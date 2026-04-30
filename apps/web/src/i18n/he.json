@@ -1,0 +1,235 @@
+{
+  "lang": "he",
+  "topBar": {
+    "selectOrg": "בחר ארגון",
+    "signOut": "התנתק",
+    "language": "שפה"
+  },
+  "clients": {
+    "title": "לקוחות",
+    "subtitle": "רשומת מאסטר משותפת. זיהוי לפי ח.פ / מספר עוסק.",
+    "newClient": "לקוח חדש",
+    "search": "חיפוש",
+    "searchPlaceholder": "חיפוש לקוחות…",
+    "includeArchived": "הצג לקוחות בארכיון",
+    "empty": "אין עדיין לקוחות. צור אחד או ייבא CSV.",
+    "noResultsSearch": "אין תוצאות תואמות לחיפוש.",
+    "showing": "מציג",
+    "of": "מתוך",
+    "perPage": "לעמוד",
+    "previous": "הקודם",
+    "next": "הבא",
+    "sort": {
+      "label": "מיון לפי",
+      "nameAZ": "שם (א–ת)",
+      "nameZA": "שם (ת–א)",
+      "createdNewest": "תאריך יצירה (חדש לישן)",
+      "createdOldest": "תאריך יצירה (ישן לחדש)",
+      "updatedNewest": "עדכון אחרון (אחרון לראשון)",
+      "updatedOldest": "עדכון אחרון (ראשון לאחרון)",
+      "status": "סטטוס"
+    },
+    "views": {
+      "label": "תצוגה",
+      "all": "כל הלקוחות",
+      "active": "לקוחות פעילים",
+      "inactive": "לקוחות לא פעילים",
+      "archived": "לקוחות בארכיון",
+      "business_customer": "לקוחות עסקיים",
+      "individual_customer": "לקוחות פרטיים",
+      "supplier": "ספקים",
+      "partner": "שותפים",
+      "other": "אחר",
+      "recently_updated": "עודכנו לאחרונה",
+      "missing_tax_id": "חסר ח.פ",
+      "duplicate_candidates": "מועמדים לכפילות"
+    },
+    "table": {
+      "name": "שם",
+      "taxId": "ח.פ / עוסק",
+      "type": "סוג",
+      "status": "סטטוס",
+      "lifecycle": "מחזור חיים"
+    },
+    "create": {
+      "title": "יצירת לקוח",
+      "taxId": "ח.פ / מספר עוסק",
+      "displayName": "שם תצוגה",
+      "type": "סוג"
+    },
+    "details": {
+      "section": "פרטי לקוח",
+      "status": "סטטוס",
+      "lifecycle": "מחזור חיים",
+      "type": "סוג",
+      "taxId": "ח.פ / מספר עוסק",
+      "email": "אימייל",
+      "phone": "טלפון",
+      "legalName": "שם משפטי"
+    },
+    "contact": {
+      "section": "יצירת קשר",
+      "website": "אתר",
+      "phonePlaceholder": "מספר טלפון",
+      "emailPlaceholder": "כתובת אימייל",
+      "requiredHint": "נדרש טלפון או אימייל לפחות.",
+      "empty": "אין פרטי התקשרות."
+    },
+    "address": {
+      "section": "כתובת (אופציונלי)",
+      "country": "מדינה (קוד)",
+      "city": "עיר",
+      "street": "רחוב",
+      "postalCode": "מיקוד",
+      "empty": "לא הוזנה כתובת."
+    },
+    "contacts": {
+      "section": "אנשי קשר",
+      "add": "הוסף איש קשר",
+      "fullNamePlaceholder": "שם מלא",
+      "primary": "ראשי"
+    },
+    "notes": {
+      "section": "הערות",
+      "add": "הוסף הערה",
+      "placeholder": "הוסף הערה…",
+      "sensitive": "רגיש",
+      "edited": "עודכן",
+      "delete": "מחק הערה",
+      "deleteConfirm": "למחוק את ההערה? לא ניתן לבטל."
+    },
+    "tags": {
+      "section": "תגיות",
+      "add": "הוסף תגית",
+      "choose": "בחר תגית…",
+      "newTagPlaceholder": "שם תגית חדשה",
+      "createTag": "צור תגית",
+      "remove": "הסר",
+      "duplicate": "התגית כבר משויכת ללקוח"
+    },
+    "files": {
+      "section": "קבצים",
+      "attach": "צרף קובץ",
+      "noFiles": "אין קבצים משויכים.",
+      "maxReached": "מותר לצרף עד שני קבצים ללקוח",
+      "open": "פתח",
+      "remove": "הסר",
+      "accessDenied": "גישה נדחתה"
+    },
+    "activity": {
+      "section": "פעילות",
+      "none": "עדיין אין פעילות."
+    },
+    "actions": {
+      "edit": "עריכה",
+      "archive": "העבר לארכיון",
+      "restore": "שחזר",
+      "archiveConfirm": "להעביר את הלקוח לארכיון? הוא יוסר מהרשימות הפעילות."
+    },
+    "type": {
+      "business_customer": "לקוח עסקי",
+      "individual_customer": "לקוח פרטי",
+      "supplier": "ספק",
+      "partner": "שותף",
+      "other": "אחר"
+    },
+    "errors": {
+      "loadFailed": "טעינת הנתונים נכשלה",
+      "createFailed": "יצירת הלקוח נכשלה",
+      "updateFailed": "עדכון הלקוח נכשל",
+      "archiveFailed": "העברת הלקוח לארכיון נכשלה",
+      "addContactFailed": "הוספת איש קשר נכשלה",
+      "addNoteFailed": "הוספת הערה נכשלה",
+      "addTagFailed": "הוספת תגית נכשלה",
+      "createTagFailed": "יצירת תגית נכשלה",
+      "attachFileFailed": "צירוף הקובץ נכשל"
+    }
+  },
+  "common": {
+    "loading": "טוען…",
+    "save": "שמור",
+    "cancel": "בטל",
+    "create": "צור",
+    "archived": "בארכיון",
+    "ok": "אישור"
+  },
+  "settings": {
+    "title": "הגדרות ארגון",
+    "subtitle": "נהל את פרופיל הארגון וזהות העסק.",
+    "readOnly": "רק בעל הארגון יכול לערוך הגדרות אלה.",
+    "ownerIdentity": {
+      "section": "זהות החברה",
+      "identityLabel": "תעודת זהות",
+      "status": "סטטוס",
+      "locked": "נעול",
+      "set": "הוגדר",
+      "trialStatus": "סטטוס ניסיון",
+      "trialActiveUntil": "פעיל עד {{date}}",
+      "trialExpired": "תקופת הניסיון הסתיימה",
+      "trialConverted": "הומר לתשלום",
+      "trialBlocked": "ניסיון לא זמין",
+      "trialNotStarted": "לא התחיל",
+      "identityNote": "לא ניתן לשנות זהות זו לאחר הפעלת הניסיון. מוצג רק ערך מוסווה."
+    },
+    "noOwnerIdentity": "הזהות מוגדרת בעת התחלת ניסיון חינם (דף מודולים).",
+    "profile": {
+      "section": "פרופיל ארגון",
+      "organizationName": "שם הארגון",
+      "legalEntityType": "סוג ישות משפטית",
+      "legalIdNumber": "מזהה עסקי",
+      "addressLine1": "שורת כתובת 1",
+      "addressLine2": "שורת כתובת 2 (אופציונלי)",
+      "city": "עיר",
+      "postalCode": "מיקוד (אופציונלי)",
+      "country": "מדינה",
+      "phone": "טלפון",
+      "website": "אתר"
+    },
+    "legalEntityType": {
+      "exempt_dealer": "עוסק פטור",
+      "registered_dealer": "עוסק מורשה",
+      "company": "חברה",
+      "other_corporation": "תאגיד אחר",
+      "other": "אחר"
+    },
+    "legalIdLabel": {
+      "teudatZehut": "תעודת זהות",
+      "exemptDealer": "מספר עוסק פטור",
+      "registeredDealer": "מספר עוסק מורשה",
+      "company": "ח.פ",
+      "otherCorporation": "מספר תאגיד",
+      "other": "מזהה",
+      "generic": "מזהה עסקי"
+    },
+    "documentIdentity": {
+      "section": "זהות במסמכים",
+      "displayNameOnDocuments": "שם תצוגה במסמכים",
+      "displayPhoneOnDocuments": "הצג טלפון במסמכים",
+      "displayWebsiteOnDocuments": "הצג אתר במסמכים",
+      "displayAddressOnDocuments": "הצג כתובת במסמכים",
+      "documentFooterNote": "הערת תחתית",
+      "footerNotePlaceholder": "למשל: עסק זה פועל באמצעות NodexPro.",
+      "footerNoteDefault": "עסק זה פועל באמצעות NodexPro."
+    },
+    "signature": {
+      "section": "חתימה",
+      "signatureText": "טקסט חתימה",
+      "signatureTextPlaceholder": "למשל: בברכה, [שמך]"
+    },
+    "bankDetails": {
+      "section": "פרטי בנק",
+      "bankAccountHolder": "שם בעל החשבון",
+      "bankName": "שם הבנק",
+      "bankBranch": "סניף",
+      "bankAccountNumber": "מספר חשבון",
+      "iban": "IBAN (אופציונלי)",
+      "swift": "SWIFT (אופציונלי)",
+      "displayBankDetailsOnDocuments": "הצג פרטי בנק במסמכים"
+    },
+    "errors": {
+      "loadFailed": "טעינת ההגדרות נכשלה",
+      "saveFailed": "שמירת ההגדרות נכשלה"
+    }
+  }
+}
+

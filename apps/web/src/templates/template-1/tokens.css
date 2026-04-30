@@ -1,0 +1,92 @@
+:root{
+  --t1-primary1:#38BDF8;
+  --t1-primary2:#3B82F6;
+  --t1-indigo:#4F46E5;
+  --t1-purple:#7C3AED;
+  --t1-magenta-accent:#D946EF;
+
+  --t1-bg:#F8FAFC;
+  --t1-card:#FFFFFF;
+  --t1-border:#E5E7EB;
+  --t1-divider:#EEF2F7;
+
+  --t1-text:#111827;
+  --t1-text2:#374151;
+  --t1-muted:#6B7280;
+  --t1-disabled:#9CA3AF;
+
+  --t1-success:#059669;
+  --t1-warning:#D97706;
+  --t1-danger:#DC2626;
+  --t1-info:#2563EB;
+
+  --t1-primary-gradient:linear-gradient(135deg,#38BDF8 0%,#3B82F6 30%,#4F46E5 65%,#7C3AED 100%);
+}
+
+.t1-appShell{
+  min-height:100vh;
+  background:var(--t1-bg);
+  color:var(--t1-text);
+  font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,'Apple Color Emoji','Segoe UI Emoji';
+}
+
+.t1-pageMain{
+  flex:1;
+  padding:24px 32px;
+}
+
+.t1-sectionCard{
+  background:var(--t1-card);
+  border:1px solid var(--t1-border);
+  border-radius:14px;
+  padding:20px;
+}
+
+.t1-dataTableWrap{
+  background:var(--t1-card);
+  border:1px solid var(--t1-border);
+  border-radius:14px;
+  overflow:hidden;
+}
+
+.t1-dataTableWrap table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+.t1-dataTableWrap thead th{
+  height:44px;
+  font-size:12px;
+  font-weight:600;
+  color:var(--t1-muted);
+  text-transform:uppercase;
+  letter-spacing:0.03em;
+  background:var(--t1-card);
+  border-bottom:1px solid var(--t1-border);
+  text-align:left;
+}
+
+.t1-dataTableWrap tbody td{
+  height:52px;
+  border-bottom:1px solid #F3F4F6;
+  font-size:14px;
+  color:var(--t1-text);
+  vertical-align:middle;
+}
+
+.t1-dataTableWrap tbody tr:hover{
+  background:#F9FAFB;
+}
+
+.t1-tableActions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+}
+
+.t1-emptyState{
+  padding:24px;
+  text-align:center;
+  color:var(--t1-muted);
+}
+

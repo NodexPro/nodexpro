@@ -1,0 +1,352 @@
+.nx-payroll-tab-root {
+  width: 100%;
+  background: transparent;
+}
+
+.nx-payroll-tab-shell {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.nx-payroll-root {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.nx-payroll-meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.nx-payroll-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.nx-payroll-meta-label {
+  font-weight: 500;
+}
+
+.nx-payroll-meta-value {
+  color: #334155;
+  font-weight: 600;
+}
+
+.nx-payroll-status-badge {
+  margin-inline-start: auto;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+}
+
+.nx-payroll-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.65fr) minmax(0, 0.65fr);
+  grid-template-areas:
+    "top-left top-right top-right"
+    "bottom-left process-wide process-wide"
+    "row-complexity row-employees row-turnover";
+  gap: 18px;
+  align-items: start;
+}
+
+.nx-payroll-col {
+  display: grid;
+  grid-auto-rows: minmax(0, auto);
+  gap: 14px;
+}
+
+.nx-payroll-col--top-left {
+  grid-area: top-left;
+}
+
+.nx-payroll-col--top-right {
+  grid-area: top-right;
+}
+
+.nx-payroll-col--bottom-left {
+  grid-area: bottom-left;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+}
+
+.nx-payroll-col--bottom-left .nx-payroll-card--bank {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.nx-payroll-col--bottom-left .nx-payroll-card--bank .nx-payroll-card-body {
+  flex: 1 1 auto;
+}
+
+.nx-payroll-col--process-wide {
+  grid-area: process-wide;
+}
+
+.nx-payroll-col--row-complexity {
+  grid-area: row-turnover;
+  margin-top: -12px;
+}
+
+.nx-payroll-col--row-employees {
+  grid-area: row-employees;
+  margin-top: -12px;
+}
+
+.nx-payroll-col--row-turnover {
+  grid-area: row-complexity;
+  margin-top: -10px;
+}
+
+.nx-payroll-card {
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  padding: 16px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.nx-payroll-card--inactive {
+  opacity: 0.6;
+}
+
+.nx-payroll-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.nx-payroll-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.nx-payroll-card-title-icon {
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.nx-payroll-card-body {
+  min-height: 0;
+}
+
+.nx-payroll-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.nx-payroll-kv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.nx-payroll-kv-label {
+  color: #94a3b8;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nx-payroll-kv-icon {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.nx-payroll-kv-value {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.nx-payroll-reminders {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nx-payroll-reminders-frequency {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.nx-payroll-reminder-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border: 1px dashed #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #f8fafc;
+}
+
+.nx-payroll-reminder-form {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nx-payroll-reminder-value {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.nx-payroll-employees {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nx-payroll-employees-count-wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.nx-payroll-employees-count-label {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.nx-payroll-employees-count-value {
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.nx-payroll-employees-graph-title {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nx-payroll-employees-graph {
+  min-height: 132px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+}
+
+.nx-payroll-employees-graph-text {
+  color: #334155;
+  font-weight: 600;
+}
+
+.nx-payroll-card--reporting .nx-payroll-card-body {
+  min-height: 180px;
+}
+
+.nx-payroll-card--employees .nx-payroll-card-body,
+.nx-payroll-card--complexity .nx-payroll-card-body {
+  min-height: 116px;
+}
+
+.nx-payroll-turnover-chart {
+  min-height: 140px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 12px 10px;
+  background: #f8fafc;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nx-payroll-turnover-bar-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 110px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.nx-payroll-turnover-bar {
+  width: min(24px, 72%);
+  border-radius: 6px 6px 3px 3px;
+  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+}
+
+.nx-payroll-turnover-bar--placeholder {
+  background: linear-gradient(180deg, #cbd5e1 0%, #94a3b8 100%);
+}
+
+.nx-payroll-turnover-empty {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 980px) {
+  .nx-payroll-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "top-left"
+      "top-right"
+      "bottom-left"
+      "process-wide"
+      "row-complexity"
+      "row-employees"
+      "row-turnover";
+    gap: 14px;
+  }
+
+  .nx-payroll-col--row-employees,
+  .nx-payroll-col--row-turnover,
+  .nx-payroll-col--row-complexity {
+    margin-top: 0;
+  }
+
+  .nx-payroll-col--bottom-left {
+    display: grid;
+  }
+
+  .nx-payroll-col--bottom-left .nx-payroll-card--bank {
+    display: block;
+  }
+
+  .nx-payroll-col--bottom-left .nx-payroll-card--bank .nx-payroll-card-body {
+    flex: none;
+  }
+}

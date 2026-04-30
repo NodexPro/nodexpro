@@ -1,0 +1,9 @@
+{
+  "name": "zentax-architecture-enforcer",
+  "private": true,
+  "scripts": {
+    "architecture:check": "node ./scripts/architecture-check.mjs check",
+    "architecture:baseline": "node ./scripts/architecture-check.mjs baseline",
+    "architecture:report": "node ./scripts/architecture-check.mjs report"
+  }
+}

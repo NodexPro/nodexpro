@@ -1,0 +1,27 @@
+-- Phase 1: Sync auth.users -> public.users.
+-- Option A: Database trigger on auth.users (if Supabase allows). Option B: Backend creates
+-- public.users on first login (auth.service ensureAppUser + middleware). This migration
+-- documents the contract; backend implements Option B by default.
+--
+-- If your Supabase project allows triggers on auth.users, run the following in SQL editor:
+--
+-- create or replace function public.handle_new_auth_user()
+-- returns trigger as $$
+-- begin
+--   insert into public.users (id, auth_user_id, email, full_name, status)
+--   values (
+--     gen_random_uuid(),
+--     new.id,
+--     coalesce(new.email, ''),
+--     coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', ''),
+--     'active'
+--   );
+--   return new;
+-- end;
+-- $$ language plpgsql security definer;
+--
+-- create trigger on_auth_user_created
+--   after insert on auth.users
+--   for each row execute function public.handle_new_auth_user();
+--
+-- Service role already has access to public schema. No extra grants needed.

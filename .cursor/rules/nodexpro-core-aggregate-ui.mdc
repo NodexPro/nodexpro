@@ -1,0 +1,133 @@
+---
+description: NodexPro — обязательный стандарт Core → Commands → Aggregate → UI (все вкладки и модули)
+alwaysApply: true
+---
+
+# Architectural standard — NodexPro (необсуждаемый контракт)
+
+Это **обязательный** стандарт для всех существующих и будущих вкладок, фич и модулей. Не рекомендация — **architectural contract** проекта.
+
+## 1. Базовая модель
+
+Действует только цепочка:
+
+**Core → Commands / backend actions → Aggregate → UI**
+
+- **Core:** auth, org / multi-tenant, membership, roles/permissions, модули, подписки, shared entities, audit, tenant isolation. Не UI-модуль, не дублируется в модулях; модули **не** общаются друг с другом напрямую.
+- **Commands:** любое изменение состояния — только через backend command. **1 действие пользователя = 1 command.** Запрещены монолитный PATCH как основной write, frontend-orchestrated save, «собрать объект на клиенте как получится».
+- **Aggregate:** workspace / tab / screen читают данные **только** через aggregate read model. **1 экран = 1 aggregate response.** Запрещены tab-specific read, partial summary GET, hidden side-read для блока экрана, склейка truth из нескольких GET.
+- **UI:** только рендер данных из aggregate; **не** место бизнес-логики.
+
+## 2. Жёсткие запреты (везде)
+
+**На frontend запрещено:** business meaning (`shouldInclude`, `merge`, business defaults, domain visibility, domain payload shaping, локальные totals/VAT/discount/renewal meaning, решать на клиенте состав save).
+
+**Read:** запрещены новые GET для tab display / summary / части workspace; запрещён UI stitching из нескольких read endpoints для одного truth.
+
+**Write:** запрещены монолитный PATCH как основной путь, batch save «всей вкладки», смешение command + PATCH как финальная модель.
+
+**Frontend:** не domain rules, не пересчёт backend values, не выбор сущности по domain-логике, не знание обязательных полей «по смыслу», если это не пришло с backend.
+
+## 3. Обязательные правила для любой новой вкладки
+
+- **READ:** только aggregate; ready-to-render model; visibility, labels, options, statuses, summaries — с backend.
+- **WRITE:** каждое действие = отдельная command; минимальный payload; валидация/нормализация на backend; **после команды — полный refreshed aggregate / case**.
+- **UI flow (единственный правильный):** действие → command → выполнение → пересборка aggregate → полный truth на клиенте → рендер **только** из truth. Запрещено: локальная мутация после save, ручная дописка строки в UI, partial sync после write, локальная «истина» параллельно серверу.
+
+## 4. Обязательные правила для любого нового модуля
+
+- Shared Core data; **не** свой parallel auth/org/permissions.
+- Read через aggregate; write через commands; UI render-only; **tenant isolation обязательна**; **audit для critical writes обязателен**.
+
+Модуль **не готов**, если: чтение не через aggregate; сохранение большим PATCH; domain logic в UI; нет org scoping; нет audit на критичные изменения.
+
+## 5. Definition of Done (вкладка / фича / модуль)
+
+Считается **DONE** только если одновременно:
+
+1. **READ** — только через aggregate  
+2. **WRITE** — только через commands  
+3. **TRUTH FLOW** — после каждой команды полный refreshed case/aggregate; UI только из returned truth  
+4. **FRONTEND** — нет business logic / domain meaning / hidden local truth  
+5. **SECURITY** — org context; queries scoped; нет theoretical cross-tenant path  
+6. **AUDIT** — critical writes логируются  
+
+**Если хоть один пункт не выполнен — фича не завершена.**
+
+## 6. Reference pattern — fees / שכ״ט
+
+Вкладка **fees** — эталон миграции: aggregate-only read, command-only write, full case после command, dumb frontend, audit + tenant-safe commands. Следующие миграции — **по образцу fees**, без новых локальных паттернов.
+
+## 7. Обязательный чеклист перед любой новой работой (вкладка / модуль)
+
+Перед кодом явно ответить (если нет ответа — сначала спроектировать; **не** начинать UI раньше):
+
+1. Где здесь **financial truth**? Если есть финансы — только **Accounting Base**.  
+2. Есть ли **country-specific logic**? Если да — только **Country Pack Framework / ruleset / legal values**.  
+3. Здесь **client/shared entity**? Значит владение через **Core/shared entity**.  
+4. Где здесь **write-command**? (только command, без PATCH/save-all).  
+5. Где здесь **aggregate read**? (один экран = один aggregate truth).  
+6. Где **refreshed truth flow** после write?  
+7. Есть ли **frontend business logic**?  
+8. Есть ли **tenant-safe scoping**?  
+9. Есть ли **audit** для critical writes?  
+
+---
+
+При любой задаче по вкладке/модулю сначала проверять соответствие этому стандарту.
+
+## 8. Permanent rule — Financial truth in Accounting Base only
+
+Financial truth включает:
+- income
+- expense
+- payment
+- payroll amounts
+- fees
+- balances
+- totals
+- financial summaries
+
+Если модуль создаёт/меняет/показывает financial truth, он **не может** быть source of truth для этих данных.
+
+**Source of financial truth = Accounting Base.**
+
+Модули владеют workflow/actions, а Accounting Base владеет:
+- accounting entries
+- periods
+- categories
+- links
+- financial summaries
+
+**Documents не являются accounting entries.**
+
+### Переходный режим (обязателен)
+
+- Legacy-потоки могут временно оставаться.
+- Не переписывать существующие модули автоматически.
+- Не ломать runtime.
+- Новая финансовая логика вне Accounting Base запрещена.
+- Если Accounting Base ещё недоступен: помечать как `TEMPORARY_ACCOUNTING_BASE_PENDING` и делать реализацию минимальной/легко мигрируемой.
+
+## 9. Permanent rule — Country-specific logic in Country Pack only
+
+Country-specific logic включает:
+- legal due dates / filing deadlines / report deadlines
+- VAT / local income tax / social insurance rules
+- statutory report rules
+- compliance calendars
+- local document types
+- local validation rules
+- credit points / נקודות זיכוי
+- legal rates / legal limits
+- country-specific metadata
+
+Если модуль создаёт/меняет/показывает country-specific logic, модуль **не может** быть source of truth для этой логики.
+
+**Source of country-specific legal logic = Country Pack Framework (active ruleset + owner legal values).**
+
+Переходный режим:
+- Legacy-логика может временно оставаться.
+- Автоматически не переписывать существующие модули.
+- Новая country-specific логика вне Country Pack запрещена.
+- Если интеграция Country Pack ещё не готова: помечать как `TEMPORARY_COUNTRY_PACK_PENDING` и держать реализацию минимальной/легко мигрируемой.

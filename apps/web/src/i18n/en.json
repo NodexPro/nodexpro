@@ -1,0 +1,235 @@
+{
+  "lang": "en",
+  "topBar": {
+    "selectOrg": "Select organization",
+    "signOut": "Sign out",
+    "language": "Language"
+  },
+  "clients": {
+    "title": "Clients",
+    "subtitle": "Shared master records. Identity by tax ID (HP).",
+    "newClient": "New client",
+    "search": "Search",
+    "searchPlaceholder": "Search clients…",
+    "includeArchived": "Include archived",
+    "empty": "No clients yet. Create one or import CSV.",
+    "noResultsSearch": "No clients match your search.",
+    "showing": "Showing",
+    "of": "of",
+    "perPage": "Per page",
+    "previous": "Previous",
+    "next": "Next",
+    "sort": {
+      "label": "Sort by",
+      "nameAZ": "Name (A–Z)",
+      "nameZA": "Name (Z–A)",
+      "createdNewest": "Created date (Newest first)",
+      "createdOldest": "Created date (Oldest first)",
+      "updatedNewest": "Last updated (Newest first)",
+      "updatedOldest": "Last updated (Oldest first)",
+      "status": "Status"
+    },
+    "views": {
+      "label": "View",
+      "all": "All Clients",
+      "active": "Active Clients",
+      "inactive": "Inactive Clients",
+      "archived": "Archived Clients",
+      "business_customer": "Business Customers",
+      "individual_customer": "Individual Customers",
+      "supplier": "Suppliers",
+      "partner": "Partners",
+      "other": "Other",
+      "recently_updated": "Recently Updated",
+      "missing_tax_id": "Missing Tax ID",
+      "duplicate_candidates": "Duplicate Candidates"
+    },
+    "table": {
+      "name": "Name",
+      "taxId": "Tax ID",
+      "type": "Type",
+      "status": "Status",
+      "lifecycle": "Lifecycle"
+    },
+    "create": {
+      "title": "Create client",
+      "taxId": "Tax ID (HP)",
+      "displayName": "Display name",
+      "type": "Type"
+    },
+    "details": {
+      "section": "Details",
+      "status": "Status",
+      "lifecycle": "Lifecycle",
+      "type": "Type",
+      "taxId": "Tax ID (HP)",
+      "email": "Email",
+      "phone": "Phone",
+      "legalName": "Legal name"
+    },
+    "contact": {
+      "section": "Contact",
+      "website": "Website",
+      "phonePlaceholder": "Phone number",
+      "emailPlaceholder": "Email address",
+      "requiredHint": "At least one of phone or email is required.",
+      "empty": "No contact information."
+    },
+    "address": {
+      "section": "Address (optional)",
+      "country": "Country (code)",
+      "city": "City",
+      "street": "Street",
+      "postalCode": "Postal code",
+      "empty": "No address entered."
+    },
+    "contacts": {
+      "section": "Contacts",
+      "add": "Add contact",
+      "fullNamePlaceholder": "Full name",
+      "primary": "Primary"
+    },
+    "notes": {
+      "section": "Notes",
+      "add": "Add note",
+      "placeholder": "Add a note…",
+      "sensitive": "Sensitive",
+      "edited": "Edited",
+      "delete": "Delete note",
+      "deleteConfirm": "Delete this note? This cannot be undone."
+    },
+    "tags": {
+      "section": "Tags",
+      "add": "Add tag",
+      "choose": "Choose tag…",
+      "newTagPlaceholder": "New tag name",
+      "createTag": "Create tag",
+      "remove": "Remove",
+      "duplicate": "Tag already linked to this client"
+    },
+    "files": {
+      "section": "Files",
+      "attach": "Attach file",
+      "noFiles": "No files attached.",
+      "maxReached": "Maximum 2 files per client",
+      "open": "Open",
+      "remove": "Remove",
+      "accessDenied": "Access denied"
+    },
+    "activity": {
+      "section": "Activity",
+      "none": "No activity yet."
+    },
+    "actions": {
+      "edit": "Edit",
+      "archive": "Archive",
+      "restore": "Restore",
+      "archiveConfirm": "Archive this client? They will be excluded from active lists."
+    },
+    "type": {
+      "business_customer": "Business customer",
+      "individual_customer": "Individual customer",
+      "supplier": "Supplier",
+      "partner": "Partner",
+      "other": "Other"
+    },
+    "errors": {
+      "loadFailed": "Failed to load",
+      "createFailed": "Failed to create client",
+      "updateFailed": "Failed to update",
+      "archiveFailed": "Failed to archive",
+      "addContactFailed": "Failed to add contact",
+      "addNoteFailed": "Failed to add note",
+      "addTagFailed": "Failed to add tag",
+      "createTagFailed": "Failed to create tag",
+      "attachFileFailed": "Failed to attach file"
+    }
+  },
+  "common": {
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "archived": "Archived",
+    "ok": "OK"
+  },
+  "settings": {
+    "title": "Organization Settings",
+    "subtitle": "Manage your organization profile and business identity.",
+    "readOnly": "Only the organization owner can edit these settings.",
+    "ownerIdentity": {
+      "section": "Company Identity",
+      "identityLabel": "Legal identity",
+      "status": "Status",
+      "locked": "Locked",
+      "set": "Set",
+      "trialStatus": "Trial status",
+      "trialActiveUntil": "Active until {{date}}",
+      "trialExpired": "Trial expired",
+      "trialConverted": "Converted to paid",
+      "trialBlocked": "Trial not available",
+      "trialNotStarted": "Not started",
+      "identityNote": "This identity cannot be changed after trial activation. Only masked value is shown."
+    },
+    "noOwnerIdentity": "Identity is set when you start a free trial (Modules page).",
+    "profile": {
+      "section": "Organization Profile",
+      "organizationName": "Organization name",
+      "legalEntityType": "Legal entity type",
+      "legalIdNumber": "Business identifier",
+      "addressLine1": "Address line 1",
+      "addressLine2": "Address line 2 (optional)",
+      "city": "City",
+      "postalCode": "Postal code (optional)",
+      "country": "Country",
+      "phone": "Phone",
+      "website": "Website"
+    },
+    "legalEntityType": {
+      "exempt_dealer": "Exempt dealer (עוסק פטור)",
+      "registered_dealer": "Registered dealer (עוסק מורשה)",
+      "company": "Company (חברה)",
+      "other_corporation": "Other corporation (תאגיד אחר)",
+      "other": "Other (אחר)"
+    },
+    "legalIdLabel": {
+      "teudatZehut": "Teudat Zehut",
+      "exemptDealer": "Exempt dealer number",
+      "registeredDealer": "Registered dealer number",
+      "company": "Company number",
+      "otherCorporation": "Corporation number",
+      "other": "Identifier",
+      "generic": "Business identifier"
+    },
+    "documentIdentity": {
+      "section": "Document Identity",
+      "displayNameOnDocuments": "Display name on documents",
+      "displayPhoneOnDocuments": "Show phone on documents",
+      "displayWebsiteOnDocuments": "Show website on documents",
+      "displayAddressOnDocuments": "Show address on documents",
+      "documentFooterNote": "Footer note",
+      "footerNotePlaceholder": "e.g. This business operates through NodexPro.",
+      "footerNoteDefault": "This business operates through NodexPro."
+    },
+    "signature": {
+      "section": "Signature",
+      "signatureText": "Signature text",
+      "signatureTextPlaceholder": "e.g. Best regards, [Your name]"
+    },
+    "bankDetails": {
+      "section": "Bank Details",
+      "bankAccountHolder": "Account holder",
+      "bankName": "Bank name",
+      "bankBranch": "Branch",
+      "bankAccountNumber": "Account number",
+      "iban": "IBAN (optional)",
+      "swift": "SWIFT (optional)",
+      "displayBankDetailsOnDocuments": "Show bank details on documents"
+    },
+    "errors": {
+      "loadFailed": "Failed to load settings",
+      "saveFailed": "Failed to save settings"
+    }
+  }
+}
+

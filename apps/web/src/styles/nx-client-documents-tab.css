@@ -1,0 +1,370 @@
+/**
+ * Client documents workspace tab — aligned with annual/fees/payroll:
+ * light #f9fafb shell inside workspace content, white cards (no per-folder tint circus).
+ */
+
+.nx-cdocs-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  position: relative;
+  min-height: 280px;
+  background: transparent;
+  padding: 0;
+}
+
+/* Same language as .nx-workspace-content > .nx-annual-root / nx-fees-tab-shell */
+.nx-workspace-content > .nx-cdocs-root {
+  background: #f9fafb;
+  border-radius: 18px;
+  padding: 20px;
+  border: 1px solid rgba(219, 227, 238, 0.8);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+@media (max-width: 820px) {
+  .nx-workspace-content > .nx-cdocs-root {
+    padding: 16px;
+    border-radius: 16px;
+  }
+}
+
+.nx-cdocs-surface {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 22px 22px 26px;
+  border: 1px solid rgba(219, 227, 238, 0.95);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.nx-cdocs-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.nx-cdocs-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.nx-cdocs-err {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.nx-cdocs-empty {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.nx-cdocs-empty--in-panel {
+  margin: 20px 0;
+}
+
+.nx-cdocs-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .nx-cdocs-folder-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .nx-cdocs-folder-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Single product card style for all folders; brand only via icon + hover ring */
+.nx-cdocs-folder-card {
+  border-radius: 16px;
+  border: 1px solid rgba(219, 227, 238, 0.95);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.nx-cdocs-folder-card:hover {
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.1), 0 1px 3px rgba(59, 130, 246, 0.12);
+}
+
+.nx-cdocs-folder-icon-wrap {
+  display: flex;
+  justify-content: center;
+  opacity: 0.95;
+  color: #3b82f6;
+}
+
+.nx-cdocs-folder-card-main {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 18px 16px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: right;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+
+.nx-cdocs-folder-card-main:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.nx-cdocs-folder-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.nx-cdocs-folder-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.nx-cdocs-folder-count {
+  color: #334155;
+}
+
+.nx-cdocs-folder-updated {
+  font-weight: 500;
+  color: #64748b;
+}
+
+.nx-cdocs-folder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: center;
+  padding: 0 12px 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.95);
+  background: #f9fafb;
+}
+
+.nx-cdocs-linkish {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #2563eb;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.nx-cdocs-linkish:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nx-cdocs-linkish--danger {
+  color: #b91c1c;
+}
+
+/* Icon-only actions (view / delete) — brand blue */
+.nx-cdocs-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nx-cdocs-icon-action:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.nx-cdocs-icon-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Folder documents panel */
+.nx-cdocs-folder-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12px 8px 20px;
+  background: rgba(15, 23, 42, 0.18);
+  border-radius: 18px;
+  box-sizing: border-box;
+}
+
+.nx-cdocs-folder-panel {
+  width: min(640px, 100%);
+  max-height: min(72vh, 520px);
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid rgba(219, 227, 238, 0.95);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+  padding: 18px 20px 22px;
+  margin-top: 8px;
+}
+
+.nx-cdocs-folder-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.nx-cdocs-folder-panel-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.nx-cdocs-panel-loading {
+  margin: 14px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.nx-cdocs-folder-panel-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.nx-cdocs-doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nx-cdocs-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.nx-cdocs-doc-icon {
+  flex-shrink: 0;
+  color: #64748b;
+  display: flex;
+}
+
+.nx-cdocs-doc-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+}
+
+.nx-cdocs-doc-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.nx-cdocs-doc-sub {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.nx-cdocs-doc-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  justify-content: flex-end;
+}
+
+.nx-cdocs-folder-name-modal {
+  width: min(400px, 100%);
+}
+
+.nx-cdocs-field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 8px;
+}
+
+.nx-cdocs-text-inp {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.nx-cdocs-text-inp:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}

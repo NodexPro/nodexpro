@@ -1,0 +1,1128 @@
+/* שכ״ט tab — כמו כרטיסי workspace (#f9fafb) */
+
+.nx-fees-tab-root {
+  direction: rtl;
+  text-align: right;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+/*
+ * לוח אחד בהיר (כמו בטאבים אחרים): הרקע הכחול של ה-workspace נשאר רק בין המסגרת ללוח;
+ * בין הסקציות הפנימיות — אפור בהיר, לא כחול.
+ */
+.nx-fees-tab-shell {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  background: #f9fafb;
+  border: 1px solid rgba(219, 227, 238, 0.95);
+  border-radius: 18px;
+  padding: 20px 22px 24px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14);
+}
+
+.nx-fees-tab-shell .nx-fees-container {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nx-fees-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* Physical LTR: column 1 = left ~66% main, column 2 = right ~33% side */
+.nx-fees-grid {
+  direction: ltr;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .nx-fees-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nx-fees-main-col {
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.nx-fees-side-col {
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.nx-fees-card {
+  width: 100%;
+  box-sizing: border-box;
+  background: #f9fafb;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.nx-fees-tab-shell .nx-fees-card {
+  background: #ffffff;
+}
+
+.nx-fees-tab-shell .nx-fees-card.nx-fees-rail--financial {
+  background: #ffffff;
+}
+
+.nx-fees-card--side {
+  padding: 16px;
+}
+
+.nx-fees-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  color: #0f172a;
+}
+
+.nx-fees-card-title--strict {
+  margin: 0;
+}
+
+.nx-fees-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.nx-fees-card-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.nx-fees-agreement-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.nx-fees-agreement-row--2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* שורה 1: תאריך תחילה / סיום — שתי עמודות שוות */
+.nx-fees-agreement-row--dates {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.nx-fees-agreement-row--dates > .nx-fees-agreement-cell--date-sm {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 65%;
+}
+
+.nx-fees-agreement-row--dates > .nx-fees-agreement-cell--date-sm .nx-fees-inp {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  font-size: 1em;
+  padding: 5px 7px;
+  min-height: 0;
+}
+
+.nx-fees-agreement-row--2 > .nx-fees-agreement-cell--pair .nx-fees-inp {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  padding: 5px 7px;
+}
+
+.nx-fees-agreement-row--full > .nx-fees-agreement-cell--status-row {
+  width: 100%;
+}
+
+.nx-fees-agreement-row--full > .nx-fees-agreement-cell--status-row .nx-fees-inp {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  padding: 5px 7px;
+}
+
+@media (max-width: 600px) {
+  .nx-fees-agreement-row--2 {
+    grid-template-columns: 1fr;
+  }
+
+  .nx-fees-agreement-row--dates {
+    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .nx-fees-agreement-row--dates > .nx-fees-agreement-cell--date-sm {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+}
+
+.nx-fees-agreement-row--full {
+  width: 100%;
+}
+
+.nx-fees-agreement-cell .client-field-label {
+  margin-bottom: 4px;
+}
+
+.nx-fees-side-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* הנחות: סוג + אחוז/סכום בשורה אחת, עמודות שוות */
+.nx-fees-discount-fields {
+  width: 100%;
+}
+
+.nx-fees-discount-field--full {
+  width: 100%;
+  min-width: 0;
+}
+
+.nx-fees-discount-inline-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  align-items: start;
+}
+
+.nx-fees-discount-inline-pair .client-field {
+  min-width: 0;
+}
+
+.nx-fees-discount-inline-pair .nx-fees-inp,
+.nx-fees-discount-inline-pair select.client-field-box-input,
+.nx-fees-discount-inline-pair select.nx-fees-inp {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 520px) {
+  .nx-fees-discount-inline-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* מעקב חידוש — שורה אחת, עמודות שוות, רווח בין שדות */
+.nx-fees-renewal-fields-row {
+  display: grid;
+  gap: 14px 18px;
+  width: 100%;
+  align-items: start;
+  box-sizing: border-box;
+}
+
+.nx-fees-renewal-field-cell {
+  min-width: 0;
+}
+
+/* ימים להתראה — עמודה צרה, שאר השדות נושמים ונשאר רווח ויזואלי */
+.nx-fees-renewal-field-cell--reminder {
+  max-width: 104px;
+}
+
+.nx-fees-renewal-field-cell--reminder .nx-fees-inp,
+.nx-fees-renewal-field-cell--reminder input.client-field-box-input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.nx-fees-inline-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 520px) {
+  .nx-fees-inline-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nx-fees-status-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.nx-fees-summary-muted {
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+.nx-fees-services-table {
+  table-layout: fixed;
+}
+
+.nx-fees-services-table--included {
+  width: 100%;
+  /* 8 עמודות תוכן + עמודת מחיקה ברוחב האייקון בלבד */
+  --nx-fees-actions-col-w: 36px;
+}
+
+.nx-fees-services-table--included thead th:not(:last-child),
+.nx-fees-services-table--included tbody tr:not(.nx-fees-subrow) > td:not(:last-child) {
+  width: calc((100% - var(--nx-fees-actions-col-w)) / 8);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.nx-fees-services-table--included thead th:last-child,
+.nx-fees-services-table--included tbody tr:not(.nx-fees-subrow) > td:last-child {
+  width: var(--nx-fees-actions-col-w);
+  max-width: var(--nx-fees-actions-col-w);
+  min-width: var(--nx-fees-actions-col-w);
+  padding: 8px 4px;
+  box-sizing: border-box;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.nx-fees-services-table--custom {
+  --nx-fees-actions-col-w: 36px;
+}
+
+.nx-fees-services-table--custom thead th:not(:last-child),
+.nx-fees-services-table--custom tbody tr > td:not(:last-child) {
+  width: calc((100% - var(--nx-fees-actions-col-w)) / 7);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.nx-fees-services-table--custom thead th:last-child,
+.nx-fees-services-table--custom tbody tr > td:last-child {
+  width: var(--nx-fees-actions-col-w);
+  max-width: var(--nx-fees-actions-col-w);
+  min-width: var(--nx-fees-actions-col-w);
+  padding: 8px 4px;
+  box-sizing: border-box;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.nx-fees-td-toggle {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.nx-fees-td-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  vertical-align: middle;
+  min-width: 0;
+}
+
+.nx-fees-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+.nx-fees-icon-btn--delete {
+  width: 28px;
+  height: 28px;
+  color: #2563eb;
+}
+
+.nx-fees-icon-btn--delete:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.nx-fees-icon-btn--delete:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.nx-fees-icon-btn--delete:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-fees-services-table.nx-fees-data-table th,
+.nx-fees-services-table.nx-fees-data-table td {
+  padding: 8px 6px;
+}
+
+.nx-fees-subrow td {
+  background: #fafbfc;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.nx-fees-price-history-table {
+  table-layout: fixed;
+}
+
+.nx-fees-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+}
+
+.nx-fees-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.nx-fees-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.nx-fees-switch-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #cbd5e1;
+  border-radius: 24px;
+  transition: background 0.2s;
+}
+
+.nx-fees-switch-slider::before {
+  position: absolute;
+  content: '';
+  height: 18px;
+  width: 18px;
+  inset-inline-start: 3px;
+  bottom: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: inset-inline-start 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.nx-fees-switch input:checked + .nx-fees-switch-slider {
+  background: #6366f1;
+}
+
+.nx-fees-switch input:checked + .nx-fees-switch-slider::before {
+  inset-inline-start: calc(100% - 21px);
+  transform: none;
+}
+
+.nx-fees-switch input:disabled + .nx-fees-switch-slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nx-fees-table-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+/* דיאלוג שער מטבע — מעל מודאל עריכת שכ״ט */
+.nx-modal-overlay.nx-fees-fx-overlay {
+  z-index: 1100;
+}
+
+.nx-modal.nx-fees-fx-dialog {
+  width: min(420px, 100%);
+  max-height: min(80vh, 520px);
+  border-radius: 16px;
+}
+
+.nx-fees-fx-dialog-title {
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.nx-fees-currency-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.nx-fees-rate-prompt-btn {
+  align-self: flex-start;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nx-fees-td-readonly {
+  color: #475569;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.nx-fees-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.nx-fees-data-table th {
+  text-align: right;
+  font-weight: 700;
+  padding: 10px 8px;
+  border-bottom: 2px solid #e2e8f0;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.nx-fees-data-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.nx-fees-data-table td.nx-fees-num {
+  text-align: end;
+  font-weight: 600;
+}
+
+.nx-fees-card.nx-fees-rail--financial {
+  background: #f9fafb;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+/* סיכום כספי — מראה טבלה (אקסל): רשת, עמודת תוויות אפורה, מספרים ב־tabular */
+.nx-fees-excel-summary {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.nx-fees-excel-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.nx-fees-excel-cell {
+  border: 1px solid #d0d7de;
+  padding: 6px 10px;
+  vertical-align: middle;
+  line-height: 1.35;
+}
+
+.nx-fees-excel-cell--label {
+  width: 52%;
+  text-align: right;
+  font-weight: 600;
+  background: #f3f3f3;
+  color: #111827;
+}
+
+.nx-fees-excel-cell--amount {
+  text-align: end;
+  font-weight: 600;
+  background: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.nx-fees-excel-row:nth-child(even) .nx-fees-excel-cell--amount {
+  background: #fafafa;
+}
+
+.nx-fees-excel-row--total .nx-fees-excel-cell {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.nx-fees-excel-row--total .nx-fees-excel-cell--label {
+  background: #e7e6e6;
+  font-weight: 700;
+  font-size: 1.15rem;
+}
+
+.nx-fees-excel-row--total .nx-fees-excel-cell--amount {
+  font-size: 1.55rem;
+  font-weight: 700;
+  background: #e7e6e6;
+  color: #0f172a;
+}
+
+.nx-fees-excel-row--emph .nx-fees-excel-cell {
+  font-weight: 700;
+}
+
+.nx-fees-renewal-banner {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.nx-fees-renewal-banner--success {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.nx-fees-renewal-banner--warning {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.nx-fees-renewal-banner--danger {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.nx-fees-renewal-banner--neutral {
+  background: #f8fafc;
+  color: #475569;
+}
+
+.nx-fees-recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nx-fees-recent-item {
+  font-size: 13px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 8px;
+}
+
+.nx-fees-recent-item time {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.nx-fees-link-like {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* גרף היסטוריית מחירים — גבהים, ערכים וטקסטים מהאגרגט */
+.nx-fees-price-chart-block {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.nx-fees-price-chart-sub {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.nx-fees-price-chart-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
+.nx-fees-price-chart-view-caption {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.nx-fees-price-chart-overflow-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.nx-fees-price-chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.nx-fees-price-chart-toggle {
+  background: none;
+  border: none;
+  padding: 6px 0;
+  margin: 0;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: inherit;
+}
+
+.nx-fees-price-chart-toggle:hover {
+  color: #1d4ed8;
+}
+
+.nx-fees-price-chart-toolbar-meta {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.nx-fees-price-chart-toolbar--modes {
+  justify-content: flex-start;
+  gap: 16px;
+}
+
+.nx-fees-price-chart-toggle--active {
+  color: #0f172a;
+  text-decoration: none;
+  cursor: default;
+  font-weight: 700;
+}
+
+.nx-fees-price-chart-toggle--active:hover {
+  color: #0f172a;
+}
+
+.nx-fees-price-chart-scroll {
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.nx-fees-price-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  min-height: 188px;
+  padding: 8px 4px 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+.nx-fees-price-chart-col {
+  position: relative;
+  flex: 0 0 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 52px;
+  padding-top: 4px;
+}
+
+.nx-fees-price-chart-tooltip {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% - 2px);
+  right: 50%;
+  transform: translateX(50%);
+  min-width: 200px;
+  max-width: min(280px, 85vw);
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+  pointer-events: none;
+  text-align: right;
+}
+
+.nx-fees-price-chart-tooltip-line {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.nx-fees-price-chart-tooltip-line:last-child {
+  margin-bottom: 0;
+}
+
+.nx-fees-price-chart-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 88px;
+  word-break: break-word;
+}
+
+.nx-fees-price-chart-delta {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  line-height: 1.15;
+  max-width: 80px;
+  word-break: break-word;
+}
+
+.nx-fees-price-chart-delta--up {
+  color: #047857;
+}
+
+.nx-fees-price-chart-delta--down {
+  color: #b91c1c;
+}
+
+.nx-fees-price-chart-delta--flat {
+  color: #64748b;
+}
+
+.nx-fees-price-chart-bar-wrap {
+  width: 100%;
+  height: 128px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.nx-fees-price-chart-bar {
+  width: 70%;
+  max-width: 34px;
+  min-height: 6px;
+  border-radius: 6px 6px 0 0;
+  box-sizing: border-box;
+  transition: opacity 0.15s ease;
+}
+
+.nx-fees-price-chart-col:hover .nx-fees-price-chart-bar {
+  opacity: 0.92;
+}
+
+.nx-fees-price-chart-bar--up {
+  background: linear-gradient(180deg, #6ee7b7 0%, #059669 100%);
+}
+
+.nx-fees-price-chart-bar--down {
+  background: linear-gradient(180deg, #fca5a5 0%, #dc2626 100%);
+}
+
+.nx-fees-price-chart-bar--flat {
+  background: linear-gradient(180deg, #7dd3fc 0%, #0284c7 100%);
+}
+
+.nx-fees-price-chart-x {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.nx-fees-tab-shell .nx-fees-footer-actions {
+  margin-top: 20px;
+  padding: 0;
+}
+
+.nx-fees-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 16px 16px 0;
+}
+
+.nx-fees-footer-actions--start {
+  justify-content: flex-start;
+}
+
+.nx-fees-save-error {
+  color: #b91c1c;
+  font-weight: 700;
+  margin: 8px 16px 0;
+  font-size: 14px;
+  text-align: right;
+}
+
+.nx-fees-tab-shell .nx-fees-save-error {
+  margin: 8px 0 0;
+}
+
+.nx-fees-empty {
+  font-size: 13px;
+  color: #94a3b8;
+  padding: 12px 0;
+}
+
+.nx-fees-inp {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  /* שדה בהיר על גבי כרטיס אפור — כמו תיבות בפרטי לקוח */
+  border: 1px solid #dbe3ee;
+  font: inherit;
+  background: #ffffff;
+}
+
+.nx-fees-inp:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.nx-fees-inp--table {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* —— Step 4: workspace (display) vs modal (edit) —— */
+.nx-fees-meta-strip {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0 0 14px;
+  line-height: 1.4;
+}
+
+.nx-fees-workspace-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.nx-fees-workspace-card-head-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nx-fees-pencil-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  border-radius: 6px;
+  line-height: 0;
+}
+
+.nx-fees-pencil-btn:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.nx-fees-pencil-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-fees-workspace-block-title-only {
+  margin-bottom: 12px;
+}
+
+.nx-fees-workspace-readonly .nx-fees-inp,
+.nx-fees-workspace-readonly input,
+.nx-fees-workspace-readonly select {
+  pointer-events: none;
+}
+
+.nx-fees-summary-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nx-fees-summary-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 14px;
+}
+
+.nx-fees-summary-line:last-child {
+  border-bottom: none;
+}
+
+.nx-fees-summary-label {
+  color: #64748b;
+}
+
+.nx-fees-summary-value {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.nx-fees-workspace-display-table th,
+.nx-fees-workspace-display-table td {
+  font-size: 13px;
+}
+
+.nx-fees-kv-display {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nx-fees-kv-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.nx-fees-kv-label {
+  color: #64748b;
+}
+
+.nx-fees-kv-value {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.nx-fees-editor-modal {
+  width: min(1120px, calc(100vw - 48px));
+}
+
+.nx-fees-editor-modal-body {
+  max-height: min(78vh, 720px);
+  overflow-y: auto;
+}
+
+.nx-fees-modal-hint {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 12px;
+}
+
+.nx-fees-modal-section {
+  margin-bottom: 14px;
+}
+
+.nx-fees-modal-section:last-child {
+  margin-bottom: 0;
+}
+
+.nx-fees-modal-section-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.nx-fees-modal-section-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.nx-fees-modal-section-bar .nx-fees-modal-section-title {
+  margin: 0;
+}
+
+/* Agreement modal — שדות מהאגרגט, grid 2 עמודות (RTL) */
+.nx-fees-modal-agreement-fields--grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nx-fees-modal-agreement-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  align-items: start;
+  direction: rtl;
+}
+
+.nx-fees-modal-agreement-row--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.nx-fees-modal-agreement-field-cell {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.nx-fees-modal-agreement-field-cell .client-field-label {
+  margin-bottom: 4px;
+}
+
+@media (max-width: 540px) {
+  .nx-fees-modal-agreement-row:not(.nx-fees-modal-agreement-row--single) {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,16 @@
+import fs from 'fs';
+const p = 'apps/api/src/domains/client-operations/client-annual-report-tab.service.ts';
+let s = fs.readFileSync(p, 'utf8');
+const dateCol = '\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05d2\u05e9\u05d4';
+const addLbl = '\u05d4\u05d5\u05e1\u05e3 \u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05d2\u05e9\u05d4';
+const needDate = '\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05d2\u05e9\u05d4 \u05e0\u05d3\u05e8\u05e9';
+const emptyDate = '\u05ea\u05d0\u05e8\u05d9\u05da \u05e8\u05d9\u05e7';
+const noSys = '\u05dc\u05d0 \u05e0\u05d9\u05ea\u05df \u05dc\u05e2\u05e8\u05d5\u05da \u05e9\u05d5\u05e8\u05ea \u05de\u05e2\u05e8\u05db\u05ea';
+const badChunk = 'תארי\uFFFD\uFFFDתארי\uFFFD\uFFFD';
+s = s.replace(new RegExp(badChunk + ' הגשה', 'g'), dateCol);
+s = s.replace(new RegExp('הוסף ' + badChunk + ' הגשה', 'g'), addLbl);
+s = s.replace(new RegExp(badChunk + ' הגשה נדרש', 'g'), needDate);
+s = s.replace(/תארי\uFFFD\uFFFD ריק/g, emptyDate);
+s = s.replace(/לא ניתן לערו\uFFFD\uFFFD שורת מערכת/g, noSys);
+fs.writeFileSync(p, s, 'utf8');
+console.log('fixed');

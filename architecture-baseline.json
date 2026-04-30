@@ -1,0 +1,1685 @@
+{
+  "generated_at": "2026-04-23T15:03:43.422Z",
+  "items": [
+    {
+      "signature": "aeea783ef5c6b135",
+      "ruleId": "RULE_A_NO_PATCH_PUT",
+      "severity": "error",
+      "file": "apps/api/src/domains/client-operations/client-operations.routes.ts",
+      "summary": "router.patch(/clients/:clientId/profile)"
+    },
+    {
+      "signature": "907d8d404d7a2d77",
+      "ruleId": "RULE_A_NO_PATCH_PUT",
+      "severity": "error",
+      "file": "apps/api/src/domains/client-operations/client-operations.routes.ts",
+      "summary": "router.patch(/clients/:clientId/tax-settings)"
+    },
+    {
+      "signature": "59afc3d1cea53937",
+      "ruleId": "RULE_A_NO_PATCH_PUT",
+      "severity": "error",
+      "file": "apps/api/src/domains/client-operations/client-operations.routes.ts",
+      "summary": "router.patch(/clients/:clientId/accounting/general)"
+    },
+    {
+      "signature": "bf168b7c8c28b494",
+      "ruleId": "RULE_A_NO_PATCH_PUT",
+      "severity": "error",
+      "file": "apps/api/src/domains/client-operations/client-operations.routes.ts",
+      "summary": "router.put(/clients/:clientId/accounting/vehicles)"
+    },
+    {
+      "signature": "23f903ca4aa3627f",
+      "ruleId": "RULE_A_NO_PATCH_PUT",
+      "severity": "error",
+      "file": "apps/api/src/domains/client-operations/client-operations.routes.ts",
+      "summary": "router.patch(/clients/:clientId/accounting/business-profile)"
+    },
+    {
+      "signature": "b1e16cda33f89c5f",
+      "ruleId": "RULE_A_NO_PATCH_PUT",
+      "severity": "error",
+      "file": "apps/api/src/domains/client-operations/client-operations.routes.ts",
+      "summary": "router.patch(/clients/:clientId/accounting-settings/vehicle-fleet/items/:vehicleId)"
+    },
+    {
+      "signature": "e7d5af75e6774dd6",
+      "ruleId": "RULE_A_NO_PATCH_PUT",
+      "severity": "error",
+      "file": "apps/api/src/domains/client-operations/client-operations.routes.ts",
+      "summary": "router.patch(/clients/:clientId/accounting-settings/blocks/:blockKey)"
+    },
+    {
+      "signature": "428b728ad09b3550",
+      "ruleId": "RULE_A_NO_PATCH_PUT",
+      "severity": "error",
+      "file": "apps/api/src/domains/client-operations/client-operations.routes.ts",
+      "summary": "router.patch(/clients/:clientId/operational-notes/:noteId)"
+    },
+    {
+      "signature": "af6666dfc18afe41",
+      "ruleId": "RULE_A_NO_PATCH_PUT",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "PATCH moduleClientOperationsUpdateClientProfile(localWorkspace.client.id)"
+    },
+    {
+      "signature": "4726c7df78024f88",
+      "ruleId": "RULE_C_COMMAND_ONLY_WRITE",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "PATCH moduleClientOperationsUpdateClientProfile(localWorkspace.client.id)"
+    },
+    {
+      "signature": "00a3fe8a2faacf55",
+      "ruleId": "RULE_H_LEGACY_ENDPOINT",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "Deprecated endpoint used: moduleClientOperationsUpdateClientProfile(localWorkspace.client.id)"
+    },
+    {
+      "signature": "7b01431d566abe0e",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsUpdateClientProfile()"
+    },
+    {
+      "signature": "0c1304d2deffe833",
+      "ruleId": "RULE_H_LEGACY_ENDPOINT",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "Legacy endpoint symbol used: moduleClientOperationsUpdateClientProfile"
+    },
+    {
+      "signature": "c2adccd633bfeed5",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsTaxCommands()"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "077984e242fa0228",
+      "ruleId": "RULE_C_COMMAND_ONLY_WRITE",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "POST moduleClientOperationsTaxSettingsRevealPaymentSecret(clientId)"
+    },
+    {
+      "signature": "84448f168b7056b7",
+      "ruleId": "RULE_H_LEGACY_ENDPOINT",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "Deprecated endpoint used: moduleClientOperationsTaxSettingsRevealPaymentSecret(clientId)"
+    },
+    {
+      "signature": "88e615cb21c5dee5",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsTaxSettingsRevealPaymentSecret()"
+    },
+    {
+      "signature": "759f07f31b59cc84",
+      "ruleId": "RULE_C_COMMAND_ONLY_WRITE",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "POST moduleClientOperationsTaxSettingsPaymentCardRequestCode(clientId)"
+    },
+    {
+      "signature": "aaab1e52315c4d39",
+      "ruleId": "RULE_H_LEGACY_ENDPOINT",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "Deprecated endpoint used: moduleClientOperationsTaxSettingsPaymentCardRequestCode(clientId)"
+    },
+    {
+      "signature": "213ba0051388acf7",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsTaxSettingsPaymentCardRequestCode()"
+    },
+    {
+      "signature": "fb193dcef49fafde",
+      "ruleId": "RULE_C_COMMAND_ONLY_WRITE",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "POST moduleClientOperationsTaxSettingsPaymentCardVerifyCode(clientId)"
+    },
+    {
+      "signature": "552c65f28de25b34",
+      "ruleId": "RULE_H_LEGACY_ENDPOINT",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "Deprecated endpoint used: moduleClientOperationsTaxSettingsPaymentCardVerifyCode(clientId)"
+    },
+    {
+      "signature": "3c4b58793ceb0d71",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsTaxSettingsPaymentCardVerifyCode()"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "2cf1a446d296b7c8",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setVatCard(prev => ...)"
+    },
+    {
+      "signature": "2cf1a446d296b7c8",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setVatCard(prev => ...)"
+    },
+    {
+      "signature": "2cf1a446d296b7c8",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setVatCard(prev => ...)"
+    },
+    {
+      "signature": "0e2ca6eeb1ccdf86",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setItCard(prev => ...)"
+    },
+    {
+      "signature": "0e2ca6eeb1ccdf86",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setItCard(prev => ...)"
+    },
+    {
+      "signature": "0e2ca6eeb1ccdf86",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setItCard(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "a937ef0ea63a06da",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "setModalDraft(prev => ...)"
+    },
+    {
+      "signature": "e01064dcf3a4a816",
+      "ruleId": "RULE_H_LEGACY_ENDPOINT",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientTaxesTab.tsx",
+      "summary": "Legacy endpoint symbol used: moduleClientOperationsTaxSettings"
+    },
+    {
+      "signature": "f3ad8b767f11f910",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'boolean'"
+    },
+    {
+      "signature": "eb48122fad220b3d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'enum_single'"
+    },
+    {
+      "signature": "ab535a3af27e772d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'multi_enum'"
+    },
+    {
+      "signature": "a3dec1250db76481",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'date'"
+    },
+    {
+      "signature": "7c3acebe2c758fa9",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingCommands()"
+    },
+    {
+      "signature": "819daab2593e6e8d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'textarea'"
+    },
+    {
+      "signature": "ab31280fa453a5cb",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'text'"
+    },
+    {
+      "signature": "819daab2593e6e8d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'textarea'"
+    },
+    {
+      "signature": "eb48122fad220b3d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'enum_single'"
+    },
+    {
+      "signature": "f3ad8b767f11f910",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'boolean'"
+    },
+    {
+      "signature": "a3dec1250db76481",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'date'"
+    },
+    {
+      "signature": "ab535a3af27e772d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientBusinessProfileTab.tsx",
+      "summary": "[confidence:high] f.type === 'multi_enum'"
+    },
+    {
+      "signature": "7286736fbe72eba6",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'vehicle_file'"
+    },
+    {
+      "signature": "e3ddbc7fb1f078e0",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET () => {\n          delete modalInflightRef.current[blockKey];\n        }"
+    },
+    {
+      "signature": "8e64a3d877104ce2",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET (out) => {\n          modalCacheRef.current[blockKey] = out;\n          return out;\n        }"
+    },
+    {
+      "signature": "4a22f5463a02696f",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET moduleClientOperationsAccountingSettingsBlockModal(clientId, blockKey)"
+    },
+    {
+      "signature": "fd7dd9a798ead027",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingSettingsBlockModal()"
+    },
+    {
+      "signature": "c9fad0e86f498bce",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET moduleClientOperationsVehicleFleetItemModal(clientId, vehicleId ?? undefined)"
+    },
+    {
+      "signature": "db4a3070e8c66524",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsVehicleFleetItemModal()"
+    },
+    {
+      "signature": "89c005d4d487cdba",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET vehicleId"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "e8979c7adc20643c",
+      "ruleId": "RULE_C_COMMAND_ONLY_WRITE",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "POST moduleClientOperationsVehicleFleetItemModalVisibility(clientId)"
+    },
+    {
+      "signature": "f143c6b0127a008c",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsVehicleFleetItemModalVisibility()"
+    },
+    {
+      "signature": "36c7c85550594922",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingCommands()"
+    },
+    {
+      "signature": "36c7c85550594922",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingCommands()"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "36c7c85550594922",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingCommands()"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "72c4260e3ac1a753",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET (e) => ({\n          ok: false as const,\n          err: userFacingApiMessage(e),\n        })"
+    },
+    {
+      "signature": "e311f2b3954e837c",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET (m) => ({ ok: true as const, m })"
+    },
+    {
+      "signature": "e22df92cc4f5d614",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET null"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "42250cc4d238c203",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET (e) => ({ ok: false as const, err: userFacingApiMessage(e) })"
+    },
+    {
+      "signature": "bd99293e07a499aa",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET (c) => ({ ok: true as const, c })"
+    },
+    {
+      "signature": "36c7c85550594922",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingCommands()"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "36c7c85550594922",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingCommands()"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "36c7c85550594922",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingCommands()"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "36c7c85550594922",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingCommands()"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "36c7c85550594922",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingCommands()"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "3765d1d810177c8d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'text' || f.type === 'secure_text'"
+    },
+    {
+      "signature": "bc1f714bd0ffc037",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "setRevealedSecureFields(prev => ...)"
+    },
+    {
+      "signature": "46940f364b3ef792",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'textarea'"
+    },
+    {
+      "signature": "5b9933f5e33b4a7b",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'enum_single'"
+    },
+    {
+      "signature": "46ee3c6f4dcae6d7",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET async () => {\n                      try {\n                        const out = await apiJson<{ field_visibility: Record<string, boolean> }>(\n                          moduleClientOperationsAccountingSettingsModalVisibility(clientId, 'expense_management'),\n                          { method: 'POST', body: JSON.stringify(merged) }\n                        );\n                        setFieldVisibility(out.field_visibility);\n                      } catch {\n                        /* keep map */\n                      }\n                    }"
+    },
+    {
+      "signature": "47526b5282b1df62",
+      "ruleId": "RULE_C_COMMAND_ONLY_WRITE",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "POST moduleClientOperationsAccountingSettingsModalVisibility(clientId, 'expense_management')"
+    },
+    {
+      "signature": "ad6439a79484454c",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingSettingsModalVisibility()"
+    },
+    {
+      "signature": "c0aff564c77058af",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'enum_multi'"
+    },
+    {
+      "signature": "b5c88d61e3f79333",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'boolean'"
+    },
+    {
+      "signature": "3765d1d810177c8d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'text' || f.type === 'secure_text'"
+    },
+    {
+      "signature": "bc1f714bd0ffc037",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "setRevealedSecureFields(prev => ...)"
+    },
+    {
+      "signature": "46940f364b3ef792",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'textarea'"
+    },
+    {
+      "signature": "5b9933f5e33b4a7b",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'enum_single'"
+    },
+    {
+      "signature": "e27c5775279abe59",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET async () => {\n                                    try {\n                                      const out = await apiJson<{ field_visibility: Record<string, boolean> }>(\n                                        moduleClientOperationsAccountingSettingsModalVisibility(\n                                          clientId,\n                                          'expense_management'\n                                        ),\n                                        { method: 'POST', body: JSON.stringify(merged) }\n                                      );\n                                      setFieldVisibility(out.field_visibility);\n                                    } catch {\n                                      /* keep map */\n                                    }\n                                  }"
+    },
+    {
+      "signature": "10cb1b9b7ded6d25",
+      "ruleId": "RULE_C_COMMAND_ONLY_WRITE",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "POST moduleClientOperationsAccountingSettingsModalVisibility(\n                                          clientId,\n                                          'expense_management'\n                                        )"
+    },
+    {
+      "signature": "ad6439a79484454c",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingSettingsModalVisibility()"
+    },
+    {
+      "signature": "b5c88d61e3f79333",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'boolean'"
+    },
+    {
+      "signature": "27e55a60a1a39982",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'integer' || f.type === 'numeric'"
+    },
+    {
+      "signature": "b9d63061eeae5fe8",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'integer'"
+    },
+    {
+      "signature": "b41401516375f2c4",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'date'"
+    },
+    {
+      "signature": "c0aff564c77058af",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'enum_multi'"
+    },
+    {
+      "signature": "eaa6f6f28acc3bfe",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET async () => {\n                                          const next = [...(value as Array<any>)];\n                                          next[idx] = { ...next[idx], selected: e.target.checked };\n                                          try {\n                                            const out = await apiJson<{\n                                              expense_items: unknown[];\n                                              field_visibility?: Record<string, boolean>;\n                                            }>(moduleClientOperationsAccountingSettingsBlockNormalizeDraft(clientId, 'expenses'), {\n                                              method: 'POST',\n                                              body: JSON.stringify({ expense_items: next }),\n                                            });\n                                            setDraft((d) => ({ ...d, [f.key]: out.expense_items }));\n                                            if (out.field_visibility) setFieldVisibility(out.field_visibility);\n                                          } catch (err) {\n                                            setModalError(err instanceof Error ? err.message : 'שגיאה');\n                                          }\n                                        }"
+    },
+    {
+      "signature": "74dd0658b29d49e2",
+      "ruleId": "RULE_C_COMMAND_ONLY_WRITE",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "POST moduleClientOperationsAccountingSettingsBlockNormalizeDraft(clientId, 'expenses')"
+    },
+    {
+      "signature": "4ef21c2d92680181",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingSettingsBlockNormalizeDraft()"
+    },
+    {
+      "signature": "4704105cfa4b594f",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET async () => {\n                                          const next = [...(value as Array<any>)];\n                                          next[idx] = { ...next[idx], selected: e.target.checked };\n                                          try {\n                                            const out = await apiJson<{\n                                              income_source_items: unknown[];\n                                              field_visibility?: Record<string, boolean>;\n                                            }>(moduleClientOperationsAccountingSettingsBlockNormalizeDraft(clientId, 'income'), {\n                                              method: 'POST',\n                                              body: JSON.stringify({ income_source_items: next }),\n                                            });\n                                            setDraft((d) => ({ ...d, [f.key]: out.income_source_items }));\n                                            if (out.field_visibility) setFieldVisibility(out.field_visibility);\n                                          } catch (err) {\n                                            setModalError(err instanceof Error ? err.message : 'שגיאה');\n                                          }\n                                        }"
+    },
+    {
+      "signature": "154de758cdfcf99f",
+      "ruleId": "RULE_C_COMMAND_ONLY_WRITE",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "POST moduleClientOperationsAccountingSettingsBlockNormalizeDraft(clientId, 'income')"
+    },
+    {
+      "signature": "4ef21c2d92680181",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingSettingsBlockNormalizeDraft()"
+    },
+    {
+      "signature": "eca2d86bc309bda3",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "GET () => {\n                    const vis = vehicleItemVis ?? vehicleItemModal.field_visibility;\n                    const rows = vehicleItemModal.fields.filter((ff) => vis[ff.key] !== false);\n                    let lastGl = '';\n                    return rows.map((f) => {\n                      const dis = !f.editable || !vehicleItemModal.can_edit;\n                      const gl = f.group_label && f.group_label !== lastGl ? f.group_label : null;\n                      if (gl) lastGl = f.group_label!;\n                      const v = vehicleItemDraft[f.key];\n                      const fieldWrap = (inner: ReactNode) => (\n                        <Fragment key={f.key}>\n                          {gl ? (\n                            <div className=\"client-field client-field-full\" style={{ gridColumn: '1 / -1' }}>\n                              <div style={{ fontSize: 14, fontWeight: 700, marginTop: 8 }}>{gl}</div>\n                            </div>\n                          ) : null}\n                          {inner}\n                        </Fragment>\n                      );\n                      if (f.type === 'text' || f.type === 'textarea') {\n                        if (f.type === 'textarea') {\n                          return fieldWrap(\n                            <div className=\"client-field client-field-full\">\n                              <div className=\"client-field-label\">{f.label}</div>\n                              <textarea\n                                value={(v as string | null | undefined) ?? ''}\n                                disabled={dis}\n                                maxLength={f.max_length}\n                                rows={3}\n                                onChange={(e) => patchVehicleItemDraft({ [f.key]: e.target.value || null })}\n                                style={{ width: '100%', border: '1px solid #dbe3ee', borderRadius: 10, padding: 10 }}\n                              />\n                            </div>\n                          );\n                        }\n                        return fieldWrap(\n                          <div className=\"client-field\">\n                            <div className=\"client-field-label\">{f.label}</div>\n                            <div className=\"client-field-box\">\n                              <input\n                                type=\"text\"\n                                value={(v as string | null | undefined) ?? ''}\n                                disabled={dis}\n                                maxLength={f.max_length}\n                                placeholder={f.placeholder}\n                                onChange={(e) => patchVehicleItemDraft({ [f.key]: e.target.value || null })}\n                                style={{ border: 'none', background: 'transparent', width: '100%', outline: 'none', font: 'inherit' }}\n                              />\n                            </div>\n                          </div>\n                        );\n                      }\n                      if (f.type === 'enum_single') {\n                        if (f.display_as === 'radio') {\n                          return fieldWrap(\n                            <div className=\"client-field client-field-full\">\n                              <div className=\"client-field-label\">{f.label}</div>\n                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }} role=\"radiogroup\" aria-label={f.label}>\n                                {(f.options ?? []).map((o) => (\n                                  <label key={String(o.value)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>\n                                    <input\n                                      type=\"radio\"\n                                      name={`vi-${f.key}`}\n                                      checked={String(v ?? '') === String(o.value)}\n                                      disabled={dis}\n                                      onChange={() => patchVehicleItemDraft({ [f.key]: o.value })}\n                                    />\n                                    <span>{o.label}</span>\n                                  </label>\n                                ))}\n                              </div>\n                            </div>\n                          );\n                        }\n                        return fieldWrap(\n                          <div className=\"client-field\">\n                            <div className=\"client-field-label\">{f.label}</div>\n                            <div className=\"client-field-box\">\n                              <select\n                                value={(v as string | null | undefined) ?? ''}\n                                disabled={dis}\n                                onChange={(e) =>\n                                  patchVehicleItemDraft({ [f.key]: e.target.value ? e.target.value : null })\n                                }\n                                style={{ border: 'none', background: 'transparent', width: '100%', outline: 'none', font: 'inherit' }}\n                              >\n                                <option value=\"\">בחר</option>\n                                {(f.options ?? []).map((o) => (\n                                  <option key={String(o.value)} value={String(o.value)}>\n                                    {o.label}\n                                  </option>\n                                ))}\n                              </select>\n                            </div>\n                          </div>\n                        );\n                      }\n                      if (f.type === 'boolean') {\n                        return fieldWrap(\n                          <div className=\"client-field\">\n                            <div className=\"client-field-label\">{f.label}</div>\n                            <div className=\"client-field-box\">\n                              <select\n                                value={Boolean(v) ? 'true' : 'false'}\n                                disabled={dis}\n                                onChange={(e) => patchVehicleItemDraft({ [f.key]: e.target.value === 'true' })}\n                                style={{ border: 'none', background: 'transparent', width: '100%', outline: 'none', font: 'inherit' }}\n                              >\n                                {(f.options ?? []).map((o) => (\n                                  <option key={String(o.value)} value={o.value ? 'true' : 'false'}>\n                                    {o.label}\n                                  </option>\n                                ))}\n                              </select>\n                            </div>\n                          </div>\n                        );\n                      }\n                      if (f.type === 'integer' || f.type === 'numeric') {\n                        return fieldWrap(\n                          <div className=\"client-field\">\n                            <div className=\"client-field-label\">{f.label}</div>\n                            <div className=\"client-field-box\">\n                              <input\n                                type=\"number\"\n                                value={(v as number | null | undefined) ?? ''}\n                                min={f.min}\n                                max={f.max}\n                                step={f.type === 'integer' ? 1 : 'any'}\n                                disabled={dis}\n                                onChange={(e) =>\n                                  patchVehicleItemDraft({\n                                    [f.key]: e.target.value === '' ? null : Number(e.target.value),\n                                  })\n                                }\n                                style={{ border: 'none', background: 'transparent', width: '100%', outline: 'none', font: 'inherit' }}\n                              />\n                            </div>\n                          </div>\n                        );\n                      }\n                      if (f.type === 'date') {\n                        return fieldWrap(\n                          <div className=\"client-field\">\n                            <div className=\"client-field-label\">{f.label}</div>\n                            <div className=\"client-field-box\">\n                              <input\n                                type=\"date\"\n                                value={v != null && String(v).length ? String(v).slice(0, 10) : ''}\n                                disabled={dis}\n                                onChange={(e) => patchVehicleItemDraft({ [f.key]: e.target.value || null })}\n                                style={{ border: 'none', background: 'transparent', width: '100%', outline: 'none', font: 'inherit' }}\n                              />\n                            </div>\n                          </div>\n                        );\n                      }\n                      if (f.type === 'vehicle_file') {\n                        const nameKey = vehicleFileDisplayNameKey(f.key);\n                        const assetId =\n                          v != null && String(v).trim() !== '' ? String(v) : null;\n                        const displayName =\n                          (vehicleItemDraft[nameKey] as string | null | undefined) ?? null;\n                        return fieldWrap(\n                          <div className=\"client-field client-field-full\">\n                            <div className=\"client-field-label\">{f.label}</div>\n                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>\n                              <span style={{ fontSize: 13 }}>{displayName || '—'}</span>\n                              {assetId && !dis ? (\n                                <button\n                                  type=\"button\"\n                                  className=\"nx-btn nx-btn-secondary nx-btn-taxes-compact\"\n                                  onClick={async () => {\n                                    setVehicleItemError('');\n                                    try {\n                                      const { url } = await apiJson<{ url: string }>(\n                                        moduleClientOperationsAccountingVehicleFleetFileOpen(clientId, assetId)\n                                      );\n                                      window.open(url, '_blank', 'noopener,noreferrer');\n                                    } catch (err) {\n                                      setVehicleItemError(userFacingApiMessage(err));\n                                    }\n                                  }}\n                                >\n                                  פתיחה\n                                </button>\n                              ) : null}\n                              {!dis ? (\n                                <>\n                                  <input\n                                    type=\"file\"\n                                    id={`vf-file-${f.key}`}\n                                    style={{ display: 'none' }}\n                                    onChange={async (e) => {\n                                      const file = e.target.files?.[0];\n                                      e.target.value = '';\n                                      if (!file) return;\n                                      setVehicleFileUploadKey(f.key);\n                                      setVehicleItemError('');\n                                      try {\n                                        const file_base64 = await fileToBase64(file);\n                                        const data = await apiJson<VehicleFleetUploadApiResponse>(\n                                          moduleClientOperationsAccountingVehicleFleetUpload(clientId),\n                                          {\n                                            method: 'POST',\n                                            body: JSON.stringify({\n                                              file_name: file.name,\n                                              mime_type: file.type || null,\n                                              file_base64,\n                                            }),\n                                          }\n                                        );\n                                        patchVehicleItemDraft({\n                                          [f.key]: data.file_asset_id,\n                                          [nameKey]: data.file_name,\n                                        });\n                                        setTab(data.client_operations_case.accounting_settings_tab ?? null);\n                                        onAccountingCaseUpdated(data.client_operations_case);\n                                      } catch (err) {\n                                        setVehicleItemError(userFacingApiMessage(err));\n                                      } finally {\n                                        setVehicleFileUploadKey(null);\n                                      }\n                                    }}\n                                  />\n                                  <button\n                                    type=\"button\"\n                                    className=\"nx-btn nx-btn-secondary nx-btn-taxes-compact\"\n                                    disabled={vehicleFileUploadKey === f.key}\n                                    onClick={() => document.getElementById(`vf-file-${f.key}`)?.click()}\n                                  >\n                                    {vehicleFileUploadKey === f.key ? 'מעלה…' : 'העלאת קובץ'}\n                                  </button>\n                                </>\n                              ) : null}\n                            </div>\n                          </div>\n                        );\n                      }\n                      return fieldWrap(\n                        <div className=\"client-field client-field-full\" key={f.key}>\n                          <div className=\"client-field-label\">{f.label}</div>\n                          <div style={{ fontSize: 12, color: '#9ca3af' }}>שדה לא נתמך: {f.type}</div>\n                        </div>\n                      );\n                    });\n                  }"
+    },
+    {
+      "signature": "75c84fdedf0a264d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'text' || f.type === 'textarea'"
+    },
+    {
+      "signature": "46940f364b3ef792",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'textarea'"
+    },
+    {
+      "signature": "5b9933f5e33b4a7b",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'enum_single'"
+    },
+    {
+      "signature": "b5c88d61e3f79333",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'boolean'"
+    },
+    {
+      "signature": "27e55a60a1a39982",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'integer' || f.type === 'numeric'"
+    },
+    {
+      "signature": "b9d63061eeae5fe8",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'integer'"
+    },
+    {
+      "signature": "b41401516375f2c4",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'date'"
+    },
+    {
+      "signature": "7286736fbe72eba6",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "[confidence:high] f.type === 'vehicle_file'"
+    },
+    {
+      "signature": "86cd090e1647a01a",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingVehicleFleetFileOpen()"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "c486c427d4753f02",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAccountingVehicleFleetUpload()"
+    },
+    {
+      "signature": "e9c7cc54f212bd31",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "a163e4a2249f0626",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "setEmAddOptionRows(prev => ...)"
+    },
+    {
+      "signature": "a163e4a2249f0626",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAccountingSettingsTab.tsx",
+      "summary": "setEmAddOptionRows(prev => ...)"
+    },
+    {
+      "signature": "840c9be6a059469b",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "GET async () => {\r\n      try {\r\n        const out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsObligationsCommands(clientId), {\r\n          method: 'POST',\r\n          body: JSON.stringify({\r\n            type: 'touch_ni_deductions_auto_reminder_shown',\r\n            payload: { period_key: pk },\r\n          }),\r\n        });\r\n        if (!cancelled) onCaseUpdated(out);\r\n      } catch (e) {\r\n        if (!cancelled) {\r\n          setErr(userFacingApiMessage(e));\r\n          niDedAutoTouchSentForPeriodRef.current = null;\r\n        }\r\n      }\r\n    }"
+    },
+    {
+      "signature": "b5087c572345b9bc",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsObligationsCommands()"
+    },
+    {
+      "signature": "81aa011f5537c5eb",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "b5087c572345b9bc",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsObligationsCommands()"
+    },
+    {
+      "signature": "81aa011f5537c5eb",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "d4997a667717778c",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "[confidence:high] interaction.type === 'none'"
+    },
+    {
+      "signature": "62fcdaf4472c8bce",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "[confidence:low] interaction.type === 'open_module'"
+    },
+    {
+      "signature": "4fb940978d21e5b6",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "[confidence:low] interaction.type === 'open_modal'"
+    },
+    {
+      "signature": "1ea7932b2110d36c",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "[confidence:high] interaction.type === 'command' && interaction.command_type"
+    },
+    {
+      "signature": "e4af09b6eb619ffe",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "setOpenActionsForCell(prev => ...)"
+    },
+    {
+      "signature": "9936875472f8d545",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "[confidence:low] intr.type === 'open_modal'"
+    },
+    {
+      "signature": "dcf8e230344324ca",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "[confidence:high] a.interaction.type === 'close_modal'"
+    },
+    {
+      "signature": "9936875472f8d545",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientObligationsTab.tsx",
+      "summary": "[confidence:low] intr.type === 'open_modal'"
+    },
+    {
+      "signature": "f7b3e2ab2785ee79",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsDocumentsCommands()"
+    },
+    {
+      "signature": "d765fd88c9c316ec",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "86278c142b64ced1",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsDocumentsFileOpen()"
+    },
+    {
+      "signature": "d765fd88c9c316ec",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "36221df13817de3d",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsDocumentsUpload()"
+    },
+    {
+      "signature": "f7b3e2ab2785ee79",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsDocumentsCommands()"
+    },
+    {
+      "signature": "d765fd88c9c316ec",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "2aea83b2ccf0b8f5",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "[confidence:high] !folder.actions.can_archive_or_delete"
+    },
+    {
+      "signature": "9b1557eef6845374",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "[confidence:high] (f.actions.can_rename || f.actions.can_archive_or_delete) && canEdit"
+    },
+    {
+      "signature": "bb3f69ca49e893f8",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "[confidence:high] f.actions.can_rename"
+    },
+    {
+      "signature": "482ce3ca12ac9e7a",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "[confidence:high] f.actions.can_archive_or_delete"
+    },
+    {
+      "signature": "4f4d3a3796dc7fe9",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "[confidence:high] d.actions.can_view && d.file_asset_id"
+    },
+    {
+      "signature": "1b9fa37f696377f4",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientDocumentsTab.tsx",
+      "summary": "[confidence:high] d.actions.can_delete"
+    },
+    {
+      "signature": "308c68ab1eaf45a2",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "[confidence:high] status === 'completed'"
+    },
+    {
+      "signature": "5ff7d32b3b52178d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "[confidence:high] status === 'missing'"
+    },
+    {
+      "signature": "7f79038c746f4fd9",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAnnualCommands()"
+    },
+    {
+      "signature": "925317b247552812",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "7218b6841a0b6fff",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAnnualFileOpen()"
+    },
+    {
+      "signature": "925317b247552812",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "d75fe643f793c93b",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAnnualUpload()"
+    },
+    {
+      "signature": "7f79038c746f4fd9",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsAnnualCommands()"
+    },
+    {
+      "signature": "925317b247552812",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "7aea131200cb91c5",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "[confidence:high] s.actions.can_edit"
+    },
+    {
+      "signature": "f2701fa7ad47772b",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "[confidence:high] s.actions.can_remove"
+    },
+    {
+      "signature": "7e7c297a5b8d3a02",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "[confidence:high] row.actions.can_rename_document || row.actions.can_remove_row"
+    },
+    {
+      "signature": "4859477b6a0e1768",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "[confidence:high] row.actions.can_rename_document"
+    },
+    {
+      "signature": "71129b8f71ea4214",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "[confidence:high] row.actions.can_remove_row"
+    },
+    {
+      "signature": "ee49a78821235b43",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "[confidence:high] row.actions.can_remove_file"
+    },
+    {
+      "signature": "acab9aaaf10e30d0",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientAnnualReportTab.tsx",
+      "summary": "[confidence:high] row.actions.can_attach_file"
+    },
+    {
+      "signature": "6fefb7e904334d15",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "[confidence:high] section.rows.length === 0"
+    },
+    {
+      "signature": "59cf2720c9b1dd51",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "[confidence:high] f.type === 'radio'"
+    },
+    {
+      "signature": "f7111b77ffebe899",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "[confidence:high] f.type === 'number'"
+    },
+    {
+      "signature": "9f1002551c9b5c42",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "[confidence:high] f.type === 'textarea'"
+    },
+    {
+      "signature": "d80fb16584d5a85f",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "[confidence:high] f.type === 'radio' && f.options"
+    },
+    {
+      "signature": "96933551322eff94",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "[confidence:high] f.type === 'select' && f.options"
+    },
+    {
+      "signature": "8e8249eb71810b23",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "[confidence:high] f.type === 'date'"
+    },
+    {
+      "signature": "f7111b77ffebe899",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "[confidence:high] f.type === 'number'"
+    },
+    {
+      "signature": "59cf2720c9b1dd51",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "[confidence:high] f.type === 'radio'"
+    },
+    {
+      "signature": "d3ad5cd75c1d3417",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsFeesCommands()"
+    },
+    {
+      "signature": "4a10eb644d946353",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "4a10eb644d946353",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "4a10eb644d946353",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "4a10eb644d946353",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "4a10eb644d946353",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "4a10eb644d946353",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "4a10eb644d946353",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "16bed8f8493c22ac",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "GET moduleClientOperationsCase(clientId, { fees_price_chart_view: mode })"
+    },
+    {
+      "signature": "119741727fa6667a",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsCase()"
+    },
+    {
+      "signature": "b5430493b01f940a",
+      "ruleId": "RULE_D_FULL_REFRESH_AFTER_COMMAND",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientFeesTab.tsx",
+      "summary": "setRecentHistoryExpanded(prev => ...)"
+    },
+    {
+      "signature": "5d5b5707e252bf1a",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] label.includes('דואר')"
+    },
+    {
+      "signature": "fe0e9bb55306ffc9",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] label.includes('טלפון')"
+    },
+    {
+      "signature": "a9644d112ddc71b3",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] label.includes('תאריך') || label.includes('מועד') || label.includes('טופס')"
+    },
+    {
+      "signature": "d613038b2905a77f",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] label.includes('בנק') || label.includes('חשבון') || label.includes('סניף')"
+    },
+    {
+      "signature": "8cc3eae35ab44867",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] label.includes('עובדים')"
+    },
+    {
+      "signature": "f43df776b3ad0bc9",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] label.includes('מס')"
+    },
+    {
+      "signature": "08fc2e65461cac37",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] field.type === 'textarea'"
+    },
+    {
+      "signature": "1e994c5f3a055b3a",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] field.type === 'select' && field.options"
+    },
+    {
+      "signature": "e96c44805d05fc97",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] field.type === 'radio' && field.options"
+    },
+    {
+      "signature": "2f2457cccdb48045",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] field.type === 'number'"
+    },
+    {
+      "signature": "4a6908eadc30ba7f",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsPayrollCommands()"
+    },
+    {
+      "signature": "2f23d100eaf49d33",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "978e93961a81e0f2",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] payrollTab.status.has_employees"
+    },
+    {
+      "signature": "978e93961a81e0f2",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] payrollTab.status.has_employees"
+    },
+    {
+      "signature": "978e93961a81e0f2",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] payrollTab.status.has_employees"
+    },
+    {
+      "signature": "28365fa77133871d",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientPayrollTab.tsx",
+      "summary": "[confidence:high] !payrollTab.status.has_employees"
+    },
+    {
+      "signature": "fbb5cc1b694ee548",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientHistoryTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsHistoryCommands()"
+    },
+    {
+      "signature": "8217147590a67af3",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientHistoryTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "a738b84461ace3c6",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientHistoryTab.tsx",
+      "summary": "Unresolved indirect call: apiPostDownload()"
+    },
+    {
+      "signature": "f89127b697a4cc69",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientHistoryTab.tsx",
+      "summary": "Unresolved indirect call: moduleClientOperationsHistoryExport()"
+    },
+    {
+      "signature": "8217147590a67af3",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientHistoryTab.tsx",
+      "summary": "Unresolved indirect call: userFacingApiMessage()"
+    },
+    {
+      "signature": "6ffd44258dc4c4e4",
+      "ruleId": "RULE_G_STATE_ACTION_EVENT",
+      "severity": "warn",
+      "file": "apps/api/src/domains/client-operations/client-accounting-commands.service.ts",
+      "summary": "Potential UI-state commands detected."
+    },
+    {
+      "signature": "fba9100d901eb39b",
+      "ruleId": "RULE_G_STATE_ACTION_EVENT",
+      "severity": "warn",
+      "file": "apps/api/src/domains/client-operations/client-accounting-tab.service.ts",
+      "summary": "Potential UI-state commands detected."
+    },
+    {
+      "signature": "344466f4a1193c4e",
+      "ruleId": "RULE_G_STATE_ACTION_EVENT",
+      "severity": "warn",
+      "file": "apps/api/src/domains/client-operations/client-annual-report-tab.service.ts",
+      "summary": "Potential UI-state commands detected."
+    },
+    {
+      "signature": "08d639ff0ee0117a",
+      "ruleId": "RULE_G_STATE_ACTION_EVENT",
+      "severity": "warn",
+      "file": "apps/api/src/domains/client-operations/client-business-profile.service.ts",
+      "summary": "Potential UI-state commands detected."
+    },
+    {
+      "signature": "f4461b35d6458ed1",
+      "ruleId": "RULE_G_STATE_ACTION_EVENT",
+      "severity": "warn",
+      "file": "apps/api/src/domains/client-operations/client-documents-tab.service.ts",
+      "summary": "Potential UI-state commands detected."
+    },
+    {
+      "signature": "6a93a5ed6d104032",
+      "ruleId": "RULE_G_STATE_ACTION_EVENT",
+      "severity": "warn",
+      "file": "apps/api/src/domains/client-operations/client-history-tab.service.ts",
+      "summary": "Potential UI-state commands detected."
+    },
+    {
+      "signature": "1665f8a77511115c",
+      "ruleId": "RULE_G_STATE_ACTION_EVENT",
+      "severity": "warn",
+      "file": "apps/api/src/domains/client-operations/client-obligations-tasks-core.service.ts",
+      "summary": "Potential UI-state commands detected."
+    }
+  ]
+}

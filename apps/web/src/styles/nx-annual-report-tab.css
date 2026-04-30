@@ -1,0 +1,790 @@
+/**
+ * Annual report tab — light canvas inside workspace (mockup: #F5F7FA, white cards).
+ * Full-bleed: workspace content uses dark blue; we negate its padding so the tab matches the design.
+ */
+.nx-annual-root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-family: inherit;
+}
+
+/* Match other workspace tabs: single light inner container on dark shell */
+.nx-workspace-content > .nx-annual-root {
+  background: #f9fafb;
+  border-radius: 18px;
+  padding: 20px;
+  border: 1px solid rgba(219, 227, 238, 0.8);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+@media (max-width: 820px) {
+  .nx-annual-root {
+    margin: 0;
+    padding: 0;
+  }
+
+  .nx-workspace-content > .nx-annual-root {
+    padding: 16px;
+    border-radius: 16px;
+  }
+}
+
+.nx-annual-meta {
+  font-size: 13px;
+  color: #6b7280;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: flex-start;
+  text-align: right;
+  width: 100%;
+}
+
+/* Dashboard: status card first in DOM → inline-end in RTL; missing docs second → inline-start */
+.nx-annual-dashboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: stretch;
+}
+
+@media (max-width: 768px) {
+  .nx-annual-dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nx-annual-dash-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px 22px 22px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(219, 227, 238, 0.95);
+}
+
+.nx-annual-dash-card--missing {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.nx-annual-dash-card-title {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.nx-annual-dash-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.nx-annual-dash-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nx-annual-dash-dot--green {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.22);
+}
+
+.nx-annual-dash-dot--yellow {
+  background: #facc15;
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.35);
+}
+
+.nx-annual-dash-dot--red {
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.22);
+}
+
+.nx-annual-dash-status-label {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.nx-annual-dash-status-label--green {
+  color: #15803d;
+}
+
+.nx-annual-dash-status-label--yellow {
+  color: #ca8a04;
+}
+
+.nx-annual-dash-status-label--red {
+  color: #b91c1c;
+}
+
+.nx-annual-dash-risk {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 400;
+  color: #6b7280;
+  line-height: 1.45;
+}
+
+.nx-annual-dash-deadline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.nx-annual-cal-icon {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.nx-annual-missing-dropdown-wrap {
+  margin-bottom: 14px;
+}
+
+.nx-annual-missing-dropdown {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+}
+
+.nx-annual-dash-progress {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 18px;
+  flex-shrink: 0;
+}
+
+.nx-annual-dash-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.nx-annual-dash-progress-fill--green {
+  background: linear-gradient(90deg, #4ade80, #22c55e);
+}
+
+.nx-annual-dash-progress-fill--yellow {
+  background: linear-gradient(90deg, #fcd34d, #eab308);
+}
+
+.nx-annual-dash-progress-fill--red {
+  background: linear-gradient(90deg, #f87171, #ef4444);
+}
+
+.nx-annual-card-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.nx-annual-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 4px;
+  padding: 12px 16px;
+  margin-bottom: 4px;
+  background: #fff;
+  border: 1px solid rgba(219, 227, 238, 0.95);
+  border-radius: 14px;
+  font-size: 13px;
+  color: #334155;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+}
+
+.nx-annual-summary-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.nx-annual-summary-label {
+  font-weight: 600;
+  color: #64748b;
+}
+
+.nx-annual-summary-value {
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.nx-annual-summary-value--muted {
+  font-weight: 600;
+  color: #475569;
+}
+
+.nx-annual-summary-sep {
+  width: 1px;
+  height: 14px;
+  background: #cbd5e1;
+  margin: 0 10px;
+  flex-shrink: 0;
+}
+
+.nx-annual-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(219, 227, 238, 0.95);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.07), 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.nx-annual-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  table-layout: fixed;
+}
+
+/* Documents table: narrow checkbox column + balanced data columns. */
+.nx-annual-table--documents col.nx-annual-col--received {
+  width: 34px;
+}
+
+.nx-annual-table--documents col.nx-annual-col--doc-name {
+  width: calc((100% - 34px) * 0.82);
+}
+
+.nx-annual-table--documents col.nx-annual-col--file {
+  width: calc((100% - 34px) * 0.04);
+}
+
+.nx-annual-table--documents col.nx-annual-col--status {
+  width: calc((100% - 34px) * 0.04);
+}
+
+.nx-annual-table--documents col.nx-annual-col--note {
+  width: calc((100% - 34px) * 0.10);
+}
+
+.nx-annual-table--submissions col.nx-annual-sub-col--year,
+.nx-annual-table--submissions col.nx-annual-sub-col--date,
+.nx-annual-table--submissions col.nx-annual-sub-col--status {
+  width: 20%;
+}
+
+.nx-annual-table--submissions col.nx-annual-sub-col--report {
+  width: 56px;
+}
+
+.nx-annual-table--submissions col.nx-annual-sub-col--actions {
+  width: 64px;
+}
+
+.nx-annual-table--submissions th,
+.nx-annual-table--submissions td {
+  padding: 10px 8px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.nx-annual-table--submissions td {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.nx-annual-table--submissions th:nth-child(1),
+.nx-annual-table--submissions td:nth-child(1),
+.nx-annual-table--submissions th:nth-child(2),
+.nx-annual-table--submissions td:nth-child(2),
+.nx-annual-table--submissions th:nth-child(3),
+.nx-annual-table--submissions td:nth-child(3) {
+  text-align: center;
+}
+
+.nx-annual-table--submissions th:last-child,
+.nx-annual-table--submissions td:last-child {
+  text-align: center;
+  padding-inline: 4px;
+}
+
+.nx-annual-table--submissions th:nth-child(4),
+.nx-annual-table--submissions td:nth-child(4) {
+  text-align: center;
+  padding-inline: 4px;
+}
+
+.nx-annual-table--documents th:nth-child(1),
+.nx-annual-table--documents td:nth-child(1) {
+  width: 34px;
+  max-width: 34px;
+  padding-block: 12px;
+  padding-inline-start: 0;
+  padding-inline-end: 3px;
+  text-align: end;
+  box-sizing: border-box;
+}
+
+.nx-annual-table--documents th:nth-child(2),
+.nx-annual-table--documents td:nth-child(2) {
+  padding-inline-end: 10px;
+  padding-inline-start: 10px;
+}
+
+.nx-annual-table--documents th:nth-child(5) {
+  text-align: center;
+  padding-inline-end: 3px;
+}
+
+.nx-annual-table--documents td:nth-child(5) {
+  padding-inline-end: 3px;
+}
+
+.nx-annual-table th {
+  text-align: right;
+  padding: 12px 14px;
+  background: #fafbfc;
+  border-bottom: 1px solid #e2e8f0;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.nx-annual-table td.nx-annual-td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+  min-height: 48px;
+}
+
+.nx-annual-table tbody tr.nx-annual-doc-row {
+  transition: background-color 0.12s ease;
+}
+
+.nx-annual-doc-row--neutral {
+  background: #fff;
+}
+
+.nx-annual-doc-row--neutral:hover {
+  background: #fafafa;
+}
+
+.nx-annual-doc-row--warning {
+  background: #fffbeb;
+}
+
+.nx-annual-doc-row--warning:hover {
+  background: #fef3c7;
+}
+
+.nx-annual-doc-row--success {
+  background: #f0fdf4;
+}
+
+.nx-annual-doc-row--success:hover {
+  background: #dcfce7;
+}
+
+.nx-annual-doc-row--completed {
+  cursor: pointer;
+}
+
+.nx-annual-td--doc-name {
+  min-width: 0;
+  overflow: visible;
+}
+
+.nx-annual-doc-name-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.nx-annual-doc-name {
+  font-weight: 600;
+  color: #0f172a;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.nx-annual-doc-name-row .nx-annual-badge {
+  flex-shrink: 0;
+}
+
+.nx-annual-doc-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-inline-start: 4px;
+  flex-shrink: 0;
+}
+
+.nx-annual-inline-action {
+  font-size: 12px;
+  color: #9ca3af;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+
+.nx-annual-inline-action:hover:not(:disabled) {
+  color: #2563eb;
+}
+
+.nx-annual-inline-action--danger:hover:not(:disabled) {
+  color: #ef4444;
+}
+
+.nx-annual-inline-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-annual-badge {
+  display: inline-block;
+  margin-inline-start: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.nx-annual-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.nx-annual-status-done {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.nx-annual-status-missing {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.nx-annual-status-warn {
+  background: #fef9c3;
+  color: #a16207;
+}
+
+.nx-annual-note-inp {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.nx-annual-lower {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+  grid-auto-rows: 1fr;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.nx-annual-lower > section {
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nx-annual-lower > section .nx-annual-table-wrap {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 900px) {
+  .nx-annual-lower {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nx-annual-notes-card {
+  border: 1px solid rgba(219, 227, 238, 0.95);
+  border-radius: 16px;
+  padding: 18px 20px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.07), 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.nx-annual-notes-ta {
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 14px;
+  resize: none;
+}
+
+.nx-annual-err {
+  color: #b91c1c;
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0;
+}
+
+.nx-annual-file-cell {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-height: 24px;
+}
+
+.nx-annual-file-cell-icon {
+  display: inline-flex;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.nx-annual-file-name {
+  color: #2563eb;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 13px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: right;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.nx-annual-file-name:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.nx-annual-file-name:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nx-annual-file-remove {
+  font-size: 12px;
+  color: #9ca3af;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font: inherit;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.nx-annual-file-remove:hover:not(:disabled) {
+  color: #ef4444;
+}
+
+.nx-annual-file-remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-annual-folder-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  color: #475569;
+}
+
+.nx-annual-folder-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-annual-dash {
+  color: #94a3b8;
+}
+
+.nx-annual-row-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  justify-content: center;
+  align-items: center;
+  width: max-content;
+  margin: 0 auto;
+  transform: translateX(15%);
+}
+
+.nx-annual-icon-action {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+}
+
+.nx-annual-icon-action:hover:not(:disabled) {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.nx-annual-icon-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-annual-report-file-action {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #2563eb;
+  padding: 0;
+  cursor: pointer;
+}
+
+.nx-annual-report-file-action--attached {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.nx-annual-report-file-action--empty {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #64748b;
+}
+
+.nx-annual-report-file-action:hover:not(:disabled) {
+  border-color: #60a5fa;
+  color: #2563eb;
+}
+
+.nx-annual-report-file-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-annual-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.nx-annual-dialog {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  min-width: min(400px, 100%);
+  max-width: 480px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.nx-annual-dialog h4 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.nx-annual-dialog label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #334155;
+}
+
+.nx-annual-dialog input,
+.nx-annual-dialog select,
+.nx-annual-dialog textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font: inherit;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.nx-annual-dialog-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
+}
