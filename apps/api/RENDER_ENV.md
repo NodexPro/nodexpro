@@ -10,8 +10,9 @@ Set these environment variables in Render for production deploy:
 - `CLIENT_DATA_ENCRYPTION_KEY`
 - `CORS_ALLOWED_ORIGINS=https://app.nodexpro.com,https://nodexpro.com,https://nodexpro.vercel.app`
 - `CORS_ALLOW_CREDENTIALS=false`
-- `PLATFORM_OWNER_EMAIL`
-- `PLATFORM_OWNER_PASSWORD_HASH`
+- `PLATFORM_OWNER_EMAIL=marinator.321@gmail.com` (single platform owner; use a different email for org/tenant users)
+- `PLATFORM_OWNER_PHONE` (SMS OTP for owner password recovery)
+- `PLATFORM_OWNER_PASSWORD_HASH` (optional legacy)
 
 DocFlow invite delivery / email provider (only if used in production):
 

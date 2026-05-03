@@ -29,10 +29,6 @@ function normalizeDeliveryView(rawStatus, rawReason) {
  * not from this message string.
  */
 export function canRunDocflowCommunicationRules(ctx) {
-    // TODO: remove this bypass in production.
-    const email = (ctx.user.email ?? '').trim().toLowerCase();
-    if (email === 'marinator02@walla.com')
-        return true;
     const perms = ctx.membership?.permissions ?? [];
     return perms.includes(COMMUNICATION_WRITE_PERM) || perms.includes(DOCFLOW_REVIEW_RBAC_PERM);
 }

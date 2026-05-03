@@ -4,6 +4,13 @@ Access to `/api/v1/owner/*` is decided **only in the backend** (`assertPlatformO
 
 There is **no** `platform_owner` row in app RBAC; do not add frontend email checks.
 
+## Один владелец — отдельный email
+
+Используйте **только** `marinator.321@gmail.com` для входа в Platform Owner (`/platform-owner/*`).  
+Для работы в организации (офис, клиенты, DocFlow как сотрудник) заведите **другой** email и пользователя Supabase — иначе один и тот же аккаунт совмещает tenant RBAC и owner guard, что даёт конфликты контекста (`X-Organization-Id`, права, обходы).
+
+Текущий канонический owner-email в примерах конфигурации: **`marinator.321@gmail.com`** (задаётся в `PLATFORM_OWNER_EMAIL` на API).
+
 ## Environment (Render / local)
 
 | Variable | Required | Description |

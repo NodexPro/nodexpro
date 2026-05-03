@@ -6,16 +6,6 @@ export function requireModuleActive(moduleCode) {
     return async (req, _res, next) => {
         const ctx = req.context;
         const email = (ctx?.user?.email ?? '').trim().toLowerCase();
-        if (moduleCode === 'docflow' && email === 'marinator02@walla.com') {
-            // TODO: remove this bypass in production.
-            console.warn('[docflow][dev-bypass] requireModuleActive bypass for marinator02@walla.com', {
-                user_id: ctx?.user?.id ?? null,
-                org_id: ctx?.organizationId ?? null,
-                module: moduleCode,
-            });
-            next();
-            return;
-        }
         if (!ctx?.organizationId) {
             console.warn('[docflow][deny] requireModuleActive: missing organization context', {
                 module: moduleCode,
