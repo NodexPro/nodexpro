@@ -28,6 +28,20 @@ async function assertOwnerOrAuditFailure(ctx, req) {
         throw error;
     }
 }
+/** Read model: current session is allowed platform owner (backend decision only). */
+router.get('/session', authMiddleware, async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        await assertOwnerOrAuditFailure(ctx, req);
+        return res.json({
+            aggregate_key: 'platform_owner_session_aggregate',
+            allowed: true,
+        });
+    }
+    catch (e) {
+        next(e);
+    }
+});
 router.use(authMiddleware);
 router.get('/legal-control', async (req, res, next) => {
     try {

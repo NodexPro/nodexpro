@@ -233,6 +233,11 @@ export const docflowPortalFileOpen = (fileAssetId: string) =>
 
 // Platform owner Country Pack API (owner-only, not tenant workspace)
 export const OWNER = {
+  /** Backend read model: current session may access platform-owner APIs */
+  session: '/owner/session',
+  passwordRecoveryRequest: '/owner/password-recovery/request',
+  passwordRecoveryVerify: '/owner/password-recovery/verify',
+  passwordRecoveryComplete: '/owner/password-recovery/complete',
   /** Single aggregate for Platform Owner Legal Control screen */
   legalControl: '/owner/legal-control',
   countryPacks: '/owner/country-packs',

@@ -26,6 +26,7 @@ import {
 import { writeAudit, AUDIT_ACTIONS } from './shared/audit-events.js';
 import { clientOperationsModuleRouter } from './domains/client-operations/client-operations.routes.js';
 import { ownerCountryPackRoutes } from './routes/owner-country-pack.routes.js';
+import { ownerPasswordRecoveryRoutes } from './routes/owner-password-recovery.routes.js';
 import { docflowRoutes } from './routes/docflow.routes.js';
 
 registerExampleModuleHook();
@@ -100,6 +101,7 @@ app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/modules', modulesRoutes);
 app.use('/api/v1/m/example', exampleModuleRouter);
 app.use('/api/v1/m/client-operations', clientOperationsModuleRouter);
+app.use('/api/v1/owner/password-recovery', ownerPasswordRecoveryRoutes);
 app.use('/api/v1/owner', ownerCountryPackRoutes);
 app.use('/api/v1/docflow', docflowRoutes);
 

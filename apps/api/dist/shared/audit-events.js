@@ -130,6 +130,13 @@ export const AUDIT_ACTIONS = {
     OWNER_PHONE_UPDATED: 'owner_phone_updated',
     OWNER_EMAIL_UPDATED: 'owner_email_updated',
     OWNER_PASSWORD_UPDATED: 'owner_password_updated',
+    /** Platform owner password recovery (SMS OTP); never log OTP in payload */
+    OWNER_PASSWORD_RECOVERY_EMAIL_REJECTED: 'owner_password_recovery.email_rejected',
+    OWNER_PASSWORD_RECOVERY_FAILED: 'owner_password_recovery.failed',
+    OWNER_PASSWORD_RECOVERY_OTP_SENT: 'owner_password_recovery.otp_sent',
+    OWNER_PASSWORD_RECOVERY_OTP_FAILED: 'owner_password_recovery.otp_failed',
+    OWNER_PASSWORD_RECOVERY_OTP_VERIFIED: 'owner_password_recovery.otp_verified',
+    OWNER_PASSWORD_RECOVERY_COMPLETED: 'owner_password_recovery.completed',
     OWNER_SECURITY_CHECK_FAILED: 'owner_security_check_failed',
     COUNTRY_CREATED: 'country_created',
     COUNTRY_PACK_CREATED: 'country_pack_created',

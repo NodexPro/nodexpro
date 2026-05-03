@@ -162,6 +162,34 @@ export async function apiJson<T>(path: string, options?: RequestInit): Promise<T
   return res.json();
 }
 
+/** Public POST JSON — no Authorization / org headers (platform-owner SMS recovery, etc.). */
+export async function apiJsonPublic<T>(path: string, options: RequestInit = {}): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string>),
+      },
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') throw e;
+    throw e;
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const code = typeof body.code === 'string' ? body.code : undefined;
+    const message = typeof body.message === 'string' ? body.message : undefined;
+    const { code: _c, message: _m, ...rest } = body;
+    void _c;
+    void _m;
+    const details = Object.keys(rest).length ? rest : undefined;
+    throw new ApiError(message || res.statusText, code, res.status, details);
+  }
+  return res.json();
+}
+
 /** POST that returns a file (e.g. history export). Parses JSON errors like `apiJson`. */
 export async function apiPostDownload(path: string, body: unknown, defaultFilename: string): Promise<void> {
   const res = await apiFetch(path, {
