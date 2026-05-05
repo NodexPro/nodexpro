@@ -232,10 +232,28 @@ export function ClientPortalDocflow() {
   }
 
   const firmTitle = String((aggregate?.firm_header as UnknownRecord | undefined)?.title ?? 'DocFlow');
+  const firmLogoUrl = String((aggregate?.firm_header as UnknownRecord | undefined)?.logo_url ?? '').trim() || null;
   const clientName = String((aggregate?.client_profile_header as UnknownRecord | undefined)?.display_name ?? '');
   const totalUnread = Number(aggregate?.unread_count ?? 0);
   const emptyStates = (aggregate?.empty_states as UnknownRecord | undefined) ?? null;
   const attachPerm = (aggregate?.attachment_permissions as UnknownRecord | undefined)?.can_attach === true;
+  const selectedThreadTitle = String(selectedThread?.thread_type_label ?? selectedThread?.thread_type ?? '').trim();
+  const selectedThreadStatusLabel = String(selectedThread?.thread_status_label ?? '').trim();
+  const selectedThreadSlaLabel = String((selectedThread?.sla_indicator as UnknownRecord | undefined)?.label ?? '').trim();
+
+  function initials(value: string): string {
+    const clean = String(value ?? '').trim();
+    if (!clean) return 'D';
+    return clean.slice(0, 1).toUpperCase();
+  }
+
+  function fmtTs(v: unknown): string {
+    const s = String(v ?? '').trim();
+    if (!s) return '';
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return s;
+    return d.toLocaleString('he-IL', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+  }
 
   if (!getDocflowPortalSessionToken() && !loading) {
     return (
@@ -258,30 +276,58 @@ export function ClientPortalDocflow() {
     <div
       style={{
         minHeight: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
         fontFamily: 'system-ui, sans-serif',
-        maxWidth: 520,
+        maxWidth: 1180,
         margin: '0 auto',
-        background: '#f9fafb',
+        background: '#0b1020',
+        color: '#E5E7EB',
+        padding: 12,
       }}
       dir="rtl"
       lang="he"
     >
       <header
         style={{
-          padding: '12px 16px',
-          background: '#fff',
-          borderBottom: '1px solid #e5e7eb',
+          padding: '12px 14px',
+          background: 'linear-gradient(180deg, #132B66 0%, #0E1E45 100%)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 14,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 12,
+          marginBottom: 10,
         }}
       >
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>{firmTitle}</div>
-          {clientName ? <div style={{ fontSize: 13, color: '#6b7280' }}>{clientName}</div> : null}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {firmLogoUrl ? (
+            <img
+              src={firmLogoUrl}
+              alt={firmTitle}
+              style={{ width: 34, height: 34, borderRadius: 10, objectFit: 'cover', border: '1px solid rgba(255,255,255,0.2)' }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 800,
+                fontSize: 13,
+                background: 'rgba(255,255,255,0.16)',
+                border: '1px solid rgba(255,255,255,0.2)',
+              }}
+            >
+              {initials(firmTitle)}
+            </div>
+          )}
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: '#fff' }}>{firmTitle}</div>
+            {clientName ? <div style={{ fontSize: 12.5, color: '#B8C3DC' }}>{clientName}</div> : null}
+          </div>
         </div>
         {Number.isFinite(totalUnread) && totalUnread > 0 ? (
           <span
@@ -289,7 +335,7 @@ export function ClientPortalDocflow() {
               minWidth: 22,
               height: 22,
               borderRadius: 11,
-              background: '#2563eb',
+              background: '#22C55E',
               color: '#fff',
               fontSize: 12,
               fontWeight: 700,
@@ -306,7 +352,7 @@ export function ClientPortalDocflow() {
       </header>
 
       {showA2hsHint ? (
-        <div style={{ padding: '8px 16px', fontSize: 13, color: '#374151', background: '#fef3c7', borderBottom: '1px solid #fde68a' }}>
+        <div style={{ padding: '8px 12px', fontSize: 13, color: '#111827', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 10, marginBottom: 8 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>ניתן להוסיף את DocFlow למסך הבית בטלפון</div>
           <button
             type="button"
@@ -331,18 +377,33 @@ export function ClientPortalDocflow() {
       ) : null}
 
       {error ? (
-        <div style={{ padding: '8px 16px', color: '#b91c1c', fontSize: 14, background: '#fef2f2' }}>{error}</div>
+        <div style={{ padding: '8px 12px', color: '#991B1B', fontSize: 14, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, marginBottom: 8 }}>{error}</div>
       ) : null}
 
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {view === 'list' ? (
+      <main style={{ display: 'flex', flex: 1, gap: 10, minHeight: 'calc(100dvh - 120px)' }}>
+        <aside
+          style={{
+            width: view === 'thread' ? 0 : 'min(340px, 100%)',
+            display: view === 'thread' ? 'none' : 'flex',
+            flexDirection: 'column',
+            minWidth: 0,
+            background: '#0F172A',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 14,
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.1)', fontSize: 13, color: '#93C5FD' }}>
+            שיחות
+          </div>
           <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
             {emptyStates?.no_threads === true ? (
-              <p style={{ color: '#6b7280', padding: 12 }}>אין שיחות עדיין.</p>
+              <p style={{ color: '#94A3B8', padding: 12 }}>אין שיחות עדיין.</p>
             ) : (
               threadList.map((t) => {
                 const id = String(t.id ?? '');
                 const unread = Number(t.unread_count ?? 0);
+                const isActive = selectedThreadId === id;
                 return (
                   <button
                     key={id}
@@ -355,153 +416,201 @@ export function ClientPortalDocflow() {
                       display: 'block',
                       width: '100%',
                       textAlign: 'start',
-                      padding: '12px 14px',
+                      padding: '11px 12px',
                       marginBottom: 8,
-                      border: '1px solid #e5e7eb',
-                      borderRadius: 8,
-                      background: '#fff',
+                      border: isActive ? '1px solid #38BDF8' : '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 10,
+                      background: isActive ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.03)',
+                      color: '#E5E7EB',
                       cursor: 'pointer',
                     }}
                   >
-                    <div style={{ fontWeight: 600, fontSize: 15 }}>{String(t.thread_type_label ?? t.thread_type ?? '')}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{String(t.thread_status_label ?? '')}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{String(t.thread_type_label ?? t.thread_type ?? '')}</div>
+                    <div style={{ fontSize: 12, color: '#93A5C6', marginTop: 2 }}>{String(t.thread_status_label ?? '')}</div>
                     {unread > 0 ? (
-                      <div style={{ fontSize: 12, color: '#2563eb', marginTop: 4 }}>לא נקראו: {unread}</div>
+                      <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#34D399' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 99, background: '#34D399', display: 'inline-block' }} />
+                        {unread > 99 ? '99+' : unread} חדשות
+                      </div>
                     ) : null}
                   </button>
                 );
               })
             )}
           </div>
-        ) : (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <div style={{ padding: 8, borderBottom: '1px solid #e5e7eb', background: '#fff' }}>
+        </aside>
+
+        <section
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            borderRadius: 14,
+            overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.12)',
+            background: '#EEF2F7',
+            color: '#111827',
+          }}
+        >
+          <div
+            style={{
+              padding: '10px 12px',
+              borderBottom: '1px solid #D6DCE8',
+              background: '#F8FAFC',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{selectedThreadTitle || 'בחרו שיחה'}</div>
+              <div style={{ fontSize: 12, color: '#64748B' }}>
+                {[selectedThreadStatusLabel, selectedThreadSlaLabel ? `SLA: ${selectedThreadSlaLabel}` : ''].filter(Boolean).join(' · ')}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
                 className="nx-btn nx-btn-taxes-compact"
-                onClick={() => {
-                  setView('list');
-                  void loadAggregate(null);
-                }}
-                style={{ marginBottom: 8 }}
+                disabled={!isCommandEnabled('mark_thread_read_by_client').enabled || !selectedThreadId || busyCommand.length > 0}
+                onClick={() => void runCommand('mark_thread_read_by_client', { thread_id: selectedThreadId })}
               >
-                חזרה לרשימה
+                נקרא
               </button>
-              <div style={{ fontWeight: 700 }}>{String(selectedThread?.thread_type_label ?? '')}</div>
-              <div style={{ fontSize: 12, color: '#6b7280' }}>{String(selectedThread?.thread_status_label ?? '')}</div>
-              <div style={{ fontSize: 12, color: '#6b7280' }}>
-                SLA: {String((selectedThread?.sla_indicator as UnknownRecord | undefined)?.label ?? '—')}
-              </div>
-            </div>
-
-            <div style={{ flex: 1, overflow: 'auto', padding: 10 }}>
-              {!selectedThreadId ? (
-                <p style={{ color: '#6b7280' }}>בחרו שיחה מהרשימה.</p>
-              ) : emptyStates?.no_messages === true ? (
-                <p style={{ color: '#6b7280' }}>אין הודעות בשיחה זו.</p>
-              ) : (
-                messages.map((m) => (
-                  <div
-                    key={String(m.id ?? '')}
-                    style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 10, marginBottom: 8, background: '#fff' }}
-                  >
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>
-                      {String(m.created_by_type ?? '')} · {String(m.created_at ?? '')}
-                    </div>
-                    <div style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>{String(m.body ?? '')}</div>
-                    <div style={{ marginTop: 8, fontSize: 13 }}>
-                      {attachments
-                        .filter((a) => String(a.message_id ?? '') === String(m.id ?? ''))
-                        .map((a) => {
-                          const fid = String(a.file_asset_id ?? '');
-                          const label = String(a.file_name ?? '').trim() || fid.slice(0, 8);
-                          return (
-                            <div key={String(a.id ?? fid)} style={{ marginTop: 4 }}>
-                              <button
-                                type="button"
-                                className="nx-btn nx-btn-taxes-compact"
-                                style={{ fontSize: 13 }}
-                                onClick={() => void openAttachment(fid)}
-                              >
-                                הורדה: {label}
-                              </button>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div style={{ padding: 10, borderTop: '1px solid #e5e7eb', background: '#fff', display: 'grid', gap: 8 }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {view === 'thread' ? (
                 <button
                   type="button"
                   className="nx-btn nx-btn-taxes-compact"
-                  disabled={!isCommandEnabled('mark_thread_read_by_client').enabled || !selectedThreadId || busyCommand.length > 0}
-                  onClick={() => void runCommand('mark_thread_read_by_client', { thread_id: selectedThreadId })}
+                  onClick={() => {
+                    setView('list');
+                    void loadAggregate(null);
+                  }}
                 >
-                  סימון כנקרא
+                  שיחות
                 </button>
-              </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: 'auto', padding: '12px 10px', background: '#E9EEF5' }}>
+            {!selectedThreadId ? (
+              <p style={{ color: '#6B7280', margin: 10 }}>בחרו שיחה מהרשימה.</p>
+            ) : emptyStates?.no_messages === true ? (
+              <p style={{ color: '#6B7280', margin: 10 }}>אין הודעות בשיחה זו.</p>
+            ) : (
+              messages.map((m) => {
+                const id = String(m.id ?? '');
+                const by = String(m.created_by_type ?? '');
+                const mine = by === 'client';
+                const msgAttachments = attachments.filter((a) => String(a.message_id ?? '') === id);
+                return (
+                  <div
+                    key={id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: mine ? 'flex-end' : 'flex-start',
+                      marginBottom: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        maxWidth: '82%',
+                        borderRadius: mine ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+                        background: mine ? '#D1FAE5' : '#FFFFFF',
+                        border: mine ? '1px solid #A7F3D0' : '1px solid #E5E7EB',
+                        padding: '8px 10px',
+                        boxShadow: '0 1px 1px rgba(0,0,0,0.05)',
+                      }}
+                    >
+                      <div style={{ marginTop: 2, whiteSpace: 'pre-wrap', lineHeight: 1.35, fontSize: 14.2 }}>{String(m.body ?? '')}</div>
+                      {msgAttachments.length > 0 ? (
+                        <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                          {msgAttachments.map((a) => {
+                            const fid = String(a.file_asset_id ?? '');
+                            const label = String(a.file_name ?? '').trim() || fid.slice(0, 8);
+                            return (
+                              <button
+                                key={String(a.id ?? fid)}
+                                type="button"
+                                className="nx-btn nx-btn-taxes-compact"
+                                style={{ fontSize: 12.5, justifySelf: 'start' }}
+                                onClick={() => void openAttachment(fid)}
+                              >
+                                קובץ: {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                      <div style={{ marginTop: 6, fontSize: 11, color: '#6B7280', textAlign: mine ? 'left' : 'right' }}>{fmtTs(m.created_at)}</div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div style={{ padding: 10, borderTop: '1px solid #D6DCE8', background: '#F8FAFC', display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
               <textarea
                 value={composer}
                 onChange={(e) => setComposer(e.target.value)}
                 placeholder="כתבו הודעה…"
-                rows={3}
-                style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: 8, boxSizing: 'border-box', fontSize: 15 }}
+                rows={2}
+                style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: 12, padding: 10, boxSizing: 'border-box', fontSize: 15, resize: 'vertical', background: '#fff' }}
               />
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                style={{ minWidth: 86 }}
+                disabled={
+                  !isCommandEnabled('send_client_message').enabled || !selectedThreadId || !composer.trim() || busyCommand.length > 0
+                }
+                onClick={() =>
+                  void runCommand('send_client_message', {
+                    thread_id: selectedThreadId,
+                    message_type: 'text',
+                    body: composer.trim(),
+                  }).then(() => setComposer(''))
+                }
+              >
+                שליחה
+              </button>
+            </div>
+
+            {attachPerm && isCommandEnabled('attach_file_to_client_message').enabled ? (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input
+                  value={attachFileAssetId}
+                  onChange={(e) => setAttachFileAssetId(e.target.value)}
+                  placeholder="מזהה קובץ (file_asset_id)"
+                  style={{ flex: 1, minWidth: 150, padding: 8, border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 13.5, background: '#fff' }}
+                />
                 <button
                   type="button"
                   className="nx-btn nx-btn-taxes-compact"
-                  disabled={
-                    !isCommandEnabled('send_client_message').enabled || !selectedThreadId || !composer.trim() || busyCommand.length > 0
-                  }
-                  onClick={() =>
-                    void runCommand('send_client_message', {
+                  disabled={!selectedThreadId || !attachFileAssetId.trim() || busyCommand.length > 0}
+                  onClick={() => {
+                    const lastMsgId = String(messages[messages.length - 1]?.id ?? '');
+                    if (!lastMsgId) return;
+                    void runCommand('attach_file_to_client_message', {
                       thread_id: selectedThreadId,
-                      message_type: 'text',
-                      body: composer.trim(),
-                    }).then(() => setComposer(''))
-                  }
+                      message_id: lastMsgId,
+                      file_asset_id: attachFileAssetId.trim(),
+                    }).then(() => setAttachFileAssetId(''));
+                  }}
                 >
-                  שליחה
+                  📎 צרף
                 </button>
-              </div>
-              {attachPerm && isCommandEnabled('attach_file_to_client_message').enabled ? (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <input
-                    value={attachFileAssetId}
-                    onChange={(e) => setAttachFileAssetId(e.target.value)}
-                    placeholder="מזהה קובץ (file_asset_id)"
-                    style={{ flex: 1, minWidth: 160, padding: 8, border: '1px solid #d1d5db', borderRadius: 6, fontSize: 14 }}
-                  />
-                  <button
-                    type="button"
-                    className="nx-btn nx-btn-taxes-compact"
-                    disabled={!selectedThreadId || !attachFileAssetId.trim() || busyCommand.length > 0}
-                    onClick={() => {
-                      const lastMsgId = String(messages[messages.length - 1]?.id ?? '');
-                      if (!lastMsgId) return;
-                      void runCommand('attach_file_to_client_message', {
-                        thread_id: selectedThreadId,
-                        message_id: lastMsgId,
-                        file_asset_id: attachFileAssetId.trim(),
-                      }).then(() => setAttachFileAssetId(''));
-                    }}
-                  >
-                    צירוף קובץ
-                  </button>
-                  <div style={{ width: '100%', fontSize: 12, color: '#6b7280' }}>
-                    Mobile direct upload is pending shared portal file-upload service; current flow expects `file_asset_id`.
-                  </div>
+                <div style={{ width: '100%', fontSize: 11.5, color: '#64748B' }}>
+                  Mobile upload uses existing `file_asset_id` flow from backend aggregate/commands.
                 </div>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </div>
-        )}
+        </section>
       </main>
     </div>
   );
