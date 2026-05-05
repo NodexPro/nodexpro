@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiDocflowPortalJson, userFacingApiMessage } from '../api/client';
 import { docflowPortalAcceptInvitation } from '../api/endpoints';
-
-const DOCFLOW_PORTAL_SESSION_KEY = 'docflow_portal_session';
+import { redirectDocflowPortalToCanonicalHost } from '../lib/docflow-portal-host';
+import { setDocflowPortalSessionToken } from '../lib/docflow-portal-session';
 
 type AcceptResponse = {
   ok?: boolean;
@@ -40,6 +40,7 @@ export function ClientPortalInvite() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
+    if (redirectDocflowPortalToCanonicalHost()) return;
     const raw = String(token ?? '').trim();
     if (!raw) {
       setStatus('error');
@@ -49,7 +50,7 @@ export function ClientPortalInvite() {
     let cancelled = false;
     void acceptInviteOnce(raw)
       .then((once) => {
-        localStorage.setItem(DOCFLOW_PORTAL_SESSION_KEY, once);
+        setDocflowPortalSessionToken(once);
         if (!cancelled) navigate('/client-portal/docflow', { replace: true });
       })
       .catch((e: unknown) => {

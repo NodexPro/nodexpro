@@ -23,6 +23,24 @@ export function userFacingApiMessage(e: unknown): string {
     if (c === 'VERSION_CONFLICT' || c === 'CONFLICT') {
       return 'המידע עודכן מאז שנפתח המסך. סגור ופתח מחדש את כרטיס הלקוח, או רענן את הרשימה, ונסה שוב.';
     }
+    if (c === 'INVITATION_EXPIRED') {
+      return 'תוקף ההזמנה פג. בקשו מהמשרד קישור הזמנה חדש.';
+    }
+    if (c === 'INVITATION_REVOKED') {
+      return 'ההזמנה בוטלה. פנו למשרד לקבלת הזמנה חדשה.';
+    }
+    if (c === 'INVALID_INVITATION_TOKEN') {
+      return 'קישור ההזמנה אינו תקין או אינו תואם לשרת. בקשו קישור חדש מהמשרד.';
+    }
+    if (c === 'INVITATION_NOT_ACCEPTABLE') {
+      return 'לא ניתן להשתמש בקישור ההזמנה במצב הנוכחי. בקשו מהמשרד קישור חדש.';
+    }
+    if (c === 'PORTAL_ACCESS_REVOKED') {
+      return 'הגישה ל-DocFlow בוטלה על ידי המשרד. פנו למשרד.';
+    }
+    if (c === 'PORTAL_USER_MISSING' || c === 'PORTAL_ACTIVATION_FAILED') {
+      return 'לא ניתן להפעיל את הגישה ל-DocFlow. פנו למשרד לתמיכה.';
+    }
     if (c === 'FORBIDDEN' || e.status === 403) {
       return 'אין הרשאה לביצוע הפעולה.';
     }
@@ -30,10 +48,10 @@ export function userFacingApiMessage(e: unknown): string {
       return 'קישור הגישה ל-DocFlow פג תוקף. בקשו מהמשרד קישור הזמנה חדש.';
     }
     if (c === 'PORTAL_SESSION_REVOKED' || c === 'PORTAL_SESSION_INVALID') {
-      return 'הגישה ל-DocFlow אינה תקפה. פתחו שוב את קישור ההזמנה מהאימייל, או בקשו קישור חדש מהמשרד. ודאו שאתם באותו כתובת אתר (למשל תמיד www).';
+      return 'סשן ה-DocFlow אינו תקף. פתחו שוב את קישור ההזמנה מהאימייל (אותו קישור יכול לחדש את הגישה אם ההזמנה עדיין בתוקף).';
     }
     if (c === 'UNAUTHORIZED' || e.status === 401) {
-      return 'ההתחברות פגה. התחבר מחדש ונסה שוב.';
+      return 'סשן ה-DocFlow אינו תקף. פתחו שוב את קישור ההזמנה מהאימייל.';
     }
     /** 501 is not a generic “server crash”; show backend message (e.g. PDF not ready). */
     if (c === 'NOT_IMPLEMENTED' || e.status === 501) {

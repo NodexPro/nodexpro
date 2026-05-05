@@ -7,8 +7,8 @@ import {
   docflowPortalMarkThreadReadByClient,
   docflowPortalSendClientMessage,
 } from '../api/endpoints';
-
-const DOCFLOW_PORTAL_SESSION_KEY = 'docflow_portal_session';
+import { redirectDocflowPortalToCanonicalHost } from '../lib/docflow-portal-host';
+import { getDocflowPortalSessionToken } from '../lib/docflow-portal-session';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -22,14 +22,6 @@ type CommandResponse = {
   ok?: boolean;
   refreshed?: { aggregate?: UnknownRecord };
 };
-
-function readPortalSession(): string | null {
-  try {
-    return localStorage.getItem(DOCFLOW_PORTAL_SESSION_KEY);
-  } catch {
-    return null;
-  }
-}
 
 export function ClientPortalDocflow() {
   const [aggregate, setAggregate] = useState<UnknownRecord | null>(null);
@@ -45,7 +37,7 @@ export function ClientPortalDocflow() {
 
   const loadAggregate = useCallback(
     async (selectedThreadId?: string | null): Promise<void> => {
-      const token = readPortalSession();
+      const token = getDocflowPortalSessionToken();
       if (!token) {
         setError('אין סשן פורטל. פתחו שוב את קישור ההזמנה מהמשרד.');
         setAggregate(null);
@@ -75,6 +67,7 @@ export function ClientPortalDocflow() {
   );
 
   useEffect(() => {
+    if (redirectDocflowPortalToCanonicalHost()) return;
     void loadAggregate(null);
   }, [loadAggregate]);
 
@@ -180,7 +173,7 @@ export function ClientPortalDocflow() {
   async function runCommand(command: string, payload: UnknownRecord): Promise<void> {
     const can = isCommandEnabled(command);
     if (!can.enabled) return;
-    const token = readPortalSession();
+    const token = getDocflowPortalSessionToken();
     if (!token) {
       setError('אין סשן פורטל.');
       return;
@@ -218,7 +211,7 @@ export function ClientPortalDocflow() {
   }
 
   async function openAttachment(fileAssetId: string): Promise<void> {
-    const token = readPortalSession();
+    const token = getDocflowPortalSessionToken();
     if (!token) {
       setError('אין סשן פורטל.');
       return;
@@ -244,7 +237,7 @@ export function ClientPortalDocflow() {
   const emptyStates = (aggregate?.empty_states as UnknownRecord | undefined) ?? null;
   const attachPerm = (aggregate?.attachment_permissions as UnknownRecord | undefined)?.can_attach === true;
 
-  if (!readPortalSession() && !loading) {
+  if (!getDocflowPortalSessionToken() && !loading) {
     return (
       <div style={{ minHeight: '100dvh', padding: 16, fontFamily: 'system-ui, sans-serif', maxWidth: 520, margin: '0 auto' }}>
         <h1 style={{ fontSize: 18, margin: '0 0 8px' }}>DocFlow</h1>

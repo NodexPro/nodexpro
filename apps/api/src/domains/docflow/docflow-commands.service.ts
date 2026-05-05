@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { badRequest, forbidden, notFound } from '../../shared/errors.js';
+import { AppError, badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { createOpaqueToken, resolvePortalSessionByRawToken, sha256Hex } from './docflow-portal-auth.service.js';
 import {
   buildClientDocflowTabAggregate,
@@ -927,156 +927,189 @@ export async function executeDocflowPortalCommand(
   const payload = ensureObj(payloadInput);
   switch (command) {
     case 'accept_client_portal_invitation': {
-      const rawInviteToken = reqString(payload, 'invite_token');
-      const tokenHash = sha256Hex(rawInviteToken);
-      const { data: invite, error } = await supabaseAdmin
-        .from('client_portal_invitations')
-        .select('id, org_id, client_id, portal_user_id, status, token_expires_at, invite_email_normalized')
-        .eq('invite_token_hash', tokenHash)
-        .maybeSingle();
-      if (error) throw error;
-      if (!invite) throw forbidden('Invalid invitation token');
-      const invStatus = String(invite.status ?? '');
-      if (invStatus === 'revoked') throw forbidden('Invitation revoked');
-      if (new Date(String(invite.token_expires_at ?? '')).getTime() <= Date.now()) {
-        throw forbidden('Invitation expired');
-      }
-      await assertDocflowEntitled(invite.org_id);
-
-      /** Already accepted: same magic link opens a fresh portal session (new device, cleared storage, www vs apex). */
-      if (invStatus === 'accepted') {
-        const portalUserIdAccepted = invite.portal_user_id as string | null;
-        if (!portalUserIdAccepted) throw forbidden('Portal user missing');
-        const { data: puRow, error: puAcceptedErr } = await supabaseAdmin
-          .from('client_portal_users')
-          .select('id, status')
-          .eq('id', portalUserIdAccepted)
+      console.info('DOCFLOW INVITE ACCEPT START');
+      try {
+        const rawInviteToken = reqString(payload, 'invite_token');
+        const tokenHash = sha256Hex(rawInviteToken);
+        const { data: invite, error } = await supabaseAdmin
+          .from('client_portal_invitations')
+          .select('id, org_id, client_id, portal_user_id, status, token_expires_at, invite_email_normalized')
+          .eq('invite_token_hash', tokenHash)
           .maybeSingle();
-        if (puAcceptedErr) throw puAcceptedErr;
-        if (!puRow || puRow.status !== 'active') throw forbidden('Portal access revoked');
+        if (error) throw error;
+        if (!invite) {
+          throw forbidden('Invalid invitation token', 'INVALID_INVITATION_TOKEN');
+        }
+        const invStatus = String(invite.status ?? '');
+        if (invStatus === 'revoked') {
+          throw forbidden('Invitation revoked', 'INVITATION_REVOKED');
+        }
+        if (new Date(String(invite.token_expires_at ?? '')).getTime() <= Date.now()) {
+          throw forbidden('Invitation expired', 'INVITATION_EXPIRED');
+        }
+        await assertDocflowEntitled(invite.org_id);
 
-        const nowIso = new Date().toISOString();
-        const { error: luErr } = await supabaseAdmin
-          .from('client_portal_users')
-          .update({ last_login_at: nowIso, updated_at: nowIso })
-          .eq('id', portalUserIdAccepted);
-        if (luErr) throw luErr;
+        /** Already accepted: same magic link issues a fresh portal session (cross-device / cleared storage). */
+        if (invStatus === 'accepted') {
+          console.info('DOCFLOW INVITE ACCEPT ALREADY_ACCEPTED_REISSUE_SESSION', { invitation_id: invite.id });
+          const portalUserIdAccepted = invite.portal_user_id as string | null;
+          if (!portalUserIdAccepted) {
+            throw forbidden('Portal user missing', 'PORTAL_USER_MISSING');
+          }
+          const { data: puRow, error: puAcceptedErr } = await supabaseAdmin
+            .from('client_portal_users')
+            .select('id, status')
+            .eq('id', portalUserIdAccepted)
+            .maybeSingle();
+          if (puAcceptedErr) throw puAcceptedErr;
+          if (!puRow || puRow.status !== 'active') {
+            throw forbidden('Portal access revoked', 'PORTAL_ACCESS_REVOKED');
+          }
 
-        const rawSessionTokenRefresh = createOpaqueToken();
-        const sessionHashRefresh = sha256Hex(rawSessionTokenRefresh);
-        const { data: sessionRefresh, error: sRefreshErr } = await supabaseAdmin
+          const nowIso = new Date().toISOString();
+          const { error: luErr } = await supabaseAdmin
+            .from('client_portal_users')
+            .update({ last_login_at: nowIso, updated_at: nowIso })
+            .eq('id', portalUserIdAccepted);
+          if (luErr) throw luErr;
+
+          const rawSessionTokenRefresh = createOpaqueToken();
+          const sessionHashRefresh = sha256Hex(rawSessionTokenRefresh);
+          const { data: sessionRefresh, error: sRefreshErr } = await supabaseAdmin
+            .from('client_portal_sessions')
+            .insert({
+              org_id: invite.org_id,
+              client_id: invite.client_id,
+              portal_user_id: portalUserIdAccepted,
+              session_token_hash: sessionHashRefresh,
+              status: 'active',
+              expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            })
+            .select('id')
+            .single();
+          if (sRefreshErr) throw sRefreshErr;
+
+          console.info('DOCFLOW INVITE ACCEPT SESSION_CREATED', {
+            invitation_id: invite.id,
+            session_id: sessionRefresh.id,
+            path: 'already_accepted_reissue',
+          });
+
+          await supabaseAdmin.from('client_message_events').insert({
+            org_id: invite.org_id,
+            client_id: invite.client_id,
+            event_type: 'portal_session_refreshed_via_invite_link',
+            actor_type: 'client',
+            actor_portal_user_id: portalUserIdAccepted,
+            payload_json: { invitation_id: invite.id, session_id: sessionRefresh.id },
+          });
+          await audit(invite.org_id, null, 'docflow_portal_session', sessionRefresh.id, 'portal_session_refreshed_via_invite', {
+            client_id: invite.client_id,
+            invitation_id: invite.id,
+          });
+
+          const refreshedAccepted = await refreshPortal(invite.org_id, invite.client_id, portalUserIdAccepted);
+          return {
+            ok: true,
+            command,
+            refreshed: {
+              ...refreshedAccepted,
+              aggregate: {
+                ...refreshedAccepted.aggregate,
+                portal_session_token_once: rawSessionTokenRefresh,
+              },
+            },
+          };
+        }
+
+        if (invStatus !== 'pending') {
+          throw forbidden('Invitation cannot be accepted', 'INVITATION_NOT_ACCEPTABLE');
+        }
+
+        let portalUserId = invite.portal_user_id as string | null;
+        if (!portalUserId) {
+          const { data: created, error: cErr } = await supabaseAdmin
+            .from('client_portal_users')
+            .insert({
+              org_id: invite.org_id,
+              client_id: invite.client_id,
+              email_normalized: invite.invite_email_normalized,
+              status: 'active',
+              auth_method: 'magic_link',
+              last_login_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single();
+          if (cErr) throw cErr;
+          portalUserId = created.id;
+        } else {
+          const { error: upErr } = await supabaseAdmin
+            .from('client_portal_users')
+            .update({ status: 'active', last_login_at: new Date().toISOString(), revoked_at: null, updated_at: new Date().toISOString() })
+            .eq('id', portalUserId);
+          if (upErr) throw upErr;
+        }
+
+        await supabaseAdmin
+          .from('client_portal_invitations')
+          .update({ status: 'accepted', accepted_at: new Date().toISOString(), portal_user_id: portalUserId })
+          .eq('id', invite.id);
+
+        const rawSessionToken = createOpaqueToken();
+        const sessionHash = sha256Hex(rawSessionToken);
+        const { data: session, error: sErr } = await supabaseAdmin
           .from('client_portal_sessions')
           .insert({
             org_id: invite.org_id,
             client_id: invite.client_id,
-            portal_user_id: portalUserIdAccepted,
-            session_token_hash: sessionHashRefresh,
+            portal_user_id: portalUserId,
+            session_token_hash: sessionHash,
             status: 'active',
             expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           })
           .select('id')
           .single();
-        if (sRefreshErr) throw sRefreshErr;
+        if (sErr) throw sErr;
+
+        console.info('DOCFLOW INVITE ACCEPT SESSION_CREATED', {
+          invitation_id: invite.id,
+          session_id: session.id,
+          path: 'first_accept',
+        });
 
         await supabaseAdmin.from('client_message_events').insert({
           org_id: invite.org_id,
           client_id: invite.client_id,
-          event_type: 'portal_session_refreshed_via_invite_link',
+          event_type: 'invitation_accepted',
           actor_type: 'client',
-          actor_portal_user_id: portalUserIdAccepted,
-          payload_json: { invitation_id: invite.id, session_id: sessionRefresh.id },
+          actor_portal_user_id: portalUserId,
+          payload_json: { invitation_id: invite.id, session_id: session.id },
         });
-        await audit(invite.org_id, null, 'docflow_portal_session', sessionRefresh.id, 'portal_session_refreshed_via_invite', {
+        await audit(invite.org_id, null, 'docflow_invitation', invite.id, 'invitation_accepted', {
           client_id: invite.client_id,
-          invitation_id: invite.id,
         });
 
-        const refreshedAccepted = await refreshPortal(invite.org_id, invite.client_id, portalUserIdAccepted);
+        if (!portalUserId) {
+          throw forbidden('Portal user activation failed', 'PORTAL_ACTIVATION_FAILED');
+        }
+        const refreshed = await refreshPortal(invite.org_id, invite.client_id, portalUserId);
         return {
           ok: true,
           command,
           refreshed: {
-            ...refreshedAccepted,
+            ...refreshed,
             aggregate: {
-              ...refreshedAccepted.aggregate,
-              portal_session_token_once: rawSessionTokenRefresh,
+              ...refreshed.aggregate,
+              portal_session_token_once: rawSessionToken,
             },
           },
         };
+      } catch (e) {
+        const reason =
+          e instanceof AppError ? (e.code ?? e.message) : e instanceof Error ? e.message : 'unexpected_error';
+        console.warn('DOCFLOW INVITE ACCEPT FAILED', reason);
+        throw e;
       }
-
-      if (invStatus !== 'pending') throw forbidden('Invitation cannot be accepted');
-
-      let portalUserId = invite.portal_user_id as string | null;
-      if (!portalUserId) {
-        const { data: created, error: cErr } = await supabaseAdmin
-          .from('client_portal_users')
-          .insert({
-            org_id: invite.org_id,
-            client_id: invite.client_id,
-            email_normalized: invite.invite_email_normalized,
-            status: 'active',
-            auth_method: 'magic_link',
-            last_login_at: new Date().toISOString(),
-          })
-          .select('id')
-          .single();
-        if (cErr) throw cErr;
-        portalUserId = created.id;
-      } else {
-        const { error: upErr } = await supabaseAdmin
-          .from('client_portal_users')
-          .update({ status: 'active', last_login_at: new Date().toISOString(), revoked_at: null, updated_at: new Date().toISOString() })
-          .eq('id', portalUserId);
-        if (upErr) throw upErr;
-      }
-
-      await supabaseAdmin
-        .from('client_portal_invitations')
-        .update({ status: 'accepted', accepted_at: new Date().toISOString(), portal_user_id: portalUserId })
-        .eq('id', invite.id);
-
-      const rawSessionToken = createOpaqueToken();
-      const sessionHash = sha256Hex(rawSessionToken);
-      const { data: session, error: sErr } = await supabaseAdmin
-        .from('client_portal_sessions')
-        .insert({
-          org_id: invite.org_id,
-          client_id: invite.client_id,
-          portal_user_id: portalUserId,
-          session_token_hash: sessionHash,
-          status: 'active',
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        })
-        .select('id')
-        .single();
-      if (sErr) throw sErr;
-
-      await supabaseAdmin.from('client_message_events').insert({
-        org_id: invite.org_id,
-        client_id: invite.client_id,
-        event_type: 'invitation_accepted',
-        actor_type: 'client',
-        actor_portal_user_id: portalUserId,
-        payload_json: { invitation_id: invite.id, session_id: session.id },
-      });
-      await audit(invite.org_id, null, 'docflow_invitation', invite.id, 'invitation_accepted', {
-        client_id: invite.client_id,
-      });
-
-      if (!portalUserId) throw forbidden('Portal user activation failed');
-      const refreshed = await refreshPortal(invite.org_id, invite.client_id, portalUserId);
-      return {
-        ok: true,
-        command,
-        refreshed: {
-          ...refreshed,
-          aggregate: {
-            ...refreshed.aggregate,
-            portal_session_token_once: rawSessionToken,
-          },
-        },
-      };
     }
     case 'send_client_message':
     case 'attach_file_to_client_message':
