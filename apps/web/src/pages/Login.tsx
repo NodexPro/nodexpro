@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -13,13 +13,18 @@ export function Login() {
   const { refetchMe } = useAuth();
   const redirectParam = new URLSearchParams(location.search).get('redirect');
   const from = redirectParam ?? (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/dashboard';
+  const passwordResetOk = Boolean((location.state as { passwordResetOk?: boolean } | null)?.passwordResetOk);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      const emailNorm = email.trim().toLowerCase();
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: emailNorm,
+        password,
+      });
       if (signInError) throw new Error(signInError.message);
       if (!data.session) throw new Error('No session after sign in');
 
@@ -50,6 +55,9 @@ export function Login() {
   return (
     <div style={{ maxWidth: 400, margin: '80px auto', padding: 24 }}>
       <h1>Sign in</h1>
+      {passwordResetOk && (
+        <p style={{ color: '#059669', marginBottom: 16 }}>Password updated. Sign in with your new password.</p>
+      )}
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 16 }}>
           <label htmlFor="email">Email</label>
@@ -76,8 +84,11 @@ export function Login() {
         {error && <p style={{ color: 'red', marginBottom: 16 }}>{error}</p>}
         <button type="submit" disabled={loading}>Sign in</button>
       </form>
+      <p style={{ marginTop: 12 }}>
+        <Link to="/forgot-password">Forgot password?</Link>
+      </p>
       <p style={{ marginTop: 16 }}>
-        <a href="/register">Create account</a>
+        <Link to="/register">Create account</Link>
       </p>
     </div>
   );

@@ -4,6 +4,8 @@ import { RequireAuth } from './components/guards/RequireAuth';
 import { RequireOrg } from './components/guards/RequireOrg';
 import { AppShell } from './components/layout/AppShell';
 import { Login } from './pages/Login';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { Register } from './pages/Register';
 import { CreateOrganization } from './pages/CreateOrganization';
 import { SelectOrganization } from './pages/SelectOrganization';
@@ -32,6 +34,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/platform-owner/login" element={<PlatformOwnerLogin />} />
       <Route path="/platform-owner/legal-control" element={<PlatformOwnerLegalControl />} />
       <Route path="/register" element={<Register />} />
