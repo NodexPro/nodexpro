@@ -156,14 +156,6 @@ export function ClientPortalDocflow() {
     window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
     window.addEventListener('appinstalled', onAppInstalled);
 
-    if ('serviceWorker' in navigator) {
-      // Register SW for installability/offline shell.
-      void navigator.serviceWorker
-        .register('/sw.js')
-        .catch(() => {
-          /* ignore - install can still work */
-        });
-    }
     return () => {
       window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
       window.removeEventListener('appinstalled', onAppInstalled);

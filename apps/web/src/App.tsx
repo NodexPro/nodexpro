@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { RequireAuth } from './components/guards/RequireAuth';
@@ -29,6 +30,85 @@ import { PlatformOwnerLegalControl } from './pages/PlatformOwnerLegalControl';
 import { DocflowCommunicationReviewPage } from './pages/DocflowCommunicationReviewPage';
 import { DocflowInvitesManagementPage } from './pages/DocflowInvitesManagementPage';
 import { I18nProvider } from './i18n/I18nProvider';
+
+function PwaUpdatePrompt() {
+  const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    let disposed = false;
+
+    const onControllerChange = () => {
+      window.location.reload();
+    };
+
+    const register = async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        if (disposed) return;
+
+        if (reg.waiting) {
+          setWaitingWorker(reg.waiting);
+        }
+
+        reg.addEventListener('updatefound', () => {
+          const installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              setWaitingWorker(reg.waiting ?? installing);
+            }
+          });
+        });
+      } catch {
+        // Ignore registration errors - app still works without offline shell.
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    void register();
+
+    return () => {
+      disposed = true;
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    };
+  }, []);
+
+  if (!waitingWorker) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        insetInlineStart: 12,
+        insetInlineEnd: 12,
+        bottom: 12,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 10,
+        background: '#111827',
+        color: '#F9FAFB',
+        border: '1px solid #374151',
+        borderRadius: 10,
+        padding: '10px 12px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
+      }}
+      role="status"
+      aria-live="polite"
+    >
+      <span style={{ fontSize: 13.5 }}>New version available - refresh</span>
+      <button
+        type="button"
+        className="nx-btn nx-btn-taxes-compact"
+        onClick={() => waitingWorker.postMessage({ type: 'SKIP_WAITING' })}
+      >
+        Refresh
+      </button>
+    </div>
+  );
+}
 
 function AppRoutes() {
   return (
@@ -70,6 +150,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
+      <PwaUpdatePrompt />
       <I18nProvider>
         <AuthProvider>
           <AppRoutes />
