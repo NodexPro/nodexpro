@@ -31,6 +31,7 @@ export function ClientPortalDocflow() {
   const [composer, setComposer] = useState('');
   const [attachFileAssetId, setAttachFileAssetId] = useState('');
   const [view, setView] = useState<'list' | 'thread'>('list');
+  const [isNarrowLayout, setIsNarrowLayout] = useState(false);
 
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
   const [canShowInstallPrompt, setCanShowInstallPrompt] = useState(false);
@@ -70,6 +71,19 @@ export function ClientPortalDocflow() {
     if (redirectDocflowPortalToCanonicalHost()) return;
     void loadAggregate(null);
   }, [loadAggregate]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const media = window.matchMedia('(max-width: 900px)');
+    const apply = () => setIsNarrowLayout(media.matches);
+    apply();
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', apply);
+      return () => media.removeEventListener('change', apply);
+    }
+    media.addListener(apply);
+    return () => media.removeListener(apply);
+  }, []);
 
   const threadList = useMemo(() => {
     const list = aggregate?.thread_list;
@@ -232,6 +246,7 @@ export function ClientPortalDocflow() {
   const selectedThreadTitle = String(selectedThread?.thread_type_label ?? selectedThread?.thread_type ?? '').trim();
   const selectedThreadStatusLabel = String(selectedThread?.thread_status_label ?? '').trim();
   const selectedThreadSlaLabel = String((selectedThread?.sla_indicator as UnknownRecord | undefined)?.label ?? '').trim();
+  const hasThreads = threadList.length > 0 && emptyStates?.no_threads !== true;
 
   function initials(value: string): string {
     const clean = String(value ?? '').trim();
@@ -346,25 +361,29 @@ export function ClientPortalDocflow() {
       {showA2hsHint ? (
         <div style={{ padding: '8px 12px', fontSize: 13, color: '#111827', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 10, marginBottom: 8 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>ניתן להוסיף את DocFlow למסך הבית בטלפון</div>
-          <button
-            type="button"
-            className="nx-btn nx-btn-taxes-compact"
-            style={{ background: '#2563EB', color: '#fff', borderRadius: 8, border: 'none' }}
-            disabled={!canShowInstallPrompt || !deferredInstallPrompt}
-            onClick={async () => {
-              try {
-                if (!deferredInstallPrompt) return;
-                deferredInstallPrompt.prompt();
-                await deferredInstallPrompt.userChoice;
-                setDeferredInstallPrompt(null);
-                setCanShowInstallPrompt(false);
-              } catch {
-                // ignore - user will decide in browser UI.
-              }
-            }}
-          >
-            הוסף למסך הבית
-          </button>
+          {canShowInstallPrompt && deferredInstallPrompt ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              style={{ background: '#2563EB', color: '#fff', borderRadius: 8, border: 'none' }}
+              onClick={async () => {
+                try {
+                  deferredInstallPrompt.prompt();
+                  await deferredInstallPrompt.userChoice;
+                  setDeferredInstallPrompt(null);
+                  setCanShowInstallPrompt(false);
+                } catch {
+                  // ignore - user will decide in browser UI.
+                }
+              }}
+            >
+              הוסף למסך הבית
+            </button>
+          ) : (
+            <div style={{ fontSize: 12, color: '#7C5E10' }}>
+              אם הכפתור לא מוצג, פתחו בתפריט הדפדפן ובחרו "Add to Home Screen".
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -375,8 +394,8 @@ export function ClientPortalDocflow() {
       <main style={{ display: 'flex', flex: 1, gap: 10, minHeight: 'calc(100dvh - 120px)' }}>
         <aside
           style={{
-            width: view === 'thread' ? 0 : 'min(340px, 100%)',
-            display: view === 'thread' ? 'none' : 'flex',
+            width: isNarrowLayout ? '100%' : view === 'thread' ? 0 : 'min(340px, 100%)',
+            display: view === 'thread' || (isNarrowLayout && view === 'thread') ? 'none' : 'flex',
             flexDirection: 'column',
             minWidth: 0,
             background: '#0F172A',
@@ -434,9 +453,9 @@ export function ClientPortalDocflow() {
 
         <section
           style={{
+            display: isNarrowLayout && view !== 'thread' ? 'none' : 'flex',
             flex: 1,
             minWidth: 0,
-            display: 'flex',
             flexDirection: 'column',
             borderRadius: 14,
             overflow: 'hidden',
@@ -463,14 +482,16 @@ export function ClientPortalDocflow() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                className="nx-btn nx-btn-taxes-compact"
-                disabled={!isCommandEnabled('mark_thread_read_by_client').enabled || !selectedThreadId || busyCommand.length > 0}
-                onClick={() => void runCommand('mark_thread_read_by_client', { thread_id: selectedThreadId })}
-              >
-                נקרא
-              </button>
+              {selectedThreadId ? (
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-taxes-compact"
+                  disabled={!isCommandEnabled('mark_thread_read_by_client').enabled || busyCommand.length > 0}
+                  onClick={() => void runCommand('mark_thread_read_by_client', { thread_id: selectedThreadId })}
+                >
+                  נקרא
+                </button>
+              ) : null}
               {view === 'thread' ? (
                 <button
                   type="button"
@@ -488,7 +509,9 @@ export function ClientPortalDocflow() {
 
           <div style={{ flex: 1, overflow: 'auto', padding: '12px 10px', background: '#E9EEF5' }}>
             {!selectedThreadId ? (
-              <p style={{ color: '#6B7280', margin: 10 }}>בחרו שיחה מהרשימה.</p>
+              <p style={{ color: '#6B7280', margin: 10 }}>
+                {hasThreads ? 'בחרו שיחה מהרשימה.' : 'אין שיחות עדיין.'}
+              </p>
             ) : emptyStates?.no_messages === true ? (
               <p style={{ color: '#6B7280', margin: 10 }}>אין הודעות בשיחה זו.</p>
             ) : (
@@ -544,64 +567,70 @@ export function ClientPortalDocflow() {
             )}
           </div>
 
-          <div style={{ padding: 10, borderTop: '1px solid #D6DCE8', background: '#F8FAFC', display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
-              <textarea
-                value={composer}
-                onChange={(e) => setComposer(e.target.value)}
-                placeholder="כתבו הודעה…"
-                rows={2}
-                style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: 12, padding: 10, boxSizing: 'border-box', fontSize: 15, resize: 'vertical', background: '#fff' }}
-              />
-              <button
-                type="button"
-                className="nx-btn nx-btn-taxes-compact"
-                style={{ minWidth: 86 }}
-                disabled={
-                  !isCommandEnabled('send_client_message').enabled || !selectedThreadId || !composer.trim() || busyCommand.length > 0
-                }
-                onClick={() =>
-                  void runCommand('send_client_message', {
-                    thread_id: selectedThreadId,
-                    message_type: 'text',
-                    body: composer.trim(),
-                  }).then(() => setComposer(''))
-                }
-              >
-                שליחה
-              </button>
-            </div>
-
-            {attachPerm && isCommandEnabled('attach_file_to_client_message').enabled ? (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <input
-                  value={attachFileAssetId}
-                  onChange={(e) => setAttachFileAssetId(e.target.value)}
-                  placeholder="מזהה קובץ (file_asset_id)"
-                  style={{ flex: 1, minWidth: 150, padding: 8, border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 13.5, background: '#fff' }}
+          {selectedThreadId ? (
+            <div style={{ padding: 10, borderTop: '1px solid #D6DCE8', background: '#F8FAFC', display: 'grid', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
+                <textarea
+                  value={composer}
+                  onChange={(e) => setComposer(e.target.value)}
+                  placeholder="כתבו הודעה…"
+                  rows={2}
+                  style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: 12, padding: 10, boxSizing: 'border-box', fontSize: 15, resize: 'vertical', background: '#fff' }}
                 />
                 <button
                   type="button"
                   className="nx-btn nx-btn-taxes-compact"
-                  disabled={!selectedThreadId || !attachFileAssetId.trim() || busyCommand.length > 0}
-                  onClick={() => {
-                    const lastMsgId = String(messages[messages.length - 1]?.id ?? '');
-                    if (!lastMsgId) return;
-                    void runCommand('attach_file_to_client_message', {
+                  style={{ minWidth: 86 }}
+                  disabled={!isCommandEnabled('send_client_message').enabled || !composer.trim() || busyCommand.length > 0}
+                  onClick={() =>
+                    void runCommand('send_client_message', {
                       thread_id: selectedThreadId,
-                      message_id: lastMsgId,
-                      file_asset_id: attachFileAssetId.trim(),
-                    }).then(() => setAttachFileAssetId(''));
-                  }}
+                      message_type: 'text',
+                      body: composer.trim(),
+                    }).then(() => setComposer(''))
+                  }
                 >
-                  📎 צרף
+                  שליחה
                 </button>
-                <div style={{ width: '100%', fontSize: 11.5, color: '#64748B' }}>
-                  Mobile upload uses existing `file_asset_id` flow from backend aggregate/commands.
-                </div>
               </div>
-            ) : null}
-          </div>
+
+              {attachPerm && isCommandEnabled('attach_file_to_client_message').enabled ? (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input
+                    value={attachFileAssetId}
+                    onChange={(e) => setAttachFileAssetId(e.target.value)}
+                    placeholder="מזהה קובץ (file_asset_id)"
+                    style={{ flex: 1, minWidth: 150, padding: 8, border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 13.5, background: '#fff' }}
+                  />
+                  <button
+                    type="button"
+                    className="nx-btn nx-btn-taxes-compact"
+                    disabled={!attachFileAssetId.trim() || busyCommand.length > 0}
+                    onClick={() => {
+                      const lastMsgId = String(messages[messages.length - 1]?.id ?? '');
+                      if (!lastMsgId) return;
+                      void runCommand('attach_file_to_client_message', {
+                        thread_id: selectedThreadId,
+                        message_id: lastMsgId,
+                        file_asset_id: attachFileAssetId.trim(),
+                      }).then(() => setAttachFileAssetId(''));
+                    }}
+                  >
+                    📎 צרף
+                  </button>
+                  <div style={{ width: '100%', fontSize: 11.5, color: '#64748B' }}>
+                    Mobile upload uses existing `file_asset_id` flow from backend aggregate/commands.
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div style={{ padding: 10, borderTop: '1px solid #D6DCE8', background: '#F8FAFC', fontSize: 13, color: '#64748B' }}>
+              {hasThreads
+                ? 'בחרו שיחה מהרשימה כדי לכתוב הודעה או לצרף קובץ.'
+                : 'אין שיחות פתוחות כרגע. כשהמשרד יפתח שיחה חדשה - היא תופיע כאן.'}
+            </div>
+          )}
         </section>
       </main>
     </div>
