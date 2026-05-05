@@ -140,7 +140,7 @@ export function ClientAccountingTab({
     setGenSaving(true);
     try {
       const bundle = await apiJson<ClientAccountingBundle>(moduleClientOperationsAccountingGeneral(clientId), {
-        method: 'PATCH',
+        method: 'POST',
         body: JSON.stringify({
           occupation_field: generalDraft.occupation_field.trim() ? generalDraft.occupation_field.trim() : null,
           business_opened_on: generalDraft.business_opened_on ? generalDraft.business_opened_on : null,
@@ -184,7 +184,7 @@ export function ClientAccountingTab({
     setVehSaving(true);
     try {
       const bundle = await apiJson<ClientAccountingBundle>(moduleClientOperationsAccountingVehicles(clientId), {
-        method: 'PUT',
+        method: 'POST',
         body: JSON.stringify({ vehicles: buildVehiclesPayload() }),
       });
       onAccountingUpdated(bundle);

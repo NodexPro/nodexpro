@@ -484,7 +484,7 @@ export function ClientWorkspacePanel({
       const updated = await apiJson<ClientOperationsCaseResponse>(
         moduleClientOperationsUpdateClientProfile(localWorkspace.client.id),
         {
-          method: 'PATCH',
+          method: 'POST',
           body: JSON.stringify(payload),
         }
       );

@@ -229,7 +229,7 @@ export function ClientOperationsRegistry() {
         editingNoteId ?
           moduleClientOperationsOperationalNote(notesModalClientId, editingNoteId)
         : moduleClientOperationsOperationalNotes(notesModalClientId);
-      const method = editingNoteId ? 'PATCH' : 'POST';
+      const method = 'POST';
       const res = await apiFetch(url, {
         method,
         body: JSON.stringify(payload),

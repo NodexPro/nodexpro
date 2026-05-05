@@ -668,31 +668,32 @@ export async function updateClientOperationsClientProfile(
 
   if (body.contact_person !== undefined) {
     const contactFullName = normalizeOptionalString(body.contact_person);
-    if (!contactFullName) throw badRequest('איש קשר is required');
-
-    if (primaryContact) {
-      await supabaseAdmin
-        .from('client_contacts')
-        .update({
+    // Allow profile save when contact name is blank; keep existing primary contact name unchanged.
+    if (contactFullName) {
+      if (primaryContact) {
+        await supabaseAdmin
+          .from('client_contacts')
+          .update({
+            full_name: contactFullName,
+            email: newEmail,
+            phone: newPhone,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', primaryContact.id)
+          .eq('organization_id', orgId);
+      } else {
+        await supabaseAdmin.from('client_contacts').insert({
+          organization_id: orgId,
+          client_id: clientId,
           full_name: contactFullName,
           email: newEmail,
           phone: newPhone,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', primaryContact.id)
-        .eq('organization_id', orgId);
-    } else {
-      await supabaseAdmin.from('client_contacts').insert({
-        organization_id: orgId,
-        client_id: clientId,
-        full_name: contactFullName,
-        email: newEmail,
-        phone: newPhone,
-        title: null,
-        is_primary: true,
-        status: 'active',
-        created_by: ctx.user.id,
-      });
+          title: null,
+          is_primary: true,
+          status: 'active',
+          created_by: ctx.user.id,
+        });
+      }
     }
   }
 
