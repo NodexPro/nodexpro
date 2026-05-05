@@ -26,6 +26,12 @@ export function userFacingApiMessage(e: unknown): string {
     if (c === 'FORBIDDEN' || e.status === 403) {
       return 'אין הרשאה לביצוע הפעולה.';
     }
+    if (c === 'PORTAL_SESSION_EXPIRED') {
+      return 'קישור הגישה ל-DocFlow פג תוקף. בקשו מהמשרד קישור הזמנה חדש.';
+    }
+    if (c === 'PORTAL_SESSION_REVOKED' || c === 'PORTAL_SESSION_INVALID') {
+      return 'הגישה ל-DocFlow אינה תקפה. פתחו שוב את קישור ההזמנה מהאימייל, או בקשו קישור חדש מהמשרד. ודאו שאתם באותו כתובת אתר (למשל תמיד www).';
+    }
     if (c === 'UNAUTHORIZED' || e.status === 401) {
       return 'ההתחברות פגה. התחבר מחדש ונסה שוב.';
     }

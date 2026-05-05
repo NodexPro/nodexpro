@@ -25,10 +25,10 @@ export async function resolvePortalSessionByRawToken(rawToken: string): Promise<
     .eq('session_token_hash', tokenHash)
     .maybeSingle();
   if (error) throw error;
-  if (!data) throw unauthorized('Invalid portal session');
-  if (data.status !== 'active') throw unauthorized('Portal session is not active');
+  if (!data) throw unauthorized('Invalid portal session', 'PORTAL_SESSION_INVALID');
+  if (data.status !== 'active') throw unauthorized('Portal session is not active', 'PORTAL_SESSION_REVOKED');
   if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) {
-    throw unauthorized('Portal session expired');
+    throw unauthorized('Portal session expired', 'PORTAL_SESSION_EXPIRED');
   }
   return {
     sessionId: data.id,
