@@ -395,7 +395,7 @@ export function ClientPortalDocflow() {
         <aside
           style={{
             width: isNarrowLayout ? '100%' : view === 'thread' ? 0 : 'min(340px, 100%)',
-            display: view === 'thread' || (isNarrowLayout && view === 'thread') ? 'none' : 'flex',
+            display: view === 'thread' ? 'none' : 'flex',
             flexDirection: 'column',
             minWidth: 0,
             background: '#0F172A',
