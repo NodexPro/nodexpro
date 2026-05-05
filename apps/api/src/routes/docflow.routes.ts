@@ -289,9 +289,11 @@ portalRouter.post('/commands', async (req, res, next) => {
   }
 });
 
+// IMPORTANT: mount portal first. office routers have root-level auth middleware and must not
+// intercept /portal/* client flows (invite/session are token-based, not office JWT-based).
+router.use('/portal', portalRouter);
 router.use('/', officeBaseRouter);
 router.use('/', officeRouter);
-router.use('/portal', portalRouter);
 
 export const docflowRoutes = router;
 
