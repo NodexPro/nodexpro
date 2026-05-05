@@ -34,17 +34,10 @@ export function Login() {
         setLoading(false);
         return;
       }
-
-      if (me.organizations.length === 0) {
-        navigate('/onboarding', { replace: true });
-        return;
-      }
-      if (me.activeOrganizationId) {
-        sessionStorage.setItem('activeOrganizationId', me.activeOrganizationId);
-        navigate(from, { replace: true });
-        return;
-      }
-      navigate('/select-org', { replace: true });
+      const redirectTo = (me.redirect_to ?? '').trim() || from;
+      if (me.activeOrganizationId) sessionStorage.setItem('activeOrganizationId', me.activeOrganizationId);
+      else sessionStorage.removeItem('activeOrganizationId');
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

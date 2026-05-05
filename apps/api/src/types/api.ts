@@ -17,6 +17,19 @@ export interface MeResponse {
   moduleAppNavItems?: { path: string; label: string }[];
 }
 
+export type AuthSessionState =
+  | 'platform_owner'
+  | 'needs_onboarding'
+  | 'needs_org_selection'
+  | 'ready'
+  | 'blocked';
+
+export interface AuthSessionAggregateResponse extends MeResponse {
+  session_state: AuthSessionState;
+  redirect_to: string;
+  allowed_actions: string[];
+}
+
 export type EntitlementStatus = 'not_entitled' | 'entitled' | 'trial' | 'expired' | 'restricted';
 export type ActivationStatus = 'inactive' | 'activating' | 'active' | 'suspended' | 'deactivated';
 

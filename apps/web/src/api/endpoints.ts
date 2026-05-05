@@ -5,7 +5,9 @@ export const AUTH = {
   login: '/auth/login',
   logout: '/auth/logout',
   me: '/auth/me',
+  session: '/auth/session',
   setActiveOrg: '/auth/me/active-organization',
+  selectActiveOrgCommand: '/auth/commands/select_active_organization',
 } as const;
 
 /** Single aggregated payload for dashboard; requires X-Organization-Id. */
@@ -96,7 +98,7 @@ export function moduleClientOperationsCase(
   return base;
 }
 export const moduleClientOperationsUpdateClientProfile = (clientId: string) =>
-  `/m/client-operations/clients/${clientId}/profile`;
+  `/m/client-operations/clients/${clientId}/profile/commands/update_profile`;
 export const moduleClientOperationsFeesCommands = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/fees/commands`;
 export const moduleClientOperationsPayrollCommands = (clientId: string) =>
@@ -124,10 +126,12 @@ export const moduleClientOperationsNoteTypes = () => '/m/client-operations/note-
 export const moduleClientOperationsOperationalNotes = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/operational-notes`;
 export const moduleClientOperationsOperationalNote = (clientId: string, noteId: string) =>
-  `/m/client-operations/clients/${clientId}/operational-notes/${noteId}`;
+  `/m/client-operations/clients/${clientId}/operational-notes/${noteId}/commands/update_note`;
 export const moduleClientOperationsRemindersDue = () => '/m/client-operations/reminders/due';
 export const moduleClientOperationsTaxSettings = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/tax-settings`;
+export const moduleClientOperationsTaxSettingsCommandUpdate = (clientId: string) =>
+  `/m/client-operations/clients/${clientId}/tax-settings/commands/update_tax_settings`;
 /** POST { type: TaxTabCommandType, payload, fees_price_chart_view? } → full ClientOperationsCaseResponse */
 export const moduleClientOperationsTaxCommands = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/tax/commands`;
@@ -144,19 +148,19 @@ export const moduleClientOperationsAccountingCommands = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/accounting/commands`;
 
 export const moduleClientOperationsAccountingGeneral = (clientId: string) =>
-  `/m/client-operations/clients/${clientId}/accounting/general`;
+  `/m/client-operations/clients/${clientId}/accounting/general/commands/update_accounting_general`;
 export const moduleClientOperationsAccountingVehicles = (clientId: string) =>
-  `/m/client-operations/clients/${clientId}/accounting/vehicles`;
+  `/m/client-operations/clients/${clientId}/accounting/vehicles/commands/replace_accounting_vehicles`;
 
 export const moduleClientOperationsAccountingBusinessProfile = (clientId: string) =>
-  `/m/client-operations/clients/${clientId}/accounting/business-profile`;
+  `/m/client-operations/clients/${clientId}/accounting/business-profile/commands/save_business_profile`;
 
 export const moduleClientOperationsAccountingSettingsTab = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/accounting-settings/tab`;
 export const moduleClientOperationsAccountingSettingsBlockModal = (clientId: string, blockKey: string) =>
   `/m/client-operations/clients/${clientId}/accounting-settings/blocks/${blockKey}/modal`;
 export const moduleClientOperationsAccountingSettingsBlockSave = (clientId: string, blockKey: string) =>
-  `/m/client-operations/clients/${clientId}/accounting-settings/blocks/${blockKey}`;
+  `/m/client-operations/clients/${clientId}/accounting-settings/blocks/${blockKey}/commands/save_block`;
 export const moduleClientOperationsAccountingSettingsBlockNormalizeDraft = (clientId: string, blockKey: string) =>
   `/m/client-operations/clients/${clientId}/accounting-settings/blocks/${blockKey}/normalize-draft`;
 export const moduleClientOperationsAccountingSettingsModalVisibility = (clientId: string, blockKey: string) =>
@@ -187,7 +191,7 @@ export const moduleClientOperationsVehicleFleetItems = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/accounting-settings/vehicle-fleet/items`;
 
 export const moduleClientOperationsVehicleFleetItem = (clientId: string, vehicleId: string) =>
-  `/m/client-operations/clients/${clientId}/accounting-settings/vehicle-fleet/items/${vehicleId}`;
+  `/m/client-operations/clients/${clientId}/accounting-settings/vehicle-fleet/items/${vehicleId}/commands/update_vehicle_fleet_item`;
 
 // DocFlow (office/client aggregates + commands)
 export const docflowClientTabAggregate = (clientId: string, selectedThreadId?: string | null) =>

@@ -6,9 +6,9 @@ export function RequireOrg({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
 
   if (auth.status !== 'authenticated') return null;
-  if (!auth.me.activeOrganizationId) {
-    if (auth.me.organizations.length === 0) return <Navigate to="/onboarding" replace />;
-    return <Navigate to="/select-org" replace />;
+  if ((auth.me.session_state ?? 'ready') !== 'ready') {
+    const redirectTo = (auth.me.redirect_to ?? '/select-org').trim() || '/select-org';
+    return <Navigate to={redirectTo} replace />;
   }
   return <>{children}</>;
 }

@@ -7,15 +7,16 @@ export function SelectOrganization() {
 
   if (auth.status !== 'authenticated') return null;
   const { organizations } = auth.me;
-  const { setActiveOrg } = auth;
-
-  if (organizations.length === 0) {
-    return <Navigate to="/onboarding" replace />;
+  const { selectActiveOrg } = auth;
+  if ((auth.me.session_state ?? 'ready') !== 'needs_org_selection') {
+    const redirectTo = (auth.me.redirect_to ?? '/dashboard').trim() || '/dashboard';
+    return <Navigate to={redirectTo} replace />;
   }
 
   async function select(id: string) {
-    await setActiveOrg(id);
-    navigate('/dashboard', { replace: true });
+    const refreshed = await selectActiveOrg(id);
+    const redirectTo = (refreshed?.redirect_to ?? '/dashboard').trim() || '/dashboard';
+    navigate(redirectTo, { replace: true });
   }
 
   return (

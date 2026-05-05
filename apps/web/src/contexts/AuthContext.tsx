@@ -11,6 +11,9 @@ export interface MeData {
   enabledModules: string[];
   navItems: { path: string; label: string; order: number }[];
   moduleAppNavItems?: { path: string; label: string }[];
+  session_state?: 'platform_owner' | 'needs_onboarding' | 'needs_org_selection' | 'ready' | 'blocked';
+  redirect_to?: string;
+  allowed_actions?: string[];
 }
 
 type AuthState =
@@ -18,7 +21,15 @@ type AuthState =
   | { status: 'unauthenticated' }
   | { status: 'authenticated'; me: MeData };
 
-const AuthContext = createContext<AuthState & { setActiveOrg: (id: string) => Promise<void>; refetchMe: () => Promise<MeData | null>; signOut: () => Promise<void> } | null>(null);
+const AuthContext = createContext<
+  AuthState & {
+    setActiveOrg: (id: string) => Promise<void>;
+    selectActiveOrg: (id: string) => Promise<MeData | null>;
+    refetchMe: () => Promise<MeData | null>;
+    signOut: () => Promise<void>;
+  }
+  | null
+>(null);
 
 function isMeEqual(a: MeData, b: MeData): boolean {
   return (
@@ -31,33 +42,50 @@ function isMeEqual(a: MeData, b: MeData): boolean {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
   const isFetchingMe = useRef(false);
+  const inFlightMe = useRef<Promise<MeData | null> | null>(null);
 
   const refetchMe = useCallback(async (signal?: AbortSignal): Promise<MeData | null> => {
-    if (isFetchingMe.current && !signal) return null;
-    isFetchingMe.current = true;
-    try {
-      const me = await apiJson<MeData>(AUTH.me, signal ? { signal } : undefined);
-      if (signal?.aborted) return null;
-      setState((prev) => {
-        if (prev.status === 'authenticated' && isMeEqual(prev.me, me)) return prev;
-        return { status: 'authenticated', me };
-      });
-      if (me.activeOrganizationId) sessionStorage.setItem('activeOrganizationId', me.activeOrganizationId);
-      return me;
-    } catch (e) {
-      if (signal?.aborted) return null;
-      setState({ status: 'unauthenticated' });
-      return null;
-    } finally {
-      isFetchingMe.current = false;
-    }
+    if (inFlightMe.current && !signal) return inFlightMe.current;
+    const run = (async () => {
+      isFetchingMe.current = true;
+      try {
+        const me = await apiJson<MeData>(AUTH.session, signal ? { signal } : undefined);
+        if (signal?.aborted) return null;
+        setState((prev) => {
+          if (prev.status === 'authenticated' && isMeEqual(prev.me, me)) return prev;
+          return { status: 'authenticated', me };
+        });
+        if (me.activeOrganizationId) sessionStorage.setItem('activeOrganizationId', me.activeOrganizationId);
+        else sessionStorage.removeItem('activeOrganizationId');
+        return me;
+      } catch (e) {
+        if (signal?.aborted) return null;
+        setState({ status: 'unauthenticated' });
+        return null;
+      } finally {
+        isFetchingMe.current = false;
+      }
+    })();
+    if (!signal) inFlightMe.current = run;
+    const result = await run;
+    if (!signal && inFlightMe.current === run) inFlightMe.current = null;
+    return result;
+  }, []);
+
+  const selectActiveOrg = useCallback(async (organizationId: string) => {
+    const me = await apiJson<MeData>(AUTH.selectActiveOrgCommand, {
+      method: 'POST',
+      body: JSON.stringify({ organization_id: organizationId }),
+    });
+    setState({ status: 'authenticated', me });
+    if (me.activeOrganizationId) sessionStorage.setItem('activeOrganizationId', me.activeOrganizationId);
+    else sessionStorage.removeItem('activeOrganizationId');
+    return me;
   }, []);
 
   const setActiveOrg = useCallback(async (organizationId: string) => {
-    await apiJson(AUTH.setActiveOrg, { method: 'PUT', body: JSON.stringify({ organizationId }) });
-    sessionStorage.setItem('activeOrganizationId', organizationId);
-    await refetchMe();
-  }, [refetchMe]);
+    await selectActiveOrg(organizationId);
+  }, [selectActiveOrg]);
 
   const signOut = useCallback(async () => {
     try {
@@ -97,9 +125,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () =>
       state.status === 'authenticated'
-        ? { ...state, setActiveOrg, refetchMe, signOut }
-        : { ...state, setActiveOrg: async () => {}, refetchMe, signOut },
-    [state, setActiveOrg, refetchMe, signOut]
+        ? { ...state, setActiveOrg, selectActiveOrg, refetchMe, signOut }
+        : { ...state, setActiveOrg: async () => {}, selectActiveOrg: async () => null, refetchMe, signOut },
+    [state, setActiveOrg, selectActiveOrg, refetchMe, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
