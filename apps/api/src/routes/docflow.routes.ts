@@ -15,6 +15,8 @@ import {
   buildClientDocflowTabAggregate,
   buildClientPortalInboxAggregate,
   buildDocflowInvitesManagementAggregate,
+  buildClientContextDocflowAggregate,
+  buildOfficeDocflowInboxAggregate,
 } from '../domains/docflow/docflow-read-models.service.js';
 import { resolvePortalSessionByRawToken } from '../domains/docflow/docflow-portal-auth.service.js';
 import { getPortalDocflowAttachmentSignedUrl } from '../domains/docflow/docflow-portal-attachment-open.service.js';
@@ -50,6 +52,38 @@ officeRouter.get('/aggregates/client-tab', async (req: Request, res: Response, n
     const selectedThreadId = String(req.query.selected_thread_id ?? '').trim() || null;
     if (!clientId) throw badRequest('client_id is required');
     const aggregate = await buildClientDocflowTabAggregate({ orgId, clientId, selectedThreadId });
+    return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+officeRouter.get('/aggregates/office-inbox', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const orgId = ctx.organizationId!;
+    const aggregate = await buildOfficeDocflowInboxAggregate({
+      orgId,
+      page: Number(req.query.page ?? 1) || 1,
+      pageSize: Number(req.query.page_size ?? 25) || 25,
+      searchClient: String(req.query.search_client ?? '').trim() || null,
+      selectedClientId: String(req.query.selected_client_id ?? '').trim() || null,
+      selectedThreadId: String(req.query.selected_thread_id ?? '').trim() || null,
+    });
+    return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+officeRouter.get('/aggregates/client-context', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const orgId = ctx.organizationId!;
+    const clientId = String(req.query.client_id ?? '').trim();
+    const selectedThreadId = String(req.query.selected_thread_id ?? '').trim() || null;
+    if (!clientId) throw badRequest('client_id is required');
+    const aggregate = await buildClientContextDocflowAggregate({ orgId, clientId, selectedThreadId });
     return res.json(aggregate);
   } catch (e) {
     next(e);
@@ -144,6 +178,9 @@ officeRouter.post('/commands/mark-thread-read-by-office', async (req, res, next)
 );
 officeRouter.post('/commands/remove-message-attachment', async (req, res, next) =>
   handleOfficeCommand(req, res, next, 'remove_message_attachment')
+);
+officeRouter.post('/commands/start-office-thread-for-client', async (req, res, next) =>
+  handleOfficeCommand(req, res, next, 'start_office_thread_for_client')
 );
 
 officeRouter.post('/files/upload', async (req: Request, res: Response, next: NextFunction) => {
@@ -268,6 +305,9 @@ async function handlePortalCommand(req: Request, res: Response, next: NextFuncti
 
 portalRouter.post('/commands/send-client-message', async (req, res, next) =>
   handlePortalCommand(req, res, next, 'send_client_message')
+);
+portalRouter.post('/commands/start-client-thread', async (req, res, next) =>
+  handlePortalCommand(req, res, next, 'start_client_portal_thread')
 );
 portalRouter.post('/commands/attach-file-to-client-message', async (req, res, next) =>
   handlePortalCommand(req, res, next, 'attach_file_to_client_message')

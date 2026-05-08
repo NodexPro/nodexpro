@@ -6,6 +6,8 @@ export type DocflowCommandType =
   | 'resend_invite'
   | 'revoke_invite'
   | 'accept_client_portal_invitation'
+  | 'start_client_portal_thread'
+  | 'start_office_thread_for_client'
   | 'revoke_client_portal_access'
   | 'archive_client_thread'
   | 'reopen_client_thread'
@@ -40,6 +42,8 @@ export type DocflowRefreshedAggregateKey =
   | 'client_docflow_tab_aggregate'
   | 'docflow_invites_management_aggregate'
   | 'client_portal_inbox_aggregate'
+  | 'office_docflow_inbox_aggregate'
+  | 'client_context_docflow_aggregate'
   | 'communication_rule_run_review_aggregate'
   | 'docflow_floating_widget_aggregate';
 

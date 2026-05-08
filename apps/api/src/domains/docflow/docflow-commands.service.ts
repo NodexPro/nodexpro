@@ -7,6 +7,8 @@ import {
   buildClientDocflowTabAggregate,
   buildClientPortalInboxAggregate,
   buildDocflowInvitesManagementAggregate,
+  buildClientContextDocflowAggregate,
+  buildOfficeDocflowInboxAggregate,
 } from './docflow-read-models.service.js';
 import type { DocflowCommandPayload, DocflowCommandResponse, DocflowCommandType } from './docflow.types.js';
 import {
@@ -57,6 +59,39 @@ async function refreshOffice(orgId: string, clientId: string, selectedThreadId?:
     aggregate_key: 'client_docflow_tab_aggregate',
     aggregate: await buildClientDocflowTabAggregate({ orgId, clientId, selectedThreadId }),
   };
+}
+
+async function refreshOfficeTarget(
+  orgId: string,
+  payload: DocflowCommandPayload,
+  params: { clientId: string; selectedThreadId?: string | null }
+): Promise<DocflowCommandResponse['refreshed']> {
+  const target = String(payload.refresh_target ?? '').trim();
+  if (target === 'office_inbox') {
+    return {
+      aggregate_key: 'office_docflow_inbox_aggregate',
+      aggregate: await buildOfficeDocflowInboxAggregate({
+        orgId,
+        page: Number(payload.page ?? 1) || 1,
+        pageSize: Number(payload.page_size ?? 25) || 25,
+        searchClient: asOptionalString(payload.search_client),
+        selectedClientId: params.clientId,
+        selectedThreadId: params.selectedThreadId ?? null,
+      }),
+    };
+  }
+  if (target === 'client_context') {
+    return {
+      aggregate_key: 'client_context_docflow_aggregate',
+      aggregate: await buildClientContextDocflowAggregate({
+        orgId,
+        clientId: params.clientId,
+        selectedThreadId: params.selectedThreadId ?? null,
+      }),
+    };
+  }
+  // default: keep legacy refresh contract for existing office screens
+  return refreshOffice(orgId, params.clientId, params.selectedThreadId ?? null);
 }
 
 async function refreshPortal(orgId: string, clientId: string, portalUserId: string, selectedThreadId?: string | null): Promise<DocflowCommandResponse['refreshed']> {
@@ -183,7 +218,12 @@ export async function executeDocflowOfficeCommand(
   payloadInput: unknown
 ): Promise<DocflowCommandResponse> {
   const payload = ensureObj(payloadInput);
-  const orgId = reqString(payload, 'org_id');
+  // NodexPro: office truth comes from auth context. Keep legacy org_id for existing commands,
+  // but allow new commands to omit org_id and rely on ctx.organizationId (no frontend truth).
+  const orgId =
+    command === 'start_office_thread_for_client'
+      ? (ctx.organizationId ?? reqString(payload, 'org_id'))
+      : reqString(payload, 'org_id');
   if (DOCFLOW_COMMUNICATION_COMMANDS.has(command)) {
     return executeDocflowCommunicationOfficeCommand(ctx, command, payload);
   }
@@ -433,6 +473,53 @@ export async function executeDocflowOfficeCommand(
   await assertClientBelongsToOrg(orgId, clientId);
 
   switch (command) {
+    case 'start_office_thread_for_client': {
+      const selectedThreadIdInput = asOptionalString(payload.selected_thread_id);
+
+      // If there is any non-archived thread, reuse latest updated thread.
+      const { data: existingThreads, error: tErr } = await supabaseAdmin
+        .from('client_message_threads')
+        .select('id, thread_status, updated_at')
+        .eq('org_id', orgId)
+        .eq('client_id', clientId)
+        .neq('thread_status', 'archived')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (tErr) throw tErr;
+
+      let threadId = String(existingThreads?.[0]?.id ?? '').trim() || null;
+      if (!threadId) {
+        const { data: created, error: cErr } = await supabaseAdmin
+          .from('client_message_threads')
+          .insert({
+            org_id: orgId,
+            client_id: clientId,
+            module_key: 'docflow',
+            thread_type: 'question',
+            thread_status: 'open',
+            created_by_type: 'office',
+            created_by_user_id: actorUserId,
+            title: null,
+          })
+          .select('id')
+          .single();
+        if (cErr) throw cErr;
+        threadId = String(created.id);
+
+        await supabaseAdmin.from('client_message_events').insert({
+          org_id: orgId,
+          client_id: clientId,
+          thread_id: threadId,
+          event_type: 'thread_created',
+          actor_type: 'office',
+          actor_user_id: actorUserId,
+        });
+        await audit(orgId, actorUserId, 'docflow_thread', threadId, 'thread_created', { thread_type: 'question', actor: 'office_user' });
+      }
+
+      const selectedThreadId = selectedThreadIdInput ?? threadId;
+      return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId }) };
+    }
     case 'invite_client_to_docflow': {
       const { data: clientContact, error: clientErr } = await supabaseAdmin
         .from('clients')
@@ -617,7 +704,7 @@ export async function executeDocflowOfficeCommand(
         actor_user_id: actorUserId,
       });
       await audit(orgId, actorUserId, 'docflow_thread', threadId, 'thread_archived', {});
-      return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, threadId) };
+      return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
     }
     case 'reopen_client_thread': {
       const threadId = reqString(payload, 'thread_id');
@@ -807,7 +894,7 @@ export async function executeDocflowOfficeCommand(
         actor_user_id: actorUserId,
       });
       await audit(orgId, actorUserId, 'docflow_message', data.id, 'message_created', { thread_id: threadId, message_type: messageType });
-      return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, threadId) };
+      return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
     }
     case 'attach_file_to_client_message': {
       const threadId = reqString(payload, 'thread_id');
@@ -913,7 +1000,7 @@ export async function executeDocflowOfficeCommand(
         payload_json: eventPayload,
       });
       await audit(orgId, actorUserId, 'docflow_thread', threadId, 'thread_read_marked_office', eventPayload);
-      return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, threadId) };
+      return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
     }
     default:
       throw badRequest(`Unsupported office docflow command: ${command}`);
@@ -1111,6 +1198,7 @@ export async function executeDocflowPortalCommand(
         throw e;
       }
     }
+    case 'start_client_portal_thread':
     case 'send_client_message':
     case 'attach_file_to_client_message':
     case 'remove_message_attachment':
@@ -1121,6 +1209,110 @@ export async function executeDocflowPortalCommand(
       const orgId = session.orgId;
       const clientId = session.clientId;
       const portalUserId = session.portalUserId;
+
+      if (command === 'start_client_portal_thread') {
+        const messageText = reqString(payload, 'message_text');
+        const idsRaw = Array.isArray(payload.file_asset_ids) ? payload.file_asset_ids : [];
+        const fileAssetIds = [...new Set(idsRaw.map((v) => String(v ?? '').trim()).filter(Boolean))];
+
+        const { data: thread, error: tErr } = await supabaseAdmin
+          .from('client_message_threads')
+          .insert({
+            org_id: orgId,
+            client_id: clientId,
+            module_key: 'docflow',
+            thread_type: 'client_initiated',
+            thread_status: 'open',
+            created_by_type: 'client',
+            created_by_user_id: null,
+            title: null,
+          })
+          .select('id')
+          .single();
+        if (tErr) throw tErr;
+
+        await supabaseAdmin.from('client_message_events').insert({
+          org_id: orgId,
+          client_id: clientId,
+          thread_id: thread.id,
+          event_type: 'thread_created',
+          actor_type: 'client',
+          actor_portal_user_id: portalUserId,
+        });
+        await audit(orgId, null, 'docflow_thread', thread.id, 'thread_created', { actor: 'client_portal_user', thread_type: 'client_initiated' });
+
+        const { data: msg, error: mErr } = await supabaseAdmin
+          .from('client_messages')
+          .insert({
+            org_id: orgId,
+            client_id: clientId,
+            thread_id: thread.id,
+            message_type: 'text',
+            created_by_type: 'client',
+            created_by_portal_user_id: portalUserId,
+            body: messageText,
+            message_status: 'published',
+          })
+          .select('id')
+          .single();
+        if (mErr) throw mErr;
+
+        await supabaseAdmin.from('client_message_events').insert({
+          org_id: orgId,
+          client_id: clientId,
+          thread_id: thread.id,
+          message_id: msg.id,
+          event_type: 'message_created',
+          actor_type: 'client',
+          actor_portal_user_id: portalUserId,
+        });
+        await audit(orgId, null, 'docflow_message', msg.id, 'message_created', {
+          thread_id: thread.id,
+          actor: 'client_portal_user',
+        });
+
+        if (fileAssetIds.length) {
+          for (const fileAssetId of fileAssetIds) {
+            await assertFileAssetInScope(orgId, fileAssetId);
+            const { error: aErr } = await supabaseAdmin.from('client_message_attachments').insert({
+              org_id: orgId,
+              client_id: clientId,
+              thread_id: thread.id,
+              message_id: msg.id,
+              file_asset_id: fileAssetId,
+            });
+            if (aErr) throw aErr;
+            await supabaseAdmin.from('client_message_events').insert({
+              org_id: orgId,
+              client_id: clientId,
+              thread_id: thread.id,
+              message_id: msg.id,
+              event_type: 'message_attachment_added',
+              actor_type: 'client',
+              actor_portal_user_id: portalUserId,
+              payload_json: {
+                org_id: orgId,
+                client_id: clientId,
+                module_key: 'docflow',
+                thread_id: thread.id,
+                message_id: msg.id,
+                file_asset_id: fileAssetId,
+              },
+            });
+            await audit(orgId, null, 'docflow_message_attachment', msg.id, 'message_attachment_added', {
+              actor: 'client_portal_user',
+              org_id: orgId,
+              client_id: clientId,
+              module_key: 'docflow',
+              thread_id: thread.id,
+              message_id: msg.id,
+              file_asset_id: fileAssetId,
+            });
+          }
+        }
+
+        return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, thread.id) };
+      }
 
       if (command === 'send_client_message') {
         const threadId = reqString(payload, 'thread_id');
