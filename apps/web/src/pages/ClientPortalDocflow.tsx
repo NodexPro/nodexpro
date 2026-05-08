@@ -32,6 +32,7 @@ export function ClientPortalDocflow() {
   const [attachFileAssetId, setAttachFileAssetId] = useState('');
   const [view, setView] = useState<'list' | 'thread'>('list');
   const [isNarrowLayout, setIsNarrowLayout] = useState(false);
+  const [showEmptyDraftComposer, setShowEmptyDraftComposer] = useState(false);
 
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
   const [canShowInstallPrompt, setCanShowInstallPrompt] = useState(false);
@@ -247,6 +248,7 @@ export function ClientPortalDocflow() {
   const selectedThreadStatusLabel = String(selectedThread?.thread_status_label ?? '').trim();
   const selectedThreadSlaLabel = String((selectedThread?.sla_indicator as UnknownRecord | undefined)?.label ?? '').trim();
   const hasThreads = threadList.length > 0 && emptyStates?.no_threads !== true;
+  const sendAction = isCommandEnabled('send_client_message');
 
   function initials(value: string): string {
     const clean = String(value ?? '').trim();
@@ -509,9 +511,76 @@ export function ClientPortalDocflow() {
 
           <div style={{ flex: 1, overflow: 'auto', padding: '12px 10px', background: '#E9EEF5' }}>
             {!selectedThreadId ? (
-              <p style={{ color: '#6B7280', margin: 10 }}>
-                {hasThreads ? 'בחרו שיחה מהרשימה.' : 'אין שיחות עדיין.'}
-              </p>
+              hasThreads ? (
+                <p style={{ color: '#6B7280', margin: 10 }}>בחרו שיחה מהרשימה.</p>
+              ) : (
+                <div style={{ margin: 10, display: 'grid', gap: 10 }}>
+                  <div style={{ color: '#6B7280', fontSize: 15, fontWeight: 600 }}>עדיין אין שיחות</div>
+                  <div style={{ color: '#64748B', fontSize: 13.5 }}>שלחו הודעה ראשונה למשרד</div>
+                  {!showEmptyDraftComposer ? (
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn-taxes-compact"
+                      style={{ width: 'fit-content' }}
+                      onClick={() => setShowEmptyDraftComposer(true)}
+                    >
+                      שלח הודעה
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gap: 8,
+                        padding: 10,
+                        background: '#fff',
+                        border: '1px solid #D6DCE8',
+                        borderRadius: 10,
+                        maxWidth: 560,
+                      }}
+                    >
+                      <textarea
+                        value={composer}
+                        onChange={(e) => setComposer(e.target.value)}
+                        placeholder="כתבו הודעה…"
+                        rows={3}
+                        style={{
+                          width: '100%',
+                          border: '1px solid #CBD5E1',
+                          borderRadius: 10,
+                          padding: 10,
+                          boxSizing: 'border-box',
+                          fontSize: 14,
+                          resize: 'vertical',
+                          background: '#fff',
+                        }}
+                      />
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="nx-btn nx-btn-taxes-compact"
+                          disabled
+                          title={sendAction.reason ?? 'No thread selected'}
+                        >
+                          שליחה
+                        </button>
+                        <button
+                          type="button"
+                          className="nx-btn nx-btn-taxes-compact"
+                          onClick={() => {
+                            setShowEmptyDraftComposer(false);
+                            setComposer('');
+                          }}
+                        >
+                          ביטול
+                        </button>
+                        <span style={{ fontSize: 12, color: '#64748B' }}>
+                          לא ניתן לשלוח לפני פתיחת שיחה על ידי המשרד.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
             ) : emptyStates?.no_messages === true ? (
               <p style={{ color: '#6B7280', margin: 10 }}>אין הודעות בשיחה זו.</p>
             ) : (
