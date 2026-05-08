@@ -51,7 +51,8 @@ async function getThreadMessages(
   orgId: string,
   clientId: string,
   threadId: string,
-  visibility: 'office' | 'portal'
+  visibility: 'office' | 'portal',
+  opts?: { limit?: number }
 ): Promise<Record<string, unknown>[]> {
   const normalizeDeliveryView = (
     rawStatus: string | null,
@@ -74,9 +75,16 @@ async function getThreadMessages(
     .eq('client_id', clientId)
     .eq('thread_id', threadId);
   if (visibility === 'portal') q = q.eq('message_status', 'published');
-  const { data, error } = await q.order('created_at', { ascending: true });
+  const limit = Math.max(1, Math.min(500, Number(opts?.limit ?? 0) || 0)) || null;
+  if (limit) {
+    // Load last N messages (descending), then reverse in memory for chat UI.
+    q = q.order('created_at', { ascending: false }).limit(limit);
+  } else {
+    q = q.order('created_at', { ascending: true });
+  }
+  const { data, error } = await q;
   if (error) throw error;
-  const messages = data ?? [];
+  const messages = (data ?? []).slice().reverse();
   const messageIds = messages.map((m) => String(m.id));
   const deliveryByMessageId = new Map<string, { delivery_status: string; delivery_reason: string | null }>();
   if (messageIds.length) {
@@ -108,16 +116,25 @@ async function getThreadMessages(
   });
 }
 
-async function getThreadAttachments(orgId: string, clientId: string, threadId: string): Promise<Record<string, unknown>[]> {
-  const { data, error } = await supabaseAdmin
+async function getThreadAttachments(
+  orgId: string,
+  clientId: string,
+  threadId: string,
+  opts?: { limit?: number }
+): Promise<Record<string, unknown>[]> {
+  let q = supabaseAdmin
     .from('client_message_attachments')
     .select('id, message_id, file_asset_id, created_at, file_assets(file_name, mime_type)')
     .eq('org_id', orgId)
     .eq('client_id', clientId)
-    .eq('thread_id', threadId)
-    .order('created_at', { ascending: true });
+    .eq('thread_id', threadId);
+  const limit = Math.max(1, Math.min(500, Number(opts?.limit ?? 0) || 0)) || null;
+  q = q.order('created_at', { ascending: false });
+  if (limit) q = q.limit(limit);
+  const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []).map((row) => {
+  const rows = (data ?? []).slice().reverse();
+  return rows.map((row) => {
     const r = row as {
       id: string;
       message_id: string;
@@ -770,7 +787,8 @@ async function resolveOfficeSelectedThread(params: {
     .select('id, module_key, thread_type, thread_status, deadline_at, updated_at')
     .eq('org_id', params.orgId)
     .eq('client_id', params.clientId)
-    .order('updated_at', { ascending: false });
+    .order('updated_at', { ascending: false })
+    .limit(50);
   if (threadsErr) throw threadsErr;
   const threadRows = (threads ?? []).map((t) => ({
     id: String(t.id),
@@ -786,16 +804,18 @@ async function resolveOfficeSelectedThread(params: {
 
   const [messages, attachments, unreadSelected] = selectedThread
     ? await Promise.all([
-        getThreadMessages(params.orgId, params.clientId, selectedThread.id, 'office'),
-        getThreadAttachments(params.orgId, params.clientId, selectedThread.id),
+        getThreadMessages(params.orgId, params.clientId, selectedThread.id, 'office', { limit: 120 }),
+        getThreadAttachments(params.orgId, params.clientId, selectedThread.id, { limit: 120 }),
         getUnreadForOffice(params.orgId, params.clientId, selectedThread.id),
       ])
     : [[], [], 0];
 
   const unreadByThread = new Map<string, number>();
-  for (const t of threadRows) {
-    unreadByThread.set(t.id, await getUnreadForOffice(params.orgId, params.clientId, t.id));
-  }
+  await Promise.all(
+    threadRows.slice(0, 25).map(async (t) => {
+      unreadByThread.set(t.id, await getUnreadForOffice(params.orgId, params.clientId, t.id));
+    })
+  );
 
   return { threadRows, selectedThread, messages, attachments, unreadSelected, unreadByThread };
 }
@@ -874,33 +894,37 @@ export async function buildOfficeDocflowInboxAggregate(params: {
   const page = normalizePage(params.page, 1);
   const search = String(params.searchClient ?? '').trim().toLowerCase();
 
-  // Phase-1 safety: page clients by organization list, then compute docflow preview for current page only.
-  const { data: clients, error: cErr } = await supabaseAdmin
+  // Server-side paging + filtering (avoid loading full org client list into memory).
+  const offset = (page - 1) * pageSize;
+  const base = supabaseAdmin
     .from('clients')
-    .select('id, display_name, status, phone, email')
-    .eq('organization_id', params.orgId)
-    .order('display_name', { ascending: true });
+    .select('id, display_name, status, phone, email', { count: 'exact' })
+    .eq('organization_id', params.orgId);
+  const q = search
+    ? base.or(
+        [
+          `display_name.ilike.%${search}%`,
+          `phone.ilike.%${search}%`,
+          `email.ilike.%${search}%`,
+        ].join(',')
+      )
+    : base;
+  const { data: clients, error: cErr, count } = await q
+    .order('display_name', { ascending: true })
+    .range(offset, offset + pageSize - 1);
   if (cErr) throw cErr;
 
-  const rowsAll = (clients ?? []).map((c) => ({
+  const total = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, totalPages);
+
+  const pageRows = (clients ?? []).map((c) => ({
     client_id: String(c.id),
     display_name: String(c.display_name ?? ''),
     status: String(c.status ?? ''),
     phone: c.phone ? String(c.phone) : null,
     email: c.email ? String(c.email) : null,
   }));
-
-  const rowsFiltered = rowsAll.filter((r) => {
-    if (!search) return true;
-    const hay = `${r.display_name} ${r.phone ?? ''} ${r.email ?? ''}`.toLowerCase();
-    return hay.includes(search);
-  });
-
-  const total = rowsFiltered.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const offset = (safePage - 1) * pageSize;
-  const pageRows = rowsFiltered.slice(offset, offset + pageSize);
 
   const pageClientIds = pageRows.map((r) => r.client_id);
   const { data: threads, error: tErr } = await supabaseAdmin
@@ -927,24 +951,36 @@ export async function buildOfficeDocflowInboxAggregate(params: {
 
   // Compute unread counters for current page only (backend truth; UI does no filtering).
   const unreadByClient = new Map<string, number>();
-  for (const r of pageRows) {
-    const tlist = threadsByClient.get(r.client_id) ?? [];
-    let sum = 0;
-    for (const t of tlist.slice(0, 20)) {
-      sum += await getUnreadForOffice(params.orgId, r.client_id, t.id);
-    }
-    unreadByClient.set(r.client_id, sum);
-  }
+  await Promise.all(
+    pageRows.map(async (r) => {
+      const tlist = threadsByClient.get(r.client_id) ?? [];
+      const latest = tlist[0] ?? null;
+      const unread = latest ? await getUnreadForOffice(params.orgId, r.client_id, latest.id) : 0;
+      unreadByClient.set(r.client_id, unread);
+    })
+  );
 
   const selectedClientId =
     String(params.selectedClientId ?? '').trim() ||
     (pageRows.length ? pageRows[0]!.client_id : '');
 
-  const selectedClientInScope = selectedClientId ? rowsAll.find((r) => r.client_id === selectedClientId) ?? null : null;
+  // Selected client must be resolved in-scope even if it is not in current page.
+  const selectedClientInScope = selectedClientId
+    ? (
+        await supabaseAdmin
+          .from('clients')
+          .select('id')
+          .eq('organization_id', params.orgId)
+          .eq('id', selectedClientId)
+          .maybeSingle()
+      ).data
+      ? { client_id: selectedClientId }
+      : null
+    : null;
   const selectedClientAggregate = selectedClientInScope
     ? await buildClientContextDocflowAggregate({
         orgId: params.orgId,
-        clientId: selectedClientInScope.client_id,
+        clientId: selectedClientId,
         selectedThreadId: params.selectedThreadId ?? null,
       })
     : null;
