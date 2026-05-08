@@ -218,16 +218,14 @@ export async function executeDocflowOfficeCommand(
   payloadInput: unknown
 ): Promise<DocflowCommandResponse> {
   const payload = ensureObj(payloadInput);
-  // NodexPro: office truth comes from auth context. Keep legacy org_id for existing commands,
-  // but allow new commands to omit org_id and rely on ctx.organizationId (no frontend truth).
-  const orgId =
-    command === 'start_office_thread_for_client'
-      ? (ctx.organizationId ?? reqString(payload, 'org_id'))
-      : reqString(payload, 'org_id');
   if (DOCFLOW_COMMUNICATION_COMMANDS.has(command)) {
+    // Legacy communication commands still use payload org_id (separate flow).
+    const orgId = reqString(payload, 'org_id');
     return executeDocflowCommunicationOfficeCommand(ctx, command, payload);
   }
 
+  // NodexPro: office org truth comes from authenticated context (never from frontend payload).
+  const orgId = ctx.organizationId ?? reqString(payload, 'org_id');
   assertOfficeScope(ctx, orgId);
   await assertDocflowEntitled(orgId);
   const actorUserId = ctx.user.id;
