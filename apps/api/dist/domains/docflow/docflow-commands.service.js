@@ -1,8 +1,8 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { badRequest, forbidden, notFound } from '../../shared/errors.js';
+import { AppError, badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { createOpaqueToken, resolvePortalSessionByRawToken, sha256Hex } from './docflow-portal-auth.service.js';
-import { buildClientDocflowTabAggregate, buildClientPortalInboxAggregate, buildDocflowInvitesManagementAggregate, } from './docflow-read-models.service.js';
+import { buildClientDocflowTabAggregate, buildClientPortalInboxAggregate, buildDocflowInvitesManagementAggregate, buildClientContextDocflowAggregate, buildClientThreadContextAggregate, buildOfficeDocflowInboxAggregate, } from './docflow-read-models.service.js';
 import { asOptionalString, assertClientBelongsToOrg, assertDocflowEntitled, assertFileAssetInScope, assertDocflowMessageScope, assertDocflowThreadScope, assertOfficeScope, canTransitionThreadStatus, reqDateTimeIso, reqString, } from './docflow.guards.js';
 import { createSystemMessageCore } from './docflow-system-message-core.service.js';
 import { executeDocflowCommunicationOfficeCommand } from './docflow-communication-rule.service.js';
@@ -29,6 +29,44 @@ async function refreshOffice(orgId, clientId, selectedThreadId) {
         aggregate_key: 'client_docflow_tab_aggregate',
         aggregate: await buildClientDocflowTabAggregate({ orgId, clientId, selectedThreadId }),
     };
+}
+async function refreshOfficeTarget(orgId, payload, params) {
+    const target = String(payload.refresh_target ?? '').trim();
+    if (target === 'office_inbox') {
+        return {
+            aggregate_key: 'office_docflow_inbox_aggregate',
+            aggregate: await buildOfficeDocflowInboxAggregate({
+                orgId,
+                page: Number(payload.page ?? 1) || 1,
+                pageSize: Number(payload.page_size ?? 25) || 25,
+                searchClient: asOptionalString(payload.search_client),
+                selectedClientId: params.clientId,
+                selectedThreadId: params.selectedThreadId ?? null,
+            }),
+        };
+    }
+    if (target === 'client_context') {
+        return {
+            aggregate_key: 'client_context_docflow_aggregate',
+            aggregate: await buildClientContextDocflowAggregate({
+                orgId,
+                clientId: params.clientId,
+                selectedThreadId: params.selectedThreadId ?? null,
+            }),
+        };
+    }
+    if (target === 'client_thread_context') {
+        return {
+            aggregate_key: 'client_thread_context_aggregate',
+            aggregate: await buildClientThreadContextAggregate({
+                orgId,
+                clientId: params.clientId,
+                threadId: params.selectedThreadId ?? null,
+            }),
+        };
+    }
+    // default: keep legacy refresh contract for existing office screens
+    return refreshOffice(orgId, params.clientId, params.selectedThreadId ?? null);
 }
 async function refreshPortal(orgId, clientId, portalUserId, selectedThreadId) {
     return {
@@ -131,10 +169,13 @@ const DOCFLOW_COMMUNICATION_COMMANDS = new Set([
 ]);
 export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
     const payload = ensureObj(payloadInput);
-    const orgId = reqString(payload, 'org_id');
     if (DOCFLOW_COMMUNICATION_COMMANDS.has(command)) {
+        // Legacy communication commands still use payload org_id (separate flow).
+        const orgId = reqString(payload, 'org_id');
         return executeDocflowCommunicationOfficeCommand(ctx, command, payload);
     }
+    // NodexPro: office org truth comes from authenticated context (never from frontend payload).
+    const orgId = ctx.organizationId ?? reqString(payload, 'org_id');
     assertOfficeScope(ctx, orgId);
     await assertDocflowEntitled(orgId);
     const actorUserId = ctx.user.id;
@@ -382,6 +423,51 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
     const clientId = reqString(payload, 'client_id');
     await assertClientBelongsToOrg(orgId, clientId);
     switch (command) {
+        case 'start_office_thread_for_client': {
+            const selectedThreadIdInput = asOptionalString(payload.selected_thread_id);
+            // If there is any non-archived thread, reuse latest updated thread.
+            const { data: existingThreads, error: tErr } = await supabaseAdmin
+                .from('client_message_threads')
+                .select('id, thread_status, updated_at')
+                .eq('org_id', orgId)
+                .eq('client_id', clientId)
+                .neq('thread_status', 'archived')
+                .order('updated_at', { ascending: false })
+                .limit(1);
+            if (tErr)
+                throw tErr;
+            let threadId = String(existingThreads?.[0]?.id ?? '').trim() || null;
+            if (!threadId) {
+                const { data: created, error: cErr } = await supabaseAdmin
+                    .from('client_message_threads')
+                    .insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    module_key: 'docflow',
+                    thread_type: 'question',
+                    thread_status: 'open',
+                    created_by_type: 'office',
+                    created_by_user_id: actorUserId,
+                    title: null,
+                })
+                    .select('id')
+                    .single();
+                if (cErr)
+                    throw cErr;
+                threadId = String(created.id);
+                await supabaseAdmin.from('client_message_events').insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    thread_id: threadId,
+                    event_type: 'thread_created',
+                    actor_type: 'office',
+                    actor_user_id: actorUserId,
+                });
+                await audit(orgId, actorUserId, 'docflow_thread', threadId, 'thread_created', { thread_type: 'question', actor: 'office_user' });
+            }
+            const selectedThreadId = selectedThreadIdInput ?? threadId;
+            return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId }) };
+        }
         case 'invite_client_to_docflow': {
             const { data: clientContact, error: clientErr } = await supabaseAdmin
                 .from('clients')
@@ -570,7 +656,7 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                 actor_user_id: actorUserId,
             });
             await audit(orgId, actorUserId, 'docflow_thread', threadId, 'thread_archived', {});
-            return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, threadId) };
+            return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
         }
         case 'reopen_client_thread': {
             const threadId = reqString(payload, 'thread_id');
@@ -770,7 +856,7 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                 actor_user_id: actorUserId,
             });
             await audit(orgId, actorUserId, 'docflow_message', data.id, 'message_created', { thread_id: threadId, message_type: messageType });
-            return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, threadId) };
+            return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
         }
         case 'attach_file_to_client_message': {
             const threadId = reqString(payload, 'thread_id');
@@ -881,7 +967,7 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                 payload_json: eventPayload,
             });
             await audit(orgId, actorUserId, 'docflow_thread', threadId, 'thread_read_marked_office', eventPayload);
-            return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, threadId) };
+            return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
         }
         default:
             throw badRequest(`Unsupported office docflow command: ${command}`);
@@ -891,94 +977,186 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
     const payload = ensureObj(payloadInput);
     switch (command) {
         case 'accept_client_portal_invitation': {
-            const rawInviteToken = reqString(payload, 'invite_token');
-            const tokenHash = sha256Hex(rawInviteToken);
-            const { data: invite, error } = await supabaseAdmin
-                .from('client_portal_invitations')
-                .select('id, org_id, client_id, portal_user_id, status, token_expires_at, invite_email_normalized')
-                .eq('invite_token_hash', tokenHash)
-                .maybeSingle();
-            if (error)
-                throw error;
-            if (!invite)
-                throw forbidden('Invalid invitation token');
-            if (invite.status !== 'pending')
-                throw forbidden('Invitation cannot be accepted');
-            if (new Date(invite.token_expires_at).getTime() <= Date.now())
-                throw forbidden('Invitation expired');
-            await assertDocflowEntitled(invite.org_id);
-            let portalUserId = invite.portal_user_id;
-            if (!portalUserId) {
-                const { data: created, error: cErr } = await supabaseAdmin
-                    .from('client_portal_users')
+            console.info('DOCFLOW INVITE ACCEPT START');
+            try {
+                const rawInviteToken = reqString(payload, 'invite_token');
+                const tokenHash = sha256Hex(rawInviteToken);
+                const { data: invite, error } = await supabaseAdmin
+                    .from('client_portal_invitations')
+                    .select('id, org_id, client_id, portal_user_id, status, token_expires_at, invite_email_normalized')
+                    .eq('invite_token_hash', tokenHash)
+                    .maybeSingle();
+                if (error)
+                    throw error;
+                if (!invite) {
+                    throw forbidden('Invalid invitation token', 'INVALID_INVITATION_TOKEN');
+                }
+                const invStatus = String(invite.status ?? '');
+                if (invStatus === 'revoked') {
+                    throw forbidden('Invitation revoked', 'INVITATION_REVOKED');
+                }
+                if (new Date(String(invite.token_expires_at ?? '')).getTime() <= Date.now()) {
+                    throw forbidden('Invitation expired', 'INVITATION_EXPIRED');
+                }
+                await assertDocflowEntitled(invite.org_id);
+                /** Already accepted: same magic link issues a fresh portal session (cross-device / cleared storage). */
+                if (invStatus === 'accepted') {
+                    console.info('DOCFLOW INVITE ACCEPT ALREADY_ACCEPTED_REISSUE_SESSION', { invitation_id: invite.id });
+                    const portalUserIdAccepted = invite.portal_user_id;
+                    if (!portalUserIdAccepted) {
+                        throw forbidden('Portal user missing', 'PORTAL_USER_MISSING');
+                    }
+                    const { data: puRow, error: puAcceptedErr } = await supabaseAdmin
+                        .from('client_portal_users')
+                        .select('id, status')
+                        .eq('id', portalUserIdAccepted)
+                        .maybeSingle();
+                    if (puAcceptedErr)
+                        throw puAcceptedErr;
+                    if (!puRow || puRow.status !== 'active') {
+                        throw forbidden('Portal access revoked', 'PORTAL_ACCESS_REVOKED');
+                    }
+                    const nowIso = new Date().toISOString();
+                    const { error: luErr } = await supabaseAdmin
+                        .from('client_portal_users')
+                        .update({ last_login_at: nowIso, updated_at: nowIso })
+                        .eq('id', portalUserIdAccepted);
+                    if (luErr)
+                        throw luErr;
+                    const rawSessionTokenRefresh = createOpaqueToken();
+                    const sessionHashRefresh = sha256Hex(rawSessionTokenRefresh);
+                    const { data: sessionRefresh, error: sRefreshErr } = await supabaseAdmin
+                        .from('client_portal_sessions')
+                        .insert({
+                        org_id: invite.org_id,
+                        client_id: invite.client_id,
+                        portal_user_id: portalUserIdAccepted,
+                        session_token_hash: sessionHashRefresh,
+                        status: 'active',
+                        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                    })
+                        .select('id')
+                        .single();
+                    if (sRefreshErr)
+                        throw sRefreshErr;
+                    console.info('DOCFLOW INVITE ACCEPT SESSION_CREATED', {
+                        invitation_id: invite.id,
+                        session_id: sessionRefresh.id,
+                        path: 'already_accepted_reissue',
+                    });
+                    await supabaseAdmin.from('client_message_events').insert({
+                        org_id: invite.org_id,
+                        client_id: invite.client_id,
+                        event_type: 'portal_session_refreshed_via_invite_link',
+                        actor_type: 'client',
+                        actor_portal_user_id: portalUserIdAccepted,
+                        payload_json: { invitation_id: invite.id, session_id: sessionRefresh.id },
+                    });
+                    await audit(invite.org_id, null, 'docflow_portal_session', sessionRefresh.id, 'portal_session_refreshed_via_invite', {
+                        client_id: invite.client_id,
+                        invitation_id: invite.id,
+                    });
+                    const refreshedAccepted = await refreshPortal(invite.org_id, invite.client_id, portalUserIdAccepted);
+                    return {
+                        ok: true,
+                        command,
+                        refreshed: {
+                            ...refreshedAccepted,
+                            aggregate: {
+                                ...refreshedAccepted.aggregate,
+                                portal_session_token_once: rawSessionTokenRefresh,
+                            },
+                        },
+                    };
+                }
+                if (invStatus !== 'pending') {
+                    throw forbidden('Invitation cannot be accepted', 'INVITATION_NOT_ACCEPTABLE');
+                }
+                let portalUserId = invite.portal_user_id;
+                if (!portalUserId) {
+                    const { data: created, error: cErr } = await supabaseAdmin
+                        .from('client_portal_users')
+                        .insert({
+                        org_id: invite.org_id,
+                        client_id: invite.client_id,
+                        email_normalized: invite.invite_email_normalized,
+                        status: 'active',
+                        auth_method: 'magic_link',
+                        last_login_at: new Date().toISOString(),
+                    })
+                        .select('id')
+                        .single();
+                    if (cErr)
+                        throw cErr;
+                    portalUserId = created.id;
+                }
+                else {
+                    const { error: upErr } = await supabaseAdmin
+                        .from('client_portal_users')
+                        .update({ status: 'active', last_login_at: new Date().toISOString(), revoked_at: null, updated_at: new Date().toISOString() })
+                        .eq('id', portalUserId);
+                    if (upErr)
+                        throw upErr;
+                }
+                await supabaseAdmin
+                    .from('client_portal_invitations')
+                    .update({ status: 'accepted', accepted_at: new Date().toISOString(), portal_user_id: portalUserId })
+                    .eq('id', invite.id);
+                const rawSessionToken = createOpaqueToken();
+                const sessionHash = sha256Hex(rawSessionToken);
+                const { data: session, error: sErr } = await supabaseAdmin
+                    .from('client_portal_sessions')
                     .insert({
                     org_id: invite.org_id,
                     client_id: invite.client_id,
-                    email_normalized: invite.invite_email_normalized,
+                    portal_user_id: portalUserId,
+                    session_token_hash: sessionHash,
                     status: 'active',
-                    auth_method: 'magic_link',
-                    last_login_at: new Date().toISOString(),
+                    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
                 })
                     .select('id')
                     .single();
-                if (cErr)
-                    throw cErr;
-                portalUserId = created.id;
-            }
-            else {
-                const { error: upErr } = await supabaseAdmin
-                    .from('client_portal_users')
-                    .update({ status: 'active', last_login_at: new Date().toISOString(), revoked_at: null, updated_at: new Date().toISOString() })
-                    .eq('id', portalUserId);
-                if (upErr)
-                    throw upErr;
-            }
-            await supabaseAdmin
-                .from('client_portal_invitations')
-                .update({ status: 'accepted', accepted_at: new Date().toISOString(), portal_user_id: portalUserId })
-                .eq('id', invite.id);
-            const rawSessionToken = createOpaqueToken();
-            const sessionHash = sha256Hex(rawSessionToken);
-            const { data: session, error: sErr } = await supabaseAdmin
-                .from('client_portal_sessions')
-                .insert({
-                org_id: invite.org_id,
-                client_id: invite.client_id,
-                portal_user_id: portalUserId,
-                session_token_hash: sessionHash,
-                status: 'active',
-                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            })
-                .select('id')
-                .single();
-            if (sErr)
-                throw sErr;
-            await supabaseAdmin.from('client_message_events').insert({
-                org_id: invite.org_id,
-                client_id: invite.client_id,
-                event_type: 'invitation_accepted',
-                actor_type: 'client',
-                actor_portal_user_id: portalUserId,
-                payload_json: { invitation_id: invite.id, session_id: session.id },
-            });
-            await audit(invite.org_id, null, 'docflow_invitation', invite.id, 'invitation_accepted', {
-                client_id: invite.client_id,
-            });
-            if (!portalUserId)
-                throw forbidden('Portal user activation failed');
-            const refreshed = await refreshPortal(invite.org_id, invite.client_id, portalUserId);
-            return {
-                ok: true,
-                command,
-                refreshed: {
-                    ...refreshed,
-                    aggregate: {
-                        ...refreshed.aggregate,
-                        portal_session_token_once: rawSessionToken,
+                if (sErr)
+                    throw sErr;
+                console.info('DOCFLOW INVITE ACCEPT SESSION_CREATED', {
+                    invitation_id: invite.id,
+                    session_id: session.id,
+                    path: 'first_accept',
+                });
+                await supabaseAdmin.from('client_message_events').insert({
+                    org_id: invite.org_id,
+                    client_id: invite.client_id,
+                    event_type: 'invitation_accepted',
+                    actor_type: 'client',
+                    actor_portal_user_id: portalUserId,
+                    payload_json: { invitation_id: invite.id, session_id: session.id },
+                });
+                await audit(invite.org_id, null, 'docflow_invitation', invite.id, 'invitation_accepted', {
+                    client_id: invite.client_id,
+                });
+                if (!portalUserId) {
+                    throw forbidden('Portal user activation failed', 'PORTAL_ACTIVATION_FAILED');
+                }
+                const refreshed = await refreshPortal(invite.org_id, invite.client_id, portalUserId);
+                return {
+                    ok: true,
+                    command,
+                    refreshed: {
+                        ...refreshed,
+                        aggregate: {
+                            ...refreshed.aggregate,
+                            portal_session_token_once: rawSessionToken,
+                        },
                     },
-                },
-            };
+                };
+            }
+            catch (e) {
+                const reason = e instanceof AppError ? (e.code ?? e.message) : e instanceof Error ? e.message : 'unexpected_error';
+                console.warn('DOCFLOW INVITE ACCEPT FAILED', reason);
+                throw e;
+            }
         }
+        case 'start_client_portal_thread':
         case 'send_client_message':
         case 'attach_file_to_client_message':
         case 'remove_message_attachment':
@@ -989,6 +1167,106 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
             const orgId = session.orgId;
             const clientId = session.clientId;
             const portalUserId = session.portalUserId;
+            if (command === 'start_client_portal_thread') {
+                const messageText = reqString(payload, 'message_text');
+                const idsRaw = Array.isArray(payload.file_asset_ids) ? payload.file_asset_ids : [];
+                const fileAssetIds = [...new Set(idsRaw.map((v) => String(v ?? '').trim()).filter(Boolean))];
+                const { data: thread, error: tErr } = await supabaseAdmin
+                    .from('client_message_threads')
+                    .insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    module_key: 'docflow',
+                    thread_type: 'client_initiated',
+                    thread_status: 'open',
+                    created_by_type: 'client',
+                    created_by_user_id: null,
+                    title: null,
+                })
+                    .select('id')
+                    .single();
+                if (tErr)
+                    throw tErr;
+                await supabaseAdmin.from('client_message_events').insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    thread_id: thread.id,
+                    event_type: 'thread_created',
+                    actor_type: 'client',
+                    actor_portal_user_id: portalUserId,
+                });
+                await audit(orgId, null, 'docflow_thread', thread.id, 'thread_created', { actor: 'client_portal_user', thread_type: 'client_initiated' });
+                const { data: msg, error: mErr } = await supabaseAdmin
+                    .from('client_messages')
+                    .insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    thread_id: thread.id,
+                    message_type: 'text',
+                    created_by_type: 'client',
+                    created_by_portal_user_id: portalUserId,
+                    body: messageText,
+                    message_status: 'published',
+                })
+                    .select('id')
+                    .single();
+                if (mErr)
+                    throw mErr;
+                await supabaseAdmin.from('client_message_events').insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    thread_id: thread.id,
+                    message_id: msg.id,
+                    event_type: 'message_created',
+                    actor_type: 'client',
+                    actor_portal_user_id: portalUserId,
+                });
+                await audit(orgId, null, 'docflow_message', msg.id, 'message_created', {
+                    thread_id: thread.id,
+                    actor: 'client_portal_user',
+                });
+                if (fileAssetIds.length) {
+                    for (const fileAssetId of fileAssetIds) {
+                        await assertFileAssetInScope(orgId, fileAssetId);
+                        const { error: aErr } = await supabaseAdmin.from('client_message_attachments').insert({
+                            org_id: orgId,
+                            client_id: clientId,
+                            thread_id: thread.id,
+                            message_id: msg.id,
+                            file_asset_id: fileAssetId,
+                        });
+                        if (aErr)
+                            throw aErr;
+                        await supabaseAdmin.from('client_message_events').insert({
+                            org_id: orgId,
+                            client_id: clientId,
+                            thread_id: thread.id,
+                            message_id: msg.id,
+                            event_type: 'message_attachment_added',
+                            actor_type: 'client',
+                            actor_portal_user_id: portalUserId,
+                            payload_json: {
+                                org_id: orgId,
+                                client_id: clientId,
+                                module_key: 'docflow',
+                                thread_id: thread.id,
+                                message_id: msg.id,
+                                file_asset_id: fileAssetId,
+                            },
+                        });
+                        await audit(orgId, null, 'docflow_message_attachment', msg.id, 'message_attachment_added', {
+                            actor: 'client_portal_user',
+                            org_id: orgId,
+                            client_id: clientId,
+                            module_key: 'docflow',
+                            thread_id: thread.id,
+                            message_id: msg.id,
+                            file_asset_id: fileAssetId,
+                        });
+                    }
+                }
+                return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, thread.id) };
+            }
             if (command === 'send_client_message') {
                 const threadId = reqString(payload, 'thread_id');
                 await assertDocflowThreadScope(orgId, clientId, threadId);

@@ -10,15 +10,24 @@ class ResendAdapter {
             throw new Error('email_provider_not_configured');
         const resend = new Resend(this.cfg.apiKey);
         const from = `${this.cfg.fromName} <${this.cfg.fromEmail}>`;
-        const { data, error } = await resend.emails.send({
+        const response = await resend.emails.send({
             from,
             to: [input.to],
             subject: input.subject,
             html: input.html,
             text: input.text,
         });
-        if (error)
+        console.log('EMAIL SEND RESPONSE:', response);
+        const { data, error } = response;
+        if (error) {
+            const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+                ? error.code
+                : error && typeof error === 'object' && 'name' in error
+                    ? String(error.name ?? '')
+                    : '';
+            console.error('EMAIL SEND ERROR:', error.message, code || '(no code)');
             throw new Error(`email_send_failed:${error.message}`);
+        }
         return { providerMessageId: data?.id ?? null };
     }
 }

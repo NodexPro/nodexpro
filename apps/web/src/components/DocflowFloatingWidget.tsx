@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { docflowFloatingWidgetAggregate, docflowOfficeCommands } from '../api/endpoints';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,6 +30,7 @@ function draftAction(d: PendingDraft, command: string): { ok: boolean; reason: s
 }
 
 export function DocflowFloatingWidget() {
+  const navigate = useNavigate();
   const auth = useAuth();
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
 
@@ -111,7 +112,11 @@ export function DocflowFloatingWidget() {
   }
 
   return (
-    <div className="nx-docflow-widget-root">
+    <div
+      className="nx-docflow-widget-root"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
       {open ? (
         <div className="nx-docflow-widget-panel" role="dialog" aria-label="DocFlow">
           <div className="nx-docflow-widget-panel-header">
@@ -126,7 +131,11 @@ export function DocflowFloatingWidget() {
           {widgetAccess === 'locked' ? (
             <div className="nx-docflow-widget-locked">
               {lockedMessage ? <p className="nx-docflow-widget-locked-msg">{lockedMessage}</p> : null}
-              <Link className="nx-btn nx-btn-primary nx-btn-taxes-compact" to={billingPath} style={{ display: 'inline-block', textDecoration: 'none' }}>
+              <Link
+                className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+                to={billingPath}
+                style={{ display: 'inline-block', textDecoration: 'none' }}
+              >
                 {billingCta}
               </Link>
             </div>
@@ -184,13 +193,14 @@ export function DocflowFloatingWidget() {
           {actionError ? <div className="nx-docflow-widget-error">{actionError}</div> : null}
         </div>
       ) : null}
-
       <button
         type="button"
         className="nx-docflow-widget-fab"
-        aria-expanded={open}
         aria-label="DocFlow"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          // Messenger is the primary DocFlow workspace; avoid local truth and rely on aggregates.
+          navigate('/m/docflow/messenger');
+        }}
       >
         <div className={`docflow-badge ${badgeModifierClass}`}>
           <div className="docflow-text-top">• DocFlow • DocFlow •</div>

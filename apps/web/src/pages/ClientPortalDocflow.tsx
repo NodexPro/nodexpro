@@ -5,6 +5,7 @@ import {
   docflowPortalFileOpen,
   docflowPortalInboxAggregate,
   docflowPortalMarkThreadReadByClient,
+  docflowPortalStartClientThread,
   docflowPortalSendClientMessage,
 } from '../api/endpoints';
 import { redirectDocflowPortalToCanonicalHost } from '../lib/docflow-portal-host';
@@ -186,7 +187,8 @@ export function ClientPortalDocflow() {
       return;
     }
     let path = '';
-    if (command === 'send_client_message') path = docflowPortalSendClientMessage;
+    if (command === 'start_client_portal_thread') path = docflowPortalStartClientThread;
+    else if (command === 'send_client_message') path = docflowPortalSendClientMessage;
     else if (command === 'attach_file_to_client_message') path = docflowPortalAttachFileToClientMessage;
     else if (command === 'mark_thread_read_by_client') path = docflowPortalMarkThreadReadByClient;
     else return;
@@ -248,7 +250,7 @@ export function ClientPortalDocflow() {
   const selectedThreadStatusLabel = String(selectedThread?.thread_status_label ?? '').trim();
   const selectedThreadSlaLabel = String((selectedThread?.sla_indicator as UnknownRecord | undefined)?.label ?? '').trim();
   const hasThreads = threadList.length > 0 && emptyStates?.no_threads !== true;
-  const sendAction = isCommandEnabled('send_client_message');
+  const startThreadAction = isCommandEnabled('start_client_portal_thread');
 
   function initials(value: string): string {
     const clean = String(value ?? '').trim();
@@ -524,7 +526,7 @@ export function ClientPortalDocflow() {
                       style={{ width: 'fit-content' }}
                       onClick={() => setShowEmptyDraftComposer(true)}
                     >
-                      שלח הודעה
+                      שלחו הודעה ראשונה
                     </button>
                   ) : (
                     <div
@@ -558,8 +560,18 @@ export function ClientPortalDocflow() {
                         <button
                           type="button"
                           className="nx-btn nx-btn-taxes-compact"
-                          disabled
-                          title={sendAction.reason ?? 'No thread selected'}
+                          style={{ minWidth: 96 }}
+                          disabled={!startThreadAction.enabled || !composer.trim() || busyCommand.length > 0}
+                          title={startThreadAction.reason ?? undefined}
+                          onClick={() =>
+                            void runCommand('start_client_portal_thread', {
+                              message_text: composer.trim(),
+                            }).then(() => {
+                              setComposer('');
+                              setShowEmptyDraftComposer(false);
+                              setView('thread');
+                            })
+                          }
                         >
                           שליחה
                         </button>
@@ -573,9 +585,9 @@ export function ClientPortalDocflow() {
                         >
                           ביטול
                         </button>
-                        <span style={{ fontSize: 12, color: '#64748B' }}>
-                          לא ניתן לשלוח לפני פתיחת שיחה על ידי המשרד.
-                        </span>
+                        {!startThreadAction.enabled ? (
+                          <span style={{ fontSize: 12, color: '#64748B' }}>{startThreadAction.reason ?? 'הפעולה אינה זמינה'}</span>
+                        ) : null}
                       </div>
                     </div>
                   )}

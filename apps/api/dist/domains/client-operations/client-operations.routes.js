@@ -3,10 +3,11 @@ import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
 import { requireModuleActive } from '../../middleware/requireModuleActive.js';
-import { listClientOperationsRegistry, getClientOperationsCase, updateClientOperationsClientProfile, } from './client-operations.service.js';
+import { listClientOperationsRegistry, getClientOperationsCase, } from './client-operations.service.js';
+import { executeClientOperationsProfileCommand, executeClientOperationsTaxSettingsCommand, } from './client-operations-commands.service.js';
 import { executeClientHistoryTabCommand, exportClientHistoryReport, } from './client-history-tab.service.js';
 import { listOperationalNoteTypes, listOperationalNotes, createOperationalNote, updateOperationalNote, deleteOperationalNote, getDueReminders, } from './client-operations-notes.service.js';
-import { getClientTaxSettings, revealClientPaymentSecret, updateClientTaxSettings, } from './client-tax-settings.service.js';
+import { getClientTaxSettings, revealClientPaymentSecret, } from './client-tax-settings.service.js';
 import { executeTaxTabCommand } from './client-tax-commands.service.js';
 import { executeAccountingCommand } from './client-accounting-commands.service.js';
 import { requestPaymentCardAccessCode, verifyPaymentCardAccessCode, } from './payment-card-access.service.js';
@@ -115,14 +116,13 @@ router.post('/clients/:clientId/history/export', ...withView, async (req, res, n
         next(e);
     }
 });
-// Save only the "פרטי לקוח" tab fields (clients + module profile + primary contact).
-router.patch('/clients/:clientId/profile', ...withEdit, async (req, res, next) => {
+router.post('/clients/:clientId/profile/commands/update_profile', ...withEdit, async (req, res, next) => {
     try {
         const ctx = req.context;
         const clientId = String(req.params.clientId ?? '');
         if (!clientId)
             return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId required' });
-        const out = await updateClientOperationsClientProfile(ctx, clientId, req.body ?? {});
+        const out = await executeClientOperationsProfileCommand(ctx, clientId, 'update_profile', req.body ?? {});
         return res.json(out);
     }
     catch (e) {
@@ -301,14 +301,13 @@ router.get('/clients/:clientId/tax-settings', ...withView, async (req, res, next
         next(e);
     }
 });
-/** @deprecated Prefer POST /tax/commands with a typed tax block command; kept for API compatibility. */
-router.patch('/clients/:clientId/tax-settings', ...withEdit, async (req, res, next) => {
+router.post('/clients/:clientId/tax-settings/commands/update_tax_settings', ...withEdit, async (req, res, next) => {
     try {
         const ctx = req.context;
         const clientId = String(req.params.clientId ?? '');
         if (!clientId)
             return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId required' });
-        const out = await updateClientTaxSettings(ctx, clientId, req.body ?? {});
+        const out = await executeClientOperationsTaxSettingsCommand(ctx, clientId, 'update_tax_settings', req.body ?? {}, { fees_price_chart_view: req.body?.fees_price_chart_view });
         return res.json(out);
     }
     catch (e) {
@@ -347,7 +346,7 @@ router.post('/clients/:clientId/accounting/commands', ...withAccountingBlockEdit
         next(e);
     }
 });
-router.patch('/clients/:clientId/accounting/general', ...withEdit, async (req, res, next) => {
+router.post('/clients/:clientId/accounting/general/commands/update_accounting_general', ...withEdit, async (req, res, next) => {
     try {
         const ctx = req.context;
         const clientId = String(req.params.clientId ?? '');
@@ -360,7 +359,7 @@ router.patch('/clients/:clientId/accounting/general', ...withEdit, async (req, r
         next(e);
     }
 });
-router.put('/clients/:clientId/accounting/vehicles', ...withEdit, async (req, res, next) => {
+router.post('/clients/:clientId/accounting/vehicles/commands/replace_accounting_vehicles', ...withEdit, async (req, res, next) => {
     try {
         const ctx = req.context;
         const clientId = String(req.params.clientId ?? '');
@@ -377,7 +376,7 @@ router.put('/clients/:clientId/accounting/vehicles', ...withEdit, async (req, re
     }
 });
 /** @deprecated Legacy bypass: does not return full refreshed case. Prefer POST /accounting/commands with type save_accounting_business_profile. */
-router.patch('/clients/:clientId/accounting/business-profile', ...withBusinessProfileEdit, async (req, res, next) => {
+router.post('/clients/:clientId/accounting/business-profile/commands/save_business_profile', ...withBusinessProfileEdit, async (req, res, next) => {
     try {
         const ctx = req.context;
         const clientId = String(req.params.clientId ?? '');
@@ -448,7 +447,7 @@ router.post('/clients/:clientId/accounting-settings/vehicle-fleet/items', ...wit
         next(e);
     }
 });
-router.patch('/clients/:clientId/accounting-settings/vehicle-fleet/items/:vehicleId', ...withAccountingBlockEdit, async (req, res, next) => {
+router.post('/clients/:clientId/accounting-settings/vehicle-fleet/items/:vehicleId/commands/update_vehicle_fleet_item', ...withAccountingBlockEdit, async (req, res, next) => {
     try {
         const ctx = req.context;
         const clientId = String(req.params.clientId ?? '');
@@ -536,7 +535,7 @@ router.post('/clients/:clientId/accounting-settings/blocks/:blockKey/normalize-d
         next(e);
     }
 });
-router.patch('/clients/:clientId/accounting-settings/blocks/:blockKey', ...withAccountingBlockEdit, async (req, res, next) => {
+router.post('/clients/:clientId/accounting-settings/blocks/:blockKey/commands/save_block', ...withAccountingBlockEdit, async (req, res, next) => {
     try {
         const ctx = req.context;
         const clientId = String(req.params.clientId ?? '');
@@ -715,7 +714,7 @@ router.post('/clients/:clientId/operational-notes', ...withEdit, async (req, res
         next(e);
     }
 });
-router.patch('/clients/:clientId/operational-notes/:noteId', ...withEdit, async (req, res, next) => {
+router.post('/clients/:clientId/operational-notes/:noteId/commands/update_note', ...withEdit, async (req, res, next) => {
     try {
         const ctx = req.context;
         const clientId = String(req.params.clientId ?? '');

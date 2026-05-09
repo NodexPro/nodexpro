@@ -82,14 +82,22 @@ export async function sendInvitationEmail(params) {
         throw new Error('RESEND_API_KEY is not configured. Cannot send invitation email.');
     }
     const { to } = params;
-    const { error } = await client.emails.send({
+    const response = await client.emails.send({
         from: FROM_EMAIL,
         to: [to],
         subject: INVITE_SUBJECT,
         html: buildInviteHtml(params),
         text: buildInviteText(params),
     });
+    console.log('EMAIL SEND RESPONSE:', response);
+    const { error } = response;
     if (error) {
+        const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+            ? error.code
+            : error && typeof error === 'object' && 'name' in error
+                ? String(error.name ?? '')
+                : '';
+        console.error('EMAIL SEND ERROR:', error.message, code || '(no code)');
         throw new Error(`Failed to send invitation email: ${error.message}`);
     }
 }

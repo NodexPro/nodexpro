@@ -29,6 +29,7 @@ import { PlatformOwnerLogin } from './pages/PlatformOwnerLogin';
 import { PlatformOwnerLegalControl } from './pages/PlatformOwnerLegalControl';
 import { DocflowCommunicationReviewPage } from './pages/DocflowCommunicationReviewPage';
 import { DocflowInvitesManagementPage } from './pages/DocflowInvitesManagementPage';
+import { DocflowMessengerPage } from './pages/DocflowMessengerPage';
 import { I18nProvider } from './i18n/I18nProvider';
 
 function PwaUpdatePrompt() {
@@ -139,6 +140,7 @@ function AppRoutes() {
         <Route path="m/example" element={<ExampleModulePage />} />
         <Route path="m/docflow/invites" element={<DocflowInvitesManagementPage />} />
         <Route path="m/docflow/review" element={<DocflowCommunicationReviewPage />} />
+        <Route path="m/docflow/messenger" element={<DocflowMessengerPage />} />
         <Route path="m/client-operations" element={<ClientOperationsRegistry />} />
         <Route path="m/client-operations/clients/:clientId" element={<ClientOperationsClientCase />} />
       </Route>

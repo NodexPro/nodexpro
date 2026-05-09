@@ -933,6 +933,19 @@ export async function buildClientThreadContextAggregate(params: {
   clientId: string;
   threadId?: string | null;
 }): Promise<Record<string, unknown>> {
+  const t0 = Date.now();
+  const ms = () => Date.now() - t0;
+  let msClient = 0;
+  let msThreads = 0;
+  let msMessages = 0;
+  let msAttachments = 0;
+  let msAllowedActions = 0;
+  const threadIdInput = String(params.threadId ?? '').trim() || null;
+  let selectedThreadId: string | null = null;
+  let threadsCount = 0;
+  let messagesCount = 0;
+  let attachmentsCount = 0;
+
   const { data: client, error: clientErr } = await supabaseAdmin
     .from('clients')
     .select('id, display_name, status')
@@ -941,8 +954,8 @@ export async function buildClientThreadContextAggregate(params: {
     .maybeSingle();
   if (clientErr) throw clientErr;
   if (!client) throw notFound('Client not found');
+  msClient = ms();
 
-  const selectedThreadIdInput = String(params.threadId ?? '').trim() || null;
   const { data: threads, error: threadsErr } = await supabaseAdmin
     .from('client_message_threads')
     .select('id, module_key, thread_type, thread_status, deadline_at, updated_at')
@@ -950,8 +963,9 @@ export async function buildClientThreadContextAggregate(params: {
     .eq('client_id', params.clientId)
     .neq('thread_status', 'archived')
     .order('updated_at', { ascending: false })
-    .limit(selectedThreadIdInput ? 50 : 1);
+    .limit(threadIdInput ? 50 : 1);
   if (threadsErr) throw threadsErr;
+  msThreads = ms();
   const threadRows = (threads ?? []).map((t) => ({
     id: String(t.id),
     module_key: String(t.module_key ?? 'docflow'),
@@ -960,12 +974,16 @@ export async function buildClientThreadContextAggregate(params: {
     deadline_at: (t.deadline_at ? String(t.deadline_at) : null) as string | null,
     updated_at: String(t.updated_at ?? ''),
   }));
+  threadsCount = threadRows.length;
   const selectedThread =
-    threadRows.find((t) => t.id === selectedThreadIdInput) ?? (threadRows.length ? threadRows[0] : null);
+    threadRows.find((t) => t.id === threadIdInput) ?? (threadRows.length ? threadRows[0] : null);
+  selectedThreadId = selectedThread?.id ?? null;
 
   const messages = selectedThread
     ? await getThreadMessages(params.orgId, params.clientId, selectedThread.id, 'office', { limit: 20 })
     : [];
+  msMessages = ms();
+  messagesCount = messages.length;
   const messageIds = messages.map((m) => String(m.id ?? '')).filter(Boolean);
   const attachments =
     selectedThread && messageIds.length
@@ -999,6 +1017,32 @@ export async function buildClientThreadContextAggregate(params: {
           });
         })()
       : [];
+  msAttachments = ms();
+  attachmentsCount = attachments.length;
+
+  const allowedActions = ((): AllowedAction[] => [
+    { command: 'start_office_thread_for_client', enabled: !selectedThread, reason: selectedThread ? 'Thread already exists' : null },
+    { command: 'send_office_message', enabled: selectedThread ? selectedThread.thread_status !== 'archived' : false, reason: null },
+    { command: 'mark_thread_read_by_office', enabled: Boolean(selectedThread), reason: null },
+    { command: 'archive_client_thread', enabled: selectedThread ? selectedThread.thread_status === 'resolved' : false, reason: null },
+  ])();
+  msAllowedActions = ms();
+
+  console.info('[docflow client-thread-context timing]', {
+    org_id: params.orgId,
+    client_id: params.clientId,
+    thread_id_input: threadIdInput,
+    selected_thread_id: selectedThreadId,
+    counts: { threads: threadsCount, messages: messagesCount, attachments: attachmentsCount },
+    ms: {
+      client_header_query: msClient,
+      selected_thread_query: msThreads - msClient,
+      messages_query: msMessages - msThreads,
+      attachments_query: msAttachments - msMessages,
+      allowed_actions_build: msAllowedActions - msAttachments,
+      total: msAllowedActions,
+    },
+  });
 
   return {
     aggregate_key: 'client_thread_context_aggregate',
@@ -1018,12 +1062,7 @@ export async function buildClientThreadContextAggregate(params: {
       : null,
     messages,
     attachments,
-    allowed_actions: [
-      { command: 'start_office_thread_for_client', enabled: !selectedThread, reason: selectedThread ? 'Thread already exists' : null },
-      { command: 'send_office_message', enabled: selectedThread ? selectedThread.thread_status !== 'archived' : false, reason: null },
-      { command: 'mark_thread_read_by_office', enabled: Boolean(selectedThread), reason: null },
-      { command: 'archive_client_thread', enabled: selectedThread ? selectedThread.thread_status === 'resolved' : false, reason: null },
-    ],
+    allowed_actions: allowedActions,
     empty_states: {
       no_threads: !selectedThread,
       no_messages: selectedThread ? messages.length === 0 : true,
