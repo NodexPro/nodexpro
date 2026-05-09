@@ -94,11 +94,6 @@ export function userFacingApiMessage(e: unknown): string {
   return 'שגיאה';
 }
 
-export type ApiRequestInit = RequestInit & {
-  /** Temporary debug-only label for tracing initiators in production. Must never contain secrets. */
-  debugLabel?: string;
-};
-
 async function getToken(): Promise<string | null> {
   try {
     const { supabase } = await import('../lib/supabase');
@@ -109,36 +104,12 @@ async function getToken(): Promise<string | null> {
   }
 }
 
-function traceFetch(path: string, debugLabel?: string): void {
-  // Temporary debug trace for DocFlow client-switch request orchestration.
-  // Logs explicit call-site label (stack is minified in production).
-  const p = String(path ?? '');
-  const isTraceTarget =
-    p === '/auth/session' ||
-    p.startsWith('/docflow/aggregates/office-inbox') ||
-    p.startsWith('/docflow/aggregates/floating-widget') ||
-    p.startsWith('/docflow/aggregates/client-thread-context') ||
-    p === '/m/client-operations/reminders/due';
-  if (!isTraceTarget) return;
-  try {
-    console.info('[docflow fetch trace]', {
-      endpoint: p,
-      debugLabel: debugLabel || null,
-      timestamp: new Date().toISOString(),
-    });
-  } catch {
-    // ignore
-  }
-}
-
-export async function apiFetch(path: string, options: ApiRequestInit = {}): Promise<Response> {
-  const { debugLabel, ...fetchOptions } = (options ?? {}) as ApiRequestInit & Record<string, unknown>;
-  traceFetch(path, debugLabel);
+export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = await getToken();
   const orgId = sessionStorage.getItem('activeOrganizationId');
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(fetchOptions.headers as Record<string, string>),
+    ...(options.headers as Record<string, string>),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   // Platform-owner endpoints must never run in tenant organization context.
@@ -146,7 +117,7 @@ export async function apiFetch(path: string, options: ApiRequestInit = {}): Prom
   if (orgId && !path.startsWith('/owner/') && !path.startsWith('/docflow/portal')) {
     headers['X-Organization-Id'] = orgId;
   }
-  return fetch(`${API_URL}${path}`, { ...(fetchOptions as RequestInit), headers });
+  return fetch(`${API_URL}${path}`, { ...options, headers });
 }
 
 /** DocFlow client portal: no Core Bearer token, no org header; optional `X-Client-Portal-Session`. */
@@ -184,7 +155,7 @@ export async function apiDocflowPortalJson<T>(
   return res.json();
 }
 
-export async function apiJson<T>(path: string, options?: ApiRequestInit): Promise<T> {
+export async function apiJson<T>(path: string, options?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await apiFetch(path, options);

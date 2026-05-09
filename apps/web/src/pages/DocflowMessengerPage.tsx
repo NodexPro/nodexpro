@@ -108,7 +108,7 @@ export function DocflowMessengerPage() {
             // IMPORTANT: do not implicitly depend on React state here; this prevents refetch on every keystroke.
             searchClient: String(opts?.searchClient ?? searchClientRef.current).trim() || undefined,
           }),
-          { signal: ac.signal, debugLabel: 'DocflowMessengerPage.loadOfficeInbox' }
+          { signal: ac.signal }
         )) as UnknownRecord;
         if (String(out.aggregate_key ?? '') !== 'office_docflow_inbox_aggregate') {
           throw new Error('תגובת השרת אינה אגרגט DocFlow inbox תקין');
@@ -138,7 +138,6 @@ export function DocflowMessengerPage() {
     try {
       const out = (await apiJson<UnknownRecord>(docflowClientThreadContextAggregate(cid, selectedThreadId ?? null), {
         signal: ac.signal,
-        debugLabel: 'DocflowMessengerPage.loadClientContext(client-thread-context)',
       })) as UnknownRecord;
       if (String(out.aggregate_key ?? '') !== 'client_thread_context_aggregate') {
         throw new Error('תגובת השרת אינה אגרגט DocFlow thread context תקין');
@@ -185,7 +184,6 @@ export function DocflowMessengerPage() {
             ...payload,
           },
         }),
-        debugLabel: `DocflowMessengerPage.runOfficeCommand:${command}`,
       })) as CommandResponse;
       const refreshed = out.refreshed?.aggregate;
       if (!isRecord(refreshed)) throw new Error('חסר אגרגט מעודכן מהשרת');
@@ -214,7 +212,6 @@ export function DocflowMessengerPage() {
             refresh_target: 'client_thread_context',
           },
         }),
-        debugLabel: 'DocflowMessengerPage.startThread',
       })) as CommandResponse;
       const refreshed = out.refreshed?.aggregate;
       if (!isRecord(refreshed)) throw new Error('חסר אגרגט מעודכן מהשרת');

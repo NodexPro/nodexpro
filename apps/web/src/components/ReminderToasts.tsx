@@ -40,9 +40,7 @@ export function ReminderToasts({ enabled }: { enabled: boolean }) {
     if (!enabled || fetchInFlight.current) return;
     fetchInFlight.current = true;
     try {
-      const data = await apiJson<{ reminders: DueReminder[] }>(moduleClientOperationsRemindersDue(), {
-        debugLabel: 'ReminderToasts.fetchDue(/reminders/due)',
-      });
+      const data = await apiJson<{ reminders: DueReminder[] }>(moduleClientOperationsRemindersDue());
       const list = Array.isArray(data?.reminders) ? data.reminders : [];
 
       const nowMs = Date.now();
