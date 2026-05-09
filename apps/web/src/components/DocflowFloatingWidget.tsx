@@ -79,10 +79,6 @@ export function DocflowFloatingWidget() {
   }, [load]);
 
   const visibility = String(aggregate?.widget_visibility ?? '');
-  if (!orgId || visibility !== 'visible') {
-    return null;
-  }
-
   const badgeRing = String(aggregate?.badge_ring ?? '');
   const badgeModifierClass =
     badgeRing === 'trial_active'
@@ -114,6 +110,10 @@ export function DocflowFloatingWidget() {
     // Strict NodexPro: editable text must come from backend truth (full body), never from preview.
     setEditBody(String(editingDraft.message_body ?? '').trim());
   }, [editingDraft]);
+
+  if (!orgId || visibility !== 'visible') {
+    return null;
+  }
 
   async function runCommand(command: string, ctx: UnknownRecord): Promise<void> {
     if (!orgId) return;
