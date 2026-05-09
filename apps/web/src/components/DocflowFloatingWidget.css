@@ -414,24 +414,66 @@
   background: #fff;
   padding: 16px;
   flex-shrink: 0;
-  max-height: 38vh;
+  max-height: 42vh;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
 
-.docflow-detail-title {
-  font-weight: 800;
-  color: #0f172a;
-  margin-bottom: 10px;
-  font-size: 15px;
-}
-
 .docflow-detail-meta {
   font-size: 13px;
   color: #334155;
   line-height: 1.7;
+}
+
+.docflow-detail-meta-compact > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.docflow-detail-meta-compact > div:last-child {
+  margin-bottom: 0;
+}
+
+.docflow-detail-meta-key {
+  font-weight: 700;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.docflow-detail-meta-key::after {
+  content: ':';
+}
+
+.docflow-detail-meta-val {
+  min-width: 0;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.docflow-edit-block {
+  margin-top: 14px;
+  width: 100%;
+  min-width: 0;
+}
+
+.docflow-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.docflow-btn-edit-wide {
+  min-width: 128px;
 }
 
 .docflow-message-preview {
@@ -539,19 +581,73 @@
 }
 
 .docflow-edit-textarea {
+  display: block;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
-  margin-top: 12px;
-  padding: 12px;
+  margin: 0;
+  padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid #dbe3ef;
-  font-size: 13px;
-  line-height: 1.5;
+  border: 1px solid #cbd5e1;
+  font-size: 14px;
+  line-height: 1.6;
   resize: vertical;
-  min-height: 120px;
+  min-height: 180px;
   direction: rtl;
   text-align: right;
+  background: #fff;
+  color: #0f172a;
+}
+
+.docflow-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10070;
+  background: rgba(15, 23, 42, 0.45);
+  border: 0;
+  padding: 0;
+  cursor: default;
+}
+
+.docflow-confirm-dialog {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10071;
+  width: min(440px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 22px 22px 18px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+}
+
+.docflow-confirm-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.docflow-confirm-text {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.docflow-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.docflow-confirm-btn-wide {
+  min-width: 140px;
 }
 
 @media (max-width: 760px) {

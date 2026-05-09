@@ -90,6 +90,7 @@ export function DocflowFloatingWidget() {
   const [searchQuery, setSearchQuery] = useState('');
   const [detailEditing, setDetailEditing] = useState(false);
   const [editBody, setEditBody] = useState('');
+  const [cancelConfirmDraft, setCancelConfirmDraft] = useState<PendingDraft | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     if (!orgId) {
@@ -217,9 +218,23 @@ export function DocflowFloatingWidget() {
   }, [selectedDraftId]);
 
   useEffect(() => {
-    if (!menuOpen && !tasksModalOpen) return;
+    setCancelConfirmDraft(null);
+  }, [selectedDraftId]);
+
+  useEffect(() => {
+    if (!tasksModalOpen) {
+      setCancelConfirmDraft(null);
+    }
+  }, [tasksModalOpen]);
+
+  useEffect(() => {
+    if (!menuOpen && !tasksModalOpen && !cancelConfirmDraft) return;
     function onKey(e: KeyboardEvent): void {
       if (e.key !== 'Escape') return;
+      if (cancelConfirmDraft) {
+        setCancelConfirmDraft(null);
+        return;
+      }
       if (tasksModalOpen) {
         setTasksModalOpen(false);
         return;
@@ -228,7 +243,7 @@ export function DocflowFloatingWidget() {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpen, tasksModalOpen]);
+  }, [menuOpen, tasksModalOpen, cancelConfirmDraft]);
 
   async function runDraftCommand(command: string, d: PendingDraft, extra?: UnknownRecord): Promise<void> {
     const ctx = isRecord(d.command_context) ? d.command_context : {};
@@ -256,6 +271,10 @@ export function DocflowFloatingWidget() {
   function onFabClick(e: MouseEvent<HTMLButtonElement>): void {
     e.stopPropagation();
     if (tasksModalOpen) {
+      if (cancelConfirmDraft) {
+        setCancelConfirmDraft(null);
+        return;
+      }
       closeTasksModal();
       return;
     }
@@ -266,13 +285,20 @@ export function DocflowFloatingWidget() {
     return null;
   }
 
-  const detailClientName = String(
-    selectedDraft?.client_name ?? selectedDraft?.client_display_name ?? ''
-  ).trim();
-  const detailRuleName = String(selectedDraft?.rule_name ?? selectedDraft?.rule_value_key ?? '').trim();
+  const detailDisplayClient =
+    String(selectedDraft?.client_name ?? selectedDraft?.client_display_name ?? '').trim() || '—';
+  const detailRuleName = String(selectedDraft?.rule_name ?? selectedDraft?.rule_value_key ?? '').trim() || '—';
   const detailDue =
     String(selectedDraft?.generated_at_display ?? '').trim() ||
-    String(selectedDraft?.created_at ?? '').trim();
+    String(selectedDraft?.created_at ?? '').trim().replace('T', ' ').slice(0, 16) ||
+    '—';
+  const detailStatus =
+    String(selectedDraft?.status_label ?? '').trim() || String(selectedDraft?.status ?? '').trim() || '—';
+
+  const cancelConfirmClientName =
+    cancelConfirmDraft != null
+      ? String(cancelConfirmDraft.client_name ?? cancelConfirmDraft.client_display_name ?? '').trim() || 'this client'
+      : '';
 
   const menuOrModalOpen = menuOpen || tasksModalOpen;
 
@@ -297,6 +323,10 @@ export function DocflowFloatingWidget() {
           aria-label="Close DocFlow tasks"
           onMouseDown={(e) => {
             e.preventDefault();
+            if (cancelConfirmDraft) {
+              setCancelConfirmDraft(null);
+              return;
+            }
             closeTasksModal();
           }}
         />
@@ -479,33 +509,64 @@ export function DocflowFloatingWidget() {
 
                   {selectedDraft && widgetAccess !== 'locked' ? (
                     <div className="docflow-detail-card">
-                      <div className="docflow-detail-title">{detailClientName || 'Client'}</div>
-                      <div className="docflow-detail-meta">
-                        {selectedDraft.client_id ? (
-                          <div>
-                            <strong>Client ID</strong> {String(selectedDraft.client_id)}
-                          </div>
-                        ) : null}
-                        {detailRuleName ? (
-                          <div>
-                            <strong>Rule</strong> {detailRuleName}
-                          </div>
-                        ) : null}
-                        {detailDue ? (
-                          <div>
-                            <strong>Generated</strong> {detailDue}
-                          </div>
-                        ) : null}
+                      <div className="docflow-detail-meta docflow-detail-meta-compact">
+                        <div>
+                          <span className="docflow-detail-meta-key">Client</span>
+                          <span className="docflow-detail-meta-val">{detailDisplayClient}</span>
+                        </div>
+                        <div>
+                          <span className="docflow-detail-meta-key">Rule</span>
+                          <span className="docflow-detail-meta-val">{detailRuleName}</span>
+                        </div>
+                        <div>
+                          <span className="docflow-detail-meta-key">Generated</span>
+                          <span className="docflow-detail-meta-val">{detailDue}</span>
+                        </div>
+                        <div>
+                          <span className="docflow-detail-meta-key">Status</span>
+                          <span className="docflow-detail-meta-val">{detailStatus}</span>
+                        </div>
                       </div>
 
                       {detailEditing && hasDraftAction(selectedDraft, 'edit_draft_message') ? (
-                        <textarea
-                          className="docflow-edit-textarea"
-                          value={editBody}
-                          onChange={(e) => setEditBody(e.target.value)}
-                          disabled={busy.length > 0}
-                          aria-label="Edit message body"
-                        />
+                        <div className="docflow-edit-block">
+                          <textarea
+                            className="docflow-edit-textarea"
+                            value={editBody}
+                            onChange={(e) => setEditBody(e.target.value)}
+                            disabled={busy.length > 0}
+                            aria-label="Edit message body"
+                          />
+                          <div className="docflow-edit-actions">
+                            <button
+                              type="button"
+                              className="docflow-btn docflow-btn-edit docflow-btn-edit-wide"
+                              disabled={busy.length > 0}
+                              onClick={() => {
+                                setDetailEditing(false);
+                                setEditBody(String(selectedDraft.message_body ?? ''));
+                              }}
+                            >
+                              Discard
+                            </button>
+                            <button
+                              type="button"
+                              className="docflow-btn docflow-btn-approve docflow-btn-edit-wide"
+                              disabled={busy.length > 0 || !draftAction(selectedDraft, 'edit_draft_message').ok}
+                              title={draftAction(selectedDraft, 'edit_draft_message').reason ?? undefined}
+                              onClick={() =>
+                                void runDraftCommand('edit_draft_message', selectedDraft, {
+                                  message_body: editBody,
+                                }).then(() => {
+                                  setDetailEditing(false);
+                                  setEditBody('');
+                                })
+                              }
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
                       ) : (
                         <div className="docflow-message-preview">
                           {String(selectedDraft.message_body ?? '').trim() ||
@@ -514,85 +575,55 @@ export function DocflowFloatingWidget() {
                         </div>
                       )}
 
-                      <div className="docflow-action-bar">
-                        {hasDraftAction(selectedDraft, 'edit_draft_message') && !detailEditing ? (
-                          <button
-                            type="button"
-                            className="docflow-btn docflow-btn-edit"
-                            disabled={busy.length > 0 || !draftAction(selectedDraft, 'edit_draft_message').ok}
-                            title={draftAction(selectedDraft, 'edit_draft_message').reason ?? undefined}
-                            onClick={() => {
-                              setDetailEditing(true);
-                              setEditBody(String(selectedDraft.message_body ?? ''));
-                            }}
-                          >
-                            Edit
-                          </button>
-                        ) : null}
-                        {hasDraftAction(selectedDraft, 'approve_draft_message') ? (
-                          <button
-                            type="button"
-                            className="docflow-btn docflow-btn-approve"
-                            disabled={busy.length > 0 || !draftAction(selectedDraft, 'approve_draft_message').ok}
-                            title={draftAction(selectedDraft, 'approve_draft_message').reason ?? undefined}
-                            onClick={() => void runDraftCommand('approve_draft_message', selectedDraft)}
-                          >
-                            Approve
-                          </button>
-                        ) : null}
-                        {hasDraftAction(selectedDraft, 'send_approved_message') ? (
-                          <button
-                            type="button"
-                            className="docflow-btn docflow-btn-send"
-                            disabled={busy.length > 0 || !draftAction(selectedDraft, 'send_approved_message').ok}
-                            title={draftAction(selectedDraft, 'send_approved_message').reason ?? undefined}
-                            onClick={() => void runDraftCommand('send_approved_message', selectedDraft)}
-                          >
-                            Send
-                          </button>
-                        ) : null}
-                        {hasDraftAction(selectedDraft, 'cancel_draft_message') ? (
-                          <button
-                            type="button"
-                            className="docflow-btn docflow-btn-cancel"
-                            disabled={busy.length > 0 || !draftAction(selectedDraft, 'cancel_draft_message').ok}
-                            title={draftAction(selectedDraft, 'cancel_draft_message').reason ?? undefined}
-                            onClick={() => void runDraftCommand('cancel_draft_message', selectedDraft)}
-                          >
-                            Cancel
-                          </button>
-                        ) : null}
-                      </div>
-
-                      {detailEditing && hasDraftAction(selectedDraft, 'edit_draft_message') ? (
-                        <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-                          <button
-                            type="button"
-                            className="docflow-btn docflow-btn-edit"
-                            disabled={busy.length > 0}
-                            onClick={() => {
-                              setDetailEditing(false);
-                              setEditBody(String(selectedDraft.message_body ?? ''));
-                            }}
-                          >
-                            Discard
-                          </button>
-                          <button
-                            type="button"
-                            className="docflow-btn docflow-btn-approve"
-                            disabled={busy.length > 0 || !draftAction(selectedDraft, 'edit_draft_message').ok}
-                            title={draftAction(selectedDraft, 'edit_draft_message').reason ?? undefined}
-                            onClick={() =>
-                              void runDraftCommand('edit_draft_message', selectedDraft, {
-                                message_body: editBody,
-                              }).then(() => {
-                                setDetailEditing(false);
-                                setEditBody('');
-                              })
-                            }
-                          >
-                            Save
-                          </button>
+                      {!detailEditing ? (
+                        <div className="docflow-action-bar">
+                          {hasDraftAction(selectedDraft, 'edit_draft_message') ? (
+                            <button
+                              type="button"
+                              className="docflow-btn docflow-btn-edit"
+                              disabled={busy.length > 0 || !draftAction(selectedDraft, 'edit_draft_message').ok}
+                              title={draftAction(selectedDraft, 'edit_draft_message').reason ?? undefined}
+                              onClick={() => {
+                                setDetailEditing(true);
+                                setEditBody(String(selectedDraft.message_body ?? ''));
+                              }}
+                            >
+                              Edit
+                            </button>
+                          ) : null}
+                          {hasDraftAction(selectedDraft, 'approve_draft_message') ? (
+                            <button
+                              type="button"
+                              className="docflow-btn docflow-btn-approve"
+                              disabled={busy.length > 0 || !draftAction(selectedDraft, 'approve_draft_message').ok}
+                              title={draftAction(selectedDraft, 'approve_draft_message').reason ?? undefined}
+                              onClick={() => void runDraftCommand('approve_draft_message', selectedDraft)}
+                            >
+                              Approve
+                            </button>
+                          ) : null}
+                          {hasDraftAction(selectedDraft, 'send_approved_message') ? (
+                            <button
+                              type="button"
+                              className="docflow-btn docflow-btn-send"
+                              disabled={busy.length > 0 || !draftAction(selectedDraft, 'send_approved_message').ok}
+                              title={draftAction(selectedDraft, 'send_approved_message').reason ?? undefined}
+                              onClick={() => void runDraftCommand('send_approved_message', selectedDraft)}
+                            >
+                              Send
+                            </button>
+                          ) : null}
+                          {hasDraftAction(selectedDraft, 'cancel_draft_message') ? (
+                            <button
+                              type="button"
+                              className="docflow-btn docflow-btn-cancel"
+                              disabled={busy.length > 0 || !draftAction(selectedDraft, 'cancel_draft_message').ok}
+                              title={draftAction(selectedDraft, 'cancel_draft_message').reason ?? undefined}
+                              onClick={() => setCancelConfirmDraft(selectedDraft)}
+                            >
+                              Cancel
+                            </button>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -605,6 +636,54 @@ export function DocflowFloatingWidget() {
             {actionError ? <div className="docflow-task-error">{actionError}</div> : null}
           </div>
         </div>
+      ) : null}
+
+      {cancelConfirmDraft && tasksModalOpen ? (
+        <>
+          <button
+            type="button"
+            className="docflow-confirm-backdrop"
+            aria-label="Close confirmation"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setCancelConfirmDraft(null);
+            }}
+          />
+          <div
+            className="docflow-confirm-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="docflow-cancel-confirm-title"
+            aria-describedby="docflow-cancel-confirm-desc"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2 id="docflow-cancel-confirm-title" className="docflow-confirm-title">
+              Cancel reminder?
+            </h2>
+            <p id="docflow-cancel-confirm-desc" className="docflow-confirm-text">
+              Are you sure you want to cancel this reminder for {cancelConfirmClientName}? After cancellation, this
+              reminder will not appear again for this client until the next payroll period/month.
+            </p>
+            <div className="docflow-confirm-actions">
+              <button type="button" className="docflow-btn docflow-btn-edit docflow-confirm-btn-wide" onClick={() => setCancelConfirmDraft(null)}>
+                Keep reminder
+              </button>
+              <button
+                type="button"
+                className="docflow-btn docflow-btn-cancel docflow-confirm-btn-wide"
+                disabled={busy.length > 0 || !draftAction(cancelConfirmDraft, 'cancel_draft_message').ok}
+                title={draftAction(cancelConfirmDraft, 'cancel_draft_message').reason ?? undefined}
+                onClick={() =>
+                  void runDraftCommand('cancel_draft_message', cancelConfirmDraft).then(() => {
+                    setCancelConfirmDraft(null);
+                  })
+                }
+              >
+                Cancel reminder
+              </button>
+            </div>
+          </div>
+        </>
       ) : null}
     </>
   );
