@@ -34,6 +34,11 @@ export function DocflowMessengerPage() {
   const inflightInboxAbort = useRef<AbortController | null>(null);
   const inflightClientAbort = useRef<AbortController | null>(null);
   const didAutoSelectFirstClient = useRef(false);
+  const searchClientRef = useRef('');
+
+  useEffect(() => {
+    searchClientRef.current = searchClient;
+  }, [searchClient]);
 
   const clientList = useMemo(() => {
     const list = officeInbox?.client_list;
@@ -88,8 +93,7 @@ export function DocflowMessengerPage() {
     return { enabled: a.enabled !== false, reason: (a.reason as string | null) ?? null };
   }
 
-  const loadOfficeInbox = useCallback(
-    async (opts?: { searchClient?: string }): Promise<void> => {
+  const loadOfficeInbox = useCallback(async (opts?: { searchClient?: string }): Promise<void> => {
       inflightInboxAbort.current?.abort();
       const ac = new AbortController();
       inflightInboxAbort.current = ac;
@@ -101,7 +105,8 @@ export function DocflowMessengerPage() {
           docflowOfficeInboxAggregate({
             page: 1,
             pageSize: 50,
-            searchClient: String(opts?.searchClient ?? searchClient).trim() || undefined,
+            // IMPORTANT: do not implicitly depend on React state here; this prevents refetch on every keystroke.
+            searchClient: String(opts?.searchClient ?? searchClientRef.current).trim() || undefined,
           }),
           { signal: ac.signal }
         )) as UnknownRecord;
@@ -117,9 +122,7 @@ export function DocflowMessengerPage() {
       } finally {
         setLoading(false);
       }
-    },
-    [searchClient]
-  );
+  }, []);
 
   const loadClientContext = useCallback(async (clientId: string, selectedThreadId?: string | null): Promise<void> => {
     const cid = String(clientId ?? '').trim();
@@ -250,7 +253,7 @@ export function DocflowMessengerPage() {
             type="button"
             className="nx-btn nx-btn-taxes-compact"
             disabled={busy.length > 0}
-            onClick={() => void loadOfficeInbox({ searchClient })}
+            onClick={() => void loadOfficeInbox({ searchClient: searchClient.trim() })}
           >
             חפש
           </button>
@@ -288,7 +291,11 @@ export function DocflowMessengerPage() {
                   <button
                     key={id}
                     type="button"
-                    onClick={() => void loadClientContext(id, null)}
+                    onClick={() => {
+                      // User selection must win over auto-select logic even if inbox refresh completes later.
+                      didAutoSelectFirstClient.current = true;
+                      void loadClientContext(id, null);
+                    }}
                     style={{
                       width: '100%',
                       textAlign: 'start',
