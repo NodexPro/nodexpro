@@ -47,7 +47,9 @@ export function DocflowFloatingWidget() {
     }
     setLoadError('');
     try {
-      const data = (await apiJson(docflowFloatingWidgetAggregate)) as UnknownRecord;
+      const data = (await apiJson(docflowFloatingWidgetAggregate, {
+        debugLabel: 'DocflowFloatingWidget.load(floating-widget)',
+      })) as UnknownRecord;
       setAggregate(data);
     } catch (e) {
       setAggregate(null);

@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const run = (async () => {
       isFetchingMe.current = true;
       try {
-        const me = await apiJson<MeData>(AUTH.session, signal ? { signal } : undefined);
+        const me = await apiJson<MeData>(AUTH.session, signal ? { signal, debugLabel: 'AuthContext.refetchMe' } : { debugLabel: 'AuthContext.refetchMe' });
         if (signal?.aborted) return null;
         setState((prev) => {
           if (prev.status === 'authenticated' && isMeEqual(prev.me, me)) return prev;
@@ -76,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const me = await apiJson<MeData>(AUTH.selectActiveOrgCommand, {
       method: 'POST',
       body: JSON.stringify({ organization_id: organizationId }),
+      debugLabel: 'AuthContext.selectActiveOrg',
     });
     setState({ status: 'authenticated', me });
     if (me.activeOrganizationId) sessionStorage.setItem('activeOrganizationId', me.activeOrganizationId);
