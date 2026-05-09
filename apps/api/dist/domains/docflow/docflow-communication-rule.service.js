@@ -410,6 +410,15 @@ async function resolveTargetClients(orgId, targetFilter, ctx) {
                 auditPayload: { mode: 'filtered', flags: normalizedFlags, unsupported_flags: unsupported },
             };
         }
+        // PostgREST rejects `in.()` with an empty list; orgs with no active clients must short-circuit.
+        if (allClientIds.length === 0) {
+            return {
+                clientIds: [],
+                skipped: [],
+                summary: 'Filtered (OR): no active clients in organization',
+                auditPayload: { mode: 'filtered', flags: normalizedFlags, behavior: 'or', note: 'no_active_clients' },
+            };
+        }
         const { data: taxRows, error: taxErr } = await supabaseAdmin
             .from('client_tax_settings')
             .select('client_id, income_tax_deductions_enabled, vat_frequency, income_tax_advance_enabled, income_tax_advance_frequency')

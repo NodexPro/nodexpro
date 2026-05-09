@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { config } from '../../config.js';
+import { AppError, badRequest } from '../../shared/errors.js';
 import { resolveCountryContext } from '../country-pack/country-pack-resolver.service.js';
 import { assertDocflowEntitled } from './docflow.guards.js';
 import { parseDocflowCommunicationPayload, runCommunicationRuleCore } from './docflow-communication-rule.service.js';
@@ -32,6 +33,32 @@ function shouldRunToday(scheduleConfig, dateUtc) {
     // default / manual / unknown: do not auto-run
     return false;
 }
+/** Accept YYYY-MM-DD or ISO timestamps (common from clients); always return UTC calendar day as YYYY-MM-DD. */
+function normalizeSchedulerRunDate(input) {
+    const fallbackYmd = new Date().toISOString().slice(0, 10);
+    const raw = input === undefined || input === null || (typeof input === 'string' && input.trim() === '')
+        ? fallbackYmd
+        : String(input).trim();
+    let ymd = '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        ymd = raw;
+    }
+    else if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+        ymd = raw.slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd))
+            throw badRequest('Invalid date; expected YYYY-MM-DD');
+    }
+    else {
+        const d = new Date(raw);
+        if (!Number.isFinite(d.getTime()))
+            throw badRequest('Invalid date; expected YYYY-MM-DD or ISO-8601');
+        ymd = d.toISOString().slice(0, 10);
+    }
+    const dateUtc = new Date(`${ymd}T00:00:00.000Z`);
+    if (!Number.isFinite(dateUtc.getTime()))
+        throw badRequest('Invalid date; expected YYYY-MM-DD');
+    return { ymd, dateUtc };
+}
 async function listDocflowActiveOrgIds() {
     const { data: mod, error: modErr } = await supabaseAdmin.from('modules').select('id').eq('code', 'docflow').maybeSingle();
     if (modErr)
@@ -53,16 +80,11 @@ async function listDocflowActiveOrgIds() {
  * Runs server-side only. Must be triggered by an internal cron (Render Cron Job).
  */
 export async function runDocflowCommunicationDailyScheduler(params) {
-    const date = String(params?.date ?? new Date().toISOString().slice(0, 10)).trim();
-    const dateUtc = new Date(`${date}T00:00:00.000Z`);
-    if (!Number.isFinite(dateUtc.getTime()) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        throw new Error('Invalid date; expected YYYY-MM-DD');
-    }
+    const { ymd: date, dateUtc } = normalizeSchedulerRunDate(params?.date);
     const runContextKey = String(params?.run_context_key ?? 'scheduler:daily').trim();
     const dryRun = params?.dry_run === true;
     if (!config.internalCronSecret) {
-        // Safety: scheduler must not run without explicit secret configured.
-        throw new Error('INTERNAL_CRON_SECRET is not configured');
+        throw new AppError(503, 'INTERNAL_CRON_SECRET is not configured', 'CRON_MISCONFIGURED');
     }
     const orgIds = await listDocflowActiveOrgIds();
     const result = {

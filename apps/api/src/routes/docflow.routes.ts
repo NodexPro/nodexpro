@@ -60,6 +60,7 @@ router.post('/internal/scheduler/run-daily', async (req: Request, res: Response,
     const out = await runDocflowCommunicationDailyScheduler({ date, dry_run: dryRun });
     return res.json({ ok: true, result: out });
   } catch (e) {
+    console.error('[docflow] POST /internal/scheduler/run-daily failed', e);
     next(e);
   }
 });

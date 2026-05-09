@@ -92,7 +92,9 @@ function summarizeTargets(p: Record<string, unknown>): string {
   const o = tf as Record<string, unknown>;
   const flags = Array.isArray(o.flags) ? o.flags.map((x) => String(x)) : [];
   if (o.mode === 'all') return 'все клиенты';
-  return flags.length ? flags.join(', ') : 'filtered';
+  const mm = String(o.match_mode ?? 'any').trim().toLowerCase();
+  const joiner = mm === 'all' || mm === 'and' ? ' AND ' : ' OR ';
+  return flags.length ? flags.join(joiner) : 'filtered';
 }
 
 function summarizeSchedule(p: Record<string, unknown>): string {
@@ -199,6 +201,7 @@ export function PlatformOwnerLegalControl() {
     message_template: string;
     review_required: boolean;
     target_flags: string[];
+    target_match_mode: 'any' | 'all';
     selected_list_name: string;
     schedule_day: number;
     schedule_months: string[];
@@ -215,6 +218,7 @@ export function PlatformOwnerLegalControl() {
     message_template: '',
     review_required: true,
     target_flags: ['all_clients'] as string[],
+    target_match_mode: 'any',
     selected_list_name: '',
     schedule_day: 1,
     schedule_months: [...MONTH_OPTIONS] as string[],
@@ -706,10 +710,14 @@ export function PlatformOwnerLegalControl() {
       agg = lvOut.refreshed.aggregate as UnknownRecord;
       checklist.push('Legal Value OK');
 
+      const isAllClients = f.target_flags.includes('all_clients');
       const targetFilter: Record<string, unknown> = {
-        mode: f.target_flags.includes('all_clients') ? 'all' : 'filtered',
+        mode: isAllClients ? 'all' : 'filtered',
         flags: f.target_flags.filter((x) => x !== 'all_clients'),
       };
+      if (!isAllClients && f.target_match_mode === 'all') {
+        targetFilter.match_mode = 'all';
+      }
       if (f.target_flags.includes('select_from_list')) {
         targetFilter.list_name = f.selected_list_name.trim();
       }
@@ -922,6 +930,21 @@ export function PlatformOwnerLegalControl() {
                     );
                   })}
                 </div>
+                {!docflowTemplateForm.target_flags.includes('all_clients') ? (
+                  <label style={{ fontSize: 13, marginTop: 8, display: 'block' }}>
+                    <input
+                      type="checkbox"
+                      checked={docflowTemplateForm.target_match_mode === 'all'}
+                      onChange={(e) =>
+                        setDocflowTemplateForm((s) => ({
+                          ...s,
+                          target_match_mode: e.target.checked ? 'all' : 'any',
+                        }))
+                      }
+                    />{' '}
+                    Все выбранные условия (AND); иначе достаточно любого (OR)
+                  </label>
+                ) : null}
                 {docflowTemplateForm.target_flags.includes('select_from_list') ? (
                   <input
                     type="text"

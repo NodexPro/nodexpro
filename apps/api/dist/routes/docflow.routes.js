@@ -45,6 +45,7 @@ router.post('/internal/scheduler/run-daily', async (req, res, next) => {
         return res.json({ ok: true, result: out });
     }
     catch (e) {
+        console.error('[docflow] POST /internal/scheduler/run-daily failed', e);
         next(e);
     }
 });

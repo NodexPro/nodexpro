@@ -65,6 +65,7 @@ export type DocflowCommunicationLegalValuePayload = {
   type: 'docflow_communication';
   message_template: string;
   review_required?: boolean;
+  /** When `target_filter` is an object with `mode: 'filtered'`, optional `match_mode`: `all` (AND) or `any` (OR). Omitted means `any`. */
   target_filter?: string | Record<string, unknown>;
   condition_config?: Record<string, unknown>;
   schedule_config?: Record<string, unknown>;
