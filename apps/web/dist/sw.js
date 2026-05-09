@@ -2,7 +2,7 @@
  * - Caches same-origin GET requests opportunistically.
  * - Does not implement complex offline flows (DocFlow data is token/api driven).
  */
-const CACHE_NAME = 'docflow-pwa-v3';
+const CACHE_NAME = 'docflow-pwa-v4';
 
 self.addEventListener('install', (event) => {
   // Activate immediately.
