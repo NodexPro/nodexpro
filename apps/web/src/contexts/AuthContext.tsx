@@ -115,8 +115,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
       if (event === 'SIGNED_OUT') setState({ status: 'unauthenticated' });
       if (event === 'TOKEN_REFRESHED') {
-        const token = (await supabase.auth.getSession()).data.session;
-        if (token) await refetchMe();
+        // Token refresh should not force a /auth/session refetch.
+        // Session aggregate is backend-truth but mostly stable (org list, permissions, enabled modules).
+        // Avoids unrelated network traffic during normal app usage (e.g. DocFlow client switching).
+        // If backend-truth must be refreshed, do it explicitly via `refetchMe()` in relevant flows.
       }
     });
     return () => subscription.unsubscribe();
