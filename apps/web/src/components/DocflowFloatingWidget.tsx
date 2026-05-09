@@ -276,6 +276,13 @@ export function DocflowFloatingWidget() {
                 <div className="docflow-task-subtitle">
                   {pendingCount} pending draft{pendingCount === 1 ? '' : 's'}
                 </div>
+                <Link
+                  to="/m/docflow/messenger"
+                  className="docflow-task-messenger-link"
+                  onClick={() => closePanel()}
+                >
+                  Open DocFlow Messenger
+                </Link>
                 {trialBadge ? (
                   <div className="docflow-task-trial">
                     {trialBadge}
@@ -297,6 +304,13 @@ export function DocflowFloatingWidget() {
                   style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
                 >
                   {billingCta}
+                </Link>
+                <Link
+                  to="/m/docflow/messenger"
+                  className="docflow-task-messenger-link docflow-task-messenger-link--block"
+                  onClick={() => closePanel()}
+                >
+                  Open DocFlow Messenger
                 </Link>
               </div>
             ) : (
@@ -343,7 +357,7 @@ export function DocflowFloatingWidget() {
                       <span>Reason</span>
                       <span>Status</span>
                       <span>Due</span>
-                      <span> </span>
+                      <span className="docflow-task-table-header-action">Action</span>
                     </div>
                     {filteredDrafts.map((d, idx) => {
                       const id = String(d.draft_id ?? '').trim();
@@ -377,16 +391,16 @@ export function DocflowFloatingWidget() {
                           <span className="docflow-task-cell-truncate" title={rule}>
                             {rule}
                           </span>
-                          <span className="docflow-task-cell-truncate" title={reason}>
-                            {reason.length > 48 ? `${reason.slice(0, 47)}…` : reason}
+                          <span className="docflow-task-cell-truncate docflow-task-cell-reason" title={reason}>
+                            {reason}
                           </span>
-                          <span className="docflow-task-cell-truncate">
+                          <span className="docflow-task-cell-truncate docflow-task-cell-status" title={statusLabel}>
                             <span className="docflow-status-pill">{statusLabel}</span>
                           </span>
-                          <span className="docflow-task-cell-truncate" title={due}>
+                          <span className="docflow-task-cell-truncate docflow-task-cell-due" title={due}>
                             {due}
                           </span>
-                          <span onClick={(e) => e.stopPropagation()}>
+                          <span className="docflow-task-col-action" onClick={(e) => e.stopPropagation()}>
                             {showReview ? (
                               <button
                                 type="button"
@@ -396,9 +410,7 @@ export function DocflowFloatingWidget() {
                               >
                                 Review
                               </button>
-                            ) : (
-                              <span />
-                            )}
+                            ) : null}
                           </span>
                         </div>
                       );
