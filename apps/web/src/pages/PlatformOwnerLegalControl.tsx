@@ -107,6 +107,12 @@ function summarizeSchedule(p: Record<string, unknown>): string {
   return `day ${day}${months.length ? ` / ${months.join(', ')}` : ''}`;
 }
 
+function docflowTemplateRowAction(row: UnknownRecord, actionKey: string): AggregateAction | undefined {
+  const raw = row.allowed_actions;
+  if (!Array.isArray(raw)) return undefined;
+  return (raw as AggregateAction[]).find((a) => String(a.action_key) === actionKey);
+}
+
 function adminPackRulesetTablesFromAgg(aggregate: UnknownRecord | null): {
   packs: UnknownRecord[];
   rulesets: UnknownRecord[];
@@ -1069,7 +1075,7 @@ export function PlatformOwnerLegalControl() {
             <tbody>
               {docflowRuleRows.map((rule, idx) => {
                 const row = rule.raw;
-                const key = rule.valueKey;
+                const updateLvAction = docflowTemplateRowAction(row, 'update_legal_value_version');
                 const linkedRuleset =
                   safeText(row.country_pack_ruleset_id) === ''
                     ? null
@@ -1100,18 +1106,21 @@ export function PlatformOwnerLegalControl() {
                         </button>
                         <button
                           type="button"
-                          disabled={commandBusy}
+                          disabled={commandBusy || !rule.versionId || updateLvAction?.enabled !== true}
                           style={btnCompactMuted}
-                          onClick={() =>
-                            openCommandModal('create_legal_value_version', { action_key: 'create_legal_value_version', enabled: true }, {
-                              country_code: String(row.country_code ?? ''),
-                              value_key: key,
-                              ruleset_code: safeText(linkedRuleset?.ruleset_code),
-                              effective_from: fmtDateYmd(new Date()),
-                              status: 'draft',
-                              value_payload_json: row.value_payload_for_edit ?? {},
-                            })
-                          }
+                          title={updateLvAction?.note ?? 'Fix payload validation errors before editing.'}
+                          onClick={() => {
+                            const meta = updateLvAction ?? {
+                              action_key: 'update_legal_value_version',
+                              enabled: true,
+                            };
+                            openCommandModal('update_legal_value_version', meta, {
+                              legal_value_version_id: rule.versionId,
+                              value_payload_json: rule.raw.value_payload_for_edit ?? {},
+                              effective_from: rule.raw.effective_from,
+                              effective_to: rule.raw.effective_to ?? null,
+                            });
+                          }}
                         >
                           Edit
                         </button>
