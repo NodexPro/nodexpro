@@ -5,6 +5,7 @@ export const config = {
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     nodeEnv,
+    internalCronSecret: process.env.INTERNAL_CRON_SECRET?.trim() || null,
     legalIdentityHashSalt: process.env.LEGAL_IDENTITY_HASH_SALT ?? 'dev-salt-change-in-production',
     platformOwner: {
         email: process.env.PLATFORM_OWNER_EMAIL?.trim().toLowerCase() ?? null,

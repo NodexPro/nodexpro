@@ -73,6 +73,161 @@ export function parseDocflowCommunicationPayload(raw) {
         message_type: messageType,
     };
 }
+export async function runCommunicationRuleCore(params) {
+    const { orgId, valueKey, runDate, runContextKey, actorUserId, trigger } = params;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate))
+        throw badRequest('run_date must be YYYY-MM-DD');
+    const { data: org, error: orgErr } = await supabaseAdmin
+        .from('organizations')
+        .select('country_code')
+        .eq('id', orgId)
+        .maybeSingle();
+    if (orgErr)
+        throw orgErr;
+    if (!org?.country_code)
+        throw notFound('Organization not found');
+    const ctxResolved = await resolveCountryContext(orgId, runDate);
+    const rawResolved = ctxResolved.resolved_values_map[valueKey];
+    if (rawResolved === undefined) {
+        throw badRequest('Communication rule not found in active ruleset context for this date');
+    }
+    const comm = parseDocflowCommunicationPayload(rawResolved);
+    const targetResolved = await resolveTargetClients(orgId, comm.target_filter);
+    const { data: lvRow, error: lvErr } = await supabaseAdmin
+        .from('country_legal_values')
+        .select('id, value_key, module_scope, country_code')
+        .eq('country_code', org.country_code)
+        .eq('value_key', valueKey)
+        .maybeSingle();
+    if (lvErr)
+        throw lvErr;
+    if (!lvRow)
+        throw badRequest('Legal value not found for organization country');
+    if (!ctxResolved.ruleset_id)
+        throw badRequest('No active ruleset for organization');
+    const moduleKey = String(lvRow.module_scope ?? '').trim();
+    if (!moduleKey)
+        throw badRequest('module_scope is required on legal value');
+    const { data: modCheck, error: modErr } = await supabaseAdmin.from('modules').select('id').eq('code', moduleKey).maybeSingle();
+    if (modErr)
+        throw modErr;
+    if (!modCheck)
+        throw badRequest('module_scope must match a registered module code');
+    const insertRun = {
+        org_id: orgId,
+        source_legal_value_id: lvRow.id,
+        source_value_key: valueKey,
+        source_ruleset_id: ctxResolved.ruleset_id,
+        module_key: moduleKey,
+        run_date: runDate,
+        run_context_key: runContextKey,
+        status: 'completed',
+        generated_count: 0,
+        skipped_count: 0,
+        skipped_detail: [],
+    };
+    let runId;
+    const { data: insertedRun, error: insErr } = await supabaseAdmin
+        .from('communication_rule_runs')
+        .insert(insertRun)
+        .select('id')
+        .single();
+    if (insErr) {
+        if (insErr.code === '23505') {
+            const { data: existing, error: exErr } = await supabaseAdmin
+                .from('communication_rule_runs')
+                .select('id')
+                .eq('org_id', orgId)
+                .eq('source_legal_value_id', lvRow.id)
+                .eq('source_ruleset_id', ctxResolved.ruleset_id)
+                .eq('run_date', runDate)
+                .eq('run_context_key', runContextKey)
+                .maybeSingle();
+            if (exErr)
+                throw exErr;
+            if (!existing)
+                throw insErr;
+            runId = existing.id;
+            await writeAudit({
+                organizationId: orgId,
+                actorUserId,
+                moduleCode: 'docflow',
+                entityType: 'communication_rule_run',
+                entityId: runId,
+                action: 'communication_rule_run_started',
+                payload: { duplicate: true, trigger, value_key: valueKey, run_date: runDate, run_context_key: runContextKey },
+            });
+            return { rule_run_id: runId, duplicate: true };
+        }
+        throw insErr;
+    }
+    runId = insertedRun.id;
+    await writeAudit({
+        organizationId: orgId,
+        actorUserId,
+        moduleCode: 'docflow',
+        entityType: 'communication_rule_run',
+        entityId: runId,
+        action: 'communication_rule_run_started',
+        payload: {
+            trigger,
+            value_key: valueKey,
+            run_date: runDate,
+            run_context_key: runContextKey,
+            target_filter: targetResolved.auditPayload,
+            target_filter_summary: targetResolved.summary,
+        },
+    });
+    const skipped = [...targetResolved.skipped];
+    let generated = 0;
+    for (const clientId of targetResolved.clientIds) {
+        const cond = await evaluateCommunicationCondition(orgId, clientId, comm.condition_config);
+        if (!cond.ok) {
+            skipped.push({ client_id: clientId, reason: cond.reason });
+            continue;
+        }
+        const idempotencyKey = `comm:${valueKey}:${runContextKey}:${runDate}:${clientId}`;
+        const initialStatus = comm.review_required === false ? 'approved' : 'draft';
+        const { error: draftErr } = await supabaseAdmin.from('communication_draft_messages').insert({
+            org_id: orgId,
+            rule_run_id: runId,
+            client_id: clientId,
+            module_key: moduleKey,
+            message_body: comm.message_template,
+            message_type: comm.message_type ?? 'system',
+            status: initialStatus,
+            idempotency_key: idempotencyKey,
+            reviewed_by: initialStatus === 'approved' ? actorUserId : null,
+        });
+        if (draftErr) {
+            if (draftErr.code === '23505') {
+                continue;
+            }
+            throw draftErr;
+        }
+        generated += 1;
+        await writeAudit({
+            organizationId: orgId,
+            actorUserId,
+            moduleCode: 'docflow',
+            entityType: 'communication_draft_message',
+            entityId: null,
+            action: 'communication_draft_generated',
+            payload: { trigger, rule_run_id: runId, client_id: clientId, value_key: valueKey },
+        });
+    }
+    const { error: upRunErr } = await supabaseAdmin
+        .from('communication_rule_runs')
+        .update({
+        generated_count: generated,
+        skipped_count: skipped.length,
+        skipped_detail: skipped,
+    })
+        .eq('id', runId);
+    if (upRunErr)
+        throw upRunErr;
+    return { rule_run_id: runId, duplicate: false };
+}
 async function evaluateCommunicationCondition(orgId, clientId, conditionConfig) {
     const cfg = conditionConfig && typeof conditionConfig === 'object' && !Array.isArray(conditionConfig) ? conditionConfig : {};
     const requireActive = cfg.require_active_obligation === true;
@@ -573,159 +728,15 @@ export async function executeDocflowCommunicationOfficeCommand(ctx, command, pay
             if (!/^\d{4}-\d{2}-\d{2}$/.test(runDateRaw))
                 throw badRequest('run_date must be YYYY-MM-DD');
             const runContextKey = asOptionalString(payload.run_context_key) ?? '';
-            const { data: org, error: orgErr } = await supabaseAdmin
-                .from('organizations')
-                .select('country_code')
-                .eq('id', orgId)
-                .maybeSingle();
-            if (orgErr)
-                throw orgErr;
-            if (!org?.country_code)
-                throw notFound('Organization not found');
-            const ctxResolved = await resolveCountryContext(orgId, runDateRaw);
-            const rawResolved = ctxResolved.resolved_values_map[valueKey];
-            if (rawResolved === undefined) {
-                throw badRequest('Communication rule not found in active ruleset context for this date');
-            }
-            const comm = parseDocflowCommunicationPayload(rawResolved);
-            const targetResolved = await resolveTargetClients(orgId, comm.target_filter);
-            const { data: lvRow, error: lvErr } = await supabaseAdmin
-                .from('country_legal_values')
-                .select('id, value_key, module_scope, country_code')
-                .eq('country_code', org.country_code)
-                .eq('value_key', valueKey)
-                .maybeSingle();
-            if (lvErr)
-                throw lvErr;
-            if (!lvRow)
-                throw badRequest('Legal value not found for organization country');
-            if (!ctxResolved.ruleset_id)
-                throw badRequest('No active ruleset for organization');
-            const moduleKey = String(lvRow.module_scope ?? '').trim();
-            if (!moduleKey)
-                throw badRequest('module_scope is required on legal value');
-            const { data: modCheck, error: modErr } = await supabaseAdmin.from('modules').select('id').eq('code', moduleKey).maybeSingle();
-            if (modErr)
-                throw modErr;
-            if (!modCheck)
-                throw badRequest('module_scope must match a registered module code');
-            const insertRun = {
-                org_id: orgId,
-                source_legal_value_id: lvRow.id,
-                source_value_key: valueKey,
-                source_ruleset_id: ctxResolved.ruleset_id,
-                module_key: moduleKey,
-                run_date: runDateRaw,
-                run_context_key: runContextKey,
-                status: 'completed',
-                generated_count: 0,
-                skipped_count: 0,
-                skipped_detail: [],
-            };
-            let runId;
-            const { data: insertedRun, error: insErr } = await supabaseAdmin
-                .from('communication_rule_runs')
-                .insert(insertRun)
-                .select('id')
-                .single();
-            if (insErr) {
-                if (insErr.code === '23505') {
-                    const { data: existing, error: exErr } = await supabaseAdmin
-                        .from('communication_rule_runs')
-                        .select('id')
-                        .eq('org_id', orgId)
-                        .eq('source_legal_value_id', lvRow.id)
-                        .eq('source_ruleset_id', ctxResolved.ruleset_id)
-                        .eq('run_date', runDateRaw)
-                        .eq('run_context_key', runContextKey)
-                        .maybeSingle();
-                    if (exErr)
-                        throw exErr;
-                    if (!existing)
-                        throw insErr;
-                    runId = existing.id;
-                    await writeAudit({
-                        organizationId: orgId,
-                        actorUserId,
-                        moduleCode: 'docflow',
-                        entityType: 'communication_rule_run',
-                        entityId: runId,
-                        action: 'communication_rule_run_started',
-                        payload: { duplicate: true, value_key: valueKey },
-                    });
-                    return {
-                        ok: true,
-                        command,
-                        refreshed: await refreshedReview(orgId, runId),
-                    };
-                }
-                throw insErr;
-            }
-            runId = insertedRun.id;
-            await writeAudit({
-                organizationId: orgId,
+            const out = await runCommunicationRuleCore({
+                orgId,
+                valueKey,
+                runDate: runDateRaw,
+                runContextKey,
                 actorUserId,
-                moduleCode: 'docflow',
-                entityType: 'communication_rule_run',
-                entityId: runId,
-                action: 'communication_rule_run_started',
-                payload: {
-                    value_key: valueKey,
-                    run_date: runDateRaw,
-                    run_context_key: runContextKey,
-                    target_filter: targetResolved.auditPayload,
-                    target_filter_summary: targetResolved.summary,
-                },
+                trigger: 'manual',
             });
-            const skipped = [...targetResolved.skipped];
-            let generated = 0;
-            for (const clientId of targetResolved.clientIds) {
-                const cond = await evaluateCommunicationCondition(orgId, clientId, comm.condition_config);
-                if (!cond.ok) {
-                    skipped.push({ client_id: clientId, reason: cond.reason });
-                    continue;
-                }
-                const idempotencyKey = `comm:${valueKey}:${runContextKey}:${runDateRaw}:${clientId}`;
-                const initialStatus = comm.review_required === false ? 'approved' : 'draft';
-                const { error: draftErr } = await supabaseAdmin.from('communication_draft_messages').insert({
-                    org_id: orgId,
-                    rule_run_id: runId,
-                    client_id: clientId,
-                    module_key: moduleKey,
-                    message_body: comm.message_template,
-                    message_type: comm.message_type ?? 'system',
-                    status: initialStatus,
-                    idempotency_key: idempotencyKey,
-                    reviewed_by: initialStatus === 'approved' ? actorUserId : null,
-                });
-                if (draftErr) {
-                    if (draftErr.code === '23505') {
-                        continue;
-                    }
-                    throw draftErr;
-                }
-                generated += 1;
-                await writeAudit({
-                    organizationId: orgId,
-                    actorUserId,
-                    moduleCode: 'docflow',
-                    entityType: 'communication_draft_message',
-                    entityId: null,
-                    action: 'communication_draft_generated',
-                    payload: { rule_run_id: runId, client_id: clientId, value_key: valueKey },
-                });
-            }
-            const { error: upRunErr } = await supabaseAdmin
-                .from('communication_rule_runs')
-                .update({
-                generated_count: generated,
-                skipped_count: skipped.length,
-                skipped_detail: skipped,
-            })
-                .eq('id', runId);
-            if (upRunErr)
-                throw upRunErr;
-            return { ok: true, command, refreshed: await refreshedReview(orgId, runId) };
+            return { ok: true, command, refreshed: await refreshedReview(orgId, out.rule_run_id) };
         }
         case 'approve_draft_message': {
             const ruleRunId = reqString(payload, 'rule_run_id');

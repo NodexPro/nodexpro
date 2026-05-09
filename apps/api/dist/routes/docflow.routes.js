@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireOrg } from '../middleware/requireOrg.js';
 import { requireModuleActive } from '../middleware/requireModuleActive.js';
-import { badRequest } from '../shared/errors.js';
+import { badRequest, forbidden } from '../shared/errors.js';
 import { executeDocflowOfficeCommand, executeDocflowPortalCommand } from '../domains/docflow/docflow-commands.service.js';
 import { buildCommunicationRuleRunReviewAggregate, canRunDocflowCommunicationRules, } from '../domains/docflow/docflow-communication-rule.service.js';
 import { buildDocflowFloatingWidgetAggregate } from '../domains/docflow/docflow-floating-widget.service.js';
@@ -11,7 +11,15 @@ import { resolvePortalSessionByRawToken } from '../domains/docflow/docflow-porta
 import { getPortalDocflowAttachmentSignedUrl } from '../domains/docflow/docflow-portal-attachment-open.service.js';
 import { uploadSharedClientFileAssetForOffice } from '../domains/file-access/shared-client-file-upload.service.js';
 import { assertDocflowEntitled, assertDocflowMessageScope, assertDocflowThreadScope, reqString } from '../domains/docflow/docflow.guards.js';
+import { config } from '../config.js';
+import { runDocflowCommunicationDailyScheduler } from '../domains/docflow/docflow-communication-scheduler.service.js';
 const router = Router();
+function requireInternalCronSecret(req) {
+    const secret = String(req.headers['x-internal-cron-secret'] ?? '').trim();
+    if (!config.internalCronSecret || !secret || secret !== config.internalCronSecret) {
+        throw forbidden('Invalid internal cron secret');
+    }
+}
 /** Auth + org only: floating widget read model must load for trial-expired (locked) orgs without requireModuleActive. */
 const officeBaseRouter = Router();
 officeBaseRouter.use(authMiddleware, requireOrg);
@@ -22,6 +30,19 @@ officeBaseRouter.get('/aggregates/floating-widget', async (req, res, next) => {
         const canUse = canRunDocflowCommunicationRules(ctx);
         const aggregate = await buildDocflowFloatingWidgetAggregate(orgId, { can_use_communication_commands: canUse });
         return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+/** Internal cron trigger (Render Cron Job) — runs daily scheduled DocFlow communication rules. */
+router.post('/internal/scheduler/run-daily', async (req, res, next) => {
+    try {
+        requireInternalCronSecret(req);
+        const date = typeof req.body?.date === 'string' ? req.body.date.trim() : undefined;
+        const dryRun = req.body?.dry_run === true;
+        const out = await runDocflowCommunicationDailyScheduler({ date, dry_run: dryRun });
+        return res.json({ ok: true, result: out });
     }
     catch (e) {
         next(e);
