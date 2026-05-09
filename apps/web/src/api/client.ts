@@ -104,7 +104,30 @@ async function getToken(): Promise<string | null> {
   }
 }
 
+function traceFetch(path: string): void {
+  // Temporary debug trace for DocFlow client-switch request orchestration.
+  // Logs stack to identify exact component/hook initiator.
+  const p = String(path ?? '');
+  const isTraceTarget =
+    p === '/auth/session' ||
+    p.startsWith('/docflow/aggregates/office-inbox') ||
+    p.startsWith('/docflow/aggregates/floating-widget') ||
+    p.startsWith('/docflow/aggregates/client-thread-context') ||
+    p === '/m/client-operations/reminders/due';
+  if (!isTraceTarget) return;
+  try {
+    console.info('[docflow fetch trace]', {
+      endpoint: p,
+      timestamp: new Date().toISOString(),
+      stack: new Error().stack,
+    });
+  } catch {
+    // ignore
+  }
+}
+
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  traceFetch(path);
   const token = await getToken();
   const orgId = sessionStorage.getItem('activeOrganizationId');
   const headers: HeadersInit = {
