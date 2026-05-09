@@ -26,6 +26,11 @@ function statusLabel(status) {
 function buildWidgetDraftAllowedActions(status, actionsDisabled, disableReason) {
     const base = [
         {
+            command: 'edit_draft_message',
+            enabled: status === 'draft',
+            reason: status === 'draft' ? null : 'Only draft can be edited',
+        },
+        {
             command: 'approve_draft_message',
             enabled: status === 'draft',
             reason: status === 'draft' ? null : 'Only draft can be approved',
@@ -168,16 +173,37 @@ export async function buildDocflowFloatingWidgetAggregate(orgId, opts) {
     }
     const runIds = [...new Set(drafts.map((d) => d.rule_run_id))];
     const ruleKeyByRun = new Map();
+    const legalValueIdByRun = new Map();
     if (runIds.length) {
         const { data: runs, error: rErr } = await supabaseAdmin
             .from('communication_rule_runs')
-            .select('id, source_value_key')
+            .select('id, source_value_key, source_legal_value_id')
             .eq('org_id', orgId)
             .in('id', runIds);
         if (rErr)
             throw rErr;
-        for (const r of runs ?? [])
+        for (const r of runs ?? []) {
             ruleKeyByRun.set(r.id, r.source_value_key ?? null);
+            legalValueIdByRun.set(r.id, r.source_legal_value_id ?? null);
+        }
+    }
+    const legalValueIds = [...new Set([...legalValueIdByRun.values()].filter((x) => typeof x === 'string' && x.trim() !== ''))];
+    const ruleLabelByLegalValueId = new Map();
+    if (legalValueIds.length) {
+        const { data: lvRows, error: lvErr } = await supabaseAdmin
+            .from('country_legal_values')
+            .select('id, label, value_key')
+            .in('id', legalValueIds);
+        if (lvErr)
+            throw lvErr;
+        for (const lv of lvRows ?? []) {
+            const id = String(lv.id ?? '').trim();
+            if (!id)
+                continue;
+            const label = lv.label != null ? String(lv.label).trim() : '';
+            const key = lv.value_key != null ? String(lv.value_key).trim() : '';
+            ruleLabelByLegalValueId.set(id, label || key || null);
+        }
     }
     const pendingDrafts = drafts.map((row) => {
         const r = row;
@@ -185,17 +211,33 @@ export async function buildDocflowFloatingWidgetAggregate(orgId, opts) {
         const st = String(r.status ?? '');
         const rid = String(r.rule_run_id ?? '');
         const body = String(r.message_body ?? '');
+        const draftId = String(r.id ?? '').trim();
+        const createdAt = (r.generated_at ?? null);
+        const ruleValueKey = ruleKeyByRun.get(rid) ?? null;
+        const legalValueId = legalValueIdByRun.get(rid) ?? null;
+        const ruleName = (legalValueId ? ruleLabelByLegalValueId.get(legalValueId) : null) ?? ruleValueKey;
         return {
+            // Explicit draft fields (Stage 4A widget contract)
+            draft_id: draftId,
+            client_id: cid,
+            client_name: displayByClient.get(cid) ?? null,
+            rule_name: ruleName,
+            rule_value_key: ruleValueKey,
+            message_body: body,
+            message_preview: truncatePreview(body, 200),
+            status: st,
+            status_label: statusLabel(st),
+            created_at: createdAt,
+            // Backward-compatible / UI convenience fields (keep until all consumers migrated)
             client_display_name: displayByClient.get(cid) ?? null,
-            rule_value_key: ruleKeyByRun.get(rid) ?? null,
             preview_text: truncatePreview(body, 200),
             status_code: st,
-            status_label: statusLabel(st),
+            status_label_legacy: statusLabel(st),
             generated_at: r.generated_at ?? null,
             generated_at_display: formatGeneratedAtDisplay(r.generated_at),
             command_context: {
                 rule_run_id: rid,
-                draft_id: String(r.id ?? ''),
+                draft_id: draftId,
             },
             allowed_actions: buildWidgetDraftAllowedActions(st, actionsDisabled, actionDisableReason || lockReason),
         };
