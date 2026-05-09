@@ -4,6 +4,7 @@ import { writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { resolveCountryContext } from '../country-pack/country-pack-resolver.service.js';
 import type { DocflowCommandResponse, DocflowCommandType, DocflowCommunicationLegalValuePayload } from './docflow.types.js';
+import { businessPreviousMonthKey } from '../../shared/business-time.js';
 import {
   assertClientBelongsToOrg,
   assertDocflowEntitled,
@@ -122,7 +123,7 @@ export async function runCommunicationRuleCore(params: {
     throw badRequest('Communication rule not found in active ruleset context for this date');
   }
   const comm = parseDocflowCommunicationPayload(rawResolved);
-  const targetResolved = await resolveTargetClients(orgId, comm.target_filter);
+  const targetResolved = await resolveTargetClients(orgId, comm.target_filter, { runDate });
 
   const { data: lvRow, error: lvErr } = await supabaseAdmin
     .from('country_legal_values')
@@ -296,6 +297,7 @@ async function evaluateCommunicationCondition(
 
 const FILTER_FLAG_ALIASES: Record<string, string> = {
   has_payroll: 'has_payroll',
+  missing_payroll_material_previous_month: 'missing_payroll_material_previous_month',
   vat_bimonthly: 'vat_bimonthly',
   vat_bi_monthly: 'vat_bimonthly',
   vat_monthly: 'vat_monthly',
@@ -323,6 +325,7 @@ function isYesLike(value: unknown): boolean {
 
 function humanTargetFlagLabel(flag: string): string {
   if (flag === 'has_payroll') return 'לקוחות עם מס הכנסה ניכויים = כן';
+  if (flag === 'missing_payroll_material_previous_month') return 'חסרים נתוני שכר לחודש קודם';
   return flag;
 }
 
@@ -347,6 +350,7 @@ function summarizeTargetFilter(targetFilter: string | Record<string, unknown> | 
       ? (targetFilter as { flags: unknown[] }).flags.map((x) => normalizeFilterFlag(String(x)))
       : [];
     if (flags.length === 1 && flags[0] === 'has_payroll') return 'לקוחות עם מס הכנסה ניכויים = כן';
+    if (flags.length === 1 && flags[0] === 'missing_payroll_material_previous_month') return 'חסרים נתוני שכר לחודש קודם';
     return `Filtered (OR): ${flags.map((f) => humanTargetFlagLabel(f)).join(', ') || 'none'}`;
   }
   return `Filter mode: ${mode || 'unknown'}`;
@@ -354,7 +358,8 @@ function summarizeTargetFilter(targetFilter: string | Record<string, unknown> | 
 
 async function resolveTargetClients(
   orgId: string,
-  targetFilter: string | Record<string, unknown> | undefined
+  targetFilter: string | Record<string, unknown> | undefined,
+  ctx?: { runDate?: string }
 ): Promise<TargetResolution> {
   const { data: activeClients, error: clientsErr } = await supabaseAdmin
     .from('clients')
@@ -436,6 +441,7 @@ async function resolveTargetClients(
     const unsupported = normalizedFlags.filter(
       (f) =>
         f !== 'has_payroll' &&
+        f !== 'missing_payroll_material_previous_month' &&
         f !== 'vat_bimonthly' &&
         f !== 'vat_monthly' &&
         f !== 'income_tax_advance_monthly' &&
@@ -474,6 +480,45 @@ async function resolveTargetClients(
       });
     }
 
+    // Payroll material (previous month) truth: client_payroll_period_state (business time zone).
+    const payrollMissingByClient = new Map<string, boolean>();
+    const runDate = String(ctx?.runDate ?? '').trim();
+    if (normalizedFlags.includes('missing_payroll_material_previous_month')) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate)) {
+        return {
+          clientIds: [],
+          skipped: allClientIds.map((id) => ({ client_id: id, reason: 'missing_or_invalid_run_date_for_payroll_material_filter' })),
+          summary: 'Filtered (OR): missing_payroll_material_previous_month (invalid run_date)',
+          auditPayload: { mode: 'filtered', flags: normalizedFlags, behavior: 'or', error: 'invalid_run_date' },
+        };
+      }
+      // Use noon UTC anchor to avoid accidental day shifts.
+      const prevPayrollMm = businessPreviousMonthKey(new Date(`${runDate}T12:00:00.000Z`));
+      const { data: payrollRows, error: prErr } = await supabaseAdmin
+        .from('client_payroll_period_state')
+        .select('client_id, salary_data_received, no_salaries_this_month, not_relevant')
+        .eq('organization_id', orgId)
+        .eq('payroll_period_key', prevPayrollMm)
+        .in('client_id', allClientIds);
+      if (prErr) throw prErr;
+      const stateByClient = new Map<
+        string,
+        { salary_data_received: boolean; no_salaries_this_month: boolean; not_relevant: boolean }
+      >();
+      for (const r of payrollRows ?? []) {
+        stateByClient.set(String((r as any).client_id), {
+          salary_data_received: (r as any).salary_data_received === true,
+          no_salaries_this_month: (r as any).no_salaries_this_month === true,
+          not_relevant: (r as any).not_relevant === true,
+        });
+      }
+      for (const clientId of allClientIds) {
+        const st = stateByClient.get(clientId) ?? { salary_data_received: false, no_salaries_this_month: false, not_relevant: false };
+        const missing = !st.salary_data_received && !st.no_salaries_this_month && !st.not_relevant;
+        payrollMissingByClient.set(clientId, missing);
+      }
+    }
+
     const matched = new Set<string>();
     const unmatchedReasonByClient = new Map<string, string>();
     for (const clientId of allClientIds) {
@@ -489,6 +534,16 @@ async function resolveTargetClients(
           const ok = isYesLike(tax.income_tax_deductions_enabled);
           if (!ok) perFlagReasons.push('has_payroll_not_yes');
           return ok;
+        }
+        if (flag === 'missing_payroll_material_previous_month') {
+          const hasPayroll = isYesLike(tax.income_tax_deductions_enabled);
+          if (!hasPayroll) {
+            perFlagReasons.push('payroll_not_enabled');
+            return false;
+          }
+          const missing = payrollMissingByClient.get(clientId) === true;
+          if (!missing) perFlagReasons.push('payroll_material_received_or_not_relevant');
+          return missing;
         }
         if (flag === 'vat_bimonthly') return tax.vat_frequency === 'bi_monthly';
         if (flag === 'vat_monthly') return tax.vat_frequency === 'monthly';

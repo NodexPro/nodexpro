@@ -59,6 +59,7 @@ const RULE_TYPE_OPTIONS = [
 
 const TARGET_OPTIONS = [
   { key: 'has_payroll', label: 'у кого есть зарплаты' },
+  { key: 'missing_payroll_material_previous_month', label: 'нет данных по зарплате за предыдущий месяц' },
   { key: 'vat_bi_monthly', label: 'у кого маам דו חודשי' },
   { key: 'vat_monthly', label: 'у кого маам חד חודשי' },
   { key: 'income_tax_advance_monthly', label: 'у кого מס הכנסה מקדמות חד חודשי' },
