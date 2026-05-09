@@ -79,6 +79,48 @@
       "summary": "Deprecated endpoint used: moduleClientOperationsUpdateClientProfile(localWorkspace.client.id)"
     },
     {
+      "signature": "d94e2cc99cfff0bb",
+      "ruleId": "RULE_B_AGGREGATE_ONLY_READ",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "GET docflowClientTabAggregate(workspace.client.id)"
+    },
+    {
+      "signature": "b510c05fe4e48c0e",
+      "ruleId": "RULE_WRAPPER_UNRESOLVED",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "Unresolved indirect call: docflowClientTabAggregate()"
+    },
+    {
+      "signature": "5c4b1b1d1a8f1cfd",
+      "ruleId": "RULE_E_NO_FRONTEND_BUSINESS_LOGIC",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "[confidence:low] e instanceof ApiError && (e.status === 403 || e.status === 404)"
+    },
+    {
+      "signature": "a5ff4015d9c8a4a8",
+      "ruleId": "RULE_C_COMMAND_ONLY_WRITE",
+      "severity": "error",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "POST moduleClientOperationsUpdateClientProfile(localWorkspace.client.id)"
+    },
+    {
+      "signature": "51aebbaa66d31c78",
+      "ruleId": "RULE_I_FINANCIAL_TRUTH_ACCOUNTING_BASE",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "Financial truth keywords found without Accounting Base reference/marker."
+    },
+    {
+      "signature": "8ce7d32d3f36f2c4",
+      "ruleId": "RULE_J_COUNTRY_SPECIFIC_LOGIC_COUNTRY_PACK",
+      "severity": "warn",
+      "file": "apps/web/src/components/ClientWorkspacePanel.tsx",
+      "summary": "Country-specific legal keyword detected without Country Pack reference/marker."
+    },
+    {
       "signature": "7b01431d566abe0e",
       "ruleId": "RULE_WRAPPER_UNRESOLVED",
       "severity": "warn",
