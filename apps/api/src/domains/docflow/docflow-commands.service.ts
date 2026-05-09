@@ -8,6 +8,7 @@ import {
   buildClientPortalInboxAggregate,
   buildDocflowInvitesManagementAggregate,
   buildClientContextDocflowAggregate,
+  buildClientThreadContextAggregate,
   buildOfficeDocflowInboxAggregate,
 } from './docflow-read-models.service.js';
 import type { DocflowCommandPayload, DocflowCommandResponse, DocflowCommandType } from './docflow.types.js';
@@ -87,6 +88,16 @@ async function refreshOfficeTarget(
         orgId,
         clientId: params.clientId,
         selectedThreadId: params.selectedThreadId ?? null,
+      }),
+    };
+  }
+  if (target === 'client_thread_context') {
+    return {
+      aggregate_key: 'client_thread_context_aggregate',
+      aggregate: await buildClientThreadContextAggregate({
+        orgId,
+        clientId: params.clientId,
+        threadId: params.selectedThreadId ?? null,
       }),
     };
   }

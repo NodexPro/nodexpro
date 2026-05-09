@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import {
-  docflowClientContextAggregate,
+  docflowClientThreadContextAggregate,
   docflowOfficeCommands,
   docflowOfficeInboxAggregate,
   docflowStartOfficeThreadForClient,
@@ -33,6 +33,7 @@ export function DocflowMessengerPage() {
   const [uiSelectedClientId, setUiSelectedClientId] = useState<string>('');
   const inflightInboxAbort = useRef<AbortController | null>(null);
   const inflightClientAbort = useRef<AbortController | null>(null);
+  const didAutoSelectFirstClient = useRef(false);
 
   const clientList = useMemo(() => {
     const list = officeInbox?.client_list;
@@ -108,13 +109,6 @@ export function DocflowMessengerPage() {
           throw new Error('תגובת השרת אינה אגרגט DocFlow inbox תקין');
         }
         setOfficeInbox(out);
-
-        // Auto-select first client on initial load only.
-        const first = Array.isArray(out.client_list) ? (out.client_list[0] as UnknownRecord | undefined) : undefined;
-        const firstClientId = String(first?.client_id ?? '').trim();
-        if (!clientContextAgg && firstClientId) {
-          await loadClientContext(firstClientId, null);
-        }
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') return;
         setOfficeInbox(null);
@@ -124,8 +118,7 @@ export function DocflowMessengerPage() {
         setLoading(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [searchClient, clientContextAgg]
+    [searchClient]
   );
 
   const loadClientContext = useCallback(async (clientId: string, selectedThreadId?: string | null): Promise<void> => {
@@ -140,11 +133,11 @@ export function DocflowMessengerPage() {
     setLoading(true);
     setError('');
     try {
-      const out = (await apiJson<UnknownRecord>(docflowClientContextAggregate(cid, selectedThreadId ?? null), {
+      const out = (await apiJson<UnknownRecord>(docflowClientThreadContextAggregate(cid, selectedThreadId ?? null), {
         signal: ac.signal,
       })) as UnknownRecord;
-      if (String(out.aggregate_key ?? '') !== 'client_context_docflow_aggregate') {
-        throw new Error('תגובת השרת אינה אגרגט DocFlow client context תקין');
+      if (String(out.aggregate_key ?? '') !== 'client_thread_context_aggregate') {
+        throw new Error('תגובת השרת אינה אגרגט DocFlow thread context תקין');
       }
       setClientContextAgg(out);
       setUiSelectedClientId('');
@@ -161,6 +154,16 @@ export function DocflowMessengerPage() {
     void loadOfficeInbox({});
   }, [loadOfficeInbox]);
 
+  useEffect(() => {
+    if (didAutoSelectFirstClient.current) return;
+    if (clientContextAgg) return;
+    const first = Array.isArray(officeInbox?.client_list) ? (officeInbox?.client_list?.[0] as UnknownRecord | undefined) : undefined;
+    const firstClientId = String(first?.client_id ?? '').trim();
+    if (!firstClientId) return;
+    didAutoSelectFirstClient.current = true;
+    void loadClientContext(firstClientId, null);
+  }, [officeInbox, clientContextAgg, loadClientContext]);
+
   async function runOfficeCommand(command: string, payload: UnknownRecord): Promise<void> {
     if (!effectiveSelectedClientId) return;
     const can = canRun(command);
@@ -174,15 +177,15 @@ export function DocflowMessengerPage() {
           command,
           payload: {
             client_id: effectiveSelectedClientId,
-            refresh_target: 'client_context',
+            refresh_target: 'client_thread_context',
             ...payload,
           },
         }),
       })) as CommandResponse;
       const refreshed = out.refreshed?.aggregate;
       if (!isRecord(refreshed)) throw new Error('חסר אגרגט מעודכן מהשרת');
-      if (String(out.refreshed?.aggregate_key ?? '') !== 'client_context_docflow_aggregate') {
-        throw new Error('השרת לא החזיר client context aggregate');
+      if (String(out.refreshed?.aggregate_key ?? '') !== 'client_thread_context_aggregate') {
+        throw new Error('השרת לא החזיר client thread context aggregate');
       }
       setClientContextAgg(refreshed);
       setUiSelectedClientId('');
@@ -203,14 +206,14 @@ export function DocflowMessengerPage() {
         body: JSON.stringify({
           payload: {
             client_id: effectiveSelectedClientId,
-            refresh_target: 'client_context',
+            refresh_target: 'client_thread_context',
           },
         }),
       })) as CommandResponse;
       const refreshed = out.refreshed?.aggregate;
       if (!isRecord(refreshed)) throw new Error('חסר אגרגט מעודכן מהשרת');
-      if (String(out.refreshed?.aggregate_key ?? '') !== 'client_context_docflow_aggregate') {
-        throw new Error('השרת לא החזיר client context aggregate');
+      if (String(out.refreshed?.aggregate_key ?? '') !== 'client_thread_context_aggregate') {
+        throw new Error('השרת לא החזיר client thread context aggregate');
       }
       setClientContextAgg(refreshed);
       setUiSelectedClientId('');

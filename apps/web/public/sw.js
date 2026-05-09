@@ -2,7 +2,7 @@
  * - Caches same-origin GET requests opportunistically.
  * - Does not implement complex offline flows (DocFlow data is token/api driven).
  */
-const CACHE_NAME = 'docflow-pwa-v2';
+const CACHE_NAME = 'docflow-pwa-v3';
 
 self.addEventListener('install', (event) => {
   // Activate immediately.
@@ -31,6 +31,13 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+
+  // Never cache API responses. API is always network-truth and may contain auth-sensitive data.
+  // Also avoids caching frontend fallbacks for misrouted API requests.
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(req));
+    return;
+  }
 
   // For documents (HTML navigations), always try network first so users
   // don't get stuck on stale index.html that points to old hashed bundles.

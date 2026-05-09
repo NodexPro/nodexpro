@@ -219,8 +219,37 @@ export const docflowInvitesManagementAggregate = (params?: {
   return `/docflow/aggregates/invites-management${suffix ? `?${suffix}` : ''}`;
 };
 
+export const docflowOfficeInboxAggregate = (params?: {
+  page?: number;
+  pageSize?: number;
+  searchClient?: string;
+  selectedClientId?: string;
+  selectedThreadId?: string;
+}) => {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('page_size', String(params.pageSize));
+  if (params?.searchClient) qs.set('search_client', params.searchClient);
+  if (params?.selectedClientId) qs.set('selected_client_id', params.selectedClientId);
+  if (params?.selectedThreadId) qs.set('selected_thread_id', params.selectedThreadId);
+  const suffix = qs.toString();
+  return `/docflow/aggregates/office-inbox${suffix ? `?${suffix}` : ''}`;
+};
+
+export const docflowClientContextAggregate = (clientId: string, selectedThreadId?: string | null) =>
+  `/docflow/aggregates/client-context?client_id=${encodeURIComponent(clientId)}${
+    selectedThreadId ? `&selected_thread_id=${encodeURIComponent(selectedThreadId)}` : ''
+  }`;
+
+export const docflowClientThreadContextAggregate = (clientId: string, threadId?: string | null) =>
+  `/docflow/aggregates/client-thread-context?client_id=${encodeURIComponent(clientId)}${
+    threadId ? `&thread_id=${encodeURIComponent(threadId)}` : ''
+  }`;
+
 /** Floating widget: auth + org only (trial-expired orgs get locked aggregate). */
 export const docflowFloatingWidgetAggregate = '/docflow/aggregates/floating-widget';
+
+export const docflowStartOfficeThreadForClient = '/docflow/commands/start-office-thread-for-client';
 
 /** Client DocFlow portal (no office org header; session via `X-Client-Portal-Session`). */
 export const docflowPortalAcceptInvitation = '/docflow/portal/commands/accept-invitation';
@@ -228,6 +257,7 @@ export const docflowPortalInboxAggregate = (selectedThreadId?: string | null) =>
   `/docflow/portal/aggregates/client-portal-inbox${
     selectedThreadId ? `?selected_thread_id=${encodeURIComponent(selectedThreadId)}` : ''
   }`;
+export const docflowPortalStartClientThread = '/docflow/portal/commands/start-client-thread';
 export const docflowPortalSendClientMessage = '/docflow/portal/commands/send-client-message';
 export const docflowPortalAttachFileToClientMessage = '/docflow/portal/commands/attach-file-to-client-message';
 export const docflowPortalRemoveMessageAttachment = '/docflow/portal/commands/remove-message-attachment';

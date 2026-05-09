@@ -87,7 +87,8 @@ async function getThreadMessages(
   const messages = (data ?? []).slice().reverse();
   const messageIds = messages.map((m) => String(m.id));
   const deliveryByMessageId = new Map<string, { delivery_status: string; delivery_reason: string | null }>();
-  if (messageIds.length) {
+  // Delivery view is primarily needed in portal visibility.
+  if (visibility === 'portal' && messageIds.length) {
     const { data: deliveries, error: dErr } = await supabaseAdmin
       .from('client_message_deliveries')
       .select('message_id, delivery_status, failure_reason')
@@ -110,8 +111,8 @@ async function getThreadMessages(
     return {
       ...m,
       message_type_label: m.message_type,
-      delivery_status: normalized.status,
-      delivery_reason: normalized.reason,
+      delivery_status: visibility === 'portal' ? normalized.status : null,
+      delivery_reason: visibility === 'portal' ? normalized.reason : null,
     };
   });
 }
@@ -788,7 +789,7 @@ async function resolveOfficeSelectedThread(params: {
     .eq('org_id', params.orgId)
     .eq('client_id', params.clientId)
     .order('updated_at', { ascending: false })
-    .limit(50);
+    .limit(20);
   if (threadsErr) throw threadsErr;
   const threadRows = (threads ?? []).map((t) => ({
     id: String(t.id),
@@ -802,20 +803,65 @@ async function resolveOfficeSelectedThread(params: {
   const selectedThread =
     threadRows.find((t) => t.id === (params.selectedThreadId ?? null)) ?? (threadRows.length ? threadRows[0] : null);
 
-  const [messages, attachments, unreadSelected] = selectedThread
-    ? await Promise.all([
-        getThreadMessages(params.orgId, params.clientId, selectedThread.id, 'office', { limit: 120 }),
-        getThreadAttachments(params.orgId, params.clientId, selectedThread.id, { limit: 120 }),
-        getUnreadForOffice(params.orgId, params.clientId, selectedThread.id),
-      ])
-    : [[], [], 0];
+  const threadIds = threadRows.map((t) => t.id);
 
-  const unreadByThread = new Map<string, number>();
-  await Promise.all(
-    threadRows.slice(0, 25).map(async (t) => {
-      unreadByThread.set(t.id, await getUnreadForOffice(params.orgId, params.clientId, t.id));
-    })
-  );
+  // Batch unread: 2 queries total (events + messages), no per-thread calls.
+  const lastReadByThread = new Map<string, string>();
+  if (threadIds.length) {
+    const { data: readEvents, error: reErr } = await supabaseAdmin
+      .from('client_message_events')
+      .select('thread_id, created_at')
+      .eq('org_id', params.orgId)
+      .eq('client_id', params.clientId)
+      .eq('event_type', 'thread_read_marked_office')
+      .in('thread_id', threadIds)
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (reErr) throw reErr;
+    for (const e of readEvents ?? []) {
+      const tid = String((e as any).thread_id ?? '');
+      if (!tid || lastReadByThread.has(tid)) continue;
+      const ts = String((e as any).created_at ?? '');
+      if (ts) lastReadByThread.set(tid, ts);
+    }
+  }
+
+  const unreadByThread = new Map<string, number>(threadIds.map((id) => [id, 0]));
+  if (threadIds.length) {
+    let minMarker = '1970-01-01T00:00:00.000Z';
+    for (const tid of threadIds) {
+      const marker = lastReadByThread.get(tid) ?? '1970-01-01T00:00:00.000Z';
+      if (marker < minMarker) minMarker = marker;
+    }
+
+    const { data: msgRows, error: mErr } = await supabaseAdmin
+      .from('client_messages')
+      .select('thread_id, created_at')
+      .eq('org_id', params.orgId)
+      .eq('client_id', params.clientId)
+      .in('thread_id', threadIds)
+      .gt('created_at', minMarker)
+      .neq('created_by_type', 'office')
+      .eq('message_status', 'published')
+      .order('created_at', { ascending: true })
+      .limit(5000);
+    if (mErr) throw mErr;
+    for (const row of msgRows ?? []) {
+      const tid = String((row as any).thread_id ?? '');
+      const ts = String((row as any).created_at ?? '');
+      if (!tid || !ts) continue;
+      const marker = lastReadByThread.get(tid) ?? '1970-01-01T00:00:00.000Z';
+      if (ts > marker) unreadByThread.set(tid, (unreadByThread.get(tid) ?? 0) + 1);
+    }
+  }
+
+  const [messages, attachments] = selectedThread
+    ? await Promise.all([
+        getThreadMessages(params.orgId, params.clientId, selectedThread.id, 'office', { limit: 50 }),
+        getThreadAttachments(params.orgId, params.clientId, selectedThread.id, { limit: 80 }),
+      ])
+    : [[], []];
+  const unreadSelected = selectedThread ? unreadByThread.get(selectedThread.id) ?? 0 : 0;
 
   return { threadRows, selectedThread, messages, attachments, unreadSelected, unreadByThread };
 }
@@ -879,6 +925,109 @@ export async function buildClientContextDocflowAggregate(params: {
       { command: 'mark_thread_read_by_office', enabled: Boolean(resolved.selectedThread), reason: null },
       { command: 'archive_client_thread', enabled: resolved.selectedThread ? resolved.selectedThread.thread_status === 'resolved' : false, reason: null },
     ],
+  };
+}
+
+export async function buildClientThreadContextAggregate(params: {
+  orgId: string;
+  clientId: string;
+  threadId?: string | null;
+}): Promise<Record<string, unknown>> {
+  const { data: client, error: clientErr } = await supabaseAdmin
+    .from('clients')
+    .select('id, display_name, status')
+    .eq('organization_id', params.orgId)
+    .eq('id', params.clientId)
+    .maybeSingle();
+  if (clientErr) throw clientErr;
+  if (!client) throw notFound('Client not found');
+
+  const selectedThreadIdInput = String(params.threadId ?? '').trim() || null;
+  const { data: threads, error: threadsErr } = await supabaseAdmin
+    .from('client_message_threads')
+    .select('id, module_key, thread_type, thread_status, deadline_at, updated_at')
+    .eq('org_id', params.orgId)
+    .eq('client_id', params.clientId)
+    .neq('thread_status', 'archived')
+    .order('updated_at', { ascending: false })
+    .limit(selectedThreadIdInput ? 50 : 1);
+  if (threadsErr) throw threadsErr;
+  const threadRows = (threads ?? []).map((t) => ({
+    id: String(t.id),
+    module_key: String(t.module_key ?? 'docflow'),
+    thread_type: String(t.thread_type ?? ''),
+    thread_status: String(t.thread_status ?? ''),
+    deadline_at: (t.deadline_at ? String(t.deadline_at) : null) as string | null,
+    updated_at: String(t.updated_at ?? ''),
+  }));
+  const selectedThread =
+    threadRows.find((t) => t.id === selectedThreadIdInput) ?? (threadRows.length ? threadRows[0] : null);
+
+  const messages = selectedThread
+    ? await getThreadMessages(params.orgId, params.clientId, selectedThread.id, 'office', { limit: 20 })
+    : [];
+  const messageIds = messages.map((m) => String(m.id ?? '')).filter(Boolean);
+  const attachments =
+    selectedThread && messageIds.length
+      ? await (async () => {
+          const { data: rows, error: aErr } = await supabaseAdmin
+            .from('client_message_attachments')
+            .select('id, message_id, file_asset_id, created_at, file_assets(file_name, mime_type)')
+            .eq('org_id', params.orgId)
+            .eq('client_id', params.clientId)
+            .eq('thread_id', selectedThread.id)
+            .in('message_id', messageIds)
+            .order('created_at', { ascending: true })
+            .limit(200);
+          if (aErr) throw aErr;
+          return (rows ?? []).map((row) => {
+            const r = row as {
+              id: string;
+              message_id: string;
+              file_asset_id: string;
+              created_at: string;
+              file_assets?: { file_name?: string | null; mime_type?: string | null } | null;
+            };
+            return {
+              id: r.id,
+              message_id: r.message_id,
+              file_asset_id: r.file_asset_id,
+              created_at: r.created_at,
+              file_name: r.file_assets?.file_name ?? null,
+              mime_type: r.file_assets?.mime_type ?? null,
+            };
+          });
+        })()
+      : [];
+
+  return {
+    aggregate_key: 'client_thread_context_aggregate',
+    client_header: {
+      client_id: String(client.id),
+      display_name: String(client.display_name ?? ''),
+      status: String(client.status ?? ''),
+    },
+    selected_thread: selectedThread
+      ? {
+          ...selectedThread,
+          thread_type_label: threadTypeLabel(selectedThread.thread_type),
+          thread_status_label: threadStatusLabel(selectedThread.thread_status),
+          sla_indicator: buildSlaIndicator(selectedThread.deadline_at),
+          allowed_actions: officeAllowedActions(selectedThread.thread_status),
+        }
+      : null,
+    messages,
+    attachments,
+    allowed_actions: [
+      { command: 'start_office_thread_for_client', enabled: !selectedThread, reason: selectedThread ? 'Thread already exists' : null },
+      { command: 'send_office_message', enabled: selectedThread ? selectedThread.thread_status !== 'archived' : false, reason: null },
+      { command: 'mark_thread_read_by_office', enabled: Boolean(selectedThread), reason: null },
+      { command: 'archive_client_thread', enabled: selectedThread ? selectedThread.thread_status === 'resolved' : false, reason: null },
+    ],
+    empty_states: {
+      no_threads: !selectedThread,
+      no_messages: selectedThread ? messages.length === 0 : true,
+    },
   };
 }
 

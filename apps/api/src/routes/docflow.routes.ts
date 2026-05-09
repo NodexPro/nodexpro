@@ -16,6 +16,7 @@ import {
   buildClientPortalInboxAggregate,
   buildDocflowInvitesManagementAggregate,
   buildClientContextDocflowAggregate,
+  buildClientThreadContextAggregate,
   buildOfficeDocflowInboxAggregate,
 } from '../domains/docflow/docflow-read-models.service.js';
 import { resolvePortalSessionByRawToken } from '../domains/docflow/docflow-portal-auth.service.js';
@@ -84,6 +85,20 @@ officeRouter.get('/aggregates/client-context', async (req: Request, res: Respons
     const selectedThreadId = String(req.query.selected_thread_id ?? '').trim() || null;
     if (!clientId) throw badRequest('client_id is required');
     const aggregate = await buildClientContextDocflowAggregate({ orgId, clientId, selectedThreadId });
+    return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+officeRouter.get('/aggregates/client-thread-context', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const orgId = ctx.organizationId!;
+    const clientId = String(req.query.client_id ?? '').trim();
+    const threadId = String(req.query.thread_id ?? '').trim() || null;
+    if (!clientId) throw badRequest('client_id is required');
+    const aggregate = await buildClientThreadContextAggregate({ orgId, clientId, threadId });
     return res.json(aggregate);
   } catch (e) {
     next(e);

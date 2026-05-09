@@ -44,6 +44,7 @@ export type DocflowRefreshedAggregateKey =
   | 'client_portal_inbox_aggregate'
   | 'office_docflow_inbox_aggregate'
   | 'client_context_docflow_aggregate'
+  | 'client_thread_context_aggregate'
   | 'communication_rule_run_review_aggregate'
   | 'docflow_floating_widget_aggregate';
 
