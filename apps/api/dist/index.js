@@ -44,10 +44,39 @@ async function logModuleLoaded() {
 const app = express();
 app.use(helmet());
 const corsAllowedOriginsRaw = process.env.CORS_ALLOWED_ORIGINS ?? '';
-const corsAllowedOrigins = corsAllowedOriginsRaw
+/** Each configured origin plus its www ↔ apex twin (same scheme/port) to avoid prod footguns. */
+function expandCorsOriginsWithWwwVariants(origins) {
+    const set = new Set(origins);
+    for (const o of origins) {
+        try {
+            const url = new URL(o);
+            const host = url.hostname.toLowerCase();
+            if (host === 'localhost' || host.startsWith('localhost.') || host === '127.0.0.1')
+                continue;
+            if (host.startsWith('www.')) {
+                const bare = host.slice(4);
+                if (bare) {
+                    const u = new URL(o);
+                    u.hostname = bare;
+                    set.add(u.origin);
+                }
+            }
+            else {
+                const u = new URL(o);
+                u.hostname = `www.${host}`;
+                set.add(u.origin);
+            }
+        }
+        catch {
+            /* ignore malformed entries */
+        }
+    }
+    return [...set];
+}
+const corsAllowedOrigins = expandCorsOriginsWithWwwVariants(corsAllowedOriginsRaw
     .split(',')
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter(Boolean));
 const corsAllowCredentials = String(process.env.CORS_ALLOW_CREDENTIALS ?? '')
     .trim()
     .toLowerCase() === 'true';

@@ -626,8 +626,9 @@ export async function buildClientPortalInboxAggregate(params) {
         (threadRows.length ? threadRows[0] : null);
     const [messages, attachments, unreadSelected] = selectedThread
         ? await Promise.all([
-            getThreadMessages(orgId, clientId, selectedThread.id, 'portal'),
-            getThreadAttachments(orgId, clientId, selectedThread.id),
+            // Match office thread context window (last N published messages); omitting limit defaults to 1 in getThreadMessages.
+            getThreadMessages(orgId, clientId, selectedThread.id, 'portal', { limit: 20 }),
+            getThreadAttachments(orgId, clientId, selectedThread.id, { limit: 80 }),
             getUnreadForClient(orgId, clientId, selectedThread.id),
         ])
         : [[], [], 0];
