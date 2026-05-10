@@ -136,10 +136,13 @@ officeRouter.get('/aggregates/communication-rule-run-review', async (req, res, n
     try {
         const ctx = req.context;
         const orgId = ctx.organizationId;
-        const ruleRunId = String(req.query.rule_run_id ?? '').trim();
-        if (!ruleRunId)
-            throw badRequest('rule_run_id is required');
-        const aggregate = await buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId);
+        const ruleRunIdRaw = String(req.query.rule_run_id ?? '').trim();
+        const ruleRunId = ruleRunIdRaw ? ruleRunIdRaw : null;
+        const runDateRaw = String(req.query.run_date ?? '').trim();
+        const catalogRunDate = /^\d{4}-\d{2}-\d{2}$/.test(runDateRaw)
+            ? runDateRaw
+            : new Date().toISOString().slice(0, 10);
+        const aggregate = await buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId, catalogRunDate);
         return res.json(aggregate);
     }
     catch (e) {

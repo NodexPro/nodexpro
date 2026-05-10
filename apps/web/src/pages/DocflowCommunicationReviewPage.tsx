@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiJson, userFacingApiMessage } from '../api/client';
-import { OWNER, docflowCommunicationRuleRunReviewAggregate, docflowOfficeCommands, orgCountrySettings } from '../api/endpoints';
+import { docflowCommunicationRuleRunReviewAggregate, docflowOfficeCommands } from '../api/endpoints';
 import { useAuth } from '../contexts/AuthContext';
 
 type UnknownRecord = Record<string, unknown>;
 
 type DraftAction = { command?: string; enabled?: boolean; reason?: string | null };
-type TemplateOption = { value_key: string; label: string; preview: string; message_type: string };
 
 function todayYmd(): string {
   return new Date().toISOString().slice(0, 10);
@@ -24,96 +23,82 @@ export function DocflowCommunicationReviewPage() {
   const [ruleRunIdInput, setRuleRunIdInput] = useState(() => searchParams.get('rule_run_id')?.trim() ?? '');
   const [templateKey, setTemplateKey] = useState('');
   const [runDate, setRunDate] = useState(todayYmd);
-  const [templateOptions, setTemplateOptions] = useState<TemplateOption[]>([]);
-  const [contextLoading, setContextLoading] = useState(false);
-  const [contextError, setContextError] = useState('');
-  const [countryConfigWarning, setCountryConfigWarning] = useState('');
-  const [resolvedCountryCode, setResolvedCountryCode] = useState('');
-  const [resolvedPackCode, setResolvedPackCode] = useState('');
-  const [resolvedRulesetCode, setResolvedRulesetCode] = useState('');
-  const [autoSelectedPackCode, setAutoSelectedPackCode] = useState('');
 
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [editBody, setEditBody] = useState('');
 
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId ?? '' : '';
 
-  useEffect(() => {
-    let alive = true;
-    async function loadResolvedContext(): Promise<void> {
-      if (!orgId) {
-        setTemplateOptions([]);
-        setTemplateKey('');
-        setCountryConfigWarning('');
-        setResolvedCountryCode('');
-        setResolvedPackCode('');
-        setResolvedRulesetCode('');
-        setAutoSelectedPackCode('');
+  const catalogResolution = useMemo(() => {
+    const c = aggregate?.catalog_resolution;
+    return c && typeof c === 'object' ? (c as UnknownRecord) : null;
+  }, [aggregate]);
+
+  const availableRules = useMemo(() => {
+    const ar = aggregate?.available_rules;
+    return Array.isArray(ar) ? (ar as UnknownRecord[]) : [];
+  }, [aggregate]);
+
+  const countryConfigWarning =
+    catalogResolution && catalogResolution.config_ready === false
+      ? String(catalogResolution.config_warning_message ?? 'No active country configuration. Please configure organization once.')
+      : '';
+
+  const applyReviewAggregate = useCallback(
+    (data: UnknownRecord): void => {
+      if (data.aggregate_key !== 'communication_rule_run_review_aggregate') {
+        setError('Unexpected aggregate from server');
         return;
       }
-      setContextLoading(true);
-      setContextError('');
-      setCountryConfigWarning('');
-      setTemplateOptions([]);
-      setTemplateKey('');
-      setAutoSelectedPackCode('');
-      try {
-        const settings = (await apiJson(orgCountrySettings(orgId))) as {
-          organization?: { country_code?: string | null };
-          eligible_packs?: Array<{ pack_code?: string; status?: string; id?: string }>;
-          active_pack?: { pack_code?: string; id?: string } | null;
-          active_ruleset?: { ruleset_code?: string; id?: string } | null;
-        };
-        if (!alive) return;
-        const eligible = Array.isArray(settings.eligible_packs) ? settings.eligible_packs : [];
-        const activePackCode = String(settings.active_pack?.pack_code ?? '').trim();
-        const activeRulesetCode = String(settings.active_ruleset?.ruleset_code ?? '').trim();
-        const countryCode = String(settings.organization?.country_code ?? '').trim();
-        setResolvedCountryCode(countryCode);
-        setResolvedPackCode(activePackCode);
-        setResolvedRulesetCode(activeRulesetCode);
-        if (!activePackCode && eligible.length === 1) {
-          setAutoSelectedPackCode(String(eligible[0]?.pack_code ?? '').trim());
-        }
-        if (!activePackCode || !activeRulesetCode) {
-          setCountryConfigWarning('No active country configuration. Please configure organization once.');
-          return;
-        }
-        const ctx = (await apiJson(OWNER.activeRulesetContext(orgId, runDate || todayYmd()))) as {
-          resolved_legal_values_map?: Record<string, unknown>;
-        };
-        if (!alive) return;
-        const map = ctx?.resolved_legal_values_map ?? {};
-        const nextOptions: TemplateOption[] = [];
-        for (const [key, raw] of Object.entries(map)) {
-          if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
-          const payload = raw as Record<string, unknown>;
-          if (String(payload.type ?? '') !== 'docflow_communication') continue;
-          const messageTemplate = String(payload.message_template ?? '').trim();
-          const preview = messageTemplate.length > 100 ? `${messageTemplate.slice(0, 100)}…` : messageTemplate;
-          const mt = String(payload.message_type ?? 'reminder');
-          nextOptions.push({
-            value_key: key,
-            label: key,
-            preview,
-            message_type: mt === 'system' ? 'system' : 'reminder',
-          });
-        }
-        nextOptions.sort((a, b) => a.value_key.localeCompare(b.value_key));
-        setTemplateOptions(nextOptions);
-        if (nextOptions.length === 1) setTemplateKey(nextOptions[0].value_key);
-      } catch (e) {
-        if (!alive) return;
-        setContextError(userFacingApiMessage(e));
-      } finally {
-        if (alive) setContextLoading(false);
+      setAggregate(data);
+      setError('');
+      const rid = String((data.run as UnknownRecord | undefined)?.id ?? '').trim();
+      if (rid) {
+        setRuleRunIdInput(rid);
+        setSearchParams({ rule_run_id: rid }, { replace: true });
       }
+    },
+    [setSearchParams]
+  );
+
+  const fetchReviewAggregate = useCallback(
+    async (opts: { ruleRunId: string | null }): Promise<void> => {
+      if (!orgId) {
+        setAggregate(null);
+        return;
+      }
+      setLoading(true);
+      setError('');
+      try {
+        const path = docflowCommunicationRuleRunReviewAggregate({
+          ruleRunId: opts.ruleRunId ?? undefined,
+          runDate: runDate.trim() || todayYmd(),
+        });
+        const data = (await apiJson(path)) as UnknownRecord;
+        applyReviewAggregate(data);
+      } catch (e) {
+        setError(userFacingApiMessage(e));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [orgId, runDate, applyReviewAggregate]
+  );
+
+  useEffect(() => {
+    if (!orgId) {
+      setAggregate(null);
+      return;
     }
-    void loadResolvedContext();
-    return () => {
-      alive = false;
-    };
-  }, [orgId, runDate]);
+    const fromUrl = searchParams.get('rule_run_id')?.trim() ?? '';
+    void fetchReviewAggregate({ ruleRunId: fromUrl || null });
+  }, [orgId, runDate, searchParams, fetchReviewAggregate]);
+
+  useEffect(() => {
+    if (availableRules.length === 1 && !templateKey.trim()) {
+      setTemplateKey(String(availableRules[0]?.rule_key ?? ''));
+    }
+  }, [availableRules, templateKey]);
 
   const runInfo = useMemo(() => {
     const r = aggregate?.run;
@@ -150,20 +135,6 @@ export function DocflowCommunicationReviewPage() {
     return Array.isArray(a) ? (a as DraftAction[]) : [];
   }, [selectedDraft]);
 
-  const applyReviewAggregate = useCallback((data: UnknownRecord): void => {
-    if (data.aggregate_key !== 'communication_rule_run_review_aggregate') {
-      setError('Unexpected aggregate from server');
-      return;
-    }
-    setAggregate(data);
-    setError('');
-    const rid = String((data.run as UnknownRecord | undefined)?.id ?? '').trim();
-    if (rid) {
-      setRuleRunIdInput(rid);
-      setSearchParams({ rule_run_id: rid }, { replace: true });
-    }
-  }, [setSearchParams]);
-
   const loadByRuleRunId = useCallback(
     async (ruleRunId: string): Promise<void> => {
       const id = ruleRunId.trim();
@@ -175,24 +146,10 @@ export function DocflowCommunicationReviewPage() {
         setError('No active organization selected');
         return;
       }
-      setLoading(true);
-      setError('');
-      try {
-        const data = (await apiJson(docflowCommunicationRuleRunReviewAggregate(id))) as UnknownRecord;
-        applyReviewAggregate(data);
-      } catch (e) {
-        setError(userFacingApiMessage(e));
-      } finally {
-        setLoading(false);
-      }
+      await fetchReviewAggregate({ ruleRunId: id });
     },
-    [orgId, applyReviewAggregate]
+    [orgId, fetchReviewAggregate]
   );
-
-  useEffect(() => {
-    const fromUrl = searchParams.get('rule_run_id')?.trim() ?? '';
-    if (fromUrl && orgId) void loadByRuleRunId(fromUrl);
-  }, [orgId, searchParams, loadByRuleRunId]);
 
   useEffect(() => {
     if (!selectedDraftId) {
@@ -234,6 +191,11 @@ export function DocflowCommunicationReviewPage() {
     const vk = templateKey.trim();
     if (!vk) {
       setError('Template is required');
+      return;
+    }
+    const row = availableRules.find((r) => String(r.rule_key ?? '') === vk);
+    if (row && row.can_run === false) {
+      setError(String(row.disabled_reason ?? 'This rule cannot be run'));
       return;
     }
     const payload: UnknownRecord = { value_key: vk };
@@ -309,11 +271,16 @@ export function DocflowCommunicationReviewPage() {
     cursor: 'pointer',
   };
 
+  const resolvedCountryCode = String(catalogResolution?.country_code ?? '');
+  const resolvedPackCode = String(catalogResolution?.country_pack_code ?? '');
+  const resolvedRulesetCode = String(catalogResolution?.ruleset_code ?? '');
+
   return (
     <div style={{ padding: 24, maxWidth: 1200 }}>
       <h1 style={{ marginTop: 0 }}>DocFlow — communication review</h1>
       <p style={{ color: '#6b7280', fontSize: 14, maxWidth: 720 }}>
-        Pick a communication template and run it. Organization, country, pack and ruleset are resolved from your current session context.
+        Pick a communication template and run it. Organization, country, pack and ruleset are included in the DocFlow review aggregate for the
+        selected date.
         Client-facing text here is the <strong>draft copy</strong> for this run; editing does not change the Owner legal value template.
       </p>
       {!orgId ? <p style={{ color: '#b45309' }}>Select an organization to continue.</p> : null}
@@ -322,13 +289,12 @@ export function DocflowCommunicationReviewPage() {
           {countryConfigWarning} <Link to="/settings">Open setup</Link>
         </p>
       ) : null}
-      {contextError ? <p style={{ color: '#b45309' }}>{contextError}</p> : null}
 
       <div style={sectionStyle}>
         <h2 style={{ marginTop: 0, fontSize: 16 }}>Run rule</h2>
         <p style={{ marginTop: 0, color: '#6b7280', fontSize: 13 }}>
-          Context: country <strong>{resolvedCountryCode || '—'}</strong>, pack <strong>{resolvedPackCode || autoSelectedPackCode || '—'}</strong>,
-          ruleset <strong>{resolvedRulesetCode || '—'}</strong>
+          Context: country <strong>{resolvedCountryCode || '—'}</strong>, pack <strong>{resolvedPackCode || '—'}</strong>, ruleset{' '}
+          <strong>{resolvedRulesetCode || '—'}</strong>
         </p>
         <div style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
           <div>
@@ -337,18 +303,18 @@ export function DocflowCommunicationReviewPage() {
               style={inputStyle}
               value={templateKey}
               onChange={(e) => setTemplateKey(e.target.value)}
-              disabled={contextLoading || !templateOptions.length || !!countryConfigWarning}
+              disabled={loading || !availableRules.length || !!countryConfigWarning}
             >
-              <option value="">{contextLoading ? 'Loading templates…' : 'Select template'}</option>
-              {templateOptions.map((t) => (
-                <option key={t.value_key} value={t.value_key}>
-                  {t.label} ({t.message_type})
+              <option value="">{loading ? 'Loading templates…' : 'Select template'}</option>
+              {availableRules.map((t) => (
+                <option key={String(t.rule_key)} value={String(t.rule_key)} disabled={t.can_run === false}>
+                  {String(t.label)} ({String(t.message_type)})
                 </option>
               ))}
             </select>
             {templateKey ? (
               <p style={{ marginTop: 6, color: '#6b7280', fontSize: 12 }}>
-                {templateOptions.find((t) => t.value_key === templateKey)?.preview ?? ''}
+                {String(availableRules.find((t) => String(t.rule_key) === templateKey)?.template_label ?? '')}
               </p>
             ) : null}
           </div>
@@ -394,7 +360,7 @@ export function DocflowCommunicationReviewPage() {
         </p>
       ) : null}
 
-      {aggregate ? (
+      {aggregate?.run ? (
         <>
           <div style={sectionStyle}>
             <h2 style={{ marginTop: 0, fontSize: 16 }}>Run</h2>
@@ -510,9 +476,7 @@ export function DocflowCommunicationReviewPage() {
                   style={btnSecondary}
                   disabled={busy.length > 0 || !isDraftActionEnabled('approve_draft_message').ok}
                   title={isDraftActionEnabled('approve_draft_message').reason ?? undefined}
-                  onClick={() =>
-                    void postCommand('approve_draft_message', { rule_run_id: currentRunId, draft_id: selectedDraftId })
-                  }
+                  onClick={() => void postCommand('approve_draft_message', { rule_run_id: currentRunId, draft_id: selectedDraftId })}
                 >
                   Approve
                 </button>

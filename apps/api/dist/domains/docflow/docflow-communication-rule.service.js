@@ -2,6 +2,10 @@ import { supabaseAdmin } from '../../db/client.js';
 import { writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { resolveCountryContext } from '../country-pack/country-pack-resolver.service.js';
+import { resolveOrganizationActiveRuleset } from '../country-pack/organization-country.service.js';
+import { getCountryPack } from '../country-pack/country-pack.service.js';
+import { getRulesetById } from '../country-pack/ruleset.service.js';
+import { resolveEntitlement } from '../modules/entitlement.service.js';
 import { businessPreviousMonthKey } from '../../shared/business-time.js';
 import { assertClientBelongsToOrg, assertDocflowEntitled, assertOfficeScope, asOptionalString, reqString, } from './docflow.guards.js';
 import { createSystemMessageCore } from './docflow-system-message-core.service.js';
@@ -553,11 +557,215 @@ async function resolveTargetClients(orgId, targetFilter, ctx) {
     }
     throw badRequest(`Unsupported target_filter mode: ${mode}`);
 }
-export async function buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId) {
+function catalogConfigWarningMessage(warningCode) {
+    if (!warningCode)
+        return null;
+    const map = {
+        organization_country_settings_not_configured: 'No active country configuration. Please configure organization once.',
+        active_country_pack_not_configured: 'No active country configuration. Please configure organization once.',
+        active_ruleset_not_configured: 'No active country configuration. Please configure organization once.',
+        active_ruleset_not_found_or_pack_mismatch: 'No active country configuration. Please configure organization once.',
+        active_ruleset_not_active: 'No active country configuration. Please configure organization once.',
+        active_country_pack_not_found: 'No active country configuration. Please configure organization once.',
+        active_country_pack_country_mismatch: 'No active country configuration. Please configure organization once.',
+        no_active_ruleset_for_date: 'No active ruleset for the selected date.',
+        configured_active_ruleset_not_effective_for_date: 'Configured ruleset is not effective for the selected date. Pick another date or update organization country settings.',
+    };
+    return map[warningCode] ?? `Country configuration issue: ${warningCode}`;
+}
+/**
+ * Backend-owned catalog of DocFlow communication rules for the review screen (active ruleset + entitlements).
+ */
+export async function buildCommunicationRuleReviewCatalog(orgId, catalogRunDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(catalogRunDate))
+        throw badRequest('run_date must be YYYY-MM-DD');
+    const base = await resolveOrganizationActiveRuleset(orgId, catalogRunDate);
+    const ctx = await resolveCountryContext(orgId, catalogRunDate);
+    let countryPackCode = '';
+    let rulesetCode = '';
+    if (base.country_pack_id) {
+        const pack = await getCountryPack(base.country_pack_id);
+        if (pack?.pack_code)
+            countryPackCode = String(pack.pack_code);
+    }
+    if (base.ruleset_id) {
+        const rs = await getRulesetById(base.ruleset_id);
+        if (rs?.ruleset_code)
+            rulesetCode = String(rs.ruleset_code);
+    }
+    const orgCountry = (ctx.country_code ?? '').trim().toUpperCase();
+    const configReady = !!ctx.ruleset_id && !!orgCountry;
+    let configWarningMessage = null;
+    if (!configReady) {
+        configWarningMessage =
+            catalogConfigWarningMessage(base.warning) ?? 'No active country configuration. Please configure organization once.';
+    }
+    const commKeys = [];
+    for (const [valueKey, raw] of Object.entries(ctx.resolved_values_map)) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+            continue;
+        if (String(raw.type ?? '') !== 'docflow_communication')
+            continue;
+        commKeys.push(valueKey);
+    }
+    if (!commKeys.length || !orgCountry) {
+        return {
+            catalog_resolution: {
+                run_date: catalogRunDate,
+                country_code: orgCountry,
+                country_pack_code: countryPackCode,
+                ruleset_code: rulesetCode,
+                config_ready: configReady,
+                config_warning_code: base.warning,
+                config_warning_message: configReady ? null : configWarningMessage,
+            },
+            available_rules: [],
+        };
+    }
+    const { data: lvRows, error: lvQErr } = await supabaseAdmin
+        .from('country_legal_values')
+        .select('id, value_key, label, module_scope, usage_hint')
+        .eq('country_code', orgCountry)
+        .in('value_key', commKeys);
+    if (lvQErr)
+        throw lvQErr;
+    const uniqueScopes = [
+        ...new Set((lvRows ?? []).map((r) => String(r.module_scope ?? '').trim()).filter(Boolean)),
+    ];
+    const modIdByCode = new Map();
+    if (uniqueScopes.length) {
+        const { data: modRows, error: modErr } = await supabaseAdmin.from('modules').select('id, code').in('code', uniqueScopes);
+        if (modErr)
+            throw modErr;
+        for (const m of modRows ?? [])
+            modIdByCode.set(String(m.code), String(m.id));
+    }
+    const entitlementByModuleId = new Map();
+    await Promise.all([...new Set(modIdByCode.values())].map(async (mid) => {
+        const ent = await resolveEntitlement(orgId, mid);
+        const ok = ent.status === 'entitled' || ent.status === 'trial';
+        entitlementByModuleId.set(mid, { ok, reason: ok ? null : ent.reason ?? 'module_not_entitled' });
+    }));
+    const rowsOut = [];
+    for (const valueKey of commKeys) {
+        const raw = ctx.resolved_values_map[valueKey];
+        const lv = (lvRows ?? []).find((r) => String(r.value_key) === valueKey);
+        let parsed = null;
+        let parseReason = null;
+        try {
+            if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                parsed = parseDocflowCommunicationPayload(raw);
+            }
+        }
+        catch (e) {
+            parseReason = e instanceof Error ? e.message : 'invalid_communication_payload';
+        }
+        const moduleKey = lv ? String(lv.module_scope ?? '').trim() : '';
+        const modId = moduleKey ? modIdByCode.get(moduleKey) : undefined;
+        let disabledReason = null;
+        if (!configReady)
+            disabledReason = configWarningMessage ?? 'country_config_not_ready';
+        else if (!lv)
+            disabledReason = 'legal_value_not_found_for_country';
+        else if (!modId)
+            disabledReason = 'unknown_module_scope';
+        else {
+            const ent = entitlementByModuleId.get(modId);
+            if (!ent?.ok)
+                disabledReason = ent?.reason ?? 'module_not_entitled';
+        }
+        if (!disabledReason && parseReason)
+            disabledReason = parseReason;
+        const canRun = disabledReason === null;
+        const label = lv ? String(lv.label) : valueKey;
+        const templateText = parsed?.message_template ?? '';
+        const templateLabel = templateText.length > 100 ? `${templateText.slice(0, 100)}…` : templateText;
+        rowsOut.push({
+            rule_key: valueKey,
+            label,
+            module_key: moduleKey,
+            template_label: templateLabel || label,
+            description: lv?.usage_hint != null && String(lv.usage_hint).trim() ? String(lv.usage_hint).trim() : null,
+            review_required: parsed?.review_required ?? true,
+            message_type: parsed?.message_type === 'system' ? 'system' : 'reminder',
+            can_run: canRun,
+            disabled_reason: disabledReason,
+            allowed_actions: [
+                {
+                    command: 'run_communication_rule',
+                    enabled: canRun,
+                    reason: disabledReason,
+                },
+            ],
+        });
+    }
+    rowsOut.sort((a, b) => {
+        const c = a.label.localeCompare(b.label);
+        if (c !== 0)
+            return c;
+        return a.rule_key.localeCompare(b.rule_key);
+    });
+    return {
+        catalog_resolution: {
+            run_date: catalogRunDate,
+            country_code: orgCountry,
+            country_pack_code: countryPackCode,
+            ruleset_code: rulesetCode,
+            config_ready: configReady,
+            config_warning_code: base.warning,
+            config_warning_message: configReady ? null : configWarningMessage,
+        },
+        available_rules: rowsOut,
+    };
+}
+export async function buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId, catalogRunDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(catalogRunDate))
+        throw badRequest('run_date must be YYYY-MM-DD');
+    const catalog = await buildCommunicationRuleReviewCatalog(orgId, catalogRunDate);
+    const rid = ruleRunId?.trim() ? ruleRunId.trim() : null;
+    if (!rid) {
+        return {
+            aggregate_key: 'communication_rule_run_review_aggregate',
+            run: null,
+            source_rule: null,
+            skipped_clients: [],
+            drafts: [],
+            client_summary: {
+                draft_count: 0,
+                approved_count: 0,
+                sent_count: 0,
+                cancelled_count: 0,
+            },
+            allowed_actions: [
+                {
+                    command: 'edit_draft_message',
+                    enabled: false,
+                    reason: 'No active run loaded',
+                },
+                {
+                    command: 'approve_draft_message',
+                    enabled: false,
+                    reason: 'No active run loaded',
+                },
+                {
+                    command: 'cancel_draft_message',
+                    enabled: false,
+                    reason: 'No active run loaded',
+                },
+                {
+                    command: 'send_approved_message',
+                    enabled: false,
+                    reason: 'No active run loaded',
+                },
+            ],
+            catalog_resolution: catalog.catalog_resolution,
+            available_rules: catalog.available_rules,
+        };
+    }
     const { data: run, error: runErr } = await supabaseAdmin
         .from('communication_rule_runs')
         .select('*')
-        .eq('id', ruleRunId)
+        .eq('id', rid)
         .eq('org_id', orgId)
         .maybeSingle();
     if (runErr)
@@ -567,7 +775,7 @@ export async function buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId)
     const { data: drafts, error: dErr } = await supabaseAdmin
         .from('communication_draft_messages')
         .select('*')
-        .eq('rule_run_id', ruleRunId)
+        .eq('rule_run_id', rid)
         .eq('org_id', orgId)
         .order('generated_at', { ascending: true });
     if (dErr)
@@ -777,12 +985,32 @@ export async function buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId)
                 reason: hasApproved ? null : 'No approved drafts',
             },
         ],
+        catalog_resolution: catalog.catalog_resolution,
+        available_rules: catalog.available_rules,
     };
 }
-async function refreshedReview(orgId, ruleRunId) {
+async function resolveReviewCatalogRunDate(orgId, ruleRunId, payload) {
+    const fromPayload = payload ? asOptionalString(payload.run_date) : null;
+    if (fromPayload && /^\d{4}-\d{2}-\d{2}$/.test(fromPayload))
+        return fromPayload;
+    const { data: run, error } = await supabaseAdmin
+        .from('communication_rule_runs')
+        .select('run_date')
+        .eq('id', ruleRunId)
+        .eq('org_id', orgId)
+        .maybeSingle();
+    if (error)
+        throw error;
+    const rd = run?.run_date ? String(run.run_date).slice(0, 10) : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rd))
+        return rd;
+    return new Date().toISOString().slice(0, 10);
+}
+async function refreshedReview(orgId, ruleRunId, payload) {
+    const catalogRunDate = await resolveReviewCatalogRunDate(orgId, ruleRunId, payload);
     return {
         aggregate_key: 'communication_rule_run_review_aggregate',
-        aggregate: await buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId),
+        aggregate: await buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId, catalogRunDate),
     };
 }
 async function refreshedAfterCommunicationCommand(orgId, ruleRunId, payload, ctx) {
@@ -794,7 +1022,7 @@ async function refreshedAfterCommunicationCommand(orgId, ruleRunId, payload, ctx
             aggregate: await buildDocflowFloatingWidgetAggregate(orgId, { can_use_communication_commands: canUse }),
         };
     }
-    return refreshedReview(orgId, ruleRunId);
+    return refreshedReview(orgId, ruleRunId, payload);
 }
 export async function executeDocflowCommunicationOfficeCommand(ctx, command, payloadInput) {
     const payload = payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput)
@@ -820,7 +1048,11 @@ export async function executeDocflowCommunicationOfficeCommand(ctx, command, pay
                 actorUserId,
                 trigger: 'manual',
             });
-            return { ok: true, command, refreshed: await refreshedReview(orgId, out.rule_run_id) };
+            return {
+                ok: true,
+                command,
+                refreshed: await refreshedReview(orgId, out.rule_run_id, { ...payload, run_date: runDateRaw }),
+            };
         }
         case 'approve_draft_message': {
             const ruleRunId = reqString(payload, 'rule_run_id');
@@ -886,7 +1118,7 @@ export async function executeDocflowCommunicationOfficeCommand(ctx, command, pay
                 action: 'communication_draft_edited',
                 payload: { rule_run_id: ruleRunId, client_id: draft.client_id },
             });
-            return { ok: true, command, refreshed: await refreshedReview(orgId, ruleRunId) };
+            return { ok: true, command, refreshed: await refreshedReview(orgId, ruleRunId, payload) };
         }
         case 'cancel_draft_message': {
             const ruleRunId = reqString(payload, 'rule_run_id');

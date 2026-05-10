@@ -201,9 +201,13 @@ export const docflowClientTabAggregate = (clientId: string, selectedThreadId?: s
 export const docflowOfficeCommands = '/docflow/commands';
 export const docflowIssueInviteDeliveryCommand = '/docflow/commands/issue-invite-delivery';
 export const docflowOfficeUploadFile = '/docflow/files/upload';
-/** Office review UI: single aggregate for a communication rule run (Phase 11.2). */
-export const docflowCommunicationRuleRunReviewAggregate = (ruleRunId: string) =>
-  `/docflow/aggregates/communication-rule-run-review?rule_run_id=${encodeURIComponent(ruleRunId)}`;
+/** Office review UI: single aggregate (catalog + optional loaded run). */
+export const docflowCommunicationRuleRunReviewAggregate = (params: { ruleRunId?: string | null; runDate: string }) => {
+  const qs = new URLSearchParams();
+  if (params.ruleRunId) qs.set('rule_run_id', params.ruleRunId);
+  qs.set('run_date', params.runDate);
+  return `/docflow/aggregates/communication-rule-run-review?${qs.toString()}`;
+};
 export const docflowInvitesManagementAggregate = (params?: {
   page?: number;
   pageSize?: number;
