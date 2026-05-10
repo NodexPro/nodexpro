@@ -67,3 +67,54 @@ export async function getPortalDocflowAttachmentSignedUrl(params) {
     });
     return { url: signed.signedUrl };
 }
+/**
+ * Signed download for office users: file must appear as a DocFlow attachment for the given org + client.
+ */
+export async function getOfficeDocflowAttachmentSignedUrl(params) {
+    const { data: row, error } = await supabaseAdmin
+        .from('client_message_attachments')
+        .select('id')
+        .eq('org_id', params.orgId)
+        .eq('client_id', params.clientId)
+        .eq('file_asset_id', params.fileAssetId)
+        .limit(1)
+        .maybeSingle();
+    if (error)
+        throw error;
+    if (!row)
+        throw forbidden('Attachment not accessible for this client context');
+    const { data: fileAsset, error: faErr } = await supabaseAdmin
+        .from('file_assets')
+        .select('id, storage_bucket, storage_key, organization_id')
+        .eq('id', params.fileAssetId)
+        .single();
+    if (faErr)
+        throw faErr;
+    if (!fileAsset || fileAsset.organization_id !== params.orgId)
+        throw forbidden('File not found');
+    const bucket = String(fileAsset.storage_bucket ?? BUCKET_CLIENT_FILES);
+    if (bucket === BUCKET_CLIENT_FILES)
+        await ensureBucketExists();
+    const { data: signed, error: sErr } = await supabaseAdmin.storage
+        .from(bucket)
+        .createSignedUrl(fileAsset.storage_key, SIGNED_URL_EXPIRES_SEC);
+    if (sErr || !signed?.signedUrl) {
+        const msg = sErr?.message ?? 'Unknown storage error';
+        console.error('[docflow-office-file-open] storage error:', { storage_key: fileAsset.storage_key, error: msg });
+        throw new Error(`Failed to create secure download URL: ${msg}`);
+    }
+    await writeAudit({
+        organizationId: params.orgId,
+        actorUserId: params.actorUserId,
+        entityType: 'docflow_message_attachment',
+        entityId: params.fileAssetId,
+        action: 'message_attachment_opened',
+        payload: {
+            actor: 'office_user',
+            client_id: params.clientId,
+            file_asset_id: params.fileAssetId,
+            expires_in_sec: SIGNED_URL_EXPIRES_SEC,
+        },
+    });
+    return { url: signed.signedUrl };
+}

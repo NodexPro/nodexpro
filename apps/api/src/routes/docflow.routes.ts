@@ -21,9 +21,21 @@ import {
   buildOfficeDocflowMessengerAggregate,
 } from '../domains/docflow/docflow-read-models.service.js';
 import { resolvePortalSessionByRawToken } from '../domains/docflow/docflow-portal-auth.service.js';
-import { getPortalDocflowAttachmentSignedUrl } from '../domains/docflow/docflow-portal-attachment-open.service.js';
-import { uploadSharedClientFileAssetForOffice } from '../domains/file-access/shared-client-file-upload.service.js';
-import { assertDocflowEntitled, assertDocflowMessageScope, assertDocflowThreadScope, reqString } from '../domains/docflow/docflow.guards.js';
+import {
+  getOfficeDocflowAttachmentSignedUrl,
+  getPortalDocflowAttachmentSignedUrl,
+} from '../domains/docflow/docflow-portal-attachment-open.service.js';
+import {
+  uploadSharedClientFileAssetForOffice,
+  uploadSharedClientFileAssetForPortal,
+} from '../domains/file-access/shared-client-file-upload.service.js';
+import {
+  assertClientBelongsToOrg,
+  assertDocflowEntitled,
+  assertDocflowMessageScope,
+  assertDocflowThreadScope,
+  reqString,
+} from '../domains/docflow/docflow.guards.js';
 import { config } from '../config.js';
 import { runDocflowCommunicationDailyScheduler } from '../domains/docflow/docflow-communication-scheduler.service.js';
 
@@ -272,6 +284,27 @@ officeRouter.post('/files/upload', async (req: Request, res: Response, next: Nex
   }
 });
 
+officeRouter.get('/files/:fileAssetId/open', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const orgId = ctx.organizationId!;
+    const clientId = String(req.query.client_id ?? '').trim();
+    if (!clientId) throw badRequest('client_id is required');
+    await assertClientBelongsToOrg(orgId, clientId);
+    const fileAssetId = String(req.params.fileAssetId ?? '').trim();
+    if (!fileAssetId) throw badRequest('fileAssetId is required');
+    const { url } = await getOfficeDocflowAttachmentSignedUrl({
+      orgId,
+      clientId,
+      actorUserId: ctx.user.id,
+      fileAssetId,
+    });
+    return res.json({ url });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // generic office command endpoint (command-only model)
 officeRouter.post('/commands', async (req, res, next) => {
   try {
@@ -306,6 +339,36 @@ portalRouter.post('/commands/accept-invitation', async (req: Request, res: Respo
   try {
     const out = await executeDocflowPortalCommand('accept_client_portal_invitation', req.body?.payload ?? req.body ?? {});
     return res.json(out);
+  } catch (e) {
+    next(e);
+  }
+});
+
+portalRouter.post('/files/upload', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rawToken = String(req.headers['x-client-portal-session'] ?? req.body?.portal_session_token ?? '').trim();
+    if (!rawToken) throw badRequest('portal session token is required');
+    const session = await resolvePortalSessionByRawToken(rawToken);
+    await assertDocflowEntitled(session.orgId);
+    const payload = (req.body?.payload ?? req.body ?? {}) as Record<string, unknown>;
+    const threadId = reqString(payload, 'thread_id');
+    const messageId = reqString(payload, 'message_id');
+    await assertDocflowThreadScope(session.orgId, session.clientId, threadId);
+    await assertDocflowMessageScope(session.orgId, session.clientId, threadId, messageId);
+    const out = await uploadSharedClientFileAssetForPortal({
+      orgId: session.orgId,
+      clientId: session.clientId,
+      portalUserId: session.portalUserId,
+      payload: {
+        file_base64: reqString(payload, 'file_base64'),
+        file_name: reqString(payload, 'file_name'),
+        mime_type: String(payload.mime_type ?? '').trim() || null,
+        module_key: 'docflow',
+        thread_id: threadId,
+        message_id: messageId,
+      },
+    });
+    return res.status(201).json(out);
   } catch (e) {
     next(e);
   }

@@ -981,34 +981,36 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                 message_id: messageId,
                 file_asset_id: fileAssetId,
             });
-            if (error)
+            if (error && error.code !== '23505')
                 throw error;
-            await supabaseAdmin.from('client_message_events').insert({
-                org_id: orgId,
-                client_id: clientId,
-                thread_id: threadId,
-                message_id: messageId,
-                event_type: 'message_attachment_added',
-                actor_type: 'office',
-                actor_user_id: actorUserId,
-                payload_json: {
+            if (!error) {
+                await supabaseAdmin.from('client_message_events').insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    thread_id: threadId,
+                    message_id: messageId,
+                    event_type: 'message_attachment_added',
+                    actor_type: 'office',
+                    actor_user_id: actorUserId,
+                    payload_json: {
+                        org_id: orgId,
+                        client_id: clientId,
+                        module_key: 'docflow',
+                        thread_id: threadId,
+                        message_id: messageId,
+                        file_asset_id: fileAssetId,
+                    },
+                });
+                await audit(orgId, actorUserId, 'docflow_message_attachment', messageId, 'message_attachment_added', {
                     org_id: orgId,
                     client_id: clientId,
                     module_key: 'docflow',
                     thread_id: threadId,
                     message_id: messageId,
                     file_asset_id: fileAssetId,
-                },
-            });
-            await audit(orgId, actorUserId, 'docflow_message_attachment', messageId, 'message_attachment_added', {
-                org_id: orgId,
-                client_id: clientId,
-                module_key: 'docflow',
-                thread_id: threadId,
-                message_id: messageId,
-                file_asset_id: fileAssetId,
-            });
-            return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, threadId) };
+                });
+            }
+            return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
         }
         case 'remove_message_attachment': {
             const threadId = reqString(payload, 'thread_id');
@@ -1454,34 +1456,36 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
                     message_id: messageId,
                     file_asset_id: fileAssetId,
                 });
-                if (error)
+                if (error && error.code !== '23505')
                     throw error;
-                await supabaseAdmin.from('client_message_events').insert({
-                    org_id: orgId,
-                    client_id: clientId,
-                    thread_id: threadId,
-                    message_id: messageId,
-                    event_type: 'message_attachment_added',
-                    actor_type: 'client',
-                    actor_portal_user_id: portalUserId,
-                    payload_json: {
+                if (!error) {
+                    await supabaseAdmin.from('client_message_events').insert({
+                        org_id: orgId,
+                        client_id: clientId,
+                        thread_id: threadId,
+                        message_id: messageId,
+                        event_type: 'message_attachment_added',
+                        actor_type: 'client',
+                        actor_portal_user_id: portalUserId,
+                        payload_json: {
+                            org_id: orgId,
+                            client_id: clientId,
+                            module_key: 'docflow',
+                            thread_id: threadId,
+                            message_id: messageId,
+                            file_asset_id: fileAssetId,
+                        },
+                    });
+                    await audit(orgId, null, 'docflow_message_attachment', messageId, 'message_attachment_added', {
+                        actor: 'client_portal_user',
                         org_id: orgId,
                         client_id: clientId,
                         module_key: 'docflow',
                         thread_id: threadId,
                         message_id: messageId,
                         file_asset_id: fileAssetId,
-                    },
-                });
-                await audit(orgId, null, 'docflow_message_attachment', messageId, 'message_attachment_added', {
-                    actor: 'client_portal_user',
-                    org_id: orgId,
-                    client_id: clientId,
-                    module_key: 'docflow',
-                    thread_id: threadId,
-                    message_id: messageId,
-                    file_asset_id: fileAssetId,
-                });
+                    });
+                }
                 return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, threadId) };
             }
             if (command === 'remove_message_attachment') {

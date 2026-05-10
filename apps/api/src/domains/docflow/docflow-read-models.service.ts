@@ -47,6 +47,25 @@ function buildSlaIndicator(deadlineAt: string | null): { code: string; label: st
   return { code: 'on_track', label: 'On track' };
 }
 
+/** Backend-owned anchors for attach_file_to_client_message (latest office vs client message in loaded window). */
+function docflowAttachmentTargets(messages: Record<string, unknown>[]): {
+  office_message_id: string | null;
+  client_message_id: string | null;
+} {
+  let office_message_id: string | null = null;
+  let client_message_id: string | null = null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    const id = String(m.id ?? '').trim();
+    const t = String(m.created_by_type ?? '').trim();
+    if (!id) continue;
+    if (!office_message_id && t === 'office') office_message_id = id;
+    if (!client_message_id && t === 'client') client_message_id = id;
+    if (office_message_id && client_message_id) break;
+  }
+  return { office_message_id, client_message_id };
+}
+
 async function getThreadMessages(
   orgId: string,
   clientId: string,
@@ -380,6 +399,7 @@ export async function buildClientDocflowTabAggregate(params: {
       : null,
     messages,
     attachments,
+    attachment_targets: docflowAttachmentTargets(messages as Record<string, unknown>[]),
     unread_counters: {
       selected_thread: unreadSelected,
       total: [...unreadByThread.values()].reduce((s, c) => s + c, 0),
@@ -738,6 +758,7 @@ export async function buildClientPortalInboxAggregate(params: {
       : null,
     messages,
     attachments,
+    attachment_targets: docflowAttachmentTargets(messages as Record<string, unknown>[]),
     unread_count: [...unreadByThread.values()].reduce((s, c) => s + c, 0),
     attachment_permissions: {
       can_attach: true,
@@ -912,6 +933,7 @@ export async function buildClientContextDocflowAggregate(params: {
       : null,
     messages: resolved.messages,
     attachments: resolved.attachments,
+    attachment_targets: docflowAttachmentTargets(resolved.messages as Record<string, unknown>[]),
     unread_counters: {
       selected_thread: resolved.unreadSelected,
       total: [...resolved.unreadByThread.values()].reduce((s, c) => s + c, 0),
@@ -1063,6 +1085,7 @@ export async function buildClientThreadContextAggregate(params: {
       : null,
     messages,
     attachments,
+    attachment_targets: docflowAttachmentTargets(messages as Record<string, unknown>[]),
     allowed_actions: allowedActions,
     empty_states: {
       no_threads: !selectedThread,

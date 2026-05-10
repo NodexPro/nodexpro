@@ -7,6 +7,7 @@ import {
   docflowPortalMarkThreadReadByClient,
   docflowPortalStartClientThread,
   docflowPortalSendClientMessage,
+  docflowPortalUploadFile,
 } from '../api/endpoints';
 import { redirectDocflowPortalToCanonicalHost } from '../lib/docflow-portal-host';
 import { getDocflowPortalSessionToken } from '../lib/docflow-portal-session';
@@ -25,13 +26,26 @@ type CommandResponse = {
   refreshed?: { aggregate?: UnknownRecord };
 };
 
+async function fileToBase64(file: File): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.onload = () => {
+      const s = String(reader.result ?? '');
+      const idx = s.indexOf(',');
+      resolve(idx >= 0 ? s.slice(idx + 1) : s);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export function ClientPortalDocflow() {
   const [aggregate, setAggregate] = useState<UnknownRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyCommand, setBusyCommand] = useState('');
   const [composer, setComposer] = useState('');
-  const [attachFileAssetId, setAttachFileAssetId] = useState('');
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [view, setView] = useState<'list' | 'thread'>('list');
   const [isNarrowLayout, setIsNarrowLayout] = useState(false);
   const [showEmptyDraftComposer, setShowEmptyDraftComposer] = useState(false);
@@ -109,6 +123,12 @@ export function ClientPortalDocflow() {
     const list = aggregate?.attachments;
     return Array.isArray(list) ? (list as UnknownRecord[]) : [];
   }, [aggregate]);
+
+  const attachmentTargets = useMemo(() => {
+    const t = aggregate?.attachment_targets;
+    return t && typeof t === 'object' ? (t as UnknownRecord) : null;
+  }, [aggregate]);
+  const clientAttachMessageId = String(attachmentTargets?.client_message_id ?? '').trim();
 
   const aggregateActions = useMemo(() => {
     const list = aggregate?.allowed_actions;
@@ -217,6 +237,47 @@ export function ClientPortalDocflow() {
       setError(userFacingApiMessage(e));
     } finally {
       setBusyCommand('');
+    }
+  }
+
+  async function uploadAndAttachPortalFile(file: File): Promise<void> {
+    const can = isCommandEnabled('attach_file_to_client_message');
+    if (!can.enabled || !selectedThreadId || !clientAttachMessageId) return;
+    const token = getDocflowPortalSessionToken();
+    if (!token) {
+      setError('אין סשן פורטל.');
+      return;
+    }
+    setUploadingFile(true);
+    setError('');
+    try {
+      const base64 = await fileToBase64(file);
+      const uploadOut = (await apiDocflowPortalJson<{ file_asset_id?: string }>(
+        docflowPortalUploadFile,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            portal_session_token: token,
+            thread_id: selectedThreadId,
+            message_id: clientAttachMessageId,
+            file_base64: base64,
+            file_name: file.name,
+            mime_type: file.type || null,
+          }),
+        },
+        token
+      )) as { file_asset_id?: string };
+      const fileAssetId = String(uploadOut.file_asset_id ?? '').trim();
+      if (!fileAssetId) throw new Error('חסר מזהה קובץ מהשרת');
+      await runCommand('attach_file_to_client_message', {
+        thread_id: selectedThreadId,
+        message_id: clientAttachMessageId,
+        file_asset_id: fileAssetId,
+      });
+    } catch (e) {
+      setError(userFacingApiMessage(e));
+    } finally {
+      setUploadingFile(false);
     }
   }
 
@@ -680,31 +741,25 @@ export function ClientPortalDocflow() {
 
               {attachPerm && isCommandEnabled('attach_file_to_client_message').enabled ? (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <input
-                    value={attachFileAssetId}
-                    onChange={(e) => setAttachFileAssetId(e.target.value)}
-                    placeholder="מזהה קובץ (file_asset_id)"
-                    style={{ flex: 1, minWidth: 150, padding: 8, border: '1px solid #CBD5E1', borderRadius: 10, fontSize: 13.5, background: '#fff' }}
-                  />
-                  <button
-                    type="button"
-                    className="nx-btn nx-btn-taxes-compact"
-                    disabled={!attachFileAssetId.trim() || busyCommand.length > 0}
-                    onClick={() => {
-                      const lastMsgId = String(messages[messages.length - 1]?.id ?? '');
-                      if (!lastMsgId) return;
-                      void runCommand('attach_file_to_client_message', {
-                        thread_id: selectedThreadId,
-                        message_id: lastMsgId,
-                        file_asset_id: attachFileAssetId.trim(),
-                      }).then(() => setAttachFileAssetId(''));
-                    }}
-                  >
-                    📎 צרף
-                  </button>
-                  <div style={{ width: '100%', fontSize: 11.5, color: '#64748B' }}>
-                    Mobile upload uses existing `file_asset_id` flow from backend aggregate/commands.
-                  </div>
+                  <label className="nx-btn nx-btn-taxes-compact" style={{ cursor: 'pointer' }}>
+                    {uploadingFile ? 'מעלה…' : '📎 צרף קובץ'}
+                    <input
+                      type="file"
+                      style={{ display: 'none' }}
+                      disabled={
+                        uploadingFile || busyCommand.length > 0 || !clientAttachMessageId || !isCommandEnabled('attach_file_to_client_message').enabled
+                      }
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.currentTarget.value = '';
+                        if (!file) return;
+                        void uploadAndAttachPortalFile(file);
+                      }}
+                    />
+                  </label>
+                  {!clientAttachMessageId ? (
+                    <span style={{ fontSize: 12, color: '#64748B' }}>שלחו הודעה לפני צירוף קובץ.</span>
+                  ) : null}
                 </div>
               ) : null}
             </div>

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { newDocflowIdempotencyKey } from '../lib/idempotency-key';
-import { docflowOfficeCommands, docflowOfficeMessengerAggregate, docflowStartOfficeThreadForClient } from '../api/endpoints';
+import {
+  docflowOfficeCommands,
+  docflowOfficeFileOpen,
+  docflowOfficeMessengerAggregate,
+  docflowOfficeUploadFile,
+  docflowStartOfficeThreadForClient,
+} from '../api/endpoints';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -18,11 +24,25 @@ function isRecord(v: unknown): v is UnknownRecord {
 
 const MESSENGER_PAGE_SIZE = 50;
 
+async function fileToBase64(file: File): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.onload = () => {
+      const s = String(reader.result ?? '');
+      const idx = s.indexOf(',');
+      resolve(idx >= 0 ? s.slice(idx + 1) : s);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export function DocflowMessengerPage() {
   const [aggregate, setAggregate] = useState<UnknownRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [composer, setComposer] = useState('');
   const [searchClient, setSearchClient] = useState('');
   const inflightAbort = useRef<AbortController | null>(null);
@@ -61,6 +81,12 @@ export function DocflowMessengerPage() {
     const list = clientContext?.attachments;
     return Array.isArray(list) ? (list as UnknownRecord[]) : [];
   }, [clientContext]);
+
+  const attachmentTargets = useMemo(() => {
+    const t = clientContext?.attachment_targets;
+    return isRecord(t) ? t : null;
+  }, [clientContext]);
+  const officeAttachMessageId = String(attachmentTargets?.office_message_id ?? '').trim();
 
   const actions = useMemo(() => {
     const list = clientContext?.allowed_actions;
@@ -165,6 +191,54 @@ export function DocflowMessengerPage() {
       setError(userFacingApiMessage(e));
     } finally {
       setBusy('');
+    }
+  }
+
+  async function openOfficeAttachment(fileAssetId: string): Promise<void> {
+    if (!effectiveSelectedClientId) return;
+    setError('');
+    try {
+      const out = (await apiJson<{ url?: string }>(docflowOfficeFileOpen(fileAssetId, effectiveSelectedClientId), {
+        method: 'GET',
+      })) as { url?: string };
+      const url = typeof out.url === 'string' ? out.url : '';
+      if (!url) throw new Error('חסר קישור מאובטח להורדה');
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      setError(userFacingApiMessage(e));
+    }
+  }
+
+  async function uploadAndAttachFile(file: File): Promise<void> {
+    if (!selectedThreadId || !effectiveSelectedClientId || !officeAttachMessageId) return;
+    const can = canRun('attach_file_to_client_message');
+    if (!can.enabled) return;
+    setUploadingFile(true);
+    setError('');
+    try {
+      const base64 = await fileToBase64(file);
+      const uploadOut = (await apiJson(docflowOfficeUploadFile, {
+        method: 'POST',
+        body: JSON.stringify({
+          client_id: effectiveSelectedClientId,
+          thread_id: selectedThreadId,
+          message_id: officeAttachMessageId,
+          file_base64: base64,
+          file_name: file.name,
+          mime_type: file.type || null,
+        }),
+      })) as { file_asset_id?: string };
+      const fileAssetId = String(uploadOut.file_asset_id ?? '').trim();
+      if (!fileAssetId) throw new Error('חסר מזהה קובץ מהשרת');
+      await runOfficeCommand('attach_file_to_client_message', {
+        thread_id: selectedThreadId,
+        message_id: officeAttachMessageId,
+        file_asset_id: fileAssetId,
+      });
+    } catch (e) {
+      setError(userFacingApiMessage(e));
+    } finally {
+      setUploadingFile(false);
     }
   }
 
@@ -361,11 +435,22 @@ export function DocflowMessengerPage() {
                       <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.35, fontSize: 14 }}>{String(m.body ?? '')}</div>
                       {msgAttachments.length > 0 ? (
                         <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-                          {msgAttachments.map((a) => (
-                            <div key={String(a.id ?? '')} style={{ fontSize: 12, color: '#334155' }}>
-                              📎 {String(a.file_name ?? a.file_asset_id ?? '').trim()}
-                            </div>
-                          ))}
+                          {msgAttachments.map((a) => {
+                            const fid = String(a.file_asset_id ?? '').trim();
+                            const label = String(a.file_name ?? '').trim() || fid.slice(0, 8);
+                            return (
+                              <button
+                                key={String(a.id ?? fid)}
+                                type="button"
+                                className="nx-btn nx-btn-taxes-compact"
+                                style={{ fontSize: 12, justifySelf: 'start' }}
+                                disabled={!fid || !effectiveSelectedClientId}
+                                onClick={() => void openOfficeAttachment(fid)}
+                              >
+                                📎 {label}
+                              </button>
+                            );
+                          })}
                         </div>
                       ) : null}
                       <div style={{ marginTop: 6, fontSize: 11, color: '#64748B', textAlign: mine ? 'left' : 'right' }}>
@@ -387,7 +472,7 @@ export function DocflowMessengerPage() {
               style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: 12, padding: 10, boxSizing: 'border-box', fontSize: 14, resize: 'vertical' }}
               disabled={!selectedThreadId || busy.length > 0}
             />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-start', flexWrap: 'wrap', alignItems: 'center' }}>
               <button
                 type="button"
                 className="nx-btn nx-btn-taxes-compact"
@@ -404,6 +489,26 @@ export function DocflowMessengerPage() {
               >
                 שליחה
               </button>
+              <label className="nx-btn nx-btn-taxes-compact" style={{ cursor: 'pointer' }}>
+                {uploadingFile ? 'מעלה…' : 'צרף קובץ'}
+                <input
+                  type="file"
+                  style={{ display: 'none' }}
+                  disabled={
+                    uploadingFile ||
+                    busy.length > 0 ||
+                    !selectedThreadId ||
+                    !officeAttachMessageId ||
+                    !canRun('attach_file_to_client_message').enabled
+                  }
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.currentTarget.value = '';
+                    if (!file) return;
+                    void uploadAndAttachFile(file);
+                  }}
+                />
+              </label>
             </div>
           </div>
         </section>

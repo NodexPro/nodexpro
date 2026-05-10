@@ -201,6 +201,9 @@ export const docflowClientTabAggregate = (clientId: string, selectedThreadId?: s
 export const docflowOfficeCommands = '/docflow/commands';
 export const docflowIssueInviteDeliveryCommand = '/docflow/commands/issue-invite-delivery';
 export const docflowOfficeUploadFile = '/docflow/files/upload';
+/** GET signed URL for office user; requires client_id scope matching messenger selection. */
+export const docflowOfficeFileOpen = (fileAssetId: string, clientId: string) =>
+  `/docflow/files/${encodeURIComponent(fileAssetId)}/open?client_id=${encodeURIComponent(clientId)}`;
 /** Office review UI: single aggregate (catalog + optional loaded run). */
 export const docflowCommunicationRuleRunReviewAggregate = (params: { ruleRunId?: string | null; runDate: string }) => {
   const qs = new URLSearchParams();
@@ -275,6 +278,7 @@ export const docflowStartOfficeThreadForClient = '/docflow/commands/start-office
 
 /** Client DocFlow portal (no office org header; session via `X-Client-Portal-Session`). */
 export const docflowPortalAcceptInvitation = '/docflow/portal/commands/accept-invitation';
+export const docflowPortalUploadFile = '/docflow/portal/files/upload';
 export const docflowPortalInboxAggregate = (selectedThreadId?: string | null) =>
   `/docflow/portal/aggregates/client-portal-inbox${
     selectedThreadId ? `?selected_thread_id=${encodeURIComponent(selectedThreadId)}` : ''

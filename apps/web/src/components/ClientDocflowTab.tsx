@@ -68,7 +68,11 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
     const list = aggregate?.messages;
     return Array.isArray(list) ? (list as UnknownRecord[]) : [];
   }, [aggregate]);
-  const selectedMessageId = String(messages[messages.length - 1]?.id ?? '');
+  const attachmentTargets = useMemo(() => {
+    const t = aggregate?.attachment_targets;
+    return t && typeof t === 'object' ? (t as UnknownRecord) : null;
+  }, [aggregate]);
+  const selectedMessageId = String(attachmentTargets?.office_message_id ?? '').trim();
 
   const attachments = useMemo(() => {
     const list = aggregate?.attachments;
