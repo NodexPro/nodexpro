@@ -2,7 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { createOpaqueToken, resolvePortalSessionByRawToken, sha256Hex } from './docflow-portal-auth.service.js';
-import { buildClientDocflowTabAggregate, buildClientPortalInboxAggregate, buildDocflowInvitesManagementAggregate, buildClientContextDocflowAggregate, buildClientThreadContextAggregate, buildOfficeDocflowInboxAggregate, } from './docflow-read-models.service.js';
+import { buildClientDocflowTabAggregate, buildClientPortalInboxAggregate, buildDocflowInvitesManagementAggregate, buildClientContextDocflowAggregate, buildClientThreadContextAggregate, buildOfficeDocflowInboxAggregate, buildOfficeDocflowMessengerAggregate, } from './docflow-read-models.service.js';
 import { asOptionalString, assertClientBelongsToOrg, assertDocflowEntitled, assertFileAssetInScope, assertDocflowMessageScope, assertDocflowThreadScope, assertOfficeScope, canTransitionThreadStatus, reqDateTimeIso, reqString, } from './docflow.guards.js';
 import { createSystemMessageCore } from './docflow-system-message-core.service.js';
 import { executeDocflowCommunicationOfficeCommand } from './docflow-communication-rule.service.js';
@@ -62,6 +62,20 @@ async function refreshOfficeTarget(orgId, payload, params) {
                 orgId,
                 clientId: params.clientId,
                 threadId: params.selectedThreadId ?? null,
+            }),
+        };
+    }
+    if (target === 'office_messenger') {
+        const threadId = params.selectedThreadId ?? asOptionalString(payload.thread_id) ?? null;
+        return {
+            aggregate_key: 'office_docflow_messenger_aggregate',
+            aggregate: await buildOfficeDocflowMessengerAggregate({
+                orgId,
+                page: Number(payload.page ?? 1) || 1,
+                pageSize: Number(payload.page_size ?? 50) || 50,
+                searchClient: asOptionalString(payload.search_client),
+                clientId: params.clientId,
+                threadId,
             }),
         };
     }

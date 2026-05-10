@@ -43,6 +43,7 @@ export type DocflowRefreshedAggregateKey =
   | 'docflow_invites_management_aggregate'
   | 'client_portal_inbox_aggregate'
   | 'office_docflow_inbox_aggregate'
+  | 'office_docflow_messenger_aggregate'
   | 'client_context_docflow_aggregate'
   | 'client_thread_context_aggregate'
   | 'communication_rule_run_review_aggregate'

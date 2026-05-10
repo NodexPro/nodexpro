@@ -18,6 +18,7 @@ import {
   buildClientContextDocflowAggregate,
   buildClientThreadContextAggregate,
   buildOfficeDocflowInboxAggregate,
+  buildOfficeDocflowMessengerAggregate,
 } from '../domains/docflow/docflow-read-models.service.js';
 import { resolvePortalSessionByRawToken } from '../domains/docflow/docflow-portal-auth.service.js';
 import { getPortalDocflowAttachmentSignedUrl } from '../domains/docflow/docflow-portal-attachment-open.service.js';
@@ -93,6 +94,24 @@ officeRouter.get('/aggregates/office-inbox', async (req: Request, res: Response,
       searchClient: String(req.query.search_client ?? '').trim() || null,
       selectedClientId: String(req.query.selected_client_id ?? '').trim() || null,
       selectedThreadId: String(req.query.selected_thread_id ?? '').trim() || null,
+    });
+    return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+officeRouter.get('/aggregates/office-messenger', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const orgId = ctx.organizationId!;
+    const aggregate = await buildOfficeDocflowMessengerAggregate({
+      orgId,
+      page: Number(req.query.page ?? 1) || 1,
+      pageSize: Number(req.query.page_size ?? 50) || 50,
+      searchClient: String(req.query.search_client ?? '').trim() || null,
+      clientId: String(req.query.client_id ?? '').trim() || null,
+      threadId: String(req.query.thread_id ?? '').trim() || null,
     });
     return res.json(aggregate);
   } catch (e) {

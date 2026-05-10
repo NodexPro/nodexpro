@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
-import {
-  docflowClientThreadContextAggregate,
-  docflowOfficeCommands,
-  docflowOfficeInboxAggregate,
-  docflowStartOfficeThreadForClient,
-} from '../api/endpoints';
+import { docflowOfficeCommands, docflowOfficeMessengerAggregate, docflowStartOfficeThreadForClient } from '../api/endpoints';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -20,20 +15,16 @@ function isRecord(v: unknown): v is UnknownRecord {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
+const MESSENGER_PAGE_SIZE = 50;
+
 export function DocflowMessengerPage() {
-  // Inbox aggregate is the source of truth for the client list snapshot.
-  const [officeInbox, setOfficeInbox] = useState<UnknownRecord | null>(null);
-  // Client-context aggregate is the source of truth for the selected client view.
-  const [clientContextAgg, setClientContextAgg] = useState<UnknownRecord | null>(null);
+  const [aggregate, setAggregate] = useState<UnknownRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [composer, setComposer] = useState('');
   const [searchClient, setSearchClient] = useState('');
-  const [uiSelectedClientId, setUiSelectedClientId] = useState<string>('');
-  const inflightInboxAbort = useRef<AbortController | null>(null);
-  const inflightClientAbort = useRef<AbortController | null>(null);
-  const didAutoSelectFirstClient = useRef(false);
+  const inflightAbort = useRef<AbortController | null>(null);
   const searchClientRef = useRef('');
 
   useEffect(() => {
@@ -41,16 +32,19 @@ export function DocflowMessengerPage() {
   }, [searchClient]);
 
   const clientList = useMemo(() => {
-    const list = officeInbox?.client_list;
+    const list = aggregate?.client_list;
     return Array.isArray(list) ? (list as UnknownRecord[]) : [];
-  }, [officeInbox]);
+  }, [aggregate]);
 
-  const clientContext = useMemo(() => {
-    return isRecord(clientContextAgg) ? clientContextAgg : null;
-  }, [clientContextAgg]);
+  const clientContext = aggregate;
 
-  const selectedClientId = String((clientContext?.client_header as UnknownRecord | undefined)?.client_id ?? '').trim();
-  const effectiveSelectedClientId = uiSelectedClientId || selectedClientId;
+  const selectedClientId = String(
+    (clientContext?.client_header as UnknownRecord | undefined)?.client_id ??
+      (clientContext?.selection as UnknownRecord | undefined)?.selected_client_id ??
+      ''
+  ).trim();
+  const effectiveSelectedClientId = selectedClientId;
+
   const selectedThread = useMemo(() => {
     const st = clientContext?.selected_thread;
     return isRecord(st) ? st : null;
@@ -93,60 +87,34 @@ export function DocflowMessengerPage() {
     return { enabled: a.enabled !== false, reason: (a.reason as string | null) ?? null };
   }
 
-  const loadOfficeInbox = useCallback(async (opts?: { searchClient?: string }): Promise<void> => {
-      inflightInboxAbort.current?.abort();
-      const ac = new AbortController();
-      inflightInboxAbort.current = ac;
-
-      setLoading(true);
-      setError('');
-      try {
-        const out = (await apiJson<UnknownRecord>(
-          docflowOfficeInboxAggregate({
-            page: 1,
-            pageSize: 50,
-            // IMPORTANT: do not implicitly depend on React state here; this prevents refetch on every keystroke.
-            searchClient: String(opts?.searchClient ?? searchClientRef.current).trim() || undefined,
-          }),
-          { signal: ac.signal }
-        )) as UnknownRecord;
-        if (String(out.aggregate_key ?? '') !== 'office_docflow_inbox_aggregate') {
-          throw new Error('תגובת השרת אינה אגרגט DocFlow inbox תקין');
-        }
-        setOfficeInbox(out);
-      } catch (e) {
-        if (e instanceof Error && e.name === 'AbortError') return;
-        setOfficeInbox(null);
-        setClientContextAgg(null);
-        setError(userFacingApiMessage(e));
-      } finally {
-        setLoading(false);
-      }
-  }, []);
-
-  const loadClientContext = useCallback(async (clientId: string, selectedThreadId?: string | null): Promise<void> => {
-    const cid = String(clientId ?? '').trim();
-    if (!cid) return;
-    setUiSelectedClientId(cid);
-
-    inflightClientAbort.current?.abort();
+  const loadMessenger = useCallback(async (opts?: { searchClient?: string; clientId?: string | null; threadId?: string | null }) => {
+    inflightAbort.current?.abort();
     const ac = new AbortController();
-    inflightClientAbort.current = ac;
+    inflightAbort.current = ac;
 
     setLoading(true);
     setError('');
     try {
-      const out = (await apiJson<UnknownRecord>(docflowClientThreadContextAggregate(cid, selectedThreadId ?? null), {
-        signal: ac.signal,
-      })) as UnknownRecord;
-      if (String(out.aggregate_key ?? '') !== 'client_thread_context_aggregate') {
-        throw new Error('תגובת השרת אינה אגרגט DocFlow thread context תקין');
+      const search = String(opts?.searchClient ?? searchClientRef.current).trim();
+      const cid = String(opts?.clientId ?? '').trim();
+      const tid = String(opts?.threadId ?? '').trim();
+      const out = (await apiJson<UnknownRecord>(
+        docflowOfficeMessengerAggregate({
+          page: 1,
+          pageSize: MESSENGER_PAGE_SIZE,
+          searchClient: search || undefined,
+          clientId: cid || undefined,
+          threadId: tid || undefined,
+        }),
+        { signal: ac.signal }
+      )) as UnknownRecord;
+      if (String(out.aggregate_key ?? '') !== 'office_docflow_messenger_aggregate') {
+        throw new Error('תגובת השרת אינה אגרגט DocFlow messenger תקין');
       }
-      setClientContextAgg(out);
-      setUiSelectedClientId('');
+      setAggregate(out);
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') return;
-      setClientContextAgg(null);
+      setAggregate(null);
       setError(userFacingApiMessage(e));
     } finally {
       setLoading(false);
@@ -154,18 +122,20 @@ export function DocflowMessengerPage() {
   }, []);
 
   useEffect(() => {
-    void loadOfficeInbox({});
-  }, [loadOfficeInbox]);
+    void loadMessenger({});
+  }, [loadMessenger]);
 
-  useEffect(() => {
-    if (didAutoSelectFirstClient.current) return;
-    if (clientContextAgg) return;
-    const first = Array.isArray(officeInbox?.client_list) ? (officeInbox?.client_list?.[0] as UnknownRecord | undefined) : undefined;
-    const firstClientId = String(first?.client_id ?? '').trim();
-    if (!firstClientId) return;
-    didAutoSelectFirstClient.current = true;
-    void loadClientContext(firstClientId, null);
-  }, [officeInbox, clientContextAgg, loadClientContext]);
+  function messengerCommandPayload(extra: UnknownRecord = {}): UnknownRecord {
+    const search = searchClientRef.current.trim();
+    return {
+      client_id: effectiveSelectedClientId,
+      refresh_target: 'office_messenger',
+      page: 1,
+      page_size: MESSENGER_PAGE_SIZE,
+      ...(search ? { search_client: search } : {}),
+      ...extra,
+    };
+  }
 
   async function runOfficeCommand(command: string, payload: UnknownRecord): Promise<void> {
     if (!effectiveSelectedClientId) return;
@@ -178,20 +148,18 @@ export function DocflowMessengerPage() {
         method: 'POST',
         body: JSON.stringify({
           command,
-          payload: {
-            client_id: effectiveSelectedClientId,
-            refresh_target: 'client_thread_context',
+          payload: messengerCommandPayload({
+            thread_id: selectedThreadId || undefined,
             ...payload,
-          },
+          }),
         }),
       })) as CommandResponse;
       const refreshed = out.refreshed?.aggregate;
       if (!isRecord(refreshed)) throw new Error('חסר אגרגט מעודכן מהשרת');
-      if (String(out.refreshed?.aggregate_key ?? '') !== 'client_thread_context_aggregate') {
-        throw new Error('השרת לא החזיר client thread context aggregate');
+      if (String(out.refreshed?.aggregate_key ?? '') !== 'office_docflow_messenger_aggregate') {
+        throw new Error('השרת לא החזיר office docflow messenger aggregate');
       }
-      setClientContextAgg(refreshed);
-      setUiSelectedClientId('');
+      setAggregate(refreshed);
     } catch (e) {
       setError(userFacingApiMessage(e));
     } finally {
@@ -207,19 +175,15 @@ export function DocflowMessengerPage() {
       const out = (await apiJson<CommandResponse>(docflowStartOfficeThreadForClient, {
         method: 'POST',
         body: JSON.stringify({
-          payload: {
-            client_id: effectiveSelectedClientId,
-            refresh_target: 'client_thread_context',
-          },
+          payload: messengerCommandPayload({}),
         }),
       })) as CommandResponse;
       const refreshed = out.refreshed?.aggregate;
       if (!isRecord(refreshed)) throw new Error('חסר אגרגט מעודכן מהשרת');
-      if (String(out.refreshed?.aggregate_key ?? '') !== 'client_thread_context_aggregate') {
-        throw new Error('השרת לא החזיר client thread context aggregate');
+      if (String(out.refreshed?.aggregate_key ?? '') !== 'office_docflow_messenger_aggregate') {
+        throw new Error('השרת לא החזיר office docflow messenger aggregate');
       }
-      setClientContextAgg(refreshed);
-      setUiSelectedClientId('');
+      setAggregate(refreshed);
     } catch (e) {
       setError(userFacingApiMessage(e));
     } finally {
@@ -253,7 +217,7 @@ export function DocflowMessengerPage() {
             type="button"
             className="nx-btn nx-btn-taxes-compact"
             disabled={busy.length > 0}
-            onClick={() => void loadOfficeInbox({ searchClient: searchClient.trim() })}
+            onClick={() => void loadMessenger({ searchClient: searchClient.trim() })}
           >
             חפש
           </button>
@@ -266,7 +230,7 @@ export function DocflowMessengerPage() {
         </div>
       ) : null}
 
-      {loading && !officeInbox ? <div style={{ color: '#64748B' }}>טוען…</div> : null}
+      {loading && !aggregate ? <div style={{ color: '#64748B' }}>טוען…</div> : null}
 
       <div
         style={{
@@ -291,11 +255,7 @@ export function DocflowMessengerPage() {
                   <button
                     key={id}
                     type="button"
-                    onClick={() => {
-                      // User selection must win over auto-select logic even if inbox refresh completes later.
-                      didAutoSelectFirstClient.current = true;
-                      void loadClientContext(id, null);
-                    }}
+                    onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
                     style={{
                       width: '100%',
                       textAlign: 'start',
@@ -435,4 +395,3 @@ export function DocflowMessengerPage() {
     </div>
   );
 }
-

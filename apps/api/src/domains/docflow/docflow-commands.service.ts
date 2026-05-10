@@ -10,6 +10,7 @@ import {
   buildClientContextDocflowAggregate,
   buildClientThreadContextAggregate,
   buildOfficeDocflowInboxAggregate,
+  buildOfficeDocflowMessengerAggregate,
 } from './docflow-read-models.service.js';
 import type { DocflowCommandPayload, DocflowCommandResponse, DocflowCommandType } from './docflow.types.js';
 import {
@@ -98,6 +99,20 @@ async function refreshOfficeTarget(
         orgId,
         clientId: params.clientId,
         threadId: params.selectedThreadId ?? null,
+      }),
+    };
+  }
+  if (target === 'office_messenger') {
+    const threadId = params.selectedThreadId ?? asOptionalString(payload.thread_id) ?? null;
+    return {
+      aggregate_key: 'office_docflow_messenger_aggregate',
+      aggregate: await buildOfficeDocflowMessengerAggregate({
+        orgId,
+        page: Number(payload.page ?? 1) || 1,
+        pageSize: Number(payload.page_size ?? 50) || 50,
+        searchClient: asOptionalString(payload.search_client),
+        clientId: params.clientId,
+        threadId,
       }),
     };
   }

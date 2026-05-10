@@ -1040,13 +1040,17 @@ export async function buildOfficeDocflowInboxAggregate(params) {
             ? { client_id: selectedClientId }
             : null
         : null;
-    const selectedClientAggregate = selectedClientInScope
+    const includeClientContext = params.includeClientContext !== false;
+    const selectedClientAggregate = selectedClientInScope && includeClientContext
         ? await buildClientContextDocflowAggregate({
             orgId: params.orgId,
             clientId: selectedClientId,
             selectedThreadId: params.selectedThreadId ?? null,
         })
         : null;
+    const resolvedSelectedThreadId = includeClientContext
+        ? selectedClientAggregate?.selected_thread?.id ?? null
+        : String(params.selectedThreadId ?? '').trim() || null;
     return {
         aggregate_key: 'office_docflow_inbox_aggregate',
         org_id: params.orgId,
@@ -1080,11 +1084,64 @@ export async function buildOfficeDocflowInboxAggregate(params) {
         }),
         selection: {
             selected_client_id: selectedClientInScope?.client_id ?? null,
-            selected_thread_id: selectedClientAggregate?.selected_thread?.id ?? null,
+            selected_thread_id: resolvedSelectedThreadId,
         },
         client_context: selectedClientAggregate,
         empty_states: {
             no_clients: total === 0,
+        },
+    };
+}
+/**
+ * Single read model for the office DocFlow messenger screen: inbox list + selected client thread context
+ * (same thread semantics as `client_thread_context_aggregate`, not `client_context_docflow_aggregate`).
+ */
+export async function buildOfficeDocflowMessengerAggregate(params) {
+    const messengerPageSize = params.pageSize ?? 50;
+    const clientIdParam = String(params.clientId ?? '').trim() || null;
+    const threadIdParam = String(params.threadId ?? '').trim() || null;
+    const inbox = await buildOfficeDocflowInboxAggregate({
+        orgId: params.orgId,
+        page: params.page,
+        pageSize: messengerPageSize,
+        searchClient: params.searchClient,
+        selectedClientId: clientIdParam,
+        selectedThreadId: threadIdParam,
+        includeClientContext: false,
+    });
+    const inboxSelection = inbox.selection;
+    const selectedClientId = String(inboxSelection?.selected_client_id ?? '').trim();
+    const selectedThreadIdParam = threadIdParam;
+    const threadCtx = selectedClientId
+        ? await buildClientThreadContextAggregate({
+            orgId: params.orgId,
+            clientId: selectedClientId,
+            threadId: selectedThreadIdParam,
+        })
+        : null;
+    const { aggregate_key: _inboxKey, client_context: _cc, empty_states: inboxEmpty, ...inboxRest } = inbox;
+    if (!threadCtx) {
+        return {
+            aggregate_key: 'office_docflow_messenger_aggregate',
+            ...inboxRest,
+            client_header: null,
+            selected_thread: null,
+            messages: [],
+            attachments: [],
+            allowed_actions: [],
+            empty_states: {
+                ...(typeof inboxEmpty === 'object' && inboxEmpty ? inboxEmpty : {}),
+            },
+        };
+    }
+    const { aggregate_key: _tKey, ...threadRest } = threadCtx;
+    return {
+        aggregate_key: 'office_docflow_messenger_aggregate',
+        ...inboxRest,
+        ...threadRest,
+        empty_states: {
+            ...(typeof inboxEmpty === 'object' && inboxEmpty ? inboxEmpty : {}),
+            ...(typeof threadRest.empty_states === 'object' && threadRest.empty_states ? threadRest.empty_states : {}),
         },
     };
 }

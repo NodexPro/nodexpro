@@ -236,6 +236,24 @@ export const docflowOfficeInboxAggregate = (params?: {
   return `/docflow/aggregates/office-inbox${suffix ? `?${suffix}` : ''}`;
 };
 
+/** Single aggregate for office DocFlow messenger (inbox list + thread context). */
+export const docflowOfficeMessengerAggregate = (params?: {
+  page?: number;
+  pageSize?: number;
+  searchClient?: string;
+  clientId?: string;
+  threadId?: string;
+}) => {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('page_size', String(params.pageSize));
+  if (params?.searchClient) qs.set('search_client', params.searchClient);
+  if (params?.clientId) qs.set('client_id', params.clientId);
+  if (params?.threadId) qs.set('thread_id', params.threadId);
+  const suffix = qs.toString();
+  return `/docflow/aggregates/office-messenger${suffix ? `?${suffix}` : ''}`;
+};
+
 export const docflowClientContextAggregate = (clientId: string, selectedThreadId?: string | null) =>
   `/docflow/aggregates/client-context?client_id=${encodeURIComponent(clientId)}${
     selectedThreadId ? `&selected_thread_id=${encodeURIComponent(selectedThreadId)}` : ''

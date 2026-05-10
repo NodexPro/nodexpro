@@ -433,9 +433,9 @@ function buildDocflowCommunicationTemplatesFromLegalTable(legalTable) {
                 },
                 {
                     action_key: 'update_legal_value_version',
-                    enabled: verStatus === 'draft',
+                    enabled: parseError === null,
                     button_label: 'Edit version JSON',
-                    note: 'Draft versions only. For active rows, add a new version instead of editing in place.',
+                    note: 'Update this version in place (payload and optional effective_from / effective_to). Use Create legal value version from Legal Values when you need a separate timeline row with a non-overlapping effective_from.',
                 },
                 {
                     action_key: 'activate_legal_value_version',

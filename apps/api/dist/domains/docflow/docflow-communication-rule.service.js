@@ -288,6 +288,49 @@ function humanTargetFlagLabel(flag) {
         return 'חסרים נתוני שכר לחודש קודם';
     return flag;
 }
+/** How multiple `flags` combine when `target_filter.mode === 'filtered'`. Default `any` (OR) for backward compatibility. */
+function parseTargetFilterMatchMode(targetFilter) {
+    const raw = String(targetFilter.match_mode ?? 'any')
+        .trim()
+        .toLowerCase();
+    if (raw === 'all' || raw === 'and')
+        return 'all';
+    return 'any';
+}
+function filteredBehaviorLabel(matchMode) {
+    return matchMode === 'all' ? 'and' : 'or';
+}
+function filteredSummaryPrefix(matchMode) {
+    return matchMode === 'all' ? 'Filtered (AND)' : 'Filtered (OR)';
+}
+function evalFilteredFlagForClient(flag, clientId, tax, payrollMissingByClient) {
+    if (flag === 'has_payroll') {
+        const ok = isYesLike(tax.income_tax_deductions_enabled);
+        return ok ? { ok } : { ok: false, reason: 'has_payroll_not_yes' };
+    }
+    if (flag === 'missing_payroll_material_previous_month') {
+        const hasPayroll = isYesLike(tax.income_tax_deductions_enabled);
+        if (!hasPayroll)
+            return { ok: false, reason: 'payroll_not_enabled' };
+        const missing = payrollMissingByClient.get(clientId) === true;
+        return missing ? { ok: true } : { ok: false, reason: 'payroll_material_received_or_not_relevant' };
+    }
+    if (flag === 'vat_bimonthly')
+        return tax.vat_frequency === 'bi_monthly' ? { ok: true } : { ok: false };
+    if (flag === 'vat_monthly')
+        return tax.vat_frequency === 'monthly' ? { ok: true } : { ok: false };
+    if (flag === 'income_tax_advance_monthly') {
+        return tax.income_tax_advance_enabled && tax.income_tax_advance_frequency === 'monthly'
+            ? { ok: true }
+            : { ok: false };
+    }
+    if (flag === 'income_tax_advance_bimonthly') {
+        return tax.income_tax_advance_enabled && tax.income_tax_advance_frequency === 'bi_monthly'
+            ? { ok: true }
+            : { ok: false };
+    }
+    return { ok: false };
+}
 function summarizeTargetFilter(targetFilter) {
     if (targetFilter === undefined || targetFilter === null || targetFilter === '' || targetFilter === 'all') {
         return 'All active clients';
@@ -309,11 +352,13 @@ function summarizeTargetFilter(targetFilter) {
         const flags = Array.isArray(targetFilter.flags)
             ? targetFilter.flags.map((x) => normalizeFilterFlag(String(x)))
             : [];
+        const mm = parseTargetFilterMatchMode(targetFilter);
+        const prefix = filteredSummaryPrefix(mm);
         if (flags.length === 1 && flags[0] === 'has_payroll')
             return 'לקוחות עם מס הכנסה ניכויים = כן';
         if (flags.length === 1 && flags[0] === 'missing_payroll_material_previous_month')
             return 'חסרים נתוני שכר לחודש קודם';
-        return `Filtered (OR): ${flags.map((f) => humanTargetFlagLabel(f)).join(', ') || 'none'}`;
+        return `${prefix}: ${flags.map((f) => humanTargetFlagLabel(f)).join(', ') || 'none'}`;
     }
     return `Filter mode: ${mode || 'unknown'}`;
 }
@@ -382,6 +427,9 @@ async function resolveTargetClients(orgId, targetFilter, ctx) {
         };
     }
     if (mode === 'filtered') {
+        const matchMode = parseTargetFilterMatchMode(targetFilter);
+        const behavior = filteredBehaviorLabel(matchMode);
+        const summaryPrefix = filteredSummaryPrefix(matchMode);
         const rawFlags = Array.isArray(targetFilter.flags)
             ? targetFilter.flags.map((x) => String(x))
             : [];
@@ -390,8 +438,8 @@ async function resolveTargetClients(orgId, targetFilter, ctx) {
             return {
                 clientIds: [],
                 skipped: allClientIds.map((id) => ({ client_id: id, reason: 'target_filter_no_flags' })),
-                summary: 'Filtered (OR): no flags',
-                auditPayload: { mode: 'filtered', flags: [] },
+                summary: `${summaryPrefix}: no flags`,
+                auditPayload: { mode: 'filtered', flags: [], match_mode: matchMode, behavior },
             };
         }
         if (normalizedFlags.includes('all'))
@@ -406,8 +454,8 @@ async function resolveTargetClients(orgId, targetFilter, ctx) {
             return {
                 clientIds: [],
                 skipped: allClientIds.map((id) => ({ client_id: id, reason: `unsupported_filter_flag:${unsupported[0]}` })),
-                summary: `Filtered (OR): unsupported ${unsupported.join(', ')}`,
-                auditPayload: { mode: 'filtered', flags: normalizedFlags, unsupported_flags: unsupported },
+                summary: `${summaryPrefix}: unsupported ${unsupported.join(', ')}`,
+                auditPayload: { mode: 'filtered', flags: normalizedFlags, unsupported_flags: unsupported, match_mode: matchMode, behavior },
             };
         }
         // PostgREST rejects `in.()` with an empty list; orgs with no active clients must short-circuit.
@@ -415,8 +463,8 @@ async function resolveTargetClients(orgId, targetFilter, ctx) {
             return {
                 clientIds: [],
                 skipped: [],
-                summary: 'Filtered (OR): no active clients in organization',
-                auditPayload: { mode: 'filtered', flags: normalizedFlags, behavior: 'or', note: 'no_active_clients' },
+                summary: `${summaryPrefix}: no active clients in organization`,
+                auditPayload: { mode: 'filtered', flags: normalizedFlags, match_mode: matchMode, behavior, note: 'no_active_clients' },
             };
         }
         const { data: taxRows, error: taxErr } = await supabaseAdmin
@@ -443,8 +491,8 @@ async function resolveTargetClients(orgId, targetFilter, ctx) {
                 return {
                     clientIds: [],
                     skipped: allClientIds.map((id) => ({ client_id: id, reason: 'missing_or_invalid_run_date_for_payroll_material_filter' })),
-                    summary: 'Filtered (OR): missing_payroll_material_previous_month (invalid run_date)',
-                    auditPayload: { mode: 'filtered', flags: normalizedFlags, behavior: 'or', error: 'invalid_run_date' },
+                    summary: `${summaryPrefix}: missing_payroll_material_previous_month (invalid run_date)`,
+                    auditPayload: { mode: 'filtered', flags: normalizedFlags, match_mode: matchMode, behavior, error: 'invalid_run_date' },
                 };
             }
             // Use noon UTC anchor to avoid accidental day shifts.
@@ -480,41 +528,14 @@ async function resolveTargetClients(orgId, targetFilter, ctx) {
                 income_tax_advance_enabled: false,
                 income_tax_advance_frequency: null,
             };
-            const perFlagReasons = [];
-            const hit = normalizedFlags.some((flag) => {
-                if (flag === 'has_payroll') {
-                    const ok = isYesLike(tax.income_tax_deductions_enabled);
-                    if (!ok)
-                        perFlagReasons.push('has_payroll_not_yes');
-                    return ok;
-                }
-                if (flag === 'missing_payroll_material_previous_month') {
-                    const hasPayroll = isYesLike(tax.income_tax_deductions_enabled);
-                    if (!hasPayroll) {
-                        perFlagReasons.push('payroll_not_enabled');
-                        return false;
-                    }
-                    const missing = payrollMissingByClient.get(clientId) === true;
-                    if (!missing)
-                        perFlagReasons.push('payroll_material_received_or_not_relevant');
-                    return missing;
-                }
-                if (flag === 'vat_bimonthly')
-                    return tax.vat_frequency === 'bi_monthly';
-                if (flag === 'vat_monthly')
-                    return tax.vat_frequency === 'monthly';
-                if (flag === 'income_tax_advance_monthly') {
-                    return tax.income_tax_advance_enabled && tax.income_tax_advance_frequency === 'monthly';
-                }
-                if (flag === 'income_tax_advance_bimonthly') {
-                    return tax.income_tax_advance_enabled && tax.income_tax_advance_frequency === 'bi_monthly';
-                }
-                return false;
-            });
+            const outcomes = normalizedFlags.map((flag) => evalFilteredFlagForClient(flag, clientId, tax, payrollMissingByClient));
+            const hit = matchMode === 'all' ? outcomes.every((o) => o.ok) : outcomes.some((o) => o.ok);
             if (hit)
                 matched.add(clientId);
-            else if (perFlagReasons.length)
-                unmatchedReasonByClient.set(clientId, perFlagReasons[0]);
+            else {
+                const firstFail = outcomes.find((o) => !o.ok);
+                unmatchedReasonByClient.set(clientId, firstFail?.reason ?? 'target_filter_no_match');
+            }
         }
         const skipped = allClientIds
             .filter((id) => !matched.has(id))
@@ -522,12 +543,12 @@ async function resolveTargetClients(orgId, targetFilter, ctx) {
         const humanFlags = normalizedFlags.map((f) => humanTargetFlagLabel(f));
         const humanSummary = normalizedFlags.length === 1 && normalizedFlags[0] === 'has_payroll'
             ? 'לקוחות עם מס הכנסה ניכויים = כן'
-            : `Filtered (OR): ${humanFlags.join(', ')}`;
+            : `${summaryPrefix}: ${humanFlags.join(', ')}`;
         return {
             clientIds: [...matched],
             skipped,
             summary: humanSummary,
-            auditPayload: { mode: 'filtered', flags: normalizedFlags, behavior: 'or' },
+            auditPayload: { mode: 'filtered', flags: normalizedFlags, match_mode: matchMode, behavior },
         };
     }
     throw badRequest(`Unsupported target_filter mode: ${mode}`);

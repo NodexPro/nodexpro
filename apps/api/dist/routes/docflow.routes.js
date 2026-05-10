@@ -6,7 +6,7 @@ import { badRequest, forbidden } from '../shared/errors.js';
 import { executeDocflowOfficeCommand, executeDocflowPortalCommand } from '../domains/docflow/docflow-commands.service.js';
 import { buildCommunicationRuleRunReviewAggregate, canRunDocflowCommunicationRules, } from '../domains/docflow/docflow-communication-rule.service.js';
 import { buildDocflowFloatingWidgetAggregate } from '../domains/docflow/docflow-floating-widget.service.js';
-import { buildClientDocflowTabAggregate, buildClientPortalInboxAggregate, buildDocflowInvitesManagementAggregate, buildClientContextDocflowAggregate, buildClientThreadContextAggregate, buildOfficeDocflowInboxAggregate, } from '../domains/docflow/docflow-read-models.service.js';
+import { buildClientDocflowTabAggregate, buildClientPortalInboxAggregate, buildDocflowInvitesManagementAggregate, buildClientContextDocflowAggregate, buildClientThreadContextAggregate, buildOfficeDocflowInboxAggregate, buildOfficeDocflowMessengerAggregate, } from '../domains/docflow/docflow-read-models.service.js';
 import { resolvePortalSessionByRawToken } from '../domains/docflow/docflow-portal-auth.service.js';
 import { getPortalDocflowAttachmentSignedUrl } from '../domains/docflow/docflow-portal-attachment-open.service.js';
 import { uploadSharedClientFileAssetForOffice } from '../domains/file-access/shared-client-file-upload.service.js';
@@ -77,6 +77,24 @@ officeRouter.get('/aggregates/office-inbox', async (req, res, next) => {
             searchClient: String(req.query.search_client ?? '').trim() || null,
             selectedClientId: String(req.query.selected_client_id ?? '').trim() || null,
             selectedThreadId: String(req.query.selected_thread_id ?? '').trim() || null,
+        });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+officeRouter.get('/aggregates/office-messenger', async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        const orgId = ctx.organizationId;
+        const aggregate = await buildOfficeDocflowMessengerAggregate({
+            orgId,
+            page: Number(req.query.page ?? 1) || 1,
+            pageSize: Number(req.query.page_size ?? 50) || 50,
+            searchClient: String(req.query.search_client ?? '').trim() || null,
+            clientId: String(req.query.client_id ?? '').trim() || null,
+            threadId: String(req.query.thread_id ?? '').trim() || null,
         });
         return res.json(aggregate);
     }
