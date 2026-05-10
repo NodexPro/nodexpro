@@ -967,34 +967,41 @@ export async function buildClientThreadContextAggregate(params) {
 export async function buildOfficeDocflowInboxAggregate(params) {
     const pageSize = normalizePageSize(params.pageSize, 25);
     const page = normalizePage(params.page, 1);
-    const search = String(params.searchClient ?? '').trim().toLowerCase();
-    // Server-side paging + filtering (avoid loading full org client list into memory).
-    const offset = (page - 1) * pageSize;
-    const base = supabaseAdmin
-        .from('clients')
-        .select('id, display_name, status, phone, email', { count: 'exact' })
-        .eq('organization_id', params.orgId);
-    const q = search
-        ? base.or([
-            `display_name.ilike.%${search}%`,
-            `phone.ilike.%${search}%`,
-            `email.ilike.%${search}%`,
-        ].join(','))
-        : base;
-    const { data: clients, error: cErr, count } = await q
-        .order('display_name', { ascending: true })
-        .range(offset, offset + pageSize - 1);
+    const searchRaw = String(params.searchClient ?? '').trim();
+    const searchForRpc = searchRaw ? searchRaw : null;
+    // Order by latest DocFlow thread activity (max updated_at per client), then display_name.
+    // Pagination and search are applied in SQL (RPC) so ordering truth stays on the backend.
+    const { data: inboxRows, error: cErr } = await supabaseAdmin.rpc('docflow_office_inbox_clients_page', {
+        p_org_id: params.orgId,
+        p_search: searchForRpc,
+        p_page: page,
+        p_page_size: pageSize,
+    });
     if (cErr)
         throw cErr;
-    const total = count ?? 0;
+    const rows = (inboxRows ?? []);
+    let total = rows.length ? Number(rows[0]?.total_count ?? 0) : 0;
+    if (!rows.length && page > 1) {
+        const { data: headRows, error: headErr } = await supabaseAdmin.rpc('docflow_office_inbox_clients_page', {
+            p_org_id: params.orgId,
+            p_search: searchForRpc,
+            p_page: 1,
+            p_page_size: 1,
+        });
+        if (headErr)
+            throw headErr;
+        const head = (headRows ?? []);
+        total = head.length ? Number(head[0]?.total_count ?? 0) : 0;
+    }
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const safePage = Math.min(page, totalPages);
-    const pageRows = (clients ?? []).map((c) => ({
-        client_id: String(c.id),
+    const pageRows = rows.map((c) => ({
+        client_id: String(c.client_id),
         display_name: String(c.display_name ?? ''),
         status: String(c.status ?? ''),
         phone: c.phone ? String(c.phone) : null,
         email: c.email ? String(c.email) : null,
+        last_thread_activity_at: c.last_thread_activity_at ? String(c.last_thread_activity_at) : null,
     }));
     const pageClientIds = pageRows.map((r) => r.client_id);
     const { data: threads, error: tErr } = await supabaseAdmin
@@ -1055,7 +1062,7 @@ export async function buildOfficeDocflowInboxAggregate(params) {
         aggregate_key: 'office_docflow_inbox_aggregate',
         org_id: params.orgId,
         filters: {
-            search_client: search,
+            search_client: searchRaw,
         },
         pagination: {
             page: safePage,

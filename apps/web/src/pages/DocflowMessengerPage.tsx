@@ -236,6 +236,10 @@ export function DocflowMessengerPage() {
         style={{
           display: 'grid',
           gridTemplateColumns: isNarrow ? '1fr' : '360px 1fr',
+          // Narrow: aside is auto-sized; conversation row must take remaining viewport height so the
+          // messages pane (flex:1; overflow:auto) gets a definite height and full history can scroll.
+          // Desktop: single row fills minHeight so both columns stretch like pre–Fix-1 layout.
+          gridTemplateRows: isNarrow ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)',
           gap: 12,
           minHeight: 'calc(100dvh - 160px)',
         }}
@@ -286,7 +290,17 @@ export function DocflowMessengerPage() {
           </div>
         </aside>
 
-        <section style={{ border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', background: '#F8FAFC', display: 'flex', flexDirection: 'column' }}>
+        <section
+          style={{
+            border: '1px solid #E5E7EB',
+            borderRadius: 12,
+            overflow: 'hidden',
+            background: '#F8FAFC',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+          }}
+        >
           <div style={{ padding: '10px 12px', borderBottom: '1px solid #E5E7EB', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 800, fontSize: 14 }}>{clientName || 'בחרו לקוח'}</div>
@@ -315,7 +329,7 @@ export function DocflowMessengerPage() {
             </div>
           </div>
 
-          <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 12, WebkitOverflowScrolling: 'touch' as const }}>
             {!effectiveSelectedClientId ? (
               <div style={{ color: '#64748B' }}>בחרו לקוח מהרשימה כדי לצפות בהתכתבות.</div>
             ) : noThreads ? (
