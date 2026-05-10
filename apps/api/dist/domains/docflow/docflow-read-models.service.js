@@ -666,6 +666,8 @@ export async function buildClientPortalInboxAggregate(params) {
     for (const t of threadRows) {
         unreadByThread.set(t.id, await getUnreadForClient(orgId, clientId, t.id));
     }
+    const portalAllowedActions = clientPortalAllowedActions(selectedThread, { hasAnyThreads });
+    const canSendMessageWithAttachment = portalAllowedActions.some((a) => a.command === 'send_client_message_with_attachment' && a.enabled);
     return {
         aggregate_key: 'client_portal_inbox_aggregate',
         firm_header: { title: 'NodexPro DocFlow' },
@@ -692,7 +694,7 @@ export async function buildClientPortalInboxAggregate(params) {
                 ...selectedThread,
                 thread_type_label: threadTypeLabel(selectedThread.thread_type),
                 thread_status_label: threadStatusLabel(selectedThread.thread_status),
-                allowed_actions: clientPortalAllowedActions(selectedThread, { hasAnyThreads }),
+                allowed_actions: portalAllowedActions,
             }
             : null,
         messages,
@@ -700,9 +702,9 @@ export async function buildClientPortalInboxAggregate(params) {
         attachment_targets: docflowAttachmentTargets(messages),
         unread_count: [...unreadByThread.values()].reduce((s, c) => s + c, 0),
         attachment_permissions: {
-            can_attach: true,
+            can_attach: canSendMessageWithAttachment,
         },
-        allowed_actions: clientPortalAllowedActions(selectedThread, { hasAnyThreads }),
+        allowed_actions: portalAllowedActions,
         pwa_badge_metadata: {
             unread_count: [...unreadByThread.values()].reduce((s, c) => s + c, 0),
         },

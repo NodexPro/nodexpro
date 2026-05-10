@@ -290,7 +290,6 @@ export function ClientPortalDocflow() {
   const clientName = String((aggregate?.client_profile_header as UnknownRecord | undefined)?.display_name ?? '');
   const totalUnread = Number(aggregate?.unread_count ?? 0);
   const emptyStates = (aggregate?.empty_states as UnknownRecord | undefined) ?? null;
-  const attachPerm = (aggregate?.attachment_permissions as UnknownRecord | undefined)?.can_attach === true;
   const selectedThreadTitle = String(selectedThread?.thread_type_label ?? selectedThread?.thread_type ?? '').trim();
   const selectedThreadStatusLabel = String(selectedThread?.thread_status_label ?? '').trim();
   const selectedThreadSlaLabel = String((selectedThread?.sla_indicator as UnknownRecord | undefined)?.label ?? '').trim();
@@ -722,18 +721,14 @@ export function ClientPortalDocflow() {
                 </button>
               </div>
 
-              {attachPerm && isCommandEnabled('send_client_message_with_attachment').enabled ? (
+              {isCommandEnabled('send_client_message_with_attachment').enabled ? (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <label className="nx-btn nx-btn-taxes-compact" style={{ cursor: 'pointer' }}>
                     {uploadingFile ? 'מעלה…' : '📎 צרף קובץ'}
                     <input
                       type="file"
                       style={{ display: 'none' }}
-                      disabled={
-                        uploadingFile ||
-                        busyCommand.length > 0 ||
-                        !isCommandEnabled('send_client_message_with_attachment').enabled
-                      }
+                      disabled={uploadingFile || busyCommand.length > 0}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         e.currentTarget.value = '';
