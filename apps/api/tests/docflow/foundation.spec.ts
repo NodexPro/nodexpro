@@ -189,6 +189,7 @@ test('office cannot send message to thread from another client/org', async () =>
         thread_id: env.otherThreadId,
         message_type: 'text',
         body: 'x',
+        idempotency_key: 'idem-office-scope-1',
       }),
       /Thread not found/
     );
@@ -199,6 +200,7 @@ test('office cannot send message to thread from another client/org', async () =>
         thread_id: env.otherOrgThreadId,
         message_type: 'text',
         body: 'x',
+        idempotency_key: 'idem-office-scope-2',
       }),
       /Thread not found/
     );
@@ -216,6 +218,7 @@ test('client portal cannot send message to thread outside its session scope', as
         thread_id: env.otherThreadId,
         message_type: 'text',
         body: 'x',
+        idempotency_key: 'idem-portal-scope-1',
       }),
       /Thread not found/
     );
@@ -314,11 +317,103 @@ test('command success still returns refreshed aggregate', async () => {
       thread_id: env.threadId,
       message_type: 'text',
       body: 'ok',
+      idempotency_key: 'idem-office-success-1',
     });
     assert.equal(out.ok, true);
     assert.equal(out.refreshed.aggregate_key, 'client_docflow_tab_aggregate');
     assert.equal(typeof out.refreshed.aggregate, 'object');
     assert.equal(out.refreshed.aggregate !== null, true);
+  } finally {
+    await cleanupEnv(env);
+  }
+});
+
+test('duplicate send_office_message idempotency_key does not create a second message', async () => {
+  const env = await createEnv(true);
+  const idem = `idem-human-office-dup-${env.marker}`;
+  try {
+    const ctx = buildCtx(env.orgId, env.userId, ['clients:write']);
+    const payload = {
+      org_id: env.orgId,
+      client_id: env.clientId,
+      thread_id: env.threadId,
+      message_type: 'text' as const,
+      body: 'once',
+      idempotency_key: idem,
+    };
+    const out1 = await executeDocflowOfficeCommand(ctx, 'send_office_message', payload);
+    const out2 = await executeDocflowOfficeCommand(ctx, 'send_office_message', payload);
+    assert.equal(out1.ok, true);
+    assert.equal(out2.ok, true);
+    const { count, error } = await supabaseAdmin
+      .from('client_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', env.orgId)
+      .eq('client_id', env.clientId)
+      .eq('idempotency_scope', 'send_office_message')
+      .eq('idempotency_key', idem);
+    if (error) throw error;
+    assert.equal(count, 1);
+  } finally {
+    await cleanupEnv(env);
+  }
+});
+
+test('duplicate send_client_message idempotency_key does not create a second message', async () => {
+  const env = await createEnv(true);
+  const idem = `idem-human-portal-dup-${env.marker}`;
+  try {
+    const payload = {
+      portal_session_token: env.portalToken,
+      thread_id: env.threadId,
+      message_type: 'text' as const,
+      body: 'once',
+      idempotency_key: idem,
+    };
+    const out1 = await executeDocflowPortalCommand('send_client_message', payload);
+    const out2 = await executeDocflowPortalCommand('send_client_message', payload);
+    assert.equal(out1.ok, true);
+    assert.equal(out2.ok, true);
+    assert.equal(out1.refreshed.aggregate_key, 'client_portal_inbox_aggregate');
+    assert.equal(out2.refreshed.aggregate_key, 'client_portal_inbox_aggregate');
+    const { count, error } = await supabaseAdmin
+      .from('client_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', env.orgId)
+      .eq('client_id', env.clientId)
+      .eq('idempotency_scope', 'send_client_message')
+      .eq('idempotency_key', idem);
+    if (error) throw error;
+    assert.equal(count, 1);
+  } finally {
+    await cleanupEnv(env);
+  }
+});
+
+test('duplicate start_client_portal_thread idempotency_key does not create a second thread message', async () => {
+  const env = await createEnv(true);
+  const idem = `idem-start-thread-dup-${env.marker}`;
+  try {
+    const payload = {
+      portal_session_token: env.portalToken,
+      message_text: 'new thread',
+      idempotency_key: idem,
+    };
+    const out1 = await executeDocflowPortalCommand('start_client_portal_thread', payload);
+    const out2 = await executeDocflowPortalCommand('start_client_portal_thread', payload);
+    assert.equal(out1.ok, true);
+    assert.equal(out2.ok, true);
+    assert.equal(out1.refreshed.aggregate_key, 'client_portal_inbox_aggregate');
+    assert.equal(out2.refreshed.aggregate_key, 'client_portal_inbox_aggregate');
+    const { count, error } = await supabaseAdmin
+      .from('client_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', env.orgId)
+      .eq('client_id', env.clientId)
+      .eq('idempotency_scope', 'start_client_portal_thread')
+      .eq('idempotency_key', idem);
+    if (error) throw error;
+    assert.equal(count, 1);
   } finally {
     await cleanupEnv(env);
   }

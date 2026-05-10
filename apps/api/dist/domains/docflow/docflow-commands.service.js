@@ -13,6 +13,104 @@ import { getPlatformPublicUrlForInvite } from '../../shared/owner-email-provider
 function ensureObj(value) {
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
+const IDEM_SCOPE_SEND_OFFICE_MESSAGE = 'send_office_message';
+const IDEM_SCOPE_SEND_CLIENT_MESSAGE = 'send_client_message';
+const IDEM_SCOPE_START_CLIENT_PORTAL_THREAD = 'start_client_portal_thread';
+function reqHumanSendIdempotencyKey(payload) {
+    const k = reqString(payload, 'idempotency_key');
+    if (k.length > 256)
+        throw badRequest('idempotency_key too long');
+    return k;
+}
+async function findHumanIdempotentMessage(orgId, clientId, scope, idempotencyKey) {
+    const { data, error } = await supabaseAdmin
+        .from('client_messages')
+        .select('id, thread_id')
+        .eq('org_id', orgId)
+        .eq('client_id', clientId)
+        .eq('idempotency_scope', scope)
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle();
+    if (error)
+        throw error;
+    if (!data)
+        return null;
+    return { id: String(data.id), thread_id: String(data.thread_id) };
+}
+async function upsertHumanOfficeMessage(params) {
+    const existing = await findHumanIdempotentMessage(params.orgId, params.clientId, params.scope, params.idempotencyKey);
+    if (existing) {
+        if (existing.thread_id !== params.threadId) {
+            throw badRequest('idempotency_key already used for another thread', 'idempotency_thread_mismatch');
+        }
+        return { messageId: existing.id, isDuplicate: true };
+    }
+    const { data, error } = await supabaseAdmin
+        .from('client_messages')
+        .insert({
+        org_id: params.orgId,
+        client_id: params.clientId,
+        thread_id: params.threadId,
+        message_type: params.messageType,
+        created_by_type: 'office',
+        created_by_user_id: params.actorUserId,
+        body: params.body,
+        message_status: 'published',
+        idempotency_scope: params.scope,
+        idempotency_key: params.idempotencyKey,
+    })
+        .select('id')
+        .single();
+    if (error && error.code === '23505') {
+        const again = await findHumanIdempotentMessage(params.orgId, params.clientId, params.scope, params.idempotencyKey);
+        if (!again)
+            throw error;
+        if (again.thread_id !== params.threadId) {
+            throw badRequest('idempotency_key already used for another thread', 'idempotency_thread_mismatch');
+        }
+        return { messageId: again.id, isDuplicate: true };
+    }
+    if (error)
+        throw error;
+    return { messageId: String(data.id), isDuplicate: false };
+}
+async function upsertHumanClientPortalMessage(params) {
+    const existing = await findHumanIdempotentMessage(params.orgId, params.clientId, params.scope, params.idempotencyKey);
+    if (existing) {
+        if (existing.thread_id !== params.threadId) {
+            throw badRequest('idempotency_key already used for another thread', 'idempotency_thread_mismatch');
+        }
+        return { messageId: existing.id, isDuplicate: true };
+    }
+    const { data, error } = await supabaseAdmin
+        .from('client_messages')
+        .insert({
+        org_id: params.orgId,
+        client_id: params.clientId,
+        thread_id: params.threadId,
+        message_type: params.messageType,
+        created_by_type: 'client',
+        created_by_portal_user_id: params.portalUserId,
+        body: params.body,
+        message_status: 'published',
+        idempotency_scope: params.scope,
+        idempotency_key: params.idempotencyKey,
+    })
+        .select('id')
+        .single();
+    if (error && error.code === '23505') {
+        const again = await findHumanIdempotentMessage(params.orgId, params.clientId, params.scope, params.idempotencyKey);
+        if (!again)
+            throw error;
+        if (again.thread_id !== params.threadId) {
+            throw badRequest('idempotency_key already used for another thread', 'idempotency_thread_mismatch');
+        }
+        return { messageId: again.id, isDuplicate: true };
+    }
+    if (error)
+        throw error;
+    return { messageId: String(data.id), isDuplicate: false };
+}
 async function audit(organizationId, actorUserId, entityType, entityId, action, payload, moduleCode = 'docflow') {
     await writeAudit({
         organizationId,
@@ -838,38 +936,35 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
             const messageType = reqString(payload, 'message_type');
             if (!['text', 'file', 'system', 'request', 'reminder'].includes(messageType))
                 throw badRequest('Unsupported message_type');
-            const { data, error } = await supabaseAdmin
-                .from('client_messages')
-                .insert({
-                org_id: orgId,
-                client_id: clientId,
-                thread_id: threadId,
-                message_type: messageType,
-                created_by_type: 'office',
-                created_by_user_id: actorUserId,
+            const idempotencyKey = reqHumanSendIdempotencyKey(payload);
+            const { messageId, isDuplicate } = await upsertHumanOfficeMessage({
+                orgId,
+                clientId,
+                threadId,
+                actorUserId,
+                messageType,
                 body,
-                message_status: 'published',
-            })
-                .select('id')
-                .single();
-            if (error)
-                throw error;
-            await supabaseAdmin
-                .from('client_message_threads')
-                .update({ updated_at: new Date().toISOString() })
-                .eq('id', threadId)
-                .eq('org_id', orgId)
-                .eq('client_id', clientId);
-            await supabaseAdmin.from('client_message_events').insert({
-                org_id: orgId,
-                client_id: clientId,
-                thread_id: threadId,
-                message_id: data.id,
-                event_type: 'message_created',
-                actor_type: 'office',
-                actor_user_id: actorUserId,
+                scope: IDEM_SCOPE_SEND_OFFICE_MESSAGE,
+                idempotencyKey,
             });
-            await audit(orgId, actorUserId, 'docflow_message', data.id, 'message_created', { thread_id: threadId, message_type: messageType });
+            if (!isDuplicate) {
+                await supabaseAdmin
+                    .from('client_message_threads')
+                    .update({ updated_at: new Date().toISOString() })
+                    .eq('id', threadId)
+                    .eq('org_id', orgId)
+                    .eq('client_id', clientId);
+                await supabaseAdmin.from('client_message_events').insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    thread_id: threadId,
+                    message_id: messageId,
+                    event_type: 'message_created',
+                    actor_type: 'office',
+                    actor_user_id: actorUserId,
+                });
+                await audit(orgId, actorUserId, 'docflow_message', messageId, 'message_created', { thread_id: threadId, message_type: messageType });
+            }
             return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
         }
         case 'attach_file_to_client_message': {
@@ -1183,8 +1278,17 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
             const portalUserId = session.portalUserId;
             if (command === 'start_client_portal_thread') {
                 const messageText = reqString(payload, 'message_text');
+                const idempotencyKey = reqHumanSendIdempotencyKey(payload);
                 const idsRaw = Array.isArray(payload.file_asset_ids) ? payload.file_asset_ids : [];
                 const fileAssetIds = [...new Set(idsRaw.map((v) => String(v ?? '').trim()).filter(Boolean))];
+                const existingStart = await findHumanIdempotentMessage(orgId, clientId, IDEM_SCOPE_START_CLIENT_PORTAL_THREAD, idempotencyKey);
+                if (existingStart) {
+                    return {
+                        ok: true,
+                        command,
+                        refreshed: await refreshPortal(orgId, clientId, portalUserId, existingStart.thread_id),
+                    };
+                }
                 const { data: thread, error: tErr } = await supabaseAdmin
                     .from('client_message_threads')
                     .insert({
@@ -1201,42 +1305,61 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
                     .single();
                 if (tErr)
                     throw tErr;
+                const threadIdStr = String(thread.id);
                 await supabaseAdmin.from('client_message_events').insert({
                     org_id: orgId,
                     client_id: clientId,
-                    thread_id: thread.id,
+                    thread_id: threadIdStr,
                     event_type: 'thread_created',
                     actor_type: 'client',
                     actor_portal_user_id: portalUserId,
                 });
-                await audit(orgId, null, 'docflow_thread', thread.id, 'thread_created', { actor: 'client_portal_user', thread_type: 'client_initiated' });
+                await audit(orgId, null, 'docflow_thread', threadIdStr, 'thread_created', {
+                    actor: 'client_portal_user',
+                    thread_type: 'client_initiated',
+                });
                 const { data: msg, error: mErr } = await supabaseAdmin
                     .from('client_messages')
                     .insert({
                     org_id: orgId,
                     client_id: clientId,
-                    thread_id: thread.id,
+                    thread_id: threadIdStr,
                     message_type: 'text',
                     created_by_type: 'client',
                     created_by_portal_user_id: portalUserId,
                     body: messageText,
                     message_status: 'published',
+                    idempotency_scope: IDEM_SCOPE_START_CLIENT_PORTAL_THREAD,
+                    idempotency_key: idempotencyKey,
                 })
                     .select('id')
                     .single();
+                if (mErr && mErr.code === '23505') {
+                    await supabaseAdmin
+                        .from('client_message_threads')
+                        .delete()
+                        .eq('id', threadIdStr)
+                        .eq('org_id', orgId)
+                        .eq('client_id', clientId);
+                    const again = await findHumanIdempotentMessage(orgId, clientId, IDEM_SCOPE_START_CLIENT_PORTAL_THREAD, idempotencyKey);
+                    if (!again)
+                        throw mErr;
+                    return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, again.thread_id) };
+                }
                 if (mErr)
                     throw mErr;
+                const msgIdStr = String(msg.id);
                 await supabaseAdmin.from('client_message_events').insert({
                     org_id: orgId,
                     client_id: clientId,
-                    thread_id: thread.id,
-                    message_id: msg.id,
+                    thread_id: threadIdStr,
+                    message_id: msgIdStr,
                     event_type: 'message_created',
                     actor_type: 'client',
                     actor_portal_user_id: portalUserId,
                 });
-                await audit(orgId, null, 'docflow_message', msg.id, 'message_created', {
-                    thread_id: thread.id,
+                await audit(orgId, null, 'docflow_message', msgIdStr, 'message_created', {
+                    thread_id: threadIdStr,
                     actor: 'client_portal_user',
                 });
                 if (fileAssetIds.length) {
@@ -1245,8 +1368,8 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
                         const { error: aErr } = await supabaseAdmin.from('client_message_attachments').insert({
                             org_id: orgId,
                             client_id: clientId,
-                            thread_id: thread.id,
-                            message_id: msg.id,
+                            thread_id: threadIdStr,
+                            message_id: msgIdStr,
                             file_asset_id: fileAssetId,
                         });
                         if (aErr)
@@ -1254,8 +1377,8 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
                         await supabaseAdmin.from('client_message_events').insert({
                             org_id: orgId,
                             client_id: clientId,
-                            thread_id: thread.id,
-                            message_id: msg.id,
+                            thread_id: threadIdStr,
+                            message_id: msgIdStr,
                             event_type: 'message_attachment_added',
                             actor_type: 'client',
                             actor_portal_user_id: portalUserId,
@@ -1263,23 +1386,23 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
                                 org_id: orgId,
                                 client_id: clientId,
                                 module_key: 'docflow',
-                                thread_id: thread.id,
-                                message_id: msg.id,
+                                thread_id: threadIdStr,
+                                message_id: msgIdStr,
                                 file_asset_id: fileAssetId,
                             },
                         });
-                        await audit(orgId, null, 'docflow_message_attachment', msg.id, 'message_attachment_added', {
+                        await audit(orgId, null, 'docflow_message_attachment', msgIdStr, 'message_attachment_added', {
                             actor: 'client_portal_user',
                             org_id: orgId,
                             client_id: clientId,
                             module_key: 'docflow',
-                            thread_id: thread.id,
-                            message_id: msg.id,
+                            thread_id: threadIdStr,
+                            message_id: msgIdStr,
                             file_asset_id: fileAssetId,
                         });
                     }
                 }
-                return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, thread.id) };
+                return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, threadIdStr) };
             }
             if (command === 'send_client_message') {
                 const threadId = reqString(payload, 'thread_id');
@@ -1288,36 +1411,33 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
                 const messageType = reqString(payload, 'message_type');
                 if (!['text', 'file', 'system', 'request', 'reminder'].includes(messageType))
                     throw badRequest('Unsupported message_type');
-                const { data, error } = await supabaseAdmin
-                    .from('client_messages')
-                    .insert({
-                    org_id: orgId,
-                    client_id: clientId,
-                    thread_id: threadId,
-                    message_type: messageType,
-                    created_by_type: 'client',
-                    created_by_portal_user_id: portalUserId,
+                const idempotencyKey = reqHumanSendIdempotencyKey(payload);
+                const { messageId, isDuplicate } = await upsertHumanClientPortalMessage({
+                    orgId,
+                    clientId,
+                    threadId,
+                    portalUserId,
+                    messageType,
                     body,
-                    message_status: 'published',
-                })
-                    .select('id')
-                    .single();
-                if (error)
-                    throw error;
-                await supabaseAdmin.from('client_message_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
-                await supabaseAdmin.from('client_message_events').insert({
-                    org_id: orgId,
-                    client_id: clientId,
-                    thread_id: threadId,
-                    message_id: data.id,
-                    event_type: 'message_created',
-                    actor_type: 'client',
-                    actor_portal_user_id: portalUserId,
+                    scope: IDEM_SCOPE_SEND_CLIENT_MESSAGE,
+                    idempotencyKey,
                 });
-                await audit(orgId, null, 'docflow_message', data.id, 'message_created', {
-                    thread_id: threadId,
-                    actor: 'client_portal_user',
-                });
+                if (!isDuplicate) {
+                    await supabaseAdmin.from('client_message_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
+                    await supabaseAdmin.from('client_message_events').insert({
+                        org_id: orgId,
+                        client_id: clientId,
+                        thread_id: threadId,
+                        message_id: messageId,
+                        event_type: 'message_created',
+                        actor_type: 'client',
+                        actor_portal_user_id: portalUserId,
+                    });
+                    await audit(orgId, null, 'docflow_message', messageId, 'message_created', {
+                        thread_id: threadId,
+                        actor: 'client_portal_user',
+                    });
+                }
                 return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, threadId) };
             }
             if (command === 'attach_file_to_client_message') {

@@ -10,6 +10,7 @@ import {
 } from '../api/endpoints';
 import { redirectDocflowPortalToCanonicalHost } from '../lib/docflow-portal-host';
 import { getDocflowPortalSessionToken } from '../lib/docflow-portal-session';
+import { newDocflowIdempotencyKey } from '../lib/idempotency-key';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -566,6 +567,7 @@ export function ClientPortalDocflow() {
                           onClick={() =>
                             void runCommand('start_client_portal_thread', {
                               message_text: composer.trim(),
+                              idempotency_key: newDocflowIdempotencyKey(),
                             }).then(() => {
                               setComposer('');
                               setShowEmptyDraftComposer(false);
@@ -668,6 +670,7 @@ export function ClientPortalDocflow() {
                       thread_id: selectedThreadId,
                       message_type: 'text',
                       body: composer.trim(),
+                      idempotency_key: newDocflowIdempotencyKey(),
                     }).then(() => setComposer(''))
                   }
                 >

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { docflowClientTabAggregate, docflowOfficeCommands, docflowOfficeUploadFile } from '../api/endpoints';
+import { newDocflowIdempotencyKey } from '../lib/idempotency-key';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -351,6 +352,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
                     thread_id: selectedThreadId,
                     message_type: 'text',
                     body: composer.trim(),
+                    idempotency_key: newDocflowIdempotencyKey(),
                   }).then(() => setComposer(''))
                 }
               >

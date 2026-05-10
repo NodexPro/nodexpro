@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
+import { newDocflowIdempotencyKey } from '../lib/idempotency-key';
 import { docflowOfficeCommands, docflowOfficeMessengerAggregate, docflowStartOfficeThreadForClient } from '../api/endpoints';
 
 type UnknownRecord = Record<string, unknown>;
@@ -397,6 +398,7 @@ export function DocflowMessengerPage() {
                     thread_id: selectedThreadId,
                     message_type: 'text',
                     body: composer.trim(),
+                    idempotency_key: newDocflowIdempotencyKey(),
                   }).then(() => setComposer(''))
                 }
               >
