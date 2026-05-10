@@ -46,7 +46,7 @@ function buildSlaIndicator(deadlineAt) {
         return { code: 'due_soon', label: 'Due soon' };
     return { code: 'on_track', label: 'On track' };
 }
-/** Backend-owned anchors for attach_file_to_client_message (latest office vs client message in loaded window). */
+/** Legacy: latest office vs client message in loaded window (composer uploads use send_*_message_with_attachment instead). */
 function docflowAttachmentTargets(messages) {
     let office_message_id = null;
     let client_message_id = null;
@@ -216,6 +216,11 @@ function officeAllowedActions(threadStatus) {
     const resolved = threadStatus === 'resolved';
     return [
         { command: 'send_office_message', enabled: !archived, reason: archived ? 'Thread archived' : null },
+        {
+            command: 'send_office_message_with_attachment',
+            enabled: !archived,
+            reason: archived ? 'Thread archived' : null,
+        },
         { command: 'change_thread_status', enabled: !archived, reason: archived ? 'Thread archived' : null },
         { command: 'assign_thread_to_user', enabled: !archived, reason: archived ? 'Thread archived' : null },
         { command: 'set_thread_deadline', enabled: !archived, reason: archived ? 'Thread archived' : null },
@@ -238,6 +243,11 @@ function clientPortalAllowedActions(selectedThread, opts) {
         },
         {
             command: 'send_client_message',
+            enabled: hasThread && !archived,
+            reason: !hasThread ? 'No thread selected' : archived ? 'Thread archived' : null,
+        },
+        {
+            command: 'send_client_message_with_attachment',
             enabled: hasThread && !archived,
             reason: !hasThread ? 'No thread selected' : archived ? 'Thread archived' : null,
         },
@@ -855,6 +865,11 @@ export async function buildClientContextDocflowAggregate(params) {
         allowed_actions: [
             { command: 'create_client_thread', enabled: true, reason: null },
             { command: 'send_office_message', enabled: resolved.selectedThread ? resolved.selectedThread.thread_status !== 'archived' : false, reason: null },
+            {
+                command: 'send_office_message_with_attachment',
+                enabled: resolved.selectedThread ? resolved.selectedThread.thread_status !== 'archived' : false,
+                reason: null,
+            },
             { command: 'mark_thread_read_by_office', enabled: Boolean(resolved.selectedThread), reason: null },
             { command: 'archive_client_thread', enabled: resolved.selectedThread ? resolved.selectedThread.thread_status === 'resolved' : false, reason: null },
         ],
@@ -943,6 +958,11 @@ export async function buildClientThreadContextAggregate(params) {
     const allowedActions = (() => [
         { command: 'start_office_thread_for_client', enabled: !selectedThread, reason: selectedThread ? 'Thread already exists' : null },
         { command: 'send_office_message', enabled: selectedThread ? selectedThread.thread_status !== 'archived' : false, reason: null },
+        {
+            command: 'send_office_message_with_attachment',
+            enabled: selectedThread ? selectedThread.thread_status !== 'archived' : false,
+            reason: null,
+        },
         { command: 'mark_thread_read_by_office', enabled: Boolean(selectedThread), reason: null },
         { command: 'archive_client_thread', enabled: selectedThread ? selectedThread.thread_status === 'resolved' : false, reason: null },
     ])();

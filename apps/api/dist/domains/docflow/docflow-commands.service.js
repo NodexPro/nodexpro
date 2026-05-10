@@ -10,11 +10,14 @@ import { sendInviteSms } from './docflow-invite-delivery.adapter.js';
 import { createEmailDeliveryAdapter } from './email-delivery.adapter.js';
 import { resolveEmailProvider } from '../../shared/owner-email-provider-config.service.js';
 import { getPlatformPublicUrlForInvite } from '../../shared/owner-email-provider-config.service.js';
+import { assertDocflowClientFileBase64WithinLimit, assertDocflowClientFileUploadAllowed, uploadSharedClientFileAssetForOffice, uploadSharedClientFileAssetForPortal, } from '../file-access/shared-client-file-upload.service.js';
 function ensureObj(value) {
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 const IDEM_SCOPE_SEND_OFFICE_MESSAGE = 'send_office_message';
+const IDEM_SCOPE_SEND_OFFICE_MESSAGE_WITH_ATTACHMENT = 'send_office_message_with_attachment';
 const IDEM_SCOPE_SEND_CLIENT_MESSAGE = 'send_client_message';
+const IDEM_SCOPE_SEND_CLIENT_MESSAGE_WITH_ATTACHMENT = 'send_client_message_with_attachment';
 const IDEM_SCOPE_START_CLIENT_PORTAL_THREAD = 'start_client_portal_thread';
 function reqHumanSendIdempotencyKey(payload) {
     const k = reqString(payload, 'idempotency_key');
@@ -967,6 +970,101 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
             }
             return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
         }
+        case 'send_office_message_with_attachment': {
+            const threadId = reqString(payload, 'thread_id');
+            await assertDocflowThreadScope(orgId, clientId, threadId);
+            const fileName = reqString(payload, 'file_name');
+            const fileBase64 = reqString(payload, 'file_base64');
+            const mimeType = asOptionalString(payload.mime_type);
+            assertDocflowClientFileUploadAllowed(fileName, mimeType);
+            assertDocflowClientFileBase64WithinLimit(fileBase64);
+            const idempotencyKey = reqHumanSendIdempotencyKey(payload);
+            const bodyOpt = asOptionalString(payload.body);
+            const bodyTrimmed = (bodyOpt ?? '').trim();
+            const messageType = bodyTrimmed ? 'text' : 'file';
+            const body = bodyTrimmed || fileName;
+            const { messageId, isDuplicate } = await upsertHumanOfficeMessage({
+                orgId,
+                clientId,
+                threadId,
+                actorUserId,
+                messageType,
+                body,
+                scope: IDEM_SCOPE_SEND_OFFICE_MESSAGE_WITH_ATTACHMENT,
+                idempotencyKey,
+            });
+            if (!isDuplicate) {
+                await supabaseAdmin
+                    .from('client_message_threads')
+                    .update({ updated_at: new Date().toISOString() })
+                    .eq('id', threadId)
+                    .eq('org_id', orgId)
+                    .eq('client_id', clientId);
+                await supabaseAdmin.from('client_message_events').insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    thread_id: threadId,
+                    message_id: messageId,
+                    event_type: 'message_created',
+                    actor_type: 'office',
+                    actor_user_id: actorUserId,
+                });
+                await audit(orgId, actorUserId, 'docflow_message', messageId, 'message_created', {
+                    thread_id: threadId,
+                    message_type: messageType,
+                });
+                const uploadOut = await uploadSharedClientFileAssetForOffice(ctx, {
+                    orgId,
+                    clientId,
+                    payload: {
+                        file_base64: fileBase64,
+                        file_name: fileName,
+                        mime_type: mimeType ?? null,
+                        module_key: 'docflow',
+                        thread_id: threadId,
+                        message_id: messageId,
+                    },
+                });
+                const fileAssetId = uploadOut.file_asset_id;
+                const { error: attErr } = await supabaseAdmin.from('client_message_attachments').insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    thread_id: threadId,
+                    message_id: messageId,
+                    file_asset_id: fileAssetId,
+                });
+                if (attErr && attErr.code !== '23505')
+                    throw attErr;
+                if (!attErr) {
+                    await supabaseAdmin.from('client_message_events').insert({
+                        org_id: orgId,
+                        client_id: clientId,
+                        thread_id: threadId,
+                        message_id: messageId,
+                        event_type: 'message_attachment_added',
+                        actor_type: 'office',
+                        actor_user_id: actorUserId,
+                        payload_json: {
+                            org_id: orgId,
+                            client_id: clientId,
+                            module_key: 'docflow',
+                            thread_id: threadId,
+                            message_id: messageId,
+                            file_asset_id: fileAssetId,
+                        },
+                    });
+                    await audit(orgId, actorUserId, 'docflow_message_attachment', messageId, 'message_attachment_added', {
+                        org_id: orgId,
+                        client_id: clientId,
+                        module_key: 'docflow',
+                        thread_id: threadId,
+                        message_id: messageId,
+                        file_asset_id: fileAssetId,
+                    });
+                }
+            }
+            return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
+        }
         case 'attach_file_to_client_message': {
             const threadId = reqString(payload, 'thread_id');
             const messageId = reqString(payload, 'message_id');
@@ -1269,6 +1367,7 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
         }
         case 'start_client_portal_thread':
         case 'send_client_message':
+        case 'send_client_message_with_attachment':
         case 'attach_file_to_client_message':
         case 'remove_message_attachment':
         case 'mark_thread_read_by_client': {
@@ -1405,6 +1504,98 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
                     }
                 }
                 return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, threadIdStr) };
+            }
+            if (command === 'send_client_message_with_attachment') {
+                const threadId = reqString(payload, 'thread_id');
+                await assertDocflowThreadScope(orgId, clientId, threadId);
+                const fileName = reqString(payload, 'file_name');
+                const fileBase64 = reqString(payload, 'file_base64');
+                const mimeType = asOptionalString(payload.mime_type);
+                assertDocflowClientFileUploadAllowed(fileName, mimeType);
+                assertDocflowClientFileBase64WithinLimit(fileBase64);
+                const idempotencyKey = reqHumanSendIdempotencyKey(payload);
+                const bodyOpt = asOptionalString(payload.body);
+                const bodyTrimmed = (bodyOpt ?? '').trim();
+                const messageType = bodyTrimmed ? 'text' : 'file';
+                const body = bodyTrimmed || fileName;
+                const { messageId, isDuplicate } = await upsertHumanClientPortalMessage({
+                    orgId,
+                    clientId,
+                    threadId,
+                    portalUserId,
+                    messageType,
+                    body,
+                    scope: IDEM_SCOPE_SEND_CLIENT_MESSAGE_WITH_ATTACHMENT,
+                    idempotencyKey,
+                });
+                if (!isDuplicate) {
+                    await supabaseAdmin.from('client_message_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
+                    await supabaseAdmin.from('client_message_events').insert({
+                        org_id: orgId,
+                        client_id: clientId,
+                        thread_id: threadId,
+                        message_id: messageId,
+                        event_type: 'message_created',
+                        actor_type: 'client',
+                        actor_portal_user_id: portalUserId,
+                    });
+                    await audit(orgId, null, 'docflow_message', messageId, 'message_created', {
+                        thread_id: threadId,
+                        actor: 'client_portal_user',
+                    });
+                    const uploadOut = await uploadSharedClientFileAssetForPortal({
+                        orgId,
+                        clientId,
+                        portalUserId,
+                        payload: {
+                            file_base64: fileBase64,
+                            file_name: fileName,
+                            mime_type: mimeType ?? null,
+                            module_key: 'docflow',
+                            thread_id: threadId,
+                            message_id: messageId,
+                        },
+                    });
+                    const fileAssetId = uploadOut.file_asset_id;
+                    const { error: attErr } = await supabaseAdmin.from('client_message_attachments').insert({
+                        org_id: orgId,
+                        client_id: clientId,
+                        thread_id: threadId,
+                        message_id: messageId,
+                        file_asset_id: fileAssetId,
+                    });
+                    if (attErr && attErr.code !== '23505')
+                        throw attErr;
+                    if (!attErr) {
+                        await supabaseAdmin.from('client_message_events').insert({
+                            org_id: orgId,
+                            client_id: clientId,
+                            thread_id: threadId,
+                            message_id: messageId,
+                            event_type: 'message_attachment_added',
+                            actor_type: 'client',
+                            actor_portal_user_id: portalUserId,
+                            payload_json: {
+                                org_id: orgId,
+                                client_id: clientId,
+                                module_key: 'docflow',
+                                thread_id: threadId,
+                                message_id: messageId,
+                                file_asset_id: fileAssetId,
+                            },
+                        });
+                        await audit(orgId, null, 'docflow_message_attachment', messageId, 'message_attachment_added', {
+                            actor: 'client_portal_user',
+                            org_id: orgId,
+                            client_id: clientId,
+                            module_key: 'docflow',
+                            thread_id: threadId,
+                            message_id: messageId,
+                            file_asset_id: fileAssetId,
+                        });
+                    }
+                }
+                return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, threadId) };
             }
             if (command === 'send_client_message') {
                 const threadId = reqString(payload, 'thread_id');

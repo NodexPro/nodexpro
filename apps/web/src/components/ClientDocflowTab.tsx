@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
-import { docflowClientTabAggregate, docflowOfficeCommands, docflowOfficeUploadFile } from '../api/endpoints';
+import { docflowClientTabAggregate, docflowOfficeCommands } from '../api/endpoints';
 import { newDocflowIdempotencyKey } from '../lib/idempotency-key';
 
 type UnknownRecord = Record<string, unknown>;
@@ -68,12 +68,6 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
     const list = aggregate?.messages;
     return Array.isArray(list) ? (list as UnknownRecord[]) : [];
   }, [aggregate]);
-  const attachmentTargets = useMemo(() => {
-    const t = aggregate?.attachment_targets;
-    return t && typeof t === 'object' ? (t as UnknownRecord) : null;
-  }, [aggregate]);
-  const selectedMessageId = String(attachmentTargets?.office_message_id ?? '').trim();
-
   const attachments = useMemo(() => {
     const list = aggregate?.attachments;
     return Array.isArray(list) ? (list as UnknownRecord[]) : [];
@@ -139,32 +133,22 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
 
   async function uploadAndAttachFile(file: File): Promise<void> {
     if (!selectedThreadId) return;
-    if (!selectedMessageId) {
-      setError('Create a message before attaching files.');
-      return;
-    }
+    const can = isCommandEnabled('send_office_message_with_attachment');
+    if (!can.enabled) return;
     setUploadingFile(true);
     setError('');
     try {
       const base64 = await fileToBase64(file);
-      const uploadOut = (await apiJson(docflowOfficeUploadFile, {
-        method: 'POST',
-        body: JSON.stringify({
-          client_id: clientId,
-          thread_id: selectedThreadId,
-          message_id: selectedMessageId,
-          file_base64: base64,
-          file_name: file.name,
-          mime_type: file.type || null,
-        }),
-      })) as { file_asset_id?: string };
-      const fileAssetId = String(uploadOut.file_asset_id ?? '').trim();
-      if (!fileAssetId) throw new Error('Missing file_asset_id from upload');
-      await runCommand('attach_file_to_client_message', {
+      const caption = composer.trim();
+      await runCommand('send_office_message_with_attachment', {
         thread_id: selectedThreadId,
-        message_id: selectedMessageId,
-        file_asset_id: fileAssetId,
+        file_base64: base64,
+        file_name: file.name,
+        mime_type: file.type || null,
+        ...(caption ? { body: caption } : {}),
+        idempotency_key: newDocflowIdempotencyKey(),
       });
+      if (caption) setComposer('');
     } catch (e) {
       setError(userFacingApiMessage(e));
     } finally {
@@ -370,9 +354,8 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
                   disabled={
                     uploadingFile ||
                     busyCommand.length > 0 ||
-                    !isCommandEnabled('attach_file_to_client_message').enabled ||
-                    !selectedThreadId ||
-                    !selectedMessageId
+                    !isCommandEnabled('send_office_message_with_attachment').enabled ||
+                    !selectedThreadId
                   }
                   onChange={(e) => {
                     const file = e.target.files?.[0];

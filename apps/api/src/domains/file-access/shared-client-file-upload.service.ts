@@ -39,6 +39,18 @@ export function assertDocflowClientFileUploadAllowed(fileName: string, mimeType:
   throw badRequest('File type not allowed for DocFlow');
 }
 
+/** Same size limits as {@link uploadSharedClientFileAssetForOffice} (decode + max bytes). */
+export function assertDocflowClientFileBase64WithinLimit(file_base64: string): void {
+  if (typeof file_base64 !== 'string' || !file_base64.length) throw badRequest('file_base64 is required');
+  if (file_base64.length > MAX_CLIENT_FILE_BASE64_LENGTH) {
+    throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
+  }
+  const buf = Buffer.from(file_base64, 'base64');
+  if (buf.length > MAX_CLIENT_FILE_SIZE) {
+    throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
+  }
+}
+
 let bucketEnsured = false;
 async function ensureBucketExists(): Promise<void> {
   if (bucketEnsured) return;

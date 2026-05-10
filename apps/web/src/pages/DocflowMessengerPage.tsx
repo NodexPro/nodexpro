@@ -5,7 +5,6 @@ import {
   docflowOfficeCommands,
   docflowOfficeFileOpen,
   docflowOfficeMessengerAggregate,
-  docflowOfficeUploadFile,
   docflowStartOfficeThreadForClient,
 } from '../api/endpoints';
 
@@ -81,12 +80,6 @@ export function DocflowMessengerPage() {
     const list = clientContext?.attachments;
     return Array.isArray(list) ? (list as UnknownRecord[]) : [];
   }, [clientContext]);
-
-  const attachmentTargets = useMemo(() => {
-    const t = clientContext?.attachment_targets;
-    return isRecord(t) ? t : null;
-  }, [clientContext]);
-  const officeAttachMessageId = String(attachmentTargets?.office_message_id ?? '').trim();
 
   const actions = useMemo(() => {
     const list = clientContext?.allowed_actions;
@@ -210,31 +203,23 @@ export function DocflowMessengerPage() {
   }
 
   async function uploadAndAttachFile(file: File): Promise<void> {
-    if (!selectedThreadId || !effectiveSelectedClientId || !officeAttachMessageId) return;
-    const can = canRun('attach_file_to_client_message');
+    if (!selectedThreadId || !effectiveSelectedClientId) return;
+    const can = canRun('send_office_message_with_attachment');
     if (!can.enabled) return;
     setUploadingFile(true);
     setError('');
     try {
       const base64 = await fileToBase64(file);
-      const uploadOut = (await apiJson(docflowOfficeUploadFile, {
-        method: 'POST',
-        body: JSON.stringify({
-          client_id: effectiveSelectedClientId,
-          thread_id: selectedThreadId,
-          message_id: officeAttachMessageId,
-          file_base64: base64,
-          file_name: file.name,
-          mime_type: file.type || null,
-        }),
-      })) as { file_asset_id?: string };
-      const fileAssetId = String(uploadOut.file_asset_id ?? '').trim();
-      if (!fileAssetId) throw new Error('חסר מזהה קובץ מהשרת');
-      await runOfficeCommand('attach_file_to_client_message', {
+      const caption = composer.trim();
+      await runOfficeCommand('send_office_message_with_attachment', {
         thread_id: selectedThreadId,
-        message_id: officeAttachMessageId,
-        file_asset_id: fileAssetId,
+        file_base64: base64,
+        file_name: file.name,
+        mime_type: file.type || null,
+        ...(caption ? { body: caption } : {}),
+        idempotency_key: newDocflowIdempotencyKey(),
       });
+      if (caption) setComposer('');
     } catch (e) {
       setError(userFacingApiMessage(e));
     } finally {
@@ -498,8 +483,7 @@ export function DocflowMessengerPage() {
                     uploadingFile ||
                     busy.length > 0 ||
                     !selectedThreadId ||
-                    !officeAttachMessageId ||
-                    !canRun('attach_file_to_client_message').enabled
+                    !canRun('send_office_message_with_attachment').enabled
                   }
                   onChange={(e) => {
                     const file = e.target.files?.[0];

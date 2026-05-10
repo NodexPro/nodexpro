@@ -190,6 +190,7 @@ officeRouter.post('/commands/assign-thread-to-user', async (req, res, next) => h
 officeRouter.post('/commands/set-thread-deadline', async (req, res, next) => handleOfficeCommand(req, res, next, 'set_thread_deadline'));
 officeRouter.post('/commands/create-system-message', async (req, res, next) => handleOfficeCommand(req, res, next, 'create_system_message'));
 officeRouter.post('/commands/send-office-message', async (req, res, next) => handleOfficeCommand(req, res, next, 'send_office_message'));
+officeRouter.post('/commands/send-office-message-with-attachment', async (req, res, next) => handleOfficeCommand(req, res, next, 'send_office_message_with_attachment'));
 officeRouter.post('/commands/attach-file-to-client-message', async (req, res, next) => handleOfficeCommand(req, res, next, 'attach_file_to_client_message'));
 officeRouter.post('/commands/mark-thread-read-by-office', async (req, res, next) => handleOfficeCommand(req, res, next, 'mark_thread_read_by_office'));
 officeRouter.post('/commands/remove-message-attachment', async (req, res, next) => handleOfficeCommand(req, res, next, 'remove_message_attachment'));
@@ -370,6 +371,7 @@ async function handlePortalCommand(req, res, next, command) {
     }
 }
 portalRouter.post('/commands/send-client-message', async (req, res, next) => handlePortalCommand(req, res, next, 'send_client_message'));
+portalRouter.post('/commands/send-client-message-with-attachment', async (req, res, next) => handlePortalCommand(req, res, next, 'send_client_message_with_attachment'));
 portalRouter.post('/commands/start-client-thread', async (req, res, next) => handlePortalCommand(req, res, next, 'start_client_portal_thread'));
 portalRouter.post('/commands/attach-file-to-client-message', async (req, res, next) => handlePortalCommand(req, res, next, 'attach_file_to_client_message'));
 portalRouter.post('/commands/mark-thread-read-by-client', async (req, res, next) => handlePortalCommand(req, res, next, 'mark_thread_read_by_client'));

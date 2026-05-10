@@ -285,6 +285,7 @@ export const docflowPortalInboxAggregate = (selectedThreadId?: string | null) =>
   }`;
 export const docflowPortalStartClientThread = '/docflow/portal/commands/start-client-thread';
 export const docflowPortalSendClientMessage = '/docflow/portal/commands/send-client-message';
+export const docflowPortalSendClientMessageWithAttachment = '/docflow/portal/commands/send-client-message-with-attachment';
 export const docflowPortalAttachFileToClientMessage = '/docflow/portal/commands/attach-file-to-client-message';
 export const docflowPortalRemoveMessageAttachment = '/docflow/portal/commands/remove-message-attachment';
 export const docflowPortalMarkThreadReadByClient = '/docflow/portal/commands/mark-thread-read-by-client';

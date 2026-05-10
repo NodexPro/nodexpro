@@ -5,9 +5,9 @@ import {
   docflowPortalFileOpen,
   docflowPortalInboxAggregate,
   docflowPortalMarkThreadReadByClient,
-  docflowPortalStartClientThread,
   docflowPortalSendClientMessage,
-  docflowPortalUploadFile,
+  docflowPortalSendClientMessageWithAttachment,
+  docflowPortalStartClientThread,
 } from '../api/endpoints';
 import { redirectDocflowPortalToCanonicalHost } from '../lib/docflow-portal-host';
 import { getDocflowPortalSessionToken } from '../lib/docflow-portal-session';
@@ -124,12 +124,6 @@ export function ClientPortalDocflow() {
     return Array.isArray(list) ? (list as UnknownRecord[]) : [];
   }, [aggregate]);
 
-  const attachmentTargets = useMemo(() => {
-    const t = aggregate?.attachment_targets;
-    return t && typeof t === 'object' ? (t as UnknownRecord) : null;
-  }, [aggregate]);
-  const clientAttachMessageId = String(attachmentTargets?.client_message_id ?? '').trim();
-
   const aggregateActions = useMemo(() => {
     const list = aggregate?.allowed_actions;
     return Array.isArray(list) ? (list as AllowedAction[]) : [];
@@ -210,6 +204,7 @@ export function ClientPortalDocflow() {
     let path = '';
     if (command === 'start_client_portal_thread') path = docflowPortalStartClientThread;
     else if (command === 'send_client_message') path = docflowPortalSendClientMessage;
+    else if (command === 'send_client_message_with_attachment') path = docflowPortalSendClientMessageWithAttachment;
     else if (command === 'attach_file_to_client_message') path = docflowPortalAttachFileToClientMessage;
     else if (command === 'mark_thread_read_by_client') path = docflowPortalMarkThreadReadByClient;
     else return;
@@ -241,8 +236,8 @@ export function ClientPortalDocflow() {
   }
 
   async function uploadAndAttachPortalFile(file: File): Promise<void> {
-    const can = isCommandEnabled('attach_file_to_client_message');
-    if (!can.enabled || !selectedThreadId || !clientAttachMessageId) return;
+    const can = isCommandEnabled('send_client_message_with_attachment');
+    if (!can.enabled || !selectedThreadId) return;
     const token = getDocflowPortalSessionToken();
     if (!token) {
       setError('אין סשן פורטל.');
@@ -252,28 +247,16 @@ export function ClientPortalDocflow() {
     setError('');
     try {
       const base64 = await fileToBase64(file);
-      const uploadOut = (await apiDocflowPortalJson<{ file_asset_id?: string }>(
-        docflowPortalUploadFile,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            portal_session_token: token,
-            thread_id: selectedThreadId,
-            message_id: clientAttachMessageId,
-            file_base64: base64,
-            file_name: file.name,
-            mime_type: file.type || null,
-          }),
-        },
-        token
-      )) as { file_asset_id?: string };
-      const fileAssetId = String(uploadOut.file_asset_id ?? '').trim();
-      if (!fileAssetId) throw new Error('חסר מזהה קובץ מהשרת');
-      await runCommand('attach_file_to_client_message', {
+      const caption = composer.trim();
+      await runCommand('send_client_message_with_attachment', {
         thread_id: selectedThreadId,
-        message_id: clientAttachMessageId,
-        file_asset_id: fileAssetId,
+        file_base64: base64,
+        file_name: file.name,
+        mime_type: file.type || null,
+        ...(caption ? { body: caption } : {}),
+        idempotency_key: newDocflowIdempotencyKey(),
       });
+      if (caption) setComposer('');
     } catch (e) {
       setError(userFacingApiMessage(e));
     } finally {
@@ -739,7 +722,7 @@ export function ClientPortalDocflow() {
                 </button>
               </div>
 
-              {attachPerm && isCommandEnabled('attach_file_to_client_message').enabled ? (
+              {attachPerm && isCommandEnabled('send_client_message_with_attachment').enabled ? (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <label className="nx-btn nx-btn-taxes-compact" style={{ cursor: 'pointer' }}>
                     {uploadingFile ? 'מעלה…' : '📎 צרף קובץ'}
@@ -747,7 +730,9 @@ export function ClientPortalDocflow() {
                       type="file"
                       style={{ display: 'none' }}
                       disabled={
-                        uploadingFile || busyCommand.length > 0 || !clientAttachMessageId || !isCommandEnabled('attach_file_to_client_message').enabled
+                        uploadingFile ||
+                        busyCommand.length > 0 ||
+                        !isCommandEnabled('send_client_message_with_attachment').enabled
                       }
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -757,9 +742,6 @@ export function ClientPortalDocflow() {
                       }}
                     />
                   </label>
-                  {!clientAttachMessageId ? (
-                    <span style={{ fontSize: 12, color: '#64748B' }}>שלחו הודעה לפני צירוף קובץ.</span>
-                  ) : null}
                 </div>
               ) : null}
             </div>
