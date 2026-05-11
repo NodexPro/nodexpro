@@ -19,6 +19,7 @@ as $$
     (
       select count(*)::bigint
       from public.client_message_threads t
+      inner join public.clients c on c.id = t.client_id and c.organization_id = p_org_id
       where t.org_id = p_org_id
         and t.thread_status not in ('archived', 'resolved')
         and t.deadline_at is not null
@@ -27,6 +28,7 @@ as $$
     (
       select count(*)::bigint
       from public.client_message_threads t
+      inner join public.clients c on c.id = t.client_id and c.organization_id = p_org_id
       where t.org_id = p_org_id
         and t.thread_status = 'waiting_client'
     ) as waiting_client_count,
@@ -45,6 +47,7 @@ as $$
     (
       select count(*)::bigint
       from public.client_message_threads t
+      inner join public.clients c on c.id = t.client_id and c.organization_id = p_org_id
       where t.org_id = p_org_id
         and t.thread_status <> 'archived'
         and exists (
@@ -69,6 +72,7 @@ as $$
     (
       select count(*)::bigint
       from public.client_message_threads t
+      inner join public.clients c on c.id = t.client_id and c.organization_id = p_org_id
       where t.org_id = p_org_id
         and t.thread_status <> 'archived'
         and t.assigned_user_id is not null
