@@ -498,10 +498,6 @@ export function PlatformOwnerLegalControl() {
       normalizeActions(panel?.available_actions ? (panel.available_actions as UnknownRecord).owner_email_provider_config : []),
     [panel]
   );
-  const commercialActions = useMemo(
-    () => normalizeActions(panel?.available_actions ? (panel.available_actions as UnknownRecord).commercial_controls : []),
-    [panel]
-  );
   const ownerEmailProviderButtonLabel = useMemo(
     () => String(ownerEmailProviderActions[0]?.button_label ?? 'Email Provider'),
     [ownerEmailProviderActions]
@@ -597,6 +593,113 @@ export function PlatformOwnerLegalControl() {
     const rows = commercialControls?.org_rows;
     return Array.isArray(rows) ? (rows as UnknownRecord[]) : [];
   }, [commercialControls]);
+
+  function fmtOwnerDate(v: unknown): string {
+    const s = safeText(v);
+    if (!s) return '—';
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return s;
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function ymdToIsoEndOfDayZ(ymd: string): string {
+    // Keep it deterministic (backend stores ISO); avoid local timezone ambiguity: end-of-day UTC.
+    const clean = ymd.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return new Date().toISOString();
+    return `${clean}T23:59:59.000Z`;
+  }
+
+  function entitlementLabel(status: string): string {
+    const s = (status || '').toLowerCase();
+    if (s === 'trial') return 'Trial';
+    if (s === 'entitled') return 'Active paid';
+    if (s === 'expired') return 'Expired';
+    if (s === 'not_entitled') return 'Not entitled';
+    return status || '—';
+  }
+
+  const [commercialModal, setCommercialModal] = useState<null | { kind: 'extend_trial' | 'activate' | 'pricing' | 'cancel_adj' }>(null);
+  const [commercialModalError, setCommercialModalError] = useState('');
+  const [commercialTarget, setCommercialTarget] = useState<{
+    org_id: string;
+    org_name: string;
+    module_key: string;
+    module_name: string;
+    entitlement_status: string;
+    trial_ends_at: string | null;
+    subscription_ends_at: string | null;
+    base_currency: string | null;
+    base_amount: number | null;
+    effective_amount: number | null;
+    active_adj_id: string | null;
+  } | null>(null);
+
+  const [trialExtendUntilYmd, setTrialExtendUntilYmd] = useState('');
+  const [trialReason, setTrialReason] = useState('');
+
+  const [activateFromYmd, setActivateFromYmd] = useState('');
+  const [activateUntilYmd, setActivateUntilYmd] = useState('');
+  const [activateReason, setActivateReason] = useState('');
+
+  const [pricingType, setPricingType] = useState<'discount_amount' | 'replace_price' | 'add_amount' | 'free_access'>('discount_amount');
+  const [pricingValue, setPricingValue] = useState('');
+  const [pricingStartYmd, setPricingStartYmd] = useState('');
+  const [pricingEndYmd, setPricingEndYmd] = useState('');
+  const [pricingReason, setPricingReason] = useState('');
+
+  const [cancelAdjReason, setCancelAdjReason] = useState('');
+
+  function openCommercialModal(
+    kind: 'extend_trial' | 'activate' | 'pricing' | 'cancel_adj',
+    orgRow: UnknownRecord,
+    modRow: UnknownRecord
+  ): void {
+    const orgId = safeText(orgRow.org_id);
+    const orgName = safeText(orgRow.org_name);
+    const moduleKey = safeText(modRow.module_key);
+    const moduleName = safeText(modRow.module_name) || moduleKey;
+    const entitlementStatus = safeText(modRow.entitlement_status);
+    const trialEndsAt = safeText(modRow.trial_ends_at) || null;
+    const subEndsAt = safeText(modRow.subscription_ends_at) || null;
+    const baseCurrency = safeText(modRow.base_price_currency) || null;
+    const baseAmount = typeof modRow.base_price_amount === 'number' ? (modRow.base_price_amount as number) : Number(modRow.base_price_amount ?? NaN);
+    const eff = (modRow.effective_price_preview as UnknownRecord | undefined) ?? null;
+    const effectiveAmount =
+      eff && typeof eff === 'object' && !Array.isArray(eff) ? Number((eff as any).amount ?? NaN) : NaN;
+    const adj = (modRow.active_pricing_adjustment as UnknownRecord | undefined) ?? null;
+    const adjId = adj && typeof adj === 'object' && !Array.isArray(adj) ? safeText((adj as any).id) || null : null;
+
+    setCommercialTarget({
+      org_id: orgId,
+      org_name: orgName,
+      module_key: moduleKey,
+      module_name: moduleName,
+      entitlement_status: entitlementStatus,
+      trial_ends_at: trialEndsAt,
+      subscription_ends_at: subEndsAt,
+      base_currency: baseCurrency,
+      base_amount: Number.isFinite(baseAmount) ? baseAmount : null,
+      effective_amount: Number.isFinite(effectiveAmount) ? effectiveAmount : null,
+      active_adj_id: adjId,
+    });
+    setCommercialModalError('');
+
+    const today = new Date().toISOString().slice(0, 10);
+    setTrialExtendUntilYmd(today);
+    setTrialReason('');
+    setActivateFromYmd(today);
+    setActivateUntilYmd('');
+    setActivateReason('');
+    setPricingType('discount_amount');
+    setPricingValue('');
+    setPricingStartYmd(today);
+    const in30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    setPricingEndYmd(in30);
+    setPricingReason('');
+    setCancelAdjReason('');
+
+    setCommercialModal({ kind });
+  }
 
   const docflowRuleRows = useMemo(() => {
     return docflowTemplates.map((row) => {
@@ -1513,131 +1616,444 @@ export function PlatformOwnerLegalControl() {
             Owner-only commercial truth: orgs, client counts, module activation + entitlement, trials, and temporary pricing adjustments.
           </p>
 
-          <div style={{ overflowX: 'auto', border: '1px solid #ddd', borderRadius: 8, background: '#fff' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
-              <thead>
-                <tr>
-                  {['Org', 'Clients', 'Modules', 'Status', 'Actions'].map((h) => (
-                    <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {commercialOrgRows.map((row, idx) => {
-                  const orgId = safeText(row.org_id);
-                  const orgName = safeText(row.org_name) || orgId.slice(0, 8);
-                  const clientsCount = Number(row.clients_count ?? 0);
-                  const modules = Array.isArray(row.modules) ? (row.modules as UnknownRecord[]) : [];
-                  const activeModules = modules.filter((m) => safeText(m.activation_status) === 'active');
-                  const entitledModules = modules.filter((m) => ['entitled', 'trial'].includes(safeText(m.entitlement_status)));
+          <div style={{ display: 'grid', gap: 12 }}>
+            {commercialOrgRows.map((org, idx) => {
+              const orgName = safeText(org.org_name) || 'Organization';
+              const clientsCount = Number(org.clients_count ?? 0);
+              const modules = Array.isArray(org.modules) ? (org.modules as UnknownRecord[]) : [];
+              return (
+                <section
+                  key={`${safeText(org.org_id)}:${idx}`}
+                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 12 }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>{orgName}</div>
+                    <div style={{ fontSize: 13, color: '#6b7280' }}>Clients: {Number.isFinite(clientsCount) ? clientsCount : '—'}</div>
+                  </div>
 
-                  const firstModuleKey = safeText(modules[0]?.module_key) || 'docflow';
-                  const hasAdj = modules.some((m) => m.active_pricing_adjustment && typeof m.active_pricing_adjustment === 'object');
-                  return (
-                    <tr key={`${orgId}:${idx}`}>
-                      <td style={{ borderBottom: '1px solid #eee', padding: 8, fontWeight: 700 }}>{orgName}</td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{Number.isFinite(clientsCount) ? clientsCount : '—'}</td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
-                        <div style={{ fontSize: 12, color: '#374151' }}>
-                          Active: {activeModules.length} / {modules.length} · Entitled/Trial: {entitledModules.length}
-                        </div>
-                      </td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: 8, fontSize: 12, color: '#374151' }}>
-                        {hasAdj ? 'Has active pricing adjustment' : '—'}
-                      </td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            style={btnCompactMuted}
-                            disabled={commandBusy || commercialActions.find((a) => a.action_key === 'extend_org_module_trial')?.enabled === false}
-                            onClick={() => {
-                              const a = commercialActions.find((x) => x.action_key === 'extend_org_module_trial');
-                              openCommandModal('extend_org_module_trial', a ?? { action_key: 'extend_org_module_trial', enabled: true }, {
-                                org_id: orgId,
-                                module_key: firstModuleKey,
-                                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                                reason: 'Owner trial extension',
-                              });
-                            }}
-                          >
-                            Extend Trial
-                          </button>
-                          <button
-                            type="button"
-                            style={btnCompactMuted}
-                            disabled={commandBusy || commercialActions.find((a) => a.action_key === 'activate_org_module_access')?.enabled === false}
-                            onClick={() => {
-                              const a = commercialActions.find((x) => x.action_key === 'activate_org_module_access');
-                              openCommandModal('activate_org_module_access', a ?? { action_key: 'activate_org_module_access', enabled: true }, {
-                                org_id: orgId,
-                                module_key: firstModuleKey,
-                                active_from: new Date().toISOString(),
-                                active_until: null,
-                                reason: 'Owner activation',
-                              });
-                            }}
-                          >
-                            Activate
-                          </button>
-                          <button
-                            type="button"
-                            style={btnCompactMuted}
-                            disabled={commandBusy || commercialActions.find((a) => a.action_key === 'create_pricing_adjustment')?.enabled === false}
-                            onClick={() => {
-                              const a = commercialActions.find((x) => x.action_key === 'create_pricing_adjustment');
-                              const today = new Date().toISOString().slice(0, 10);
-                              const in30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-                              openCommandModal('create_pricing_adjustment', a ?? { action_key: 'create_pricing_adjustment', enabled: true }, {
-                                org_id: orgId,
-                                module_key: firstModuleKey,
-                                adjustment_type: 'discount_amount',
-                                value: 10,
-                                start_date: today,
-                                end_date: in30,
-                                reason: 'Owner pricing adjustment',
-                              });
-                            }}
-                          >
-                            Pricing
-                          </button>
-                          {(() => {
-                            const modWithAdj = modules.find((m) => m.active_pricing_adjustment && typeof m.active_pricing_adjustment === 'object') ?? null;
-                            const adjId = modWithAdj ? safeText((modWithAdj.active_pricing_adjustment as UnknownRecord).id) : '';
-                            if (!adjId) return null;
-                            return (
+                  <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                    {modules.map((m, mi) => {
+                      const moduleName = safeText(m.module_name) || safeText(m.module_key) || 'Module';
+                      const entStatus = safeText(m.entitlement_status);
+                      const act = safeText(m.activation_status);
+                      const trialEnds = safeText(m.trial_ends_at) || null;
+                      const subEnds = safeText(m.subscription_ends_at) || null;
+                      const baseCurrency = safeText(m.base_price_currency) || null;
+                      const baseAmount = Number(m.base_price_amount ?? NaN);
+                      const eff = (m.effective_price_preview as UnknownRecord | undefined) ?? null;
+                      const effAmount = eff && typeof eff === 'object' && !Array.isArray(eff) ? Number((eff as any).amount ?? NaN) : NaN;
+                      const adj = (m.active_pricing_adjustment as UnknownRecord | undefined) ?? null;
+                      const hasAdj = Boolean(adj && typeof adj === 'object' && !Array.isArray(adj));
+
+                      const statusLine = (() => {
+                        const parts: string[] = [];
+                        parts.push(`Status: ${entitlementLabel(entStatus)}`);
+                        if (entStatus === 'trial' && trialEnds) parts.push(`Expires: ${fmtOwnerDate(trialEnds)}`);
+                        if (entStatus === 'entitled' && subEnds) parts.push(`Ends: ${fmtOwnerDate(subEnds)}`);
+                        parts.push(`Activation: ${act === 'active' ? 'On' : 'Off'}`);
+                        return parts.join(' · ');
+                      })();
+
+                      const pricingLine =
+                        baseCurrency && Number.isFinite(baseAmount)
+                          ? `Base: ${baseCurrency} ${baseAmount.toFixed(2)}${Number.isFinite(effAmount) ? ` · Effective (current): ${baseCurrency} ${effAmount.toFixed(2)}` : ''}${hasAdj ? ' · Adjustment active' : ''}`
+                          : 'Base price: —';
+
+                      return (
+                        <div
+                          key={`${safeText(m.module_key)}:${mi}`}
+                          style={{ border: '1px solid #E5E7EB', borderRadius: 12, padding: 12, background: '#F9FAFB' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: 15 }}>{moduleName}</div>
+                              <div style={{ fontSize: 12.5, color: '#374151', marginTop: 4 }}>{statusLine}</div>
+                              <div style={{ fontSize: 12.5, color: '#374151', marginTop: 4 }}>{pricingLine}</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                               <button
                                 type="button"
-                                style={btnCompactMuted}
-                                disabled={commandBusy || commercialActions.find((a) => a.action_key === 'cancel_pricing_adjustment')?.enabled === false}
-                                onClick={() => {
-                                  const a = commercialActions.find((x) => x.action_key === 'cancel_pricing_adjustment');
-                                  openCommandModal('cancel_pricing_adjustment', a ?? { action_key: 'cancel_pricing_adjustment', enabled: true }, {
-                                    pricing_adjustment_id: adjId,
-                                    reason: 'Owner cancelled adjustment',
-                                  });
-                                }}
+                                className="nx-btn nx-btn-taxes-compact"
+                                disabled={commandBusy || entStatus === 'entitled'}
+                                onClick={() => openCommercialModal('extend_trial', org, m)}
                               >
-                                Cancel adjustment
+                                Extend Trial
                               </button>
-                            );
-                          })()}
+                              <button
+                                type="button"
+                                className="nx-btn nx-btn-taxes-compact"
+                                disabled={commandBusy}
+                                onClick={() => openCommercialModal('activate', org, m)}
+                              >
+                                Activate
+                              </button>
+                              <button
+                                type="button"
+                                className="nx-btn nx-btn-taxes-compact"
+                                disabled={commandBusy}
+                                onClick={() => openCommercialModal('pricing', org, m)}
+                              >
+                                Pricing
+                              </button>
+                              {hasAdj ? (
+                                <button
+                                  type="button"
+                                  className="nx-btn nx-btn-taxes-compact"
+                                  disabled={commandBusy}
+                                  onClick={() => openCommercialModal('cancel_adj', org, m)}
+                                >
+                                  Cancel Adjustment
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {!commercialOrgRows.length ? (
-                  <tr>
-                    <td colSpan={5} style={{ padding: 12, color: '#6b7280' }}>
-                      No commercial data available.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+                      );
+                    })}
+                    {!modules.length ? <div style={{ color: '#6b7280' }}>No modules</div> : null}
+                  </div>
+                </section>
+              );
+            })}
+            {!commercialOrgRows.length ? <div style={{ color: '#6b7280' }}>No commercial data available.</div> : null}
           </div>
         </section>
+
+        {commercialModal && commercialTarget ? (
+          <div
+            role="dialog"
+            aria-modal="true"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1100,
+              padding: 16,
+            }}
+            onClick={() => setCommercialModal(null)}
+          >
+            <div
+              style={{
+                background: '#fff',
+                width: 'min(720px, 96vw)',
+                borderRadius: 14,
+                border: '1px solid #E5E7EB',
+                boxShadow: '0 10px 30px rgba(15,23,42,0.14)',
+                padding: 16,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <h2 style={{ margin: 0, fontSize: 16 }}>
+                  {commercialModal.kind === 'extend_trial'
+                    ? 'Extend Trial'
+                    : commercialModal.kind === 'activate'
+                      ? 'Activate Module'
+                      : commercialModal.kind === 'pricing'
+                        ? 'Pricing Adjustment'
+                        : 'Cancel Pricing Adjustment'}
+                </h2>
+                <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={() => setCommercialModal(null)}>
+                  X
+                </button>
+              </div>
+
+              {commercialModalError ? (
+                <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B' }}>
+                  {commercialModalError}
+                </div>
+              ) : null}
+
+              <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+                <div style={{ padding: 10, border: '1px solid #E5E7EB', borderRadius: 12, background: '#F8FAFC' }}>
+                  <div style={{ fontWeight: 800 }}>{commercialTarget.org_name}</div>
+                  <div style={{ marginTop: 4, color: '#374151', fontSize: 13 }}>
+                    {commercialTarget.module_name} · Status: {entitlementLabel(commercialTarget.entitlement_status)}
+                    {commercialTarget.entitlement_status === 'trial' && commercialTarget.trial_ends_at
+                      ? ` · Current expiry: ${fmtOwnerDate(commercialTarget.trial_ends_at)}`
+                      : ''}
+                  </div>
+                </div>
+
+                {commercialModal.kind === 'extend_trial' ? (
+                  <>
+                    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                      Extend until
+                      <input
+                        type="date"
+                        value={trialExtendUntilYmd}
+                        onChange={(e) => setTrialExtendUntilYmd(e.target.value)}
+                        style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                      Reason
+                      <input
+                        type="text"
+                        value={trialReason}
+                        onChange={(e) => setTrialReason(e.target.value)}
+                        placeholder="Reason"
+                        style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                      />
+                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                      <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={() => setCommercialModal(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="nx-btn nx-btn-taxes-compact"
+                        style={{ background: '#2563EB', color: '#fff' }}
+                        disabled={commandBusy || !trialExtendUntilYmd.trim() || !trialReason.trim()}
+                        onClick={() =>
+                          void (async () => {
+                            try {
+                              setCommercialModalError('');
+                              await sendOwnerCommand('extend_org_module_trial', {
+                                org_id: commercialTarget.org_id,
+                                module_key: commercialTarget.module_key,
+                                expires_at: ymdToIsoEndOfDayZ(trialExtendUntilYmd),
+                                reason: trialReason.trim(),
+                              });
+                              setCommercialModal(null);
+                            } catch (e) {
+                              setCommercialModalError(userFacingApiMessage(e));
+                            }
+                          })()
+                        }
+                      >
+                        Extend Trial
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+
+                {commercialModal.kind === 'activate' ? (
+                  <>
+                    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                      Start date
+                      <input
+                        type="date"
+                        value={activateFromYmd}
+                        onChange={(e) => setActivateFromYmd(e.target.value)}
+                        style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                      End date (optional)
+                      <input
+                        type="date"
+                        value={activateUntilYmd}
+                        onChange={(e) => setActivateUntilYmd(e.target.value)}
+                        style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                      Reason
+                      <input
+                        type="text"
+                        value={activateReason}
+                        onChange={(e) => setActivateReason(e.target.value)}
+                        placeholder="Reason"
+                        style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                      />
+                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                      <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={() => setCommercialModal(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="nx-btn nx-btn-taxes-compact"
+                        style={{ background: '#2563EB', color: '#fff' }}
+                        disabled={commandBusy || !activateFromYmd.trim() || !activateReason.trim()}
+                        onClick={() =>
+                          void (async () => {
+                            try {
+                              setCommercialModalError('');
+                              await sendOwnerCommand('activate_org_module_access', {
+                                org_id: commercialTarget.org_id,
+                                module_key: commercialTarget.module_key,
+                                active_from: ymdToIsoEndOfDayZ(activateFromYmd),
+                                ...(activateUntilYmd.trim() ? { active_until: ymdToIsoEndOfDayZ(activateUntilYmd) } : {}),
+                                reason: activateReason.trim(),
+                              });
+                              setCommercialModal(null);
+                            } catch (e) {
+                              setCommercialModalError(userFacingApiMessage(e));
+                            }
+                          })()
+                        }
+                      >
+                        Activate
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+
+                {commercialModal.kind === 'pricing' ? (
+                  <>
+                    <div style={{ padding: 10, borderRadius: 12, border: '1px solid #E5E7EB', background: '#F8FAFC', fontSize: 13, color: '#374151' }}>
+                      Base price: {commercialTarget.base_currency && commercialTarget.base_amount != null ? `${commercialTarget.base_currency} ${commercialTarget.base_amount.toFixed(2)}` : '—'}
+                      <br />
+                      Effective price (current):{' '}
+                      {commercialTarget.base_currency && commercialTarget.effective_amount != null
+                        ? `${commercialTarget.base_currency} ${commercialTarget.effective_amount.toFixed(2)}`
+                        : '—'}
+                      <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
+                        Preview for the new adjustment is computed by backend after save (no frontend price math).
+                      </div>
+                    </div>
+
+                    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                      Adjustment type
+                      <select
+                        value={pricingType}
+                        onChange={(e) => setPricingType(e.target.value as any)}
+                        style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                      >
+                        <option value="discount_amount">Discount Amount</option>
+                        <option value="replace_price">Replace Price</option>
+                        <option value="add_amount">Add Amount</option>
+                        <option value="free_access">Free Access</option>
+                      </select>
+                    </label>
+
+                    {pricingType !== 'free_access' ? (
+                      <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                        Value
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={pricingValue}
+                          onChange={(e) => setPricingValue(e.target.value)}
+                          style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                        />
+                      </label>
+                    ) : null}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                        Start date
+                        <input
+                          type="date"
+                          value={pricingStartYmd}
+                          onChange={(e) => setPricingStartYmd(e.target.value)}
+                          style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                        End date (required)
+                        <input
+                          type="date"
+                          value={pricingEndYmd}
+                          onChange={(e) => setPricingEndYmd(e.target.value)}
+                          style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                        />
+                      </label>
+                    </div>
+
+                    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                      Reason
+                      <input
+                        type="text"
+                        value={pricingReason}
+                        onChange={(e) => setPricingReason(e.target.value)}
+                        placeholder="Reason"
+                        style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                      />
+                    </label>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                      <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={() => setCommercialModal(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="nx-btn nx-btn-taxes-compact"
+                        style={{ background: '#2563EB', color: '#fff' }}
+                        disabled={
+                          commandBusy ||
+                          !pricingStartYmd.trim() ||
+                          !pricingEndYmd.trim() ||
+                          !pricingReason.trim() ||
+                          (pricingType !== 'free_access' && !pricingValue.trim())
+                        }
+                        onClick={() =>
+                          void (async () => {
+                            try {
+                              setCommercialModalError('');
+                              await sendOwnerCommand('create_pricing_adjustment', {
+                                org_id: commercialTarget.org_id,
+                                module_key: commercialTarget.module_key,
+                                adjustment_type: pricingType,
+                                ...(pricingType === 'free_access' ? {} : { value: Number(pricingValue) }),
+                                start_date: pricingStartYmd,
+                                end_date: pricingEndYmd,
+                                reason: pricingReason.trim(),
+                              });
+                              setCommercialModal(null);
+                            } catch (e) {
+                              setCommercialModalError(userFacingApiMessage(e));
+                            }
+                          })()
+                        }
+                      >
+                        Save Adjustment
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+
+                {commercialModal.kind === 'cancel_adj' ? (
+                  <>
+                    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                      Reason (optional)
+                      <input
+                        type="text"
+                        value={cancelAdjReason}
+                        onChange={(e) => setCancelAdjReason(e.target.value)}
+                        placeholder="Reason"
+                        style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                      />
+                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                      <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={() => setCommercialModal(null)}>
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        className="nx-btn nx-btn-taxes-compact"
+                        style={{ background: '#B91C1C', color: '#fff' }}
+                        disabled={commandBusy || !commercialTarget.active_adj_id}
+                        onClick={() =>
+                          void (async () => {
+                            try {
+                              setCommercialModalError('');
+                              await sendOwnerCommand('cancel_pricing_adjustment', {
+                                pricing_adjustment_id: commercialTarget.active_adj_id,
+                                ...(cancelAdjReason.trim() ? { reason: cancelAdjReason.trim() } : {}),
+                              });
+                              setCommercialModal(null);
+                            } catch (e) {
+                              setCommercialModalError(userFacingApiMessage(e));
+                            }
+                          })()
+                        }
+                      >
+                        Cancel Adjustment
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <h2 style={{ margin: 0 }}>1. Country Packs</h2>
