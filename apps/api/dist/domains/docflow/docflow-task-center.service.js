@@ -167,7 +167,7 @@ export async function buildOfficeDocflowTaskCenterAggregate(opts) {
     if (mErr)
         throw mErr;
     const m0 = metricsRows?.[0] ?? {};
-    const { data: pageRows, error: pErr } = await supabaseAdmin.rpc('docflow_task_center_threads_page', {
+    const rpcArgs = {
         p_org_id: opts.orgId,
         p_user_id: opts.userId,
         p_search: opts.search ?? '',
@@ -179,14 +179,32 @@ export async function buildOfficeDocflowTaskCenterAggregate(opts) {
         p_overdue_only: !!opts.overdue_only,
         p_due_from: opts.due_from && /^\d{4}-\d{2}-\d{2}$/.test(opts.due_from) ? opts.due_from : null,
         p_due_to: opts.due_to && /^\d{4}-\d{2}-\d{2}$/.test(opts.due_to) ? opts.due_to : null,
-        p_page: page,
-        p_page_size: pageSize,
-    });
-    if (pErr)
-        throw pErr;
-    const rowsRaw = (pageRows ?? []);
-    const totalRows = rowsRaw.length ? Number(rowsRaw[0].total_count) || 0 : 0;
-    const totalPages = totalRows > 0 ? Math.max(1, Math.ceil(totalRows / pageSize)) : 0;
+    };
+    const fetchThreadsPage = async (p, ps) => {
+        const { data, error } = await supabaseAdmin.rpc('docflow_task_center_threads_page', {
+            ...rpcArgs,
+            p_page: p,
+            p_page_size: ps,
+        });
+        if (error)
+            throw error;
+        return (data ?? []);
+    };
+    let effectivePage = page;
+    let rowsRaw = await fetchThreadsPage(effectivePage, pageSize);
+    let totalRows = rowsRaw.length ? Number(rowsRaw[0].total_count) || 0 : 0;
+    if (!rowsRaw.length) {
+        const peek = await fetchThreadsPage(1, 1);
+        totalRows = peek.length ? Number(peek[0].total_count) || 0 : 0;
+    }
+    let totalPages = totalRows > 0 ? Math.max(1, Math.ceil(totalRows / pageSize)) : 0;
+    if (totalPages > 0 && effectivePage > totalPages) {
+        effectivePage = totalPages;
+        rowsRaw = await fetchThreadsPage(effectivePage, pageSize);
+    }
+    else if (totalPages === 0) {
+        effectivePage = 1;
+    }
     const rows = [];
     for (const r of rowsRaw) {
         const unread = await getUnreadForOffice(opts.orgId, r.client_id, r.thread_id);
@@ -307,7 +325,7 @@ export async function buildOfficeDocflowTaskCenterAggregate(opts) {
         },
         rows,
         pagination: {
-            page,
+            page: effectivePage,
             total_pages: totalPages,
             total_rows: totalRows,
         },

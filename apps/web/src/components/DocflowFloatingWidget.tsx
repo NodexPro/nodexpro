@@ -176,6 +176,11 @@ export function DocflowFloatingWidget() {
       });
       const data = (await apiJson(url)) as UnknownRecord;
       setTaskCenter(data);
+      const pr = data.pagination;
+      if (isRecord(pr)) {
+        const serverPage = typeof pr.page === 'number' ? pr.page : Number(pr.page) || 1;
+        if (serverPage !== tcPage) setTcPage(serverPage);
+      }
     } catch (e) {
       setTaskCenter(null);
       setTcLoadError(userFacingApiMessage(e));
