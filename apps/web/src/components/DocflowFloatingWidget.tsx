@@ -283,7 +283,7 @@ export function DocflowFloatingWidget() {
 
   const summaryRec = isRecord(taskCenter?.summary) ? (taskCenter!.summary as UnknownRecord) : null;
   const filtersRec = isRecord(taskCenter?.filters) ? (taskCenter!.filters as UnknownRecord) : null;
-  const rowsArr = Array.isArray(taskCenter?.rows) ? (taskCenter!.rows as UnknownRecord[]) : [];
+  const rowsArr: UnknownRecord[] = Array.isArray(taskCenter?.rows) ? (taskCenter!.rows as UnknownRecord[]) : [];
   const paginationRec = isRecord(taskCenter?.pagination) ? (taskCenter!.pagination as UnknownRecord) : null;
   const tcTotalPages =
     typeof paginationRec?.total_pages === 'number'

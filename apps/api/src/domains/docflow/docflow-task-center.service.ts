@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '../../db/client.js';
-import type { AllowedAction } from './docflow.types.js';
+import type { AllowedAction, OfficeDocflowTaskCenterRow } from './docflow.types.js';
 import { buildDocflowFloatingWidgetAggregate } from './docflow-floating-widget.service.js';
 import { getUnreadForOffice, threadStatusLabel, threadTypeLabel } from './docflow-read-models.service.js';
 import { asOptionalString } from './docflow.guards.js';
@@ -104,6 +104,39 @@ function taskCenterBulkActions(): { bulk_action: string; enabled: boolean; reaso
   ];
 }
 
+function normalizeAllowedAction(a: unknown): AllowedAction {
+  const x = a as Record<string, unknown>;
+  return {
+    command: String(x.command ?? ''),
+    enabled: Boolean(x.enabled),
+    reason: x.reason == null || x.reason === undefined ? null : String(x.reason),
+  };
+}
+
+/**
+ * Single contract for aggregate JSON: `rows` is always a plain array of plain objects
+ * (no BigInt, no sparse holes, JSON-serializable).
+ */
+function finalizeOfficeDocflowTaskCenterRows(rows: Record<string, unknown>[]): OfficeDocflowTaskCenterRow[] {
+  const mapped: OfficeDocflowTaskCenterRow[] = rows.map((r) => {
+    const rawActions = Array.isArray(r.allowed_actions) ? r.allowed_actions : [];
+    return {
+      thread_id: String(r.thread_id ?? ''),
+      client_id: String(r.client_id ?? ''),
+      client_name: String(r.client_name ?? ''),
+      module_label: String(r.module_label ?? ''),
+      thread_type_label: String(r.thread_type_label ?? ''),
+      status_label: String(r.status_label ?? ''),
+      due_label: String(r.due_label ?? ''),
+      assigned_label: String(r.assigned_label ?? ''),
+      unread_count: Number(r.unread_count) || 0,
+      last_activity_label: String(r.last_activity_label ?? ''),
+      allowed_actions: rawActions.map(normalizeAllowedAction),
+    };
+  });
+  return JSON.parse(JSON.stringify(mapped)) as OfficeDocflowTaskCenterRow[];
+}
+
 export function parseTaskCenterOptsFromPayload(
   orgId: string,
   userId: string,
@@ -171,7 +204,7 @@ export async function buildOfficeDocflowTaskCenterAggregate(opts: OfficeDocflowT
         assigned_to_me_count: 0,
       },
       filters: { modules: [], thread_types: [], statuses: [], accountants: [] },
-      rows: [],
+      rows: finalizeOfficeDocflowTaskCenterRows([]),
       pagination: { page: 1, total_pages: 0, total_rows: 0 },
       bulk_allowed_actions: [],
       task_center: {
@@ -367,7 +400,7 @@ export async function buildOfficeDocflowTaskCenterAggregate(opts: OfficeDocflowT
       statuses,
       accountants,
     },
-    rows,
+    rows: finalizeOfficeDocflowTaskCenterRows(rows),
     pagination: {
       page: effectivePage,
       total_pages: totalPages,

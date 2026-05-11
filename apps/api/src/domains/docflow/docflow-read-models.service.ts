@@ -177,6 +177,7 @@ async function getThreadAttachments(
   });
 }
 
+/** Per-thread office unread (message count). Org/inbox totals: `docflow_office_unread_messages_*` RPCs (same rules). */
 export async function getUnreadForOffice(orgId: string, clientId: string, threadId: string): Promise<number> {
   const { data: lastRead, error: readErr } = await supabaseAdmin
     .from('client_message_events')
@@ -834,6 +835,7 @@ async function resolveOfficeSelectedThread(params: {
     .select('id, module_key, thread_type, thread_status, deadline_at, updated_at')
     .eq('org_id', params.orgId)
     .eq('client_id', params.clientId)
+    .neq('thread_status', 'archived')
     .order('updated_at', { ascending: false })
     .limit(20);
   if (threadsErr) throw threadsErr;
@@ -1219,16 +1221,20 @@ export async function buildOfficeDocflowInboxAggregate(params: {
     threadsByClient.set(cid, list);
   }
 
-  // Compute unread counters for current page only (backend truth; UI does no filtering).
+  // Unread per client (sum of unread messages across all non-archived threads) — same SQL as task center KPI / RPC.
   const unreadByClient = new Map<string, number>();
-  await Promise.all(
-    pageRows.map(async (r) => {
-      const tlist = threadsByClient.get(r.client_id) ?? [];
-      const latest = tlist[0] ?? null;
-      const unread = latest ? await getUnreadForOffice(params.orgId, r.client_id, latest.id) : 0;
-      unreadByClient.set(r.client_id, unread);
-    })
-  );
+  if (pageClientIds.length) {
+    const { data: unreadRows, error: uErr } = await supabaseAdmin.rpc('docflow_office_unread_messages_for_clients', {
+      p_org_id: params.orgId,
+      p_client_ids: pageClientIds,
+    });
+    if (uErr) throw uErr;
+    for (const row of unreadRows ?? []) {
+      const cid = String((row as { client_id?: string }).client_id ?? '');
+      const n = Number((row as { unread_count?: number | string }).unread_count) || 0;
+      if (cid) unreadByClient.set(cid, n);
+    }
+  }
 
   const selectedClientId =
     String(params.selectedClientId ?? '').trim() ||

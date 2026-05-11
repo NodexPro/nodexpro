@@ -47,6 +47,21 @@ export type AllowedAction = {
   reason: string | null;
 };
 
+/** Ready-to-render task table row for `office_docflow_task_center_aggregate.rows` (always a JSON array). */
+export type OfficeDocflowTaskCenterRow = {
+  thread_id: string;
+  client_id: string;
+  client_name: string;
+  module_label: string;
+  thread_type_label: string;
+  status_label: string;
+  due_label: string;
+  assigned_label: string;
+  unread_count: number;
+  last_activity_label: string;
+  allowed_actions: AllowedAction[];
+};
+
 export type DocflowRefreshedAggregateKey =
   | 'client_docflow_tab_aggregate'
   | 'docflow_invites_management_aggregate'

@@ -834,6 +834,7 @@
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .docflow-task-table {
