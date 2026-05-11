@@ -23,26 +23,43 @@ function isRecord(v: unknown): v is UnknownRecord {
 
 const MESSENGER_PAGE_SIZE = 50;
 
-/** Inline SVG: document checklist; 17×17 (≈16–18px UI). Sharp vector, no glow. */
+/** Inline SVG: request-documents — doc + fold + lines + gradient + badge (22px, no PNG / glow / shadow). */
 function DocflowClientRequestGlyph(): ReactElement {
   const uid = useId().replace(/:/g, '');
-  const gid = `nx-docflow-req-${uid}`;
+  const gid = `nx-df-req-g-${uid}`;
   return (
-    <svg width={17} height={17} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden focusable="false">
+    <svg width={22} height={22} viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden focusable="false">
       <defs>
-        <linearGradient id={gid} x1="1.5" y1="1.5" x2="14.5" y2="14.5" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#2563EB" />
-          <stop offset="1" stopColor="#5B21B6" />
+        <linearGradient id={gid} x1="2" y1="3" x2="20" y2="19" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#38BDF8" />
+          <stop offset="0.45" stopColor="#6366F1" />
+          <stop offset="1" stopColor="#7C3AED" />
         </linearGradient>
       </defs>
+      {/* Rounded join reads as soft corners; pentagon = sheet + fold */}
       <path
-        d="M3.5 2.25h5.2L10.75 4.3v9.45H3.5a.5.5 0 0 1-.5-.5V2.75a.5.5 0 0 1 .5-.5Z"
+        d="M5.25 9.3V16.85h9.2V11L10.85 9.3H5.25z"
         stroke={`url(#${gid})`}
-        strokeWidth="1.15"
+        strokeWidth="1.45"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      {/* Body lines = checklist / request */}
+      <path
+        d="M7.05 12.65h5.15M7.05 14.2h5.15M7.05 15.75h3.25"
+        stroke={`url(#${gid})`}
+        strokeWidth="1.25"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path d="M8.7 2.25V4.8h2.55" stroke={`url(#${gid})`} strokeWidth="1.15" strokeLinejoin="round" />
-      <path d="M5 7.2h4.2M5 9h4.2M5 10.8H8.1" stroke={`url(#${gid})`} strokeWidth="1" strokeLinecap="round" />
+      {/* Action badge: request / add — flat gradient disc + crisp white plus */}
+      <circle cx="16.75" cy="16.35" r="3.6" fill={`url(#${gid})`} />
+      <path
+        d="M16.75 14.9v2.9M15.3 16.35h2.9"
+        stroke="#FFFFFF"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
