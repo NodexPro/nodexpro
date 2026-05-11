@@ -45,7 +45,7 @@ function DocflowClientRequestGlyph(): ReactElement {
         </linearGradient>
       </defs>
       {/* Outer circular disc */}
-      <circle cx="12" cy="12" r="9.75" fill={`url(#${gid})`} />
+      <circle cx="12" cy="12" r="10.6" fill={`url(#${gid})`} />
       {/* Document outline */}
       <path
         d="M8 8h4.9L15.5 10.6V16H8.5A1.5 1.5 0 0 1 7 14.5V8.5A.5.5 0 0 1 7.5 8Z"
@@ -59,8 +59,8 @@ function DocflowClientRequestGlyph(): ReactElement {
       {/* Document lines */}
       <path d="M9.1 11.7h3.4M9.1 13h3.4M9.1 14.3h2.2" stroke="#FFFFFF" strokeWidth="1.1" strokeLinecap="round" />
       {/* Plus badge (front) */}
-      <circle cx="15.7" cy="15.5" r="2.6" stroke="#FFFFFF" strokeWidth="1.1" fill="none" />
-      <path d="M15.7 14.4v2.2M14.6 15.5h2.2" stroke="#FFFFFF" strokeWidth="1.1" strokeLinecap="round" />
+      <circle cx="16" cy="15.75" r="2.9" stroke="#FFFFFF" strokeWidth="1.05" fill="none" />
+      <path d="M16 14.7v2.1M14.95 15.75H17.05" stroke="#FFFFFF" strokeWidth="1.05" strokeLinecap="round" />
     </svg>
   );
 }
@@ -442,6 +442,8 @@ export function DocflowMessengerPage() {
                             padding: 0,
                             fontWeight: 700,
                             fontSize: 14,
+                            height: 22,
+                            lineHeight: '22px',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
@@ -459,6 +461,8 @@ export function DocflowMessengerPage() {
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            position: 'relative',
+                            transform: 'translateX(9px)',
                           }}
                         >
                           {requestVisible ? (
