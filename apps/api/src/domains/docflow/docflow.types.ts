@@ -18,6 +18,7 @@ export type DocflowCommandType =
   | 'create_system_message'
   | 'send_office_message'
   | 'send_office_message_with_attachment'
+  | 'create_docflow_document_request'
   | 'send_client_message'
   | 'send_client_message_with_attachment'
   | 'attach_file_to_client_message'

@@ -25,6 +25,7 @@ import {
   reqDateTimeIso,
   reqString,
 } from './docflow.guards.js';
+import { resolveOrganizationCountryCode } from './docflow-request-templates.service.js';
 import { createSystemMessageCore } from './docflow-system-message-core.service.js';
 import { executeDocflowCommunicationOfficeCommand } from './docflow-communication-rule.service.js';
 import { sendInviteSms } from './docflow-invite-delivery.adapter.js';
@@ -44,6 +45,7 @@ function ensureObj(value: unknown): DocflowCommandPayload {
 
 const IDEM_SCOPE_SEND_OFFICE_MESSAGE = 'send_office_message';
 const IDEM_SCOPE_SEND_OFFICE_MESSAGE_WITH_ATTACHMENT = 'send_office_message_with_attachment';
+const IDEM_SCOPE_CREATE_DOCFLOW_DOCUMENT_REQUEST = 'create_docflow_document_request';
 const IDEM_SCOPE_SEND_CLIENT_MESSAGE = 'send_client_message';
 const IDEM_SCOPE_SEND_CLIENT_MESSAGE_WITH_ATTACHMENT = 'send_client_message_with_attachment';
 const IDEM_SCOPE_START_CLIENT_PORTAL_THREAD = 'start_client_portal_thread';
@@ -113,6 +115,61 @@ async function upsertHumanOfficeMessage(params: {
     .single();
   if (error && (error as { code?: string }).code === '23505') {
     const again = await findHumanIdempotentMessage(params.orgId, params.clientId, params.scope, params.idempotencyKey);
+    if (!again) throw error;
+    if (again.thread_id !== params.threadId) {
+      throw badRequest('idempotency_key already used for another thread', 'idempotency_thread_mismatch');
+    }
+    return { messageId: again.id, isDuplicate: true };
+  }
+  if (error) throw error;
+  return { messageId: String(data.id), isDuplicate: false };
+}
+
+async function upsertOfficeDocumentRequestMessage(params: {
+  orgId: string;
+  clientId: string;
+  threadId: string;
+  actorUserId: string;
+  body: string;
+  requestSnapshotJson: Record<string, unknown>;
+  idempotencyKey: string;
+}): Promise<{ messageId: string; isDuplicate: boolean }> {
+  const existing = await findHumanIdempotentMessage(
+    params.orgId,
+    params.clientId,
+    IDEM_SCOPE_CREATE_DOCFLOW_DOCUMENT_REQUEST,
+    params.idempotencyKey
+  );
+  if (existing) {
+    if (existing.thread_id !== params.threadId) {
+      throw badRequest('idempotency_key already used for another thread', 'idempotency_thread_mismatch');
+    }
+    return { messageId: existing.id, isDuplicate: true };
+  }
+  const { data, error } = await supabaseAdmin
+    .from('client_messages')
+    .insert({
+      org_id: params.orgId,
+      client_id: params.clientId,
+      thread_id: params.threadId,
+      message_type: 'document_request',
+      created_by_type: 'office',
+      created_by_user_id: params.actorUserId,
+      body: params.body,
+      message_status: 'published',
+      request_snapshot_json: params.requestSnapshotJson,
+      idempotency_scope: IDEM_SCOPE_CREATE_DOCFLOW_DOCUMENT_REQUEST,
+      idempotency_key: params.idempotencyKey,
+    })
+    .select('id')
+    .single();
+  if (error && (error as { code?: string }).code === '23505') {
+    const again = await findHumanIdempotentMessage(
+      params.orgId,
+      params.clientId,
+      IDEM_SCOPE_CREATE_DOCFLOW_DOCUMENT_REQUEST,
+      params.idempotencyKey
+    );
     if (!again) throw error;
     if (again.thread_id !== params.threadId) {
       throw badRequest('idempotency_key already used for another thread', 'idempotency_thread_mismatch');
@@ -1147,6 +1204,91 @@ export async function executeDocflowOfficeCommand(
             file_asset_id: fileAssetId,
           });
         }
+      }
+      return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
+    }
+    case 'create_docflow_document_request': {
+      const threadId = reqString(payload, 'thread_id');
+      const templateDefinitionId = reqString(payload, 'template_definition_id');
+      await assertDocflowThreadScope(orgId, clientId, threadId);
+      const idsRaw = Array.isArray(payload.selected_definition_item_ids) ? payload.selected_definition_item_ids : [];
+      const selectedIds = new Set(idsRaw.map((v) => String(v ?? '').trim()).filter(Boolean));
+      if (!selectedIds.size) throw badRequest('selected_definition_item_ids must contain at least one id');
+      const idempotencyKey = reqHumanSendIdempotencyKey(payload);
+      const note = asOptionalString(payload.note);
+
+      const orgCountry = await resolveOrganizationCountryCode(orgId);
+      if (!orgCountry) throw badRequest('Organization country is not set; cannot send document request');
+
+      const { data: tpl, error: tErr } = await supabaseAdmin
+        .from('docflow_request_template_definitions')
+        .select('id, country_code, name, archived_at')
+        .eq('id', templateDefinitionId)
+        .maybeSingle();
+      if (tErr) throw tErr;
+      if (!tpl) throw notFound('Template not found');
+      if (tpl.archived_at) throw badRequest('Template is archived');
+      const tplCountry = String(tpl.country_code ?? '').trim().toUpperCase().slice(0, 2);
+      if (tplCountry !== orgCountry) throw badRequest('Template does not match organization country');
+
+      const { data: itemRows, error: iErr } = await supabaseAdmin
+        .from('docflow_request_template_definition_items')
+        .select('id, label, description, sort_order')
+        .eq('template_definition_id', templateDefinitionId)
+        .order('sort_order', { ascending: true });
+      if (iErr) throw iErr;
+      const items = itemRows ?? [];
+      if (!items.length) throw badRequest('Template has no items');
+      const validIds = new Set(items.map((r) => String(r.id)));
+      for (const sid of selectedIds) {
+        if (!validIds.has(sid)) throw badRequest('selected_definition_item_ids must reference template items');
+      }
+      const snapshotItems = items
+        .filter((r) => selectedIds.has(String(r.id)))
+        .map((r) => ({
+          definition_item_id: String(r.id),
+          label: String(r.label ?? '').trim(),
+          description: r.description != null && String(r.description).trim() !== '' ? String(r.description) : null,
+        }));
+
+      const snapshot: Record<string, unknown> = {
+        template_definition_id: templateDefinitionId,
+        template_name: String(tpl.name ?? '').trim(),
+        country_code: tplCountry,
+        note,
+        items: snapshotItems,
+      };
+      const bodyTitle = `📑 ${String(tpl.name ?? '').trim()}`;
+
+      const { messageId, isDuplicate } = await upsertOfficeDocumentRequestMessage({
+        orgId,
+        clientId,
+        threadId,
+        actorUserId,
+        body: bodyTitle,
+        requestSnapshotJson: snapshot,
+        idempotencyKey,
+      });
+      if (!isDuplicate) {
+        await supabaseAdmin
+          .from('client_message_threads')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', threadId)
+          .eq('org_id', orgId)
+          .eq('client_id', clientId);
+        await supabaseAdmin.from('client_message_events').insert({
+          org_id: orgId,
+          client_id: clientId,
+          thread_id: threadId,
+          message_id: messageId,
+          event_type: 'message_created',
+          actor_type: 'office',
+          actor_user_id: actorUserId,
+        });
+        await audit(orgId, actorUserId, 'docflow_message', messageId, AUDIT_ACTIONS.DOCFLOW_DOCUMENT_REQUEST_SENT, {
+          thread_id: threadId,
+          template_definition_id: templateDefinitionId,
+        });
       }
       return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: threadId }) };
     }

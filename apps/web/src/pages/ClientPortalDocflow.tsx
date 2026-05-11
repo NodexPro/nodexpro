@@ -665,7 +665,55 @@ export function ClientPortalDocflow() {
                         boxShadow: '0 1px 1px rgba(0,0,0,0.05)',
                       }}
                     >
-                      <div style={{ marginTop: 2, whiteSpace: 'pre-wrap', lineHeight: 1.35, fontSize: 14.2 }}>{String(m.body ?? '')}</div>
+                      {String(m.message_type ?? '') === 'document_request' ? (
+                        (() => {
+                          const snap = m.request_snapshot_json;
+                          const s =
+                            snap && typeof snap === 'object' && !Array.isArray(snap)
+                              ? (snap as UnknownRecord)
+                              : null;
+                          const title = String(s?.template_name ?? m.body ?? '').trim() || 'Document request';
+                          const note = String(s?.note ?? '').trim() || null;
+                          const itemsRaw = Array.isArray(s?.items) ? (s?.items as UnknownRecord[]) : [];
+                          const items = itemsRaw
+                            .map((it) => String(it.label ?? '').trim())
+                            .filter(Boolean)
+                            .slice(0, 50);
+                          return (
+                            <div
+                              style={{
+                                border: '1px solid #C7D2FE',
+                                background: '#EEF2FF',
+                                borderRadius: 12,
+                                padding: '10px 10px',
+                              }}
+                            >
+                              <div style={{ fontWeight: 800, color: '#1E3A8A', marginBottom: 8 }}>
+                                📑 {title}
+                              </div>
+                              {items.length ? (
+                                <div style={{ display: 'grid', gap: 6, color: '#111827', fontSize: 13.8 }}>
+                                  {items.map((label, idx) => (
+                                    <div key={`${idx}:${label}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                      <span style={{ width: 14, display: 'inline-block' }}>☐</span>
+                                      <span>{label}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: 13, color: '#334155' }}>—</div>
+                              )}
+                              {note ? (
+                                <div style={{ marginTop: 10, whiteSpace: 'pre-wrap', color: '#111827', fontSize: 13.6 }}>
+                                  {note}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div style={{ marginTop: 2, whiteSpace: 'pre-wrap', lineHeight: 1.35, fontSize: 14.2 }}>{String(m.body ?? '')}</div>
+                      )}
                       {msgAttachments.length > 0 ? (
                         <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
                           {msgAttachments.map((a) => {

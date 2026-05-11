@@ -8,6 +8,7 @@ import {
   isDocflowCommunicationOwnerPayload,
 } from './docflow-communication-owner-payload.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
+import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
 
 function canUseOrgAggregate(ctx: RequestContext, organizationId: string): boolean {
   return !!ctx.organizationId && ctx.organizationId === organizationId;
@@ -423,6 +424,7 @@ const OWNER_LEGAL_CONTROL_AUDIT_ENTITY_TYPES = [
   'module_plan',
   'owner_country_pack_api',
   'country_pack_command',
+  'docflow_request_template_definition',
 ] as const;
 
 type OwnerLegalControlAuditRow = {
@@ -569,13 +571,15 @@ async function fetchOwnerLegalControlPanelAuditSummary(): Promise<{ recent: Owne
 export async function buildOwnerLegalControlPanelAggregate(ctx: RequestContext): Promise<Record<string, unknown>> {
   assertPlatformOwner(ctx);
 
-  const [countryPacksAdmin, legalValues, platformPricing, emailProviderConfig, auditSummary] = await Promise.all([
-    buildOwnerCountryPackAdminAggregate(ctx),
-    buildOwnerLegalValuesAggregate(ctx),
-    buildOwnerPlatformPricingAggregate(ctx),
-    buildOwnerEmailProviderConfigAggregate(),
-    fetchOwnerLegalControlPanelAuditSummary(),
-  ]);
+  const [countryPacksAdmin, legalValues, platformPricing, emailProviderConfig, auditSummary, docflowRequestTemplates] =
+    await Promise.all([
+      buildOwnerCountryPackAdminAggregate(ctx),
+      buildOwnerLegalValuesAggregate(ctx),
+      buildOwnerPlatformPricingAggregate(ctx),
+      buildOwnerEmailProviderConfigAggregate(),
+      fetchOwnerLegalControlPanelAuditSummary(),
+      fetchDocflowRequestTemplatesForOwner(),
+    ]);
 
   const tables = countryPacksAdmin.tables as
     | { countries?: unknown[]; country_packs?: unknown[]; rulesets?: unknown[] }
@@ -603,6 +607,7 @@ export async function buildOwnerLegalControlPanelAggregate(ctx: RequestContext):
     legal_values_table: legalValues.table ?? [],
     legal_value_versions: legalValueVersionsFlat,
     docflow_communication_templates: docflowCommunicationTemplates,
+    docflow_request_templates: docflowRequestTemplates,
     docflow_communication_quick_actions: [
       {
         action_key: 'create_legal_value',
@@ -686,6 +691,27 @@ export async function buildOwnerLegalControlPanelAggregate(ctx: RequestContext):
           payload: {
             app_public_url: 'https://app.yourdomain.com',
           },
+        },
+      ],
+      docflow_request_templates: [
+        {
+          action_key: 'save_request_template_definition',
+          enabled: true,
+          button_label: 'Save document request template',
+          note: 'Full replace of name, country, and checklist items. Omit template_definition_id to create.',
+          payload: {
+            template_definition_id: 'optional uuid',
+            country_code: 'IL',
+            name: 'string',
+            items: [{ label: 'string', description: 'optional string' }],
+          },
+        },
+        {
+          action_key: 'archive_request_template_definition',
+          enabled: true,
+          button_label: 'Archive document request template',
+          note: null,
+          payload: { template_definition_id: 'uuid' },
         },
       ],
     },

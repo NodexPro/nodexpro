@@ -177,6 +177,9 @@ export const AUDIT_ACTIONS = {
     DOCFLOW_ATTACHMENT_ADDED: 'message_attachment_added',
     DOCFLOW_THREAD_READ_MARKED_OFFICE: 'thread_read_marked_office',
     DOCFLOW_THREAD_READ_MARKED_CLIENT: 'thread_read_marked_client',
+    DOCFLOW_REQUEST_TEMPLATE_SAVED: 'docflow_request_template_saved',
+    DOCFLOW_REQUEST_TEMPLATE_ARCHIVED: 'docflow_request_template_archived',
+    DOCFLOW_DOCUMENT_REQUEST_SENT: 'docflow_document_request_sent',
 };
 export async function writeAudit(params) {
     await supabaseAdmin.from('audit_log').insert({

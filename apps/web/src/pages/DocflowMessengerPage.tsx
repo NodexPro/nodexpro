@@ -43,6 +43,10 @@ export function DocflowMessengerPage() {
   const [busy, setBusy] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
   const [composer, setComposer] = useState('');
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [requestTemplateId, setRequestTemplateId] = useState('');
+  const [requestSelectedItemIds, setRequestSelectedItemIds] = useState<string[]>([]);
+  const [requestNote, setRequestNote] = useState('');
   const [searchClient, setSearchClient] = useState('');
   const inflightAbort = useRef<AbortController | null>(null);
   const searchClientRef = useRef('');
@@ -80,6 +84,32 @@ export function DocflowMessengerPage() {
     const list = clientContext?.attachments;
     return Array.isArray(list) ? (list as UnknownRecord[]) : [];
   }, [clientContext]);
+
+  const availableRequestTemplates = useMemo(() => {
+    const t = clientContext?.available_request_templates;
+    return Array.isArray(t) ? (t as UnknownRecord[]) : [];
+  }, [clientContext]);
+
+  const selectedRequestTemplate = useMemo(() => {
+    const id = requestTemplateId.trim();
+    if (!id) return null;
+    return availableRequestTemplates.find((t) => String(t.id ?? '').trim() === id) ?? null;
+  }, [availableRequestTemplates, requestTemplateId]);
+
+  function resetRequestDraftFromTemplate(tpl: UnknownRecord | null): void {
+    if (!tpl) {
+      setRequestTemplateId('');
+      setRequestSelectedItemIds([]);
+      setRequestNote('');
+      return;
+    }
+    const tid = String(tpl.id ?? '').trim();
+    const items = Array.isArray(tpl.items) ? (tpl.items as UnknownRecord[]) : [];
+    const allIds = items.map((it) => String(it.id ?? '').trim()).filter(Boolean);
+    setRequestTemplateId(tid);
+    setRequestSelectedItemIds(allIds);
+    setRequestNote('');
+  }
 
   const actions = useMemo(() => {
     const list = clientContext?.allowed_actions;
@@ -493,10 +523,172 @@ export function DocflowMessengerPage() {
                   }}
                 />
               </label>
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                style={{ minWidth: 110, background: '#2563EB', color: '#fff' }}
+                disabled={!selectedThreadId || busy.length > 0 || !canRun('create_docflow_document_request').enabled}
+                title={canRun('create_docflow_document_request').reason ?? undefined}
+                onClick={() => {
+                  const first = availableRequestTemplates[0] ?? null;
+                  resetRequestDraftFromTemplate(first && isRecord(first) ? first : null);
+                  setRequestModalOpen(true);
+                }}
+              >
+                📑 בקשת מסמכים
+              </button>
             </div>
           </div>
         </section>
       </div>
+
+      {requestModalOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+          onClick={() => setRequestModalOpen(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              width: 'min(720px, 96vw)',
+              borderRadius: 14,
+              border: '1px solid #E5E7EB',
+              boxShadow: '0 10px 30px rgba(15,23,42,0.14)',
+              padding: 16,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <h3 style={{ margin: 0 }}>Create Document Request</h3>
+              <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={() => setRequestModalOpen(false)}>
+                X
+              </button>
+            </div>
+
+            <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+              <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                Template
+                <select
+                  value={requestTemplateId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const tpl = availableRequestTemplates.find((t) => String(t.id ?? '').trim() === id) ?? null;
+                    resetRequestDraftFromTemplate(tpl && isRecord(tpl) ? tpl : null);
+                  }}
+                  style={{ height: 38, borderRadius: 10, border: '1px solid #CBD5E1', padding: '0 12px', fontSize: 14 }}
+                  disabled={busy.length > 0}
+                >
+                  <option value="">Select template</option>
+                  {availableRequestTemplates.map((t) => {
+                    const id = String(t.id ?? '').trim();
+                    const name = String(t.name ?? '').trim();
+                    return (
+                      <option key={id} value={id}>
+                        {name || id}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+
+              <div style={{ border: '1px solid #E5E7EB', borderRadius: 12, padding: 12, background: '#F8FAFC' }}>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Checklist</div>
+                {!selectedRequestTemplate ? (
+                  <div style={{ color: '#6b7280', fontSize: 13 }}>Select a template to see items.</div>
+                ) : (
+                  (() => {
+                    const items = Array.isArray(selectedRequestTemplate.items) ? (selectedRequestTemplate.items as UnknownRecord[]) : [];
+                    return items.length ? (
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {items.map((it) => {
+                          const id = String(it.id ?? '').trim();
+                          const label = String(it.label ?? '').trim();
+                          const checked = requestSelectedItemIds.includes(id);
+                          return (
+                            <label key={id} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14 }}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const on = e.target.checked;
+                                  setRequestSelectedItemIds((prev) => {
+                                    const s = new Set(prev);
+                                    if (on) s.add(id);
+                                    else s.delete(id);
+                                    return [...s];
+                                  });
+                                }}
+                              />
+                              <span>{label || id}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ color: '#6b7280', fontSize: 13 }}>Template has no items.</div>
+                    );
+                  })()
+                )}
+              </div>
+
+              <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                Note (optional)
+                <textarea
+                  rows={3}
+                  value={requestNote}
+                  onChange={(e) => setRequestNote(e.target.value)}
+                  placeholder="Please send these documents…"
+                  style={{ width: '100%', border: '1px solid #CBD5E1', borderRadius: 12, padding: 10, boxSizing: 'border-box', fontSize: 14, resize: 'vertical' }}
+                  disabled={busy.length > 0}
+                />
+              </label>
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={() => setRequestModalOpen(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-taxes-compact"
+                  style={{ background: '#2563EB', color: '#fff', minWidth: 120 }}
+                  disabled={
+                    busy.length > 0 ||
+                    !selectedThreadId ||
+                    !canRun('create_docflow_document_request').enabled ||
+                    !requestTemplateId.trim() ||
+                    requestSelectedItemIds.length === 0
+                  }
+                  onClick={() =>
+                    void runOfficeCommand('create_docflow_document_request', {
+                      thread_id: selectedThreadId,
+                      template_definition_id: requestTemplateId,
+                      selected_definition_item_ids: requestSelectedItemIds,
+                      ...(requestNote.trim() ? { note: requestNote.trim() } : {}),
+                      idempotency_key: newDocflowIdempotencyKey(),
+                    }).then(() => {
+                      setRequestModalOpen(false);
+                      setRequestNote('');
+                    })
+                  }
+                >
+                  Send Request
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

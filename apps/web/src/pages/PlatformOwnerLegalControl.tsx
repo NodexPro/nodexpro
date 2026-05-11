@@ -175,6 +175,19 @@ export function PlatformOwnerLegalControl() {
   const [legalValuesModalOpen, setLegalValuesModalOpen] = useState(false);
   const [auditModalOpen, setAuditModalOpen] = useState(false);
   const [emailProviderModalOpen, setEmailProviderModalOpen] = useState(false);
+  const [docflowRequestsModalOpen, setDocflowRequestsModalOpen] = useState(false);
+  const [docflowRequestsModalError, setDocflowRequestsModalError] = useState('');
+  const [docflowRequestTemplateDraft, setDocflowRequestTemplateDraft] = useState<{
+    template_definition_id: string;
+    country_code: string;
+    name: string;
+    items: Array<{ label: string; description: string }>;
+  }>({
+    template_definition_id: '',
+    country_code: '',
+    name: '',
+    items: [{ label: '', description: '' }],
+  });
   const [emailProviderModalError, setEmailProviderModalError] = useState('');
   const [appPublicUrlDraft, setAppPublicUrlDraft] = useState('');
   const appPublicUrlDraftTrimmed = appPublicUrlDraft.trim();
@@ -563,6 +576,11 @@ export function PlatformOwnerLegalControl() {
 
   const docflowTemplates = useMemo(() => {
     const t = panel?.docflow_communication_templates;
+    return Array.isArray(t) ? (t as UnknownRecord[]) : [];
+  }, [panel]);
+
+  const ownerDocflowRequestTemplates = useMemo(() => {
+    const t = panel?.docflow_request_templates;
     return Array.isArray(t) ? (t as UnknownRecord[]) : [];
   }, [panel]);
 
@@ -1151,7 +1169,324 @@ export function PlatformOwnerLegalControl() {
         <button type="button" style={btnCompactMuted} onClick={() => setEmailProviderModalOpen(true)}>
           {ownerEmailProviderButtonLabel}
         </button>
+        <button
+          type="button"
+          style={btnCompactMuted}
+          onClick={() => {
+            setDocflowRequestsModalError('');
+            setDocflowRequestsModalOpen(true);
+          }}
+        >
+          Requests
+        </button>
       </div>
+
+      {docflowRequestsModalOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+          onClick={() => setDocflowRequestsModalOpen(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              width: 'min(980px, 96vw)',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              borderRadius: 14,
+              border: '1px solid #E5E7EB',
+              boxShadow: '0 10px 30px rgba(15,23,42,0.14)',
+              padding: 16,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <h2 style={{ margin: 0 }}>DocFlow Requests</h2>
+                <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+                  Owner-only request templates. Country is required.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  style={btnCompactMuted}
+                  onClick={() =>
+                    setDocflowRequestTemplateDraft({
+                      template_definition_id: '',
+                      country_code: '',
+                      name: '',
+                      items: [{ label: '', description: '' }],
+                    })
+                  }
+                >
+                  + New template
+                </button>
+                <button type="button" style={btnCompactMuted} onClick={() => setDocflowRequestsModalOpen(false)}>
+                  X
+                </button>
+              </div>
+            </div>
+
+            {docflowRequestsModalError ? (
+              <p style={{ color: '#b91c1c', fontSize: 13, marginTop: 10, marginBottom: 0 }}>{docflowRequestsModalError}</p>
+            ) : null}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12, marginTop: 12 }}>
+              <div style={{ border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ padding: 10, borderBottom: '1px solid #E5E7EB', fontWeight: 700 }}>Templates</div>
+                <div style={{ maxHeight: 520, overflow: 'auto' }}>
+                  {!ownerDocflowRequestTemplates.length ? (
+                    <div style={{ padding: 12, color: '#6b7280' }}>No templates yet.</div>
+                  ) : (
+                    ownerDocflowRequestTemplates.map((t, idx) => {
+                      const id = safeText(t.id) || `${idx}`;
+                      const isSelected = id && id === docflowRequestTemplateDraft.template_definition_id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: 10,
+                            border: 'none',
+                            borderBottom: '1px solid #F3F4F6',
+                            background: isSelected ? '#EFF6FF' : '#fff',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => {
+                            const rawItems = Array.isArray(t.items) ? (t.items as UnknownRecord[]) : [];
+                            setDocflowRequestTemplateDraft({
+                              template_definition_id: safeText(t.id),
+                              country_code: safeText(t.country_code).toUpperCase(),
+                              name: safeText(t.name),
+                              items:
+                                rawItems.length > 0
+                                  ? rawItems.map((it) => ({
+                                      label: safeText(it.label),
+                                      description: safeText(it.description),
+                                    }))
+                                  : [{ label: '', description: '' }],
+                            });
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, color: '#111827' }}>{safeText(t.name) || '—'}</div>
+                          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{safeText(t.country_code) || '—'}</div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div style={{ border: '1px solid #E5E7EB', borderRadius: 10, padding: 12 }}>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                    Country (required)
+                    <select
+                      value={docflowRequestTemplateDraft.country_code}
+                      onChange={(e) => setDocflowRequestTemplateDraft((s) => ({ ...s, country_code: e.target.value }))}
+                      style={{ height: 38, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 12px', fontSize: 14 }}
+                    >
+                      <option value="">Select country</option>
+                      {countryCodeOptions.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                    Template name (required)
+                    <input
+                      type="text"
+                      value={docflowRequestTemplateDraft.name}
+                      onChange={(e) => setDocflowRequestTemplateDraft((s) => ({ ...s, name: e.target.value }))}
+                      placeholder="VAT Monthly Documents"
+                      style={{ height: 38, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 12px', fontSize: 14 }}
+                    />
+                  </label>
+
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Checklist items</div>
+                    {docflowRequestTemplateDraft.items.map((it, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr auto',
+                          gap: 8,
+                          alignItems: 'center',
+                        }}
+                      >
+                        <input
+                          type="text"
+                          value={it.label}
+                          onChange={(e) =>
+                            setDocflowRequestTemplateDraft((s) => ({
+                              ...s,
+                              items: s.items.map((x, idx) => (idx === i ? { ...x, label: e.target.value } : x)),
+                            }))
+                          }
+                          placeholder="Bank statements"
+                          style={{ height: 36, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 10px', fontSize: 14 }}
+                        />
+                        <input
+                          type="text"
+                          value={it.description}
+                          onChange={(e) =>
+                            setDocflowRequestTemplateDraft((s) => ({
+                              ...s,
+                              items: s.items.map((x, idx) => (idx === i ? { ...x, description: e.target.value } : x)),
+                            }))
+                          }
+                          placeholder="Optional description"
+                          style={{ height: 36, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 10px', fontSize: 14 }}
+                        />
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            type="button"
+                            style={btnCompactMuted}
+                            disabled={i === 0}
+                            onClick={() =>
+                              setDocflowRequestTemplateDraft((s) => {
+                                const next = s.items.slice();
+                                const tmp = next[i - 1];
+                                next[i - 1] = next[i];
+                                next[i] = tmp;
+                                return { ...s, items: next };
+                              })
+                            }
+                            title="Move up"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            style={btnCompactMuted}
+                            disabled={i === docflowRequestTemplateDraft.items.length - 1}
+                            onClick={() =>
+                              setDocflowRequestTemplateDraft((s) => {
+                                const next = s.items.slice();
+                                const tmp = next[i + 1];
+                                next[i + 1] = next[i];
+                                next[i] = tmp;
+                                return { ...s, items: next };
+                              })
+                            }
+                            title="Move down"
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            style={btnCompactMuted}
+                            onClick={() =>
+                              setDocflowRequestTemplateDraft((s) => ({
+                                ...s,
+                                items: s.items.length <= 1 ? [{ label: '', description: '' }] : s.items.filter((_, idx) => idx !== i),
+                              }))
+                            }
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div>
+                      <button
+                        type="button"
+                        style={btnCompactMuted}
+                        onClick={() => setDocflowRequestTemplateDraft((s) => ({ ...s, items: [...s.items, { label: '', description: '' }] }))}
+                      >
+                        + Add item
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', marginTop: 6 }}>
+                    {docflowRequestTemplateDraft.template_definition_id ? (
+                      <button
+                        type="button"
+                        style={btnCompactMuted}
+                        disabled={commandBusy}
+                        onClick={() =>
+                          void (async () => {
+                            try {
+                              setDocflowRequestsModalError('');
+                              await sendOwnerCommand('archive_request_template_definition', {
+                                template_definition_id: docflowRequestTemplateDraft.template_definition_id,
+                              });
+                              setDocflowRequestTemplateDraft({
+                                template_definition_id: '',
+                                country_code: '',
+                                name: '',
+                                items: [{ label: '', description: '' }],
+                              });
+                            } catch (e) {
+                              setDocflowRequestsModalError(userFacingApiMessage(e));
+                            }
+                          })()
+                        }
+                      >
+                        Archive
+                      </button>
+                    ) : null}
+                    <button type="button" style={btnCompactMuted} onClick={() => setDocflowRequestsModalOpen(false)}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...btnCompact, borderRadius: 8, minWidth: 96 }}
+                      disabled={
+                        commandBusy ||
+                        !safeText(docflowRequestTemplateDraft.country_code) ||
+                        !safeText(docflowRequestTemplateDraft.name) ||
+                        docflowRequestTemplateDraft.items.filter((x) => safeText(x.label)).length === 0
+                      }
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            setDocflowRequestsModalError('');
+                            await sendOwnerCommand('save_request_template_definition', {
+                              ...(docflowRequestTemplateDraft.template_definition_id
+                                ? { template_definition_id: docflowRequestTemplateDraft.template_definition_id }
+                                : {}),
+                              country_code: docflowRequestTemplateDraft.country_code,
+                              name: docflowRequestTemplateDraft.name,
+                              items: docflowRequestTemplateDraft.items
+                                .map((x) => ({ label: x.label.trim(), description: x.description.trim() || null }))
+                                .filter((x) => x.label),
+                            });
+                          } catch (e) {
+                            setDocflowRequestsModalError(userFacingApiMessage(e));
+                          }
+                        })()
+                      }
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <details style={{ marginTop: 18, border: '1px solid #e5e7eb', borderRadius: 8, padding: 10, background: '#fafafa' }}>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Advanced technical tools</summary>

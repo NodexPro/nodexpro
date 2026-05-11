@@ -246,6 +246,9 @@ officeRouter.post('/commands/send-office-message', async (req, res, next) =>
 officeRouter.post('/commands/send-office-message-with-attachment', async (req, res, next) =>
   handleOfficeCommand(req, res, next, 'send_office_message_with_attachment')
 );
+officeRouter.post('/commands/create-docflow-document-request', async (req, res, next) =>
+  handleOfficeCommand(req, res, next, 'create_docflow_document_request')
+);
 officeRouter.post('/commands/attach-file-to-client-message', async (req, res, next) =>
   handleOfficeCommand(req, res, next, 'attach_file_to_client_message')
 );

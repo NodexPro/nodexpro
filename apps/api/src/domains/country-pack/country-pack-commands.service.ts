@@ -47,7 +47,9 @@ type CountryPackCommandType =
   | 'update_package_price'
   | 'create_module_plan'
   | 'save_email_provider_config'
-  | 'save_platform_public_url';
+  | 'save_platform_public_url'
+  | 'save_request_template_definition'
+  | 'archive_request_template_definition';
 
 type CountryPackCommand = {
   command: CountryPackCommandType;
@@ -1091,6 +1093,130 @@ async function handleUpdateModulePlanPricing(
   };
 }
 
+function parseRequestTemplateDefinitionItems(payload: Record<string, unknown>): { label: string; description: string | null }[] {
+  const raw = payload.items;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw badRequest('items must be a non-empty array');
+  }
+  return raw.map((it, i) => {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) {
+      throw badRequest(`items[${i}] must be an object`);
+    }
+    const o = it as Record<string, unknown>;
+    const label = typeof o.label === 'string' ? o.label.trim() : '';
+    if (!label) throw badRequest(`items[${i}].label is required`);
+    if (o.description === undefined || o.description === null) {
+      return { label, description: null };
+    }
+    if (typeof o.description !== 'string') throw badRequest(`items[${i}].description must be a string`);
+    const d = o.description.trim();
+    return { label, description: d.length ? d : null };
+  });
+}
+
+async function handleSaveRequestTemplateDefinition(
+  ctx: RequestContext,
+  payload: Record<string, unknown>
+): Promise<CountryPackCommandResponse> {
+  const countryCode = asString(payload.country_code, 'country_code').toUpperCase().slice(0, 2);
+  await assertCountryExists(countryCode);
+  const name = asString(payload.name, 'name');
+  const items = parseRequestTemplateDefinitionItems(payload);
+  const existingId = asOptionalString(payload.template_definition_id);
+
+  if (existingId) {
+    const { data: row, error: findErr } = await supabaseAdmin
+      .from('docflow_request_template_definitions')
+      .select('id, archived_at')
+      .eq('id', existingId)
+      .maybeSingle();
+    if (findErr) throw findErr;
+    if (!row) throw notFound('Template not found');
+    if (row.archived_at) throw badRequest('Template is archived');
+
+    const { error: uErr } = await supabaseAdmin
+      .from('docflow_request_template_definitions')
+      .update({
+        country_code: countryCode,
+        name,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existingId);
+    if (uErr) throw uErr;
+
+    const { error: dErr } = await supabaseAdmin
+      .from('docflow_request_template_definition_items')
+      .delete()
+      .eq('template_definition_id', existingId);
+    if (dErr) throw dErr;
+
+    const ins = items.map((it, idx) => ({
+      template_definition_id: existingId,
+      sort_order: idx,
+      label: it.label,
+      description: it.description,
+    }));
+    const { error: iErr } = await supabaseAdmin.from('docflow_request_template_definition_items').insert(ins);
+    if (iErr) throw iErr;
+
+    await audit(ctx, AUDIT_ACTIONS.DOCFLOW_REQUEST_TEMPLATE_SAVED, 'docflow_request_template_definition', existingId, {
+      country_code: countryCode,
+      name,
+      item_count: items.length,
+    });
+    return { ok: true, command: 'save_request_template_definition', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+  }
+
+  const { data: created, error: cErr } = await supabaseAdmin
+    .from('docflow_request_template_definitions')
+    .insert({ country_code: countryCode, name })
+    .select('id')
+    .single();
+  if (cErr) throw cErr;
+  const newId = String(created.id);
+  const ins = items.map((it, idx) => ({
+    template_definition_id: newId,
+    sort_order: idx,
+    label: it.label,
+    description: it.description,
+  }));
+  const { error: iErr } = await supabaseAdmin.from('docflow_request_template_definition_items').insert(ins);
+  if (iErr) throw iErr;
+
+  await audit(ctx, AUDIT_ACTIONS.DOCFLOW_REQUEST_TEMPLATE_SAVED, 'docflow_request_template_definition', newId, {
+    country_code: countryCode,
+    name,
+    item_count: items.length,
+  });
+  return { ok: true, command: 'save_request_template_definition', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+}
+
+async function handleArchiveRequestTemplateDefinition(
+  ctx: RequestContext,
+  payload: Record<string, unknown>
+): Promise<CountryPackCommandResponse> {
+  const id = asString(payload.template_definition_id, 'template_definition_id');
+  const { data: row, error: findErr } = await supabaseAdmin
+    .from('docflow_request_template_definitions')
+    .select('id, archived_at')
+    .eq('id', id)
+    .maybeSingle();
+  if (findErr) throw findErr;
+  if (!row) throw notFound('Template not found');
+  if (row.archived_at) {
+    return { ok: true, command: 'archive_request_template_definition', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+  }
+
+  const { error: uErr } = await supabaseAdmin
+    .from('docflow_request_template_definitions')
+    .update({ archived_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (uErr) throw uErr;
+
+  await audit(ctx, AUDIT_ACTIONS.DOCFLOW_REQUEST_TEMPLATE_ARCHIVED, 'docflow_request_template_definition', id, {});
+  return { ok: true, command: 'archive_request_template_definition', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+}
+
 export async function executeCountryPackCommand(
   ctx: RequestContext,
   command: CountryPackCommand
@@ -1209,6 +1335,10 @@ export async function executeCountryPackCommand(
       return handleSaveEmailProviderConfig(ctx, command.payload);
     case 'save_platform_public_url':
       return handleSavePlatformPublicUrl(ctx, command.payload);
+    case 'save_request_template_definition':
+      return handleSaveRequestTemplateDefinition(ctx, command.payload);
+    case 'archive_request_template_definition':
+      return handleArchiveRequestTemplateDefinition(ctx, command.payload);
     default:
       throw badRequest(`Unsupported country-pack command: ${(command as { command?: string }).command ?? 'unknown'}`);
   }

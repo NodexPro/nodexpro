@@ -1,6 +1,10 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { notFound } from '../../shared/errors.js';
 import type { AllowedAction } from './docflow.types.js';
+import {
+  fetchDocflowRequestTemplatesForOrgCountry,
+  resolveOrganizationCountryCode,
+} from './docflow-request-templates.service.js';
 
 function threadStatusLabel(status: string): string {
   switch (status) {
@@ -89,7 +93,7 @@ async function getThreadMessages(
   };
   let q = supabaseAdmin
     .from('client_messages')
-    .select('id, thread_id, message_type, created_by_type, body, message_status, created_at')
+    .select('id, thread_id, message_type, created_by_type, body, message_status, created_at, request_snapshot_json')
     .eq('org_id', orgId)
     .eq('client_id', clientId)
     .eq('thread_id', threadId);
@@ -232,6 +236,11 @@ function officeAllowedActions(threadStatus: string): AllowedAction[] {
     { command: 'send_office_message', enabled: !archived, reason: archived ? 'Thread archived' : null },
     {
       command: 'send_office_message_with_attachment',
+      enabled: !archived,
+      reason: archived ? 'Thread archived' : null,
+    },
+    {
+      command: 'create_docflow_document_request',
       enabled: !archived,
       reason: archived ? 'Thread archived' : null,
     },
@@ -965,6 +974,11 @@ export async function buildClientContextDocflowAggregate(params: {
         enabled: resolved.selectedThread ? resolved.selectedThread.thread_status !== 'archived' : false,
         reason: null,
       },
+      {
+        command: 'create_docflow_document_request',
+        enabled: resolved.selectedThread ? resolved.selectedThread.thread_status !== 'archived' : false,
+        reason: null,
+      },
       { command: 'mark_thread_read_by_office', enabled: Boolean(resolved.selectedThread), reason: null },
       { command: 'archive_client_thread', enabled: resolved.selectedThread ? resolved.selectedThread.thread_status === 'resolved' : false, reason: null },
     ],
@@ -1068,6 +1082,11 @@ export async function buildClientThreadContextAggregate(params: {
     { command: 'send_office_message', enabled: selectedThread ? selectedThread.thread_status !== 'archived' : false, reason: null },
     {
       command: 'send_office_message_with_attachment',
+      enabled: selectedThread ? selectedThread.thread_status !== 'archived' : false,
+      reason: null,
+    },
+    {
+      command: 'create_docflow_document_request',
       enabled: selectedThread ? selectedThread.thread_status !== 'archived' : false,
       reason: null,
     },
@@ -1300,6 +1319,9 @@ export async function buildOfficeDocflowMessengerAggregate(params: {
   const clientIdParam = String(params.clientId ?? '').trim() || null;
   const threadIdParam = String(params.threadId ?? '').trim() || null;
 
+  const orgCountry = await resolveOrganizationCountryCode(params.orgId);
+  const available_request_templates = orgCountry ? await fetchDocflowRequestTemplatesForOrgCountry(orgCountry) : [];
+
   const inbox = await buildOfficeDocflowInboxAggregate({
     orgId: params.orgId,
     page: params.page,
@@ -1340,6 +1362,7 @@ export async function buildOfficeDocflowMessengerAggregate(params: {
       messages: [],
       attachments: [],
       allowed_actions: [],
+      available_request_templates,
       empty_states: {
         ...(typeof inboxEmpty === 'object' && inboxEmpty ? inboxEmpty : {}),
       },
@@ -1352,6 +1375,7 @@ export async function buildOfficeDocflowMessengerAggregate(params: {
     aggregate_key: 'office_docflow_messenger_aggregate',
     ...inboxRest,
     ...threadRest,
+    available_request_templates,
     empty_states: {
       ...(typeof inboxEmpty === 'object' && inboxEmpty ? inboxEmpty : {}),
       ...(typeof threadRest.empty_states === 'object' && threadRest.empty_states ? threadRest.empty_states : {}),

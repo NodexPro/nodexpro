@@ -191,6 +191,7 @@ officeRouter.post('/commands/set-thread-deadline', async (req, res, next) => han
 officeRouter.post('/commands/create-system-message', async (req, res, next) => handleOfficeCommand(req, res, next, 'create_system_message'));
 officeRouter.post('/commands/send-office-message', async (req, res, next) => handleOfficeCommand(req, res, next, 'send_office_message'));
 officeRouter.post('/commands/send-office-message-with-attachment', async (req, res, next) => handleOfficeCommand(req, res, next, 'send_office_message_with_attachment'));
+officeRouter.post('/commands/create-docflow-document-request', async (req, res, next) => handleOfficeCommand(req, res, next, 'create_docflow_document_request'));
 officeRouter.post('/commands/attach-file-to-client-message', async (req, res, next) => handleOfficeCommand(req, res, next, 'attach_file_to_client_message'));
 officeRouter.post('/commands/mark-thread-read-by-office', async (req, res, next) => handleOfficeCommand(req, res, next, 'mark_thread_read_by_office'));
 officeRouter.post('/commands/remove-message-attachment', async (req, res, next) => handleOfficeCommand(req, res, next, 'remove_message_attachment'));
