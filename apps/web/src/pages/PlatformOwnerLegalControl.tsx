@@ -498,6 +498,10 @@ export function PlatformOwnerLegalControl() {
       normalizeActions(panel?.available_actions ? (panel.available_actions as UnknownRecord).owner_email_provider_config : []),
     [panel]
   );
+  const commercialActions = useMemo(
+    () => normalizeActions(panel?.available_actions ? (panel.available_actions as UnknownRecord).commercial_controls : []),
+    [panel]
+  );
   const ownerEmailProviderButtonLabel = useMemo(
     () => String(ownerEmailProviderActions[0]?.button_label ?? 'Email Provider'),
     [ownerEmailProviderActions]
@@ -583,6 +587,16 @@ export function PlatformOwnerLegalControl() {
     const t = panel?.docflow_request_templates;
     return Array.isArray(t) ? (t as UnknownRecord[]) : [];
   }, [panel]);
+
+  const commercialControls = useMemo(() => {
+    const cc = panel?.commercial_controls;
+    return cc && typeof cc === 'object' && !Array.isArray(cc) ? (cc as UnknownRecord) : null;
+  }, [panel]);
+
+  const commercialOrgRows = useMemo(() => {
+    const rows = commercialControls?.org_rows;
+    return Array.isArray(rows) ? (rows as UnknownRecord[]) : [];
+  }, [commercialControls]);
 
   const docflowRuleRows = useMemo(() => {
     return docflowTemplates.map((row) => {
@@ -1491,6 +1505,140 @@ export function PlatformOwnerLegalControl() {
       <details style={{ marginTop: 18, border: '1px solid #e5e7eb', borderRadius: 8, padding: 10, background: '#fafafa' }}>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Advanced technical tools</summary>
         <section style={{ marginTop: 12 }}>
+        <section style={{ marginBottom: 18, padding: 12, border: '1px solid #dbeafe', borderRadius: 10, background: '#f8fbff' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <h2 style={{ margin: 0 }}>Commercial Controls</h2>
+          </div>
+          <p style={{ color: '#4b5563', fontSize: 13, marginTop: 8, marginBottom: 10 }}>
+            Owner-only commercial truth: orgs, client counts, module activation + entitlement, trials, and temporary pricing adjustments.
+          </p>
+
+          <div style={{ overflowX: 'auto', border: '1px solid #ddd', borderRadius: 8, background: '#fff' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
+              <thead>
+                <tr>
+                  {['Org', 'Clients', 'Modules', 'Status', 'Actions'].map((h) => (
+                    <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {commercialOrgRows.map((row, idx) => {
+                  const orgId = safeText(row.org_id);
+                  const orgName = safeText(row.org_name) || orgId.slice(0, 8);
+                  const clientsCount = Number(row.clients_count ?? 0);
+                  const modules = Array.isArray(row.modules) ? (row.modules as UnknownRecord[]) : [];
+                  const activeModules = modules.filter((m) => safeText(m.activation_status) === 'active');
+                  const entitledModules = modules.filter((m) => ['entitled', 'trial'].includes(safeText(m.entitlement_status)));
+
+                  const firstModuleKey = safeText(modules[0]?.module_key) || 'docflow';
+                  const hasAdj = modules.some((m) => m.active_pricing_adjustment && typeof m.active_pricing_adjustment === 'object');
+                  return (
+                    <tr key={`${orgId}:${idx}`}>
+                      <td style={{ borderBottom: '1px solid #eee', padding: 8, fontWeight: 700 }}>{orgName}</td>
+                      <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{Number.isFinite(clientsCount) ? clientsCount : '—'}</td>
+                      <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
+                        <div style={{ fontSize: 12, color: '#374151' }}>
+                          Active: {activeModules.length} / {modules.length} · Entitled/Trial: {entitledModules.length}
+                        </div>
+                      </td>
+                      <td style={{ borderBottom: '1px solid #eee', padding: 8, fontSize: 12, color: '#374151' }}>
+                        {hasAdj ? 'Has active pricing adjustment' : '—'}
+                      </td>
+                      <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            style={btnCompactMuted}
+                            disabled={commandBusy || commercialActions.find((a) => a.action_key === 'extend_org_module_trial')?.enabled === false}
+                            onClick={() => {
+                              const a = commercialActions.find((x) => x.action_key === 'extend_org_module_trial');
+                              openCommandModal('extend_org_module_trial', a ?? { action_key: 'extend_org_module_trial', enabled: true }, {
+                                org_id: orgId,
+                                module_key: firstModuleKey,
+                                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                                reason: 'Owner trial extension',
+                              });
+                            }}
+                          >
+                            Extend Trial
+                          </button>
+                          <button
+                            type="button"
+                            style={btnCompactMuted}
+                            disabled={commandBusy || commercialActions.find((a) => a.action_key === 'activate_org_module_access')?.enabled === false}
+                            onClick={() => {
+                              const a = commercialActions.find((x) => x.action_key === 'activate_org_module_access');
+                              openCommandModal('activate_org_module_access', a ?? { action_key: 'activate_org_module_access', enabled: true }, {
+                                org_id: orgId,
+                                module_key: firstModuleKey,
+                                active_from: new Date().toISOString(),
+                                active_until: null,
+                                reason: 'Owner activation',
+                              });
+                            }}
+                          >
+                            Activate
+                          </button>
+                          <button
+                            type="button"
+                            style={btnCompactMuted}
+                            disabled={commandBusy || commercialActions.find((a) => a.action_key === 'create_pricing_adjustment')?.enabled === false}
+                            onClick={() => {
+                              const a = commercialActions.find((x) => x.action_key === 'create_pricing_adjustment');
+                              const today = new Date().toISOString().slice(0, 10);
+                              const in30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+                              openCommandModal('create_pricing_adjustment', a ?? { action_key: 'create_pricing_adjustment', enabled: true }, {
+                                org_id: orgId,
+                                module_key: firstModuleKey,
+                                adjustment_type: 'discount_amount',
+                                value: 10,
+                                start_date: today,
+                                end_date: in30,
+                                reason: 'Owner pricing adjustment',
+                              });
+                            }}
+                          >
+                            Pricing
+                          </button>
+                          {(() => {
+                            const modWithAdj = modules.find((m) => m.active_pricing_adjustment && typeof m.active_pricing_adjustment === 'object') ?? null;
+                            const adjId = modWithAdj ? safeText((modWithAdj.active_pricing_adjustment as UnknownRecord).id) : '';
+                            if (!adjId) return null;
+                            return (
+                              <button
+                                type="button"
+                                style={btnCompactMuted}
+                                disabled={commandBusy || commercialActions.find((a) => a.action_key === 'cancel_pricing_adjustment')?.enabled === false}
+                                onClick={() => {
+                                  const a = commercialActions.find((x) => x.action_key === 'cancel_pricing_adjustment');
+                                  openCommandModal('cancel_pricing_adjustment', a ?? { action_key: 'cancel_pricing_adjustment', enabled: true }, {
+                                    pricing_adjustment_id: adjId,
+                                    reason: 'Owner cancelled adjustment',
+                                  });
+                                }}
+                              >
+                                Cancel adjustment
+                              </button>
+                            );
+                          })()}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!commercialOrgRows.length ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: 12, color: '#6b7280' }}>
+                      No commercial data available.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <h2 style={{ margin: 0 }}>1. Country Packs</h2>
           <ActionToolbar

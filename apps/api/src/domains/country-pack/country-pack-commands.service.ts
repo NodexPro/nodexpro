@@ -49,7 +49,11 @@ type CountryPackCommandType =
   | 'save_email_provider_config'
   | 'save_platform_public_url'
   | 'save_request_template_definition'
-  | 'archive_request_template_definition';
+  | 'archive_request_template_definition'
+  | 'extend_org_module_trial'
+  | 'activate_org_module_access'
+  | 'create_pricing_adjustment'
+  | 'cancel_pricing_adjustment';
 
 type CountryPackCommand = {
   command: CountryPackCommandType;
@@ -94,6 +98,308 @@ function asDate(value: unknown, field: string): string {
     throw badRequest(`${field} must be YYYY-MM-DD`);
   }
   return v;
+}
+
+function asIsoDateTime(value: unknown, field: string): string {
+  const v = asString(value, field);
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) throw badRequest(`${field} must be ISO datetime`);
+  return d.toISOString();
+}
+
+async function resolveModuleByKey(moduleKey: string): Promise<{ id: string; code: string; is_system: boolean }> {
+  const { data, error } = await supabaseAdmin.from('modules').select('id, code, is_system').eq('code', moduleKey).single();
+  if (error) throw error;
+  if (!data) throw notFound('Module not found');
+  return { id: String(data.id), code: String(data.code), is_system: Boolean((data as { is_system?: boolean }).is_system) };
+}
+
+async function ensureOrgModuleActive(orgId: string, moduleId: string): Promise<void> {
+  const { data: existing, error: eErr } = await supabaseAdmin
+    .from('organization_modules')
+    .select('id, status')
+    .eq('organization_id', orgId)
+    .eq('module_id', moduleId)
+    .maybeSingle();
+  if (eErr) throw eErr;
+  if (existing) {
+    if (String((existing as { status?: string }).status ?? '') !== 'active') {
+      const { error: uErr } = await supabaseAdmin
+        .from('organization_modules')
+        .update({ status: 'active', updated_at: new Date().toISOString() })
+        .eq('id', (existing as { id: string }).id);
+      if (uErr) throw uErr;
+    }
+    return;
+  }
+  const { error: iErr } = await supabaseAdmin.from('organization_modules').insert({
+    organization_id: orgId,
+    module_id: moduleId,
+    status: 'active',
+  });
+  if (iErr) throw iErr;
+}
+
+async function resolveDefaultActivePlanId(moduleId: string): Promise<string> {
+  const { data, error } = await supabaseAdmin
+    .from('module_plans')
+    .select('id')
+    .eq('module_id', moduleId)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw badRequest('No active module plan exists for this module');
+  return String((data as { id: string }).id);
+}
+
+async function handleExtendOrgModuleTrial(ctx: RequestContext, payload: Record<string, unknown>): Promise<CountryPackCommandResponse> {
+  const orgId = asString(payload.org_id, 'org_id');
+  const moduleKey = asString(payload.module_key, 'module_key');
+  const expiresAtIso = asIsoDateTime(payload.expires_at, 'expires_at');
+  const reason = asString(payload.reason, 'reason');
+  const mod = await resolveModuleByKey(moduleKey);
+  if (mod.is_system) throw badRequest('System modules do not have commercial trials');
+
+  await ensureOrgModuleActive(orgId, mod.id);
+
+  const { data: existing, error: sErr } = await supabaseAdmin
+    .from('organization_module_subscriptions')
+    .select('id, status, trial_ends_at, ends_at')
+    .eq('organization_id', orgId)
+    .eq('module_id', mod.id)
+    .maybeSingle();
+  if (sErr) throw sErr;
+
+  const oldState = existing
+    ? { status: String((existing as any).status ?? ''), trial_ends_at: (existing as any).trial_ends_at ?? null, ends_at: (existing as any).ends_at ?? null }
+    : null;
+
+  if (existing && String((existing as any).status ?? '') === 'active') {
+    throw badRequest('Cannot extend trial for an active subscription');
+  }
+
+  if (existing) {
+    const { error: uErr } = await supabaseAdmin
+      .from('organization_module_subscriptions')
+      .update({ status: 'trialing', trial_ends_at: expiresAtIso, updated_at: new Date().toISOString() })
+      .eq('id', (existing as any).id);
+    if (uErr) throw uErr;
+    await audit(ctx, AUDIT_ACTIONS.OWNER_TRIAL_EXTENDED, 'org_module_subscription', String((existing as any).id), {
+      org_id: orgId,
+      module_key: moduleKey,
+      reason,
+      old_state: oldState,
+      new_state: { status: 'trialing', trial_ends_at: expiresAtIso },
+    });
+    return { ok: true, command: 'extend_org_module_trial', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+  }
+
+  const planId = await resolveDefaultActivePlanId(mod.id);
+  const { data: created, error: cErr } = await supabaseAdmin
+    .from('organization_module_subscriptions')
+    .insert({
+      organization_id: orgId,
+      module_id: mod.id,
+      module_plan_id: planId,
+      status: 'trialing',
+      trial_ends_at: expiresAtIso,
+    })
+    .select('id')
+    .single();
+  if (cErr) throw cErr;
+  await audit(ctx, AUDIT_ACTIONS.OWNER_TRIAL_EXTENDED, 'org_module_subscription', String((created as any).id), {
+    org_id: orgId,
+    module_key: moduleKey,
+    reason,
+    old_state: null,
+    new_state: { status: 'trialing', trial_ends_at: expiresAtIso },
+  });
+  return { ok: true, command: 'extend_org_module_trial', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+}
+
+async function handleActivateOrgModuleAccess(ctx: RequestContext, payload: Record<string, unknown>): Promise<CountryPackCommandResponse> {
+  const orgId = asString(payload.org_id, 'org_id');
+  const moduleKey = asString(payload.module_key, 'module_key');
+  const activeFromIso = asIsoDateTime(payload.active_from, 'active_from');
+  const activeUntilRaw = payload.active_until;
+  const activeUntilIso = activeUntilRaw ? asIsoDateTime(activeUntilRaw, 'active_until') : null;
+  const reason = asString(payload.reason, 'reason');
+  const mod = await resolveModuleByKey(moduleKey);
+  if (mod.is_system) throw badRequest('System modules do not have commercial activation');
+
+  await ensureOrgModuleActive(orgId, mod.id);
+
+  const { data: existing, error: sErr } = await supabaseAdmin
+    .from('organization_module_subscriptions')
+    .select('id, status, trial_ends_at, ends_at, module_plan_id')
+    .eq('organization_id', orgId)
+    .eq('module_id', mod.id)
+    .maybeSingle();
+  if (sErr) throw sErr;
+
+  const oldState = existing
+    ? {
+        status: String((existing as any).status ?? ''),
+        trial_ends_at: (existing as any).trial_ends_at ?? null,
+        ends_at: (existing as any).ends_at ?? null,
+      }
+    : null;
+
+  if (existing) {
+    // MVP rule: paid activation cleanly replaces trial (and cancels it).
+    const { error: uErr } = await supabaseAdmin
+      .from('organization_module_subscriptions')
+      .update({
+        status: 'active',
+        started_at: activeFromIso,
+        ends_at: activeUntilIso,
+        trial_ends_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', (existing as any).id);
+    if (uErr) throw uErr;
+    await audit(ctx, AUDIT_ACTIONS.OWNER_MODULE_ACCESS_ACTIVATED, 'org_module_subscription', String((existing as any).id), {
+      org_id: orgId,
+      module_key: moduleKey,
+      reason,
+      old_state: oldState,
+      new_state: { status: 'active', started_at: activeFromIso, ends_at: activeUntilIso, trial_ends_at: null },
+    });
+    return { ok: true, command: 'activate_org_module_access', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+  }
+
+  const planId = await resolveDefaultActivePlanId(mod.id);
+  const { data: created, error: cErr } = await supabaseAdmin
+    .from('organization_module_subscriptions')
+    .insert({
+      organization_id: orgId,
+      module_id: mod.id,
+      module_plan_id: planId,
+      status: 'active',
+      started_at: activeFromIso,
+      ends_at: activeUntilIso,
+      trial_ends_at: null,
+    })
+    .select('id')
+    .single();
+  if (cErr) throw cErr;
+  await audit(ctx, AUDIT_ACTIONS.OWNER_MODULE_ACCESS_ACTIVATED, 'org_module_subscription', String((created as any).id), {
+    org_id: orgId,
+    module_key: moduleKey,
+    reason,
+    old_state: null,
+    new_state: { status: 'active', started_at: activeFromIso, ends_at: activeUntilIso, trial_ends_at: null },
+  });
+  return { ok: true, command: 'activate_org_module_access', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+}
+
+function computeEffectivePrice(base: number, type: string, value: number | null): number {
+  if (!Number.isFinite(base)) return base;
+  if (type === 'free_access') return 0;
+  const v = value ?? 0;
+  if (type === 'discount_amount') return Math.max(0, base - v);
+  if (type === 'add_amount') return Math.max(0, base + v);
+  if (type === 'replace_price') return Math.max(0, v);
+  return base;
+}
+
+async function handleCreatePricingAdjustment(ctx: RequestContext, payload: Record<string, unknown>): Promise<CountryPackCommandResponse> {
+  const orgId = asString(payload.org_id, 'org_id');
+  const moduleKey = asString(payload.module_key, 'module_key');
+  const adjustmentType = asString(payload.adjustment_type, 'adjustment_type');
+  if (!['discount_amount', 'replace_price', 'add_amount', 'free_access'].includes(adjustmentType)) {
+    throw badRequest('Invalid adjustment_type');
+  }
+  const startDate = asDate(payload.start_date, 'start_date');
+  const endDate = asDate(payload.end_date, 'end_date');
+  if (new Date(endDate).getTime() < new Date(startDate).getTime()) throw badRequest('end_date must be >= start_date');
+  const reason = asString(payload.reason, 'reason');
+  const valueRaw = payload.value;
+  const value = valueRaw === undefined || valueRaw === null || valueRaw === '' ? null : Number(valueRaw);
+  if (adjustmentType !== 'free_access') {
+    if (value === null || !Number.isFinite(value) || value < 0) throw badRequest('value must be a non-negative number');
+  }
+
+  const mod = await resolveModuleByKey(moduleKey);
+  if (mod.is_system) throw badRequest('System modules do not support pricing adjustments');
+
+  // Overlap protection (MVP): reject if any active adjustment overlaps.
+  const { data: overlaps, error: oErr } = await supabaseAdmin
+    .from('org_module_pricing_adjustments')
+    .select('id, effective_from, effective_until')
+    .eq('organization_id', orgId)
+    .eq('module_id', mod.id)
+    .eq('status', 'active')
+    .lte('effective_from', endDate)
+    .gte('effective_until', startDate)
+    .limit(1);
+  if (oErr) throw oErr;
+  if ((overlaps ?? []).length) throw conflict('Overlapping active pricing adjustment exists');
+
+  const { data: created, error: cErr } = await supabaseAdmin
+    .from('org_module_pricing_adjustments')
+    .insert({
+      organization_id: orgId,
+      module_id: mod.id,
+      adjustment_type: adjustmentType,
+      value_amount: adjustmentType === 'free_access' ? null : value,
+      effective_from: startDate,
+      effective_until: endDate,
+      reason,
+      status: 'active',
+      created_by_owner_user_id: ctx.user.id,
+    })
+    .select('id')
+    .single();
+  if (cErr) throw cErr;
+
+  await audit(ctx, adjustmentType === 'free_access' ? AUDIT_ACTIONS.OWNER_FREE_ACCESS_GRANTED : AUDIT_ACTIONS.OWNER_PRICING_ADJUSTMENT_CREATED, 'org_module_pricing_adjustment', String((created as any).id), {
+    org_id: orgId,
+    module_key: moduleKey,
+    reason,
+    new_state: {
+      adjustment_type: adjustmentType,
+      value_amount: adjustmentType === 'free_access' ? null : value,
+      effective_from: startDate,
+      effective_until: endDate,
+    },
+  });
+
+  return { ok: true, command: 'create_pricing_adjustment', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+}
+
+async function handleCancelPricingAdjustment(ctx: RequestContext, payload: Record<string, unknown>): Promise<CountryPackCommandResponse> {
+  const id = asString(payload.pricing_adjustment_id, 'pricing_adjustment_id');
+  const reason = asOptionalString(payload.reason) ?? null;
+  const { data: row, error: rErr } = await supabaseAdmin
+    .from('org_module_pricing_adjustments')
+    .select('id, status, organization_id, module_id, adjustment_type, value_amount, effective_from, effective_until')
+    .eq('id', id)
+    .maybeSingle();
+  if (rErr) throw rErr;
+  if (!row) throw notFound('Pricing adjustment not found');
+  if (String((row as any).status ?? '') !== 'active') {
+    return { ok: true, command: 'cancel_pricing_adjustment', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+  }
+  const oldState = {
+    adjustment_type: String((row as any).adjustment_type ?? ''),
+    value_amount: (row as any).value_amount ?? null,
+    effective_from: String((row as any).effective_from ?? ''),
+    effective_until: String((row as any).effective_until ?? ''),
+  };
+  const { error: uErr } = await supabaseAdmin
+    .from('org_module_pricing_adjustments')
+    .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (uErr) throw uErr;
+  await audit(ctx, AUDIT_ACTIONS.OWNER_PRICING_ADJUSTMENT_CANCELLED, 'org_module_pricing_adjustment', id, {
+    reason,
+    old_state: oldState,
+    new_state: { status: 'cancelled' },
+  });
+  return { ok: true, command: 'cancel_pricing_adjustment', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
 }
 
 async function audit(
@@ -1339,6 +1645,14 @@ export async function executeCountryPackCommand(
       return handleSaveRequestTemplateDefinition(ctx, command.payload);
     case 'archive_request_template_definition':
       return handleArchiveRequestTemplateDefinition(ctx, command.payload);
+    case 'extend_org_module_trial':
+      return handleExtendOrgModuleTrial(ctx, command.payload);
+    case 'activate_org_module_access':
+      return handleActivateOrgModuleAccess(ctx, command.payload);
+    case 'create_pricing_adjustment':
+      return handleCreatePricingAdjustment(ctx, command.payload);
+    case 'cancel_pricing_adjustment':
+      return handleCancelPricingAdjustment(ctx, command.payload);
     default:
       throw badRequest(`Unsupported country-pack command: ${(command as { command?: string }).command ?? 'unknown'}`);
   }

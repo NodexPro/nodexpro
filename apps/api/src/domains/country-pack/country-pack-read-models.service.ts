@@ -9,6 +9,185 @@ import {
 } from './docflow-communication-owner-payload.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
+import { resolveEntitlement } from '../modules/entitlement.service.js';
+
+type CommercialModuleRow = {
+  module_key: string;
+  module_name: string;
+  activation_status: string;
+  entitlement_status: string;
+  entitlement_reason: string | null;
+  trial_ends_at: string | null;
+  subscription_ends_at: string | null;
+  base_price_amount: number | null;
+  base_price_currency: string | null;
+  active_pricing_adjustment: Record<string, unknown> | null;
+  effective_price_preview: { currency: string | null; amount: number | null } | null;
+};
+
+async function buildOwnerCommercialControlsAggregate(): Promise<Record<string, unknown>> {
+  const { data: orgs, error: oErr } = await supabaseAdmin
+    .from('organizations')
+    .select('id, name, status, created_at')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (oErr) throw oErr;
+
+  const orgIds = (orgs ?? []).map((o) => String(o.id));
+
+  const clientsCountByOrg = new Map<string, number>();
+  if (orgIds.length) {
+    const { data: clientCounts, error: cErr } = await supabaseAdmin
+      .from('clients')
+      .select('organization_id')
+      .in('organization_id', orgIds);
+    if (cErr) throw cErr;
+    for (const row of clientCounts ?? []) {
+      const oid = String((row as { organization_id: string }).organization_id);
+      clientsCountByOrg.set(oid, (clientsCountByOrg.get(oid) ?? 0) + 1);
+    }
+  }
+
+  const { data: modules, error: mErr } = await supabaseAdmin
+    .from('modules')
+    .select('id, code, name, is_system')
+    .eq('is_active', true)
+    .order('nav_order', { ascending: true });
+  if (mErr) throw mErr;
+  const commercialModules = (modules ?? []).filter((m) => !(m as { is_system?: boolean }).is_system);
+
+  const moduleIdToKey = new Map<string, { code: string; name: string }>();
+  for (const m of commercialModules) {
+    moduleIdToKey.set(String(m.id), { code: String(m.code), name: String(m.name) });
+  }
+
+  const moduleIds = commercialModules.map((m) => String(m.id));
+
+  const plansByModule = new Map<string, { currency: string; price_amount: number }>();
+  if (moduleIds.length) {
+    const { data: plans, error: pErr } = await supabaseAdmin
+      .from('module_plans')
+      .select('module_id, currency, price_amount, sort_order')
+      .in('module_id', moduleIds)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+    if (pErr) throw pErr;
+    for (const p of plans ?? []) {
+      const mid = String((p as any).module_id);
+      if (plansByModule.has(mid)) continue;
+      plansByModule.set(mid, { currency: String((p as any).currency), price_amount: Number((p as any).price_amount) });
+    }
+  }
+
+  const activationByOrgModule = new Map<string, string>();
+  const subByOrgModule = new Map<string, { status: string; trial_ends_at: string | null; ends_at: string | null }>();
+  if (orgIds.length && moduleIds.length) {
+    const [orgModsRes, subsRes] = await Promise.all([
+      supabaseAdmin
+        .from('organization_modules')
+        .select('organization_id, module_id, status')
+        .in('organization_id', orgIds)
+        .in('module_id', moduleIds),
+      supabaseAdmin
+        .from('organization_module_subscriptions')
+        .select('organization_id, module_id, status, trial_ends_at, ends_at')
+        .in('organization_id', orgIds)
+        .in('module_id', moduleIds),
+    ]);
+    if (orgModsRes.error) throw orgModsRes.error;
+    if (subsRes.error) throw subsRes.error;
+    for (const r of orgModsRes.data ?? []) {
+      activationByOrgModule.set(`${String((r as any).organization_id)}:${String((r as any).module_id)}`, String((r as any).status ?? 'inactive'));
+    }
+    for (const r of subsRes.data ?? []) {
+      subByOrgModule.set(`${String((r as any).organization_id)}:${String((r as any).module_id)}`, {
+        status: String((r as any).status ?? ''),
+        trial_ends_at: (r as any).trial_ends_at ? String((r as any).trial_ends_at) : null,
+        ends_at: (r as any).ends_at ? String((r as any).ends_at) : null,
+      });
+    }
+  }
+
+  const nowYmd = new Date().toISOString().slice(0, 10);
+  const activeAdjByOrgModule = new Map<string, Record<string, unknown>>();
+  if (orgIds.length && moduleIds.length) {
+    const { data: adjs, error: aErr } = await supabaseAdmin
+      .from('org_module_pricing_adjustments')
+      .select('id, organization_id, module_id, adjustment_type, value_amount, effective_from, effective_until, reason, status')
+      .in('organization_id', orgIds)
+      .in('module_id', moduleIds)
+      .eq('status', 'active')
+      .lte('effective_from', nowYmd)
+      .gte('effective_until', nowYmd);
+    if (aErr) throw aErr;
+    for (const r of adjs ?? []) {
+      const key = `${String((r as any).organization_id)}:${String((r as any).module_id)}`;
+      if (activeAdjByOrgModule.has(key)) continue;
+      activeAdjByOrgModule.set(key, {
+        id: String((r as any).id),
+        adjustment_type: String((r as any).adjustment_type),
+        value_amount: (r as any).value_amount != null ? Number((r as any).value_amount) : null,
+        effective_from: String((r as any).effective_from),
+        effective_until: String((r as any).effective_until),
+        reason: String((r as any).reason ?? ''),
+      });
+    }
+  }
+
+  function effectivePrice(base: number | null, type: string | null, value: number | null): number | null {
+    if (base == null || !Number.isFinite(base)) return null;
+    if (!type) return base;
+    if (type === 'free_access') return 0;
+    const v = value ?? 0;
+    if (type === 'discount_amount') return Math.max(0, base - v);
+    if (type === 'add_amount') return Math.max(0, base + v);
+    if (type === 'replace_price') return Math.max(0, v);
+    return base;
+  }
+
+  const orgRows = [];
+  for (const o of orgs ?? []) {
+    const orgId = String((o as any).id);
+    const clientsCount = clientsCountByOrg.get(orgId) ?? 0;
+    const modulesOut: CommercialModuleRow[] = [];
+    for (const m of commercialModules) {
+      const moduleId = String((m as any).id);
+      const modKey = moduleIdToKey.get(moduleId)?.code ?? String((m as any).code);
+      const modName = moduleIdToKey.get(moduleId)?.name ?? String((m as any).name);
+      const activation = activationByOrgModule.get(`${orgId}:${moduleId}`) ?? 'inactive';
+      const entitlement = await resolveEntitlement(orgId, moduleId);
+      const sub = subByOrgModule.get(`${orgId}:${moduleId}`) ?? null;
+      const base = plansByModule.get(moduleId) ?? null;
+      const adj = activeAdjByOrgModule.get(`${orgId}:${moduleId}`) ?? null;
+      const adjType = adj ? String(adj.adjustment_type ?? '') : null;
+      const adjValue = adj ? (typeof adj.value_amount === 'number' ? (adj.value_amount as number) : null) : null;
+      const eff = effectivePrice(base ? base.price_amount : null, adjType, adjValue);
+      modulesOut.push({
+        module_key: modKey,
+        module_name: modName,
+        activation_status: activation,
+        entitlement_status: entitlement.status,
+        entitlement_reason: entitlement.reason ?? null,
+        trial_ends_at: sub?.trial_ends_at ?? null,
+        subscription_ends_at: sub?.ends_at ?? null,
+        base_price_amount: base ? base.price_amount : null,
+        base_price_currency: base ? base.currency : null,
+        active_pricing_adjustment: adj,
+        effective_price_preview: { currency: base ? base.currency : null, amount: eff },
+      });
+    }
+    orgRows.push({
+      org_id: orgId,
+      org_name: String((o as any).name ?? ''),
+      clients_count: clientsCount,
+      modules: modulesOut,
+    });
+  }
+
+  return {
+    org_rows: orgRows,
+  };
+}
 
 function canUseOrgAggregate(ctx: RequestContext, organizationId: string): boolean {
   return !!ctx.organizationId && ctx.organizationId === organizationId;
@@ -571,14 +750,22 @@ async function fetchOwnerLegalControlPanelAuditSummary(): Promise<{ recent: Owne
 export async function buildOwnerLegalControlPanelAggregate(ctx: RequestContext): Promise<Record<string, unknown>> {
   assertPlatformOwner(ctx);
 
-  const [countryPacksAdmin, legalValues, platformPricing, emailProviderConfig, auditSummary, docflowRequestTemplates] =
-    await Promise.all([
+  const [
+    countryPacksAdmin,
+    legalValues,
+    platformPricing,
+    emailProviderConfig,
+    auditSummary,
+    docflowRequestTemplates,
+    commercialControls,
+  ] = await Promise.all([
       buildOwnerCountryPackAdminAggregate(ctx),
       buildOwnerLegalValuesAggregate(ctx),
       buildOwnerPlatformPricingAggregate(ctx),
       buildOwnerEmailProviderConfigAggregate(),
       fetchOwnerLegalControlPanelAuditSummary(),
       fetchDocflowRequestTemplatesForOwner(),
+      buildOwnerCommercialControlsAggregate(),
     ]);
 
   const tables = countryPacksAdmin.tables as
@@ -608,6 +795,7 @@ export async function buildOwnerLegalControlPanelAggregate(ctx: RequestContext):
     legal_value_versions: legalValueVersionsFlat,
     docflow_communication_templates: docflowCommunicationTemplates,
     docflow_request_templates: docflowRequestTemplates,
+    commercial_controls: commercialControls,
     docflow_communication_quick_actions: [
       {
         action_key: 'create_legal_value',
@@ -712,6 +900,44 @@ export async function buildOwnerLegalControlPanelAggregate(ctx: RequestContext):
           button_label: 'Archive document request template',
           note: null,
           payload: { template_definition_id: 'uuid' },
+        },
+      ],
+      commercial_controls: [
+        {
+          action_key: 'extend_org_module_trial',
+          enabled: true,
+          button_label: 'Extend Trial',
+          note: null,
+          payload: { org_id: 'uuid', module_key: 'docflow', expires_at: 'ISO datetime', reason: 'string' },
+        },
+        {
+          action_key: 'activate_org_module_access',
+          enabled: true,
+          button_label: 'Activate Module',
+          note: null,
+          payload: { org_id: 'uuid', module_key: 'docflow', active_from: 'ISO datetime', active_until: 'optional ISO datetime', reason: 'string' },
+        },
+        {
+          action_key: 'create_pricing_adjustment',
+          enabled: true,
+          button_label: 'Pricing Adjustment',
+          note: null,
+          payload: {
+            org_id: 'uuid',
+            module_key: 'docflow',
+            adjustment_type: 'discount_amount|replace_price|add_amount|free_access',
+            value: 'number (not required for free_access)',
+            start_date: 'YYYY-MM-DD',
+            end_date: 'YYYY-MM-DD',
+            reason: 'string',
+          },
+        },
+        {
+          action_key: 'cancel_pricing_adjustment',
+          enabled: true,
+          button_label: 'Cancel Pricing Adjustment',
+          note: null,
+          payload: { pricing_adjustment_id: 'uuid', reason: 'optional string' },
         },
       ],
     },
