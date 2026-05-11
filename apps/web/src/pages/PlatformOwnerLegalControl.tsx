@@ -167,6 +167,15 @@ export function PlatformOwnerLegalControl() {
 
   const [panel, setPanel] = useState(null as UnknownRecord | null);
 
+  // Commercial Controls (backend-owned pagination/filtering; frontend stores only UI inputs + expand state)
+  const [commercialPage, setCommercialPage] = useState(1);
+  const [commercialPageSize, setCommercialPageSize] = useState(20);
+  const [commercialSearch, setCommercialSearch] = useState('');
+  const [commercialModuleKey, setCommercialModuleKey] = useState('');
+  const [commercialEntitlementStatus, setCommercialEntitlementStatus] = useState('');
+  const [commercialActivationStatus, setCommercialActivationStatus] = useState('');
+  const [commercialExpandedOrgIds, setCommercialExpandedOrgIds] = useState<Set<string>>(() => new Set());
+
   const [orgSettings, setOrgSettings] = useState(null as UnknownRecord | null);
   const [orgDiagnostics, setOrgDiagnostics] = useState(null as UnknownRecord | null);
 
@@ -258,7 +267,16 @@ export function PlatformOwnerLegalControl() {
     setAccessDenied(false);
     setAccessDeniedReason('');
     try {
-      const p = (await apiJson(OWNER.legalControl)) as UnknownRecord;
+      const qs = new URLSearchParams();
+      qs.set('commercial_page', String(commercialPage));
+      qs.set('commercial_page_size', String(commercialPageSize));
+      if (commercialSearch.trim()) qs.set('commercial_search', commercialSearch.trim());
+      if (commercialModuleKey.trim()) qs.set('commercial_module_key', commercialModuleKey.trim());
+      if (commercialEntitlementStatus.trim()) qs.set('commercial_entitlement_status', commercialEntitlementStatus.trim());
+      if (commercialActivationStatus.trim()) qs.set('commercial_activation_status', commercialActivationStatus.trim());
+
+      const path = `${OWNER.legalControl}?${qs.toString()}`;
+      const p = (await apiJson(path)) as UnknownRecord;
       setPanel(p);
     } catch (e) {
       if (isForbidden(e)) {
@@ -277,7 +295,15 @@ export function PlatformOwnerLegalControl() {
       void loadCore();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.status]);
+  }, [
+    auth.status,
+    commercialPage,
+    commercialPageSize,
+    commercialSearch,
+    commercialModuleKey,
+    commercialEntitlementStatus,
+    commercialActivationStatus,
+  ]);
 
   async function loadOrgDiagnostics(): Promise<void> {
     const orgId = activeOrganizationId.trim();
@@ -297,13 +323,26 @@ export function PlatformOwnerLegalControl() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrganizationId]);
 
+  function commercialControlsContextPayload(): UnknownRecord {
+    return {
+      commercial_controls_context: {
+        page: commercialPage,
+        page_size: commercialPageSize,
+        search: commercialSearch.trim() || null,
+        module_key: commercialModuleKey.trim() || null,
+        entitlement_status: commercialEntitlementStatus.trim() || null,
+        activation_status: commercialActivationStatus.trim() || null,
+      },
+    };
+  }
+
   async function sendOwnerCommand(command: string, payload: UnknownRecord): Promise<OwnerCommandResponse> {
     setCommandBusy(true);
     setError('');
     try {
       const out = (await apiJson(OWNER.command, {
         method: 'POST',
-        body: JSON.stringify({ command, payload }),
+        body: JSON.stringify({ command, payload: { ...payload, ...commercialControlsContextPayload() } }),
       })) as OwnerCommandResponse;
       const refreshed = out.refreshed.aggregate;
       if (out.refreshed.aggregate_key === 'owner_legal_control_panel_aggregate') setPanel(refreshed);
@@ -592,6 +631,17 @@ export function PlatformOwnerLegalControl() {
   const commercialOrgRows = useMemo(() => {
     const rows = commercialControls?.org_rows;
     return Array.isArray(rows) ? (rows as UnknownRecord[]) : [];
+  }, [commercialControls]);
+
+  const commercialPagination = useMemo(() => {
+    const p = commercialControls?.pagination;
+    return p && typeof p === 'object' && !Array.isArray(p) ? (p as UnknownRecord) : null;
+  }, [commercialControls]);
+
+  const commercialFilterOptions = useMemo(() => {
+    const f = commercialControls?.filters;
+    const o = f && typeof f === 'object' && !Array.isArray(f) ? (f as UnknownRecord).options : null;
+    return o && typeof o === 'object' && !Array.isArray(o) ? (o as UnknownRecord) : null;
   }, [commercialControls]);
 
   function fmtOwnerDate(v: unknown): string {
@@ -1617,21 +1667,171 @@ export function PlatformOwnerLegalControl() {
           </p>
 
           <div style={{ display: 'grid', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
+              <label style={{ display: 'grid', gap: 6, fontSize: 12, color: '#374151', fontWeight: 700 }}>
+                Search org
+                <input
+                  type="text"
+                  value={commercialSearch}
+                  onChange={(e) => {
+                    setCommercialSearch(e.target.value);
+                    setCommercialPage(1);
+                  }}
+                  placeholder="Organization name…"
+                  style={{ height: 36, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 10px', minWidth: 220 }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6, fontSize: 12, color: '#374151', fontWeight: 700 }}>
+                Module
+                <select
+                  value={commercialModuleKey}
+                  onChange={(e) => {
+                    setCommercialModuleKey(e.target.value);
+                    setCommercialPage(1);
+                  }}
+                  style={{ height: 36, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 10px', minWidth: 180 }}
+                >
+                  <option value="">All modules</option>
+                  {(Array.isArray((commercialFilterOptions?.modules as unknown) ?? [])
+                    ? (commercialFilterOptions?.modules as UnknownRecord[])
+                    : []
+                  ).map((m) => {
+                    const key = safeText(m.module_key);
+                    const name = safeText(m.module_name) || key;
+                    return (
+                      <option key={key} value={key}>
+                        {name}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 6, fontSize: 12, color: '#374151', fontWeight: 700 }}>
+                Entitlement
+                <select
+                  value={commercialEntitlementStatus}
+                  onChange={(e) => {
+                    setCommercialEntitlementStatus(e.target.value);
+                    setCommercialPage(1);
+                  }}
+                  style={{ height: 36, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 10px', minWidth: 160 }}
+                >
+                  <option value="">Any</option>
+                  {(Array.isArray((commercialFilterOptions?.entitlement_statuses as unknown) ?? [])
+                    ? (commercialFilterOptions?.entitlement_statuses as string[])
+                    : ['entitled', 'trial', 'not_entitled', 'expired']
+                  ).map((s) => (
+                    <option key={s} value={s}>
+                      {entitlementLabel(s)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 6, fontSize: 12, color: '#374151', fontWeight: 700 }}>
+                Activation
+                <select
+                  value={commercialActivationStatus}
+                  onChange={(e) => {
+                    setCommercialActivationStatus(e.target.value);
+                    setCommercialPage(1);
+                  }}
+                  style={{ height: 36, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 10px', minWidth: 140 }}
+                >
+                  <option value="">Any</option>
+                  <option value="active">On</option>
+                  <option value="inactive">Off</option>
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 6, fontSize: 12, color: '#374151', fontWeight: 700 }}>
+                Page size
+                <select
+                  value={String(commercialPageSize)}
+                  onChange={(e) => {
+                    setCommercialPageSize(Number(e.target.value) || 20);
+                    setCommercialPage(1);
+                  }}
+                  style={{ height: 36, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 10px' }}
+                >
+                  {[10, 20, 50].map((n) => (
+                    <option key={n} value={String(n)}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12.5, color: '#374151' }}>
+                Total: {String(commercialPagination?.total_count ?? '—')} · Page {String(commercialPagination?.page ?? commercialPage)} /{' '}
+                {String(commercialPagination?.total_pages ?? '—')}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-taxes-compact"
+                  disabled={loading || commandBusy || (Number(commercialPagination?.page ?? commercialPage) || 1) <= 1}
+                  onClick={() => setCommercialPage((p) => Math.max(1, p - 1))}
+                >
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-taxes-compact"
+                  disabled={
+                    loading ||
+                    commandBusy ||
+                    (Number(commercialPagination?.page ?? commercialPage) || 1) >= (Number(commercialPagination?.total_pages ?? 1) || 1)
+                  }
+                  onClick={() => setCommercialPage((p) => p + 1)}
+                >
+                  Next
+                </button>
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-taxes-compact"
+                  disabled={loading || commandBusy}
+                  onClick={() => setCommercialExpandedOrgIds(new Set())}
+                >
+                  Collapse all
+                </button>
+              </div>
+            </div>
+
             {commercialOrgRows.map((org, idx) => {
               const orgName = safeText(org.org_name) || 'Organization';
               const clientsCount = Number(org.clients_count ?? 0);
               const modules = Array.isArray(org.modules) ? (org.modules as UnknownRecord[]) : [];
+              const orgId = safeText(org.org_id);
+              const expanded = orgId ? commercialExpandedOrgIds.has(orgId) : false;
               return (
                 <section
-                  key={`${safeText(org.org_id)}:${idx}`}
+                  key={`${orgId}:${idx}`}
                   style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 12 }}
                 >
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                    <div style={{ fontWeight: 800, fontSize: 16 }}>{orgName}</div>
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn-taxes-compact"
+                      style={{ fontWeight: 800, fontSize: 15, minWidth: 220, justifyContent: 'space-between' }}
+                      onClick={() => {
+                        if (!orgId) return;
+                        setCommercialExpandedOrgIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(orgId)) next.delete(orgId);
+                          else next.add(orgId);
+                          return next;
+                        });
+                      }}
+                    >
+                      <span>{orgName}</span>
+                      <span style={{ opacity: 0.8 }}>{expanded ? '▾' : '▸'}</span>
+                    </button>
                     <div style={{ fontSize: 13, color: '#6b7280' }}>Clients: {Number.isFinite(clientsCount) ? clientsCount : '—'}</div>
                   </div>
 
-                  <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                  {expanded ? (
+                    <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
                     {modules.map((m, mi) => {
                       const moduleName = safeText(m.module_name) || safeText(m.module_key) || 'Module';
                       const entStatus = safeText(m.entitlement_status);
@@ -1711,7 +1911,8 @@ export function PlatformOwnerLegalControl() {
                       );
                     })}
                     {!modules.length ? <div style={{ color: '#6b7280' }}>No modules</div> : null}
-                  </div>
+                    </div>
+                  ) : null}
                 </section>
               );
             })}

@@ -9,7 +9,14 @@ import {
 } from './docflow-communication-owner-payload.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
-import { resolveEntitlement } from '../modules/entitlement.service.js';
+type CommercialControlsQuery = {
+  page: number;
+  page_size: number;
+  search: string | null;
+  module_key: string | null;
+  entitlement_status: string | null;
+  activation_status: string | null;
+};
 
 type CommercialModuleRow = {
   module_key: string;
@@ -25,36 +32,63 @@ type CommercialModuleRow = {
   effective_price_preview: { currency: string | null; amount: number | null } | null;
 };
 
-async function buildOwnerCommercialControlsAggregate(): Promise<Record<string, unknown>> {
-  const { data: orgs, error: oErr } = await supabaseAdmin
+function normalizeCommercialControlsQuery(input?: Partial<CommercialControlsQuery>): CommercialControlsQuery {
+  const page = Math.max(1, Math.floor(Number(input?.page ?? 1) || 1));
+  const pageSize = Math.max(1, Math.min(100, Math.floor(Number(input?.page_size ?? 20) || 20)));
+  const searchRaw = typeof input?.search === 'string' ? input!.search.trim() : '';
+  const search = searchRaw ? searchRaw : null;
+  const moduleKeyRaw = typeof input?.module_key === 'string' ? input!.module_key.trim() : '';
+  const module_key = moduleKeyRaw ? moduleKeyRaw : null;
+  const entRaw = typeof input?.entitlement_status === 'string' ? input!.entitlement_status.trim() : '';
+  const entitlement_status = entRaw ? entRaw : null;
+  const actRaw = typeof input?.activation_status === 'string' ? input!.activation_status.trim() : '';
+  const activation_status = actRaw ? actRaw : null;
+  return { page, page_size: pageSize, search, module_key, entitlement_status, activation_status };
+}
+
+async function buildOwnerCommercialControlsAggregate(queryInput?: Partial<CommercialControlsQuery>): Promise<Record<string, unknown>> {
+  const q0 = normalizeCommercialControlsQuery(queryInput);
+  const excludedNamePrefix = /^(cc-sync-|cc-bad-|dbg-)/i;
+
+  // Fetch candidate orgs by name search; then apply backend-owned "meaningful org" filter and module filters.
+  // Note: we cap candidates to protect the endpoint; pagination is applied AFTER filtering.
+  const CANDIDATE_CAP = 5000;
+  let orgQuery = supabaseAdmin
     .from('organizations')
-    .select('id, name, status, created_at')
+    .select('id, name, status, created_at', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(200);
+    .limit(CANDIDATE_CAP);
+  if (q0.search) {
+    orgQuery = orgQuery.ilike('name', `%${q0.search}%`);
+  }
+  const { data: orgs, error: oErr } = await orgQuery;
   if (oErr) throw oErr;
 
-  const orgIds = (orgs ?? []).map((o) => String(o.id));
-
-  const clientsCountByOrg = new Map<string, number>();
-  if (orgIds.length) {
-    const { data: clientCounts, error: cErr } = await supabaseAdmin
-      .from('clients')
-      .select('organization_id')
-      .in('organization_id', orgIds);
-    if (cErr) throw cErr;
-    for (const row of clientCounts ?? []) {
-      const oid = String((row as { organization_id: string }).organization_id);
-      clientsCountByOrg.set(oid, (clientsCountByOrg.get(oid) ?? 0) + 1);
-    }
+  const orgIdsAll = (orgs ?? []).map((o) => String((o as any).id)).filter(Boolean);
+  if (!orgIdsAll.length) {
+    return {
+      filters: {
+        search: q0.search,
+        module_key: q0.module_key,
+        entitlement_status: q0.entitlement_status,
+        activation_status: q0.activation_status,
+      },
+      pagination: { page: q0.page, page_size: q0.page_size, total_count: 0, total_pages: 0 },
+      org_rows: [],
+    };
   }
 
+  // Module catalog for filter dropdowns + per-org module rendering.
   const { data: modules, error: mErr } = await supabaseAdmin
     .from('modules')
     .select('id, code, name, is_system')
     .eq('is_active', true)
-    .order('nav_order', { ascending: true });
+    .order('created_at', { ascending: false })
   if (mErr) throw mErr;
   const commercialModules = (modules ?? []).filter((m) => !(m as { is_system?: boolean }).is_system);
+  const moduleByKey = new Map<string, { id: string; name: string }>(
+    commercialModules.map((m) => [String((m as any).code), { id: String((m as any).id), name: String((m as any).name) }])
+  );
 
   const moduleIdToKey = new Map<string, { code: string; name: string }>();
   for (const m of commercialModules) {
@@ -83,17 +117,17 @@ async function buildOwnerCommercialControlsAggregate(): Promise<Record<string, u
   const subByOrgModule = new Map<string, { status: string; trial_ends_at: string | null; ends_at: string | null }>();
   const orgHasModuleActivationHistory = new Set<string>();
   const orgHasSubscriptionHistory = new Set<string>();
-  if (orgIds.length && moduleIds.length) {
+  if (orgIdsAll.length && moduleIds.length) {
     const [orgModsRes, subsRes] = await Promise.all([
       supabaseAdmin
         .from('organization_modules')
         .select('organization_id, module_id, status')
-        .in('organization_id', orgIds)
+        .in('organization_id', orgIdsAll)
         .in('module_id', moduleIds),
       supabaseAdmin
         .from('organization_module_subscriptions')
         .select('organization_id, module_id, status, trial_ends_at, ends_at')
-        .in('organization_id', orgIds)
+        .in('organization_id', orgIdsAll)
         .in('module_id', moduleIds),
     ]);
     if (orgModsRes.error) throw orgModsRes.error;
@@ -117,11 +151,11 @@ async function buildOwnerCommercialControlsAggregate(): Promise<Record<string, u
   const nowYmd = new Date().toISOString().slice(0, 10);
   const activeAdjByOrgModule = new Map<string, Record<string, unknown>>();
   const orgHasPricingHistory = new Set<string>();
-  if (orgIds.length && moduleIds.length) {
+  if (orgIdsAll.length && moduleIds.length) {
     const { data: adjs, error: aErr } = await supabaseAdmin
       .from('org_module_pricing_adjustments')
       .select('id, organization_id, module_id, adjustment_type, value_amount, effective_from, effective_until, reason, status')
-      .in('organization_id', orgIds)
+      .in('organization_id', orgIdsAll)
       .in('module_id', moduleIds)
       .eq('status', 'active')
       .lte('effective_from', nowYmd)
@@ -154,15 +188,58 @@ async function buildOwnerCommercialControlsAggregate(): Promise<Record<string, u
     return base;
   }
 
-  /**
-   * Owner dashboard must show only meaningful orgs.
-   * Backend-owned filtering (NO frontend hacks):
-   * - Exclude debug/test/sync orgs by name prefix.
-   * - Exclude empty orgs with no clients and no commercial/module history.
-   * - Exclude non-active orgs unless they have clients or commercial history.
-   */
-  const excludedNamePrefix = /^(cc-sync-|cc-bad-|dbg-)/i;
-  const filteredOrgs = (orgs ?? []).filter((o) => {
+  // Full-platform trial state per org (used to compute entitlement without per-org calls)
+  const orgHasValidTrial = new Set<string>();
+  {
+    const { data: trials, error: tErr } = await supabaseAdmin
+      .from('organization_trials')
+      .select('organization_id')
+      .in('organization_id', orgIdsAll)
+      .eq('trial_scope', 'full_platform')
+      .eq('status', 'trialing')
+      .gt('ends_at', new Date().toISOString());
+    if (tErr) throw tErr;
+    for (const r of trials ?? []) {
+      orgHasValidTrial.add(String((r as any).organization_id));
+    }
+  }
+
+  // For "meaningful org" filtering: we need to know clients_count > 0, but we will only count
+  // clients for candidate orgs by reading organization_id rows (still backend-owned).
+  // This can be heavy for very large datasets; cap protects owner endpoint.
+  const CLIENT_ROWS_CAP = 200_000;
+  const clientsCountByOrg = new Map<string, number>();
+  {
+    const { data: clientRows, error: cErr } = await supabaseAdmin
+      .from('clients')
+      .select('organization_id')
+      .in('organization_id', orgIdsAll)
+      .limit(CLIENT_ROWS_CAP);
+    if (cErr) throw cErr;
+    for (const row of clientRows ?? []) {
+      const oid = String((row as any).organization_id);
+      clientsCountByOrg.set(oid, (clientsCountByOrg.get(oid) ?? 0) + 1);
+    }
+  }
+
+  function computeEntitlementStatus(orgId: string, moduleId: string): { status: string; reason: string | null } {
+    const sub = subByOrgModule.get(`${orgId}:${moduleId}`) ?? null;
+    if (sub) {
+      if (sub.status === 'active' || sub.status === 'trialing') {
+        if (sub.ends_at && new Date(sub.ends_at) < new Date()) return { status: 'expired', reason: 'Subscription ended' };
+        if (sub.status === 'trialing' && sub.trial_ends_at && new Date(sub.trial_ends_at) < new Date()) {
+          return { status: 'expired', reason: 'Trial ended' };
+        }
+        return { status: sub.status === 'trialing' ? 'trial' : 'entitled', reason: null };
+      }
+      return { status: 'expired', reason: `Subscription status: ${sub.status}` };
+    }
+    if (orgHasValidTrial.has(orgId)) return { status: 'trial', reason: null };
+    return { status: 'not_entitled', reason: 'No subscription or trial for this module' };
+  }
+
+  // Step 1: meaningful org filtering + debug exclusion (backend-owned).
+  let meaningful = (orgs ?? []).filter((o) => {
     const orgId = String((o as any).id);
     const name = String((o as any).name ?? '').trim();
     const status = String((o as any).status ?? '').trim().toLowerCase();
@@ -176,13 +253,44 @@ async function buildOwnerCommercialControlsAggregate(): Promise<Record<string, u
       orgHasModuleActivationHistory.has(orgId) ||
       orgHasPricingHistory.has(orgId);
     if (hasClients || hasHistory) return true;
-    // empty org with no history => exclude (even if active)
     if (status !== 'active') return false;
     return false;
   });
 
+  // Step 2: apply module filters (backend-owned).
+  const filterModule = q0.module_key ? moduleByKey.get(q0.module_key) ?? null : null;
+  meaningful = meaningful.filter((o) => {
+    const orgId = String((o as any).id);
+    const matchesModule = (moduleId: string): boolean => {
+      if (q0.activation_status) {
+        const act = activationByOrgModule.get(`${orgId}:${moduleId}`) ?? 'inactive';
+        if (act !== q0.activation_status) return false;
+      }
+      if (q0.entitlement_status) {
+        const ent = computeEntitlementStatus(orgId, moduleId).status;
+        if (ent !== q0.entitlement_status) return false;
+      }
+      return true;
+    };
+    if (filterModule) {
+      return matchesModule(filterModule.id);
+    }
+    // If no module_key filter, treat other filters as "any module matches"
+    if (!q0.activation_status && !q0.entitlement_status) return true;
+    for (const mid of moduleIds) {
+      if (matchesModule(mid)) return true;
+    }
+    return false;
+  });
+
+  const totalCount = meaningful.length;
+  const totalPages = totalCount ? Math.ceil(totalCount / q0.page_size) : 0;
+  const page = Math.min(q0.page, Math.max(1, totalPages || 1));
+  const start = (page - 1) * q0.page_size;
+  const pageOrgs = meaningful.slice(start, start + q0.page_size);
+
   const orgRows = [];
-  for (const o of filteredOrgs) {
+  for (const o of pageOrgs) {
     const orgId = String((o as any).id);
     const clientsCount = clientsCountByOrg.get(orgId) ?? 0;
     const modulesOut: CommercialModuleRow[] = [];
@@ -191,7 +299,7 @@ async function buildOwnerCommercialControlsAggregate(): Promise<Record<string, u
       const modKey = moduleIdToKey.get(moduleId)?.code ?? String((m as any).code);
       const modName = moduleIdToKey.get(moduleId)?.name ?? String((m as any).name);
       const activation = activationByOrgModule.get(`${orgId}:${moduleId}`) ?? 'inactive';
-      const entitlement = await resolveEntitlement(orgId, moduleId);
+      const entitlement = computeEntitlementStatus(orgId, moduleId);
       const sub = subByOrgModule.get(`${orgId}:${moduleId}`) ?? null;
       const base = plansByModule.get(moduleId) ?? null;
       const adj = activeAdjByOrgModule.get(`${orgId}:${moduleId}`) ?? null;
@@ -203,7 +311,7 @@ async function buildOwnerCommercialControlsAggregate(): Promise<Record<string, u
         module_name: modName,
         activation_status: activation,
         entitlement_status: entitlement.status,
-        entitlement_reason: entitlement.reason ?? null,
+        entitlement_reason: entitlement.reason,
         trial_ends_at: sub?.trial_ends_at ?? null,
         subscription_ends_at: sub?.ends_at ?? null,
         base_price_amount: base ? base.price_amount : null,
@@ -221,6 +329,23 @@ async function buildOwnerCommercialControlsAggregate(): Promise<Record<string, u
   }
 
   return {
+    filters: {
+      search: q0.search,
+      module_key: q0.module_key,
+      entitlement_status: q0.entitlement_status,
+      activation_status: q0.activation_status,
+      options: {
+        modules: commercialModules.map((m) => ({ module_key: String((m as any).code), module_name: String((m as any).name) })),
+        entitlement_statuses: ['entitled', 'trial', 'not_entitled', 'expired'],
+        activation_statuses: ['active', 'inactive'],
+      },
+    },
+    pagination: {
+      page,
+      page_size: q0.page_size,
+      total_count: totalCount,
+      total_pages: totalPages,
+    },
     org_rows: orgRows,
   };
 }
@@ -783,7 +908,10 @@ async function fetchOwnerLegalControlPanelAuditSummary(): Promise<{ recent: Owne
  * Single read model for GET /api/v1/owner/legal-control.
  * Composes existing owner aggregates only (no extra domain queries beyond audit summary).
  */
-export async function buildOwnerLegalControlPanelAggregate(ctx: RequestContext): Promise<Record<string, unknown>> {
+export async function buildOwnerLegalControlPanelAggregate(
+  ctx: RequestContext,
+  opts?: { commercial_controls?: Partial<CommercialControlsQuery> }
+): Promise<Record<string, unknown>> {
   assertPlatformOwner(ctx);
 
   const [
@@ -801,7 +929,7 @@ export async function buildOwnerLegalControlPanelAggregate(ctx: RequestContext):
       buildOwnerEmailProviderConfigAggregate(),
       fetchOwnerLegalControlPanelAuditSummary(),
       fetchDocflowRequestTemplatesForOwner(),
-      buildOwnerCommercialControlsAggregate(),
+      buildOwnerCommercialControlsAggregate(opts?.commercial_controls),
     ]);
 
   const tables = countryPacksAdmin.tables as

@@ -60,7 +60,16 @@ router.get('/legal-control', async (req: Request, res: Response, next: NextFunct
   try {
     const ctx = req.context as RequestContext;
     await assertOwnerOrAuditFailure(ctx, req);
-    const aggregate = await buildOwnerLegalControlPanelAggregate(ctx);
+    const aggregate = await buildOwnerLegalControlPanelAggregate(ctx, {
+      commercial_controls: {
+        page: Number(req.query.commercial_page ?? 1) || 1,
+        page_size: Number(req.query.commercial_page_size ?? 20) || 20,
+        search: typeof req.query.commercial_search === 'string' ? req.query.commercial_search : null,
+        module_key: typeof req.query.commercial_module_key === 'string' ? req.query.commercial_module_key : null,
+        entitlement_status: typeof req.query.commercial_entitlement_status === 'string' ? req.query.commercial_entitlement_status : null,
+        activation_status: typeof req.query.commercial_activation_status === 'string' ? req.query.commercial_activation_status : null,
+      },
+    });
     return res.json(aggregate);
   } catch (e) {
     next(e);

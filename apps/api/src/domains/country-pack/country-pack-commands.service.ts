@@ -71,10 +71,32 @@ type CountryPackCommandResponse = {
   };
 };
 
-async function refreshedOwnerLegalControlPanel(ctx: RequestContext): Promise<CountryPackCommandResponse['refreshed']> {
+function commercialControlsContextFromPayload(payload: Record<string, unknown>): Partial<{
+  page: number;
+  page_size: number;
+  search: string | null;
+  module_key: string | null;
+  entitlement_status: string | null;
+  activation_status: string | null;
+}> | null {
+  const raw = payload.commercial_controls_context;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  return {
+    page: Number(o.page ?? 1) || 1,
+    page_size: Number(o.page_size ?? 20) || 20,
+    search: typeof o.search === 'string' ? o.search : null,
+    module_key: typeof o.module_key === 'string' ? o.module_key : null,
+    entitlement_status: typeof o.entitlement_status === 'string' ? o.entitlement_status : null,
+    activation_status: typeof o.activation_status === 'string' ? o.activation_status : null,
+  };
+}
+
+async function refreshedOwnerLegalControlPanel(ctx: RequestContext, payload?: Record<string, unknown>): Promise<CountryPackCommandResponse['refreshed']> {
+  const commercial = payload ? commercialControlsContextFromPayload(payload) : null;
   return {
     aggregate_key: 'owner_legal_control_panel_aggregate',
-    aggregate: await buildOwnerLegalControlPanelAggregate(ctx),
+    aggregate: await buildOwnerLegalControlPanelAggregate(ctx, commercial ? { commercial_controls: commercial } : undefined),
   };
 }
 
@@ -193,7 +215,7 @@ async function handleExtendOrgModuleTrial(ctx: RequestContext, payload: Record<s
       old_state: oldState,
       new_state: { status: 'trialing', trial_ends_at: expiresAtIso },
     });
-    return { ok: true, command: 'extend_org_module_trial', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+    return { ok: true, command: 'extend_org_module_trial', refreshed: await refreshedOwnerLegalControlPanel(ctx, payload) };
   }
 
   const planId = await resolveDefaultActivePlanId(mod.id);
@@ -216,7 +238,7 @@ async function handleExtendOrgModuleTrial(ctx: RequestContext, payload: Record<s
     old_state: null,
     new_state: { status: 'trialing', trial_ends_at: expiresAtIso },
   });
-  return { ok: true, command: 'extend_org_module_trial', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+  return { ok: true, command: 'extend_org_module_trial', refreshed: await refreshedOwnerLegalControlPanel(ctx, payload) };
 }
 
 async function handleActivateOrgModuleAccess(ctx: RequestContext, payload: Record<string, unknown>): Promise<CountryPackCommandResponse> {
@@ -267,7 +289,7 @@ async function handleActivateOrgModuleAccess(ctx: RequestContext, payload: Recor
       old_state: oldState,
       new_state: { status: 'active', started_at: activeFromIso, ends_at: activeUntilIso, trial_ends_at: null },
     });
-    return { ok: true, command: 'activate_org_module_access', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+    return { ok: true, command: 'activate_org_module_access', refreshed: await refreshedOwnerLegalControlPanel(ctx, payload) };
   }
 
   const planId = await resolveDefaultActivePlanId(mod.id);
@@ -292,7 +314,7 @@ async function handleActivateOrgModuleAccess(ctx: RequestContext, payload: Recor
     old_state: null,
     new_state: { status: 'active', started_at: activeFromIso, ends_at: activeUntilIso, trial_ends_at: null },
   });
-  return { ok: true, command: 'activate_org_module_access', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+  return { ok: true, command: 'activate_org_module_access', refreshed: await refreshedOwnerLegalControlPanel(ctx, payload) };
 }
 
 function computeEffectivePrice(base: number, type: string, value: number | null): number {
@@ -367,7 +389,7 @@ async function handleCreatePricingAdjustment(ctx: RequestContext, payload: Recor
     },
   });
 
-  return { ok: true, command: 'create_pricing_adjustment', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+  return { ok: true, command: 'create_pricing_adjustment', refreshed: await refreshedOwnerLegalControlPanel(ctx, payload) };
 }
 
 async function handleCancelPricingAdjustment(ctx: RequestContext, payload: Record<string, unknown>): Promise<CountryPackCommandResponse> {
@@ -381,7 +403,7 @@ async function handleCancelPricingAdjustment(ctx: RequestContext, payload: Recor
   if (rErr) throw rErr;
   if (!row) throw notFound('Pricing adjustment not found');
   if (String((row as any).status ?? '') !== 'active') {
-    return { ok: true, command: 'cancel_pricing_adjustment', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+    return { ok: true, command: 'cancel_pricing_adjustment', refreshed: await refreshedOwnerLegalControlPanel(ctx, payload) };
   }
   const oldState = {
     adjustment_type: String((row as any).adjustment_type ?? ''),
@@ -399,7 +421,7 @@ async function handleCancelPricingAdjustment(ctx: RequestContext, payload: Recor
     old_state: oldState,
     new_state: { status: 'cancelled' },
   });
-  return { ok: true, command: 'cancel_pricing_adjustment', refreshed: await refreshedOwnerLegalControlPanel(ctx) };
+  return { ok: true, command: 'cancel_pricing_adjustment', refreshed: await refreshedOwnerLegalControlPanel(ctx, payload) };
 }
 
 async function audit(
