@@ -60,6 +60,8 @@ async function buildOwnerCommercialControlsAggregate() {
     }
     const activationByOrgModule = new Map();
     const subByOrgModule = new Map();
+    const orgHasModuleActivationHistory = new Set();
+    const orgHasSubscriptionHistory = new Set();
     if (orgIds.length && moduleIds.length) {
         const [orgModsRes, subsRes] = await Promise.all([
             supabaseAdmin
@@ -78,10 +80,14 @@ async function buildOwnerCommercialControlsAggregate() {
         if (subsRes.error)
             throw subsRes.error;
         for (const r of orgModsRes.data ?? []) {
-            activationByOrgModule.set(`${String(r.organization_id)}:${String(r.module_id)}`, String(r.status ?? 'inactive'));
+            const oid = String(r.organization_id);
+            orgHasModuleActivationHistory.add(oid);
+            activationByOrgModule.set(`${oid}:${String(r.module_id)}`, String(r.status ?? 'inactive'));
         }
         for (const r of subsRes.data ?? []) {
-            subByOrgModule.set(`${String(r.organization_id)}:${String(r.module_id)}`, {
+            const oid = String(r.organization_id);
+            orgHasSubscriptionHistory.add(oid);
+            subByOrgModule.set(`${oid}:${String(r.module_id)}`, {
                 status: String(r.status ?? ''),
                 trial_ends_at: r.trial_ends_at ? String(r.trial_ends_at) : null,
                 ends_at: r.ends_at ? String(r.ends_at) : null,
@@ -90,6 +96,7 @@ async function buildOwnerCommercialControlsAggregate() {
     }
     const nowYmd = new Date().toISOString().slice(0, 10);
     const activeAdjByOrgModule = new Map();
+    const orgHasPricingHistory = new Set();
     if (orgIds.length && moduleIds.length) {
         const { data: adjs, error: aErr } = await supabaseAdmin
             .from('org_module_pricing_adjustments')
@@ -102,7 +109,9 @@ async function buildOwnerCommercialControlsAggregate() {
         if (aErr)
             throw aErr;
         for (const r of adjs ?? []) {
-            const key = `${String(r.organization_id)}:${String(r.module_id)}`;
+            const oid = String(r.organization_id);
+            orgHasPricingHistory.add(oid);
+            const key = `${oid}:${String(r.module_id)}`;
             if (activeAdjByOrgModule.has(key))
                 continue;
             activeAdjByOrgModule.set(key, {
@@ -131,8 +140,38 @@ async function buildOwnerCommercialControlsAggregate() {
             return Math.max(0, v);
         return base;
     }
+    /**
+     * Owner dashboard must show only meaningful orgs.
+     * Backend-owned filtering (NO frontend hacks):
+     * - Exclude debug/test/sync orgs by name prefix.
+     * - Exclude empty orgs with no clients and no commercial/module history.
+     * - Exclude non-active orgs unless they have clients or commercial history.
+     */
+    const excludedNamePrefix = /^(cc-sync-|cc-bad-|dbg-)/i;
+    const filteredOrgs = (orgs ?? []).filter((o) => {
+        const orgId = String(o.id);
+        const name = String(o.name ?? '').trim();
+        const status = String(o.status ?? '').trim().toLowerCase();
+        if (!orgId)
+            return false;
+        if (!name)
+            return false;
+        if (excludedNamePrefix.test(name))
+            return false;
+        const clientsCount = clientsCountByOrg.get(orgId) ?? 0;
+        const hasClients = clientsCount > 0;
+        const hasHistory = orgHasSubscriptionHistory.has(orgId) ||
+            orgHasModuleActivationHistory.has(orgId) ||
+            orgHasPricingHistory.has(orgId);
+        if (hasClients || hasHistory)
+            return true;
+        // empty org with no history => exclude (even if active)
+        if (status !== 'active')
+            return false;
+        return false;
+    });
     const orgRows = [];
-    for (const o of orgs ?? []) {
+    for (const o of filteredOrgs) {
         const orgId = String(o.id);
         const clientsCount = clientsCountByOrg.get(orgId) ?? 0;
         const modulesOut = [];
