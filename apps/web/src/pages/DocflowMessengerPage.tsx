@@ -29,8 +29,8 @@ function DocflowClientRequestGlyph(): ReactElement {
   const gid = `nx-df-req-${uid}`;
   return (
     <svg
-      width={20}
-      height={20}
+      width={18}
+      height={18}
       viewBox="0 0 20 20"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
@@ -407,6 +407,7 @@ export function DocflowMessengerPage() {
                 const unread = Number(c.unread_count ?? 0) || 0;
                 const active = id && id === effectiveSelectedClientId;
                 const canRequest = canRunGlobal('create_docflow_document_request');
+                const requestVisible = canRequest.enabled === true;
                 return (
                   <div
                     key={id}
@@ -443,31 +444,46 @@ export function DocflowMessengerPage() {
                         >
                           {name}
                         </button>
-                        {canRequest.enabled ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void openRequestForClient(id);
-                            }}
-                            title="לבקש מלקוח"
-                            aria-label="לבקש מלקוח"
-                            style={{
-                              flexShrink: 0,
-                              border: 'none',
-                              background: 'transparent',
-                              padding: 4,
-                              margin: -4,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              lineHeight: 0,
-                            }}
-                          >
-                            <DocflowClientRequestGlyph />
-                          </button>
-                        ) : null}
+                        {/* Fixed slot: keeps layout stable when action is not allowed */}
+                        <div
+                          style={{
+                            width: 22,
+                            height: 22,
+                            flexShrink: 0,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {requestVisible ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void openRequestForClient(id);
+                              }}
+                              title="לבקש מלקוח"
+                              aria-label="לבקש מלקוח"
+                              style={{
+                                width: 22,
+                                height: 22,
+                                border: 'none',
+                                background: 'transparent',
+                                padding: 0,
+                                margin: 0,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                lineHeight: 0,
+                              }}
+                            >
+                              <DocflowClientRequestGlyph />
+                            </button>
+                          ) : (
+                            <span aria-hidden style={{ width: 22, height: 22, display: 'block' }} />
+                          )}
+                        </div>
                       </div>
                       <button
                         type="button"
@@ -487,26 +503,31 @@ export function DocflowMessengerPage() {
                       </button>
                     </div>
 
-                    {unread > 0 ? (
-                      <span
-                        style={{
-                          minWidth: 22,
-                          height: 22,
-                          borderRadius: 11,
-                          background: '#22C55E',
-                          color: '#fff',
-                          fontSize: 12,
-                          fontWeight: 800,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '0 6px',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {unread > 99 ? '99+' : unread}
-                      </span>
-                    ) : null}
+                    {/* Fixed slot: unread badge always reserves space; color changed to NodexPro purple */}
+                    <div style={{ width: 22, height: 22, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {unread > 0 ? (
+                        <span
+                          style={{
+                            minWidth: 22,
+                            height: 22,
+                            borderRadius: 11,
+                            background: '#6D28D9',
+                            color: '#fff',
+                            fontSize: 12,
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0 6px',
+                            boxSizing: 'border-box',
+                          }}
+                        >
+                          {unread > 99 ? '99+' : unread}
+                        </span>
+                      ) : (
+                        <span aria-hidden style={{ width: 22, height: 22, display: 'block' }} />
+                      )}
+                    </div>
                   </div>
                 );
               })
