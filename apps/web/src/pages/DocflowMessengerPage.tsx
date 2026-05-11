@@ -7,6 +7,7 @@ import {
   docflowOfficeMessengerAggregate,
   docflowStartOfficeThreadForClient,
 } from '../api/endpoints';
+import requestClientIcon from '../assets/icons/docflow-request-client.png';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -116,6 +117,15 @@ export function DocflowMessengerPage() {
     return Array.isArray(list) ? (list as AllowedAction[]) : [];
   }, [clientContext]);
 
+  const actionByCommandGlobal = useMemo(() => {
+    const m = new Map<string, AllowedAction>();
+    for (const a of actions) {
+      const cmd = String(a.command ?? '').trim();
+      if (cmd) m.set(cmd, a);
+    }
+    return m;
+  }, [actions]);
+
   const actionByCommand = useMemo(() => {
     const m = new Map<string, AllowedAction>();
     for (const a of actions) {
@@ -133,6 +143,12 @@ export function DocflowMessengerPage() {
 
   function canRun(command: string): { enabled: boolean; reason: string | null } {
     const a = actionByCommand.get(command);
+    if (!a) return { enabled: false, reason: 'הפעולה אינה זמינה' };
+    return { enabled: a.enabled !== false, reason: (a.reason as string | null) ?? null };
+  }
+
+  function canRunGlobal(command: string): { enabled: boolean; reason: string | null } {
+    const a = actionByCommandGlobal.get(command);
     if (!a) return { enabled: false, reason: 'הפעולה אינה זמינה' };
     return { enabled: a.enabled !== false, reason: (a.reason as string | null) ?? null };
   }
@@ -289,6 +305,16 @@ export function DocflowMessengerPage() {
 
   const isNarrow = typeof window !== 'undefined' ? window.matchMedia?.('(max-width: 900px)')?.matches === true : false;
 
+  async function openRequestForClient(clientId: string): Promise<void> {
+    const cid = clientId.trim();
+    if (!cid) return;
+    if (!canRunGlobal('create_docflow_document_request').enabled) return;
+    await loadMessenger({ clientId: cid, threadId: null, searchClient: searchClientRef.current.trim() });
+    const first = availableRequestTemplates[0] ?? null;
+    resetRequestDraftFromTemplate(first && isRecord(first) ? first : null);
+    setRequestModalOpen(true);
+  }
+
   return (
     <div dir="rtl" lang="he" style={{ padding: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
@@ -345,35 +371,88 @@ export function DocflowMessengerPage() {
                 const name = String(c.display_name ?? '').trim() || 'לקוח';
                 const unread = Number(c.unread_count ?? 0) || 0;
                 const active = id && id === effectiveSelectedClientId;
+                const canRequest = canRunGlobal('create_docflow_document_request');
                 return (
-                  <button
+                  <div
                     key={id}
-                    type="button"
-                    onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
                     style={{
-                      width: '100%',
-                      textAlign: 'start',
-                      padding: '10px 12px',
-                      border: 'none',
                       borderBottom: '1px solid #F1F5F9',
                       background: active ? '#EFF6FF' : '#fff',
-                      cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       gap: 8,
+                      padding: '10px 12px',
                     }}
                   >
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-                      <div style={{ fontSize: 12, color: '#64748B' }}>Threads: {String(c.active_thread_count ?? 0)}</div>
+                    <button
+                      type="button"
+                      onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
+                      style={{
+                        width: '100%',
+                        textAlign: 'start',
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        padding: 0,
+                        minWidth: 0,
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {name}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#64748B' }}>Threads: {String(c.active_thread_count ?? 0)}</div>
+                      </div>
+                    </button>
+
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
+                      {unread > 0 ? (
+                        <span
+                          style={{
+                            minWidth: 22,
+                            height: 22,
+                            borderRadius: 11,
+                            background: '#22C55E',
+                            color: '#fff',
+                            fontSize: 12,
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0 6px',
+                          }}
+                        >
+                          {unread > 99 ? '99+' : unread}
+                        </span>
+                      ) : null}
+
+                      {canRequest.enabled ? (
+                        <button
+                          type="button"
+                          onClick={() => void openRequestForClient(id)}
+                          title="לבקש מלקוח"
+                          aria-label="לבקש מלקוח"
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            padding: 2,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            opacity: active ? 1 : 0.9,
+                          }}
+                        >
+                          <img src={requestClientIcon} alt="לבקש מלקוח" width={18} height={18} style={{ display: 'block' }} />
+                        </button>
+                      ) : null}
                     </div>
-                    {unread > 0 ? (
-                      <span style={{ minWidth: 22, height: 22, borderRadius: 11, background: '#22C55E', color: '#fff', fontSize: 12, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>
-                        {unread > 99 ? '99+' : unread}
-                      </span>
-                    ) : null}
-                  </button>
+                  </div>
                 );
               })
             )}
@@ -523,20 +602,6 @@ export function DocflowMessengerPage() {
                   }}
                 />
               </label>
-              <button
-                type="button"
-                className="nx-btn nx-btn-taxes-compact"
-                style={{ minWidth: 110, background: '#2563EB', color: '#fff' }}
-                disabled={!selectedThreadId || busy.length > 0 || !canRun('create_docflow_document_request').enabled}
-                title={canRun('create_docflow_document_request').reason ?? undefined}
-                onClick={() => {
-                  const first = availableRequestTemplates[0] ?? null;
-                  resetRequestDraftFromTemplate(first && isRecord(first) ? first : null);
-                  setRequestModalOpen(true);
-                }}
-              >
-                📑 בקשת מסמכים
-              </button>
             </div>
           </div>
         </section>
