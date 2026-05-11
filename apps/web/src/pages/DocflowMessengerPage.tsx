@@ -379,79 +379,114 @@ export function DocflowMessengerPage() {
                       borderBottom: '1px solid #F1F5F9',
                       background: active ? '#EFF6FF' : '#fff',
                       display: 'flex',
-                      alignItems: 'center',
+                      alignItems: 'flex-start',
                       justifyContent: 'space-between',
-                      gap: 8,
+                      gap: 10,
                       padding: '10px 12px',
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
-                      style={{
-                        width: '100%',
-                        textAlign: 'start',
-                        border: 'none',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 8,
-                        padding: 0,
-                        minWidth: 0,
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {name}
-                        </div>
-                        <div style={{ fontSize: 12, color: '#64748B' }}>Threads: {String(c.active_thread_count ?? 0)}</div>
-                      </div>
-                    </button>
-
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
-                      {unread > 0 ? (
-                        <span
-                          style={{
-                            minWidth: 22,
-                            height: 22,
-                            borderRadius: 11,
-                            background: '#22C55E',
-                            color: '#fff',
-                            fontSize: 12,
-                            fontWeight: 800,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '0 6px',
-                          }}
-                        >
-                          {unread > 99 ? '99+' : unread}
-                        </span>
-                      ) : null}
-
-                      {canRequest.enabled ? (
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         <button
                           type="button"
-                          onClick={() => void openRequestForClient(id)}
-                          title="לבקש מלקוח"
-                          aria-label="לבקש מלקוח"
+                          onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
                           style={{
+                            flex: 1,
+                            minWidth: 0,
+                            textAlign: 'start',
                             border: 'none',
                             background: 'transparent',
-                            padding: 2,
                             cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            opacity: active ? 1 : 0.9,
+                            padding: 0,
+                            fontWeight: 700,
+                            fontSize: 14,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            color: '#0F172A',
                           }}
                         >
-                          <img src={requestClientIcon} alt="לבקש מלקוח" width={18} height={18} style={{ display: 'block' }} />
+                          {name}
                         </button>
-                      ) : null}
+                        {canRequest.enabled ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void openRequestForClient(id);
+                            }}
+                            title="לבקש מלקוח"
+                            aria-label="לבקש מלקוח"
+                            style={{
+                              flexShrink: 0,
+                              border: 'none',
+                              background: 'transparent',
+                              padding: 0,
+                              margin: 0,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              lineHeight: 0,
+                            }}
+                          >
+                            <img
+                              src={requestClientIcon}
+                              alt=""
+                              width={27}
+                              height={27}
+                              draggable={false}
+                              style={{
+                                display: 'block',
+                                width: 27,
+                                height: 27,
+                                objectFit: 'contain',
+                                filter:
+                                  'saturate(1.55) contrast(1.18) brightness(0.92) drop-shadow(0 0.5px 0 rgba(15,23,42,0.12)) drop-shadow(0 1px 2px rgba(37,99,235,0.22))',
+                              }}
+                            />
+                          </button>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
+                        style={{
+                          alignSelf: 'stretch',
+                          textAlign: 'start',
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontSize: 12,
+                          color: '#64748B',
+                        }}
+                      >
+                        Threads: {String(c.active_thread_count ?? 0)}
+                      </button>
                     </div>
+
+                    {unread > 0 ? (
+                      <span
+                        style={{
+                          minWidth: 22,
+                          height: 22,
+                          borderRadius: 11,
+                          background: '#22C55E',
+                          color: '#fff',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '0 6px',
+                          flexShrink: 0,
+                          marginTop: 1,
+                        }}
+                      >
+                        {unread > 99 ? '99+' : unread}
+                      </span>
+                    ) : null}
                   </div>
                 );
               })
