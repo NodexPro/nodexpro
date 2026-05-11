@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { docflowFloatingWidgetAggregate, docflowOfficeCommands, docflowOfficeTaskCenterAggregate } from '../api/endpoints';
@@ -107,6 +107,9 @@ export function DocflowFloatingWidget() {
   const [editBody, setEditBody] = useState('');
   const [cancelConfirmDraft, setCancelConfirmDraft] = useState<PendingDraft | null>(null);
 
+  /** Invalidates in-flight task-center GETs so stale responses cannot overwrite newer aggregate truth. */
+  const taskCenterRequestGenRef = useRef(0);
+
   const load = useCallback(async (): Promise<void> => {
     if (!orgId) {
       setAggregate(null);
@@ -156,8 +159,9 @@ export function DocflowFloatingWidget() {
     tcDraftRule,
   ]);
 
-  const loadTaskCenter = useCallback(async (): Promise<void> => {
+  const loadTaskCenter = useCallback(async (signal?: AbortSignal): Promise<void> => {
     if (!orgId || !tasksModalOpen) return;
+    const gen = ++taskCenterRequestGenRef.current;
     setTcLoadError('');
     try {
       const url = docflowOfficeTaskCenterAggregate({
@@ -174,7 +178,9 @@ export function DocflowFloatingWidget() {
         due_to: tcDueTo.trim() || null,
         draft_rule_filter: tcDraftRule !== 'all' ? tcDraftRule : null,
       });
-      const data = (await apiJson(url)) as UnknownRecord;
+      const data = (await apiJson(url, { signal })) as UnknownRecord;
+      if (signal?.aborted) return;
+      if (gen !== taskCenterRequestGenRef.current) return;
       setTaskCenter(data);
       const pr = data.pagination;
       if (isRecord(pr)) {
@@ -182,6 +188,8 @@ export function DocflowFloatingWidget() {
         if (serverPage !== tcPage) setTcPage(serverPage);
       }
     } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
+      if (gen !== taskCenterRequestGenRef.current) return;
       setTaskCenter(null);
       setTcLoadError(userFacingApiMessage(e));
     }
@@ -204,11 +212,17 @@ export function DocflowFloatingWidget() {
 
   useEffect(() => {
     if (!tasksModalOpen || !orgId) {
+      taskCenterRequestGenRef.current += 1;
       setTaskCenter(null);
       setSelectedThreadIds([]);
       return;
     }
-    void loadTaskCenter();
+    const ac = new AbortController();
+    void loadTaskCenter(ac.signal);
+    return () => {
+      taskCenterRequestGenRef.current += 1;
+      ac.abort();
+    };
   }, [tasksModalOpen, orgId, loadTaskCenter]);
 
   const runTaskModalCommand = useCallback(
@@ -234,6 +248,7 @@ export function DocflowFloatingWidget() {
         if (key !== 'office_docflow_task_center_aggregate' || !isRecord(agg)) {
           throw new Error('DocFlow task center aggregate missing in command response');
         }
+        taskCenterRequestGenRef.current += 1;
         setTaskCenter(agg);
         void load();
       } catch (e) {
@@ -843,7 +858,7 @@ export function DocflowFloatingWidget() {
                               </td>
                             </tr>
                           ) : (
-                            rowsArr.map((row) => {
+                            rowsArr.map((row, rowIdx) => {
                               const tid = String(row.thread_id ?? '');
                               const cid = String(row.client_id ?? '');
                               const actions = Array.isArray(row.allowed_actions)
@@ -852,7 +867,7 @@ export function DocflowFloatingWidget() {
                               const unread = row.unread_count;
                               const unreadN = typeof unread === 'number' ? unread : Number(unread) || 0;
                               return (
-                                <tr key={tid || cid}>
+                                <tr key={`tc-${rowIdx}-${tid}-${cid}`}>
                                   <td>
                                     <input
                                       type="checkbox"

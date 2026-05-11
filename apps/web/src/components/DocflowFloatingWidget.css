@@ -833,8 +833,11 @@
 .docflow-task-center-table-wrap {
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
   flex-shrink: 0;
+  min-width: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .docflow-task-table {
