@@ -23,36 +23,38 @@ function isRecord(v: unknown): v is UnknownRecord {
 
 const MESSENGER_PAGE_SIZE = 50;
 
-/** Request-documents: gradient disc + white doc / + (mockup-aligned). Renders 28×28 for parity with unread badge. */
+/** Request documents: stroke-only vector, gradient on lines only — no filled disc, no shadow (Slack/Linear-style). */
 function DocflowClientRequestGlyph(): ReactElement {
   const uid = useId().replace(/:/g, '');
-  const gid = `nx-df-req-g-${uid}`;
+  const gid = `nx-df-req-${uid}`;
   return (
-    <svg width={28} height={28} viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden focusable="false">
+    <svg
+      width={20}
+      height={20}
+      viewBox="0 0 20 20"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+      focusable="false"
+      shapeRendering="geometricPrecision"
+    >
       <defs>
-        <linearGradient id={gid} x1="3" y1="2.5" x2="19" y2="19.5" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#38BDF8" />
-          <stop offset="0.42" stopColor="#6366F1" />
-          <stop offset="1" stopColor="#7C3AED" />
+        <linearGradient id={gid} x1="2" y1="2" x2="18" y2="18" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#2563EB" />
+          <stop offset="0.5" stopColor="#4F46E5" />
+          <stop offset="1" stopColor="#6D28D9" />
         </linearGradient>
       </defs>
-      <circle cx="11" cy="11" r="10.25" fill={`url(#${gid})`} />
       <path
-        d="M7.15 8.05h4.75L12.9 9.95v5.35H7.2c-.58 0-1.05-.47-1.05-1.05V9.1c0-.58.47-1.05 1.05-1.05Z"
-        stroke="#FFFFFF"
-        strokeWidth="1.2"
+        d="M4.75 5.35h5.45L13.6 8.75v8.9H4.75A.85.85 0 0 1 3.9 16.8V6.2a.85.85 0 0 1 .85-.85Z"
+        stroke={`url(#${gid})`}
+        strokeWidth="1.35"
         strokeLinejoin="round"
         strokeLinecap="round"
-        fill="none"
       />
-      <path d="M11.9 8.05v1.9h1.9" stroke="#FFFFFF" strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-      <path d="M8.2 12.05h3.55M8.2 13.25h3.55M8.2 14.45h2.35" stroke="#FFFFFF" strokeWidth="1" strokeLinecap="round" />
-      <path
-        d="M13.65 13.05v1.85M12.72 13.98h1.85"
-        stroke="#FFFFFF"
-        strokeWidth="1.1"
-        strokeLinecap="round"
-      />
+      <path d="M10.2 5.35v3.4h3.4" stroke={`url(#${gid})`} strokeWidth="1.35" strokeLinejoin="round" strokeLinecap="round" />
+      <path d="M6.55 10.45h5.35M6.55 12.05h5.35M6.55 13.65h3.45" stroke={`url(#${gid})`} strokeWidth="1.1" strokeLinecap="round" />
+      <path d="M15.35 4.75v2M14.35 5.75h2" stroke={`url(#${gid})`} strokeWidth="1.15" strokeLinecap="round" />
     </svg>
   );
 }
@@ -413,77 +415,19 @@ export function DocflowMessengerPage() {
                       background: active ? '#EFF6FF' : '#fff',
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
                       padding: '10px 12px',
                     }}
                   >
-                    {/* LTR row matches mock: [unread] [request icon] [name · threads] — Hebrew stays RTL inside text column */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'row',
-                        direction: 'ltr',
-                        alignItems: 'center',
-                        gap: 10,
-                        flex: 1,
-                        minWidth: 0,
-                      }}
-                    >
-                      {unread > 0 ? (
-                        <span
-                          style={{
-                            minWidth: 28,
-                            height: 28,
-                            borderRadius: 14,
-                            background: '#22C55E',
-                            color: '#fff',
-                            fontSize: 13,
-                            fontWeight: 800,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '0 6px',
-                            flexShrink: 0,
-                            boxSizing: 'border-box',
-                          }}
-                        >
-                          {unread > 99 ? '99+' : unread}
-                        </span>
-                      ) : null}
-
-                      {canRequest.enabled ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void openRequestForClient(id);
-                          }}
-                          title="לבקש מלקוח"
-                          aria-label="לבקש מלקוח"
-                          style={{
-                            width: 28,
-                            height: 28,
-                            flexShrink: 0,
-                            border: 'none',
-                            background: 'transparent',
-                            padding: 0,
-                            margin: 0,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            lineHeight: 0,
-                          }}
-                        >
-                          <DocflowClientRequestGlyph />
-                        </button>
-                      ) : null}
-
-                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4, direction: 'rtl', textAlign: 'start' }}>
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         <button
                           type="button"
                           onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
                           style={{
-                            maxWidth: '100%',
+                            flex: '1 1 0%',
+                            minWidth: 0,
                             textAlign: 'start',
                             border: 'none',
                             background: 'transparent',
@@ -499,24 +443,70 @@ export function DocflowMessengerPage() {
                         >
                           {name}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
-                          style={{
-                            alignSelf: 'stretch',
-                            textAlign: 'start',
-                            border: 'none',
-                            background: 'transparent',
-                            cursor: 'pointer',
-                            padding: 0,
-                            fontSize: 12,
-                            color: '#64748B',
-                          }}
-                        >
-                          Threads: {String(c.active_thread_count ?? 0)}
-                        </button>
+                        {canRequest.enabled ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void openRequestForClient(id);
+                            }}
+                            title="לבקש מלקוח"
+                            aria-label="לבקש מלקוח"
+                            style={{
+                              flexShrink: 0,
+                              border: 'none',
+                              background: 'transparent',
+                              padding: 4,
+                              margin: -4,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              lineHeight: 0,
+                            }}
+                          >
+                            <DocflowClientRequestGlyph />
+                          </button>
+                        ) : null}
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
+                        style={{
+                          alignSelf: 'stretch',
+                          textAlign: 'start',
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontSize: 12,
+                          color: '#64748B',
+                        }}
+                      >
+                        Threads: {String(c.active_thread_count ?? 0)}
+                      </button>
                     </div>
+
+                    {unread > 0 ? (
+                      <span
+                        style={{
+                          minWidth: 22,
+                          height: 22,
+                          borderRadius: 11,
+                          background: '#22C55E',
+                          color: '#fff',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '0 6px',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {unread > 99 ? '99+' : unread}
+                      </span>
+                    ) : null}
                   </div>
                 );
               })
