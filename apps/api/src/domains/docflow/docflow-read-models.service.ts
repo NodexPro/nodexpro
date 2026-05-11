@@ -6,7 +6,7 @@ import {
   resolveOrganizationCountryCode,
 } from './docflow-request-templates.service.js';
 
-function threadStatusLabel(status: string): string {
+export function threadStatusLabel(status: string): string {
   switch (status) {
     case 'open':
       return 'Open';
@@ -23,7 +23,7 @@ function threadStatusLabel(status: string): string {
   }
 }
 
-function threadTypeLabel(type: string): string {
+export function threadTypeLabel(type: string): string {
   switch (type) {
     case 'document_request':
       return 'Document Request';
@@ -177,7 +177,7 @@ async function getThreadAttachments(
   });
 }
 
-async function getUnreadForOffice(orgId: string, clientId: string, threadId: string): Promise<number> {
+export async function getUnreadForOffice(orgId: string, clientId: string, threadId: string): Promise<number> {
   const { data: lastRead, error: readErr } = await supabaseAdmin
     .from('client_message_events')
     .select('created_at')

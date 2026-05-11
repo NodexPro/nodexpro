@@ -10,6 +10,7 @@ import { businessPreviousMonthKey } from '../../shared/business-time.js';
 import { assertClientBelongsToOrg, assertDocflowEntitled, assertOfficeScope, asOptionalString, reqString, } from './docflow.guards.js';
 import { createSystemMessageCore } from './docflow-system-message-core.service.js';
 import { buildDocflowFloatingWidgetAggregate } from './docflow-floating-widget.service.js';
+import { buildOfficeDocflowTaskCenterAggregate, parseTaskCenterOptsFromPayload } from './docflow-task-center.service.js';
 const COMMUNICATION_WRITE_PERM = 'docflow:system_message_write';
 const DOCFLOW_REVIEW_RBAC_PERM = 'docflow.review';
 function normalizeDeliveryView(rawStatus, rawReason) {
@@ -1020,6 +1021,18 @@ async function refreshedAfterCommunicationCommand(orgId, ruleRunId, payload, ctx
         return {
             aggregate_key: 'docflow_floating_widget_aggregate',
             aggregate: await buildDocflowFloatingWidgetAggregate(orgId, { can_use_communication_commands: canUse }),
+        };
+    }
+    if (target === 'office_docflow_task_center_aggregate') {
+        const canUse = canRunDocflowCommunicationRules(ctx);
+        return {
+            aggregate_key: 'office_docflow_task_center_aggregate',
+            aggregate: await buildOfficeDocflowTaskCenterAggregate({
+                orgId,
+                userId: ctx.user.id,
+                can_use_communication_commands: canUse,
+                ...parseTaskCenterOptsFromPayload(orgId, ctx.user.id, payload),
+            }),
         };
     }
     return refreshedReview(orgId, ruleRunId, payload);

@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { notFound } from '../../shared/errors.js';
 import { fetchDocflowRequestTemplatesForOrgCountry, resolveOrganizationCountryCode, } from './docflow-request-templates.service.js';
-function threadStatusLabel(status) {
+export function threadStatusLabel(status) {
     switch (status) {
         case 'open':
             return 'Open';
@@ -17,7 +17,7 @@ function threadStatusLabel(status) {
             return status;
     }
 }
-function threadTypeLabel(type) {
+export function threadTypeLabel(type) {
     switch (type) {
         case 'document_request':
             return 'Document Request';
@@ -158,7 +158,7 @@ async function getThreadAttachments(orgId, clientId, threadId, opts) {
         };
     });
 }
-async function getUnreadForOffice(orgId, clientId, threadId) {
+export async function getUnreadForOffice(orgId, clientId, threadId) {
     const { data: lastRead, error: readErr } = await supabaseAdmin
         .from('client_message_events')
         .select('created_at')

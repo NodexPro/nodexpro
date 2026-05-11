@@ -274,6 +274,38 @@ export const docflowClientThreadContextAggregate = (clientId: string, threadId?:
 /** Floating widget: auth + org only (trial-expired orgs get locked aggregate). */
 export const docflowFloatingWidgetAggregate = '/docflow/aggregates/floating-widget';
 
+export function docflowOfficeTaskCenterAggregate(params?: {
+  page?: number;
+  page_size?: number;
+  search?: string | null;
+  module?: string | null;
+  thread_type?: string | null;
+  thread_status?: string | null;
+  assigned_filter?: string | null;
+  unread_only?: boolean;
+  overdue_only?: boolean;
+  due_from?: string | null;
+  due_to?: string | null;
+  draft_rule_filter?: string | null;
+}): string {
+  if (!params) return '/docflow/aggregates/office-task-center';
+  const q = new URLSearchParams();
+  if (params.page != null) q.set('page', String(params.page));
+  if (params.page_size != null) q.set('page_size', String(params.page_size));
+  if (params.search) q.set('search', params.search);
+  if (params.module) q.set('module', params.module);
+  if (params.thread_type) q.set('thread_type', params.thread_type);
+  if (params.thread_status) q.set('thread_status', params.thread_status);
+  if (params.assigned_filter) q.set('assigned_filter', params.assigned_filter);
+  if (params.unread_only) q.set('unread_only', '1');
+  if (params.overdue_only) q.set('overdue_only', '1');
+  if (params.due_from) q.set('due_from', params.due_from);
+  if (params.due_to) q.set('due_to', params.due_to);
+  if (params.draft_rule_filter) q.set('draft_rule_filter', params.draft_rule_filter);
+  const s = q.toString();
+  return s ? `/docflow/aggregates/office-task-center?${s}` : '/docflow/aggregates/office-task-center';
+}
+
 export const docflowStartOfficeThreadForClient = '/docflow/commands/start-office-thread-for-client';
 
 /** Client DocFlow portal (no office org header; session via `X-Client-Portal-Session`). */

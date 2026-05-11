@@ -11,6 +11,7 @@ import {
   canRunDocflowCommunicationRules,
 } from '../domains/docflow/docflow-communication-rule.service.js';
 import { buildDocflowFloatingWidgetAggregate } from '../domains/docflow/docflow-floating-widget.service.js';
+import { buildOfficeDocflowTaskCenterAggregate, parseTaskCenterOptsFromQuery } from '../domains/docflow/docflow-task-center.service.js';
 import {
   buildClientDocflowTabAggregate,
   buildClientPortalInboxAggregate,
@@ -58,6 +59,23 @@ officeBaseRouter.get('/aggregates/floating-widget', async (req: Request, res: Re
     const orgId = ctx.organizationId!;
     const canUse = canRunDocflowCommunicationRules(ctx);
     const aggregate = await buildDocflowFloatingWidgetAggregate(orgId, { can_use_communication_commands: canUse });
+    return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+officeBaseRouter.get('/aggregates/office-task-center', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const orgId = ctx.organizationId!;
+    const canUse = canRunDocflowCommunicationRules(ctx);
+    const aggregate = await buildOfficeDocflowTaskCenterAggregate({
+      orgId,
+      userId: ctx.user.id,
+      can_use_communication_commands: canUse,
+      ...parseTaskCenterOptsFromQuery(req.query as Record<string, unknown>),
+    });
     return res.json(aggregate);
   } catch (e) {
     next(e);

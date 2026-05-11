@@ -6,6 +6,7 @@ import { badRequest, forbidden } from '../shared/errors.js';
 import { executeDocflowOfficeCommand, executeDocflowPortalCommand } from '../domains/docflow/docflow-commands.service.js';
 import { buildCommunicationRuleRunReviewAggregate, canRunDocflowCommunicationRules, } from '../domains/docflow/docflow-communication-rule.service.js';
 import { buildDocflowFloatingWidgetAggregate } from '../domains/docflow/docflow-floating-widget.service.js';
+import { buildOfficeDocflowTaskCenterAggregate, parseTaskCenterOptsFromQuery } from '../domains/docflow/docflow-task-center.service.js';
 import { buildClientDocflowTabAggregate, buildClientPortalInboxAggregate, buildDocflowInvitesManagementAggregate, buildClientContextDocflowAggregate, buildClientThreadContextAggregate, buildOfficeDocflowInboxAggregate, buildOfficeDocflowMessengerAggregate, } from '../domains/docflow/docflow-read-models.service.js';
 import { resolvePortalSessionByRawToken } from '../domains/docflow/docflow-portal-auth.service.js';
 import { getOfficeDocflowAttachmentSignedUrl, getPortalDocflowAttachmentSignedUrl, } from '../domains/docflow/docflow-portal-attachment-open.service.js';
@@ -29,6 +30,23 @@ officeBaseRouter.get('/aggregates/floating-widget', async (req, res, next) => {
         const orgId = ctx.organizationId;
         const canUse = canRunDocflowCommunicationRules(ctx);
         const aggregate = await buildDocflowFloatingWidgetAggregate(orgId, { can_use_communication_commands: canUse });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+officeBaseRouter.get('/aggregates/office-task-center', async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        const orgId = ctx.organizationId;
+        const canUse = canRunDocflowCommunicationRules(ctx);
+        const aggregate = await buildOfficeDocflowTaskCenterAggregate({
+            orgId,
+            userId: ctx.user.id,
+            can_use_communication_commands: canUse,
+            ...parseTaskCenterOptsFromQuery(req.query),
+        });
         return res.json(aggregate);
     }
     catch (e) {

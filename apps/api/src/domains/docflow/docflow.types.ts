@@ -29,7 +29,13 @@ export type DocflowCommandType =
   | 'approve_draft_message'
   | 'edit_draft_message'
   | 'cancel_draft_message'
-  | 'send_approved_message';
+  | 'send_approved_message'
+  | 'open_docflow_thread'
+  | 'send_docflow_reminder'
+  | 'assign_docflow_thread'
+  | 'resolve_docflow_thread'
+  | 'archive_docflow_thread'
+  | 'bulk_docflow_action';
 
 export type DocflowActorType = 'office' | 'client' | 'system';
 
@@ -50,7 +56,8 @@ export type DocflowRefreshedAggregateKey =
   | 'client_context_docflow_aggregate'
   | 'client_thread_context_aggregate'
   | 'communication_rule_run_review_aggregate'
-  | 'docflow_floating_widget_aggregate';
+  | 'docflow_floating_widget_aggregate'
+  | 'office_docflow_task_center_aggregate';
 
 export type DocflowCommandResponse = {
   ok: true;
