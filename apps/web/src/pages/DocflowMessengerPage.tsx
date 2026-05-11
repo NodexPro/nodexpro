@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { newDocflowIdempotencyKey } from '../lib/idempotency-key';
 import {
@@ -7,7 +7,6 @@ import {
   docflowOfficeMessengerAggregate,
   docflowStartOfficeThreadForClient,
 } from '../api/endpoints';
-import requestClientIcon from '../assets/icons/docflow-request-client.png';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -23,6 +22,30 @@ function isRecord(v: unknown): v is UnknownRecord {
 }
 
 const MESSENGER_PAGE_SIZE = 50;
+
+/** Inline SVG: document checklist; 17×17 (≈16–18px UI). Sharp vector, no glow. */
+function DocflowClientRequestGlyph(): ReactElement {
+  const uid = useId().replace(/:/g, '');
+  const gid = `nx-docflow-req-${uid}`;
+  return (
+    <svg width={17} height={17} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden focusable="false">
+      <defs>
+        <linearGradient id={gid} x1="1.5" y1="1.5" x2="14.5" y2="14.5" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#2563EB" />
+          <stop offset="1" stopColor="#5B21B6" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M3.5 2.25h5.2L10.75 4.3v9.45H3.5a.5.5 0 0 1-.5-.5V2.75a.5.5 0 0 1 .5-.5Z"
+        stroke={`url(#${gid})`}
+        strokeWidth="1.15"
+        strokeLinejoin="round"
+      />
+      <path d="M8.7 2.25V4.8h2.55" stroke={`url(#${gid})`} strokeWidth="1.15" strokeLinejoin="round" />
+      <path d="M5 7.2h4.2M5 9h4.2M5 10.8H8.1" stroke={`url(#${gid})`} strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 async function fileToBase64(file: File): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
@@ -379,19 +402,19 @@ export function DocflowMessengerPage() {
                       borderBottom: '1px solid #F1F5F9',
                       background: active ? '#EFF6FF' : '#fff',
                       display: 'flex',
-                      alignItems: 'flex-start',
+                      alignItems: 'center',
                       justifyContent: 'space-between',
-                      gap: 10,
+                      gap: 8,
                       padding: '10px 12px',
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                         <button
                           type="button"
                           onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
                           style={{
-                            flex: 1,
+                            flex: '1 1 0%',
                             minWidth: 0,
                             textAlign: 'start',
                             border: 'none',
@@ -428,23 +451,10 @@ export function DocflowMessengerPage() {
                               alignItems: 'center',
                               justifyContent: 'center',
                               lineHeight: 0,
+                              color: '#2563EB',
                             }}
                           >
-                            <img
-                              src={requestClientIcon}
-                              alt=""
-                              width={27}
-                              height={27}
-                              draggable={false}
-                              style={{
-                                display: 'block',
-                                width: 27,
-                                height: 27,
-                                objectFit: 'contain',
-                                filter:
-                                  'saturate(1.55) contrast(1.18) brightness(0.92) drop-shadow(0 0.5px 0 rgba(15,23,42,0.12)) drop-shadow(0 1px 2px rgba(37,99,235,0.22))',
-                              }}
-                            />
+                            <DocflowClientRequestGlyph />
                           </button>
                         ) : null}
                       </div>
@@ -480,8 +490,6 @@ export function DocflowMessengerPage() {
                           alignItems: 'center',
                           justifyContent: 'center',
                           padding: '0 6px',
-                          flexShrink: 0,
-                          marginTop: 1,
                         }}
                       >
                         {unread > 99 ? '99+' : unread}
