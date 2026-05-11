@@ -23,38 +23,44 @@ function isRecord(v: unknown): v is UnknownRecord {
 
 const MESSENGER_PAGE_SIZE = 50;
 
-/** Request documents: stroke-only vector, gradient on lines only — no filled disc, no shadow (Slack/Linear-style). */
+/** Request documents: circular doc+plus icon, matching provided design, sized to sit in the same slot as the unread badge. */
 function DocflowClientRequestGlyph(): ReactElement {
   const uid = useId().replace(/:/g, '');
   const gid = `nx-df-req-${uid}`;
   return (
     <svg
-      width={18}
-      height={18}
-      viewBox="0 0 20 20"
+      width={22}
+      height={22}
+      viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden
       focusable="false"
-      shapeRendering="geometricPrecision"
     >
       <defs>
-        <linearGradient id={gid} x1="2" y1="2" x2="18" y2="18" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#2563EB" />
-          <stop offset="0.5" stopColor="#4F46E5" />
-          <stop offset="1" stopColor="#6D28D9" />
+        <linearGradient id={gid} x1="4" y1="3" x2="20" y2="21" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#38BDF8" />
+          <stop offset="0.45" stopColor="#6366F1" />
+          <stop offset="1" stopColor="#7C3AED" />
         </linearGradient>
       </defs>
+      {/* Outer circular disc */}
+      <circle cx="12" cy="12" r="9.75" fill={`url(#${gid})`} />
+      {/* Document outline */}
       <path
-        d="M4.75 5.35h5.45L13.6 8.75v8.9H4.75A.85.85 0 0 1 3.9 16.8V6.2a.85.85 0 0 1 .85-.85Z"
-        stroke={`url(#${gid})`}
-        strokeWidth="1.35"
+        d="M8 8h4.9L15.5 10.6V16H8.5A1.5 1.5 0 0 1 7 14.5V8.5A.5.5 0 0 1 7.5 8Z"
+        stroke="#FFFFFF"
+        strokeWidth="1.3"
         strokeLinejoin="round"
-        strokeLinecap="round"
+        fill="none"
       />
-      <path d="M10.2 5.35v3.4h3.4" stroke={`url(#${gid})`} strokeWidth="1.35" strokeLinejoin="round" strokeLinecap="round" />
-      <path d="M6.55 10.45h5.35M6.55 12.05h5.35M6.55 13.65h3.45" stroke={`url(#${gid})`} strokeWidth="1.1" strokeLinecap="round" />
-      <path d="M15.35 4.75v2M14.35 5.75h2" stroke={`url(#${gid})`} strokeWidth="1.15" strokeLinecap="round" />
+      {/* Fold corner */}
+      <path d="M12.9 8v2.6h2.6" stroke="#FFFFFF" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
+      {/* Document lines */}
+      <path d="M9.1 11.7h3.4M9.1 13h3.4M9.1 14.3h2.2" stroke="#FFFFFF" strokeWidth="1.1" strokeLinecap="round" />
+      {/* Plus badge (front) */}
+      <circle cx="15.7" cy="15.5" r="2.6" stroke="#FFFFFF" strokeWidth="1.1" fill="none" />
+      <path d="M15.7 14.4v2.2M14.6 15.5h2.2" stroke="#FFFFFF" strokeWidth="1.1" strokeLinecap="round" />
     </svg>
   );
 }
