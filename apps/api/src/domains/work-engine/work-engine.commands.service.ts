@@ -13,7 +13,11 @@
  *   - One user/system action = one command.
  *   - Every successful state-relevant write increments work_items.version and appends a work_transition.
  *   - Frontend never decides state, label, or allowed actions.
- *   - After every command we return the refreshed Work Engine foundation aggregate.
+ *   - After every command we return the refreshed Work Engine aggregate.
+ *     Default: `work_engine_foundation_aggregate`. When `payload.refresh_aggregate`
+ *     is `work_engine_queue_aggregate`, the response includes the full queue
+ *     aggregate (Stage 3E); optional `payload.aggregate_filters` scopes the
+ *     rebuilt queue the same way as GET /aggregates/queue.
  *   - Source: docs/work-engine-domain-model.md, docs/work-engine-state-machine.md,
  *             docs/work-engine-dedup-policy.md, docs/work-engine-override-precedence.md.
  */
@@ -37,7 +41,13 @@ import {
   reqInt,
   reqString,
 } from './work-engine.guards.js';
-import { buildWorkEngineFoundationAggregate } from './work-engine.read-models.service.js';
+import {
+  buildWorkEngineFoundationAggregate,
+  buildWorkEngineQueueAggregate,
+  coerceWorkEngineQueueFilters,
+  queueAllowedActions,
+  type QueueAllowedActionCommand,
+} from './work-engine.read-models.service.js';
 import { intakeWorkEvent } from './work-engine.event-intake.service.js';
 import {
   CREATION_SOURCE_TYPES,
@@ -53,6 +63,57 @@ import {
   type WorkItemRow,
   type WorkState,
 } from './work-engine.types.js';
+
+const REFRESH_FOUNDATION = 'work_engine_foundation_aggregate' as const;
+const REFRESH_QUEUE = 'work_engine_queue_aggregate' as const;
+
+function parseRefreshAggregateKey(payload: WorkEngineCommandPayload): 'foundation' | 'queue' {
+  const raw = asOptionalString(payload.refresh_aggregate);
+  if (raw === undefined || raw === null || raw === '') return 'foundation';
+  if (raw === REFRESH_FOUNDATION) return 'foundation';
+  if (raw === REFRESH_QUEUE) return 'queue';
+  throw badRequest(
+    `Invalid refresh_aggregate: use '${REFRESH_FOUNDATION}', '${REFRESH_QUEUE}', or omit`,
+    'invalid_refresh_aggregate',
+  );
+}
+
+function isQueueRefreshMode(payload: WorkEngineCommandPayload): boolean {
+  return parseRefreshAggregateKey(payload) === 'queue';
+}
+
+async function buildRefreshedForPayload(
+  orgId: string,
+  payload: WorkEngineCommandPayload,
+): Promise<WorkEngineCommandResponse['refreshed']> {
+  if (parseRefreshAggregateKey(payload) === 'queue') {
+    const filters = coerceWorkEngineQueueFilters(payload.aggregate_filters);
+    return {
+      aggregate_key: REFRESH_QUEUE,
+      aggregate: await buildWorkEngineQueueAggregate({ orgId, filters }),
+    };
+  }
+  return {
+    aggregate_key: REFRESH_FOUNDATION,
+    aggregate: await buildWorkEngineFoundationAggregate({ orgId }),
+  };
+}
+
+/**
+ * Stage 3E: recompute the same semantic `allowed_actions` as the queue aggregate
+ * and reject if the requested command does not match an enabled action. Never
+ * trust client-supplied allowed_actions flags.
+ */
+function assertQueueActionEnabled(current: WorkItemRow, semantic: QueueAllowedActionCommand): void {
+  const actions = queueAllowedActions(current.work_state);
+  const row = actions.find((a) => a.command === semantic);
+  if (!row?.enabled) {
+    throw badRequest(
+      row?.reason ?? `Queue action '${semantic}' is not allowed for work_state='${current.work_state}'`,
+      'queue_action_not_allowed',
+    );
+  }
+}
 
 function ensureObj(value: unknown): WorkEngineCommandPayload {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -83,15 +144,6 @@ async function audit(
     action,
     payload,
   });
-}
-
-async function refreshFoundation(
-  orgId: string,
-): Promise<WorkEngineCommandResponse['refreshed']> {
-  return {
-    aggregate_key: 'work_engine_foundation_aggregate',
-    aggregate: await buildWorkEngineFoundationAggregate({ orgId }),
-  };
 }
 
 async function loadWorkItem(orgId: string, workItemId: string): Promise<WorkItemRow> {
@@ -252,7 +304,7 @@ export async function executeWorkEngineCommand(
           work_state: initialState,
         },
       );
-      return { ok: true, command, refreshed: await refreshFoundation(orgId) };
+      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
     }
 
     case 'assign_work_item': {
@@ -265,6 +317,7 @@ export async function executeWorkEngineCommand(
           : asOptionalString(payload.assigned_user_id);
       const current = await loadWorkItem(orgId, workItemId);
       assertExpectedVersion(current.version, expectedVersion);
+      if (isQueueRefreshMode(payload)) assertQueueActionEnabled(current, 'assign');
       // Auto-promote new -> assigned when assigning a user for the first time.
       const willMoveFromNewToAssigned =
         current.work_state === 'new' && assignedUserIdRaw !== null;
@@ -312,7 +365,7 @@ export async function executeWorkEngineCommand(
           to_state: nextState,
         },
       );
-      return { ok: true, command, refreshed: await refreshFoundation(orgId) };
+      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
     }
 
     case 'change_work_state': {
@@ -321,6 +374,10 @@ export async function executeWorkEngineCommand(
       const toState = assertValidWorkState(reqString(payload, 'to_state'));
       const current = await loadWorkItem(orgId, workItemId);
       assertExpectedVersion(current.version, expectedVersion);
+      if (isQueueRefreshMode(payload)) {
+        if (toState === 'archived') assertQueueActionEnabled(current, 'archive');
+        else assertQueueActionEnabled(current, 'change_state');
+      }
       if (!canTransitionWorkState(current.work_state, toState)) {
         throw badRequest(
           `Invalid transition: ${current.work_state} -> ${toState}`,
@@ -357,7 +414,7 @@ export async function executeWorkEngineCommand(
         AUDIT_ACTIONS.WORK_ITEM_STATE_CHANGED,
         { from_state: current.work_state, to_state: toState },
       );
-      return { ok: true, command, refreshed: await refreshFoundation(orgId) };
+      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
     }
 
     case 'set_work_deadline': {
@@ -376,6 +433,7 @@ export async function executeWorkEngineCommand(
       }
       const current = await loadWorkItem(orgId, workItemId);
       assertExpectedVersion(current.version, expectedVersion);
+      if (isQueueRefreshMode(payload)) assertQueueActionEnabled(current, 'set_deadline');
       const newVersion = current.version + 1;
       const overrideSummary = isOverride
         ? {
@@ -425,7 +483,7 @@ export async function executeWorkEngineCommand(
         AUDIT_ACTIONS.WORK_ITEM_DEADLINE_SET,
         { previous_due_at: current.due_at, new_due_at: dueAt, override: isOverride },
       );
-      return { ok: true, command, refreshed: await refreshFoundation(orgId) };
+      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
     }
 
     case 'append_work_event': {
@@ -505,7 +563,7 @@ export async function executeWorkEngineCommand(
           work_item_id: workItemIdOpt,
         },
       );
-      return { ok: true, command, refreshed: await refreshFoundation(orgId) };
+      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
     }
 
     case 'apply_work_override': {
@@ -528,6 +586,7 @@ export async function executeWorkEngineCommand(
       }
       const current = await loadWorkItem(orgId, workItemId);
       assertExpectedVersion(current.version, expectedVersion);
+      if (isQueueRefreshMode(payload)) assertQueueActionEnabled(current, 'apply_override');
       const toStateRaw = asOptionalString(payload.to_state);
       let nextState: WorkState = current.work_state;
       if (toStateRaw) {
@@ -612,7 +671,7 @@ export async function executeWorkEngineCommand(
           to_state: nextState,
         },
       );
-      return { ok: true, command, refreshed: await refreshFoundation(orgId) };
+      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
     }
 
     case 'intake_work_event': {
@@ -623,7 +682,7 @@ export async function executeWorkEngineCommand(
       return {
         ok: true,
         command,
-        refreshed: await refreshFoundation(orgId),
+        refreshed: await buildRefreshedForPayload(orgId, payload),
         meta,
       };
     }

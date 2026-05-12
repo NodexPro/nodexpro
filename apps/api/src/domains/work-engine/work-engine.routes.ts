@@ -5,9 +5,23 @@
  *
  * Endpoints (single command surface — no per-command routes):
  *   - GET  /aggregates/foundation   -> work_engine_foundation_aggregate
+ *   - GET  /aggregates/queue        -> work_engine_queue_aggregate (Stage 3D);
+ *                                      backend-ready queue table with rows,
+ *                                      summary_cards, filters, pagination,
+ *                                      pending_mapping_section. Supports
+ *                                      filter query params:
+ *                                        state, module_key, assigned_user_id,
+ *                                        reviewer_user_id, client_id,
+ *                                        period_key, limit, offset.
  *   - POST /commands                -> generic command endpoint; body shape:
  *                                      { command: <WorkEngineCommandType>,
  *                                        payload: <command-specific payload> }
+ *                                      Optional on payload: `refresh_aggregate`
+ *                                      (`work_engine_foundation_aggregate` default,
+ *                                      or `work_engine_queue_aggregate` for full
+ *                                      queue refresh) and `aggregate_filters` (same
+ *                                      shape as GET /aggregates/queue query params)
+ *                                      when returning the queue aggregate.
  *                                      Stage 3A event intake uses this endpoint with
  *                                      `command: "intake_work_event"`.
  *   - POST /events/intake           -> Stage 2 raw envelope intake (audit-only;
@@ -26,7 +40,11 @@ import type { RequestContext } from '../../shared/context.js';
 import { badRequest } from '../../shared/errors.js';
 import { executeWorkEngineCommand } from './work-engine.commands.service.js';
 import { acceptWorkEngineEvent } from './work-engine.event-intake.service.js';
-import { buildWorkEngineFoundationAggregate } from './work-engine.read-models.service.js';
+import {
+  buildWorkEngineFoundationAggregate,
+  buildWorkEngineQueueAggregate,
+  type WorkEngineQueueFilters,
+} from './work-engine.read-models.service.js';
 import type {
   WorkEngineCommandType,
   WorkEventEnvelope,
@@ -42,6 +60,42 @@ router.get(
       const ctx = req.context as RequestContext;
       const orgId = ctx.organizationId!;
       const aggregate = await buildWorkEngineFoundationAggregate({ orgId });
+      return res.json(aggregate);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+// Stage 3D — backend-ready queue aggregate. Query params are read here so the
+// route owns parsing; the read-models service owns validation/clamping of
+// values (limit caps, unknown state values, etc.).
+router.get(
+  '/aggregates/queue',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const ctx = req.context as RequestContext;
+      const orgId = ctx.organizationId!;
+      const q = req.query as Record<string, unknown>;
+      const filters: WorkEngineQueueFilters = {
+        state: typeof q.state === 'string' ? q.state : null,
+        module_key: typeof q.module_key === 'string' ? q.module_key : null,
+        assigned_user_id:
+          typeof q.assigned_user_id === 'string' ? q.assigned_user_id : null,
+        reviewer_user_id:
+          typeof q.reviewer_user_id === 'string' ? q.reviewer_user_id : null,
+        client_id: typeof q.client_id === 'string' ? q.client_id : null,
+        period_key: typeof q.period_key === 'string' ? q.period_key : null,
+        limit:
+          typeof q.limit === 'string' && q.limit.trim() !== ''
+            ? Number(q.limit)
+            : null,
+        offset:
+          typeof q.offset === 'string' && q.offset.trim() !== ''
+            ? Number(q.offset)
+            : null,
+      };
+      const aggregate = await buildWorkEngineQueueAggregate({ orgId, filters });
       return res.json(aggregate);
     } catch (e) {
       next(e);

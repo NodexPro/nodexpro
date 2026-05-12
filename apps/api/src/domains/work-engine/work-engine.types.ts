@@ -67,7 +67,9 @@ export type AllowedAction = {
   reason: string | null;
 };
 
-export type WorkEngineRefreshedAggregateKey = 'work_engine_foundation_aggregate';
+export type WorkEngineRefreshedAggregateKey =
+  | 'work_engine_foundation_aggregate'
+  | 'work_engine_queue_aggregate';
 
 export type WorkEngineCommandResponse = {
   ok: true;
@@ -183,3 +185,38 @@ export const OVERRIDE_KINDS_REQUIRING_REASON: ReadonlySet<OverrideKind> = new Se
   'reminder_cancel',
   'reopen',
 ]);
+
+// ============================================================================
+// Stage 3B — explicit event mapping layer.
+// ============================================================================
+
+/**
+ * Resolved event mapping returned by `resolveEventMapping` when the inbound
+ * `event_type` is present in the backend allowlist AND all required envelope
+ * fields are present. Backend never invents these; the mapper picks them
+ * verbatim from the static allowlist in `work-engine.event-mapping.service.ts`.
+ */
+export type EventMappingResolved = {
+  resolved: true;
+  /** Workflow domain (e.g. 'payroll'); becomes work_items.module_key. */
+  module_key: string;
+  /** Canonical work_type (e.g. 'payroll_document_collection'). */
+  work_type: string;
+  /** Initial work_state for the newly created work_item (one of WORK_STATES). */
+  initial_state: WorkState;
+};
+
+/**
+ * Mapping could not be resolved. Either the event_type is not in the allowlist
+ * (`reason='unknown_event_mapping'`) or a required field is missing
+ * (`reason='missing_period_key'`, etc.). The event must still be persisted as
+ * `accepted_pending_mapping` so a future Stage 3C consumer or operator can
+ * reprocess it once the contract is extended.
+ */
+export type EventMappingPending = {
+  resolved: false;
+  reason: string;
+  missing_fields?: string[];
+};
+
+export type EventMappingResult = EventMappingResolved | EventMappingPending;

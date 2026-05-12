@@ -199,6 +199,10 @@ export const AUDIT_ACTIONS = {
   WORK_ITEM_AUTO_CREATED_FROM_EVENT: 'work_engine.work_item_auto_created_from_event',
   WORK_ITEM_EXISTING_REUSED_FROM_EVENT: 'work_engine.work_item_existing_reused_from_event',
   WORK_EVENT_ACCEPTED_PENDING_MAPPING: 'work_engine.event_accepted_pending_mapping',
+  // Work Engine Stage 3B — explicit mapping layer outcomes (allowlist).
+  // Backend never invents a mapping; only allowlisted event_type values resolve.
+  WORK_EVENT_MAPPING_RESOLVED: 'work_engine.event_mapping_resolved',
+  WORK_EVENT_MAPPING_PENDING: 'work_engine.event_mapping_pending',
 } as const;
 
 type AuditPayload = Record<string, unknown>;

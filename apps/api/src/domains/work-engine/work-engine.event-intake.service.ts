@@ -6,23 +6,27 @@
  * idempotency_key, and stores every accepted/duplicate/failed row in
  * `work_events`. It does NOT auto-create work_items.
  *
- * Stage 3A (new): `intakeWorkEvent(ctx, payload)` is the canonical command
- * handler for `POST /api/v1/work-engine/commands/intake-event`. It:
+ * Stage 3A: `intakeWorkEvent(ctx, payload)` is the canonical command handler
+ * for `intake_work_event` via `POST /api/v1/work-engine/commands`. It:
  *   1. validates the intake payload against tenant context;
- *   2. enforces idempotency by the deterministic dedup tuple
- *      (org_id, source_module, source_entity_id, event_type, period_key);
+ *   2. enforces idempotency by event_id and (source_module, idempotency_key);
  *   3. respects the active-work-item invariant
  *      (org_id, client_id, module_key, work_type, period_key)
  *      WHERE work_state NOT IN ('done','archived')
  *      — if active exists, the event is recorded against it and an audit
  *      transition is appended (no duplicate work_item);
- *   4. otherwise creates exactly one new work_item in state 'new' with
- *      creation_source_type='event' and links the event row to it;
- *   5. writes audit rows for "received", "duplicate skipped",
- *      "work created", "existing reused" per Stage 3A rules.
+ *   4. links the event row to the work_item it created or reused;
+ *   5. writes audit rows for received / duplicate / created / reused outcomes.
  *
- * Stage 3A is intake + dedup + work item creation ONLY. No SLA, no country
- * deadlines, no notifications, no assignment, no DocFlow, no UI.
+ * Stage 3B (new): the workflow contract (module_key, work_type, initial
+ * work_state) is decided by the explicit allowlist mapper in
+ * `work-engine.event-mapping.service.ts`. Emitter-supplied `work_type` is
+ * intentionally IGNORED — backend trusts only the allowlist. Unknown event
+ * types and events missing required envelope fields are persisted with
+ * `processing_outcome = '<mapping reason>'` and DO NOT create a work_item.
+ *
+ * Stage 3A+3B is intake + dedup + mapped work item creation ONLY. No SLA, no
+ * country deadlines, no notifications, no assignment, no DocFlow, no UI.
  *
  * Source of truth: docs/work-engine-event-contract.md, docs/work-engine-dedup-policy.md,
  *                  docs/work-engine-domain-model.md, docs/work-engine-state-machine.md.
@@ -49,6 +53,7 @@ import {
   assertValidPeriodKey,
   isUuid,
 } from './work-engine.guards.js';
+import { resolveEventMapping } from './work-engine.event-mapping.service.js';
 
 function validateEnvelope(env: WorkEventEnvelope): void {
   if (!env || typeof env !== 'object') throw badRequest('event envelope is required');
@@ -304,12 +309,14 @@ function ensureRecord(v: unknown): Record<string, unknown> {
  *           must match the authenticated organization.
  *
  * Optional: work_type, period_key, event_id, emitted_by_type, emitted_by_id, payload.
- *   * If both `work_type` and `period_key` are present, intake will try to
- *     create or reuse a work_item per the dedup invariant.
- *   * If either is missing, intake stores the event with
- *     `processing_outcome='accepted_pending_mapping'` and returns
- *     `intake_result='pending_mapping'`. Backend never invents work_type or
- *     period_key — that is a contract of the emitter.
+ *
+ * Stage 3B contract: `work_type` is accepted for audit traceability but is
+ * IGNORED for routing — the allowlist mapper in
+ * `work-engine.event-mapping.service.ts` is the only source of work_type.
+ * `period_key` remains the emitter's contract (backend never computes legal
+ * reporting periods). If the mapper resolves and `period_key` is present,
+ * intake creates / reuses a work_item; otherwise the event is persisted with
+ * the mapper's reason as `processing_outcome` and `intake_result='pending_mapping'`.
  */
 function validateIntakePayload(
   ctx: RequestContext,
@@ -630,29 +637,31 @@ export async function intakeWorkEvent(
     };
   }
 
-  // ---- Step 2: safe-mapping guard ----
-  // Backend NEVER invents module_key / work_type / period_key. If any of the
-  // three is missing, we accept the envelope for audit but do not create or
-  // touch a work_item. A future Stage 3B mapper / migration backfill can
-  // reprocess `accepted_pending_mapping` rows once the emitter ships the
-  // missing fields.
-  const missingForMapping: string[] = [];
-  if (!v.work_type) missingForMapping.push('work_type');
-  if (!v.period_key) missingForMapping.push('period_key');
-  if (missingForMapping.length > 0) {
-    const pendingReason = `missing: ${missingForMapping.join(', ')}`;
+  // ---- Step 2: explicit mapping (Stage 3B) ----
+  // Backend ONLY trusts the static allowlist in event-mapping.service.ts. The
+  // mapper picks module_key / work_type / initial_state from that allowlist.
+  // Anything emitter sent under payload.work_type is intentionally ignored —
+  // backend never lets emitters "claim" a workflow domain.
+  const mapping = resolveEventMapping({
+    event_type: v.event_type,
+    period_key: v.period_key,
+  });
+  if (!mapping.resolved) {
     const workEventId = await insertIntakeEventRow(
       v,
       null,
-      'accepted_pending_mapping',
+      mapping.reason,
     );
     await auditIntake(
       v,
       actorUserId,
-      AUDIT_ACTIONS.WORK_EVENT_ACCEPTED_PENDING_MAPPING,
+      AUDIT_ACTIONS.WORK_EVENT_MAPPING_PENDING,
       null,
       workEventId,
-      { pending_reason: pendingReason, missing_fields: missingForMapping },
+      {
+        pending_reason: mapping.reason,
+        missing_fields: mapping.missing_fields ?? null,
+      },
     );
     return {
       intake_result: 'pending_mapping' satisfies IntakeWorkEventOutcome,
@@ -660,21 +669,39 @@ export async function intakeWorkEvent(
       work_item_id: null,
       event_id: v.event_id,
       dedup_key: v.dedup_key,
-      pending_reason: pendingReason,
+      pending_reason: mapping.reason,
     };
   }
 
-  // From this point we know both work_type and period_key are non-null strings
-  // (the missingForMapping early-return above is exhaustive).
-  const workType: string = v.work_type as string;
+  // Mapper resolved → authoritative workflow contract for this event.
+  const mappedModuleKey: string = mapping.module_key;
+  const mappedWorkType: string = mapping.work_type;
+  const mappedInitialState: WorkItemRow['work_state'] = mapping.initial_state;
+  // period_key existence is guaranteed by the mapper (`requires_period_key`).
   const periodKey: string = v.period_key as string;
 
+  await auditIntake(
+    v,
+    actorUserId,
+    AUDIT_ACTIONS.WORK_EVENT_MAPPING_RESOLVED,
+    null,
+    null,
+    {
+      mapped_module_key: mappedModuleKey,
+      mapped_work_type: mappedWorkType,
+      mapped_initial_state: mappedInitialState,
+    },
+  );
+
   // ---- Step 3: active work_item dedup ----
+  // Dedup tuple per docs/work-engine-dedup-policy.md:
+  //   (org_id, client_id, module_key, work_type, period_key) WHERE work_state
+  //   NOT IN ('done','archived'). module_key/work_type come from the mapper.
   const active = await findActiveWorkItem(
     v.org_id,
     v.client_id,
-    v.source_module,
-    workType,
+    mappedModuleKey,
+    mappedWorkType,
     periodKey,
   );
   if (active) {
@@ -714,15 +741,17 @@ export async function intakeWorkEvent(
   }
 
   // ---- Step 4: create new work_item ----
+  // module_key + work_type + initial_state come from the mapper. source_module
+  // stays as the emitter identity (audit lineage).
   const createResp = await supabaseAdmin
     .from('work_items')
     .insert({
       org_id: v.org_id,
       client_id: v.client_id,
-      module_key: v.source_module,
-      work_type: workType,
+      module_key: mappedModuleKey,
+      work_type: mappedWorkType,
       period_key: periodKey,
-      work_state: 'new',
+      work_state: mappedInitialState,
       owner_user_id: null,
       assigned_user_id: null,
       reviewer_user_id: null,
@@ -750,8 +779,8 @@ export async function intakeWorkEvent(
       const raceWinner = await findActiveWorkItem(
         v.org_id,
         v.client_id,
-        v.source_module,
-        workType,
+        mappedModuleKey,
+        mappedWorkType,
         periodKey,
       );
       if (!raceWinner) throw createResp.error;
@@ -803,7 +832,7 @@ export async function intakeWorkEvent(
     orgId: v.org_id,
     workItemId: created.id,
     fromState: null,
-    toState: 'new',
+    toState: mappedInitialState,
     actionCode: 'create_from_event',
     resultingVersion: created.version,
     payloadSnapshot: {
@@ -811,6 +840,8 @@ export async function intakeWorkEvent(
       event_type: v.event_type,
       source_entity_id: v.source_entity_id,
       creation_source_type: 'event',
+      mapped_module_key: mappedModuleKey,
+      mapped_work_type: mappedWorkType,
     },
   });
   await auditIntake(
@@ -819,7 +850,11 @@ export async function intakeWorkEvent(
     AUDIT_ACTIONS.WORK_ITEM_AUTO_CREATED_FROM_EVENT,
     created.id,
     workEventId,
-    { work_state: 'new' },
+    {
+      work_state: mappedInitialState,
+      mapped_module_key: mappedModuleKey,
+      mapped_work_type: mappedWorkType,
+    },
   );
   return {
     intake_result: 'created' satisfies IntakeWorkEventOutcome,

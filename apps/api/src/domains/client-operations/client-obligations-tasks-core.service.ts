@@ -3,6 +3,7 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
 import { businessDayOfMonth, businessMonthKey, businessPreviousMonthKey, businessYmd } from '../../shared/business-time.js';
+import { emitObligationDocumentsMissingIfMapped } from './client-obligations-work-engine-bridge.js';
 
 /**
  * שכר column — unified payroll process status (Asia/Jerusalem payroll_period_key = previous month).
@@ -2543,10 +2544,10 @@ export async function recomputeClientObligationsAndTasks(
 ): Promise<void> {
   const orgId = assertOrg(ctx);
   await ensureClientInOrg(orgId, clientId);
-  await recomputeClientObligationsAndTasksForOrg(orgId, clientId, now);
+  await recomputeClientObligationsAndTasksForOrg(ctx, orgId, clientId, now);
 }
 
-async function recomputeClientObligationsAndTasksForOrg(orgId: string, clientId: string, now: Date): Promise<void> {
+async function recomputeClientObligationsAndTasksForOrg(ctx: RequestContext, orgId: string, clientId: string, now: Date): Promise<void> {
   const relevant = await patchIncomeTaxDeductionsComputedStatuses(orgId, clientId, now, await buildRelevantObligations(orgId, clientId, now));
   const { data: profileRow } = await supabaseAdmin
     .from('client_operational_profiles')
@@ -2619,6 +2620,23 @@ async function recomputeClientObligationsAndTasksForOrg(orgId: string, clientId:
       .from('client_obligations')
       .upsert(payload, { onConflict: 'organization_id,client_id,obligation_type,period_key' });
     if (upErr) throw new AppError(500, upErr.message ?? 'client_obligations upsert failed', 'SUPABASE_ERROR');
+
+    // Stage 3C — Work Engine bridge.
+    // Emit ONLY on transition into `missing_data` for an allowlisted
+    // obligation_type. The bridge maps obligation_type → Stage 3B event_type
+    // and routes through `intakeWorkEvent`. The bridge is fire-and-forget:
+    // any failure is logged but does NOT affect the obligations/tasks flow.
+    if (status === 'missing_data' && existingStatus !== 'missing_data') {
+      await emitObligationDocumentsMissingIfMapped({
+        ctx,
+        orgId,
+        clientId,
+        obligationType: rel.obligation_type,
+        periodKey: rel.period_key,
+        dueDate: rel.due_date ?? null,
+        blockingReason: nextBlockingReason,
+      });
+    }
   }
 
   for (const old of current) {
@@ -3727,7 +3745,7 @@ export async function executeClientObligationsCommand(
   }
 
   if (!skipRecomputeAfterCommand) {
-  await recomputeClientObligationsAndTasksForOrg(orgId, clientId, new Date());
+  await recomputeClientObligationsAndTasksForOrg(ctx, orgId, clientId, new Date());
   }
   await writeAudit({
     organizationId: orgId,
@@ -3811,7 +3829,7 @@ export async function runClientOperationsNightPass(
 
   let processed = 0;
   for (const c of (clients ?? []) as Array<{ id: string }>) {
-    await recomputeClientObligationsAndTasksForOrg(orgId, c.id, now);
+    await recomputeClientObligationsAndTasksForOrg(ctx, orgId, c.id, now);
     processed += 1;
   }
 
