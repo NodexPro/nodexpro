@@ -1,5 +1,12 @@
 // Paths only. No logic.
 
+/** Work Engine aggregates and command surface (Stage 3D / 3E backend). */
+export const WORK_ENGINE = {
+  aggregateFoundation: '/work-engine/aggregates/foundation',
+  aggregateQueue: '/work-engine/aggregates/queue',
+  commands: '/work-engine/commands',
+} as const;
+
 export const AUTH = {
   register: '/auth/register',
   login: '/auth/login',

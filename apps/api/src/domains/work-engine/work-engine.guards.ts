@@ -166,12 +166,28 @@ export function canTransitionWorkState(from: WorkState, to: WorkState): boolean 
 }
 
 /**
+ * Read-only projection of the state-machine matrix for aggregate render hints.
+ *
+ * The returned array is the set of `to` states that `change_work_state` will
+ * accept from the given `from` state, in deterministic order. Mutating this
+ * array does not affect the backend matrix.
+ */
+export function getAllowedTransitionsFrom(from: WorkState): WorkState[] {
+  return Array.from(ALLOWED_TRANSITIONS[from] ?? new Set<WorkState>());
+}
+
+/**
  * True iff `to` is a valid reopen target from a `done` work item.
  * Caller (apply_work_override) is responsible for enforcing override_kind='reopen'
  * and mandatory reason_text before invoking this.
  */
 export function canReopenFromDone(to: WorkState): boolean {
   return REOPEN_TARGET_STATES.has(to);
+}
+
+/** Read-only projection of the reopen target set for aggregate render hints. */
+export function getReopenTargetStates(): WorkState[] {
+  return Array.from(REOPEN_TARGET_STATES);
 }
 
 export function assertExpectedVersion(current: number, expected: number): void {

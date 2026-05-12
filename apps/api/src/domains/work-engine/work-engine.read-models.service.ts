@@ -7,8 +7,21 @@
  */
 
 import { supabaseAdmin } from '../../db/client.js';
-import type { AllowedAction, WorkItemRow, WorkState } from './work-engine.types.js';
-import { WORK_STATES } from './work-engine.types.js';
+import type {
+  AllowedAction,
+  OverrideKind,
+  WorkItemRow,
+  WorkState,
+} from './work-engine.types.js';
+import {
+  OVERRIDE_KINDS,
+  OVERRIDE_KINDS_REQUIRING_REASON,
+  WORK_STATES,
+} from './work-engine.types.js';
+import {
+  getAllowedTransitionsFrom,
+  getReopenTargetStates,
+} from './work-engine.guards.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 
 /**
@@ -388,6 +401,129 @@ export type QueueAllowedAction = {
   reason: string | null;
 };
 
+/**
+ * Backend-owned per-row state catalog. Stage 4 architecture fix: the queue UI
+ * must not select target transitions from the global state catalog — it must
+ * consume this row-scoped list. The values are projected directly from the
+ * `change_work_state` state-machine matrix in `work-engine.guards.ts` so this
+ * is provably the same truth the command enforces on POST.
+ */
+export type QueueRowAllowedTransition = {
+  value: WorkState;
+  label: string;
+  terminal: boolean;
+};
+
+function rowAllowedTransitions(currentState: WorkState): QueueRowAllowedTransition[] {
+  return getAllowedTransitionsFrom(currentState).map((value) => ({
+    value,
+    label: workStateLabel(value),
+    terminal: value === 'done' || value === 'archived',
+  }));
+}
+
+/**
+ * Backend-owned per-row override-kind catalog. Only the kinds that
+ * `apply_work_override` will accept for the row's current state appear here.
+ * The frontend must not enumerate `OVERRIDE_KINDS` — it consumes this list.
+ *
+ *   - `reopen`              → only when current_state === 'done'.
+ *     Includes `requires_to_state=true` + `allowed_to_states` projected from
+ *     `REOPEN_TARGET_STATES` so the UI never invents reopen targets.
+ *   - `archive_non_done`    → only when current_state is neither 'done' nor 'archived'.
+ *   - `state`               → only when at least one normal transition exists
+ *     (otherwise `apply_work_override` with kind='state' has no legal target).
+ *   - `deadline`, `assignment`, `escalation_cancel`, `reminder_cancel` → any
+ *     non-archived state.
+ *
+ * Any change to the underlying override rules must be made here in tandem with
+ * the matching guard logic in `work-engine.commands.service.ts`.
+ */
+export type QueueRowAllowedOverrideKind = {
+  value: OverrideKind;
+  label: string;
+  requires_reason: boolean;
+  requires_to_state: boolean;
+  allowed_to_states?: QueueRowAllowedTransition[];
+};
+
+function overrideKindLabel(kind: OverrideKind): string {
+  switch (kind) {
+    case 'deadline':
+      return 'Deadline';
+    case 'assignment':
+      return 'Assignment';
+    case 'state':
+      return 'State';
+    case 'escalation_cancel':
+      return 'Cancel escalation';
+    case 'reminder_cancel':
+      return 'Cancel reminder';
+    case 'reopen':
+      return 'Reopen';
+    case 'archive_non_done':
+      return 'Archive non-done';
+    default:
+      return humanizeKey(kind);
+  }
+}
+
+function rowAllowedOverrideKinds(currentState: WorkState): QueueRowAllowedOverrideKind[] {
+  const archived = currentState === 'archived';
+  const done = currentState === 'done';
+  const transitions = rowAllowedTransitions(currentState);
+  const out: QueueRowAllowedOverrideKind[] = [];
+  for (const kind of OVERRIDE_KINDS) {
+    if (archived) continue; // no override is valid on archived rows
+    const requiresReason = OVERRIDE_KINDS_REQUIRING_REASON.has(kind);
+    if (kind === 'reopen') {
+      if (!done) continue;
+      out.push({
+        value: kind,
+        label: overrideKindLabel(kind),
+        requires_reason: requiresReason,
+        requires_to_state: true,
+        allowed_to_states: getReopenTargetStates().map((value) => ({
+          value,
+          label: workStateLabel(value),
+          terminal: value === 'done' || value === 'archived',
+        })),
+      });
+      continue;
+    }
+    if (kind === 'archive_non_done') {
+      if (done) continue; // already terminal; use change_state → archived instead
+      out.push({
+        value: kind,
+        label: overrideKindLabel(kind),
+        requires_reason: requiresReason,
+        requires_to_state: false,
+      });
+      continue;
+    }
+    if (kind === 'state') {
+      if (done) continue; // reopen handles done → active
+      if (transitions.length === 0) continue;
+      out.push({
+        value: kind,
+        label: overrideKindLabel(kind),
+        requires_reason: requiresReason,
+        requires_to_state: true,
+        allowed_to_states: transitions,
+      });
+      continue;
+    }
+    if (done) continue; // deadline/assignment/escalation_cancel/reminder_cancel not meaningful on done
+    out.push({
+      value: kind,
+      label: overrideKindLabel(kind),
+      requires_reason: requiresReason,
+      requires_to_state: false,
+    });
+  }
+  return out;
+}
+
 /** Exported for Stage 3E command-side validation (must match queue aggregate rows). */
 export function queueAllowedActions(state: WorkState): QueueAllowedAction[] {
   const archived = state === 'archived';
@@ -729,6 +865,8 @@ export async function buildWorkEngineQueueAggregate(params: {
       override_summary_json: r.override_summary_json,
     }),
     allowed_actions: queueAllowedActions(r.work_state),
+    allowed_transitions: rowAllowedTransitions(r.work_state),
+    allowed_override_kinds: rowAllowedOverrideKinds(r.work_state),
     version: r.version,
     updated_at: r.updated_at,
   }));
