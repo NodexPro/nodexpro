@@ -56,7 +56,8 @@ export type WorkEngineCommandType =
   | 'change_work_state'
   | 'set_work_deadline'
   | 'append_work_event'
-  | 'apply_work_override';
+  | 'apply_work_override'
+  | 'intake_work_event';
 
 export type WorkEngineCommandPayload = Record<string, unknown>;
 
@@ -75,6 +76,34 @@ export type WorkEngineCommandResponse = {
     aggregate_key: WorkEngineRefreshedAggregateKey;
     aggregate: Record<string, unknown>;
   };
+  /** Command-specific metadata (e.g. intake outcome). Never holds workflow truth. */
+  meta?: Record<string, unknown>;
+};
+
+/**
+ * Outcome of `intake_work_event` (Stage 3A). Backend-decided; UI must not recompute.
+ *   - `created`         : new work_item created from this event
+ *   - `reused_existing` : active work_item already existed; event recorded against it
+ *   - `duplicate_event` : same (org, source_module, source_entity_id, event_type, period_key)
+ *                         already processed; no work created or modified
+ *   - `pending_mapping` : event accepted and stored, but cannot be safely mapped to a
+ *                         (module_key, work_type, period_key) tuple, so NO work_item is
+ *                         created. Backend never invents work_type — emitter must supply it.
+ */
+export type IntakeWorkEventOutcome =
+  | 'created'
+  | 'reused_existing'
+  | 'duplicate_event'
+  | 'pending_mapping';
+
+export type IntakeWorkEventMeta = {
+  intake_result: IntakeWorkEventOutcome;
+  work_event_id: string;
+  work_item_id: string | null;
+  event_id: string;
+  dedup_key: string;
+  /** Present only when `intake_result === 'pending_mapping'`; backend-decided reason. */
+  pending_reason?: string;
 };
 
 /** Inbound cross-module event envelope; see docs/work-engine-event-contract.md. */

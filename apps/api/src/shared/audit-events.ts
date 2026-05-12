@@ -193,6 +193,12 @@ export const AUDIT_ACTIONS = {
   WORK_ITEM_DEADLINE_SET: 'work_engine.work_item_deadline_set',
   WORK_ITEM_OVERRIDE_APPLIED: 'work_engine.work_item_override_applied',
   WORK_EVENT_APPENDED: 'work_engine.work_event_appended',
+  // Work Engine Stage 3A — event intake outcomes.
+  WORK_EVENT_RECEIVED: 'work_engine.event_received',
+  WORK_EVENT_DUPLICATE_SKIPPED: 'work_engine.event_duplicate_skipped',
+  WORK_ITEM_AUTO_CREATED_FROM_EVENT: 'work_engine.work_item_auto_created_from_event',
+  WORK_ITEM_EXISTING_REUSED_FROM_EVENT: 'work_engine.work_item_existing_reused_from_event',
+  WORK_EVENT_ACCEPTED_PENDING_MAPPING: 'work_engine.event_accepted_pending_mapping',
 } as const;
 
 type AuditPayload = Record<string, unknown>;

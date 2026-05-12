@@ -1,13 +1,20 @@
 /**
- * Work Engine HTTP routes (Stage 2 foundation).
+ * Work Engine HTTP routes.
  *
  * Mounted at /api/v1/work-engine.
  *
- * Endpoints:
- *   - GET  /aggregates/foundation        -> work_engine_foundation_aggregate
- *   - POST /commands                     -> generic command endpoint
- *   - POST /events/intake                -> cross-module event envelope intake
+ * Endpoints (single command surface — no per-command routes):
+ *   - GET  /aggregates/foundation   -> work_engine_foundation_aggregate
+ *   - POST /commands                -> generic command endpoint; body shape:
+ *                                      { command: <WorkEngineCommandType>,
+ *                                        payload: <command-specific payload> }
+ *                                      Stage 3A event intake uses this endpoint with
+ *                                      `command: "intake_work_event"`.
+ *   - POST /events/intake           -> Stage 2 raw envelope intake (audit-only;
+ *                                      no work_item creation). Emitters should prefer
+ *                                      POST /commands with command="intake_work_event".
  *
+ * Routes only validate body shape and dispatch. NO workflow decisions live here.
  * No PATCH/PUT. Aggregate GET returns full ready-to-render truth. Every command
  * returns a refreshed aggregate.
  */
@@ -49,6 +56,7 @@ const ALLOWED_COMMANDS: ReadonlySet<WorkEngineCommandType> = new Set<WorkEngineC
   'set_work_deadline',
   'append_work_event',
   'apply_work_override',
+  'intake_work_event',
 ]);
 
 router.post(

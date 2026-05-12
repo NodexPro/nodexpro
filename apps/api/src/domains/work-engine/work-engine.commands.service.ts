@@ -38,6 +38,7 @@ import {
   reqString,
 } from './work-engine.guards.js';
 import { buildWorkEngineFoundationAggregate } from './work-engine.read-models.service.js';
+import { intakeWorkEvent } from './work-engine.event-intake.service.js';
 import {
   CREATION_SOURCE_TYPES,
   OVERRIDE_KINDS,
@@ -612,6 +613,19 @@ export async function executeWorkEngineCommand(
         },
       );
       return { ok: true, command, refreshed: await refreshFoundation(orgId) };
+    }
+
+    case 'intake_work_event': {
+      // Stage 3A: thin dispatcher only — all intake / dedup / work_item creation
+      // logic lives in work-engine.event-intake.service.ts. The route layer must
+      // not make any workflow decisions.
+      const meta = await intakeWorkEvent(ctx, payload);
+      return {
+        ok: true,
+        command,
+        refreshed: await refreshFoundation(orgId),
+        meta,
+      };
     }
 
     default: {

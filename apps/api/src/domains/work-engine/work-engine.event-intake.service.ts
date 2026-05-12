@@ -1,24 +1,54 @@
 /**
- * Work Engine event intake (Stage 2 foundation).
- * Source of truth: docs/work-engine-event-contract.md.
+ * Work Engine event intake.
  *
- * Stage 2 scope (per task spec):
- *   - validate envelope shape;
- *   - enforce org_id / client_id tenancy;
- *   - enforce idempotency by (org_id, event_id) AND (org_id, source_module, idempotency_key);
- *   - store every accepted/duplicate/failed event in work_events;
- *   - DO NOT auto-create work_items here. Routing/dedup logic lands in Stage 3.
+ * Stage 2 (preserved): `acceptWorkEngineEvent(env)` is the raw event-envelope
+ * audit log writer. It validates the envelope, deduplicates by event_id /
+ * idempotency_key, and stores every accepted/duplicate/failed row in
+ * `work_events`. It does NOT auto-create work_items.
+ *
+ * Stage 3A (new): `intakeWorkEvent(ctx, payload)` is the canonical command
+ * handler for `POST /api/v1/work-engine/commands/intake-event`. It:
+ *   1. validates the intake payload against tenant context;
+ *   2. enforces idempotency by the deterministic dedup tuple
+ *      (org_id, source_module, source_entity_id, event_type, period_key);
+ *   3. respects the active-work-item invariant
+ *      (org_id, client_id, module_key, work_type, period_key)
+ *      WHERE work_state NOT IN ('done','archived')
+ *      — if active exists, the event is recorded against it and an audit
+ *      transition is appended (no duplicate work_item);
+ *   4. otherwise creates exactly one new work_item in state 'new' with
+ *      creation_source_type='event' and links the event row to it;
+ *   5. writes audit rows for "received", "duplicate skipped",
+ *      "work created", "existing reused" per Stage 3A rules.
+ *
+ * Stage 3A is intake + dedup + work item creation ONLY. No SLA, no country
+ * deadlines, no notifications, no assignment, no DocFlow, no UI.
+ *
+ * Source of truth: docs/work-engine-event-contract.md, docs/work-engine-dedup-policy.md,
+ *                  docs/work-engine-domain-model.md, docs/work-engine-state-machine.md.
  */
 
+import { randomUUID } from 'node:crypto';
 import { supabaseAdmin } from '../../db/client.js';
-import { badRequest } from '../../shared/errors.js';
+import type { RequestContext } from '../../shared/context.js';
+import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
+import { badRequest, forbidden } from '../../shared/errors.js';
 import {
   ACTOR_TYPES,
+  type ActorType,
   type EventProcessingStatus,
+  type IntakeWorkEventMeta,
+  type IntakeWorkEventOutcome,
   type WorkEventEnvelope,
   type WorkEventIntakeResult,
+  type WorkItemRow,
 } from './work-engine.types.js';
-import { PERIOD_KEY_REGEX, isUuid } from './work-engine.guards.js';
+import {
+  PERIOD_KEY_REGEX,
+  assertOrgScope,
+  assertValidPeriodKey,
+  isUuid,
+} from './work-engine.guards.js';
 
 function validateEnvelope(env: WorkEventEnvelope): void {
   if (!env || typeof env !== 'object') throw badRequest('event envelope is required');
@@ -220,5 +250,582 @@ export async function acceptWorkEngineEvent(
     processing_status: 'accepted',
     processing_outcome: processingOutcome,
     processing_error: null,
+  };
+}
+
+// ============================================================================
+// Stage 3A — intake_work_event command handler.
+// ============================================================================
+
+/**
+ * Normalized intake payload after `validateIntakePayload`.
+ *
+ * `work_type` and `period_key` are intentionally nullable: emitters that cannot
+ * yet supply a canonical (module_key, work_type, period_key) mapping must still
+ * be able to deliver the event for audit. In that case backend persists the
+ * event with `processing_outcome='accepted_pending_mapping'` and does NOT
+ * invent any of the missing fields.
+ */
+type ValidatedIntakePayload = {
+  event_id: string;
+  org_id: string;
+  client_id: string;
+  source_module: string;
+  source_entity_type: string;
+  source_entity_id: string;
+  event_type: string;
+  work_type: string | null;
+  period_key: string | null;
+  occurred_at: string;
+  schema_version: number;
+  emitted_by_type: ActorType;
+  emitted_by_id: string | null;
+  payload: Record<string, unknown>;
+  dedup_key: string;
+};
+
+function reqNonEmpty(obj: Record<string, unknown>, key: string): string {
+  const v = String(obj[key] ?? '').trim();
+  if (!v) throw badRequest(`${key} is required`);
+  return v;
+}
+
+function ensureRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * Validate intake_work_event payload.
+ *
+ * Required: event_type, source_module, source_entity_type, source_entity_id,
+ *           client_id, occurred_at, schema_version. org_id, when supplied,
+ *           must match the authenticated organization.
+ *
+ * Optional: work_type, period_key, event_id, emitted_by_type, emitted_by_id, payload.
+ *   * If both `work_type` and `period_key` are present, intake will try to
+ *     create or reuse a work_item per the dedup invariant.
+ *   * If either is missing, intake stores the event with
+ *     `processing_outcome='accepted_pending_mapping'` and returns
+ *     `intake_result='pending_mapping'`. Backend never invents work_type or
+ *     period_key — that is a contract of the emitter.
+ */
+function validateIntakePayload(
+  ctx: RequestContext,
+  raw: Record<string, unknown>,
+): ValidatedIntakePayload {
+  const ctxOrgId = ctx.organizationId;
+  if (!ctxOrgId || !ctx.membership) {
+    throw forbidden('Organization context required');
+  }
+  const payloadOrgIdRaw = raw.org_id;
+  const orgId = String(payloadOrgIdRaw ?? ctxOrgId).trim();
+  if (!isUuid(orgId)) throw badRequest('org_id must be a uuid');
+  if (payloadOrgIdRaw !== undefined && payloadOrgIdRaw !== null) {
+    if (orgId !== ctxOrgId) {
+      throw forbidden('payload.org_id does not match authenticated organization');
+    }
+  }
+  // Final cross-check via the same guard used by every command.
+  assertOrgScope(ctx, orgId);
+
+  const clientId = reqNonEmpty(raw, 'client_id');
+  if (!isUuid(clientId)) throw badRequest('client_id must be a uuid');
+
+  const sourceModule = reqNonEmpty(raw, 'source_module');
+  const sourceEntityType = reqNonEmpty(raw, 'source_entity_type');
+  const sourceEntityId = reqNonEmpty(raw, 'source_entity_id');
+  const eventType = reqNonEmpty(raw, 'event_type');
+
+  // work_type — optional; never invented by backend.
+  const workTypeRaw = String(raw.work_type ?? '').trim();
+  const workType: string | null = workTypeRaw ? workTypeRaw : null;
+
+  // period_key — optional; when present must match the canonical regex.
+  const periodKeyRaw = String(raw.period_key ?? '').trim();
+  const periodKey: string | null = periodKeyRaw
+    ? assertValidPeriodKey(periodKeyRaw)
+    : null;
+
+  const occurredAtRaw = String(raw.occurred_at ?? '').trim();
+  if (!occurredAtRaw || !Number.isFinite(new Date(occurredAtRaw).getTime())) {
+    throw badRequest('occurred_at must be an ISO datetime');
+  }
+
+  const schemaVersionRaw = raw.schema_version;
+  const schemaVersion =
+    typeof schemaVersionRaw === 'number' ? schemaVersionRaw : Number(schemaVersionRaw);
+  if (
+    !Number.isFinite(schemaVersion) ||
+    !Number.isInteger(schemaVersion) ||
+    schemaVersion < 1
+  ) {
+    throw badRequest('schema_version must be an integer >= 1');
+  }
+
+  const eventIdRaw = raw.event_id;
+  let eventId: string;
+  if (eventIdRaw === undefined || eventIdRaw === null || eventIdRaw === '') {
+    eventId = randomUUID();
+  } else {
+    eventId = String(eventIdRaw).trim();
+    if (!isUuid(eventId)) throw badRequest('event_id must be a uuid');
+  }
+
+  const emittedByTypeRaw = String(raw.emitted_by_type ?? 'system').trim();
+  if (!(ACTOR_TYPES as readonly string[]).includes(emittedByTypeRaw)) {
+    throw badRequest('emitted_by_type must be one of user|system|rule');
+  }
+  // User-emitted events are not the Stage 3A contract; intake is an automation
+  // surface. Reject explicitly to keep "state ≠ action ≠ event" invariants.
+  if (emittedByTypeRaw === 'user') {
+    throw badRequest(
+      "emitted_by_type='user' is not allowed for intake_work_event; use a user-driven command instead",
+      'intake_user_emitter_forbidden',
+    );
+  }
+  const emittedByType = emittedByTypeRaw as ActorType;
+
+  let emittedById: string | null = null;
+  if (raw.emitted_by_id !== undefined && raw.emitted_by_id !== null) {
+    const s = String(raw.emitted_by_id).trim();
+    if (s) {
+      if (!isUuid(s)) throw badRequest('emitted_by_id must be a uuid or null');
+      emittedById = s;
+    }
+  }
+
+  // Dedup tuple per rule 1: (org_id, source_module, source_entity_id, event_type, period_key).
+  // Missing period_key is encoded as the literal empty string so the unique
+  // index (org_id, source_module, idempotency_key) still distinguishes
+  // "periodless" events from period-scoped ones.
+  const dedupKey = `${sourceEntityId}|${eventType}|${periodKey ?? ''}`;
+
+  return {
+    event_id: eventId,
+    org_id: orgId,
+    client_id: clientId,
+    source_module: sourceModule,
+    source_entity_type: sourceEntityType,
+    source_entity_id: sourceEntityId,
+    event_type: eventType,
+    work_type: workType,
+    period_key: periodKey,
+    occurred_at: occurredAtRaw,
+    schema_version: schemaVersion,
+    emitted_by_type: emittedByType,
+    emitted_by_id: emittedById,
+    payload: ensureRecord(raw.payload),
+    dedup_key: dedupKey,
+  };
+}
+
+async function assertClientInOrg(orgId: string, clientId: string): Promise<void> {
+  const { data, error } = await supabaseAdmin
+    .from('clients')
+    .select('id, organization_id')
+    .eq('id', clientId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw badRequest(`client ${clientId} not found`, 'client_not_found');
+  if ((data as { organization_id: string }).organization_id !== orgId) {
+    throw forbidden('client does not belong to authenticated organization');
+  }
+}
+
+/** Look up the existing event row + its work_item_id (if any) for an idempotency-collision read. */
+async function findExistingIntakeEvent(
+  orgId: string,
+  eventId: string,
+  sourceModule: string,
+  dedupKey: string,
+): Promise<{ id: string; work_item_id: string | null } | null> {
+  const byEvent = await supabaseAdmin
+    .from('work_events')
+    .select('id, work_item_id')
+    .eq('org_id', orgId)
+    .eq('event_id', eventId)
+    .maybeSingle();
+  if (byEvent.error) throw byEvent.error;
+  if (byEvent.data) {
+    return {
+      id: String((byEvent.data as { id: string }).id),
+      work_item_id: (byEvent.data as { work_item_id: string | null }).work_item_id ?? null,
+    };
+  }
+  const byIdem = await supabaseAdmin
+    .from('work_events')
+    .select('id, work_item_id')
+    .eq('org_id', orgId)
+    .eq('source_module', sourceModule)
+    .eq('idempotency_key', dedupKey)
+    .maybeSingle();
+  if (byIdem.error) throw byIdem.error;
+  if (!byIdem.data) return null;
+  return {
+    id: String((byIdem.data as { id: string }).id),
+    work_item_id: (byIdem.data as { work_item_id: string | null }).work_item_id ?? null,
+  };
+}
+
+/** Find the single active work_item for the dedup tuple. */
+async function findActiveWorkItem(
+  orgId: string,
+  clientId: string,
+  moduleKey: string,
+  workType: string,
+  periodKey: string,
+): Promise<WorkItemRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from('work_items')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('client_id', clientId)
+    .eq('module_key', moduleKey)
+    .eq('work_type', workType)
+    .eq('period_key', periodKey)
+    .not('work_state', 'in', '(done,archived)')
+    .maybeSingle();
+  if (error) throw error;
+  return (data as WorkItemRow | null) ?? null;
+}
+
+async function insertIntakeEventRow(
+  v: ValidatedIntakePayload,
+  workItemId: string | null,
+  processingOutcome: string,
+): Promise<string> {
+  const insertResp = await supabaseAdmin
+    .from('work_events')
+    .insert({
+      event_id: v.event_id,
+      org_id: v.org_id,
+      direction: 'inbound',
+      source_module: v.source_module,
+      source_entity_type: v.source_entity_type,
+      source_entity_id: v.source_entity_id,
+      event_type: v.event_type,
+      client_id: v.client_id,
+      period_key: v.period_key,
+      work_item_id: workItemId,
+      occurred_at: v.occurred_at,
+      emitted_by_type: v.emitted_by_type,
+      emitted_by_id: v.emitted_by_id,
+      schema_version: v.schema_version,
+      idempotency_key: v.dedup_key,
+      payload: v.payload,
+      processing_status: 'accepted' satisfies EventProcessingStatus,
+      processing_outcome: processingOutcome,
+      processing_error: null,
+    })
+    .select('id')
+    .single();
+  if (insertResp.error) throw insertResp.error;
+  return String((insertResp.data as { id: string | number }).id);
+}
+
+async function insertIntakeTransition(args: {
+  orgId: string;
+  workItemId: string;
+  fromState: WorkItemRow['work_state'] | null;
+  toState: WorkItemRow['work_state'];
+  actionCode: 'create_from_event' | 'intake_event_appended_to_existing';
+  resultingVersion: number;
+  payloadSnapshot: Record<string, unknown>;
+}): Promise<void> {
+  const { error } = await supabaseAdmin.from('work_transitions').insert({
+    org_id: args.orgId,
+    work_item_id: args.workItemId,
+    from_state: args.fromState,
+    to_state: args.toState,
+    transition_kind: 'automation',
+    action_code: args.actionCode,
+    actor_type: 'system',
+    actor_user_id: null,
+    reason_text: null,
+    metadata_json: args.payloadSnapshot,
+    expected_version: null,
+    resulting_version: args.resultingVersion,
+  });
+  if (error) throw error;
+}
+
+async function auditIntake(
+  v: ValidatedIntakePayload,
+  actorUserId: string | null,
+  action: string,
+  workItemId: string | null,
+  workEventId: string | null,
+  extra: Record<string, unknown>,
+): Promise<void> {
+  await writeAudit({
+    organizationId: v.org_id,
+    actorUserId,
+    moduleCode: 'work_engine',
+    entityType: workItemId ? 'work_item' : 'work_event',
+    entityId: workItemId ?? workEventId ?? null,
+    action,
+    payload: {
+      event_id: v.event_id,
+      event_type: v.event_type,
+      source_module: v.source_module,
+      source_entity_type: v.source_entity_type,
+      source_entity_id: v.source_entity_id,
+      client_id: v.client_id,
+      work_type: v.work_type,
+      period_key: v.period_key,
+      dedup_key: v.dedup_key,
+      work_event_id: workEventId,
+      work_item_id: workItemId,
+      ...extra,
+    },
+  });
+}
+
+/**
+ * Stage 3A canonical event intake command handler.
+ *
+ * Returns the metadata about the intake outcome; the caller (commands service)
+ * is responsible for attaching a refreshed Work Engine aggregate to the
+ * response envelope.
+ */
+export async function intakeWorkEvent(
+  ctx: RequestContext,
+  payloadInput: unknown,
+): Promise<IntakeWorkEventMeta> {
+  const raw = ensureRecord(payloadInput);
+  const v = validateIntakePayload(ctx, raw);
+  await assertClientInOrg(v.org_id, v.client_id);
+
+  const actorUserId = ctx.user.id;
+
+  // Always audit "received" first so duplicate/failure paths still leave a trail.
+  await auditIntake(v, actorUserId, AUDIT_ACTIONS.WORK_EVENT_RECEIVED, null, null, {
+    emitted_by_type: v.emitted_by_type,
+  });
+
+  // ---- Step 1: event-level idempotency ----
+  const existing = await findExistingIntakeEvent(
+    v.org_id,
+    v.event_id,
+    v.source_module,
+    v.dedup_key,
+  );
+  if (existing) {
+    await auditIntake(
+      v,
+      actorUserId,
+      AUDIT_ACTIONS.WORK_EVENT_DUPLICATE_SKIPPED,
+      existing.work_item_id,
+      existing.id,
+      { duplicate_of_work_event_id: existing.id },
+    );
+    return {
+      intake_result: 'duplicate_event' satisfies IntakeWorkEventOutcome,
+      work_event_id: existing.id,
+      work_item_id: existing.work_item_id,
+      event_id: v.event_id,
+      dedup_key: v.dedup_key,
+    };
+  }
+
+  // ---- Step 2: safe-mapping guard ----
+  // Backend NEVER invents module_key / work_type / period_key. If any of the
+  // three is missing, we accept the envelope for audit but do not create or
+  // touch a work_item. A future Stage 3B mapper / migration backfill can
+  // reprocess `accepted_pending_mapping` rows once the emitter ships the
+  // missing fields.
+  const missingForMapping: string[] = [];
+  if (!v.work_type) missingForMapping.push('work_type');
+  if (!v.period_key) missingForMapping.push('period_key');
+  if (missingForMapping.length > 0) {
+    const pendingReason = `missing: ${missingForMapping.join(', ')}`;
+    const workEventId = await insertIntakeEventRow(
+      v,
+      null,
+      'accepted_pending_mapping',
+    );
+    await auditIntake(
+      v,
+      actorUserId,
+      AUDIT_ACTIONS.WORK_EVENT_ACCEPTED_PENDING_MAPPING,
+      null,
+      workEventId,
+      { pending_reason: pendingReason, missing_fields: missingForMapping },
+    );
+    return {
+      intake_result: 'pending_mapping' satisfies IntakeWorkEventOutcome,
+      work_event_id: workEventId,
+      work_item_id: null,
+      event_id: v.event_id,
+      dedup_key: v.dedup_key,
+      pending_reason: pendingReason,
+    };
+  }
+
+  // From this point we know both work_type and period_key are non-null strings
+  // (the missingForMapping early-return above is exhaustive).
+  const workType: string = v.work_type as string;
+  const periodKey: string = v.period_key as string;
+
+  // ---- Step 3: active work_item dedup ----
+  const active = await findActiveWorkItem(
+    v.org_id,
+    v.client_id,
+    v.source_module,
+    workType,
+    periodKey,
+  );
+  if (active) {
+    const workEventId = await insertIntakeEventRow(
+      v,
+      active.id,
+      'reused_existing_active_work_item',
+    );
+    await insertIntakeTransition({
+      orgId: v.org_id,
+      workItemId: active.id,
+      fromState: active.work_state,
+      toState: active.work_state,
+      actionCode: 'intake_event_appended_to_existing',
+      resultingVersion: active.version,
+      payloadSnapshot: {
+        event_id: v.event_id,
+        event_type: v.event_type,
+        source_entity_id: v.source_entity_id,
+      },
+    });
+    await auditIntake(
+      v,
+      actorUserId,
+      AUDIT_ACTIONS.WORK_ITEM_EXISTING_REUSED_FROM_EVENT,
+      active.id,
+      workEventId,
+      { work_state: active.work_state, work_item_version: active.version },
+    );
+    return {
+      intake_result: 'reused_existing' satisfies IntakeWorkEventOutcome,
+      work_event_id: workEventId,
+      work_item_id: active.id,
+      event_id: v.event_id,
+      dedup_key: v.dedup_key,
+    };
+  }
+
+  // ---- Step 4: create new work_item ----
+  const createResp = await supabaseAdmin
+    .from('work_items')
+    .insert({
+      org_id: v.org_id,
+      client_id: v.client_id,
+      module_key: v.source_module,
+      work_type: workType,
+      period_key: periodKey,
+      work_state: 'new',
+      owner_user_id: null,
+      assigned_user_id: null,
+      reviewer_user_id: null,
+      escalation_owner_id: null,
+      due_at: null,
+      sla_status: 'none',
+      source_module: v.source_module,
+      source_entity_type: v.source_entity_type,
+      source_entity_id: v.source_entity_id,
+      created_by_rule_id: null,
+      created_by_event_id: v.event_id,
+      created_by_user_id: null,
+      creation_source_type: 'event',
+      version: 0,
+      override_active: false,
+    })
+    .select('*')
+    .single();
+
+  if (createResp.error) {
+    const code = (createResp.error as { code?: string }).code;
+    if (code === '23505') {
+      // Race: someone created the active work_item between our SELECT and INSERT.
+      // Fall back to the reuse path with a fresh fetch.
+      const raceWinner = await findActiveWorkItem(
+        v.org_id,
+        v.client_id,
+        v.source_module,
+        workType,
+        periodKey,
+      );
+      if (!raceWinner) throw createResp.error;
+      const workEventId = await insertIntakeEventRow(
+        v,
+        raceWinner.id,
+        'reused_existing_active_work_item_after_race',
+      );
+      await insertIntakeTransition({
+        orgId: v.org_id,
+        workItemId: raceWinner.id,
+        fromState: raceWinner.work_state,
+        toState: raceWinner.work_state,
+        actionCode: 'intake_event_appended_to_existing',
+        resultingVersion: raceWinner.version,
+        payloadSnapshot: {
+          event_id: v.event_id,
+          event_type: v.event_type,
+          source_entity_id: v.source_entity_id,
+          race_resolved: true,
+        },
+      });
+      await auditIntake(
+        v,
+        actorUserId,
+        AUDIT_ACTIONS.WORK_ITEM_EXISTING_REUSED_FROM_EVENT,
+        raceWinner.id,
+        workEventId,
+        {
+          work_state: raceWinner.work_state,
+          work_item_version: raceWinner.version,
+          race_resolved: true,
+        },
+      );
+      return {
+        intake_result: 'reused_existing' satisfies IntakeWorkEventOutcome,
+        work_event_id: workEventId,
+        work_item_id: raceWinner.id,
+        event_id: v.event_id,
+        dedup_key: v.dedup_key,
+      };
+    }
+    throw createResp.error;
+  }
+
+  const created = createResp.data as WorkItemRow;
+  const workEventId = await insertIntakeEventRow(v, created.id, 'created_new_work_item');
+  await insertIntakeTransition({
+    orgId: v.org_id,
+    workItemId: created.id,
+    fromState: null,
+    toState: 'new',
+    actionCode: 'create_from_event',
+    resultingVersion: created.version,
+    payloadSnapshot: {
+      event_id: v.event_id,
+      event_type: v.event_type,
+      source_entity_id: v.source_entity_id,
+      creation_source_type: 'event',
+    },
+  });
+  await auditIntake(
+    v,
+    actorUserId,
+    AUDIT_ACTIONS.WORK_ITEM_AUTO_CREATED_FROM_EVENT,
+    created.id,
+    workEventId,
+    { work_state: 'new' },
+  );
+  return {
+    intake_result: 'created' satisfies IntakeWorkEventOutcome,
+    work_event_id: workEventId,
+    work_item_id: created.id,
+    event_id: v.event_id,
+    dedup_key: v.dedup_key,
   };
 }
