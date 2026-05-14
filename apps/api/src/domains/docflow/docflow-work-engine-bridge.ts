@@ -15,6 +15,7 @@
 
 import type { RequestContext } from '../../shared/context.js';
 import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service.js';
+import type { IntakeWorkEventMeta } from '../work-engine/work-engine.types.js';
 
 const SOURCE_MODULE = 'docflow';
 const SOURCE_ENTITY_TYPE = 'client_message_thread';
@@ -36,39 +37,60 @@ export type DocflowThreadNeedsAttentionSignal = {
   moduleKey?: string | null;
 };
 
+function buildDocflowThreadNeedsAttentionIntakePayload(signal: DocflowThreadNeedsAttentionSignal): Record<string, unknown> {
+  const periodKey = docflowThreadWorkPeriodKey(signal.threadId);
+  return {
+    org_id: signal.orgId,
+    client_id: signal.clientId,
+    source_module: SOURCE_MODULE,
+    source_entity_type: SOURCE_ENTITY_TYPE,
+    source_entity_id: signal.threadId,
+    event_type: EVENT_TYPE,
+    period_key: periodKey,
+    occurred_at: new Date().toISOString(),
+    schema_version: SCHEMA_VERSION,
+    emitted_by_type: 'system',
+    emitted_by_id: null,
+    payload: {
+      thread_id: signal.threadId,
+      thread_status: signal.threadStatus,
+      thread_type: signal.threadType,
+      ...(signal.moduleKey ? { module_key: signal.moduleKey } : {}),
+    },
+  };
+}
+
+/**
+ * Same intake envelope as `emitDocflowThreadNeedsAttention`, but returns intake outcome
+ * (used by Stage 6 backfill for metrics). Does not log on failure — caller decides.
+ */
+export async function emitDocflowThreadNeedsAttentionWithIntakeResult(
+  signal: DocflowThreadNeedsAttentionSignal,
+): Promise<{ ok: true; intake: IntakeWorkEventMeta } | { ok: false; error: string }> {
+  const body = buildDocflowThreadNeedsAttentionIntakePayload(signal);
+  try {
+    const intake = await intakeWorkEvent(signal.ctx, body);
+    return { ok: true, intake };
+  } catch (err) {
+    return {
+      ok: false,
+      error: (err as { message?: string })?.message ?? String(err),
+    };
+  }
+}
+
 /**
  * Fire-and-forget intake for a DocFlow thread that should surface on the Work Engine queue.
  * Idempotent at the Work Engine layer (stable dedup tuple + active work_item reuse).
  */
 export async function emitDocflowThreadNeedsAttention(signal: DocflowThreadNeedsAttentionSignal): Promise<void> {
-  const periodKey = docflowThreadWorkPeriodKey(signal.threadId);
-  try {
-    await intakeWorkEvent(signal.ctx, {
-      org_id: signal.orgId,
-      client_id: signal.clientId,
-      source_module: SOURCE_MODULE,
-      source_entity_type: SOURCE_ENTITY_TYPE,
-      source_entity_id: signal.threadId,
-      event_type: EVENT_TYPE,
-      period_key: periodKey,
-      occurred_at: new Date().toISOString(),
-      schema_version: SCHEMA_VERSION,
-      emitted_by_type: 'system',
-      emitted_by_id: null,
-      payload: {
-        thread_id: signal.threadId,
-        thread_status: signal.threadStatus,
-        thread_type: signal.threadType,
-        ...(signal.moduleKey ? { module_key: signal.moduleKey } : {}),
-      },
-    });
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('[docflow → work_engine] intake failed for docflow.thread_needs_attention', {
-      org_id: signal.orgId,
-      client_id: signal.clientId,
-      thread_id: signal.threadId,
-      error: (err as { message?: string })?.message ?? String(err),
-    });
-  }
+  const r = await emitDocflowThreadNeedsAttentionWithIntakeResult(signal);
+  if (r.ok) return;
+  // eslint-disable-next-line no-console
+  console.warn('[docflow → work_engine] intake failed for docflow.thread_needs_attention', {
+    org_id: signal.orgId,
+    client_id: signal.clientId,
+    thread_id: signal.threadId,
+    error: r.error,
+  });
 }
