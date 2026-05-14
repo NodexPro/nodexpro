@@ -8,7 +8,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { hasPermission } from '../rbac/rbac.service.js';
 import { OVERRIDE_KINDS, OVERRIDE_KINDS_REQUIRING_REASON, WORK_STATES, } from './work-engine.types.js';
-import { getAllowedTransitionsFrom, getReopenTargetStates, } from './work-engine.guards.js';
+import { getAllowedTransitionsFrom, getReopenTargetStates, canPickUpFromUnassignedWorkState, } from './work-engine.guards.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
 import { canStaffPickUpUnassigned, resolveWorkTypePoliciesBatch } from './work-engine.policy.service.js';
@@ -35,7 +35,7 @@ function computeOwnershipCommands(args) {
         hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin);
     const canPickUpPolicy = canStaffPickUpUnassigned(policy, viewer.roleCode);
     const out = [];
-    const pickOk = row.work_state === 'new' &&
+    const pickOk = canPickUpFromUnassignedWorkState(row.work_state) &&
         row.assigned_user_id == null &&
         canPickupPerm &&
         canPickUpPolicy;
@@ -47,8 +47,8 @@ function computeOwnershipCommands(args) {
             ? null
             : row.assigned_user_id
                 ? 'Item already has an assignee'
-                : row.work_state !== 'new'
-                    ? 'Only new unassigned items can be picked up'
+                : !canPickUpFromUnassignedWorkState(row.work_state)
+                    ? 'Pick up is only allowed for new or office-waiting unassigned items'
                     : !canPickupPerm
                         ? 'Missing work_engine.pickup permission'
                         : !canPickUpPolicy

@@ -36,6 +36,7 @@ import {
   assertOrgScope,
   assertValidPeriodKey,
   assertValidWorkState,
+  canPickUpFromUnassignedWorkState,
   canReopenFromDone,
   canTransitionWorkState,
   isUuid,
@@ -857,9 +858,9 @@ export async function executeWorkEngineCommand(
         requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.pickup);
         const workItemId = reqString(payload, 'work_item_id');
         const current = await loadWorkItem(orgId, workItemId);
-        if (current.work_state !== 'new' || current.assigned_user_id !== null) {
+        if (!canPickUpFromUnassignedWorkState(current.work_state) || current.assigned_user_id !== null) {
           throw badRequest(
-            'pick_up_unassigned requires work_state=new and no assignee',
+            'pick_up_unassigned requires work_state=new or waiting_human (office queue) and no assignee',
             'invalid_transition',
           );
         }

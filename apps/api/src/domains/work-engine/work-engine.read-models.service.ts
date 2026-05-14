@@ -22,6 +22,7 @@ import {
 import {
   getAllowedTransitionsFrom,
   getReopenTargetStates,
+  canPickUpFromUnassignedWorkState,
 } from './work-engine.guards.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
@@ -78,7 +79,7 @@ function computeOwnershipCommands(args: {
   const out: QueueOwnershipCommand[] = [];
 
   const pickOk =
-    row.work_state === 'new' &&
+    canPickUpFromUnassignedWorkState(row.work_state) &&
     row.assigned_user_id == null &&
     canPickupPerm &&
     canPickUpPolicy;
@@ -90,8 +91,8 @@ function computeOwnershipCommands(args: {
       ? null
       : row.assigned_user_id
         ? 'Item already has an assignee'
-        : row.work_state !== 'new'
-          ? 'Only new unassigned items can be picked up'
+        : !canPickUpFromUnassignedWorkState(row.work_state)
+          ? 'Pick up is only allowed for new or office-waiting unassigned items'
           : !canPickupPerm
             ? 'Missing work_engine.pickup permission'
             : !canPickUpPolicy

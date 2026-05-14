@@ -147,6 +147,13 @@ const REOPEN_TARGET_STATES = new Set([
     'waiting_human',
     'waiting_client',
 ]);
+/**
+ * Unassigned inbox rows the office may claim via `pick_up_unassigned`.
+ * Product "waiting office" queue = `waiting_human` in Work Engine (no `waiting_office` enum).
+ */
+export function canPickUpFromUnassignedWorkState(state) {
+    return state === 'new' || state === 'waiting_human';
+}
 export function canTransitionWorkState(from, to) {
     if (from === to)
         return false;

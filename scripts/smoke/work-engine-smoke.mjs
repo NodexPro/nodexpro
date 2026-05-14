@@ -76,12 +76,12 @@ function queueRefreshPayload(periodKey, clientId, extra = {}) {
   };
 }
 
-function findSmokeRow(aggregate, clientId, periodKey) {
+function findSmokeRow(aggregate, clientId, periodKey, workType = 'smoke_validation') {
   const rows = aggregate?.rows ?? [];
   return rows.find(
     (r) =>
       r.module_key === 'smoke_test' &&
-      r.work_type === 'smoke_validation' &&
+      r.work_type === workType &&
       r.period_key === periodKey &&
       r.client_id === clientId,
   );
@@ -296,6 +296,90 @@ async function main() {
         status: res.status,
         detail: ok ? 'blocked as expected' : JSON.stringify(json).slice(0, 240),
       });
+    }
+
+    // T7c — pick_up_unassigned from waiting_human (unassigned office queue)
+    {
+      const pickupWorkType = 'smoke_pickup_path';
+      const pickupEntityId = `smoke-pickup-${smokeRunId}`;
+      const pickupCreate = {
+        ...queueRefreshPayload(commandPeriodKey, clientId),
+        idempotency_key: `${smokeRunId}-create-pickup-item`,
+        client_id: clientId,
+        module_key: 'smoke_test',
+        work_type: pickupWorkType,
+        period_key: commandPeriodKey,
+        source_module: 'smoke_test',
+        source_entity_type: 'smoke_validation_entity',
+        source_entity_id: pickupEntityId,
+        creation_source_type: 'command',
+      };
+      let pickupItemId = null;
+      let pickupVersion = 0;
+      {
+        const body = { command: 'create_work_item', payload: pickupCreate };
+        const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+        const ok = res.status === 200 && assertQueueRefreshed(json);
+        const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey, pickupWorkType) : null;
+        if (ok && row) {
+          pickupItemId = row.work_item_id;
+          pickupVersion = row.version;
+        }
+      }
+      if (!pickupItemId) {
+        results.push({
+          name: 'SKIP pick_up_unassigned path (create pickup row failed)',
+          ok: false,
+          status: 0,
+          detail: 'create_work_item for pickup smoke',
+        });
+      } else {
+        {
+          const body = {
+            command: 'change_work_state',
+            payload: {
+              ...queueRefreshPayload(commandPeriodKey, clientId),
+              work_item_id: pickupItemId,
+              expected_version: pickupVersion,
+              to_state: 'waiting_human',
+              reason_text: 'smoke to waiting_human for pickup',
+              idempotency_key: `${smokeRunId}-pickup-to-waiting-human`,
+            },
+          };
+          const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+          const ok = res.status === 200 && assertQueueRefreshed(json);
+          const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey, pickupWorkType) : null;
+          const vOk = ok && row && row.work_state === 'waiting_human';
+          if (vOk) pickupVersion = row.version;
+          results.push({
+            name: 'POST change_work_state → waiting_human (pickup smoke row)',
+            ok: vOk,
+            status: res.status,
+            detail: vOk ? `version=${pickupVersion}` : JSON.stringify(json).slice(0, 280),
+          });
+        }
+        {
+          const body = {
+            command: 'pick_up_unassigned',
+            payload: {
+              ...queueRefreshPayload(commandPeriodKey, clientId),
+              work_item_id: pickupItemId,
+              expected_version: pickupVersion,
+              idempotency_key: `${smokeRunId}-pick-up-from-waiting-human`,
+            },
+          };
+          const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+          const ok = res.status === 200 && assertQueueRefreshed(json);
+          const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey, pickupWorkType) : null;
+          const vOk = ok && row && row.work_state === 'assigned' && row.assigned_user_id != null;
+          results.push({
+            name: 'POST pick_up_unassigned from waiting_human + queue refresh',
+            ok: vOk,
+            status: res.status,
+            detail: vOk ? `assigned user set` : JSON.stringify(json).slice(0, 280),
+          });
+        }
+      }
     }
 
     // T8 — assign_work_item + queue refresh (first assign only; requires TEST_ASSIGNEE_USER_ID)

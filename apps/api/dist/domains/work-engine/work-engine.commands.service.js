@@ -26,7 +26,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, conflict, forbidden, notFound } from '../../shared/errors.js';
 import { hasPermission } from '../rbac/rbac.service.js';
-import { asOptionalIso, asOptionalString, assertClientBelongsToOrg, assertExpectedVersion, assertOrgScope, assertValidPeriodKey, assertValidWorkState, canReopenFromDone, canTransitionWorkState, isUuid, reqInt, reqString, } from './work-engine.guards.js';
+import { asOptionalIso, asOptionalString, assertClientBelongsToOrg, assertExpectedVersion, assertOrgScope, assertValidPeriodKey, assertValidWorkState, canPickUpFromUnassignedWorkState, canReopenFromDone, canTransitionWorkState, isUuid, reqInt, reqString, } from './work-engine.guards.js';
 import { abortWorkEngineCommandIdempotency, beginWorkEngineCommandIdempotency, completeWorkEngineCommandIdempotency, } from './work-engine.idempotency.js';
 import { buildWorkEngineFoundationAggregate, buildWorkEngineQueueAggregate, coerceWorkEngineQueueFilters, queueAllowedActions, } from './work-engine.read-models.service.js';
 import { intakeWorkEvent } from './work-engine.event-intake.service.js';
@@ -650,8 +650,8 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
                 requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.pickup);
                 const workItemId = reqString(payload, 'work_item_id');
                 const current = await loadWorkItem(orgId, workItemId);
-                if (current.work_state !== 'new' || current.assigned_user_id !== null) {
-                    throw badRequest('pick_up_unassigned requires work_state=new and no assignee', 'invalid_transition');
+                if (!canPickUpFromUnassignedWorkState(current.work_state) || current.assigned_user_id !== null) {
+                    throw badRequest('pick_up_unassigned requires work_state=new or waiting_human (office queue) and no assignee', 'invalid_transition');
                 }
                 const policy = await resolveWorkTypeWorkflowPolicy(orgId, current.work_type);
                 const role = ctx.membership?.roleCode ?? 'staff';
