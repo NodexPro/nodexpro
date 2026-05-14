@@ -12,7 +12,7 @@
  *     country-specific rules. Period semantics belong to Country Pack /
  *     Owner Legal Control Panel; the emitter must supply period_key.
  *   - This file contains NO financial truth, NO frontend, NO UI logic, NO
- *     DocFlow / client_tasks / obligations coupling. It is pure dispatch
+ *     runtime coupling to DocFlow / client_tasks / obligations. It is pure dispatch
  *     metadata.
  *   - Extending the allowlist requires an explicit backend change here.
  *     UI/frontend cannot extend it.
@@ -33,10 +33,10 @@ type SafeEventMapping = {
   work_type: string;
   initial_state: WorkState;
   /**
-   * Stage 3B: every allowlisted mapping requires period_key. Period-less
-   * workflows are not yet supported by the mapper.
+   * When true, intake rejects mapping until `period_key` is present (emitter-supplied).
+   * Synthetic non-legal keys (e.g. `docflow:thread:<uuid>`) are allowed by format regex.
    */
-  requires_period_key: true;
+  requires_period_key: boolean;
 };
 
 /**
@@ -69,6 +69,12 @@ const SAFE_EVENT_MAPPINGS: Readonly<Record<string, SafeEventMapping>> = {
     module_key: 'annual_report',
     work_type: 'annual_report_document_collection',
     initial_state: 'waiting_client',
+    requires_period_key: true,
+  },
+  'docflow.thread_needs_attention': {
+    module_key: 'docflow',
+    work_type: 'docflow_thread_followup',
+    initial_state: 'waiting_human',
     requires_period_key: true,
   },
 };

@@ -30,6 +30,7 @@ import {
 } from './docflow.guards.js';
 import { resolveOrganizationCountryCode } from './docflow-request-templates.service.js';
 import { createSystemMessageCore } from './docflow-system-message-core.service.js';
+import { emitDocflowThreadNeedsAttention } from './docflow-work-engine-bridge.js';
 import { executeDocflowCommunicationOfficeCommand } from './docflow-communication-rule.service.js';
 import { sendInviteSms } from './docflow-invite-delivery.adapter.js';
 import { createEmailDeliveryAdapter } from './email-delivery.adapter.js';
@@ -970,6 +971,15 @@ export async function executeDocflowOfficeCommand(
           actor_user_id: actorUserId,
         });
         await audit(orgId, actorUserId, 'docflow_thread', threadId, 'thread_created', { thread_type: 'question', actor: 'office_user' });
+        await emitDocflowThreadNeedsAttention({
+          ctx,
+          orgId,
+          clientId,
+          threadId,
+          threadStatus: 'open',
+          threadType: 'question',
+          moduleKey: 'docflow',
+        });
       }
 
       const selectedThreadId = selectedThreadIdInput ?? threadId;
@@ -1131,6 +1141,15 @@ export async function executeDocflowOfficeCommand(
         actor_user_id: actorUserId,
       });
       await audit(orgId, actorUserId, 'docflow_thread', data.id, 'thread_created', { module_key: moduleKey, thread_type: threadType });
+      await emitDocflowThreadNeedsAttention({
+        ctx,
+        orgId,
+        clientId,
+        threadId: String(data.id),
+        threadStatus: 'open',
+        threadType,
+        moduleKey,
+      });
       return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, data.id, ctx, payload) };
     }
     case 'archive_client_thread':
@@ -1196,7 +1215,7 @@ export async function executeDocflowOfficeCommand(
       const nextStatus = command === 'resolve_docflow_thread' ? 'resolved' : reqString(payload, 'next_thread_status');
       const { data: thread, error: tErr } = await supabaseAdmin
         .from('client_message_threads')
-        .select('id, thread_status')
+        .select('id, thread_status, thread_type, module_key')
         .eq('id', threadId)
         .eq('org_id', orgId)
         .eq('client_id', clientId)
@@ -1227,6 +1246,17 @@ export async function executeDocflowOfficeCommand(
         from: thread.thread_status,
         to: nextStatus,
       });
+      if (nextStatus === 'waiting_office' && thread.thread_status !== 'waiting_office') {
+        await emitDocflowThreadNeedsAttention({
+          ctx,
+          orgId,
+          clientId,
+          threadId,
+          threadStatus: nextStatus,
+          threadType: String((thread as { thread_type?: string }).thread_type ?? ''),
+          moduleKey: String((thread as { module_key?: string }).module_key ?? '') || undefined,
+        });
+      }
       return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, threadId, ctx, payload) };
     }
     case 'assign_thread_to_user':
