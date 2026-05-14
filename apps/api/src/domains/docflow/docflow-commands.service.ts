@@ -30,7 +30,7 @@ import {
 } from './docflow.guards.js';
 import { resolveOrganizationCountryCode } from './docflow-request-templates.service.js';
 import { createSystemMessageCore } from './docflow-system-message-core.service.js';
-import { emitDocflowThreadNeedsAttention } from './docflow-work-engine-bridge.js';
+import { emitDocflowThreadNeedsAttention, fetchClientMessageThreadRowForWorkEmit } from './docflow-work-engine-bridge.js';
 import { executeDocflowCommunicationOfficeCommand } from './docflow-communication-rule.service.js';
 import { sendInviteSms } from './docflow-invite-delivery.adapter.js';
 import { createEmailDeliveryAdapter } from './email-delivery.adapter.js';
@@ -666,6 +666,38 @@ async function executeBulkDocflowOfficeAction(
   };
 }
 
+async function emitDocflowThreadNeedsAttentionAfterPortalWrite(args: {
+  orgId: string;
+  clientId: string;
+  threadId: string;
+}): Promise<void> {
+  try {
+    const snap = await fetchClientMessageThreadRowForWorkEmit(args.orgId, args.clientId, args.threadId);
+    if (!snap) return;
+    await emitDocflowThreadNeedsAttention({
+      intakeCaller: { kind: 'docflow_portal_trust', orgId: args.orgId, auditActorUserId: null },
+      clientId: args.clientId,
+      threadId: args.threadId,
+      threadStatus: snap.thread_status,
+      threadType: snap.thread_type,
+      moduleKey: snap.module_key ?? undefined,
+    });
+  } catch (emitErr) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      JSON.stringify({
+        level: 'error',
+        component: 'docflow_commands',
+        event: 'portal_work_engine_emit_preflight_failed',
+        org_id: args.orgId,
+        client_id: args.clientId,
+        thread_id: args.threadId,
+        error: (emitErr as Error)?.message ?? String(emitErr),
+      }),
+    );
+  }
+}
+
 export async function executeDocflowOfficeCommand(
   ctx: RequestContext,
   command: DocflowCommandType,
@@ -972,14 +1004,25 @@ export async function executeDocflowOfficeCommand(
         });
         await audit(orgId, actorUserId, 'docflow_thread', threadId, 'thread_created', { thread_type: 'question', actor: 'office_user' });
         await emitDocflowThreadNeedsAttention({
-          ctx,
-          orgId,
+          intakeCaller: { kind: 'office_request', ctx },
           clientId,
           threadId,
           threadStatus: 'open',
           threadType: 'question',
           moduleKey: 'docflow',
         });
+      } else {
+        const snap = await fetchClientMessageThreadRowForWorkEmit(orgId, clientId, threadId);
+        if (snap) {
+          await emitDocflowThreadNeedsAttention({
+            intakeCaller: { kind: 'office_request', ctx },
+            clientId,
+            threadId,
+            threadStatus: snap.thread_status,
+            threadType: snap.thread_type,
+            moduleKey: snap.module_key ?? undefined,
+          });
+        }
       }
 
       const selectedThreadId = selectedThreadIdInput ?? threadId;
@@ -1142,8 +1185,7 @@ export async function executeDocflowOfficeCommand(
       });
       await audit(orgId, actorUserId, 'docflow_thread', data.id, 'thread_created', { module_key: moduleKey, thread_type: threadType });
       await emitDocflowThreadNeedsAttention({
-        ctx,
-        orgId,
+        intakeCaller: { kind: 'office_request', ctx },
         clientId,
         threadId: String(data.id),
         threadStatus: 'open',
@@ -1248,8 +1290,7 @@ export async function executeDocflowOfficeCommand(
       });
       if (nextStatus === 'waiting_office' && thread.thread_status !== 'waiting_office') {
         await emitDocflowThreadNeedsAttention({
-          ctx,
-          orgId,
+          intakeCaller: { kind: 'office_request', ctx },
           clientId,
           threadId,
           threadStatus: nextStatus,
@@ -2024,6 +2065,12 @@ export async function executeDocflowPortalCommand(
           actor: 'client_portal_user',
         });
 
+        await emitDocflowThreadNeedsAttentionAfterPortalWrite({
+          orgId,
+          clientId,
+          threadId: threadIdStr,
+        });
+
         if (fileAssetIds.length) {
           for (const fileAssetId of fileAssetIds) {
             await assertFileAssetInScope(orgId, fileAssetId);
@@ -2156,6 +2203,7 @@ export async function executeDocflowPortalCommand(
               file_asset_id: fileAssetId,
             });
           }
+          await emitDocflowThreadNeedsAttentionAfterPortalWrite({ orgId, clientId, threadId });
         }
         return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, threadId) };
       }
@@ -2192,6 +2240,7 @@ export async function executeDocflowPortalCommand(
             thread_id: threadId,
             actor: 'client_portal_user',
           });
+          await emitDocflowThreadNeedsAttentionAfterPortalWrite({ orgId, clientId, threadId });
         }
         return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, threadId) };
       }

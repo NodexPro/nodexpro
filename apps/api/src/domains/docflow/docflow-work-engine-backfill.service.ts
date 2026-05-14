@@ -237,8 +237,7 @@ export async function runDocflowWorkEngineBackfill(opts: {
 
   for (const t of threads) {
     const r = await emitDocflowThreadNeedsAttentionWithIntakeResult({
-      ctx,
-      orgId: opts.orgId,
+      intakeCaller: { kind: 'office_request', ctx },
       clientId: t.client_id,
       threadId: t.id,
       threadStatus: t.thread_status,

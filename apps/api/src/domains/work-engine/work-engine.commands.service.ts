@@ -678,7 +678,7 @@ export async function executeWorkEngineCommand(
       // Stage 3A: thin dispatcher only — all intake / dedup / work_item creation
       // logic lives in work-engine.event-intake.service.ts. The route layer must
       // not make any workflow decisions.
-      const meta = await intakeWorkEvent(ctx, payload);
+      const meta = await intakeWorkEvent({ kind: 'office_request', ctx }, payload);
       return {
         ok: true,
         command,

@@ -83,7 +83,7 @@ export async function emitObligationDocumentsMissingIfMapped(
   const sourceEntityId = `${signal.clientId}::${signal.obligationType}::${signal.periodKey}`;
 
   try {
-    await intakeWorkEvent(signal.ctx, {
+    await intakeWorkEvent({ kind: 'office_request', ctx: signal.ctx }, {
       org_id: signal.orgId,
       client_id: signal.clientId,
       source_module: SOURCE_MODULE,

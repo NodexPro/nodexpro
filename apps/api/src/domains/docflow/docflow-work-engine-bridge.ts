@@ -3,7 +3,7 @@
  *
  * Emits `docflow.thread_needs_attention` through `intakeWorkEvent` only (no direct
  * work_items / work_events writes). DocFlow tables remain the communication truth;
- * Work Engine owns projected workflow rows.
+ * Work Engine owns projected workflow memory.
  *
  * STRICT:
  *   - Never throws into DocFlow command handlers (additive only).
@@ -13,7 +13,9 @@
  *   - `event_type` must stay allowlisted in `work-engine.event-mapping.service.ts`.
  */
 
-import type { RequestContext } from '../../shared/context.js';
+import { supabaseAdmin } from '../../db/client.js';
+import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
+import type { IntakeWorkEventCaller } from '../work-engine/work-engine.event-intake.service.js';
 import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service.js';
 import type { IntakeWorkEventMeta } from '../work-engine/work-engine.types.js';
 
@@ -27,9 +29,37 @@ export function docflowThreadWorkPeriodKey(threadId: string): string {
   return `docflow:thread:${threadId}`;
 }
 
+export function docflowThreadNeedsAttentionOrgId(caller: IntakeWorkEventCaller): string {
+  return caller.kind === 'office_request' ? caller.ctx.organizationId! : caller.orgId;
+}
+
+export async function fetchClientMessageThreadRowForWorkEmit(
+  orgId: string,
+  clientId: string,
+  threadId: string,
+): Promise<{ thread_status: string; thread_type: string; module_key: string | null } | null> {
+  const { data, error } = await supabaseAdmin
+    .from('client_message_threads')
+    .select('thread_status, thread_type, module_key')
+    .eq('id', threadId)
+    .eq('org_id', orgId)
+    .eq('client_id', clientId)
+    .neq('thread_status', 'archived')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    thread_status: String((data as { thread_status?: string }).thread_status ?? ''),
+    thread_type: String((data as { thread_type?: string }).thread_type ?? ''),
+    module_key:
+      (data as { module_key?: string | null }).module_key != null
+        ? String((data as { module_key: string }).module_key)
+        : null,
+  };
+}
+
 export type DocflowThreadNeedsAttentionSignal = {
-  ctx: RequestContext;
-  orgId: string;
+  intakeCaller: IntakeWorkEventCaller;
   clientId: string;
   threadId: string;
   threadStatus: string;
@@ -37,10 +67,13 @@ export type DocflowThreadNeedsAttentionSignal = {
   moduleKey?: string | null;
 };
 
-function buildDocflowThreadNeedsAttentionIntakePayload(signal: DocflowThreadNeedsAttentionSignal): Record<string, unknown> {
+function buildDocflowThreadNeedsAttentionIntakePayload(
+  signal: DocflowThreadNeedsAttentionSignal,
+): Record<string, unknown> {
   const periodKey = docflowThreadWorkPeriodKey(signal.threadId);
+  const orgId = docflowThreadNeedsAttentionOrgId(signal.intakeCaller);
   return {
-    org_id: signal.orgId,
+    org_id: orgId,
     client_id: signal.clientId,
     source_module: SOURCE_MODULE,
     source_entity_type: SOURCE_ENTITY_TYPE,
@@ -60,6 +93,31 @@ function buildDocflowThreadNeedsAttentionIntakePayload(signal: DocflowThreadNeed
   };
 }
 
+function bridgeAuditActorUserId(signal: DocflowThreadNeedsAttentionSignal): string | null {
+  return signal.intakeCaller.kind === 'office_request' ? signal.intakeCaller.ctx.user.id : null;
+}
+
+async function auditDocflowBridgeIntakeFailure(signal: DocflowThreadNeedsAttentionSignal, error: string): Promise<void> {
+  const orgId = docflowThreadNeedsAttentionOrgId(signal.intakeCaller);
+  try {
+    await writeAudit({
+      organizationId: orgId,
+      actorUserId: bridgeAuditActorUserId(signal),
+      moduleCode: 'docflow',
+      entityType: 'docflow_thread',
+      entityId: signal.threadId,
+      action: AUDIT_ACTIONS.DOCFLOW_WORK_ENGINE_BRIDGE_INTAKE_FAILED,
+      payload: {
+        client_id: signal.clientId,
+        event_type: EVENT_TYPE,
+        error,
+      },
+    });
+  } catch {
+    // best-effort audit
+  }
+}
+
 /**
  * Same intake envelope as `emitDocflowThreadNeedsAttention`, but returns intake outcome
  * (used by Stage 6 backfill for metrics). Does not log on failure — caller decides.
@@ -69,7 +127,7 @@ export async function emitDocflowThreadNeedsAttentionWithIntakeResult(
 ): Promise<{ ok: true; intake: IntakeWorkEventMeta } | { ok: false; error: string }> {
   const body = buildDocflowThreadNeedsAttentionIntakePayload(signal);
   try {
-    const intake = await intakeWorkEvent(signal.ctx, body);
+    const intake = await intakeWorkEvent(signal.intakeCaller, body);
     return { ok: true, intake };
   } catch (err) {
     return {
@@ -86,11 +144,17 @@ export async function emitDocflowThreadNeedsAttentionWithIntakeResult(
 export async function emitDocflowThreadNeedsAttention(signal: DocflowThreadNeedsAttentionSignal): Promise<void> {
   const r = await emitDocflowThreadNeedsAttentionWithIntakeResult(signal);
   if (r.ok) return;
-  // eslint-disable-next-line no-console
-  console.warn('[docflow → work_engine] intake failed for docflow.thread_needs_attention', {
-    org_id: signal.orgId,
+  const orgId = docflowThreadNeedsAttentionOrgId(signal.intakeCaller);
+  const line = JSON.stringify({
+    level: 'error',
+    component: 'docflow_work_engine_bridge',
+    event: 'docflow.thread_needs_attention.intake_failed',
+    org_id: orgId,
     client_id: signal.clientId,
     thread_id: signal.threadId,
     error: r.error,
   });
+  // eslint-disable-next-line no-console
+  console.warn(line);
+  await auditDocflowBridgeIntakeFailure(signal, r.error);
 }
