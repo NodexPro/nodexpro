@@ -1,0 +1,133 @@
+/* Office DocFlow messenger — portal status + card (aggregate-driven only). */
+
+.nx-df-portal-badge {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 2px;
+  margin: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nx-df-portal-badge__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+
+.nx-df-portal-badge--gray .nx-df-portal-badge__dot {
+  background: #94a3b8;
+}
+
+.nx-df-portal-badge--yellow .nx-df-portal-badge__dot {
+  background: #ca8a04;
+}
+
+.nx-df-portal-badge--blue .nx-df-portal-badge__dot {
+  background: #2563eb;
+}
+
+.nx-df-portal-invite-glyph {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  margin: 0;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.nx-df-portal-invite-glyph:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.nx-df-portal-popover-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.nx-df-portal-popover-card {
+  width: min(420px, 100%);
+  max-height: min(560px, 90dvh);
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+  padding: 16px 18px 14px;
+}
+
+.nx-df-portal-popover-card__title {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.nx-df-portal-popover-card__subtitle {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.nx-df-portal-popover-kv {
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+
+.nx-df-portal-popover-kv__row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.nx-df-portal-popover-kv__row:last-child {
+  border-bottom: none;
+}
+
+.nx-df-portal-popover-kv dt {
+  margin: 0;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.nx-df-portal-popover-kv dd {
+  margin: 0;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.nx-df-portal-popover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.nx-df-portal-popover-actions .nx-btn {
+  min-width: 96px;
+}
+
+.nx-df-portal-popover-actions .nx-btn--danger {
+  border-color: #dc2626;
+  color: #b91c1c;
+  background: #ffffff;
+}

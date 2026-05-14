@@ -7,6 +7,7 @@ import {
   docflowOfficeMessengerAggregate,
   docflowStartOfficeThreadForClient,
 } from '../api/endpoints';
+import '../styles/nx-docflow-messenger-portal.css';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -90,6 +91,7 @@ export function DocflowMessengerPage() {
   const [requestSelectedItemIds, setRequestSelectedItemIds] = useState<string[]>([]);
   const [requestNote, setRequestNote] = useState('');
   const [searchClient, setSearchClient] = useState('');
+  const [portalPopoverClientId, setPortalPopoverClientId] = useState<string | null>(null);
   const inflightAbort = useRef<AbortController | null>(null);
   const searchClientRef = useRef('');
 
@@ -274,6 +276,51 @@ export function DocflowMessengerPage() {
     }
   }
 
+  const portalPopoverSource = useMemo(() => {
+    if (!portalPopoverClientId) return null;
+    const row = clientList.find((c) => String(c.client_id ?? '') === portalPopoverClientId);
+    if (!row || !isRecord(row.portal_card)) return null;
+    return { row, card: row.portal_card as UnknownRecord };
+  }, [portalPopoverClientId, clientList]);
+
+  async function runMessengerPortalCommand(command: string, actionPayload: UnknownRecord = {}): Promise<void> {
+    const cid = String(portalPopoverSource?.row?.client_id ?? '').trim();
+    if (!cid) return;
+    setBusy(command);
+    setError('');
+    try {
+      const search = searchClientRef.current.trim();
+      const threadPayload =
+        cid === effectiveSelectedClientId && selectedThreadId ? { thread_id: selectedThreadId } : {};
+      const out = (await apiJson<CommandResponse>(docflowOfficeCommands, {
+        method: 'POST',
+        body: JSON.stringify({
+          command,
+          payload: {
+            client_id: cid,
+            refresh_target: 'office_messenger',
+            page: 1,
+            page_size: MESSENGER_PAGE_SIZE,
+            ...(search ? { search_client: search } : {}),
+            ...threadPayload,
+            ...actionPayload,
+          },
+        }),
+      })) as CommandResponse;
+      const refreshed = out.refreshed?.aggregate;
+      if (!isRecord(refreshed)) throw new Error('חסר אגרגט מעודכן מהשרת');
+      if (String(out.refreshed?.aggregate_key ?? '') !== 'office_docflow_messenger_aggregate') {
+        throw new Error('השרת לא החזיר office docflow messenger aggregate');
+      }
+      setAggregate(refreshed);
+      setPortalPopoverClientId(null);
+    } catch (e) {
+      setError(userFacingApiMessage(e));
+    } finally {
+      setBusy('');
+    }
+  }
+
   async function openOfficeAttachment(fileAssetId: string): Promise<void> {
     if (!effectiveSelectedClientId) return;
     setError('');
@@ -429,6 +476,34 @@ export function DocflowMessengerPage() {
                   >
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        {isRecord(c.portal_badge) ? (
+                          <button
+                            type="button"
+                            className={`nx-df-portal-badge nx-df-portal-badge--${String((c.portal_badge as UnknownRecord).color ?? 'gray')}`}
+                            title={String((c.portal_badge as UnknownRecord).label ?? '')}
+                            aria-label={String((c.portal_badge as UnknownRecord).label ?? 'סטטוס פורטל')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPortalPopoverClientId(id);
+                            }}
+                          >
+                            <span className="nx-df-portal-badge__dot" />
+                          </button>
+                        ) : null}
+                        {c.show_portal_invite_glyph === true ? (
+                          <button
+                            type="button"
+                            className="nx-df-portal-invite-glyph"
+                            title="הזמנה לפורטל"
+                            aria-label="הזמנה לפורטל"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPortalPopoverClientId(id);
+                            }}
+                          >
+                            ✈
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => void loadMessenger({ clientId: id, threadId: null, searchClient: searchClientRef.current.trim() })}
@@ -836,6 +911,78 @@ export function DocflowMessengerPage() {
                   Send Request
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {portalPopoverSource ? (
+        <div
+          className="nx-df-portal-popover-overlay"
+          role="presentation"
+          onClick={() => setPortalPopoverClientId(null)}
+        >
+          <div
+            className="nx-df-portal-popover-card"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="nx-df-portal-popover-card__title">{String(portalPopoverSource.card.title ?? '')}</h2>
+            {portalPopoverSource.card.subtitle ? (
+              <p className="nx-df-portal-popover-card__subtitle">{String(portalPopoverSource.card.subtitle)}</p>
+            ) : null}
+            <dl className="nx-df-portal-popover-kv">
+              {(Array.isArray(portalPopoverSource.card.fields)
+                ? (portalPopoverSource.card.fields as UnknownRecord[])
+                : []
+              ).map((f, idx) => {
+                const lab = String(f.label ?? '');
+                const val = f.value == null || String(f.value).trim() === '' ? '—' : String(f.value);
+                return (
+                  <div key={`${lab}-${idx}`} className="nx-df-portal-popover-kv__row">
+                    <dt>{lab}</dt>
+                    <dd>{val}</dd>
+                  </div>
+                );
+              })}
+            </dl>
+            <div className="nx-df-portal-popover-actions">
+              {(Array.isArray(portalPopoverSource.card.allowed_actions)
+                ? (portalPopoverSource.card.allowed_actions as UnknownRecord[])
+                : []
+              ).map((a) => {
+                const cmd = String(a.command ?? '').trim();
+                const label = String(a.label ?? cmd);
+                const variant = String(a.variant ?? 'secondary');
+                const enabled = a.enabled !== false;
+                const reason = (a.reason as string | null) ?? null;
+                const extra = isRecord(a.payload) ? (a.payload as UnknownRecord) : {};
+                const primary = variant === 'primary';
+                const danger = variant === 'danger';
+                return (
+                  <button
+                    key={cmd}
+                    type="button"
+                    className={`nx-btn nx-btn-taxes-compact${danger ? ' nx-btn--danger' : ''}`}
+                    style={
+                      primary && !danger
+                        ? { background: '#2563eb', color: '#fff', borderColor: '#2563eb' }
+                        : undefined
+                    }
+                    disabled={!enabled || busy.length > 0}
+                    title={reason ?? ''}
+                    onClick={() => void runMessengerPortalCommand(cmd, extra)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+              <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={() => setPortalPopoverClientId(null)}>
+                סגירה
+              </button>
             </div>
           </div>
         </div>

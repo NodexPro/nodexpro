@@ -681,6 +681,13 @@ async function buildMessengerPortalListExtrasByClientId(
     const hasEmail = typeof r.email === 'string' && r.email.trim() !== '';
     const hasAnyChannel = hasPhone || hasEmail;
     const canInvite = hasAnyChannel && (resolvedStatus === 'not_invited' || resolvedStatus === 'expired' || resolvedStatus === 'revoked');
+    const inviteDisabledReason = canInvite
+      ? null
+      : !hasAnyChannel
+        ? 'חסר טלפון או אימייל בפרטי הלקוח'
+        : resolvedStatus === 'invited' || resolvedStatus === 'joined'
+          ? 'כבר קיימת הזמנה או גישה פעילה לפורטל'
+          : 'לא זמין כעת';
     const delivery = latestInvite?.id ? latestDeliveryByInvitation.get(latestInvite.id) : null;
     const deliveryStatus = delivery?.status ?? 'not_sent';
     const canSendDelivery = resolvedStatus === 'invited' && hasAnyChannel && deliveryStatus !== 'sent';
@@ -709,7 +716,7 @@ async function buildMessengerPortalListExtrasByClientId(
         label: 'שלח הזמנה לפורטל',
         variant: 'primary',
         enabled: canInvite,
-        reason: canInvite ? null : hasAnyChannel ? null : 'חסר טלפון או אימייל בפרטי הלקוח',
+        reason: inviteDisabledReason,
         payload: {},
       },
       {
@@ -1497,6 +1504,8 @@ export async function buildOfficeDocflowInboxAggregate(params: {
     }
   }
 
+  const portalExtrasByClient = await buildMessengerPortalListExtrasByClientId(params.orgId, pageRows);
+
   const selectedClientId =
     String(params.selectedClientId ?? '').trim() ||
     (pageRows.length ? pageRows[0]!.client_id : '');
@@ -1543,6 +1552,7 @@ export async function buildOfficeDocflowInboxAggregate(params: {
     client_list: pageRows.map((r) => {
       const tlist = threadsByClient.get(r.client_id) ?? [];
       const latest = tlist[0] ?? null;
+      const portal = portalExtrasByClient.get(r.client_id);
       return {
         ...r,
         unread_count: unreadByClient.get(r.client_id) ?? 0,
@@ -1557,6 +1567,7 @@ export async function buildOfficeDocflowInboxAggregate(params: {
               updated_at: latest.updated_at,
             }
           : null,
+        ...(portal ?? {}),
       };
     }),
     selection: {

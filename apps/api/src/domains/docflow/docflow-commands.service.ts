@@ -405,6 +405,23 @@ async function refreshInvitesManagement(orgId: string, payload: DocflowCommandPa
   };
 }
 
+/** After portal/invite mutations: honor `refresh_target` (messenger vs invites vs legacy tab). */
+async function refreshInviteRelatedAggregate(
+  orgId: string,
+  clientId: string,
+  ctx: RequestContext,
+  payload: DocflowCommandPayload,
+): Promise<DocflowCommandResponse['refreshed']> {
+  const target = String(payload.refresh_target ?? '').trim();
+  if (target === 'docflow_invites_management') {
+    return refreshInvitesManagement(orgId, payload);
+  }
+  if (target === 'office_messenger') {
+    return refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: asOptionalString(payload.thread_id) }, ctx);
+  }
+  return refreshOffice(orgId, clientId, undefined, ctx, payload);
+}
+
 async function createDocflowInviteForClient(params: {
   orgId: string;
   clientId: string;
@@ -950,7 +967,7 @@ export async function executeDocflowOfficeCommand(
       });
     }
 
-    return { ok: true, command, refreshed: await refreshInvitesManagement(orgId, payload) };
+    return { ok: true, command, refreshed: await refreshInviteRelatedAggregate(orgId, clientId, ctx, payload) };
   }
 
   if (command === 'bulk_docflow_action') {
@@ -1059,10 +1076,7 @@ export async function executeDocflowOfficeCommand(
         expiresInHours: Number(payload.expires_in_hours ?? 72),
       });
 
-      const refreshed =
-        String(payload.refresh_target ?? '') === 'docflow_invites_management'
-          ? await refreshInvitesManagement(orgId, payload)
-          : await refreshOffice(orgId, clientId, undefined, ctx, payload);
+      const refreshed = await refreshInviteRelatedAggregate(orgId, clientId, ctx, payload);
       return {
         ok: true,
         command,
@@ -1095,7 +1109,7 @@ export async function executeDocflowOfficeCommand(
         phoneRaw: phone || null,
         expiresInHours: Number(payload.expires_in_hours ?? 72),
       });
-      return { ok: true, command, refreshed: await refreshInvitesManagement(orgId, payload) };
+      return { ok: true, command, refreshed: await refreshInviteRelatedAggregate(orgId, clientId, ctx, payload) };
     }
     case 'revoke_invite': {
       const now = new Date().toISOString();
@@ -1109,7 +1123,7 @@ export async function executeDocflowOfficeCommand(
       await audit(orgId, actorUserId, 'docflow_invitation', clientId, AUDIT_ACTIONS.DOCFLOW_INVITATION_REVOKED, {
         client_id: clientId,
       });
-      return { ok: true, command, refreshed: await refreshInvitesManagement(orgId, payload) };
+      return { ok: true, command, refreshed: await refreshInviteRelatedAggregate(orgId, clientId, ctx, payload) };
     }
     case 'revoke_client_portal_access': {
       const reason = asOptionalString(payload.reason);
@@ -1145,7 +1159,7 @@ export async function executeDocflowOfficeCommand(
         payload_json: { reason },
       });
       await audit(orgId, actorUserId, 'docflow_portal_access', clientId, 'portal_access_revoked', { reason });
-      return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, undefined, ctx, payload) };
+      return { ok: true, command, refreshed: await refreshInviteRelatedAggregate(orgId, clientId, ctx, payload) };
     }
     case 'create_client_thread': {
       const moduleKey = reqString(payload, 'module_key');
