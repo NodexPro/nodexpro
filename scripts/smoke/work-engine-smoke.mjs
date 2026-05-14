@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 /**
- * Local-only Work Engine smoke test (Stage 3G).
+ * Local-only Work Engine smoke test (Stage 3G + Stage 4B command coverage).
  * NOT product code. Reads secrets from environment only — never logs tokens.
  *
  * Required: API_BASE_URL, AUTH_TOKEN, ORG_ID, CLIENT_ID
- * Optional: TEST_PERIOD_KEY (default payroll:2026-05)
+ * Optional: TEST_PERIOD_KEY (default smoke:2026-05), TEST_ASSIGNEE_USER_ID,
+ *            TEST_REVIEWER_USER_ID, SMOKE_RUN_ID (default: timestamp)
  */
 
 const REQUIRED_ENV = ['API_BASE_URL', 'AUTH_TOKEN', 'ORG_ID', 'CLIENT_ID'];
-const DEFAULT_PERIOD_KEY = 'payroll:2026-05';
+/** Default period_key for create/commands; must match work-engine period_key regex. */
+const DEFAULT_COMMAND_PERIOD_KEY = 'smoke:2026-05';
+/** Intake dedup tests use a stable mapper-friendly period when TEST_PERIOD_KEY unset. */
+const DEFAULT_INTAKE_PERIOD_KEY = 'payroll:2026-05';
 
 function missingEnv() {
-  const missing = REQUIRED_ENV.filter((k) => !String(process.env[k] ?? '').trim());
-  return missing;
+  return REQUIRED_ENV.filter((k) => !String(process.env[k] ?? '').trim());
 }
 
 function baseUrl() {
@@ -47,6 +50,43 @@ async function fetchJson(method, path, body) {
   return { res, json };
 }
 
+function assertQueueRefreshed(json) {
+  return (
+    json &&
+    json.ok === true &&
+    json.refreshed &&
+    json.refreshed.aggregate_key === 'work_engine_queue_aggregate' &&
+    json.refreshed.aggregate &&
+    json.refreshed.aggregate.aggregate_key === 'work_engine_queue_aggregate' &&
+    Array.isArray(json.refreshed.aggregate.rows)
+  );
+}
+
+function queueRefreshPayload(periodKey, clientId, extra = {}) {
+  return {
+    refresh_aggregate: 'work_engine_queue_aggregate',
+    aggregate_filters: {
+      module_key: 'smoke_test',
+      period_key: periodKey,
+      client_id: clientId,
+      limit: 50,
+      offset: 0,
+      ...extra,
+    },
+  };
+}
+
+function findSmokeRow(aggregate, clientId, periodKey) {
+  const rows = aggregate?.rows ?? [];
+  return rows.find(
+    (r) =>
+      r.module_key === 'smoke_test' &&
+      r.work_type === 'smoke_validation' &&
+      r.period_key === periodKey &&
+      r.client_id === clientId,
+  );
+}
+
 async function main() {
   const miss = missingEnv();
   if (miss.length) {
@@ -60,7 +100,10 @@ async function main() {
     console.error('  export ORG_ID="<organization uuid>"');
     console.error('  export CLIENT_ID="<client uuid in that org>"');
     console.error('  # optional:');
-    console.error(`  export TEST_PERIOD_KEY="${DEFAULT_PERIOD_KEY}"`);
+    console.error(`  export TEST_PERIOD_KEY="${DEFAULT_COMMAND_PERIOD_KEY}"`);
+    console.error('  export TEST_ASSIGNEE_USER_ID="<user uuid in org>"');
+    console.error('  export TEST_REVIEWER_USER_ID="<user uuid>"');
+    console.error('  export SMOKE_RUN_ID="my-local-run-1"');
     console.error('');
     console.error('See docs/work-engine-smoke-test.md');
     console.error('');
@@ -69,7 +112,12 @@ async function main() {
 
   const orgId = process.env.ORG_ID.trim();
   const clientId = process.env.CLIENT_ID.trim();
-  const periodKey = String(process.env.TEST_PERIOD_KEY ?? '').trim() || DEFAULT_PERIOD_KEY;
+  const smokeRunId = String(process.env.SMOKE_RUN_ID ?? '').trim() || `run-${Date.now()}`;
+  const commandPeriodKey =
+    String(process.env.TEST_PERIOD_KEY ?? '').trim() || DEFAULT_COMMAND_PERIOD_KEY;
+  const intakePeriodKey =
+    String(process.env.TEST_PERIOD_KEY ?? '').trim() || DEFAULT_INTAKE_PERIOD_KEY;
+  const optionalAssignee = String(process.env.TEST_ASSIGNEE_USER_ID ?? '').trim() || null;
 
   const results = [];
 
@@ -124,7 +172,7 @@ async function main() {
     source_entity_type: 'smoke_test_entity',
     source_entity_id: 'smoke-test-client-period',
     event_type: 'payroll.documents_missing',
-    period_key: periodKey,
+    period_key: intakePeriodKey,
     occurred_at: new Date().toISOString(),
     schema_version: 1,
     emitted_by_type: 'system',
@@ -171,7 +219,7 @@ async function main() {
     });
   }
 
-  // T6 — queue again
+  // T6 — queue again (after intake)
   {
     const { res, json } = await fetchJson('GET', '/work-engine/aggregates/queue');
     const ok =
@@ -187,12 +235,209 @@ async function main() {
     });
   }
 
+  const sourceEntityId = `smoke-stage4b-${smokeRunId}`;
+  const createPayload = {
+    ...queueRefreshPayload(commandPeriodKey, clientId),
+    client_id: clientId,
+    module_key: 'smoke_test',
+    work_type: 'smoke_validation',
+    period_key: commandPeriodKey,
+    source_module: 'smoke_test',
+    source_entity_type: 'smoke_validation_entity',
+    source_entity_id: sourceEntityId,
+    creation_source_type: 'command',
+  };
+
+  // T7 — create_work_item + queue refresh
+  let workItemId = null;
+  let workVersion = 0;
+  {
+    const body = { command: 'create_work_item', payload: createPayload };
+    const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+    const ok = res.status === 200 && assertQueueRefreshed(json);
+    const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey) : null;
+    if (ok && row) {
+      workItemId = row.work_item_id;
+      workVersion = row.version;
+    }
+    results.push({
+      name: 'POST /work-engine/commands create_work_item (+ queue refresh)',
+      ok: ok && !!workItemId,
+      status: res.status,
+      detail: ok && workItemId ? `work_item_id=${workItemId} version=${workVersion}` : JSON.stringify(json).slice(0, 280),
+    });
+  }
+
+  if (!workItemId) {
+    results.push({
+      name: 'SKIP downstream command tests (create_work_item did not return smoke row)',
+      ok: false,
+      status: 0,
+      detail: 'Fix create_work_item / client / period and re-run',
+    });
+  } else {
+    // T8 — assign_work_item + queue refresh
+    {
+      const assignTo = optionalAssignee;
+      const body = {
+        command: 'assign_work_item',
+        payload: {
+          ...queueRefreshPayload(commandPeriodKey, clientId),
+          work_item_id: workItemId,
+          expected_version: workVersion,
+          assigned_user_id: assignTo,
+        },
+      };
+      const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+      const ok = res.status === 200 && assertQueueRefreshed(json);
+      const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey) : null;
+      const vOk = ok && row && row.work_item_id === workItemId && row.version === workVersion + 1;
+      if (vOk) workVersion = row.version;
+      results.push({
+        name: `POST assign_work_item (${assignTo ? 'TEST_ASSIGNEE_USER_ID' : 'unassign null'}) + queue refresh`,
+        ok: vOk,
+        status: res.status,
+        detail: vOk
+          ? `version=${workVersion} state=${row.work_state}`
+          : JSON.stringify(json).slice(0, 280),
+      });
+    }
+
+    // T9 — change_work_state + queue refresh
+    {
+      const body = {
+        command: 'change_work_state',
+        payload: {
+          ...queueRefreshPayload(commandPeriodKey, clientId),
+          work_item_id: workItemId,
+          expected_version: workVersion,
+          to_state: 'waiting_client',
+          reason_text: 'smoke change_state',
+        },
+      };
+      const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+      const ok = res.status === 200 && assertQueueRefreshed(json);
+      const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey) : null;
+      const vOk = ok && row && row.work_item_id === workItemId && row.work_state === 'waiting_client';
+      if (vOk) workVersion = row.version;
+      results.push({
+        name: 'POST change_work_state → waiting_client + queue refresh',
+        ok: vOk,
+        status: res.status,
+        detail: vOk ? `version=${workVersion}` : JSON.stringify(json).slice(0, 280),
+      });
+    }
+
+    // T9b — illegal transition (should fail, no ok)
+    {
+      const body = {
+        command: 'change_work_state',
+        payload: {
+          ...queueRefreshPayload(commandPeriodKey, clientId),
+          work_item_id: workItemId,
+          expected_version: workVersion,
+          to_state: 'approved',
+          reason_text: 'smoke illegal',
+        },
+      };
+      const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+      const ok =
+        res.status === 400 &&
+        json &&
+        json.code === 'invalid_transition' &&
+        String(json.message ?? '').toLowerCase().includes('invalid transition');
+      results.push({
+        name: 'POST change_work_state illegal transition (expect 400)',
+        ok,
+        status: res.status,
+        detail: ok ? 'blocked as expected' : JSON.stringify(json).slice(0, 240),
+      });
+    }
+
+    // T10 — set_work_deadline + queue refresh
+    {
+      const dueIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const body = {
+        command: 'set_work_deadline',
+        payload: {
+          ...queueRefreshPayload(commandPeriodKey, clientId),
+          work_item_id: workItemId,
+          expected_version: workVersion,
+          due_at: dueIso,
+        },
+      };
+      const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+      const ok = res.status === 200 && assertQueueRefreshed(json);
+      const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey) : null;
+      const vOk = ok && row && row.work_item_id === workItemId && row.due_at != null;
+      if (vOk) workVersion = row.version;
+      results.push({
+        name: 'POST set_work_deadline + queue refresh',
+        ok: vOk,
+        status: res.status,
+        detail: vOk ? `version=${workVersion}` : JSON.stringify(json).slice(0, 280),
+      });
+    }
+
+    // T11 — apply_work_override (assignment) + queue refresh
+    {
+      const body = {
+        command: 'apply_work_override',
+        payload: {
+          ...queueRefreshPayload(commandPeriodKey, clientId),
+          work_item_id: workItemId,
+          expected_version: workVersion,
+          override_kind: 'assignment',
+          reason_text: null,
+        },
+      };
+      const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+      const ok = res.status === 200 && assertQueueRefreshed(json);
+      const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey) : null;
+      const vOk = ok && row && row.work_item_id === workItemId && row.override_active === true;
+      if (vOk) workVersion = row.version;
+      results.push({
+        name: 'POST apply_work_override (assignment) + queue refresh',
+        ok: vOk,
+        status: res.status,
+        detail: vOk ? `version=${workVersion} override_active=true` : JSON.stringify(json).slice(0, 280),
+      });
+    }
+
+    // T12 — expected_version conflict (stale)
+    {
+      const body = {
+        command: 'assign_work_item',
+        payload: {
+          ...queueRefreshPayload(commandPeriodKey, clientId),
+          work_item_id: workItemId,
+          expected_version: 0,
+          assigned_user_id: null,
+        },
+      };
+      const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+      const ok =
+        res.status === 409 &&
+        json &&
+        json.ok !== true &&
+        (json.code === 'version_conflict' || String(json.message ?? '').includes('Version conflict'));
+      results.push({
+        name: 'POST assign_work_item stale expected_version (expect 409 version_conflict)',
+        ok,
+        status: res.status,
+        detail: ok ? `code=${json.code}` : JSON.stringify(json).slice(0, 240),
+      });
+    }
+  }
+
   console.log('');
-  console.log('Work Engine smoke test');
-  console.log(`API_BASE_URL: ${baseUrl()}`);
-  console.log(`ORG_ID:       ${orgId}`);
-  console.log(`CLIENT_ID:    ${clientId}`);
-  console.log(`period_key:   ${periodKey}`);
+  console.log('Work Engine smoke test (Stage 3G + 4B)');
+  console.log(`API_BASE_URL:     ${baseUrl()}`);
+  console.log(`ORG_ID:          ${orgId}`);
+  console.log(`CLIENT_ID:       ${clientId}`);
+  console.log(`SMOKE_RUN_ID:     ${smokeRunId}`);
+  console.log(`command period:  ${commandPeriodKey}`);
+  console.log(`intake period:   ${intakePeriodKey}`);
   console.log('(AUTH_TOKEN is set — value not printed)');
   console.log('');
 
