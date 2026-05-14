@@ -150,15 +150,19 @@
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
+  max-width: 100%;
 }
 
 .nx-we-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
 }
 
+.nx-we-th,
 .nx-we-table thead th {
   text-align: left;
   background: #f8fafc;
@@ -167,16 +171,40 @@
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid #e2e8f0;
   white-space: nowrap;
 }
 
+.nx-we-td,
 .nx-we-table tbody td {
-  padding: 10px 12px;
+  padding: 10px 10px;
   border-bottom: 1px solid #f1f5f9;
-  vertical-align: top;
+  vertical-align: middle;
   color: #0f172a;
+}
+
+.nx-we-th--data,
+.nx-we-td--data {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-we-th--actions,
+.nx-we-td--actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: end;
+}
+
+.nx-we-cell-ellip {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .nx-we-table tbody tr:last-child td {
@@ -254,36 +282,51 @@
   line-height: 1.35;
 }
 
+.nx-we-btn--secondary {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.nx-we-btn--secondary:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
 .nx-we-shell-actions {
-  display: flex;
+  display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
 }
 
 .nx-we-shell-actions .nx-we-btn {
-  padding: 8px 16px;
-  font-size: 14px;
+  padding: 8px 14px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
   border-radius: 6px;
+  flex: 0 0 auto;
 }
 
-.nx-we-overflow {
+.nx-we-overflow-anchor {
   position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
 }
 
-.nx-we-overflow__summary {
-  list-style: none;
+.nx-we-overflow-trigger {
+  appearance: none;
   cursor: pointer;
   user-select: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  height: 36px;
-  padding: 0 10px;
-  font-size: 20px;
+  min-width: 36px;
+  height: 34px;
+  padding: 0 8px;
+  font-size: 18px;
   font-weight: 700;
   line-height: 1;
   border: 1px solid #cbd5e1;
@@ -292,24 +335,22 @@
   color: #0f172a;
 }
 
-.nx-we-overflow__summary::-webkit-details-marker {
-  display: none;
+.nx-we-overflow-trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
-.nx-we-overflow__menu {
-  position: absolute;
-  inset-inline-end: 0;
-  top: calc(100% + 4px);
+.nx-we-overflow-popover {
   min-width: 200px;
+  max-width: min(320px, calc(100vw - 16px));
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
   padding: 6px;
-  z-index: 20;
 }
 
-.nx-we-overflow__item {
+.nx-we-overflow-popover__item {
   display: block;
   width: 100%;
   text-align: start;
@@ -323,8 +364,13 @@
   color: #0f172a;
 }
 
-.nx-we-overflow__item:hover:not(:disabled) {
+.nx-we-overflow-popover__item:hover:not(:disabled) {
   background: #f1f5f9;
+}
+
+.nx-we-overflow-popover__item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .nx-we-drawer-overlay {
@@ -376,9 +422,12 @@
   border-top: 1px solid #e2e8f0;
   padding: 12px 18px 16px;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  flex-wrap: nowrap;
   gap: 8px;
-  justify-content: center;
+  align-items: stretch;
+  max-height: min(360px, 42vh);
+  overflow-y: auto;
 }
 
 .nx-we-drawer__footer .nx-we-btn {

@@ -26,11 +26,15 @@ export function TemplateLayout({
 }) {
   const location = useLocation();
   const isClientOperationsModule = location.pathname.startsWith('/m/client-operations');
-  const pageMaxWidth = isClientOperationsModule ? 1400 : 1100;
+  const isWorkEngineSection = location.pathname.startsWith('/work-engine/');
+  const pageMaxWidth = isClientOperationsModule || isWorkEngineSection ? 1600 : 1100;
 
   return (
     <div className="t1-appShell" style={{ display: 'flex', minHeight: '100vh' }}>
-      <AppSidebar items={sidebarItems} mode={isClientOperationsModule ? 'collapsedHover' : 'default'} />
+      <AppSidebar
+        items={sidebarItems}
+        mode={isClientOperationsModule || isWorkEngineSection ? 'collapsedHover' : 'default'}
+      />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <AppHeader
           organizations={organizations}

@@ -27,6 +27,8 @@ export type WorkEngineQueueFiltersInput = {
   offset?: number | null;
 };
 
+export type QueueActionDisplaySlot = 'row_primary' | 'row_secondary' | 'row_overflow';
+
 export type QueueAllowedActionCommand =
   | 'assign'
   | 'change_state'
@@ -40,6 +42,7 @@ export type QueueAllowedAction = {
   label: string;
   enabled: boolean;
   reason: string | null;
+  display_slot: QueueActionDisplaySlot;
 };
 
 export type QueueOpenDetailAction = {
@@ -47,6 +50,7 @@ export type QueueOpenDetailAction = {
   label: string;
   enabled: boolean;
   reason: string | null;
+  display_slot: QueueActionDisplaySlot;
 };
 
 export type QueueRowQueueShell = {
@@ -104,6 +108,7 @@ export type QueueOwnershipCommand = {
   label: string;
   enabled: boolean;
   reason: string | null;
+  display_slot: QueueActionDisplaySlot;
 };
 
 export type QueueReviewCommand = {
@@ -111,6 +116,7 @@ export type QueueReviewCommand = {
   label: string;
   enabled: boolean;
   reason: string | null;
+  display_slot: QueueActionDisplaySlot;
 };
 
 export type WorkEngineQueueRow = {

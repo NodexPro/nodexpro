@@ -48,12 +48,76 @@ export type WorkEngineQueueViewerContext = {
   roleCode: string;
 };
 
+/** Queue row chrome only — presentation metadata for inbox table (not command semantics). */
+export type QueueActionDisplaySlot = 'row_primary' | 'row_secondary' | 'row_overflow';
+
+/**
+ * First matching enabled command becomes `row_secondary`; remainder stay overflow.
+ * Product policy: prefer pickup, then review actions, then execution lock.
+ */
+const QUEUE_ROW_SECONDARY_PRIORITY: ReadonlyArray<
+  | { kind: 'ownership'; command: 'pick_up_unassigned' | 'claim_work_item' | 'release_claim' }
+  | { kind: 'review'; command: 'request_review' | 'approve_work_item' | 'reject_work_item' }
+> = [
+  { kind: 'ownership', command: 'pick_up_unassigned' },
+  { kind: 'review', command: 'request_review' },
+  { kind: 'review', command: 'approve_work_item' },
+  { kind: 'review', command: 'reject_work_item' },
+  { kind: 'ownership', command: 'claim_work_item' },
+  { kind: 'ownership', command: 'release_claim' },
+];
+
 export type QueueOwnershipCommand = {
   command: 'pick_up_unassigned' | 'claim_work_item' | 'release_claim';
   label: string;
   enabled: boolean;
   reason: string | null;
+  display_slot: QueueActionDisplaySlot;
 };
+
+/** Stage 10 Phase 2 — review commands strip (same pattern as ownership_commands). */
+export type QueueReviewCommandKind = 'request_review' | 'approve_work_item' | 'reject_work_item';
+
+export type QueueReviewCommand = {
+  command: QueueReviewCommandKind;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+  display_slot: QueueActionDisplaySlot;
+};
+
+type QueueOwnershipCommandDraft = Omit<QueueOwnershipCommand, 'display_slot'>;
+type QueueReviewCommandDraft = Omit<QueueReviewCommand, 'display_slot'>;
+
+function applyOwnershipReviewDisplaySlots(
+  ownership: QueueOwnershipCommandDraft[],
+  review: QueueReviewCommandDraft[],
+): { ownership_commands: QueueOwnershipCommand[]; review_commands: QueueReviewCommand[] } {
+  const ownership_commands: QueueOwnershipCommand[] = ownership.map((c) => ({
+    ...c,
+    display_slot: 'row_overflow',
+  }));
+  const review_commands: QueueReviewCommand[] = review.map((c) => ({
+    ...c,
+    display_slot: 'row_overflow',
+  }));
+  for (const spec of QUEUE_ROW_SECONDARY_PRIORITY) {
+    if (spec.kind === 'ownership') {
+      const hit = ownership_commands.find((c) => c.command === spec.command && c.enabled);
+      if (hit) {
+        hit.display_slot = 'row_secondary';
+        return { ownership_commands, review_commands };
+      }
+    } else {
+      const hit = review_commands.find((c) => c.command === spec.command && c.enabled);
+      if (hit) {
+        hit.display_slot = 'row_secondary';
+        return { ownership_commands, review_commands };
+      }
+    }
+  }
+  return { ownership_commands, review_commands };
+}
 
 function computeOwnershipCommands(args: {
   row: Pick<
@@ -62,7 +126,7 @@ function computeOwnershipCommands(args: {
   >;
   viewer: WorkEngineQueueViewerContext;
   policy: WorkTypeWorkflowPolicy;
-}): QueueOwnershipCommand[] {
+}): QueueOwnershipCommandDraft[] {
   const { row, viewer, policy } = args;
   const perms = [...viewer.permissions];
   const canPickupPerm =
@@ -76,7 +140,7 @@ function computeOwnershipCommands(args: {
     hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin);
 
   const canPickUpPolicy = canStaffPickUpUnassigned(policy, viewer.roleCode);
-  const out: QueueOwnershipCommand[] = [];
+  const out: QueueOwnershipCommandDraft[] = [];
 
   const pickOk =
     canPickUpFromUnassignedWorkState(row.work_state) &&
@@ -106,16 +170,16 @@ function computeOwnershipCommands(args: {
     canClaimState && !row.claimed_by_user_id && isAssignee && canClaimPerm;
   out.push({
     command: 'claim_work_item',
-    label: 'Claim',
+    label: 'Lock',
     enabled: claimOk,
     reason: claimOk
       ? null
       : row.claimed_by_user_id
-        ? 'Already claimed'
+        ? 'Already locked'
         : !canClaimState
-          ? 'Claim is only allowed in assigned state'
+          ? 'Lock is only allowed in assigned state'
           : !isAssignee
-            ? 'Only the assignee can claim'
+            ? 'Only the assignee can lock'
             : !canClaimPerm
               ? 'Missing work_engine.claim permission'
               : null,
@@ -127,12 +191,12 @@ function computeOwnershipCommands(args: {
     held && ((isClaimHolder && canClaimPerm) || (!isClaimHolder && canForceClaim));
   out.push({
     command: 'release_claim',
-    label: 'Release claim',
+    label: 'Unlock',
     enabled: releaseOk,
     reason: releaseOk
       ? null
       : !held
-        ? 'Nothing to release'
+        ? 'Nothing to unlock'
         : isClaimHolder
           ? 'Missing work_engine.claim permission'
           : 'Missing work_engine.claim.force permission',
@@ -140,16 +204,6 @@ function computeOwnershipCommands(args: {
 
   return out;
 }
-
-/** Stage 10 Phase 2 — review commands strip (same pattern as ownership_commands). */
-export type QueueReviewCommandKind = 'request_review' | 'approve_work_item' | 'reject_work_item';
-
-export type QueueReviewCommand = {
-  command: QueueReviewCommandKind;
-  label: string;
-  enabled: boolean;
-  reason: string | null;
-};
 
 function reviewFlowStatusLabel(
   row: Pick<WorkItemRow, 'work_state' | 'assigned_user_id' | 'reviewer_user_id'>,
@@ -170,7 +224,7 @@ function computeReviewCommands(args: {
   row: Pick<WorkItemRow, 'work_state' | 'assigned_user_id' | 'reviewer_user_id' | 'work_type'>;
   viewer: WorkEngineQueueViewerContext;
   policy: WorkTypeWorkflowPolicy;
-}): QueueReviewCommand[] {
+}): QueueReviewCommandDraft[] {
   const { row, viewer, policy } = args;
   const perms = [...viewer.permissions];
   const adminBypass = hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin);
@@ -225,7 +279,7 @@ function computeReviewCommands(args: {
     mayCompleteReview &&
     noSelfReview;
 
-  const out: QueueReviewCommand[] = [];
+  const out: QueueReviewCommandDraft[] = [];
   out.push({
     command: 'request_review',
     label: 'Request review',
@@ -657,6 +711,7 @@ export type QueueAllowedAction = {
   label: string;
   enabled: boolean;
   reason: string | null;
+  display_slot: QueueActionDisplaySlot;
 };
 
 /**
@@ -798,6 +853,7 @@ export function queueAllowedActions(row: QueueActionRowContext): QueueAllowedAct
       command: 'assign',
       label: 'Assign',
       enabled: !archived && !done && state !== 'review_pending' && unassigned,
+      display_slot: 'row_overflow',
       reason: archived
         ? 'Work item is archived'
         : done
@@ -812,12 +868,14 @@ export function queueAllowedActions(row: QueueActionRowContext): QueueAllowedAct
       command: 'change_state',
       label: 'Change state',
       enabled: !archived,
+      display_slot: 'row_overflow',
       reason: archived ? 'Work item is archived' : null,
     },
     {
       command: 'set_deadline',
       label: 'Set deadline',
       enabled: !archived && !done,
+      display_slot: 'row_overflow',
       reason: archived
         ? 'Work item is archived'
         : done
@@ -828,12 +886,14 @@ export function queueAllowedActions(row: QueueActionRowContext): QueueAllowedAct
       command: 'apply_override',
       label: 'Override',
       enabled: !archived,
+      display_slot: 'row_overflow',
       reason: archived ? 'Work item is archived' : null,
     },
     {
       command: 'archive',
       label: 'Archive',
       enabled: done,
+      display_slot: 'row_overflow',
       reason: done
         ? null
         : archived
@@ -949,7 +1009,7 @@ const QUEUE_COLUMN_DEFS: Record<
   review_status: { label: 'Review', empty_display: 'dash' },
   due_at: { label: 'Due', empty_display: 'blank' },
   sla: { label: 'SLA', empty_display: 'blank' },
-  claimed: { label: 'Claim', empty_display: 'blank' },
+  claimed: { label: 'Lock', empty_display: 'blank' },
 };
 
 function queueColumnHasAnyValue(
@@ -1027,7 +1087,7 @@ function buildQueueRowDetailPanel(params: {
     { label: 'Assignee', value: params.assigned_user_name },
     { label: 'Reviewer', value: params.reviewer_user_name },
     {
-      label: 'Claim',
+      label: 'Lock',
       value:
         params.claimed_by_user_name && params.claimed_at
           ? `${params.claimed_by_user_name} · ${formatQueueUtcTimestamp(params.claimed_at)}`
@@ -1501,7 +1561,7 @@ export async function buildWorkEngineQueueAggregate(params: {
       allow_staff_pickup_unassigned: true,
       review_gate: 'allowed',
     };
-    const ownership_commands =
+    const ownershipDraft =
       viewer != null
         ? computeOwnershipCommands({
             row: r,
@@ -1509,8 +1569,12 @@ export async function buildWorkEngineQueueAggregate(params: {
             policy: policyRow,
           })
         : [];
-    const review_commands =
+    const reviewDraft =
       viewer != null ? computeReviewCommands({ row: r, viewer, policy: policyRow }) : [];
+    const { ownership_commands, review_commands } = applyOwnershipReviewDisplaySlots(
+      ownershipDraft,
+      reviewDraft,
+    );
     return {
       work_item_id: r.id,
       client_id: r.client_id,
@@ -1552,6 +1616,7 @@ export async function buildWorkEngineQueueAggregate(params: {
           label: 'Open',
           enabled: true,
           reason: null,
+          display_slot: 'row_primary',
         },
         overflow_menu_button_label: '⋯',
       },

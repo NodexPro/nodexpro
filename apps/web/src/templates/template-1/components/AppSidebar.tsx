@@ -5,6 +5,11 @@ import logoSrc from '../assets/nodexpro-logo.png';
 
 type SidebarMode = 'default' | 'collapsedHover';
 
+function iconForNavItem(to: string, label: string): string {
+  if (to.includes('/work-engine')) return '📋';
+  return iconForLabel(label);
+}
+
 function iconForLabel(label: string): string {
   const l = label.toLowerCase();
   if (l.includes('docflow') || l.includes('chat') || l.includes('צ׳אט') || l.includes('צאט')) return '💬';
@@ -26,7 +31,7 @@ export function AppSidebar({ items, mode = 'default' }: { items: Template1Sideba
   const width = mode === 'collapsedHover' ? (showExpanded ? 240 : 64) : 240;
 
   const itemsWithIcons = useMemo(() => {
-    return items.map((i) => ({ ...i, icon: iconForLabel(i.label) }));
+    return items.map((i) => ({ ...i, icon: iconForNavItem(i.to, i.label) }));
   }, [items]);
 
   return (

@@ -24,6 +24,45 @@ const PENDING_MAPPING_OUTCOMES = [
     MAPPING_REASON.UNKNOWN_EVENT_MAPPING,
     MAPPING_REASON.MISSING_PERIOD_KEY,
 ];
+/**
+ * First matching enabled command becomes `row_secondary`; remainder stay overflow.
+ * Product policy: prefer pickup, then review actions, then execution lock.
+ */
+const QUEUE_ROW_SECONDARY_PRIORITY = [
+    { kind: 'ownership', command: 'pick_up_unassigned' },
+    { kind: 'review', command: 'request_review' },
+    { kind: 'review', command: 'approve_work_item' },
+    { kind: 'review', command: 'reject_work_item' },
+    { kind: 'ownership', command: 'claim_work_item' },
+    { kind: 'ownership', command: 'release_claim' },
+];
+function applyOwnershipReviewDisplaySlots(ownership, review) {
+    const ownership_commands = ownership.map((c) => ({
+        ...c,
+        display_slot: 'row_overflow',
+    }));
+    const review_commands = review.map((c) => ({
+        ...c,
+        display_slot: 'row_overflow',
+    }));
+    for (const spec of QUEUE_ROW_SECONDARY_PRIORITY) {
+        if (spec.kind === 'ownership') {
+            const hit = ownership_commands.find((c) => c.command === spec.command && c.enabled);
+            if (hit) {
+                hit.display_slot = 'row_secondary';
+                return { ownership_commands, review_commands };
+            }
+        }
+        else {
+            const hit = review_commands.find((c) => c.command === spec.command && c.enabled);
+            if (hit) {
+                hit.display_slot = 'row_secondary';
+                return { ownership_commands, review_commands };
+            }
+        }
+    }
+    return { ownership_commands, review_commands };
+}
 function computeOwnershipCommands(args) {
     const { row, viewer, policy } = args;
     const perms = [...viewer.permissions];
@@ -60,16 +99,16 @@ function computeOwnershipCommands(args) {
     const claimOk = canClaimState && !row.claimed_by_user_id && isAssignee && canClaimPerm;
     out.push({
         command: 'claim_work_item',
-        label: 'Claim',
+        label: 'Lock',
         enabled: claimOk,
         reason: claimOk
             ? null
             : row.claimed_by_user_id
-                ? 'Already claimed'
+                ? 'Already locked'
                 : !canClaimState
-                    ? 'Claim is only allowed in assigned state'
+                    ? 'Lock is only allowed in assigned state'
                     : !isAssignee
-                        ? 'Only the assignee can claim'
+                        ? 'Only the assignee can lock'
                         : !canClaimPerm
                             ? 'Missing work_engine.claim permission'
                             : null,
@@ -79,12 +118,12 @@ function computeOwnershipCommands(args) {
     const releaseOk = held && ((isClaimHolder && canClaimPerm) || (!isClaimHolder && canForceClaim));
     out.push({
         command: 'release_claim',
-        label: 'Release claim',
+        label: 'Unlock',
         enabled: releaseOk,
         reason: releaseOk
             ? null
             : !held
-                ? 'Nothing to release'
+                ? 'Nothing to unlock'
                 : isClaimHolder
                     ? 'Missing work_engine.claim permission'
                     : 'Missing work_engine.claim.force permission',
@@ -582,6 +621,7 @@ export function queueAllowedActions(row) {
             command: 'assign',
             label: 'Assign',
             enabled: !archived && !done && state !== 'review_pending' && unassigned,
+            display_slot: 'row_overflow',
             reason: archived
                 ? 'Work item is archived'
                 : done
@@ -596,12 +636,14 @@ export function queueAllowedActions(row) {
             command: 'change_state',
             label: 'Change state',
             enabled: !archived,
+            display_slot: 'row_overflow',
             reason: archived ? 'Work item is archived' : null,
         },
         {
             command: 'set_deadline',
             label: 'Set deadline',
             enabled: !archived && !done,
+            display_slot: 'row_overflow',
             reason: archived
                 ? 'Work item is archived'
                 : done
@@ -612,12 +654,14 @@ export function queueAllowedActions(row) {
             command: 'apply_override',
             label: 'Override',
             enabled: !archived,
+            display_slot: 'row_overflow',
             reason: archived ? 'Work item is archived' : null,
         },
         {
             command: 'archive',
             label: 'Archive',
             enabled: done,
+            display_slot: 'row_overflow',
             reason: done
                 ? null
                 : archived
@@ -683,7 +727,7 @@ const QUEUE_COLUMN_DEFS = {
     review_status: { label: 'Review', empty_display: 'dash' },
     due_at: { label: 'Due', empty_display: 'blank' },
     sla: { label: 'SLA', empty_display: 'blank' },
-    claimed: { label: 'Claim', empty_display: 'blank' },
+    claimed: { label: 'Lock', empty_display: 'blank' },
 };
 function queueColumnHasAnyValue(rows, key) {
     return rows.some((r) => {
@@ -728,7 +772,7 @@ function buildQueueRowDetailPanel(params) {
         { label: 'Assignee', value: params.assigned_user_name },
         { label: 'Reviewer', value: params.reviewer_user_name },
         {
-            label: 'Claim',
+            label: 'Lock',
             value: params.claimed_by_user_name && params.claimed_at
                 ? `${params.claimed_by_user_name} · ${formatQueueUtcTimestamp(params.claimed_at)}`
                 : null,
@@ -1126,14 +1170,15 @@ export async function buildWorkEngineQueueAggregate(params) {
             allow_staff_pickup_unassigned: true,
             review_gate: 'allowed',
         };
-        const ownership_commands = viewer != null
+        const ownershipDraft = viewer != null
             ? computeOwnershipCommands({
                 row: r,
                 viewer,
                 policy: policyRow,
             })
             : [];
-        const review_commands = viewer != null ? computeReviewCommands({ row: r, viewer, policy: policyRow }) : [];
+        const reviewDraft = viewer != null ? computeReviewCommands({ row: r, viewer, policy: policyRow }) : [];
+        const { ownership_commands, review_commands } = applyOwnershipReviewDisplaySlots(ownershipDraft, reviewDraft);
         return {
             work_item_id: r.id,
             client_id: r.client_id,
@@ -1175,6 +1220,7 @@ export async function buildWorkEngineQueueAggregate(params) {
                     label: 'Open',
                     enabled: true,
                     reason: null,
+                    display_slot: 'row_primary',
                 },
                 overflow_menu_button_label: '⋯',
             },
