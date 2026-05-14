@@ -4,13 +4,23 @@
 
 import { supabaseAdmin } from '../../db/client.js';
 
+export type ReviewGate = 'none' | 'required' | 'allowed';
+
 export type WorkTypeWorkflowPolicy = {
   allow_staff_pickup_unassigned: boolean;
+  review_gate: ReviewGate;
 };
 
 const DEFAULT_POLICY: WorkTypeWorkflowPolicy = {
   allow_staff_pickup_unassigned: true,
+  review_gate: 'allowed',
 };
+
+function coerceReviewGate(raw: unknown): ReviewGate {
+  const s = String(raw ?? '').trim().toLowerCase();
+  if (s === 'none' || s === 'required' || s === 'allowed') return s;
+  return 'allowed';
+}
 
 export async function resolveWorkTypeWorkflowPolicy(
   orgId: string,
@@ -32,14 +42,19 @@ export async function resolveWorkTypePoliciesBatch(
 
   const { data, error } = await supabaseAdmin
     .from('work_engine_work_type_policies')
-    .select('work_type, allow_staff_pickup_unassigned')
+    .select('work_type, allow_staff_pickup_unassigned, review_gate')
     .eq('org_id', orgId)
     .in('work_type', uniq);
   if (error) throw error;
   for (const row of data ?? []) {
-    const r = row as { work_type: string; allow_staff_pickup_unassigned: boolean | null };
+    const r = row as {
+      work_type: string;
+      allow_staff_pickup_unassigned: boolean | null;
+      review_gate?: string | null;
+    };
     map.set(r.work_type, {
       allow_staff_pickup_unassigned: r.allow_staff_pickup_unassigned !== false,
+      review_gate: coerceReviewGate(r.review_gate),
     });
   }
   return map;

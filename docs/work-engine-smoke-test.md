@@ -76,7 +76,7 @@ Each mutating command sends `refresh_aggregate: work_engine_queue_aggregate` and
 | T9b | `change_work_state` | **Illegal** transition (`waiting_client` → `approved`); expects HTTP **400** and `code === invalid_transition`. |
 | T10 | `set_work_deadline` | Sets `due_at` ~7 days ahead; version increments; queue refreshed. |
 | T11 | `apply_work_override` | `override_kind: assignment` (no `reason_text` required); `override_active === true`; version increments; queue refreshed. |
-| T12 | `assign_work_item` | Sends **stale** `expected_version: 0`; expects HTTP **409** and `code === version_conflict`. |
+| T12 | `set_work_deadline` | Sends **stale** `expected_version: 0`; expects HTTP **409** and `code === WORK_ITEM_VERSION_CONFLICT` (or legacy `version_conflict`). |
 
 If **T7** does not find the new row (e.g. wrong `CLIENT_ID` / DB error), downstream command tests are skipped and reported as **FAIL**.
 

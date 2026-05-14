@@ -277,6 +277,27 @@ async function main() {
       detail: 'Fix create_work_item / client / period and re-run',
     });
   } else {
+    // T7b — request_review invalid unless assigned (Phase 2)
+    {
+      const body = {
+        command: 'request_review',
+        payload: {
+          ...queueRefreshPayload(commandPeriodKey, clientId),
+          work_item_id: workItemId,
+          expected_version: workVersion,
+          idempotency_key: `${smokeRunId}-request-review-invalid`,
+        },
+      };
+      const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+      const ok = res.status === 400 && json && json.code === 'INVALID_TRANSITION';
+      results.push({
+        name: 'POST request_review on non-assigned row (expect 400 INVALID_TRANSITION)',
+        ok,
+        status: res.status,
+        detail: ok ? 'blocked as expected' : JSON.stringify(json).slice(0, 240),
+      });
+    }
+
     // T8 — assign_work_item + queue refresh (first assign only; requires TEST_ASSIGNEE_USER_ID)
     if (!optionalAssignee) {
       results.push({
@@ -459,9 +480,11 @@ async function main() {
         res.status === 409 &&
         json &&
         json.ok !== true &&
-        (json.code === 'version_conflict' || String(json.message ?? '').includes('Version conflict'));
+        (json.code === 'WORK_ITEM_VERSION_CONFLICT' ||
+          json.code === 'version_conflict' ||
+          String(json.message ?? '').includes('Version conflict'));
       results.push({
-        name: 'POST set_work_deadline stale expected_version (expect 409 version_conflict)',
+        name: 'POST set_work_deadline stale expected_version (expect 409 WORK_ITEM_VERSION_CONFLICT)',
         ok,
         status: res.status,
         detail: ok ? `code=${json.code}` : JSON.stringify(json).slice(0, 240),

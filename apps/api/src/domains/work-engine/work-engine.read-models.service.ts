@@ -25,8 +25,7 @@ import {
 } from './work-engine.guards.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
-import { canStaffPickUpUnassigned, resolveWorkTypePoliciesBatch } from './work-engine.policy.service.js';
-import type { WorkTypeWorkflowPolicy } from './work-engine.policy.service.js';
+import { canStaffPickUpUnassigned, resolveWorkTypePoliciesBatch, type WorkTypeWorkflowPolicy } from './work-engine.policy.service.js';
 import { WORK_ENGINE_PERMISSIONS } from './work-engine.rbac.js';
 
 /**
@@ -138,6 +137,152 @@ function computeOwnershipCommands(args: {
           : 'Missing work_engine.claim.force permission',
   });
 
+  return out;
+}
+
+/** Stage 10 Phase 2 — review commands strip (same pattern as ownership_commands). */
+export type QueueReviewCommandKind = 'request_review' | 'approve_work_item' | 'reject_work_item';
+
+export type QueueReviewCommand = {
+  command: QueueReviewCommandKind;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+};
+
+function reviewFlowStatusLabel(
+  row: Pick<WorkItemRow, 'work_state' | 'assigned_user_id' | 'reviewer_user_id'>,
+): string | null {
+  if (row.work_state === 'review_pending') return 'In review';
+  if (
+    row.work_state === 'assigned' &&
+    row.assigned_user_id &&
+    row.reviewer_user_id &&
+    row.reviewer_user_id !== row.assigned_user_id
+  ) {
+    return 'Review not started';
+  }
+  return null;
+}
+
+function computeReviewCommands(args: {
+  row: Pick<WorkItemRow, 'work_state' | 'assigned_user_id' | 'reviewer_user_id' | 'work_type'>;
+  viewer: WorkEngineQueueViewerContext;
+  policy: WorkTypeWorkflowPolicy;
+}): QueueReviewCommand[] {
+  const { row, viewer, policy } = args;
+  const perms = [...viewer.permissions];
+  const adminBypass = hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin);
+
+  const canRequestPerm =
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.reviewRequest) || adminBypass;
+  const canApprovePerm =
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.reviewApprove) || adminBypass;
+  const canRejectPerm =
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.reviewReject) || adminBypass;
+  const canBreakGlass =
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.reviewBreakGlass) || adminBypass;
+
+  const gateOff = policy.review_gate === 'none';
+  const role = viewer.roleCode;
+  const assigneeOkForRequest =
+    role === 'admin' || role === 'owner' || row.assigned_user_id === viewer.userId;
+
+  const reviewerSet =
+    row.reviewer_user_id != null && String(row.reviewer_user_id).trim() !== '';
+  const assigneeSet =
+    row.assigned_user_id != null && String(row.assigned_user_id).trim() !== '';
+  const noSelfReview =
+    !assigneeSet || !reviewerSet || row.reviewer_user_id !== row.assigned_user_id;
+
+  const requestOk =
+    !gateOff &&
+    row.work_state === 'assigned' &&
+    assigneeSet &&
+    reviewerSet &&
+    noSelfReview &&
+    canRequestPerm &&
+    assigneeOkForRequest;
+
+  const isReviewer = reviewerSet && row.reviewer_user_id === viewer.userId;
+  const mayCompleteReview =
+    assigneeSet &&
+    row.assigned_user_id !== viewer.userId &&
+    (isReviewer || canBreakGlass);
+
+  const approveOk =
+    !gateOff &&
+    row.work_state === 'review_pending' &&
+    canApprovePerm &&
+    mayCompleteReview &&
+    noSelfReview;
+
+  const rejectOk =
+    !gateOff &&
+    row.work_state === 'review_pending' &&
+    canRejectPerm &&
+    mayCompleteReview &&
+    noSelfReview;
+
+  const out: QueueReviewCommand[] = [];
+  out.push({
+    command: 'request_review',
+    label: 'Request review',
+    enabled: requestOk,
+    reason: requestOk
+      ? null
+      : gateOff
+        ? 'Review workflow is disabled for this work type'
+        : row.work_state !== 'assigned'
+          ? 'Request review is only available in assigned state'
+          : !assigneeSet
+            ? 'Work item has no assignee'
+            : !reviewerSet
+              ? 'Designated reviewer must be set before requesting review'
+              : !noSelfReview
+                ? 'Reviewer cannot match the assignee'
+                : !canRequestPerm
+                  ? 'Missing work_engine.review.request permission'
+                  : !assigneeOkForRequest
+                    ? 'Only the assignee may request review'
+                    : null,
+  });
+  out.push({
+    command: 'approve_work_item',
+    label: 'Approve',
+    enabled: approveOk,
+    reason: approveOk
+      ? null
+      : gateOff
+        ? 'Review workflow is disabled for this work type'
+        : row.work_state !== 'review_pending'
+          ? 'Approve is only available while review is pending'
+          : !canApprovePerm
+            ? 'Missing work_engine.review.approve permission'
+            : !noSelfReview
+              ? 'Reviewer cannot match the assignee'
+              : !mayCompleteReview
+                ? 'Only the reviewer or break-glass role may approve'
+                : null,
+  });
+  out.push({
+    command: 'reject_work_item',
+    label: 'Reject',
+    enabled: rejectOk,
+    reason: rejectOk
+      ? null
+      : gateOff
+        ? 'Review workflow is disabled for this work type'
+        : row.work_state !== 'review_pending'
+          ? 'Reject is only available while review is pending'
+          : !canRejectPerm
+            ? 'Missing work_engine.review.reject permission'
+            : !noSelfReview
+              ? 'Reviewer cannot match the assignee'
+              : !mayCompleteReview
+                ? 'Only the reviewer or break-glass role may reject'
+                : null,
+  });
   return out;
 }
 
@@ -401,7 +546,7 @@ export type WorkEngineQueueFilters = {
   reviewer_user_id?: string | null;
   client_id?: string | null;
   period_key?: string | null;
-  /** Backend-owned bucket: assigned_to_me | unassigned | claimed_by_me */
+  /** Backend-owned bucket: assigned_to_me | unassigned | claimed_by_me | review_for_me */
   queue_bucket?: string | null;
   limit?: number | null;
   offset?: number | null;
@@ -741,6 +886,7 @@ type QueueCellKey =
   | 'unread'
   | 'period_key'
   | 'reviewer'
+  | 'review_status'
   | 'due_at'
   | 'sla'
   | 'claimed';
@@ -777,7 +923,14 @@ const BASE_QUEUE_COLUMN_KEYS: QueueCellKey[] = [
   'unread',
 ];
 
-const OPTIONAL_QUEUE_COLUMN_KEYS: QueueCellKey[] = ['period_key', 'reviewer', 'due_at', 'sla', 'claimed'];
+const OPTIONAL_QUEUE_COLUMN_KEYS: QueueCellKey[] = [
+  'period_key',
+  'reviewer',
+  'review_status',
+  'due_at',
+  'sla',
+  'claimed',
+];
 
 const QUEUE_COLUMN_DEFS: Record<
   QueueCellKey,
@@ -792,6 +945,7 @@ const QUEUE_COLUMN_DEFS: Record<
   unread: { label: 'Unread', empty_display: 'dash' },
   period_key: { label: 'Period', empty_display: 'dash' },
   reviewer: { label: 'Reviewer', empty_display: 'dash' },
+  review_status: { label: 'Review', empty_display: 'dash' },
   due_at: { label: 'Due', empty_display: 'blank' },
   sla: { label: 'SLA', empty_display: 'blank' },
   claimed: { label: 'Claim', empty_display: 'blank' },
@@ -849,6 +1003,7 @@ function buildQueueRowDetailPanel(params: {
   module_label: string;
   work_type_label: string;
   work_state_label: string;
+  review_flow_status_label: string | null;
   assigned_user_name: string | null;
   reviewer_user_name: string | null;
   claimed_by_user_name: string | null;
@@ -867,6 +1022,7 @@ function buildQueueRowDetailPanel(params: {
 
   const kvRows: Array<{ label: string; value: string | null }> = [
     { label: 'State', value: params.work_state_label },
+    { label: 'Review status', value: params.review_flow_status_label },
     { label: 'Assignee', value: params.assigned_user_name },
     { label: 'Reviewer', value: params.reviewer_user_name },
     {
@@ -922,7 +1078,7 @@ export function parseWorkEngineQueueFilters(raw: WorkEngineQueueFilters): {
   reviewer_user_id: string | null;
   client_id: string | null;
   period_key: string | null;
-  queue_bucket: 'assigned_to_me' | 'unassigned' | 'claimed_by_me' | null;
+  queue_bucket: 'assigned_to_me' | 'unassigned' | 'claimed_by_me' | 'review_for_me' | null;
   limit: number;
   offset: number;
 } {
@@ -943,7 +1099,10 @@ export function parseWorkEngineQueueFilters(raw: WorkEngineQueueFilters): {
   const periodKey = raw.period_key ? String(raw.period_key).trim() : '';
   const bucketRaw = raw.queue_bucket ? String(raw.queue_bucket).trim() : '';
   const queue_bucket =
-    bucketRaw === 'assigned_to_me' || bucketRaw === 'unassigned' || bucketRaw === 'claimed_by_me'
+    bucketRaw === 'assigned_to_me' ||
+    bucketRaw === 'unassigned' ||
+    bucketRaw === 'claimed_by_me' ||
+    bucketRaw === 'review_for_me'
       ? bucketRaw
       : null;
 
@@ -1038,6 +1197,7 @@ export async function buildWorkEngineQueueAggregate(params: {
   let bucketAssignedToMe = 0;
   let bucketUnassigned = 0;
   let bucketClaimedByMe = 0;
+  let bucketReviewForMe = 0;
   if (viewerId) {
     const a = await supabaseAdmin
       .from('work_items')
@@ -1058,12 +1218,20 @@ export async function buildWorkEngineQueueAggregate(params: {
       .select('id', { count: 'exact', head: true })
       .eq('org_id', orgId)
       .eq('claimed_by_user_id', viewerId);
+    const rfm = await supabaseAdmin
+      .from('work_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('work_state', 'review_pending')
+      .eq('reviewer_user_id', viewerId);
     if (a.error) throw a.error;
     if (u.error) throw u.error;
     if (c.error) throw c.error;
+    if (rfm.error) throw rfm.error;
     bucketAssignedToMe = a.count ?? 0;
     bucketUnassigned = u.count ?? 0;
     bucketClaimedByMe = c.count ?? 0;
+    bucketReviewForMe = rfm.count ?? 0;
   }
 
   // ---- 2. Filter option catalogs (backend-owned).
@@ -1113,10 +1281,17 @@ export async function buildWorkEngineQueueAggregate(params: {
       .not('work_state', 'eq', 'archived');
   } else if (f.queue_bucket === 'claimed_by_me' && viewerId) {
     q = q.eq('claimed_by_user_id', viewerId);
+  } else if (f.queue_bucket === 'review_for_me' && viewerId) {
+    q = q.eq('work_state', 'review_pending').eq('reviewer_user_id', viewerId);
   }
   if (f.state) q = q.eq('work_state', f.state);
   if (f.module_key) q = q.eq('module_key', f.module_key);
-  if (f.queue_bucket !== 'assigned_to_me' && f.queue_bucket !== 'unassigned' && f.assigned_user_id) {
+  if (
+    f.queue_bucket !== 'assigned_to_me' &&
+    f.queue_bucket !== 'unassigned' &&
+    f.queue_bucket !== 'review_for_me' &&
+    f.assigned_user_id
+  ) {
     q = q.eq('assigned_user_id', f.assigned_user_id);
   }
   if (f.reviewer_user_id) q = q.eq('reviewer_user_id', f.reviewer_user_id);
@@ -1295,6 +1470,8 @@ export async function buildWorkEngineQueueAggregate(params: {
       isConv && threadId ? String(officeUnreadByThread.get(threadId) ?? 0) : null;
     const period_cell = isConv ? null : r.period_key;
     const reviewer_cell = isConv ? null : reviewer_user_name;
+    const review_flow_status_label = reviewFlowStatusLabel(r);
+    const review_status_cell = isConv ? null : review_flow_status_label;
     const due_cell = r.due_at ? formatQueueUtcTimestamp(r.due_at) : null;
     const sla_cell = r.sla_status === 'none' ? null : slaStatusLabel(r.sla_status);
     const messengerPath =
@@ -1313,6 +1490,7 @@ export async function buildWorkEngineQueueAggregate(params: {
       unread: unread_cell,
       period_key: period_cell,
       reviewer: reviewer_cell,
+      review_status: review_status_cell,
       due_at: due_cell,
       sla: sla_cell,
       claimed: claimed_cell,
@@ -1320,6 +1498,7 @@ export async function buildWorkEngineQueueAggregate(params: {
 
     const policyRow = policyByType.get(r.work_type) ?? {
       allow_staff_pickup_unassigned: true,
+      review_gate: 'allowed',
     };
     const ownership_commands =
       viewer != null
@@ -1329,6 +1508,8 @@ export async function buildWorkEngineQueueAggregate(params: {
             policy: policyRow,
           })
         : [];
+    const review_commands =
+      viewer != null ? computeReviewCommands({ row: r, viewer, policy: policyRow }) : [];
     return {
       work_item_id: r.id,
       client_id: r.client_id,
@@ -1348,6 +1529,8 @@ export async function buildWorkEngineQueueAggregate(params: {
       claimed_at: r.claimed_at,
       claimed_by_user_name,
       ownership_commands,
+      review_flow_status_label,
+      review_commands,
       due_at: r.due_at,
       sla_status: r.sla_status,
       sla_status_label: slaStatusLabel(r.sla_status),
@@ -1384,6 +1567,7 @@ export async function buildWorkEngineQueueAggregate(params: {
         module_label,
         work_type_label,
         work_state_label,
+        review_flow_status_label,
         assigned_user_name,
         reviewer_user_name,
         claimed_by_user_name,
@@ -1411,6 +1595,7 @@ export async function buildWorkEngineQueueAggregate(params: {
       assigned_to_me: bucketAssignedToMe,
       unassigned: bucketUnassigned,
       claimed_by_me: bucketClaimedByMe,
+      review_for_me: bucketReviewForMe,
       waiting_client: counts.waiting_client ?? 0,
       waiting_human: counts.waiting_human ?? 0,
       review_pending: counts.review_pending ?? 0,
@@ -1449,6 +1634,7 @@ export async function buildWorkEngineQueueAggregate(params: {
         { value: 'assigned_to_me', label: 'Assigned to me' },
         { value: 'unassigned', label: 'Unassigned' },
         { value: 'claimed_by_me', label: 'Claimed by me' },
+        { value: 'review_for_me', label: 'Review for me' },
       ],
       pending_mapping_reasons: [
         { value: MAPPING_REASON.UNKNOWN_EVENT_MAPPING, label: 'Unknown event type' },

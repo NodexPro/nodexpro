@@ -176,6 +176,6 @@ export function getReopenTargetStates() {
 }
 export function assertExpectedVersion(current, expected) {
     if (current !== expected) {
-        throw conflict(`Version conflict: expected ${expected}, current ${current}`, 'version_conflict');
+        throw conflict(`Version conflict: expected ${expected}, current ${current}`, 'WORK_ITEM_VERSION_CONFLICT');
     }
 }

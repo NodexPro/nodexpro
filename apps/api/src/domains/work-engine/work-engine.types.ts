@@ -62,7 +62,11 @@ export type WorkEngineCommandType =
   | 'pick_up_unassigned'
   | 'transfer_work_item'
   | 'claim_work_item'
-  | 'release_claim';
+  | 'release_claim'
+  /** Stage 10 Phase 2 — review workflow */
+  | 'request_review'
+  | 'approve_work_item'
+  | 'reject_work_item';
 
 export type WorkEngineCommandPayload = Record<string, unknown>;
 

@@ -106,6 +106,13 @@ export type QueueOwnershipCommand = {
   reason: string | null;
 };
 
+export type QueueReviewCommand = {
+  command: 'request_review' | 'approve_work_item' | 'reject_work_item';
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+};
+
 export type WorkEngineQueueRow = {
   work_item_id: string;
   client_id: string | null;
@@ -125,6 +132,8 @@ export type WorkEngineQueueRow = {
   claimed_at?: string | null;
   claimed_by_user_name?: string | null;
   ownership_commands?: QueueOwnershipCommand[];
+  review_flow_status_label?: string | null;
+  review_commands?: QueueReviewCommand[];
   due_at: string | null;
   sla_status: string;
   sla_status_label: string;
@@ -168,6 +177,7 @@ export type WorkEngineQueueAggregate = {
     assigned_to_me: number;
     unassigned: number;
     claimed_by_me: number;
+    review_for_me: number;
     waiting_client: number;
     waiting_human: number;
     review_pending: number;

@@ -9,6 +9,10 @@ export const WORK_ENGINE_PERMISSIONS = {
     claimForce: 'work_engine.claim.force',
     override: 'work_engine.override',
     admin: 'work_engine.admin',
+    reviewRequest: 'work_engine.review.request',
+    reviewApprove: 'work_engine.review.approve',
+    reviewReject: 'work_engine.review.reject',
+    reviewBreakGlass: 'work_engine.review.break_glass',
 };
 export function requireWorkEnginePermission(ctx, permissionCode) {
     if (!ctx.membership)

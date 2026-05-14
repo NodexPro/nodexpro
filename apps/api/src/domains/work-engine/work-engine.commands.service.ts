@@ -26,7 +26,8 @@ import { randomUUID } from 'node:crypto';
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { badRequest, conflict, notFound } from '../../shared/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../../shared/errors.js';
+import { hasPermission } from '../rbac/rbac.service.js';
 import {
   asOptionalIso,
   asOptionalString,
@@ -55,7 +56,10 @@ import {
   type WorkEngineQueueViewerContext,
 } from './work-engine.read-models.service.js';
 import { intakeWorkEvent } from './work-engine.event-intake.service.js';
-import { canStaffPickUpUnassigned, resolveWorkTypeWorkflowPolicy } from './work-engine.policy.service.js';
+import {
+  canStaffPickUpUnassigned,
+  resolveWorkTypeWorkflowPolicy,
+} from './work-engine.policy.service.js';
 import {
   WORK_ENGINE_PERMISSIONS,
   requireWorkEnginePermission,
@@ -200,6 +204,28 @@ function assertQueueActionEnabled(current: WorkItemRow, semantic: QueueAllowedAc
       row?.reason ?? `Queue action '${semantic}' is not allowed for work_state='${current.work_state}'`,
       'queue_action_not_allowed',
     );
+  }
+}
+
+function assertActorMayRequestReview(ctx: RequestContext, current: WorkItemRow): void {
+  requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.reviewRequest);
+  const role = ctx.membership?.roleCode ?? 'staff';
+  if (role === 'staff' && current.assigned_user_id !== ctx.user.id) {
+    throw forbidden('Only the assignee may request review', 'FORBIDDEN');
+  }
+}
+
+function assertActorMayApproveOrReject(ctx: RequestContext, current: WorkItemRow): void {
+  const perms = ctx.membership?.permissions ?? [];
+  const isReviewer = current.reviewer_user_id === ctx.user.id;
+  const canBreakGlass =
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.reviewBreakGlass) ||
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin);
+  if (ctx.user.id === current.assigned_user_id) {
+    throw forbidden('Assignee cannot approve or reject their own submission', 'SELF_REVIEW_FORBIDDEN');
+  }
+  if (!isReviewer && !canBreakGlass) {
+    throw forbidden('Only the designated reviewer (or break-glass) may complete this review', 'FORBIDDEN');
   }
 }
 
@@ -521,7 +547,7 @@ export async function executeWorkEngineCommand(
       }
       const newVersion = current.version + 1;
       const patch: Record<string, unknown> = { work_state: toState };
-      if (toState === 'waiting_client') {
+      if (toState === 'waiting_client' || toState === 'review_pending') {
         patch.claimed_by_user_id = null;
         patch.claimed_at = null;
       }
@@ -1067,6 +1093,243 @@ export async function executeWorkEngineCommand(
         await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_CLAIM_RELEASED, {
           previous_claimed_by: current.claimed_by_user_id,
           force,
+        });
+        return { workItemId };
+      });
+    }
+
+    case 'request_review': {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+        const workItemId = reqString(payload, 'work_item_id');
+        const expectedVersion = reqInt(payload, 'expected_version');
+        const idempotencyKey = reqString(payload, 'idempotency_key');
+        const current = await loadWorkItem(orgId, workItemId);
+        assertExpectedVersion(current.version, expectedVersion);
+        const policy = await resolveWorkTypeWorkflowPolicy(orgId, current.work_type);
+        if (policy.review_gate === 'none') {
+          throw badRequest(
+            'Review workflow is not enabled for this work type',
+            'REVIEW_NOT_APPLICABLE',
+          );
+        }
+        if (current.work_state === 'review_pending') {
+          throw conflict('Work item is already in review', 'WORK_ITEM_ALREADY_IN_REVIEW');
+        }
+        if (current.work_state !== 'assigned') {
+          throw badRequest(
+            `request_review requires work_state=assigned (current='${current.work_state}')`,
+            'INVALID_TRANSITION',
+          );
+        }
+        if (!current.assigned_user_id) {
+          throw badRequest('Work item has no assignee', 'INVALID_TRANSITION');
+        }
+        if (!current.reviewer_user_id) {
+          throw badRequest(
+            'Designated reviewer is required before requesting review',
+            'REVIEWER_REQUIRED',
+          );
+        }
+        if (current.reviewer_user_id === current.assigned_user_id) {
+          throw badRequest(
+            'Reviewer cannot match the assignee (separation of duties)',
+            'SELF_REVIEW_FORBIDDEN',
+          );
+        }
+        assertActorMayRequestReview(ctx, current);
+
+        const newVersion = current.version + 1;
+        await updateWorkItemWithVersion({
+          orgId,
+          workItemId,
+          expectedVersion,
+          newVersion,
+          patch: {
+            work_state: 'review_pending',
+            claimed_by_user_id: null,
+            claimed_at: null,
+          },
+        });
+        await insertTransition({
+          org_id: orgId,
+          work_item_id: workItemId,
+          from_state: current.work_state,
+          to_state: 'review_pending',
+          transition_kind: 'command',
+          action_code: 'request_review',
+          actor_type: 'user',
+          actor_user_id: actorUserId,
+          reason_text: asOptionalString(payload.reason_text),
+          metadata_json: {
+            event_kind: 'review_requested',
+            reviewer_user_id: current.reviewer_user_id,
+            assignee_user_id: current.assigned_user_id,
+            requested_by_user_id: actorUserId,
+            previous_state: current.work_state,
+            new_state: 'review_pending',
+            idempotency_key: idempotencyKey,
+            notification_intent: 'office_reviewer_review_required',
+          },
+          expected_version: expectedVersion,
+          resulting_version: newVersion,
+        });
+        await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_REVIEW_REQUESTED, {
+          reviewer_user_id: current.reviewer_user_id,
+          assignee_user_id: current.assigned_user_id,
+          from_state: current.work_state,
+          to_state: 'review_pending',
+          idempotency_key: idempotencyKey,
+          notification_intent: 'office_reviewer_review_required',
+        });
+        return { workItemId };
+      });
+    }
+
+    case 'approve_work_item': {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+        requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.reviewApprove);
+        const workItemId = reqString(payload, 'work_item_id');
+        const expectedVersion = reqInt(payload, 'expected_version');
+        const idempotencyKey = reqString(payload, 'idempotency_key');
+        const current = await loadWorkItem(orgId, workItemId);
+        assertExpectedVersion(current.version, expectedVersion);
+        const policy = await resolveWorkTypeWorkflowPolicy(orgId, current.work_type);
+        if (policy.review_gate === 'none') {
+          throw badRequest('Review is not enabled for this work type', 'POLICY_DENIES_COMMAND');
+        }
+        if (current.work_state !== 'review_pending') {
+          throw badRequest(
+            `approve_work_item requires work_state=review_pending (current='${current.work_state}')`,
+            'INVALID_TRANSITION',
+          );
+        }
+        if (!current.reviewer_user_id || !current.assigned_user_id) {
+          throw badRequest('Invalid review row (missing reviewer or assignee)', 'INVALID_TRANSITION');
+        }
+        if (current.reviewer_user_id === current.assigned_user_id) {
+          throw badRequest('Reviewer cannot match the assignee', 'SELF_REVIEW_FORBIDDEN');
+        }
+        assertActorMayApproveOrReject(ctx, current);
+
+        const newVersion = current.version + 1;
+        await updateWorkItemWithVersion({
+          orgId,
+          workItemId,
+          expectedVersion,
+          newVersion,
+          patch: { work_state: 'assigned' },
+        });
+        await insertTransition({
+          org_id: orgId,
+          work_item_id: workItemId,
+          from_state: 'review_pending',
+          to_state: 'assigned',
+          transition_kind: 'command',
+          action_code: 'approve_work_item',
+          actor_type: 'user',
+          actor_user_id: actorUserId,
+          reason_text: asOptionalString(payload.reason_text),
+          metadata_json: {
+            event_kind: 'review_approved',
+            review_result: 'approved',
+            reviewer_user_id: current.reviewer_user_id,
+            assignee_user_id: current.assigned_user_id,
+            approved_by_user_id: actorUserId,
+            previous_state: 'review_pending',
+            new_state: 'assigned',
+            idempotency_key: idempotencyKey,
+            break_glass: current.reviewer_user_id !== actorUserId,
+            notification_intent: 'assignee_approval_decision',
+          },
+          expected_version: expectedVersion,
+          resulting_version: newVersion,
+        });
+        await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_REVIEW_APPROVED, {
+          reviewer_user_id: current.reviewer_user_id,
+          assignee_user_id: current.assigned_user_id,
+          from_state: 'review_pending',
+          to_state: 'assigned',
+          idempotency_key: idempotencyKey,
+          break_glass: current.reviewer_user_id !== actorUserId,
+          notification_intent: 'assignee_approval_decision',
+        });
+        return { workItemId };
+      });
+    }
+
+    case 'reject_work_item': {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+        requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.reviewReject);
+        const workItemId = reqString(payload, 'work_item_id');
+        const expectedVersion = reqInt(payload, 'expected_version');
+        const idempotencyKey = reqString(payload, 'idempotency_key');
+        const rejectionReasonRaw = String(payload.rejection_reason ?? '').trim();
+        if (!rejectionReasonRaw) {
+          throw badRequest('rejection_reason is required', 'REVIEW_REJECTION_REASON_REQUIRED');
+        }
+        const current = await loadWorkItem(orgId, workItemId);
+        assertExpectedVersion(current.version, expectedVersion);
+        const policy = await resolveWorkTypeWorkflowPolicy(orgId, current.work_type);
+        if (policy.review_gate === 'none') {
+          throw badRequest('Review is not enabled for this work type', 'POLICY_DENIES_COMMAND');
+        }
+        if (current.work_state !== 'review_pending') {
+          throw badRequest(
+            `reject_work_item requires work_state=review_pending (current='${current.work_state}')`,
+            'INVALID_TRANSITION',
+          );
+        }
+        if (!current.reviewer_user_id || !current.assigned_user_id) {
+          throw badRequest('Invalid review row (missing reviewer or assignee)', 'INVALID_TRANSITION');
+        }
+        if (current.reviewer_user_id === current.assigned_user_id) {
+          throw badRequest('Reviewer cannot match the assignee', 'SELF_REVIEW_FORBIDDEN');
+        }
+        assertActorMayApproveOrReject(ctx, current);
+
+        const newVersion = current.version + 1;
+        await updateWorkItemWithVersion({
+          orgId,
+          workItemId,
+          expectedVersion,
+          newVersion,
+          patch: { work_state: 'assigned' },
+        });
+        await insertTransition({
+          org_id: orgId,
+          work_item_id: workItemId,
+          from_state: 'review_pending',
+          to_state: 'assigned',
+          transition_kind: 'command',
+          action_code: 'reject_work_item',
+          actor_type: 'user',
+          actor_user_id: actorUserId,
+          reason_text: rejectionReasonRaw,
+          metadata_json: {
+            event_kind: 'review_rejected',
+            review_result: 'rejected',
+            reviewer_user_id: current.reviewer_user_id,
+            assignee_user_id: current.assigned_user_id,
+            rejected_by_user_id: actorUserId,
+            rejection_reason: rejectionReasonRaw,
+            previous_state: 'review_pending',
+            new_state: 'assigned',
+            idempotency_key: idempotencyKey,
+            break_glass: current.reviewer_user_id !== actorUserId,
+            notification_intent: 'assignee_approval_decision',
+          },
+          expected_version: expectedVersion,
+          resulting_version: newVersion,
+        });
+        await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_REVIEW_REJECTED, {
+          reviewer_user_id: current.reviewer_user_id,
+          assignee_user_id: current.assigned_user_id,
+          from_state: 'review_pending',
+          to_state: 'assigned',
+          rejection_reason: rejectionReasonRaw,
+          idempotency_key: idempotencyKey,
+          break_glass: current.reviewer_user_id !== actorUserId,
+          notification_intent: 'assignee_approval_decision',
         });
         return { workItemId };
       });

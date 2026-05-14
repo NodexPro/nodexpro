@@ -19,6 +19,7 @@ import {
   fetchWorkEngineQueueAggregate,
   type QueueAllowedActionCommand,
   type QueueOwnershipCommand,
+  type QueueReviewCommand,
   type QueueDetailSection,
   type QueueRowAllowedOverrideKind,
   type WorkEngineQueueAggregate,
@@ -73,6 +74,7 @@ type PendingModal =
   | { kind: 'set_deadline'; row: WorkEngineQueueRow }
   | { kind: 'apply_override'; row: WorkEngineQueueRow }
   | { kind: 'archive'; row: WorkEngineQueueRow }
+  | { kind: 'reject_review'; row: WorkEngineQueueRow }
   | null;
 
 export function WorkEngineQueue() {
@@ -128,6 +130,31 @@ export function WorkEngineQueue() {
       void loadAggregate(filters);
     },
     [filters, loadAggregate],
+  );
+
+  const handleReviewCommand = useCallback(
+    async (row: WorkEngineQueueRow, cmd: QueueReviewCommand['command']) => {
+      if (cmd === 'reject_work_item') {
+        setModal({ kind: 'reject_review', row });
+        return;
+      }
+      setError(null);
+      try {
+        const resp = await executeWorkEngineQueueCommand({
+          command: cmd,
+          payload: {
+            work_item_id: row.work_item_id,
+            expected_version: row.version,
+            idempotency_key: crypto.randomUUID(),
+          },
+          filters: filtersToApi(filters),
+        });
+        handleCommandResult(resp.refreshed?.aggregate ?? null);
+      } catch (e) {
+        setError(userFacingApiMessage(e));
+      }
+    },
+    [filters, handleCommandResult],
   );
 
   const handleOwnershipCommand = useCallback(
@@ -216,6 +243,7 @@ export function WorkEngineQueue() {
         onOpenDetail={(row) => setDetailRow(row)}
         onOverflowAction={(row, cmd) => setModal(buildModalForAction(row, cmd))}
         onOwnershipCommand={handleOwnershipCommand}
+        onReviewCommand={handleReviewCommand}
       />
 
       <Pagination
@@ -278,6 +306,7 @@ function SummaryCards({ cards }: { cards: WorkEngineQueueAggregate['summary_card
     { key: 'assigned_to_me', label: 'Assigned to me' },
     { key: 'unassigned', label: 'Unassigned' },
     { key: 'claimed_by_me', label: 'Claimed by me' },
+    { key: 'review_for_me', label: 'Review for me' },
     { key: 'waiting_client', label: 'Waiting client' },
     { key: 'waiting_human', label: 'Waiting office' },
     { key: 'review_pending', label: 'Review pending' },
@@ -465,6 +494,7 @@ function QueueTable(props: {
   onOpenDetail: (row: WorkEngineQueueRow) => void;
   onOverflowAction: (row: WorkEngineQueueRow, cmd: QueueAllowedActionCommand) => void;
   onOwnershipCommand: (row: WorkEngineQueueRow, cmd: QueueOwnershipCommand['command']) => void;
+  onReviewCommand: (row: WorkEngineQueueRow, cmd: QueueReviewCommand['command']) => void;
 }) {
   if (props.rows.length === 0) {
     return (
@@ -494,6 +524,7 @@ function QueueTable(props: {
                       onOpenDetail={() => props.onOpenDetail(row)}
                       onOverflowAction={(cmd) => props.onOverflowAction(row, cmd)}
                       onOwnershipCommand={(cmd) => props.onOwnershipCommand(row, cmd)}
+                      onReviewCommand={(cmd) => props.onReviewCommand(row, cmd)}
                     />
                   ) : (
                     renderQueueDataCell(row, col.key, col.empty_display)
@@ -534,10 +565,12 @@ function QueueRowShellActions(props: {
   onOpenDetail: () => void;
   onOverflowAction: (cmd: QueueAllowedActionCommand) => void;
   onOwnershipCommand: (cmd: QueueOwnershipCommand['command']) => void;
+  onReviewCommand: (cmd: QueueReviewCommand['command']) => void;
 }) {
   const { row } = props;
   const open = row.queue_shell.open_detail;
   const ownership = row.ownership_commands ?? [];
+  const review = row.review_commands ?? [];
   return (
     <div className="nx-we-shell-actions">
       {ownership.map((c) => (
@@ -548,6 +581,18 @@ function QueueRowShellActions(props: {
           disabled={!c.enabled}
           title={c.reason ?? ''}
           onClick={() => props.onOwnershipCommand(c.command)}
+        >
+          {c.label}
+        </button>
+      ))}
+      {review.map((c) => (
+        <button
+          key={c.command}
+          type="button"
+          className="nx-we-btn nx-we-btn--secondary"
+          disabled={!c.enabled}
+          title={c.reason ?? ''}
+          onClick={() => props.onReviewCommand(c.command)}
         >
           {c.label}
         </button>
@@ -785,6 +830,7 @@ function ActionModal(props: {
   const [stateValue, setStateValue] = useState<string>('');
   const [dueAt, setDueAt] = useState<string>('');
   const [reasonText, setReasonText] = useState<string>('');
+  const [rejectionReason, setRejectionReason] = useState<string>('');
   // Override modal uses row.allowed_override_kinds; start with the first entry
   // the backend offers for this row (or empty string if no override is valid).
   const initialOverrideKind: string =
@@ -809,6 +855,8 @@ function ActionModal(props: {
         return 'Apply override';
       case 'archive':
         return 'Archive work item';
+      case 'reject_review':
+        return 'Reject review';
     }
   }, [modal.kind]);
 
@@ -861,6 +909,14 @@ function ActionModal(props: {
           reason_text: reasonText.trim() || null,
           to_state: choice.requires_to_state ? stateValue : null,
         };
+      } else if (modal.kind === 'reject_review') {
+        const rr = rejectionReason.trim();
+        if (!rr) throw new Error('Rejection reason is required');
+        command = 'reject_work_item';
+        payload = {
+          ...baseCommand,
+          rejection_reason: rr,
+        };
       } else {
         command = 'change_work_state';
         payload = { ...baseCommand, to_state: 'archived', reason_text: reasonText || null };
@@ -886,6 +942,7 @@ function ActionModal(props: {
     onCompleted,
     overrideKind,
     reasonText,
+    rejectionReason,
     stateValue,
   ]);
 
@@ -909,7 +966,7 @@ function ActionModal(props: {
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
               >
-                <option value="">— Unassign —</option>
+                <option value="">— Choose assignee —</option>
                 {aggregate.filters.assignees.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
@@ -1035,6 +1092,18 @@ function ActionModal(props: {
             )
           )}
 
+          {modal.kind === 'reject_review' && (
+            <div className="nx-we-field">
+              <label htmlFor="we-modal-reject-reason">Rejection reason (required)</label>
+              <textarea
+                id="we-modal-reject-reason"
+                rows={4}
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+              />
+            </div>
+          )}
+
           {modal.kind === 'archive' && (
             <>
               <div className="nx-we-modal__hint">
@@ -1065,16 +1134,23 @@ function ActionModal(props: {
           </button>
           <button
             type="button"
-            className={`nx-we-btn ${modal.kind === 'archive' ? 'nx-we-btn--danger' : 'nx-we-btn--primary'}`}
+            className={`nx-we-btn ${modal.kind === 'archive' || modal.kind === 'reject_review' ? 'nx-we-btn--danger' : 'nx-we-btn--primary'}`}
             onClick={submit}
             disabled={
               submitting ||
               (modal.kind === 'change_state' && modal.row.allowed_transitions.length === 0) ||
               (modal.kind === 'apply_override' &&
-                modal.row.allowed_override_kinds.length === 0)
+                modal.row.allowed_override_kinds.length === 0) ||
+              (modal.kind === 'reject_review' && !rejectionReason.trim())
             }
           >
-            {submitting ? 'Saving…' : modal.kind === 'archive' ? 'Archive' : 'Save'}
+            {submitting
+              ? 'Saving…'
+              : modal.kind === 'archive'
+                ? 'Archive'
+                : modal.kind === 'reject_review'
+                  ? 'Reject'
+                  : 'Save'}
           </button>
         </div>
       </div>

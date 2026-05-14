@@ -194,7 +194,7 @@ export function assertExpectedVersion(current: number, expected: number): void {
   if (current !== expected) {
     throw conflict(
       `Version conflict: expected ${expected}, current ${current}`,
-      'version_conflict',
+      'WORK_ITEM_VERSION_CONFLICT',
     );
   }
 }

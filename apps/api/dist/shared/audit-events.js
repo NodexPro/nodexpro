@@ -196,6 +196,10 @@ export const AUDIT_ACTIONS = {
     WORK_ITEM_TRANSFERRED: 'work_engine.work_item_transferred',
     WORK_ITEM_CLAIMED: 'work_engine.work_item_claimed',
     WORK_ITEM_CLAIM_RELEASED: 'work_engine.work_item_claim_released',
+    /** Stage 10 Phase 2 — review workflow (action review_requested; state review_pending). */
+    WORK_ITEM_REVIEW_REQUESTED: 'work_engine.review_requested',
+    WORK_ITEM_REVIEW_APPROVED: 'work_engine.review_approved',
+    WORK_ITEM_REVIEW_REJECTED: 'work_engine.review_rejected',
     WORK_ITEM_STATE_CHANGED: 'work_engine.work_item_state_changed',
     WORK_ITEM_DEADLINE_SET: 'work_engine.work_item_deadline_set',
     WORK_ITEM_OVERRIDE_APPLIED: 'work_engine.work_item_override_applied',
