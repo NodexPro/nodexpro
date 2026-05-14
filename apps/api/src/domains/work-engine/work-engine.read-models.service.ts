@@ -23,6 +23,7 @@ import {
   getReopenTargetStates,
 } from './work-engine.guards.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
+import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
 
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
@@ -374,6 +375,8 @@ function workTypeLabel(key: string): string {
       return 'VAT Documents';
     case 'annual_report_document_collection':
       return 'Annual Report Documents';
+    case 'docflow_thread_followup':
+      return 'Conversation';
     default:
       return humanizeKey(key);
   }
@@ -397,6 +400,8 @@ export type QueueAllowedActionCommand =
 
 export type QueueAllowedAction = {
   command: QueueAllowedActionCommand;
+  /** Ready-to-render button / menu label (backend-owned). */
+  label: string;
   enabled: boolean;
   reason: string | null;
 };
@@ -531,6 +536,7 @@ export function queueAllowedActions(state: WorkState): QueueAllowedAction[] {
   return [
     {
       command: 'assign',
+      label: 'Assign',
       enabled: !archived && !done,
       reason: archived
         ? 'Work item is archived'
@@ -540,11 +546,13 @@ export function queueAllowedActions(state: WorkState): QueueAllowedAction[] {
     },
     {
       command: 'change_state',
+      label: 'Change state',
       enabled: !archived,
       reason: archived ? 'Work item is archived' : null,
     },
     {
       command: 'set_deadline',
+      label: 'Set deadline',
       enabled: !archived && !done,
       reason: archived
         ? 'Work item is archived'
@@ -554,11 +562,13 @@ export function queueAllowedActions(state: WorkState): QueueAllowedAction[] {
     },
     {
       command: 'apply_override',
+      label: 'Override',
       enabled: !archived,
       reason: archived ? 'Work item is archived' : null,
     },
     {
       command: 'archive',
+      label: 'Archive',
       enabled: done,
       reason: done
         ? null
@@ -582,6 +592,197 @@ function overrideSummary(row: {
     if (typeof kind === 'string' && kind.trim()) return `Override: ${kind}`;
   }
   return 'Override active';
+}
+
+function isDocflowConversationQueueItem(r: {
+  module_key: string | null;
+  work_type: string;
+  source_entity_type: string;
+}): boolean {
+  return (
+    r.module_key === 'docflow' &&
+    r.work_type === 'docflow_thread_followup' &&
+    r.source_entity_type === 'client_message_thread'
+  );
+}
+
+function formatQueueUtcTimestamp(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.toISOString().replace('T', ' ').slice(0, 16)} UTC`;
+}
+
+type QueueCellKey =
+  | 'client'
+  | 'module'
+  | 'work_type'
+  | 'state'
+  | 'assignee'
+  | 'last_activity'
+  | 'unread'
+  | 'period_key'
+  | 'reviewer'
+  | 'due_at'
+  | 'sla';
+
+export type QueueTableColumnModel = {
+  key: string;
+  label: string;
+  empty_display: 'dash' | 'blank';
+  kind: 'data' | 'actions';
+};
+
+export type QueueDetailSection =
+  | {
+      kind: 'kv_block';
+      title: string;
+      rows: Array<{ label: string; value: string | null }>;
+    }
+  | { kind: 'static_paragraph'; title: string; body: string }
+  | { kind: 'open_path'; label: string; path: string };
+
+export type QueueRowDetailPanel = {
+  title: string;
+  subtitle: string | null;
+  sections: QueueDetailSection[];
+};
+
+const BASE_QUEUE_COLUMN_KEYS: QueueCellKey[] = [
+  'client',
+  'module',
+  'work_type',
+  'state',
+  'assignee',
+  'last_activity',
+  'unread',
+];
+
+const OPTIONAL_QUEUE_COLUMN_KEYS: QueueCellKey[] = ['period_key', 'reviewer', 'due_at', 'sla'];
+
+const QUEUE_COLUMN_DEFS: Record<
+  QueueCellKey,
+  { label: string; empty_display: 'dash' | 'blank' }
+> = {
+  client: { label: 'Client', empty_display: 'dash' },
+  module: { label: 'Module', empty_display: 'dash' },
+  work_type: { label: 'Work type', empty_display: 'dash' },
+  state: { label: 'State', empty_display: 'dash' },
+  assignee: { label: 'Assignee', empty_display: 'dash' },
+  last_activity: { label: 'Last activity', empty_display: 'dash' },
+  unread: { label: 'Unread', empty_display: 'dash' },
+  period_key: { label: 'Period', empty_display: 'dash' },
+  reviewer: { label: 'Reviewer', empty_display: 'dash' },
+  due_at: { label: 'Due', empty_display: 'blank' },
+  sla: { label: 'SLA', empty_display: 'blank' },
+};
+
+function queueColumnHasAnyValue(
+  rows: Array<{ queue_cells: Record<string, string | null> }>,
+  key: string,
+): boolean {
+  return rows.some((r) => {
+    const v = r.queue_cells[key];
+    return v != null && String(v).trim() !== '';
+  });
+}
+
+function computeQueueTableModel(
+  rows: Array<{ queue_cells: Record<string, string | null> }>,
+): { columns: QueueTableColumnModel[] } {
+  const columns: QueueTableColumnModel[] = [];
+  for (const key of BASE_QUEUE_COLUMN_KEYS) {
+    const def = QUEUE_COLUMN_DEFS[key];
+    columns.push({ key, label: def.label, empty_display: def.empty_display, kind: 'data' });
+  }
+  for (const key of OPTIONAL_QUEUE_COLUMN_KEYS) {
+    if (queueColumnHasAnyValue(rows, key)) {
+      const def = QUEUE_COLUMN_DEFS[key];
+      columns.push({ key, label: def.label, empty_display: def.empty_display, kind: 'data' });
+    }
+  }
+  columns.push({
+    key: 'actions',
+    label: 'Actions',
+    empty_display: 'blank',
+    kind: 'actions',
+  });
+  return { columns };
+}
+
+function buildCommandModalSubjectLine(params: {
+  work_type_label: string;
+  module_label: string;
+  period_key: string;
+  version: number;
+  hide_period_in_subject: boolean;
+}): string {
+  const parts = [params.work_type_label, params.module_label];
+  if (!params.hide_period_in_subject) parts.push(`period ${params.period_key}`);
+  parts.push(`v${params.version}`);
+  return parts.join(' · ');
+}
+
+function buildQueueRowDetailPanel(params: {
+  client_name: string | null;
+  client_id: string | null;
+  module_label: string;
+  work_type_label: string;
+  work_state_label: string;
+  assigned_user_name: string | null;
+  reviewer_user_name: string | null;
+  due_at: string | null;
+  sla_status_label: string;
+  override_summary: string | null;
+  period_key: string;
+  hide_period_in_subject: boolean;
+  docflow_messenger_path: string | null;
+}): QueueRowDetailPanel {
+  const title =
+    params.client_name?.trim() ||
+    (params.client_id ? `Client ${params.client_id}` : 'Work item');
+  const subtitle = `${params.work_type_label} · ${params.module_label}`;
+
+  const kvRows: Array<{ label: string; value: string | null }> = [
+    { label: 'State', value: params.work_state_label },
+    { label: 'Assignee', value: params.assigned_user_name },
+    { label: 'Reviewer', value: params.reviewer_user_name },
+    { label: 'Due', value: params.due_at ? formatQueueUtcTimestamp(params.due_at) : null },
+    { label: 'SLA', value: params.sla_status_label },
+  ];
+  if (!params.hide_period_in_subject) {
+    kvRows.splice(1, 0, { label: 'Period', value: params.period_key });
+  }
+  if (params.override_summary) {
+    kvRows.push({ label: 'Override', value: params.override_summary });
+  }
+
+  const sections: QueueDetailSection[] = [
+    { kind: 'kv_block', title: 'Summary', rows: kvRows },
+  ];
+  if (params.docflow_messenger_path) {
+    sections.push({
+      kind: 'open_path',
+      label: 'Open conversation in messenger',
+      path: params.docflow_messenger_path,
+    });
+  }
+  sections.push({
+    kind: 'static_paragraph',
+    title: 'Audit trail',
+    body:
+      'Work history and command audit for this item are not shown in this preview yet. ' +
+      'All writes continue to be validated and recorded on the server.',
+  });
+  sections.push({
+    kind: 'static_paragraph',
+    title: 'Related DocFlow conversation',
+    body: params.docflow_messenger_path
+      ? 'Use the link above to open the live thread in the office messenger. Messaging truth remains in DocFlow.'
+      : 'No linked DocFlow conversation is projected for this work item.',
+  });
+
+  return { title, subtitle, sections };
 }
 
 /** Parse queue filter input (HTTP query or command `aggregate_filters`). */
@@ -648,6 +849,9 @@ type QueueWorkItemRow = Pick<
   | 'override_summary_json'
   | 'version'
   | 'updated_at'
+  | 'source_module'
+  | 'source_entity_type'
+  | 'source_entity_id'
 >;
 
 /**
@@ -722,7 +926,7 @@ export async function buildWorkEngineQueueAggregate(params: {
   let q = supabaseAdmin
     .from('work_items')
     .select(
-      'id, client_id, module_key, work_type, period_key, work_state, assigned_user_id, reviewer_user_id, due_at, sla_status, override_active, override_summary_json, version, updated_at',
+      'id, client_id, module_key, work_type, period_key, work_state, assigned_user_id, reviewer_user_id, due_at, sla_status, override_active, override_summary_json, version, updated_at, source_module, source_entity_type, source_entity_id',
       { count: 'exact' },
     )
     .eq('org_id', orgId);
@@ -785,6 +989,34 @@ export async function buildWorkEngineQueueAggregate(params: {
     }
   }
 
+  // ---- 4b. DocFlow thread activity + office-unread (queue read-model projection only).
+  const docflowUnreadPairs: Array<{ clientId: string; threadId: string }> = [];
+  const docflowThreadIdsForActivity = new Set<string>();
+  for (const r of rowsRaw) {
+    if (isDocflowConversationQueueItem(r) && r.client_id && r.source_entity_id) {
+      docflowUnreadPairs.push({ clientId: r.client_id, threadId: r.source_entity_id });
+      docflowThreadIdsForActivity.add(r.source_entity_id);
+    }
+  }
+  const officeUnreadByThread =
+    docflowUnreadPairs.length > 0
+      ? await batchOfficeUnreadForThreads(orgId, docflowUnreadPairs)
+      : new Map<string, number>();
+  const threadUpdatedAtById = new Map<string, string>();
+  if (docflowThreadIdsForActivity.size > 0) {
+    const tIds = Array.from(docflowThreadIdsForActivity);
+    const thrResp = await supabaseAdmin
+      .from('client_message_threads')
+      .select('id, updated_at')
+      .eq('org_id', orgId)
+      .in('id', tIds);
+    if (thrResp.error) throw thrResp.error;
+    for (const t of thrResp.data ?? []) {
+      const id = String((t as { id?: string }).id ?? '');
+      if (id) threadUpdatedAtById.set(id, String((t as { updated_at?: string }).updated_at ?? ''));
+    }
+  }
+
   // ---- 5. Recent pending-mapping rows for the pending section.
   const pendingRecentResp = await supabaseAdmin
     .from('work_events')
@@ -836,40 +1068,117 @@ export async function buildWorkEngineQueueAggregate(params: {
     }
   }
 
-  // ---- 6. Compose row models.
-  const rows = rowsRaw.map((r) => ({
-    work_item_id: r.id,
-    client_id: r.client_id,
-    client_name: r.client_id ? (clientNameById.get(r.client_id) ?? null) : null,
-    module_key: r.module_key,
-    module_label: moduleLabel(r.module_key),
-    work_type: r.work_type,
-    work_type_label: workTypeLabel(r.work_type),
-    period_key: r.period_key,
-    work_state: r.work_state,
-    work_state_label: workStateLabel(r.work_state),
-    assigned_user_id: r.assigned_user_id,
-    assigned_user_name: r.assigned_user_id
+  // ---- 6. Compose row models (ready-to-render; includes queue_table drivers).
+  const rows = rowsRaw.map((r) => {
+    const isConv = isDocflowConversationQueueItem(r);
+    const clientName = r.client_id ? (clientNameById.get(r.client_id) ?? null) : null;
+    const module_label = moduleLabel(r.module_key);
+    const work_type_label = workTypeLabel(r.work_type);
+    const work_state_label = workStateLabel(r.work_state);
+    const assigned_user_name = r.assigned_user_id
       ? (userNameById.get(r.assigned_user_id) ?? null)
-      : null,
-    reviewer_user_id: r.reviewer_user_id,
-    reviewer_user_name: r.reviewer_user_id
+      : null;
+    const reviewer_user_name = r.reviewer_user_id
       ? (userNameById.get(r.reviewer_user_id) ?? null)
-      : null,
-    due_at: r.due_at,
-    sla_status: r.sla_status,
-    sla_status_label: slaStatusLabel(r.sla_status),
-    override_active: r.override_active,
-    override_summary: overrideSummary({
+      : null;
+    const ov = overrideSummary({
       override_active: r.override_active,
       override_summary_json: r.override_summary_json,
-    }),
-    allowed_actions: queueAllowedActions(r.work_state),
-    allowed_transitions: rowAllowedTransitions(r.work_state),
-    allowed_override_kinds: rowAllowedOverrideKinds(r.work_state),
-    version: r.version,
-    updated_at: r.updated_at,
-  }));
+    });
+    const stateCell = ov ? `${work_state_label} · ${ov}` : work_state_label;
+    const threadId = isConv ? String(r.source_entity_id ?? '') : '';
+    const lastActivityIso =
+      isConv && threadId && threadUpdatedAtById.has(threadId)
+        ? (threadUpdatedAtById.get(threadId) ?? r.updated_at)
+        : r.updated_at;
+    const last_activity_cell = formatQueueUtcTimestamp(lastActivityIso);
+    const unread_cell =
+      isConv && threadId ? String(officeUnreadByThread.get(threadId) ?? 0) : null;
+    const period_cell = isConv ? null : r.period_key;
+    const reviewer_cell = isConv ? null : reviewer_user_name;
+    const due_cell = r.due_at ? formatQueueUtcTimestamp(r.due_at) : null;
+    const sla_cell = r.sla_status === 'none' ? null : slaStatusLabel(r.sla_status);
+    const messengerPath =
+      isConv && r.client_id && threadId
+        ? `/m/docflow/messenger?client_id=${encodeURIComponent(r.client_id)}&thread_id=${encodeURIComponent(threadId)}`
+        : null;
+    const hidePeriodInSubject = isConv;
+
+    const queue_cells: Record<string, string | null> = {
+      client: clientName,
+      module: module_label,
+      work_type: work_type_label,
+      state: stateCell,
+      assignee: assigned_user_name,
+      last_activity: last_activity_cell,
+      unread: unread_cell,
+      period_key: period_cell,
+      reviewer: reviewer_cell,
+      due_at: due_cell,
+      sla: sla_cell,
+    };
+
+    return {
+      work_item_id: r.id,
+      client_id: r.client_id,
+      client_name: clientName,
+      module_key: r.module_key,
+      module_label,
+      work_type: r.work_type,
+      work_type_label,
+      period_key: r.period_key,
+      work_state: r.work_state,
+      work_state_label,
+      assigned_user_id: r.assigned_user_id,
+      assigned_user_name,
+      reviewer_user_id: r.reviewer_user_id,
+      reviewer_user_name,
+      due_at: r.due_at,
+      sla_status: r.sla_status,
+      sla_status_label: slaStatusLabel(r.sla_status),
+      override_active: r.override_active,
+      override_summary: ov,
+      allowed_actions: queueAllowedActions(r.work_state),
+      allowed_transitions: rowAllowedTransitions(r.work_state),
+      allowed_override_kinds: rowAllowedOverrideKinds(r.work_state),
+      version: r.version,
+      updated_at: r.updated_at,
+      queue_cells,
+      queue_shell: {
+        open_detail: {
+          kind: 'open_queue_item_detail',
+          label: 'Open',
+          enabled: true,
+          reason: null,
+        },
+        overflow_menu_button_label: '⋯',
+      },
+      command_modal_subject_line: buildCommandModalSubjectLine({
+        work_type_label,
+        module_label,
+        period_key: r.period_key,
+        version: r.version,
+        hide_period_in_subject: hidePeriodInSubject,
+      }),
+      detail_panel: buildQueueRowDetailPanel({
+        client_name: clientName,
+        client_id: r.client_id,
+        module_label,
+        work_type_label,
+        work_state_label,
+        assigned_user_name,
+        reviewer_user_name,
+        due_at: r.due_at,
+        sla_status_label: slaStatusLabel(r.sla_status),
+        override_summary: ov,
+        period_key: r.period_key,
+        hide_period_in_subject: hidePeriodInSubject,
+        docflow_messenger_path: messengerPath,
+      }),
+    };
+  });
+
+  const queue_table = computeQueueTableModel(rows);
 
   // ---- 7. Compose response.
   return {
@@ -934,6 +1243,8 @@ export async function buildWorkEngineQueueAggregate(params: {
       total_matching: totalMatching,
       returned: rows.length,
     },
+
+    queue_table,
 
     rows,
 

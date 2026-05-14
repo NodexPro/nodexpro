@@ -35,8 +35,44 @@ export type QueueAllowedActionCommand =
 
 export type QueueAllowedAction = {
   command: QueueAllowedActionCommand;
+  /** Backend-owned caption for overflow menu / secondary UI. */
+  label: string;
   enabled: boolean;
   reason: string | null;
+};
+
+export type QueueOpenDetailAction = {
+  kind: 'open_queue_item_detail';
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+};
+
+export type QueueRowQueueShell = {
+  open_detail: QueueOpenDetailAction;
+  overflow_menu_button_label: string;
+};
+
+export type QueueDetailSection =
+  | { kind: 'kv_block'; title: string; rows: Array<{ label: string; value: string | null }> }
+  | { kind: 'static_paragraph'; title: string; body: string }
+  | { kind: 'open_path'; label: string; path: string };
+
+export type QueueRowDetailPanel = {
+  title: string;
+  subtitle: string | null;
+  sections: QueueDetailSection[];
+};
+
+export type QueueTableColumnModel = {
+  key: string;
+  label: string;
+  empty_display: 'dash' | 'blank';
+  kind: 'data' | 'actions';
+};
+
+export type WorkEngineQueueTableModel = {
+  columns: QueueTableColumnModel[];
 };
 
 export type QueueLabeledOption = {
@@ -87,6 +123,11 @@ export type WorkEngineQueueRow = {
   allowed_override_kinds: QueueRowAllowedOverrideKind[];
   version: number;
   updated_at: string;
+  /** Backend-computed visible cell values for the queue table (keyed by queue_table column keys). */
+  queue_cells: Record<string, string | null>;
+  queue_shell: QueueRowQueueShell;
+  command_modal_subject_line: string;
+  detail_panel: QueueRowDetailPanel;
 };
 
 export type WorkEnginePendingMappingRow = {
@@ -141,6 +182,8 @@ export type WorkEngineQueueAggregate = {
     total_matching: number;
     returned: number;
   };
+  /** Table structure (column order, labels, kinds) — UI renders verbatim. */
+  queue_table: WorkEngineQueueTableModel;
   rows: WorkEngineQueueRow[];
   pending_mapping_section: {
     pending_mapping_count: number;

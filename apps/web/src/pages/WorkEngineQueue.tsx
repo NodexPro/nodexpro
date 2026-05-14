@@ -12,16 +12,18 @@
  *   - All filter options come from `aggregate.filters.*`.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   executeWorkEngineQueueCommand,
   fetchWorkEngineQueueAggregate,
-  type QueueAllowedAction,
   type QueueAllowedActionCommand,
+  type QueueDetailSection,
   type QueueRowAllowedOverrideKind,
   type WorkEngineQueueAggregate,
   type WorkEngineQueueFiltersInput,
   type WorkEngineQueueRow,
+  type WorkEngineQueueTableModel,
 } from '../api/work-engine';
 import { userFacingApiMessage } from '../api/client';
 import '../styles/nx-work-engine-queue.css';
@@ -61,24 +63,6 @@ function filtersToApi(f: FilterState): WorkEngineQueueFiltersInput {
   };
 }
 
-/** Action label is owned by the UI only as a *button caption*; semantics live in backend. */
-function actionButtonLabel(cmd: QueueAllowedActionCommand): string {
-  switch (cmd) {
-    case 'assign':
-      return 'Assign';
-    case 'change_state':
-      return 'Change state';
-    case 'set_deadline':
-      return 'Set deadline';
-    case 'apply_override':
-      return 'Override';
-    case 'archive':
-      return 'Archive';
-    default:
-      return cmd;
-  }
-}
-
 type PendingModal =
   | { kind: 'assign'; row: WorkEngineQueueRow }
   | { kind: 'change_state'; row: WorkEngineQueueRow }
@@ -88,11 +72,13 @@ type PendingModal =
   | null;
 
 export function WorkEngineQueue() {
+  const navigate = useNavigate();
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
   const [aggregate, setAggregate] = useState<WorkEngineQueueAggregate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<PendingModal>(null);
+  const [detailRow, setDetailRow] = useState<WorkEngineQueueRow | null>(null);
 
   const loadAggregate = useCallback(async (f: FilterState) => {
     setLoading(true);
@@ -199,7 +185,12 @@ export function WorkEngineQueue() {
         loading={loading}
       />
 
-      <QueueTable rows={rows} onAction={(row, cmd) => setModal(buildModalForAction(row, cmd))} />
+      <QueueTable
+        table={aggregate.queue_table}
+        rows={rows}
+        onOpenDetail={(row) => setDetailRow(row)}
+        onOverflowAction={(row, cmd) => setModal(buildModalForAction(row, cmd))}
+      />
 
       <Pagination
         offset={pagination.offset}
@@ -212,6 +203,21 @@ export function WorkEngineQueue() {
       />
 
       <PendingMappingSection pending={pending} />
+
+      {detailRow ? (
+        <QueueItemDetailDrawer
+          row={detailRow}
+          onClose={() => setDetailRow(null)}
+          onNavigate={(path) => {
+            navigate(path);
+            setDetailRow(null);
+          }}
+          onCommandAction={(row, cmd) => {
+            setDetailRow(null);
+            setModal(buildModalForAction(row, cmd));
+          }}
+        />
+      ) : null}
 
       {modal ? (
         <ActionModal
@@ -412,8 +418,10 @@ function FiltersBar(props: {
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function QueueTable(props: {
+  table: WorkEngineQueueTableModel;
   rows: WorkEngineQueueRow[];
-  onAction: (row: WorkEngineQueueRow, cmd: QueueAllowedActionCommand) => void;
+  onOpenDetail: (row: WorkEngineQueueRow) => void;
+  onOverflowAction: (row: WorkEngineQueueRow, cmd: QueueAllowedActionCommand) => void;
 }) {
   if (props.rows.length === 0) {
     return (
@@ -427,45 +435,27 @@ function QueueTable(props: {
       <table className="nx-we-table">
         <thead>
           <tr>
-            <th>Client</th>
-            <th>Module</th>
-            <th>Work type</th>
-            <th>Period</th>
-            <th>State</th>
-            <th>Assignee</th>
-            <th>Reviewer</th>
-            <th>Due</th>
-            <th>SLA</th>
-            <th>Actions</th>
+            {props.table.columns.map((col) => (
+              <th key={col.key}>{col.label}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {props.rows.map((row) => (
             <tr key={row.work_item_id}>
-              <td>{row.client_name || row.client_id || <span className="nx-we-muted">—</span>}</td>
-              <td>{row.module_label}</td>
-              <td>{row.work_type_label}</td>
-              <td>{row.period_key}</td>
-              <td>
-                <span className="nx-we-state-badge">{row.work_state_label}</span>
-                {row.override_summary ? (
-                  <>
-                    <br />
-                    <span className="nx-we-override-pill">{row.override_summary}</span>
-                  </>
-                ) : null}
-              </td>
-              <td>{row.assigned_user_name || <span className="nx-we-muted">—</span>}</td>
-              <td>{row.reviewer_user_name || <span className="nx-we-muted">—</span>}</td>
-              <td>{row.due_at || <span className="nx-we-muted">—</span>}</td>
-              <td>
-                <span className={`nx-we-sla-badge nx-we-sla-badge--${row.sla_status}`}>
-                  {row.sla_status_label}
-                </span>
-              </td>
-              <td>
-                <RowActions row={row} onAction={(cmd) => props.onAction(row, cmd)} />
-              </td>
+              {props.table.columns.map((col) => (
+                <td key={`${row.work_item_id}-${col.key}`}>
+                  {col.kind === 'actions' ? (
+                    <QueueRowShellActions
+                      row={row}
+                      onOpenDetail={() => props.onOpenDetail(row)}
+                      onOverflowAction={(cmd) => props.onOverflowAction(row, cmd)}
+                    />
+                  ) : (
+                    renderQueueDataCell(row, col.key, col.empty_display)
+                  )}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -474,25 +464,164 @@ function QueueTable(props: {
   );
 }
 
-function RowActions(props: {
+function renderQueueDataCell(
+  row: WorkEngineQueueRow,
+  colKey: string,
+  emptyDisplay: 'dash' | 'blank',
+): ReactNode {
+  const raw = row.queue_cells[colKey] ?? null;
+  const isEmpty = raw == null || String(raw).trim() === '';
+  if (isEmpty) {
+    return emptyDisplay === 'dash' ? <span className="nx-we-muted">—</span> : null;
+  }
+  if (colKey === 'state') {
+    return <span className="nx-we-state-badge nx-we-state-badge--wide">{raw}</span>;
+  }
+  if (colKey === 'sla' && row.sla_status && row.sla_status !== 'none') {
+    return (
+      <span className={`nx-we-sla-badge nx-we-sla-badge--${row.sla_status}`}>{raw}</span>
+    );
+  }
+  return raw;
+}
+
+function QueueRowShellActions(props: {
   row: WorkEngineQueueRow;
-  onAction: (cmd: QueueAllowedActionCommand) => void;
+  onOpenDetail: () => void;
+  onOverflowAction: (cmd: QueueAllowedActionCommand) => void;
 }) {
+  const { row } = props;
+  const open = row.queue_shell.open_detail;
   return (
-    <div className="nx-we-row-actions">
-      {props.row.allowed_actions.map((a: QueueAllowedAction) => (
-        <button
-          key={a.command}
-          type="button"
-          className="nx-we-btn"
-          disabled={!a.enabled}
-          title={a.reason ?? ''}
-          onClick={() => props.onAction(a.command)}
-        >
-          {actionButtonLabel(a.command)}
-        </button>
-      ))}
+    <div className="nx-we-shell-actions">
+      <button
+        type="button"
+        className="nx-we-btn nx-we-btn--primary"
+        disabled={!open.enabled}
+        title={open.reason ?? ''}
+        onClick={() => props.onOpenDetail()}
+      >
+        {open.label}
+      </button>
+      <details className="nx-we-overflow">
+        <summary className="nx-we-overflow__summary" aria-label="More actions">
+          {row.queue_shell.overflow_menu_button_label}
+        </summary>
+        <div className="nx-we-overflow__menu">
+          {row.allowed_actions.map((a) => (
+            <button
+              key={a.command}
+              type="button"
+              className="nx-we-overflow__item"
+              disabled={!a.enabled}
+              title={a.reason ?? ''}
+              onClick={() => {
+                props.onOverflowAction(a.command);
+              }}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </details>
     </div>
+  );
+}
+
+function QueueItemDetailDrawer(props: {
+  row: WorkEngineQueueRow;
+  onClose: () => void;
+  onNavigate: (path: string) => void;
+  onCommandAction: (row: WorkEngineQueueRow, cmd: QueueAllowedActionCommand) => void;
+}) {
+  const { row } = props;
+  const panel = row.detail_panel;
+  return (
+    <div className="nx-we-drawer-overlay" role="presentation" onClick={props.onClose}>
+      <div
+        className="nx-we-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="nx-we-drawer-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="nx-we-drawer__head">
+          <div>
+            <h2 id="nx-we-drawer-title" className="nx-we-drawer__title">
+              {panel.title}
+            </h2>
+            {panel.subtitle ? <p className="nx-we-drawer__subtitle">{panel.subtitle}</p> : null}
+          </div>
+          <button type="button" className="nx-we-btn" onClick={props.onClose}>
+            Close
+          </button>
+        </div>
+        <div className="nx-we-drawer__body">
+          {panel.sections.map((section, idx) => (
+            <DetailSectionView
+              key={`${row.work_item_id}-sec-${idx}`}
+              section={section}
+              onNavigate={props.onNavigate}
+            />
+          ))}
+        </div>
+        <div className="nx-we-drawer__footer">
+          {row.allowed_actions.map((a) => (
+            <button
+              key={a.command}
+              type="button"
+              className="nx-we-btn"
+              disabled={!a.enabled}
+              title={a.reason ?? ''}
+              onClick={() => props.onCommandAction(row, a.command)}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailSectionView(props: {
+  section: QueueDetailSection;
+  onNavigate: (path: string) => void;
+}) {
+  const s = props.section;
+  if (s.kind === 'kv_block') {
+    return (
+      <section className="nx-we-drawer-section">
+        <h3 className="nx-we-drawer-section__title">{s.title}</h3>
+        <dl className="nx-we-drawer-kv">
+          {s.rows.map((r, i) => (
+            <div key={`${i}-${r.label}`} className="nx-we-drawer-kv__row">
+              <dt>{r.label}</dt>
+              <dd>{r.value && String(r.value).trim() ? r.value : <span className="nx-we-muted">—</span>}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    );
+  }
+  if (s.kind === 'static_paragraph') {
+    return (
+      <section className="nx-we-drawer-section">
+        <h3 className="nx-we-drawer-section__title">{s.title}</h3>
+        <p className="nx-we-drawer-section__body">{s.body}</p>
+      </section>
+    );
+  }
+  return (
+    <section className="nx-we-drawer-section">
+      <button
+        type="button"
+        className="nx-we-btn nx-we-btn--primary"
+        onClick={() => props.onNavigate(s.path)}
+      >
+        {s.label}
+      </button>
+    </section>
   );
 }
 
@@ -702,8 +831,7 @@ function ActionModal(props: {
         <h3 className="nx-we-modal__title">{title}</h3>
         <div className="nx-we-modal__body">
           <div className="nx-we-modal__hint">
-            Work item: <strong>{modal.row.work_type_label}</strong> ·{' '}
-            <strong>{modal.row.module_label}</strong> · period {modal.row.period_key}
+            {modal.row.command_modal_subject_line}
             <br />
             Current state: <strong>{modal.row.work_state_label}</strong> · version{' '}
             <strong>{modal.row.version}</strong>
