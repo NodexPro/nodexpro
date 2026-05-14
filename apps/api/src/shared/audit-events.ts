@@ -4,6 +4,8 @@ export const AUDIT_ACTIONS = {
   USER_CREATED: 'user.created',
   USER_LOGGED_IN: 'user.logged_in',
   USER_LOGGED_OUT: 'user.logged_out',
+  /** Core: persisted active tenant selection (users.active_organization_id). */
+  AUTH_ACTIVE_ORG_SELECTED: 'auth.active_org_selected',
   ORGANIZATION_CREATED: 'organization.created',
   ORGANIZATION_UPDATED: 'organization.updated',
   MEMBERSHIP_CREATED: 'membership.created',

@@ -1,3 +1,5 @@
+import { getBackendActiveOrganizationId } from './org-context';
+
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 /** API error JSON `{ code, message, ...details }` — use `code` for secure-session / encryption flows */
@@ -106,7 +108,7 @@ async function getToken(): Promise<string | null> {
 
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = await getToken();
-  const orgId = sessionStorage.getItem('activeOrganizationId');
+  const orgId = getBackendActiveOrganizationId();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),

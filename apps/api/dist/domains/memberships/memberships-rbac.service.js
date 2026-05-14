@@ -8,6 +8,7 @@ import { forbidden, badRequest } from '../../shared/errors.js';
 import { requireRbacPermission, RBAC_PERMISSIONS } from '../rbac/rbac.service.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { sendInvitationEmail } from '../../shared/email.service.js';
+import { updateUserStoredActiveOrganizationId } from '../auth/active-organization.service.js';
 const INVITE_EXPIRY_DAYS = 7;
 function writeSystemAudit(params) {
     return supabaseAdmin.from('system_audit_log').insert({
@@ -393,5 +394,6 @@ export async function acceptInviteRbac(ctx, token) {
         eventType: 'invitation_accepted',
         payload: { invitation_id: inv.id, role_code: invRow.role_code },
     });
+    await updateUserStoredActiveOrganizationId(ctx.user.id, invRow.organization_id);
     return { success: true, organization_id: invRow.organization_id };
 }

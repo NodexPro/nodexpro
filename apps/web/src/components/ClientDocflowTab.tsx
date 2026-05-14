@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
+import { getBackendActiveOrganizationId } from '../api/org-context';
 import { docflowClientTabAggregate, docflowOfficeCommands } from '../api/endpoints';
 import { newDocflowIdempotencyKey } from '../lib/idempotency-key';
 
@@ -108,7 +109,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
     setBusyCommand(command);
     setError('');
     try {
-      const orgId = sessionStorage.getItem('activeOrganizationId') ?? '';
+      const orgId = getBackendActiveOrganizationId() ?? '';
       if (!orgId) throw new Error('No active organization selected');
       const out = (await apiJson(docflowOfficeCommands, {
         method: 'POST',

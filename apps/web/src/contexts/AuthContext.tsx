@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { supabase } from '../lib/supabase';
 import { apiJson } from '../api/client';
 import { AUTH } from '../api/endpoints';
+import { setBackendActiveOrganizationId } from '../api/org-context';
 
 export interface MeData {
   user: { id: string; email: string; fullName: string | null; status: string };
@@ -55,11 +56,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (prev.status === 'authenticated' && isMeEqual(prev.me, me)) return prev;
           return { status: 'authenticated', me };
         });
-        if (me.activeOrganizationId) sessionStorage.setItem('activeOrganizationId', me.activeOrganizationId);
-        else sessionStorage.removeItem('activeOrganizationId');
+        setBackendActiveOrganizationId(me.activeOrganizationId);
         return me;
       } catch (e) {
         if (signal?.aborted) return null;
+        setBackendActiveOrganizationId(null);
         setState({ status: 'unauthenticated' });
         return null;
       } finally {
@@ -78,8 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       body: JSON.stringify({ organization_id: organizationId }),
     });
     setState({ status: 'authenticated', me });
-    if (me.activeOrganizationId) sessionStorage.setItem('activeOrganizationId', me.activeOrganizationId);
-    else sessionStorage.removeItem('activeOrganizationId');
+    setBackendActiveOrganizationId(me.activeOrganizationId);
     return me;
   }, []);
 
@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await apiJson(AUTH.logout, { method: 'POST' });
     } finally {
       await supabase.auth.signOut();
-      sessionStorage.removeItem('activeOrganizationId');
+      setBackendActiveOrganizationId(null);
       setState({ status: 'unauthenticated' });
     }
   }, []);
@@ -102,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const load = async () => {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
+        setBackendActiveOrganizationId(null);
         setState({ status: 'unauthenticated' });
         return;
       }
@@ -113,7 +114,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
-      if (event === 'SIGNED_OUT') setState({ status: 'unauthenticated' });
+      if (event === 'SIGNED_OUT') {
+        setBackendActiveOrganizationId(null);
+        setState({ status: 'unauthenticated' });
+      }
       if (event === 'TOKEN_REFRESHED') {
         // Token refresh should not force a /auth/session refetch.
         // Session aggregate is backend-truth but mostly stable (org list, permissions, enabled modules).

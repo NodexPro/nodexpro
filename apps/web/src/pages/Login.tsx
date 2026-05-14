@@ -35,8 +35,6 @@ export function Login() {
         return;
       }
       const redirectTo = (me.redirect_to ?? '').trim() || from;
-      if (me.activeOrganizationId) sessionStorage.setItem('activeOrganizationId', me.activeOrganizationId);
-      else sessionStorage.removeItem('activeOrganizationId');
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');

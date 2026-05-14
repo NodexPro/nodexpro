@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import { authService } from './auth.service.js';
+import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
+import { getUserStoredActiveOrganizationId, loadOrgMembershipForUser, updateUserStoredActiveOrganizationId, } from './active-organization.service.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../../config.js';
@@ -29,8 +31,6 @@ async function buildMeResponse(ctx, opts) {
     let activeOrgId = opts?.preferredActiveOrganizationId ?? ctx.organizationId ?? null;
     if (activeOrgId && !orgIdSet.has(activeOrgId))
         activeOrgId = null;
-    if (!activeOrgId && orgList.length === 1)
-        activeOrgId = orgList[0].id;
     let permissions = ctx.membership?.permissions ?? [];
     if (activeOrgId && permissions.length === 0) {
         const { loadMembershipWithPermissions } = await import('../rbac/rbac.service.js');
@@ -196,7 +196,23 @@ router.put('/me/active-organization', authMiddleware, async (req, res, next) => 
             data = (await supabaseAdmin.from('organization_users').select('organization_id').eq('user_id', req.context.user.id).eq('organization_id', organizationId).eq('membership_status', 'active').single()).data;
         if (!data)
             return res.status(403).json({ code: 'FORBIDDEN', message: 'Not a member of this organization' });
-        return res.json({ activeOrganizationId: organizationId });
+        const userId = req.context.user.id;
+        const previousOrgId = await getUserStoredActiveOrganizationId(userId);
+        await updateUserStoredActiveOrganizationId(userId, organizationId);
+        await writeAudit({
+            organizationId,
+            actorUserId: userId,
+            entityType: 'user',
+            entityId: userId,
+            action: AUDIT_ACTIONS.AUTH_ACTIVE_ORG_SELECTED,
+            payload: { previous_org_id: previousOrgId, new_org_id: organizationId, actor_user_id: userId },
+            ipAddress: typeof req.ip === 'string' && req.ip ? req.ip : null,
+            userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+        });
+        const freshMembership = await loadOrgMembershipForUser(userId, organizationId);
+        const freshCtx = { ...req.context, organizationId, membership: freshMembership };
+        const me = await buildMeResponse(freshCtx, { preferredActiveOrganizationId: organizationId });
+        return res.json(toAuthSessionAggregate(me));
     }
     catch (e) {
         next(e);
@@ -225,7 +241,22 @@ router.post('/commands/select_active_organization', authMiddleware, async (req, 
         }
         if (!data)
             return res.status(403).json({ code: 'FORBIDDEN', message: 'Not a member of this organization' });
-        const me = await buildMeResponse(req.context, { preferredActiveOrganizationId: organizationId });
+        const userId = req.context.user.id;
+        const previousOrgId = await getUserStoredActiveOrganizationId(userId);
+        await updateUserStoredActiveOrganizationId(userId, organizationId);
+        await writeAudit({
+            organizationId,
+            actorUserId: userId,
+            entityType: 'user',
+            entityId: userId,
+            action: AUDIT_ACTIONS.AUTH_ACTIVE_ORG_SELECTED,
+            payload: { previous_org_id: previousOrgId, new_org_id: organizationId, actor_user_id: userId },
+            ipAddress: typeof req.ip === 'string' && req.ip ? req.ip : null,
+            userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+        });
+        const freshMembership = await loadOrgMembershipForUser(userId, organizationId);
+        const freshCtx = { ...req.context, organizationId, membership: freshMembership };
+        const me = await buildMeResponse(freshCtx, { preferredActiveOrganizationId: organizationId });
         return res.json(toAuthSessionAggregate(me));
     }
     catch (e) {

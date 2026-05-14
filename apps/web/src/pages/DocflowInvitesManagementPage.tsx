@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
+import { getBackendActiveOrganizationId } from '../api/org-context';
 import { docflowInvitesManagementAggregate, docflowOfficeCommands } from '../api/endpoints';
 
 type UnknownRecord = Record<string, unknown>;
@@ -120,7 +121,7 @@ export function DocflowInvitesManagementPage() {
     setBusy(command);
     setError('');
     try {
-      const orgId = sessionStorage.getItem('activeOrganizationId') ?? '';
+      const orgId = getBackendActiveOrganizationId() ?? '';
       if (!orgId) throw new Error('No active organization selected');
       const out = (await apiJson(docflowOfficeCommands, {
         method: 'POST',

@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { forbidden } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
+import { updateUserStoredActiveOrganizationId } from '../auth/active-organization.service.js';
 import type { RequestContext } from '../../shared/context.js';
 import type { CreateOrganizationResponse } from '../../types/api.js';
 
@@ -41,6 +42,8 @@ export async function createOrganization(ctx: RequestContext, params: { name: st
     created_at: now,
     updated_at: now,
   }).then((r) => { if (r.error) console.warn('[org] organization_memberships insert:', r.error); });
+
+  await updateUserStoredActiveOrganizationId(ctx.user.id, org.id);
 
   /* Legacy onboarding: optional starter plan + subscriptions + plan_modules. Not used for module entitlement.
    * Module entitlement is resolved only from organization_module_subscriptions and modules.is_system.

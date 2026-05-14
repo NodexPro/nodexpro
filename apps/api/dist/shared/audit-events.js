@@ -3,6 +3,8 @@ export const AUDIT_ACTIONS = {
     USER_CREATED: 'user.created',
     USER_LOGGED_IN: 'user.logged_in',
     USER_LOGGED_OUT: 'user.logged_out',
+    /** Core: persisted active tenant selection (users.active_organization_id). */
+    AUTH_ACTIVE_ORG_SELECTED: 'auth.active_org_selected',
     ORGANIZATION_CREATED: 'organization.created',
     ORGANIZATION_UPDATED: 'organization.updated',
     MEMBERSHIP_CREATED: 'membership.created',
@@ -185,6 +187,23 @@ export const AUDIT_ACTIONS = {
     DOCFLOW_REQUEST_TEMPLATE_SAVED: 'docflow_request_template_saved',
     DOCFLOW_REQUEST_TEMPLATE_ARCHIVED: 'docflow_request_template_archived',
     DOCFLOW_DOCUMENT_REQUEST_SENT: 'docflow_document_request_sent',
+    // Work Engine (Stage 2 foundation; canonical workflow memory).
+    WORK_ITEM_CREATED: 'work_engine.work_item_created',
+    WORK_ITEM_ASSIGNED: 'work_engine.work_item_assigned',
+    WORK_ITEM_STATE_CHANGED: 'work_engine.work_item_state_changed',
+    WORK_ITEM_DEADLINE_SET: 'work_engine.work_item_deadline_set',
+    WORK_ITEM_OVERRIDE_APPLIED: 'work_engine.work_item_override_applied',
+    WORK_EVENT_APPENDED: 'work_engine.work_event_appended',
+    // Work Engine Stage 3A — event intake outcomes.
+    WORK_EVENT_RECEIVED: 'work_engine.event_received',
+    WORK_EVENT_DUPLICATE_SKIPPED: 'work_engine.event_duplicate_skipped',
+    WORK_ITEM_AUTO_CREATED_FROM_EVENT: 'work_engine.work_item_auto_created_from_event',
+    WORK_ITEM_EXISTING_REUSED_FROM_EVENT: 'work_engine.work_item_existing_reused_from_event',
+    WORK_EVENT_ACCEPTED_PENDING_MAPPING: 'work_engine.event_accepted_pending_mapping',
+    // Work Engine Stage 3B — explicit mapping layer outcomes (allowlist).
+    // Backend never invents a mapping; only allowlisted event_type values resolve.
+    WORK_EVENT_MAPPING_RESOLVED: 'work_engine.event_mapping_resolved',
+    WORK_EVENT_MAPPING_PENDING: 'work_engine.event_mapping_pending',
 };
 export async function writeAudit(params) {
     await supabaseAdmin.from('audit_log').insert({

@@ -27,11 +27,6 @@ export function CreateOrganization() {
       // [DEBUG] create organization API response
       console.debug('[CreateOrg] API response', { id: res.id, activeOrganizationId: res.activeOrganizationId, membershipCreated: res.membershipCreated });
 
-      const activeId = res.activeOrganizationId ?? res.id;
-      sessionStorage.setItem('activeOrganizationId', activeId);
-      // [DEBUG] activeOrganizationId after set
-      console.debug('[CreateOrg] sessionStorage set', { activeOrganizationId: sessionStorage.getItem('activeOrganizationId') });
-
       const me = await auth.refetchMe();
       // [DEBUG] /me refetch result
       console.debug('[CreateOrg] refetchMe result', {

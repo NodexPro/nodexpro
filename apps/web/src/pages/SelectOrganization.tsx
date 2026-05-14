@@ -1,9 +1,10 @@
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export function SelectOrganization() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   if (auth.status !== 'authenticated') return null;
   const { organizations } = auth.me;
@@ -16,7 +17,10 @@ export function SelectOrganization() {
   async function select(id: string) {
     const refreshed = await selectActiveOrg(id);
     const redirectTo = (refreshed?.redirect_to ?? '/dashboard').trim() || '/dashboard';
-    navigate(redirectTo, { replace: true });
+    const fromRaw = (location.state as { from?: unknown })?.from;
+    const fromPath = typeof fromRaw === 'string' && fromRaw.startsWith('/') ? fromRaw : null;
+    const target = fromPath && fromPath !== '/select-org' ? fromPath : redirectTo;
+    navigate(target, { replace: true });
   }
 
   return (

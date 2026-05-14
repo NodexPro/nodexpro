@@ -31,12 +31,9 @@ export function InviteAccept() {
       method: 'POST',
       body: JSON.stringify({ token }),
     })
-      .then((r) => {
+      .then(async () => {
         setStatus('success');
-        if (r?.organization_id) {
-          sessionStorage.setItem('activeOrganizationId', r.organization_id);
-          auth.refetchMe?.();
-        }
+        await auth.refetchMe?.();
         setTimeout(() => navigate('/dashboard'), 2000);
       })
       .catch((e) => {

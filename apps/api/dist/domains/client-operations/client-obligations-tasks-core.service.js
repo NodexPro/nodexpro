@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
 import { businessDayOfMonth, businessMonthKey, businessPreviousMonthKey, businessYmd } from '../../shared/business-time.js';
+import { emitObligationDocumentsMissingIfMapped } from './client-obligations-work-engine-bridge.js';
 function assertOrg(ctx) {
     const orgId = ctx.organizationId;
     if (!orgId)
@@ -1853,9 +1854,9 @@ async function upsertNiSelfEmployedRowFromRelevant(orgId, clientId, niRel, statu
 export async function recomputeClientObligationsAndTasks(ctx, clientId, now = new Date()) {
     const orgId = assertOrg(ctx);
     await ensureClientInOrg(orgId, clientId);
-    await recomputeClientObligationsAndTasksForOrg(orgId, clientId, now);
+    await recomputeClientObligationsAndTasksForOrg(ctx, orgId, clientId, now);
 }
-async function recomputeClientObligationsAndTasksForOrg(orgId, clientId, now) {
+async function recomputeClientObligationsAndTasksForOrg(ctx, orgId, clientId, now) {
     const relevant = await patchIncomeTaxDeductionsComputedStatuses(orgId, clientId, now, await buildRelevantObligations(orgId, clientId, now));
     const { data: profileRow } = await supabaseAdmin
         .from('client_operational_profiles')
@@ -1922,6 +1923,22 @@ async function recomputeClientObligationsAndTasksForOrg(orgId, clientId, now) {
             .upsert(payload, { onConflict: 'organization_id,client_id,obligation_type,period_key' });
         if (upErr)
             throw new AppError(500, upErr.message ?? 'client_obligations upsert failed', 'SUPABASE_ERROR');
+        // Stage 3C — Work Engine bridge.
+        // Emit ONLY on transition into `missing_data` for an allowlisted
+        // obligation_type. The bridge maps obligation_type → Stage 3B event_type
+        // and routes through `intakeWorkEvent`. The bridge is fire-and-forget:
+        // any failure is logged but does NOT affect the obligations/tasks flow.
+        if (status === 'missing_data' && existingStatus !== 'missing_data') {
+            await emitObligationDocumentsMissingIfMapped({
+                ctx,
+                orgId,
+                clientId,
+                obligationType: rel.obligation_type,
+                periodKey: rel.period_key,
+                dueDate: rel.due_date ?? null,
+                blockingReason: nextBlockingReason,
+            });
+        }
     }
     for (const old of current) {
         const key = keyOf({ obligation_type: String(old.obligation_type), period_key: String(old.period_key) });
@@ -2908,7 +2925,7 @@ export async function executeClientObligationsCommand(ctx, clientId, body) {
             throw badRequest('Unknown obligations command');
     }
     if (!skipRecomputeAfterCommand) {
-        await recomputeClientObligationsAndTasksForOrg(orgId, clientId, new Date());
+        await recomputeClientObligationsAndTasksForOrg(ctx, orgId, clientId, new Date());
     }
     await writeAudit({
         organizationId: orgId,
@@ -2988,7 +3005,7 @@ export async function runClientOperationsNightPass(ctx, asOfDate) {
         throw new AppError(500, error.message ?? 'clients read failed', 'SUPABASE_ERROR');
     let processed = 0;
     for (const c of (clients ?? [])) {
-        await recomputeClientObligationsAndTasksForOrg(orgId, c.id, now);
+        await recomputeClientObligationsAndTasksForOrg(ctx, orgId, c.id, now);
         processed += 1;
     }
     await writeAudit({

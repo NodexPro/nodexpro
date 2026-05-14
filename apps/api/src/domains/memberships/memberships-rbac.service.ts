@@ -10,6 +10,7 @@ import { requireRbacPermission, RBAC_PERMISSIONS } from '../rbac/rbac.service.js
 import type { RequestContext } from '../../shared/context.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { sendInvitationEmail } from '../../shared/email.service.js';
+import { updateUserStoredActiveOrganizationId } from '../auth/active-organization.service.js';
 
 const INVITE_EXPIRY_DAYS = 7;
 
@@ -460,6 +461,8 @@ export async function acceptInviteRbac(ctx: RequestContext, token: string) {
     eventType: 'invitation_accepted',
     payload: { invitation_id: (inv as { id: string }).id, role_code: invRow.role_code },
   });
+
+  await updateUserStoredActiveOrganizationId(ctx.user.id, invRow.organization_id);
 
   return { success: true, organization_id: invRow.organization_id };
 }
