@@ -22,6 +22,7 @@ export type WorkEngineQueueFiltersInput = {
   reviewer_user_id?: string | null;
   client_id?: string | null;
   period_key?: string | null;
+  queue_bucket?: string | null;
   limit?: number | null;
   offset?: number | null;
 };
@@ -98,6 +99,13 @@ export type QueueRowAllowedOverrideKind = {
   allowed_to_states?: QueueRowAllowedTransition[];
 };
 
+export type QueueOwnershipCommand = {
+  command: 'pick_up_unassigned' | 'claim_work_item' | 'release_claim';
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+};
+
 export type WorkEngineQueueRow = {
   work_item_id: string;
   client_id: string | null;
@@ -113,6 +121,10 @@ export type WorkEngineQueueRow = {
   assigned_user_name: string | null;
   reviewer_user_id: string | null;
   reviewer_user_name: string | null;
+  claimed_by_user_id?: string | null;
+  claimed_at?: string | null;
+  claimed_by_user_name?: string | null;
+  ownership_commands?: QueueOwnershipCommand[];
   due_at: string | null;
   sla_status: string;
   sla_status_label: string;
@@ -153,6 +165,9 @@ export type WorkEngineQueueAggregate = {
   generated_at: string;
   summary_cards: {
     total_active: number;
+    assigned_to_me: number;
+    unassigned: number;
+    claimed_by_me: number;
     waiting_client: number;
     waiting_human: number;
     review_pending: number;
@@ -166,6 +181,7 @@ export type WorkEngineQueueAggregate = {
     assignees: QueueLabeledOption[];
     reviewers: QueueLabeledOption[];
     period_keys: QueueLabeledOption[];
+    queue_buckets: QueueLabeledOption[];
     pending_mapping_reasons: QueueLabeledOption[];
   };
   applied_filters: {
@@ -175,6 +191,7 @@ export type WorkEngineQueueAggregate = {
     reviewer_user_id: string | null;
     client_id: string | null;
     period_key: string | null;
+    queue_bucket: string | null;
   };
   pagination: {
     limit: number;
@@ -209,6 +226,7 @@ function appendFilterParams(qs: URLSearchParams, f: WorkEngineQueueFiltersInput)
   if (f.reviewer_user_id) qs.set('reviewer_user_id', f.reviewer_user_id);
   if (f.client_id) qs.set('client_id', f.client_id);
   if (f.period_key) qs.set('period_key', f.period_key);
+  if (f.queue_bucket) qs.set('queue_bucket', f.queue_bucket);
   if (typeof f.limit === 'number' && Number.isFinite(f.limit)) qs.set('limit', String(f.limit));
   if (typeof f.offset === 'number' && Number.isFinite(f.offset)) qs.set('offset', String(f.offset));
 }

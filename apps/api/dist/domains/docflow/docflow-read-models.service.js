@@ -186,6 +186,27 @@ export async function getUnreadForOffice(orgId, clientId, threadId) {
         throw error;
     return count ?? 0;
 }
+/**
+ * Batch office-unread counts for many threads (same rules as {@link getUnreadForOffice}).
+ * Used by cross-domain read models (e.g. Work Engine queue). Executes one
+ * unread count query per distinct thread (bounded by the caller's page size).
+ */
+export async function batchOfficeUnreadForThreads(orgId, pairs) {
+    const byThread = new Map();
+    const unique = new Map();
+    for (const p of pairs) {
+        if (!p.threadId || !p.clientId)
+            continue;
+        unique.set(p.threadId, p);
+    }
+    if (unique.size === 0)
+        return byThread;
+    await Promise.all([...unique.values()].map(async (p) => {
+        const n = await getUnreadForOffice(orgId, p.clientId, p.threadId);
+        byThread.set(p.threadId, n);
+    }));
+    return byThread;
+}
 async function getUnreadForClient(orgId, clientId, threadId) {
     const { data: lastRead, error: readErr } = await supabaseAdmin
         .from('client_message_events')
@@ -450,6 +471,207 @@ function resolveInviteStatus(row) {
         return 'invited';
     }
     return 'not_invited';
+}
+function invitationDbStatusLabel(status) {
+    switch (String(status ?? '').trim()) {
+        case 'pending':
+            return 'ממתין';
+        case 'accepted':
+            return 'אושר';
+        case 'expired':
+            return 'פג תוקף';
+        case 'revoked':
+            return 'בוטל';
+        default:
+            return status ? String(status) : '—';
+    }
+}
+function messengerPortalBadgeForInviteStatus(status) {
+    if (status === 'joined')
+        return { color: 'blue', label: 'משתמש פורטל פעיל' };
+    if (status === 'invited')
+        return { color: 'yellow', label: 'הזמנה ממתינה' };
+    return { color: 'gray', label: docflowInviteStatusLabel(status) };
+}
+async function buildMessengerPortalListExtrasByClientId(orgId, pageRows) {
+    const out = new Map();
+    const clientIds = pageRows.map((r) => r.client_id).filter(Boolean);
+    if (!clientIds.length)
+        return out;
+    const [portalUsersRes, invitesRes] = await Promise.all([
+        supabaseAdmin
+            .from('client_portal_users')
+            .select('client_id, status, last_login_at, updated_at')
+            .eq('org_id', orgId)
+            .in('client_id', clientIds)
+            .order('updated_at', { ascending: false }),
+        supabaseAdmin
+            .from('client_portal_invitations')
+            .select('id, client_id, status, created_at, token_expires_at, accepted_at')
+            .eq('org_id', orgId)
+            .in('client_id', clientIds)
+            .order('created_at', { ascending: false }),
+    ]);
+    if (portalUsersRes.error)
+        throw portalUsersRes.error;
+    if (invitesRes.error)
+        throw invitesRes.error;
+    const latestPortalByClient = new Map();
+    for (const row of portalUsersRes.data ?? []) {
+        const cid = String(row.client_id ?? '');
+        if (!cid || latestPortalByClient.has(cid))
+            continue;
+        latestPortalByClient.set(cid, {
+            status: row.status ? String(row.status) : null,
+            last_login_at: row.last_login_at
+                ? String(row.last_login_at)
+                : null,
+        });
+    }
+    const latestInviteByClient = new Map();
+    for (const row of invitesRes.data ?? []) {
+        const cid = String(row.client_id ?? '');
+        if (!cid || latestInviteByClient.has(cid))
+            continue;
+        latestInviteByClient.set(cid, {
+            id: String(row.id ?? ''),
+            status: row.status ? String(row.status) : null,
+            createdAt: row.created_at ? String(row.created_at) : null,
+            tokenExpiresAt: row.token_expires_at
+                ? String(row.token_expires_at)
+                : null,
+            acceptedAt: row.accepted_at
+                ? String(row.accepted_at)
+                : null,
+        });
+    }
+    const inviteIds = Array.from(new Set([...latestInviteByClient.values()]
+        .map((i) => i.id)
+        .filter((id) => id && id.length > 0)));
+    const latestDeliveryByInvitation = new Map();
+    if (inviteIds.length) {
+        const { data: delRows, error: dErr } = await supabaseAdmin
+            .from('client_portal_invite_deliveries')
+            .select('invitation_id, channel, delivery_status, delivery_error, created_at')
+            .eq('org_id', orgId)
+            .in('invitation_id', inviteIds)
+            .order('created_at', { ascending: false });
+        if (dErr)
+            throw dErr;
+        for (const row of delRows ?? []) {
+            const invId = String(row.invitation_id ?? '');
+            if (!invId || latestDeliveryByInvitation.has(invId))
+                continue;
+            const st = String(row.delivery_status ?? 'not_sent');
+            const ch = row.channel
+                ? String(row.channel)
+                : null;
+            latestDeliveryByInvitation.set(invId, {
+                status: st,
+                channel: ch,
+                error: row.delivery_error
+                    ? String(row.delivery_error)
+                    : null,
+            });
+        }
+    }
+    for (const r of pageRows) {
+        const clientId = r.client_id;
+        const latestPortal = latestPortalByClient.get(clientId);
+        const latestInvite = latestInviteByClient.get(clientId);
+        const resolvedStatus = resolveInviteStatus({
+            portalStatus: latestPortal?.status ?? null,
+            inviteStatus: latestInvite?.status ?? null,
+            tokenExpiresAt: latestInvite?.tokenExpiresAt ?? null,
+        });
+        const hasPhone = typeof r.phone === 'string' && r.phone.trim() !== '';
+        const hasEmail = typeof r.email === 'string' && r.email.trim() !== '';
+        const hasAnyChannel = hasPhone || hasEmail;
+        const canInvite = hasAnyChannel && (resolvedStatus === 'not_invited' || resolvedStatus === 'expired' || resolvedStatus === 'revoked');
+        const inviteDisabledReason = canInvite
+            ? null
+            : !hasAnyChannel
+                ? 'חסר טלפון או אימייל בפרטי הלקוח'
+                : resolvedStatus === 'invited' || resolvedStatus === 'joined'
+                    ? 'כבר קיימת הזמנה או גישה פעילה לפורטל'
+                    : 'לא זמין כעת';
+        const delivery = latestInvite?.id ? latestDeliveryByInvitation.get(latestInvite.id) : null;
+        const deliveryStatus = delivery?.status ?? 'not_sent';
+        const canSendDelivery = resolvedStatus === 'invited' && hasAnyChannel && deliveryStatus !== 'sent';
+        const portalActive = (latestPortal?.status ?? '') === 'active';
+        const inviteRowStatus = latestInvite?.status ?? null;
+        const portal_badge = messengerPortalBadgeForInviteStatus(resolvedStatus);
+        const portal_status_label = docflowInviteStatusLabel(resolvedStatus);
+        const invitation_status_label = latestInvite ? invitationDbStatusLabel(inviteRowStatus) : '—';
+        const delivery_status_label = docflowInviteDeliveryStatusLabel(deliveryStatus);
+        const invitation_sent_at = latestInvite?.createdAt ?? null;
+        const accepted_at = latestInvite?.acceptedAt ?? null;
+        const last_portal_activity_at = portalActive && latestPortal?.last_login_at ? latestPortal.last_login_at : null;
+        const allowed_actions = [
+            {
+                command: 'invite_client_to_docflow',
+                label: 'שלח הזמנה לפורטל',
+                variant: 'primary',
+                enabled: canInvite,
+                reason: inviteDisabledReason,
+                payload: {},
+            },
+            {
+                command: 'resend_invite',
+                label: 'שלח שוב הזמנה',
+                variant: 'secondary',
+                enabled: resolvedStatus === 'invited' && hasAnyChannel,
+                reason: resolvedStatus === 'invited' && hasAnyChannel ? null : 'אין הזמנה פעילה לשליחה חוזרת',
+                payload: {},
+            },
+            {
+                command: 'revoke_invite',
+                label: 'בטל הזמנה',
+                variant: 'danger',
+                enabled: resolvedStatus === 'invited',
+                reason: resolvedStatus === 'invited' ? null : 'אין הזמנה ממתינה לביטול',
+                payload: {},
+            },
+            {
+                command: 'issue_docflow_invite_delivery',
+                label: 'שלח קישור (מייל / SMS)',
+                variant: 'primary',
+                enabled: canSendDelivery && Boolean(latestInvite?.id),
+                reason: canSendDelivery ? null : 'השליחה כבר בוצעה או שאין הזמנה לשליחה',
+                payload: latestInvite?.id ? { invitation_id: latestInvite.id } : {},
+            },
+            {
+                command: 'revoke_client_portal_access',
+                label: 'השבת גישה לפורטל',
+                variant: 'danger',
+                enabled: portalActive,
+                reason: portalActive ? null : 'אין משתמש פורטל פעיל',
+                payload: {},
+            },
+        ];
+        const portal_card = {
+            title: r.display_name?.trim() || 'לקוח',
+            subtitle: portal_badge.label,
+            fields: [
+                { key: 'client', label: 'לקוח', value: r.display_name?.trim() || null },
+                { key: 'phone', label: 'טלפון', value: r.phone },
+                { key: 'email', label: 'אימייל', value: r.email },
+                { key: 'portal_status', label: 'סטטוס פורטל', value: portal_status_label },
+                { key: 'invitation_status', label: 'סטטוס הזמנה', value: invitation_status_label },
+                { key: 'delivery_status', label: 'סטטוס שליחה', value: delivery_status_label },
+                { key: 'invitation_sent_at', label: 'הזמנה נוצרה בתאריך', value: invitation_sent_at },
+                { key: 'accepted_at', label: 'אושר בתאריך', value: accepted_at },
+                { key: 'last_portal_activity_at', label: 'פעילות אחרונה בפורטל', value: last_portal_activity_at },
+            ],
+            allowed_actions,
+        };
+        out.set(clientId, {
+            portal_badge,
+            portal_card,
+            show_portal_invite_glyph: canInvite,
+        });
+    }
+    return out;
 }
 export async function buildDocflowInvitesManagementAggregate(params) {
     const pageSize = Math.max(1, Math.min(100, Number(params.pageSize ?? 25) || 25));
@@ -1106,6 +1328,7 @@ export async function buildOfficeDocflowInboxAggregate(params) {
                 unreadByClient.set(cid, n);
         }
     }
+    const portalExtrasByClient = await buildMessengerPortalListExtrasByClientId(params.orgId, pageRows);
     const selectedClientId = String(params.selectedClientId ?? '').trim() ||
         (pageRows.length ? pageRows[0].client_id : '');
     // Selected client must be resolved in-scope even if it is not in current page.
@@ -1145,6 +1368,7 @@ export async function buildOfficeDocflowInboxAggregate(params) {
         client_list: pageRows.map((r) => {
             const tlist = threadsByClient.get(r.client_id) ?? [];
             const latest = tlist[0] ?? null;
+            const portal = portalExtrasByClient.get(r.client_id);
             return {
                 ...r,
                 unread_count: unreadByClient.get(r.client_id) ?? 0,
@@ -1159,6 +1383,7 @@ export async function buildOfficeDocflowInboxAggregate(params) {
                         updated_at: latest.updated_at,
                     }
                     : null,
+                ...(portal ?? {}),
             };
         }),
         selection: {

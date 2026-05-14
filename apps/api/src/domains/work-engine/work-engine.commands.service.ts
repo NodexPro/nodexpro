@@ -42,13 +42,24 @@ import {
   reqString,
 } from './work-engine.guards.js';
 import {
+  abortWorkEngineCommandIdempotency,
+  beginWorkEngineCommandIdempotency,
+  completeWorkEngineCommandIdempotency,
+} from './work-engine.idempotency.js';
+import {
   buildWorkEngineFoundationAggregate,
   buildWorkEngineQueueAggregate,
   coerceWorkEngineQueueFilters,
   queueAllowedActions,
   type QueueAllowedActionCommand,
+  type WorkEngineQueueViewerContext,
 } from './work-engine.read-models.service.js';
 import { intakeWorkEvent } from './work-engine.event-intake.service.js';
+import { canStaffPickUpUnassigned, resolveWorkTypeWorkflowPolicy } from './work-engine.policy.service.js';
+import {
+  WORK_ENGINE_PERMISSIONS,
+  requireWorkEnginePermission,
+} from './work-engine.rbac.js';
 import {
   CREATION_SOURCE_TYPES,
   OVERRIDE_KINDS,
@@ -66,6 +77,74 @@ import {
 
 const REFRESH_FOUNDATION = 'work_engine_foundation_aggregate' as const;
 const REFRESH_QUEUE = 'work_engine_queue_aggregate' as const;
+
+function viewerQueueContext(ctx: RequestContext): WorkEngineQueueViewerContext | null {
+  if (!ctx.membership) return null;
+  return {
+    userId: ctx.user.id,
+    permissions: ctx.membership.permissions ?? [],
+    roleCode: ctx.membership.roleCode,
+  };
+}
+
+async function insertWorkAssignmentHistory(row: {
+  orgId: string;
+  workItemId: string;
+  from: string | null;
+  to: string | null;
+  actorUserId: string;
+  commandType: string;
+  idempotencyKey: string;
+}): Promise<void> {
+  const { error } = await supabaseAdmin.from('work_assignment_history').insert({
+    org_id: row.orgId,
+    work_item_id: row.workItemId,
+    from_assigned_user_id: row.from,
+    to_assigned_user_id: row.to,
+    actor_user_id: row.actorUserId,
+    command_type: row.commandType,
+    idempotency_key: row.idempotencyKey,
+  });
+  if (error) throw error;
+}
+
+async function executeWithCommandIdempotency(
+  ctx: RequestContext,
+  orgId: string,
+  command: WorkEngineCommandType,
+  payload: WorkEngineCommandPayload,
+  exec: () => Promise<{ workItemId: string | null }>,
+): Promise<WorkEngineCommandResponse> {
+  const idemKey = reqString(payload, 'idempotency_key');
+  const lease = await beginWorkEngineCommandIdempotency({
+    orgId,
+    commandType: command,
+    idempotencyKey: idemKey,
+  });
+  if (lease.kind === 'replay') {
+    return {
+      ok: true,
+      command,
+      refreshed: await buildRefreshedForPayload(orgId, payload, ctx),
+      meta: { idempotent_replay: true },
+    };
+  }
+  try {
+    const out = await exec();
+    await completeWorkEngineCommandIdempotency({
+      leaseRowId: lease.leaseRowId,
+      workItemId: out.workItemId,
+    });
+    return {
+      ok: true,
+      command,
+      refreshed: await buildRefreshedForPayload(orgId, payload, ctx),
+    };
+  } catch (e) {
+    await abortWorkEngineCommandIdempotency(lease.leaseRowId);
+    throw e;
+  }
+}
 
 function parseRefreshAggregateKey(payload: WorkEngineCommandPayload): 'foundation' | 'queue' {
   const raw = asOptionalString(payload.refresh_aggregate);
@@ -85,12 +164,18 @@ function isQueueRefreshMode(payload: WorkEngineCommandPayload): boolean {
 async function buildRefreshedForPayload(
   orgId: string,
   payload: WorkEngineCommandPayload,
+  ctx: RequestContext,
 ): Promise<WorkEngineCommandResponse['refreshed']> {
   if (parseRefreshAggregateKey(payload) === 'queue') {
     const filters = coerceWorkEngineQueueFilters(payload.aggregate_filters);
+    const viewer = viewerQueueContext(ctx);
     return {
       aggregate_key: REFRESH_QUEUE,
-      aggregate: await buildWorkEngineQueueAggregate({ orgId, filters }),
+      aggregate: await buildWorkEngineQueueAggregate({
+        orgId,
+        filters,
+        viewer: viewer ?? undefined,
+      }),
     };
   }
   return {
@@ -105,7 +190,10 @@ async function buildRefreshedForPayload(
  * trust client-supplied allowed_actions flags.
  */
 function assertQueueActionEnabled(current: WorkItemRow, semantic: QueueAllowedActionCommand): void {
-  const actions = queueAllowedActions(current.work_state);
+  const actions = queueAllowedActions({
+    work_state: current.work_state,
+    assigned_user_id: current.assigned_user_id,
+  });
   const row = actions.find((a) => a.command === semantic);
   if (!row?.enabled) {
     throw badRequest(
@@ -210,6 +298,7 @@ export async function executeWorkEngineCommand(
 
   switch (command) {
     case 'create_work_item': {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
       const clientId = reqString(payload, 'client_id');
       await assertClientBelongsToOrg(orgId, clientId);
       const moduleKey = reqString(payload, 'module_key');
@@ -304,71 +393,117 @@ export async function executeWorkEngineCommand(
           work_state: initialState,
         },
       );
-      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
+      return { workItemId: row.id };
+      });
     }
 
     case 'assign_work_item': {
-      const workItemId = reqString(payload, 'work_item_id');
-      const expectedVersion = reqInt(payload, 'expected_version');
-      // Explicit null clears the assignment; otherwise must be a non-empty string.
-      const assignedUserIdRaw =
-        payload.assigned_user_id === null
-          ? null
-          : asOptionalString(payload.assigned_user_id);
-      const current = await loadWorkItem(orgId, workItemId);
-      assertExpectedVersion(current.version, expectedVersion);
-      if (isQueueRefreshMode(payload)) assertQueueActionEnabled(current, 'assign');
-      // Auto-promote new -> assigned when assigning a user for the first time.
-      const willMoveFromNewToAssigned =
-        current.work_state === 'new' && assignedUserIdRaw !== null;
-      const nextState: WorkState = willMoveFromNewToAssigned
-        ? 'assigned'
-        : current.work_state;
-      const newVersion = current.version + 1;
-      await updateWorkItemWithVersion({
-        orgId,
-        workItemId,
-        expectedVersion,
-        newVersion,
-        patch: {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+        requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.assign);
+        const workItemId = reqString(payload, 'work_item_id');
+        const expectedVersion = reqInt(payload, 'expected_version');
+        const assignedUserIdRaw = asOptionalString(payload.assigned_user_id);
+        if (assignedUserIdRaw == null || assignedUserIdRaw === '') {
+          throw badRequest(
+            'assign_work_item requires assigned_user_id (first assignment only; use transfer_work_item to reassign)',
+            'assign_target_required',
+          );
+        }
+        const current = await loadWorkItem(orgId, workItemId);
+        assertExpectedVersion(current.version, expectedVersion);
+        if (current.assigned_user_id != null && String(current.assigned_user_id).trim() !== '') {
+          throw badRequest(
+            'assign_work_item is only valid when the work item has no assignee; use transfer_work_item',
+            'assign_requires_unassigned',
+          );
+        }
+        if (['review_pending', 'done', 'archived'].includes(current.work_state)) {
+          throw badRequest(
+            `assign_work_item is not allowed in work_state='${current.work_state}'`,
+            'invalid_transition',
+          );
+        }
+        if (isQueueRefreshMode(payload)) assertQueueActionEnabled(current, 'assign');
+        if (
+          assignedUserIdRaw &&
+          current.reviewer_user_id &&
+          current.reviewer_user_id === assignedUserIdRaw
+        ) {
+          throw badRequest(
+            'Reviewer cannot match the assignee (separation of duties)',
+            'SELF_REVIEW_FORBIDDEN',
+          );
+        }
+        const willMoveFromNewToAssigned =
+          current.work_state === 'new' && assignedUserIdRaw !== null;
+        const nextState: WorkState = willMoveFromNewToAssigned
+          ? 'assigned'
+          : current.work_state;
+        const assigneeChanged =
+          (current.assigned_user_id ?? null) !== (assignedUserIdRaw ?? null);
+        const newVersion = current.version + 1;
+        const patch: Record<string, unknown> = {
           assigned_user_id: assignedUserIdRaw,
           work_state: nextState,
-        },
-      });
-      await insertTransition({
-        org_id: orgId,
-        work_item_id: workItemId,
-        from_state: current.work_state,
-        to_state: nextState,
-        transition_kind: 'command',
-        action_code: 'assign_work_item',
-        actor_type: 'user',
-        actor_user_id: actorUserId,
-        reason_text: asOptionalString(payload.reason_text),
-        metadata_json: {
-          previous_assigned_user_id: current.assigned_user_id,
-          new_assigned_user_id: assignedUserIdRaw,
-        },
-        expected_version: expectedVersion,
-        resulting_version: newVersion,
-      });
-      await audit(
-        orgId,
-        actorUserId,
-        'work_item',
-        workItemId,
-        AUDIT_ACTIONS.WORK_ITEM_ASSIGNED,
-        {
-          previous_assigned_user_id: current.assigned_user_id,
-          new_assigned_user_id: assignedUserIdRaw,
+        };
+        if (assigneeChanged) {
+          patch.claimed_by_user_id = null;
+          patch.claimed_at = null;
+        }
+        await updateWorkItemWithVersion({
+          orgId,
+          workItemId,
+          expectedVersion,
+          newVersion,
+          patch,
+        });
+        if (assigneeChanged) {
+          await insertWorkAssignmentHistory({
+            orgId,
+            workItemId,
+            from: current.assigned_user_id,
+            to: assignedUserIdRaw,
+            actorUserId,
+            commandType: 'assign_work_item',
+            idempotencyKey: reqString(payload, 'idempotency_key'),
+          });
+        }
+        await insertTransition({
+          org_id: orgId,
+          work_item_id: workItemId,
           from_state: current.work_state,
           to_state: nextState,
-        },
-      );
-      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
+          transition_kind: 'command',
+          action_code: 'assign_work_item',
+          actor_type: 'user',
+          actor_user_id: actorUserId,
+          reason_text: asOptionalString(payload.reason_text),
+          metadata_json: {
+            previous_assigned_user_id: current.assigned_user_id,
+            new_assigned_user_id: assignedUserIdRaw,
+          },
+          expected_version: expectedVersion,
+          resulting_version: newVersion,
+        });
+        await audit(
+          orgId,
+          actorUserId,
+          'work_item',
+          workItemId,
+          AUDIT_ACTIONS.WORK_ITEM_ASSIGNED,
+          {
+            previous_assigned_user_id: current.assigned_user_id,
+            new_assigned_user_id: assignedUserIdRaw,
+            from_state: current.work_state,
+            to_state: nextState,
+          },
+        );
+        return { workItemId };
+      });
     }
 
     case 'change_work_state': {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
       const workItemId = reqString(payload, 'work_item_id');
       const expectedVersion = reqInt(payload, 'expected_version');
       const toState = assertValidWorkState(reqString(payload, 'to_state'));
@@ -385,12 +520,17 @@ export async function executeWorkEngineCommand(
         );
       }
       const newVersion = current.version + 1;
+      const patch: Record<string, unknown> = { work_state: toState };
+      if (toState === 'waiting_client') {
+        patch.claimed_by_user_id = null;
+        patch.claimed_at = null;
+      }
       await updateWorkItemWithVersion({
         orgId,
         workItemId,
         expectedVersion,
         newVersion,
-        patch: { work_state: toState },
+        patch,
       });
       await insertTransition({
         org_id: orgId,
@@ -414,10 +554,12 @@ export async function executeWorkEngineCommand(
         AUDIT_ACTIONS.WORK_ITEM_STATE_CHANGED,
         { from_state: current.work_state, to_state: toState },
       );
-      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
+      return { workItemId };
+      });
     }
 
     case 'set_work_deadline': {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
       const workItemId = reqString(payload, 'work_item_id');
       const expectedVersion = reqInt(payload, 'expected_version');
       const dueAt =
@@ -483,7 +625,8 @@ export async function executeWorkEngineCommand(
         AUDIT_ACTIONS.WORK_ITEM_DEADLINE_SET,
         { previous_due_at: current.due_at, new_due_at: dueAt, override: isOverride },
       );
-      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
+      return { workItemId };
+      });
     }
 
     case 'append_work_event': {
@@ -563,13 +706,14 @@ export async function executeWorkEngineCommand(
           work_item_id: workItemIdOpt,
         },
       );
-      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
+      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload, ctx) };
     }
 
     case 'apply_work_override': {
-      const workItemId = reqString(payload, 'work_item_id');
-      const expectedVersion = reqInt(payload, 'expected_version');
-      const overrideKindRaw = reqString(payload, 'override_kind');
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+        const workItemId = reqString(payload, 'work_item_id');
+        const expectedVersion = reqInt(payload, 'expected_version');
+        const overrideKindRaw = reqString(payload, 'override_kind');
       if (!(OVERRIDE_KINDS as readonly string[]).includes(overrideKindRaw)) {
         throw badRequest(
           `Invalid override_kind: ${overrideKindRaw}`,
@@ -577,6 +721,13 @@ export async function executeWorkEngineCommand(
         );
       }
       const overrideKind = overrideKindRaw as OverrideKind;
+        if (overrideKind === 'assignment') {
+          throw badRequest(
+            'Assignment changes are not allowed via apply_work_override; use pick_up_unassigned, assign_work_item, or transfer_work_item',
+            'assignment_override_forbidden',
+          );
+        }
+        requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.override);
       const reasonText = asOptionalString(payload.reason_text);
       if (OVERRIDE_KINDS_REQUIRING_REASON.has(overrideKind) && !reasonText) {
         throw badRequest(
@@ -671,7 +822,254 @@ export async function executeWorkEngineCommand(
           to_state: nextState,
         },
       );
-      return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
+      return { workItemId };
+      });
+    }
+
+    case 'pick_up_unassigned': {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+        requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.pickup);
+        const workItemId = reqString(payload, 'work_item_id');
+        const current = await loadWorkItem(orgId, workItemId);
+        if (current.work_state !== 'new' || current.assigned_user_id !== null) {
+          throw badRequest(
+            'pick_up_unassigned requires work_state=new and no assignee',
+            'invalid_transition',
+          );
+        }
+        const policy = await resolveWorkTypeWorkflowPolicy(orgId, current.work_type);
+        const role = ctx.membership?.roleCode ?? 'staff';
+        if (!canStaffPickUpUnassigned(policy, role)) {
+          throw badRequest(
+            'Pick up blocked by work type policy for this role',
+            'POLICY_DENIES_COMMAND',
+          );
+        }
+        const expectedVersion = reqInt(payload, 'expected_version');
+        assertExpectedVersion(current.version, expectedVersion);
+        const newVersion = current.version + 1;
+        await updateWorkItemWithVersion({
+          orgId,
+          workItemId,
+          expectedVersion,
+          newVersion,
+          patch: {
+            assigned_user_id: actorUserId,
+            work_state: 'assigned',
+          },
+        });
+        await insertWorkAssignmentHistory({
+          orgId,
+          workItemId,
+          from: null,
+          to: actorUserId,
+          actorUserId,
+          commandType: 'pick_up_unassigned',
+          idempotencyKey: reqString(payload, 'idempotency_key'),
+        });
+        await insertTransition({
+          org_id: orgId,
+          work_item_id: workItemId,
+          from_state: current.work_state,
+          to_state: 'assigned',
+          transition_kind: 'command',
+          action_code: 'pick_up_unassigned',
+          actor_type: 'user',
+          actor_user_id: actorUserId,
+          reason_text: asOptionalString(payload.reason_text),
+          metadata_json: { new_assigned_user_id: actorUserId },
+          expected_version: expectedVersion,
+          resulting_version: newVersion,
+        });
+        await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_PICKED_UP, {
+          to_assignee: actorUserId,
+        });
+        return { workItemId };
+      });
+    }
+
+    case 'transfer_work_item': {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+        requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.assign);
+        const workItemId = reqString(payload, 'work_item_id');
+        const toUserId = reqString(payload, 'to_assigned_user_id');
+        const current = await loadWorkItem(orgId, workItemId);
+        const expectedVersion = reqInt(payload, 'expected_version');
+        assertExpectedVersion(current.version, expectedVersion);
+        if (['new', 'review_pending', 'done', 'archived'].includes(current.work_state)) {
+          throw badRequest(
+            `transfer_work_item is not allowed in work_state='${current.work_state}'`,
+            'invalid_transition',
+          );
+        }
+        if (current.assigned_user_id == null || String(current.assigned_user_id).trim() === '') {
+          throw badRequest(
+            'transfer_work_item requires an existing assignee; use assign_work_item or pick_up_unassigned',
+            'transfer_requires_assignee',
+          );
+        }
+        if (current.reviewer_user_id && current.reviewer_user_id === toUserId) {
+          throw badRequest(
+            'Reviewer cannot match the assignee (separation of duties)',
+            'SELF_REVIEW_FORBIDDEN',
+          );
+        }
+        const newVersion = current.version + 1;
+        await updateWorkItemWithVersion({
+          orgId,
+          workItemId,
+          expectedVersion,
+          newVersion,
+          patch: {
+            assigned_user_id: toUserId,
+            claimed_by_user_id: null,
+            claimed_at: null,
+          },
+        });
+        await insertWorkAssignmentHistory({
+          orgId,
+          workItemId,
+          from: current.assigned_user_id,
+          to: toUserId,
+          actorUserId,
+          commandType: 'transfer_work_item',
+          idempotencyKey: reqString(payload, 'idempotency_key'),
+        });
+        await insertTransition({
+          org_id: orgId,
+          work_item_id: workItemId,
+          from_state: current.work_state,
+          to_state: current.work_state,
+          transition_kind: 'command',
+          action_code: 'transfer_work_item',
+          actor_type: 'user',
+          actor_user_id: actorUserId,
+          reason_text: asOptionalString(payload.reason_text),
+          metadata_json: {
+            previous_assigned_user_id: current.assigned_user_id,
+            new_assigned_user_id: toUserId,
+          },
+          expected_version: expectedVersion,
+          resulting_version: newVersion,
+        });
+        await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_TRANSFERRED, {
+          from: current.assigned_user_id,
+          to: toUserId,
+        });
+        return { workItemId };
+      });
+    }
+
+    case 'claim_work_item': {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+        const force = payload.force === true;
+        const workItemId = reqString(payload, 'work_item_id');
+        const current = await loadWorkItem(orgId, workItemId);
+        const expectedVersion = reqInt(payload, 'expected_version');
+        assertExpectedVersion(current.version, expectedVersion);
+        if (current.work_state !== 'assigned') {
+          throw badRequest(
+            `claim_work_item is only allowed in work_state='assigned' (current='${current.work_state}')`,
+            'invalid_transition',
+          );
+        }
+        if (current.claimed_by_user_id) {
+          throw conflict('Work item already claimed', 'WORK_ITEM_ALREADY_CLAIMED');
+        }
+        let claimHolder: string;
+        if (force) {
+          requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.claimForce);
+          if (!current.assigned_user_id) {
+            throw badRequest('Cannot force-claim without assignee', 'invalid_transition');
+          }
+          claimHolder = current.assigned_user_id;
+        } else {
+          requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.claim);
+          if (current.assigned_user_id !== actorUserId) {
+            throw badRequest('Only the assignee can claim this item', 'WORK_ITEM_NOT_ASSIGNEE');
+          }
+          claimHolder = actorUserId;
+        }
+        const newVersion = current.version + 1;
+        await updateWorkItemWithVersion({
+          orgId,
+          workItemId,
+          expectedVersion,
+          newVersion,
+          patch: {
+            claimed_by_user_id: claimHolder,
+            claimed_at: new Date().toISOString(),
+          },
+        });
+        await insertTransition({
+          org_id: orgId,
+          work_item_id: workItemId,
+          from_state: current.work_state,
+          to_state: current.work_state,
+          transition_kind: 'command',
+          action_code: 'claim_work_item',
+          actor_type: 'user',
+          actor_user_id: actorUserId,
+          reason_text: asOptionalString(payload.reason_text),
+          metadata_json: { claimed_by_user_id: claimHolder, force },
+          expected_version: expectedVersion,
+          resulting_version: newVersion,
+        });
+        await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_CLAIMED, {
+          claimed_by_user_id: claimHolder,
+          force,
+        });
+        return { workItemId };
+      });
+    }
+
+    case 'release_claim': {
+      return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+        const workItemId = reqString(payload, 'work_item_id');
+        const current = await loadWorkItem(orgId, workItemId);
+        const expectedVersion = reqInt(payload, 'expected_version');
+        assertExpectedVersion(current.version, expectedVersion);
+        if (!current.claimed_by_user_id) {
+          return { workItemId };
+        }
+        const isHolder = current.claimed_by_user_id === actorUserId;
+        if (isHolder) {
+          requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.claim);
+        } else {
+          requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.claimForce);
+        }
+        const force = !isHolder;
+        const newVersion = current.version + 1;
+        await updateWorkItemWithVersion({
+          orgId,
+          workItemId,
+          expectedVersion,
+          newVersion,
+          patch: {
+            claimed_by_user_id: null,
+            claimed_at: null,
+          },
+        });
+        await insertTransition({
+          org_id: orgId,
+          work_item_id: workItemId,
+          from_state: current.work_state,
+          to_state: current.work_state,
+          transition_kind: 'command',
+          action_code: 'release_claim',
+          actor_type: 'user',
+          actor_user_id: actorUserId,
+          reason_text: asOptionalString(payload.reason_text),
+          metadata_json: { force: !isHolder },
+          expected_version: expectedVersion,
+          resulting_version: newVersion,
+        });
+        await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_CLAIM_RELEASED, {
+          previous_claimed_by: current.claimed_by_user_id,
+          force,
+        });
+        return { workItemId };
+      });
     }
 
     case 'intake_work_event': {
@@ -682,7 +1080,7 @@ export async function executeWorkEngineCommand(
       return {
         ok: true,
         command,
-        refreshed: await buildRefreshedForPayload(orgId, payload),
+        refreshed: await buildRefreshedForPayload(orgId, payload, ctx),
         meta,
       };
     }

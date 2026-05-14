@@ -74,6 +74,151 @@ function reasonCellText(d: PendingDraft): string {
   return String(d.rule_name ?? d.rule_value_key ?? '').trim();
 }
 
+/** Presentation only: maps backend `status_label` strings (see `threadStatusLabel` in API) to pill color — no domain logic. */
+function taskCenterStatusPillClass(statusLabel: string): string {
+  const s = statusLabel.trim();
+  if (s === 'Open') return 'docflow-tc-status-pill docflow-tc-status-pill--open';
+  if (s === 'Waiting Client') return 'docflow-tc-status-pill docflow-tc-status-pill--waiting-client';
+  if (s === 'Waiting Office') return 'docflow-tc-status-pill docflow-tc-status-pill--waiting-office';
+  if (s === 'Resolved') return 'docflow-tc-status-pill docflow-tc-status-pill--resolved';
+  if (s === 'Archived') return 'docflow-tc-status-pill docflow-tc-status-pill--archived';
+  return 'docflow-tc-status-pill docflow-tc-status-pill--default';
+}
+
+function taskCenterBulkActionLabel(bulkAction: string): string {
+  switch (bulkAction) {
+    case 'reminder':
+      return 'Reminder';
+    case 'assign':
+      return 'Assign';
+    case 'resolve':
+      return 'Resolve';
+    case 'archive':
+      return 'Archive';
+    default:
+      return bulkAction;
+  }
+}
+
+function taskCenterSecondaryActionLabel(command: string): string {
+  switch (command) {
+    case 'send_docflow_reminder':
+      return 'Reminder';
+    case 'assign_docflow_thread':
+      return 'Assign';
+    case 'resolve_docflow_thread':
+      return 'Resolve';
+    case 'archive_docflow_thread':
+      return 'Archive';
+    default:
+      return command;
+  }
+}
+
+function threadRowAction(actions: AllowedAction[], command: string): AllowedAction | undefined {
+  return actions.find((a) => String(a.command ?? '') === command);
+}
+
+const TC_SECONDARY_CMDS = [
+  'send_docflow_reminder',
+  'assign_docflow_thread',
+  'resolve_docflow_thread',
+  'archive_docflow_thread',
+] as const;
+
+type KpiTone = 'danger' | 'warn' | 'amber' | 'ok' | 'info' | 'purple';
+
+function TaskCenterKpiIcon({ tone }: { tone: KpiTone }) {
+  const svgProps = {
+    className: 'docflow-kpi-icon-svg',
+    width: 22,
+    height: 22,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    xmlns: 'http://www.w3.org/2000/svg',
+    'aria-hidden': true as const,
+  };
+  switch (tone) {
+    case 'danger':
+      return (
+        <svg {...svgProps}>
+          <path
+            d="M12 9v4m0 4h.01M10.3 3.2h3.4L21 17H3L10.3 3.2z"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case 'warn':
+      return (
+        <svg {...svgProps}>
+          <path
+            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case 'amber':
+      return (
+        <svg {...svgProps}>
+          <path
+            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case 'ok':
+      return (
+        <svg {...svgProps}>
+          <path
+            d="M9 12h6m-6 4h4M7 4h10l1 4v10a2 2 0 01-2 2H8a2 2 0 01-2-2V8l1-4z"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case 'info':
+      return (
+        <svg {...svgProps}>
+          <path
+            d="M3 8l9 5 9-5-9-5-9 5zm0 8l9 5 9-5M3 12l9 5 9-5"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case 'purple':
+      return (
+        <svg {...svgProps}>
+          <path
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21v-1a4 4 0 014-4h4a4 4 0 014 4v1"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...svgProps}>
+          <circle cx="12" cy="12" r="3" fill="currentColor" />
+        </svg>
+      );
+  }
+}
+
 export function DocflowFloatingWidget() {
   const navigate = useNavigate();
   const auth = useAuth();
@@ -555,7 +700,7 @@ export function DocflowFloatingWidget() {
                 <div id="docflow-tasks-modal-title" className="docflow-tasks-modal-title">
                   DocFlow Tasks
                 </div>
-                <div className="docflow-tasks-modal-subtitle">
+                <div className="docflow-tasks-modal-subtitle docflow-tasks-modal-meta">
                   {modalPendingCount} pending draft{modalPendingCount === 1 ? '' : 's'}
                 </div>
                 {modalTrialBadge ? (
@@ -589,170 +734,173 @@ export function DocflowFloatingWidget() {
                 </Link>
               </div>
             ) : (
-              <>
+              <div className="docflow-tasks-modal-body docflow-tasks-modal-body--task-center">
                 {tcLoadError ? <div className="docflow-task-error docflow-task-error--pad">{tcLoadError}</div> : null}
                 {!taskCenter && !tcLoadError ? (
                   <div className="docflow-task-loading">Loading task center…</div>
                 ) : null}
                 {taskCenter ? (
-                  <div className="docflow-tasks-modal-body docflow-tasks-modal-body--task-center">
+                  <>
                     <div className="docflow-task-kpi-row">
                       {(
                         [
-                          { k: 'overdue_count', label: 'Overdue', tone: 'danger' },
-                          { k: 'waiting_client_count', label: 'Waiting Client', tone: 'warn' },
-                          { k: 'needs_review_count', label: 'Needs Review', tone: 'amber' },
-                          { k: 'pending_drafts_count', label: 'Pending Drafts', tone: 'ok' },
-                          { k: 'unread_replies_count', label: 'Unread Replies', tone: 'info' },
-                          { k: 'assigned_to_me_count', label: 'Assigned To Me', tone: 'purple' },
+                          { k: 'overdue_count', label: 'Overdue', tone: 'danger' as const },
+                          { k: 'waiting_client_count', label: 'Waiting Client', tone: 'warn' as const },
+                          { k: 'needs_review_count', label: 'Needs Review', tone: 'amber' as const },
+                          { k: 'pending_drafts_count', label: 'Drafts', tone: 'ok' as const },
+                          { k: 'unread_replies_count', label: 'Unread Replies', tone: 'info' as const },
+                          { k: 'assigned_to_me_count', label: 'Assigned To Me', tone: 'purple' as const },
                         ] as const
                       ).map((card) => {
                         const v = summaryRec?.[card.k];
                         const n = typeof v === 'number' ? v : Number(v) || 0;
                         return (
                           <div key={card.k} className={`docflow-kpi-card docflow-kpi-card--${card.tone}`}>
-                            <div className="docflow-kpi-label">{card.label}</div>
+                            <div className="docflow-kpi-card-top">
+                              <span className={`docflow-kpi-icon docflow-kpi-icon--${card.tone}`} aria-hidden>
+                                <TaskCenterKpiIcon tone={card.tone} />
+                              </span>
+                              <div className="docflow-kpi-label">{card.label}</div>
+                            </div>
                             <div className="docflow-kpi-val">{n}</div>
                           </div>
                         );
                       })}
                     </div>
 
-                    <div className="docflow-task-center-filter-row">
-                      <input
-                        className="docflow-task-search docflow-task-search--grow"
-                        type="search"
-                        placeholder="Search clients, threads…"
-                        value={tcSearch}
-                        onChange={(e) => {
-                          setTcSearch(e.target.value);
-                          setTcPage(1);
-                        }}
-                        aria-label="Search"
-                      />
-                      <select
-                        className="docflow-task-select"
-                        value={tcModule}
-                        onChange={(e) => {
-                          setTcModule(e.target.value);
-                          setTcPage(1);
-                        }}
-                        aria-label="Module"
-                      >
-                        <option value="">All modules</option>
-                        {moduleFilterOpts.map((o) => (
-                          <option key={String(o.value)} value={String(o.value ?? '')}>
-                            {String(o.label ?? o.value)}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="docflow-task-select"
-                        value={tcThreadType}
-                        onChange={(e) => {
-                          setTcThreadType(e.target.value);
-                          setTcPage(1);
-                        }}
-                        aria-label="Thread type"
-                      >
-                        <option value="">All types</option>
-                        {typeFilterOpts.map((o) => (
-                          <option key={String(o.value)} value={String(o.value ?? '')}>
-                            {String(o.label ?? o.value)}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="docflow-task-select"
-                        value={tcThreadStatus}
-                        onChange={(e) => {
-                          setTcThreadStatus(e.target.value);
-                          setTcPage(1);
-                        }}
-                        aria-label="Thread status"
-                      >
-                        <option value="">All statuses</option>
-                        {statusFilterOpts.map((o) => (
-                          <option key={String(o.value)} value={String(o.value ?? '')}>
-                            {String(o.label ?? o.value)}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="docflow-task-select"
-                        value={tcAssigned}
-                        onChange={(e) => {
-                          setTcAssigned(e.target.value);
-                          setTcPage(1);
-                        }}
-                        aria-label="Assigned"
-                      >
-                        <option value="">All accountants</option>
-                        {accountantFilterOpts.map((o) => (
-                          <option key={String(o.value)} value={String(o.value ?? '')}>
-                            {String(o.label ?? o.value)}
-                          </option>
-                        ))}
-                      </select>
-                      <label className="docflow-task-check">
+                    <div className="docflow-tc-toolbar">
+                      <div className="docflow-tc-toolbar-filters">
                         <input
-                          type="checkbox"
-                          checked={tcUnreadOnly}
+                          className="docflow-task-search docflow-task-search--grow"
+                          type="search"
+                          placeholder="Search clients, threads…"
+                          value={tcSearch}
                           onChange={(e) => {
-                            setTcUnreadOnly(e.target.checked);
+                            setTcSearch(e.target.value);
                             setTcPage(1);
                           }}
-                        />{' '}
-                        Unread only
-                      </label>
-                      <label className="docflow-task-check">
-                        <input
-                          type="checkbox"
-                          checked={tcOverdueOnly}
+                          aria-label="Search"
+                        />
+                        <select
+                          className="docflow-task-select docflow-tc-select-compact"
+                          value={tcModule}
                           onChange={(e) => {
-                            setTcOverdueOnly(e.target.checked);
+                            setTcModule(e.target.value);
                             setTcPage(1);
                           }}
-                        />{' '}
-                        Overdue only
-                      </label>
-                      <input
-                        className="docflow-task-date"
-                        type="date"
-                        value={tcDueFrom}
-                        onChange={(e) => {
-                          setTcDueFrom(e.target.value);
-                          setTcPage(1);
-                        }}
-                        aria-label="Due from"
-                      />
-                      <input
-                        className="docflow-task-date"
-                        type="date"
-                        value={tcDueTo}
-                        onChange={(e) => {
-                          setTcDueTo(e.target.value);
-                          setTcPage(1);
-                        }}
-                        aria-label="Due to"
-                      />
-                      <button type="button" className="docflow-task-clear-filters" onClick={() => clearAllTaskFilters()}>
-                        Clear filters
-                      </button>
-                    </div>
-
-                    <div className="docflow-task-center-toolbar">
-                      <div className="docflow-task-center-toolbar-spacer" />
+                          aria-label="Module"
+                        >
+                          <option value="">All modules</option>
+                          {moduleFilterOpts.map((o) => (
+                            <option key={String(o.value)} value={String(o.value ?? '')}>
+                              {String(o.label ?? o.value)}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="docflow-task-select docflow-tc-select-compact"
+                          value={tcThreadType}
+                          onChange={(e) => {
+                            setTcThreadType(e.target.value);
+                            setTcPage(1);
+                          }}
+                          aria-label="Thread type"
+                        >
+                          <option value="">All types</option>
+                          {typeFilterOpts.map((o) => (
+                            <option key={String(o.value)} value={String(o.value ?? '')}>
+                              {String(o.label ?? o.value)}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="docflow-task-select docflow-tc-select-compact"
+                          value={tcThreadStatus}
+                          onChange={(e) => {
+                            setTcThreadStatus(e.target.value);
+                            setTcPage(1);
+                          }}
+                          aria-label="Thread status"
+                        >
+                          <option value="">All statuses</option>
+                          {statusFilterOpts.map((o) => (
+                            <option key={String(o.value)} value={String(o.value ?? '')}>
+                              {String(o.label ?? o.value)}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="docflow-task-select docflow-tc-select-compact"
+                          value={tcAssigned}
+                          onChange={(e) => {
+                            setTcAssigned(e.target.value);
+                            setTcPage(1);
+                          }}
+                          aria-label="Assigned"
+                        >
+                          <option value="">All accountants</option>
+                          {accountantFilterOpts.map((o) => (
+                            <option key={String(o.value)} value={String(o.value ?? '')}>
+                              {String(o.label ?? o.value)}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          className="docflow-task-date docflow-tc-date-compact"
+                          type="date"
+                          value={tcDueFrom}
+                          onChange={(e) => {
+                            setTcDueFrom(e.target.value);
+                            setTcPage(1);
+                          }}
+                          aria-label="Due from"
+                        />
+                        <input
+                          className="docflow-task-date docflow-tc-date-compact"
+                          type="date"
+                          value={tcDueTo}
+                          onChange={(e) => {
+                            setTcDueTo(e.target.value);
+                            setTcPage(1);
+                          }}
+                          aria-label="Due to"
+                        />
+                        <label className="docflow-task-check docflow-tc-check-compact">
+                          <input
+                            type="checkbox"
+                            checked={tcUnreadOnly}
+                            onChange={(e) => {
+                              setTcUnreadOnly(e.target.checked);
+                              setTcPage(1);
+                            }}
+                          />
+                          <span>Unread only</span>
+                        </label>
+                        <label className="docflow-task-check docflow-tc-check-compact">
+                          <input
+                            type="checkbox"
+                            checked={tcOverdueOnly}
+                            onChange={(e) => {
+                              setTcOverdueOnly(e.target.checked);
+                              setTcPage(1);
+                            }}
+                          />
+                          <span>Overdue only</span>
+                        </label>
+                        <button type="button" className="docflow-task-clear-filters" onClick={() => clearAllTaskFilters()}>
+                          Clear filters
+                        </button>
+                      </div>
                       {bulkAllowed.some((b) => b.enabled) ? (
-                        <div className="docflow-bulk-wrap">
-                          <span className="docflow-bulk-label">Bulk:</span>
+                        <div className="docflow-tc-toolbar-bulk">
+                          <span className="docflow-bulk-label">Bulk</span>
                           <select
-                            className="docflow-task-select docflow-task-select--narrow"
+                            className="docflow-task-select docflow-task-select--narrow docflow-tc-select-compact"
                             value={assignUserChoice}
                             onChange={(e) => setAssignUserChoice(e.target.value)}
                             aria-label="Bulk assign target user"
                           >
-                            <option value="">Bulk assign target…</option>
+                            <option value="">Assign to…</option>
                             {accountantFilterOpts
                               .filter((o) => {
                                 const v = String(o.value ?? '');
@@ -770,11 +918,11 @@ export function DocflowFloatingWidget() {
                               <button
                                 key={String(b.bulk_action)}
                                 type="button"
-                                className="docflow-btn docflow-btn-edit docflow-btn-compact"
+                                className="docflow-tc-bulk-btn"
                                 disabled={busy.length > 0 || selectedThreadIds.length === 0}
                                 onClick={() => void runBulk(String(b.bulk_action))}
                               >
-                                {String(b.bulk_action)}
+                                {taskCenterBulkActionLabel(String(b.bulk_action))}
                               </button>
                             ))}
                         </div>
@@ -785,7 +933,7 @@ export function DocflowFloatingWidget() {
                       <div className="docflow-assign-bar">
                         <span className="docflow-assign-bar-label">Assign thread</span>
                         <select
-                          className="docflow-task-select"
+                          className="docflow-task-select docflow-tc-select-compact"
                           value={assignUserChoice}
                           onChange={(e) => setAssignUserChoice(e.target.value)}
                           aria-label="Assign to"
@@ -832,22 +980,22 @@ export function DocflowFloatingWidget() {
                       </div>
                     ) : null}
 
-                    <div className="docflow-task-center-table-wrap">
-                      <table className="docflow-task-table">
-                        <thead>
+                    <div className="docflow-task-center-table-wrap docflow-tc-table-scroll">
+                      <table className="docflow-task-table docflow-tc-task-table">
+                        <thead className="docflow-task-table-head">
                           <tr>
                             <th className="docflow-task-th-check">
                               <input type="checkbox" checked={allRowsSelected} onChange={() => toggleSelectAllRows()} aria-label="Select all" />
                             </th>
                             <th>Client</th>
                             <th>Module</th>
-                            <th>Thread type</th>
+                            <th>Thread Type</th>
                             <th>Status</th>
                             <th>Due</th>
                             <th>Assigned</th>
-                            <th>Last activity</th>
+                            <th>Last Activity</th>
                             <th>Unread</th>
-                            <th>Actions</th>
+                            <th className="docflow-task-th-actions">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -880,75 +1028,102 @@ export function DocflowFloatingWidget() {
                                     {String(row.client_name ?? '—')}
                                   </td>
                                   <td className="docflow-task-td-clip">
-                                    <span className="docflow-chip docflow-chip--muted">{String(row.module_label ?? '—')}</span>
+                                    <span className="docflow-tc-module-pill">{String(row.module_label ?? '—')}</span>
                                   </td>
-                                  <td className="docflow-task-td-clip">{String(row.thread_type_label ?? '—')}</td>
+                                  <td className="docflow-task-td-clip docflow-tc-td-muted">{String(row.thread_type_label ?? '—')}</td>
                                   <td className="docflow-task-td-clip">
-                                    <span className="docflow-status-pill">{String(row.status_label ?? '—')}</span>
+                                    <span className={taskCenterStatusPillClass(String(row.status_label ?? ''))}>
+                                      {String(row.status_label ?? '—')}
+                                    </span>
                                   </td>
                                   <td className="docflow-task-td-clip">{String(row.due_label ?? '—')}</td>
                                   <td className="docflow-task-td-clip">{String(row.assigned_label ?? '—')}</td>
                                   <td className="docflow-task-td-clip">{String(row.last_activity_label ?? '—')}</td>
-                                  <td>
-                                    {unreadN > 0 ? <span className="docflow-unread-badge">{unreadN > 99 ? '99+' : unreadN}</span> : '—'}
+                                  <td className="docflow-tc-td-unread">
+                                    {unreadN > 0 ? (
+                                      <span className="docflow-unread-badge docflow-tc-unread-badge">{unreadN > 99 ? '99+' : unreadN}</span>
+                                    ) : (
+                                      <span className="docflow-tc-unread-dash">—</span>
+                                    )}
                                   </td>
-                                  <td className="docflow-task-actions">
-                                    {actions.map((a) => {
-                                      const cmd = String(a.command ?? '');
-                                      if (!cmd || !a.enabled) return null;
-                                      return (
-                                        <button
-                                          key={cmd}
-                                          type="button"
-                                          className="docflow-btn docflow-btn-edit docflow-btn-compact"
-                                          disabled={busy.length > 0}
-                                          title={a.reason ?? undefined}
-                                          onClick={() => {
-                                            if (cmd === 'open_docflow_thread') {
-                                              void runTaskModalCommand(cmd, { thread_id: tid, client_id: cid }).then(() => {
+                                  <td className="docflow-tc-actions-cell">
+                                    <div className="docflow-tc-actions-row">
+                                      {(() => {
+                                        const openA = threadRowAction(actions, 'open_docflow_thread');
+                                        if (!openA) return null;
+                                        return (
+                                          <button
+                                            type="button"
+                                            className="docflow-tc-btn-open"
+                                            disabled={busy.length > 0 || !openA.enabled}
+                                            title={openA.reason ?? undefined}
+                                            onClick={() => {
+                                              if (!openA.enabled) return;
+                                              void runTaskModalCommand('open_docflow_thread', { thread_id: tid, client_id: cid }).then(() => {
                                                 closeTasksModal();
                                                 navigate(
                                                   `/m/docflow/messenger?client_id=${encodeURIComponent(cid)}&thread_id=${encodeURIComponent(tid)}`,
                                                 );
                                               });
-                                              return;
-                                            }
-                                            if (cmd === 'send_docflow_reminder') {
-                                              void runTaskModalCommand(cmd, {
-                                                thread_id: tid,
-                                                client_id: cid,
-                                                idempotency_key: `rem_${tid}_${Date.now()}`,
-                                              });
-                                              return;
-                                            }
-                                            if (cmd === 'assign_docflow_thread') {
-                                              setAssignPick({ threadId: tid, clientId: cid });
-                                              setAssignUserChoice('');
-                                              return;
-                                            }
-                                            if (cmd === 'resolve_docflow_thread') {
-                                              void runTaskModalCommand(cmd, { thread_id: tid, client_id: cid });
-                                              return;
-                                            }
-                                            if (cmd === 'archive_docflow_thread') {
-                                              void runTaskModalCommand(cmd, { thread_id: tid, client_id: cid });
-                                            }
-                                          }}
-                                        >
-                                          {cmd === 'open_docflow_thread'
-                                            ? 'Open'
-                                            : cmd === 'send_docflow_reminder'
-                                              ? 'Reminder'
-                                              : cmd === 'assign_docflow_thread'
-                                                ? 'Assign'
-                                                : cmd === 'resolve_docflow_thread'
-                                                  ? 'Resolve'
-                                                  : cmd === 'archive_docflow_thread'
-                                                    ? 'Archive'
-                                                    : cmd}
-                                        </button>
-                                      );
-                                    })}
+                                            }}
+                                          >
+                                            Open
+                                          </button>
+                                        );
+                                      })()}
+                                      {TC_SECONDARY_CMDS.some((cmd) => threadRowAction(actions, cmd)) ? (
+                                        <details className="docflow-tc-actions-more">
+                                          <summary className="docflow-tc-more-summary" aria-label="More actions">
+                                            ⋯
+                                          </summary>
+                                          <ul className="docflow-tc-more-menu" role="menu">
+                                            {TC_SECONDARY_CMDS.map((cmd) => {
+                                              const act = threadRowAction(actions, cmd);
+                                              if (!act) return null;
+                                              return (
+                                                <li key={cmd} role="presentation">
+                                                  <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    className="docflow-tc-more-item"
+                                                    disabled={busy.length > 0 || !act.enabled}
+                                                    title={act.reason ?? undefined}
+                                                    onClick={(e) => {
+                                                      (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute(
+                                                        'open',
+                                                      );
+                                                      if (!act.enabled) return;
+                                                      if (cmd === 'send_docflow_reminder') {
+                                                        void runTaskModalCommand(cmd, {
+                                                          thread_id: tid,
+                                                          client_id: cid,
+                                                          idempotency_key: `rem_${tid}_${Date.now()}`,
+                                                        });
+                                                        return;
+                                                      }
+                                                      if (cmd === 'assign_docflow_thread') {
+                                                        setAssignPick({ threadId: tid, clientId: cid });
+                                                        setAssignUserChoice('');
+                                                        return;
+                                                      }
+                                                      if (cmd === 'resolve_docflow_thread') {
+                                                        void runTaskModalCommand(cmd, { thread_id: tid, client_id: cid });
+                                                        return;
+                                                      }
+                                                      if (cmd === 'archive_docflow_thread') {
+                                                        void runTaskModalCommand(cmd, { thread_id: tid, client_id: cid });
+                                                      }
+                                                    }}
+                                                  >
+                                                    {taskCenterSecondaryActionLabel(cmd)}
+                                                  </button>
+                                                </li>
+                                              );
+                                            })}
+                                          </ul>
+                                        </details>
+                                      ) : null}
+                                    </div>
                                   </td>
                                 </tr>
                               );
@@ -958,7 +1133,7 @@ export function DocflowFloatingWidget() {
                       </table>
                     </div>
 
-                    <div className="docflow-task-center-pagination">
+                    <div className="docflow-task-center-pagination docflow-tc-pagination">
                       <button
                         type="button"
                         className="docflow-btn docflow-btn-edit docflow-btn-compact"
@@ -984,10 +1159,11 @@ export function DocflowFloatingWidget() {
                       </span>
                     </div>
 
-                    <div className="docflow-task-draft-block">
-                      <div className="docflow-task-controls">
+                    <div className="docflow-task-draft-block docflow-tc-draft-block">
+                      <div className="docflow-tc-draft-header">
+                        <span className="docflow-tc-draft-heading">Pending drafts</span>
                         <select
-                          className="docflow-task-select"
+                          className="docflow-task-select docflow-tc-select-compact docflow-tc-draft-rule-select"
                           value={tcDraftRule}
                           onChange={(e) => {
                             setTcDraftRule(e.target.value);
@@ -1003,9 +1179,20 @@ export function DocflowFloatingWidget() {
                         </select>
                       </div>
                       {modalPendingCount === 0 || modalDrafts.length === 0 ? (
-                        <div className="docflow-task-empty">
-                          No pending drafts in this view
-                          <div className="docflow-task-empty-muted">Adjust the draft rule filter or wait for new drafts.</div>
+                        <div className="docflow-tc-draft-empty-card">
+                          <div className="docflow-tc-draft-empty-icon" aria-hidden>
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path
+                                d="M9 12h6m-6 4h4M7 4h10l1 4v10a2 2 0 01-2 2H8a2 2 0 01-2-2V8l1-4z"
+                                stroke="#c4b5fd"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+                          <div className="docflow-tc-draft-empty-title">No drafts in this view</div>
+                          <div className="docflow-tc-draft-empty-muted">Choose another draft rule filter or check back when new drafts arrive.</div>
                         </div>
                       ) : (
                         <div className="docflow-draft-card-list">
@@ -1066,7 +1253,7 @@ export function DocflowFloatingWidget() {
                         </div>
                       )}
                     </div>
-                  </div>
+                  </>
                 ) : null}
 
                 {selectedDraft && widgetAccess !== 'locked' ? (
@@ -1190,7 +1377,7 @@ export function DocflowFloatingWidget() {
                       ) : null}
                     </div>
                   ) : null}
-              </>
+              </div>
             )}
 
             {loadError ? <div className="docflow-task-error">{loadError}</div> : null}

@@ -187,7 +187,7 @@
   background: #f8fafc;
 }
 
-/* Centered tasks modal */
+/* Centered tasks modal — premium single-scroll shell */
 .docflow-tasks-modal-wrap {
   position: fixed;
   inset: 0;
@@ -195,7 +195,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: max(12px, 2vh) max(12px, 2vw);
   box-sizing: border-box;
   pointer-events: none;
 }
@@ -203,38 +203,46 @@
 .docflow-tasks-modal {
   pointer-events: auto;
   width: 100%;
-  max-width: 1120px;
-  max-height: calc(100vh - 48px);
+  max-width: min(1240px, 90vw);
+  max-height: 88vh;
   background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.2);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 22px;
+  box-shadow:
+    0 4px 6px -1px rgba(15, 23, 42, 0.06),
+    0 24px 48px -12px rgba(15, 23, 42, 0.18),
+    0 0 0 1px rgba(124, 58, 237, 0.04);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  overflow-x: hidden;
 }
 
 .docflow-tasks-modal-header {
-  padding: 18px 20px 14px;
+  padding: 20px 24px 16px;
   border-bottom: 1px solid #eef2f7;
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 8px;
+  gap: 12px;
   align-items: start;
   flex-shrink: 0;
+  background: linear-gradient(180deg, #fff 0%, #fafbfc 100%);
 }
 
 .docflow-tasks-modal-title {
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 800;
+  letter-spacing: -0.025em;
   color: #0f172a;
+  line-height: 1.2;
 }
 
-.docflow-tasks-modal-subtitle {
-  font-size: 13px;
-  color: #64748b;
-  margin-top: 6px;
+.docflow-tasks-modal-subtitle,
+.docflow-tasks-modal-meta {
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-top: 4px;
+  line-height: 1.45;
 }
 
 .docflow-tasks-modal-body {
@@ -242,6 +250,7 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
 }
@@ -303,23 +312,24 @@
 
 /* Draft cards */
 .docflow-draft-card-list {
-  padding: 12px 16px 8px;
+  padding: 4px 0 8px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  overflow-x: hidden;
+  gap: 12px;
+  overflow: visible;
 }
 
 .docflow-draft-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 12px 14px;
-  background: #fafafa;
+  border: 1px solid #e8ecf4;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
   cursor: pointer;
   text-align: left;
-  overflow-x: hidden;
+  overflow: visible;
   word-wrap: break-word;
   overflow-wrap: anywhere;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .docflow-draft-card:hover,
@@ -408,17 +418,16 @@
 }
 
 .docflow-detail-card {
-  margin: 8px 16px 16px;
-  border: 1px solid #dbe3ef;
-  border-radius: 14px;
-  background: #fff;
-  padding: 16px;
+  margin: 12px 0 0;
+  border: 1px solid #e8ecf4;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fff 0%, #fafbff 100%);
+  padding: 18px 20px 20px;
   flex-shrink: 0;
-  max-height: 42vh;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: visible;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
 }
 
 .docflow-detail-meta {
@@ -535,17 +544,21 @@
 }
 
 .docflow-task-trial {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #15803d;
-  font-weight: 600;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6d28d9;
 }
 
 .docflow-task-trial-detail {
-  font-size: 11px;
-  color: #64748b;
+  font-size: 12px;
+  color: #94a3b8;
   font-weight: 500;
-  margin-top: 2px;
+  margin-top: 4px;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .docflow-task-locked {
@@ -657,38 +670,39 @@
   }
 
   .docflow-tasks-modal {
-    max-height: calc(100vh - 24px);
-    border-radius: 16px 16px 0 0;
+    max-height: 88vh;
+    border-radius: 20px 20px 0 0;
   }
 }
 
-/* DocFlow Office Task Center (modal body) */
+/* DocFlow Office Task Center (single scroll body) */
 .docflow-tasks-modal-body--task-center {
-  padding: 14px 18px 18px;
+  padding: 16px 22px 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   min-height: 0;
+  overflow-x: auto;
 }
 
 .docflow-task-loading {
-  padding: 24px;
+  padding: 40px 24px;
   text-align: center;
   color: #64748b;
   font-size: 14px;
 }
 
 .docflow-task-error--pad {
-  margin: 0 18px;
+  margin: 0 22px;
 }
 
 .docflow-task-kpi-row {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1100px) {
   .docflow-task-kpi-row {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -701,25 +715,81 @@
 }
 
 .docflow-kpi-card {
-  border: 1px solid #e5e7eb;
+  position: relative;
+  border: 1px solid #e8ecf4;
+  border-radius: 14px;
+  padding: 12px 14px 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  min-width: 0;
+}
+
+.docflow-kpi-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.docflow-kpi-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
-  padding: 10px 12px;
-  background: #fafafa;
+  flex-shrink: 0;
+}
+
+.docflow-kpi-icon-svg {
+  display: block;
+}
+
+.docflow-kpi-icon--danger {
+  color: #dc2626;
+  background: #fef2f2;
+}
+.docflow-kpi-icon--warn {
+  color: #ea580c;
+  background: #fff7ed;
+}
+.docflow-kpi-icon--amber {
+  color: #ca8a04;
+  background: #fffbeb;
+}
+.docflow-kpi-icon--ok {
+  color: #16a34a;
+  background: #f0fdf4;
+}
+.docflow-kpi-icon--info {
+  color: #2563eb;
+  background: #eff6ff;
+}
+.docflow-kpi-icon--purple {
+  color: #7c3aed;
+  background: #f5f3ff;
 }
 
 .docflow-kpi-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  line-height: 1.35;
+  text-align: right;
+  flex: 1;
+  padding-top: 2px;
 }
 
 .docflow-kpi-val {
-  margin-top: 6px;
-  font-size: 22px;
+  margin-top: 10px;
+  font-size: 26px;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
   color: #0f172a;
+  line-height: 1;
 }
 
 .docflow-kpi-card--danger .docflow-kpi-val {
@@ -741,21 +811,106 @@
   color: #7c3aed;
 }
 
-.docflow-task-center-filter-row {
+/* Compact filter + bulk toolbar */
+.docflow-tc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e8ecf4;
+  border-radius: 14px;
+}
+
+.docflow-tc-toolbar-filters {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.docflow-tc-toolbar-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+
+.docflow-tc-toolbar-bulk .docflow-bulk-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin-right: 2px;
+}
+
+.docflow-tc-select-compact {
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid #dbe3ef;
+}
+
+.docflow-tc-date-compact {
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid #dbe3ef;
+  font-size: 12px;
+  color: #334155;
+}
+
+.docflow-tc-check-compact {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  gap: 6px;
+  padding: 4px 2px;
+}
+
+.docflow-tc-bulk-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  height: auto;
+  line-height: 1.2;
+  border: 1px solid #c4b5fd;
+  background: #fff;
+  color: #5b21b6;
+  cursor: pointer;
+}
+
+.docflow-tc-bulk-btn:hover:not(:disabled) {
+  background: #faf5ff;
+}
+
+.docflow-tc-bulk-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .docflow-task-search--grow {
-  flex: 1 1 180px;
-  min-width: 140px;
+  flex: 1 1 200px;
+  min-width: 160px;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid #dbe3ef;
 }
 
 .docflow-task-select--narrow {
-  min-width: 160px;
-  max-width: 220px;
+  min-width: 140px;
+  max-width: 200px;
 }
 
 .docflow-task-date {
@@ -775,35 +930,17 @@
 
 .docflow-task-clear-filters {
   border: none;
-  background: none;
-  color: #7c3aed;
-  font-size: 13px;
+  background: transparent;
+  color: #6d28d9;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   padding: 6px 8px;
+  border-radius: 8px;
 }
 
-.docflow-task-center-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.docflow-task-center-toolbar-spacer {
-  flex: 1;
-}
-
-.docflow-bulk-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.docflow-bulk-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: #64748b;
+.docflow-task-clear-filters:hover {
+  background: rgba(124, 58, 237, 0.08);
 }
 
 .docflow-btn-compact {
@@ -818,63 +955,312 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid #e9d5ff;
-  border-radius: 10px;
-  background: #faf5ff;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #faf5ff 0%, #fff 100%);
 }
 
 .docflow-assign-bar-label {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   color: #5b21b6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.docflow-task-center-table-wrap {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  overflow-x: auto;
-  overflow-y: visible;
+.docflow-tc-table-scroll {
+  border: 1px solid #e8ecf4;
+  border-radius: 14px;
+  overflow: visible;
   flex-shrink: 0;
   min-width: 0;
-  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  background: #fff;
 }
 
-.docflow-task-table {
+.docflow-tc-task-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
-.docflow-task-table thead {
-  background: #f8fafc;
+.docflow-task-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  box-shadow: 0 1px 0 #e2e8f0;
 }
 
-.docflow-task-table th,
-.docflow-task-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid #eef2f7;
-  text-align: left;
-  vertical-align: middle;
+.docflow-task-table-head th {
+  padding: 12px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.docflow-task-th-actions {
+  width: 1%;
+  text-align: right;
+}
+
+.docflow-task-table.docflow-tc-task-table td {
+  padding: 14px 14px;
+  font-size: 13px;
+  color: #1e293b;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.docflow-tc-task-table tbody tr:hover td {
+  background: #fafbff;
 }
 
 .docflow-task-th-check {
-  width: 36px;
+  width: 44px;
+  padding-left: 12px !important;
 }
 
 .docflow-task-td-clip {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 200px;
+}
+
+.docflow-tc-td-muted {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.docflow-tc-td-unread {
+  text-align: center;
+  width: 72px;
+}
+
+.docflow-tc-unread-dash {
+  color: #cbd5e1;
+  font-size: 13px;
 }
 
 .docflow-task-empty-cell {
-  padding: 20px;
+  padding: 36px 20px;
   text-align: center;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.docflow-tc-module-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Presentation-only mapping for backend status_label strings */
+.docflow-tc-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docflow-tc-status-pill--open {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.docflow-tc-status-pill--waiting-client {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+.docflow-tc-status-pill--waiting-office {
+  background: #fefce8;
+  color: #a16207;
+  border: 1px solid #fde047;
+}
+.docflow-tc-status-pill--resolved {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+.docflow-tc-status-pill--archived {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+.docflow-tc-status-pill--default {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
+.docflow-tc-unread-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  box-shadow: 0 1px 2px rgba(91, 33, 182, 0.25);
+}
+
+.docflow-tc-actions-cell {
+  vertical-align: middle;
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.docflow-tc-actions-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.docflow-tc-btn-open {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid #7c3aed;
+  background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(91, 33, 182, 0.2);
+}
+
+.docflow-tc-btn-open:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.docflow-tc-btn-open:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.docflow-tc-actions-more {
+  position: relative;
+  display: inline-block;
+}
+
+.docflow-tc-more-summary {
+  list-style: none;
+  cursor: pointer;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
+}
+
+.docflow-tc-more-summary::-webkit-details-marker {
+  display: none;
+}
+
+.docflow-tc-more-summary:hover {
+  border-color: #c4b5fd;
+  color: #5b21b6;
+  background: #faf5ff;
+}
+
+.docflow-tc-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 6px;
+  min-width: 160px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e8ecf4;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.12);
+  z-index: 20;
+}
+
+.docflow-tc-more-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.docflow-tc-more-item:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.docflow-tc-more-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.docflow-tc-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #475569;
+  gap: 10px;
+  padding: 8px 4px;
+}
+
+.docflow-page-indicator {
+  font-weight: 600;
+}
+
+.docflow-page-summary {
+  margin-left: auto;
+  font-size: 12px;
   color: #64748b;
 }
 
+/* Draft list chips (shared with task center legacy) */
 .docflow-chip {
   display: inline-block;
   max-width: 100%;
@@ -892,45 +1278,60 @@
   color: #1e40af;
 }
 
-.docflow-unread-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 11px;
-  background: #7c3aed;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
+.docflow-tc-draft-block {
+  border-top: 1px solid #eef2f7;
+  padding-top: 16px;
+  margin-top: 4px;
 }
 
-.docflow-task-actions {
-  white-space: normal;
-}
-
-.docflow-task-center-pagination {
+.docflow-tc-draft-header {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
   flex-wrap: wrap;
-  font-size: 13px;
-  color: #475569;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.docflow-page-indicator {
-  font-weight: 600;
-}
-
-.docflow-page-summary {
-  margin-left: auto;
-  font-size: 12px;
+.docflow-tc-draft-heading {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
   color: #64748b;
 }
 
-.docflow-task-draft-block {
-  border-top: 1px solid #eef2f7;
-  padding-top: 12px;
+.docflow-tc-draft-rule-select {
+  min-width: 200px;
+  max-width: 100%;
+}
+
+.docflow-tc-draft-empty-card {
+  border: 1px dashed #e2e8f0;
+  border-radius: 14px;
+  padding: 28px 20px;
+  text-align: center;
+  background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
+}
+
+.docflow-tc-draft-empty-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.docflow-tc-draft-empty-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.docflow-tc-draft-empty-muted {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.45;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
 }

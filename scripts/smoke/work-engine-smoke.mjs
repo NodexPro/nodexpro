@@ -238,6 +238,7 @@ async function main() {
   const sourceEntityId = `smoke-stage4b-${smokeRunId}`;
   const createPayload = {
     ...queueRefreshPayload(commandPeriodKey, clientId),
+    idempotency_key: `${smokeRunId}-create-work-item`,
     client_id: clientId,
     module_key: 'smoke_test',
     work_type: 'smoke_validation',
@@ -276,16 +277,23 @@ async function main() {
       detail: 'Fix create_work_item / client / period and re-run',
     });
   } else {
-    // T8 — assign_work_item + queue refresh
-    {
-      const assignTo = optionalAssignee;
+    // T8 — assign_work_item + queue refresh (first assign only; requires TEST_ASSIGNEE_USER_ID)
+    if (!optionalAssignee) {
+      results.push({
+        name: 'SKIP assign_work_item (set TEST_ASSIGNEE_USER_ID for first-assign coverage)',
+        ok: true,
+        status: 0,
+        detail: 'assign_work_item requires a non-null assigned_user_id',
+      });
+    } else {
       const body = {
         command: 'assign_work_item',
         payload: {
           ...queueRefreshPayload(commandPeriodKey, clientId),
           work_item_id: workItemId,
           expected_version: workVersion,
-          assigned_user_id: assignTo,
+          assigned_user_id: optionalAssignee,
+          idempotency_key: `${smokeRunId}-assign-1`,
         },
       };
       const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
@@ -294,7 +302,7 @@ async function main() {
       const vOk = ok && row && row.work_item_id === workItemId && row.version === workVersion + 1;
       if (vOk) workVersion = row.version;
       results.push({
-        name: `POST assign_work_item (${assignTo ? 'TEST_ASSIGNEE_USER_ID' : 'unassign null'}) + queue refresh`,
+        name: 'POST assign_work_item (TEST_ASSIGNEE_USER_ID) + queue refresh',
         ok: vOk,
         status: res.status,
         detail: vOk
@@ -313,6 +321,7 @@ async function main() {
           expected_version: workVersion,
           to_state: 'waiting_client',
           reason_text: 'smoke change_state',
+          idempotency_key: `${smokeRunId}-change-waiting-client`,
         },
       };
       const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
@@ -338,6 +347,7 @@ async function main() {
           expected_version: workVersion,
           to_state: 'approved',
           reason_text: 'smoke illegal',
+          idempotency_key: `${smokeRunId}-change-illegal`,
         },
       };
       const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
@@ -364,6 +374,7 @@ async function main() {
           work_item_id: workItemId,
           expected_version: workVersion,
           due_at: dueIso,
+          idempotency_key: `${smokeRunId}-set-deadline`,
         },
       };
       const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
@@ -379,7 +390,7 @@ async function main() {
       });
     }
 
-    // T11 — apply_work_override (assignment) + queue refresh
+    // T11 — apply_work_override (assignment) must be rejected (command purity)
     {
       const body = {
         command: 'apply_work_override',
@@ -389,6 +400,33 @@ async function main() {
           expected_version: workVersion,
           override_kind: 'assignment',
           reason_text: null,
+          idempotency_key: `${smokeRunId}-override-assignment`,
+        },
+      };
+      const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+      const ok =
+        res.status === 400 &&
+        json &&
+        json.code === 'assignment_override_forbidden';
+      results.push({
+        name: 'POST apply_work_override assignment kind (expect 400 assignment_override_forbidden)',
+        ok,
+        status: res.status,
+        detail: ok ? 'blocked as expected' : JSON.stringify(json).slice(0, 280),
+      });
+    }
+
+    // T11b — apply_work_override (escalation_cancel) + queue refresh
+    {
+      const body = {
+        command: 'apply_work_override',
+        payload: {
+          ...queueRefreshPayload(commandPeriodKey, clientId),
+          work_item_id: workItemId,
+          expected_version: workVersion,
+          override_kind: 'escalation_cancel',
+          reason_text: 'smoke escalation cancel override',
+          idempotency_key: `${smokeRunId}-override-escalation-cancel`,
         },
       };
       const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
@@ -397,7 +435,7 @@ async function main() {
       const vOk = ok && row && row.work_item_id === workItemId && row.override_active === true;
       if (vOk) workVersion = row.version;
       results.push({
-        name: 'POST apply_work_override (assignment) + queue refresh',
+        name: 'POST apply_work_override (escalation_cancel) + queue refresh',
         ok: vOk,
         status: res.status,
         detail: vOk ? `version=${workVersion} override_active=true` : JSON.stringify(json).slice(0, 280),
@@ -407,12 +445,13 @@ async function main() {
     // T12 — expected_version conflict (stale)
     {
       const body = {
-        command: 'assign_work_item',
+        command: 'set_work_deadline',
         payload: {
           ...queueRefreshPayload(commandPeriodKey, clientId),
           work_item_id: workItemId,
           expected_version: 0,
-          assigned_user_id: null,
+          due_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          idempotency_key: `${smokeRunId}-deadline-stale`,
         },
       };
       const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
@@ -422,7 +461,7 @@ async function main() {
         json.ok !== true &&
         (json.code === 'version_conflict' || String(json.message ?? '').includes('Version conflict'));
       results.push({
-        name: 'POST assign_work_item stale expected_version (expect 409 version_conflict)',
+        name: 'POST set_work_deadline stale expected_version (expect 409 version_conflict)',
         ok,
         status: res.status,
         detail: ok ? `code=${json.code}` : JSON.stringify(json).slice(0, 240),

@@ -67,6 +67,7 @@ router.get('/aggregates/queue', async (req, res, next) => {
             reviewer_user_id: typeof q.reviewer_user_id === 'string' ? q.reviewer_user_id : null,
             client_id: typeof q.client_id === 'string' ? q.client_id : null,
             period_key: typeof q.period_key === 'string' ? q.period_key : null,
+            queue_bucket: typeof q.queue_bucket === 'string' ? q.queue_bucket : null,
             limit: typeof q.limit === 'string' && q.limit.trim() !== ''
                 ? Number(q.limit)
                 : null,
@@ -74,7 +75,17 @@ router.get('/aggregates/queue', async (req, res, next) => {
                 ? Number(q.offset)
                 : null,
         };
-        const aggregate = await buildWorkEngineQueueAggregate({ orgId, filters });
+        const aggregate = await buildWorkEngineQueueAggregate({
+            orgId,
+            filters,
+            viewer: ctx.membership && ctx.user
+                ? {
+                    userId: ctx.user.id,
+                    permissions: ctx.membership.permissions ?? [],
+                    roleCode: ctx.membership.roleCode,
+                }
+                : undefined,
+        });
         return res.json(aggregate);
     }
     catch (e) {
@@ -84,6 +95,10 @@ router.get('/aggregates/queue', async (req, res, next) => {
 const ALLOWED_COMMANDS = new Set([
     'create_work_item',
     'assign_work_item',
+    'pick_up_unassigned',
+    'transfer_work_item',
+    'claim_work_item',
+    'release_claim',
     'change_work_state',
     'set_work_deadline',
     'append_work_event',

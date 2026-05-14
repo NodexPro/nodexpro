@@ -18,6 +18,7 @@ import {
   executeWorkEngineQueueCommand,
   fetchWorkEngineQueueAggregate,
   type QueueAllowedActionCommand,
+  type QueueOwnershipCommand,
   type QueueDetailSection,
   type QueueRowAllowedOverrideKind,
   type WorkEngineQueueAggregate,
@@ -35,6 +36,7 @@ type FilterState = {
   reviewer_user_id: string;
   client_id: string;
   period_key: string;
+  queue_bucket: string;
   limit: number;
   offset: number;
 };
@@ -46,6 +48,7 @@ const INITIAL_FILTERS: FilterState = {
   reviewer_user_id: '',
   client_id: '',
   period_key: '',
+  queue_bucket: '',
   limit: 50,
   offset: 0,
 };
@@ -58,6 +61,7 @@ function filtersToApi(f: FilterState): WorkEngineQueueFiltersInput {
     reviewer_user_id: f.reviewer_user_id || null,
     client_id: f.client_id || null,
     period_key: f.period_key || null,
+    queue_bucket: f.queue_bucket || null,
     limit: f.limit,
     offset: f.offset,
   };
@@ -126,6 +130,27 @@ export function WorkEngineQueue() {
     [filters, loadAggregate],
   );
 
+  const handleOwnershipCommand = useCallback(
+    async (row: WorkEngineQueueRow, cmd: QueueOwnershipCommand['command']) => {
+      setError(null);
+      try {
+        const resp = await executeWorkEngineQueueCommand({
+          command: cmd,
+          payload: {
+            work_item_id: row.work_item_id,
+            expected_version: row.version,
+            idempotency_key: crypto.randomUUID(),
+          },
+          filters: filtersToApi(filters),
+        });
+        handleCommandResult(resp.refreshed?.aggregate ?? null);
+      } catch (e) {
+        setError(userFacingApiMessage(e));
+      }
+    },
+    [filters, handleCommandResult],
+  );
+
   const onPaginate = useCallback(
     (direction: 1 | -1) => {
       if (!aggregate) return;
@@ -190,6 +215,7 @@ export function WorkEngineQueue() {
         rows={rows}
         onOpenDetail={(row) => setDetailRow(row)}
         onOverflowAction={(row, cmd) => setModal(buildModalForAction(row, cmd))}
+        onOwnershipCommand={handleOwnershipCommand}
       />
 
       <Pagination
@@ -247,10 +273,11 @@ function buildModalForAction(row: WorkEngineQueueRow, cmd: QueueAllowedActionCom
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function SummaryCards({ cards }: { cards: WorkEngineQueueAggregate['summary_cards'] }) {
-  // Card entries are intentionally a fixed mapping of keys → human captions
-  // (UI shell only; the values themselves come from the backend).
-  const items: Array<{ key: keyof typeof cards; label: string; tone?: 'alert' | 'warn' }> = [
+  const items: Array<{ key: keyof WorkEngineQueueAggregate['summary_cards']; label: string; tone?: 'alert' | 'warn' }> = [
     { key: 'total_active', label: 'Active' },
+    { key: 'assigned_to_me', label: 'Assigned to me' },
+    { key: 'unassigned', label: 'Unassigned' },
+    { key: 'claimed_by_me', label: 'Claimed by me' },
     { key: 'waiting_client', label: 'Waiting client' },
     { key: 'waiting_human', label: 'Waiting office' },
     { key: 'review_pending', label: 'Review pending' },
@@ -299,6 +326,21 @@ function FiltersBar(props: {
             <option key={opt.value} value={opt.value}>
               {opt.label}
               {opt.terminal ? ' (terminal)' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="nx-we-field">
+        <label htmlFor="we-queue-bucket">Queue view</label>
+        <select
+          id="we-queue-bucket"
+          value={filters.queue_bucket}
+          onChange={(e) => set({ queue_bucket: e.target.value })}
+        >
+          {(options.queue_buckets ?? [{ value: '', label: 'All' }]).map((opt) => (
+            <option key={opt.value || 'all'} value={opt.value}>
+              {opt.label}
             </option>
           ))}
         </select>
@@ -422,6 +464,7 @@ function QueueTable(props: {
   rows: WorkEngineQueueRow[];
   onOpenDetail: (row: WorkEngineQueueRow) => void;
   onOverflowAction: (row: WorkEngineQueueRow, cmd: QueueAllowedActionCommand) => void;
+  onOwnershipCommand: (row: WorkEngineQueueRow, cmd: QueueOwnershipCommand['command']) => void;
 }) {
   if (props.rows.length === 0) {
     return (
@@ -450,6 +493,7 @@ function QueueTable(props: {
                       row={row}
                       onOpenDetail={() => props.onOpenDetail(row)}
                       onOverflowAction={(cmd) => props.onOverflowAction(row, cmd)}
+                      onOwnershipCommand={(cmd) => props.onOwnershipCommand(row, cmd)}
                     />
                   ) : (
                     renderQueueDataCell(row, col.key, col.empty_display)
@@ -489,11 +533,25 @@ function QueueRowShellActions(props: {
   row: WorkEngineQueueRow;
   onOpenDetail: () => void;
   onOverflowAction: (cmd: QueueAllowedActionCommand) => void;
+  onOwnershipCommand: (cmd: QueueOwnershipCommand['command']) => void;
 }) {
   const { row } = props;
   const open = row.queue_shell.open_detail;
+  const ownership = row.ownership_commands ?? [];
   return (
     <div className="nx-we-shell-actions">
+      {ownership.map((c) => (
+        <button
+          key={c.command}
+          type="button"
+          className="nx-we-btn nx-we-btn--secondary"
+          disabled={!c.enabled}
+          title={c.reason ?? ''}
+          onClick={() => props.onOwnershipCommand(c.command)}
+        >
+          {c.label}
+        </button>
+      ))}
       <button
         type="button"
         className="nx-we-btn nx-we-btn--primary"
@@ -759,14 +817,20 @@ function ActionModal(props: {
     setSubmitting(true);
     try {
       const row = modal.row;
-      const baseCommand = { work_item_id: row.work_item_id, expected_version: row.version };
+      const baseCommand = {
+        work_item_id: row.work_item_id,
+        expected_version: row.version,
+        idempotency_key: crypto.randomUUID(),
+      };
 
       let command: string;
       let payload: Record<string, unknown>;
 
       if (modal.kind === 'assign') {
+        const id = assigneeId.trim();
+        if (!id) throw new Error('Assignee is required');
         command = 'assign_work_item';
-        payload = { ...baseCommand, assigned_user_id: assigneeId || null };
+        payload = { ...baseCommand, assigned_user_id: id };
       } else if (modal.kind === 'change_state') {
         if (row.allowed_transitions.length === 0) {
           throw new Error('No transitions are available for this work item.');

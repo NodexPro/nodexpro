@@ -187,9 +187,15 @@ export const AUDIT_ACTIONS = {
     DOCFLOW_REQUEST_TEMPLATE_SAVED: 'docflow_request_template_saved',
     DOCFLOW_REQUEST_TEMPLATE_ARCHIVED: 'docflow_request_template_archived',
     DOCFLOW_DOCUMENT_REQUEST_SENT: 'docflow_document_request_sent',
+    /** DocFlow → Work Engine bridge: intake threw or returned hard failure before audit trail (rare). */
+    DOCFLOW_WORK_ENGINE_BRIDGE_INTAKE_FAILED: 'docflow.work_engine_bridge.intake_failed',
     // Work Engine (Stage 2 foundation; canonical workflow memory).
     WORK_ITEM_CREATED: 'work_engine.work_item_created',
     WORK_ITEM_ASSIGNED: 'work_engine.work_item_assigned',
+    WORK_ITEM_PICKED_UP: 'work_engine.work_item_picked_up',
+    WORK_ITEM_TRANSFERRED: 'work_engine.work_item_transferred',
+    WORK_ITEM_CLAIMED: 'work_engine.work_item_claimed',
+    WORK_ITEM_CLAIM_RELEASED: 'work_engine.work_item_claim_released',
     WORK_ITEM_STATE_CHANGED: 'work_engine.work_item_state_changed',
     WORK_ITEM_DEADLINE_SET: 'work_engine.work_item_deadline_set',
     WORK_ITEM_OVERRIDE_APPLIED: 'work_engine.work_item_override_applied',

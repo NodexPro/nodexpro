@@ -9,6 +9,7 @@ import { canRunDocflowCommunicationRules } from './docflow-communication-rule.se
 import { asOptionalString, assertClientBelongsToOrg, assertDocflowEntitled, assertFileAssetInScope, assertDocflowMessageScope, assertDocflowThreadScope, assertOfficeScope, canTransitionThreadStatus, reqDateTimeIso, reqString, } from './docflow.guards.js';
 import { resolveOrganizationCountryCode } from './docflow-request-templates.service.js';
 import { createSystemMessageCore } from './docflow-system-message-core.service.js';
+import { emitDocflowThreadNeedsAttention, fetchClientMessageThreadRowForWorkEmit } from './docflow-work-engine-bridge.js';
 import { executeDocflowCommunicationOfficeCommand } from './docflow-communication-rule.service.js';
 import { sendInviteSms } from './docflow-invite-delivery.adapter.js';
 import { createEmailDeliveryAdapter } from './email-delivery.adapter.js';
@@ -298,6 +299,17 @@ async function refreshInvitesManagement(orgId, payload) {
         }),
     };
 }
+/** After portal/invite mutations: honor `refresh_target` (messenger vs invites vs legacy tab). */
+async function refreshInviteRelatedAggregate(orgId, clientId, ctx, payload) {
+    const target = String(payload.refresh_target ?? '').trim();
+    if (target === 'docflow_invites_management') {
+        return refreshInvitesManagement(orgId, payload);
+    }
+    if (target === 'office_messenger') {
+        return refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: asOptionalString(payload.thread_id) }, ctx);
+    }
+    return refreshOffice(orgId, clientId, undefined, ctx, payload);
+}
 async function createDocflowInviteForClient(params) {
     const email = String(params.emailRaw ?? '')
         .trim()
@@ -538,6 +550,33 @@ async function executeBulkDocflowOfficeAction(ctx, orgId, actorUserId, command, 
         command,
         refreshed: await refreshOffice(orgId, firstClientId, undefined, ctx, payload),
     };
+}
+async function emitDocflowThreadNeedsAttentionAfterPortalWrite(args) {
+    try {
+        const snap = await fetchClientMessageThreadRowForWorkEmit(args.orgId, args.clientId, args.threadId);
+        if (!snap)
+            return;
+        await emitDocflowThreadNeedsAttention({
+            intakeCaller: { kind: 'docflow_portal_trust', orgId: args.orgId, auditActorUserId: null },
+            clientId: args.clientId,
+            threadId: args.threadId,
+            threadStatus: snap.thread_status,
+            threadType: snap.thread_type,
+            moduleKey: snap.module_key ?? undefined,
+        });
+    }
+    catch (emitErr) {
+        // eslint-disable-next-line no-console
+        console.warn(JSON.stringify({
+            level: 'error',
+            component: 'docflow_commands',
+            event: 'portal_work_engine_emit_preflight_failed',
+            org_id: args.orgId,
+            client_id: args.clientId,
+            thread_id: args.threadId,
+            error: emitErr?.message ?? String(emitErr),
+        }));
+    }
 }
 export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
     const payload = ensureObj(payloadInput);
@@ -790,7 +829,7 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                 error: deliveryError,
             });
         }
-        return { ok: true, command, refreshed: await refreshInvitesManagement(orgId, payload) };
+        return { ok: true, command, refreshed: await refreshInviteRelatedAggregate(orgId, clientId, ctx, payload) };
     }
     if (command === 'bulk_docflow_action') {
         return await executeBulkDocflowOfficeAction(ctx, orgId, actorUserId, command, payload);
@@ -839,6 +878,27 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                     actor_user_id: actorUserId,
                 });
                 await audit(orgId, actorUserId, 'docflow_thread', threadId, 'thread_created', { thread_type: 'question', actor: 'office_user' });
+                await emitDocflowThreadNeedsAttention({
+                    intakeCaller: { kind: 'office_request', ctx },
+                    clientId,
+                    threadId,
+                    threadStatus: 'open',
+                    threadType: 'question',
+                    moduleKey: 'docflow',
+                });
+            }
+            else {
+                const snap = await fetchClientMessageThreadRowForWorkEmit(orgId, clientId, threadId);
+                if (snap) {
+                    await emitDocflowThreadNeedsAttention({
+                        intakeCaller: { kind: 'office_request', ctx },
+                        clientId,
+                        threadId,
+                        threadStatus: snap.thread_status,
+                        threadType: snap.thread_type,
+                        moduleKey: snap.module_key ?? undefined,
+                    });
+                }
             }
             const selectedThreadId = selectedThreadIdInput ?? threadId;
             return { ok: true, command, refreshed: await refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId }, ctx) };
@@ -871,9 +931,7 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                 phoneRaw: defaultPhone,
                 expiresInHours: Number(payload.expires_in_hours ?? 72),
             });
-            const refreshed = String(payload.refresh_target ?? '') === 'docflow_invites_management'
-                ? await refreshInvitesManagement(orgId, payload)
-                : await refreshOffice(orgId, clientId, undefined, ctx, payload);
+            const refreshed = await refreshInviteRelatedAggregate(orgId, clientId, ctx, payload);
             return {
                 ok: true,
                 command,
@@ -909,7 +967,7 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                 phoneRaw: phone || null,
                 expiresInHours: Number(payload.expires_in_hours ?? 72),
             });
-            return { ok: true, command, refreshed: await refreshInvitesManagement(orgId, payload) };
+            return { ok: true, command, refreshed: await refreshInviteRelatedAggregate(orgId, clientId, ctx, payload) };
         }
         case 'revoke_invite': {
             const now = new Date().toISOString();
@@ -924,7 +982,7 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
             await audit(orgId, actorUserId, 'docflow_invitation', clientId, AUDIT_ACTIONS.DOCFLOW_INVITATION_REVOKED, {
                 client_id: clientId,
             });
-            return { ok: true, command, refreshed: await refreshInvitesManagement(orgId, payload) };
+            return { ok: true, command, refreshed: await refreshInviteRelatedAggregate(orgId, clientId, ctx, payload) };
         }
         case 'revoke_client_portal_access': {
             const reason = asOptionalString(payload.reason);
@@ -960,7 +1018,7 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                 payload_json: { reason },
             });
             await audit(orgId, actorUserId, 'docflow_portal_access', clientId, 'portal_access_revoked', { reason });
-            return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, undefined, ctx, payload) };
+            return { ok: true, command, refreshed: await refreshInviteRelatedAggregate(orgId, clientId, ctx, payload) };
         }
         case 'create_client_thread': {
             const moduleKey = reqString(payload, 'module_key');
@@ -999,6 +1057,14 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                 actor_user_id: actorUserId,
             });
             await audit(orgId, actorUserId, 'docflow_thread', data.id, 'thread_created', { module_key: moduleKey, thread_type: threadType });
+            await emitDocflowThreadNeedsAttention({
+                intakeCaller: { kind: 'office_request', ctx },
+                clientId,
+                threadId: String(data.id),
+                threadStatus: 'open',
+                threadType,
+                moduleKey,
+            });
             return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, data.id, ctx, payload) };
         }
         case 'archive_client_thread':
@@ -1072,7 +1138,7 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
             const nextStatus = command === 'resolve_docflow_thread' ? 'resolved' : reqString(payload, 'next_thread_status');
             const { data: thread, error: tErr } = await supabaseAdmin
                 .from('client_message_threads')
-                .select('id, thread_status')
+                .select('id, thread_status, thread_type, module_key')
                 .eq('id', threadId)
                 .eq('org_id', orgId)
                 .eq('client_id', clientId)
@@ -1108,6 +1174,16 @@ export async function executeDocflowOfficeCommand(ctx, command, payloadInput) {
                 from: thread.thread_status,
                 to: nextStatus,
             });
+            if (nextStatus === 'waiting_office' && thread.thread_status !== 'waiting_office') {
+                await emitDocflowThreadNeedsAttention({
+                    intakeCaller: { kind: 'office_request', ctx },
+                    clientId,
+                    threadId,
+                    threadStatus: nextStatus,
+                    threadType: String(thread.thread_type ?? ''),
+                    moduleKey: String(thread.module_key ?? '') || undefined,
+                });
+            }
             return { ok: true, command, refreshed: await refreshOffice(orgId, clientId, threadId, ctx, payload) };
         }
         case 'assign_thread_to_user':
@@ -1857,6 +1933,11 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
                     thread_id: threadIdStr,
                     actor: 'client_portal_user',
                 });
+                await emitDocflowThreadNeedsAttentionAfterPortalWrite({
+                    orgId,
+                    clientId,
+                    threadId: threadIdStr,
+                });
                 if (fileAssetIds.length) {
                     for (const fileAssetId of fileAssetIds) {
                         await assertFileAssetInScope(orgId, fileAssetId);
@@ -1988,6 +2069,7 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
                             file_asset_id: fileAssetId,
                         });
                     }
+                    await emitDocflowThreadNeedsAttentionAfterPortalWrite({ orgId, clientId, threadId });
                 }
                 return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, threadId) };
             }
@@ -2024,6 +2106,7 @@ export async function executeDocflowPortalCommand(command, payloadInput) {
                         thread_id: threadId,
                         actor: 'client_portal_user',
                     });
+                    await emitDocflowThreadNeedsAttentionAfterPortalWrite({ orgId, clientId, threadId });
                 }
                 return { ok: true, command, refreshed: await refreshPortal(orgId, clientId, portalUserId, threadId) };
             }

@@ -6,7 +6,7 @@
  * idempotency_key, and stores every accepted/duplicate/failed row in
  * `work_events`. It does NOT auto-create work_items.
  *
- * Stage 3A: `intakeWorkEvent(ctx, payload)` is the canonical command handler
+ * Stage 3A: `intakeWorkEvent(caller, payload)` is the canonical command handler
  * for `intake_work_event` via `POST /api/v1/work-engine/commands`. It:
  *   1. validates the intake payload against tenant context;
  *   2. enforces idempotency by event_id and (source_module, idempotency_key);
@@ -225,38 +225,10 @@ function ensureRecord(v) {
         : {};
 }
 /**
- * Validate intake_work_event payload.
- *
- * Required: event_type, source_module, source_entity_type, source_entity_id,
- *           client_id, occurred_at, schema_version. org_id, when supplied,
- *           must match the authenticated organization.
- *
- * Optional: work_type, period_key, event_id, emitted_by_type, emitted_by_id, payload.
- *
- * Stage 3B contract: `work_type` is accepted for audit traceability but is
- * IGNORED for routing — the allowlist mapper in
- * `work-engine.event-mapping.service.ts` is the only source of work_type.
- * `period_key` remains the emitter's contract (backend never computes legal
- * reporting periods). If the mapper resolves and `period_key` is present,
- * intake creates / reuses a work_item; otherwise the event is persisted with
- * the mapper's reason as `processing_outcome` and `intake_result='pending_mapping'`.
+ * Shared body of intake_work_event validation once `org_id` is resolved and
+ * (for office) membership asserted elsewhere.
  */
-function validateIntakePayload(ctx, raw) {
-    const ctxOrgId = ctx.organizationId;
-    if (!ctxOrgId || !ctx.membership) {
-        throw forbidden('Organization context required');
-    }
-    const payloadOrgIdRaw = raw.org_id;
-    const orgId = String(payloadOrgIdRaw ?? ctxOrgId).trim();
-    if (!isUuid(orgId))
-        throw badRequest('org_id must be a uuid');
-    if (payloadOrgIdRaw !== undefined && payloadOrgIdRaw !== null) {
-        if (orgId !== ctxOrgId) {
-            throw forbidden('payload.org_id does not match authenticated organization');
-        }
-    }
-    // Final cross-check via the same guard used by every command.
-    assertOrgScope(ctx, orgId);
+function parseIntakeWorkEventEnvelope(orgId, raw) {
     const clientId = reqNonEmpty(raw, 'client_id');
     if (!isUuid(clientId))
         throw badRequest('client_id must be a uuid');
@@ -334,6 +306,35 @@ function validateIntakePayload(ctx, raw) {
         payload: ensureRecord(raw.payload),
         dedup_key: dedupKey,
     };
+}
+function validateIntakePayload(ctx, raw) {
+    const ctxOrgId = ctx.organizationId;
+    if (!ctxOrgId || !ctx.membership) {
+        throw forbidden('Organization context required');
+    }
+    const payloadOrgIdRaw = raw.org_id;
+    const orgId = String(payloadOrgIdRaw ?? ctxOrgId).trim();
+    if (!isUuid(orgId))
+        throw badRequest('org_id must be a uuid');
+    if (payloadOrgIdRaw !== undefined && payloadOrgIdRaw !== null) {
+        if (orgId !== ctxOrgId) {
+            throw forbidden('payload.org_id does not match authenticated organization');
+        }
+    }
+    // Final cross-check via the same guard used by every command.
+    assertOrgScope(ctx, orgId);
+    return parseIntakeWorkEventEnvelope(orgId, raw);
+}
+/** Portal-trusted intake: org_id resolved from verified portal session only. */
+function validateIntakePayloadForTrustedOrg(orgIdTrusted, raw) {
+    const payloadOrgIdRaw = raw.org_id;
+    const orgId = String(payloadOrgIdRaw ?? orgIdTrusted).trim();
+    if (!isUuid(orgId))
+        throw badRequest('org_id must be a uuid');
+    if (orgId !== orgIdTrusted) {
+        throw forbidden('payload.org_id does not match trusted organization context');
+    }
+    return parseIntakeWorkEventEnvelope(orgId, raw);
 }
 async function assertClientInOrg(orgId, clientId) {
     const { data, error } = await supabaseAdmin
@@ -476,11 +477,13 @@ async function auditIntake(v, actorUserId, action, workItemId, workEventId, extr
  * is responsible for attaching a refreshed Work Engine aggregate to the
  * response envelope.
  */
-export async function intakeWorkEvent(ctx, payloadInput) {
+export async function intakeWorkEvent(caller, payloadInput) {
     const raw = ensureRecord(payloadInput);
-    const v = validateIntakePayload(ctx, raw);
+    const v = caller.kind === 'office_request'
+        ? validateIntakePayload(caller.ctx, raw)
+        : validateIntakePayloadForTrustedOrg(caller.orgId, raw);
     await assertClientInOrg(v.org_id, v.client_id);
-    const actorUserId = ctx.user.id;
+    const actorUserId = caller.kind === 'office_request' ? caller.ctx.user.id : caller.auditActorUserId;
     // Always audit "received" first so duplicate/failure paths still leave a trail.
     await auditIntake(v, actorUserId, AUDIT_ACTIONS.WORK_EVENT_RECEIVED, null, null, {
         emitted_by_type: v.emitted_by_type,

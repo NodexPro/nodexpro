@@ -26,11 +26,68 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
 import { asOptionalIso, asOptionalString, assertClientBelongsToOrg, assertExpectedVersion, assertOrgScope, assertValidPeriodKey, assertValidWorkState, canReopenFromDone, canTransitionWorkState, isUuid, reqInt, reqString, } from './work-engine.guards.js';
+import { abortWorkEngineCommandIdempotency, beginWorkEngineCommandIdempotency, completeWorkEngineCommandIdempotency, } from './work-engine.idempotency.js';
 import { buildWorkEngineFoundationAggregate, buildWorkEngineQueueAggregate, coerceWorkEngineQueueFilters, queueAllowedActions, } from './work-engine.read-models.service.js';
 import { intakeWorkEvent } from './work-engine.event-intake.service.js';
+import { canStaffPickUpUnassigned, resolveWorkTypeWorkflowPolicy } from './work-engine.policy.service.js';
+import { WORK_ENGINE_PERMISSIONS, requireWorkEnginePermission, } from './work-engine.rbac.js';
 import { CREATION_SOURCE_TYPES, OVERRIDE_KINDS, OVERRIDE_KINDS_REQUIRING_REASON, } from './work-engine.types.js';
 const REFRESH_FOUNDATION = 'work_engine_foundation_aggregate';
 const REFRESH_QUEUE = 'work_engine_queue_aggregate';
+function viewerQueueContext(ctx) {
+    if (!ctx.membership)
+        return null;
+    return {
+        userId: ctx.user.id,
+        permissions: ctx.membership.permissions ?? [],
+        roleCode: ctx.membership.roleCode,
+    };
+}
+async function insertWorkAssignmentHistory(row) {
+    const { error } = await supabaseAdmin.from('work_assignment_history').insert({
+        org_id: row.orgId,
+        work_item_id: row.workItemId,
+        from_assigned_user_id: row.from,
+        to_assigned_user_id: row.to,
+        actor_user_id: row.actorUserId,
+        command_type: row.commandType,
+        idempotency_key: row.idempotencyKey,
+    });
+    if (error)
+        throw error;
+}
+async function executeWithCommandIdempotency(ctx, orgId, command, payload, exec) {
+    const idemKey = reqString(payload, 'idempotency_key');
+    const lease = await beginWorkEngineCommandIdempotency({
+        orgId,
+        commandType: command,
+        idempotencyKey: idemKey,
+    });
+    if (lease.kind === 'replay') {
+        return {
+            ok: true,
+            command,
+            refreshed: await buildRefreshedForPayload(orgId, payload, ctx),
+            meta: { idempotent_replay: true },
+        };
+    }
+    try {
+        const out = await exec();
+        await completeWorkEngineCommandIdempotency({
+            leaseRowId: lease.leaseRowId,
+            workItemId: out.workItemId,
+        });
+        return {
+            ok: true,
+            command,
+            refreshed: await buildRefreshedForPayload(orgId, payload, ctx),
+        };
+    }
+    catch (e) {
+        await abortWorkEngineCommandIdempotency(lease.leaseRowId);
+        throw e;
+    }
+}
 function parseRefreshAggregateKey(payload) {
     const raw = asOptionalString(payload.refresh_aggregate);
     if (raw === undefined || raw === null || raw === '')
@@ -44,12 +101,17 @@ function parseRefreshAggregateKey(payload) {
 function isQueueRefreshMode(payload) {
     return parseRefreshAggregateKey(payload) === 'queue';
 }
-async function buildRefreshedForPayload(orgId, payload) {
+async function buildRefreshedForPayload(orgId, payload, ctx) {
     if (parseRefreshAggregateKey(payload) === 'queue') {
         const filters = coerceWorkEngineQueueFilters(payload.aggregate_filters);
+        const viewer = viewerQueueContext(ctx);
         return {
             aggregate_key: REFRESH_QUEUE,
-            aggregate: await buildWorkEngineQueueAggregate({ orgId, filters }),
+            aggregate: await buildWorkEngineQueueAggregate({
+                orgId,
+                filters,
+                viewer: viewer ?? undefined,
+            }),
         };
     }
     return {
@@ -63,7 +125,10 @@ async function buildRefreshedForPayload(orgId, payload) {
  * trust client-supplied allowed_actions flags.
  */
 function assertQueueActionEnabled(current, semantic) {
-    const actions = queueAllowedActions(current.work_state);
+    const actions = queueAllowedActions({
+        work_state: current.work_state,
+        assigned_user_id: current.assigned_user_id,
+    });
     const row = actions.find((a) => a.command === semantic);
     if (!row?.enabled) {
         throw badRequest(row?.reason ?? `Queue action '${semantic}' is not allowed for work_state='${current.work_state}'`, 'queue_action_not_allowed');
@@ -130,238 +195,279 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
     const actorUserId = ctx.user.id;
     switch (command) {
         case 'create_work_item': {
-            const clientId = reqString(payload, 'client_id');
-            await assertClientBelongsToOrg(orgId, clientId);
-            const moduleKey = reqString(payload, 'module_key');
-            const workType = reqString(payload, 'work_type');
-            const periodKey = assertValidPeriodKey(reqString(payload, 'period_key'));
-            const sourceModule = reqString(payload, 'source_module');
-            const sourceEntityType = reqString(payload, 'source_entity_type');
-            const sourceEntityId = reqString(payload, 'source_entity_id');
-            const creationSourceRaw = asOptionalString(payload.creation_source_type) ?? 'command';
-            if (!CREATION_SOURCE_TYPES.includes(creationSourceRaw)) {
-                throw badRequest('Invalid creation_source_type');
-            }
-            const creationSourceType = creationSourceRaw;
-            const ownerUserId = asOptionalString(payload.owner_user_id);
-            const assignedUserId = asOptionalString(payload.assigned_user_id);
-            const reviewerUserId = asOptionalString(payload.reviewer_user_id);
-            const escalationOwnerId = asOptionalString(payload.escalation_owner_id);
-            const dueAt = asOptionalIso(payload.due_at);
-            const createdByRuleId = asOptionalString(payload.created_by_rule_id);
-            const createdByEventId = asOptionalString(payload.created_by_event_id);
-            const initialState = assignedUserId ? 'assigned' : 'new';
-            const insertResp = await supabaseAdmin
-                .from('work_items')
-                .insert({
-                org_id: orgId,
-                client_id: clientId,
-                module_key: moduleKey,
-                work_type: workType,
-                period_key: periodKey,
-                work_state: initialState,
-                owner_user_id: ownerUserId,
-                assigned_user_id: assignedUserId,
-                reviewer_user_id: reviewerUserId,
-                escalation_owner_id: escalationOwnerId,
-                due_at: dueAt,
-                sla_status: 'none',
-                source_module: sourceModule,
-                source_entity_type: sourceEntityType,
-                source_entity_id: sourceEntityId,
-                created_by_rule_id: createdByRuleId,
-                created_by_event_id: createdByEventId,
-                created_by_user_id: actorUserId,
-                creation_source_type: creationSourceType,
-                version: 0,
-                override_active: false,
-            })
-                .select('*')
-                .single();
-            if (insertResp.error) {
-                const code = insertResp.error.code;
-                if (code === '23505') {
-                    throw conflict('Active work item already exists for this dedup key', 'work_item_dedup_conflict');
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                const clientId = reqString(payload, 'client_id');
+                await assertClientBelongsToOrg(orgId, clientId);
+                const moduleKey = reqString(payload, 'module_key');
+                const workType = reqString(payload, 'work_type');
+                const periodKey = assertValidPeriodKey(reqString(payload, 'period_key'));
+                const sourceModule = reqString(payload, 'source_module');
+                const sourceEntityType = reqString(payload, 'source_entity_type');
+                const sourceEntityId = reqString(payload, 'source_entity_id');
+                const creationSourceRaw = asOptionalString(payload.creation_source_type) ?? 'command';
+                if (!CREATION_SOURCE_TYPES.includes(creationSourceRaw)) {
+                    throw badRequest('Invalid creation_source_type');
                 }
-                throw insertResp.error;
-            }
-            const row = insertResp.data;
-            await insertTransition({
-                org_id: orgId,
-                work_item_id: row.id,
-                from_state: null,
-                to_state: initialState,
-                transition_kind: 'command',
-                action_code: 'create_work_item',
-                actor_type: 'user',
-                actor_user_id: actorUserId,
-                reason_text: asOptionalString(payload.reason_text),
-                metadata_json: {
+                const creationSourceType = creationSourceRaw;
+                const ownerUserId = asOptionalString(payload.owner_user_id);
+                const assignedUserId = asOptionalString(payload.assigned_user_id);
+                const reviewerUserId = asOptionalString(payload.reviewer_user_id);
+                const escalationOwnerId = asOptionalString(payload.escalation_owner_id);
+                const dueAt = asOptionalIso(payload.due_at);
+                const createdByRuleId = asOptionalString(payload.created_by_rule_id);
+                const createdByEventId = asOptionalString(payload.created_by_event_id);
+                const initialState = assignedUserId ? 'assigned' : 'new';
+                const insertResp = await supabaseAdmin
+                    .from('work_items')
+                    .insert({
+                    org_id: orgId,
+                    client_id: clientId,
+                    module_key: moduleKey,
+                    work_type: workType,
+                    period_key: periodKey,
+                    work_state: initialState,
+                    owner_user_id: ownerUserId,
+                    assigned_user_id: assignedUserId,
+                    reviewer_user_id: reviewerUserId,
+                    escalation_owner_id: escalationOwnerId,
+                    due_at: dueAt,
+                    sla_status: 'none',
                     source_module: sourceModule,
                     source_entity_type: sourceEntityType,
                     source_entity_id: sourceEntityId,
+                    created_by_rule_id: createdByRuleId,
+                    created_by_event_id: createdByEventId,
+                    created_by_user_id: actorUserId,
                     creation_source_type: creationSourceType,
-                },
-                expected_version: null,
-                resulting_version: row.version,
+                    version: 0,
+                    override_active: false,
+                })
+                    .select('*')
+                    .single();
+                if (insertResp.error) {
+                    const code = insertResp.error.code;
+                    if (code === '23505') {
+                        throw conflict('Active work item already exists for this dedup key', 'work_item_dedup_conflict');
+                    }
+                    throw insertResp.error;
+                }
+                const row = insertResp.data;
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: row.id,
+                    from_state: null,
+                    to_state: initialState,
+                    transition_kind: 'command',
+                    action_code: 'create_work_item',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: asOptionalString(payload.reason_text),
+                    metadata_json: {
+                        source_module: sourceModule,
+                        source_entity_type: sourceEntityType,
+                        source_entity_id: sourceEntityId,
+                        creation_source_type: creationSourceType,
+                    },
+                    expected_version: null,
+                    resulting_version: row.version,
+                });
+                await audit(orgId, actorUserId, 'work_item', row.id, AUDIT_ACTIONS.WORK_ITEM_CREATED, {
+                    module_key: moduleKey,
+                    work_type: workType,
+                    period_key: periodKey,
+                    work_state: initialState,
+                });
+                return { workItemId: row.id };
             });
-            await audit(orgId, actorUserId, 'work_item', row.id, AUDIT_ACTIONS.WORK_ITEM_CREATED, {
-                module_key: moduleKey,
-                work_type: workType,
-                period_key: periodKey,
-                work_state: initialState,
-            });
-            return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
         }
         case 'assign_work_item': {
-            const workItemId = reqString(payload, 'work_item_id');
-            const expectedVersion = reqInt(payload, 'expected_version');
-            // Explicit null clears the assignment; otherwise must be a non-empty string.
-            const assignedUserIdRaw = payload.assigned_user_id === null
-                ? null
-                : asOptionalString(payload.assigned_user_id);
-            const current = await loadWorkItem(orgId, workItemId);
-            assertExpectedVersion(current.version, expectedVersion);
-            if (isQueueRefreshMode(payload))
-                assertQueueActionEnabled(current, 'assign');
-            // Auto-promote new -> assigned when assigning a user for the first time.
-            const willMoveFromNewToAssigned = current.work_state === 'new' && assignedUserIdRaw !== null;
-            const nextState = willMoveFromNewToAssigned
-                ? 'assigned'
-                : current.work_state;
-            const newVersion = current.version + 1;
-            await updateWorkItemWithVersion({
-                orgId,
-                workItemId,
-                expectedVersion,
-                newVersion,
-                patch: {
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.assign);
+                const workItemId = reqString(payload, 'work_item_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const assignedUserIdRaw = asOptionalString(payload.assigned_user_id);
+                if (assignedUserIdRaw == null || assignedUserIdRaw === '') {
+                    throw badRequest('assign_work_item requires assigned_user_id (first assignment only; use transfer_work_item to reassign)', 'assign_target_required');
+                }
+                const current = await loadWorkItem(orgId, workItemId);
+                assertExpectedVersion(current.version, expectedVersion);
+                if (current.assigned_user_id != null && String(current.assigned_user_id).trim() !== '') {
+                    throw badRequest('assign_work_item is only valid when the work item has no assignee; use transfer_work_item', 'assign_requires_unassigned');
+                }
+                if (['review_pending', 'done', 'archived'].includes(current.work_state)) {
+                    throw badRequest(`assign_work_item is not allowed in work_state='${current.work_state}'`, 'invalid_transition');
+                }
+                if (isQueueRefreshMode(payload))
+                    assertQueueActionEnabled(current, 'assign');
+                if (assignedUserIdRaw &&
+                    current.reviewer_user_id &&
+                    current.reviewer_user_id === assignedUserIdRaw) {
+                    throw badRequest('Reviewer cannot match the assignee (separation of duties)', 'SELF_REVIEW_FORBIDDEN');
+                }
+                const willMoveFromNewToAssigned = current.work_state === 'new' && assignedUserIdRaw !== null;
+                const nextState = willMoveFromNewToAssigned
+                    ? 'assigned'
+                    : current.work_state;
+                const assigneeChanged = (current.assigned_user_id ?? null) !== (assignedUserIdRaw ?? null);
+                const newVersion = current.version + 1;
+                const patch = {
                     assigned_user_id: assignedUserIdRaw,
                     work_state: nextState,
-                },
-            });
-            await insertTransition({
-                org_id: orgId,
-                work_item_id: workItemId,
-                from_state: current.work_state,
-                to_state: nextState,
-                transition_kind: 'command',
-                action_code: 'assign_work_item',
-                actor_type: 'user',
-                actor_user_id: actorUserId,
-                reason_text: asOptionalString(payload.reason_text),
-                metadata_json: {
+                };
+                if (assigneeChanged) {
+                    patch.claimed_by_user_id = null;
+                    patch.claimed_at = null;
+                }
+                await updateWorkItemWithVersion({
+                    orgId,
+                    workItemId,
+                    expectedVersion,
+                    newVersion,
+                    patch,
+                });
+                if (assigneeChanged) {
+                    await insertWorkAssignmentHistory({
+                        orgId,
+                        workItemId,
+                        from: current.assigned_user_id,
+                        to: assignedUserIdRaw,
+                        actorUserId,
+                        commandType: 'assign_work_item',
+                        idempotencyKey: reqString(payload, 'idempotency_key'),
+                    });
+                }
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: current.work_state,
+                    to_state: nextState,
+                    transition_kind: 'command',
+                    action_code: 'assign_work_item',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: asOptionalString(payload.reason_text),
+                    metadata_json: {
+                        previous_assigned_user_id: current.assigned_user_id,
+                        new_assigned_user_id: assignedUserIdRaw,
+                    },
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_ASSIGNED, {
                     previous_assigned_user_id: current.assigned_user_id,
                     new_assigned_user_id: assignedUserIdRaw,
-                },
-                expected_version: expectedVersion,
-                resulting_version: newVersion,
+                    from_state: current.work_state,
+                    to_state: nextState,
+                });
+                return { workItemId };
             });
-            await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_ASSIGNED, {
-                previous_assigned_user_id: current.assigned_user_id,
-                new_assigned_user_id: assignedUserIdRaw,
-                from_state: current.work_state,
-                to_state: nextState,
-            });
-            return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
         }
         case 'change_work_state': {
-            const workItemId = reqString(payload, 'work_item_id');
-            const expectedVersion = reqInt(payload, 'expected_version');
-            const toState = assertValidWorkState(reqString(payload, 'to_state'));
-            const current = await loadWorkItem(orgId, workItemId);
-            assertExpectedVersion(current.version, expectedVersion);
-            if (isQueueRefreshMode(payload)) {
-                if (toState === 'archived')
-                    assertQueueActionEnabled(current, 'archive');
-                else
-                    assertQueueActionEnabled(current, 'change_state');
-            }
-            if (!canTransitionWorkState(current.work_state, toState)) {
-                throw badRequest(`Invalid transition: ${current.work_state} -> ${toState}`, 'invalid_transition');
-            }
-            const newVersion = current.version + 1;
-            await updateWorkItemWithVersion({
-                orgId,
-                workItemId,
-                expectedVersion,
-                newVersion,
-                patch: { work_state: toState },
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                const workItemId = reqString(payload, 'work_item_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const toState = assertValidWorkState(reqString(payload, 'to_state'));
+                const current = await loadWorkItem(orgId, workItemId);
+                assertExpectedVersion(current.version, expectedVersion);
+                if (isQueueRefreshMode(payload)) {
+                    if (toState === 'archived')
+                        assertQueueActionEnabled(current, 'archive');
+                    else
+                        assertQueueActionEnabled(current, 'change_state');
+                }
+                if (!canTransitionWorkState(current.work_state, toState)) {
+                    throw badRequest(`Invalid transition: ${current.work_state} -> ${toState}`, 'invalid_transition');
+                }
+                const newVersion = current.version + 1;
+                const patch = { work_state: toState };
+                if (toState === 'waiting_client') {
+                    patch.claimed_by_user_id = null;
+                    patch.claimed_at = null;
+                }
+                await updateWorkItemWithVersion({
+                    orgId,
+                    workItemId,
+                    expectedVersion,
+                    newVersion,
+                    patch,
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: current.work_state,
+                    to_state: toState,
+                    transition_kind: 'command',
+                    action_code: 'change_work_state',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: asOptionalString(payload.reason_text),
+                    metadata_json: {},
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_STATE_CHANGED, { from_state: current.work_state, to_state: toState });
+                return { workItemId };
             });
-            await insertTransition({
-                org_id: orgId,
-                work_item_id: workItemId,
-                from_state: current.work_state,
-                to_state: toState,
-                transition_kind: 'command',
-                action_code: 'change_work_state',
-                actor_type: 'user',
-                actor_user_id: actorUserId,
-                reason_text: asOptionalString(payload.reason_text),
-                metadata_json: {},
-                expected_version: expectedVersion,
-                resulting_version: newVersion,
-            });
-            await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_STATE_CHANGED, { from_state: current.work_state, to_state: toState });
-            return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
         }
         case 'set_work_deadline': {
-            const workItemId = reqString(payload, 'work_item_id');
-            const expectedVersion = reqInt(payload, 'expected_version');
-            const dueAt = payload.due_at === null ? null : asOptionalIso(payload.due_at);
-            const isOverride = payload.override === true;
-            const reasonText = asOptionalString(payload.reason_text);
-            // docs/work-engine-override-precedence.md §3: reason_text required for deadline overrides.
-            if (isOverride && !reasonText) {
-                throw badRequest('reason_text is required for deadline override', 'override_reason_required');
-            }
-            const current = await loadWorkItem(orgId, workItemId);
-            assertExpectedVersion(current.version, expectedVersion);
-            if (isQueueRefreshMode(payload))
-                assertQueueActionEnabled(current, 'set_deadline');
-            const newVersion = current.version + 1;
-            const overrideSummary = isOverride
-                ? {
-                    field: 'due_at',
-                    previous_value: current.due_at,
-                    new_value: dueAt,
-                    overridden_at: new Date().toISOString(),
-                    overridden_by: actorUserId,
-                    reason_text: reasonText,
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                const workItemId = reqString(payload, 'work_item_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const dueAt = payload.due_at === null ? null : asOptionalIso(payload.due_at);
+                const isOverride = payload.override === true;
+                const reasonText = asOptionalString(payload.reason_text);
+                // docs/work-engine-override-precedence.md §3: reason_text required for deadline overrides.
+                if (isOverride && !reasonText) {
+                    throw badRequest('reason_text is required for deadline override', 'override_reason_required');
                 }
-                : null;
-            const patch = { due_at: dueAt };
-            if (isOverride) {
-                patch.override_active = true;
-                patch.override_summary_json = overrideSummary;
-            }
-            await updateWorkItemWithVersion({
-                orgId,
-                workItemId,
-                expectedVersion,
-                newVersion,
-                patch,
+                const current = await loadWorkItem(orgId, workItemId);
+                assertExpectedVersion(current.version, expectedVersion);
+                if (isQueueRefreshMode(payload))
+                    assertQueueActionEnabled(current, 'set_deadline');
+                const newVersion = current.version + 1;
+                const overrideSummary = isOverride
+                    ? {
+                        field: 'due_at',
+                        previous_value: current.due_at,
+                        new_value: dueAt,
+                        overridden_at: new Date().toISOString(),
+                        overridden_by: actorUserId,
+                        reason_text: reasonText,
+                    }
+                    : null;
+                const patch = { due_at: dueAt };
+                if (isOverride) {
+                    patch.override_active = true;
+                    patch.override_summary_json = overrideSummary;
+                }
+                await updateWorkItemWithVersion({
+                    orgId,
+                    workItemId,
+                    expectedVersion,
+                    newVersion,
+                    patch,
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: current.work_state,
+                    to_state: current.work_state,
+                    transition_kind: isOverride ? 'override' : 'command',
+                    action_code: 'set_work_deadline',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: reasonText,
+                    metadata_json: {
+                        previous_due_at: current.due_at,
+                        new_due_at: dueAt,
+                        override: isOverride,
+                    },
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_DEADLINE_SET, { previous_due_at: current.due_at, new_due_at: dueAt, override: isOverride });
+                return { workItemId };
             });
-            await insertTransition({
-                org_id: orgId,
-                work_item_id: workItemId,
-                from_state: current.work_state,
-                to_state: current.work_state,
-                transition_kind: isOverride ? 'override' : 'command',
-                action_code: 'set_work_deadline',
-                actor_type: 'user',
-                actor_user_id: actorUserId,
-                reason_text: reasonText,
-                metadata_json: {
-                    previous_due_at: current.due_at,
-                    new_due_at: dueAt,
-                    override: isOverride,
-                },
-                expected_version: expectedVersion,
-                resulting_version: newVersion,
-            });
-            await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_DEADLINE_SET, { previous_due_at: current.due_at, new_due_at: dueAt, override: isOverride });
-            return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
         }
         case 'append_work_event': {
             const workItemIdOpt = asOptionalString(payload.work_item_id);
@@ -429,99 +535,331 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
                 direction,
                 work_item_id: workItemIdOpt,
             });
-            return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
+            return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload, ctx) };
         }
         case 'apply_work_override': {
-            const workItemId = reqString(payload, 'work_item_id');
-            const expectedVersion = reqInt(payload, 'expected_version');
-            const overrideKindRaw = reqString(payload, 'override_kind');
-            if (!OVERRIDE_KINDS.includes(overrideKindRaw)) {
-                throw badRequest(`Invalid override_kind: ${overrideKindRaw}`, 'invalid_override_kind');
-            }
-            const overrideKind = overrideKindRaw;
-            const reasonText = asOptionalString(payload.reason_text);
-            if (OVERRIDE_KINDS_REQUIRING_REASON.has(overrideKind) && !reasonText) {
-                throw badRequest(`reason_text is required for override kind '${overrideKind}'`, 'override_reason_required');
-            }
-            const current = await loadWorkItem(orgId, workItemId);
-            assertExpectedVersion(current.version, expectedVersion);
-            if (isQueueRefreshMode(payload))
-                assertQueueActionEnabled(current, 'apply_override');
-            const toStateRaw = asOptionalString(payload.to_state);
-            let nextState = current.work_state;
-            if (toStateRaw) {
-                nextState = assertValidWorkState(toStateRaw);
-            }
-            // Reopen is the only path out of `done` (which is terminal for normal
-            // transitions). Other override kinds may NOT touch a `done` item.
-            if (overrideKind === 'reopen') {
-                if (current.work_state !== 'done') {
-                    throw badRequest(`Override 'reopen' is only valid from work_state='done' (current='${current.work_state}')`, 'invalid_reopen_source');
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                const workItemId = reqString(payload, 'work_item_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const overrideKindRaw = reqString(payload, 'override_kind');
+                if (!OVERRIDE_KINDS.includes(overrideKindRaw)) {
+                    throw badRequest(`Invalid override_kind: ${overrideKindRaw}`, 'invalid_override_kind');
                 }
-                if (!toStateRaw) {
-                    throw badRequest(`Override 'reopen' requires 'to_state' (one of assigned|waiting_human|waiting_client)`, 'reopen_target_required');
+                const overrideKind = overrideKindRaw;
+                if (overrideKind === 'assignment') {
+                    throw badRequest('Assignment changes are not allowed via apply_work_override; use pick_up_unassigned, assign_work_item, or transfer_work_item', 'assignment_override_forbidden');
                 }
-                if (!canReopenFromDone(nextState)) {
-                    throw badRequest(`Override 'reopen' cannot target '${nextState}'; allowed: assigned, waiting_human, waiting_client`, 'invalid_reopen_target');
+                requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.override);
+                const reasonText = asOptionalString(payload.reason_text);
+                if (OVERRIDE_KINDS_REQUIRING_REASON.has(overrideKind) && !reasonText) {
+                    throw badRequest(`reason_text is required for override kind '${overrideKind}'`, 'override_reason_required');
                 }
-            }
-            else if (toStateRaw &&
-                nextState !== current.work_state &&
-                !canTransitionWorkState(current.work_state, nextState)) {
-                throw badRequest(`Invalid override transition: ${current.work_state} -> ${nextState}`, 'invalid_transition');
-            }
-            const newVersion = current.version + 1;
-            const overrideSummary = {
-                kind: overrideKind,
-                previous_state: current.work_state,
-                new_state: nextState,
-                overridden_at: new Date().toISOString(),
-                overridden_by: actorUserId,
-                reason_text: reasonText,
-                previous_value: payload.previous_value ?? null,
-                new_value: payload.new_value ?? null,
-            };
-            await updateWorkItemWithVersion({
-                orgId,
-                workItemId,
-                expectedVersion,
-                newVersion,
-                patch: {
-                    work_state: nextState,
-                    override_active: true,
-                    override_summary_json: overrideSummary,
-                },
+                const current = await loadWorkItem(orgId, workItemId);
+                assertExpectedVersion(current.version, expectedVersion);
+                if (isQueueRefreshMode(payload))
+                    assertQueueActionEnabled(current, 'apply_override');
+                const toStateRaw = asOptionalString(payload.to_state);
+                let nextState = current.work_state;
+                if (toStateRaw) {
+                    nextState = assertValidWorkState(toStateRaw);
+                }
+                // Reopen is the only path out of `done` (which is terminal for normal
+                // transitions). Other override kinds may NOT touch a `done` item.
+                if (overrideKind === 'reopen') {
+                    if (current.work_state !== 'done') {
+                        throw badRequest(`Override 'reopen' is only valid from work_state='done' (current='${current.work_state}')`, 'invalid_reopen_source');
+                    }
+                    if (!toStateRaw) {
+                        throw badRequest(`Override 'reopen' requires 'to_state' (one of assigned|waiting_human|waiting_client)`, 'reopen_target_required');
+                    }
+                    if (!canReopenFromDone(nextState)) {
+                        throw badRequest(`Override 'reopen' cannot target '${nextState}'; allowed: assigned, waiting_human, waiting_client`, 'invalid_reopen_target');
+                    }
+                }
+                else if (toStateRaw &&
+                    nextState !== current.work_state &&
+                    !canTransitionWorkState(current.work_state, nextState)) {
+                    throw badRequest(`Invalid override transition: ${current.work_state} -> ${nextState}`, 'invalid_transition');
+                }
+                const newVersion = current.version + 1;
+                const overrideSummary = {
+                    kind: overrideKind,
+                    previous_state: current.work_state,
+                    new_state: nextState,
+                    overridden_at: new Date().toISOString(),
+                    overridden_by: actorUserId,
+                    reason_text: reasonText,
+                    previous_value: payload.previous_value ?? null,
+                    new_value: payload.new_value ?? null,
+                };
+                await updateWorkItemWithVersion({
+                    orgId,
+                    workItemId,
+                    expectedVersion,
+                    newVersion,
+                    patch: {
+                        work_state: nextState,
+                        override_active: true,
+                        override_summary_json: overrideSummary,
+                    },
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: current.work_state,
+                    to_state: nextState,
+                    transition_kind: 'override',
+                    action_code: 'apply_work_override',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: reasonText,
+                    metadata_json: overrideSummary,
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_OVERRIDE_APPLIED, {
+                    override_kind: overrideKind,
+                    from_state: current.work_state,
+                    to_state: nextState,
+                });
+                return { workItemId };
             });
-            await insertTransition({
-                org_id: orgId,
-                work_item_id: workItemId,
-                from_state: current.work_state,
-                to_state: nextState,
-                transition_kind: 'override',
-                action_code: 'apply_work_override',
-                actor_type: 'user',
-                actor_user_id: actorUserId,
-                reason_text: reasonText,
-                metadata_json: overrideSummary,
-                expected_version: expectedVersion,
-                resulting_version: newVersion,
+        }
+        case 'pick_up_unassigned': {
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.pickup);
+                const workItemId = reqString(payload, 'work_item_id');
+                const current = await loadWorkItem(orgId, workItemId);
+                if (current.work_state !== 'new' || current.assigned_user_id !== null) {
+                    throw badRequest('pick_up_unassigned requires work_state=new and no assignee', 'invalid_transition');
+                }
+                const policy = await resolveWorkTypeWorkflowPolicy(orgId, current.work_type);
+                const role = ctx.membership?.roleCode ?? 'staff';
+                if (!canStaffPickUpUnassigned(policy, role)) {
+                    throw badRequest('Pick up blocked by work type policy for this role', 'POLICY_DENIES_COMMAND');
+                }
+                const expectedVersion = reqInt(payload, 'expected_version');
+                assertExpectedVersion(current.version, expectedVersion);
+                const newVersion = current.version + 1;
+                await updateWorkItemWithVersion({
+                    orgId,
+                    workItemId,
+                    expectedVersion,
+                    newVersion,
+                    patch: {
+                        assigned_user_id: actorUserId,
+                        work_state: 'assigned',
+                    },
+                });
+                await insertWorkAssignmentHistory({
+                    orgId,
+                    workItemId,
+                    from: null,
+                    to: actorUserId,
+                    actorUserId,
+                    commandType: 'pick_up_unassigned',
+                    idempotencyKey: reqString(payload, 'idempotency_key'),
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: current.work_state,
+                    to_state: 'assigned',
+                    transition_kind: 'command',
+                    action_code: 'pick_up_unassigned',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: asOptionalString(payload.reason_text),
+                    metadata_json: { new_assigned_user_id: actorUserId },
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_PICKED_UP, {
+                    to_assignee: actorUserId,
+                });
+                return { workItemId };
             });
-            await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_OVERRIDE_APPLIED, {
-                override_kind: overrideKind,
-                from_state: current.work_state,
-                to_state: nextState,
+        }
+        case 'transfer_work_item': {
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.assign);
+                const workItemId = reqString(payload, 'work_item_id');
+                const toUserId = reqString(payload, 'to_assigned_user_id');
+                const current = await loadWorkItem(orgId, workItemId);
+                const expectedVersion = reqInt(payload, 'expected_version');
+                assertExpectedVersion(current.version, expectedVersion);
+                if (['new', 'review_pending', 'done', 'archived'].includes(current.work_state)) {
+                    throw badRequest(`transfer_work_item is not allowed in work_state='${current.work_state}'`, 'invalid_transition');
+                }
+                if (current.assigned_user_id == null || String(current.assigned_user_id).trim() === '') {
+                    throw badRequest('transfer_work_item requires an existing assignee; use assign_work_item or pick_up_unassigned', 'transfer_requires_assignee');
+                }
+                if (current.reviewer_user_id && current.reviewer_user_id === toUserId) {
+                    throw badRequest('Reviewer cannot match the assignee (separation of duties)', 'SELF_REVIEW_FORBIDDEN');
+                }
+                const newVersion = current.version + 1;
+                await updateWorkItemWithVersion({
+                    orgId,
+                    workItemId,
+                    expectedVersion,
+                    newVersion,
+                    patch: {
+                        assigned_user_id: toUserId,
+                        claimed_by_user_id: null,
+                        claimed_at: null,
+                    },
+                });
+                await insertWorkAssignmentHistory({
+                    orgId,
+                    workItemId,
+                    from: current.assigned_user_id,
+                    to: toUserId,
+                    actorUserId,
+                    commandType: 'transfer_work_item',
+                    idempotencyKey: reqString(payload, 'idempotency_key'),
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: current.work_state,
+                    to_state: current.work_state,
+                    transition_kind: 'command',
+                    action_code: 'transfer_work_item',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: asOptionalString(payload.reason_text),
+                    metadata_json: {
+                        previous_assigned_user_id: current.assigned_user_id,
+                        new_assigned_user_id: toUserId,
+                    },
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_TRANSFERRED, {
+                    from: current.assigned_user_id,
+                    to: toUserId,
+                });
+                return { workItemId };
             });
-            return { ok: true, command, refreshed: await buildRefreshedForPayload(orgId, payload) };
+        }
+        case 'claim_work_item': {
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                const force = payload.force === true;
+                const workItemId = reqString(payload, 'work_item_id');
+                const current = await loadWorkItem(orgId, workItemId);
+                const expectedVersion = reqInt(payload, 'expected_version');
+                assertExpectedVersion(current.version, expectedVersion);
+                if (current.work_state !== 'assigned') {
+                    throw badRequest(`claim_work_item is only allowed in work_state='assigned' (current='${current.work_state}')`, 'invalid_transition');
+                }
+                if (current.claimed_by_user_id) {
+                    throw conflict('Work item already claimed', 'WORK_ITEM_ALREADY_CLAIMED');
+                }
+                let claimHolder;
+                if (force) {
+                    requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.claimForce);
+                    if (!current.assigned_user_id) {
+                        throw badRequest('Cannot force-claim without assignee', 'invalid_transition');
+                    }
+                    claimHolder = current.assigned_user_id;
+                }
+                else {
+                    requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.claim);
+                    if (current.assigned_user_id !== actorUserId) {
+                        throw badRequest('Only the assignee can claim this item', 'WORK_ITEM_NOT_ASSIGNEE');
+                    }
+                    claimHolder = actorUserId;
+                }
+                const newVersion = current.version + 1;
+                await updateWorkItemWithVersion({
+                    orgId,
+                    workItemId,
+                    expectedVersion,
+                    newVersion,
+                    patch: {
+                        claimed_by_user_id: claimHolder,
+                        claimed_at: new Date().toISOString(),
+                    },
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: current.work_state,
+                    to_state: current.work_state,
+                    transition_kind: 'command',
+                    action_code: 'claim_work_item',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: asOptionalString(payload.reason_text),
+                    metadata_json: { claimed_by_user_id: claimHolder, force },
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_CLAIMED, {
+                    claimed_by_user_id: claimHolder,
+                    force,
+                });
+                return { workItemId };
+            });
+        }
+        case 'release_claim': {
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                const workItemId = reqString(payload, 'work_item_id');
+                const current = await loadWorkItem(orgId, workItemId);
+                const expectedVersion = reqInt(payload, 'expected_version');
+                assertExpectedVersion(current.version, expectedVersion);
+                if (!current.claimed_by_user_id) {
+                    return { workItemId };
+                }
+                const isHolder = current.claimed_by_user_id === actorUserId;
+                if (isHolder) {
+                    requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.claim);
+                }
+                else {
+                    requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.claimForce);
+                }
+                const force = !isHolder;
+                const newVersion = current.version + 1;
+                await updateWorkItemWithVersion({
+                    orgId,
+                    workItemId,
+                    expectedVersion,
+                    newVersion,
+                    patch: {
+                        claimed_by_user_id: null,
+                        claimed_at: null,
+                    },
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: current.work_state,
+                    to_state: current.work_state,
+                    transition_kind: 'command',
+                    action_code: 'release_claim',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: asOptionalString(payload.reason_text),
+                    metadata_json: { force: !isHolder },
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_CLAIM_RELEASED, {
+                    previous_claimed_by: current.claimed_by_user_id,
+                    force,
+                });
+                return { workItemId };
+            });
         }
         case 'intake_work_event': {
             // Stage 3A: thin dispatcher only — all intake / dedup / work_item creation
             // logic lives in work-engine.event-intake.service.ts. The route layer must
             // not make any workflow decisions.
-            const meta = await intakeWorkEvent(ctx, payload);
+            const meta = await intakeWorkEvent({ kind: 'office_request', ctx }, payload);
             return {
                 ok: true,
                 command,
-                refreshed: await buildRefreshedForPayload(orgId, payload),
+                refreshed: await buildRefreshedForPayload(orgId, payload, ctx),
                 meta,
             };
         }

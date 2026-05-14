@@ -12,7 +12,7 @@
  *     country-specific rules. Period semantics belong to Country Pack /
  *     Owner Legal Control Panel; the emitter must supply period_key.
  *   - This file contains NO financial truth, NO frontend, NO UI logic, NO
- *     DocFlow / client_tasks / obligations coupling. It is pure dispatch
+ *     runtime coupling to DocFlow / client_tasks / obligations. It is pure dispatch
  *     metadata.
  *   - Extending the allowlist requires an explicit backend change here.
  *     UI/frontend cannot extend it.
@@ -50,6 +50,12 @@ const SAFE_EVENT_MAPPINGS = {
         module_key: 'annual_report',
         work_type: 'annual_report_document_collection',
         initial_state: 'waiting_client',
+        requires_period_key: true,
+    },
+    'docflow.thread_needs_attention': {
+        module_key: 'docflow',
+        work_type: 'docflow_thread_followup',
+        initial_state: 'waiting_human',
         requires_period_key: true,
     },
 };

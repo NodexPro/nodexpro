@@ -7,6 +7,7 @@
  */
 
 import { supabaseAdmin } from '../../db/client.js';
+import { hasPermission } from '../rbac/rbac.service.js';
 import type {
   AllowedAction,
   OverrideKind,
@@ -24,6 +25,9 @@ import {
 } from './work-engine.guards.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
+import { canStaffPickUpUnassigned, resolveWorkTypePoliciesBatch } from './work-engine.policy.service.js';
+import type { WorkTypeWorkflowPolicy } from './work-engine.policy.service.js';
+import { WORK_ENGINE_PERMISSIONS } from './work-engine.rbac.js';
 
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
@@ -36,6 +40,106 @@ const PENDING_MAPPING_OUTCOMES = [
   MAPPING_REASON.UNKNOWN_EVENT_MAPPING,
   MAPPING_REASON.MISSING_PERIOD_KEY,
 ] as const;
+
+/** Viewer context for backend-owned queue buckets and ownership command strip. */
+export type WorkEngineQueueViewerContext = {
+  userId: string;
+  permissions: readonly string[];
+  roleCode: string;
+};
+
+export type QueueOwnershipCommand = {
+  command: 'pick_up_unassigned' | 'claim_work_item' | 'release_claim';
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+};
+
+function computeOwnershipCommands(args: {
+  row: Pick<
+    WorkItemRow,
+    'work_state' | 'assigned_user_id' | 'claimed_by_user_id' | 'work_type'
+  >;
+  viewer: WorkEngineQueueViewerContext;
+  policy: WorkTypeWorkflowPolicy;
+}): QueueOwnershipCommand[] {
+  const { row, viewer, policy } = args;
+  const perms = [...viewer.permissions];
+  const canPickupPerm =
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.pickup) ||
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin);
+  const canClaimPerm =
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.claim) ||
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin);
+  const canForceClaim =
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.claimForce) ||
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin);
+
+  const canPickUpPolicy = canStaffPickUpUnassigned(policy, viewer.roleCode);
+  const out: QueueOwnershipCommand[] = [];
+
+  const pickOk =
+    row.work_state === 'new' &&
+    row.assigned_user_id == null &&
+    canPickupPerm &&
+    canPickUpPolicy;
+  out.push({
+    command: 'pick_up_unassigned',
+    label: 'Pick up',
+    enabled: pickOk,
+    reason: pickOk
+      ? null
+      : row.assigned_user_id
+        ? 'Item already has an assignee'
+        : row.work_state !== 'new'
+          ? 'Only new unassigned items can be picked up'
+          : !canPickupPerm
+            ? 'Missing work_engine.pickup permission'
+            : !canPickUpPolicy
+              ? 'Disabled by work type policy for staff'
+              : null,
+  });
+
+  const canClaimState = row.work_state === 'assigned';
+  const isAssignee = row.assigned_user_id === viewer.userId;
+  const claimOk =
+    canClaimState && !row.claimed_by_user_id && isAssignee && canClaimPerm;
+  out.push({
+    command: 'claim_work_item',
+    label: 'Claim',
+    enabled: claimOk,
+    reason: claimOk
+      ? null
+      : row.claimed_by_user_id
+        ? 'Already claimed'
+        : !canClaimState
+          ? 'Claim is only allowed in assigned state'
+          : !isAssignee
+            ? 'Only the assignee can claim'
+            : !canClaimPerm
+              ? 'Missing work_engine.claim permission'
+              : null,
+  });
+
+  const held = row.claimed_by_user_id != null;
+  const isClaimHolder = row.claimed_by_user_id === viewer.userId;
+  const releaseOk =
+    held && ((isClaimHolder && canClaimPerm) || (!isClaimHolder && canForceClaim));
+  out.push({
+    command: 'release_claim',
+    label: 'Release claim',
+    enabled: releaseOk,
+    reason: releaseOk
+      ? null
+      : !held
+        ? 'Nothing to release'
+        : isClaimHolder
+          ? 'Missing work_engine.claim permission'
+          : 'Missing work_engine.claim.force permission',
+  });
+
+  return out;
+}
 
 function workStateLabel(state: WorkState): string {
   switch (state) {
@@ -297,6 +401,8 @@ export type WorkEngineQueueFilters = {
   reviewer_user_id?: string | null;
   client_id?: string | null;
   period_key?: string | null;
+  /** Backend-owned bucket: assigned_to_me | unassigned | claimed_by_me */
+  queue_bucket?: string | null;
   limit?: number | null;
   offset?: number | null;
 };
@@ -327,6 +433,7 @@ export function coerceWorkEngineQueueFilters(v: unknown): WorkEngineQueueFilters
     reviewer_user_id: str('reviewer_user_id'),
     client_id: str('client_id'),
     period_key: str('period_key'),
+    queue_bucket: str('queue_bucket'),
     limit: num('limit'),
     offset: num('offset'),
   };
@@ -438,8 +545,8 @@ function rowAllowedTransitions(currentState: WorkState): QueueRowAllowedTransiti
  *   - `archive_non_done`    → only when current_state is neither 'done' nor 'archived'.
  *   - `state`               → only when at least one normal transition exists
  *     (otherwise `apply_work_override` with kind='state' has no legal target).
- *   - `deadline`, `assignment`, `escalation_cancel`, `reminder_cancel` → any
- *     non-archived state.
+ *   - `deadline`, `escalation_cancel`, `reminder_cancel` → any non-archived state.
+ *   - `assignment` is intentionally excluded (use assign / transfer / pickup commands).
  *
  * Any change to the underlying override rules must be made here in tandem with
  * the matching guard logic in `work-engine.commands.service.ts`.
@@ -518,7 +625,8 @@ function rowAllowedOverrideKinds(currentState: WorkState): QueueRowAllowedOverri
       });
       continue;
     }
-    if (done) continue; // deadline/assignment/escalation_cancel/reminder_cancel not meaningful on done
+    if (kind === 'assignment') continue;
+    if (done) continue; // deadline/escalation_cancel/reminder_cancel not meaningful on done
     out.push({
       value: kind,
       label: overrideKindLabel(kind),
@@ -529,20 +637,30 @@ function rowAllowedOverrideKinds(currentState: WorkState): QueueRowAllowedOverri
   return out;
 }
 
+/** Row fields required so "Assign" is only offered when there is no assignee (first assign). */
+export type QueueActionRowContext = Pick<WorkItemRow, 'work_state' | 'assigned_user_id'>;
+
 /** Exported for Stage 3E command-side validation (must match queue aggregate rows). */
-export function queueAllowedActions(state: WorkState): QueueAllowedAction[] {
+export function queueAllowedActions(row: QueueActionRowContext): QueueAllowedAction[] {
+  const state = row.work_state;
+  const unassigned =
+    row.assigned_user_id == null || String(row.assigned_user_id).trim() === '';
   const archived = state === 'archived';
   const done = state === 'done';
   return [
     {
       command: 'assign',
       label: 'Assign',
-      enabled: !archived && !done,
+      enabled: !archived && !done && state !== 'review_pending' && unassigned,
       reason: archived
         ? 'Work item is archived'
         : done
           ? 'Work item is done'
-          : null,
+          : state === 'review_pending'
+            ? 'Reassignment is blocked while in review'
+            : !unassigned
+              ? 'Item already has an assignee — use transfer_work_item'
+              : null,
     },
     {
       command: 'change_state',
@@ -624,7 +742,8 @@ type QueueCellKey =
   | 'period_key'
   | 'reviewer'
   | 'due_at'
-  | 'sla';
+  | 'sla'
+  | 'claimed';
 
 export type QueueTableColumnModel = {
   key: string;
@@ -658,7 +777,7 @@ const BASE_QUEUE_COLUMN_KEYS: QueueCellKey[] = [
   'unread',
 ];
 
-const OPTIONAL_QUEUE_COLUMN_KEYS: QueueCellKey[] = ['period_key', 'reviewer', 'due_at', 'sla'];
+const OPTIONAL_QUEUE_COLUMN_KEYS: QueueCellKey[] = ['period_key', 'reviewer', 'due_at', 'sla', 'claimed'];
 
 const QUEUE_COLUMN_DEFS: Record<
   QueueCellKey,
@@ -675,6 +794,7 @@ const QUEUE_COLUMN_DEFS: Record<
   reviewer: { label: 'Reviewer', empty_display: 'dash' },
   due_at: { label: 'Due', empty_display: 'blank' },
   sla: { label: 'SLA', empty_display: 'blank' },
+  claimed: { label: 'Claim', empty_display: 'blank' },
 };
 
 function queueColumnHasAnyValue(
@@ -731,6 +851,8 @@ function buildQueueRowDetailPanel(params: {
   work_state_label: string;
   assigned_user_name: string | null;
   reviewer_user_name: string | null;
+  claimed_by_user_name: string | null;
+  claimed_at: string | null;
   due_at: string | null;
   sla_status_label: string;
   override_summary: string | null;
@@ -747,6 +869,13 @@ function buildQueueRowDetailPanel(params: {
     { label: 'State', value: params.work_state_label },
     { label: 'Assignee', value: params.assigned_user_name },
     { label: 'Reviewer', value: params.reviewer_user_name },
+    {
+      label: 'Claim',
+      value:
+        params.claimed_by_user_name && params.claimed_at
+          ? `${params.claimed_by_user_name} · ${formatQueueUtcTimestamp(params.claimed_at)}`
+          : null,
+    },
     { label: 'Due', value: params.due_at ? formatQueueUtcTimestamp(params.due_at) : null },
     { label: 'SLA', value: params.sla_status_label },
   ];
@@ -793,6 +922,7 @@ export function parseWorkEngineQueueFilters(raw: WorkEngineQueueFilters): {
   reviewer_user_id: string | null;
   client_id: string | null;
   period_key: string | null;
+  queue_bucket: 'assigned_to_me' | 'unassigned' | 'claimed_by_me' | null;
   limit: number;
   offset: number;
 } {
@@ -811,6 +941,11 @@ export function parseWorkEngineQueueFilters(raw: WorkEngineQueueFilters): {
     : '';
   const clientId = raw.client_id ? String(raw.client_id).trim() : '';
   const periodKey = raw.period_key ? String(raw.period_key).trim() : '';
+  const bucketRaw = raw.queue_bucket ? String(raw.queue_bucket).trim() : '';
+  const queue_bucket =
+    bucketRaw === 'assigned_to_me' || bucketRaw === 'unassigned' || bucketRaw === 'claimed_by_me'
+      ? bucketRaw
+      : null;
 
   let limit = Number(raw.limit ?? QUEUE_DEFAULT_LIMIT);
   if (!Number.isFinite(limit) || limit <= 0) limit = QUEUE_DEFAULT_LIMIT;
@@ -828,6 +963,7 @@ export function parseWorkEngineQueueFilters(raw: WorkEngineQueueFilters): {
     reviewer_user_id: reviewerUserId || null,
     client_id: clientId || null,
     period_key: periodKey || null,
+    queue_bucket,
     limit,
     offset,
   };
@@ -843,6 +979,8 @@ type QueueWorkItemRow = Pick<
   | 'work_state'
   | 'assigned_user_id'
   | 'reviewer_user_id'
+  | 'claimed_by_user_id'
+  | 'claimed_at'
   | 'due_at'
   | 'sla_status'
   | 'override_active'
@@ -864,9 +1002,11 @@ type QueueWorkItemRow = Pick<
 export async function buildWorkEngineQueueAggregate(params: {
   orgId: string;
   filters?: WorkEngineQueueFilters;
+  viewer?: WorkEngineQueueViewerContext | null;
 }): Promise<Record<string, unknown>> {
-  const { orgId } = params;
+  const { orgId, viewer } = params;
   const f = parseWorkEngineQueueFilters(params.filters ?? {});
+  const viewerId = viewer?.userId ?? null;
 
   // ---- 1. Counts for summary cards (bounded scan).
   const countsResp = await supabaseAdmin
@@ -894,6 +1034,37 @@ export async function buildWorkEngineQueueAggregate(params: {
     .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]);
   if (pendingCountResp.error) throw pendingCountResp.error;
   const pendingMappingCount = pendingCountResp.count ?? 0;
+
+  let bucketAssignedToMe = 0;
+  let bucketUnassigned = 0;
+  let bucketClaimedByMe = 0;
+  if (viewerId) {
+    const a = await supabaseAdmin
+      .from('work_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('assigned_user_id', viewerId)
+      .not('work_state', 'eq', 'done')
+      .not('work_state', 'eq', 'archived');
+    const u = await supabaseAdmin
+      .from('work_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .is('assigned_user_id', null)
+      .not('work_state', 'eq', 'done')
+      .not('work_state', 'eq', 'archived');
+    const c = await supabaseAdmin
+      .from('work_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('claimed_by_user_id', viewerId);
+    if (a.error) throw a.error;
+    if (u.error) throw u.error;
+    if (c.error) throw c.error;
+    bucketAssignedToMe = a.count ?? 0;
+    bucketUnassigned = u.count ?? 0;
+    bucketClaimedByMe = c.count ?? 0;
+  }
 
   // ---- 2. Filter option catalogs (backend-owned).
   // Distinct values for module / assignee / reviewer / period_key come from
@@ -926,13 +1097,28 @@ export async function buildWorkEngineQueueAggregate(params: {
   let q = supabaseAdmin
     .from('work_items')
     .select(
-      'id, client_id, module_key, work_type, period_key, work_state, assigned_user_id, reviewer_user_id, due_at, sla_status, override_active, override_summary_json, version, updated_at, source_module, source_entity_type, source_entity_id',
+      'id, client_id, module_key, work_type, period_key, work_state, assigned_user_id, reviewer_user_id, claimed_by_user_id, claimed_at, due_at, sla_status, override_active, override_summary_json, version, updated_at, source_module, source_entity_type, source_entity_id',
       { count: 'exact' },
     )
     .eq('org_id', orgId);
+  if (f.queue_bucket === 'assigned_to_me' && viewerId) {
+    q = q
+      .eq('assigned_user_id', viewerId)
+      .not('work_state', 'eq', 'done')
+      .not('work_state', 'eq', 'archived');
+  } else if (f.queue_bucket === 'unassigned') {
+    q = q
+      .is('assigned_user_id', null)
+      .not('work_state', 'eq', 'done')
+      .not('work_state', 'eq', 'archived');
+  } else if (f.queue_bucket === 'claimed_by_me' && viewerId) {
+    q = q.eq('claimed_by_user_id', viewerId);
+  }
   if (f.state) q = q.eq('work_state', f.state);
   if (f.module_key) q = q.eq('module_key', f.module_key);
-  if (f.assigned_user_id) q = q.eq('assigned_user_id', f.assigned_user_id);
+  if (f.queue_bucket !== 'assigned_to_me' && f.queue_bucket !== 'unassigned' && f.assigned_user_id) {
+    q = q.eq('assigned_user_id', f.assigned_user_id);
+  }
   if (f.reviewer_user_id) q = q.eq('reviewer_user_id', f.reviewer_user_id);
   if (f.client_id) q = q.eq('client_id', f.client_id);
   if (f.period_key) q = q.eq('period_key', f.period_key);
@@ -943,6 +1129,11 @@ export async function buildWorkEngineQueueAggregate(params: {
   const rowsRaw = (pageResp.data ?? []) as QueueWorkItemRow[];
   const totalMatching = pageResp.count ?? rowsRaw.length;
 
+  const policyByType = await resolveWorkTypePoliciesBatch(
+    orgId,
+    rowsRaw.map((r) => r.work_type),
+  );
+
   // ---- 4. Batch-fetch display names for client + users referenced by the page.
   const clientIds = Array.from(
     new Set(rowsRaw.map((r) => r.client_id).filter((v): v is string => !!v)),
@@ -951,6 +1142,7 @@ export async function buildWorkEngineQueueAggregate(params: {
   for (const r of rowsRaw) {
     if (r.assigned_user_id) userIdsSet.add(r.assigned_user_id);
     if (r.reviewer_user_id) userIdsSet.add(r.reviewer_user_id);
+    if (r.claimed_by_user_id) userIdsSet.add(r.claimed_by_user_id);
   }
   // Also include distinct assignee/reviewer ids so the filter dropdowns show
   // a name, not a UUID.
@@ -1081,6 +1273,13 @@ export async function buildWorkEngineQueueAggregate(params: {
     const reviewer_user_name = r.reviewer_user_id
       ? (userNameById.get(r.reviewer_user_id) ?? null)
       : null;
+    const claimed_by_user_name = r.claimed_by_user_id
+      ? (userNameById.get(r.claimed_by_user_id) ?? null)
+      : null;
+    const claimed_cell =
+      r.claimed_by_user_id && r.claimed_at
+        ? `${claimed_by_user_name ?? r.claimed_by_user_id} · ${formatQueueUtcTimestamp(r.claimed_at)}`
+        : null;
     const ov = overrideSummary({
       override_active: r.override_active,
       override_summary_json: r.override_summary_json,
@@ -1116,8 +1315,20 @@ export async function buildWorkEngineQueueAggregate(params: {
       reviewer: reviewer_cell,
       due_at: due_cell,
       sla: sla_cell,
+      claimed: claimed_cell,
     };
 
+    const policyRow = policyByType.get(r.work_type) ?? {
+      allow_staff_pickup_unassigned: true,
+    };
+    const ownership_commands =
+      viewer != null
+        ? computeOwnershipCommands({
+            row: r,
+            viewer,
+            policy: policyRow,
+          })
+        : [];
     return {
       work_item_id: r.id,
       client_id: r.client_id,
@@ -1133,12 +1344,19 @@ export async function buildWorkEngineQueueAggregate(params: {
       assigned_user_name,
       reviewer_user_id: r.reviewer_user_id,
       reviewer_user_name,
+      claimed_by_user_id: r.claimed_by_user_id,
+      claimed_at: r.claimed_at,
+      claimed_by_user_name,
+      ownership_commands,
       due_at: r.due_at,
       sla_status: r.sla_status,
       sla_status_label: slaStatusLabel(r.sla_status),
       override_active: r.override_active,
       override_summary: ov,
-      allowed_actions: queueAllowedActions(r.work_state),
+      allowed_actions: queueAllowedActions({
+        work_state: r.work_state,
+        assigned_user_id: r.assigned_user_id,
+      }),
       allowed_transitions: rowAllowedTransitions(r.work_state),
       allowed_override_kinds: rowAllowedOverrideKinds(r.work_state),
       version: r.version,
@@ -1168,6 +1386,8 @@ export async function buildWorkEngineQueueAggregate(params: {
         work_state_label,
         assigned_user_name,
         reviewer_user_name,
+        claimed_by_user_name,
+        claimed_at: r.claimed_at,
         due_at: r.due_at,
         sla_status_label: slaStatusLabel(r.sla_status),
         override_summary: ov,
@@ -1188,6 +1408,9 @@ export async function buildWorkEngineQueueAggregate(params: {
 
     summary_cards: {
       total_active: totalActive,
+      assigned_to_me: bucketAssignedToMe,
+      unassigned: bucketUnassigned,
+      claimed_by_me: bucketClaimedByMe,
       waiting_client: counts.waiting_client ?? 0,
       waiting_human: counts.waiting_human ?? 0,
       review_pending: counts.review_pending ?? 0,
@@ -1221,6 +1444,12 @@ export async function buildWorkEngineQueueAggregate(params: {
         .sort()
         .reverse() // newest periods first
         .map((p) => ({ value: p, label: p })),
+      queue_buckets: [
+        { value: '', label: 'All (respect filters below)' },
+        { value: 'assigned_to_me', label: 'Assigned to me' },
+        { value: 'unassigned', label: 'Unassigned' },
+        { value: 'claimed_by_me', label: 'Claimed by me' },
+      ],
       pending_mapping_reasons: [
         { value: MAPPING_REASON.UNKNOWN_EVENT_MAPPING, label: 'Unknown event type' },
         { value: MAPPING_REASON.MISSING_PERIOD_KEY, label: 'Missing period_key' },
@@ -1235,6 +1464,7 @@ export async function buildWorkEngineQueueAggregate(params: {
       reviewer_user_id: f.reviewer_user_id,
       client_id: f.client_id,
       period_key: f.period_key,
+      queue_bucket: f.queue_bucket,
     },
 
     pagination: {

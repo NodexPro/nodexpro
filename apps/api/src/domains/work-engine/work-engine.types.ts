@@ -57,7 +57,12 @@ export type WorkEngineCommandType =
   | 'set_work_deadline'
   | 'append_work_event'
   | 'apply_work_override'
-  | 'intake_work_event';
+  | 'intake_work_event'
+  /** Stage 10 Phase 1 — ownership spine */
+  | 'pick_up_unassigned'
+  | 'transfer_work_item'
+  | 'claim_work_item'
+  | 'release_claim';
 
 export type WorkEngineCommandPayload = Record<string, unknown>;
 
@@ -158,6 +163,8 @@ export type WorkItemRow = {
   version: number;
   override_active: boolean;
   override_summary_json: Record<string, unknown> | null;
+  claimed_by_user_id: string | null;
+  claimed_at: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -193,6 +193,10 @@ export const AUDIT_ACTIONS = {
   // Work Engine (Stage 2 foundation; canonical workflow memory).
   WORK_ITEM_CREATED: 'work_engine.work_item_created',
   WORK_ITEM_ASSIGNED: 'work_engine.work_item_assigned',
+  WORK_ITEM_PICKED_UP: 'work_engine.work_item_picked_up',
+  WORK_ITEM_TRANSFERRED: 'work_engine.work_item_transferred',
+  WORK_ITEM_CLAIMED: 'work_engine.work_item_claimed',
+  WORK_ITEM_CLAIM_RELEASED: 'work_engine.work_item_claim_released',
   WORK_ITEM_STATE_CHANGED: 'work_engine.work_item_state_changed',
   WORK_ITEM_DEADLINE_SET: 'work_engine.work_item_deadline_set',
   WORK_ITEM_OVERRIDE_APPLIED: 'work_engine.work_item_override_applied',
