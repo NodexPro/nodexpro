@@ -4,7 +4,7 @@ import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import { resolveCountryContext } from './country-pack-resolver.service.js';
 import { assertValidDocflowCommunicationOwnerPayload, isDocflowCommunicationOwnerPayload, } from './docflow-communication-owner-payload.js';
 import { buildCommunicationPolicyEditorOptions } from './operational-communication-owner-form.js';
-import { OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY, REMINDER_TEMPLATE_VARIABLES, assertValidOperationalReminderPolicyPayload, assertValidOperationalReminderTemplatePayload, isOperationalReminderPolicyPayload, isOperationalReminderTemplatePayload, } from './operational-communication-owner-payload.js';
+import { OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY, assertValidOperationalReminderPolicyPayload, assertValidOperationalReminderTemplatePayload, isOperationalReminderPolicyPayload, isOperationalReminderTemplatePayload, } from './operational-communication-owner-payload.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
 function normalizeCommercialControlsQuery(input) {
@@ -846,6 +846,24 @@ function buildOperationalReminderPoliciesFromLegalTable(legalTable) {
                 normalized = {};
             }
             const workflows = Array.isArray(normalized.workflows) ? normalized.workflows : [];
+            const workflowLabels = workflows.map((w) => {
+                const wt = String(w.workflow_type ?? '');
+                const labels = {
+                    waiting_client: 'Waiting for client',
+                    response_sla: 'Response SLA',
+                    review_sla: 'Review SLA',
+                };
+                return labels[wt] ?? wt;
+            });
+            const reminderCount = workflows.reduce((n, w) => n +
+                (Array.isArray(w.cadence_steps)
+                    ? w.cadence_steps.length
+                    : 0), 0);
+            const channelLabels = (Array.isArray(normalized.default_channels) ? normalized.default_channels : []).map((c) => {
+                const code = String(c);
+                const map = { docflow: 'DocFlow', email: 'Email', portal: 'Portal' };
+                return map[code] ?? code;
+            });
             out.push({
                 legal_value_id: lv.id,
                 value_key: lv.value_key,
@@ -860,18 +878,16 @@ function buildOperationalReminderPoliciesFromLegalTable(legalTable) {
                 effective_window: ver.effective_window,
                 approval_required: normalized.approval_required !== false,
                 default_channels: normalized.default_channels ?? [],
+                channel_labels: channelLabels,
+                workflow_labels: workflowLabels,
+                workflow_summary: workflowLabels.join(', ') || '—',
                 workflow_count: workflows.length,
-                cadence_step_count: workflows.reduce((n, w) => n +
-                    (Array.isArray(w.cadence_steps)
-                        ? w.cadence_steps.length
-                        : 0), 0),
-                policy_preview: parseError ?? JSON.stringify(normalized).slice(0, 200),
+                reminder_count: reminderCount,
+                cadence_step_count: reminderCount,
+                policy_preview: parseError ?? (workflowLabels.join(' · ') || '—'),
                 parse_error: parseError,
                 allowed_actions: [
-                    { action_key: 'create_legal_value_version', enabled: true, button_label: 'New version' },
-                    { action_key: 'update_legal_value_version', enabled: parseError === null, button_label: 'Edit JSON' },
-                    { action_key: 'activate_legal_value_version', enabled: ver.status !== 'active' && parseError === null, button_label: 'Activate' },
-                    { action_key: 'deactivate_legal_value_version', enabled: ver.status === 'active', button_label: 'Deactivate' },
+                    { action_key: 'save_operational_reminder_workflow', enabled: true, button_label: 'Edit workflow' },
                 ],
             });
         }
@@ -972,6 +988,7 @@ function buildCommunicationPoliciesSlice(legalTable, packContext) {
     const operationalReminderPolicies = buildOperationalReminderPoliciesFromLegalTable(legalTable);
     const operationalReminderTemplates = buildOperationalReminderTemplatesFromLegalTable(legalTable);
     const pickerOptions = buildCommunicationPoliciesPickerOptions(packContext);
+    const editorOptionsBase = buildCommunicationPolicyEditorOptions(operationalReminderTemplates);
     const validationErrors = [];
     for (const row of operationalReminderPolicies) {
         if (row.parse_error)
@@ -986,31 +1003,17 @@ function buildCommunicationPoliciesSlice(legalTable, packContext) {
         operational_reminder_templates: operationalReminderTemplates,
         validation_errors: validationErrors,
         picker_options: pickerOptions,
-        editor_options: {
-            ...buildCommunicationPolicyEditorOptions(),
-            template_variables: REMINDER_TEMPLATE_VARIABLES.map((code) => ({ code, label: code })),
-        },
+        editor_options: editorOptionsBase,
         flow_note: 'Country → Country Pack → Ruleset → Communication policy/template version. Reuse existing country structure; do not create countries here.',
         quick_actions: [
             {
-                action_key: 'save_operational_reminder_policy',
+                action_key: 'save_operational_reminder_workflow',
                 enabled: pickerOptions.countries.length > 0 && pickerOptions.rulesets.length > 0,
-                button_label: 'New reminder policy',
-                smart_form: 'reminder_policy',
-            },
-            {
-                action_key: 'save_operational_reminder_template',
-                enabled: pickerOptions.countries.length > 0 && pickerOptions.rulesets.length > 0,
-                button_label: 'New reminder template',
-                smart_form: 'reminder_template',
-            },
-            {
-                action_key: 'save_operational_reminder_version',
-                enabled: pickerOptions.countries.length > 0 && pickerOptions.rulesets.length > 0,
-                button_label: 'New policy or template version',
-                smart_form: 'reminder_version',
+                button_label: 'New reminder workflow',
+                smart_form: 'reminder_workflow',
             },
         ],
+        show_template_records: false,
     };
 }
 async function fetchOwnerLegalControlPanelAuditSummary() {

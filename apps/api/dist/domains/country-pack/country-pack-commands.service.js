@@ -13,7 +13,7 @@ import { encryptOptionalSecret } from '../../shared/owner-email-provider-config.
 import { saveOwnerEmailProviderConfigGlobal } from '../../shared/owner-email-provider-config.service.js';
 import { saveOwnerEmailProviderConfigOrgOverride } from '../../shared/owner-email-provider-config.service.js';
 import { savePlatformPublicUrlGlobal } from '../../shared/owner-email-provider-config.service.js';
-import { handleSaveOperationalReminderPolicy, handleSaveOperationalReminderPolicyVersion, handleSaveOperationalReminderTemplate, handleSaveOperationalReminderTemplateVersion, } from './operational-communication-owner-commands.service.js';
+import { handleSaveOperationalReminderPolicy, handleSaveOperationalReminderPolicyVersion, handleSaveOperationalReminderTemplate, handleSaveOperationalReminderTemplateVersion, handleSaveOperationalReminderWorkflow, } from './operational-communication-owner-commands.service.js';
 function commercialControlsContextFromPayload(payload) {
     const raw = payload.commercial_controls_context;
     if (!raw || typeof raw !== 'object' || Array.isArray(raw))
@@ -1526,6 +1526,8 @@ export async function executeCountryPackCommand(ctx, command) {
             return handleCreatePricingAdjustment(ctx, command.payload);
         case 'cancel_pricing_adjustment':
             return handleCancelPricingAdjustment(ctx, command.payload);
+        case 'save_operational_reminder_workflow':
+            return handleSaveOperationalReminderWorkflow(ctx, command.payload);
         case 'save_operational_reminder_policy':
             return handleSaveOperationalReminderPolicy(ctx, command.payload);
         case 'save_operational_reminder_template':

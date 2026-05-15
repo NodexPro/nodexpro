@@ -16,8 +16,7 @@ import {
 import type { OwnerCommandResponse, UnknownRecord } from './owner-legal-control-types';
 import {
   CommunicationPoliciesToolbar,
-  OperationalReminderOwnerModal,
-  type ReminderSmartFormKind,
+  OperationalReminderWorkflowWizard,
 } from './operational-reminder-owner-forms';
 
 function isForbidden(e: unknown): boolean {
@@ -186,7 +185,7 @@ export function PlatformOwnerLegalControl() {
 
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandModal, setCommandModal] = useState(null as CommandModalState | null);
-  const [reminderSmartModal, setReminderSmartModal] = useState(null as ReminderSmartFormKind | null);
+  const [reminderWorkflowOpen, setReminderWorkflowOpen] = useState(false);
   const [legalValuesModalOpen, setLegalValuesModalOpen] = useState(false);
   const [auditModalOpen, setAuditModalOpen] = useState(false);
   const [emailProviderModalOpen, setEmailProviderModalOpen] = useState(false);
@@ -620,11 +619,6 @@ export function PlatformOwnerLegalControl() {
 
   const reminderPolicies = useMemo(() => {
     const rows = communicationPolicies?.operational_reminder_policies;
-    return Array.isArray(rows) ? (rows as UnknownRecord[]) : [];
-  }, [communicationPolicies]);
-
-  const reminderTemplates = useMemo(() => {
-    const rows = communicationPolicies?.operational_reminder_templates;
     return Array.isArray(rows) ? (rows as UnknownRecord[]) : [];
   }, [communicationPolicies]);
 
@@ -1093,72 +1087,43 @@ export function PlatformOwnerLegalControl() {
             <CommunicationPoliciesToolbar
               actions={communicationQuickActions}
               disabled={commandBusy}
-              onSmartForm={(kind) => setReminderSmartModal(kind)}
+              onOpenWorkflow={() => setReminderWorkflowOpen(true)}
             />
           </div>
         ) : null}
         <div style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <div>
-            <h3 style={{ margin: '0 0 8px' }}>Reminder policies</h3>
+            <h3 style={{ margin: '0 0 8px' }}>Reminder workflows</h3>
             <div style={{ overflowX: 'auto', border: '1px solid #e9d5ff', borderRadius: 8, background: '#fff' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
                 <thead>
                   <tr>
-                    {['Country', 'Key', 'Workflows', 'Steps', 'Channels', 'Approval', 'Effective', 'Status', 'Preview'].map((h) => (
+                    {['Country', 'Workflow', 'Reminders', 'Channels', 'Approval', 'Effective', 'Status', 'Preview'].map((h) => (
                       <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #e9d5ff', padding: 8 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {reminderPolicies.map((row) => (
+                  {reminderPolicies.map((row) => {
+                    const channelLabels = Array.isArray(row.channel_labels)
+                      ? (row.channel_labels as string[]).join(', ')
+                      : JSON.stringify(row.default_channels ?? []);
+                    return (
                     <tr key={String(row.version_id ?? row.value_key)}>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.country_code ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.value_key ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.workflow_count ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.cadence_step_count ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{JSON.stringify(row.default_channels ?? [])}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.workflow_summary ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.reminder_count ?? row.cadence_step_count ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{channelLabels}</td>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{row.approval_required === false ? 'optional' : 'required'}</td>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.effective_window ?? '')}</td>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String((row.status_badge as { label?: string })?.label ?? row.status ?? '')}</td>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff', fontSize: 12 }}>{String(row.policy_preview ?? '')}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   {!reminderPolicies.length ? (
                     <tr>
-                      <td colSpan={9} style={{ padding: 12, color: '#6b7280' }}>No reminder policies yet.</td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div>
-            <h3 style={{ margin: '0 0 8px' }}>Reminder templates</h3>
-            <div style={{ overflowX: 'auto', border: '1px solid #e9d5ff', borderRadius: 8, background: '#fff' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
-                <thead>
-                  <tr>
-                    {['Country', 'Template key', 'Workflow', 'Lang', 'Channel', 'Effective', 'Status', 'Preview'].map((h) => (
-                      <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #e9d5ff', padding: 8 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {reminderTemplates.map((row) => (
-                    <tr key={String(row.version_id ?? row.template_key)}>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.country_code ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.template_key ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.workflow_type ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.language ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.channel ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.effective_window ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String((row.status_badge as { label?: string })?.label ?? row.status ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff', fontSize: 12 }}>{String(row.template_preview ?? '')}</td>
-                    </tr>
-                  ))}
-                  {!reminderTemplates.length ? (
-                    <tr>
-                      <td colSpan={8} style={{ padding: 12, color: '#6b7280' }}>No reminder templates yet.</td>
+                      <td colSpan={8} style={{ padding: 12, color: '#6b7280' }}>No reminder workflows yet.</td>
                     </tr>
                   ) : null}
                 </tbody>
@@ -3332,15 +3297,14 @@ export function PlatformOwnerLegalControl() {
         </div>
       ) : null}
 
-      <OperationalReminderOwnerModal
-        kind={reminderSmartModal}
-        open={reminderSmartModal != null}
+      <OperationalReminderWorkflowWizard
+        open={reminderWorkflowOpen}
         busy={commandBusy}
         communicationPolicies={communicationPolicies}
-        onClose={() => setReminderSmartModal(null)}
+        onClose={() => setReminderWorkflowOpen(false)}
         onSubmit={async (cmd, payload) => {
           const out = await sendOwnerCommand(cmd, payload);
-          setReminderSmartModal(null);
+          setReminderWorkflowOpen(false);
           return out;
         }}
       />

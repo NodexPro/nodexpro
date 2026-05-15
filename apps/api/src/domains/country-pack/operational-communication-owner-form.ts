@@ -6,6 +6,8 @@ import {
   REMINDER_TEMPLATE_KEY_PREFIX,
   REMINDER_TEMPLATE_VARIABLES,
   REMINDER_WORKFLOW_TYPES,
+  OPERATIONAL_REMINDER_POLICY_TYPE,
+  OPERATIONAL_REMINDER_TEMPLATE_TYPE,
   assertValidOperationalReminderPolicyPayload,
   assertValidOperationalReminderTemplatePayload,
   type OperationalReminderCadenceStep,
@@ -53,6 +55,23 @@ const LANGUAGE_LABELS: Record<string, string> = {
   he: 'Hebrew',
   en: 'English',
 };
+
+const VARIABLE_LABELS: Record<string, string> = {
+  client_name: 'Client name',
+  assignee_name: 'Assignee name',
+  reviewer_name: 'Reviewer name',
+  work_type_label: 'Work type',
+  module_label: 'Module',
+  period_key: 'Period',
+  sla_status_label: 'SLA status',
+  due_date: 'Due date',
+  portal_link: 'Portal link',
+  office_name: 'Office name',
+};
+
+const DEFAULT_WORKFLOW_ANCHOR: ReminderCadenceAnchor = 'obligation_starts_at';
+
+const MESSAGE_VARIABLE_PATTERN = /\{\{\s*([a-z_]+)\s*\}\}/g;
 
 export type ResolvedOwnerPeriod = {
   period_slug: string;
@@ -357,6 +376,158 @@ function parseLegacyCadenceSteps(raw: unknown): OperationalReminderCadenceStep[]
   });
 }
 
+export function extractVariablesFromReminderMessage(message: string): string[] {
+  const found = new Set<string>();
+  for (const match of message.matchAll(MESSAGE_VARIABLE_PATTERN)) {
+    const name = match[1];
+    if ((REMINDER_TEMPLATE_VARIABLES as readonly string[]).includes(name)) {
+      found.add(name);
+    }
+  }
+  return [...found];
+}
+
+function pickPrimaryReminderChannel(channels: ReminderChannel[]): ReminderChannel {
+  if (channels.includes('docflow')) return 'docflow';
+  if (channels.includes('email')) return 'email';
+  return channels[0];
+}
+
+export type ParsedOwnerReminderWorkflow = {
+  workflow_type: ReminderWorkflowType;
+  approval_required: boolean;
+  default_channels: ReminderChannel[];
+  templates: Array<{
+    value_key: string;
+    label: string;
+    payload: OperationalReminderTemplatePayload;
+  }>;
+  policy_workflow: OperationalReminderPolicyPayload['workflows'][number];
+};
+
+/** Unified owner wizard → templates + single workflow cadence (policy merge on command). */
+export function parseOwnerReminderWorkflowForm(raw: unknown): ParsedOwnerReminderWorkflow {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw badRequest('workflow payload must be an object');
+  }
+  const o = raw as Record<string, unknown>;
+  const workflowTypeRaw = typeof o.workflow_type === 'string' ? o.workflow_type.trim() : '';
+  if (!(REMINDER_WORKFLOW_TYPES as readonly string[]).includes(workflowTypeRaw)) {
+    throw badRequest('workflow_type is invalid', 'invalid_workflow_type');
+  }
+  const workflowType = workflowTypeRaw as ReminderWorkflowType;
+  const approvalRequired = o.approval_required !== false;
+  const defaultChannels = assertChannels(o.default_channels, 'default_channels');
+
+  if (!Array.isArray(o.reminders) || o.reminders.length === 0) {
+    throw badRequest('reminders must be a non-empty array', 'reminders_required');
+  }
+
+  const cadenceSteps: OperationalReminderCadenceStep[] = [];
+  const templates: ParsedOwnerReminderWorkflow['templates'] = [];
+  const seenStepKeys = new Set<string>();
+
+  for (let i = 0; i < o.reminders.length; i++) {
+    const item = o.reminders[i];
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw badRequest(`reminders[${i}] must be an object`);
+    }
+    const r = item as Record<string, unknown>;
+    const resolvedPeriod = resolveOwnerPeriodInput({
+      period_slug: typeof r.period_slug === 'string' ? r.period_slug : null,
+      period: r.period as { amount?: unknown; unit?: unknown } | null,
+    });
+    const channels = assertChannels(r.channels, `reminders[${i}].channels`);
+    const severity = parseSeverity(r.severity);
+    if (!severity) {
+      throw badRequest(`reminders[${i}].severity is required`, 'severity_required');
+    }
+    const language = typeof r.language === 'string' ? r.language.trim().toLowerCase() : '';
+    if (!/^[a-z]{2}$/.test(language)) {
+      throw badRequest(`reminders[${i}].language must be a 2-letter code`, 'invalid_language');
+    }
+    const message = typeof r.message === 'string' ? r.message.trim() : '';
+    if (!message) {
+      throw badRequest(`reminders[${i}].message is required`, 'message_required');
+    }
+    const subjectRaw = typeof r.subject === 'string' ? r.subject.trim() : '';
+    if (channels.includes('email') && !subjectRaw) {
+      throw badRequest(`reminders[${i}].subject is required when email channel is selected`, 'subject_required');
+    }
+
+    const templateKey = buildReminderTemplateKey(workflowType, resolvedPeriod.period_slug, language);
+    const stepKey = buildReminderStepKey(workflowType, resolvedPeriod.period_slug);
+    if (seenStepKeys.has(stepKey)) {
+      throw badRequest(`duplicate reminder period in schedule: ${resolvedPeriod.label}`, 'duplicate_reminder_period');
+    }
+    seenStepKeys.add(stepKey);
+
+    const variables = extractVariablesFromReminderMessage(message);
+    const primaryChannel = pickPrimaryReminderChannel(channels);
+    const subjectTemplate = subjectRaw || message.split('\n')[0]?.slice(0, 120) || 'Reminder';
+
+    const templatePayload = assertValidOperationalReminderTemplatePayload({
+      type: OPERATIONAL_REMINDER_TEMPLATE_TYPE,
+      template_key: templateKey,
+      workflow_type: workflowType,
+      language,
+      channel: primaryChannel,
+      subject_template: subjectTemplate,
+      body_template: message,
+      variables,
+    });
+
+    const wfLabel = WORKFLOW_LABELS[workflowType] ?? workflowType;
+    const langLabel = LANGUAGE_LABELS[language] ?? language;
+    templates.push({
+      value_key: templateKey,
+      label: `${wfLabel} · ${resolvedPeriod.label} · ${langLabel}`,
+      payload: templatePayload,
+    });
+
+    const step: OperationalReminderCadenceStep = {
+      step_key: stepKey,
+      offset_minutes: resolvedPeriod.offset_minutes,
+      template_key: templateKey,
+      channels,
+      severity,
+    };
+    cadenceSteps.push(step);
+  }
+
+  cadenceSteps.sort((a, b) => a.offset_minutes - b.offset_minutes);
+
+  return {
+    workflow_type: workflowType,
+    approval_required: approvalRequired,
+    default_channels: defaultChannels,
+    templates,
+    policy_workflow: {
+      workflow_type: workflowType,
+      enabled: true,
+      anchor: DEFAULT_WORKFLOW_ANCHOR,
+      cadence_steps: cadenceSteps,
+    },
+  };
+}
+
+export function mergeReminderWorkflowIntoPolicy(
+  existing: OperationalReminderPolicyPayload | null,
+  parsed: ParsedOwnerReminderWorkflow,
+): OperationalReminderPolicyPayload {
+  const incomingWorkflow = parsed.policy_workflow;
+  const workflows = existing
+    ? existing.workflows.filter((w) => w.workflow_type !== parsed.workflow_type)
+    : [];
+  workflows.push(incomingWorkflow);
+  return assertValidOperationalReminderPolicyPayload({
+    type: OPERATIONAL_REMINDER_POLICY_TYPE,
+    approval_required: parsed.approval_required,
+    default_channels: parsed.default_channels,
+    workflows,
+  });
+}
+
 /** Owner-friendly policy editor → validated operational_reminder_policy payload. */
 export function parseOwnerReminderPolicyForm(raw: unknown): OperationalReminderPolicyPayload {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -496,7 +667,11 @@ export function buildCommunicationPolicyEditorOptions(
     })),
     existing_templates: templates,
     existing_templates_by_workflow: byWorkflow,
-    template_variables: REMINDER_TEMPLATE_VARIABLES.map((code) => ({ code, label: code })),
+    template_variables: REMINDER_TEMPLATE_VARIABLES.map((code) => ({
+      code,
+      label: VARIABLE_LABELS[code] ?? code,
+      token: `{{${code}}}`,
+    })),
   };
 }
 

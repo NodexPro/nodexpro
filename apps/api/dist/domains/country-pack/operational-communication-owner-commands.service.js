@@ -9,7 +9,7 @@ import { assertCountryExists } from './country.service.js';
 import { getCountryPack } from './country-pack.service.js';
 import { assertRulesetExists } from './ruleset.service.js';
 import { assertLegalValueExists, assertNoOverlapLegalValueVersions, getLegalValueByKey, } from './legal-value.service.js';
-import { DEFAULT_REMINDER_POLICY_VALUE_KEY, parseOwnerReminderPolicyForm, parseOwnerReminderTemplateForm, } from './operational-communication-owner-form.js';
+import { DEFAULT_REMINDER_POLICY_VALUE_KEY, mergeReminderWorkflowIntoPolicy, parseOwnerReminderPolicyForm, parseOwnerReminderTemplateForm, parseOwnerReminderWorkflowForm, } from './operational-communication-owner-form.js';
 import { OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY, assertOperationalCommunicationLegalValueMetadata, } from './operational-communication-owner-payload.js';
 import { buildOwnerLegalControlPanelAggregate } from './country-pack-read-models.service.js';
 function asString(value, field) {
@@ -141,6 +141,106 @@ function parseSaveScope(payload) {
         activateAfterCreate: asBool(payload.activate_after_create, true),
     };
 }
+async function fetchLatestPolicyPayloadForRuleset(legalValueId, rulesetId) {
+    const { data, error } = await supabaseAdmin
+        .from('country_legal_value_versions')
+        .select('value_payload_json, effective_from, created_at')
+        .eq('legal_value_id', legalValueId)
+        .eq('country_pack_ruleset_id', rulesetId)
+        .order('effective_from', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1);
+    if (error)
+        throw error;
+    const row = (data ?? [])[0];
+    if (!row?.value_payload_json)
+        return null;
+    try {
+        return parseOwnerReminderPolicyForm(row.value_payload_json);
+    }
+    catch {
+        return null;
+    }
+}
+export async function handleSaveOperationalReminderWorkflow(ctx, payload) {
+    const scope = parseSaveScope(payload);
+    await assertCountryExists(scope.countryCode);
+    await assertRulesetScope(scope.countryCode, scope.countryPackId, scope.rulesetId);
+    const parsed = parseOwnerReminderWorkflowForm(payload);
+    const templateMeta = [];
+    for (const tmpl of parsed.templates) {
+        const legal = await ensureOperationalLegalValue({
+            countryCode: scope.countryCode,
+            valueKey: tmpl.value_key,
+            label: tmpl.label,
+        });
+        if (legal.created) {
+            await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_CREATED, 'country_legal_value', legal.id, {
+                country_code: scope.countryCode,
+                value_key: tmpl.value_key,
+            });
+        }
+        const versionId = await insertLegalValueVersion({
+            legalValueId: legal.id,
+            rulesetId: scope.rulesetId,
+            effectiveFrom: scope.effectiveFrom,
+            effectiveTo: scope.effectiveTo,
+            valuePayloadJson: tmpl.payload,
+            status: scope.activateAfterCreate ? 'active' : 'draft',
+        });
+        await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_CREATED, 'country_legal_value_version', versionId, {
+            legal_value_id: legal.id,
+            ruleset_id: scope.rulesetId,
+            kind: 'operational_reminder_template',
+            template_key: tmpl.value_key,
+            source: 'save_operational_reminder_workflow',
+        });
+        await activateVersionIfRequested(ctx, versionId, scope.activateAfterCreate);
+        templateMeta.push({ template_key: tmpl.value_key, legal_value_version_id: versionId, created: legal.created });
+    }
+    const policyLegal = await ensureOperationalLegalValue({
+        countryCode: scope.countryCode,
+        valueKey: DEFAULT_REMINDER_POLICY_VALUE_KEY,
+        label: asOptionalString(payload.policy_label) ?? 'Work Engine reminder policy',
+    });
+    if (policyLegal.created) {
+        await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_CREATED, 'country_legal_value', policyLegal.id, {
+            country_code: scope.countryCode,
+            value_key: DEFAULT_REMINDER_POLICY_VALUE_KEY,
+        });
+    }
+    const existingPolicy = await fetchLatestPolicyPayloadForRuleset(policyLegal.id, scope.rulesetId);
+    const mergedPolicy = mergeReminderWorkflowIntoPolicy(existingPolicy, parsed);
+    const policyVersionId = await insertLegalValueVersion({
+        legalValueId: policyLegal.id,
+        rulesetId: scope.rulesetId,
+        effectiveFrom: scope.effectiveFrom,
+        effectiveTo: scope.effectiveTo,
+        valuePayloadJson: mergedPolicy,
+        status: scope.activateAfterCreate ? 'active' : 'draft',
+    });
+    await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_CREATED, 'country_legal_value_version', policyVersionId, {
+        legal_value_id: policyLegal.id,
+        ruleset_id: scope.rulesetId,
+        kind: 'operational_reminder_policy',
+        workflow_type: parsed.workflow_type,
+        source: 'save_operational_reminder_workflow',
+    });
+    await activateVersionIfRequested(ctx, policyVersionId, scope.activateAfterCreate);
+    return {
+        ok: true,
+        command: 'save_operational_reminder_workflow',
+        refreshed: await refreshedPanel(ctx),
+        meta: {
+            legal_value_id: policyLegal.id,
+            legal_value_version_id: policyVersionId,
+            workflow_type: parsed.workflow_type,
+            reminder_count: parsed.policy_workflow.cadence_steps.length,
+            templates: templateMeta,
+            policy_merged_from_existing: existingPolicy !== null,
+        },
+    };
+}
 export async function handleSaveOperationalReminderPolicy(ctx, payload) {
     const scope = parseSaveScope(payload);
     await assertCountryExists(scope.countryCode);
@@ -183,9 +283,11 @@ export async function handleSaveOperationalReminderTemplate(ctx, payload) {
     const scope = parseSaveScope(payload);
     await assertCountryExists(scope.countryCode);
     await assertRulesetScope(scope.countryCode, scope.countryPackId, scope.rulesetId);
-    const { value_key: valueKey, payload: templatePayload } = parseOwnerReminderTemplateForm(payload.template);
+    const parsedTemplate = parseOwnerReminderTemplateForm(payload.template);
+    const { value_key: valueKey, payload: templatePayload } = parsedTemplate;
     const label = asOptionalString(payload.template_label) ??
-        `Reminder template (${templatePayload.workflow_type} / ${templatePayload.language})`;
+        asOptionalString(payload.template?.template_display_name) ??
+        `Reminder template (${templatePayload.workflow_type} / ${parsedTemplate.period_label} / ${templatePayload.language})`;
     const legal = await ensureOperationalLegalValue({
         countryCode: scope.countryCode,
         valueKey,
@@ -221,6 +323,11 @@ export async function handleSaveOperationalReminderTemplate(ctx, payload) {
             legal_value_version_id: versionId,
             template_key: valueKey,
             legal_value_created: legal.created,
+            legal_value_reused: !legal.created,
+            period_slug: parsedTemplate.period_slug,
+            friendly_message: legal.created
+                ? 'New reminder template created.'
+                : 'Existing template definition reused; a new version was added under the selected ruleset.',
         },
     };
 }
