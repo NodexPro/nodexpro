@@ -11,7 +11,8 @@ import { OVERRIDE_KINDS, OVERRIDE_KINDS_REQUIRING_REASON, WORK_STATES, } from '.
 import { getAllowedTransitionsFrom, getReopenTargetStates, canPickUpFromUnassignedWorkState, } from './work-engine.guards.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
-import { canStaffPickUpUnassigned, resolveWorkTypePoliciesBatch } from './work-engine.policy.service.js';
+import { canStaffPickUpUnassigned, DEFAULT_SLA_POLICY, resolveWorkTypePoliciesBatch, } from './work-engine.policy.service.js';
+import { buildQueueSlaPresentation, loadActiveSlaObligationsForItems, } from './work-engine.sla.service.js';
 import { WORK_ENGINE_PERMISSIONS } from './work-engine.rbac.js';
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
@@ -977,8 +978,11 @@ function buildQueueRowDetailPanel(params) {
                 ? `${params.claimed_by_user_name} · ${formatQueueUtcTimestamp(params.claimed_at)}`
                 : null,
         },
-        { label: 'Due', value: params.due_at ? formatQueueUtcTimestamp(params.due_at) : null },
-        { label: 'SLA', value: params.sla_status_label },
+        {
+            label: 'SLA due',
+            value: params.primary_due_at_label ?? (params.due_at ? formatQueueUtcTimestamp(params.due_at) : null),
+        },
+        { label: 'SLA status', value: params.sla_status_label },
     ];
     if (!params.hide_period_in_subject) {
         kvRows.splice(1, 0, { label: 'Period', value: params.period_key });
@@ -1211,6 +1215,7 @@ export async function buildWorkEngineQueueAggregate(params) {
     const rowsRaw = (pageResp.data ?? []);
     const totalMatching = pageResp.count ?? rowsRaw.length;
     const policyByType = await resolveWorkTypePoliciesBatch(orgId, rowsRaw.map((r) => r.work_type));
+    const obligationsByItem = await loadActiveSlaObligationsForItems(orgId, rowsRaw.map((r) => r.id));
     // ---- 4. Batch-fetch display names for client + users referenced by the page.
     const clientIds = Array.from(new Set(rowsRaw.map((r) => r.client_id).filter((v) => !!v)));
     const userIdsSet = new Set();
@@ -1369,7 +1374,10 @@ export async function buildWorkEngineQueueAggregate(params) {
         const policyRow = policyByType.get(r.work_type) ?? {
             allow_staff_pickup_unassigned: true,
             review_gate: 'allowed',
+            ...DEFAULT_SLA_POLICY,
         };
+        const itemObligations = obligationsByItem.get(r.id) ?? [];
+        const slaPresentation = buildQueueSlaPresentation(itemObligations, r.sla_status, r.due_at, policyRow);
         const ownershipDraft = viewer != null
             ? computeOwnershipCommands({
                 row: r,
@@ -1435,6 +1443,8 @@ export async function buildWorkEngineQueueAggregate(params) {
             due_at: r.due_at,
             sla_status: r.sla_status,
             sla_status_label: slaStatusLabel(r.sla_status),
+            sla_badges: slaPresentation.sla_badges,
+            primary_due_at_label: slaPresentation.primary_due_at_label,
             override_active: r.override_active,
             override_summary: ov,
             allowed_actions,
@@ -1464,6 +1474,7 @@ export async function buildWorkEngineQueueAggregate(params) {
                 claimed_at: r.claimed_at,
                 due_at: r.due_at,
                 sla_status_label: slaStatusLabel(r.sla_status),
+                primary_due_at_label: slaPresentation.primary_due_at_label,
                 override_summary: ov,
                 period_key: r.period_key,
                 hide_period_in_subject: hidePeriodInSubject,

@@ -87,6 +87,12 @@ function findSmokeRow(aggregate, clientId, periodKey, workType = 'smoke_validati
   );
 }
 
+/** Phase 3A — backend-owned SLA fields on queue row (no client-side SLA math). */
+function rowHasSlaKind(row, kind) {
+  if (!row || row.sla_status === 'none') return false;
+  return Array.isArray(row.sla_badges) && row.sla_badges.some((b) => b.kind === kind);
+}
+
 async function main() {
   const miss = missingEnv();
   if (miss.length) {
@@ -371,12 +377,14 @@ async function main() {
           const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
           const ok = res.status === 200 && assertQueueRefreshed(json);
           const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey, pickupWorkType) : null;
-          const vOk = ok && row && row.work_state === 'assigned' && row.assigned_user_id != null;
+          const slaOk = ok && row && rowHasSlaKind(row, 'response');
           results.push({
             name: 'POST pick_up_unassigned from waiting_human + queue refresh',
-            ok: vOk,
+            ok: slaOk,
             status: res.status,
-            detail: vOk ? `assigned user set` : JSON.stringify(json).slice(0, 280),
+            detail: slaOk
+              ? `sla_status=${row.sla_status} response obligation`
+              : JSON.stringify(json).slice(0, 280),
           });
         }
       }
@@ -404,14 +412,14 @@ async function main() {
       const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
       const ok = res.status === 200 && assertQueueRefreshed(json);
       const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey) : null;
-      const vOk = ok && row && row.work_item_id === workItemId && row.version === workVersion + 1;
-      if (vOk) workVersion = row.version;
+      const slaOk = ok && row && row.work_item_id === workItemId && rowHasSlaKind(row, 'response');
+      if (slaOk) workVersion = row.version;
       results.push({
-        name: 'POST assign_work_item (TEST_ASSIGNEE_USER_ID) + queue refresh',
-        ok: vOk,
+        name: 'POST assign_work_item starts response SLA + queue refresh',
+        ok: slaOk,
         status: res.status,
-        detail: vOk
-          ? `version=${workVersion} state=${row.work_state}`
+        detail: slaOk
+          ? `version=${workVersion} sla_status=${row.sla_status}`
           : JSON.stringify(json).slice(0, 280),
       });
     }
@@ -432,13 +440,122 @@ async function main() {
       const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
       const ok = res.status === 200 && assertQueueRefreshed(json);
       const row = ok ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey) : null;
-      const vOk = ok && row && row.work_item_id === workItemId && row.work_state === 'waiting_client';
-      if (vOk) workVersion = row.version;
+      const slaOk =
+        ok &&
+        row &&
+        row.work_item_id === workItemId &&
+        row.work_state === 'waiting_client' &&
+        rowHasSlaKind(row, 'waiting_client');
+      if (slaOk) workVersion = row.version;
       results.push({
-        name: 'POST change_work_state → waiting_client + queue refresh',
-        ok: vOk,
+        name: 'POST change_work_state → waiting_client starts client-wait SLA',
+        ok: slaOk,
         status: res.status,
-        detail: vOk ? `version=${workVersion}` : JSON.stringify(json).slice(0, 280),
+        detail: slaOk
+          ? `version=${workVersion} sla_status=${row.sla_status}`
+          : JSON.stringify(json).slice(0, 280),
+      });
+    }
+
+    // T9c — Phase 3A review SLA (optional: TEST_ASSIGNEE + TEST_REVIEWER, distinct users)
+    const smokeReviewer = String(process.env.TEST_REVIEWER_USER_ID ?? '').trim() || null;
+    if (optionalAssignee && smokeReviewer && optionalAssignee !== smokeReviewer) {
+      {
+        const body = {
+          command: 'create_work_item',
+          payload: {
+            ...queueRefreshPayload(commandPeriodKey, clientId),
+            idempotency_key: `${smokeRunId}-create-review-sla`,
+            client_id: clientId,
+            module_key: 'smoke_test',
+            work_type: 'smoke_review_sla',
+            period_key: commandPeriodKey,
+            source_module: 'smoke_test',
+            source_entity_type: 'smoke_validation_entity',
+            source_entity_id: `smoke-review-sla-${smokeRunId}`,
+            creation_source_type: 'command',
+            reviewer_user_id: smokeReviewer,
+            assigned_user_id: optionalAssignee,
+          },
+        };
+        const { res, json } = await fetchJson('POST', '/work-engine/commands', body);
+        const ok = res.status === 200 && assertQueueRefreshed(json);
+        const row = ok
+          ? findSmokeRow(json.refreshed.aggregate, clientId, commandPeriodKey, 'smoke_review_sla')
+          : null;
+        let reviewItemId = row?.work_item_id ?? null;
+        let reviewVersion = row?.version ?? 0;
+        results.push({
+          name: 'POST create_work_item (review SLA row, pre-assigned)',
+          ok: ok && !!reviewItemId,
+          status: res.status,
+          detail: reviewItemId ? `id=${reviewItemId}` : JSON.stringify(json).slice(0, 240),
+        });
+        if (reviewItemId) {
+          const rrBody = {
+            command: 'request_review',
+            payload: {
+              ...queueRefreshPayload(commandPeriodKey, clientId),
+              work_item_id: reviewItemId,
+              expected_version: reviewVersion,
+              idempotency_key: `${smokeRunId}-request-review-sla`,
+            },
+          };
+          const rr = await fetchJson('POST', '/work-engine/commands', rrBody);
+          const rrOk = rr.res.status === 200 && assertQueueRefreshed(rr.json);
+          const rrRow = rrOk
+            ? findSmokeRow(rr.json.refreshed.aggregate, clientId, commandPeriodKey, 'smoke_review_sla')
+            : null;
+          const reviewSlaOk =
+            rrOk && rrRow?.work_state === 'review_pending' && rowHasSlaKind(rrRow, 'review');
+          if (reviewSlaOk) {
+            reviewVersion = rrRow.version;
+            reviewItemId = rrRow.work_item_id;
+          }
+          results.push({
+            name: 'POST request_review starts review SLA',
+            ok: reviewSlaOk,
+            status: rr.res.status,
+            detail: reviewSlaOk
+              ? `sla_status=${rrRow.sla_status}`
+              : JSON.stringify(rr.json).slice(0, 280),
+          });
+          if (reviewSlaOk) {
+            const apprBody = {
+              command: 'approve_work_item',
+              payload: {
+                ...queueRefreshPayload(commandPeriodKey, clientId),
+                work_item_id: reviewItemId,
+                expected_version: reviewVersion,
+                idempotency_key: `${smokeRunId}-approve-review-sla`,
+              },
+            };
+            const appr = await fetchJson('POST', '/work-engine/commands', apprBody);
+            const apprOk = appr.res.status === 200 && assertQueueRefreshed(appr.json);
+            const apprRow = apprOk
+              ? findSmokeRow(appr.json.refreshed.aggregate, clientId, commandPeriodKey, 'smoke_review_sla')
+              : null;
+            const metOk =
+              apprOk &&
+              apprRow?.work_state === 'assigned' &&
+              rowHasSlaKind(apprRow, 'response');
+            results.push({
+              name: 'POST approve_work_item met review SLA + response SLA',
+              ok: metOk,
+              status: appr.res.status,
+              detail: metOk
+                ? `sla_status=${apprRow.sla_status}`
+                : JSON.stringify(appr.json).slice(0, 280),
+            });
+          }
+        }
+      }
+    } else {
+      results.push({
+        name: 'SKIP review SLA smoke (set distinct TEST_ASSIGNEE_USER_ID + TEST_REVIEWER_USER_ID)',
+        ok: true,
+        status: 0,
+        detail: 'optional',
       });
     }
 

@@ -201,6 +201,11 @@ export const AUDIT_ACTIONS = {
     WORK_ITEM_REVIEW_APPROVED: 'work_engine.review_approved',
     WORK_ITEM_REVIEW_REJECTED: 'work_engine.review_rejected',
     WORK_ITEM_STATE_CHANGED: 'work_engine.work_item_state_changed',
+    /** Stage 10 Phase 3A — operational SLA obligations (not legal deadlines). */
+    WORK_ITEM_SLA_OBLIGATION_STARTED: 'work_engine.work_item_sla_obligation_started',
+    WORK_ITEM_SLA_OBLIGATION_MET: 'work_engine.work_item_sla_obligation_met',
+    WORK_ITEM_SLA_OBLIGATION_BREACHED: 'work_engine.work_item_sla_obligation_breached',
+    WORK_ITEM_SLA_STATUS_RECOMPUTED: 'work_engine.work_item_sla_status_recomputed',
     WORK_ITEM_DEADLINE_SET: 'work_engine.work_item_deadline_set',
     WORK_ITEM_OVERRIDE_APPLIED: 'work_engine.work_item_override_applied',
     WORK_EVENT_APPENDED: 'work_engine.work_event_appended',

@@ -61,6 +61,7 @@ import {
   canStaffPickUpUnassigned,
   resolveWorkTypeWorkflowPolicy,
 } from './work-engine.policy.service.js';
+import { applySlaHooksForCommand } from './work-engine.sla.service.js';
 import {
   WORK_ENGINE_PERMISSIONS,
   requireWorkEnginePermission,
@@ -289,9 +290,34 @@ type TransitionInsert = {
   resulting_version: number;
 };
 
-async function insertTransition(row: TransitionInsert): Promise<void> {
-  const { error } = await supabaseAdmin.from('work_transitions').insert(row);
+async function insertTransition(row: TransitionInsert): Promise<string> {
+  const { data, error } = await supabaseAdmin
+    .from('work_transitions')
+    .insert(row)
+    .select('id')
+    .single();
   if (error) throw error;
+  return String(data.id);
+}
+
+async function runPhase3aSlaHooks(args: {
+  orgId: string;
+  workItemId: string;
+  command: WorkEngineCommandType;
+  transitionId: string;
+  actorUserId: string | null;
+  workType: string;
+  toState?: WorkState;
+}): Promise<void> {
+  await applySlaHooksForCommand({
+    orgId: args.orgId,
+    workItemId: args.workItemId,
+    command: args.command,
+    transitionId: args.transitionId,
+    actorUserId: args.actorUserId,
+    toState: args.toState,
+    workType: args.workType,
+  });
 }
 
 async function updateWorkItemWithVersion(args: {
@@ -388,7 +414,7 @@ export async function executeWorkEngineCommand(
         throw insertResp.error;
       }
       const row = insertResp.data as WorkItemRow;
-      await insertTransition({
+      const transitionId = await insertTransition({
         org_id: orgId,
         work_item_id: row.id,
         from_state: null,
@@ -420,6 +446,17 @@ export async function executeWorkEngineCommand(
           work_state: initialState,
         },
       );
+      if (assignedUserId) {
+        await runPhase3aSlaHooks({
+          orgId,
+          workItemId: row.id,
+          command: 'assign_work_item',
+          transitionId,
+          actorUserId,
+          workType,
+          toState: initialState,
+        });
+      }
       return { workItemId: row.id };
       });
     }
@@ -495,7 +532,7 @@ export async function executeWorkEngineCommand(
             idempotencyKey: reqString(payload, 'idempotency_key'),
           });
         }
-        await insertTransition({
+        const transitionId = await insertTransition({
           org_id: orgId,
           work_item_id: workItemId,
           from_state: current.work_state,
@@ -525,6 +562,15 @@ export async function executeWorkEngineCommand(
             to_state: nextState,
           },
         );
+        await runPhase3aSlaHooks({
+          orgId,
+          workItemId,
+          command: 'assign_work_item',
+          transitionId,
+          actorUserId,
+          workType: current.work_type,
+          toState: nextState,
+        });
         return { workItemId };
       });
     }
@@ -567,7 +613,7 @@ export async function executeWorkEngineCommand(
         newVersion,
         patch,
       });
-      await insertTransition({
+      const transitionId = await insertTransition({
         org_id: orgId,
         work_item_id: workItemId,
         from_state: current.work_state,
@@ -589,6 +635,17 @@ export async function executeWorkEngineCommand(
         AUDIT_ACTIONS.WORK_ITEM_STATE_CHANGED,
         { from_state: current.work_state, to_state: toState },
       );
+      if (toState === 'waiting_client') {
+        await runPhase3aSlaHooks({
+          orgId,
+          workItemId,
+          command: 'change_work_state',
+          transitionId,
+          actorUserId,
+          workType: current.work_type,
+          toState,
+        });
+      }
       return { workItemId };
       });
     }
@@ -902,7 +959,7 @@ export async function executeWorkEngineCommand(
           commandType: 'pick_up_unassigned',
           idempotencyKey: reqString(payload, 'idempotency_key'),
         });
-        await insertTransition({
+        const transitionId = await insertTransition({
           org_id: orgId,
           work_item_id: workItemId,
           from_state: current.work_state,
@@ -918,6 +975,15 @@ export async function executeWorkEngineCommand(
         });
         await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_PICKED_UP, {
           to_assignee: actorUserId,
+        });
+        await runPhase3aSlaHooks({
+          orgId,
+          workItemId,
+          command: 'pick_up_unassigned',
+          transitionId,
+          actorUserId,
+          workType: current.work_type,
+          toState: 'assigned',
         });
         return { workItemId };
       });
@@ -1160,7 +1226,7 @@ export async function executeWorkEngineCommand(
             claimed_at: null,
           },
         });
-        await insertTransition({
+        const transitionId = await insertTransition({
           org_id: orgId,
           work_item_id: workItemId,
           from_state: current.work_state,
@@ -1182,6 +1248,15 @@ export async function executeWorkEngineCommand(
           },
           expected_version: expectedVersion,
           resulting_version: newVersion,
+        });
+        await runPhase3aSlaHooks({
+          orgId,
+          workItemId,
+          command: 'request_review',
+          transitionId,
+          actorUserId,
+          workType: current.work_type,
+          toState: 'review_pending',
         });
         await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_REVIEW_REQUESTED, {
           reviewer_user_id: current.reviewer_user_id,
@@ -1229,7 +1304,7 @@ export async function executeWorkEngineCommand(
           newVersion,
           patch: { work_state: 'assigned' },
         });
-        await insertTransition({
+        const transitionId = await insertTransition({
           org_id: orgId,
           work_item_id: workItemId,
           from_state: 'review_pending',
@@ -1253,6 +1328,15 @@ export async function executeWorkEngineCommand(
           },
           expected_version: expectedVersion,
           resulting_version: newVersion,
+        });
+        await runPhase3aSlaHooks({
+          orgId,
+          workItemId,
+          command: 'approve_work_item',
+          transitionId,
+          actorUserId,
+          workType: current.work_type,
+          toState: 'assigned',
         });
         await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_REVIEW_APPROVED, {
           reviewer_user_id: current.reviewer_user_id,
@@ -1305,7 +1389,7 @@ export async function executeWorkEngineCommand(
           newVersion,
           patch: { work_state: 'assigned' },
         });
-        await insertTransition({
+        const transitionId = await insertTransition({
           org_id: orgId,
           work_item_id: workItemId,
           from_state: 'review_pending',
@@ -1330,6 +1414,15 @@ export async function executeWorkEngineCommand(
           },
           expected_version: expectedVersion,
           resulting_version: newVersion,
+        });
+        await runPhase3aSlaHooks({
+          orgId,
+          workItemId,
+          command: 'reject_work_item',
+          transitionId,
+          actorUserId,
+          workType: current.work_type,
+          toState: 'assigned',
         });
         await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_REVIEW_REJECTED, {
           reviewer_user_id: current.reviewer_user_id,

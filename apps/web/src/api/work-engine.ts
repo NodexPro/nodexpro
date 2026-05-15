@@ -183,6 +183,8 @@ export type WorkEngineQueueRow = {
   due_at: string | null;
   sla_status: string;
   sla_status_label: string;
+  sla_badges?: Array<{ kind: string; label: string; tone: 'neutral' | 'warn' | 'danger' }>;
+  primary_due_at_label?: string | null;
   override_active: boolean;
   override_summary: string | null;
   allowed_actions: QueueAllowedAction[];
