@@ -153,6 +153,23 @@
   overflow-x: auto;
   overflow-y: visible;
   max-width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.nx-we-table-wrap::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.nx-we-table-wrap::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+}
+
+.nx-we-table-wrap::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 8px;
 }
 
 .nx-we-table {
@@ -217,12 +234,13 @@
 
 .nx-we-state-badge {
   display: inline-block;
-  padding: 2px 8px;
+  padding: 3px 9px;
   font-size: 12px;
   font-weight: 600;
   background: #eef2ff;
   color: #3730a3;
-  border-radius: 999px;
+  border-radius: 6px;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
@@ -371,6 +389,100 @@
 .nx-we-overflow-popover__item:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.nx-we-queue__cards--premium {
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.nx-we-queue__cards--premium .nx-we-card {
+  border-radius: 12px;
+  padding: 14px 16px 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  border-color: #e8ecf1;
+}
+
+.nx-we-queue__cards--premium .nx-we-card__label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.nx-we-queue__cards--premium .nx-we-card__value {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.nx-we-overflow-popover--wide {
+  min-width: 260px;
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 8px;
+  border-radius: 10px;
+  box-shadow:
+    0 4px 6px -1px rgba(15, 23, 42, 0.08),
+    0 18px 40px -12px rgba(15, 23, 42, 0.18);
+  border-color: #e2e8f0;
+}
+
+.nx-we-overflow-popover__section {
+  padding-bottom: 2px;
+}
+
+.nx-we-overflow-popover__section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  padding: 6px 10px 4px;
+}
+
+.nx-we-overflow-popover__sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: linear-gradient(90deg, transparent, #e2e8f0 12%, #e2e8f0 88%, transparent);
+}
+
+.nx-we-overflow-popover__item--submenu {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.nx-we-overflow-popover__chevron {
+  font-size: 16px;
+  color: #94a3b8;
+  line-height: 1;
+}
+
+.nx-we-overflow-popover__admin-wrap {
+  position: relative;
+}
+
+.nx-we-overflow-popover__admin-flyout {
+  margin-top: 4px;
+  margin-bottom: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.nx-we-overflow-popover__admin-flyout .nx-we-overflow-popover__item {
+  font-size: 13px;
+}
+
+.nx-we-overflow-popover__item {
+  border-radius: 7px;
+}
+
+.nx-we-overflow-popover__item:hover:not(:disabled) {
+  background: #eef2f7;
 }
 
 .nx-we-drawer-overlay {

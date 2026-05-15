@@ -538,7 +538,15 @@ export async function executeWorkEngineCommand(
       assertExpectedVersion(current.version, expectedVersion);
       if (isQueueRefreshMode(payload)) {
         if (toState === 'archived') assertQueueActionEnabled(current, 'archive');
-        else assertQueueActionEnabled(current, 'change_state');
+        else if (toState === 'waiting_client') {
+          const acts = queueAllowedActions({
+            work_state: current.work_state,
+            assigned_user_id: current.assigned_user_id,
+          });
+          const quick = acts.find((a) => a.command === 'mark_waiting_client');
+          if (quick?.enabled) assertQueueActionEnabled(current, 'mark_waiting_client');
+          else assertQueueActionEnabled(current, 'change_state');
+        } else assertQueueActionEnabled(current, 'change_state');
       }
       if (!canTransitionWorkState(current.work_state, toState)) {
         throw badRequest(
@@ -923,6 +931,7 @@ export async function executeWorkEngineCommand(
         const current = await loadWorkItem(orgId, workItemId);
         const expectedVersion = reqInt(payload, 'expected_version');
         assertExpectedVersion(current.version, expectedVersion);
+        if (isQueueRefreshMode(payload)) assertQueueActionEnabled(current, 'transfer');
         if (['new', 'review_pending', 'done', 'archived'].includes(current.work_state)) {
           throw badRequest(
             `transfer_work_item is not allowed in work_state='${current.work_state}'`,

@@ -24,44 +24,208 @@ const PENDING_MAPPING_OUTCOMES = [
     MAPPING_REASON.UNKNOWN_EVENT_MAPPING,
     MAPPING_REASON.MISSING_PERIOD_KEY,
 ];
-/**
- * First matching enabled command becomes `row_secondary`; remainder stay overflow.
- * Product policy: prefer pickup, then review actions, then execution lock.
- */
-const QUEUE_ROW_SECONDARY_PRIORITY = [
-    { kind: 'ownership', command: 'pick_up_unassigned' },
-    { kind: 'review', command: 'request_review' },
-    { kind: 'review', command: 'approve_work_item' },
-    { kind: 'review', command: 'reject_work_item' },
-    { kind: 'ownership', command: 'claim_work_item' },
-    { kind: 'ownership', command: 'release_claim' },
-];
-function applyOwnershipReviewDisplaySlots(ownership, review) {
-    const ownership_commands = ownership.map((c) => ({
+function queueRowChromeMode(row) {
+    const unassigned = row.assigned_user_id == null || String(row.assigned_user_id).trim() === '';
+    if (unassigned && canPickUpFromUnassignedWorkState(row.work_state))
+        return 'unassigned_pickup';
+    if (row.work_state === 'review_pending')
+        return 'review_gate';
+    return 'default';
+}
+function buildQueueRowChrome(args) {
+    const { row, viewer, ownershipDraft, reviewDraft, allowedRows } = args;
+    const perms = [...viewer.permissions];
+    const canAdmin = hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin) ||
+        hasPermission(perms, WORK_ENGINE_PERMISSIONS.override) ||
+        hasPermission(perms, WORK_ENGINE_PERMISSIONS.claimForce);
+    const ownership = ownershipDraft.map((c) => ({
         ...c,
-        display_slot: 'row_overflow',
+        presentation_group: 'row_overflow',
     }));
-    const review_commands = review.map((c) => ({
+    const review = reviewDraft.map((c) => ({
         ...c,
-        display_slot: 'row_overflow',
+        presentation_group: 'row_overflow',
     }));
-    for (const spec of QUEUE_ROW_SECONDARY_PRIORITY) {
-        if (spec.kind === 'ownership') {
-            const hit = ownership_commands.find((c) => c.command === spec.command && c.enabled);
-            if (hit) {
-                hit.display_slot = 'row_secondary';
-                return { ownership_commands, review_commands };
-            }
+    const allowed = allowedRows.map((a) => ({ ...a }));
+    const mode = queueRowChromeMode(row);
+    const secondaries = [];
+    const pick = ownership.find((c) => c.command === 'pick_up_unassigned');
+    const claim = ownership.find((c) => c.command === 'claim_work_item');
+    const release = ownership.find((c) => c.command === 'release_claim');
+    const reqRev = review.find((c) => c.command === 'request_review');
+    const appr = review.find((c) => c.command === 'approve_work_item');
+    const rej = review.find((c) => c.command === 'reject_work_item');
+    if (mode === 'unassigned_pickup' && pick) {
+        secondaries.push({
+            channel: 'ownership',
+            command: pick.command,
+            label: pick.label,
+            enabled: pick.enabled,
+            reason: pick.reason,
+        });
+        pick.presentation_group = 'row_secondary';
+    }
+    else if (mode === 'review_gate') {
+        if (appr) {
+            secondaries.push({
+                channel: 'review',
+                command: appr.command,
+                label: appr.label,
+                enabled: appr.enabled,
+                reason: appr.reason,
+            });
+            appr.presentation_group = 'row_secondary';
         }
-        else {
-            const hit = review_commands.find((c) => c.command === spec.command && c.enabled);
-            if (hit) {
-                hit.display_slot = 'row_secondary';
-                return { ownership_commands, review_commands };
-            }
+        if (rej) {
+            secondaries.push({
+                channel: 'review',
+                command: rej.command,
+                label: rej.label,
+                enabled: rej.enabled,
+                reason: rej.reason,
+            });
+            rej.presentation_group = 'row_secondary';
         }
     }
-    return { ownership_commands, review_commands };
+    else {
+        const held = row.claimed_by_user_id != null;
+        if (held && release) {
+            secondaries.push({
+                channel: 'ownership',
+                command: release.command,
+                label: release.label,
+                enabled: release.enabled,
+                reason: release.reason,
+            });
+            release.presentation_group = 'row_secondary';
+        }
+        else if (claim) {
+            secondaries.push({
+                channel: 'ownership',
+                command: claim.command,
+                label: claim.label,
+                enabled: claim.enabled,
+                reason: claim.reason,
+            });
+            claim.presentation_group = 'row_secondary';
+        }
+    }
+    const transfer = allowed.find((a) => a.command === 'transfer');
+    const markWait = allowed.find((a) => a.command === 'mark_waiting_client');
+    const assign = allowed.find((a) => a.command === 'assign');
+    const changeState = allowed.find((a) => a.command === 'change_state');
+    const setDl = allowed.find((a) => a.command === 'set_deadline');
+    const applyOv = allowed.find((a) => a.command === 'apply_override');
+    const arch = allowed.find((a) => a.command === 'archive');
+    if (release && release.presentation_group !== 'row_secondary') {
+        const isHolder = row.claimed_by_user_id === viewer.userId;
+        if (row.claimed_by_user_id && !isHolder && release.enabled) {
+            release.presentation_group = 'admin_overflow';
+        }
+        else {
+            release.presentation_group = 'row_overflow';
+        }
+    }
+    const mainItems = [];
+    const pushOwnership = (c) => {
+        if (!c || c.presentation_group !== 'row_overflow')
+            return;
+        if (c.command === 'release_claim' && !row.claimed_by_user_id)
+            return;
+        mainItems.push({
+            channel: 'ownership',
+            command: c.command,
+            label: c.label,
+            enabled: c.enabled,
+            reason: c.reason,
+        });
+    };
+    const pushReview = (c) => {
+        if (!c || c.presentation_group !== 'row_overflow')
+            return;
+        mainItems.push({
+            channel: 'review',
+            command: c.command,
+            label: c.label,
+            enabled: c.enabled,
+            reason: c.reason,
+        });
+    };
+    const pushSemantic = (a) => {
+        if (!a || a.presentation_group !== 'row_overflow')
+            return;
+        mainItems.push({
+            channel: 'semantic',
+            command: a.command,
+            label: a.label,
+            enabled: a.enabled,
+            reason: a.reason,
+        });
+    };
+    if (mode === 'unassigned_pickup') {
+        pushSemantic(assign);
+        pushSemantic(setDl);
+        pushSemantic(markWait);
+        pushSemantic(changeState);
+    }
+    else if (mode === 'review_gate') {
+        pushSemantic(setDl);
+        pushSemantic(markWait);
+        pushSemantic(changeState);
+    }
+    else {
+        pushReview(reqRev);
+        pushSemantic(transfer);
+        pushSemantic(setDl);
+        pushSemantic(markWait);
+        pushSemantic(changeState);
+    }
+    const adminItems = [];
+    const pushAdminSemantic = (a) => {
+        if (!a || a.presentation_group !== 'admin_overflow')
+            return;
+        adminItems.push({
+            channel: 'semantic',
+            command: a.command,
+            label: a.label,
+            enabled: a.enabled,
+            reason: a.reason,
+        });
+    };
+    pushAdminSemantic(applyOv);
+    pushAdminSemantic(arch);
+    if (release && release.presentation_group === 'admin_overflow') {
+        adminItems.push({
+            channel: 'ownership',
+            command: release.command,
+            label: release.label,
+            enabled: release.enabled,
+            reason: release.reason,
+        });
+    }
+    const showAdmin = canAdmin && adminItems.length > 0;
+    const queue_shell = {
+        open_detail: {
+            kind: 'open_queue_item_detail',
+            label: 'Open',
+            enabled: true,
+            reason: null,
+            presentation_group: 'row_primary',
+        },
+        secondary_actions: secondaries,
+        overflow_menu: {
+            trigger_label: '⋯',
+            sections: [{ section_title: null, items: mainItems }],
+            admin: showAdmin
+                ? {
+                    panel_title: 'Administrative actions',
+                    submenu_trigger_label: 'Administrative actions',
+                    items: adminItems,
+                }
+                : null,
+        },
+    };
+    return { ownership_commands: ownership, review_commands: review, allowed_actions: allowed, queue_shell };
 }
 function computeOwnershipCommands(args) {
     const { row, viewer, policy } = args;
@@ -99,16 +263,16 @@ function computeOwnershipCommands(args) {
     const claimOk = canClaimState && !row.claimed_by_user_id && isAssignee && canClaimPerm;
     out.push({
         command: 'claim_work_item',
-        label: 'Lock',
+        label: 'Start work',
         enabled: claimOk,
         reason: claimOk
             ? null
             : row.claimed_by_user_id
-                ? 'Already locked'
+                ? 'An execution lock is already held'
                 : !canClaimState
-                    ? 'Lock is only allowed in assigned state'
+                    ? 'Start work is only available in assigned state'
                     : !isAssignee
-                        ? 'Only the assignee can lock'
+                        ? 'Only the assignee can start work on this item'
                         : !canClaimPerm
                             ? 'Missing work_engine.claim permission'
                             : null,
@@ -116,14 +280,17 @@ function computeOwnershipCommands(args) {
     const held = row.claimed_by_user_id != null;
     const isClaimHolder = row.claimed_by_user_id === viewer.userId;
     const releaseOk = held && ((isClaimHolder && canClaimPerm) || (!isClaimHolder && canForceClaim));
+    const releaseLabel = held && row.claimed_by_user_id && row.claimed_by_user_id !== viewer.userId
+        ? 'Force unlock'
+        : 'Stop work';
     out.push({
         command: 'release_claim',
-        label: 'Unlock',
+        label: releaseLabel,
         enabled: releaseOk,
         reason: releaseOk
             ? null
             : !held
-                ? 'Nothing to unlock'
+                ? 'No lock is held'
                 : isClaimHolder
                     ? 'Missing work_engine.claim permission'
                     : 'Missing work_engine.claim.force permission',
@@ -616,12 +783,21 @@ export function queueAllowedActions(row) {
     const unassigned = row.assigned_user_id == null || String(row.assigned_user_id).trim() === '';
     const archived = state === 'archived';
     const done = state === 'done';
+    const transitions = getAllowedTransitionsFrom(state);
+    const canMarkWaiting = !archived && transitions.includes('waiting_client');
+    const transferBlockedStates = new Set([
+        'new',
+        'review_pending',
+        'done',
+        'archived',
+    ]);
+    const transferEnabled = !archived && !unassigned && !transferBlockedStates.has(state);
     return [
         {
             command: 'assign',
             label: 'Assign',
             enabled: !archived && !done && state !== 'review_pending' && unassigned,
-            display_slot: 'row_overflow',
+            presentation_group: 'row_overflow',
             reason: archived
                 ? 'Work item is archived'
                 : done
@@ -629,21 +805,45 @@ export function queueAllowedActions(row) {
                     : state === 'review_pending'
                         ? 'Reassignment is blocked while in review'
                         : !unassigned
-                            ? 'Item already has an assignee — use transfer_work_item'
+                            ? 'Use Reassign to change assignee'
                             : null,
         },
         {
+            command: 'transfer',
+            label: 'Reassign',
+            enabled: transferEnabled,
+            presentation_group: 'row_overflow',
+            reason: archived
+                ? 'Work item is archived'
+                : unassigned
+                    ? 'Assign first — Reassign is for items that already have an assignee'
+                    : transferBlockedStates.has(state)
+                        ? 'Reassign is not available in this state'
+                        : null,
+        },
+        {
+            command: 'mark_waiting_client',
+            label: 'Mark waiting for client',
+            enabled: canMarkWaiting,
+            presentation_group: 'row_overflow',
+            reason: archived
+                ? 'Work item is archived'
+                : !canMarkWaiting
+                    ? 'This transition is not available from the current state'
+                    : null,
+        },
+        {
             command: 'change_state',
-            label: 'Change state',
+            label: 'Update status',
             enabled: !archived,
-            display_slot: 'row_overflow',
+            presentation_group: 'row_overflow',
             reason: archived ? 'Work item is archived' : null,
         },
         {
             command: 'set_deadline',
             label: 'Set deadline',
             enabled: !archived && !done,
-            display_slot: 'row_overflow',
+            presentation_group: 'row_overflow',
             reason: archived
                 ? 'Work item is archived'
                 : done
@@ -654,19 +854,19 @@ export function queueAllowedActions(row) {
             command: 'apply_override',
             label: 'Override',
             enabled: !archived,
-            display_slot: 'row_overflow',
+            presentation_group: 'admin_overflow',
             reason: archived ? 'Work item is archived' : null,
         },
         {
             command: 'archive',
             label: 'Archive',
             enabled: done,
-            display_slot: 'row_overflow',
+            presentation_group: 'admin_overflow',
             reason: done
                 ? null
                 : archived
                     ? 'Work item is already archived'
-                    : 'Archive requires override unless work item is done',
+                    : 'Archive is available when the item is done',
         },
     ];
 }
@@ -1178,7 +1378,39 @@ export async function buildWorkEngineQueueAggregate(params) {
             })
             : [];
         const reviewDraft = viewer != null ? computeReviewCommands({ row: r, viewer, policy: policyRow }) : [];
-        const { ownership_commands, review_commands } = applyOwnershipReviewDisplaySlots(ownershipDraft, reviewDraft);
+        const allowedBase = queueAllowedActions({
+            work_state: r.work_state,
+            assigned_user_id: r.assigned_user_id,
+        });
+        const chrome = viewer != null
+            ? buildQueueRowChrome({
+                row: r,
+                viewer,
+                ownershipDraft,
+                reviewDraft,
+                allowedRows: allowedBase,
+            })
+            : {
+                ownership_commands: [],
+                review_commands: [],
+                allowed_actions: allowedBase,
+                queue_shell: {
+                    open_detail: {
+                        kind: 'open_queue_item_detail',
+                        label: 'Open',
+                        enabled: true,
+                        reason: null,
+                        presentation_group: 'row_primary',
+                    },
+                    secondary_actions: [],
+                    overflow_menu: {
+                        trigger_label: '⋯',
+                        sections: [{ section_title: null, items: [] }],
+                        admin: null,
+                    },
+                },
+            };
+        const { ownership_commands, review_commands, allowed_actions, queue_shell } = chrome;
         return {
             work_item_id: r.id,
             client_id: r.client_id,
@@ -1205,25 +1437,13 @@ export async function buildWorkEngineQueueAggregate(params) {
             sla_status_label: slaStatusLabel(r.sla_status),
             override_active: r.override_active,
             override_summary: ov,
-            allowed_actions: queueAllowedActions({
-                work_state: r.work_state,
-                assigned_user_id: r.assigned_user_id,
-            }),
+            allowed_actions,
             allowed_transitions: rowAllowedTransitions(r.work_state),
             allowed_override_kinds: rowAllowedOverrideKinds(r.work_state),
             version: r.version,
             updated_at: r.updated_at,
             queue_cells,
-            queue_shell: {
-                open_detail: {
-                    kind: 'open_queue_item_detail',
-                    label: 'Open',
-                    enabled: true,
-                    reason: null,
-                    display_slot: 'row_primary',
-                },
-                overflow_menu_button_label: '⋯',
-            },
+            queue_shell,
             command_modal_subject_line: buildCommandModalSubjectLine({
                 work_type_label,
                 module_label,

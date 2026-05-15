@@ -26,8 +26,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   executeWorkEngineQueueCommand,
   fetchWorkEngineQueueAggregate,
-  type QueueAllowedAction,
   type QueueAllowedActionCommand,
+  type QueueOverflowMenuItem,
   type QueueOwnershipCommand,
   type QueueReviewCommand,
   type QueueDetailSection,
@@ -80,7 +80,8 @@ function filtersToApi(f: FilterState): WorkEngineQueueFiltersInput {
 
 type PendingModal =
   | { kind: 'assign'; row: WorkEngineQueueRow }
-  | { kind: 'change_state'; row: WorkEngineQueueRow }
+  | { kind: 'transfer'; row: WorkEngineQueueRow }
+  | { kind: 'change_state'; row: WorkEngineQueueRow; preset_to_state?: string | null }
   | { kind: 'set_deadline'; row: WorkEngineQueueRow }
   | { kind: 'apply_override'; row: WorkEngineQueueRow }
   | { kind: 'archive'; row: WorkEngineQueueRow }
@@ -301,6 +302,8 @@ export function WorkEngineQueue() {
 
 function buildModalForAction(row: WorkEngineQueueRow, cmd: QueueAllowedActionCommand): PendingModal {
   if (cmd === 'assign') return { kind: 'assign', row };
+  if (cmd === 'transfer') return { kind: 'transfer', row };
+  if (cmd === 'mark_waiting_client') return { kind: 'change_state', row, preset_to_state: 'waiting_client' };
   if (cmd === 'change_state') return { kind: 'change_state', row };
   if (cmd === 'set_deadline') return { kind: 'set_deadline', row };
   if (cmd === 'apply_override') return { kind: 'apply_override', row };
@@ -325,7 +328,7 @@ function SummaryCards({ cards }: { cards: WorkEngineQueueAggregate['summary_card
     { key: 'pending_mapping', label: 'Pending mapping', tone: 'warn' },
   ];
   return (
-    <div className="nx-we-queue__cards">
+    <div className="nx-we-queue__cards nx-we-queue__cards--premium">
       {items.map((it) => (
         <div
           key={it.key as string}
@@ -599,21 +602,26 @@ function renderQueueDataCell(
 }
 
 type QueueOverflowMenuProps = {
-  buttonLabel: string;
+  menu: WorkEngineQueueRow['queue_shell']['overflow_menu'];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  ownership: QueueOwnershipCommand[];
-  review: QueueReviewCommand[];
-  allowed: QueueAllowedAction[];
-  onPickOwnership: (cmd: QueueOwnershipCommand['command']) => void;
-  onPickReview: (cmd: QueueReviewCommand['command']) => void;
-  onPickAllowed: (cmd: QueueAllowedActionCommand) => void;
+  onPickItem: (item: QueueOverflowMenuItem) => void;
 };
 
 function QueueOverflowMenu(props: QueueOverflowMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [adminOpen, setAdminOpen] = useState(false);
+
+  const entryCount =
+    props.menu.sections.reduce((n, s) => n + s.items.length, 0) +
+    (props.menu.admin?.items.length ?? 0);
+  const hasEntries = entryCount > 0;
+
+  useEffect(() => {
+    if (!props.open) setAdminOpen(false);
+  }, [props.open]);
 
   useLayoutEffect(() => {
     if (!props.open) return;
@@ -623,7 +631,7 @@ function QueueOverflowMenu(props: QueueOverflowMenuProps) {
       if (!anchor) return;
       const rect = anchor.getBoundingClientRect();
       const pad = 8;
-      const mw = menu?.offsetWidth ?? 220;
+      const mw = menu?.offsetWidth ?? 260;
       const mh = menu?.offsetHeight ?? 8;
       let top = rect.bottom + 4;
       let left = rect.right - mw;
@@ -635,16 +643,19 @@ function QueueOverflowMenu(props: QueueOverflowMenuProps) {
     place();
     const id = window.requestAnimationFrame(place);
     return () => window.cancelAnimationFrame(id);
-  }, [props.open, props.ownership.length, props.review.length, props.allowed.length]);
+  }, [props.open, entryCount, adminOpen, props.menu.admin]);
 
   useEffect(() => {
     if (!props.open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') props.onOpenChange(false);
+      if (e.key === 'Escape') {
+        if (adminOpen) setAdminOpen(false);
+        else props.onOpenChange(false);
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [props.open, props.onOpenChange]);
+  }, [props.open, props.onOpenChange, adminOpen]);
 
   useEffect(() => {
     if (!props.open) return;
@@ -660,70 +671,85 @@ function QueueOverflowMenu(props: QueueOverflowMenuProps) {
 
   useEffect(() => {
     if (!props.open) return;
-    const onScroll = () => props.onOpenChange(false);
+    const onScroll = () => {
+      setAdminOpen(false);
+      props.onOpenChange(false);
+    };
     document.addEventListener('scroll', onScroll, true);
     return () => document.removeEventListener('scroll', onScroll, true);
   }, [props.open, props.onOpenChange]);
 
-  const hasEntries =
-    props.ownership.length + props.review.length + props.allowed.length > 0;
+  const onPick = (item: QueueOverflowMenuItem) => {
+    props.onOpenChange(false);
+    props.onPickItem(item);
+  };
 
   const menu =
     props.open && hasEntries ? (
       <div
         ref={menuRef}
-        className="nx-we-overflow-popover"
+        className="nx-we-overflow-popover nx-we-overflow-popover--wide"
         role="menu"
         style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 4000 }}
       >
-        {props.ownership.map((c) => (
-          <button
-            key={`o-${c.command}`}
-            type="button"
-            role="menuitem"
-            className="nx-we-overflow-popover__item"
-            disabled={!c.enabled}
-            title={c.reason ?? ''}
-            onClick={() => {
-              props.onOpenChange(false);
-              props.onPickOwnership(c.command);
-            }}
-          >
-            {c.label}
-          </button>
+        {props.menu.sections.map((sec, si) => (
+          <div key={`sec-${si}`} className="nx-we-overflow-popover__section">
+            {sec.section_title ? (
+              <div className="nx-we-overflow-popover__section-title">{sec.section_title}</div>
+            ) : null}
+            {sec.items.map((item, ii) => (
+              <button
+                key={`${si}-${ii}-${item.channel}-${item.command}`}
+                type="button"
+                role="menuitem"
+                className="nx-we-overflow-popover__item"
+                disabled={!item.enabled}
+                title={item.reason ?? ''}
+                onClick={() => onPick(item)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         ))}
-        {props.review.map((c) => (
-          <button
-            key={`r-${c.command}`}
-            type="button"
-            role="menuitem"
-            className="nx-we-overflow-popover__item"
-            disabled={!c.enabled}
-            title={c.reason ?? ''}
-            onClick={() => {
-              props.onOpenChange(false);
-              props.onPickReview(c.command);
-            }}
-          >
-            {c.label}
-          </button>
-        ))}
-        {props.allowed.map((a) => (
-          <button
-            key={`a-${a.command}`}
-            type="button"
-            role="menuitem"
-            className="nx-we-overflow-popover__item"
-            disabled={!a.enabled}
-            title={a.reason ?? ''}
-            onClick={() => {
-              props.onOpenChange(false);
-              props.onPickAllowed(a.command);
-            }}
-          >
-            {a.label}
-          </button>
-        ))}
+        {props.menu.admin ? (
+          <div className="nx-we-overflow-popover__admin-wrap">
+            <div className="nx-we-overflow-popover__sep" aria-hidden />
+            <div className="nx-we-overflow-popover__section-title">{props.menu.admin.panel_title}</div>
+            <button
+              type="button"
+              className="nx-we-overflow-popover__item nx-we-overflow-popover__item--submenu"
+              aria-expanded={adminOpen}
+              aria-haspopup="menu"
+              onClick={() => setAdminOpen((v) => !v)}
+            >
+              <span>{props.menu.admin.submenu_trigger_label}</span>
+              <span className="nx-we-overflow-popover__chevron" aria-hidden>
+                ›
+              </span>
+            </button>
+            {adminOpen ? (
+              <div className="nx-we-overflow-popover__admin-flyout" role="menu">
+                {props.menu.admin.items.map((item, ii) => (
+                  <button
+                    key={`adm-${ii}-${item.channel}-${item.command}`}
+                    type="button"
+                    role="menuitem"
+                    className="nx-we-overflow-popover__item"
+                    disabled={!item.enabled}
+                    title={item.reason ?? ''}
+                    onClick={() => {
+                      setAdminOpen(false);
+                      onPick(item);
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     ) : null;
 
@@ -739,11 +765,30 @@ function QueueOverflowMenu(props: QueueOverflowMenuProps) {
         title={hasEntries ? 'More actions' : ''}
         onClick={() => hasEntries && props.onOpenChange(!props.open)}
       >
-        {props.buttonLabel}
+        {props.menu.trigger_label}
       </button>
       {menu ? createPortal(menu, document.body) : null}
     </div>
   );
+}
+
+function dispatchOverflowPick(
+  item: QueueOverflowMenuItem,
+  handlers: {
+    onOverflowAction: (cmd: QueueAllowedActionCommand) => void;
+    onOwnershipCommand: (cmd: QueueOwnershipCommand['command']) => void;
+    onReviewCommand: (cmd: QueueReviewCommand['command']) => void;
+  },
+) {
+  if (item.channel === 'ownership') {
+    handlers.onOwnershipCommand(item.command as QueueOwnershipCommand['command']);
+    return;
+  }
+  if (item.channel === 'review') {
+    handlers.onReviewCommand(item.command as QueueReviewCommand['command']);
+    return;
+  }
+  handlers.onOverflowAction(item.command as QueueAllowedActionCommand);
 }
 
 function QueueRowShellActions(props: {
@@ -755,15 +800,8 @@ function QueueRowShellActions(props: {
   onOwnershipCommand: (cmd: QueueOwnershipCommand['command']) => void;
   onReviewCommand: (cmd: QueueReviewCommand['command']) => void;
 }) {
-  const { row } = props;
-  const open = row.queue_shell.open_detail;
-  const ownership = row.ownership_commands ?? [];
-  const review = row.review_commands ?? [];
-  const ownershipRow = ownership.filter((c) => c.display_slot === 'row_secondary');
-  const reviewRow = review.filter((c) => c.display_slot === 'row_secondary');
-  const ownershipMenu = ownership.filter((c) => c.display_slot === 'row_overflow');
-  const reviewMenu = review.filter((c) => c.display_slot === 'row_overflow');
-  const allowedMenu = row.allowed_actions.filter((a) => a.display_slot === 'row_overflow');
+  const shell = props.row.queue_shell;
+  const open = shell.open_detail;
 
   return (
     <div className="nx-we-shell-actions">
@@ -776,40 +814,33 @@ function QueueRowShellActions(props: {
       >
         {open.label}
       </button>
-      {ownershipRow.map((c) => (
+      {(shell.secondary_actions ?? []).map((c) => (
         <button
-          key={c.command}
+          key={`${c.channel}-${c.command}`}
           type="button"
           className="nx-we-btn nx-we-btn--secondary"
           disabled={!c.enabled}
           title={c.reason ?? ''}
-          onClick={() => props.onOwnershipCommand(c.command)}
-        >
-          {c.label}
-        </button>
-      ))}
-      {reviewRow.map((c) => (
-        <button
-          key={c.command}
-          type="button"
-          className="nx-we-btn nx-we-btn--secondary"
-          disabled={!c.enabled}
-          title={c.reason ?? ''}
-          onClick={() => props.onReviewCommand(c.command)}
+          onClick={() =>
+            c.channel === 'ownership'
+              ? props.onOwnershipCommand(c.command as QueueOwnershipCommand['command'])
+              : props.onReviewCommand(c.command as QueueReviewCommand['command'])
+          }
         >
           {c.label}
         </button>
       ))}
       <QueueOverflowMenu
-        buttonLabel={row.queue_shell.overflow_menu_button_label}
+        menu={shell.overflow_menu}
         open={props.overflowOpen}
         onOpenChange={props.onOverflowOpenChange}
-        ownership={ownershipMenu}
-        review={reviewMenu}
-        allowed={allowedMenu}
-        onPickOwnership={props.onOwnershipCommand}
-        onPickReview={props.onReviewCommand}
-        onPickAllowed={props.onOverflowAction}
+        onPickItem={(item) =>
+          dispatchOverflowPick(item, {
+            onOverflowAction: props.onOverflowAction,
+            onOwnershipCommand: props.onOwnershipCommand,
+            onReviewCommand: props.onReviewCommand,
+          })
+        }
       />
     </div>
   );
@@ -1027,12 +1058,31 @@ function ActionModal(props: {
       ? modal.row.allowed_override_kinds.find((k) => k.value === overrideKind)
       : undefined;
 
+  useEffect(() => {
+    if (modal.kind === 'change_state') {
+      const pre = modal.preset_to_state;
+      const row = modal.row;
+      if (pre && row.allowed_transitions.some((t) => t.value === pre)) {
+        setStateValue(pre);
+      } else {
+        setStateValue('');
+      }
+    } else {
+      setStateValue('');
+    }
+    setAssigneeId('');
+  }, [modal]);
+
   const title = useMemo(() => {
     switch (modal.kind) {
       case 'assign':
         return 'Assign work item';
+      case 'transfer':
+        return 'Reassign work item';
       case 'change_state':
-        return 'Change state';
+        return modal.preset_to_state === 'waiting_client'
+          ? 'Mark waiting for client'
+          : 'Update status';
       case 'set_deadline':
         return 'Set deadline';
       case 'apply_override':
@@ -1042,7 +1092,7 @@ function ActionModal(props: {
       case 'reject_review':
         return 'Reject review';
     }
-  }, [modal.kind]);
+  }, [modal]);
 
   const submit = useCallback(async () => {
     setError(null);
@@ -1063,6 +1113,11 @@ function ActionModal(props: {
         if (!id) throw new Error('Assignee is required');
         command = 'assign_work_item';
         payload = { ...baseCommand, assigned_user_id: id };
+      } else if (modal.kind === 'transfer') {
+        const id = assigneeId.trim();
+        if (!id) throw new Error('New assignee is required');
+        command = 'transfer_work_item';
+        payload = { ...baseCommand, to_assigned_user_id: id };
       } else if (modal.kind === 'change_state') {
         if (row.allowed_transitions.length === 0) {
           throw new Error('No transitions are available for this work item.');
@@ -1101,9 +1156,11 @@ function ActionModal(props: {
           ...baseCommand,
           rejection_reason: rr,
         };
-      } else {
+      } else if (modal.kind === 'archive') {
         command = 'change_work_state';
         payload = { ...baseCommand, to_state: 'archived', reason_text: reasonText || null };
+      } else {
+        throw new Error('Unknown modal');
       }
 
       const resp = await executeWorkEngineQueueCommand({
@@ -1121,8 +1178,7 @@ function ActionModal(props: {
     assigneeId,
     dueAt,
     filtersForApi,
-    modal.kind,
-    modal.row,
+    modal,
     onCompleted,
     overrideKind,
     reasonText,
@@ -1141,6 +1197,27 @@ function ActionModal(props: {
             Current state: <strong>{modal.row.work_state_label}</strong> · version{' '}
             <strong>{modal.row.version}</strong>
           </div>
+
+          {modal.kind === 'transfer' && (
+            <div className="nx-we-field">
+              <label htmlFor="we-modal-transfer-to">New assignee</label>
+              <select
+                id="we-modal-transfer-to"
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
+              >
+                <option value="">— Choose assignee —</option>
+                {aggregate.filters.assignees.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <span className="nx-we-modal__hint">
+                Choices come from the queue aggregate (`filters.assignees`).
+              </span>
+            </div>
+          )}
 
           {modal.kind === 'assign' && (
             <div className="nx-we-field">
@@ -1322,6 +1399,7 @@ function ActionModal(props: {
             onClick={submit}
             disabled={
               submitting ||
+              ((modal.kind === 'assign' || modal.kind === 'transfer') && !assigneeId.trim()) ||
               (modal.kind === 'change_state' && modal.row.allowed_transitions.length === 0) ||
               (modal.kind === 'apply_override' &&
                 modal.row.allowed_override_kinds.length === 0) ||

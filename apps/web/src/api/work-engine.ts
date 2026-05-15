@@ -27,10 +27,16 @@ export type WorkEngineQueueFiltersInput = {
   offset?: number | null;
 };
 
-export type QueueActionDisplaySlot = 'row_primary' | 'row_secondary' | 'row_overflow';
+export type QueuePresentationGroup =
+  | 'row_primary'
+  | 'row_secondary'
+  | 'row_overflow'
+  | 'admin_overflow';
 
 export type QueueAllowedActionCommand =
   | 'assign'
+  | 'transfer'
+  | 'mark_waiting_client'
   | 'change_state'
   | 'set_deadline'
   | 'apply_override'
@@ -42,7 +48,7 @@ export type QueueAllowedAction = {
   label: string;
   enabled: boolean;
   reason: string | null;
-  display_slot: QueueActionDisplaySlot;
+  presentation_group: QueuePresentationGroup;
 };
 
 export type QueueOpenDetailAction = {
@@ -50,12 +56,46 @@ export type QueueOpenDetailAction = {
   label: string;
   enabled: boolean;
   reason: string | null;
-  display_slot: QueueActionDisplaySlot;
+  presentation_group: 'row_primary';
+};
+
+export type QueueOverflowMenuItem = {
+  channel: 'ownership' | 'review' | 'semantic';
+  command: string;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+};
+
+export type QueueOverflowMenuSection = {
+  section_title: string | null;
+  items: QueueOverflowMenuItem[];
+};
+
+export type QueueOverflowAdminBlock = {
+  panel_title: string;
+  submenu_trigger_label: string;
+  items: QueueOverflowMenuItem[];
+};
+
+export type QueueOverflowMenuModel = {
+  trigger_label: string;
+  sections: QueueOverflowMenuSection[];
+  admin: QueueOverflowAdminBlock | null;
+};
+
+export type QueueShellSecondaryAction = {
+  channel: 'ownership' | 'review';
+  command: string;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
 };
 
 export type QueueRowQueueShell = {
   open_detail: QueueOpenDetailAction;
-  overflow_menu_button_label: string;
+  secondary_actions: QueueShellSecondaryAction[];
+  overflow_menu: QueueOverflowMenuModel;
 };
 
 export type QueueDetailSection =
@@ -108,7 +148,7 @@ export type QueueOwnershipCommand = {
   label: string;
   enabled: boolean;
   reason: string | null;
-  display_slot: QueueActionDisplaySlot;
+  presentation_group: QueuePresentationGroup;
 };
 
 export type QueueReviewCommand = {
@@ -116,7 +156,7 @@ export type QueueReviewCommand = {
   label: string;
   enabled: boolean;
   reason: string | null;
-  display_slot: QueueActionDisplaySlot;
+  presentation_group: QueuePresentationGroup;
 };
 
 export type WorkEngineQueueRow = {
