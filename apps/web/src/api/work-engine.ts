@@ -194,6 +194,8 @@ export type WorkEngineQueueRow = {
   updated_at: string;
   /** Backend-computed visible cell values for the queue table (keyed by queue_table column keys). */
   queue_cells: Record<string, string | null>;
+  /** Optional native title/tooltip text per column key (presentation only). */
+  queue_cell_titles?: Record<string, string | null>;
   queue_shell: QueueRowQueueShell;
   command_modal_subject_line: string;
   detail_panel: QueueRowDetailPanel;

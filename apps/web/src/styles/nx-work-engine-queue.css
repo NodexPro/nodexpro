@@ -201,15 +201,23 @@
   font-size: 13px;
 }
 
-/* Column widths — layout only. Due + Actions are fixed px; client absorbs remainder. */
+/* Column widths — layout only. Due + Lock + Actions are fixed px; client absorbs remainder. */
 .nx-we-col--actions {
-  width: 240px;
-  min-width: 240px;
+  width: 198px;
+  min-width: 198px;
+  max-width: 198px;
 }
 
 .nx-we-col--due {
-  width: 118px;
-  min-width: 118px;
+  width: 108px;
+  min-width: 108px;
+  max-width: 108px;
+}
+
+.nx-we-col--claimed {
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
 }
 
 .nx-we-col--unread {
@@ -313,9 +321,7 @@
 
 .nx-we-col--period_key,
 .nx-we-col--reviewer,
-.nx-we-col--review_status,
-.nx-we-col--due_at,
-.nx-we-col--claimed {
+.nx-we-col--review_status {
   width: var(--nx-we-w-optional, 6%);
 }
 
@@ -347,6 +353,21 @@
   font-size: 11px;
   font-weight: 500;
   color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.nx-we-th[data-col-key='claimed'],
+.nx-we-td[data-col-key='claimed'] {
+  text-align: center;
+  padding-inline: 6px;
+}
+
+.nx-we-lock-cell {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1;
 }
 
 .nx-we-th,
@@ -499,7 +520,7 @@
 .nx-we-row-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 .nx-we-row-actions .nx-we-btn {

@@ -621,24 +621,33 @@ function renderQueueDataCell(
       </span>
     );
   }
+  const cellTitle = row.queue_cell_titles?.[colKey] ?? null;
   if (colKey === 'due') {
     const lines = text.split('\n');
+    const title = cellTitle?.trim() ? cellTitle : text;
     return (
-      <span className="nx-we-due-cell" title={text}>
+      <span className="nx-we-due-cell" title={title}>
         <span className="nx-we-due-cell__primary">{lines[0]}</span>
         {lines[1] ? <span className="nx-we-due-cell__secondary">{lines[1]}</span> : null}
+      </span>
+    );
+  }
+  if (colKey === 'claimed') {
+    return (
+      <span className="nx-we-lock-cell" title={cellTitle?.trim() ? cellTitle : undefined}>
+        {text}
       </span>
     );
   }
   const ellip = colKey === 'client' || colKey === 'assignee' || colKey === 'reviewer';
   const cellClass = [
     ellip ? 'nx-we-cell-ellip' : 'nx-we-cell-text',
-    colKey === 'last_activity' || colKey === 'due_at' ? 'nx-we-cell--compact-date' : '',
+    colKey === 'last_activity' ? 'nx-we-cell--compact-date' : '',
   ]
     .filter(Boolean)
     .join(' ');
   return (
-    <span className={cellClass} title={ellip ? text : undefined}>
+    <span className={cellClass} title={ellip ? text : cellTitle?.trim() ? cellTitle : undefined}>
       {text}
     </span>
   );

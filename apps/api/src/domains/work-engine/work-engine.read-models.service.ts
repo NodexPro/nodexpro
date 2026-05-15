@@ -1213,6 +1213,24 @@ function formatQueueUtcTimestamp(iso: string | null): string | null {
   return `${d.toISOString().replace('T', ' ').slice(0, 16)} UTC`;
 }
 
+/** Compact Lock column cell (table); full holder/time lives in tooltip / detail. */
+function buildClaimedQueueCell(claimedByUserId: string | null): string | null {
+  if (!claimedByUserId) return null;
+  return '✓';
+}
+
+function buildClaimedQueueCellTitle(
+  claimedByUserId: string | null,
+  claimedByUserName: string | null,
+  claimedAt: string | null,
+): string | null {
+  if (!claimedByUserId) return null;
+  const who = claimedByUserName ?? claimedByUserId;
+  if (!claimedAt) return who;
+  const ts = formatQueueUtcTimestamp(claimedAt);
+  return ts ? `${who} · ${ts}` : who;
+}
+
 type QueueCellKey =
   | 'client'
   | 'module'
@@ -1225,7 +1243,6 @@ type QueueCellKey =
   | 'reviewer'
   | 'review_status'
   | 'due'
-  | 'due_at'
   | 'claimed';
 
 export type QueueTableColumnModel = {
@@ -1261,13 +1278,7 @@ const BASE_QUEUE_COLUMN_KEYS: QueueCellKey[] = [
   'due',
 ];
 
-const OPTIONAL_QUEUE_COLUMN_KEYS: QueueCellKey[] = [
-  'period_key',
-  'reviewer',
-  'review_status',
-  'due_at',
-  'claimed',
-];
+const OPTIONAL_QUEUE_COLUMN_KEYS: QueueCellKey[] = ['period_key', 'reviewer', 'review_status', 'claimed'];
 
 const QUEUE_COLUMN_DEFS: Record<
   QueueCellKey,
@@ -1284,8 +1295,7 @@ const QUEUE_COLUMN_DEFS: Record<
   period_key: { label: 'Period', empty_display: 'dash' },
   reviewer: { label: 'Reviewer', empty_display: 'dash' },
   review_status: { label: 'Review', empty_display: 'dash' },
-  due_at: { label: 'Due at', empty_display: 'blank' },
-  claimed: { label: 'Lock', empty_display: 'blank' },
+  claimed: { label: 'Lock', empty_display: 'dash' },
 };
 
 function queueColumnHasAnyValue(
@@ -1796,10 +1806,12 @@ export async function buildWorkEngineQueueAggregate(params: {
     const claimed_by_user_name = r.claimed_by_user_id
       ? (userNameById.get(r.claimed_by_user_id) ?? null)
       : null;
-    const claimed_cell =
-      r.claimed_by_user_id && r.claimed_at
-        ? `${claimed_by_user_name ?? r.claimed_by_user_id} · ${formatQueueUtcTimestamp(r.claimed_at)}`
-        : null;
+    const claimed_cell = buildClaimedQueueCell(r.claimed_by_user_id);
+    const claimed_cell_title = buildClaimedQueueCellTitle(
+      r.claimed_by_user_id,
+      claimed_by_user_name,
+      r.claimed_at,
+    );
     const ov = overrideSummary({
       override_active: r.override_active,
       override_summary_json: r.override_summary_json,
@@ -1817,7 +1829,6 @@ export async function buildWorkEngineQueueAggregate(params: {
     const reviewer_cell = isConv ? null : reviewer_user_name;
     const review_flow_status_label = reviewFlowStatusLabel(r);
     const review_status_cell = isConv ? null : review_flow_status_label;
-    const due_cell = r.due_at ? formatQueueUtcTimestamp(r.due_at) : null;
     const slaStatusLabelText = slaStatusLabel(r.sla_status);
     const messengerPath =
       isConv && r.client_id && threadId
@@ -1860,8 +1871,11 @@ export async function buildWorkEngineQueueAggregate(params: {
       period_key: period_cell,
       reviewer: reviewer_cell,
       review_status: review_status_cell,
-      due_at: due_cell,
       claimed: claimed_cell,
+    };
+    const queue_cell_titles: Record<string, string | null> = {
+      claimed: claimed_cell_title,
+      due: slaPresentation.primary_due_at_label,
     };
     const ownershipDraft =
       viewer != null
@@ -1941,6 +1955,7 @@ export async function buildWorkEngineQueueAggregate(params: {
       version: r.version,
       updated_at: r.updated_at,
       queue_cells,
+      queue_cell_titles,
       queue_shell,
       command_modal_subject_line: buildCommandModalSubjectLine({
         work_type_label,

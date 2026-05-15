@@ -234,33 +234,25 @@ export type QueueSlaPresentation = {
   primary_due_at_label: string | null;
 };
 
-/** Ready-to-render DUE column text (status line + optional relative due hint). */
+/** Ready-to-render DUE column text: line 1 status label, line 2 date-only (YYYY-MM-DD). */
 export function buildDueQueueCellText(
   slaStatus: SlaStatus,
   slaStatusLabel: string,
   primaryDueAtIso: string | null,
 ): string | null {
   if (slaStatus === 'none') return null;
-  const relative = formatOperationalDueRelative(primaryDueAtIso);
-  if (relative) return `${slaStatusLabel}\n${relative}`;
+  const dateLine = formatSlaDueDateOnly(primaryDueAtIso);
+  if (dateLine) return `${slaStatusLabel}\n${dateLine}`;
   return slaStatusLabel;
 }
 
-/** Backend-only relative due hint for queue DUE column (no frontend date math). */
-export function formatOperationalDueRelative(iso: string | null): string | null {
+/** UTC calendar date for queue DUE column (no time). */
+export function formatSlaDueDateOnly(iso: string | null): string | null {
   if (!iso) return null;
-  const dueMs = new Date(iso).getTime();
-  if (Number.isNaN(dueMs)) return null;
-  const deltaMs = dueMs - Date.now();
-  const absHours = Math.max(1, Math.round(Math.abs(deltaMs) / 3_600_000));
-  if (deltaMs > 0) {
-    if (absHours < 24) return `Due in ${absHours}h`;
-    const days = Math.round(absHours / 24);
-    if (days === 1) return 'Due tomorrow';
-    return `Due in ${days}d`;
-  }
-  if (absHours < 24) return `${absHours}h past due`;
-  return 'Past due';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
 export function buildQueueSlaPresentation(
@@ -287,10 +279,12 @@ export function buildQueueSlaPresentation(
 }
 
 function formatSlaDueLabel(iso: string): string {
+  const dateOnly = formatSlaDueDateOnly(iso);
+  if (!dateOnly) return iso;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+  return `${dateOnly} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
 }
 
 async function markDueActiveObligationsBreached(
