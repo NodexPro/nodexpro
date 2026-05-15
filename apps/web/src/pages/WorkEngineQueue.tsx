@@ -521,11 +521,17 @@ function QueueTable(props: {
   return (
     <div className="nx-we-table-wrap">
       <table className="nx-we-table">
+        <colgroup>
+          {props.table.columns.map((col) => (
+            <col key={col.key} className={`nx-we-col nx-we-col--${col.key}`} />
+          ))}
+        </colgroup>
         <thead>
           <tr>
             {props.table.columns.map((col) => (
               <th
                 key={col.key}
+                data-col-key={col.key}
                 className={col.kind === 'actions' ? 'nx-we-th nx-we-th--actions' : 'nx-we-th nx-we-th--data'}
               >
                 {col.label}
@@ -582,7 +588,14 @@ function renderQueueDataCell(
   const text = String(raw);
   if (colKey === 'state') {
     return (
-      <span className="nx-we-state-badge nx-we-state-badge--wide" title={text}>
+      <span className="nx-we-state-badge" title={text}>
+        {text}
+      </span>
+    );
+  }
+  if (colKey === 'unread') {
+    return (
+      <span className="nx-we-unread-badge" title={text}>
         {text}
       </span>
     );
@@ -594,8 +607,12 @@ function renderQueueDataCell(
       </span>
     );
   }
+  const cellClass =
+    colKey === 'last_activity' || colKey === 'due_at'
+      ? 'nx-we-cell-ellip nx-we-cell--compact-date'
+      : 'nx-we-cell-ellip';
   return (
-    <span className="nx-we-cell-ellip" title={text}>
+    <span className={cellClass} title={text}>
       {text}
     </span>
   );

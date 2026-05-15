@@ -7,6 +7,9 @@
   direction: ltr;
   color: #0f172a;
   font-family: inherit;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .nx-we-queue__title {
@@ -153,8 +156,15 @@
   overflow-x: auto;
   overflow-y: visible;
   max-width: 100%;
+  min-width: 0;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+@media (min-width: 1100px) {
+  .nx-we-table-wrap {
+    overflow-x: hidden;
+  }
 }
 
 .nx-we-table-wrap::-webkit-scrollbar {
@@ -176,7 +186,64 @@
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12px;
+}
+
+/* Column widths — layout only; keys match aggregate table.columns */
+.nx-we-col--client {
+  width: auto;
+}
+
+.nx-we-col--module {
+  width: 72px;
+}
+
+.nx-we-col--work_type {
+  width: 88px;
+}
+
+.nx-we-col--state {
+  width: 92px;
+}
+
+.nx-we-col--assignee {
+  width: 96px;
+}
+
+.nx-we-col--last_activity {
+  width: 84px;
+}
+
+.nx-we-col--unread {
+  width: 44px;
+}
+
+.nx-we-col--period_key {
+  width: 64px;
+}
+
+.nx-we-col--reviewer {
+  width: 88px;
+}
+
+.nx-we-col--review_status {
+  width: 72px;
+}
+
+.nx-we-col--due_at {
+  width: 76px;
+}
+
+.nx-we-col--sla {
+  width: 64px;
+}
+
+.nx-we-col--claimed {
+  width: 52px;
+}
+
+.nx-we-col--actions {
+  width: 210px;
 }
 
 .nx-we-th,
@@ -185,17 +252,24 @@
   background: #f8fafc;
   color: #475569;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 8px 10px;
+  letter-spacing: 0.05em;
+  padding: 5px 7px;
   border-bottom: 1px solid #e2e8f0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-we-th[data-col-key='unread'],
+.nx-we-td[data-col-key='unread'] {
+  text-align: center;
 }
 
 .nx-we-td,
 .nx-we-table tbody td {
-  padding: 10px 10px;
+  padding: 6px 7px;
   border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
   color: #0f172a;
@@ -211,9 +285,9 @@
 
 .nx-we-th--actions,
 .nx-we-td--actions {
-  width: 1%;
   white-space: nowrap;
   text-align: end;
+  padding-inline: 6px;
 }
 
 .nx-we-cell-ellip {
@@ -234,14 +308,38 @@
 
 .nx-we-state-badge {
   display: inline-block;
-  padding: 3px 9px;
-  font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 6px;
+  font-size: 11px;
   font-weight: 600;
   background: #eef2ff;
   color: #3730a3;
-  border-radius: 6px;
-  letter-spacing: 0.01em;
+  border-radius: 5px;
+  letter-spacing: 0;
   white-space: nowrap;
+  vertical-align: middle;
+}
+
+.nx-we-unread-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+  background: #f1f5f9;
+  border-radius: 5px;
+}
+
+.nx-we-cell--compact-date {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 .nx-we-sla-badge {
@@ -293,13 +391,6 @@
   font-size: 12px;
 }
 
-.nx-we-state-badge--wide {
-  white-space: normal;
-  max-width: 260px;
-  border-radius: 8px;
-  line-height: 1.35;
-}
-
 .nx-we-btn--secondary {
   border-color: #cbd5e1;
   background: #f8fafc;
@@ -315,17 +406,19 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .nx-we-shell-actions .nx-we-btn {
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: 4px 8px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1.2;
-  border-radius: 6px;
+  border-radius: 5px;
   flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .nx-we-overflow-anchor {
@@ -341,10 +434,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
-  height: 34px;
-  padding: 0 8px;
-  font-size: 18px;
+  min-width: 26px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1;
   border: 1px solid #cbd5e1;
