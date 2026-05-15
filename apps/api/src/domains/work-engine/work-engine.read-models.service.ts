@@ -1582,8 +1582,7 @@ const REMINDER_REVIEW_QUEUE_TABLE: { columns: QueueTableColumnModel[] } = {
     { key: 'client', label: 'Client', empty_display: 'dash', kind: 'data' },
     { key: 'workflow', label: 'Workflow', empty_display: 'dash', kind: 'data' },
     { key: 'period', label: 'Period', empty_display: 'dash', kind: 'data' },
-    { key: 'channels', label: 'Channel', empty_display: 'dash', kind: 'data' },
-    { key: 'preview', label: 'Preview', empty_display: 'dash', kind: 'data' },
+    { key: 'channel', label: 'Channel', empty_display: 'dash', kind: 'data' },
     { key: 'status', label: 'Status', empty_display: 'dash', kind: 'data' },
     { key: 'actions', label: 'Actions', empty_display: 'blank', kind: 'actions' },
   ],
@@ -2227,17 +2226,7 @@ async function buildReminderReviewQueueAggregate(params: {
     viewer,
   });
 
-  const reminderRows = page.rows.map((row) => ({
-    ...row,
-    queue_cells: {
-      client: row.client_name,
-      workflow: row.workflow_label,
-      period: row.period_label,
-      channels: row.channel_labels.join(', '),
-      preview: row.preview_text,
-      status: row.state_label,
-    },
-  }));
+  const reminderRows = page.rows;
 
   return {
     aggregate_key: 'work_engine_queue_aggregate',

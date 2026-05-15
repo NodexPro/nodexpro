@@ -98,9 +98,7 @@ type PendingModal =
   | { kind: 'apply_override'; row: WorkEngineQueueRow }
   | { kind: 'archive'; row: WorkEngineQueueRow }
   | { kind: 'reject_review'; row: WorkEngineQueueRow }
-  | { kind: 'reminder_edit'; row: ReminderReviewQueueRow }
-  | { kind: 'reminder_cancel'; row: ReminderReviewQueueRow; action: ReminderReviewAllowedAction }
-  | { kind: 'reminder_snooze'; row: ReminderReviewQueueRow; action: ReminderReviewAllowedAction }
+  | { kind: 'reminder_detail'; row: ReminderReviewQueueRow; initialMode?: 'view' | 'edit' | 'cancel' | 'snooze' }
   | null;
 
 export function WorkEngineQueue() {
@@ -261,42 +259,9 @@ export function WorkEngineQueue() {
     [filters, handleCommandFailure, handleCommandResult],
   );
 
-  const handleReminderAction = useCallback(
-    async (row: ReminderReviewQueueRow, action: ReminderReviewAllowedAction) => {
-      if (!action.enabled) return;
-      const key = action.action_key;
-      if (key === 'edit_reminder_candidate') {
-        setModal({ kind: 'reminder_edit', row });
-        return;
-      }
-      if (key === 'cancel_reminder_candidate') {
-        setModal({ kind: 'reminder_cancel', row, action });
-        return;
-      }
-      if (key === 'snooze_reminder_candidate') {
-        setModal({ kind: 'reminder_snooze', row, action });
-        return;
-      }
-      if (key === 'approve_send_reminder') {
-        setError(null);
-        try {
-          const resp = await executeWorkEngineQueueCommand({
-            command: action.command,
-            payload: {
-              ...action.command_payload,
-              idempotency_key: crypto.randomUUID(),
-            },
-            filters: filtersToApi(filters),
-          });
-          handleCommandResult(resp.refreshed?.aggregate ?? null);
-        } catch (e) {
-          await handleCommandFailure(e);
-        }
-        return;
-      }
-    },
-    [filters, handleCommandFailure, handleCommandResult],
-  );
+  const openReminderDetail = useCallback((row: ReminderReviewQueueRow, initialMode?: 'view' | 'edit' | 'cancel' | 'snooze') => {
+    setModal({ kind: 'reminder_detail', row, initialMode: initialMode ?? 'view' });
+  }, []);
 
   if (loading && !aggregate) {
     return (
@@ -358,7 +323,7 @@ export function WorkEngineQueue() {
         <ReminderReviewTable
           table={aggregate.queue_table}
           rows={reminderRows}
-          onAction={handleReminderAction}
+          onOpenDetail={openReminderDetail}
         />
       ) : (
         <QueueTable
@@ -399,19 +364,18 @@ export function WorkEngineQueue() {
         />
       ) : null}
 
-      {modal &&
-      (modal.kind === 'reminder_edit' ||
-        modal.kind === 'reminder_cancel' ||
-        modal.kind === 'reminder_snooze') ? (
-        <ReminderActionModal
-          modal={modal}
+      {modal?.kind === 'reminder_detail' ? (
+        <ReminderReviewDetailModal
+          row={modal.row}
           aggregate={aggregate}
+          initialMode={modal.initialMode ?? 'view'}
           filtersForApi={filtersToApi(filters)}
           onClose={onCloseModal}
           onCompleted={(refreshed) => {
             onCloseModal();
             handleCommandResult(refreshed as WorkEngineQueueAggregate);
           }}
+          onCommandFailure={handleCommandFailure}
         />
       ) : modal ? (
         <ActionModal
@@ -1207,10 +1171,7 @@ function PendingMappingSection(props: {
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 
-type WorkItemPendingModal = Exclude<
-  NonNullable<PendingModal>,
-  { kind: 'reminder_edit' } | { kind: 'reminder_cancel' } | { kind: 'reminder_snooze' }
->;
+type WorkItemPendingModal = Exclude<NonNullable<PendingModal>, { kind: 'reminder_detail' }>;
 
 function ActionModal(props: {
   modal: WorkItemPendingModal;
@@ -1642,7 +1603,7 @@ function ReminderReviewBanner(props: {
 function ReminderReviewTable(props: {
   table: WorkEngineQueueTableModel;
   rows: ReminderReviewQueueRow[];
-  onAction: (row: ReminderReviewQueueRow, action: ReminderReviewAllowedAction) => void;
+  onOpenDetail: (row: ReminderReviewQueueRow) => void;
 }) {
   const columns = props.table.columns;
   if (props.rows.length === 0) {
@@ -1653,8 +1614,8 @@ function ReminderReviewTable(props: {
     );
   }
   return (
-    <div className="nx-we-table-wrap">
-      <table className={`nx-we-table nx-we-table--cols-${columns.length}`}>
+    <div className="nx-we-table-wrap nx-we-reminder-review-table-wrap">
+      <table className={`nx-we-table nx-we-table--reminder-review nx-we-table--cols-${columns.length}`}>
         <thead>
           <tr>
             {columns.map((col) => (
@@ -1665,143 +1626,227 @@ function ReminderReviewTable(props: {
           </tr>
         </thead>
         <tbody>
-          {props.rows.map((row) => (
-            <tr key={row.reminder_candidate_id}>
-              {columns.map((col) => (
-                <td
-                  key={`${row.reminder_candidate_id}-${col.key}`}
-                  className={col.kind === 'actions' ? 'nx-we-td nx-we-td--actions' : 'nx-we-td'}
-                >
-                  {col.kind === 'actions' ? (
-                    <div className="nx-we-reminder-actions">
-                      {row.allowed_actions.map((action) => (
-                        <button
-                          key={action.action_key}
-                          type="button"
-                          className={`nx-we-btn nx-we-btn--compact${action.action_key === 'approve_send_reminder' ? ' nx-we-btn--primary' : ''}${action.action_key === 'cancel_reminder_candidate' ? ' nx-we-btn--danger' : ''}`}
-                          disabled={!action.enabled}
-                          title={action.disabled_reason ?? undefined}
-                          onClick={() => props.onAction(row, action)}
-                        >
-                          {action.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="nx-we-cell-text">
-                      {row.queue_cells?.[col.key] ?? '—'}
-                    </span>
-                  )}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {props.rows.map((row) => {
+            const open = row.open_detail;
+            return (
+              <tr
+                key={row.reminder_candidate_id}
+                className="nx-we-reminder-review-row"
+                onClick={() => open.enabled && props.onOpenDetail(row)}
+              >
+                {columns.map((col) => (
+                  <td
+                    key={`${row.reminder_candidate_id}-${col.key}`}
+                    className={col.kind === 'actions' ? 'nx-we-td nx-we-td--actions' : 'nx-we-td'}
+                    onClick={col.kind === 'actions' ? (e) => e.stopPropagation() : undefined}
+                  >
+                    {col.kind === 'actions' ? (
+                      <button
+                        type="button"
+                        className="nx-we-btn nx-we-btn--compact nx-we-btn--primary"
+                        disabled={!open.enabled}
+                        title={open.disabled_reason ?? undefined}
+                        onClick={() => props.onOpenDetail(row)}
+                      >
+                        {open.label}
+                      </button>
+                    ) : (
+                      <span
+                        className="nx-we-cell-ellip"
+                        title={row.queue_cells[col.key as keyof typeof row.queue_cells] ?? undefined}
+                      >
+                        {row.queue_cells[col.key as keyof typeof row.queue_cells] ?? '—'}
+                      </span>
+                    )}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
 
-function ReminderActionModal(props: {
-  modal: Extract<
-    PendingModal,
-    { kind: 'reminder_edit' } | { kind: 'reminder_cancel' } | { kind: 'reminder_snooze' }
-  >;
+function ReminderReviewDetailModal(props: {
+  row: ReminderReviewQueueRow;
   aggregate: WorkEngineQueueAggregate;
+  initialMode: 'view' | 'edit' | 'cancel' | 'snooze';
   filtersForApi: WorkEngineQueueFiltersInput;
   onClose: () => void;
   onCompleted: (refreshed: WorkEngineQueueAggregate | Record<string, unknown> | null) => void;
+  onCommandFailure: (e: unknown) => void | Promise<void>;
 }) {
-  const { modal, aggregate, filtersForApi, onClose, onCompleted } = props;
+  const { row, aggregate, initialMode, filtersForApi, onClose, onCompleted, onCommandFailure } =
+    props;
+  const detail = row.reminder_detail_model;
+  const [mode, setMode] = useState(initialMode);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [subject, setSubject] = useState(modal.row.editable_message.subject);
-  const [body, setBody] = useState(modal.row.editable_message.body);
+
+  const editAction = row.allowed_actions.find((a) => a.action_key === 'edit_reminder_candidate');
+  const cancelAction = row.allowed_actions.find((a) => a.action_key === 'cancel_reminder_candidate');
+  const snoozeAction = row.allowed_actions.find((a) => a.action_key === 'snooze_reminder_candidate');
+
+  const [subject, setSubject] = useState(detail.message.subject ?? '');
+  const [body, setBody] = useState(detail.message.body);
   const [cancelReason, setCancelReason] = useState('');
-  const editAction = modal.row.allowed_actions.find((a) => a.action_key === 'edit_reminder_candidate');
-  const expectedVersion = Number(editAction?.command_payload?.expected_version ?? 1);
-  const [snoozePreset, setSnoozePreset] = useState(
-    aggregate.snooze_presets?.[0]?.preset_key ?? '1h',
+
+  const snoozePresetsFromAction = (snoozeAction?.command_payload?.snooze_presets ?? []) as Array<{
+    preset_key: string;
+    label: string;
+  }>;
+  const snoozePresets =
+    aggregate.snooze_presets && aggregate.snooze_presets.length > 0
+      ? aggregate.snooze_presets
+      : snoozePresetsFromAction;
+  const [snoozePreset, setSnoozePreset] = useState(snoozePresets[0]?.preset_key ?? '1h');
+
+  const runCommand = useCallback(
+    async (action: ReminderReviewAllowedAction, extra?: Record<string, unknown>) => {
+      setError(null);
+      setSubmitting(true);
+      try {
+        const payload = {
+          ...action.command_payload,
+          ...extra,
+          idempotency_key: crypto.randomUUID(),
+        };
+        const resp = await executeWorkEngineQueueCommand({
+          command: action.command,
+          payload,
+          filters: filtersForApi,
+        });
+        onCompleted(resp.refreshed?.aggregate ?? null);
+      } catch (e) {
+        setError(userFacingApiMessage(e));
+        await onCommandFailure(e);
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [filtersForApi, onCompleted, onCommandFailure],
   );
 
-  const title =
-    modal.kind === 'reminder_edit'
-      ? 'Edit reminder message'
-      : modal.kind === 'reminder_cancel'
-        ? 'Cancel reminder'
-        : 'Snooze reminder';
-
-  const submit = useCallback(async () => {
-    setError(null);
-    setSubmitting(true);
-    try {
-      let command: string;
-      let payload: Record<string, unknown>;
-      const base = {
-        reminder_candidate_id: modal.row.reminder_candidate_id,
-        expected_version: expectedVersion,
-        idempotency_key: crypto.randomUUID(),
-      };
-      if (modal.kind === 'reminder_edit') {
-        command = 'edit_reminder_candidate';
-        payload = { ...base, subject, body };
-      } else if (modal.kind === 'reminder_cancel') {
-        command = modal.action.command;
-        payload = { ...modal.action.command_payload, ...base, reason: cancelReason.trim() || null };
-      } else {
-        command = modal.action.command;
-        payload = { ...modal.action.command_payload, ...base, snooze_preset: snoozePreset };
+  const onActionClick = useCallback(
+    (action: ReminderReviewAllowedAction) => {
+      if (!action.enabled || submitting) return;
+      if (action.action_key === 'edit_reminder_candidate') {
+        setMode('edit');
+        return;
       }
-      const resp = await executeWorkEngineQueueCommand({ command, payload, filters: filtersForApi });
-      onCompleted(resp.refreshed?.aggregate ?? null);
-    } catch (e) {
-      setError(userFacingApiMessage(e));
-    } finally {
-      setSubmitting(false);
-    }
-  }, [body, cancelReason, expectedVersion, filtersForApi, modal, onCompleted, snoozePreset, subject]);
+      if (action.action_key === 'cancel_reminder_candidate') {
+        setMode('cancel');
+        return;
+      }
+      if (action.action_key === 'snooze_reminder_candidate') {
+        setMode('snooze');
+        return;
+      }
+      if (action.action_key === 'approve_send_reminder') {
+        void runCommand(action);
+      }
+    },
+    [runCommand, submitting],
+  );
+
+  const submitEdit = useCallback(async () => {
+    if (!editAction?.enabled) return;
+    await runCommand(editAction, { subject: subject.trim() || null, body: body.trim() });
+  }, [body, editAction, runCommand, subject]);
+
+  const submitCancel = useCallback(async () => {
+    if (!cancelAction?.enabled) return;
+    await runCommand(cancelAction, { reason: cancelReason.trim() || null });
+  }, [cancelAction, cancelReason, runCommand]);
+
+  const submitSnooze = useCallback(async () => {
+    if (!snoozeAction?.enabled) return;
+    await runCommand(snoozeAction, { snooze_preset: snoozePreset });
+  }, [runCommand, snoozeAction, snoozePreset]);
+
+  const title =
+    mode === 'edit'
+      ? (editAction?.label ?? 'Edit')
+      : mode === 'cancel'
+        ? (cancelAction?.label ?? 'Cancel')
+        : mode === 'snooze'
+          ? (snoozeAction?.label ?? 'Snooze')
+          : detail.title;
 
   return (
     <div className="nx-we-modal-overlay" role="dialog" aria-modal="true">
-      <div className="nx-we-modal nx-we-modal--reminder">
+      <div className="nx-we-modal nx-we-modal--reminder-detail">
         <h3 className="nx-we-modal__title">{title}</h3>
+        {detail.subtitle ? <p className="nx-we-modal__hint">{detail.subtitle}</p> : null}
         <div className="nx-we-modal__body">
-          <div className="nx-we-modal__hint">
-            {modal.row.client_name ?? '—'} · {modal.row.workflow_label}
-            {modal.row.period_label ? ` · ${modal.row.period_label}` : ''}
-          </div>
           {error ? <div className="nx-we-banner-error">{error}</div> : null}
 
-          {modal.kind === 'reminder_edit' ? (
+          {mode === 'view' ? (
             <>
-              <div className="nx-we-field">
-                <label htmlFor="we-reminder-subject">Subject</label>
-                <input
-                  id="we-reminder-subject"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                />
+              <dl className="nx-we-reminder-detail-kv">
+                {detail.summary_fields.map((field) => (
+                  <div key={field.key} className="nx-we-reminder-detail-kv__row">
+                    <dt>{field.label}</dt>
+                    <dd>{field.value ?? '—'}</dd>
+                  </div>
+                ))}
+              </dl>
+              {detail.channel_labels.length > 0 ? (
+                <p className="nx-we-modal__hint">Channels: {detail.channel_labels.join(', ')}</p>
+              ) : null}
+              <div className="nx-we-reminder-detail-message">
+                {detail.message.show_subject ? (
+                  <div className="nx-we-field">
+                    <label>{detail.message.subject_label}</label>
+                    <div className="nx-we-reminder-detail-message__readonly">
+                      {detail.message.subject ?? '—'}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="nx-we-field">
+                  <label>{detail.message.body_label}</label>
+                  <div className="nx-we-reminder-detail-message__readonly nx-we-reminder-detail-message__body">
+                    {detail.message.body}
+                  </div>
+                </div>
               </div>
+            </>
+          ) : null}
+
+          {mode === 'edit' ? (
+            <>
+              {detail.message.show_subject ? (
+                <div className="nx-we-field">
+                  <label htmlFor="we-reminder-detail-subject">{detail.message.subject_label}</label>
+                  <input
+                    id="we-reminder-detail-subject"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                  />
+                </div>
+              ) : null}
               <div className="nx-we-field">
-                <label htmlFor="we-reminder-body">Message</label>
+                <label htmlFor="we-reminder-detail-body">{detail.message.body_label}</label>
                 <textarea
-                  id="we-reminder-body"
+                  id="we-reminder-detail-body"
                   rows={8}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                 />
               </div>
-              <p className="nx-we-modal__hint">
-                Channels: {modal.row.editable_message.channel_preview_labels.join(', ')}
-              </p>
+              {detail.channel_labels.length > 0 ? (
+                <p className="nx-we-modal__hint">Channels: {detail.channel_labels.join(', ')}</p>
+              ) : null}
             </>
           ) : null}
 
-          {modal.kind === 'reminder_cancel' ? (
+          {mode === 'cancel' ? (
             <div className="nx-we-field">
-              <label htmlFor="we-reminder-cancel-reason">Reason (optional)</label>
+              <label htmlFor="we-reminder-detail-cancel-reason">Reason (optional)</label>
               <textarea
-                id="we-reminder-cancel-reason"
+                id="we-reminder-detail-cancel-reason"
                 rows={3}
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
@@ -1809,15 +1854,15 @@ function ReminderActionModal(props: {
             </div>
           ) : null}
 
-          {modal.kind === 'reminder_snooze' ? (
+          {mode === 'snooze' ? (
             <div className="nx-we-field">
-              <label htmlFor="we-reminder-snooze">Snooze for</label>
+              <label htmlFor="we-reminder-detail-snooze">Snooze for</label>
               <select
-                id="we-reminder-snooze"
+                id="we-reminder-detail-snooze"
                 value={snoozePreset}
                 onChange={(e) => setSnoozePreset(e.target.value)}
               >
-                {(aggregate.snooze_presets ?? []).map((p) => (
+                {snoozePresets.map((p) => (
                   <option key={p.preset_key} value={p.preset_key}>
                     {p.label}
                   </option>
@@ -1826,24 +1871,67 @@ function ReminderActionModal(props: {
             </div>
           ) : null}
         </div>
-        <div className="nx-we-modal__footer">
-          <button type="button" className="nx-we-btn" onClick={onClose} disabled={submitting}>
-            Close
-          </button>
-          <button
-            type="button"
-            className={`nx-we-btn ${modal.kind === 'reminder_cancel' ? 'nx-we-btn--danger' : 'nx-we-btn--primary'}`}
-            onClick={submit}
-            disabled={submitting || (modal.kind === 'reminder_edit' && !body.trim())}
-          >
-            {submitting
-              ? 'Saving…'
-              : modal.kind === 'reminder_cancel'
-                ? 'Cancel reminder'
-                : modal.kind === 'reminder_snooze'
-                  ? 'Snooze'
-                  : 'Save'}
-          </button>
+        <div className="nx-we-modal__footer nx-we-reminder-detail-actions">
+          {mode === 'view' ? (
+            <>
+              <button type="button" className="nx-we-btn" onClick={onClose} disabled={submitting}>
+                Close
+              </button>
+              {row.allowed_actions.map((action) => (
+                <button
+                  key={action.action_key}
+                  type="button"
+                  className={`nx-we-btn nx-we-btn--compact${action.action_key === 'approve_send_reminder' ? ' nx-we-btn--primary' : ''}${action.action_key === 'cancel_reminder_candidate' ? ' nx-we-btn--danger' : ''}`}
+                  disabled={!action.enabled || submitting}
+                  title={action.disabled_reason ?? undefined}
+                  onClick={() => onActionClick(action)}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="nx-we-btn"
+                onClick={() => setMode('view')}
+                disabled={submitting}
+              >
+                Back
+              </button>
+              {mode === 'edit' ? (
+                <button
+                  type="button"
+                  className="nx-we-btn nx-we-btn--primary"
+                  onClick={() => void submitEdit()}
+                  disabled={submitting || !body.trim() || !editAction?.enabled}
+                >
+                  {submitting ? 'Saving…' : 'Save'}
+                </button>
+              ) : null}
+              {mode === 'cancel' ? (
+                <button
+                  type="button"
+                  className="nx-we-btn nx-we-btn--danger"
+                  onClick={() => void submitCancel()}
+                  disabled={submitting || !cancelAction?.enabled}
+                >
+                  {submitting ? 'Saving…' : (cancelAction?.label ?? 'Cancel')}
+                </button>
+              ) : null}
+              {mode === 'snooze' ? (
+                <button
+                  type="button"
+                  className="nx-we-btn nx-we-btn--primary"
+                  onClick={() => void submitSnooze()}
+                  disabled={submitting || !snoozeAction?.enabled}
+                >
+                  {submitting ? 'Saving…' : (snoozeAction?.label ?? 'Snooze')}
+                </button>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
     </div>

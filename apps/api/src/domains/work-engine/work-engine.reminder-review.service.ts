@@ -7,6 +7,8 @@ import { supabaseAdmin } from '../../db/client.js';
 import { businessYmd } from '../../shared/business-time.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
+import { isUuid } from './work-engine.guards.js';
+import { REMINDER_CHANNELS } from '../country-pack/operational-communication-owner-payload.js';
 import { createSystemMessageCore } from '../docflow/docflow-system-message-core.service.js';
 export type ReminderReviewViewerContext = {
   userId: string;
@@ -81,6 +83,47 @@ function channelLabel(channel: string): string {
   }
 }
 
+/** Map policy channel tokens to canonical keys; never surface docflow:thread:uuid in UI. */
+function normalizeReminderChannelKey(raw: string): (typeof REMINDER_CHANNELS)[number] | null {
+  const t = raw.trim().toLowerCase();
+  if (!t) return null;
+  if (t === 'docflow' || t.startsWith('docflow:')) return 'docflow';
+  if (t === 'email' || t.startsWith('email:')) return 'email';
+  if (t === 'portal' || t.startsWith('portal:')) return 'portal';
+  if ((REMINDER_CHANNELS as readonly string[]).includes(t)) {
+    return t as (typeof REMINDER_CHANNELS)[number];
+  }
+  return null;
+}
+
+function humanChannelLabelsFromSnapshot(snapshot: unknown, primaryChannel: string): string[] {
+  const keys: (typeof REMINDER_CHANNELS)[number][] = [];
+  const seen = new Set<string>();
+  const pushKey = (raw: string) => {
+    const key = normalizeReminderChannelKey(raw);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    keys.push(key);
+  };
+  if (Array.isArray(snapshot)) {
+    for (const item of snapshot) pushKey(String(item));
+  }
+  pushKey(primaryChannel);
+  return keys.map(channelLabel);
+}
+
+function formatChannelCell(labels: string[]): string {
+  return labels.length > 0 ? labels.join(', ') : '—';
+}
+
+function displayClientName(name: string | null, clientId: string | null): string | null {
+  if (!name?.trim()) return null;
+  const trimmed = name.trim();
+  if (clientId && trimmed === clientId) return null;
+  if (isUuid(trimmed)) return null;
+  return trimmed;
+}
+
 function candidateStateLabel(status: string): string {
   switch (status) {
     case 'pending_review':
@@ -136,7 +179,15 @@ function formatQueueLabel(iso: string | null): string | null {
 
 function parseChannelOrder(snapshot: unknown): string[] {
   if (!Array.isArray(snapshot)) return [];
-  return snapshot.map((v) => String(v).trim()).filter(Boolean);
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (const item of snapshot) {
+    const key = normalizeReminderChannelKey(String(item));
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    keys.push(key);
+  }
+  return keys;
 }
 
 function notificationAudience(targetType: string): string {
@@ -600,22 +651,46 @@ function buildReminderAllowedActions(
   ];
 }
 
+export type ReminderReviewDetailField = {
+  key: string;
+  label: string;
+  value: string | null;
+};
+
+export type ReminderReviewDetailMessage = {
+  subject_label: string;
+  subject: string | null;
+  show_subject: boolean;
+  body_label: string;
+  body: string;
+};
+
+export type ReminderReviewDetailModel = {
+  title: string;
+  subtitle: string | null;
+  summary_fields: ReminderReviewDetailField[];
+  message: ReminderReviewDetailMessage;
+  channel_labels: string[];
+};
+
+export type ReminderReviewOpenDetailAction = {
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+};
+
+/** Compact reminder review row — full content lives in reminder_detail_model (modal only). */
 export type ReminderReviewQueueRow = {
   reminder_candidate_id: string;
-  client_name: string | null;
-  workflow_label: string;
-  period_label: string | null;
-  severity_label: string;
-  channel_labels: string[];
-  preview_text: string;
-  created_at_label: string | null;
-  due_label: string | null;
-  state_label: string;
-  editable_message: {
-    subject: string;
-    body: string;
-    channel_preview_labels: string[];
+  queue_cells: {
+    client: string | null;
+    workflow: string;
+    period: string | null;
+    channel: string;
+    status: string;
   };
+  open_detail: ReminderReviewOpenDetailAction;
+  reminder_detail_model: ReminderReviewDetailModel;
   allowed_actions: ReminderReviewAllowedAction[];
 };
 
@@ -682,31 +757,65 @@ export async function loadReminderReviewPage(params: {
   }
 
   const rows: ReminderReviewQueueRow[] = candidates.map((c) => {
-    const channels = parseChannelOrder(c.channel_order_snapshot);
-    if (!channels.includes(c.channel)) channels.unshift(c.channel);
+    const channelLabels = humanChannelLabelsFromSnapshot(c.channel_order_snapshot, c.channel);
     const snap = (c.sla_context_snapshot ?? {}) as Record<string, unknown>;
     const sev = severityFromSlaSnapshot(snap);
     const dueAt = c.suggested_send_at ?? (snap.due_at ? String(snap.due_at) : null);
     const body = (c.edited_body ?? c.body).trim();
-    const preview =
-      body.length > 160 ? `${body.slice(0, 157)}…` : body;
-    const clientName = c.client_id ? clientNameById.get(c.client_id) ?? c.client_id : null;
+    const workflowLabel = workflowTypeLabel(c.workflow_type);
+    const periodLabel = periodByWorkItem.get(c.work_item_id) || null;
+    const stateLabel = candidateStateLabel(c.status);
+    const clientName = c.client_id
+      ? displayClientName(clientNameById.get(c.client_id) ?? null, c.client_id)
+      : null;
+    const createdLabel = formatQueueLabel(c.created_at);
+    const dueLabel = formatQueueLabel(dueAt);
+    const subjectTrim = c.subject?.trim() || null;
+    const showSubject = channelLabels.includes('Email') || !!subjectTrim;
+
+    const summary_fields: ReminderReviewDetailField[] = [
+      { key: 'client', label: 'Client', value: clientName },
+      { key: 'workflow', label: 'Workflow', value: workflowLabel },
+      { key: 'period', label: 'Period', value: periodLabel },
+      { key: 'channel', label: 'Channel', value: formatChannelCell(channelLabels) },
+      { key: 'status', label: 'Status', value: stateLabel },
+    ];
+    if (createdLabel) {
+      summary_fields.push({ key: 'created_at', label: 'Created', value: createdLabel });
+    }
+    if (dueLabel) {
+      summary_fields.push({ key: 'due', label: 'Due', value: dueLabel });
+    }
+    if (sev.label && sev.key !== 'normal') {
+      summary_fields.push({ key: 'severity', label: 'Severity', value: sev.label });
+    }
 
     return {
       reminder_candidate_id: c.id,
-      client_name: clientName,
-      workflow_label: workflowTypeLabel(c.workflow_type),
-      period_label: periodByWorkItem.get(c.work_item_id) || null,
-      severity_label: sev.label,
-      channel_labels: channels.map(channelLabel),
-      preview_text: preview,
-      created_at_label: formatQueueLabel(c.created_at),
-      due_label: formatQueueLabel(dueAt),
-      state_label: candidateStateLabel(c.status),
-      editable_message: {
-        subject: c.subject,
-        body: c.edited_body ?? c.body,
-        channel_preview_labels: channels.map(channelLabel),
+      queue_cells: {
+        client: clientName,
+        workflow: workflowLabel,
+        period: periodLabel,
+        channel: formatChannelCell(channelLabels),
+        status: stateLabel,
+      },
+      open_detail: {
+        label: 'View',
+        enabled: true,
+        disabled_reason: null,
+      },
+      reminder_detail_model: {
+        title: 'Reminder review',
+        subtitle: clientName ? `${clientName} · ${workflowLabel}` : workflowLabel,
+        summary_fields,
+        message: {
+          subject_label: 'Email subject',
+          subject: subjectTrim,
+          show_subject: showSubject,
+          body_label: 'Message',
+          body,
+        },
+        channel_labels: channelLabels,
       },
       allowed_actions: buildReminderAllowedActions(c, params.viewer),
     };

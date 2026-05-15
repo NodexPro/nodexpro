@@ -75,6 +75,84 @@
   justify-content: flex-end;
 }
 
+/* ---- Reminder review table (compact rows, modal-only detail) ---- */
+.nx-we-reminder-review-table-wrap .nx-we-table--reminder-review {
+  table-layout: fixed;
+}
+
+.nx-we-reminder-review-row {
+  cursor: pointer;
+}
+
+.nx-we-reminder-review-row:hover {
+  background: #f8fafc;
+}
+
+.nx-we-reminder-review-table-wrap .nx-we-td--actions {
+  width: 88px;
+  text-align: right;
+}
+
+/* ---- Reminder detail modal ---- */
+.nx-we-modal--reminder-detail {
+  max-width: 560px;
+  width: min(560px, calc(100vw - 32px));
+}
+
+.nx-we-modal--reminder-detail .nx-we-modal__body {
+  flex: 0 1 auto;
+}
+
+.nx-we-reminder-detail-kv {
+  margin: 0 0 12px;
+  display: grid;
+  grid-template-columns: minmax(96px, 120px) 1fr;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+
+.nx-we-reminder-detail-kv__row {
+  display: contents;
+}
+
+.nx-we-reminder-detail-kv dt {
+  margin: 0;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.nx-we-reminder-detail-kv dd {
+  margin: 0;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.nx-we-reminder-detail-message {
+  margin-top: 8px;
+}
+
+.nx-we-reminder-detail-message__readonly {
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.nx-we-reminder-detail-message__body {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.nx-we-reminder-detail-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .nx-we-btn--compact {
   padding: 6px 12px;
   font-size: 12px;

@@ -228,24 +228,46 @@ export type ReminderReviewAllowedAction = {
   command_payload: Record<string, unknown>;
 };
 
+export type ReminderReviewDetailField = {
+  key: string;
+  label: string;
+  value: string | null;
+};
+
+export type ReminderReviewDetailMessage = {
+  subject_label: string;
+  subject: string | null;
+  show_subject: boolean;
+  body_label: string;
+  body: string;
+};
+
+export type ReminderReviewDetailModel = {
+  title: string;
+  subtitle: string | null;
+  summary_fields: ReminderReviewDetailField[];
+  message: ReminderReviewDetailMessage;
+  channel_labels: string[];
+};
+
+export type ReminderReviewOpenDetailAction = {
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+};
+
 export type ReminderReviewQueueRow = {
   reminder_candidate_id: string;
-  client_name: string | null;
-  workflow_label: string;
-  period_label: string | null;
-  severity_label: string;
-  channel_labels: string[];
-  preview_text: string;
-  created_at_label: string | null;
-  due_label: string | null;
-  state_label: string;
-  editable_message: {
-    subject: string;
-    body: string;
-    channel_preview_labels: string[];
+  queue_cells: {
+    client: string | null;
+    workflow: string;
+    period: string | null;
+    channel: string;
+    status: string;
   };
+  open_detail: ReminderReviewOpenDetailAction;
+  reminder_detail_model: ReminderReviewDetailModel;
   allowed_actions: ReminderReviewAllowedAction[];
-  queue_cells?: Record<string, string | null>;
 };
 
 export type ReminderReviewBanner = {
