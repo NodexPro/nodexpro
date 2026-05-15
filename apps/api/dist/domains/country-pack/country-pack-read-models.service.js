@@ -471,9 +471,12 @@ export async function buildOwnerLegalValuesAggregate(ctx) {
         };
     });
     const rows = allRows.filter((r) => !isOperationalCommunicationLegalValueRow(r));
+    const operationalCommunicationTable = allRows.filter((r) => isOperationalCommunicationLegalValueRow(r));
     return {
         aggregate_key: 'owner_legal_values_aggregate',
         table: rows,
+        /** Work Engine reminder policies/templates — excluded from `table` (tax/legal values UI only). */
+        operational_communication_table: operationalCommunicationTable,
         validation_warnings: rows
             .filter((r) => !r.versions.length)
             .map((r) => `missing_versions_for_${r.value_key}`),
@@ -1044,10 +1047,11 @@ export async function buildOwnerLegalControlPanelAggregate(ctx, opts) {
     ]);
     const tables = countryPacksAdmin.tables;
     const legalTable = legalValues.table;
+    const operationalCommunicationLegalTable = legalValues.operational_communication_table ?? [];
     const legalValueVersionsFlat = (legalTable ?? []).flatMap((r) => Array.isArray(r.versions) ? r.versions : []);
     const docflowCommunicationTemplates = buildDocflowCommunicationTemplatesFromLegalTable(legalTable ?? []);
-    const legalTaxValuesTable = (legalTable ?? []).filter((r) => !isOperationalCommunicationLegalValueRow(r));
-    const communicationPolicies = buildCommunicationPoliciesSlice(legalTable ?? [], {
+    const legalTaxValuesTable = legalTable ?? [];
+    const communicationPolicies = buildCommunicationPoliciesSlice(operationalCommunicationLegalTable, {
         countries: tables?.countries,
         country_packs: tables?.country_packs,
         rulesets: tables?.rulesets,

@@ -504,10 +504,15 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
   });
 
   const rows = allRows.filter((r) => !isOperationalCommunicationLegalValueRow(r as Record<string, unknown>));
+  const operationalCommunicationTable = allRows.filter((r) =>
+    isOperationalCommunicationLegalValueRow(r as Record<string, unknown>),
+  );
 
   return {
     aggregate_key: 'owner_legal_values_aggregate',
     table: rows,
+    /** Work Engine reminder policies/templates — excluded from `table` (tax/legal values UI only). */
+    operational_communication_table: operationalCommunicationTable,
     validation_warnings: rows
       .filter((r) => !(r as { versions: unknown[] }).versions.length)
       .map((r) => `missing_versions_for_${(r as { value_key: string }).value_key}`),
@@ -1160,14 +1165,14 @@ export async function buildOwnerLegalControlPanelAggregate(
     | undefined;
 
   const legalTable = legalValues.table as Array<Record<string, unknown>> | undefined;
+  const operationalCommunicationLegalTable =
+    (legalValues.operational_communication_table as Array<Record<string, unknown>> | undefined) ?? [];
   const legalValueVersionsFlat = (legalTable ?? []).flatMap((r) =>
     Array.isArray(r.versions) ? (r.versions as Record<string, unknown>[]) : []
   );
   const docflowCommunicationTemplates = buildDocflowCommunicationTemplatesFromLegalTable(legalTable ?? []);
-  const legalTaxValuesTable = (legalTable ?? []).filter(
-    (r) => !isOperationalCommunicationLegalValueRow(r),
-  );
-  const communicationPolicies = buildCommunicationPoliciesSlice(legalTable ?? [], {
+  const legalTaxValuesTable = legalTable ?? [];
+  const communicationPolicies = buildCommunicationPoliciesSlice(operationalCommunicationLegalTable, {
     countries: tables?.countries,
     country_packs: tables?.country_packs,
     rulesets: tables?.rulesets,
