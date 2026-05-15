@@ -10,7 +10,6 @@ import {
 import { buildCommunicationPolicyEditorOptions } from './operational-communication-owner-form.js';
 import {
   OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY,
-  REMINDER_TEMPLATE_VARIABLES,
   assertValidOperationalReminderPolicyPayload,
   assertValidOperationalReminderTemplatePayload,
   isOperationalReminderPolicyPayload,
@@ -1071,6 +1070,7 @@ function buildCommunicationPoliciesSlice(
   const operationalReminderPolicies = buildOperationalReminderPoliciesFromLegalTable(legalTable);
   const operationalReminderTemplates = buildOperationalReminderTemplatesFromLegalTable(legalTable);
   const pickerOptions = buildCommunicationPoliciesPickerOptions(packContext);
+  const editorOptionsBase = buildCommunicationPolicyEditorOptions(operationalReminderTemplates);
   const validationErrors: string[] = [];
   for (const row of operationalReminderPolicies) {
     if (row.parse_error) validationErrors.push(`policy:${row.value_key}:${row.parse_error}`);
@@ -1083,10 +1083,7 @@ function buildCommunicationPoliciesSlice(
     operational_reminder_templates: operationalReminderTemplates,
     validation_errors: validationErrors,
     picker_options: pickerOptions,
-    editor_options: {
-      ...buildCommunicationPolicyEditorOptions(),
-      template_variables: REMINDER_TEMPLATE_VARIABLES.map((code) => ({ code, label: code })),
-    },
+    editor_options: editorOptionsBase,
     flow_note:
       'Country → Country Pack → Ruleset → Communication policy/template version. Reuse existing country structure; do not create countries here.',
     quick_actions: [

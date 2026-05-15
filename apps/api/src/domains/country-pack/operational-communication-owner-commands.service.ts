@@ -260,10 +260,12 @@ export async function handleSaveOperationalReminderTemplate(
   await assertCountryExists(scope.countryCode);
   await assertRulesetScope(scope.countryCode, scope.countryPackId, scope.rulesetId);
 
-  const { value_key: valueKey, payload: templatePayload } = parseOwnerReminderTemplateForm(payload.template);
+  const parsedTemplate = parseOwnerReminderTemplateForm(payload.template);
+  const { value_key: valueKey, payload: templatePayload } = parsedTemplate;
   const label =
     asOptionalString(payload.template_label) ??
-    `Reminder template (${templatePayload.workflow_type} / ${templatePayload.language})`;
+    asOptionalString((payload.template as Record<string, unknown>)?.template_display_name) ??
+    `Reminder template (${templatePayload.workflow_type} / ${parsedTemplate.period_label} / ${templatePayload.language})`;
 
   const legal = await ensureOperationalLegalValue({
     countryCode: scope.countryCode,
@@ -304,6 +306,11 @@ export async function handleSaveOperationalReminderTemplate(
       legal_value_version_id: versionId,
       template_key: valueKey,
       legal_value_created: legal.created,
+      legal_value_reused: !legal.created,
+      period_slug: parsedTemplate.period_slug,
+      friendly_message: legal.created
+        ? 'New reminder template created.'
+        : 'Existing template definition reused; a new version was added under the selected ruleset.',
     },
   };
 }

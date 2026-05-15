@@ -19,6 +19,24 @@ type PickerRuleset = {
 
 type EditorOption = { code: string; label: string };
 
+type PresetPeriodOption = {
+  label: string;
+  amount: number;
+  unit: string;
+  period_slug: string;
+};
+
+type ExistingTemplateOption = {
+  template_key: string;
+  display_name: string;
+  workflow_type: string;
+  period_slug: string;
+  period_label: string;
+  language: string;
+  channel: string;
+  country_code: string;
+};
+
 type EditorOptions = {
   workflow_types: EditorOption[];
   channels: EditorOption[];
@@ -26,21 +44,25 @@ type EditorOptions = {
   severities: EditorOption[];
   languages: EditorOption[];
   template_variables: EditorOption[];
+  preset_periods: PresetPeriodOption[];
+  allowed_units: EditorOption[];
+  existing_templates: ExistingTemplateOption[];
 };
 
-type CadenceStepForm = {
-  step_key: string;
-  offset_minutes: number;
-  template_key: string;
+type CadencePeriodForm = {
+  period_ref: string;
+  custom_amount: number;
+  custom_unit: string;
   channels: string[];
   severity: string;
+  template_ref: string;
 };
 
 type WorkflowForm = {
   workflow_type: string;
   enabled: boolean;
   anchor: string;
-  cadence_steps: CadenceStepForm[];
+  cadence_periods: CadencePeriodForm[];
 };
 
 const inputStyle: CSSProperties = {
@@ -63,8 +85,17 @@ function fmtToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function emptyCadenceStep(): CadenceStepForm {
-  return { step_key: '', offset_minutes: 60, template_key: '', channels: [], severity: '' };
+function emptyCadencePeriod(editor: EditorOptions | null): CadencePeriodForm {
+  const firstPreset = editor?.preset_periods[0]?.period_slug ?? '1h';
+  const firstChannel = editor?.channels[0]?.code ?? 'docflow';
+  return {
+    period_ref: firstPreset,
+    custom_amount: 1,
+    custom_unit: editor?.allowed_units[0]?.code ?? 'hours',
+    channels: [firstChannel],
+    severity: editor?.severities[0]?.code ?? 'info',
+    template_ref: '',
+  };
 }
 
 function emptyWorkflow(editor: EditorOptions | null): WorkflowForm {
@@ -72,8 +103,16 @@ function emptyWorkflow(editor: EditorOptions | null): WorkflowForm {
     workflow_type: editor?.workflow_types[0]?.code ?? 'waiting_client',
     enabled: true,
     anchor: editor?.anchors[0]?.code ?? 'obligation_starts_at',
-    cadence_steps: [emptyCadenceStep()],
+    cadence_periods: [emptyCadencePeriod(editor)],
   };
+}
+
+function periodLabelForRef(editor: EditorOptions | null, periodRef: string, customAmount: number, customUnit: string): string {
+  if (periodRef !== '__custom__') {
+    const preset = editor?.preset_periods.find((p) => p.period_slug === periodRef);
+    if (preset) return preset.label;
+  }
+  return `${customAmount} ${customUnit}`;
 }
 
 function normalizeCountryCode(raw: unknown): string {
@@ -137,6 +176,26 @@ function parseEditorOptions(cp: UnknownRecord | null): EditorOptions | null {
           label: safeText(x.label) || safeText(x.code),
         }))
       : [];
+  const presetPeriods = Array.isArray(e.preset_periods)
+    ? (e.preset_periods as UnknownRecord[]).map((x) => ({
+        label: safeText(x.label),
+        amount: Number(x.amount),
+        unit: safeText(x.unit),
+        period_slug: safeText(x.period_slug),
+      }))
+    : [];
+  const existingTemplates = Array.isArray(e.existing_templates)
+    ? (e.existing_templates as UnknownRecord[]).map((x) => ({
+        template_key: safeText(x.template_key),
+        display_name: safeText(x.display_name) || safeText(x.template_key),
+        workflow_type: safeText(x.workflow_type),
+        period_slug: safeText(x.period_slug),
+        period_label: safeText(x.period_label),
+        language: safeText(x.language),
+        channel: safeText(x.channel),
+        country_code: safeText(x.country_code).toUpperCase(),
+      }))
+    : [];
   return {
     workflow_types: mapOpts(e.workflow_types),
     channels: mapOpts(e.channels),
@@ -144,6 +203,9 @@ function parseEditorOptions(cp: UnknownRecord | null): EditorOptions | null {
     severities: mapOpts(e.severities),
     languages: mapOpts(e.languages),
     template_variables: mapOpts(e.template_variables),
+    preset_periods: presetPeriods,
+    allowed_units: mapOpts(e.allowed_units),
+    existing_templates: existingTemplates,
   };
 }
 
@@ -320,94 +382,179 @@ function PolicyEditor({
             </label>
           </div>
           <div style={{ marginTop: 10 }}>
-            <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>Cadence steps</div>
-            {wf.cadence_steps.map((step, si) => (
-              <div
-                key={si}
-                style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: 8, marginBottom: 8, background: '#fff' }}
-              >
-                <div style={{ display: 'grid', gap: 6 }}>
-                  <input
-                    placeholder="Step key (e.g. nudge_1h)"
-                    value={step.step_key}
-                    style={inputStyle}
-                    onChange={(e) => {
-                      const next = [...workflows];
-                      const steps = [...wf.cadence_steps];
-                      steps[si] = { ...step, step_key: e.target.value };
-                      next[wi] = { ...wf, cadence_steps: steps };
-                      onWorkflows(next);
-                    }}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Offset minutes"
-                    value={step.offset_minutes}
-                    style={inputStyle}
-                    onChange={(e) => {
-                      const next = [...workflows];
-                      const steps = [...wf.cadence_steps];
-                      steps[si] = { ...step, offset_minutes: Number(e.target.value) };
-                      next[wi] = { ...wf, cadence_steps: steps };
-                      onWorkflows(next);
-                    }}
-                  />
-                  <input
-                    placeholder="Template key (comm.reminder.template.*)"
-                    value={step.template_key}
-                    style={inputStyle}
-                    onChange={(e) => {
-                      const next = [...workflows];
-                      const steps = [...wf.cadence_steps];
-                      steps[si] = { ...step, template_key: e.target.value };
-                      next[wi] = { ...wf, cadence_steps: steps };
-                      onWorkflows(next);
-                    }}
-                  />
-                  <select
-                    value={step.severity}
-                    style={inputStyle}
-                    onChange={(e) => {
-                      const next = [...workflows];
-                      const steps = [...wf.cadence_steps];
-                      steps[si] = { ...step, severity: e.target.value };
-                      next[wi] = { ...wf, cadence_steps: steps };
-                      onWorkflows(next);
-                    }}
-                  >
-                    <option value="">Severity (optional)</option>
-                    {(editor?.severities ?? []).map((s) => (
-                      <option key={s.code} value={s.code}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
+            <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>Reminder periods</div>
+            {wf.cadence_periods.map((period, pi) => {
+              const templatesForWorkflow = (editor?.existing_templates ?? []).filter(
+                (t) => t.workflow_type === wf.workflow_type,
+              );
+              return (
+                <div
+                  key={pi}
+                  style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: 10, marginBottom: 8, background: '#fff' }}
+                >
+                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>
+                    Period: {periodLabelForRef(editor, period.period_ref, period.custom_amount, period.custom_unit)}
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <label style={labelStyle}>
+                      Period
+                      <select
+                        value={period.period_ref}
+                        style={inputStyle}
+                        onChange={(e) => {
+                          const next = [...workflows];
+                          const periods = [...wf.cadence_periods];
+                          periods[pi] = { ...period, period_ref: e.target.value };
+                          next[wi] = { ...wf, cadence_periods: periods };
+                          onWorkflows(next);
+                        }}
+                      >
+                        {(editor?.preset_periods ?? []).map((p) => (
+                          <option key={p.period_slug} value={p.period_slug}>
+                            {p.label}
+                          </option>
+                        ))}
+                        <option value="__custom__">Custom period…</option>
+                      </select>
+                    </label>
+                    {period.period_ref === '__custom__' ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <label style={labelStyle}>
+                          Amount
+                          <input
+                            type="number"
+                            min={1}
+                            value={period.custom_amount}
+                            style={inputStyle}
+                            onChange={(e) => {
+                              const next = [...workflows];
+                              const periods = [...wf.cadence_periods];
+                              periods[pi] = { ...period, custom_amount: Number(e.target.value) };
+                              next[wi] = { ...wf, cadence_periods: periods };
+                              onWorkflows(next);
+                            }}
+                          />
+                        </label>
+                        <label style={labelStyle}>
+                          Unit
+                          <select
+                            value={period.custom_unit}
+                            style={inputStyle}
+                            onChange={(e) => {
+                              const next = [...workflows];
+                              const periods = [...wf.cadence_periods];
+                              periods[pi] = { ...period, custom_unit: e.target.value };
+                              next[wi] = { ...wf, cadence_periods: periods };
+                              onWorkflows(next);
+                            }}
+                          >
+                            {(editor?.allowed_units ?? []).map((u) => (
+                              <option key={u.code} value={u.code}>
+                                {u.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    ) : null}
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>Channels</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {(editor?.channels ?? []).map((ch) => {
+                          const checked = period.channels.includes(ch.code);
+                          return (
+                            <label key={ch.code} style={{ fontSize: 13 }}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  const next = [...workflows];
+                                  const periods = [...wf.cadence_periods];
+                                  const channels = checked
+                                    ? period.channels.filter((c) => c !== ch.code)
+                                    : [...period.channels, ch.code];
+                                  periods[pi] = { ...period, channels };
+                                  next[wi] = { ...wf, cadence_periods: periods };
+                                  onWorkflows(next);
+                                }}
+                              />{' '}
+                              {ch.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <label style={labelStyle}>
+                      Severity
+                      <select
+                        value={period.severity}
+                        style={inputStyle}
+                        onChange={(e) => {
+                          const next = [...workflows];
+                          const periods = [...wf.cadence_periods];
+                          periods[pi] = { ...period, severity: e.target.value };
+                          next[wi] = { ...wf, cadence_periods: periods };
+                          onWorkflows(next);
+                        }}
+                      >
+                        {(editor?.severities ?? []).map((sev) => (
+                          <option key={sev.code} value={sev.code}>
+                            {sev.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={labelStyle}>
+                      Template
+                      <select
+                        value={period.template_ref}
+                        style={inputStyle}
+                        onChange={(e) => {
+                          const next = [...workflows];
+                          const periods = [...wf.cadence_periods];
+                          periods[pi] = { ...period, template_ref: e.target.value };
+                          next[wi] = { ...wf, cadence_periods: periods };
+                          onWorkflows(next);
+                        }}
+                      >
+                        <option value="">Select template</option>
+                        {templatesForWorkflow.map((t) => (
+                          <option key={t.template_key} value={t.template_key}>
+                            {t.display_name} ({t.period_label} · {t.language})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {wf.cadence_periods.length > 1 ? (
+                    <button
+                      type="button"
+                      style={{ ...btnCompact, marginTop: 8, padding: '4px 10px', fontSize: 12 }}
+                      onClick={() => {
+                        const next = [...workflows];
+                        next[wi] = {
+                          ...wf,
+                          cadence_periods: wf.cadence_periods.filter((_, i) => i !== pi),
+                        };
+                        onWorkflows(next);
+                      }}
+                    >
+                      Remove period
+                    </button>
+                  ) : null}
                 </div>
-                {wf.cadence_steps.length > 1 ? (
-                  <button
-                    type="button"
-                    style={{ ...btnCompact, marginTop: 6, padding: '4px 10px', fontSize: 12 }}
-                    onClick={() => {
-                      const next = [...workflows];
-                      next[wi] = { ...wf, cadence_steps: wf.cadence_steps.filter((_, i) => i !== si) };
-                      onWorkflows(next);
-                    }}
-                  >
-                    Remove step
-                  </button>
-                ) : null}
-              </div>
-            ))}
+              );
+            })}
             <button
               type="button"
               style={{ ...btnCompact, padding: '4px 12px', fontSize: 12 }}
               onClick={() => {
                 const next = [...workflows];
-                next[wi] = { ...wf, cadence_steps: [...wf.cadence_steps, emptyCadenceStep()] };
+                next[wi] = { ...wf, cadence_periods: [...wf.cadence_periods, emptyCadencePeriod(editor)] };
                 onWorkflows(next);
               }}
             >
-              Add cadence step
+              + Add period
             </button>
           </div>
         </div>
@@ -426,6 +573,10 @@ function PolicyEditor({
 function TemplateEditor({
   editor,
   workflowType,
+  periodRef,
+  customAmount,
+  customUnit,
+  templateDisplayName,
   language,
   channel,
   subjectTemplate,
@@ -436,6 +587,10 @@ function TemplateEditor({
 }: {
   editor: EditorOptions | null;
   workflowType: string;
+  periodRef: string;
+  customAmount: number;
+  customUnit: string;
+  templateDisplayName: string;
   language: string;
   channel: string;
   subjectTemplate: string;
@@ -444,6 +599,10 @@ function TemplateEditor({
   tone: string;
   onChange: (patch: Partial<{
     workflowType: string;
+    periodRef: string;
+    customAmount: number;
+    customUnit: string;
+    templateDisplayName: string;
     language: string;
     channel: string;
     subjectTemplate: string;
@@ -469,6 +628,51 @@ function TemplateEditor({
             </option>
           ))}
         </select>
+      </label>
+      <label style={labelStyle}>
+        Period
+        <select value={periodRef} style={inputStyle} onChange={(e) => onChange({ periodRef: e.target.value })}>
+          {(editor?.preset_periods ?? []).map((p) => (
+            <option key={p.period_slug} value={p.period_slug}>
+              {p.label}
+            </option>
+          ))}
+          <option value="__custom__">Custom period…</option>
+        </select>
+      </label>
+      {periodRef === '__custom__' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <label style={labelStyle}>
+            Amount
+            <input
+              type="number"
+              min={1}
+              value={customAmount}
+              style={inputStyle}
+              onChange={(e) => onChange({ customAmount: Number(e.target.value) })}
+            />
+          </label>
+          <label style={labelStyle}>
+            Unit
+            <select value={customUnit} style={inputStyle} onChange={(e) => onChange({ customUnit: e.target.value })}>
+              {(editor?.allowed_units ?? []).map((u) => (
+                <option key={u.code} value={u.code}>
+                  {u.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : null}
+      <label style={labelStyle}>
+        Template display name
+        <input
+          type="text"
+          value={templateDisplayName}
+          style={inputStyle}
+          placeholder="e.g. Waiting client — 1 hour nudge"
+          onChange={(e) => onChange({ templateDisplayName: e.target.value })}
+        />
       </label>
       <label style={labelStyle}>
         Language
@@ -590,6 +794,10 @@ export function OperationalReminderOwnerModal({
   const [workflows, setWorkflows] = useState<WorkflowForm[]>([]);
 
   const [workflowType, setWorkflowType] = useState('waiting_client');
+  const [templatePeriodRef, setTemplatePeriodRef] = useState('1h');
+  const [templateCustomAmount, setTemplateCustomAmount] = useState(1);
+  const [templateCustomUnit, setTemplateCustomUnit] = useState('hours');
+  const [templateDisplayName, setTemplateDisplayName] = useState('');
   const [language, setLanguage] = useState('he');
   const [channel, setChannel] = useState('docflow');
   const [subjectTemplate, setSubjectTemplate] = useState('');
@@ -616,6 +824,10 @@ export function OperationalReminderOwnerModal({
     setDefaultChannels(editor?.channels.slice(0, 2).map((c) => c.code) ?? ['docflow', 'email']);
     setWorkflows([emptyWorkflow(editor)]);
     setWorkflowType(editor?.workflow_types[0]?.code ?? 'waiting_client');
+    setTemplatePeriodRef(editor?.preset_periods[0]?.period_slug ?? '1h');
+    setTemplateCustomAmount(1);
+    setTemplateCustomUnit(editor?.allowed_units[0]?.code ?? 'hours');
+    setTemplateDisplayName('');
     setLanguage(editor?.languages[0]?.code ?? 'he');
     setChannel(editor?.channels[0]?.code ?? 'docflow');
     setSubjectTemplate('');
@@ -659,22 +871,32 @@ export function OperationalReminderOwnerModal({
         workflow_type: wf.workflow_type,
         enabled: wf.enabled,
         anchor: wf.anchor,
-        cadence_steps: wf.cadence_steps.map((s) => ({
-          step_key: s.step_key,
-          offset_minutes: s.offset_minutes,
-          template_key: s.template_key,
-          ...(s.channels.length ? { channels: s.channels } : {}),
-          ...(s.severity ? { severity: s.severity } : {}),
-        })),
+        cadence_periods: wf.cadence_periods.map((p) => {
+          const base = {
+            channels: p.channels,
+            severity: p.severity,
+            template_ref: p.template_ref,
+          };
+          if (p.period_ref === '__custom__') {
+            return { ...base, period: { amount: p.custom_amount, unit: p.custom_unit } };
+          }
+          return { ...base, period_slug: p.period_ref };
+        }),
       })),
     };
   }
 
   function buildTemplatePayload() {
+    const periodPart =
+      templatePeriodRef === '__custom__'
+        ? { period: { amount: templateCustomAmount, unit: templateCustomUnit } }
+        : { period_slug: templatePeriodRef };
     return {
       workflow_type: workflowType,
       language,
       channel,
+      template_display_name: templateDisplayName.trim(),
+      ...periodPart,
       subject_template: subjectTemplate,
       body_template: bodyTemplate,
       variables,
@@ -690,6 +912,13 @@ export function OperationalReminderOwnerModal({
     }
     if (!effectiveFrom) {
       setError('Effective from date is required.');
+      return;
+    }
+    if (
+      (kind === 'reminder_template' || (kind === 'reminder_version' && versionKind === 'template')) &&
+      !templateDisplayName.trim()
+    ) {
+      setError('Template display name is required.');
       return;
     }
     try {
@@ -822,6 +1051,10 @@ export function OperationalReminderOwnerModal({
           <TemplateEditor
             editor={editor}
             workflowType={workflowType}
+            periodRef={templatePeriodRef}
+            customAmount={templateCustomAmount}
+            customUnit={templateCustomUnit}
+            templateDisplayName={templateDisplayName}
             language={language}
             channel={channel}
             subjectTemplate={subjectTemplate}
@@ -830,6 +1063,10 @@ export function OperationalReminderOwnerModal({
             tone={tone}
             onChange={(patch) => {
               if (patch.workflowType !== undefined) setWorkflowType(patch.workflowType);
+              if (patch.periodRef !== undefined) setTemplatePeriodRef(patch.periodRef);
+              if (patch.customAmount !== undefined) setTemplateCustomAmount(patch.customAmount);
+              if (patch.customUnit !== undefined) setTemplateCustomUnit(patch.customUnit);
+              if (patch.templateDisplayName !== undefined) setTemplateDisplayName(patch.templateDisplayName);
               if (patch.language !== undefined) setLanguage(patch.language);
               if (patch.channel !== undefined) setChannel(patch.channel);
               if (patch.subjectTemplate !== undefined) setSubjectTemplate(patch.subjectTemplate);
