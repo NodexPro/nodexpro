@@ -8,6 +8,7 @@ import {
   buildReminderCandidateDedupKey,
   resolveCadenceStepFromWorkflow,
   resolveChannelOrder,
+  resolveFirstCadenceStepForWorkflow,
   resolveReminderTarget,
   resolveWorkflowFromPolicy,
   selectTemplateVersion,
@@ -104,6 +105,53 @@ test('resolveCadenceStepFromWorkflow finds configured step', () => {
   const wf = resolveWorkflowFromPolicy(policy, 'waiting_client');
   const step = resolveCadenceStepFromWorkflow(wf, 'nudge_1h');
   assert.equal(step.template_key, 'comm.reminder.template.waiting_client.he');
+});
+
+test('resolveFirstCadenceStepForWorkflow returns first configured cadence period', () => {
+  const policyMulti = assertValidOperationalReminderPolicyPayload({
+    type: 'operational_reminder_policy',
+    default_channels: ['docflow'],
+    workflows: [
+      {
+        workflow_type: 'waiting_client',
+        enabled: true,
+        anchor: 'obligation_starts_at',
+        cadence_steps: [
+          {
+            step_key: 'nudge_waiting_client_1h',
+            offset_minutes: 60,
+            template_key: 'comm.reminder.template.waiting_client.1h.he',
+          },
+          {
+            step_key: 'nudge_waiting_client_2d',
+            offset_minutes: 2880,
+            template_key: 'comm.reminder.template.waiting_client.2d.he',
+          },
+        ],
+      },
+    ],
+  });
+  const step = resolveFirstCadenceStepForWorkflow(policyMulti, 'waiting_client');
+  assert.equal(step.step_key, 'nudge_waiting_client_1h');
+});
+
+test('resolveFirstCadenceStepForWorkflow rejects empty cadence', () => {
+  const emptyCadence = assertValidOperationalReminderPolicyPayload({
+    type: 'operational_reminder_policy',
+    default_channels: ['docflow'],
+    workflows: [
+      {
+        workflow_type: 'waiting_client',
+        enabled: true,
+        anchor: 'obligation_starts_at',
+        cadence_steps: [],
+      },
+    ],
+  });
+  assert.throws(
+    () => resolveFirstCadenceStepForWorkflow(emptyCadence, 'waiting_client'),
+    (e: Error & { code?: string }) => e.code === 'reminder_cadence_empty',
+  );
 });
 
 test('resolveChannelOrder prefers step channels over policy default', () => {

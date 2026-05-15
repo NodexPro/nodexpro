@@ -15,7 +15,7 @@ import { canStaffPickUpUnassigned, DEFAULT_SLA_POLICY, resolveWorkTypePoliciesBa
 import { buildDueQueueCellText, buildQueueSlaPresentation, loadActiveSlaObligationsForItems, } from './work-engine.sla.service.js';
 import { WORK_ENGINE_PERMISSIONS } from './work-engine.rbac.js';
 import { buildReminderReviewBanner, loadReminderReviewCounts, loadReminderReviewPage, REMINDER_SNOOZE_PRESETS, } from './work-engine.reminder-review.service.js';
-import { canAccessReminderDraftDevTool, GENERATE_REMINDER_DRAFT_STEP_KEY, GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE, } from './work-engine.queue-dev-tools.js';
+import { canAccessReminderDraftDevTool, GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE, } from './work-engine.queue-dev-tools.js';
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
  * pending-mapping outcome (the event was persisted but no work_item was
@@ -219,7 +219,7 @@ function buildQueueRowChrome(args) {
                 work_item_id: row.id,
                 expected_version: row.version,
                 workflow_type: GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE,
-                step_key: GENERATE_REMINDER_DRAFT_STEP_KEY,
+                resolve_step_from_active_policy: true,
             },
         });
     }

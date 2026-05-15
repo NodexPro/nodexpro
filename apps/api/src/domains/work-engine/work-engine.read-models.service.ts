@@ -48,7 +48,6 @@ import {
 } from './work-engine.reminder-review.service.js';
 import {
   canAccessReminderDraftDevTool,
-  GENERATE_REMINDER_DRAFT_STEP_KEY,
   GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE,
 } from './work-engine.queue-dev-tools.js';
 
@@ -353,7 +352,7 @@ function buildQueueRowChrome(args: {
         work_item_id: row.id,
         expected_version: row.version,
         workflow_type: GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE,
-        step_key: GENERATE_REMINDER_DRAFT_STEP_KEY,
+        resolve_step_from_active_policy: true,
       },
     });
   }

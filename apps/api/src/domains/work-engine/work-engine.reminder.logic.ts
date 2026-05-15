@@ -77,6 +77,25 @@ export function resolveCadenceStepFromWorkflow(
   return step;
 }
 
+/**
+ * First configured cadence period for an enabled workflow (owner policy order).
+ * Used by admin/dev "Generate reminder draft" — never hardcode step_key in UI.
+ */
+export function resolveFirstCadenceStepForWorkflow(
+  policy: OperationalReminderPolicyPayload,
+  workflowType: ReminderWorkflowType,
+): OperationalReminderCadenceStep {
+  const workflow = resolveWorkflowFromPolicy(policy, workflowType);
+  const first = workflow.cadence_steps[0];
+  if (!first) {
+    throw badRequest(
+      `Reminder workflow '${workflowType}' has no cadence periods configured in the active policy`,
+      'reminder_cadence_empty',
+    );
+  }
+  return first;
+}
+
 export function resolveChannelOrder(
   policy: OperationalReminderPolicyPayload,
   step: OperationalReminderCadenceStep,

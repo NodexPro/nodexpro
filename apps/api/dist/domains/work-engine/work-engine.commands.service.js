@@ -34,7 +34,7 @@ import { canStaffPickUpUnassigned, resolveWorkTypeWorkflowPolicy, } from './work
 import { applySlaHooksForCommand } from './work-engine.sla.service.js';
 import { buildReminderCandidateDedupKey, generateReminderCandidate, parseGenerateReminderCandidateWorkflowType, } from './work-engine.reminder.service.js';
 import { approveSendReminderCandidate, cancelReminderCandidate, editReminderCandidate, loadReminderCandidate, parseReminderSnoozePreset, snoozeReminderCandidate, } from './work-engine.reminder-review.service.js';
-import { assertGenerateReminderCandidateDevAccess } from './work-engine.queue-dev-tools.js';
+import { assertGenerateReminderCandidateDevAccess, resolveGenerateReminderDraftCadence, } from './work-engine.queue-dev-tools.js';
 import { WORK_ENGINE_PERMISSIONS, requireWorkEnginePermission, } from './work-engine.rbac.js';
 import { CREATION_SOURCE_TYPES, OVERRIDE_KINDS, OVERRIDE_KINDS_REQUIRING_REASON, } from './work-engine.types.js';
 const REFRESH_FOUNDATION = 'work_engine_foundation_aggregate';
@@ -1200,11 +1200,19 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
             };
             return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
                 requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
-                assertGenerateReminderCandidateDevAccess(ctx);
                 const workItemId = reqString(payload, 'work_item_id');
-                const stepKey = reqString(payload, 'step_key');
-                const workflowType = parseGenerateReminderCandidateWorkflowType(payload.workflow_type);
                 const expectedVersion = reqInt(payload, 'expected_version');
+                let workflowType = parseGenerateReminderCandidateWorkflowType(payload.workflow_type);
+                let stepKey;
+                if (payload.resolve_step_from_active_policy === true) {
+                    assertGenerateReminderCandidateDevAccess(ctx);
+                    const resolvedCadence = await resolveGenerateReminderDraftCadence(orgId, workflowType);
+                    workflowType = resolvedCadence.workflow_type;
+                    stepKey = resolvedCadence.step_key;
+                }
+                else {
+                    stepKey = reqString(payload, 'step_key');
+                }
                 const current = await loadWorkItem(orgId, workItemId);
                 assertExpectedVersion(current.version, expectedVersion);
                 const outcome = await generateReminderCandidate({
