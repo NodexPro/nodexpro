@@ -600,9 +600,32 @@ export function PlatformOwnerLegalControl() {
   const auditHasMore = auditRecent.length > auditPreviewLimit;
 
   const legalRows = useMemo(() => {
+    const tax = panel?.legal_tax_values as UnknownRecord | undefined;
+    if (tax && Array.isArray(tax.table)) return tax.table as UnknownRecord[];
     const table = legalValues?.table;
-    return Array.isArray(table) ? (table as UnknownRecord[]) : [];
-  }, [legalValues]);
+    const rows = Array.isArray(table) ? (table as UnknownRecord[]) : [];
+    return rows.filter((r) => String(r.category ?? '') !== 'Operational Communication Policies');
+  }, [legalValues, panel]);
+
+  const communicationPolicies = useMemo(() => {
+    const cp = panel?.communication_policies;
+    return cp && typeof cp === 'object' && !Array.isArray(cp) ? (cp as UnknownRecord) : null;
+  }, [panel]);
+
+  const reminderPolicies = useMemo(() => {
+    const rows = communicationPolicies?.operational_reminder_policies;
+    return Array.isArray(rows) ? (rows as UnknownRecord[]) : [];
+  }, [communicationPolicies]);
+
+  const reminderTemplates = useMemo(() => {
+    const rows = communicationPolicies?.operational_reminder_templates;
+    return Array.isArray(rows) ? (rows as UnknownRecord[]) : [];
+  }, [communicationPolicies]);
+
+  const communicationQuickActions = useMemo(() => {
+    const rows = communicationPolicies?.quick_actions;
+    return Array.isArray(rows) ? (rows as UnknownRecord[]) : [];
+  }, [communicationPolicies]);
 
   const countryPackTables = useMemo(() => {
     const tables = (countryPacksAdmin?.tables ?? {}) as UnknownRecord;
@@ -1022,6 +1045,92 @@ export function PlatformOwnerLegalControl() {
           </ul>
         </div>
       ) : null}
+
+      <section style={{ marginTop: 18, padding: 12, border: '1px solid #c4b5fd', borderRadius: 8, background: '#faf5ff' }}>
+        <h2 style={{ margin: 0 }}>Communication policies (Work Engine reminders)</h2>
+        <p style={{ color: '#5b21b6', fontSize: 13, marginTop: 8 }}>
+          Operational communication only — not tax/VAT/legal constants. Country-specific cadence and templates;
+          accountant approval required before send (Phase 3B).
+        </p>
+        {communicationQuickActions.length ? (
+          <div style={{ marginTop: 10 }}>
+            <ActionToolbar
+              actions={communicationQuickActions}
+              disabled={commandBusy}
+              onPick={(cmd, meta, pre) => openCommandModal(cmd, meta, pre)}
+            />
+          </div>
+        ) : null}
+        <div style={{ display: 'grid', gap: 16, marginTop: 12 }}>
+          <div>
+            <h3 style={{ margin: '0 0 8px' }}>Reminder policies</h3>
+            <div style={{ overflowX: 'auto', border: '1px solid #e9d5ff', borderRadius: 8, background: '#fff' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+                <thead>
+                  <tr>
+                    {['Country', 'Key', 'Workflows', 'Steps', 'Channels', 'Approval', 'Effective', 'Status', 'Preview'].map((h) => (
+                      <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #e9d5ff', padding: 8 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {reminderPolicies.map((row) => (
+                    <tr key={String(row.version_id ?? row.value_key)}>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.country_code ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.value_key ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.workflow_count ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.cadence_step_count ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{JSON.stringify(row.default_channels ?? [])}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{row.approval_required === false ? 'optional' : 'required'}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.effective_window ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String((row.status_badge as { label?: string })?.label ?? row.status ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff', fontSize: 12 }}>{String(row.policy_preview ?? '')}</td>
+                    </tr>
+                  ))}
+                  {!reminderPolicies.length ? (
+                    <tr>
+                      <td colSpan={9} style={{ padding: 12, color: '#6b7280' }}>No reminder policies yet.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3 style={{ margin: '0 0 8px' }}>Reminder templates</h3>
+            <div style={{ overflowX: 'auto', border: '1px solid #e9d5ff', borderRadius: 8, background: '#fff' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
+                <thead>
+                  <tr>
+                    {['Country', 'Template key', 'Workflow', 'Lang', 'Channel', 'Effective', 'Status', 'Preview'].map((h) => (
+                      <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #e9d5ff', padding: 8 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {reminderTemplates.map((row) => (
+                    <tr key={String(row.version_id ?? row.template_key)}>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.country_code ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.template_key ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.workflow_type ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.language ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.channel ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.effective_window ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String((row.status_badge as { label?: string })?.label ?? row.status ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff', fontSize: 12 }}>{String(row.template_preview ?? '')}</td>
+                    </tr>
+                  ))}
+                  {!reminderTemplates.length ? (
+                    <tr>
+                      <td colSpan={8} style={{ padding: 12, color: '#6b7280' }}>No reminder templates yet.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section style={{ marginTop: 18, padding: 12, border: '1px solid #dbeafe', borderRadius: 8, background: '#f8fbff' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>

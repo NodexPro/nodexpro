@@ -77,6 +77,7 @@ export function normalizeLegalValuePayloadJsonInput(input: unknown): unknown {
   return input;
 }
 
+/** @deprecated Use validateLegalValueVersionPayload from operational-communication-owner-payload.js */
 export function validateLegalValueVersionPayloadIfDocflow(valuePayloadJson: unknown): unknown {
   const normalized = normalizeLegalValuePayloadJsonInput(valuePayloadJson);
   if (normalized === null) return null;

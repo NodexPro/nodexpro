@@ -6,7 +6,7 @@ import { assertCountryExists } from './country.service.js';
 import { getCountryPack } from './country-pack.service.js';
 import { assertNoOverlapRuleset, assertRulesetExists, resolveActiveRulesetByDate } from './ruleset.service.js';
 import { assertLegalValueExists, assertNoOverlapLegalValueVersions } from './legal-value.service.js';
-import { isDocflowCommunicationOwnerPayload, normalizeLegalValuePayloadJsonInput, assertValidDocflowCommunicationOwnerPayload, } from './docflow-communication-owner-payload.js';
+import { assertOperationalCommunicationLegalValueMetadata, validateLegalValueVersionPayload, } from './operational-communication-owner-payload.js';
 import { getOrganizationCountrySettings } from './organization-country.service.js';
 import { buildOrganizationCountrySettingsAggregate, buildOwnerLegalControlPanelAggregate, } from './country-pack-read-models.service.js';
 import { encryptOptionalSecret } from '../../shared/owner-email-provider-config.service.js';
@@ -677,17 +677,27 @@ async function handleUpdateOrganizationCountrySettings(ctx, payload) {
 async function handleCreateLegalValue(ctx, payload) {
     const countryCode = asString(payload.country_code, 'country_code').toUpperCase();
     await assertCountryExists(countryCode);
+    const category = asString(payload.category, 'category');
+    const moduleScope = asString(payload.module_scope, 'module_scope');
+    const valueType = asString(payload.value_type, 'value_type');
+    const valueKey = asString(payload.value_key, 'value_key');
+    assertOperationalCommunicationLegalValueMetadata({
+        category,
+        module_scope: moduleScope,
+        value_type: valueType,
+        value_key: valueKey,
+    });
     const { data, error } = await supabaseAdmin
         .from('country_legal_values')
         .insert({
         country_code: countryCode,
-        value_key: asString(payload.value_key, 'value_key'),
+        value_key: valueKey,
         label: asString(payload.label, 'label'),
-        category: asString(payload.category, 'category'),
-        module_scope: asString(payload.module_scope, 'module_scope'),
+        category,
+        module_scope: moduleScope,
         usage_hint: asOptionalString(payload.usage_hint),
         owner_note: asOptionalString(payload.owner_note),
-        value_type: asString(payload.value_type, 'value_type'),
+        value_type: valueType,
         status: asString(payload.status ?? 'draft', 'status'),
     })
         .select('*')
@@ -771,11 +781,14 @@ async function handleCreateLegalValueVersion(ctx, payload) {
     const effectiveFrom = asDate(payload.effective_from, 'effective_from');
     const effectiveTo = asOptionalString(payload.effective_to);
     await assertNoOverlapLegalValueVersions({ legalValueId: legalValue.id, effectiveFrom, effectiveTo });
-    const rawPayload = normalizeLegalValuePayloadJsonInput(payload.value_payload_json);
-    let valuePayloadJson = rawPayload;
-    if (rawPayload !== null && isDocflowCommunicationOwnerPayload(rawPayload)) {
-        valuePayloadJson = assertValidDocflowCommunicationOwnerPayload(rawPayload);
-    }
+    assertOperationalCommunicationLegalValueMetadata({
+        category: legalValue.category,
+        module_scope: legalValue.module_scope,
+        value_type: legalValue.value_type,
+        value_key: legalValue.value_key,
+        value_payload_json: payload.value_payload_json,
+    });
+    const valuePayloadJson = validateLegalValueVersionPayload(payload.value_payload_json);
     if (valuePayloadJson === null || valuePayloadJson === undefined) {
         throw badRequest('value_payload_json is required');
     }
@@ -824,12 +837,21 @@ async function handleUpdateLegalValueVersion(ctx, payload) {
         excludeVersionId: versionId,
     });
     if (payload.value_payload_json !== undefined) {
-        const raw = normalizeLegalValuePayloadJsonInput(payload.value_payload_json);
-        let nextPayload = raw;
-        if (raw !== null && isDocflowCommunicationOwnerPayload(raw)) {
-            nextPayload = assertValidDocflowCommunicationOwnerPayload(raw);
+        const { data: lvRow } = await supabaseAdmin
+            .from('country_legal_values')
+            .select('category, module_scope, value_type, value_key')
+            .eq('id', current.legal_value_id)
+            .maybeSingle();
+        if (lvRow) {
+            assertOperationalCommunicationLegalValueMetadata({
+                category: String(lvRow.category),
+                module_scope: String(lvRow.module_scope),
+                value_type: String(lvRow.value_type),
+                value_key: String(lvRow.value_key),
+                value_payload_json: payload.value_payload_json,
+            });
         }
-        patch.value_payload_json = nextPayload;
+        patch.value_payload_json = validateLegalValueVersionPayload(payload.value_payload_json);
     }
     if (payload.effective_from !== undefined)
         patch.effective_from = effectiveFrom;

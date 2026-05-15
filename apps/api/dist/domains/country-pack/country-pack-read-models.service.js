@@ -3,6 +3,7 @@ import { forbidden, notFound } from '../../shared/errors.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import { resolveCountryContext } from './country-pack-resolver.service.js';
 import { assertValidDocflowCommunicationOwnerPayload, isDocflowCommunicationOwnerPayload, } from './docflow-communication-owner-payload.js';
+import { OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY, assertValidOperationalReminderPolicyPayload, assertValidOperationalReminderTemplatePayload, isOperationalReminderPolicyPayload, isOperationalReminderTemplatePayload, } from './operational-communication-owner-payload.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
 function normalizeCommercialControlsQuery(input) {
@@ -455,7 +456,7 @@ export async function buildOwnerLegalValuesAggregate(ctx) {
         byLegalValueId.set(v.legal_value_id, list);
     }
     const today = new Date().toISOString().slice(0, 10);
-    const rows = (values.data ?? []).map((lv) => {
+    const allRows = (values.data ?? []).map((lv) => {
         const lvVersions = byLegalValueId.get(lv.id) ?? [];
         const activeCurrent = lvVersions.find((item) => {
             const raw = item;
@@ -468,6 +469,7 @@ export async function buildOwnerLegalValuesAggregate(ctx) {
             versions: lvVersions,
         };
     });
+    const rows = allRows.filter((r) => !isOperationalCommunicationLegalValueRow(r));
     return {
         aggregate_key: 'owner_legal_values_aggregate',
         table: rows,
@@ -478,12 +480,12 @@ export async function buildOwnerLegalValuesAggregate(ctx) {
             {
                 action_key: 'create_legal_value',
                 enabled: true,
-                note: 'country_code: IL, US, … (must exist in countries). category must be exactly: VAT | Income Tax | National Insurance | Credit Points | Pricing | Reports | Calendar | Modules. value_type: number | percentage | boolean | string | json | money | date.',
+                note: 'country_code: IL, US, … (must exist in countries). category: VAT | Income Tax | National Insurance | Credit Points | Pricing | Reports | Calendar | Modules | Operational Communication Policies (use Communication policies section for reminders). value_type: number | percentage | boolean | string | json | money | date.',
                 payload: {
                     country_code: 'ISO 3166-1 alpha-2',
                     value_key: 'string',
                     label: 'string',
-                    category: 'VAT|Income Tax|National Insurance|Credit Points|Pricing|Reports|Calendar|Modules (exact label)',
+                    category: 'VAT|Income Tax|National Insurance|Credit Points|Pricing|Reports|Calendar|Modules|Operational Communication Policies (exact label)',
                     module_scope: 'string',
                     value_type: 'number|percentage|boolean|string|json|money|date',
                     status: 'optional draft|active|disabled',
@@ -820,6 +822,178 @@ function buildDocflowCommunicationTemplatesFromLegalTable(legalTable) {
     }
     return out;
 }
+function isOperationalCommunicationLegalValueRow(lv) {
+    return String(lv.category ?? '') === OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY;
+}
+function buildOperationalReminderPoliciesFromLegalTable(legalTable) {
+    const out = [];
+    for (const lv of legalTable) {
+        if (!isOperationalCommunicationLegalValueRow(lv))
+            continue;
+        const versions = Array.isArray(lv.versions) ? lv.versions : [];
+        for (const ver of versions) {
+            const vpj = ver.value_payload_json;
+            if (!isOperationalReminderPolicyPayload(vpj))
+                continue;
+            let normalized;
+            let parseError = null;
+            try {
+                normalized = assertValidOperationalReminderPolicyPayload(vpj);
+            }
+            catch (e) {
+                parseError = e instanceof Error ? e.message : 'invalid_payload';
+                normalized = {};
+            }
+            const workflows = Array.isArray(normalized.workflows) ? normalized.workflows : [];
+            out.push({
+                legal_value_id: lv.id,
+                value_key: lv.value_key,
+                label: lv.label,
+                country_code: lv.country_code,
+                version_id: ver.id,
+                country_pack_ruleset_id: ver.country_pack_ruleset_id,
+                effective_from: ver.effective_from,
+                effective_to: ver.effective_to,
+                status: ver.status,
+                status_badge: ver.status_badge,
+                effective_window: ver.effective_window,
+                approval_required: normalized.approval_required !== false,
+                default_channels: normalized.default_channels ?? [],
+                workflow_count: workflows.length,
+                cadence_step_count: workflows.reduce((n, w) => n +
+                    (Array.isArray(w.cadence_steps)
+                        ? w.cadence_steps.length
+                        : 0), 0),
+                policy_preview: parseError ?? JSON.stringify(normalized).slice(0, 200),
+                parse_error: parseError,
+                allowed_actions: [
+                    { action_key: 'create_legal_value_version', enabled: true, button_label: 'New version' },
+                    { action_key: 'update_legal_value_version', enabled: parseError === null, button_label: 'Edit JSON' },
+                    { action_key: 'activate_legal_value_version', enabled: ver.status !== 'active' && parseError === null, button_label: 'Activate' },
+                    { action_key: 'deactivate_legal_value_version', enabled: ver.status === 'active', button_label: 'Deactivate' },
+                ],
+            });
+        }
+    }
+    return out;
+}
+function buildOperationalReminderTemplatesFromLegalTable(legalTable) {
+    const out = [];
+    for (const lv of legalTable) {
+        if (!isOperationalCommunicationLegalValueRow(lv))
+            continue;
+        const versions = Array.isArray(lv.versions) ? lv.versions : [];
+        for (const ver of versions) {
+            const vpj = ver.value_payload_json;
+            if (!isOperationalReminderTemplatePayload(vpj))
+                continue;
+            let normalized;
+            let parseError = null;
+            try {
+                normalized = assertValidOperationalReminderTemplatePayload(vpj);
+            }
+            catch (e) {
+                parseError = e instanceof Error ? e.message : 'invalid_payload';
+                normalized = {};
+            }
+            const subject = String(normalized.subject_template ?? '');
+            const body = String(normalized.body_template ?? '');
+            const preview = parseError !== null
+                ? `(invalid: ${parseError})`
+                : `${subject} / ${body.length > 120 ? `${body.slice(0, 120)}…` : body}`;
+            out.push({
+                legal_value_id: lv.id,
+                value_key: lv.value_key,
+                template_key: normalized.template_key ?? lv.value_key,
+                label: lv.label,
+                country_code: lv.country_code,
+                version_id: ver.id,
+                country_pack_ruleset_id: ver.country_pack_ruleset_id,
+                effective_from: ver.effective_from,
+                effective_to: ver.effective_to,
+                status: ver.status,
+                status_badge: ver.status_badge,
+                effective_window: ver.effective_window,
+                workflow_type: normalized.workflow_type,
+                language: normalized.language,
+                channel: normalized.channel,
+                variables: normalized.variables ?? [],
+                tone: normalized.tone ?? null,
+                template_preview: preview,
+                parse_error: parseError,
+                value_payload_for_edit: parseError === null ? normalized : vpj,
+                allowed_actions: [
+                    { action_key: 'create_legal_value_version', enabled: true, button_label: 'New version' },
+                    { action_key: 'update_legal_value_version', enabled: parseError === null, button_label: 'Edit JSON' },
+                    { action_key: 'activate_legal_value_version', enabled: ver.status !== 'active' && parseError === null, button_label: 'Activate' },
+                    { action_key: 'deactivate_legal_value_version', enabled: ver.status === 'active', button_label: 'Deactivate' },
+                ],
+            });
+        }
+    }
+    return out;
+}
+function buildCommunicationPoliciesSlice(legalTable) {
+    const operationalReminderPolicies = buildOperationalReminderPoliciesFromLegalTable(legalTable);
+    const operationalReminderTemplates = buildOperationalReminderTemplatesFromLegalTable(legalTable);
+    const validationErrors = [];
+    for (const row of operationalReminderPolicies) {
+        if (row.parse_error)
+            validationErrors.push(`policy:${row.value_key}:${row.parse_error}`);
+    }
+    for (const row of operationalReminderTemplates) {
+        if (row.parse_error)
+            validationErrors.push(`template:${row.template_key}:${row.parse_error}`);
+    }
+    return {
+        operational_reminder_policies: operationalReminderPolicies,
+        operational_reminder_templates: operationalReminderTemplates,
+        validation_errors: validationErrors,
+        quick_actions: [
+            {
+                action_key: 'create_legal_value',
+                enabled: true,
+                button_label: 'New reminder policy',
+                note: 'category=Operational Communication Policies, module_scope=work_engine, value_type=json, value_key=comm.reminder.policy',
+                payload: {
+                    country_code: 'ISO 3166-1 alpha-2',
+                    value_key: 'comm.reminder.policy',
+                    label: 'Work Engine reminder policy',
+                    category: OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY,
+                    module_scope: 'work_engine',
+                    value_type: 'json',
+                },
+            },
+            {
+                action_key: 'create_legal_value',
+                enabled: true,
+                button_label: 'New reminder template',
+                note: 'Template value_key must start with comm.reminder.template.',
+                payload: {
+                    country_code: 'ISO 3166-1 alpha-2',
+                    value_key: 'comm.reminder.template.waiting_client.he',
+                    label: 'Reminder template',
+                    category: OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY,
+                    module_scope: 'work_engine',
+                    value_type: 'json',
+                },
+            },
+            {
+                action_key: 'create_legal_value_version',
+                enabled: true,
+                button_label: 'New policy/template version',
+                note: 'value_payload_json type operational_reminder_policy or operational_reminder_template',
+                payload: {
+                    country_code: 'ISO 3166-1 alpha-2',
+                    value_key: 'string',
+                    country_pack_ruleset_id: 'uuid',
+                    effective_from: 'YYYY-MM-DD',
+                    value_payload_json: 'operational_reminder_policy | operational_reminder_template JSON',
+                },
+            },
+        ],
+    };
+}
 async function fetchOwnerLegalControlPanelAuditSummary() {
     const { data, error } = await supabaseAdmin
         .from('audit_log')
@@ -850,9 +1024,12 @@ export async function buildOwnerLegalControlPanelAggregate(ctx, opts) {
     const legalTable = legalValues.table;
     const legalValueVersionsFlat = (legalTable ?? []).flatMap((r) => Array.isArray(r.versions) ? r.versions : []);
     const docflowCommunicationTemplates = buildDocflowCommunicationTemplatesFromLegalTable(legalTable ?? []);
+    const legalTaxValuesTable = (legalTable ?? []).filter((r) => !isOperationalCommunicationLegalValueRow(r));
+    const communicationPolicies = buildCommunicationPoliciesSlice(legalTable ?? []);
     const cpWarnings = countryPacksAdmin.warnings ?? [];
     const lvWarnings = legalValues.validation_warnings ?? [];
     const prWarnings = platformPricing.warnings ?? [];
+    const commWarnings = communicationPolicies.validation_errors;
     return {
         aggregate_key: 'owner_legal_control_panel_aggregate',
         country_packs_admin: countryPacksAdmin,
@@ -862,8 +1039,13 @@ export async function buildOwnerLegalControlPanelAggregate(ctx, opts) {
         countries: tables?.countries ?? [],
         country_packs: tables?.country_packs ?? [],
         rulesets: tables?.rulesets ?? [],
-        legal_values_table: legalValues.table ?? [],
-        legal_value_versions: legalValueVersionsFlat,
+        legal_values_table: legalTaxValuesTable,
+        legal_tax_values: { table: legalTaxValuesTable },
+        legal_value_versions: legalValueVersionsFlat.filter((v) => {
+            const parent = (legalTable ?? []).find((lv) => lv.id === v.legal_value_id);
+            return parent ? !isOperationalCommunicationLegalValueRow(parent) : true;
+        }),
+        communication_policies: communicationPolicies,
         docflow_communication_templates: docflowCommunicationTemplates,
         docflow_request_templates: docflowRequestTemplates,
         commercial_controls: commercialControls,
@@ -905,8 +1087,9 @@ export async function buildOwnerLegalControlPanelAggregate(ctx, opts) {
         warnings: {
             country_pack_admin: cpWarnings,
             legal_values: lvWarnings,
+            communication_policies: commWarnings,
             platform_pricing: prWarnings,
-            combined: [...cpWarnings, ...lvWarnings, ...prWarnings],
+            combined: [...cpWarnings, ...lvWarnings, ...commWarnings, ...prWarnings],
         },
         available_actions: {
             country_pack_admin: countryPacksAdmin.actions ?? [],

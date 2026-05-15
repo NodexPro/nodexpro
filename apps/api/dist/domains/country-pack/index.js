@@ -7,3 +7,5 @@ export * from './organization-country.service.js';
 export * from './country-pack-resolver.service.js';
 export * from './country-pack-read-models.service.js';
 export * from './country-pack-commands.service.js';
+export * from './operational-communication-owner-payload.js';
+export * from './operational-communication-policy.service.js';
