@@ -46,6 +46,11 @@ import {
   loadReminderReviewPage,
   REMINDER_SNOOZE_PRESETS,
 } from './work-engine.reminder-review.service.js';
+import {
+  canAccessReminderDraftDevTool,
+  GENERATE_REMINDER_DRAFT_STEP_KEY,
+  GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE,
+} from './work-engine.queue-dev-tools.js';
 
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
@@ -74,11 +79,13 @@ export type QueuePresentationGroup =
   | 'admin_overflow';
 
 export type QueueOverflowMenuItem = {
-  channel: 'ownership' | 'review' | 'semantic';
+  channel: 'ownership' | 'review' | 'semantic' | 'work_engine_command';
   command: string;
   label: string;
   enabled: boolean;
   reason: string | null;
+  /** Present for `work_engine_command` — merged with row ids on the client before POST. */
+  command_payload?: Record<string, unknown> | null;
 };
 
 export type QueueOverflowMenuSection = {
@@ -151,7 +158,7 @@ function queueRowChromeMode(row: Pick<WorkItemRow, 'work_state' | 'assigned_user
 }
 
 function buildQueueRowChrome(args: {
-  row: Pick<WorkItemRow, 'work_state' | 'assigned_user_id' | 'claimed_by_user_id'>;
+  row: Pick<WorkItemRow, 'work_state' | 'assigned_user_id' | 'claimed_by_user_id' | 'id' | 'version'>;
   viewer: WorkEngineQueueViewerContext;
   ownershipDraft: QueueOwnershipCommandDraft[];
   reviewDraft: QueueReviewCommandDraft[];
@@ -333,7 +340,25 @@ function buildQueueRowChrome(args: {
     });
   }
 
-  const showAdmin = canAdmin && adminItems.length > 0;
+  const devToolAccess = canAccessReminderDraftDevTool(viewer);
+  if (devToolAccess) {
+    const archived = row.work_state === 'archived';
+    adminItems.push({
+      channel: 'work_engine_command',
+      command: 'generate_reminder_candidate',
+      label: 'Generate reminder draft',
+      enabled: !archived,
+      reason: archived ? 'Work item is archived' : null,
+      command_payload: {
+        work_item_id: row.id,
+        expected_version: row.version,
+        workflow_type: GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE,
+        step_key: GENERATE_REMINDER_DRAFT_STEP_KEY,
+      },
+    });
+  }
+
+  const showAdmin = adminItems.length > 0 && (canAdmin || devToolAccess);
 
   const queue_shell: QueueRowQueueShellModel = {
     open_detail: {

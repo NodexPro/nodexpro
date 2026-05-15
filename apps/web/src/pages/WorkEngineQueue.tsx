@@ -238,6 +238,29 @@ export function WorkEngineQueue() {
     void loadAggregate(next);
   }, [filters, loadAggregate]);
 
+  const handleWorkEngineOverflowCommand = useCallback(
+    async (row: WorkEngineQueueRow, item: QueueOverflowMenuItem) => {
+      if (!item.enabled || item.channel !== 'work_engine_command') return;
+      setError(null);
+      try {
+        const resp = await executeWorkEngineQueueCommand({
+          command: item.command,
+          payload: {
+            ...(item.command_payload ?? {}),
+            work_item_id: row.work_item_id,
+            expected_version: row.version,
+            idempotency_key: crypto.randomUUID(),
+          },
+          filters: filtersToApi(filters),
+        });
+        handleCommandResult(resp.refreshed?.aggregate ?? null);
+      } catch (e) {
+        await handleCommandFailure(e);
+      }
+    },
+    [filters, handleCommandFailure, handleCommandResult],
+  );
+
   const handleReminderAction = useCallback(
     async (row: ReminderReviewQueueRow, action: ReminderReviewAllowedAction) => {
       if (!action.enabled) return;
@@ -343,6 +366,7 @@ export function WorkEngineQueue() {
           rows={rows}
           onOpenDetail={(row) => setDetailRow(row)}
           onOverflowAction={(row, cmd) => setModal(buildModalForAction(row, cmd))}
+          onWorkEngineCommand={(row, item) => void handleWorkEngineOverflowCommand(row, item)}
           onOwnershipCommand={handleOwnershipCommand}
           onReviewCommand={handleReviewCommand}
         />
@@ -619,6 +643,7 @@ function QueueTable(props: {
   rows: WorkEngineQueueRow[];
   onOpenDetail: (row: WorkEngineQueueRow) => void;
   onOverflowAction: (row: WorkEngineQueueRow, cmd: QueueAllowedActionCommand) => void;
+  onWorkEngineCommand: (row: WorkEngineQueueRow, item: QueueOverflowMenuItem) => void;
   onOwnershipCommand: (row: WorkEngineQueueRow, cmd: QueueOwnershipCommand['command']) => void;
   onReviewCommand: (row: WorkEngineQueueRow, cmd: QueueReviewCommand['command']) => void;
 }) {
@@ -673,6 +698,7 @@ function QueueTable(props: {
                       }
                       onOpenDetail={() => props.onOpenDetail(row)}
                       onOverflowAction={(cmd) => props.onOverflowAction(row, cmd)}
+                      onWorkEngineCommand={(item) => props.onWorkEngineCommand(row, item)}
                       onOwnershipCommand={(cmd) => props.onOwnershipCommand(row, cmd)}
                       onReviewCommand={(cmd) => props.onReviewCommand(row, cmd)}
                     />
@@ -921,6 +947,7 @@ function dispatchOverflowPick(
   item: QueueOverflowMenuItem,
   handlers: {
     onOverflowAction: (cmd: QueueAllowedActionCommand) => void;
+    onWorkEngineCommand: (item: QueueOverflowMenuItem) => void;
     onOwnershipCommand: (cmd: QueueOwnershipCommand['command']) => void;
     onReviewCommand: (cmd: QueueReviewCommand['command']) => void;
   },
@@ -933,6 +960,10 @@ function dispatchOverflowPick(
     handlers.onReviewCommand(item.command as QueueReviewCommand['command']);
     return;
   }
+  if (item.channel === 'work_engine_command') {
+    handlers.onWorkEngineCommand(item);
+    return;
+  }
   handlers.onOverflowAction(item.command as QueueAllowedActionCommand);
 }
 
@@ -942,6 +973,7 @@ function QueueRowShellActions(props: {
   onOverflowOpenChange: (open: boolean) => void;
   onOpenDetail: () => void;
   onOverflowAction: (cmd: QueueAllowedActionCommand) => void;
+  onWorkEngineCommand: (item: QueueOverflowMenuItem) => void;
   onOwnershipCommand: (cmd: QueueOwnershipCommand['command']) => void;
   onReviewCommand: (cmd: QueueReviewCommand['command']) => void;
 }) {
@@ -982,6 +1014,7 @@ function QueueRowShellActions(props: {
         onPickItem={(item) =>
           dispatchOverflowPick(item, {
             onOverflowAction: props.onOverflowAction,
+            onWorkEngineCommand: props.onWorkEngineCommand,
             onOwnershipCommand: props.onOwnershipCommand,
             onReviewCommand: props.onReviewCommand,
           })

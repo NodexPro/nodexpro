@@ -75,6 +75,7 @@ import {
   parseReminderSnoozePreset,
   snoozeReminderCandidate,
 } from './work-engine.reminder-review.service.js';
+import { assertGenerateReminderCandidateDevAccess } from './work-engine.queue-dev-tools.js';
 import {
   WORK_ENGINE_PERMISSIONS,
   requireWorkEnginePermission,
@@ -1467,6 +1468,7 @@ export async function executeWorkEngineCommand(
       };
       return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
         requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
+        assertGenerateReminderCandidateDevAccess(ctx);
         const workItemId = reqString(payload, 'work_item_id');
         const stepKey = reqString(payload, 'step_key');
         const workflowType = parseGenerateReminderCandidateWorkflowType(payload.workflow_type);

@@ -60,11 +60,12 @@ export type QueueOpenDetailAction = {
 };
 
 export type QueueOverflowMenuItem = {
-  channel: 'ownership' | 'review' | 'semantic';
+  channel: 'ownership' | 'review' | 'semantic' | 'work_engine_command';
   command: string;
   label: string;
   enabled: boolean;
   reason: string | null;
+  command_payload?: Record<string, unknown> | null;
 };
 
 export type QueueOverflowMenuSection = {

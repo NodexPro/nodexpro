@@ -15,6 +15,7 @@ import { canStaffPickUpUnassigned, DEFAULT_SLA_POLICY, resolveWorkTypePoliciesBa
 import { buildDueQueueCellText, buildQueueSlaPresentation, loadActiveSlaObligationsForItems, } from './work-engine.sla.service.js';
 import { WORK_ENGINE_PERMISSIONS } from './work-engine.rbac.js';
 import { buildReminderReviewBanner, loadReminderReviewCounts, loadReminderReviewPage, REMINDER_SNOOZE_PRESETS, } from './work-engine.reminder-review.service.js';
+import { canAccessReminderDraftDevTool, GENERATE_REMINDER_DRAFT_STEP_KEY, GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE, } from './work-engine.queue-dev-tools.js';
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
  * pending-mapping outcome (the event was persisted but no work_item was
@@ -205,7 +206,24 @@ function buildQueueRowChrome(args) {
             reason: release.reason,
         });
     }
-    const showAdmin = canAdmin && adminItems.length > 0;
+    const devToolAccess = canAccessReminderDraftDevTool(viewer);
+    if (devToolAccess) {
+        const archived = row.work_state === 'archived';
+        adminItems.push({
+            channel: 'work_engine_command',
+            command: 'generate_reminder_candidate',
+            label: 'Generate reminder draft',
+            enabled: !archived,
+            reason: archived ? 'Work item is archived' : null,
+            command_payload: {
+                work_item_id: row.id,
+                expected_version: row.version,
+                workflow_type: GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE,
+                step_key: GENERATE_REMINDER_DRAFT_STEP_KEY,
+            },
+        });
+    }
+    const showAdmin = adminItems.length > 0 && (canAdmin || devToolAccess);
     const queue_shell = {
         open_detail: {
             kind: 'open_queue_item_detail',
