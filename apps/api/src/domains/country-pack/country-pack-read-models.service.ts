@@ -1030,11 +1030,16 @@ function buildCommunicationPoliciesPickerOptions(packContext?: {
   const packs = (packContext?.country_packs ?? []) as Array<Record<string, unknown>>;
   const rulesets = (packContext?.rulesets ?? []) as Array<Record<string, unknown>>;
   return {
-    countries: countries.map((c) => ({
-      country_code: String(c.country_code ?? ''),
-      name: String(c.name ?? c.country_code ?? ''),
-      status: String(c.status ?? ''),
-    })),
+    countries: countries.map((c) => {
+      const countryCode = String(c.country_code ?? c.code ?? '')
+        .trim()
+        .toUpperCase();
+      return {
+        country_code: countryCode,
+        name: String(c.name ?? countryCode),
+        status: String(c.status ?? ''),
+      };
+    }),
     country_packs: packs.map((p) => ({
       id: String(p.id ?? ''),
       country_code: String(p.country_code ?? ''),

@@ -76,13 +76,53 @@ function emptyWorkflow(editor: EditorOptions | null): WorkflowForm {
   };
 }
 
-function parsePickerOptions(cp: UnknownRecord | null) {
+function normalizeCountryCode(raw: unknown): string {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return '';
+  const row = raw as UnknownRecord;
+  return safeText(row.country_code).toUpperCase() || safeText(row.code).toUpperCase();
+}
+
+function parsePickerOptions(cp: UnknownRecord | null): {
+  countries: PickerCountry[];
+  country_packs: PickerPack[];
+  rulesets: PickerRuleset[];
+} {
   const po = cp?.picker_options;
   const o = po && typeof po === 'object' && !Array.isArray(po) ? (po as UnknownRecord) : {};
+  const countriesRaw = Array.isArray(o.countries) ? o.countries : [];
   return {
-    countries: (Array.isArray(o.countries) ? o.countries : []) as PickerCountry[],
-    country_packs: (Array.isArray(o.country_packs) ? o.country_packs : []) as PickerPack[],
-    rulesets: (Array.isArray(o.rulesets) ? o.rulesets : []) as PickerRuleset[],
+    countries: countriesRaw.map((row) => {
+      const countryCode = normalizeCountryCode(row);
+      const r = row as UnknownRecord;
+      return {
+        country_code: countryCode,
+        name: safeText(r.name) || countryCode,
+        status: safeText(r.status),
+      };
+    }),
+    country_packs: (Array.isArray(o.country_packs) ? o.country_packs : []).map((row) => {
+      const r = row as UnknownRecord;
+      return {
+        id: safeText(r.id),
+        country_code: safeText(r.country_code).toUpperCase(),
+        pack_code: safeText(r.pack_code),
+        name: safeText(r.name),
+        status: safeText(r.status),
+      };
+    }),
+    rulesets: (Array.isArray(o.rulesets) ? o.rulesets : []).map((row) => {
+      const r = row as UnknownRecord;
+      return {
+        id: safeText(r.id),
+        country_pack_id: safeText(r.country_pack_id),
+        ruleset_code: safeText(r.ruleset_code),
+        ruleset_version: safeText(r.ruleset_version),
+        status: safeText(r.status),
+        effective_from: safeText(r.effective_from),
+        effective_to: r.effective_to == null ? null : safeText(r.effective_to),
+        effective_window: safeText(r.effective_window),
+      };
+    }),
   };
 }
 
@@ -124,9 +164,10 @@ function CountryPackRulesetFields({
   onPack: (v: string) => void;
   onRuleset: (v: string) => void;
 }) {
+  const countryUp = countryCode.trim().toUpperCase();
   const packs = useMemo(
-    () => picker.country_packs.filter((p) => p.country_code === countryCode),
-    [picker.country_packs, countryCode],
+    () => picker.country_packs.filter((p) => p.country_code === countryUp),
+    [picker.country_packs, countryUp],
   );
   const rulesets = useMemo(
     () => picker.rulesets.filter((r) => r.country_pack_id === packId),
@@ -581,11 +622,13 @@ export function OperationalReminderOwnerModal({
     setBodyTemplate('');
     setVariables(['client_name']);
     setTone('');
-  }, [open, kind, editor, picker.countries, picker.country_packs, picker.rulesets]);
+    // Reset only when modal opens or kind changes — not when picker option arrays are re-derived.
+  }, [open, kind]);
 
   function onCountryChange(code: string) {
-    setCountryCode(code);
-    const pack = picker.country_packs.find((p) => p.country_code === code);
+    const countryUp = code.trim().toUpperCase();
+    setCountryCode(countryUp);
+    const pack = picker.country_packs.find((p) => p.country_code === countryUp);
     setPackId(pack?.id ?? '');
     const rs = picker.rulesets.find((r) => r.country_pack_id === (pack?.id ?? ''));
     setRulesetId(rs?.id ?? '');
