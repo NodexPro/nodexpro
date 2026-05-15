@@ -78,6 +78,35 @@ async function markActiveObligationMet(orgId, workItemId, kind) {
         throw error;
     return (data?.length ?? 0) > 0;
 }
+export async function hasActiveObligation(orgId, workItemId, kind) {
+    const { count, error } = await supabaseAdmin
+        .from('work_sla_obligations')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('work_item_id', workItemId)
+        .eq('kind', kind)
+        .eq('status', 'active');
+    if (error)
+        throw error;
+    return (count ?? 0) > 0;
+}
+/** Start response SLA only when none is active (idempotent for Start work / claim). */
+export async function startResponseObligationIfAbsent(args) {
+    if (await hasActiveObligation(args.orgId, args.workItemId, 'response')) {
+        return false;
+    }
+    const policy = await resolveWorkTypeSlaPolicy(args.orgId, args.workType);
+    await startObligation({
+        orgId: args.orgId,
+        workItemId: args.workItemId,
+        kind: 'response',
+        durationMinutes: policy.response_sla_minutes,
+        sourceTransitionId: args.sourceTransitionId,
+        actorUserId: args.actorUserId,
+        policy,
+    });
+    return true;
+}
 async function startObligation(args) {
     await cancelActiveObligation(args.orgId, args.workItemId, args.kind, 'superseded');
     const startsAt = new Date().toISOString();
@@ -297,6 +326,16 @@ export async function applySlaHooksForCommand(args) {
                 sourceTransitionId: args.transitionId,
                 actorUserId: args.actorUserId,
                 policy,
+            });
+            break;
+        }
+        case 'claim_work_item': {
+            await startResponseObligationIfAbsent({
+                orgId: args.orgId,
+                workItemId: args.workItemId,
+                sourceTransitionId: args.transitionId,
+                actorUserId: args.actorUserId,
+                workType: args.workType,
             });
             break;
         }

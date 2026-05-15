@@ -37,7 +37,7 @@ import {
   type WorkEngineQueueRow,
   type WorkEngineQueueTableModel,
 } from '../api/work-engine';
-import { userFacingApiMessage } from '../api/client';
+import { ApiError, userFacingApiMessage } from '../api/client';
 import '../styles/nx-work-engine-queue.css';
 
 type FilterState = {
@@ -63,6 +63,15 @@ const INITIAL_FILTERS: FilterState = {
   limit: 50,
   offset: 0,
 };
+
+function isWorkItemVersionConflict(e: unknown): boolean {
+  if (!(e instanceof ApiError)) return false;
+  const code = e.code ?? '';
+  return (
+    e.status === 409 &&
+    (code === 'WORK_ITEM_VERSION_CONFLICT' || code === 'version_conflict_on_update')
+  );
+}
 
 function filtersToApi(f: FilterState): WorkEngineQueueFiltersInput {
   return {
@@ -143,6 +152,18 @@ export function WorkEngineQueue() {
     [filters, loadAggregate],
   );
 
+  const handleCommandFailure = useCallback(
+    async (e: unknown) => {
+      if (isWorkItemVersionConflict(e)) {
+        setError('Item was updated. Refreshing...');
+        await loadAggregate(filters);
+        return;
+      }
+      setError(userFacingApiMessage(e));
+    },
+    [filters, loadAggregate],
+  );
+
   const handleReviewCommand = useCallback(
     async (row: WorkEngineQueueRow, cmd: QueueReviewCommand['command']) => {
       if (cmd === 'reject_work_item') {
@@ -162,10 +183,10 @@ export function WorkEngineQueue() {
         });
         handleCommandResult(resp.refreshed?.aggregate ?? null);
       } catch (e) {
-        setError(userFacingApiMessage(e));
+        await handleCommandFailure(e);
       }
     },
-    [filters, handleCommandResult],
+    [filters, handleCommandFailure, handleCommandResult],
   );
 
   const handleOwnershipCommand = useCallback(
@@ -183,10 +204,10 @@ export function WorkEngineQueue() {
         });
         handleCommandResult(resp.refreshed?.aggregate ?? null);
       } catch (e) {
-        setError(userFacingApiMessage(e));
+        await handleCommandFailure(e);
       }
     },
-    [filters, handleCommandResult],
+    [filters, handleCommandFailure, handleCommandResult],
   );
 
   const onPaginate = useCallback(
@@ -1192,6 +1213,12 @@ function ActionModal(props: {
       });
       onCompleted(resp.refreshed?.aggregate ?? null);
     } catch (e) {
+      if (isWorkItemVersionConflict(e)) {
+        setError('Item was updated. Refreshing...');
+        const refreshed = await fetchWorkEngineQueueAggregate(filtersForApi);
+        onCompleted(refreshed);
+        return;
+      }
       setError(userFacingApiMessage(e));
     } finally {
       setSubmitting(false);

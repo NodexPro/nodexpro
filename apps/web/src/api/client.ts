@@ -22,6 +22,12 @@ export class ApiError extends Error {
 export function userFacingApiMessage(e: unknown): string {
   if (e instanceof ApiError) {
     const c = e.code ?? '';
+    if (
+      c === 'WORK_ITEM_VERSION_CONFLICT' ||
+      c === 'version_conflict_on_update'
+    ) {
+      return 'Item was updated. Refreshing...';
+    }
     if (c === 'VERSION_CONFLICT' || c === 'CONFLICT') {
       return 'המידע עודכן מאז שנפתח המסך. סגור ופתח מחדש את כרטיס הלקוח, או רענן את הרשימה, ונסה שוב.';
     }

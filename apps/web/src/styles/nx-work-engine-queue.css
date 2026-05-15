@@ -201,45 +201,49 @@
   font-size: 13px;
 }
 
-/* Column widths — layout only; fr ratios 1.3 / 1 / 1 / 0.9 / 1 / 1.1 / 0.55 (+ optional) */
+/* Column widths — layout only. Due + Actions are fixed px; client absorbs remainder. */
 .nx-we-col--actions {
-  width: 235px;
+  width: 240px;
+  min-width: 240px;
+}
+
+.nx-we-col--due {
+  width: 118px;
+  min-width: 118px;
+}
+
+.nx-we-col--unread {
+  width: 44px;
+  min-width: 44px;
+}
+
+.nx-we-col--last_activity {
+  width: 100px;
+  min-width: 100px;
+}
+
+.nx-we-col--module,
+.nx-we-col--work_type,
+.nx-we-col--state,
+.nx-we-col--assignee {
+  width: 9%;
 }
 
 .nx-we-table--cols-8 {
-  --nx-we-w-client: 19%;
-  --nx-we-w-module: 12%;
-  --nx-we-w-work_type: 12%;
-  --nx-we-w-state: 11%;
-  --nx-we-w-assignee: 12%;
-  --nx-we-w-last_activity: 13%;
-  --nx-we-w-unread: 7%;
   --nx-we-w-optional: 0%;
 }
 
 /* Default queue table: 8 data columns (incl. Due) + Actions */
 .nx-we-table--cols-9 {
-  --nx-we-w-client: 16%;
-  --nx-we-w-module: 10%;
-  --nx-we-w-work_type: 10%;
-  --nx-we-w-state: 9%;
-  --nx-we-w-assignee: 10%;
-  --nx-we-w-last_activity: 11%;
-  --nx-we-w-unread: 5%;
-  --nx-we-w-due: 9%;
   --nx-we-w-optional: 0%;
 }
 
 .nx-we-table--cols-10 {
-  --nx-we-w-client: 15%;
-  --nx-we-w-module: 9.5%;
-  --nx-we-w-work_type: 9.5%;
-  --nx-we-w-state: 8.5%;
-  --nx-we-w-assignee: 9.5%;
-  --nx-we-w-last_activity: 10.5%;
-  --nx-we-w-unread: 5%;
-  --nx-we-w-due: 8.5%;
-  --nx-we-w-optional: 6%;
+  --nx-we-w-module: 8%;
+  --nx-we-w-work_type: 8%;
+  --nx-we-w-state: 7.5%;
+  --nx-we-w-assignee: 8%;
+  --nx-we-w-optional: 5.5%;
 }
 
 .nx-we-table--cols-11 {
@@ -287,35 +291,24 @@
 }
 
 .nx-we-col--client {
-  width: var(--nx-we-w-client, 19%);
+  width: auto;
+  min-width: 0;
 }
 
 .nx-we-col--module {
-  width: var(--nx-we-w-module, 12%);
+  width: var(--nx-we-w-module, 9%);
 }
 
 .nx-we-col--work_type {
-  width: var(--nx-we-w-work_type, 12%);
+  width: var(--nx-we-w-work_type, 9%);
 }
 
 .nx-we-col--state {
-  width: var(--nx-we-w-state, 11%);
+  width: var(--nx-we-w-state, 9%);
 }
 
 .nx-we-col--assignee {
-  width: var(--nx-we-w-assignee, 12%);
-}
-
-.nx-we-col--last_activity {
-  width: var(--nx-we-w-last_activity, 13%);
-}
-
-.nx-we-col--unread {
-  width: var(--nx-we-w-unread, 7%);
-}
-
-.nx-we-col--due {
-  width: var(--nx-we-w-due, 9%);
+  width: var(--nx-we-w-assignee, 9%);
 }
 
 .nx-we-col--period_key,
@@ -326,12 +319,22 @@
   width: var(--nx-we-w-optional, 6%);
 }
 
+.nx-we-th[data-col-key='due'],
+.nx-we-td[data-col-key='due'] {
+  text-align: center;
+  padding-inline: 10px 16px;
+  border-left: 1px solid #eef2f7;
+}
+
 .nx-we-due-cell {
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
   line-height: 1.25;
   min-width: 0;
+  max-width: 100%;
+  text-align: center;
 }
 
 .nx-we-due-cell__primary {
@@ -364,6 +367,7 @@
 .nx-we-th[data-col-key='unread'],
 .nx-we-td[data-col-key='unread'] {
   text-align: center;
+  padding-inline: 6px;
 }
 
 .nx-we-td,
@@ -383,16 +387,17 @@
 .nx-we-td--actions {
   white-space: nowrap;
   text-align: right;
-  padding: 8px 10px;
+  padding: 8px 12px;
   vertical-align: middle;
+  border-left: 1px solid #e2e8f0;
 }
 
 .nx-we-th--actions {
-  padding-inline-end: 12px;
+  padding-inline: 16px 12px;
 }
 
 .nx-we-td--actions {
-  padding-inline-end: 10px;
+  padding-inline: 14px 12px;
 }
 
 .nx-we-cell-text {

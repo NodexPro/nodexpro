@@ -871,7 +871,7 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
                         claimed_at: new Date().toISOString(),
                     },
                 });
-                await insertTransition({
+                const transitionId = await insertTransition({
                     org_id: orgId,
                     work_item_id: workItemId,
                     from_state: current.work_state,
@@ -888,6 +888,15 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
                 await audit(orgId, actorUserId, 'work_item', workItemId, AUDIT_ACTIONS.WORK_ITEM_CLAIMED, {
                     claimed_by_user_id: claimHolder,
                     force,
+                });
+                await runPhase3aSlaHooks({
+                    orgId,
+                    workItemId,
+                    command: 'claim_work_item',
+                    transitionId,
+                    actorUserId,
+                    workType: current.work_type,
+                    toState: current.work_state,
                 });
                 return { workItemId };
             });
