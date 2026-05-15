@@ -913,6 +913,22 @@ function buildClaimedQueueCellTitle(claimedByUserId, claimedByUserName, claimedA
     const ts = formatQueueUtcTimestamp(claimedAt);
     return ts ? `${who} · ${ts}` : who;
 }
+/** Legacy keys must never appear in queue_table.columns or queue_cells. */
+const QUEUE_TABLE_EXCLUDED_COLUMN_KEYS = new Set(['due_at', 'sla']);
+const QUEUE_TABLE_CELL_KEYS = [
+    'client',
+    'module',
+    'work_type',
+    'state',
+    'assignee',
+    'last_activity',
+    'unread',
+    'due',
+    'claimed',
+    'period_key',
+    'reviewer',
+    'review_status',
+];
 const BASE_QUEUE_COLUMN_KEYS = [
     'client',
     'module',
@@ -922,8 +938,16 @@ const BASE_QUEUE_COLUMN_KEYS = [
     'last_activity',
     'unread',
     'due',
+    'claimed',
 ];
-const OPTIONAL_QUEUE_COLUMN_KEYS = ['period_key', 'reviewer', 'review_status', 'claimed'];
+const OPTIONAL_QUEUE_COLUMN_KEYS = ['period_key', 'reviewer', 'review_status'];
+function sanitizeQueueCells(cells) {
+    const out = {};
+    for (const key of QUEUE_TABLE_CELL_KEYS) {
+        out[key] = cells[key] ?? null;
+    }
+    return out;
+}
 const QUEUE_COLUMN_DEFS = {
     client: { label: 'Client', empty_display: 'dash' },
     module: { label: 'Module', empty_display: 'dash' },
@@ -947,10 +971,14 @@ function queueColumnHasAnyValue(rows, key) {
 function computeQueueTableModel(rows) {
     const columns = [];
     for (const key of BASE_QUEUE_COLUMN_KEYS) {
+        if (QUEUE_TABLE_EXCLUDED_COLUMN_KEYS.has(key))
+            continue;
         const def = QUEUE_COLUMN_DEFS[key];
         columns.push({ key, label: def.label, empty_display: def.empty_display, kind: 'data' });
     }
     for (const key of OPTIONAL_QUEUE_COLUMN_KEYS) {
+        if (QUEUE_TABLE_EXCLUDED_COLUMN_KEYS.has(key))
+            continue;
         if (queueColumnHasAnyValue(rows, key)) {
             const def = QUEUE_COLUMN_DEFS[key];
             columns.push({ key, label: def.label, empty_display: def.empty_display, kind: 'data' });
@@ -962,7 +990,9 @@ function computeQueueTableModel(rows) {
         empty_display: 'blank',
         kind: 'actions',
     });
-    return { columns };
+    return {
+        columns: columns.filter((c) => !QUEUE_TABLE_EXCLUDED_COLUMN_KEYS.has(c.key)),
+    };
 }
 function buildCommandModalSubjectLine(params) {
     const parts = [params.work_type_label, params.module_label];
@@ -1374,7 +1404,7 @@ export async function buildWorkEngineQueueAggregate(params) {
             itemObligations.find((o) => o.status === 'active')?.due_at ??
             r.due_at;
         const due_column_cell = buildDueQueueCellText(r.sla_status, slaStatusLabelText, primaryDueIso);
-        const queue_cells = {
+        const queue_cells = sanitizeQueueCells({
             client: clientName,
             module: module_label,
             work_type: work_type_label,
@@ -1387,7 +1417,7 @@ export async function buildWorkEngineQueueAggregate(params) {
             reviewer: reviewer_cell,
             review_status: review_status_cell,
             claimed: claimed_cell,
-        };
+        });
         const queue_cell_titles = {
             claimed: claimed_cell_title,
             due: slaPresentation.primary_due_at_label,

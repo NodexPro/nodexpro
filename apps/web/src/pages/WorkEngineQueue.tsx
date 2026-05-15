@@ -522,6 +522,13 @@ function FiltersBar(props: {
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 
+/** Presentation-only guard: never render legacy optional columns from stale aggregates. */
+const QUEUE_TABLE_EXCLUDED_COLUMN_KEYS = new Set(['due_at', 'sla']);
+
+function visibleQueueTableColumns(table: WorkEngineQueueTableModel): WorkEngineQueueTableModel['columns'] {
+  return table.columns.filter((c) => !QUEUE_TABLE_EXCLUDED_COLUMN_KEYS.has(c.key));
+}
+
 function QueueTable(props: {
   table: WorkEngineQueueTableModel;
   rows: WorkEngineQueueRow[];
@@ -531,6 +538,7 @@ function QueueTable(props: {
   onReviewCommand: (row: WorkEngineQueueRow, cmd: QueueReviewCommand['command']) => void;
 }) {
   const [overflowMenuRowId, setOverflowMenuRowId] = useState<string | null>(null);
+  const columns = visibleQueueTableColumns(props.table);
 
   if (props.rows.length === 0) {
     return (
@@ -541,15 +549,15 @@ function QueueTable(props: {
   }
   return (
     <div className="nx-we-table-wrap">
-      <table className={`nx-we-table nx-we-table--cols-${props.table.columns.length}`}>
+      <table className={`nx-we-table nx-we-table--cols-${columns.length}`}>
         <colgroup>
-          {props.table.columns.map((col) => (
+          {columns.map((col) => (
             <col key={col.key} className={`nx-we-col nx-we-col--${col.key}`} />
           ))}
         </colgroup>
         <thead>
           <tr>
-            {props.table.columns.map((col) => (
+            {columns.map((col) => (
               <th
                 key={col.key}
                 data-col-key={col.key}
@@ -563,7 +571,7 @@ function QueueTable(props: {
         <tbody>
           {props.rows.map((row) => (
             <tr key={row.work_item_id}>
-              {props.table.columns.map((col) => (
+              {columns.map((col) => (
                 <td
                   key={`${row.work_item_id}-${col.key}`}
                   className={
