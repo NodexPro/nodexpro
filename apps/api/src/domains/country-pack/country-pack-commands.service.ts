@@ -21,6 +21,12 @@ import { encryptOptionalSecret } from '../../shared/owner-email-provider-config.
 import { saveOwnerEmailProviderConfigGlobal } from '../../shared/owner-email-provider-config.service.js';
 import { saveOwnerEmailProviderConfigOrgOverride } from '../../shared/owner-email-provider-config.service.js';
 import { savePlatformPublicUrlGlobal } from '../../shared/owner-email-provider-config.service.js';
+import {
+  handleSaveOperationalReminderPolicy,
+  handleSaveOperationalReminderPolicyVersion,
+  handleSaveOperationalReminderTemplate,
+  handleSaveOperationalReminderTemplateVersion,
+} from './operational-communication-owner-commands.service.js';
 
 type CountryPackCommandType =
   | 'create_country'
@@ -53,7 +59,11 @@ type CountryPackCommandType =
   | 'extend_org_module_trial'
   | 'activate_org_module_access'
   | 'create_pricing_adjustment'
-  | 'cancel_pricing_adjustment';
+  | 'cancel_pricing_adjustment'
+  | 'save_operational_reminder_policy'
+  | 'save_operational_reminder_template'
+  | 'save_operational_reminder_policy_version'
+  | 'save_operational_reminder_template_version';
 
 type CountryPackCommand = {
   command: CountryPackCommandType;
@@ -1697,6 +1707,14 @@ export async function executeCountryPackCommand(
       return handleCreatePricingAdjustment(ctx, command.payload);
     case 'cancel_pricing_adjustment':
       return handleCancelPricingAdjustment(ctx, command.payload);
+    case 'save_operational_reminder_policy':
+      return handleSaveOperationalReminderPolicy(ctx, command.payload);
+    case 'save_operational_reminder_template':
+      return handleSaveOperationalReminderTemplate(ctx, command.payload);
+    case 'save_operational_reminder_policy_version':
+      return handleSaveOperationalReminderPolicyVersion(ctx, command.payload);
+    case 'save_operational_reminder_template_version':
+      return handleSaveOperationalReminderTemplateVersion(ctx, command.payload);
     default:
       throw badRequest(`Unsupported country-pack command: ${(command as { command?: string }).command ?? 'unknown'}`);
   }

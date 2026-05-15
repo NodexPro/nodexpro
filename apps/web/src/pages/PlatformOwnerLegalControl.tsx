@@ -14,6 +14,11 @@ import {
   normalizeActions,
 } from './owner-legal-control-panel-actions';
 import type { OwnerCommandResponse, UnknownRecord } from './owner-legal-control-types';
+import {
+  CommunicationPoliciesToolbar,
+  OperationalReminderOwnerModal,
+  type ReminderSmartFormKind,
+} from './operational-reminder-owner-forms';
 
 function isForbidden(e: unknown): boolean {
   return e instanceof ApiError && (e.status === 401 || e.status === 403);
@@ -181,6 +186,7 @@ export function PlatformOwnerLegalControl() {
 
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandModal, setCommandModal] = useState(null as CommandModalState | null);
+  const [reminderSmartModal, setReminderSmartModal] = useState(null as ReminderSmartFormKind | null);
   const [legalValuesModalOpen, setLegalValuesModalOpen] = useState(false);
   const [auditModalOpen, setAuditModalOpen] = useState(false);
   const [emailProviderModalOpen, setEmailProviderModalOpen] = useState(false);
@@ -1084,10 +1090,10 @@ export function PlatformOwnerLegalControl() {
         </div>
         {communicationQuickActions.length ? (
           <div style={{ marginTop: 10 }}>
-            <ActionToolbar
+            <CommunicationPoliciesToolbar
               actions={communicationQuickActions}
               disabled={commandBusy}
-              onPick={(cmd, meta, pre) => openCommandModal(cmd, meta, pre)}
+              onSmartForm={(kind) => setReminderSmartModal(kind)}
             />
           </div>
         ) : null}
@@ -3325,6 +3331,19 @@ export function PlatformOwnerLegalControl() {
           </div>
         </div>
       ) : null}
+
+      <OperationalReminderOwnerModal
+        kind={reminderSmartModal}
+        open={reminderSmartModal != null}
+        busy={commandBusy}
+        communicationPolicies={communicationPolicies}
+        onClose={() => setReminderSmartModal(null)}
+        onSubmit={async (cmd, payload) => {
+          const out = await sendOwnerCommand(cmd, payload);
+          setReminderSmartModal(null);
+          return out;
+        }}
+      />
 
       <CommandActionModal
         open={!!commandModal}

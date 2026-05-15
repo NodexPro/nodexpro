@@ -3,7 +3,8 @@ import { forbidden, notFound } from '../../shared/errors.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import { resolveCountryContext } from './country-pack-resolver.service.js';
 import { assertValidDocflowCommunicationOwnerPayload, isDocflowCommunicationOwnerPayload, } from './docflow-communication-owner-payload.js';
-import { OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY, assertValidOperationalReminderPolicyPayload, assertValidOperationalReminderTemplatePayload, isOperationalReminderPolicyPayload, isOperationalReminderTemplatePayload, } from './operational-communication-owner-payload.js';
+import { buildCommunicationPolicyEditorOptions } from './operational-communication-owner-form.js';
+import { OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY, REMINDER_TEMPLATE_VARIABLES, assertValidOperationalReminderPolicyPayload, assertValidOperationalReminderTemplatePayload, isOperationalReminderPolicyPayload, isOperationalReminderTemplatePayload, } from './operational-communication-owner-payload.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
 function normalizeCommercialControlsQuery(input) {
@@ -980,48 +981,29 @@ function buildCommunicationPoliciesSlice(legalTable, packContext) {
         operational_reminder_templates: operationalReminderTemplates,
         validation_errors: validationErrors,
         picker_options: pickerOptions,
+        editor_options: {
+            ...buildCommunicationPolicyEditorOptions(),
+            template_variables: REMINDER_TEMPLATE_VARIABLES.map((code) => ({ code, label: code })),
+        },
         flow_note: 'Country → Country Pack → Ruleset → Communication policy/template version. Reuse existing country structure; do not create countries here.',
         quick_actions: [
             {
-                action_key: 'create_legal_value',
-                enabled: pickerOptions.countries.length > 0,
-                button_label: 'New reminder policy legal value',
-                note: 'Pick country_code from picker_options.countries. Then attach versions under picker_options.rulesets (active ruleset for that country pack).',
-                payload: {
-                    country_code: '<from picker_options.countries>',
-                    value_key: 'comm.reminder.policy',
-                    label: 'Work Engine reminder policy',
-                    category: OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY,
-                    module_scope: 'work_engine',
-                    value_type: 'json',
-                },
+                action_key: 'save_operational_reminder_policy',
+                enabled: pickerOptions.countries.length > 0 && pickerOptions.rulesets.length > 0,
+                button_label: 'New reminder policy',
+                smart_form: 'reminder_policy',
             },
             {
-                action_key: 'create_legal_value',
-                enabled: pickerOptions.countries.length > 0,
-                button_label: 'New reminder template legal value',
-                note: 'Template value_key must start with comm.reminder.template.',
-                payload: {
-                    country_code: '<from picker_options.countries>',
-                    value_key: 'comm.reminder.template.waiting_client.he',
-                    label: 'Reminder template',
-                    category: OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY,
-                    module_scope: 'work_engine',
-                    value_type: 'json',
-                },
+                action_key: 'save_operational_reminder_template',
+                enabled: pickerOptions.countries.length > 0 && pickerOptions.rulesets.length > 0,
+                button_label: 'New reminder template',
+                smart_form: 'reminder_template',
             },
             {
-                action_key: 'create_legal_value_version',
-                enabled: pickerOptions.rulesets.length > 0,
-                button_label: 'New policy/template version',
-                note: 'country_pack_ruleset_id from picker_options.rulesets. value_payload_json type operational_reminder_policy or operational_reminder_template.',
-                payload: {
-                    country_code: '<from picker_options.countries>',
-                    value_key: 'comm.reminder.policy | comm.reminder.template.*',
-                    country_pack_ruleset_id: '<from picker_options.rulesets>',
-                    effective_from: 'YYYY-MM-DD',
-                    value_payload_json: 'operational_reminder_policy | operational_reminder_template JSON',
-                },
+                action_key: 'save_operational_reminder_version',
+                enabled: pickerOptions.countries.length > 0 && pickerOptions.rulesets.length > 0,
+                button_label: 'New policy or template version',
+                smart_form: 'reminder_version',
             },
         ],
     };

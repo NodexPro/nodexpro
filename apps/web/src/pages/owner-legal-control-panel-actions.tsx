@@ -80,7 +80,7 @@ export const btnCompactMuted: CSSProperties = {
   color: '#374151',
 };
 
-const btnPrimary: CSSProperties = {
+export const btnPrimary: CSSProperties = {
   padding: '8px 20px',
   minWidth: 96,
   fontSize: 14,
@@ -93,7 +93,7 @@ const btnPrimary: CSSProperties = {
   cursor: 'pointer',
 };
 
-const btnGhost: CSSProperties = {
+export const btnGhost: CSSProperties = {
   padding: '8px 20px',
   minWidth: 96,
   fontSize: 14,
