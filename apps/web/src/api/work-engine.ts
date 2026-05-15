@@ -218,10 +218,57 @@ export type WorkEnginePendingMappingRow = {
   occurred_at: string;
 };
 
+export type ReminderReviewAllowedAction = {
+  action_key: string;
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  command: string;
+  command_payload: Record<string, unknown>;
+};
+
+export type ReminderReviewQueueRow = {
+  reminder_candidate_id: string;
+  client_name: string | null;
+  workflow_label: string;
+  period_label: string | null;
+  severity_label: string;
+  channel_labels: string[];
+  preview_text: string;
+  created_at_label: string | null;
+  due_label: string | null;
+  state_label: string;
+  editable_message: {
+    subject: string;
+    body: string;
+    channel_preview_labels: string[];
+  };
+  allowed_actions: ReminderReviewAllowedAction[];
+  queue_cells?: Record<string, string | null>;
+};
+
+export type ReminderReviewBanner = {
+  visible: boolean;
+  variant: 'warning' | 'brand';
+  title: string;
+  subtitle: string;
+  cta_label: string;
+  cta_action: { action_key: 'open_reminder_review' };
+  dismissible: boolean;
+};
+
 export type WorkEngineQueueAggregate = {
   aggregate_key: 'work_engine_queue_aggregate';
   org_id: string;
   generated_at: string;
+  queue_view_mode?: 'work_items' | 'reminder_review';
+  reminder_review_summary?: {
+    pending_count: number;
+    urgent_count: number;
+    overdue_count: number;
+  };
+  banner?: ReminderReviewBanner;
+  snooze_presets?: Array<{ preset_key: string; label: string }>;
   summary_cards: {
     total_active: number;
     assigned_to_me: number;
@@ -234,6 +281,7 @@ export type WorkEngineQueueAggregate = {
     overdue: number;
     escalated: number;
     pending_mapping: number;
+    pending_reminders?: number;
   };
   filters: {
     states: QueueStateOption[];
@@ -262,6 +310,7 @@ export type WorkEngineQueueAggregate = {
   /** Table structure (column order, labels, kinds) — UI renders verbatim. */
   queue_table: WorkEngineQueueTableModel;
   rows: WorkEngineQueueRow[];
+  reminder_review_rows?: ReminderReviewQueueRow[];
   pending_mapping_section: {
     pending_mapping_count: number;
     recent_pending_mappings: WorkEnginePendingMappingRow[];

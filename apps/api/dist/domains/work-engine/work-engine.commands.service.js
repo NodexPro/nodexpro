@@ -33,6 +33,7 @@ import { intakeWorkEvent } from './work-engine.event-intake.service.js';
 import { canStaffPickUpUnassigned, resolveWorkTypeWorkflowPolicy, } from './work-engine.policy.service.js';
 import { applySlaHooksForCommand } from './work-engine.sla.service.js';
 import { buildReminderCandidateDedupKey, generateReminderCandidate, parseGenerateReminderCandidateWorkflowType, } from './work-engine.reminder.service.js';
+import { approveSendReminderCandidate, cancelReminderCandidate, editReminderCandidate, loadReminderCandidate, parseReminderSnoozePreset, snoozeReminderCandidate, } from './work-engine.reminder-review.service.js';
 import { WORK_ENGINE_PERMISSIONS, requireWorkEnginePermission, } from './work-engine.rbac.js';
 import { CREATION_SOURCE_TYPES, OVERRIDE_KINDS, OVERRIDE_KINDS_REQUIRING_REASON, } from './work-engine.types.js';
 const REFRESH_FOUNDATION = 'work_engine_foundation_aggregate';
@@ -1225,6 +1226,90 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
                     });
                 }
                 return { workItemId };
+            });
+        }
+        case 'edit_reminder_candidate': {
+            const queuePayload = {
+                ...payload,
+                refresh_aggregate: REFRESH_QUEUE,
+            };
+            return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
+                requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
+                const candidateId = reqString(payload, 'reminder_candidate_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const body = reqString(payload, 'body');
+                const subject = asOptionalString(payload.subject);
+                const current = await loadReminderCandidate(orgId, candidateId);
+                await editReminderCandidate({
+                    orgId,
+                    actorUserId,
+                    candidateId,
+                    expectedVersion,
+                    subject,
+                    body,
+                });
+                return { workItemId: current.work_item_id };
+            });
+        }
+        case 'approve_send_reminder_candidate': {
+            const queuePayload = {
+                ...payload,
+                refresh_aggregate: REFRESH_QUEUE,
+            };
+            return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
+                requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
+                const candidateId = reqString(payload, 'reminder_candidate_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const current = await loadReminderCandidate(orgId, candidateId);
+                await approveSendReminderCandidate({
+                    orgId,
+                    actorUserId,
+                    candidateId,
+                    expectedVersion,
+                });
+                return { workItemId: current.work_item_id };
+            });
+        }
+        case 'cancel_reminder_candidate': {
+            const queuePayload = {
+                ...payload,
+                refresh_aggregate: REFRESH_QUEUE,
+            };
+            return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
+                requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
+                const candidateId = reqString(payload, 'reminder_candidate_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const reason = asOptionalString(payload.reason);
+                const current = await loadReminderCandidate(orgId, candidateId);
+                await cancelReminderCandidate({
+                    orgId,
+                    actorUserId,
+                    candidateId,
+                    expectedVersion,
+                    reason,
+                });
+                return { workItemId: current.work_item_id };
+            });
+        }
+        case 'snooze_reminder_candidate': {
+            const queuePayload = {
+                ...payload,
+                refresh_aggregate: REFRESH_QUEUE,
+            };
+            return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
+                requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
+                const candidateId = reqString(payload, 'reminder_candidate_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const snoozePreset = parseReminderSnoozePreset(payload.snooze_preset);
+                const current = await loadReminderCandidate(orgId, candidateId);
+                await snoozeReminderCandidate({
+                    orgId,
+                    actorUserId,
+                    candidateId,
+                    expectedVersion,
+                    snoozePreset,
+                });
+                return { workItemId: current.work_item_id };
             });
         }
         case 'intake_work_event': {

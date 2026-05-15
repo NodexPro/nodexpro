@@ -68,7 +68,12 @@ export type WorkEngineCommandType =
   | 'approve_work_item'
   | 'reject_work_item'
   /** Stage 10 Phase 3B-2 — manual reminder candidate generation */
-  | 'generate_reminder_candidate';
+  | 'generate_reminder_candidate'
+  /** Stage 10 Phase 3B-3 — reminder review queue commands */
+  | 'edit_reminder_candidate'
+  | 'approve_send_reminder_candidate'
+  | 'cancel_reminder_candidate'
+  | 'snooze_reminder_candidate';
 
 export type WorkEngineCommandPayload = Record<string, unknown>;
 
