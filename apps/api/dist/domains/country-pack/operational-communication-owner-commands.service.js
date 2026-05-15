@@ -9,8 +9,8 @@ import { assertCountryExists } from './country.service.js';
 import { getCountryPack } from './country-pack.service.js';
 import { assertRulesetExists } from './ruleset.service.js';
 import { assertLegalValueExists, assertNoOverlapLegalValueVersions, getLegalValueByKey, } from './legal-value.service.js';
-import { DEFAULT_REMINDER_POLICY_VALUE_KEY, mergeReminderWorkflowIntoPolicy, parseOwnerReminderPolicyForm, parseOwnerReminderTemplateForm, parseOwnerReminderWorkflowForm, } from './operational-communication-owner-form.js';
-import { OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY, assertOperationalCommunicationLegalValueMetadata, } from './operational-communication-owner-payload.js';
+import { DEFAULT_REMINDER_POLICY_VALUE_KEY, mergeReminderWorkflowIntoPolicy, parseOwnerReminderPolicyForm, parseOwnerReminderTemplateForm, parseOwnerReminderWorkflowForm, setWorkflowEnabledInPolicy, } from './operational-communication-owner-form.js';
+import { OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY, REMINDER_WORKFLOW_TYPES, assertOperationalCommunicationLegalValueMetadata, assertValidOperationalReminderPolicyPayload, isOperationalReminderPolicyPayload, } from './operational-communication-owner-payload.js';
 import { buildOwnerLegalControlPanelAggregate } from './country-pack-read-models.service.js';
 function asString(value, field) {
     if (typeof value !== 'string' || !value.trim())
@@ -141,6 +141,96 @@ function parseSaveScope(payload) {
         activateAfterCreate: asBool(payload.activate_after_create, true),
     };
 }
+function parseReminderWorkflowTypeField(raw) {
+    if (typeof raw !== 'string' || !raw.trim()) {
+        throw badRequest('workflow_type is required', 'invalid_workflow_type');
+    }
+    const v = raw.trim();
+    if (!REMINDER_WORKFLOW_TYPES.includes(v)) {
+        throw badRequest('workflow_type is invalid', 'invalid_workflow_type');
+    }
+    return v;
+}
+async function loadPolicyVersionContext(versionId) {
+    const { data, error } = await supabaseAdmin
+        .from('country_legal_value_versions')
+        .select('id, legal_value_id, country_pack_ruleset_id, effective_from, effective_to, status, value_payload_json, country_legal_values!inner(country_code, value_key, category)')
+        .eq('id', versionId)
+        .maybeSingle();
+    if (error)
+        throw error;
+    if (!data)
+        throw notFound('Policy version not found', 'policy_version_not_found');
+    const joined = data.country_legal_values;
+    if (String(joined.category ?? '') !== OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY) {
+        throw badRequest('Version is not an operational reminder policy', 'invalid_policy_version');
+    }
+    if (String(joined.value_key ?? '') !== DEFAULT_REMINDER_POLICY_VALUE_KEY) {
+        throw badRequest('Version is not the reminder policy legal value', 'invalid_policy_version');
+    }
+    const vpj = data.value_payload_json;
+    if (!isOperationalReminderPolicyPayload(vpj)) {
+        throw badRequest('Policy version payload is invalid', 'invalid_policy_payload');
+    }
+    const policy = assertValidOperationalReminderPolicyPayload(vpj);
+    return {
+        id: String(data.id),
+        legal_value_id: String(data.legal_value_id),
+        country_pack_ruleset_id: String(data.country_pack_ruleset_id),
+        effective_from: String(data.effective_from),
+        effective_to: data.effective_to == null ? null : String(data.effective_to),
+        status: String(data.status),
+        country_code: String(joined.country_code ?? '').toUpperCase(),
+        policy,
+    };
+}
+async function deactivateLegalValueVersionInPlace(ctx, versionId) {
+    const { error } = await supabaseAdmin
+        .from('country_legal_value_versions')
+        .update({ status: 'disabled' })
+        .eq('id', versionId);
+    if (error)
+        throw error;
+    await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_DEACTIVATED, 'country_legal_value_version', versionId, {});
+}
+async function activateLegalValueVersionInPlace(ctx, source) {
+    await assertNoOverlapLegalValueVersions({
+        legalValueId: source.legal_value_id,
+        effectiveFrom: source.effective_from,
+        effectiveTo: source.effective_to,
+        excludeVersionId: source.id,
+    });
+    const { error } = await supabaseAdmin
+        .from('country_legal_value_versions')
+        .update({ status: 'active' })
+        .eq('id', source.id);
+    if (error)
+        throw error;
+    await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_ACTIVATED, 'country_legal_value_version', source.id, {});
+}
+/** New active policy version; deactivates replaced active version (Country Pack version pattern). */
+async function republishPolicyVersionWithPayload(ctx, source, newPolicy, auditMeta) {
+    if (source.status === 'active') {
+        await deactivateLegalValueVersionInPlace(ctx, source.id);
+    }
+    const newVersionId = await insertLegalValueVersion({
+        legalValueId: source.legal_value_id,
+        rulesetId: source.country_pack_ruleset_id,
+        effectiveFrom: source.effective_from,
+        effectiveTo: source.effective_to,
+        valuePayloadJson: newPolicy,
+        status: 'active',
+    });
+    await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_CREATED, 'country_legal_value_version', newVersionId, {
+        legal_value_id: source.legal_value_id,
+        ruleset_id: source.country_pack_ruleset_id,
+        kind: 'operational_reminder_policy',
+        replaced_version_id: source.id,
+        ...auditMeta,
+    });
+    await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_ACTIVATED, 'country_legal_value_version', newVersionId, {});
+    return newVersionId;
+}
 async function fetchLatestPolicyPayloadForRuleset(legalValueId, rulesetId) {
     const { data, error } = await supabaseAdmin
         .from('country_legal_value_versions')
@@ -239,6 +329,83 @@ export async function handleSaveOperationalReminderWorkflow(ctx, payload) {
             templates: templateMeta,
             policy_merged_from_existing: existingPolicy !== null,
         },
+    };
+}
+export async function handleEditOperationalReminderWorkflow(ctx, payload) {
+    const out = await handleSaveOperationalReminderWorkflow(ctx, payload);
+    return { ...out, command: 'edit_operational_reminder_workflow' };
+}
+export async function handleDisableOperationalReminderWorkflow(ctx, payload) {
+    const versionId = asString(payload.policy_legal_value_version_id, 'policy_legal_value_version_id');
+    const workflowType = parseReminderWorkflowTypeField(payload.workflow_type);
+    const source = await loadPolicyVersionContext(versionId);
+    const wf = source.policy.workflows.find((w) => w.workflow_type === workflowType);
+    if (!wf?.enabled && source.status === 'active') {
+        return {
+            ok: true,
+            command: 'disable_operational_reminder_workflow',
+            refreshed: await refreshedPanel(ctx),
+            meta: { workflow_type: workflowType, noop: true },
+        };
+    }
+    const newPolicy = setWorkflowEnabledInPolicy(source.policy, workflowType, false);
+    const newVersionId = await republishPolicyVersionWithPayload(ctx, source, newPolicy, {
+        workflow_type: workflowType,
+        workflow_enabled: false,
+    });
+    return {
+        ok: true,
+        command: 'disable_operational_reminder_workflow',
+        refreshed: await refreshedPanel(ctx),
+        meta: { legal_value_version_id: newVersionId, workflow_type: workflowType },
+    };
+}
+export async function handleEnableOperationalReminderWorkflow(ctx, payload) {
+    const versionId = asString(payload.policy_legal_value_version_id, 'policy_legal_value_version_id');
+    const workflowType = parseReminderWorkflowTypeField(payload.workflow_type);
+    const source = await loadPolicyVersionContext(versionId);
+    const wf = source.policy.workflows.find((w) => w.workflow_type === workflowType);
+    if (source.status !== 'active') {
+        await activateLegalValueVersionInPlace(ctx, source);
+        if (wf?.enabled) {
+            return {
+                ok: true,
+                command: 'enable_operational_reminder_workflow',
+                refreshed: await refreshedPanel(ctx),
+                meta: { legal_value_version_id: source.id, workflow_type: workflowType, activated_version: true },
+            };
+        }
+        const reloaded = await loadPolicyVersionContext(source.id);
+        const newPolicy = setWorkflowEnabledInPolicy(reloaded.policy, workflowType, true);
+        const newVersionId = await republishPolicyVersionWithPayload(ctx, reloaded, newPolicy, {
+            workflow_type: workflowType,
+            workflow_enabled: true,
+        });
+        return {
+            ok: true,
+            command: 'enable_operational_reminder_workflow',
+            refreshed: await refreshedPanel(ctx),
+            meta: { legal_value_version_id: newVersionId, workflow_type: workflowType },
+        };
+    }
+    if (wf?.enabled) {
+        return {
+            ok: true,
+            command: 'enable_operational_reminder_workflow',
+            refreshed: await refreshedPanel(ctx),
+            meta: { workflow_type: workflowType, noop: true },
+        };
+    }
+    const newPolicy = setWorkflowEnabledInPolicy(source.policy, workflowType, true);
+    const newVersionId = await republishPolicyVersionWithPayload(ctx, source, newPolicy, {
+        workflow_type: workflowType,
+        workflow_enabled: true,
+    });
+    return {
+        ok: true,
+        command: 'enable_operational_reminder_workflow',
+        refreshed: await refreshedPanel(ctx),
+        meta: { legal_value_version_id: newVersionId, workflow_type: workflowType },
     };
 }
 export async function handleSaveOperationalReminderPolicy(ctx, payload) {

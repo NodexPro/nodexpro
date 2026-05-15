@@ -511,6 +511,123 @@ export function parseOwnerReminderWorkflowForm(raw: unknown): ParsedOwnerReminde
   };
 }
 
+export type OwnerReminderWorkflowEditableForm = {
+  country_code: string;
+  country_pack_id: string;
+  country_pack_ruleset_id: string;
+  policy_legal_value_version_id: string;
+  effective_from: string;
+  effective_to: string | null;
+  activate_after_create: boolean;
+  workflow_type: ReminderWorkflowType;
+  approval_required: boolean;
+  default_channels: ReminderChannel[];
+  reminders: Array<{
+    period_slug?: string;
+    period?: { amount: number; unit: string };
+    severity: 'info' | 'warn' | 'urgent';
+    channels: ReminderChannel[];
+    language: string;
+    subject?: string;
+    message: string;
+  }>;
+};
+
+export function offsetMinutesToOwnerPeriodForm(offsetMinutes: number): {
+  period_slug: string;
+  custom_amount: number;
+  custom_unit: string;
+} {
+  const preset = OWNER_REMINDER_PRESET_PERIODS.find(
+    (p) => periodAmountUnitToOffsetMinutes(p.amount, p.unit) === offsetMinutes,
+  );
+  if (preset) {
+    return { period_slug: preset.period_slug, custom_amount: preset.amount, custom_unit: preset.unit };
+  }
+  if (offsetMinutes % (7 * 24 * 60) === 0) {
+    const amount = offsetMinutes / (7 * 24 * 60);
+    return { period_slug: '__custom__', custom_amount: amount, custom_unit: 'weeks' };
+  }
+  if (offsetMinutes % (24 * 60) === 0) {
+    const amount = offsetMinutes / (24 * 60);
+    return { period_slug: '__custom__', custom_amount: amount, custom_unit: 'days' };
+  }
+  if (offsetMinutes % 60 === 0) {
+    const amount = offsetMinutes / 60;
+    return { period_slug: '__custom__', custom_amount: amount, custom_unit: 'hours' };
+  }
+  return { period_slug: '__custom__', custom_amount: offsetMinutes, custom_unit: 'minutes' };
+}
+
+export function setWorkflowEnabledInPolicy(
+  policy: OperationalReminderPolicyPayload,
+  workflowType: ReminderWorkflowType,
+  enabled: boolean,
+): OperationalReminderPolicyPayload {
+  let found = false;
+  const workflows = policy.workflows.map((w) => {
+    if (w.workflow_type !== workflowType) return w;
+    found = true;
+    return { ...w, enabled };
+  });
+  if (!found) {
+    throw badRequest(`Workflow '${workflowType}' is not in this policy version`, 'reminder_workflow_not_found');
+  }
+  return assertValidOperationalReminderPolicyPayload({
+    ...policy,
+    workflows,
+  });
+}
+
+export function buildReminderWorkflowEditableForm(params: {
+  countryCode: string;
+  countryPackId: string;
+  rulesetId: string;
+  policyVersionId: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  versionStatus: string;
+  policy: OperationalReminderPolicyPayload;
+  workflowType: ReminderWorkflowType;
+  templateBodiesByKey: Map<string, OperationalReminderTemplatePayload>;
+}): OwnerReminderWorkflowEditableForm {
+  const wf = params.policy.workflows.find((w) => w.workflow_type === params.workflowType);
+  if (!wf) {
+    throw badRequest(`Workflow '${params.workflowType}' is not in this policy version`, 'reminder_workflow_not_found');
+  }
+  const reminders = wf.cadence_steps.map((step) => {
+    const period = offsetMinutesToOwnerPeriodForm(step.offset_minutes);
+    const template = params.templateBodiesByKey.get(step.template_key);
+    const periodPart =
+      period.period_slug === '__custom__'
+        ? { period: { amount: period.custom_amount, unit: period.custom_unit } }
+        : { period_slug: period.period_slug };
+    return {
+      ...periodPart,
+      severity: step.severity ?? 'info',
+      channels: step.channels ?? params.policy.default_channels,
+      language: template?.language ?? 'he',
+      ...(template?.channel === 'email' || (step.channels ?? []).includes('email')
+        ? { subject: template?.subject_template ?? '' }
+        : {}),
+      message: template?.body_template ?? '',
+    };
+  });
+  return {
+    country_code: params.countryCode,
+    country_pack_id: params.countryPackId,
+    country_pack_ruleset_id: params.rulesetId,
+    policy_legal_value_version_id: params.policyVersionId,
+    effective_from: params.effectiveFrom,
+    effective_to: params.effectiveTo,
+    activate_after_create: params.versionStatus === 'active',
+    workflow_type: params.workflowType,
+    approval_required: params.policy.approval_required !== false,
+    default_channels: params.policy.default_channels,
+    reminders,
+  };
+}
+
 export function mergeReminderWorkflowIntoPolicy(
   existing: OperationalReminderPolicyPayload | null,
   parsed: ParsedOwnerReminderWorkflow,

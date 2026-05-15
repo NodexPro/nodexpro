@@ -186,6 +186,8 @@ export function PlatformOwnerLegalControl() {
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandModal, setCommandModal] = useState(null as CommandModalState | null);
   const [reminderWorkflowOpen, setReminderWorkflowOpen] = useState(false);
+  const [reminderWorkflowMode, setReminderWorkflowMode] = useState<'create' | 'edit'>('create');
+  const [reminderWorkflowEditForm, setReminderWorkflowEditForm] = useState(null as UnknownRecord | null);
   const [legalValuesModalOpen, setLegalValuesModalOpen] = useState(false);
   const [auditModalOpen, setAuditModalOpen] = useState(false);
   const [emailProviderModalOpen, setEmailProviderModalOpen] = useState(false);
@@ -1087,7 +1089,11 @@ export function PlatformOwnerLegalControl() {
             <CommunicationPoliciesToolbar
               actions={communicationQuickActions}
               disabled={commandBusy}
-              onOpenWorkflow={() => setReminderWorkflowOpen(true)}
+              onOpenWorkflow={() => {
+                setReminderWorkflowMode('create');
+                setReminderWorkflowEditForm(null);
+                setReminderWorkflowOpen(true);
+              }}
             />
           </div>
         ) : null}
@@ -1098,7 +1104,7 @@ export function PlatformOwnerLegalControl() {
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
                 <thead>
                   <tr>
-                    {['Country', 'Workflow', 'Reminders', 'Channels', 'Approval', 'Effective', 'Status', 'Preview'].map((h) => (
+                    {['Country', 'Workflow', 'Reminders', 'Channels', 'Approval', 'Effective', 'Status', 'Preview', 'Actions'].map((h) => (
                       <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #e9d5ff', padding: 8 }}>{h}</th>
                     ))}
                   </tr>
@@ -1108,22 +1114,72 @@ export function PlatformOwnerLegalControl() {
                     const channelLabels = Array.isArray(row.channel_labels)
                       ? (row.channel_labels as string[]).join(', ')
                       : JSON.stringify(row.default_channels ?? []);
+                    const actions = Array.isArray(row.allowed_actions)
+                      ? (row.allowed_actions as UnknownRecord[])
+                      : [];
                     return (
-                    <tr key={String(row.version_id ?? row.value_key)}>
+                    <tr key={String(row.row_key ?? row.version_id ?? row.value_key)}>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.country_code ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.workflow_summary ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.workflow_summary ?? row.workflow_label ?? '')}</td>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.reminder_count ?? row.cadence_step_count ?? '')}</td>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{channelLabels}</td>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{row.approval_required === false ? 'optional' : 'required'}</td>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.effective_window ?? '')}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String((row.status_badge as { label?: string })?.label ?? row.status ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.workflow_row_status_label ?? '')}</td>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff', fontSize: 12 }}>{String(row.policy_preview ?? '')}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {actions.map((action) => {
+                            const actionKey = safeText(action.action_key);
+                            const enabled = action.enabled !== false;
+                            const label = safeText(action.label) || actionKey;
+                            const command = safeText(action.command);
+                            const commandPayload =
+                              action.command_payload && typeof action.command_payload === 'object' && !Array.isArray(action.command_payload)
+                                ? (action.command_payload as UnknownRecord)
+                                : {};
+                            const disabledReason = safeText(action.disabled_reason);
+                            if (!actionKey || !command) return null;
+                            return (
+                              <button
+                                key={actionKey}
+                                type="button"
+                                disabled={commandBusy || !enabled}
+                                title={!enabled && disabledReason ? disabledReason : undefined}
+                                style={{
+                                  ...btnCompact,
+                                  padding: '4px 10px',
+                                  fontSize: 12,
+                                  opacity: enabled ? 1 : 0.5,
+                                }}
+                                onClick={() => {
+                                  if (!enabled) return;
+                                  if (actionKey === 'edit_reminder_workflow') {
+                                    const form =
+                                      row.editable_form && typeof row.editable_form === 'object' && !Array.isArray(row.editable_form)
+                                        ? (row.editable_form as UnknownRecord)
+                                        : null;
+                                    if (!form) return;
+                                    setReminderWorkflowMode('edit');
+                                    setReminderWorkflowEditForm(form);
+                                    setReminderWorkflowOpen(true);
+                                    return;
+                                  }
+                                  void sendOwnerCommand(command, commandPayload);
+                                }}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </td>
                     </tr>
                     );
                   })}
                   {!reminderPolicies.length ? (
                     <tr>
-                      <td colSpan={8} style={{ padding: 12, color: '#6b7280' }}>No reminder workflows yet.</td>
+                      <td colSpan={9} style={{ padding: 12, color: '#6b7280' }}>No reminder workflows yet.</td>
                     </tr>
                   ) : null}
                 </tbody>
@@ -3300,11 +3356,17 @@ export function PlatformOwnerLegalControl() {
       <OperationalReminderWorkflowWizard
         open={reminderWorkflowOpen}
         busy={commandBusy}
+        mode={reminderWorkflowMode}
+        initialEditableForm={reminderWorkflowEditForm}
         communicationPolicies={communicationPolicies}
-        onClose={() => setReminderWorkflowOpen(false)}
+        onClose={() => {
+          setReminderWorkflowOpen(false);
+          setReminderWorkflowEditForm(null);
+        }}
         onSubmit={async (cmd, payload) => {
           const out = await sendOwnerCommand(cmd, payload);
           setReminderWorkflowOpen(false);
+          setReminderWorkflowEditForm(null);
           return out;
         }}
       />

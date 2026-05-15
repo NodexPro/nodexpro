@@ -13,7 +13,7 @@ import { encryptOptionalSecret } from '../../shared/owner-email-provider-config.
 import { saveOwnerEmailProviderConfigGlobal } from '../../shared/owner-email-provider-config.service.js';
 import { saveOwnerEmailProviderConfigOrgOverride } from '../../shared/owner-email-provider-config.service.js';
 import { savePlatformPublicUrlGlobal } from '../../shared/owner-email-provider-config.service.js';
-import { handleSaveOperationalReminderPolicy, handleSaveOperationalReminderPolicyVersion, handleSaveOperationalReminderTemplate, handleSaveOperationalReminderTemplateVersion, handleSaveOperationalReminderWorkflow, } from './operational-communication-owner-commands.service.js';
+import { handleSaveOperationalReminderPolicy, handleSaveOperationalReminderPolicyVersion, handleSaveOperationalReminderTemplate, handleSaveOperationalReminderTemplateVersion, handleSaveOperationalReminderWorkflow, handleEditOperationalReminderWorkflow, handleDisableOperationalReminderWorkflow, handleEnableOperationalReminderWorkflow, } from './operational-communication-owner-commands.service.js';
 function commercialControlsContextFromPayload(payload) {
     const raw = payload.commercial_controls_context;
     if (!raw || typeof raw !== 'object' || Array.isArray(raw))
@@ -1528,6 +1528,12 @@ export async function executeCountryPackCommand(ctx, command) {
             return handleCancelPricingAdjustment(ctx, command.payload);
         case 'save_operational_reminder_workflow':
             return handleSaveOperationalReminderWorkflow(ctx, command.payload);
+        case 'edit_operational_reminder_workflow':
+            return handleEditOperationalReminderWorkflow(ctx, command.payload);
+        case 'disable_operational_reminder_workflow':
+            return handleDisableOperationalReminderWorkflow(ctx, command.payload);
+        case 'enable_operational_reminder_workflow':
+            return handleEnableOperationalReminderWorkflow(ctx, command.payload);
         case 'save_operational_reminder_policy':
             return handleSaveOperationalReminderPolicy(ctx, command.payload);
         case 'save_operational_reminder_template':

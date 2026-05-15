@@ -7,13 +7,19 @@ import {
   assertValidDocflowCommunicationOwnerPayload,
   isDocflowCommunicationOwnerPayload,
 } from './docflow-communication-owner-payload.js';
-import { buildCommunicationPolicyEditorOptions } from './operational-communication-owner-form.js';
+import {
+  buildCommunicationPolicyEditorOptions,
+  buildReminderWorkflowEditableForm,
+} from './operational-communication-owner-form.js';
 import {
   OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY,
   assertValidOperationalReminderPolicyPayload,
   assertValidOperationalReminderTemplatePayload,
   isOperationalReminderPolicyPayload,
   isOperationalReminderTemplatePayload,
+  type OperationalReminderTemplatePayload,
+  type OperationalReminderWorkflow,
+  type ReminderWorkflowType,
 } from './operational-communication-owner-payload.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
@@ -912,77 +918,246 @@ function isOperationalCommunicationLegalValueRow(lv: Record<string, unknown>): b
   return String(lv.category ?? '') === OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY;
 }
 
-function buildOperationalReminderPoliciesFromLegalTable(
+const REMINDER_WORKFLOW_TYPE_LABELS: Record<string, string> = {
+  waiting_client: 'Waiting for client',
+  response_sla: 'Response SLA',
+  review_sla: 'Review SLA',
+};
+
+const REMINDER_CHANNEL_LABELS: Record<string, string> = {
+  docflow: 'DocFlow',
+  email: 'Email',
+  portal: 'Portal',
+};
+
+type ReminderWorkflowRowAction = {
+  action_key: string;
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  command: string;
+  command_payload: Record<string, unknown>;
+};
+
+function buildTemplateBodiesIndexForRuleset(
   legalTable: Array<Record<string, unknown>>,
-): Array<Record<string, unknown>> {
-  const out: Array<Record<string, unknown>> = [];
+  rulesetId: string,
+): Map<string, OperationalReminderTemplatePayload> {
+  const index = new Map<string, OperationalReminderTemplatePayload>();
   for (const lv of legalTable) {
     if (!isOperationalCommunicationLegalValueRow(lv)) continue;
     const versions = Array.isArray(lv.versions) ? (lv.versions as Record<string, unknown>[]) : [];
     for (const ver of versions) {
+      if (String(ver.country_pack_ruleset_id ?? '') !== rulesetId) continue;
       const vpj = ver.value_payload_json;
-      if (!isOperationalReminderPolicyPayload(vpj)) continue;
-      let normalized: Record<string, unknown>;
-      let parseError: string | null = null;
+      if (!isOperationalReminderTemplatePayload(vpj)) continue;
       try {
-        normalized = assertValidOperationalReminderPolicyPayload(vpj) as unknown as Record<string, unknown>;
-      } catch (e) {
-        parseError = e instanceof Error ? e.message : 'invalid_payload';
-        normalized = {};
+        const payload = assertValidOperationalReminderTemplatePayload(vpj);
+        const existing = index.get(payload.template_key);
+        const verStatus = String(ver.status ?? '');
+        if (!existing || verStatus === 'active') {
+          index.set(payload.template_key, payload);
+        }
+      } catch {
+        // skip invalid template versions
       }
-      const workflows = Array.isArray(normalized.workflows) ? normalized.workflows : [];
-      const workflowLabels = workflows.map((w) => {
-        const wt = String((w as { workflow_type?: string }).workflow_type ?? '');
-        const labels: Record<string, string> = {
-          waiting_client: 'Waiting for client',
-          response_sla: 'Response SLA',
-          review_sla: 'Review SLA',
-        };
-        return labels[wt] ?? wt;
-      });
-      const reminderCount = workflows.reduce(
-        (n, w) =>
-          n +
-          (Array.isArray((w as { cadence_steps?: unknown }).cadence_steps)
-            ? (w as { cadence_steps: unknown[] }).cadence_steps.length
-            : 0),
-        0,
-      );
-      const channelLabels = (Array.isArray(normalized.default_channels) ? normalized.default_channels : []).map(
-        (c) => {
-          const code = String(c);
-          const map: Record<string, string> = { docflow: 'DocFlow', email: 'Email', portal: 'Portal' };
-          return map[code] ?? code;
-        },
-      );
-      out.push({
-        legal_value_id: lv.id,
-        value_key: lv.value_key,
-        label: lv.label,
-        country_code: lv.country_code,
-        version_id: ver.id,
-        country_pack_ruleset_id: ver.country_pack_ruleset_id,
-        effective_from: ver.effective_from,
-        effective_to: ver.effective_to,
-        status: ver.status,
-        status_badge: ver.status_badge,
-        effective_window: ver.effective_window,
-        approval_required: normalized.approval_required !== false,
-        default_channels: normalized.default_channels ?? [],
-        channel_labels: channelLabels,
-        workflow_labels: workflowLabels,
-        workflow_summary: workflowLabels.join(', ') || '—',
-        workflow_count: workflows.length,
-        reminder_count: reminderCount,
-        cadence_step_count: reminderCount,
-        policy_preview: parseError ?? (workflowLabels.join(' · ') || '—'),
-        parse_error: parseError,
-        allowed_actions: [
-          { action_key: 'save_operational_reminder_workflow', enabled: true, button_label: 'Edit workflow' },
-        ],
-      });
     }
   }
+  return index;
+}
+
+function resolvePackIdForRuleset(
+  rulesetId: string,
+  packContext?: { rulesets?: unknown[] },
+): string {
+  const rulesets = (packContext?.rulesets ?? []) as Array<Record<string, unknown>>;
+  const rs = rulesets.find((r) => String(r.id ?? '') === rulesetId);
+  return String(rs?.country_pack_id ?? '');
+}
+
+function computeReminderWorkflowRowStatus(params: {
+  versionStatus: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  workflowEnabled: boolean;
+  today: string;
+}): 'active' | 'disabled' {
+  if (params.versionStatus !== 'active') return 'disabled';
+  if (!params.workflowEnabled) return 'disabled';
+  if (params.effectiveFrom > params.today) return 'disabled';
+  if (params.effectiveTo && params.effectiveTo < params.today) return 'disabled';
+  return 'active';
+}
+
+function buildReminderWorkflowAllowedActions(params: {
+  rowStatus: 'active' | 'disabled';
+  parseError: string | null;
+  countryCode: string;
+  countryPackId: string;
+  rulesetId: string;
+  versionId: string;
+  workflowType: ReminderWorkflowType;
+  editableForm: Record<string, unknown> | null;
+}): ReminderWorkflowRowAction[] {
+  const basePayload = {
+    country_code: params.countryCode,
+    country_pack_id: params.countryPackId,
+    country_pack_ruleset_id: params.rulesetId,
+    policy_legal_value_version_id: params.versionId,
+    workflow_type: params.workflowType,
+  };
+  const editEnabled = params.parseError === null && params.editableForm !== null;
+  const disableEnabled = params.rowStatus === 'active' && params.parseError === null;
+  const enableEnabled = params.rowStatus === 'disabled' && params.parseError === null;
+
+  return [
+    {
+      action_key: 'edit_reminder_workflow',
+      label: 'Edit',
+      enabled: editEnabled,
+      disabled_reason: editEnabled ? null : params.parseError ?? 'Workflow cannot be edited',
+      command: 'edit_operational_reminder_workflow',
+      command_payload: basePayload,
+    },
+    {
+      action_key: 'disable_reminder_workflow',
+      label: 'Disable',
+      enabled: disableEnabled,
+      disabled_reason: disableEnabled ? null : 'Workflow is not active',
+      command: 'disable_operational_reminder_workflow',
+      command_payload: basePayload,
+    },
+    {
+      action_key: 'enable_reminder_workflow',
+      label: 'Enable',
+      enabled: enableEnabled,
+      disabled_reason: enableEnabled ? null : 'Workflow is already active',
+      command: 'enable_operational_reminder_workflow',
+      command_payload: basePayload,
+    },
+  ];
+}
+
+function buildOperationalReminderPoliciesFromLegalTable(
+  legalTable: Array<Record<string, unknown>>,
+  packContext?: {
+    countries?: unknown[];
+    country_packs?: unknown[];
+    rulesets?: unknown[];
+  },
+): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (const lv of legalTable) {
+    if (!isOperationalCommunicationLegalValueRow(lv)) continue;
+    const valueKey = String(lv.value_key ?? '');
+    if (valueKey !== 'comm.reminder.policy') continue;
+
+    const versions = Array.isArray(lv.versions) ? (lv.versions as Record<string, unknown>[]) : [];
+    for (const ver of versions) {
+      const vpj = ver.value_payload_json;
+      if (!isOperationalReminderPolicyPayload(vpj)) continue;
+
+      let policy: ReturnType<typeof assertValidOperationalReminderPolicyPayload>;
+      let parseError: string | null = null;
+      try {
+        policy = assertValidOperationalReminderPolicyPayload(vpj);
+      } catch (e) {
+        parseError = e instanceof Error ? e.message : 'invalid_payload';
+        policy = { type: 'operational_reminder_policy', approval_required: true, default_channels: [], workflows: [] };
+      }
+
+      const rulesetId = String(ver.country_pack_ruleset_id ?? '');
+      const countryCode = String(lv.country_code ?? '').toUpperCase();
+      const countryPackId = resolvePackIdForRuleset(rulesetId, packContext);
+      const templateIndex = buildTemplateBodiesIndexForRuleset(legalTable, rulesetId);
+      const channelLabels = policy.default_channels.map((c) => REMINDER_CHANNEL_LABELS[c] ?? c);
+
+      for (const wf of policy.workflows as OperationalReminderWorkflow[]) {
+        const workflowType = wf.workflow_type;
+        const workflowLabel = REMINDER_WORKFLOW_TYPE_LABELS[workflowType] ?? workflowType;
+        const rowStatus = computeReminderWorkflowRowStatus({
+          versionStatus: String(ver.status ?? ''),
+          effectiveFrom: String(ver.effective_from ?? ''),
+          effectiveTo: ver.effective_to == null ? null : String(ver.effective_to),
+          workflowEnabled: wf.enabled !== false,
+          today,
+        });
+
+        let editableForm: Record<string, unknown> | null = null;
+        if (parseError === null) {
+          try {
+            editableForm = buildReminderWorkflowEditableForm({
+              countryCode,
+              countryPackId,
+              rulesetId,
+              policyVersionId: String(ver.id ?? ''),
+              effectiveFrom: String(ver.effective_from ?? ''),
+              effectiveTo: ver.effective_to == null ? null : String(ver.effective_to),
+              versionStatus: String(ver.status ?? ''),
+              policy,
+              workflowType,
+              templateBodiesByKey: templateIndex,
+            }) as unknown as Record<string, unknown>;
+          } catch {
+            editableForm = null;
+          }
+        }
+
+        const reminderCount = wf.cadence_steps.length;
+        const allowedActions = buildReminderWorkflowAllowedActions({
+          rowStatus,
+          parseError,
+          countryCode,
+          countryPackId,
+          rulesetId,
+          versionId: String(ver.id ?? ''),
+          workflowType,
+          editableForm,
+        });
+
+        out.push({
+          row_key: `${ver.id}:${workflowType}`,
+          legal_value_id: lv.id,
+          value_key: valueKey,
+          label: lv.label,
+          country_code: countryCode,
+          country_pack_id: countryPackId,
+          version_id: ver.id,
+          country_pack_ruleset_id: rulesetId,
+          workflow_type: workflowType,
+          workflow_label: workflowLabel,
+          workflow_summary: workflowLabel,
+          effective_from: ver.effective_from,
+          effective_to: ver.effective_to,
+          status: ver.status,
+          status_badge: ver.status_badge,
+          effective_window: ver.effective_window,
+          workflow_row_status: rowStatus,
+          workflow_row_status_label: rowStatus === 'active' ? 'Active' : 'Disabled',
+          approval_required: policy.approval_required !== false,
+          default_channels: policy.default_channels,
+          channel_labels: channelLabels,
+          reminder_count: reminderCount,
+          cadence_step_count: reminderCount,
+          policy_preview: parseError ?? workflowLabel,
+          parse_error: parseError,
+          editable_form: editableForm,
+          allowed_actions: allowedActions,
+        });
+      }
+    }
+  }
+
+  out.sort((a, b) => {
+    const c = String(a.country_code).localeCompare(String(b.country_code));
+    if (c !== 0) return c;
+    const w = String(a.workflow_label).localeCompare(String(b.workflow_label));
+    if (w !== 0) return w;
+    return String(b.effective_from).localeCompare(String(a.effective_from));
+  });
+
   return out;
 }
 
@@ -1090,7 +1265,7 @@ function buildCommunicationPoliciesSlice(
     rulesets?: unknown[];
   },
 ) {
-  const operationalReminderPolicies = buildOperationalReminderPoliciesFromLegalTable(legalTable);
+  const operationalReminderPolicies = buildOperationalReminderPoliciesFromLegalTable(legalTable, packContext);
   const operationalReminderTemplates = buildOperationalReminderTemplatesFromLegalTable(legalTable);
   const pickerOptions = buildCommunicationPoliciesPickerOptions(packContext);
   const editorOptionsBase = buildCommunicationPolicyEditorOptions(operationalReminderTemplates);

@@ -27,6 +27,9 @@ import {
   handleSaveOperationalReminderTemplate,
   handleSaveOperationalReminderTemplateVersion,
   handleSaveOperationalReminderWorkflow,
+  handleEditOperationalReminderWorkflow,
+  handleDisableOperationalReminderWorkflow,
+  handleEnableOperationalReminderWorkflow,
 } from './operational-communication-owner-commands.service.js';
 
 type CountryPackCommandType =
@@ -62,6 +65,9 @@ type CountryPackCommandType =
   | 'create_pricing_adjustment'
   | 'cancel_pricing_adjustment'
   | 'save_operational_reminder_workflow'
+  | 'edit_operational_reminder_workflow'
+  | 'disable_operational_reminder_workflow'
+  | 'enable_operational_reminder_workflow'
   | 'save_operational_reminder_policy'
   | 'save_operational_reminder_template'
   | 'save_operational_reminder_policy_version'
@@ -1711,6 +1717,12 @@ export async function executeCountryPackCommand(
       return handleCancelPricingAdjustment(ctx, command.payload);
     case 'save_operational_reminder_workflow':
       return handleSaveOperationalReminderWorkflow(ctx, command.payload);
+    case 'edit_operational_reminder_workflow':
+      return handleEditOperationalReminderWorkflow(ctx, command.payload);
+    case 'disable_operational_reminder_workflow':
+      return handleDisableOperationalReminderWorkflow(ctx, command.payload);
+    case 'enable_operational_reminder_workflow':
+      return handleEnableOperationalReminderWorkflow(ctx, command.payload);
     case 'save_operational_reminder_policy':
       return handleSaveOperationalReminderPolicy(ctx, command.payload);
     case 'save_operational_reminder_template':

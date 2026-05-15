@@ -413,16 +413,68 @@ export function CommunicationPoliciesToolbar({
   );
 }
 
+function applyEditableFormToState(
+  form: UnknownRecord,
+  editor: EditorOptions | null,
+  setters: {
+    setCountryCode: (v: string) => void;
+    setPackId: (v: string) => void;
+    setRulesetId: (v: string) => void;
+    setEffectiveFrom: (v: string) => void;
+    setEffectiveTo: (v: string) => void;
+    setActivateAfterCreate: (v: boolean) => void;
+    setWorkflowType: (v: string) => void;
+    setApprovalRequired: (v: boolean) => void;
+    setDefaultChannels: (v: string[]) => void;
+    setReminders: (v: ReminderForm[]) => void;
+  },
+): void {
+  setters.setCountryCode(safeText(form.country_code));
+  setters.setPackId(safeText(form.country_pack_id));
+  setters.setRulesetId(safeText(form.country_pack_ruleset_id));
+  setters.setEffectiveFrom(safeText(form.effective_from) || fmtToday());
+  setters.setEffectiveTo(form.effective_to == null ? '' : safeText(form.effective_to));
+  setters.setActivateAfterCreate(form.activate_after_create !== false);
+  setters.setWorkflowType(safeText(form.workflow_type) || 'waiting_client');
+  setters.setApprovalRequired(form.approval_required !== false);
+  setters.setDefaultChannels(
+    Array.isArray(form.default_channels) ? (form.default_channels as string[]) : ['docflow'],
+  );
+  const remindersRaw = Array.isArray(form.reminders) ? form.reminders : [];
+  setters.setReminders(
+    remindersRaw.map((r) => {
+      const item = r as UnknownRecord;
+      const period = item.period as { amount?: number; unit?: string } | undefined;
+      const periodSlug = safeText(item.period_slug);
+      const isCustom = !periodSlug && period;
+      return {
+        period_ref: isCustom ? '__custom__' : periodSlug || editor?.preset_periods[0]?.period_slug || '1h',
+        custom_amount: period?.amount ?? 1,
+        custom_unit: period?.unit ?? editor?.allowed_units[0]?.code ?? 'hours',
+        severity: safeText(item.severity) || editor?.severities[0]?.code || 'info',
+        channels: Array.isArray(item.channels) ? (item.channels as string[]) : ['docflow'],
+        language: safeText(item.language) || editor?.languages[0]?.code || 'he',
+        subject: safeText(item.subject),
+        message: safeText(item.message),
+      };
+    }),
+  );
+}
+
 export function OperationalReminderWorkflowWizard({
   open,
   busy,
   communicationPolicies,
+  mode,
+  initialEditableForm,
   onClose,
   onSubmit,
 }: {
   open: boolean;
   busy: boolean;
   communicationPolicies: UnknownRecord | null;
+  mode: 'create' | 'edit';
+  initialEditableForm: UnknownRecord | null;
   onClose: () => void;
   onSubmit: (command: string, payload: UnknownRecord) => Promise<OwnerCommandResponse>;
 }) {
@@ -446,6 +498,21 @@ export function OperationalReminderWorkflowWizard({
     if (!open) return;
     setStep(1);
     setError('');
+    if (mode === 'edit' && initialEditableForm) {
+      applyEditableFormToState(initialEditableForm, editor, {
+        setCountryCode,
+        setPackId,
+        setRulesetId,
+        setEffectiveFrom,
+        setEffectiveTo,
+        setActivateAfterCreate,
+        setWorkflowType,
+        setApprovalRequired,
+        setDefaultChannels,
+        setReminders,
+      });
+      return;
+    }
     setEffectiveFrom(fmtToday());
     setEffectiveTo('');
     setActivateAfterCreate(true);
@@ -459,7 +526,7 @@ export function OperationalReminderWorkflowWizard({
     setApprovalRequired(true);
     setDefaultChannels(editor?.channels.slice(0, 2).map((c) => c.code) ?? ['docflow', 'email']);
     setReminders([emptyReminder(editor)]);
-  }, [open]);
+  }, [open, mode, initialEditableForm]);
 
   function onCountryChange(code: string) {
     const countryUp = code.trim().toUpperCase();
@@ -536,7 +603,8 @@ export function OperationalReminderWorkflowWizard({
       }
     }
     try {
-      await onSubmit('save_operational_reminder_workflow', buildPayload());
+      const command = mode === 'edit' ? 'edit_operational_reminder_workflow' : 'save_operational_reminder_workflow';
+      await onSubmit(command, buildPayload());
       onClose();
     } catch (e) {
       setError(
@@ -575,7 +643,7 @@ export function OperationalReminderWorkflowWizard({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 style={{ marginTop: 0 }}>New reminder workflow</h3>
+        <h3 style={{ marginTop: 0 }}>{mode === 'edit' ? 'Edit reminder workflow' : 'New reminder workflow'}</h3>
         <p style={{ color: '#666', fontSize: 13, marginTop: 0 }}>
           Step {step} of 2 — templates and policy linkage are created automatically on save.
         </p>
@@ -617,7 +685,12 @@ export function OperationalReminderWorkflowWizard({
             </label>
             <label style={{ ...labelStyle, marginTop: 12 }}>
               Workflow type
-              <select value={workflowType} style={inputStyle} onChange={(e) => setWorkflowType(e.target.value)}>
+              <select
+                value={workflowType}
+                style={inputStyle}
+                disabled={mode === 'edit'}
+                onChange={(e) => setWorkflowType(e.target.value)}
+              >
                 {(editor?.workflow_types ?? []).map((w) => (
                   <option key={w.code} value={w.code}>
                     {w.label}
