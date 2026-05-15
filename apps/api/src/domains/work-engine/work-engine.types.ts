@@ -66,7 +66,9 @@ export type WorkEngineCommandType =
   /** Stage 10 Phase 2 — review workflow */
   | 'request_review'
   | 'approve_work_item'
-  | 'reject_work_item';
+  | 'reject_work_item'
+  /** Stage 10 Phase 3B-2 — manual reminder candidate generation */
+  | 'generate_reminder_candidate';
 
 export type WorkEngineCommandPayload = Record<string, unknown>;
 

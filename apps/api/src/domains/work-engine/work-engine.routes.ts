@@ -125,6 +125,7 @@ const ALLOWED_COMMANDS: ReadonlySet<WorkEngineCommandType> = new Set<WorkEngineC
   'request_review',
   'approve_work_item',
   'reject_work_item',
+  'generate_reminder_candidate',
   'change_work_state',
   'set_work_deadline',
   'append_work_event',

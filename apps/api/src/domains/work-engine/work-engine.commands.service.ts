@@ -63,6 +63,11 @@ import {
 } from './work-engine.policy.service.js';
 import { applySlaHooksForCommand } from './work-engine.sla.service.js';
 import {
+  buildReminderCandidateDedupKey,
+  generateReminderCandidate,
+  parseGenerateReminderCandidateWorkflowType,
+} from './work-engine.reminder.service.js';
+import {
   WORK_ENGINE_PERMISSIONS,
   requireWorkEnginePermission,
 } from './work-engine.rbac.js';
@@ -1443,6 +1448,53 @@ export async function executeWorkEngineCommand(
           break_glass: current.reviewer_user_id !== actorUserId,
           notification_intent: 'assignee_approval_decision',
         });
+        return { workItemId };
+      });
+    }
+
+    case 'generate_reminder_candidate': {
+      const queuePayload: WorkEngineCommandPayload = {
+        ...payload,
+        refresh_aggregate: REFRESH_QUEUE,
+      };
+      return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
+        requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
+        const workItemId = reqString(payload, 'work_item_id');
+        const stepKey = reqString(payload, 'step_key');
+        const workflowType = parseGenerateReminderCandidateWorkflowType(payload.workflow_type);
+        const expectedVersion = reqInt(payload, 'expected_version');
+        const current = await loadWorkItem(orgId, workItemId);
+        assertExpectedVersion(current.version, expectedVersion);
+
+        const outcome = await generateReminderCandidate({
+          orgId,
+          workItem: current,
+          workflowType,
+          stepKey,
+          triggerType: 'manual_command',
+        });
+
+        if (outcome.created) {
+          await audit(
+            orgId,
+            actorUserId,
+            'work_reminder_candidate',
+            outcome.candidateId,
+            AUDIT_ACTIONS.REMINDER_CANDIDATE_CREATED,
+            {
+              work_item_id: workItemId,
+              workflow_type: workflowType,
+              step_key: stepKey,
+              dedup_key: buildReminderCandidateDedupKey({
+                workItemId,
+                workflowType,
+                stepKey,
+              }),
+              policy_driven: true,
+            },
+          );
+        }
+
         return { workItemId };
       });
     }

@@ -1050,8 +1050,38 @@ export function PlatformOwnerLegalControl() {
         <h2 style={{ margin: 0 }}>Communication policies (Work Engine reminders)</h2>
         <p style={{ color: '#5b21b6', fontSize: 13, marginTop: 8 }}>
           Operational communication only — not tax/VAT/legal constants. Country-specific cadence and templates;
-          accountant approval required before send (Phase 3B).
+          accountant approval required before send (Phase 3B). Use existing Country → Country Pack → Ruleset
+          (sections below); do not create countries from this panel.
         </p>
+        <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div style={{ border: '1px solid #e9d5ff', borderRadius: 8, padding: 8, background: '#fff' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Countries</div>
+            <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#4b5563' }}>
+              {countryPackTables.countries.slice(0, 8).map((c) => (
+                <li key={String(c.id ?? c.country_code)}>{String(c.country_code ?? '')} — {String(c.name ?? '')}</li>
+              ))}
+              {!countryPackTables.countries.length ? <li>None</li> : null}
+            </ul>
+          </div>
+          <div style={{ border: '1px solid #e9d5ff', borderRadius: 8, padding: 8, background: '#fff' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Country packs</div>
+            <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#4b5563' }}>
+              {countryPackTables.packs.slice(0, 8).map((p) => (
+                <li key={String(p.id)}>{String(p.country_code ?? '')} / {String(p.pack_code ?? '')}</li>
+              ))}
+              {!countryPackTables.packs.length ? <li>None</li> : null}
+            </ul>
+          </div>
+          <div style={{ border: '1px solid #e9d5ff', borderRadius: 8, padding: 8, background: '#fff' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Rulesets</div>
+            <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#4b5563' }}>
+              {countryPackTables.rulesets.slice(0, 8).map((r) => (
+                <li key={String(r.id)}>{String(r.ruleset_code ?? '')} v{String(r.ruleset_version ?? '')} ({String(r.status ?? '')})</li>
+              ))}
+              {!countryPackTables.rulesets.length ? <li>None</li> : null}
+            </ul>
+          </div>
+        </div>
         {communicationQuickActions.length ? (
           <div style={{ marginTop: 10 }}>
             <ActionToolbar

@@ -1019,9 +1019,51 @@ function buildOperationalReminderTemplatesFromLegalTable(
   return out;
 }
 
-function buildCommunicationPoliciesSlice(legalTable: Array<Record<string, unknown>>) {
+function buildCommunicationPoliciesPickerOptions(packContext?: {
+  countries?: unknown[];
+  country_packs?: unknown[];
+  rulesets?: unknown[];
+}) {
+  const countries = (packContext?.countries ?? []) as Array<Record<string, unknown>>;
+  const packs = (packContext?.country_packs ?? []) as Array<Record<string, unknown>>;
+  const rulesets = (packContext?.rulesets ?? []) as Array<Record<string, unknown>>;
+  return {
+    countries: countries.map((c) => ({
+      country_code: String(c.country_code ?? ''),
+      name: String(c.name ?? c.country_code ?? ''),
+      status: String(c.status ?? ''),
+    })),
+    country_packs: packs.map((p) => ({
+      id: String(p.id ?? ''),
+      country_code: String(p.country_code ?? ''),
+      pack_code: String(p.pack_code ?? ''),
+      name: String(p.name ?? ''),
+      status: String(p.status ?? ''),
+    })),
+    rulesets: rulesets.map((r) => ({
+      id: String(r.id ?? ''),
+      country_pack_id: String(r.country_pack_id ?? ''),
+      ruleset_code: String(r.ruleset_code ?? ''),
+      ruleset_version: String(r.ruleset_version ?? ''),
+      status: String(r.status ?? ''),
+      effective_from: String(r.effective_from ?? ''),
+      effective_to: r.effective_to == null ? null : String(r.effective_to),
+      effective_window: String(r.effective_window ?? ''),
+    })),
+  };
+}
+
+function buildCommunicationPoliciesSlice(
+  legalTable: Array<Record<string, unknown>>,
+  packContext?: {
+    countries?: unknown[];
+    country_packs?: unknown[];
+    rulesets?: unknown[];
+  },
+) {
   const operationalReminderPolicies = buildOperationalReminderPoliciesFromLegalTable(legalTable);
   const operationalReminderTemplates = buildOperationalReminderTemplatesFromLegalTable(legalTable);
+  const pickerOptions = buildCommunicationPoliciesPickerOptions(packContext);
   const validationErrors: string[] = [];
   for (const row of operationalReminderPolicies) {
     if (row.parse_error) validationErrors.push(`policy:${row.value_key}:${row.parse_error}`);
@@ -1033,14 +1075,18 @@ function buildCommunicationPoliciesSlice(legalTable: Array<Record<string, unknow
     operational_reminder_policies: operationalReminderPolicies,
     operational_reminder_templates: operationalReminderTemplates,
     validation_errors: validationErrors,
+    picker_options: pickerOptions,
+    flow_note:
+      'Country → Country Pack → Ruleset → Communication policy/template version. Reuse existing country structure; do not create countries here.',
     quick_actions: [
       {
         action_key: 'create_legal_value',
-        enabled: true,
-        button_label: 'New reminder policy',
-        note: 'category=Operational Communication Policies, module_scope=work_engine, value_type=json, value_key=comm.reminder.policy',
+        enabled: pickerOptions.countries.length > 0,
+        button_label: 'New reminder policy legal value',
+        note:
+          'Pick country_code from picker_options.countries. Then attach versions under picker_options.rulesets (active ruleset for that country pack).',
         payload: {
-          country_code: 'ISO 3166-1 alpha-2',
+          country_code: '<from picker_options.countries>',
           value_key: 'comm.reminder.policy',
           label: 'Work Engine reminder policy',
           category: OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY,
@@ -1050,11 +1096,11 @@ function buildCommunicationPoliciesSlice(legalTable: Array<Record<string, unknow
       },
       {
         action_key: 'create_legal_value',
-        enabled: true,
-        button_label: 'New reminder template',
+        enabled: pickerOptions.countries.length > 0,
+        button_label: 'New reminder template legal value',
         note: 'Template value_key must start with comm.reminder.template.',
         payload: {
-          country_code: 'ISO 3166-1 alpha-2',
+          country_code: '<from picker_options.countries>',
           value_key: 'comm.reminder.template.waiting_client.he',
           label: 'Reminder template',
           category: OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY,
@@ -1064,13 +1110,14 @@ function buildCommunicationPoliciesSlice(legalTable: Array<Record<string, unknow
       },
       {
         action_key: 'create_legal_value_version',
-        enabled: true,
+        enabled: pickerOptions.rulesets.length > 0,
         button_label: 'New policy/template version',
-        note: 'value_payload_json type operational_reminder_policy or operational_reminder_template',
+        note:
+          'country_pack_ruleset_id from picker_options.rulesets. value_payload_json type operational_reminder_policy or operational_reminder_template.',
         payload: {
-          country_code: 'ISO 3166-1 alpha-2',
-          value_key: 'string',
-          country_pack_ruleset_id: 'uuid',
+          country_code: '<from picker_options.countries>',
+          value_key: 'comm.reminder.policy | comm.reminder.template.*',
+          country_pack_ruleset_id: '<from picker_options.rulesets>',
           effective_from: 'YYYY-MM-DD',
           value_payload_json: 'operational_reminder_policy | operational_reminder_template JSON',
         },
@@ -1130,7 +1177,11 @@ export async function buildOwnerLegalControlPanelAggregate(
   const legalTaxValuesTable = (legalTable ?? []).filter(
     (r) => !isOperationalCommunicationLegalValueRow(r),
   );
-  const communicationPolicies = buildCommunicationPoliciesSlice(legalTable ?? []);
+  const communicationPolicies = buildCommunicationPoliciesSlice(legalTable ?? [], {
+    countries: tables?.countries,
+    country_packs: tables?.country_packs,
+    rulesets: tables?.rulesets,
+  });
 
   const cpWarnings = (countryPacksAdmin.warnings as string[] | undefined) ?? [];
   const lvWarnings = (legalValues.validation_warnings as string[] | undefined) ?? [];

@@ -49,7 +49,8 @@ Payload type `operational_reminder_template`:
 | Phase | Scope |
 |-------|--------|
 | **3B-1** | Migration, validators, owner aggregate slice, resolver/renderer |
-| **3B-2** | `work-engine.reminder.service.ts`, candidate generation, SLA hook |
+| **3B-2** | `work-engine.reminder.service.ts`, manual `generate_reminder_candidate` command |
+| **3B-2b** | SLA hook automatic generation |
 | **3B-3** | Queue `reminder_review` section + accountant commands |
 | **3B-4** | DocFlow dispatch after approve |
 | **3C** | `work_escalation_candidates` (separate from reminders) |
