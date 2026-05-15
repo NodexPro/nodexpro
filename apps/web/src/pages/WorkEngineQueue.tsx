@@ -600,10 +600,12 @@ function renderQueueDataCell(
       </span>
     );
   }
-  if (colKey === 'sla' && row.sla_status && row.sla_status !== 'none') {
+  if (colKey === 'due') {
+    const lines = text.split('\n');
     return (
-      <span className={`nx-we-sla-badge nx-we-sla-badge--${row.sla_status}`} title={text}>
-        {text}
+      <span className="nx-we-due-cell" title={text}>
+        <span className="nx-we-due-cell__primary">{lines[0]}</span>
+        {lines[1] ? <span className="nx-we-due-cell__secondary">{lines[1]}</span> : null}
       </span>
     );
   }

@@ -194,6 +194,35 @@ export type QueueSlaPresentation = {
   primary_due_at_label: string | null;
 };
 
+/** Ready-to-render DUE column text (status line + optional relative due hint). */
+export function buildDueQueueCellText(
+  slaStatus: SlaStatus,
+  slaStatusLabel: string,
+  primaryDueAtIso: string | null,
+): string | null {
+  if (slaStatus === 'none') return null;
+  const relative = formatOperationalDueRelative(primaryDueAtIso);
+  if (relative) return `${slaStatusLabel}\n${relative}`;
+  return slaStatusLabel;
+}
+
+/** Backend-only relative due hint for queue DUE column (no frontend date math). */
+export function formatOperationalDueRelative(iso: string | null): string | null {
+  if (!iso) return null;
+  const dueMs = new Date(iso).getTime();
+  if (Number.isNaN(dueMs)) return null;
+  const deltaMs = dueMs - Date.now();
+  const absHours = Math.max(1, Math.round(Math.abs(deltaMs) / 3_600_000));
+  if (deltaMs > 0) {
+    if (absHours < 24) return `Due in ${absHours}h`;
+    const days = Math.round(absHours / 24);
+    if (days === 1) return 'Due tomorrow';
+    return `Due in ${days}d`;
+  }
+  if (absHours < 24) return `${absHours}h past due`;
+  return 'Past due';
+}
+
 export function buildQueueSlaPresentation(
   obligations: WorkSlaObligationRow[],
   slaStatus: SlaStatus,

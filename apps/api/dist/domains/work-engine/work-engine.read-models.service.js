@@ -12,7 +12,7 @@ import { getAllowedTransitionsFrom, getReopenTargetStates, canPickUpFromUnassign
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
 import { canStaffPickUpUnassigned, DEFAULT_SLA_POLICY, resolveWorkTypePoliciesBatch, } from './work-engine.policy.service.js';
-import { buildQueueSlaPresentation, loadActiveSlaObligationsForItems, } from './work-engine.sla.service.js';
+import { buildDueQueueCellText, buildQueueSlaPresentation, loadActiveSlaObligationsForItems, } from './work-engine.sla.service.js';
 import { WORK_ENGINE_PERMISSIONS } from './work-engine.rbac.js';
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
@@ -906,13 +906,13 @@ const BASE_QUEUE_COLUMN_KEYS = [
     'assignee',
     'last_activity',
     'unread',
+    'due',
 ];
 const OPTIONAL_QUEUE_COLUMN_KEYS = [
     'period_key',
     'reviewer',
     'review_status',
     'due_at',
-    'sla',
     'claimed',
 ];
 const QUEUE_COLUMN_DEFS = {
@@ -923,11 +923,11 @@ const QUEUE_COLUMN_DEFS = {
     assignee: { label: 'Assignee', empty_display: 'dash' },
     last_activity: { label: 'Last activity', empty_display: 'dash' },
     unread: { label: 'Unread', empty_display: 'dash' },
+    due: { label: 'Due', empty_display: 'dash' },
     period_key: { label: 'Period', empty_display: 'dash' },
     reviewer: { label: 'Reviewer', empty_display: 'dash' },
     review_status: { label: 'Review', empty_display: 'dash' },
-    due_at: { label: 'Due', empty_display: 'blank' },
-    sla: { label: 'SLA', empty_display: 'blank' },
+    due_at: { label: 'Due at', empty_display: 'blank' },
     claimed: { label: 'Lock', empty_display: 'blank' },
 };
 function queueColumnHasAnyValue(rows, key) {
@@ -982,7 +982,7 @@ function buildQueueRowDetailPanel(params) {
             label: 'SLA due',
             value: params.primary_due_at_label ?? (params.due_at ? formatQueueUtcTimestamp(params.due_at) : null),
         },
-        { label: 'SLA status', value: params.sla_status_label },
+        { label: 'Due status', value: params.sla_status_label },
     ];
     if (!params.hide_period_in_subject) {
         kvRows.splice(1, 0, { label: 'Period', value: params.period_key });
@@ -1351,11 +1351,23 @@ export async function buildWorkEngineQueueAggregate(params) {
         const review_flow_status_label = reviewFlowStatusLabel(r);
         const review_status_cell = isConv ? null : review_flow_status_label;
         const due_cell = r.due_at ? formatQueueUtcTimestamp(r.due_at) : null;
-        const sla_cell = r.sla_status === 'none' ? null : slaStatusLabel(r.sla_status);
+        const slaStatusLabelText = slaStatusLabel(r.sla_status);
         const messengerPath = isConv && r.client_id && threadId
             ? `/m/docflow/messenger?client_id=${encodeURIComponent(r.client_id)}&thread_id=${encodeURIComponent(threadId)}`
             : null;
         const hidePeriodInSubject = isConv;
+        const policyRow = policyByType.get(r.work_type) ?? {
+            allow_staff_pickup_unassigned: true,
+            review_gate: 'allowed',
+            ...DEFAULT_SLA_POLICY,
+        };
+        const itemObligations = obligationsByItem.get(r.id) ?? [];
+        const slaPresentation = buildQueueSlaPresentation(itemObligations, r.sla_status, r.due_at, policyRow);
+        const primaryDueIso = itemObligations.find((o) => o.status === 'active' && o.kind === 'response')?.due_at ??
+            itemObligations.find((o) => o.status === 'active' && o.kind === 'review')?.due_at ??
+            itemObligations.find((o) => o.status === 'active')?.due_at ??
+            r.due_at;
+        const due_column_cell = buildDueQueueCellText(r.sla_status, slaStatusLabelText, primaryDueIso);
         const queue_cells = {
             client: clientName,
             module: module_label,
@@ -1364,20 +1376,13 @@ export async function buildWorkEngineQueueAggregate(params) {
             assignee: assigned_user_name,
             last_activity: last_activity_cell,
             unread: unread_cell,
+            due: due_column_cell,
             period_key: period_cell,
             reviewer: reviewer_cell,
             review_status: review_status_cell,
             due_at: due_cell,
-            sla: sla_cell,
             claimed: claimed_cell,
         };
-        const policyRow = policyByType.get(r.work_type) ?? {
-            allow_staff_pickup_unassigned: true,
-            review_gate: 'allowed',
-            ...DEFAULT_SLA_POLICY,
-        };
-        const itemObligations = obligationsByItem.get(r.id) ?? [];
-        const slaPresentation = buildQueueSlaPresentation(itemObligations, r.sla_status, r.due_at, policyRow);
         const ownershipDraft = viewer != null
             ? computeOwnershipCommands({
                 row: r,
