@@ -520,7 +520,7 @@ function QueueTable(props: {
   }
   return (
     <div className="nx-we-table-wrap">
-      <table className="nx-we-table">
+      <table className={`nx-we-table nx-we-table--cols-${props.table.columns.length}`}>
         <colgroup>
           {props.table.columns.map((col) => (
             <col key={col.key} className={`nx-we-col nx-we-col--${col.key}`} />
@@ -607,12 +607,15 @@ function renderQueueDataCell(
       </span>
     );
   }
-  const cellClass =
-    colKey === 'last_activity' || colKey === 'due_at'
-      ? 'nx-we-cell-ellip nx-we-cell--compact-date'
-      : 'nx-we-cell-ellip';
+  const ellip = colKey === 'client' || colKey === 'assignee' || colKey === 'reviewer';
+  const cellClass = [
+    ellip ? 'nx-we-cell-ellip' : 'nx-we-cell-text',
+    colKey === 'last_activity' || colKey === 'due_at' ? 'nx-we-cell--compact-date' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
-    <span className={cellClass} title={text}>
+    <span className={cellClass} title={ellip ? text : undefined}>
       {text}
     </span>
   );
