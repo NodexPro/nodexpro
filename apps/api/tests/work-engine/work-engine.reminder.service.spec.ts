@@ -6,9 +6,11 @@ import {
 } from '../../src/domains/country-pack/operational-communication-owner-payload.js';
 import {
   buildReminderCandidateDedupKey,
+  isManualReminderTriggerType,
   resolveCadenceStepFromWorkflow,
   resolveChannelOrder,
   resolveFirstCadenceStepForWorkflow,
+  resolveReminderCandidateDedupKeyForInsert,
   resolveReminderTarget,
   resolveWorkflowFromPolicy,
   selectTemplateVersion,
@@ -193,4 +195,23 @@ test('formatOffsetMinutesAsPeriodLabel returns owner preset labels', () => {
   assert.equal(formatOffsetMinutesAsPeriodLabel(60), '1 hour');
   assert.equal(formatOffsetMinutesAsPeriodLabel(2 * 24 * 60), '2 days');
   assert.equal(formatOffsetMinutesAsPeriodLabel(14 * 24 * 60), '14 days');
+});
+
+test('resolveReminderCandidateDedupKeyForInsert uses attempt suffix after terminal rows', () => {
+  const base = buildReminderCandidateDedupKey({
+    workItemId: 'wi-1',
+    workflowType: 'waiting_client',
+    stepKey: 'nudge_1h',
+  });
+  assert.equal(resolveReminderCandidateDedupKeyForInsert({ baseKey: base, terminalAttemptCount: 0 }), base);
+  assert.equal(
+    resolveReminderCandidateDedupKeyForInsert({ baseKey: base, terminalAttemptCount: 1 }),
+    `${base}:attempt:2`,
+  );
+});
+
+test('isManualReminderTriggerType recognizes admin test triggers', () => {
+  assert.equal(isManualReminderTriggerType('manual_command'), true);
+  assert.equal(isManualReminderTriggerType('admin_test'), true);
+  assert.equal(isManualReminderTriggerType('system_rule'), false);
 });

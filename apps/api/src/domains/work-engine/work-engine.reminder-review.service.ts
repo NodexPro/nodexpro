@@ -29,6 +29,8 @@ export type ReminderCandidateRow = {
   workflow_type: string;
   step_key: string;
   status: string;
+  delivery_status: string;
+  delivery_error: string | null;
   channel: string;
   channel_order_snapshot: unknown;
   target_type: string;
@@ -38,6 +40,7 @@ export type ReminderCandidateRow = {
   suggested_send_at: string | null;
   snoozed_until: string | null;
   sla_context_snapshot: Record<string, unknown>;
+  work_notification_id: string | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -52,7 +55,11 @@ export const REMINDER_SNOOZE_PRESETS = [
 
 export type ReminderSnoozePresetKey = (typeof REMINDER_SNOOZE_PRESETS)[number]['preset_key'];
 
-const REVIEWABLE_STATUSES = ['pending_review', 'edited'] as const;
+const REVIEWABLE_STATUSES = ['pending_review', 'edited', 'delivery_failed'] as const;
+const APPROVABLE_STATUSES = ['pending_review', 'edited', 'delivery_failed'] as const;
+
+const REMINDER_CANDIDATE_SELECT =
+  'id, org_id, work_item_id, client_id, workflow_type, step_key, status, delivery_status, delivery_error, channel, channel_order_snapshot, target_type, subject, body, edited_body, suggested_send_at, snoozed_until, sla_context_snapshot, work_notification_id, version, created_at, updated_at';
 
 function humanizeKey(key: string): string {
   return key
@@ -146,16 +153,26 @@ function resolveReminderCadencePeriodLabel(
   return null;
 }
 
-function candidateStateLabel(status: string): string {
+function candidateStateLabel(
+  status: string,
+  deliveryStatus: string | null,
+  deliveryError: string | null,
+): string {
+  if (status === 'delivery_failed') {
+    return deliveryError?.trim()
+      ? `Delivery failed — ${deliveryError.trim()}`
+      : 'Delivery failed — retry Approve & send';
+  }
+  if (status === 'sending') return 'Sending…';
   switch (status) {
     case 'pending_review':
       return 'Pending review';
     case 'edited':
       return 'Edited';
     case 'approved':
-      return 'Approved';
+      return deliveryStatus === 'pending_dispatch' ? 'Approved — dispatching' : 'Approved';
     case 'sent':
-      return 'Sent';
+      return deliveryStatus === 'delivered' ? 'Sent' : 'Sent — pending dispatch';
     case 'cancelled':
       return 'Cancelled';
     case 'snoozed':
@@ -245,9 +262,7 @@ export async function loadReminderCandidate(
 ): Promise<ReminderCandidateRow> {
   const { data, error } = await supabaseAdmin
     .from('work_reminder_candidates')
-    .select(
-      'id, org_id, work_item_id, client_id, workflow_type, step_key, status, channel, channel_order_snapshot, target_type, subject, body, edited_body, suggested_send_at, snoozed_until, sla_context_snapshot, version, created_at, updated_at',
-    )
+    .select(REMINDER_CANDIDATE_SELECT)
     .eq('org_id', orgId)
     .eq('id', candidateId)
     .maybeSingle();
@@ -256,16 +271,30 @@ export async function loadReminderCandidate(
   return data as ReminderCandidateRow;
 }
 
-function assertReviewable(candidate: ReminderCandidateRow): void {
+function assertSnoozeExpiredIfNeeded(candidate: ReminderCandidateRow): void {
   if (candidate.status === 'snoozed') {
     const until = candidate.snoozed_until ? new Date(candidate.snoozed_until).getTime() : 0;
     if (until > Date.now()) {
       throw badRequest('Reminder candidate is snoozed');
     }
-    return;
   }
+}
+
+function assertReviewable(candidate: ReminderCandidateRow): void {
+  assertSnoozeExpiredIfNeeded(candidate);
+  if (candidate.status === 'snoozed') return;
   if (!(REVIEWABLE_STATUSES as readonly string[]).includes(candidate.status)) {
     throw badRequest(`Reminder candidate cannot be modified in status ${candidate.status}`);
+  }
+}
+
+function assertApprovable(candidate: ReminderCandidateRow): void {
+  assertSnoozeExpiredIfNeeded(candidate);
+  if (candidate.status === 'sent') return;
+  if (candidate.status === 'snoozed') return;
+  if (candidate.status === 'approved' || candidate.status === 'sending') return;
+  if (!(APPROVABLE_STATUSES as readonly string[]).includes(candidate.status)) {
+    throw badRequest(`Reminder candidate cannot be approved in status ${candidate.status}`);
   }
 }
 
@@ -293,7 +322,7 @@ export async function loadReminderReviewCounts(orgId: string): Promise<ReminderR
     .from('work_reminder_candidates')
     .select('status, snoozed_until, sla_context_snapshot')
     .eq('org_id', orgId)
-    .in('status', ['pending_review', 'edited', 'snoozed'])
+    .in('status', ['pending_review', 'edited', 'snoozed', 'delivery_failed'])
     .limit(5000);
   if (error) throw error;
 
@@ -305,7 +334,11 @@ export async function loadReminderReviewCounts(orgId: string): Promise<ReminderR
     if (status === 'snoozed') {
       const until = row.snoozed_until ? new Date(String(row.snoozed_until)).getTime() : 0;
       if (until > Date.now()) continue;
-    } else if (status !== 'pending_review' && status !== 'edited') {
+    } else if (
+      status !== 'pending_review' &&
+      status !== 'edited' &&
+      status !== 'delivery_failed'
+    ) {
       continue;
     }
     pending_count += 1;
@@ -383,72 +416,70 @@ async function loadWorkItemForReminder(orgId: string, workItemId: string) {
   };
 }
 
-export async function approveSendReminderCandidate(params: {
+async function findNotificationIdForCandidate(
+  orgId: string,
+  candidateId: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('work_notifications')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('source_reminder_candidate_id', candidateId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ? String(data.id) : null;
+}
+
+async function ensureReminderDeliveryIntent(params: {
   orgId: string;
   actorUserId: string;
-  candidateId: string;
-  expectedVersion: number;
-}): Promise<{ candidateId: string; notificationId: string | null }> {
-  const current = await assertExpectedCandidateVersion(
-    params.orgId,
-    params.candidateId,
-    params.expectedVersion,
-  );
-  assertReviewable(current);
+  candidate: ReminderCandidateRow;
+  messageBody: string;
+}): Promise<string> {
+  const existingId =
+    params.candidate.work_notification_id ??
+    (await findNotificationIdForCandidate(params.orgId, params.candidate.id));
+  if (existingId) return existingId;
 
-  const workItem = await loadWorkItemForReminder(params.orgId, current.work_item_id);
-  const clientId = current.client_id ?? workItem.client_id;
-  if (!clientId) throw badRequest('Reminder candidate has no client target');
+  const slaSnap = (params.candidate.sla_context_snapshot ?? {}) as Record<string, unknown>;
+  const channels = parseChannelOrder(params.candidate.channel_order_snapshot);
+  const primaryChannel = params.candidate.channel || channels[0] || 'docflow';
+  const intentDedupKey = `reminder_candidate:${params.candidate.id}`;
 
-  const messageBody = (current.edited_body ?? current.body).trim();
-  if (!messageBody) throw badRequest('Reminder message body is empty');
-
-  const slaSnap = (current.sla_context_snapshot ?? {}) as Record<string, unknown>;
-  const dedupKey = `reminder_candidate:${current.id}`;
-  const channels = parseChannelOrder(current.channel_order_snapshot);
-  const primaryChannel = current.channel || channels[0] || 'docflow';
-
-  let notificationId: string;
   const { data: insertedNotif, error: notifErr } = await supabaseAdmin
     .from('work_notifications')
     .insert({
       org_id: params.orgId,
-      work_item_id: current.work_item_id,
-      audience: notificationAudience(current.target_type),
+      work_item_id: params.candidate.work_item_id,
+      audience: notificationAudience(params.candidate.target_type),
       intent_type: 'reminder_candidate_approved',
       severity: notificationSeverity(slaSnap),
-      dedup_key: dedupKey,
+      dedup_key: intentDedupKey,
       payload_snapshot: {
-        reminder_candidate_id: current.id,
-        subject: current.subject,
-        body: messageBody,
+        reminder_candidate_id: params.candidate.id,
+        subject: params.candidate.subject,
+        body: params.messageBody,
         channels,
         primary_channel: primaryChannel,
-        workflow_type: current.workflow_type,
-        step_key: current.step_key,
+        workflow_type: params.candidate.workflow_type,
+        step_key: params.candidate.step_key,
       },
       delivery_status: 'pending_dispatch',
-      source_reminder_candidate_id: current.id,
+      source_reminder_candidate_id: params.candidate.id,
     })
     .select('id')
     .single();
+
   if (notifErr) {
     const code = (notifErr as { code?: string }).code;
-    if (code !== '23505') throw notifErr;
-    const { data: existing, error: existingErr } = await supabaseAdmin
-      .from('work_notifications')
-      .select('id')
-      .eq('org_id', params.orgId)
-      .eq('work_item_id', current.work_item_id)
-      .eq('dedup_key', dedupKey)
-      .maybeSingle();
-    if (existingErr) throw existingErr;
-    if (!existing?.id) throw notifErr;
-    notificationId = String(existing.id);
-  } else {
-    notificationId = String(insertedNotif?.id ?? '');
+    if (code === '23505') {
+      const raced = await findNotificationIdForCandidate(params.orgId, params.candidate.id);
+      if (raced) return raced;
+    }
+    throw notifErr;
   }
 
+  const notificationId = String(insertedNotif?.id ?? '');
   await writeAudit({
     organizationId: params.orgId,
     actorUserId: params.actorUserId,
@@ -457,43 +488,178 @@ export async function approveSendReminderCandidate(params: {
     entityId: notificationId,
     action: AUDIT_ACTIONS.REMINDER_DELIVERY_INTENT_CREATED,
     payload: {
-      reminder_candidate_id: current.id,
-      work_item_id: current.work_item_id,
+      reminder_candidate_id: params.candidate.id,
+      work_item_id: params.candidate.work_item_id,
     },
   });
+  return notificationId;
+}
 
-  const shouldDocflow =
-    primaryChannel === 'docflow' || channels.includes('docflow');
-  if (shouldDocflow) {
-    await createSystemMessageCore({
-      orgId: params.orgId,
-      clientId,
-      moduleKey: workItem.module_key || 'docflow',
-      messageType: 'reminder',
-      body: messageBody,
-      idempotencyKey: `work_reminder_candidate:${current.id}`,
-      ruleCode: 'work_engine_reminder_candidate_approved',
-      ruleContextKey: current.id,
-      sendModeRaw: 'auto_send_allowed',
-      autoSendAllowedByRule: true,
-      allowPublishWithoutAutoSendRule: true,
-      threadIdInput: null,
+export async function approveSendReminderCandidate(params: {
+  orgId: string;
+  actorUserId: string;
+  candidateId: string;
+  expectedVersion: number;
+}): Promise<{ candidateId: string; notificationId: string | null; deliveryFailed?: boolean }> {
+  let current = await assertExpectedCandidateVersion(
+    params.orgId,
+    params.candidateId,
+    params.expectedVersion,
+  );
+
+  if (current.status === 'sent') {
+    return {
+      candidateId: params.candidateId,
+      notificationId: current.work_notification_id,
+    };
+  }
+
+  assertApprovable(current);
+
+  const workItem = await loadWorkItemForReminder(params.orgId, current.work_item_id);
+  const clientId = current.client_id ?? workItem.client_id;
+  if (!clientId) throw badRequest('Reminder candidate has no client target');
+
+  const messageBody = (current.edited_body ?? current.body).trim();
+  if (!messageBody) throw badRequest('Reminder message body is empty');
+
+  const channels = parseChannelOrder(current.channel_order_snapshot);
+  const primaryChannel = current.channel || channels[0] || 'docflow';
+  const shouldDocflow = primaryChannel === 'docflow' || channels.includes('docflow');
+
+  if (current.status !== 'approved' && current.status !== 'sending') {
+    const nowIso = new Date().toISOString();
+    const { data: approvedRow, error: approveErr } = await supabaseAdmin
+      .from('work_reminder_candidates')
+      .update({
+        status: 'approved',
+        delivery_status: 'pending_dispatch',
+        delivery_error: null,
+        approved_by_user_id: params.actorUserId,
+        approved_at: nowIso,
+        version: current.version + 1,
+      })
+      .eq('org_id', params.orgId)
+      .eq('id', params.candidateId)
+      .eq('version', current.version)
+      .in('status', ['pending_review', 'edited', 'snoozed', 'delivery_failed'])
+      .select(REMINDER_CANDIDATE_SELECT)
+      .maybeSingle();
+    if (approveErr) throw approveErr;
+    if (!approvedRow) {
+      current = await loadReminderCandidate(params.orgId, params.candidateId);
+      if (current.status === 'sent') {
+        return {
+          candidateId: params.candidateId,
+          notificationId: current.work_notification_id,
+        };
+      }
+      throw conflict('Reminder candidate was updated by another session');
+    }
+    current = approvedRow as ReminderCandidateRow;
+
+    await writeAudit({
+      organizationId: params.orgId,
       actorUserId: params.actorUserId,
+      moduleCode: 'work_engine',
+      entityType: 'work_reminder_candidate',
+      entityId: params.candidateId,
+      action: AUDIT_ACTIONS.REMINDER_CANDIDATE_APPROVED,
+      payload: {
+        work_item_id: current.work_item_id,
+        channel: primaryChannel,
+      },
     });
-    await supabaseAdmin
-      .from('work_notifications')
-      .update({ delivery_status: 'dispatched_to_outbox' })
-      .eq('id', notificationId)
-      .eq('org_id', params.orgId);
+  }
+
+  const notificationId = await ensureReminderDeliveryIntent({
+    orgId: params.orgId,
+    actorUserId: params.actorUserId,
+    candidate: current,
+    messageBody,
+  });
+
+  const { error: sendingErr } = await supabaseAdmin
+    .from('work_reminder_candidates')
+    .update({
+      status: 'sending',
+      delivery_status: 'pending_dispatch',
+      work_notification_id: notificationId,
+      version: current.version + 1,
+    })
+    .eq('org_id', params.orgId)
+    .eq('id', params.candidateId)
+    .eq('version', current.version);
+  if (sendingErr) throw sendingErr;
+  current = { ...current, version: current.version + 1, status: 'sending' };
+
+  if (shouldDocflow) {
+    try {
+      await createSystemMessageCore({
+        orgId: params.orgId,
+        clientId,
+        moduleKey: workItem.module_key || 'docflow',
+        messageType: 'reminder',
+        body: messageBody,
+        idempotencyKey: `work_reminder_candidate:${current.id}`,
+        ruleCode: 'work_engine_reminder_candidate_approved',
+        ruleContextKey: current.id,
+        sendModeRaw: 'auto_send_allowed',
+        autoSendAllowedByRule: true,
+        allowPublishWithoutAutoSendRule: true,
+        threadIdInput: null,
+        actorUserId: params.actorUserId,
+      });
+      await supabaseAdmin
+        .from('work_notifications')
+        .update({ delivery_status: 'dispatched_to_outbox' })
+        .eq('id', notificationId)
+        .eq('org_id', params.orgId);
+    } catch (deliveryErr) {
+      const deliveryMessage =
+        deliveryErr instanceof Error ? deliveryErr.message : 'DocFlow delivery failed';
+      const failIso = new Date().toISOString();
+      await supabaseAdmin
+        .from('work_reminder_candidates')
+        .update({
+          status: 'delivery_failed',
+          delivery_status: 'failed',
+          delivery_error: deliveryMessage,
+          work_notification_id: notificationId,
+          version: current.version + 1,
+        })
+        .eq('org_id', params.orgId)
+        .eq('id', params.candidateId)
+        .eq('version', current.version);
+      await writeAudit({
+        organizationId: params.orgId,
+        actorUserId: params.actorUserId,
+        moduleCode: 'work_engine',
+        entityType: 'work_reminder_candidate',
+        entityId: params.candidateId,
+        action: AUDIT_ACTIONS.REMINDER_DELIVERY_FAILED,
+        payload: {
+          work_item_id: current.work_item_id,
+          work_notification_id: notificationId,
+          error: deliveryMessage,
+        },
+      });
+      return {
+        candidateId: params.candidateId,
+        notificationId,
+        deliveryFailed: true,
+      };
+    }
   }
 
   const nowIso = new Date().toISOString();
-  const { error: updErr } = await supabaseAdmin
+  const finalDeliveryStatus = shouldDocflow ? 'delivered' : 'pending_dispatch';
+  const { error: sentErr } = await supabaseAdmin
     .from('work_reminder_candidates')
     .update({
       status: 'sent',
-      approved_by_user_id: params.actorUserId,
-      approved_at: nowIso,
+      delivery_status: finalDeliveryStatus,
+      delivery_error: null,
       sent_at: nowIso,
       work_notification_id: notificationId,
       version: current.version + 1,
@@ -501,7 +667,7 @@ export async function approveSendReminderCandidate(params: {
     .eq('org_id', params.orgId)
     .eq('id', params.candidateId)
     .eq('version', current.version);
-  if (updErr) throw updErr;
+  if (sentErr) throw sentErr;
 
   await writeAudit({
     organizationId: params.orgId,
@@ -509,11 +675,12 @@ export async function approveSendReminderCandidate(params: {
     moduleCode: 'work_engine',
     entityType: 'work_reminder_candidate',
     entityId: params.candidateId,
-    action: AUDIT_ACTIONS.REMINDER_CANDIDATE_APPROVED,
+    action: AUDIT_ACTIONS.REMINDER_CANDIDATE_SENT,
     payload: {
       work_item_id: current.work_item_id,
       work_notification_id: notificationId,
       channel: primaryChannel,
+      delivery_status: finalDeliveryStatus,
     },
   });
 
@@ -725,12 +892,9 @@ export async function loadReminderReviewPage(params: {
   const nowIso = new Date().toISOString();
   const { data: raw, error, count } = await supabaseAdmin
     .from('work_reminder_candidates')
-    .select(
-      'id, org_id, work_item_id, client_id, workflow_type, step_key, status, channel, channel_order_snapshot, target_type, subject, body, edited_body, suggested_send_at, snoozed_until, sla_context_snapshot, version, created_at, updated_at',
-      { count: 'exact' },
-    )
+    .select(REMINDER_CANDIDATE_SELECT, { count: 'exact' })
     .eq('org_id', params.orgId)
-    .in('status', ['pending_review', 'edited', 'snoozed'])
+    .in('status', ['pending_review', 'edited', 'snoozed', 'delivery_failed'])
     .order('created_at', { ascending: false })
     .range(params.offset, params.offset + params.limit - 1);
   if (error) throw error;
@@ -740,7 +904,11 @@ export async function loadReminderReviewPage(params: {
       const until = c.snoozed_until ? new Date(c.snoozed_until).getTime() : 0;
       return until <= Date.now();
     }
-    return c.status === 'pending_review' || c.status === 'edited';
+    return (
+      c.status === 'pending_review' ||
+      c.status === 'edited' ||
+      c.status === 'delivery_failed'
+    );
   });
 
   const clientIds = Array.from(
@@ -795,7 +963,7 @@ export async function loadReminderReviewPage(params: {
     const body = (c.edited_body ?? c.body).trim();
     const workflowLabel = workflowTypeLabel(c.workflow_type);
     const periodLabel = resolveReminderCadencePeriodLabel(c, snap, reminderPolicy);
-    const stateLabel = candidateStateLabel(c.status);
+    const stateLabel = candidateStateLabel(c.status, c.delivery_status, c.delivery_error);
     const clientName = c.client_id
       ? displayClientName(clientNameById.get(c.client_id) ?? null, c.client_id)
       : null;

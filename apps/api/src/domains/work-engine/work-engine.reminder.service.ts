@@ -13,14 +13,18 @@ import {
   type ReminderWorkflowType,
 } from '../country-pack/operational-communication-owner-payload.js';
 import {
+  ACTIVE_REMINDER_CANDIDATE_STATUSES,
   assertResolvedReminderPolicy,
   buildReminderCandidateDedupKey,
+  isManualReminderTriggerType,
   parseGenerateReminderCandidateWorkflowType,
   resolveCadenceStepFromWorkflow,
   resolveChannelOrder,
+  resolveReminderCandidateDedupKeyForInsert,
   resolveReminderTarget,
   resolveWorkflowFromPolicy,
   selectTemplateVersion,
+  TERMINAL_REMINDER_CANDIDATE_STATUSES,
 } from './work-engine.reminder.logic.js';
 import type { WorkItemRow } from './work-engine.types.js';
 
@@ -189,18 +193,64 @@ async function loadReminderTemplateContext(
   };
 }
 
-async function findExistingCandidateByDedup(
-  orgId: string,
-  dedupKey: string,
-): Promise<{ id: string } | null> {
+async function findActiveCandidateByTuple(params: {
+  orgId: string;
+  workItemId: string;
+  workflowType: string;
+  stepKey: string;
+}): Promise<{ id: string } | null> {
   const { data, error } = await supabaseAdmin
     .from('work_reminder_candidates')
     .select('id')
-    .eq('org_id', orgId)
-    .eq('dedup_key', dedupKey)
+    .eq('org_id', params.orgId)
+    .eq('work_item_id', params.workItemId)
+    .eq('workflow_type', params.workflowType)
+    .eq('step_key', params.stepKey.trim())
+    .in('status', [...ACTIVE_REMINDER_CANDIDATE_STATUSES])
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return data ? { id: String(data.id) } : null;
+  return data?.id ? { id: String(data.id) } : null;
+}
+
+async function countTerminalCandidatesByTuple(params: {
+  orgId: string;
+  workItemId: string;
+  workflowType: string;
+  stepKey: string;
+}): Promise<number> {
+  const { count, error } = await supabaseAdmin
+    .from('work_reminder_candidates')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', params.orgId)
+    .eq('work_item_id', params.workItemId)
+    .eq('workflow_type', params.workflowType)
+    .eq('step_key', params.stepKey.trim())
+    .in('status', [...TERMINAL_REMINDER_CANDIDATE_STATUSES]);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+async function findLatestTerminalCandidateByTuple(params: {
+  orgId: string;
+  workItemId: string;
+  workflowType: string;
+  stepKey: string;
+}): Promise<{ id: string } | null> {
+  const { data, error } = await supabaseAdmin
+    .from('work_reminder_candidates')
+    .select('id')
+    .eq('org_id', params.orgId)
+    .eq('work_item_id', params.workItemId)
+    .eq('workflow_type', params.workflowType)
+    .eq('step_key', params.stepKey.trim())
+    .in('status', [...TERMINAL_REMINDER_CANDIDATE_STATUSES])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ? { id: String(data.id) } : null;
 }
 
 export async function generateReminderCandidate(
@@ -224,18 +274,39 @@ export async function generateReminderCandidate(
   const templateContext = await loadReminderTemplateContext(params.orgId, params.workItem);
   const rendered = renderReminderTemplate(templateVersion.payload, templateContext);
   const target = resolveReminderTarget(workflowType, params.workItem);
-  const dedupKey = buildReminderCandidateDedupKey({
+  const baseDedupKey = buildReminderCandidateDedupKey({
     workItemId: params.workItem.id,
     workflowType,
     stepKey,
   });
 
-  const existing = await findExistingCandidateByDedup(params.orgId, dedupKey);
-  if (existing) {
-    return { candidateId: existing.id, created: false, dedupHit: true };
+  const tuple = {
+    orgId: params.orgId,
+    workItemId: params.workItem.id,
+    workflowType,
+    stepKey,
+  };
+
+  const active = await findActiveCandidateByTuple(tuple);
+  if (active) {
+    return { candidateId: active.id, created: false, dedupHit: true };
   }
 
   const triggerType = (params.triggerType ?? 'manual_command').trim() || 'manual_command';
+  const terminalCount = await countTerminalCandidatesByTuple(tuple);
+  const manualTest = isManualReminderTriggerType(triggerType);
+
+  if (terminalCount > 0 && !manualTest) {
+    const latest = await findLatestTerminalCandidateByTuple(tuple);
+    if (latest) {
+      return { candidateId: latest.id, created: false, dedupHit: true };
+    }
+  }
+
+  const dedupKey = resolveReminderCandidateDedupKeyForInsert({
+    baseKey: baseDedupKey,
+    terminalAttemptCount: manualTest ? terminalCount : 0,
+  });
   const slaSnapshot = {
     work_state: params.workItem.work_state,
     sla_status: params.workItem.sla_status,
@@ -279,9 +350,9 @@ export async function generateReminderCandidate(
   if (insertResp.error) {
     const code = (insertResp.error as { code?: string }).code;
     if (code === '23505') {
-      const raced = await findExistingCandidateByDedup(params.orgId, dedupKey);
-      if (raced) {
-        return { candidateId: raced.id, created: false, dedupHit: true };
+      const racedActive = await findActiveCandidateByTuple(tuple);
+      if (racedActive) {
+        return { candidateId: racedActive.id, created: false, dedupHit: true };
       }
     }
     throw insertResp.error;

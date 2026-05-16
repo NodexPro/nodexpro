@@ -28,12 +28,43 @@ import {
 
 export type ReminderCandidateTargetType = 'client' | 'assignee' | 'reviewer' | 'escalation_owner';
 
+export const ACTIVE_REMINDER_CANDIDATE_STATUSES = [
+  'pending_review',
+  'edited',
+  'approved',
+  'sending',
+  'snoozed',
+] as const;
+
+export const TERMINAL_REMINDER_CANDIDATE_STATUSES = [
+  'sent',
+  'cancelled',
+  'delivery_failed',
+] as const;
+
+export type ActiveReminderCandidateStatus = (typeof ACTIVE_REMINDER_CANDIDATE_STATUSES)[number];
+export type TerminalReminderCandidateStatus = (typeof TERMINAL_REMINDER_CANDIDATE_STATUSES)[number];
+
 export function buildReminderCandidateDedupKey(params: {
   workItemId: string;
   workflowType: ReminderWorkflowType;
   stepKey: string;
 }): string {
   return `reminder:${params.workItemId}:${params.workflowType}:${params.stepKey.trim()}`;
+}
+
+/** Physical dedup_key for insert — suffix after a terminal row so admin can re-test the same cadence step. */
+export function resolveReminderCandidateDedupKeyForInsert(params: {
+  baseKey: string;
+  terminalAttemptCount: number;
+}): string {
+  if (params.terminalAttemptCount <= 0) return params.baseKey;
+  return `${params.baseKey}:attempt:${params.terminalAttemptCount + 1}`;
+}
+
+export function isManualReminderTriggerType(triggerType: string): boolean {
+  const t = triggerType.trim();
+  return t === 'manual_command' || t === 'admin_test';
 }
 
 export function parseGenerateReminderCandidateWorkflowType(raw: unknown): ReminderWorkflowType {

@@ -4,8 +4,30 @@
 import { badRequest } from '../../shared/errors.js';
 import { REMINDER_WORKFLOW_TYPES, } from '../country-pack/operational-communication-owner-payload.js';
 import { OWNER_REMINDER_PRESET_PERIODS, buildPeriodLabelFromAmountUnit, offsetMinutesToOwnerPeriodForm, periodAmountUnitToOffsetMinutes, } from '../country-pack/operational-communication-owner-form.js';
+export const ACTIVE_REMINDER_CANDIDATE_STATUSES = [
+    'pending_review',
+    'edited',
+    'approved',
+    'sending',
+    'snoozed',
+];
+export const TERMINAL_REMINDER_CANDIDATE_STATUSES = [
+    'sent',
+    'cancelled',
+    'delivery_failed',
+];
 export function buildReminderCandidateDedupKey(params) {
     return `reminder:${params.workItemId}:${params.workflowType}:${params.stepKey.trim()}`;
+}
+/** Physical dedup_key for insert — suffix after a terminal row so admin can re-test the same cadence step. */
+export function resolveReminderCandidateDedupKeyForInsert(params) {
+    if (params.terminalAttemptCount <= 0)
+        return params.baseKey;
+    return `${params.baseKey}:attempt:${params.terminalAttemptCount + 1}`;
+}
+export function isManualReminderTriggerType(triggerType) {
+    const t = triggerType.trim();
+    return t === 'manual_command' || t === 'admin_test';
 }
 export function parseGenerateReminderCandidateWorkflowType(raw) {
     if (typeof raw !== 'string' || !raw.trim()) {
