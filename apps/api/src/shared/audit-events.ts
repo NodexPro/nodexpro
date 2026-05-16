@@ -220,6 +220,7 @@ export const AUDIT_ACTIONS = {
   WORK_ITEM_ESCALATION_ACKNOWLEDGED: 'work_engine.work_item_escalation_acknowledged',
   WORK_ITEM_ESCALATION_RESOLVED: 'work_engine.work_item_escalation_resolved',
   WORK_ITEM_ESCALATION_OWNER_REASSIGNED: 'work_engine.work_item_escalation_owner_reassigned',
+  WORK_ITEM_AUTO_ESCALATION_SKIPPED: 'work_engine.work_item_auto_escalation_skipped',
   WORK_ITEM_DEADLINE_SET: 'work_engine.work_item_deadline_set',
   WORK_ITEM_OVERRIDE_APPLIED: 'work_engine.work_item_override_applied',
   WORK_EVENT_APPENDED: 'work_engine.work_event_appended',

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildEscalationPriorStateTooltip,
   canAcknowledgeEscalation,
   canEscalateWorkItem,
   canManualEscalateWorkState,
@@ -10,6 +11,8 @@ import {
   isOrgManagerRole,
   parseEscalationReason,
   parseEscalationSource,
+  resolveAutoEscalationOwnerId,
+  shouldAutoEscalateForSla,
 } from '../../src/domains/work-engine/work-engine.escalation.logic.js';
 import type { WorkItemRow } from '../../src/domains/work-engine/work-engine.types.js';
 
@@ -122,4 +125,81 @@ test('canReassignEscalationOwner is manager-only', () => {
 
 test('escalationSourceLabel maps known sources', () => {
   assert.equal(escalationSourceLabel('sla_breached'), 'SLA breached');
+});
+
+test('shouldAutoEscalateForSla triggers on breached sla_status or obligation', () => {
+  assert.equal(
+    shouldAutoEscalateForSla({
+      work_state: 'assigned',
+      sla_status: 'breached',
+      has_breached_obligation: false,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldAutoEscalateForSla({
+      work_state: 'waiting_client',
+      sla_status: 'on_track',
+      has_breached_obligation: true,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldAutoEscalateForSla({
+      work_state: 'escalated',
+      sla_status: 'breached',
+      has_breached_obligation: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldAutoEscalateForSla({
+      work_state: 'done',
+      sla_status: 'breached',
+      has_breached_obligation: true,
+    }),
+    false,
+  );
+});
+
+test('resolveAutoEscalationOwnerId follows owner pick order', () => {
+  const members = [
+    { user_id: 'admin-1', role_code: 'admin' },
+    { user_id: 'staff-1', role_code: 'staff' },
+    { user_id: 'owner-1', role_code: 'owner' },
+  ];
+  const row = baseRow({
+    escalation_owner_id: null,
+    reviewer_user_id: 'staff-1',
+    assigned_user_id: 'staff-1',
+    owner_user_id: 'owner-1',
+  });
+  assert.equal(resolveAutoEscalationOwnerId(row, members), 'staff-1');
+
+  const withExisting = baseRow({
+    escalation_owner_id: 'admin-1',
+    reviewer_user_id: 'staff-1',
+  });
+  assert.equal(resolveAutoEscalationOwnerId(withExisting, members), 'admin-1');
+
+  const managerAssignee = baseRow({
+    escalation_owner_id: null,
+    reviewer_user_id: null,
+    assigned_user_id: 'admin-1',
+    owner_user_id: null,
+  });
+  assert.equal(resolveAutoEscalationOwnerId(managerAssignee, members), 'admin-1');
+
+  const noCandidate = baseRow({
+    escalation_owner_id: null,
+    reviewer_user_id: null,
+    assigned_user_id: 'staff-1',
+    owner_user_id: null,
+  });
+  assert.equal(resolveAutoEscalationOwnerId(noCandidate, members), 'admin-1');
+});
+
+test('buildEscalationPriorStateTooltip formats prior state for queue tooltip', () => {
+  assert.equal(buildEscalationPriorStateTooltip('assigned'), 'Was Assigned');
+  assert.equal(buildEscalationPriorStateTooltip(null), null);
 });

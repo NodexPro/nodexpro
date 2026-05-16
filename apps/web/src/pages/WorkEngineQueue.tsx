@@ -670,7 +670,11 @@ function QueueTable(props: {
       <table className={`nx-we-table nx-we-table--cols-${columns.length}`}>
         <colgroup>
           {columns.map((col) => (
-            <col key={col.key} className={`nx-we-col nx-we-col--${col.key}`} />
+            <col
+              key={col.key}
+              className={`nx-we-col nx-we-col--${col.key}`}
+              style={col.width_percent != null ? { width: `${col.width_percent}%` } : undefined}
+            />
           ))}
         </colgroup>
         <thead>
@@ -735,8 +739,9 @@ function renderQueueDataCell(
   }
   const text = String(raw);
   if (colKey === 'state') {
+    const title = row.queue_cell_titles?.state?.trim() || text;
     return (
-      <span className="nx-we-state-badge" title={text}>
+      <span className="nx-we-state-badge" title={title}>
         {text}
       </span>
     );

@@ -26,6 +26,7 @@ import {
   canPickUpFromUnassignedWorkState,
 } from './work-engine.guards.js';
 import {
+  buildEscalationPriorStateTooltip,
   buildEscalationSourceOptions,
   canAcknowledgeEscalation,
   canEscalateWorkItem,
@@ -1537,6 +1538,8 @@ export type QueueTableColumnModel = {
   label: string;
   empty_display: 'dash' | 'blank';
   kind: 'data' | 'actions';
+  /** Backend layout intent (% of table width); UI applies verbatim. */
+  width_percent?: number;
 };
 
 export type QueueDetailSection =
@@ -1612,6 +1615,35 @@ const QUEUE_COLUMN_DEFS: Record<
   claimed: { label: 'Lock', empty_display: 'dash' },
 };
 
+/** Queue column width intent (client ~20% narrower than legacy 12% baseline). */
+const QUEUE_COLUMN_WIDTH_PERCENT: Partial<Record<string, number>> = {
+  client: 9.6,
+  module: 8,
+  work_type: 8,
+  state: 7.5,
+  assignee: 8,
+  last_activity: 9,
+  unread: 4,
+  period_key: 5,
+  reviewer: 7,
+  review_status: 6,
+};
+
+function queueColumnModel(
+  key: string,
+  def: { label: string; empty_display: 'dash' | 'blank' },
+  kind: 'data' | 'actions',
+): QueueTableColumnModel {
+  const width = QUEUE_COLUMN_WIDTH_PERCENT[key];
+  return {
+    key,
+    label: def.label,
+    empty_display: def.empty_display,
+    kind,
+    ...(width != null ? { width_percent: width } : {}),
+  };
+}
+
 function queueColumnHasAnyValue(
   rows: Array<{ queue_cells: Record<string, string | null> }>,
   key: string,
@@ -1629,21 +1661,18 @@ function computeQueueTableModel(
   for (const key of BASE_QUEUE_COLUMN_KEYS) {
     if (QUEUE_TABLE_EXCLUDED_COLUMN_KEYS.has(key)) continue;
     const def = QUEUE_COLUMN_DEFS[key];
-    columns.push({ key, label: def.label, empty_display: def.empty_display, kind: 'data' });
+    columns.push(queueColumnModel(key, def, 'data'));
   }
   for (const key of OPTIONAL_QUEUE_COLUMN_KEYS) {
     if (QUEUE_TABLE_EXCLUDED_COLUMN_KEYS.has(key)) continue;
     if (queueColumnHasAnyValue(rows, key)) {
       const def = QUEUE_COLUMN_DEFS[key];
-      columns.push({ key, label: def.label, empty_display: def.empty_display, kind: 'data' });
+      columns.push(queueColumnModel(key, def, 'data'));
     }
   }
-  columns.push({
-    key: 'actions',
-    label: 'Actions',
-    empty_display: 'blank',
-    kind: 'actions',
-  });
+  columns.push(
+    queueColumnModel('actions', { label: 'Actions', empty_display: 'blank' }, 'actions'),
+  );
   return {
     columns: columns.filter((c) => !QUEUE_TABLE_EXCLUDED_COLUMN_KEYS.has(c.key)),
   };
@@ -2158,12 +2187,13 @@ export async function buildWorkEngineQueueAggregate(params: {
     const escalation_owner_name = r.escalation_owner_id
       ? (userNameById.get(r.escalation_owner_id) ?? null)
       : null;
-    const priorStateLabel = r.escalation_prior_work_state
-      ? workStateLabel(r.escalation_prior_work_state as WorkState)
-      : null;
-    let stateCell = ov ? `${work_state_label} · ${ov}` : work_state_label;
-    if (r.work_state === 'escalated' && priorStateLabel) {
-      stateCell = `${work_state_label} (was ${priorStateLabel})`;
+    const stateCell = ov ? `${work_state_label} · ${ov}` : work_state_label;
+    const stateCellTitleParts: string[] = [];
+    if (r.work_state === 'escalated' && r.escalation_prior_work_state) {
+      const priorTooltip = buildEscalationPriorStateTooltip(
+        r.escalation_prior_work_state as WorkState,
+      );
+      if (priorTooltip) stateCellTitleParts.push(priorTooltip);
     }
     const threadId = isConv ? String(r.source_entity_id ?? '') : '';
     const lastActivityIso =
@@ -2224,6 +2254,7 @@ export async function buildWorkEngineQueueAggregate(params: {
     const queue_cell_titles: Record<string, string | null> = {
       claimed: claimed_cell_title,
       due: slaPresentation.primary_due_at_label,
+      state: stateCellTitleParts.length > 0 ? stateCellTitleParts.join(' · ') : null,
     };
     const ownershipDraft =
       viewer != null

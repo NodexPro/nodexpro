@@ -157,6 +157,7 @@ export type QueueTableColumnModel = {
   label: string;
   empty_display: 'dash' | 'blank';
   kind: 'data' | 'actions';
+  width_percent?: number;
 };
 
 export type WorkEngineQueueTableModel = {

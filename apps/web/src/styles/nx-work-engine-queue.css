@@ -400,7 +400,7 @@
 
 /* 15+ columns: reuse densest preset */
 .nx-we-table[class*='--cols-']:not(.nx-we-table--cols-8):not(.nx-we-table--cols-9):not(.nx-we-table--cols-10):not(.nx-we-table--cols-11):not(.nx-we-table--cols-12):not(.nx-we-table--cols-13):not(.nx-we-table--cols-14) {
-  --nx-we-w-client: 12%;
+  --nx-we-w-client: 9.6%;
   --nx-we-w-module: 8%;
   --nx-we-w-work_type: 8%;
   --nx-we-w-state: 7%;
@@ -482,7 +482,7 @@
 }
 
 .nx-we-table--cols-12 {
-  --nx-we-w-client: 15.5%;
+  --nx-we-w-client: 12.4%;
   --nx-we-w-module: 10%;
   --nx-we-w-work_type: 10%;
   --nx-we-w-state: 9%;
@@ -493,7 +493,7 @@
 }
 
 .nx-we-table--cols-13 {
-  --nx-we-w-client: 14.5%;
+  --nx-we-w-client: 11.6%;
   --nx-we-w-module: 9.5%;
   --nx-we-w-work_type: 9.5%;
   --nx-we-w-state: 8.5%;
@@ -504,7 +504,7 @@
 }
 
 .nx-we-table--cols-14 {
-  --nx-we-w-client: 13.5%;
+  --nx-we-w-client: 10.8%;
   --nx-we-w-module: 9%;
   --nx-we-w-work_type: 9%;
   --nx-we-w-state: 8%;
@@ -515,7 +515,7 @@
 }
 
 .nx-we-table--cols-15 {
-  --nx-we-w-client: 12.5%;
+  --nx-we-w-client: 10%;
   --nx-we-w-module: 8.5%;
   --nx-we-w-work_type: 8.5%;
   --nx-we-w-state: 7.5%;

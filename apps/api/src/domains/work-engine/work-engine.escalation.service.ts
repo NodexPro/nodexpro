@@ -12,16 +12,22 @@ import {
   assertCanEscalateWorkItem,
   assertHasEscalationPriorState,
   assertWorkItemIsEscalated,
+  AUTO_ESCALATION_REASON,
+  AUTO_ESCALATION_SOURCE,
   canAcknowledgeEscalation,
   canEscalateWorkItem,
   canReassignEscalationOwner,
   canResolveEscalation,
   isEscalationAcknowledged,
+  parseEscalationReason,
+  resolveAutoEscalationOwnerId,
+  shouldAutoEscalateForSla,
+  type AutoEscalationOwnerCandidate,
   type EscalationPermissionContext,
   type EscalationSource,
-  parseEscalationReason,
 } from './work-engine.escalation.logic.js';
 import { WORK_ENGINE_PERMISSIONS } from './work-engine.rbac.js';
+import type { WorkSlaObligationRow } from './work-engine.sla.service.js';
 import type { WorkItemRow, WorkState } from './work-engine.types.js';
 
 async function assertActiveOrgMember(orgId: string, userId: string): Promise<void> {
@@ -325,6 +331,215 @@ export async function loadEscalationOwnerOptions(
   });
   options.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
   return options;
+}
+
+async function loadActiveAndBreachedObligations(
+  orgId: string,
+  workItemId: string,
+): Promise<WorkSlaObligationRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from('work_sla_obligations')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('work_item_id', workItemId)
+    .in('status', ['active', 'breached']);
+  if (error) throw error;
+  return (data ?? []) as WorkSlaObligationRow[];
+}
+
+async function loadOrgMembersForAutoEscalation(orgId: string): Promise<AutoEscalationOwnerCandidate[]> {
+  const { data, error } = await supabaseAdmin
+    .from('organization_memberships')
+    .select('user_id, role_code')
+    .eq('organization_id', orgId)
+    .eq('status', 'active');
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    user_id: String((row as { user_id: string }).user_id),
+    role_code: String((row as { role_code: string }).role_code ?? 'staff'),
+  }));
+}
+
+async function insertEscalationTransition(row: {
+  org_id: string;
+  work_item_id: string;
+  from_state: WorkState;
+  to_state: WorkState;
+  action_code: string;
+  actor_user_id: string | null;
+  reason_text: string | null;
+  metadata_json: Record<string, unknown>;
+  expected_version: number;
+  resulting_version: number;
+}): Promise<void> {
+  const { error } = await supabaseAdmin.from('work_transitions').insert({
+    org_id: row.org_id,
+    work_item_id: row.work_item_id,
+    from_state: row.from_state,
+    to_state: row.to_state,
+    transition_kind: 'automation',
+    action_code: row.action_code,
+    actor_type: 'rule',
+    actor_user_id: row.actor_user_id,
+    reason_text: row.reason_text,
+    metadata_json: row.metadata_json,
+    expected_version: row.expected_version,
+    resulting_version: row.resulting_version,
+  });
+  if (error) throw error;
+}
+
+export type EvaluateEscalationsForWorkItemResult = {
+  evaluated: boolean;
+  created: boolean;
+  skipped_reason: string | null;
+  escalation_owner_id: string | null;
+};
+
+/**
+ * Policy-driven automatic escalation (Phase 3C-2 MVP).
+ * Creates escalated work_state only — never sends, never resolves.
+ */
+export async function evaluateEscalationsForWorkItem(params: {
+  orgId: string;
+  workItemId: string;
+  actorUserId?: string | null;
+}): Promise<EvaluateEscalationsForWorkItemResult> {
+  const workItem = await loadWorkItemForEscalation(params.orgId, params.workItemId);
+
+  if (workItem.work_state === 'escalated') {
+    return {
+      evaluated: true,
+      created: false,
+      skipped_reason: 'already_escalated',
+      escalation_owner_id: workItem.escalation_owner_id,
+    };
+  }
+
+  if (workItem.work_state === 'done' || workItem.work_state === 'archived') {
+    return {
+      evaluated: true,
+      created: false,
+      skipped_reason: 'terminal_work_state',
+      escalation_owner_id: null,
+    };
+  }
+
+  const obligations = await loadActiveAndBreachedObligations(params.orgId, params.workItemId);
+  const hasBreachedObligation = obligations.some((o) => o.status === 'breached');
+
+  if (
+    !shouldAutoEscalateForSla({
+      work_state: workItem.work_state,
+      sla_status: workItem.sla_status,
+      has_breached_obligation: hasBreachedObligation,
+    })
+  ) {
+    return {
+      evaluated: true,
+      created: false,
+      skipped_reason: 'sla_not_breached',
+      escalation_owner_id: null,
+    };
+  }
+
+  const members = await loadOrgMembersForAutoEscalation(params.orgId);
+  const escalationOwnerId = resolveAutoEscalationOwnerId(workItem, members);
+  if (!escalationOwnerId) {
+    await writeAudit({
+      organizationId: params.orgId,
+      actorUserId: params.actorUserId ?? null,
+      moduleCode: 'work_engine',
+      entityType: 'work_item',
+      entityId: workItem.id,
+      action: AUDIT_ACTIONS.WORK_ITEM_AUTO_ESCALATION_SKIPPED,
+      payload: {
+        reason: 'no_eligible_escalation_owner',
+        sla_status: workItem.sla_status,
+        has_breached_obligation: hasBreachedObligation,
+      },
+    });
+    return {
+      evaluated: true,
+      created: false,
+      skipped_reason: 'no_eligible_escalation_owner',
+      escalation_owner_id: null,
+    };
+  }
+
+  const priorWorkState = workItem.work_state;
+  const expectedVersion = workItem.version;
+  const newVersion = expectedVersion + 1;
+
+  const { error, count } = await supabaseAdmin
+    .from('work_items')
+    .update({
+      work_state: 'escalated',
+      escalation_owner_id: escalationOwnerId,
+      escalation_reason: AUTO_ESCALATION_REASON,
+      escalation_source: AUTO_ESCALATION_SOURCE,
+      escalation_prior_work_state: priorWorkState,
+      escalation_acknowledged_at: null,
+      escalation_acknowledged_by_user_id: null,
+      version: newVersion,
+    }, { count: 'exact' })
+    .eq('id', workItem.id)
+    .eq('org_id', params.orgId)
+    .eq('version', expectedVersion);
+  if (error) throw error;
+  if (count === 0) {
+    return {
+      evaluated: true,
+      created: false,
+      skipped_reason: 'version_conflict',
+      escalation_owner_id: null,
+    };
+  }
+
+  await insertEscalationTransition({
+    org_id: params.orgId,
+    work_item_id: workItem.id,
+    from_state: priorWorkState,
+    to_state: 'escalated',
+    action_code: 'auto_escalate_work_item',
+    actor_user_id: params.actorUserId ?? null,
+    reason_text: AUTO_ESCALATION_REASON,
+    metadata_json: {
+      escalation_owner_id: escalationOwnerId,
+      escalation_source: AUTO_ESCALATION_SOURCE,
+      prior_work_state: priorWorkState,
+      trigger: 'sla_breached',
+      auto_generated: true,
+    },
+    expected_version: expectedVersion,
+    resulting_version: newVersion,
+  });
+
+  await writeAudit({
+    organizationId: params.orgId,
+    actorUserId: params.actorUserId ?? null,
+    moduleCode: 'work_engine',
+    entityType: 'work_item',
+    entityId: workItem.id,
+    action: AUDIT_ACTIONS.WORK_ITEM_ESCALATED,
+    payload: {
+      from_state: priorWorkState,
+      to_state: 'escalated',
+      escalation_owner_id: escalationOwnerId,
+      escalation_reason: AUTO_ESCALATION_REASON,
+      escalation_source: AUTO_ESCALATION_SOURCE,
+      prior_work_state: priorWorkState,
+      trigger_type: 'system_rule',
+      auto_generated: true,
+    },
+  });
+
+  return {
+    evaluated: true,
+    created: true,
+    skipped_reason: null,
+    escalation_owner_id: escalationOwnerId,
+  };
 }
 
 export async function loadWorkItemForEscalation(orgId: string, workItemId: string): Promise<WorkItemRow> {

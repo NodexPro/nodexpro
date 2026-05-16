@@ -9,7 +9,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { hasPermission } from '../rbac/rbac.service.js';
 import { OVERRIDE_KINDS, OVERRIDE_KINDS_REQUIRING_REASON, WORK_STATES, } from './work-engine.types.js';
 import { getAllowedTransitionsFrom, getReopenTargetStates, canPickUpFromUnassignedWorkState, } from './work-engine.guards.js';
-import { buildEscalationSourceOptions, canAcknowledgeEscalation, canEscalateWorkItem, canReassignEscalationOwner, canResolveEscalation, escalationSourceLabel, isEscalationAcknowledged, } from './work-engine.escalation.logic.js';
+import { buildEscalationPriorStateTooltip, buildEscalationSourceOptions, canAcknowledgeEscalation, canEscalateWorkItem, canReassignEscalationOwner, canResolveEscalation, escalationSourceLabel, isEscalationAcknowledged, } from './work-engine.escalation.logic.js';
 import { loadEscalationOwnerOptions } from './work-engine.escalation.service.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
@@ -1149,6 +1149,29 @@ const QUEUE_COLUMN_DEFS = {
     review_status: { label: 'Review', empty_display: 'dash' },
     claimed: { label: 'Lock', empty_display: 'dash' },
 };
+/** Queue column width intent (client ~20% narrower than legacy 12% baseline). */
+const QUEUE_COLUMN_WIDTH_PERCENT = {
+    client: 9.6,
+    module: 8,
+    work_type: 8,
+    state: 7.5,
+    assignee: 8,
+    last_activity: 9,
+    unread: 4,
+    period_key: 5,
+    reviewer: 7,
+    review_status: 6,
+};
+function queueColumnModel(key, def, kind) {
+    const width = QUEUE_COLUMN_WIDTH_PERCENT[key];
+    return {
+        key,
+        label: def.label,
+        empty_display: def.empty_display,
+        kind,
+        ...(width != null ? { width_percent: width } : {}),
+    };
+}
 function queueColumnHasAnyValue(rows, key) {
     return rows.some((r) => {
         const v = r.queue_cells[key];
@@ -1161,22 +1184,17 @@ function computeQueueTableModel(rows) {
         if (QUEUE_TABLE_EXCLUDED_COLUMN_KEYS.has(key))
             continue;
         const def = QUEUE_COLUMN_DEFS[key];
-        columns.push({ key, label: def.label, empty_display: def.empty_display, kind: 'data' });
+        columns.push(queueColumnModel(key, def, 'data'));
     }
     for (const key of OPTIONAL_QUEUE_COLUMN_KEYS) {
         if (QUEUE_TABLE_EXCLUDED_COLUMN_KEYS.has(key))
             continue;
         if (queueColumnHasAnyValue(rows, key)) {
             const def = QUEUE_COLUMN_DEFS[key];
-            columns.push({ key, label: def.label, empty_display: def.empty_display, kind: 'data' });
+            columns.push(queueColumnModel(key, def, 'data'));
         }
     }
-    columns.push({
-        key: 'actions',
-        label: 'Actions',
-        empty_display: 'blank',
-        kind: 'actions',
-    });
+    columns.push(queueColumnModel('actions', { label: 'Actions', empty_display: 'blank' }, 'actions'));
     return {
         columns: columns.filter((c) => !QUEUE_TABLE_EXCLUDED_COLUMN_KEYS.has(c.key)),
     };
@@ -1580,12 +1598,12 @@ export async function buildWorkEngineQueueAggregate(params) {
         const escalation_owner_name = r.escalation_owner_id
             ? (userNameById.get(r.escalation_owner_id) ?? null)
             : null;
-        const priorStateLabel = r.escalation_prior_work_state
-            ? workStateLabel(r.escalation_prior_work_state)
-            : null;
-        let stateCell = ov ? `${work_state_label} · ${ov}` : work_state_label;
-        if (r.work_state === 'escalated' && priorStateLabel) {
-            stateCell = `${work_state_label} (was ${priorStateLabel})`;
+        const stateCell = ov ? `${work_state_label} · ${ov}` : work_state_label;
+        const stateCellTitleParts = [];
+        if (r.work_state === 'escalated' && r.escalation_prior_work_state) {
+            const priorTooltip = buildEscalationPriorStateTooltip(r.escalation_prior_work_state);
+            if (priorTooltip)
+                stateCellTitleParts.push(priorTooltip);
         }
         const threadId = isConv ? String(r.source_entity_id ?? '') : '';
         const lastActivityIso = isConv && threadId && threadUpdatedAtById.has(threadId)
@@ -1631,6 +1649,7 @@ export async function buildWorkEngineQueueAggregate(params) {
         const queue_cell_titles = {
             claimed: claimed_cell_title,
             due: slaPresentation.primary_due_at_label,
+            state: stateCellTitleParts.length > 0 ? stateCellTitleParts.join(' · ') : null,
         };
         const ownershipDraft = viewer != null
             ? computeOwnershipCommands({
