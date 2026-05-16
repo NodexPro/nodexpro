@@ -3,6 +3,7 @@
  */
 import { badRequest } from '../../shared/errors.js';
 import { REMINDER_WORKFLOW_TYPES, } from '../country-pack/operational-communication-owner-payload.js';
+import { OWNER_REMINDER_PRESET_PERIODS, buildPeriodLabelFromAmountUnit, offsetMinutesToOwnerPeriodForm, periodAmountUnitToOffsetMinutes, } from '../country-pack/operational-communication-owner-form.js';
 export function buildReminderCandidateDedupKey(params) {
     return `reminder:${params.workItemId}:${params.workflowType}:${params.stepKey.trim()}`;
 }
@@ -95,6 +96,19 @@ export function resolveReminderTarget(workflowType, workItem) {
             throw badRequest(`Unsupported workflow_type: ${String(_exhaustive)}`);
         }
     }
+}
+/** Human cadence period label (1 hour, 2 days, …) from policy offset_minutes. */
+export function formatOffsetMinutesAsPeriodLabel(offsetMinutes) {
+    const preset = OWNER_REMINDER_PRESET_PERIODS.find((p) => periodAmountUnitToOffsetMinutes(p.amount, p.unit) === offsetMinutes);
+    if (preset)
+        return preset.label;
+    const form = offsetMinutesToOwnerPeriodForm(offsetMinutes);
+    if (form.period_slug !== '__custom__') {
+        const bySlug = OWNER_REMINDER_PRESET_PERIODS.find((p) => p.period_slug === form.period_slug);
+        if (bySlug)
+            return bySlug.label;
+    }
+    return buildPeriodLabelFromAmountUnit(form.custom_amount, form.custom_unit);
 }
 export function assertResolvedReminderPolicy(resolved) {
     if (!resolved.country_code || !resolved.ruleset_id) {

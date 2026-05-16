@@ -8,7 +8,12 @@ import { businessYmd } from '../../shared/business-time.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
 import { isUuid } from './work-engine.guards.js';
-import { REMINDER_CHANNELS } from '../country-pack/operational-communication-owner-payload.js';
+import {
+  REMINDER_CHANNELS,
+  type OperationalReminderPolicyPayload,
+} from '../country-pack/operational-communication-owner-payload.js';
+import { resolveOperationalCommunicationPolicies } from '../country-pack/operational-communication-policy.service.js';
+import { formatOffsetMinutesAsPeriodLabel } from './work-engine.reminder.logic.js';
 import { createSystemMessageCore } from '../docflow/docflow-system-message-core.service.js';
 export type ReminderReviewViewerContext = {
   userId: string;
@@ -122,6 +127,23 @@ function displayClientName(name: string | null, clientId: string | null): string
   if (clientId && trimmed === clientId) return null;
   if (isUuid(trimmed)) return null;
   return trimmed;
+}
+
+function resolveReminderCadencePeriodLabel(
+  candidate: ReminderCandidateRow,
+  snap: Record<string, unknown>,
+  policy: OperationalReminderPolicyPayload | null,
+): string | null {
+  const offsetRaw = snap.offset_minutes;
+  if (typeof offsetRaw === 'number' && Number.isFinite(offsetRaw) && offsetRaw >= 0) {
+    return formatOffsetMinutesAsPeriodLabel(Math.floor(offsetRaw));
+  }
+  if (policy) {
+    const workflow = policy.workflows.find((w) => w.workflow_type === candidate.workflow_type);
+    const step = workflow?.cadence_steps.find((s) => s.step_key === candidate.step_key);
+    if (step) return formatOffsetMinutesAsPeriodLabel(step.offset_minutes);
+  }
+  return null;
 }
 
 function candidateStateLabel(status: string): string {
@@ -739,21 +761,30 @@ export async function loadReminderReviewPage(params: {
     }
   }
 
-  const periodByWorkItem = new Map<string, string>();
   if (workItemIds.length > 0) {
     const { data, error: wErr } = await supabaseAdmin
       .from('work_items')
-      .select('id, period_key, client_id')
+      .select('id, client_id')
       .eq('org_id', params.orgId)
       .in('id', workItemIds);
     if (wErr) throw wErr;
     for (const w of data ?? []) {
-      periodByWorkItem.set(String(w.id), String(w.period_key ?? ''));
       const cid = w.client_id ? String(w.client_id) : null;
       if (cid && !clientNameById.has(cid)) {
         clientNameById.set(cid, cid);
       }
     }
+  }
+
+  let reminderPolicy: OperationalReminderPolicyPayload | null = null;
+  try {
+    const resolved = await resolveOperationalCommunicationPolicies(
+      params.orgId,
+      businessYmd(new Date()),
+    );
+    reminderPolicy = resolved.active_reminder_policy;
+  } catch {
+    reminderPolicy = null;
   }
 
   const rows: ReminderReviewQueueRow[] = candidates.map((c) => {
@@ -763,7 +794,7 @@ export async function loadReminderReviewPage(params: {
     const dueAt = c.suggested_send_at ?? (snap.due_at ? String(snap.due_at) : null);
     const body = (c.edited_body ?? c.body).trim();
     const workflowLabel = workflowTypeLabel(c.workflow_type);
-    const periodLabel = periodByWorkItem.get(c.work_item_id) || null;
+    const periodLabel = resolveReminderCadencePeriodLabel(c, snap, reminderPolicy);
     const stateLabel = candidateStateLabel(c.status);
     const clientName = c.client_id
       ? displayClientName(clientNameById.get(c.client_id) ?? null, c.client_id)
@@ -771,7 +802,7 @@ export async function loadReminderReviewPage(params: {
     const createdLabel = formatQueueLabel(c.created_at);
     const dueLabel = formatQueueLabel(dueAt);
     const subjectTrim = c.subject?.trim() || null;
-    const showSubject = channelLabels.includes('Email') || !!subjectTrim;
+    const showSubject = channelLabels.includes('Email');
 
     const summary_fields: ReminderReviewDetailField[] = [
       { key: 'client', label: 'Client', value: clientName },
@@ -805,7 +836,7 @@ export async function loadReminderReviewPage(params: {
         disabled_reason: null,
       },
       reminder_detail_model: {
-        title: 'Reminder review',
+        title: '',
         subtitle: clientName ? `${clientName} · ${workflowLabel}` : workflowLabel,
         summary_fields,
         message: {

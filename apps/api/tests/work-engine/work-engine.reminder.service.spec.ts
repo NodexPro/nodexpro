@@ -14,6 +14,7 @@ import {
   selectTemplateVersion,
 } from '../../src/domains/work-engine/work-engine.reminder.logic.js';
 import type { WorkItemRow } from '../../src/domains/work-engine/work-engine.types.js';
+import { formatOffsetMinutesAsPeriodLabel } from '../../src/domains/work-engine/work-engine.reminder.logic.js';
 
 const policy = assertValidOperationalReminderPolicyPayload({
   type: 'operational_reminder_policy',
@@ -186,4 +187,10 @@ test('resolveReminderTarget maps waiting_client to client target', () => {
   assert.equal(target.target_type, 'client');
   assert.equal(target.client_id, '33333333-3333-4333-8333-333333333333');
   assert.equal(target.target_user_id, null);
+});
+
+test('formatOffsetMinutesAsPeriodLabel returns owner preset labels', () => {
+  assert.equal(formatOffsetMinutesAsPeriodLabel(60), '1 hour');
+  assert.equal(formatOffsetMinutesAsPeriodLabel(2 * 24 * 60), '2 days');
+  assert.equal(formatOffsetMinutesAsPeriodLabel(14 * 24 * 60), '14 days');
 });

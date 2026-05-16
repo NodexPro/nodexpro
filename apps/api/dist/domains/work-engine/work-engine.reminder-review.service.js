@@ -3,10 +3,13 @@
  * Human review / approve / cancel / snooze — delivery only on explicit approve.
  */
 import { supabaseAdmin } from '../../db/client.js';
+import { businessYmd } from '../../shared/business-time.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
 import { isUuid } from './work-engine.guards.js';
-import { REMINDER_CHANNELS } from '../country-pack/operational-communication-owner-payload.js';
+import { REMINDER_CHANNELS, } from '../country-pack/operational-communication-owner-payload.js';
+import { resolveOperationalCommunicationPolicies } from '../country-pack/operational-communication-policy.service.js';
+import { formatOffsetMinutesAsPeriodLabel } from './work-engine.reminder.logic.js';
 import { createSystemMessageCore } from '../docflow/docflow-system-message-core.service.js';
 export const REMINDER_SNOOZE_PRESETS = [
     { preset_key: '1h', label: '1 hour', duration_minutes: 60 },
@@ -91,6 +94,19 @@ function displayClientName(name, clientId) {
     if (isUuid(trimmed))
         return null;
     return trimmed;
+}
+function resolveReminderCadencePeriodLabel(candidate, snap, policy) {
+    const offsetRaw = snap.offset_minutes;
+    if (typeof offsetRaw === 'number' && Number.isFinite(offsetRaw) && offsetRaw >= 0) {
+        return formatOffsetMinutesAsPeriodLabel(Math.floor(offsetRaw));
+    }
+    if (policy) {
+        const workflow = policy.workflows.find((w) => w.workflow_type === candidate.workflow_type);
+        const step = workflow?.cadence_steps.find((s) => s.step_key === candidate.step_key);
+        if (step)
+            return formatOffsetMinutesAsPeriodLabel(step.offset_minutes);
+    }
+    return null;
 }
 function candidateStateLabel(status) {
     switch (status) {
@@ -562,22 +578,28 @@ export async function loadReminderReviewPage(params) {
             clientNameById.set(String(c.id), String(c.display_name ?? c.id));
         }
     }
-    const periodByWorkItem = new Map();
     if (workItemIds.length > 0) {
         const { data, error: wErr } = await supabaseAdmin
             .from('work_items')
-            .select('id, period_key, client_id')
+            .select('id, client_id')
             .eq('org_id', params.orgId)
             .in('id', workItemIds);
         if (wErr)
             throw wErr;
         for (const w of data ?? []) {
-            periodByWorkItem.set(String(w.id), String(w.period_key ?? ''));
             const cid = w.client_id ? String(w.client_id) : null;
             if (cid && !clientNameById.has(cid)) {
                 clientNameById.set(cid, cid);
             }
         }
+    }
+    let reminderPolicy = null;
+    try {
+        const resolved = await resolveOperationalCommunicationPolicies(params.orgId, businessYmd(new Date()));
+        reminderPolicy = resolved.active_reminder_policy;
+    }
+    catch {
+        reminderPolicy = null;
     }
     const rows = candidates.map((c) => {
         const channelLabels = humanChannelLabelsFromSnapshot(c.channel_order_snapshot, c.channel);
@@ -586,7 +608,7 @@ export async function loadReminderReviewPage(params) {
         const dueAt = c.suggested_send_at ?? (snap.due_at ? String(snap.due_at) : null);
         const body = (c.edited_body ?? c.body).trim();
         const workflowLabel = workflowTypeLabel(c.workflow_type);
-        const periodLabel = periodByWorkItem.get(c.work_item_id) || null;
+        const periodLabel = resolveReminderCadencePeriodLabel(c, snap, reminderPolicy);
         const stateLabel = candidateStateLabel(c.status);
         const clientName = c.client_id
             ? displayClientName(clientNameById.get(c.client_id) ?? null, c.client_id)
@@ -594,7 +616,7 @@ export async function loadReminderReviewPage(params) {
         const createdLabel = formatQueueLabel(c.created_at);
         const dueLabel = formatQueueLabel(dueAt);
         const subjectTrim = c.subject?.trim() || null;
-        const showSubject = channelLabels.includes('Email') || !!subjectTrim;
+        const showSubject = channelLabels.includes('Email');
         const summary_fields = [
             { key: 'client', label: 'Client', value: clientName },
             { key: 'workflow', label: 'Workflow', value: workflowLabel },
@@ -626,7 +648,7 @@ export async function loadReminderReviewPage(params) {
                 disabled_reason: null,
             },
             reminder_detail_model: {
-                title: 'Reminder review',
+                title: '',
                 subtitle: clientName ? `${clientName} · ${workflowLabel}` : workflowLabel,
                 summary_fields,
                 message: {

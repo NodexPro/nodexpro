@@ -1843,19 +1843,22 @@ function ReminderReviewDetailPane(props: {
     await runCommand(snoozeAction, { snooze_preset: snoozePreset });
   }, [runCommand, snoozeAction, snoozePreset]);
 
-  const title =
+  const subModeTitle =
     mode === 'edit'
       ? (editAction?.label ?? 'Edit')
       : mode === 'cancel'
         ? (cancelAction?.label ?? 'Cancel')
         : mode === 'snooze'
           ? (snoozeAction?.label ?? 'Snooze')
-          : detail.title;
+          : null;
 
   return (
     <div className="nx-we-reminder-detail-pane">
-      <h4 className="nx-we-reminder-detail-pane__title">{title}</h4>
-      {detail.subtitle ? <p className="nx-we-modal__hint">{detail.subtitle}</p> : null}
+      {subModeTitle ? (
+        <h4 className="nx-we-reminder-detail-pane__title">{subModeTitle}</h4>
+      ) : detail.subtitle ? (
+        <p className="nx-we-reminder-detail-pane__subtitle">{detail.subtitle}</p>
+      ) : null}
       {error ? <div className="nx-we-banner-error">{error}</div> : null}
 
       {mode === 'view' ? (
