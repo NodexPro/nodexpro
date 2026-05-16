@@ -219,6 +219,34 @@ export async function reassignEscalationOwner(params) {
     });
     return { previousOwnerId, newVersion };
 }
+export async function loadEscalationOwnerOptions(orgId) {
+    const { data: memberships, error: memErr } = await supabaseAdmin
+        .from('organization_memberships')
+        .select('user_id')
+        .eq('organization_id', orgId)
+        .eq('status', 'active');
+    if (memErr)
+        throw memErr;
+    const userIds = Array.from(new Set((memberships ?? [])
+        .map((m) => String(m.user_id ?? '').trim())
+        .filter(Boolean)));
+    if (userIds.length === 0)
+        return [];
+    const { data: users, error: userErr } = await supabaseAdmin
+        .from('users')
+        .select('id, full_name, email')
+        .in('id', userIds);
+    if (userErr)
+        throw userErr;
+    const options = (users ?? []).map((u) => {
+        const id = String(u.id);
+        const name = String(u.full_name ?? '').trim();
+        const email = String(u.email ?? '').trim();
+        return { value: id, label: name || email || id };
+    });
+    options.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    return options;
+}
 export async function loadWorkItemForEscalation(orgId, workItemId) {
     if (!isUuid(workItemId))
         throw badRequest('work_item_id must be a uuid');

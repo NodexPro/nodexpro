@@ -59,6 +59,14 @@ export type QueueOpenDetailAction = {
   presentation_group: 'row_primary';
 };
 
+export type QueueWorkEngineCommandInteraction = 'immediate' | 'modal';
+
+export type QueueEscalationCommandKind =
+  | 'escalate_work_item'
+  | 'acknowledge_escalation'
+  | 'resolve_escalation'
+  | 'reassign_escalation_owner';
+
 export type QueueOverflowMenuItem = {
   channel: 'ownership' | 'review' | 'semantic' | 'work_engine_command';
   command: string;
@@ -66,6 +74,40 @@ export type QueueOverflowMenuItem = {
   enabled: boolean;
   reason: string | null;
   command_payload?: Record<string, unknown> | null;
+  interaction?: QueueWorkEngineCommandInteraction;
+  modal_form_key?: QueueEscalationCommandKind;
+};
+
+export type WorkEngineEscalationFormSelectField = {
+  key: string;
+  kind: 'select';
+  label: string;
+  required: boolean;
+  options: QueueLabeledOption[];
+};
+
+export type WorkEngineEscalationFormTextareaField = {
+  key: string;
+  kind: 'textarea';
+  label: string;
+  required: boolean;
+  placeholder?: string | null;
+};
+
+export type WorkEngineEscalationFormField =
+  | WorkEngineEscalationFormSelectField
+  | WorkEngineEscalationFormTextareaField;
+
+export type WorkEngineEscalationCommandForm = {
+  command: QueueEscalationCommandKind;
+  title: string;
+  submit_label: string;
+  cancel_label: string;
+  fields: WorkEngineEscalationFormField[];
+};
+
+export type WorkEngineEscalationWorkspace = {
+  command_forms: Partial<Record<QueueEscalationCommandKind, WorkEngineEscalationCommandForm>>;
 };
 
 export type QueueOverflowMenuSection = {
@@ -159,12 +201,6 @@ export type QueueReviewCommand = {
   reason: string | null;
   presentation_group: QueuePresentationGroup;
 };
-
-export type QueueEscalationCommandKind =
-  | 'escalate_work_item'
-  | 'acknowledge_escalation'
-  | 'resolve_escalation'
-  | 'reassign_escalation_owner';
 
 export type QueueEscalationCommand = {
   command: QueueEscalationCommandKind;
@@ -315,6 +351,7 @@ export type WorkEngineQueueAggregate = {
   };
   banner?: ReminderReviewBanner;
   snooze_presets?: Array<{ preset_key: string; label: string }>;
+  escalation_workspace?: WorkEngineEscalationWorkspace;
   summary_cards: {
     total_active: number;
     assigned_to_me: number;

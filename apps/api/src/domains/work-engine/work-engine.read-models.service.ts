@@ -26,6 +26,7 @@ import {
   canPickUpFromUnassignedWorkState,
 } from './work-engine.guards.js';
 import {
+  buildEscalationSourceOptions,
   canAcknowledgeEscalation,
   canEscalateWorkItem,
   canReassignEscalationOwner,
@@ -34,6 +35,7 @@ import {
   isEscalationAcknowledged,
   type EscalationPermissionContext,
 } from './work-engine.escalation.logic.js';
+import { loadEscalationOwnerOptions } from './work-engine.escalation.service.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
 import {
@@ -86,6 +88,8 @@ export type QueuePresentationGroup =
   | 'row_overflow'
   | 'admin_overflow';
 
+export type QueueWorkEngineCommandInteraction = 'immediate' | 'modal';
+
 export type QueueOverflowMenuItem = {
   channel: 'ownership' | 'review' | 'semantic' | 'work_engine_command';
   command: string;
@@ -94,6 +98,42 @@ export type QueueOverflowMenuItem = {
   reason: string | null;
   /** Present for `work_engine_command` — merged with row ids on the client before POST. */
   command_payload?: Record<string, unknown> | null;
+  /** `modal` opens aggregate-provided form; `immediate` POSTs command as-is. */
+  interaction?: QueueWorkEngineCommandInteraction;
+  /** Key into `escalation_workspace.command_forms` when interaction is `modal`. */
+  modal_form_key?: QueueEscalationCommandKind;
+};
+
+export type WorkEngineEscalationFormSelectField = {
+  key: string;
+  kind: 'select';
+  label: string;
+  required: boolean;
+  options: Array<{ value: string; label: string }>;
+};
+
+export type WorkEngineEscalationFormTextareaField = {
+  key: string;
+  kind: 'textarea';
+  label: string;
+  required: boolean;
+  placeholder?: string | null;
+};
+
+export type WorkEngineEscalationFormField =
+  | WorkEngineEscalationFormSelectField
+  | WorkEngineEscalationFormTextareaField;
+
+export type WorkEngineEscalationCommandForm = {
+  command: QueueEscalationCommandKind;
+  title: string;
+  submit_label: string;
+  cancel_label: string;
+  fields: WorkEngineEscalationFormField[];
+};
+
+export type WorkEngineEscalationWorkspace = {
+  command_forms: Partial<Record<QueueEscalationCommandKind, WorkEngineEscalationCommandForm>>;
 };
 
 export type QueueOverflowMenuSection = {
@@ -372,12 +412,15 @@ function buildQueueRowChrome(args: {
 
   const devToolAccess = canAccessReminderDraftDevTool(viewer);
   for (const esc of escalation) {
+    const interaction = workEngineEscalationInteraction(esc.command);
     adminItems.push({
       channel: 'work_engine_command',
       command: esc.command,
       label: esc.label,
       enabled: esc.enabled,
       reason: esc.reason,
+      interaction,
+      modal_form_key: interaction === 'modal' ? esc.command : undefined,
       command_payload: {
         work_item_id: row.id,
         expected_version: row.version,
@@ -659,6 +702,83 @@ function computeReviewCommands(args: {
                 : null,
   });
   return out;
+}
+
+function workEngineEscalationInteraction(
+  command: QueueEscalationCommandKind,
+): QueueWorkEngineCommandInteraction {
+  return command === 'acknowledge_escalation' ? 'immediate' : 'modal';
+}
+
+export function buildEscalationWorkspace(ownerOptions: Array<{ value: string; label: string }>): WorkEngineEscalationWorkspace {
+  const sourceOptions = buildEscalationSourceOptions().map((o) => ({
+    value: o.value,
+    label: o.label,
+  }));
+
+  return {
+    command_forms: {
+      escalate_work_item: {
+        command: 'escalate_work_item',
+        title: 'Escalate work item',
+        submit_label: 'Escalate',
+        cancel_label: 'Cancel',
+        fields: [
+          {
+            key: 'escalation_owner_id',
+            kind: 'select',
+            label: 'Escalation owner',
+            required: true,
+            options: ownerOptions,
+          },
+          {
+            key: 'escalation_source',
+            kind: 'select',
+            label: 'Escalation source',
+            required: true,
+            options: sourceOptions,
+          },
+          {
+            key: 'escalation_reason',
+            kind: 'textarea',
+            label: 'Escalation reason',
+            required: true,
+            placeholder: 'Describe why this item is escalated',
+          },
+        ],
+      },
+      reassign_escalation_owner: {
+        command: 'reassign_escalation_owner',
+        title: 'Reassign escalation owner',
+        submit_label: 'Reassign',
+        cancel_label: 'Cancel',
+        fields: [
+          {
+            key: 'escalation_owner_id',
+            kind: 'select',
+            label: 'Escalation owner',
+            required: true,
+            options: ownerOptions,
+          },
+        ],
+      },
+      resolve_escalation: {
+        command: 'resolve_escalation',
+        title: 'Resolve escalation',
+        submit_label: 'Resolve',
+        cancel_label: 'Cancel',
+        fields: [
+          {
+            key: 'resolution_note',
+            kind: 'textarea',
+            label: 'Resolution note',
+            required: false,
+            placeholder: 'Optional note for the audit trail',
+          },
+        ],
+      },
+    },
+  };
 }
 
 function escalationPermissionContext(viewer: WorkEngineQueueViewerContext): EscalationPermissionContext {
@@ -2247,6 +2367,9 @@ export async function buildWorkEngineQueueAggregate(params: {
         })
       : { rows: [], total: 0 };
 
+  const escalationOwnerOptions = await loadEscalationOwnerOptions(orgId);
+  const escalation_workspace = buildEscalationWorkspace(escalationOwnerOptions);
+
   // ---- 7. Compose response.
   return {
     aggregate_key: 'work_engine_queue_aggregate',
@@ -2259,6 +2382,7 @@ export async function buildWorkEngineQueueAggregate(params: {
       preset_key: p.preset_key,
       label: p.label,
     })),
+    escalation_workspace,
 
     summary_cards: {
       total_active: totalActive,

@@ -36,6 +36,12 @@ export function parseEscalationReason(raw) {
     }
     return v;
 }
+export function buildEscalationSourceOptions() {
+    return ESCALATION_SOURCES.map((value) => ({
+        value,
+        label: escalationSourceLabel(value),
+    }));
+}
 export function escalationSourceLabel(source) {
     switch (source) {
         case 'manual_escalation':

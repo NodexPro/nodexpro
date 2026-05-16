@@ -35,6 +35,7 @@ import {
   type ReminderReviewAllowedAction,
   type ReminderReviewBanner as ReminderReviewBannerModel,
   type ReminderReviewQueueRow,
+  type WorkEngineEscalationFormField,
   type WorkEngineQueueAggregate,
   type WorkEngineQueueFiltersInput,
   type WorkEngineQueueRow,
@@ -100,6 +101,11 @@ type PendingModal =
   | { kind: 'reject_review'; row: WorkEngineQueueRow }
   | null;
 
+type EscalationModalState = {
+  row: WorkEngineQueueRow;
+  item: QueueOverflowMenuItem;
+};
+
 export function WorkEngineQueue() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
@@ -110,6 +116,7 @@ export function WorkEngineQueue() {
   const [detailRow, setDetailRow] = useState<WorkEngineQueueRow | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [reminderReviewOpen, setReminderReviewOpen] = useState(false);
+  const [escalationModal, setEscalationModal] = useState<EscalationModalState | null>(null);
 
   const loadAggregate = useCallback(async (f: FilterState) => {
     setLoading(true);
@@ -234,9 +241,12 @@ export function WorkEngineQueue() {
     setBannerDismissed(false);
   }, []);
 
-  const handleWorkEngineOverflowCommand = useCallback(
-    async (row: WorkEngineQueueRow, item: QueueOverflowMenuItem) => {
-      if (!item.enabled || item.channel !== 'work_engine_command') return;
+  const runWorkEngineOverflowCommand = useCallback(
+    async (
+      row: WorkEngineQueueRow,
+      item: QueueOverflowMenuItem,
+      fieldValues: Record<string, string>,
+    ) => {
       setError(null);
       try {
         const resp = await executeWorkEngineQueueCommand({
@@ -246,15 +256,30 @@ export function WorkEngineQueue() {
             work_item_id: row.work_item_id,
             expected_version: row.version,
             idempotency_key: crypto.randomUUID(),
+            ...fieldValues,
           },
           filters: filtersToApi(filters),
         });
         handleCommandResult(resp.refreshed?.aggregate ?? null);
+        setEscalationModal(null);
       } catch (e) {
         await handleCommandFailure(e);
+        throw e;
       }
     },
     [filters, handleCommandFailure, handleCommandResult],
+  );
+
+  const handleWorkEngineOverflowCommand = useCallback(
+    async (row: WorkEngineQueueRow, item: QueueOverflowMenuItem) => {
+      if (!item.enabled || item.channel !== 'work_engine_command') return;
+      if (item.interaction === 'modal' && item.modal_form_key) {
+        setEscalationModal({ row, item });
+        return;
+      }
+      await runWorkEngineOverflowCommand(row, item, {});
+    },
+    [runWorkEngineOverflowCommand],
   );
 
   if (loading && !aggregate) {
@@ -345,6 +370,19 @@ export function WorkEngineQueue() {
             setDetailRow(null);
             setModal(buildModalForAction(row, cmd));
           }}
+        />
+      ) : null}
+
+      {escalationModal && aggregate?.escalation_workspace ? (
+        <EscalationCommandModal
+          aggregate={aggregate}
+          row={escalationModal.row}
+          item={escalationModal.item}
+          onClose={() => setEscalationModal(null)}
+          onSubmit={async (fieldValues) => {
+            await runWorkEngineOverflowCommand(escalationModal.row, escalationModal.item, fieldValues);
+          }}
+          onCommandFailure={handleCommandFailure}
         />
       ) : null}
 
@@ -2012,5 +2050,178 @@ function ReminderReviewDetailPane(props: {
         )}
       </div>
     </div>
+  );
+}
+
+function initialEscalationFieldValues(fields: WorkEngineEscalationFormField[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const field of fields) {
+    if (field.kind === 'select') {
+      out[field.key] = field.options[0]?.value ?? '';
+    } else {
+      out[field.key] = '';
+    }
+  }
+  return out;
+}
+
+function EscalationCommandModal(props: {
+  aggregate: WorkEngineQueueAggregate;
+  row: WorkEngineQueueRow;
+  item: QueueOverflowMenuItem;
+  onClose: () => void;
+  onSubmit: (fieldValues: Record<string, string>) => Promise<void>;
+  onCommandFailure: (e: unknown) => void | Promise<void>;
+}) {
+  const formKey = props.item.modal_form_key;
+  const form =
+    formKey && props.aggregate.escalation_workspace?.command_forms
+      ? props.aggregate.escalation_workspace.command_forms[formKey]
+      : undefined;
+
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    form ? initialEscalationFieldValues(form.fields) : {},
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!form || !formKey) {
+    return null;
+  }
+
+  const subject = props.row.command_modal_subject_line ?? props.row.work_type_label;
+
+  const handleSubmit = async () => {
+    setError(null);
+    for (const field of form.fields) {
+      if (field.required && !String(values[field.key] ?? '').trim()) {
+        setError(`${field.label} is required`);
+        return;
+      }
+    }
+    setSubmitting(true);
+    try {
+      const payload: Record<string, string> = {};
+      for (const field of form.fields) {
+        const v = String(values[field.key] ?? '').trim();
+        if (v || field.required) payload[field.key] = v;
+      }
+      await props.onSubmit(payload);
+    } catch (e) {
+      setError(userFacingApiMessage(e));
+      await props.onCommandFailure(e);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      className="nx-we-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="we-escalation-modal-title"
+    >
+      <div className="nx-we-modal nx-we-modal--escalation-workspace">
+        <div className="nx-we-modal__header-row">
+          <h3 id="we-escalation-modal-title" className="nx-we-modal__title">
+            {form.title}
+          </h3>
+        </div>
+        <div className="nx-we-modal__body">
+          {subject ? <p className="nx-we-modal__hint">{subject}</p> : null}
+          {error ? <div className="nx-we-banner-error">{error}</div> : null}
+          <form
+            className="nx-we-escalation-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleSubmit();
+            }}
+          >
+            {form.fields.map((field) => (
+              <EscalationFormFieldControl
+                key={field.key}
+                field={field}
+                value={values[field.key] ?? ''}
+                disabled={submitting}
+                onChange={(next) => setValues((prev) => ({ ...prev, [field.key]: next }))}
+              />
+            ))}
+            <div className="nx-we-modal-footer nx-tax-nested-modal-footer">
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                onClick={props.onClose}
+                disabled={submitting}
+              >
+                {form.cancel_label}
+              </button>
+              <button
+                type="submit"
+                className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+                disabled={submitting}
+              >
+                {submitting ? 'Working…' : form.submit_label}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EscalationFormFieldControl(props: {
+  field: WorkEngineEscalationFormField;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  const id = `we-escalation-${props.field.key}`;
+  if (props.field.kind === 'select') {
+    return (
+      <label className="nx-we-escalation-form__field" htmlFor={id}>
+        <span className="nx-we-escalation-form__label">
+          {props.field.label}
+          {props.field.required ? ' *' : ''}
+        </span>
+        <select
+          id={id}
+          className="nx-we-escalation-form__select"
+          value={props.value}
+          required={props.field.required}
+          disabled={props.disabled}
+          onChange={(e) => props.onChange(e.target.value)}
+        >
+          {props.field.options.length === 0 ? (
+            <option value="">No eligible users</option>
+          ) : (
+            props.field.options.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))
+          )}
+        </select>
+      </label>
+    );
+  }
+  return (
+    <label className="nx-we-escalation-form__field" htmlFor={id}>
+      <span className="nx-we-escalation-form__label">
+        {props.field.label}
+        {props.field.required ? ' *' : ''}
+      </span>
+      <textarea
+        id={id}
+        className="nx-we-escalation-form__textarea"
+        value={props.value}
+        required={props.field.required}
+        disabled={props.disabled}
+        placeholder={props.field.placeholder ?? undefined}
+        rows={4}
+        onChange={(e) => props.onChange(e.target.value)}
+      />
+    </label>
   );
 }

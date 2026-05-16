@@ -163,6 +163,51 @@
   box-shadow: 0 2px 8px rgba(91, 61, 168, 0.12);
 }
 
+.nx-we-modal--escalation-workspace {
+  width: min(560px, calc(100vw - 32px));
+  max-width: 560px;
+}
+
+.nx-we-modal--escalation-workspace .nx-we-modal__body {
+  flex: 0 1 auto;
+}
+
+.nx-we-escalation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.nx-we-escalation-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nx-we-escalation-form__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.nx-we-escalation-form__select,
+.nx-we-escalation-form__textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #0f172a;
+  background: #fff;
+}
+
+.nx-we-escalation-form__textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+
 .nx-we-modal--reminder-review-workspace {
   max-width: min(1200px, calc(100vw - 32px));
   width: min(1200px, calc(100vw - 32px));

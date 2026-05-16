@@ -48,6 +48,13 @@ export function parseEscalationReason(raw: unknown): string {
   return v;
 }
 
+export function buildEscalationSourceOptions(): Array<{ value: EscalationSource; label: string }> {
+  return ESCALATION_SOURCES.map((value) => ({
+    value,
+    label: escalationSourceLabel(value),
+  }));
+}
+
 export function escalationSourceLabel(source: string): string {
   switch (source) {
     case 'manual_escalation':

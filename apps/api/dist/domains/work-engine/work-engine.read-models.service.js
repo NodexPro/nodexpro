@@ -9,7 +9,8 @@ import { supabaseAdmin } from '../../db/client.js';
 import { hasPermission } from '../rbac/rbac.service.js';
 import { OVERRIDE_KINDS, OVERRIDE_KINDS_REQUIRING_REASON, WORK_STATES, } from './work-engine.types.js';
 import { getAllowedTransitionsFrom, getReopenTargetStates, canPickUpFromUnassignedWorkState, } from './work-engine.guards.js';
-import { canAcknowledgeEscalation, canEscalateWorkItem, canReassignEscalationOwner, canResolveEscalation, escalationSourceLabel, isEscalationAcknowledged, } from './work-engine.escalation.logic.js';
+import { buildEscalationSourceOptions, canAcknowledgeEscalation, canEscalateWorkItem, canReassignEscalationOwner, canResolveEscalation, escalationSourceLabel, isEscalationAcknowledged, } from './work-engine.escalation.logic.js';
+import { loadEscalationOwnerOptions } from './work-engine.escalation.service.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
 import { canStaffPickUpUnassigned, DEFAULT_SLA_POLICY, resolveWorkTypePoliciesBatch, } from './work-engine.policy.service.js';
@@ -213,12 +214,15 @@ function buildQueueRowChrome(args) {
     }
     const devToolAccess = canAccessReminderDraftDevTool(viewer);
     for (const esc of escalation) {
+        const interaction = workEngineEscalationInteraction(esc.command);
         adminItems.push({
             channel: 'work_engine_command',
             command: esc.command,
             label: esc.label,
             enabled: esc.enabled,
             reason: esc.reason,
+            interaction,
+            modal_form_key: interaction === 'modal' ? esc.command : undefined,
             command_payload: {
                 work_item_id: row.id,
                 expected_version: row.version,
@@ -447,6 +451,78 @@ function computeReviewCommands(args) {
                                 : null,
     });
     return out;
+}
+function workEngineEscalationInteraction(command) {
+    return command === 'acknowledge_escalation' ? 'immediate' : 'modal';
+}
+export function buildEscalationWorkspace(ownerOptions) {
+    const sourceOptions = buildEscalationSourceOptions().map((o) => ({
+        value: o.value,
+        label: o.label,
+    }));
+    return {
+        command_forms: {
+            escalate_work_item: {
+                command: 'escalate_work_item',
+                title: 'Escalate work item',
+                submit_label: 'Escalate',
+                cancel_label: 'Cancel',
+                fields: [
+                    {
+                        key: 'escalation_owner_id',
+                        kind: 'select',
+                        label: 'Escalation owner',
+                        required: true,
+                        options: ownerOptions,
+                    },
+                    {
+                        key: 'escalation_source',
+                        kind: 'select',
+                        label: 'Escalation source',
+                        required: true,
+                        options: sourceOptions,
+                    },
+                    {
+                        key: 'escalation_reason',
+                        kind: 'textarea',
+                        label: 'Escalation reason',
+                        required: true,
+                        placeholder: 'Describe why this item is escalated',
+                    },
+                ],
+            },
+            reassign_escalation_owner: {
+                command: 'reassign_escalation_owner',
+                title: 'Reassign escalation owner',
+                submit_label: 'Reassign',
+                cancel_label: 'Cancel',
+                fields: [
+                    {
+                        key: 'escalation_owner_id',
+                        kind: 'select',
+                        label: 'Escalation owner',
+                        required: true,
+                        options: ownerOptions,
+                    },
+                ],
+            },
+            resolve_escalation: {
+                command: 'resolve_escalation',
+                title: 'Resolve escalation',
+                submit_label: 'Resolve',
+                cancel_label: 'Cancel',
+                fields: [
+                    {
+                        key: 'resolution_note',
+                        kind: 'textarea',
+                        label: 'Resolution note',
+                        required: false,
+                        placeholder: 'Optional note for the audit trail',
+                    },
+                ],
+            },
+        },
+    };
 }
 function escalationPermissionContext(viewer) {
     return {
@@ -1689,6 +1765,8 @@ export async function buildWorkEngineQueueAggregate(params) {
             viewer,
         })
         : { rows: [], total: 0 };
+    const escalationOwnerOptions = await loadEscalationOwnerOptions(orgId);
+    const escalation_workspace = buildEscalationWorkspace(escalationOwnerOptions);
     // ---- 7. Compose response.
     return {
         aggregate_key: 'work_engine_queue_aggregate',
@@ -1701,6 +1779,7 @@ export async function buildWorkEngineQueueAggregate(params) {
             preset_key: p.preset_key,
             label: p.label,
         })),
+        escalation_workspace,
         summary_cards: {
             total_active: totalActive,
             assigned_to_me: bucketAssignedToMe,
