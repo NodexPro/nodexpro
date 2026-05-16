@@ -85,6 +85,13 @@ export const MAPPING_REASON = {
 } as const;
 export type MappingReason = (typeof MAPPING_REASON)[keyof typeof MAPPING_REASON];
 
+/** Outcomes where the event row exists but no work_item was linked yet. */
+export const PENDING_MAPPING_PROCESSING_OUTCOMES = [
+  'accepted_pending_mapping',
+  MAPPING_REASON.UNKNOWN_EVENT_MAPPING,
+  MAPPING_REASON.MISSING_PERIOD_KEY,
+] as const;
+
 /** Stable list of event_type values backend will currently resolve. */
 export function knownEventTypes(): string[] {
   return Object.keys(SAFE_EVENT_MAPPINGS);

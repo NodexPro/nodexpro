@@ -37,7 +37,11 @@ import {
   type EscalationPermissionContext,
 } from './work-engine.escalation.logic.js';
 import { loadEscalationOwnerOptions } from './work-engine.escalation.service.js';
-import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
+import {
+  knownEventTypes,
+  MAPPING_REASON,
+  PENDING_MAPPING_PROCESSING_OUTCOMES,
+} from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
 import {
   canStaffPickUpUnassigned,
@@ -69,11 +73,7 @@ import {
  * created). Includes the Stage 3A legacy umbrella string so historical rows
  * still count.
  */
-const PENDING_MAPPING_OUTCOMES = [
-  'accepted_pending_mapping',
-  MAPPING_REASON.UNKNOWN_EVENT_MAPPING,
-  MAPPING_REASON.MISSING_PERIOD_KEY,
-] as const;
+const PENDING_MAPPING_OUTCOMES = PENDING_MAPPING_PROCESSING_OUTCOMES;
 
 /** Viewer context for backend-owned queue buckets and ownership command strip. */
 export type WorkEngineQueueViewerContext = {

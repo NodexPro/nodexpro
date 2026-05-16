@@ -33,15 +33,56 @@
  * returns a refreshed aggregate.
  */
 import { Router } from 'express';
+import { config } from '../../config.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
-import { badRequest } from '../../shared/errors.js';
+import { badRequest, forbidden } from '../../shared/errors.js';
+import { runWorkEngineScheduler } from './work-engine.scheduler.service.js';
 import { executeWorkEngineCommand } from './work-engine.commands.service.js';
 import { acceptWorkEngineEvent } from './work-engine.event-intake.service.js';
 import { buildWorkEngineFoundationAggregate, buildWorkEngineQueueAggregate, } from './work-engine.read-models.service.js';
 const router = Router();
-router.use(authMiddleware, requireOrg);
-router.get('/aggregates/foundation', async (req, res, next) => {
+function requireInternalCronSecret(req) {
+    const secret = String(req.headers['x-internal-cron-secret'] ?? '').trim();
+    if (!config.internalCronSecret || !secret || secret !== config.internalCronSecret) {
+        throw forbidden('Invalid internal cron secret');
+    }
+}
+/** Internal cron trigger (Render Cron Job) — Work Engine background runner. */
+router.post('/internal/scheduler/run', async (req, res, next) => {
+    try {
+        requireInternalCronSecret(req);
+        const body = (req.body ?? {});
+        const summary = await runWorkEngineScheduler({
+            org_id: typeof body.org_id === 'string' ? body.org_id.trim() : undefined,
+            batch_size: typeof body.batch_size === 'number' ? body.batch_size : undefined,
+            max_work_items_per_run: typeof body.max_work_items_per_run === 'number' ? body.max_work_items_per_run : undefined,
+            max_pending_events_per_org: typeof body.max_pending_events_per_org === 'number'
+                ? body.max_pending_events_per_org
+                : undefined,
+            run_context_key: typeof body.run_context_key === 'string' ? body.run_context_key.trim() : undefined,
+            dry_run: body.dry_run === true,
+        });
+        return res.json({
+            ok: summary.ok,
+            skipped: summary.skipped,
+            scanned_work_items: summary.scanned_work_items,
+            recomputed_sla: summary.recomputed_sla,
+            reminders_created: summary.reminders_created,
+            escalations_created: summary.escalations_created,
+            snoozed_woken: summary.snoozed_woken,
+            errors: summary.errors,
+            result: summary,
+        });
+    }
+    catch (e) {
+        console.error('[work-engine] POST /internal/scheduler/run failed', e);
+        next(e);
+    }
+});
+const officeRouter = Router();
+officeRouter.use(authMiddleware, requireOrg);
+officeRouter.get('/aggregates/foundation', async (req, res, next) => {
     try {
         const ctx = req.context;
         const orgId = ctx.organizationId;
@@ -55,7 +96,7 @@ router.get('/aggregates/foundation', async (req, res, next) => {
 // Stage 3D — backend-ready queue aggregate. Query params are read here so the
 // route owns parsing; the read-models service owns validation/clamping of
 // values (limit caps, unknown state values, etc.).
-router.get('/aggregates/queue', async (req, res, next) => {
+officeRouter.get('/aggregates/queue', async (req, res, next) => {
     try {
         const ctx = req.context;
         const orgId = ctx.organizationId;
@@ -117,7 +158,7 @@ const ALLOWED_COMMANDS = new Set([
     'apply_work_override',
     'intake_work_event',
 ]);
-router.post('/commands', async (req, res, next) => {
+officeRouter.post('/commands', async (req, res, next) => {
     try {
         const ctx = req.context;
         const command = String(req.body?.command ?? '').trim();
@@ -134,7 +175,7 @@ router.post('/commands', async (req, res, next) => {
         next(e);
     }
 });
-router.post('/events/intake', async (req, res, next) => {
+officeRouter.post('/events/intake', async (req, res, next) => {
     try {
         const ctx = req.context;
         const env = (req.body ?? {});
@@ -152,4 +193,5 @@ router.post('/events/intake', async (req, res, next) => {
         next(e);
     }
 });
+router.use(officeRouter);
 export const workEngineRoutes = router;

@@ -11,7 +11,7 @@ import { OVERRIDE_KINDS, OVERRIDE_KINDS_REQUIRING_REASON, WORK_STATES, } from '.
 import { getAllowedTransitionsFrom, getReopenTargetStates, canPickUpFromUnassignedWorkState, } from './work-engine.guards.js';
 import { buildEscalationPriorStateTooltip, buildEscalationSourceOptions, canAcknowledgeEscalation, canEscalateWorkItem, canReassignEscalationOwner, canResolveEscalation, escalationSourceLabel, isEscalationAcknowledged, } from './work-engine.escalation.logic.js';
 import { loadEscalationOwnerOptions } from './work-engine.escalation.service.js';
-import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
+import { knownEventTypes, MAPPING_REASON, PENDING_MAPPING_PROCESSING_OUTCOMES, } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
 import { canStaffPickUpUnassigned, DEFAULT_SLA_POLICY, resolveWorkTypePoliciesBatch, } from './work-engine.policy.service.js';
 import { buildDueQueueCellText, buildQueueSlaPresentation, loadActiveSlaObligationsForItems, } from './work-engine.sla.service.js';
@@ -24,11 +24,7 @@ import { canAccessReminderDraftDevTool, GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE, }
  * created). Includes the Stage 3A legacy umbrella string so historical rows
  * still count.
  */
-const PENDING_MAPPING_OUTCOMES = [
-    'accepted_pending_mapping',
-    MAPPING_REASON.UNKNOWN_EVENT_MAPPING,
-    MAPPING_REASON.MISSING_PERIOD_KEY,
-];
+const PENDING_MAPPING_OUTCOMES = PENDING_MAPPING_PROCESSING_OUTCOMES;
 function queueRowChromeMode(row) {
     const unassigned = row.assigned_user_id == null || String(row.assigned_user_id).trim() === '';
     if (unassigned && canPickUpFromUnassignedWorkState(row.work_state))

@@ -53,7 +53,10 @@ import {
   assertValidPeriodKey,
   isUuid,
 } from './work-engine.guards.js';
-import { resolveEventMapping } from './work-engine.event-mapping.service.js';
+import {
+  PENDING_MAPPING_PROCESSING_OUTCOMES,
+  resolveEventMapping,
+} from './work-engine.event-mapping.service.js';
 
 function validateEnvelope(env: WorkEventEnvelope): void {
   if (!env || typeof env !== 'object') throw badRequest('event envelope is required');
@@ -878,4 +881,211 @@ export async function intakeWorkEvent(
     event_id: v.event_id,
     dedup_key: v.dedup_key,
   };
+}
+
+export type ReprocessPendingWorkEventsResult = {
+  scanned: number;
+  resolved: number;
+  still_pending: number;
+  linked_work_item_ids: string[];
+  errors: number;
+};
+
+type PendingWorkEventRow = {
+  id: string;
+  org_id: string;
+  event_id: string;
+  client_id: string;
+  source_module: string;
+  source_entity_type: string;
+  source_entity_id: string;
+  event_type: string;
+  period_key: string | null;
+  idempotency_key: string;
+  payload: Record<string, unknown> | null;
+  processing_outcome: string;
+};
+
+async function updatePendingWorkEventOutcome(
+  workEventId: string,
+  orgId: string,
+  workItemId: string,
+  processingOutcome: string,
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('work_events')
+    .update({
+      work_item_id: workItemId,
+      processing_outcome: processingOutcome,
+    })
+    .eq('id', workEventId)
+    .eq('org_id', orgId);
+  if (error) throw error;
+}
+
+/**
+ * Scheduler batch: retry mapping for persisted events that previously stayed pending.
+ * No module-specific logic — only the shared allowlist mapper.
+ */
+export async function reprocessPendingWorkEventsForOrg(params: {
+  orgId: string;
+  limit: number;
+  dryRun?: boolean;
+}): Promise<ReprocessPendingWorkEventsResult> {
+  const result: ReprocessPendingWorkEventsResult = {
+    scanned: 0,
+    resolved: 0,
+    still_pending: 0,
+    linked_work_item_ids: [],
+    errors: 0,
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from('work_events')
+    .select(
+      'id, org_id, event_id, client_id, source_module, source_entity_type, source_entity_id, event_type, period_key, idempotency_key, payload, processing_outcome',
+    )
+    .eq('org_id', params.orgId)
+    .is('work_item_id', null)
+    .in('processing_outcome', PENDING_MAPPING_PROCESSING_OUTCOMES as unknown as string[])
+    .order('received_at', { ascending: true })
+    .limit(params.limit);
+  if (error) throw error;
+
+  const rows = (data ?? []) as PendingWorkEventRow[];
+  result.scanned = rows.length;
+
+  for (const row of rows) {
+    try {
+      if (!row.client_id || !isUuid(row.client_id)) {
+        result.still_pending += 1;
+        continue;
+      }
+
+      const mapping = resolveEventMapping({
+        event_type: row.event_type,
+        period_key: row.period_key,
+      });
+      if (!mapping.resolved) {
+        result.still_pending += 1;
+        continue;
+      }
+
+      const periodKey = row.period_key as string;
+      const active = await findActiveWorkItem(
+        row.org_id,
+        row.client_id,
+        mapping.module_key,
+        mapping.work_type,
+        periodKey,
+      );
+
+      if (params.dryRun) {
+        result.resolved += 1;
+        if (active) result.linked_work_item_ids.push(active.id);
+        continue;
+      }
+
+      if (active) {
+        await updatePendingWorkEventOutcome(
+          row.id,
+          row.org_id,
+          active.id,
+          'reused_existing_active_work_item',
+        );
+        await insertIntakeTransition({
+          orgId: row.org_id,
+          workItemId: active.id,
+          fromState: active.work_state,
+          toState: active.work_state,
+          actionCode: 'intake_event_appended_to_existing',
+          resultingVersion: active.version,
+          payloadSnapshot: {
+            event_id: row.event_id,
+            event_type: row.event_type,
+            source_entity_id: row.source_entity_id,
+            scheduler_reprocess: true,
+          },
+        });
+        result.resolved += 1;
+        result.linked_work_item_ids.push(active.id);
+        continue;
+      }
+
+      const createResp = await supabaseAdmin
+        .from('work_items')
+        .insert({
+          org_id: row.org_id,
+          client_id: row.client_id,
+          module_key: mapping.module_key,
+          work_type: mapping.work_type,
+          period_key: periodKey,
+          work_state: mapping.initial_state,
+          owner_user_id: null,
+          assigned_user_id: null,
+          reviewer_user_id: null,
+          escalation_owner_id: null,
+          due_at: null,
+          sla_status: 'none',
+          source_module: row.source_module,
+          source_entity_type: row.source_entity_type,
+          source_entity_id: row.source_entity_id,
+          created_by_rule_id: null,
+          created_by_event_id: row.event_id,
+          created_by_user_id: null,
+          creation_source_type: 'event',
+          version: 0,
+          override_active: false,
+        })
+        .select('*')
+        .single();
+
+      if (createResp.error) {
+        const code = (createResp.error as { code?: string }).code;
+        if (code === '23505') {
+          const raceWinner = await findActiveWorkItem(
+            row.org_id,
+            row.client_id,
+            mapping.module_key,
+            mapping.work_type,
+            periodKey,
+          );
+          if (!raceWinner) throw createResp.error;
+          await updatePendingWorkEventOutcome(
+            row.id,
+            row.org_id,
+            raceWinner.id,
+            'reused_existing_active_work_item_after_race',
+          );
+          result.resolved += 1;
+          result.linked_work_item_ids.push(raceWinner.id);
+          continue;
+        }
+        throw createResp.error;
+      }
+
+      const created = createResp.data as WorkItemRow;
+      await updatePendingWorkEventOutcome(row.id, row.org_id, created.id, 'created_new_work_item');
+      await insertIntakeTransition({
+        orgId: row.org_id,
+        workItemId: created.id,
+        fromState: null,
+        toState: mapping.initial_state,
+        actionCode: 'create_from_event',
+        resultingVersion: created.version,
+        payloadSnapshot: {
+          event_id: row.event_id,
+          event_type: row.event_type,
+          source_entity_id: row.source_entity_id,
+          scheduler_reprocess: true,
+        },
+      });
+      result.resolved += 1;
+      result.linked_work_item_ids.push(created.id);
+    } catch {
+      result.errors += 1;
+    }
+  }
+
+  return result;
 }

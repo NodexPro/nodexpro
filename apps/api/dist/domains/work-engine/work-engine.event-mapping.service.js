@@ -63,6 +63,12 @@ export const MAPPING_REASON = {
     UNKNOWN_EVENT_MAPPING: 'unknown_event_mapping',
     MISSING_PERIOD_KEY: 'missing_period_key',
 };
+/** Outcomes where the event row exists but no work_item was linked yet. */
+export const PENDING_MAPPING_PROCESSING_OUTCOMES = [
+    'accepted_pending_mapping',
+    MAPPING_REASON.UNKNOWN_EVENT_MAPPING,
+    MAPPING_REASON.MISSING_PERIOD_KEY,
+];
 /** Stable list of event_type values backend will currently resolve. */
 export function knownEventTypes() {
     return Object.keys(SAFE_EVENT_MAPPINGS);

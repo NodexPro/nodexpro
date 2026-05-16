@@ -34,10 +34,12 @@
  */
 
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { config } from '../../config.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import type { RequestContext } from '../../shared/context.js';
-import { badRequest } from '../../shared/errors.js';
+import { badRequest, forbidden } from '../../shared/errors.js';
+import { runWorkEngineScheduler } from './work-engine.scheduler.service.js';
 import { executeWorkEngineCommand } from './work-engine.commands.service.js';
 import { acceptWorkEngineEvent } from './work-engine.event-intake.service.js';
 import {
@@ -51,9 +53,53 @@ import type {
 } from './work-engine.types.js';
 
 const router = Router();
-router.use(authMiddleware, requireOrg);
 
-router.get(
+function requireInternalCronSecret(req: Request): void {
+  const secret = String(req.headers['x-internal-cron-secret'] ?? '').trim();
+  if (!config.internalCronSecret || !secret || secret !== config.internalCronSecret) {
+    throw forbidden('Invalid internal cron secret');
+  }
+}
+
+/** Internal cron trigger (Render Cron Job) — Work Engine background runner. */
+router.post('/internal/scheduler/run', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    requireInternalCronSecret(req);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const summary = await runWorkEngineScheduler({
+      org_id: typeof body.org_id === 'string' ? body.org_id.trim() : undefined,
+      batch_size: typeof body.batch_size === 'number' ? body.batch_size : undefined,
+      max_work_items_per_run:
+        typeof body.max_work_items_per_run === 'number' ? body.max_work_items_per_run : undefined,
+      max_pending_events_per_org:
+        typeof body.max_pending_events_per_org === 'number'
+          ? body.max_pending_events_per_org
+          : undefined,
+      run_context_key:
+        typeof body.run_context_key === 'string' ? body.run_context_key.trim() : undefined,
+      dry_run: body.dry_run === true,
+    });
+    return res.json({
+      ok: summary.ok,
+      skipped: summary.skipped,
+      scanned_work_items: summary.scanned_work_items,
+      recomputed_sla: summary.recomputed_sla,
+      reminders_created: summary.reminders_created,
+      escalations_created: summary.escalations_created,
+      snoozed_woken: summary.snoozed_woken,
+      errors: summary.errors,
+      result: summary,
+    });
+  } catch (e) {
+    console.error('[work-engine] POST /internal/scheduler/run failed', e);
+    next(e);
+  }
+});
+
+const officeRouter = Router();
+officeRouter.use(authMiddleware, requireOrg);
+
+officeRouter.get(
   '/aggregates/foundation',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -70,7 +116,7 @@ router.get(
 // Stage 3D — backend-ready queue aggregate. Query params are read here so the
 // route owns parsing; the read-models service owns validation/clamping of
 // values (limit caps, unknown state values, etc.).
-router.get(
+officeRouter.get(
   '/aggregates/queue',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -141,7 +187,7 @@ const ALLOWED_COMMANDS: ReadonlySet<WorkEngineCommandType> = new Set<WorkEngineC
   'intake_work_event',
 ]);
 
-router.post(
+officeRouter.post(
   '/commands',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -160,7 +206,7 @@ router.post(
   },
 );
 
-router.post(
+officeRouter.post(
   '/events/intake',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -183,5 +229,7 @@ router.post(
     }
   },
 );
+
+router.use(officeRouter);
 
 export const workEngineRoutes = router;

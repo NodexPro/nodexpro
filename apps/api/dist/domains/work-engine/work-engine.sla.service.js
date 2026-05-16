@@ -5,8 +5,8 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { DEFAULT_SLA_POLICY, resolveWorkTypeSlaPolicy, } from './work-engine.policy.service.js';
-import { evaluateEscalationsForWorkItem } from './work-engine.escalation.service.js';
-import { evaluateRemindersForWorkItem } from './work-engine.reminder.service.js';
+import { evaluateEscalationsForWorkItem, } from './work-engine.escalation.service.js';
+import { evaluateRemindersForWorkItem, } from './work-engine.reminder.service.js';
 export const SLA_OBLIGATION_KINDS = ['response', 'waiting_client', 'review'];
 export const SLA_OBLIGATION_STATUSES = ['active', 'met', 'breached', 'cancelled'];
 function addMinutes(iso, minutes) {
@@ -268,8 +268,18 @@ export async function recomputeWorkItemSlaStatus(orgId, workItemId, opts) {
         .maybeSingle();
     if (itemErr)
         throw itemErr;
-    if (!item)
-        return 'none';
+    if (!item) {
+        return {
+            slaStatus: 'none',
+            reminders: { evaluated_steps: 0, created_candidate_ids: [], dedup_hits: 0 },
+            escalation: {
+                evaluated: false,
+                created: false,
+                skipped_reason: 'work_item_not_found',
+                escalation_owner_id: null,
+            },
+        };
+    }
     const workType = String(item.work_type);
     const policy = await resolveWorkTypeSlaPolicy(orgId, workType);
     const previousStatus = String(item.sla_status);
@@ -304,17 +314,17 @@ export async function recomputeWorkItemSlaStatus(orgId, workItemId, opts) {
             to_sla_status: nextStatus,
         });
     }
-    await evaluateRemindersForWorkItem({
+    const reminders = await evaluateRemindersForWorkItem({
         orgId,
         workItemId,
         actorUserId: opts?.actorUserId ?? null,
     });
-    await evaluateEscalationsForWorkItem({
+    const escalation = await evaluateEscalationsForWorkItem({
         orgId,
         workItemId,
         actorUserId: opts?.actorUserId ?? null,
     });
-    return nextStatus;
+    return { slaStatus: nextStatus, reminders, escalation };
 }
 /** Command-time SLA obligation hooks (Phase 3A). */
 export async function applySlaHooksForCommand(args) {

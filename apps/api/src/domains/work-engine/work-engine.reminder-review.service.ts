@@ -1048,3 +1048,37 @@ export function buildReminderReviewBanner(counts: ReminderReviewCounts): {
     dismissible: true,
   };
 }
+
+/** Scheduler: return snoozed candidates to pending_review when snooze window elapsed. */
+export async function wakeExpiredSnoozedReminderCandidates(params: {
+  orgId: string;
+  limit: number;
+  dryRun?: boolean;
+}): Promise<{ scanned: number; woken: number }> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabaseAdmin
+    .from('work_reminder_candidates')
+    .select('id')
+    .eq('org_id', params.orgId)
+    .eq('status', 'snoozed')
+    .lte('snoozed_until', nowIso)
+    .order('snoozed_until', { ascending: true })
+    .limit(params.limit);
+  if (error) throw error;
+
+  const rows = data ?? [];
+  if (rows.length === 0 || params.dryRun) {
+    return { scanned: rows.length, woken: 0 };
+  }
+
+  const ids = rows.map((r) => String((r as { id: string }).id));
+  const { error: updErr, count } = await supabaseAdmin
+    .from('work_reminder_candidates')
+    .update({ status: 'pending_review', snoozed_until: null }, { count: 'exact' })
+    .eq('org_id', params.orgId)
+    .eq('status', 'snoozed')
+    .in('id', ids);
+  if (updErr) throw updErr;
+
+  return { scanned: rows.length, woken: count ?? 0 };
+}

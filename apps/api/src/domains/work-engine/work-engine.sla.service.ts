@@ -11,8 +11,14 @@ import {
   resolveWorkTypeSlaPolicy,
 } from './work-engine.policy.service.js';
 import type { SlaStatus, WorkEngineCommandType, WorkState } from './work-engine.types.js';
-import { evaluateEscalationsForWorkItem } from './work-engine.escalation.service.js';
-import { evaluateRemindersForWorkItem } from './work-engine.reminder.service.js';
+import {
+  evaluateEscalationsForWorkItem,
+  type EvaluateEscalationsForWorkItemResult,
+} from './work-engine.escalation.service.js';
+import {
+  evaluateRemindersForWorkItem,
+  type EvaluateRemindersForWorkItemResult,
+} from './work-engine.reminder.service.js';
 
 export const SLA_OBLIGATION_KINDS = ['response', 'waiting_client', 'review'] as const;
 export type SlaObligationKind = (typeof SLA_OBLIGATION_KINDS)[number];
@@ -347,11 +353,17 @@ function computeSlaStatusFromObligations(
   return 'on_track';
 }
 
+export type RecomputeWorkItemSlaStatusResult = {
+  slaStatus: SlaStatus;
+  reminders: EvaluateRemindersForWorkItemResult;
+  escalation: EvaluateEscalationsForWorkItemResult;
+};
+
 export async function recomputeWorkItemSlaStatus(
   orgId: string,
   workItemId: string,
   opts?: { actorUserId?: string | null; auditOnStatusChange?: boolean },
-): Promise<SlaStatus> {
+): Promise<RecomputeWorkItemSlaStatusResult> {
   const { data: item, error: itemErr } = await supabaseAdmin
     .from('work_items')
     .select('id, org_id, work_type, sla_status, due_at, version')
@@ -359,7 +371,18 @@ export async function recomputeWorkItemSlaStatus(
     .eq('org_id', orgId)
     .maybeSingle();
   if (itemErr) throw itemErr;
-  if (!item) return 'none';
+  if (!item) {
+    return {
+      slaStatus: 'none',
+      reminders: { evaluated_steps: 0, created_candidate_ids: [], dedup_hits: 0 },
+      escalation: {
+        evaluated: false,
+        created: false,
+        skipped_reason: 'work_item_not_found',
+        escalation_owner_id: null,
+      },
+    };
+  }
 
   const workType = String((item as { work_type: string }).work_type);
   const policy = await resolveWorkTypeSlaPolicy(orgId, workType);
@@ -400,19 +423,19 @@ export async function recomputeWorkItemSlaStatus(
     });
   }
 
-  await evaluateRemindersForWorkItem({
+  const reminders = await evaluateRemindersForWorkItem({
     orgId,
     workItemId,
     actorUserId: opts?.actorUserId ?? null,
   });
 
-  await evaluateEscalationsForWorkItem({
+  const escalation = await evaluateEscalationsForWorkItem({
     orgId,
     workItemId,
     actorUserId: opts?.actorUserId ?? null,
   });
 
-  return nextStatus;
+  return { slaStatus: nextStatus, reminders, escalation };
 }
 
 /** Command-time SLA obligation hooks (Phase 3A). */
