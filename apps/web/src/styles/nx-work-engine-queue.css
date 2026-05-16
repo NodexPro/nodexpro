@@ -151,6 +151,48 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+  margin-top: 14px;
+}
+
+.nx-we-card--clickable {
+  cursor: pointer;
+}
+
+.nx-we-card--clickable:hover {
+  border-color: #c4b5fd;
+  box-shadow: 0 2px 8px rgba(91, 61, 168, 0.12);
+}
+
+.nx-we-modal--reminder-review-workspace {
+  max-width: min(960px, calc(100vw - 32px));
+  width: min(960px, calc(100vw - 32px));
+  max-height: min(88vh, 920px);
+  display: flex;
+  flex-direction: column;
+}
+
+.nx-we-modal--reminder-review-workspace .nx-we-modal__body {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+.nx-we-modal__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 0;
+}
+
+.nx-we-modal__header-row .nx-we-modal__title {
+  margin: 0;
+}
+
+.nx-we-reminder-detail-pane__title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .nx-we-btn--compact {

@@ -1091,8 +1091,7 @@ export function parseWorkEngineQueueFilters(raw) {
     const queue_bucket = bucketRaw === 'assigned_to_me' ||
         bucketRaw === 'unassigned' ||
         bucketRaw === 'claimed_by_me' ||
-        bucketRaw === 'review_for_me' ||
-        bucketRaw === 'reminder_review'
+        bucketRaw === 'review_for_me'
         ? bucketRaw
         : null;
     let limit = Number(raw.limit ?? QUEUE_DEFAULT_LIMIT);
@@ -1140,15 +1139,6 @@ export async function buildWorkEngineQueueAggregate(params) {
     const viewerId = viewer?.userId ?? null;
     const reminderReviewSummary = await loadReminderReviewCounts(orgId);
     const reminderBanner = buildReminderReviewBanner(reminderReviewSummary);
-    if (f.queue_bucket === 'reminder_review') {
-        return buildReminderReviewQueueAggregate({
-            orgId,
-            filters: f,
-            viewer,
-            reminderReviewSummary,
-            reminderBanner,
-        });
-    }
     // ---- 1. Counts for summary cards (bounded scan).
     const countsResp = await supabaseAdmin
         .from('work_items')
@@ -1569,6 +1559,14 @@ export async function buildWorkEngineQueueAggregate(params) {
         };
     });
     const queue_table = computeQueueTableModel(rows);
+    const reminderReviewPage = reminderReviewSummary.pending_count > 0
+        ? await loadReminderReviewPage({
+            orgId,
+            offset: 0,
+            limit: Math.min(reminderReviewSummary.pending_count, QUEUE_MAX_LIMIT),
+            viewer,
+        })
+        : { rows: [], total: 0 };
     // ---- 7. Compose response.
     return {
         aggregate_key: 'work_engine_queue_aggregate',
@@ -1626,7 +1624,6 @@ export async function buildWorkEngineQueueAggregate(params) {
                 { value: 'unassigned', label: 'Unassigned' },
                 { value: 'claimed_by_me', label: 'Claimed by me' },
                 { value: 'review_for_me', label: 'Review for me' },
-                { value: 'reminder_review', label: 'Reminder review' },
             ],
             pending_mapping_reasons: [
                 { value: MAPPING_REASON.UNKNOWN_EVENT_MAPPING, label: 'Unknown event type' },
@@ -1651,7 +1648,14 @@ export async function buildWorkEngineQueueAggregate(params) {
         },
         queue_table,
         rows,
-        reminder_review_rows: [],
+        reminder_review_table: REMINDER_REVIEW_QUEUE_TABLE,
+        reminder_review_rows: reminderReviewPage.rows,
+        reminder_review_pagination: {
+            limit: Math.min(reminderReviewSummary.pending_count, QUEUE_MAX_LIMIT),
+            offset: 0,
+            total_matching: reminderReviewPage.total,
+            returned: reminderReviewPage.rows.length,
+        },
         pending_mapping_section: {
             pending_mapping_count: pendingMappingCount,
             recent_pending_mappings: pendingRecentRows.map((p) => ({
@@ -1672,102 +1676,6 @@ export async function buildWorkEngineQueueAggregate(params) {
                 received_at: p.received_at,
                 occurred_at: p.occurred_at,
             })),
-            reason_catalog: [
-                { value: MAPPING_REASON.UNKNOWN_EVENT_MAPPING, label: 'Unknown event type' },
-                { value: MAPPING_REASON.MISSING_PERIOD_KEY, label: 'Missing period_key' },
-                { value: 'accepted_pending_mapping', label: 'Pending mapping (legacy)' },
-            ],
-        },
-    };
-}
-async function buildReminderReviewQueueAggregate(params) {
-    const { orgId, filters: f, viewer, reminderReviewSummary, reminderBanner } = params;
-    const pendingCountResp = await supabaseAdmin
-        .from('work_events')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', orgId)
-        .is('work_item_id', null)
-        .in('processing_outcome', PENDING_MAPPING_OUTCOMES);
-    if (pendingCountResp.error)
-        throw pendingCountResp.error;
-    const pendingMappingCount = pendingCountResp.count ?? 0;
-    const page = await loadReminderReviewPage({
-        orgId,
-        offset: f.offset,
-        limit: f.limit,
-        viewer,
-    });
-    const reminderRows = page.rows;
-    return {
-        aggregate_key: 'work_engine_queue_aggregate',
-        org_id: orgId,
-        generated_at: new Date().toISOString(),
-        queue_view_mode: 'reminder_review',
-        reminder_review_summary: reminderReviewSummary,
-        banner: reminderBanner,
-        snooze_presets: REMINDER_SNOOZE_PRESETS.map((p) => ({
-            preset_key: p.preset_key,
-            label: p.label,
-        })),
-        summary_cards: {
-            total_active: 0,
-            assigned_to_me: 0,
-            unassigned: 0,
-            claimed_by_me: 0,
-            review_for_me: 0,
-            waiting_client: 0,
-            waiting_human: 0,
-            review_pending: reminderReviewSummary.pending_count,
-            overdue: reminderReviewSummary.overdue_count,
-            escalated: 0,
-            pending_mapping: pendingMappingCount,
-            pending_reminders: reminderReviewSummary.pending_count,
-        },
-        filters: {
-            states: WORK_STATES.map((s) => ({
-                value: s,
-                label: workStateLabel(s),
-                terminal: s === 'done' || s === 'archived',
-            })),
-            modules: [],
-            assignees: [],
-            reviewers: [],
-            period_keys: [],
-            queue_buckets: [
-                { value: '', label: 'All (respect filters below)' },
-                { value: 'assigned_to_me', label: 'Assigned to me' },
-                { value: 'unassigned', label: 'Unassigned' },
-                { value: 'claimed_by_me', label: 'Claimed by me' },
-                { value: 'review_for_me', label: 'Review for me' },
-                { value: 'reminder_review', label: 'Reminder review' },
-            ],
-            pending_mapping_reasons: [
-                { value: MAPPING_REASON.UNKNOWN_EVENT_MAPPING, label: 'Unknown event type' },
-                { value: MAPPING_REASON.MISSING_PERIOD_KEY, label: 'Missing period_key' },
-                { value: 'accepted_pending_mapping', label: 'Pending mapping (legacy)' },
-            ],
-        },
-        applied_filters: {
-            state: f.state,
-            module_key: f.module_key,
-            assigned_user_id: f.assigned_user_id,
-            reviewer_user_id: f.reviewer_user_id,
-            client_id: f.client_id,
-            period_key: f.period_key,
-            queue_bucket: f.queue_bucket,
-        },
-        pagination: {
-            limit: f.limit,
-            offset: f.offset,
-            total_matching: page.total,
-            returned: reminderRows.length,
-        },
-        queue_table: REMINDER_REVIEW_QUEUE_TABLE,
-        rows: [],
-        reminder_review_rows: reminderRows,
-        pending_mapping_section: {
-            pending_mapping_count: pendingMappingCount,
-            recent_pending_mappings: [],
             reason_catalog: [
                 { value: MAPPING_REASON.UNKNOWN_EVENT_MAPPING, label: 'Unknown event type' },
                 { value: MAPPING_REASON.MISSING_PERIOD_KEY, label: 'Missing period_key' },

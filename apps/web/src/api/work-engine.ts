@@ -284,7 +284,7 @@ export type WorkEngineQueueAggregate = {
   aggregate_key: 'work_engine_queue_aggregate';
   org_id: string;
   generated_at: string;
-  queue_view_mode?: 'work_items' | 'reminder_review';
+  queue_view_mode?: 'work_items';
   reminder_review_summary?: {
     pending_count: number;
     urgent_count: number;
@@ -333,7 +333,14 @@ export type WorkEngineQueueAggregate = {
   /** Table structure (column order, labels, kinds) — UI renders verbatim. */
   queue_table: WorkEngineQueueTableModel;
   rows: WorkEngineQueueRow[];
+  reminder_review_table?: WorkEngineQueueTableModel;
   reminder_review_rows?: ReminderReviewQueueRow[];
+  reminder_review_pagination?: {
+    limit: number;
+    offset: number;
+    total_matching: number;
+    returned: number;
+  };
   pending_mapping_section: {
     pending_mapping_count: number;
     recent_pending_mappings: WorkEnginePendingMappingRow[];
