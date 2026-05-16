@@ -1,0 +1,143 @@
+name: Work Engine Scheduler
+
+on:
+  schedule:
+    # Every 30 minutes (UTC). Backend owns batching and overlap safety.
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: work-engine-scheduler
+  cancel-in-progress: false
+
+jobs:
+  run-scheduler:
+    name: Trigger Work Engine scheduler
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Validate cron secret is configured
+        env:
+          WORK_ENGINE_CRON_SECRET: ${{ secrets.WORK_ENGINE_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WORK_ENGINE_CRON_SECRET:-}" ]; then
+            echo "::error::Repository secret WORK_ENGINE_CRON_SECRET is not set. See docs/work-engine-github-actions-scheduler.md"
+            exit 1
+          fi
+
+      - name: Call Work Engine internal scheduler
+        env:
+          WORK_ENGINE_CRON_SECRET: ${{ secrets.WORK_ENGINE_CRON_SECRET }}
+          SCHEDULER_URL: https://nodexpro.onrender.com/api/v1/work-engine/internal/scheduler/run
+          REQUEST_BODY: '{"batch_size":100,"max_work_items_per_run":500}'
+        run: |
+          set -euo pipefail
+
+          print_safe_summary() {
+            local response_file="$1"
+            if ! command -v jq >/dev/null 2>&1; then
+              echo "Summary: response received (install jq on runner for field breakdown)"
+              return 0
+            fi
+            if ! jq -e . >/dev/null 2>&1 <"$response_file"; then
+              echo "Summary: non-JSON response body"
+              return 0
+            fi
+            jq -c '{
+              ok: (.ok // false),
+              skipped: (.skipped // false),
+              skipped_reason: (.result.skipped_reason // .skipped_reason // null),
+              scanned_work_items: (.scanned_work_items // 0),
+              recomputed_sla: (.recomputed_sla // 0),
+              reminders_created: (.reminders_created // 0),
+              escalations_created: (.escalations_created // 0),
+              snoozed_woken: (.snoozed_woken // 0),
+              error_count: ((.errors // []) | length)
+            }' "$response_file"
+          }
+
+          is_transient_http() {
+            case "$1" in
+              408|429|500|502|503|504) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          invoke_scheduler() {
+            local attempt_label="$1"
+            local response_file http_code curl_exit
+
+            response_file="$(mktemp)"
+            trap 'rm -f "$response_file"' RETURN
+
+            set +e
+            http_code="$(
+              curl -sS \
+                --max-time 180 \
+                --retry 0 \
+                -o "$response_file" \
+                -w '%{http_code}' \
+                -X POST "$SCHEDULER_URL" \
+                -H "Content-Type: application/json" \
+                -H "X-Internal-Cron-Secret: ${WORK_ENGINE_CRON_SECRET}" \
+                -d "$REQUEST_BODY"
+            )"
+            curl_exit=$?
+            set -e
+
+            echo "Attempt: ${attempt_label}"
+            echo "HTTP status: ${http_code}"
+
+            if [ "$curl_exit" -ne 0 ]; then
+              echo "::warning::curl exited with code ${curl_exit}"
+              print_safe_summary "$response_file" || true
+              return 2
+            fi
+
+            print_safe_summary "$response_file"
+
+            if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+              if command -v jq >/dev/null 2>&1 && jq -e '.ok == true' >/dev/null 2>&1 <"$response_file"; then
+                return 0
+              fi
+              if command -v jq >/dev/null 2>&1 && jq -e '.ok == false' >/dev/null 2>&1 <"$response_file"; then
+                echo "::error::Scheduler returned ok=false"
+                return 1
+              fi
+              return 0
+            fi
+
+            if is_transient_http "$http_code"; then
+              return 2
+            fi
+
+            echo "::error::Scheduler request failed with HTTP ${http_code}"
+            return 1
+          }
+
+          if invoke_scheduler "primary"; then
+            echo "Work Engine scheduler completed successfully."
+            exit 0
+          fi
+
+          primary_exit=$?
+          if [ "$primary_exit" -eq 2 ]; then
+            echo "Transient failure detected — retrying once in 15 seconds..."
+            sleep 15
+            if invoke_scheduler "retry"; then
+              echo "Work Engine scheduler completed successfully on retry."
+              exit 0
+            fi
+            retry_exit=$?
+            if [ "$retry_exit" -eq 2 ]; then
+              echo "::error::Scheduler failed after retry (transient errors)"
+              exit 1
+            fi
+            echo "::error::Scheduler failed after retry"
+            exit 1
+          fi
+
+          echo "::error::Scheduler failed (non-retryable)"
+          exit 1

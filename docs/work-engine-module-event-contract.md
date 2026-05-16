@@ -157,6 +157,8 @@ Response summary (top-level):
 
 Set `INTERNAL_CRON_SECRET` in Render (same variable as DocFlow daily scheduler).
 
+For production scheduling via GitHub Actions (every 30 minutes), see [work-engine-github-actions-scheduler.md](./work-engine-github-actions-scheduler.md) (`WORK_ENGINE_CRON_SECRET` must match Render’s `INTERNAL_CRON_SECRET`).
+
 ## 6. Smoke test
 
 ```bash
