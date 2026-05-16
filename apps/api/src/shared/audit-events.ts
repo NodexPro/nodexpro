@@ -215,6 +215,11 @@ export const AUDIT_ACTIONS = {
   REMINDER_CANDIDATE_SNOOZED: 'work_engine.reminder_candidate_snoozed',
   REMINDER_DELIVERY_INTENT_CREATED: 'work_engine.reminder_delivery_intent_created',
   REMINDER_DELIVERY_FAILED: 'work_engine.reminder_delivery_failed',
+  /** Stage 10 Phase 3C-1 — escalation (operational ownership, not reminders). */
+  WORK_ITEM_ESCALATED: 'work_engine.work_item_escalated',
+  WORK_ITEM_ESCALATION_ACKNOWLEDGED: 'work_engine.work_item_escalation_acknowledged',
+  WORK_ITEM_ESCALATION_RESOLVED: 'work_engine.work_item_escalation_resolved',
+  WORK_ITEM_ESCALATION_OWNER_REASSIGNED: 'work_engine.work_item_escalation_owner_reassigned',
   WORK_ITEM_DEADLINE_SET: 'work_engine.work_item_deadline_set',
   WORK_ITEM_OVERRIDE_APPLIED: 'work_engine.work_item_override_applied',
   WORK_EVENT_APPENDED: 'work_engine.work_event_appended',

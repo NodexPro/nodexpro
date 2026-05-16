@@ -13,6 +13,10 @@ export const WORK_ENGINE_PERMISSIONS = {
     reviewApprove: 'work_engine.review.approve',
     reviewReject: 'work_engine.review.reject',
     reviewBreakGlass: 'work_engine.review.break_glass',
+    escalationEscalate: 'work_engine.escalation.escalate',
+    escalationAcknowledge: 'work_engine.escalation.acknowledge',
+    escalationResolve: 'work_engine.escalation.resolve',
+    escalationReassign: 'work_engine.escalation.reassign',
 };
 export function requireWorkEnginePermission(ctx, permissionCode) {
     if (!ctx.membership)

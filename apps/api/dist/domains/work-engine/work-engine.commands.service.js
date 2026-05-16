@@ -28,7 +28,9 @@ import { badRequest, conflict, forbidden, notFound } from '../../shared/errors.j
 import { hasPermission } from '../rbac/rbac.service.js';
 import { asOptionalIso, asOptionalString, assertClientBelongsToOrg, assertExpectedVersion, assertOrgScope, assertValidPeriodKey, assertValidWorkState, canPickUpFromUnassignedWorkState, canReopenFromDone, canTransitionWorkState, isUuid, reqInt, reqString, } from './work-engine.guards.js';
 import { abortWorkEngineCommandIdempotency, beginWorkEngineCommandIdempotency, completeWorkEngineCommandIdempotency, } from './work-engine.idempotency.js';
-import { buildWorkEngineFoundationAggregate, buildWorkEngineQueueAggregate, coerceWorkEngineQueueFilters, queueAllowedActions, } from './work-engine.read-models.service.js';
+import { buildWorkEngineFoundationAggregate, buildWorkEngineQueueAggregate, coerceWorkEngineQueueFilters, computeEscalationCommands, queueAllowedActions, } from './work-engine.read-models.service.js';
+import { acknowledgeEscalation, escalateWorkItem, reassignEscalationOwner, resolveEscalation, } from './work-engine.escalation.service.js';
+import { parseEscalationReason, parseEscalationSource, } from './work-engine.escalation.logic.js';
 import { intakeWorkEvent } from './work-engine.event-intake.service.js';
 import { canStaffPickUpUnassigned, resolveWorkTypeWorkflowPolicy, } from './work-engine.policy.service.js';
 import { applySlaHooksForCommand } from './work-engine.sla.service.js';
@@ -129,6 +131,15 @@ async function buildRefreshedForPayload(orgId, payload, ctx) {
  * and reject if the requested command does not match an enabled action. Never
  * trust client-supplied allowed_actions flags.
  */
+function assertEscalationCommandEnabled(ctx, current, command) {
+    const viewer = viewerQueueContext(ctx);
+    if (!viewer)
+        throw forbidden('Organization membership required');
+    const row = computeEscalationCommands({ row: current, viewer }).find((c) => c.command === command);
+    if (!row?.enabled) {
+        throw badRequest(row?.reason ?? `Escalation command '${command}' is not allowed for this work item`, 'escalation_command_not_allowed');
+    }
+}
 function assertQueueActionEnabled(current, semantic) {
     const actions = queueAllowedActions({
         work_state: current.work_state,
@@ -1299,6 +1310,170 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
                     reason,
                 });
                 return { workItemId: current.work_item_id };
+            });
+        }
+        case 'escalate_work_item': {
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                const workItemId = reqString(payload, 'work_item_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const idempotencyKey = reqString(payload, 'idempotency_key');
+                const escalationOwnerId = reqString(payload, 'escalation_owner_id');
+                const escalationReason = parseEscalationReason(payload.escalation_reason);
+                const escalationSource = parseEscalationSource(payload.escalation_source);
+                const current = await loadWorkItem(orgId, workItemId);
+                assertExpectedVersion(current.version, expectedVersion);
+                assertEscalationCommandEnabled(ctx, current, 'escalate_work_item');
+                const roleCode = ctx.membership?.roleCode ?? 'staff';
+                const permissions = ctx.membership?.permissions ?? [];
+                const { priorWorkState, newVersion } = await escalateWorkItem({
+                    orgId,
+                    actorUserId,
+                    roleCode,
+                    permissions,
+                    workItem: current,
+                    expectedVersion,
+                    escalationOwnerId,
+                    escalationReason,
+                    escalationSource,
+                    idempotencyKey,
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: priorWorkState,
+                    to_state: 'escalated',
+                    transition_kind: 'command',
+                    action_code: 'escalate_work_item',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: escalationReason,
+                    metadata_json: {
+                        escalation_owner_id: escalationOwnerId,
+                        escalation_reason: escalationReason,
+                        escalation_source: escalationSource,
+                        prior_work_state: priorWorkState,
+                        idempotency_key: idempotencyKey,
+                    },
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                return { workItemId };
+            });
+        }
+        case 'acknowledge_escalation': {
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                const workItemId = reqString(payload, 'work_item_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const current = await loadWorkItem(orgId, workItemId);
+                assertExpectedVersion(current.version, expectedVersion);
+                assertEscalationCommandEnabled(ctx, current, 'acknowledge_escalation');
+                const roleCode = ctx.membership?.roleCode ?? 'staff';
+                const permissions = ctx.membership?.permissions ?? [];
+                const { newVersion } = await acknowledgeEscalation({
+                    orgId,
+                    actorUserId,
+                    roleCode,
+                    permissions,
+                    workItem: current,
+                    expectedVersion,
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: 'escalated',
+                    to_state: 'escalated',
+                    transition_kind: 'command',
+                    action_code: 'acknowledge_escalation',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: null,
+                    metadata_json: {
+                        escalation_owner_id: current.escalation_owner_id,
+                        acknowledged_by_user_id: actorUserId,
+                    },
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                return { workItemId };
+            });
+        }
+        case 'resolve_escalation': {
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                const workItemId = reqString(payload, 'work_item_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const resolutionNote = asOptionalString(payload.resolution_note);
+                const current = await loadWorkItem(orgId, workItemId);
+                assertExpectedVersion(current.version, expectedVersion);
+                assertEscalationCommandEnabled(ctx, current, 'resolve_escalation');
+                const roleCode = ctx.membership?.roleCode ?? 'staff';
+                const permissions = ctx.membership?.permissions ?? [];
+                const { restoredWorkState, newVersion } = await resolveEscalation({
+                    orgId,
+                    actorUserId,
+                    roleCode,
+                    permissions,
+                    workItem: current,
+                    expectedVersion,
+                    resolutionNote,
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: 'escalated',
+                    to_state: restoredWorkState,
+                    transition_kind: 'command',
+                    action_code: 'resolve_escalation',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: resolutionNote,
+                    metadata_json: {
+                        prior_work_state: restoredWorkState,
+                        resolution_note: resolutionNote,
+                        previous_escalation_owner_id: current.escalation_owner_id,
+                    },
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                return { workItemId };
+            });
+        }
+        case 'reassign_escalation_owner': {
+            return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+                const workItemId = reqString(payload, 'work_item_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const newEscalationOwnerId = reqString(payload, 'escalation_owner_id');
+                const current = await loadWorkItem(orgId, workItemId);
+                assertExpectedVersion(current.version, expectedVersion);
+                assertEscalationCommandEnabled(ctx, current, 'reassign_escalation_owner');
+                const roleCode = ctx.membership?.roleCode ?? 'staff';
+                const permissions = ctx.membership?.permissions ?? [];
+                const { previousOwnerId, newVersion } = await reassignEscalationOwner({
+                    orgId,
+                    actorUserId,
+                    roleCode,
+                    permissions,
+                    workItem: current,
+                    expectedVersion,
+                    newEscalationOwnerId,
+                });
+                await insertTransition({
+                    org_id: orgId,
+                    work_item_id: workItemId,
+                    from_state: 'escalated',
+                    to_state: 'escalated',
+                    transition_kind: 'command',
+                    action_code: 'reassign_escalation_owner',
+                    actor_type: 'user',
+                    actor_user_id: actorUserId,
+                    reason_text: null,
+                    metadata_json: {
+                        previous_escalation_owner_id: previousOwnerId,
+                        new_escalation_owner_id: newEscalationOwnerId,
+                    },
+                    expected_version: expectedVersion,
+                    resulting_version: newVersion,
+                });
+                return { workItemId };
             });
         }
         case 'snooze_reminder_candidate': {

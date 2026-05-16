@@ -160,6 +160,20 @@ export type QueueReviewCommand = {
   presentation_group: QueuePresentationGroup;
 };
 
+export type QueueEscalationCommandKind =
+  | 'escalate_work_item'
+  | 'acknowledge_escalation'
+  | 'resolve_escalation'
+  | 'reassign_escalation_owner';
+
+export type QueueEscalationCommand = {
+  command: QueueEscalationCommandKind;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+  presentation_group: QueuePresentationGroup;
+};
+
 export type WorkEngineQueueRow = {
   work_item_id: string;
   client_id: string | null;
@@ -181,6 +195,15 @@ export type WorkEngineQueueRow = {
   ownership_commands?: QueueOwnershipCommand[];
   review_flow_status_label?: string | null;
   review_commands?: QueueReviewCommand[];
+  escalation_commands?: QueueEscalationCommand[];
+  escalation_owner_id?: string | null;
+  escalation_owner_name?: string | null;
+  escalation_reason?: string | null;
+  escalation_source?: string | null;
+  escalation_source_label?: string | null;
+  escalation_prior_work_state?: string | null;
+  escalation_acknowledged_at?: string | null;
+  escalation_acknowledged_label?: string | null;
   due_at: string | null;
   sla_status: string;
   sla_status_label: string;

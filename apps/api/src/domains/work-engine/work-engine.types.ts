@@ -73,7 +73,12 @@ export type WorkEngineCommandType =
   | 'edit_reminder_candidate'
   | 'approve_send_reminder_candidate'
   | 'cancel_reminder_candidate'
-  | 'snooze_reminder_candidate';
+  | 'snooze_reminder_candidate'
+  /** Stage 10 Phase 3C-1 — manual escalation spine */
+  | 'escalate_work_item'
+  | 'acknowledge_escalation'
+  | 'resolve_escalation'
+  | 'reassign_escalation_owner';
 
 export type WorkEngineCommandPayload = Record<string, unknown>;
 
@@ -162,6 +167,11 @@ export type WorkItemRow = {
   assigned_user_id: string | null;
   reviewer_user_id: string | null;
   escalation_owner_id: string | null;
+  escalation_reason: string | null;
+  escalation_source: string | null;
+  escalation_prior_work_state: WorkState | null;
+  escalation_acknowledged_at: string | null;
+  escalation_acknowledged_by_user_id: string | null;
   due_at: string | null;
   sla_status: SlaStatus;
   source_module: string;

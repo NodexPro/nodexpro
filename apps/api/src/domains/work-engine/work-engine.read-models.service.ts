@@ -25,6 +25,15 @@ import {
   getReopenTargetStates,
   canPickUpFromUnassignedWorkState,
 } from './work-engine.guards.js';
+import {
+  canAcknowledgeEscalation,
+  canEscalateWorkItem,
+  canReassignEscalationOwner,
+  canResolveEscalation,
+  escalationSourceLabel,
+  isEscalationAcknowledged,
+  type EscalationPermissionContext,
+} from './work-engine.escalation.logic.js';
 import { knownEventTypes, MAPPING_REASON } from './work-engine.event-mapping.service.js';
 import { batchOfficeUnreadForThreads } from '../docflow/docflow-read-models.service.js';
 import {
@@ -145,8 +154,24 @@ export type QueueReviewCommand = {
   presentation_group: QueuePresentationGroup;
 };
 
+/** Stage 10 Phase 3C-1 — escalation commands (named work-engine commands). */
+export type QueueEscalationCommandKind =
+  | 'escalate_work_item'
+  | 'acknowledge_escalation'
+  | 'resolve_escalation'
+  | 'reassign_escalation_owner';
+
+export type QueueEscalationCommand = {
+  command: QueueEscalationCommandKind;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+  presentation_group: QueuePresentationGroup;
+};
+
 type QueueOwnershipCommandDraft = Omit<QueueOwnershipCommand, 'presentation_group'>;
 type QueueReviewCommandDraft = Omit<QueueReviewCommand, 'presentation_group'>;
+type QueueEscalationCommandDraft = Omit<QueueEscalationCommand, 'presentation_group'>;
 
 function queueRowChromeMode(row: Pick<WorkItemRow, 'work_state' | 'assigned_user_id'>): 'unassigned_pickup' | 'review_gate' | 'default' {
   const unassigned =
@@ -161,14 +186,16 @@ function buildQueueRowChrome(args: {
   viewer: WorkEngineQueueViewerContext;
   ownershipDraft: QueueOwnershipCommandDraft[];
   reviewDraft: QueueReviewCommandDraft[];
+  escalationDraft: QueueEscalationCommandDraft[];
   allowedRows: QueueAllowedAction[];
 }): {
   ownership_commands: QueueOwnershipCommand[];
   review_commands: QueueReviewCommand[];
+  escalation_commands: QueueEscalationCommand[];
   allowed_actions: QueueAllowedAction[];
   queue_shell: QueueRowQueueShellModel;
 } {
-  const { row, viewer, ownershipDraft, reviewDraft, allowedRows } = args;
+  const { row, viewer, ownershipDraft, reviewDraft, escalationDraft, allowedRows } = args;
   const perms = [...viewer.permissions];
   const canAdmin =
     hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin) ||
@@ -182,6 +209,10 @@ function buildQueueRowChrome(args: {
   const review: QueueReviewCommand[] = reviewDraft.map((c) => ({
     ...c,
     presentation_group: 'row_overflow',
+  }));
+  const escalation: QueueEscalationCommand[] = escalationDraft.map((c) => ({
+    ...c,
+    presentation_group: 'admin_overflow',
   }));
   const allowed: QueueAllowedAction[] = allowedRows.map((a) => ({ ...a }));
 
@@ -340,6 +371,20 @@ function buildQueueRowChrome(args: {
   }
 
   const devToolAccess = canAccessReminderDraftDevTool(viewer);
+  for (const esc of escalation) {
+    adminItems.push({
+      channel: 'work_engine_command',
+      command: esc.command,
+      label: esc.label,
+      enabled: esc.enabled,
+      reason: esc.reason,
+      command_payload: {
+        work_item_id: row.id,
+        expected_version: row.version,
+      },
+    });
+  }
+
   if (devToolAccess) {
     const archived = row.work_state === 'archived';
     adminItems.push({
@@ -357,7 +402,7 @@ function buildQueueRowChrome(args: {
     });
   }
 
-  const showAdmin = adminItems.length > 0 && (canAdmin || devToolAccess);
+  const showAdmin = adminItems.length > 0;
 
   const queue_shell: QueueRowQueueShellModel = {
     open_detail: {
@@ -381,7 +426,13 @@ function buildQueueRowChrome(args: {
     },
   };
 
-  return { ownership_commands: ownership, review_commands: review, allowed_actions: allowed, queue_shell };
+  return {
+    ownership_commands: ownership,
+    review_commands: review,
+    escalation_commands: escalation,
+    allowed_actions: allowed,
+    queue_shell,
+  };
 }
 
 function computeOwnershipCommands(args: {
@@ -607,6 +658,91 @@ function computeReviewCommands(args: {
                 ? 'Only the reviewer or break-glass role may reject'
                 : null,
   });
+  return out;
+}
+
+function escalationPermissionContext(viewer: WorkEngineQueueViewerContext): EscalationPermissionContext {
+  return {
+    userId: viewer.userId,
+    roleCode: viewer.roleCode,
+    permissions: [...viewer.permissions],
+  };
+}
+
+/** Exported for command-side validation (must match queue aggregate rows). */
+export function computeEscalationCommands(args: {
+  row: Pick<
+    WorkItemRow,
+    | 'work_state'
+    | 'escalation_owner_id'
+    | 'escalation_acknowledged_at'
+    | 'assigned_user_id'
+  >;
+  viewer: WorkEngineQueueViewerContext;
+}): QueueEscalationCommandDraft[] {
+  const ctx = escalationPermissionContext(args.viewer);
+  const perms = ctx.permissions;
+  const hasOverride =
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.override) ||
+    hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin);
+
+  const escalateOk = canEscalateWorkItem(ctx, args.row, hasOverride);
+  const acknowledgeOk = canAcknowledgeEscalation(ctx, args.row);
+  const resolveOk = canResolveEscalation(ctx, args.row);
+  const reassignOk = canReassignEscalationOwner(ctx, args.row);
+
+  const out: QueueEscalationCommandDraft[] = [];
+
+  out.push({
+    command: 'escalate_work_item',
+    label: 'Escalate',
+    enabled: escalateOk,
+    reason: escalateOk
+      ? null
+      : args.row.work_state === 'escalated'
+        ? 'Work item is already escalated'
+        : args.row.work_state === 'done' || args.row.work_state === 'archived'
+          ? 'Cannot escalate a terminal work item'
+          : !hasOverride && !canEscalateWorkItem(ctx, args.row, false)
+            ? 'Only managers or override permission may escalate'
+            : 'Escalation is not available from the current state',
+  });
+
+  out.push({
+    command: 'acknowledge_escalation',
+    label: 'Acknowledge escalation',
+    enabled: acknowledgeOk,
+    reason: acknowledgeOk
+      ? null
+      : args.row.work_state !== 'escalated'
+        ? 'Only escalated work items can be acknowledged'
+        : isEscalationAcknowledged(args.row)
+          ? 'Escalation is already acknowledged'
+          : 'Only escalation owner or managers may acknowledge',
+  });
+
+  out.push({
+    command: 'resolve_escalation',
+    label: 'Resolve escalation',
+    enabled: resolveOk,
+    reason: resolveOk
+      ? null
+      : args.row.work_state !== 'escalated'
+        ? 'Only escalated work items can be resolved'
+        : 'Only escalation owner or managers may resolve',
+  });
+
+  out.push({
+    command: 'reassign_escalation_owner',
+    label: 'Reassign escalation owner',
+    enabled: reassignOk,
+    reason: reassignOk
+      ? null
+      : args.row.work_state !== 'escalated'
+        ? 'Only escalated work items can be reassigned'
+        : 'Only managers may reassign escalation owner',
+  });
+
   return out;
 }
 
@@ -1098,7 +1234,8 @@ function rowAllowedOverrideKinds(currentState: WorkState): QueueRowAllowedOverri
       continue;
     }
     if (kind === 'assignment') continue;
-    if (done) continue; // deadline/escalation_cancel/reminder_cancel not meaningful on done
+    if (kind === 'escalation_cancel') continue;
+    if (done) continue; // deadline/reminder_cancel not meaningful on done
     out.push({
       value: kind,
       label: overrideKindLabel(kind),
@@ -1550,6 +1687,12 @@ type QueueWorkItemRow = Pick<
   | 'work_state'
   | 'assigned_user_id'
   | 'reviewer_user_id'
+  | 'escalation_owner_id'
+  | 'escalation_reason'
+  | 'escalation_source'
+  | 'escalation_prior_work_state'
+  | 'escalation_acknowledged_at'
+  | 'escalation_acknowledged_by_user_id'
   | 'claimed_by_user_id'
   | 'claimed_at'
   | 'due_at'
@@ -1691,7 +1834,7 @@ export async function buildWorkEngineQueueAggregate(params: {
   let q = supabaseAdmin
     .from('work_items')
     .select(
-      'id, client_id, module_key, work_type, period_key, work_state, assigned_user_id, reviewer_user_id, claimed_by_user_id, claimed_at, due_at, sla_status, override_active, override_summary_json, version, updated_at, source_module, source_entity_type, source_entity_id',
+      'id, client_id, module_key, work_type, period_key, work_state, assigned_user_id, reviewer_user_id, escalation_owner_id, escalation_reason, escalation_source, escalation_prior_work_state, escalation_acknowledged_at, escalation_acknowledged_by_user_id, claimed_by_user_id, claimed_at, due_at, sla_status, override_active, override_summary_json, version, updated_at, source_module, source_entity_type, source_entity_id',
       { count: 'exact' },
     )
     .eq('org_id', orgId);
@@ -1748,6 +1891,7 @@ export async function buildWorkEngineQueueAggregate(params: {
     if (r.assigned_user_id) userIdsSet.add(r.assigned_user_id);
     if (r.reviewer_user_id) userIdsSet.add(r.reviewer_user_id);
     if (r.claimed_by_user_id) userIdsSet.add(r.claimed_by_user_id);
+    if (r.escalation_owner_id) userIdsSet.add(r.escalation_owner_id);
   }
   // Also include distinct assignee/reviewer ids so the filter dropdowns show
   // a name, not a UUID.
@@ -1891,7 +2035,16 @@ export async function buildWorkEngineQueueAggregate(params: {
       override_active: r.override_active,
       override_summary_json: r.override_summary_json,
     });
-    const stateCell = ov ? `${work_state_label} · ${ov}` : work_state_label;
+    const escalation_owner_name = r.escalation_owner_id
+      ? (userNameById.get(r.escalation_owner_id) ?? null)
+      : null;
+    const priorStateLabel = r.escalation_prior_work_state
+      ? workStateLabel(r.escalation_prior_work_state as WorkState)
+      : null;
+    let stateCell = ov ? `${work_state_label} · ${ov}` : work_state_label;
+    if (r.work_state === 'escalated' && priorStateLabel) {
+      stateCell = `${work_state_label} (was ${priorStateLabel})`;
+    }
     const threadId = isConv ? String(r.source_entity_id ?? '') : '';
     const lastActivityIso =
       isConv && threadId && threadUpdatedAtById.has(threadId)
@@ -1962,6 +2115,8 @@ export async function buildWorkEngineQueueAggregate(params: {
         : [];
     const reviewDraft =
       viewer != null ? computeReviewCommands({ row: r, viewer, policy: policyRow }) : [];
+    const escalationDraft =
+      viewer != null ? computeEscalationCommands({ row: r, viewer }) : [];
     const allowedBase = queueAllowedActions({
       work_state: r.work_state,
       assigned_user_id: r.assigned_user_id,
@@ -1973,11 +2128,13 @@ export async function buildWorkEngineQueueAggregate(params: {
             viewer,
             ownershipDraft,
             reviewDraft,
+            escalationDraft,
             allowedRows: allowedBase,
           })
         : {
             ownership_commands: [] as QueueOwnershipCommand[],
             review_commands: [] as QueueReviewCommand[],
+            escalation_commands: [] as QueueEscalationCommand[],
             allowed_actions: allowedBase,
             queue_shell: {
               open_detail: {
@@ -1995,7 +2152,13 @@ export async function buildWorkEngineQueueAggregate(params: {
               },
             },
           };
-    const { ownership_commands, review_commands, allowed_actions, queue_shell } = chrome;
+    const { ownership_commands, review_commands, escalation_commands, allowed_actions, queue_shell } =
+      chrome;
+    const escalation_acknowledged_label = isEscalationAcknowledged(r)
+      ? 'Acknowledged'
+      : r.work_state === 'escalated'
+        ? 'Pending acknowledgment'
+        : null;
     return {
       work_item_id: r.id,
       client_id: r.client_id,
@@ -2017,6 +2180,17 @@ export async function buildWorkEngineQueueAggregate(params: {
       ownership_commands,
       review_flow_status_label,
       review_commands,
+      escalation_commands,
+      escalation_owner_id: r.escalation_owner_id,
+      escalation_owner_name,
+      escalation_reason: r.escalation_reason,
+      escalation_source: r.escalation_source,
+      escalation_source_label: r.escalation_source
+        ? escalationSourceLabel(r.escalation_source)
+        : null,
+      escalation_prior_work_state: r.escalation_prior_work_state,
+      escalation_acknowledged_at: r.escalation_acknowledged_at,
+      escalation_acknowledged_label,
       due_at: r.due_at,
       sla_status: r.sla_status,
       sla_status_label: slaStatusLabel(r.sla_status),
