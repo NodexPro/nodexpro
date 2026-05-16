@@ -5,6 +5,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { DEFAULT_SLA_POLICY, resolveWorkTypeSlaPolicy, } from './work-engine.policy.service.js';
+import { evaluateRemindersForWorkItem } from './work-engine.reminder.service.js';
 export const SLA_OBLIGATION_KINDS = ['response', 'waiting_client', 'review'];
 export const SLA_OBLIGATION_STATUSES = ['active', 'met', 'breached', 'cancelled'];
 function addMinutes(iso, minutes) {
@@ -302,6 +303,11 @@ export async function recomputeWorkItemSlaStatus(orgId, workItemId, opts) {
             to_sla_status: nextStatus,
         });
     }
+    await evaluateRemindersForWorkItem({
+        orgId,
+        workItemId,
+        actorUserId: opts?.actorUserId ?? null,
+    });
     return nextStatus;
 }
 /** Command-time SLA obligation hooks (Phase 3A). */

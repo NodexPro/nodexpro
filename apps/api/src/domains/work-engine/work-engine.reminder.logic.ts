@@ -12,6 +12,7 @@ import {
   type OperationalReminderCadenceStep,
   type OperationalReminderPolicyPayload,
   type OperationalReminderWorkflow,
+  type ReminderCadenceAnchor,
   type ReminderChannel,
   type ReminderWorkflowType,
 } from '../country-pack/operational-communication-owner-payload.js';
@@ -65,6 +66,89 @@ export function resolveReminderCandidateDedupKeyForInsert(params: {
 export function isManualReminderTriggerType(triggerType: string): boolean {
   const t = triggerType.trim();
   return t === 'manual_command' || t === 'admin_test';
+}
+
+export type ReminderSlaObligationKind = 'response' | 'waiting_client' | 'review';
+
+export const REMINDER_WORKFLOW_TO_SLA_KIND: Record<ReminderWorkflowType, ReminderSlaObligationKind> =
+  {
+    waiting_client: 'waiting_client',
+    response_sla: 'response',
+    review_sla: 'review',
+  };
+
+export type ReminderObligationSnapshot = {
+  kind: ReminderSlaObligationKind;
+  starts_at: string;
+  due_at: string;
+  status: string;
+  paused_at: string | null;
+};
+
+export function isWorkItemEligibleForAutoReminders(workState: string): boolean {
+  return workState !== 'done' && workState !== 'archived';
+}
+
+export function isWaitingClientWorkflowContext(
+  workState: string,
+  obligations: ReminderObligationSnapshot[],
+): boolean {
+  if (workState === 'waiting_client') return true;
+  return obligations.some(
+    (o) => o.kind === 'waiting_client' && o.status === 'active' && !o.paused_at,
+  );
+}
+
+export function resolveActiveObligationForWorkflow(
+  workflowType: ReminderWorkflowType,
+  obligations: ReminderObligationSnapshot[],
+): ReminderObligationSnapshot | null {
+  const kind = REMINDER_WORKFLOW_TO_SLA_KIND[workflowType];
+  return (
+    obligations.find((o) => o.kind === kind && o.status === 'active' && !o.paused_at) ?? null
+  );
+}
+
+export function resolveCadenceAnchorIso(
+  anchor: ReminderCadenceAnchor,
+  obligation: ReminderObligationSnapshot,
+): string {
+  if (anchor === 'obligation_due_at') return obligation.due_at;
+  return obligation.starts_at;
+}
+
+export function computeCadenceTriggerAtMs(anchorIso: string, offsetMinutes: number): number {
+  return new Date(anchorIso).getTime() + offsetMinutes * 60_000;
+}
+
+export function isCadenceStepEligible(
+  nowMs: number,
+  anchorIso: string,
+  offsetMinutes: number,
+): boolean {
+  return nowMs >= computeCadenceTriggerAtMs(anchorIso, offsetMinutes);
+}
+
+export function shouldEvaluateReminderWorkflow(params: {
+  workflowType: ReminderWorkflowType;
+  workState: string;
+  obligations: ReminderObligationSnapshot[];
+}): boolean {
+  if (params.workflowType === 'waiting_client') {
+    return isWaitingClientWorkflowContext(params.workState, params.obligations);
+  }
+  return resolveActiveObligationForWorkflow(params.workflowType, params.obligations) != null;
+}
+
+export function listEligibleCadenceSteps(params: {
+  workflow: OperationalReminderWorkflow;
+  obligation: ReminderObligationSnapshot;
+  nowMs: number;
+}): OperationalReminderCadenceStep[] {
+  const anchorIso = resolveCadenceAnchorIso(params.workflow.anchor, params.obligation);
+  return params.workflow.cadence_steps.filter((step) =>
+    isCadenceStepEligible(params.nowMs, anchorIso, step.offset_minutes),
+  );
 }
 
 export function parseGenerateReminderCandidateWorkflowType(raw: unknown): ReminderWorkflowType {

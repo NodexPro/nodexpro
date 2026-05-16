@@ -11,6 +11,7 @@ import {
   resolveWorkTypeSlaPolicy,
 } from './work-engine.policy.service.js';
 import type { SlaStatus, WorkEngineCommandType, WorkState } from './work-engine.types.js';
+import { evaluateRemindersForWorkItem } from './work-engine.reminder.service.js';
 
 export const SLA_OBLIGATION_KINDS = ['response', 'waiting_client', 'review'] as const;
 export type SlaObligationKind = (typeof SLA_OBLIGATION_KINDS)[number];
@@ -397,6 +398,12 @@ export async function recomputeWorkItemSlaStatus(
       to_sla_status: nextStatus,
     });
   }
+
+  await evaluateRemindersForWorkItem({
+    orgId,
+    workItemId,
+    actorUserId: opts?.actorUserId ?? null,
+  });
 
   return nextStatus;
 }

@@ -29,6 +29,44 @@ export function isManualReminderTriggerType(triggerType) {
     const t = triggerType.trim();
     return t === 'manual_command' || t === 'admin_test';
 }
+export const REMINDER_WORKFLOW_TO_SLA_KIND = {
+    waiting_client: 'waiting_client',
+    response_sla: 'response',
+    review_sla: 'review',
+};
+export function isWorkItemEligibleForAutoReminders(workState) {
+    return workState !== 'done' && workState !== 'archived';
+}
+export function isWaitingClientWorkflowContext(workState, obligations) {
+    if (workState === 'waiting_client')
+        return true;
+    return obligations.some((o) => o.kind === 'waiting_client' && o.status === 'active' && !o.paused_at);
+}
+export function resolveActiveObligationForWorkflow(workflowType, obligations) {
+    const kind = REMINDER_WORKFLOW_TO_SLA_KIND[workflowType];
+    return (obligations.find((o) => o.kind === kind && o.status === 'active' && !o.paused_at) ?? null);
+}
+export function resolveCadenceAnchorIso(anchor, obligation) {
+    if (anchor === 'obligation_due_at')
+        return obligation.due_at;
+    return obligation.starts_at;
+}
+export function computeCadenceTriggerAtMs(anchorIso, offsetMinutes) {
+    return new Date(anchorIso).getTime() + offsetMinutes * 60_000;
+}
+export function isCadenceStepEligible(nowMs, anchorIso, offsetMinutes) {
+    return nowMs >= computeCadenceTriggerAtMs(anchorIso, offsetMinutes);
+}
+export function shouldEvaluateReminderWorkflow(params) {
+    if (params.workflowType === 'waiting_client') {
+        return isWaitingClientWorkflowContext(params.workState, params.obligations);
+    }
+    return resolveActiveObligationForWorkflow(params.workflowType, params.obligations) != null;
+}
+export function listEligibleCadenceSteps(params) {
+    const anchorIso = resolveCadenceAnchorIso(params.workflow.anchor, params.obligation);
+    return params.workflow.cadence_steps.filter((step) => isCadenceStepEligible(params.nowMs, anchorIso, step.offset_minutes));
+}
 export function parseGenerateReminderCandidateWorkflowType(raw) {
     if (typeof raw !== 'string' || !raw.trim()) {
         throw badRequest('workflow_type is required', 'invalid_workflow_type');

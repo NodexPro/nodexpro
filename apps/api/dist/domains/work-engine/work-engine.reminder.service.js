@@ -4,10 +4,12 @@
  */
 import { supabaseAdmin } from '../../db/client.js';
 import { businessYmd } from '../../shared/business-time.js';
-import { badRequest } from '../../shared/errors.js';
+import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
+import { badRequest, notFound } from '../../shared/errors.js';
+import { isUuid } from './work-engine.guards.js';
 import { resolveOperationalCommunicationPolicies } from '../country-pack/operational-communication-policy.service.js';
 import { renderReminderTemplate, } from '../country-pack/operational-communication-owner-payload.js';
-import { ACTIVE_REMINDER_CANDIDATE_STATUSES, assertResolvedReminderPolicy, buildReminderCandidateDedupKey, isManualReminderTriggerType, resolveCadenceStepFromWorkflow, resolveChannelOrder, resolveReminderCandidateDedupKeyForInsert, resolveReminderTarget, resolveWorkflowFromPolicy, selectTemplateVersion, TERMINAL_REMINDER_CANDIDATE_STATUSES, } from './work-engine.reminder.logic.js';
+import { ACTIVE_REMINDER_CANDIDATE_STATUSES, assertResolvedReminderPolicy, buildReminderCandidateDedupKey, isManualReminderTriggerType, isWorkItemEligibleForAutoReminders, listEligibleCadenceSteps, resolveActiveObligationForWorkflow, resolveCadenceStepFromWorkflow, resolveChannelOrder, resolveReminderCandidateDedupKeyForInsert, resolveReminderTarget, resolveWorkflowFromPolicy, selectTemplateVersion, shouldEvaluateReminderWorkflow, TERMINAL_REMINDER_CANDIDATE_STATUSES, } from './work-engine.reminder.logic.js';
 export { buildReminderCandidateDedupKey, parseGenerateReminderCandidateWorkflowType, resolveCadenceStepFromWorkflow, resolveChannelOrder, resolveReminderTarget, resolveWorkflowFromPolicy, selectTemplateVersion, } from './work-engine.reminder.logic.js';
 function humanizeKey(key) {
     return key
@@ -254,7 +256,7 @@ export async function generateReminderCandidate(params) {
         generated_body: rendered.body,
         suggested_send_at: null,
         sla_context_snapshot: slaSnapshot,
-        created_by_system_rule: false,
+        created_by_system_rule: !isManualReminderTriggerType(triggerType),
         dedup_key: dedupKey,
         idempotency_key: null,
     })
@@ -275,4 +277,124 @@ export async function generateReminderCandidate(params) {
         created: true,
         dedupHit: false,
     };
+}
+function obligationSnapshots(rows) {
+    return rows.map((o) => ({
+        kind: o.kind,
+        starts_at: o.starts_at,
+        due_at: o.due_at,
+        status: o.status,
+        paused_at: o.paused_at,
+    }));
+}
+async function loadWorkItemForReminderEvaluation(orgId, workItemId) {
+    if (!isUuid(workItemId))
+        throw badRequest('work_item_id must be a uuid');
+    const { data, error } = await supabaseAdmin
+        .from('work_items')
+        .select('*')
+        .eq('id', workItemId)
+        .eq('org_id', orgId)
+        .maybeSingle();
+    if (error)
+        throw error;
+    if (!data)
+        throw notFound('Work item not found');
+    return data;
+}
+async function loadActiveObligationsForWorkItem(orgId, workItemId) {
+    const { data, error } = await supabaseAdmin
+        .from('work_sla_obligations')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('work_item_id', workItemId)
+        .eq('status', 'active');
+    if (error)
+        throw error;
+    return (data ?? []);
+}
+/**
+ * Policy-driven automatic reminder candidate generation (Phase 3B-5).
+ * Creates pending_review candidates only — never sends or inserts work_notifications.
+ */
+export async function evaluateRemindersForWorkItem(params) {
+    const result = {
+        evaluated_steps: 0,
+        created_candidate_ids: [],
+        dedup_hits: 0,
+    };
+    const workItem = await loadWorkItemForReminderEvaluation(params.orgId, params.workItemId);
+    if (!isWorkItemEligibleForAutoReminders(workItem.work_state)) {
+        return result;
+    }
+    const asOf = params.asOf ?? new Date();
+    const asOfDate = businessYmd(asOf);
+    const nowMs = asOf.getTime();
+    let resolved;
+    try {
+        resolved = await resolveOperationalCommunicationPolicies(params.orgId, asOfDate);
+        assertResolvedReminderPolicy(resolved);
+    }
+    catch {
+        return result;
+    }
+    const reminderPolicy = resolved.active_reminder_policy;
+    const obligations = obligationSnapshots(await loadActiveObligationsForWorkItem(params.orgId, params.workItemId));
+    for (const workflowConfig of reminderPolicy.workflows) {
+        if (!workflowConfig.enabled)
+            continue;
+        const workflowType = workflowConfig.workflow_type;
+        if (!shouldEvaluateReminderWorkflow({
+            workflowType,
+            workState: workItem.work_state,
+            obligations,
+        })) {
+            continue;
+        }
+        const obligation = resolveActiveObligationForWorkflow(workflowType, obligations);
+        if (!obligation)
+            continue;
+        let workflow;
+        try {
+            workflow = resolveWorkflowFromPolicy(reminderPolicy, workflowType);
+        }
+        catch {
+            continue;
+        }
+        const eligibleSteps = listEligibleCadenceSteps({ workflow, obligation, nowMs });
+        for (const step of eligibleSteps) {
+            result.evaluated_steps += 1;
+            const outcome = await generateReminderCandidate({
+                orgId: params.orgId,
+                workItem,
+                workflowType,
+                stepKey: step.step_key,
+                triggerType: 'system_rule',
+            });
+            if (outcome.created) {
+                result.created_candidate_ids.push(outcome.candidateId);
+                await writeAudit({
+                    organizationId: params.orgId,
+                    actorUserId: params.actorUserId ?? null,
+                    moduleCode: 'work_engine',
+                    entityType: 'work_reminder_candidate',
+                    entityId: outcome.candidateId,
+                    action: AUDIT_ACTIONS.REMINDER_CANDIDATE_CREATED,
+                    payload: {
+                        work_item_id: params.workItemId,
+                        workflow_type: workflowType,
+                        step_key: step.step_key,
+                        trigger_type: 'system_rule',
+                        offset_minutes: step.offset_minutes,
+                        policy_version_id: resolved.policy_version_id,
+                        auto_generated: true,
+                    },
+                });
+            }
+            else if (outcome.dedupHit) {
+                result.dedup_hits += 1;
+            }
+        }
+    }
+    return result;
 }

@@ -6,7 +6,10 @@ import {
 } from '../../src/domains/country-pack/operational-communication-owner-payload.js';
 import {
   buildReminderCandidateDedupKey,
+  isCadenceStepEligible,
   isManualReminderTriggerType,
+  isWorkItemEligibleForAutoReminders,
+  listEligibleCadenceSteps,
   resolveCadenceStepFromWorkflow,
   resolveChannelOrder,
   resolveFirstCadenceStepForWorkflow,
@@ -14,6 +17,8 @@ import {
   resolveReminderTarget,
   resolveWorkflowFromPolicy,
   selectTemplateVersion,
+  shouldEvaluateReminderWorkflow,
+  type ReminderObligationSnapshot,
 } from '../../src/domains/work-engine/work-engine.reminder.logic.js';
 import type { WorkItemRow } from '../../src/domains/work-engine/work-engine.types.js';
 import { formatOffsetMinutesAsPeriodLabel } from '../../src/domains/work-engine/work-engine.reminder.logic.js';
@@ -138,23 +143,111 @@ test('resolveFirstCadenceStepForWorkflow returns first configured cadence period
   assert.equal(step.step_key, 'nudge_waiting_client_1h');
 });
 
-test('resolveFirstCadenceStepForWorkflow rejects empty cadence', () => {
-  const emptyCadence = assertValidOperationalReminderPolicyPayload({
-    type: 'operational_reminder_policy',
-    default_channels: ['docflow'],
-    workflows: [
-      {
-        workflow_type: 'waiting_client',
-        enabled: true,
-        anchor: 'obligation_starts_at',
-        cadence_steps: [],
-      },
-    ],
-  });
-  assert.throws(
-    () => resolveFirstCadenceStepForWorkflow(emptyCadence, 'waiting_client'),
-    (e: Error & { code?: string }) => e.code === 'reminder_cadence_empty',
+test('policy validation rejects empty cadence_steps', () => {
+  assert.throws(() =>
+    assertValidOperationalReminderPolicyPayload({
+      type: 'operational_reminder_policy',
+      default_channels: ['docflow'],
+      workflows: [
+        {
+          workflow_type: 'waiting_client',
+          enabled: true,
+          anchor: 'obligation_starts_at',
+          cadence_steps: [],
+        },
+      ],
+    }),
   );
+});
+
+const responsePolicy = assertValidOperationalReminderPolicyPayload({
+  type: 'operational_reminder_policy',
+  default_channels: ['docflow'],
+  workflows: [
+    {
+      workflow_type: 'response_sla',
+      enabled: true,
+      anchor: 'obligation_due_at',
+      cadence_steps: [
+        {
+          step_key: 'due_soon_1h',
+          offset_minutes: -60,
+          template_key: 'comm.reminder.template.response_sla.due_soon.he',
+        },
+        {
+          step_key: 'overdue_0',
+          offset_minutes: 0,
+          template_key: 'comm.reminder.template.response_sla.overdue.he',
+        },
+      ],
+    },
+  ],
+});
+
+function activeObligation(
+  kind: ReminderObligationSnapshot['kind'],
+  startsAt: string,
+  dueAt: string,
+): ReminderObligationSnapshot {
+  return { kind, starts_at: startsAt, due_at: dueAt, status: 'active', paused_at: null };
+}
+
+test('isCadenceStepEligible supports negative offsets before due_at', () => {
+  const dueAt = '2026-05-20T12:00:00.000Z';
+  const oneHourBeforeDue = new Date('2026-05-20T11:00:00.000Z').getTime();
+  const twoHoursBeforeDue = new Date('2026-05-20T10:00:00.000Z').getTime();
+  assert.equal(isCadenceStepEligible(oneHourBeforeDue, dueAt, -60), true);
+  assert.equal(isCadenceStepEligible(twoHoursBeforeDue, dueAt, -60), false);
+  assert.equal(isCadenceStepEligible(oneHourBeforeDue, dueAt, 0), false);
+});
+
+test('listEligibleCadenceSteps filters by anchor and now', () => {
+  const wf = resolveWorkflowFromPolicy(responsePolicy, 'response_sla');
+  const obligation = activeObligation(
+    'response',
+    '2026-05-19T12:00:00.000Z',
+    '2026-05-20T12:00:00.000Z',
+  );
+  const atDue = new Date('2026-05-20T12:00:00.000Z').getTime();
+  const eligible = listEligibleCadenceSteps({ workflow: wf, obligation, nowMs: atDue });
+  assert.deepEqual(
+    eligible.map((s) => s.step_key),
+    ['due_soon_1h', 'overdue_0'],
+  );
+});
+
+test('shouldEvaluateReminderWorkflow for waiting_client uses work_state or obligation', () => {
+  const obligations = [activeObligation('waiting_client', '2026-05-01T00:00:00.000Z', '2026-05-02T00:00:00.000Z')];
+  assert.equal(
+    shouldEvaluateReminderWorkflow({
+      workflowType: 'waiting_client',
+      workState: 'in_progress',
+      obligations,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldEvaluateReminderWorkflow({
+      workflowType: 'waiting_client',
+      workState: 'in_progress',
+      obligations: [],
+    }),
+    false,
+  );
+  assert.equal(
+    shouldEvaluateReminderWorkflow({
+      workflowType: 'waiting_client',
+      workState: 'waiting_client',
+      obligations: [],
+    }),
+    true,
+  );
+});
+
+test('isWorkItemEligibleForAutoReminders excludes terminal work states', () => {
+  assert.equal(isWorkItemEligibleForAutoReminders('waiting_client'), true);
+  assert.equal(isWorkItemEligibleForAutoReminders('done'), false);
+  assert.equal(isWorkItemEligibleForAutoReminders('archived'), false);
 });
 
 test('resolveChannelOrder prefers step channels over policy default', () => {
