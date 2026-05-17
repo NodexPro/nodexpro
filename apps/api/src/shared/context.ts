@@ -1,11 +1,14 @@
 import type { Request } from 'express';
 
+export type UiLanguageCode = 'en' | 'he';
+
 export interface AppUser {
   id: string;
   authUserId: string;
   email: string;
   fullName: string | null;
   status: string;
+  uiLanguage: UiLanguageCode | null;
 }
 
 export interface OrgMembership {

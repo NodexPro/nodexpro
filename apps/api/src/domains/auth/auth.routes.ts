@@ -8,7 +8,12 @@ import {
   loadOrgMembershipForUser,
   updateUserStoredActiveOrganizationId,
 } from './active-organization.service.js';
-import type { AuthSessionAggregateResponse, MeResponse } from '../../types/api.js';
+import type {
+  AuthSessionAggregateResponse,
+  MeResponse,
+  SidebarAccountBlockModel,
+  UiLanguageCode,
+} from '../../types/api.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../../config.js';
@@ -17,6 +22,52 @@ import type { RequestContext } from '../../shared/context.js';
 
 const router = Router();
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
+
+function resolveUiLanguage(ctx: RequestContext): UiLanguageCode {
+  const stored = ctx.user.uiLanguage;
+  if (stored === 'he' || stored === 'en') return stored;
+  return 'en';
+}
+
+type MeCoreForSidebar = Omit<MeResponse, 'sidebar_account_block'>;
+
+function buildSidebarAccountBlock(me: MeCoreForSidebar, uiLanguage: UiLanguageCode): SidebarAccountBlockModel {
+  const activeOrg = me.organizations.find((o) => o.id === me.activeOrganizationId) ?? null;
+  const organizationName =
+    activeOrg?.name ?? (me.organizations.length === 1 ? me.organizations[0]?.name ?? null : null);
+  const displayName = (me.user.fullName?.trim() || me.user.email || '').trim();
+  const labels =
+    uiLanguage === 'he'
+      ? { org: 'ארגון', language: 'שפה', logout: 'התנתקות', en: 'English', he: 'עברית' }
+      : { org: 'Organization', language: 'Language', logout: 'Sign out', en: 'English', he: 'עברית' };
+
+  return {
+    organization_name: organizationName,
+    user_display_name: displayName,
+    user_email: me.user.email,
+    organization_switcher: {
+      visible: me.organizations.length > 1,
+      label: labels.org,
+      organizations: me.organizations.map((o) => ({
+        organization_id: o.id,
+        name: o.name,
+        selected: o.id === me.activeOrganizationId,
+      })),
+    },
+    language_selector: {
+      label: labels.language,
+      current_value: uiLanguage,
+      options: [
+        { value: 'en', label: labels.en },
+        { value: 'he', label: labels.he },
+      ],
+    },
+    logout_action: {
+      label: labels.logout,
+      command_key: 'logout',
+    },
+  };
+}
 
 async function buildMeResponse(
   ctx: RequestContext,
@@ -93,7 +144,8 @@ async function buildMeResponse(
   moduleAppNavItems.sort((a, b) => a.order - b.order);
   navItems.sort((a, b) => a.order - b.order);
 
-  return {
+  const uiLanguage = resolveUiLanguage(ctx);
+  const meCore: MeCoreForSidebar = {
     user: { id: ctx.user.id, email: ctx.user.email, fullName: ctx.user.fullName, status: ctx.user.status },
     organizations: orgList,
     activeOrganizationId: activeOrgId,
@@ -101,6 +153,10 @@ async function buildMeResponse(
     enabledModules,
     navItems,
     moduleAppNavItems: moduleAppNavItems.map(({ path, label }) => ({ path, label })),
+  };
+  return {
+    ...meCore,
+    sidebar_account_block: buildSidebarAccountBlock(meCore, uiLanguage),
   };
 }
 
@@ -271,6 +327,39 @@ router.post('/commands/select_active_organization', authMiddleware, async (req, 
     const freshMembership = await loadOrgMembershipForUser(userId, organizationId);
     const freshCtx: RequestContext = { ...req.context!, organizationId, membership: freshMembership };
     const me = await buildMeResponse(freshCtx, { preferredActiveOrganizationId: organizationId });
+    return res.json(toAuthSessionAggregate(me));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/commands/set_ui_language', authMiddleware, async (req, res, next) => {
+  try {
+    const languageCode = String(req.body?.language_code ?? '').trim();
+    if (languageCode !== 'en' && languageCode !== 'he') {
+      return res.status(400).json({ code: 'BAD_REQUEST', message: 'language_code must be en or he' });
+    }
+    const ctx = req.context!;
+    const previous = ctx.user.uiLanguage;
+    await supabaseAdmin
+      .from('users')
+      .update({ ui_language: languageCode, updated_at: new Date().toISOString() })
+      .eq('id', ctx.user.id);
+    await writeAudit({
+      organizationId: ctx.organizationId,
+      actorUserId: ctx.user.id,
+      entityType: 'user',
+      entityId: ctx.user.id,
+      action: AUDIT_ACTIONS.AUTH_UI_LANGUAGE_SET,
+      payload: { previous_language: previous, new_language: languageCode },
+      ipAddress: typeof req.ip === 'string' && req.ip ? req.ip : null,
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+    });
+    const freshCtx: RequestContext = {
+      ...ctx,
+      user: { ...ctx.user, uiLanguage: languageCode },
+    };
+    const me = await buildMeResponse(freshCtx);
     return res.json(toAuthSessionAggregate(me));
   } catch (e) {
     next(e);

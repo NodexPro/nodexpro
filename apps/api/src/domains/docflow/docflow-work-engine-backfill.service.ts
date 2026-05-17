@@ -203,6 +203,7 @@ export async function buildBackfillRequestContext(actorUserId: string, orgId: st
       email: String((userRow as { email?: string | null }).email ?? '').trim(),
       fullName: (userRow as { full_name?: string | null }).full_name ?? null,
       status: String((userRow as { status?: string | null }).status ?? 'active'),
+      uiLanguage: null,
     },
     membership,
     organizationId: orgId,

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { apiJson } from '../api/client';
 import { AUTH } from '../api/endpoints';
 import { setBackendActiveOrganizationId } from '../api/org-context';
+import type { SidebarAccountBlockModel, UiLanguageCode } from '../types/session';
 
 export interface MeData {
   user: { id: string; email: string; fullName: string | null; status: string };
@@ -12,6 +13,7 @@ export interface MeData {
   enabledModules: string[];
   navItems: { path: string; label: string; order: number }[];
   moduleAppNavItems?: { path: string; label: string }[];
+  sidebar_account_block: SidebarAccountBlockModel;
   session_state?: 'platform_owner' | 'needs_onboarding' | 'needs_org_selection' | 'ready' | 'blocked';
   redirect_to?: string;
   allowed_actions?: string[];
@@ -26,6 +28,7 @@ const AuthContext = createContext<
   AuthState & {
     setActiveOrg: (id: string) => Promise<void>;
     selectActiveOrg: (id: string) => Promise<MeData | null>;
+    setUiLanguage: (languageCode: UiLanguageCode) => Promise<MeData | null>;
     refetchMe: () => Promise<MeData | null>;
     signOut: () => Promise<void>;
   }
@@ -87,6 +90,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await selectActiveOrg(organizationId);
   }, [selectActiveOrg]);
 
+  const setUiLanguage = useCallback(async (languageCode: UiLanguageCode) => {
+    const me = await apiJson<MeData>(AUTH.setUiLanguageCommand, {
+      method: 'POST',
+      body: JSON.stringify({ language_code: languageCode }),
+    });
+    setState({ status: 'authenticated', me });
+    setBackendActiveOrganizationId(me.activeOrganizationId);
+    return me;
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
       await apiJson(AUTH.logout, { method: 'POST' });
@@ -131,9 +144,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () =>
       state.status === 'authenticated'
-        ? { ...state, setActiveOrg, selectActiveOrg, refetchMe, signOut }
-        : { ...state, setActiveOrg: async () => {}, selectActiveOrg: async () => null, refetchMe, signOut },
-    [state, setActiveOrg, selectActiveOrg, refetchMe, signOut]
+        ? { ...state, setActiveOrg, selectActiveOrg, setUiLanguage, refetchMe, signOut }
+        : {
+            ...state,
+            setActiveOrg: async () => {},
+            selectActiveOrg: async () => null,
+            setUiLanguage: async () => null,
+            refetchMe,
+            signOut,
+          },
+    [state, setActiveOrg, selectActiveOrg, setUiLanguage, refetchMe, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

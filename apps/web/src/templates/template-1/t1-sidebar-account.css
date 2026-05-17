@@ -1,0 +1,122 @@
+.t1-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  height: 100vh;
+  background: #ffffff;
+  border-right: 1px solid #e5e7eb;
+  overflow: hidden;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.t1-sidebar__nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.t1-sidebar-account {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding: 12px 4px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.t1-sidebar-account--compact {
+  align-items: center;
+  padding: 10px 0 6px;
+}
+
+.t1-sidebar-account__divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 0 4px 4px;
+}
+
+.t1-sidebar-account__org-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.t1-sidebar-account__user {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4b5563;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.t1-sidebar-account__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.t1-sidebar-account__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 0 4px;
+}
+
+.t1-sidebar-account__select {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.t1-sidebar-account__select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.t1-sidebar-account__logout {
+  width: 100%;
+  margin-top: 2px;
+  justify-content: center;
+}
+
+.t1-sidebar-account__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  color: #4338ca;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+[dir='rtl'] .t1-sidebar-account__select,
+[dir='rtl'] .t1-sidebar-account__org-name,
+[dir='rtl'] .t1-sidebar-account__user {
+  text-align: right;
+}

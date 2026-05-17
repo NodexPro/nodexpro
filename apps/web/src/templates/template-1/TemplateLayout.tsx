@@ -2,6 +2,8 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { AppHeader } from './components/AppHeader';
 import { AppSidebar } from './components/AppSidebar';
+import type { SidebarAccountBlockModel } from '../../types/session';
+import type { UiLanguageCode } from '../../types/session';
 
 import './tokens.css';
 
@@ -14,6 +16,9 @@ export function TemplateLayout({
   user,
   onSignOut,
   sidebarItems,
+  sidebarAccountBlock,
+  accountBusy,
+  onSetUiLanguage,
   children,
 }: {
   organizations: { id: string; name: string }[];
@@ -22,6 +27,9 @@ export function TemplateLayout({
   user: { email: string; fullName: string | null };
   onSignOut: () => Promise<void> | void;
   sidebarItems: Template1SidebarItem[];
+  sidebarAccountBlock: SidebarAccountBlockModel;
+  accountBusy?: boolean;
+  onSetUiLanguage: (code: UiLanguageCode) => Promise<void> | void;
   children: React.ReactNode;
 }) {
   const location = useLocation();
@@ -35,6 +43,11 @@ export function TemplateLayout({
       <AppSidebar
         items={sidebarItems}
         mode={isClientOperationsModule || isWorkEngineSection ? 'collapsedHover' : 'default'}
+        accountBlock={sidebarAccountBlock}
+        accountBusy={accountBusy}
+        onSelectOrganization={onSelectOrg}
+        onSetLanguage={onSetUiLanguage}
+        onLogout={onSignOut}
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {!isWorkEngineQueuePage ? (

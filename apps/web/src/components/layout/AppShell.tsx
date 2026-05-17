@@ -1,20 +1,38 @@
+import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../i18n/I18nProvider';
 import { TemplateLayout } from '../../templates/template-1/TemplateLayout';
 import { ReminderToasts } from '../ReminderToasts';
 import { DocflowFloatingWidget } from '../DocflowFloatingWidget';
-
 /** Modules catalog is visible when user can manage billing/modules. Must not depend on enabledModules/trial/purchased. */
 function canSeeModulesCatalog(permissions: string[]): boolean {
   return permissions.includes('modules:read') || permissions.includes('subscriptions:read');
 }
 
+function SessionLanguageSync() {
+  const auth = useAuth();
+  const { lang, setLang } = useI18n();
+
+  useEffect(() => {
+    if (auth.status !== 'authenticated') return;
+    const next = auth.me.sidebar_account_block?.language_selector?.current_value;
+    if ((next === 'en' || next === 'he') && next !== lang) {
+      setLang(next);
+    }
+  }, [auth, lang, setLang]);
+
+  return null;
+}
+
 export function AppShell() {
   const auth = useAuth();
+  const { setLang } = useI18n();
+  const [accountBusy, setAccountBusy] = useState(false);
+
   if (auth.status !== 'authenticated') return null;
   const { me } = auth;
   let navItems = me.navItems?.length ? me.navItems : buildNavItemsFallback(me.permissions, me.enabledModules);
-  // Ensure Modules catalog entry is present when user has permission (never tie to enabledModules).
   if (canSeeModulesCatalog(me.permissions) && !navItems.some((n) => n.path === '/modules')) {
     navItems = [...navItems, { path: '/modules', label: 'Modules', order: 30 }].sort((a, b) => a.order - b.order);
   }
@@ -30,7 +48,7 @@ export function AppShell() {
   const enabledModulesSet = new Set((me.enabledModules ?? []).map((m) => m.toLowerCase()));
   const moduleChildrenRaw = mergeModuleSubnavItems(
     fromBackendModuleNav.length ? fromBackendModuleNav : fromLegacyNav,
-    fromEnabledFallback
+    fromEnabledFallback,
   ).filter((item) => !isHiddenModuleItem(item) && isEnabledModuleItem(item, enabledModulesSet));
   const moduleChildren = moduleChildrenRaw.map((c) => ({ to: c.path, label: c.label }));
 
@@ -46,13 +64,33 @@ export function AppShell() {
 
   return (
     <>
+      <SessionLanguageSync />
       <TemplateLayout
         organizations={me.organizations}
         activeOrganizationId={me.activeOrganizationId}
-        onSelectOrg={auth.setActiveOrg}
+        onSelectOrg={async (id) => {
+          setAccountBusy(true);
+          try {
+            await auth.setActiveOrg(id);
+          } finally {
+            setAccountBusy(false);
+          }
+        }}
         user={me.user}
         onSignOut={auth.signOut}
         sidebarItems={sidebarItems}
+        sidebarAccountBlock={me.sidebar_account_block}
+        accountBusy={accountBusy}
+        onSetUiLanguage={async (code) => {
+          setAccountBusy(true);
+          try {
+            const refreshed = await auth.setUiLanguage(code);
+            const next = refreshed?.sidebar_account_block.language_selector.current_value;
+            if (next === 'en' || next === 'he') setLang(next);
+          } finally {
+            setAccountBusy(false);
+          }
+        }}
       >
         <Outlet />
       </TemplateLayout>
@@ -91,7 +129,7 @@ function isHiddenModuleItem(item: { path: string; label: string; moduleCode: str
 
 function isEnabledModuleItem(
   item: { path: string; label: string; moduleCode: string | null },
-  enabledModulesSet: Set<string>
+  enabledModulesSet: Set<string>,
 ): boolean {
   const code = (item.moduleCode ?? inferModuleCodeFromPath(item.path) ?? '').toLowerCase();
   if (!code) return false;
@@ -100,7 +138,7 @@ function isEnabledModuleItem(
 
 function mergeModuleSubnavItems(
   primary: Array<{ path: string; label: string; moduleCode: string | null }>,
-  fromEnabled: Array<{ path: string; label: string; moduleCode: string }>
+  fromEnabled: Array<{ path: string; label: string; moduleCode: string }>,
 ): Array<{ path: string; label: string; moduleCode: string | null }> {
   const merged: Array<{ path: string; label: string; moduleCode: string | null }> = [];
   const byCode = new Set<string>();

@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { Template1SidebarItem } from '../TemplateLayout';
+import type { SidebarAccountBlockModel } from '../../../types/session';
+import { SidebarAccountBlock } from './SidebarAccountBlock';
 import logoSrc from '../assets/nodexpro-logo.png';
+import '../t1-sidebar-account.css';
 
 type SidebarMode = 'default' | 'collapsedHover';
 
@@ -24,7 +27,23 @@ function iconForLabel(label: string): string {
   return '•';
 }
 
-export function AppSidebar({ items, mode = 'default' }: { items: Template1SidebarItem[]; mode?: SidebarMode }) {
+export function AppSidebar({
+  items,
+  mode = 'default',
+  accountBlock,
+  accountBusy = false,
+  onSelectOrganization,
+  onSetLanguage,
+  onLogout,
+}: {
+  items: Template1SidebarItem[];
+  mode?: SidebarMode;
+  accountBlock: SidebarAccountBlockModel;
+  accountBusy?: boolean;
+  onSelectOrganization: (organizationId: string) => void | Promise<void>;
+  onSetLanguage: (languageCode: 'en' | 'he') => void | Promise<void>;
+  onLogout: () => void | Promise<void>;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   const showExpanded = mode !== 'collapsedHover' ? true : expanded;
@@ -36,15 +55,13 @@ export function AppSidebar({ items, mode = 'default' }: { items: Template1Sideba
 
   return (
     <aside
+      className="t1-sidebar"
       onMouseEnter={() => mode === 'collapsedHover' && setExpanded(true)}
       onMouseLeave={() => mode === 'collapsedHover' && setExpanded(false)}
       style={{
         width,
-        background: '#FFFFFF',
-        borderRight: '1px solid #E5E7EB',
         padding: showExpanded ? 16 : 10,
         transition: 'width 160ms ease, padding 160ms ease',
-        overflow: 'hidden',
       }}
     >
       <div
@@ -52,8 +69,9 @@ export function AppSidebar({ items, mode = 'default' }: { items: Template1Sideba
           display: 'flex',
           alignItems: 'center',
           gap: showExpanded ? 10 : 0,
-          padding: showExpanded ? '4px 8px 16px 8px' : '4px 0 16px 0',
+          padding: showExpanded ? '4px 8px 12px 8px' : '4px 0 12px 0',
           justifyContent: showExpanded ? 'flex-start' : 'center',
+          flexShrink: 0,
         }}
       >
         <img src={logoSrc} alt="NodexPro" style={{ width: 42, height: 42, display: 'block' }} />
@@ -64,7 +82,7 @@ export function AppSidebar({ items, mode = 'default' }: { items: Template1Sideba
         )}
       </div>
 
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <nav className="t1-sidebar__nav" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {itemsWithIcons.map((item) => (
           <React.Fragment key={item.to}>
             <NavLink
@@ -118,7 +136,15 @@ export function AppSidebar({ items, mode = 'default' }: { items: Template1Sideba
           </React.Fragment>
         ))}
       </nav>
+
+      <SidebarAccountBlock
+        block={accountBlock}
+        expanded={showExpanded}
+        busy={accountBusy}
+        onSelectOrganization={onSelectOrganization}
+        onSetLanguage={onSetLanguage}
+        onLogout={onLogout}
+      />
     </aside>
   );
 }
-

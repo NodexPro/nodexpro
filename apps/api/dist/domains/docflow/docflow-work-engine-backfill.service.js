@@ -191,6 +191,7 @@ export async function buildBackfillRequestContext(actorUserId, orgId) {
             email: String(userRow.email ?? '').trim(),
             fullName: userRow.full_name ?? null,
             status: String(userRow.status ?? 'active'),
+            uiLanguage: null,
         },
         membership,
         organizationId: orgId,

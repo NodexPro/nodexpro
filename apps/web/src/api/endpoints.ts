@@ -15,6 +15,7 @@ export const AUTH = {
   session: '/auth/session',
   setActiveOrg: '/auth/me/active-organization',
   selectActiveOrgCommand: '/auth/commands/select_active_organization',
+  setUiLanguageCommand: '/auth/commands/set_ui_language',
 } as const;
 
 /** Single aggregated payload for dashboard; requires X-Organization-Id. */
