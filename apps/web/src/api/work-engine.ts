@@ -340,11 +340,27 @@ export type ReminderReviewBanner = {
   dismissible: boolean;
 };
 
+export type WorkspaceTabBadgeVariant = 'neutral' | 'warning' | 'urgent' | null;
+
+export type AccountantWorkspaceTab = {
+  key: string;
+  label: string;
+  subtitle: string;
+  icon_key: string;
+  route: string;
+  active: boolean;
+  badge_count: number | null;
+  badge_variant: WorkspaceTabBadgeVariant;
+  enabled: boolean;
+  disabled_reason: string | null;
+};
+
 export type WorkEngineQueueAggregate = {
   aggregate_key: 'work_engine_queue_aggregate';
   org_id: string;
   generated_at: string;
   queue_view_mode?: 'work_items';
+  workspace_tabs?: AccountantWorkspaceTab[];
   reminder_review_summary?: {
     pending_count: number;
     urgent_count: number;

@@ -1114,6 +1114,136 @@ function pendingReasonLabel(reason: string): string {
 }
 
 // ============================================================================
+// Stage 11A — accountant workspace tabs (aggregate-owned shell)
+// ============================================================================
+
+export type WorkspaceTabBadgeVariant = 'neutral' | 'warning' | 'urgent' | null;
+
+export type AccountantWorkspaceTabModel = {
+  key: string;
+  label: string;
+  subtitle: string;
+  icon_key: string;
+  route: string;
+  active: boolean;
+  badge_count: number | null;
+  badge_variant: WorkspaceTabBadgeVariant;
+  enabled: boolean;
+  disabled_reason: string | null;
+};
+
+/** Routes that exist in the web app today (Stage 11A — backend registry only). */
+const ACCOUNTANT_WORKSPACE_REGISTERED_ROUTES = new Set<string>([
+  '/work-engine/queue',
+  '/documents',
+  '/clients',
+]);
+
+type WorkspaceTabSeed = {
+  key: string;
+  label: string;
+  subtitle: string;
+  icon_key: string;
+  route: string;
+  badge_count?: number | null;
+  badge_variant?: WorkspaceTabBadgeVariant;
+};
+
+const ACCOUNTANT_WORKSPACE_TAB_SEEDS: WorkspaceTabSeed[] = [
+  {
+    key: 'work_engine',
+    label: 'Work Engine',
+    subtitle: 'Command Center',
+    icon_key: 'work_engine',
+    route: '/work-engine/queue',
+    badge_count: null,
+    badge_variant: null,
+  },
+  {
+    key: 'invoices',
+    label: 'Invoices',
+    subtitle: 'Sales & Billing',
+    icon_key: 'invoices',
+    route: '/m/invoices',
+    badge_count: 0,
+    badge_variant: 'neutral',
+  },
+  {
+    key: 'payroll',
+    label: 'Payroll',
+    subtitle: 'Salary & Benefits',
+    icon_key: 'payroll',
+    route: '/m/payroll',
+    badge_count: 0,
+    badge_variant: 'neutral',
+  },
+  {
+    key: 'vat',
+    label: 'VAT',
+    subtitle: 'Tax Reporting',
+    icon_key: 'vat',
+    route: '/m/vat',
+    badge_count: 0,
+    badge_variant: 'neutral',
+  },
+  {
+    key: 'documents',
+    label: 'Documents',
+    subtitle: 'Files & Requests',
+    icon_key: 'documents',
+    route: '/documents',
+    badge_count: null,
+    badge_variant: null,
+  },
+  {
+    key: 'clients',
+    label: 'Clients',
+    subtitle: 'Client Directory',
+    icon_key: 'clients',
+    route: '/clients',
+    badge_count: null,
+    badge_variant: null,
+  },
+  {
+    key: 'bank',
+    label: 'Bank',
+    subtitle: 'Reconciliation',
+    icon_key: 'bank',
+    route: '/m/bank',
+    badge_count: 0,
+    badge_variant: 'neutral',
+  },
+  {
+    key: 'reports',
+    label: 'Reports',
+    subtitle: 'Analytics',
+    icon_key: 'reports',
+    route: '/m/reports',
+    badge_count: 0,
+    badge_variant: 'neutral',
+  },
+];
+
+function buildAccountantWorkspaceTabs(activeKey: string): AccountantWorkspaceTabModel[] {
+  return ACCOUNTANT_WORKSPACE_TAB_SEEDS.map((seed) => {
+    const routeRegistered = ACCOUNTANT_WORKSPACE_REGISTERED_ROUTES.has(seed.route);
+    const enabled = routeRegistered;
+    return {
+      key: seed.key,
+      label: seed.label,
+      subtitle: seed.subtitle,
+      icon_key: seed.icon_key,
+      route: seed.route,
+      active: seed.key === activeKey,
+      badge_count: seed.badge_count ?? null,
+      badge_variant: seed.badge_variant ?? null,
+      enabled,
+      disabled_reason: enabled ? null : 'Coming soon',
+    };
+  });
+}
+
+// ============================================================================
 // Stage 3D — work_engine_queue_aggregate
 // ============================================================================
 
@@ -2407,6 +2537,7 @@ export async function buildWorkEngineQueueAggregate(params: {
     org_id: orgId,
     generated_at: new Date().toISOString(),
     queue_view_mode: 'work_items',
+    workspace_tabs: buildAccountantWorkspaceTabs('work_engine'),
     reminder_review_summary: reminderReviewSummary,
     banner: reminderBanner,
     snooze_presets: REMINDER_SNOOZE_PRESETS.map((p) => ({

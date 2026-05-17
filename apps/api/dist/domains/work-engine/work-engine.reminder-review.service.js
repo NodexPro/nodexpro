@@ -6,7 +6,9 @@ import { supabaseAdmin } from '../../db/client.js';
 import { businessYmd } from '../../shared/business-time.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
+import { hasPermission } from '../rbac/rbac.service.js';
 import { isUuid } from './work-engine.guards.js';
+import { WORK_ENGINE_PERMISSIONS } from './work-engine.rbac.js';
 import { REMINDER_CHANNELS, } from '../country-pack/operational-communication-owner-payload.js';
 import { resolveOperationalCommunicationPolicies } from '../country-pack/operational-communication-policy.service.js';
 import { formatOffsetMinutesAsPeriodLabel } from './work-engine.reminder.logic.js';
@@ -643,10 +645,19 @@ export async function snoozeReminderCandidate(params) {
     });
     return { candidateId: params.candidateId, snoozedUntil };
 }
+function canMutateReminderCandidates(viewer) {
+    if (!viewer)
+        return false;
+    const perms = [...viewer.permissions];
+    return (hasPermission(perms, WORK_ENGINE_PERMISSIONS.write) ||
+        hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin));
+}
 function buildReminderAllowedActions(row, viewer) {
-    const canWrite = viewer != null;
+    const canWrite = canMutateReminderCandidates(viewer);
     const disabled = (reason) => canWrite ? { enabled: true, disabled_reason: null } : { enabled: false, disabled_reason: reason };
-    const base = disabled('Organization membership required');
+    const base = disabled(viewer == null
+        ? 'Organization membership required'
+        : 'Missing work_engine.write permission');
     const payloadBase = {
         reminder_candidate_id: row.id,
         expected_version: row.version,
