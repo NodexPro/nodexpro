@@ -29,6 +29,7 @@ import { ownerCountryPackRoutes } from './routes/owner-country-pack.routes.js';
 import { ownerPasswordRecoveryRoutes } from './routes/owner-password-recovery.routes.js';
 import { docflowRoutes } from './routes/docflow.routes.js';
 import { workEngineRoutes } from './domains/work-engine/work-engine.routes.js';
+import { incomeRoutes } from './domains/income/income.routes.js';
 
 registerExampleModuleHook();
 
@@ -134,6 +135,7 @@ app.use('/api/v1/owner/password-recovery', ownerPasswordRecoveryRoutes);
 app.use('/api/v1/owner', ownerCountryPackRoutes);
 app.use('/api/v1/docflow', docflowRoutes);
 app.use('/api/v1/work-engine', workEngineRoutes);
+app.use('/api/v1/income', incomeRoutes);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof AppError) {

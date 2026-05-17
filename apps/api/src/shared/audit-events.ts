@@ -236,6 +236,8 @@ export const AUDIT_ACTIONS = {
   // Backend never invents a mapping; only allowlisted event_type values resolve.
   WORK_EVENT_MAPPING_RESOLVED: 'work_engine.event_mapping_resolved',
   WORK_EVENT_MAPPING_PENDING: 'work_engine.event_mapping_pending',
+  /** Income INC-1b — persisted issuer workspace context selection. */
+  INCOME_ISSUER_CONTEXT_SELECTED: 'income.issuer_context_selected',
 } as const;
 
 type AuditPayload = Record<string, unknown>;
