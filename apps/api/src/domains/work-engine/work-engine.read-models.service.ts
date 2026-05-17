@@ -1135,8 +1135,8 @@ export type AccountantWorkspaceTabModel = {
 /** Routes that exist in the web app today (Stage 11A — backend registry only). */
 const ACCOUNTANT_WORKSPACE_REGISTERED_ROUTES = new Set<string>([
   '/work-engine/queue',
+  '/m/client-operations',
   '/documents',
-  '/clients',
 ]);
 
 type WorkspaceTabSeed = {
@@ -1156,6 +1156,15 @@ const ACCOUNTANT_WORKSPACE_TAB_SEEDS: WorkspaceTabSeed[] = [
     subtitle: 'Command Center',
     icon_key: 'work_engine',
     route: '/work-engine/queue',
+    badge_count: null,
+    badge_variant: null,
+  },
+  {
+    key: 'clients',
+    label: 'Clients',
+    subtitle: 'Client Operations',
+    icon_key: 'clients',
+    route: '/m/client-operations',
     badge_count: null,
     badge_variant: null,
   },
@@ -1192,15 +1201,6 @@ const ACCOUNTANT_WORKSPACE_TAB_SEEDS: WorkspaceTabSeed[] = [
     subtitle: 'Files & Requests',
     icon_key: 'documents',
     route: '/documents',
-    badge_count: null,
-    badge_variant: null,
-  },
-  {
-    key: 'clients',
-    label: 'Clients',
-    subtitle: 'Client Directory',
-    icon_key: 'clients',
-    route: '/clients',
     badge_count: null,
     badge_variant: null,
   },

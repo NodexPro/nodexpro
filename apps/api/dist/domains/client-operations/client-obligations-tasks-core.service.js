@@ -3,6 +3,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
 import { businessDayOfMonth, businessMonthKey, businessPreviousMonthKey, businessYmd } from '../../shared/business-time.js';
 import { emitObligationDocumentsMissingIfMapped } from './client-obligations-work-engine-bridge.js';
+import { syncPayrollMaterialWorkEvent, syncVatMaterialWorkEvent, } from './client-operations-work-engine-bridge.js';
 function assertOrg(ctx) {
     const orgId = ctx.organizationId;
     if (!orgId)
@@ -1938,6 +1939,12 @@ async function recomputeClientObligationsAndTasksForOrg(ctx, orgId, clientId, no
                 dueDate: rel.due_date ?? null,
                 blockingReason: nextBlockingReason,
             });
+            if (rel.obligation_type === 'payroll_data' && rel.period_key) {
+                await syncPayrollMaterialWorkEvent(ctx, orgId, clientId, rel.period_key);
+            }
+            if (rel.obligation_type === 'vat_report' && rel.period_key) {
+                await syncVatMaterialWorkEvent(ctx, orgId, clientId, rel.period_key);
+            }
         }
     }
     for (const old of current) {

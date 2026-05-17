@@ -71,6 +71,30 @@ const SAFE_EVENT_MAPPINGS: Readonly<Record<string, SafeEventMapping>> = {
     initial_state: 'waiting_client',
     requires_period_key: true,
   },
+  'client_operations.annual_report_documents_missing': {
+    module_key: 'client_operations',
+    work_type: 'annual_report_docs',
+    initial_state: 'waiting_client',
+    requires_period_key: true,
+  },
+  'client_operations.capital_declaration_documents_missing': {
+    module_key: 'client_operations',
+    work_type: 'capital_declaration_docs',
+    initial_state: 'waiting_client',
+    requires_period_key: true,
+  },
+  'client_operations.payroll_material_missing': {
+    module_key: 'client_operations',
+    work_type: 'payroll_material',
+    initial_state: 'waiting_client',
+    requires_period_key: true,
+  },
+  'client_operations.vat_material_missing': {
+    module_key: 'client_operations',
+    work_type: 'vat_material',
+    initial_state: 'waiting_client',
+    requires_period_key: true,
+  },
   'docflow.thread_needs_attention': {
     module_key: 'docflow',
     work_type: 'docflow_thread_followup',

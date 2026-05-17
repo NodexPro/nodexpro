@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.js';
+import { syncAnnualScopeMaterialWorkEvent } from './client-operations-work-engine-bridge.js';
 const BUCKET = 'client-files';
 const MAX_B64 = 12_000_000;
 const MAX_FILE = 8_000_000;
@@ -1193,4 +1194,11 @@ export async function executeAnnualTabCommand(ctx, clientId, body) {
             throw badRequest('סוג פקודה לא מוכר');
     }
     await bumpReadModelVersion(orgId, clientId, expected, ctx.user.id, scope);
+    const orgIdCtx = ctx.organizationId;
+    if (orgIdCtx) {
+        const refreshed = await getAnnualTabReadModel(ctx, clientId, scope);
+        const hasMissingDocs = Boolean(refreshed &&
+            (refreshed.status.code === 'missing_docs' || refreshed.missing_documents.length > 0));
+        await syncAnnualScopeMaterialWorkEvent(ctx, orgIdCtx, clientId, scope, hasMissingDocs);
+    }
 }
