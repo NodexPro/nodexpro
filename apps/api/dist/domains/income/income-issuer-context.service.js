@@ -8,7 +8,7 @@ import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { hasPermission } from '../rbac/rbac.service.js';
 import { resolveIncomeIssuerBusinessDisplay } from './income-issuer-display.js';
 import { buildAllowedActingModes, buildAllowedActions, buildIssuerOptions, } from './income-workspace-context.builders.js';
-import { INCOME_AGGREGATE_KEY, INCOME_COMMAND_SELECT_ISSUER, INCOME_PERMISSIONS, } from './income.types.js';
+import { INCOME_CONTEXT_AGGREGATE_KEY, INCOME_COMMAND_SELECT_ISSUER, INCOME_PERMISSIONS, } from './income.types.js';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isUuid(value) {
     return UUID_RE.test(value);
@@ -239,7 +239,7 @@ export async function buildIncomeWorkspaceContextAggregate(ctx) {
         });
     }
     return {
-        aggregate_key: INCOME_AGGREGATE_KEY,
+        aggregate_key: INCOME_CONTEXT_AGGREGATE_KEY,
         org_id: orgId,
         actor_user_id: actorUserId,
         acting_mode: effective.acting_mode,
@@ -254,7 +254,7 @@ export async function buildIncomeWorkspaceContextAggregate(ctx) {
         warnings,
     };
 }
-export async function executeSelectIncomeIssuerContextCommand(ctx, body, auditMeta) {
+export async function applySelectIncomeIssuerContext(ctx, body, auditMeta) {
     const orgId = ctx.organizationId;
     if (!orgId)
         throw forbidden('Organization context required');
@@ -297,10 +297,4 @@ export async function executeSelectIncomeIssuerContextCommand(ctx, body, auditMe
         ipAddress: auditMeta?.ipAddress ?? null,
         userAgent: auditMeta?.userAgent ?? null,
     });
-    const income_workspace_context_aggregate = await buildIncomeWorkspaceContextAggregate(ctx);
-    return {
-        ok: true,
-        command: INCOME_COMMAND_SELECT_ISSUER,
-        income_workspace_context_aggregate,
-    };
 }

@@ -15,14 +15,13 @@ import {
   buildIssuerOptions,
 } from './income-workspace-context.builders.js';
 import {
-  INCOME_AGGREGATE_KEY,
+  INCOME_CONTEXT_AGGREGATE_KEY,
   INCOME_COMMAND_SELECT_ISSUER,
   INCOME_PERMISSIONS,
   type IncomeActingMode,
   type IncomeWorkspaceContextAggregate,
   type IncomeWorkspacePermissions,
   type IncomeWorkspaceWarning,
-  type SelectIncomeIssuerContextCommandResponse,
 } from './income.types.js';
 
 const UUID_RE =
@@ -339,7 +338,7 @@ export async function buildIncomeWorkspaceContextAggregate(
   }
 
   return {
-    aggregate_key: INCOME_AGGREGATE_KEY,
+    aggregate_key: INCOME_CONTEXT_AGGREGATE_KEY,
     org_id: orgId,
     actor_user_id: actorUserId,
     acting_mode: effective.acting_mode,
@@ -355,11 +354,11 @@ export async function buildIncomeWorkspaceContextAggregate(
   };
 }
 
-export async function executeSelectIncomeIssuerContextCommand(
+export async function applySelectIncomeIssuerContext(
   ctx: RequestContext,
   body: Record<string, unknown>,
   auditMeta?: { ipAddress?: string | null; userAgent?: string | null },
-): Promise<SelectIncomeIssuerContextCommandResponse> {
+): Promise<void> {
   const orgId = ctx.organizationId;
   if (!orgId) throw forbidden('Organization context required');
 
@@ -415,10 +414,4 @@ export async function executeSelectIncomeIssuerContextCommand(
     userAgent: auditMeta?.userAgent ?? null,
   });
 
-  const income_workspace_context_aggregate = await buildIncomeWorkspaceContextAggregate(ctx);
-  return {
-    ok: true,
-    command: INCOME_COMMAND_SELECT_ISSUER,
-    income_workspace_context_aggregate,
-  };
 }

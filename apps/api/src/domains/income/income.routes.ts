@@ -1,5 +1,5 @@
 /**
- * Income module routes (INC-1b).
+ * Income module routes (INC-1b / INC-2).
  * Mounted at /api/v1/income.
  */
 
@@ -9,10 +9,9 @@ import { requireModuleActive } from '../../middleware/requireModuleActive.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
 import type { RequestContext } from '../../shared/context.js';
-import {
-  buildIncomeWorkspaceContextAggregate,
-  executeSelectIncomeIssuerContextCommand,
-} from './income-issuer-context.service.js';
+import { executeIncomeCommand } from './income-commands.service.js';
+import { buildIncomeWorkspaceContextAggregate } from './income-issuer-context.service.js';
+import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
 import { INCOME_MODULE_CODE, INCOME_PERMISSIONS } from './income.types.js';
 
 const router = Router();
@@ -30,14 +29,50 @@ router.get(
   },
 );
 
+router.get(
+  '/aggregates/workspace',
+  requirePermission(INCOME_PERMISSIONS.view),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const aggregate = await buildIncomeWorkspaceAggregate(req.context as RequestContext);
+      return res.json(aggregate);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands',
+  requirePermission(INCOME_PERMISSIONS.edit),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const out = await executeIncomeCommand(
+        req.context as RequestContext,
+        req.body as Record<string, unknown>,
+        {
+          ipAddress: typeof req.ip === 'string' && req.ip ? req.ip : null,
+          userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+        },
+      );
+      return res.json(out);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
 router.post(
   '/commands/select_issuer_context',
   requirePermission(INCOME_PERMISSIONS.edit),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const out = await executeSelectIncomeIssuerContextCommand(
+      const out = await executeIncomeCommand(
         req.context as RequestContext,
-        req.body as Record<string, unknown>,
+        {
+          ...(req.body as Record<string, unknown>),
+          command: 'select_income_issuer_context',
+        },
         {
           ipAddress: typeof req.ip === 'string' && req.ip ? req.ip : null,
           userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
