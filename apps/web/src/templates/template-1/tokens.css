@@ -28,11 +28,19 @@
   background:var(--t1-bg);
   color:var(--t1-text);
   font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,'Apple Color Emoji','Segoe UI Emoji';
+  overflow-x:hidden;
 }
 
 .t1-pageMain{
   flex:1;
   padding:24px 32px;
+  min-width:0;
+  box-sizing:border-box;
+}
+
+.t1-pageMain--work-engine-queue{
+  padding-top:16px;
+  overflow-x:hidden;
 }
 
 .t1-sectionCard{

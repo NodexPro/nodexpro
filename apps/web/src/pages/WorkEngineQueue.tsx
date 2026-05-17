@@ -309,7 +309,7 @@ export function WorkEngineQueue() {
   const banner = aggregate.banner;
 
   return (
-    <div className="nx-we-queue">
+    <div className="nx-we-queue nx-we-queue--with-workspace-tabs">
       {aggregate.workspace_tabs && aggregate.workspace_tabs.length > 0 ? (
         <AccountantWorkspaceTabs tabs={aggregate.workspace_tabs} />
       ) : null}
@@ -526,14 +526,14 @@ function AccountantWorkspaceTabs(props: { tabs: AccountantWorkspaceTab[] }) {
 
   return (
     <nav className="nx-aw-tabs" aria-label="Accountant workspace modules">
-      <div className="nx-aw-tabs__scroll" role="list">
+      <div className="nx-aw-tabs__scroll" role="tablist">
         {tabs.map((tab) => {
           const showBadge = tab.badge_count !== null;
           const badgeVariant = tab.badge_variant ?? 'neutral';
-          const cardClass = [
-            'nx-aw-tabs__card',
-            tab.active ? 'nx-aw-tabs__card--active' : '',
-            !tab.enabled ? 'nx-aw-tabs__card--disabled' : '',
+          const tabClass = [
+            'nx-aw-tabs__tab',
+            tab.active ? 'nx-aw-tabs__tab--active' : '',
+            !tab.enabled ? 'nx-aw-tabs__tab--disabled' : '',
           ]
             .filter(Boolean)
             .join(' ');
@@ -542,7 +542,9 @@ function AccountantWorkspaceTabs(props: { tabs: AccountantWorkspaceTab[] }) {
             <button
               key={tab.key}
               type="button"
-              className={cardClass}
+              className={tabClass}
+              role="tab"
+              aria-selected={tab.active}
               disabled={!tab.enabled}
               title={!tab.enabled ? tab.disabled_reason ?? undefined : undefined}
               aria-current={tab.active ? 'page' : undefined}
