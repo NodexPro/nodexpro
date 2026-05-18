@@ -6,6 +6,7 @@ import { forbidden } from '../../shared/errors.js';
 import { loadActiveIncomeIssuerScope, toIssuerContextSummary } from './income-issuer-scope.service.js';
 import { buildDocumentCreationSchema } from './income-document-creation-schema.builders.js';
 import { resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
+import { accountingDisplayStatusLabel, resolveAccountingDisplayStatus, } from './income-accounting-posting.mapping.js';
 import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './income-workspace-cards.builders.js';
 import { INCOME_WORKSPACE_AGGREGATE_KEY, } from './income.types.js';
 const DOCUMENT_TYPE_LABELS = {
@@ -133,7 +134,7 @@ async function loadDrafts(scope, customerNames) {
 async function loadIssuedDocuments(scope) {
     let query = supabaseAdmin
         .from('income_documents')
-        .select('id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at')
+        .select('id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at, accounting_posting_status, accounting_entry_id')
         .eq('document_status', 'issued')
         .order('issue_date', { ascending: false })
         .order('created_at', { ascending: false })
@@ -142,6 +143,7 @@ async function loadIssuedDocuments(scope) {
     const { data, error } = await query;
     if (error)
         throw error;
+    const canRetryPosting = scope.permissions.issue;
     return (data ?? []).map((row) => {
         const r = row;
         const lines = Array.isArray(r.lines_snapshot_json) ? r.lines_snapshot_json : [];
@@ -149,6 +151,11 @@ async function loadIssuedDocuments(scope) {
             ? String(r.customer_snapshot_json.display_name)
             : null;
         const docType = r.document_type;
+        const accountingDisplay = resolveAccountingDisplayStatus(docType, r.accounting_posting_status);
+        const rowActions = [];
+        if (canRetryPosting && r.accounting_posting_status === 'failed') {
+            rowActions.push('retry_income_document_accounting_posting');
+        }
         return {
             document_id: r.id,
             document_number: r.document_number,
@@ -162,7 +169,14 @@ async function loadIssuedDocuments(scope) {
             line_count: lines.length,
             source_draft_id: r.source_draft_id,
             created_at: r.created_at,
-            allowed_actions: [],
+            accounting_posting_status: r.accounting_posting_status,
+            accounting_status_label: accountingDisplayStatusLabel(accountingDisplay),
+            accounting_display_status: accountingDisplay,
+            accounting_entry_id: r.accounting_entry_id,
+            accounting_entry_reference: r.accounting_entry_id
+                ? `accounting_entry:${r.accounting_entry_id}`
+                : null,
+            allowed_actions: rowActions,
         };
     });
 }
@@ -207,6 +221,7 @@ function issuedDocumentsTableModel(rows) {
             { key: 'customer_display_name', label: 'לקוח' },
             { key: 'issue_date', label: 'תאריך הנפקה' },
             { key: 'document_status_label', label: 'סטטוס' },
+            { key: 'accounting_status_label', label: 'חשבונאות' },
         ],
         rows,
         empty_state: {
@@ -237,11 +252,19 @@ export async function buildIncomeWorkspaceAggregate(ctx) {
     const scope = await loadActiveIncomeIssuerScope(ctx);
     if (!scope.permissions.view)
         throw forbidden('income.view required');
-    const [customersCount, itemsCount, draftsCount, issuedCount] = await Promise.all([
+    const [customersCount, itemsCount, draftsCount, issuedCount, postedCount, postingFailedCount] = await Promise.all([
         countScoped('income_customers', scope, { column: 'status', value: 'active' }),
         countScoped('income_items', scope, { column: 'active', value: true }),
         countScoped('income_document_drafts', scope, { column: 'status', value: 'draft' }),
         countScoped('income_documents', scope, { column: 'document_status', value: 'issued' }),
+        countScoped('income_documents', scope, {
+            column: 'accounting_posting_status',
+            value: 'posted',
+        }),
+        countScoped('income_documents', scope, {
+            column: 'accounting_posting_status',
+            value: 'failed',
+        }),
     ]);
     const docTypesResult = await resolveAvailableDocumentTypes(scope.org_id, scope);
     const canCreateDocument = scope.permissions.edit && docTypesResult.available_document_types.some((t) => t.enabled);
@@ -262,6 +285,8 @@ export async function buildIncomeWorkspaceAggregate(ctx) {
             items: itemsCount,
             drafts: draftsCount,
             issued_documents: issuedCount,
+            posted_documents: postedCount,
+            posting_failed: postingFailedCount,
         }, { canCreateDocument }),
         customers_table_model: customersTableModel(customers),
         items_table_model: itemsTableModel(items),

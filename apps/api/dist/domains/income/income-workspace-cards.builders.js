@@ -38,6 +38,20 @@ export function buildIncomeWorkspaceCards(perms, counts, options) {
             allowed_actions: perms.view ? ['open'] : [],
         },
         {
+            key: 'posted_documents',
+            label: 'מסמכים מפורסמים',
+            count: counts.posted_documents,
+            allowed_actions: perms.view ? ['open'] : [],
+        },
+        {
+            key: 'posting_failed',
+            label: 'פרסום חשבונאי נכשל',
+            count: counts.posting_failed,
+            allowed_actions: perms.issue && counts.posting_failed > 0
+                ? ['retry_income_document_accounting_posting']
+                : [],
+        },
+        {
             key: 'drafts',
             label: 'טיוטות',
             count: counts.drafts,
@@ -91,7 +105,7 @@ export function buildWorkspaceAllowedActions(perms) {
         actions.push('select_issuer_context', 'create_income_customer', 'create_one_time_income_customer', 'create_income_item', 'create_income_document_draft', 'update_income_document_draft', 'cancel_income_document_draft');
     }
     if (perms.issue) {
-        actions.push('issue_income_document');
+        actions.push('issue_income_document', 'retry_income_document_accounting_posting');
     }
     return actions;
 }

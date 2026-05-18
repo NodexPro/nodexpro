@@ -9,7 +9,6 @@ import {
   formatIncomeDocumentNumber,
   buildLegalSnapshotForIssue,
   buildTotalsSnapshotForIssue,
-  ACCOUNTING_BASE_POST_AFTER_ISSUE_TODO,
 } from '../../src/domains/income/income-document-issue.pure.js';
 import { buildAvailableDocumentTypesForBusiness } from '../../src/domains/income/income-document-types.fallback.js';
 
@@ -73,12 +72,11 @@ test('issue allocates backend document number format', () => {
   assert.equal(formatIncomeDocumentNumber(2026, 42, 'INV-'), 'INV-42');
 });
 
-test('issued snapshots mark non-financial-truth and accounting base pending', () => {
+test('issued snapshots mark non-financial-truth preview only', () => {
   const totals = buildTotalsSnapshotForIssue({ subtotal_reference: 100 }, 'ILS', 2);
   assert.equal(totals.not_financial_truth, true);
   assert.equal(totals.not_accounting_base_truth, true);
   assert.equal(totals.accounting_base_post_pending, true);
-  assert.ok(ACCOUNTING_BASE_POST_AFTER_ISSUE_TODO.includes('Accounting Base'));
 });
 
 test('legal snapshot includes country pack boundary fields', () => {
@@ -119,8 +117,9 @@ test('numbering uses backend rpc only', () => {
   assert.doesNotMatch(numberingSource, /document_number.*\+.*1/);
 });
 
-test('issue service has no Accounting Base / Work Engine / DocFlow imports', () => {
-  assert.doesNotMatch(issueServiceSource, /from\s+['"].*accounting/i);
+test('issue service uses income accounting boundary not direct accounting-base tables', () => {
+  assert.match(issueServiceSource, /income-accounting-posting\.service/);
+  assert.doesNotMatch(issueServiceSource, /from\s+['"].*\/accounting-base\//);
   assert.doesNotMatch(issueServiceSource, /from\s+['"].*work-engine/i);
   assert.doesNotMatch(issueServiceSource, /from\s+['"].*docflow/i);
 });

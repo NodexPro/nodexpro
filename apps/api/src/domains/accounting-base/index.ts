@@ -8,3 +8,4 @@ export * from './category.service.js';
 export * from './entry.service.js';
 export * from './link.service.js';
 export * from './summary.service.js';
+export * from './income-document-posting.service.js';

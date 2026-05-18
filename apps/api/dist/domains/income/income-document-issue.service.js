@@ -9,7 +9,8 @@ import { assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './inc
 import { loadIncomeIssuerProfileProjection } from './income-issuer-profile-sync.service.js';
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { allocateIncomeDocumentNumber } from './income-document-numbering.service.js';
-import { ACCOUNTING_BASE_POST_AFTER_ISSUE_TODO, assertDraftReadyToIssue, buildLegalSnapshotForIssue, buildTotalsSnapshotForIssue, } from './income-document-issue.pure.js';
+import { assertDraftReadyToIssue, buildLegalSnapshotForIssue, buildTotalsSnapshotForIssue, } from './income-document-issue.pure.js';
+import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 async function loadFullDraftForIssue(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
@@ -137,19 +138,37 @@ export async function executeIssueIncomeDocument(ctx, body) {
         currency: draft.currency ?? 'ILS',
         language: draft.language ?? 'he',
         lines_snapshot_json: lines,
-        totals_snapshot_json: {
-            ...totals_snapshot_json,
-            accounting_base_boundary: ACCOUNTING_BASE_POST_AFTER_ISSUE_TODO,
-        },
+        totals_snapshot_json,
         legal_snapshot_json,
         issuer_snapshot_json,
         source_draft_id: draft.id,
+        accounting_posting_status: 'pending',
     })
         .select('id')
         .single();
     if (insertErr || !issued)
         throw insertErr ?? new Error('Failed to create issued income document');
     const issuedId = issued.id;
+    try {
+        await applyAccountingPostingForIssuedDocument(ctx, {
+            id: issuedId,
+            organization_id: scope.org_id,
+            document_type: draft.document_type,
+            document_number: allocated.document_number,
+            issue_date,
+            currency: draft.currency ?? 'ILS',
+            represented_client_id: scope.represented_client_id,
+            totals_snapshot_json,
+            lines_snapshot_json: lines,
+            accounting_posting_status: 'pending',
+            accounting_entry_id: null,
+            notes: draft.notes,
+        });
+    }
+    catch (postingErr) {
+        await supabaseAdmin.from('income_documents').delete().eq('id', issuedId).eq('organization_id', scope.org_id);
+        throw postingErr;
+    }
     const { error: draftUpdateErr } = await supabaseAdmin
         .from('income_document_drafts')
         .update({
@@ -160,8 +179,9 @@ export async function executeIssueIncomeDocument(ctx, body) {
         .eq('id', draft_id)
         .eq('organization_id', scope.org_id)
         .eq('status', 'draft');
-    if (draftUpdateErr)
+    if (draftUpdateErr) {
         throw draftUpdateErr;
+    }
     await writeAudit({
         organizationId: scope.org_id,
         actorUserId: scope.actor_user_id,
@@ -174,7 +194,6 @@ export async function executeIssueIncomeDocument(ctx, body) {
             document_type: draft.document_type,
             document_number: allocated.document_number,
             issuer_business_id: scope.issuer_business_id,
-            accounting_base_post: 'pending',
         },
     });
     return issuedId;

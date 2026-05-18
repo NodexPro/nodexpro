@@ -9,6 +9,7 @@ export const INCOME_COMMAND_CREATE_DRAFT = 'create_income_document_draft' as con
 export const INCOME_COMMAND_UPDATE_DRAFT = 'update_income_document_draft' as const;
 export const INCOME_COMMAND_CANCEL_DRAFT = 'cancel_income_document_draft' as const;
 export const INCOME_COMMAND_ISSUE_DOCUMENT = 'issue_income_document' as const;
+export const INCOME_COMMAND_RETRY_ACCOUNTING_POSTING = 'retry_income_document_accounting_posting' as const;
 
 export const INCOME_MODULE_CODE = 'income' as const;
 
@@ -145,6 +146,11 @@ export interface IncomeIssuedDocumentsTableRow {
   line_count: number;
   source_draft_id: string | null;
   created_at: string;
+  accounting_posting_status: string;
+  accounting_status_label: string;
+  accounting_display_status: string;
+  accounting_entry_id: string | null;
+  accounting_entry_reference: string | null;
   allowed_actions: string[];
 }
 
@@ -206,7 +212,8 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_CREATE_DRAFT
   | typeof INCOME_COMMAND_UPDATE_DRAFT
   | typeof INCOME_COMMAND_CANCEL_DRAFT
-  | typeof INCOME_COMMAND_ISSUE_DOCUMENT;
+  | typeof INCOME_COMMAND_ISSUE_DOCUMENT
+  | typeof INCOME_COMMAND_RETRY_ACCOUNTING_POSTING;
 
 export interface IncomeCommandResponse {
   ok: true;

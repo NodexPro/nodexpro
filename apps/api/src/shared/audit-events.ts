@@ -250,6 +250,11 @@ export const AUDIT_ACTIONS = {
   /** Income INC-4 — issued document + numbering allocation. */
   INCOME_DOCUMENT_ISSUED: 'income.document_issued',
   INCOME_DOCUMENT_NUMBER_ALLOCATED: 'income.document_number_allocated',
+  /** Income INC-5 — Accounting Base posting lifecycle for issued documents. */
+  INCOME_ACCOUNTING_POSTING_STARTED: 'income.accounting_posting_started',
+  INCOME_ACCOUNTING_POSTING_SUCCEEDED: 'income.accounting_posting_succeeded',
+  INCOME_ACCOUNTING_POSTING_FAILED: 'income.accounting_posting_failed',
+  INCOME_ACCOUNTING_POSTING_NOT_REQUIRED: 'income.accounting_posting_not_required',
 } as const;
 
 type AuditPayload = Record<string, unknown>;

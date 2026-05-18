@@ -8,6 +8,8 @@ export function buildIncomeWorkspaceCards(
     items: number;
     drafts: number;
     issued_documents: number;
+    posted_documents: number;
+    posting_failed: number;
   },
   options?: { canCreateDocument?: boolean },
 ): IncomeWorkspaceCard[] {
@@ -49,6 +51,21 @@ export function buildIncomeWorkspaceCards(
       label: 'מסמכים',
       count: counts.issued_documents,
       allowed_actions: perms.view ? ['open'] : [],
+    },
+    {
+      key: 'posted_documents',
+      label: 'מסמכים מפורסמים',
+      count: counts.posted_documents,
+      allowed_actions: perms.view ? ['open'] : [],
+    },
+    {
+      key: 'posting_failed',
+      label: 'פרסום חשבונאי נכשל',
+      count: counts.posting_failed,
+      allowed_actions:
+        perms.issue && counts.posting_failed > 0
+          ? ['retry_income_document_accounting_posting']
+          : [],
     },
     {
       key: 'drafts',
@@ -112,7 +129,7 @@ export function buildWorkspaceAllowedActions(perms: IncomeWorkspacePermissions):
     );
   }
   if (perms.issue) {
-    actions.push('issue_income_document');
+    actions.push('issue_income_document', 'retry_income_document_accounting_posting');
   }
   return actions;
 }

@@ -26,6 +26,7 @@ import {
 } from './income-issuer-context.service.js';
 import {
   assertIncomeEditPermission,
+  assertIncomeIssuePermission,
   loadActiveIncomeIssuerScope,
 } from './income-issuer-scope.service.js';
 import {
@@ -37,11 +38,13 @@ import {
   findAvailableDocumentType,
   resolveAvailableDocumentTypes,
 } from './income-document-types.resolver.js';
+import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
 import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
 import {
   INCOME_COMMAND_CANCEL_DRAFT,
   INCOME_COMMAND_ISSUE_DOCUMENT,
+  INCOME_COMMAND_RETRY_ACCOUNTING_POSTING,
   INCOME_COMMAND_CREATE_CUSTOMER,
   INCOME_COMMAND_CREATE_DRAFT,
   INCOME_COMMAND_CREATE_ITEM,
@@ -62,6 +65,7 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_UPDATE_DRAFT,
   INCOME_COMMAND_CANCEL_DRAFT,
   INCOME_COMMAND_ISSUE_DOCUMENT,
+  INCOME_COMMAND_RETRY_ACCOUNTING_POSTING,
 ]);
 
 async function commandResponse(
@@ -419,6 +423,14 @@ export async function executeIncomeCommand(
 
   if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
     await executeIssueIncomeDocument(ctx, body);
+    return commandResponse(ctx, command);
+  }
+
+  if (command === INCOME_COMMAND_RETRY_ACCOUNTING_POSTING) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeIssuePermission(scope);
+    const income_document_id = reqUuid(body.income_document_id, 'income_document_id');
+    await retryAccountingPostingForIssuedDocument(ctx, scope.org_id, income_document_id);
     return commandResponse(ctx, command);
   }
 
