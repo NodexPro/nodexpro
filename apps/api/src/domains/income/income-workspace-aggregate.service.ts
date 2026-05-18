@@ -13,6 +13,7 @@ import {
   accountingDisplayStatusLabel,
   resolveAccountingDisplayStatus,
 } from './income-accounting-posting.mapping.js';
+import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './income-workspace-cards.builders.js';
 import {
   INCOME_WORKSPACE_AGGREGATE_KEY,
@@ -193,7 +194,7 @@ async function loadIssuedDocuments(
   let query = supabaseAdmin
     .from('income_documents')
     .select(
-      'id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at, accounting_posting_status, accounting_entry_id',
+      'id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at, accounting_posting_status, accounting_entry_id, pdf_render_status, pdf_asset_id',
     )
     .eq('document_status', 'issued')
     .order('issue_date', { ascending: false })
@@ -204,6 +205,15 @@ async function loadIssuedDocuments(
   if (error) throw error;
 
   const canRetryPosting = scope.permissions.issue;
+  const canView = scope.permissions.view;
+
+  const pdfStatusLabel = (status: string): string => {
+    if (status === 'rendered') return 'PDF ready';
+    if (status === 'failed') return 'PDF failed';
+    if (status === 'pending') return 'PDF pending';
+    return status;
+  };
+
   return (data ?? []).map((row) => {
     const r = row as {
       id: string;
@@ -218,6 +228,8 @@ async function loadIssuedDocuments(
       created_at: string;
       accounting_posting_status: string;
       accounting_entry_id: string | null;
+      pdf_render_status: string;
+      pdf_asset_id: string | null;
     };
     const lines = Array.isArray(r.lines_snapshot_json) ? r.lines_snapshot_json : [];
     const customerDisplay =
@@ -229,6 +241,12 @@ async function loadIssuedDocuments(
     const rowActions: string[] = [];
     if (canRetryPosting && r.accounting_posting_status === 'failed') {
       rowActions.push('retry_income_document_accounting_posting');
+    }
+    if (canRetryPosting && r.pdf_render_status === 'failed') {
+      rowActions.push('retry_income_document_pdf_render');
+    }
+    if (canView && r.pdf_render_status === 'rendered' && r.pdf_asset_id) {
+      rowActions.push('download_pdf');
     }
     return {
       document_id: r.id,
@@ -250,6 +268,13 @@ async function loadIssuedDocuments(
       accounting_entry_reference: r.accounting_entry_id
         ? `accounting_entry:${r.accounting_entry_id}`
         : null,
+      pdf_render_status: r.pdf_render_status,
+      pdf_status_label: pdfStatusLabel(r.pdf_render_status),
+      pdf_asset_id: r.pdf_asset_id,
+      pdf_download_path:
+        r.pdf_render_status === 'rendered' && r.pdf_asset_id
+          ? incomeDocumentDownloadPath(r.id)
+          : null,
       allowed_actions: rowActions,
     };
   });
@@ -301,6 +326,7 @@ function issuedDocumentsTableModel(
       { key: 'issue_date', label: 'תאריך הנפקה' },
       { key: 'document_status_label', label: 'סטטוס' },
       { key: 'accounting_status_label', label: 'חשבונאות' },
+      { key: 'pdf_status_label', label: 'PDF' },
     ],
     rows,
     empty_state: {

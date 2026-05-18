@@ -9,6 +9,7 @@ export const INCOME_COMMAND_UPDATE_DRAFT = 'update_income_document_draft';
 export const INCOME_COMMAND_CANCEL_DRAFT = 'cancel_income_document_draft';
 export const INCOME_COMMAND_ISSUE_DOCUMENT = 'issue_income_document';
 export const INCOME_COMMAND_RETRY_ACCOUNTING_POSTING = 'retry_income_document_accounting_posting';
+export const INCOME_COMMAND_RETRY_PDF_RENDER = 'retry_income_document_pdf_render';
 export const INCOME_MODULE_CODE = 'income';
 export const INCOME_PERMISSIONS = {
     view: 'income.view',

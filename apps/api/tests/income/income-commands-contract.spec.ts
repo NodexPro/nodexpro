@@ -75,3 +75,15 @@ test('issued document rows expose accounting_posting_status', () => {
   assert.match(typesSource, /accounting_posting_status/);
   assert.match(workspaceSource, /accounting_status_label/);
 });
+
+test('retry_income_document_pdf_render command is registered', () => {
+  assert.match(commandsSource, /INCOME_COMMAND_RETRY_PDF_RENDER/);
+  assert.match(commandsSource, /renderIncomeDocumentPdf/);
+});
+
+test('issued document rows expose pdf_render_status', () => {
+  const typesSource = readFileSync(join(dir, '../../src/domains/income/income.types.ts'), 'utf8');
+  assert.match(typesSource, /pdf_render_status/);
+  assert.match(typesSource, /pdf_download_path/);
+  assert.match(workspaceSource, /pdf_status_label/);
+});

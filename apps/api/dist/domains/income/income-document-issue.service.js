@@ -11,6 +11,7 @@ import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableD
 import { allocateIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { assertDraftReadyToIssue, buildLegalSnapshotForIssue, buildTotalsSnapshotForIssue, } from './income-document-issue.pure.js';
 import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
+import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 async function loadFullDraftForIssue(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
@@ -196,5 +197,6 @@ export async function executeIssueIncomeDocument(ctx, body) {
             issuer_business_id: scope.issuer_business_id,
         },
     });
+    await renderIncomeDocumentPdf(ctx, scope.org_id, issuedId);
     return issuedId;
 }

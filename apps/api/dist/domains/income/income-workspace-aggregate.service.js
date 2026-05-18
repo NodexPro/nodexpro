@@ -7,6 +7,7 @@ import { loadActiveIncomeIssuerScope, toIssuerContextSummary } from './income-is
 import { buildDocumentCreationSchema } from './income-document-creation-schema.builders.js';
 import { resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
 import { accountingDisplayStatusLabel, resolveAccountingDisplayStatus, } from './income-accounting-posting.mapping.js';
+import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './income-workspace-cards.builders.js';
 import { INCOME_WORKSPACE_AGGREGATE_KEY, } from './income.types.js';
 const DOCUMENT_TYPE_LABELS = {
@@ -134,7 +135,7 @@ async function loadDrafts(scope, customerNames) {
 async function loadIssuedDocuments(scope) {
     let query = supabaseAdmin
         .from('income_documents')
-        .select('id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at, accounting_posting_status, accounting_entry_id')
+        .select('id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at, accounting_posting_status, accounting_entry_id, pdf_render_status, pdf_asset_id')
         .eq('document_status', 'issued')
         .order('issue_date', { ascending: false })
         .order('created_at', { ascending: false })
@@ -144,6 +145,16 @@ async function loadIssuedDocuments(scope) {
     if (error)
         throw error;
     const canRetryPosting = scope.permissions.issue;
+    const canView = scope.permissions.view;
+    const pdfStatusLabel = (status) => {
+        if (status === 'rendered')
+            return 'PDF ready';
+        if (status === 'failed')
+            return 'PDF failed';
+        if (status === 'pending')
+            return 'PDF pending';
+        return status;
+    };
     return (data ?? []).map((row) => {
         const r = row;
         const lines = Array.isArray(r.lines_snapshot_json) ? r.lines_snapshot_json : [];
@@ -155,6 +166,12 @@ async function loadIssuedDocuments(scope) {
         const rowActions = [];
         if (canRetryPosting && r.accounting_posting_status === 'failed') {
             rowActions.push('retry_income_document_accounting_posting');
+        }
+        if (canRetryPosting && r.pdf_render_status === 'failed') {
+            rowActions.push('retry_income_document_pdf_render');
+        }
+        if (canView && r.pdf_render_status === 'rendered' && r.pdf_asset_id) {
+            rowActions.push('download_pdf');
         }
         return {
             document_id: r.id,
@@ -175,6 +192,12 @@ async function loadIssuedDocuments(scope) {
             accounting_entry_id: r.accounting_entry_id,
             accounting_entry_reference: r.accounting_entry_id
                 ? `accounting_entry:${r.accounting_entry_id}`
+                : null,
+            pdf_render_status: r.pdf_render_status,
+            pdf_status_label: pdfStatusLabel(r.pdf_render_status),
+            pdf_asset_id: r.pdf_asset_id,
+            pdf_download_path: r.pdf_render_status === 'rendered' && r.pdf_asset_id
+                ? incomeDocumentDownloadPath(r.id)
                 : null,
             allowed_actions: rowActions,
         };
@@ -222,6 +245,7 @@ function issuedDocumentsTableModel(rows) {
             { key: 'issue_date', label: 'תאריך הנפקה' },
             { key: 'document_status_label', label: 'סטטוס' },
             { key: 'accounting_status_label', label: 'חשבונאות' },
+            { key: 'pdf_status_label', label: 'PDF' },
         ],
         rows,
         empty_state: {

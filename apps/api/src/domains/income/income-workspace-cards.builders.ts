@@ -129,7 +129,14 @@ export function buildWorkspaceAllowedActions(perms: IncomeWorkspacePermissions):
     );
   }
   if (perms.issue) {
-    actions.push('issue_income_document', 'retry_income_document_accounting_posting');
+    actions.push(
+      'issue_income_document',
+      'retry_income_document_accounting_posting',
+      'retry_income_document_pdf_render',
+    );
+  }
+  if (perms.view) {
+    actions.push('download_pdf');
   }
   return actions;
 }

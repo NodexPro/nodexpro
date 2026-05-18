@@ -28,6 +28,7 @@ import {
   buildTotalsSnapshotForIssue,
 } from './income-document-issue.pure.js';
 import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
+import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import type { IncomeDocumentType } from './income.types.js';
 
 interface FullDraftRow {
@@ -275,6 +276,8 @@ export async function executeIssueIncomeDocument(
       issuer_business_id: scope.issuer_business_id,
     },
   });
+
+  await renderIncomeDocumentPdf(ctx, scope.org_id, issuedId);
 
   return issuedId;
 }

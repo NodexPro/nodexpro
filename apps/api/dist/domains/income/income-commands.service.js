@@ -12,8 +12,9 @@ import { parseDraftPayloadBody, validateDraftAgainstDocumentTypeRules, } from '.
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
+import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
-import { INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, } from './income.types.js';
+import { INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, } from './income.types.js';
 const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_SELECT_ISSUER,
     INCOME_COMMAND_CREATE_CUSTOMER,
@@ -24,6 +25,7 @@ const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_CANCEL_DRAFT,
     INCOME_COMMAND_ISSUE_DOCUMENT,
     INCOME_COMMAND_RETRY_ACCOUNTING_POSTING,
+    INCOME_COMMAND_RETRY_PDF_RENDER,
 ]);
 async function commandResponse(ctx, command) {
     return {
@@ -314,6 +316,13 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         assertIncomeIssuePermission(scope);
         const income_document_id = reqUuid(body.income_document_id, 'income_document_id');
         await retryAccountingPostingForIssuedDocument(ctx, scope.org_id, income_document_id);
+        return commandResponse(ctx, command);
+    }
+    if (command === INCOME_COMMAND_RETRY_PDF_RENDER) {
+        const scope = await loadActiveIncomeIssuerScope(ctx);
+        assertIncomeIssuePermission(scope);
+        const income_document_id = reqUuid(body.income_document_id, 'income_document_id');
+        await renderIncomeDocumentPdf(ctx, scope.org_id, income_document_id);
         return commandResponse(ctx, command);
     }
     throw badRequest(`Unhandled income command: ${command}`);

@@ -9,6 +9,7 @@ import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
 import { executeIncomeCommand } from './income-commands.service.js';
 import { buildIncomeWorkspaceContextAggregate } from './income-issuer-context.service.js';
+import { downloadIncomeDocumentPdfBuffer } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
 import { INCOME_MODULE_CODE, INCOME_PERMISSIONS } from './income.types.js';
 const router = Router();
@@ -37,6 +38,17 @@ router.post('/commands', requirePermission(INCOME_PERMISSIONS.edit), async (req,
             userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
         });
         return res.json(out);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+router.get('/documents/:id/download', requirePermission(INCOME_PERMISSIONS.view), async (req, res, next) => {
+    try {
+        const { buffer, fileName } = await downloadIncomeDocumentPdfBuffer(req.context, String(req.params.id));
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName.replace(/"/g, '')}"`);
+        return res.send(buffer);
     }
     catch (e) {
         next(e);

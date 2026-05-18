@@ -255,6 +255,11 @@ export const AUDIT_ACTIONS = {
   INCOME_ACCOUNTING_POSTING_SUCCEEDED: 'income.accounting_posting_succeeded',
   INCOME_ACCOUNTING_POSTING_FAILED: 'income.accounting_posting_failed',
   INCOME_ACCOUNTING_POSTING_NOT_REQUIRED: 'income.accounting_posting_not_required',
+  /** Income INC-6 — PDF render lifecycle. */
+  INCOME_PDF_RENDER_STARTED: 'income.pdf_render_started',
+  INCOME_PDF_RENDER_SUCCEEDED: 'income.pdf_render_succeeded',
+  INCOME_PDF_RENDER_FAILED: 'income.pdf_render_failed',
+  INCOME_PDF_DOWNLOADED: 'income.pdf_downloaded',
 } as const;
 
 type AuditPayload = Record<string, unknown>;
