@@ -8,6 +8,7 @@ export const INCOME_COMMAND_CREATE_ITEM = 'create_income_item' as const;
 export const INCOME_COMMAND_CREATE_DRAFT = 'create_income_document_draft' as const;
 export const INCOME_COMMAND_UPDATE_DRAFT = 'update_income_document_draft' as const;
 export const INCOME_COMMAND_CANCEL_DRAFT = 'cancel_income_document_draft' as const;
+export const INCOME_COMMAND_ISSUE_DOCUMENT = 'issue_income_document' as const;
 
 export const INCOME_MODULE_CODE = 'income' as const;
 
@@ -131,6 +132,22 @@ export interface IncomeDraftsTableRow {
   allowed_actions: string[];
 }
 
+export interface IncomeIssuedDocumentsTableRow {
+  document_id: string;
+  document_number: string;
+  document_type: IncomeDocumentType;
+  document_type_label: string;
+  document_status: string;
+  document_status_label: string;
+  customer_display_name: string | null;
+  issue_date: string;
+  currency: string;
+  line_count: number;
+  source_draft_id: string | null;
+  created_at: string;
+  allowed_actions: string[];
+}
+
 export interface IncomeTableModel<T> {
   columns: IncomeTableColumn[];
   rows: T[];
@@ -175,6 +192,8 @@ export interface IncomeWorkspaceAggregate {
   customers_table_model: IncomeTableModel<IncomeCustomersTableRow>;
   items_table_model: IncomeTableModel<IncomeItemsTableRow>;
   drafts_table_model: IncomeTableModel<IncomeDraftsTableRow>;
+  issued_documents_table_model: IncomeTableModel<IncomeIssuedDocumentsTableRow>;
+  issued_documents_count: number;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
 }
@@ -186,7 +205,8 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_CREATE_ITEM
   | typeof INCOME_COMMAND_CREATE_DRAFT
   | typeof INCOME_COMMAND_UPDATE_DRAFT
-  | typeof INCOME_COMMAND_CANCEL_DRAFT;
+  | typeof INCOME_COMMAND_CANCEL_DRAFT
+  | typeof INCOME_COMMAND_ISSUE_DOCUMENT;
 
 export interface IncomeCommandResponse {
   ok: true;

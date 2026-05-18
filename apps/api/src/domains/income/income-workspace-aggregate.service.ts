@@ -15,6 +15,7 @@ import {
   type IncomeCustomersTableRow,
   type IncomeDocumentType,
   type IncomeDraftsTableRow,
+  type IncomeIssuedDocumentsTableRow,
   type IncomeItemsTableRow,
   type IncomeTableModel,
   type IncomeWorkspaceAggregate,
@@ -45,7 +46,7 @@ function applyIssuerScopeToBuilder(
 }
 
 async function countScoped(
-  table: 'income_customers' | 'income_items' | 'income_document_drafts',
+  table: 'income_customers' | 'income_items' | 'income_document_drafts' | 'income_documents',
   scope: ActiveIncomeIssuerScope,
   statusFilter?: { column: string; value: string | boolean },
 ): Promise<number> {
@@ -145,6 +146,7 @@ async function loadDrafts(
   if (error) throw error;
 
   const canEdit = scope.permissions.edit;
+  const canIssue = scope.permissions.issue;
   return (data ?? []).map((row) => {
     const r = row as {
       id: string;
@@ -173,9 +175,63 @@ async function loadDrafts(
       customer_display_name: customerDisplay,
       line_count: lines.length,
       updated_at: r.updated_at,
-      allowed_actions: canEdit
-        ? ['update_income_document_draft', 'cancel_income_document_draft']
-        : [],
+      allowed_actions: [
+        ...(canEdit ? ['update_income_document_draft', 'cancel_income_document_draft'] : []),
+        ...(canIssue ? ['issue_income_document'] : []),
+      ],
+    };
+  });
+}
+
+async function loadIssuedDocuments(
+  scope: ActiveIncomeIssuerScope,
+): Promise<IncomeIssuedDocumentsTableRow[]> {
+  let query = supabaseAdmin
+    .from('income_documents')
+    .select(
+      'id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at',
+    )
+    .eq('document_status', 'issued')
+    .order('issue_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(500);
+  query = applyIssuerScopeToBuilder(query, scope);
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return (data ?? []).map((row) => {
+    const r = row as {
+      id: string;
+      document_number: string;
+      document_type: IncomeDocumentType;
+      document_status: string;
+      customer_snapshot_json: Record<string, unknown> | null;
+      issue_date: string;
+      currency: string;
+      lines_snapshot_json: unknown;
+      source_draft_id: string | null;
+      created_at: string;
+    };
+    const lines = Array.isArray(r.lines_snapshot_json) ? r.lines_snapshot_json : [];
+    const customerDisplay =
+      r.customer_snapshot_json?.display_name != null
+        ? String(r.customer_snapshot_json.display_name)
+        : null;
+    const docType = r.document_type;
+    return {
+      document_id: r.id,
+      document_number: r.document_number,
+      document_type: docType,
+      document_type_label: DOCUMENT_TYPE_LABELS[docType],
+      document_status: r.document_status,
+      document_status_label: r.document_status === 'issued' ? 'Issued' : r.document_status,
+      customer_display_name: customerDisplay,
+      issue_date: r.issue_date,
+      currency: r.currency,
+      line_count: lines.length,
+      source_draft_id: r.source_draft_id,
+      created_at: r.created_at,
+      allowed_actions: [],
     };
   });
 }
@@ -215,6 +271,26 @@ function itemsTableModel(rows: IncomeItemsTableRow[]): IncomeTableModel<IncomeIt
   };
 }
 
+function issuedDocumentsTableModel(
+  rows: IncomeIssuedDocumentsTableRow[],
+): IncomeTableModel<IncomeIssuedDocumentsTableRow> {
+  return {
+    columns: [
+      { key: 'document_number', label: 'מספר מסמך' },
+      { key: 'document_type_label', label: 'סוג מסמך' },
+      { key: 'customer_display_name', label: 'לקוח' },
+      { key: 'issue_date', label: 'תאריך הנפקה' },
+      { key: 'document_status_label', label: 'סטטוס' },
+    ],
+    rows,
+    empty_state: {
+      visible: rows.length === 0,
+      title: 'אין מסמכים שהונפקו',
+      description: null,
+    },
+  };
+}
+
 function draftsTableModel(rows: IncomeDraftsTableRow[]): IncomeTableModel<IncomeDraftsTableRow> {
   return {
     columns: [
@@ -237,10 +313,11 @@ export async function buildIncomeWorkspaceAggregate(ctx: RequestContext): Promis
   const scope = await loadActiveIncomeIssuerScope(ctx);
   if (!scope.permissions.view) throw forbidden('income.view required');
 
-  const [customersCount, itemsCount, draftsCount] = await Promise.all([
+  const [customersCount, itemsCount, draftsCount, issuedCount] = await Promise.all([
     countScoped('income_customers', scope, { column: 'status', value: 'active' }),
     countScoped('income_items', scope, { column: 'active', value: true }),
     countScoped('income_document_drafts', scope, { column: 'status', value: 'draft' }),
+    countScoped('income_documents', scope, { column: 'document_status', value: 'issued' }),
   ]);
 
   const docTypesResult = await resolveAvailableDocumentTypes(scope.org_id, scope);
@@ -251,6 +328,7 @@ export async function buildIncomeWorkspaceAggregate(ctx: RequestContext): Promis
   const customerNames = new Map(customers.map((c) => [c.customer_id, c.display_name]));
   const items = await loadItems(scope);
   const drafts = await loadDrafts(scope, customerNames);
+  const issuedDocuments = await loadIssuedDocuments(scope);
 
   return {
     aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
@@ -265,12 +343,15 @@ export async function buildIncomeWorkspaceAggregate(ctx: RequestContext): Promis
         customers: customersCount,
         items: itemsCount,
         drafts: draftsCount,
+        issued_documents: issuedCount,
       },
       { canCreateDocument },
     ),
     customers_table_model: customersTableModel(customers),
     items_table_model: itemsTableModel(items),
     drafts_table_model: draftsTableModel(drafts),
+    issued_documents_table_model: issuedDocumentsTableModel(issuedDocuments),
+    issued_documents_count: issuedCount,
     allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
     warnings: docTypesResult.warnings,
   };

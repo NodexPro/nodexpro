@@ -35,21 +35,6 @@ function incomePermissionsFromContext(ctx) {
         issue_on_behalf: hasPermission(perms, INCOME_PERMISSIONS.issueOnBehalf),
     };
 }
-async function loadOrganizationNames(orgId) {
-    const { data, error } = await supabaseAdmin
-        .from('organizations')
-        .select('name, legal_name')
-        .eq('id', orgId)
-        .single();
-    if (error || !data)
-        throw notFound('Organization not found');
-    return {
-        name: String(data.name ?? '').trim(),
-        legal_name: data.legal_name != null
-            ? String(data.legal_name).trim() || null
-            : null,
-    };
-}
 /** Ensures the tenant-owned issuer profile exists; syncs from Core when missing or stale. */
 export async function ensureOrgIncomeIssuerProfile(orgId) {
     const synced = await syncIncomeIssuerProfileFromOrganization(orgId, { audit: false });

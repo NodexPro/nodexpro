@@ -16,7 +16,7 @@ test('workspace cards include non-empty allowed_acting_modes via separate builde
 test('new_document card omits create action when document creation is disabled', () => {
   const cards = buildIncomeWorkspaceCards(
     { view: true, edit: true, issue: true, issue_on_behalf: true },
-    { customers: 0, items: 0, drafts: 0 },
+    { customers: 0, items: 0, drafts: 0, issued_documents: 0 },
     { canCreateDocument: false },
   );
   const newDoc = cards.find((c) => c.key === 'new_document');
@@ -26,9 +26,11 @@ test('new_document card omits create action when document creation is disabled',
 test('workspace cards never use empty arrays for customers/items/drafts counts', () => {
   const cards = buildIncomeWorkspaceCards(
     { view: true, edit: true, issue: true, issue_on_behalf: true },
-    { customers: 3, items: 2, drafts: 1 },
+    { customers: 3, items: 2, drafts: 1, issued_documents: 4 },
   );
-  assert.equal(cards.length, 11);
+  assert.equal(cards.length, 12);
+  const documents = cards.find((c) => c.key === 'documents');
+  assert.equal(documents?.count, 4);
   const customers = cards.find((c) => c.key === 'customers');
   const drafts = cards.find((c) => c.key === 'drafts');
   assert.equal(customers?.count, 3);

@@ -29,3 +29,10 @@ export function assertIncomeEditPermission(scope) {
     if (!scope.permissions.edit)
         throw forbidden('income.edit required');
 }
+export function assertIncomeIssuePermission(scope) {
+    if (!scope.permissions.issue)
+        throw forbidden('income.issue required');
+    if (scope.acting_mode === 'office_representative' && !scope.permissions.issue_on_behalf) {
+        throw forbidden('income.issue_on_behalf required for office_representative mode');
+    }
+}

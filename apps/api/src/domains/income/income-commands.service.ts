@@ -37,9 +37,11 @@ import {
   findAvailableDocumentType,
   resolveAvailableDocumentTypes,
 } from './income-document-types.resolver.js';
+import { executeIssueIncomeDocument } from './income-document-issue.service.js';
 import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
 import {
   INCOME_COMMAND_CANCEL_DRAFT,
+  INCOME_COMMAND_ISSUE_DOCUMENT,
   INCOME_COMMAND_CREATE_CUSTOMER,
   INCOME_COMMAND_CREATE_DRAFT,
   INCOME_COMMAND_CREATE_ITEM,
@@ -59,6 +61,7 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_CREATE_DRAFT,
   INCOME_COMMAND_UPDATE_DRAFT,
   INCOME_COMMAND_CANCEL_DRAFT,
+  INCOME_COMMAND_ISSUE_DOCUMENT,
 ]);
 
 async function commandResponse(
@@ -274,6 +277,9 @@ async function executeUpdateDraft(ctx: RequestContext, body: Record<string, unkn
   if (existing.status === 'cancelled') {
     throw badRequest('Cannot update a cancelled draft');
   }
+  if (existing.status === 'issued') {
+    throw badRequest('Cannot update an issued draft');
+  }
 
   const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
   const payload = parseDraftPayloadBody(
@@ -336,6 +342,9 @@ async function executeCancelDraft(ctx: RequestContext, body: Record<string, unkn
   const existing = await loadDraftInScope(scope, draft_id);
   if (existing.status === 'cancelled') {
     throw badRequest('Draft is already cancelled');
+  }
+  if (existing.status === 'issued') {
+    throw badRequest('Cannot cancel an issued draft');
   }
 
   const { error } = await supabaseAdmin
@@ -405,6 +414,11 @@ export async function executeIncomeCommand(
 
   if (command === INCOME_COMMAND_CANCEL_DRAFT) {
     await executeCancelDraft(ctx, body);
+    return commandResponse(ctx, command);
+  }
+
+  if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
+    await executeIssueIncomeDocument(ctx, body);
     return commandResponse(ctx, command);
   }
 

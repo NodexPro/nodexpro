@@ -10,8 +10,9 @@ import { applySelectIncomeIssuerContext, buildIncomeWorkspaceContextAggregate, }
 import { assertIncomeEditPermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
 import { parseDraftPayloadBody, validateDraftAgainstDocumentTypeRules, } from './income-document-draft.helpers.js';
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
+import { executeIssueIncomeDocument } from './income-document-issue.service.js';
 import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
-import { INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, } from './income.types.js';
+import { INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, } from './income.types.js';
 const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_SELECT_ISSUER,
     INCOME_COMMAND_CREATE_CUSTOMER,
@@ -20,6 +21,7 @@ const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_CREATE_DRAFT,
     INCOME_COMMAND_UPDATE_DRAFT,
     INCOME_COMMAND_CANCEL_DRAFT,
+    INCOME_COMMAND_ISSUE_DOCUMENT,
 ]);
 async function commandResponse(ctx, command) {
     return {
@@ -184,6 +186,9 @@ async function executeUpdateDraft(ctx, body) {
     if (existing.status === 'cancelled') {
         throw badRequest('Cannot update a cancelled draft');
     }
+    if (existing.status === 'issued') {
+        throw badRequest('Cannot update an issued draft');
+    }
     const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
     const payload = parseDraftPayloadBody(body, parseIncomeDocumentType, optionalUuid, reqJsonArray);
     assertDocumentTypeEnabled(available_document_types, payload.document_type);
@@ -236,6 +241,9 @@ async function executeCancelDraft(ctx, body) {
     const existing = await loadDraftInScope(scope, draft_id);
     if (existing.status === 'cancelled') {
         throw badRequest('Draft is already cancelled');
+    }
+    if (existing.status === 'issued') {
+        throw badRequest('Cannot cancel an issued draft');
     }
     const { error } = await supabaseAdmin
         .from('income_document_drafts')
@@ -293,6 +301,10 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
     }
     if (command === INCOME_COMMAND_CANCEL_DRAFT) {
         await executeCancelDraft(ctx, body);
+        return commandResponse(ctx, command);
+    }
+    if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
+        await executeIssueIncomeDocument(ctx, body);
         return commandResponse(ctx, command);
     }
     throw badRequest(`Unhandled income command: ${command}`);

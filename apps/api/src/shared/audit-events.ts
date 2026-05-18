@@ -247,6 +247,9 @@ export const AUDIT_ACTIONS = {
   INCOME_DOCUMENT_DRAFT_CANCELLED: 'income.document_draft_cancelled',
   /** Income INC-3.5 — issuer profile projection synced from Core org business profile. */
   INCOME_ISSUER_PROFILE_SYNCED: 'income.issuer_profile_synced',
+  /** Income INC-4 — issued document + numbering allocation. */
+  INCOME_DOCUMENT_ISSUED: 'income.document_issued',
+  INCOME_DOCUMENT_NUMBER_ALLOCATED: 'income.document_number_allocated',
 } as const;
 
 type AuditPayload = Record<string, unknown>;

@@ -52,3 +52,15 @@ test('workspace aggregate includes available_document_types and document_creatio
   assert.match(typesSource, /document_creation_schema:\s*IncomeDocumentCreationSchema/);
   assert.match(workspaceSource, /resolveAvailableDocumentTypes/);
 });
+
+test('issue_income_document command is registered', () => {
+  assert.match(commandsSource, /INCOME_COMMAND_ISSUE_DOCUMENT/);
+  assert.match(commandsSource, /executeIssueIncomeDocument/);
+});
+
+test('workspace aggregate includes issued documents table', () => {
+  const typesSource = readFileSync(join(dir, '../../src/domains/income/income.types.ts'), 'utf8');
+  assert.match(typesSource, /issued_documents_table_model/);
+  assert.match(workspaceSource, /loadIssuedDocuments/);
+  assert.match(workspaceSource, /income_documents/);
+});

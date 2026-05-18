@@ -7,6 +7,7 @@ export function buildIncomeWorkspaceCards(
     customers: number;
     items: number;
     drafts: number;
+    issued_documents: number;
   },
   options?: { canCreateDocument?: boolean },
 ): IncomeWorkspaceCard[] {
@@ -42,6 +43,12 @@ export function buildIncomeWorkspaceCards(
       label: 'ריטיינרים',
       count: 0,
       allowed_actions: editActions,
+    },
+    {
+      key: 'documents',
+      label: 'מסמכים',
+      count: counts.issued_documents,
+      allowed_actions: perms.view ? ['open'] : [],
     },
     {
       key: 'drafts',
@@ -103,6 +110,9 @@ export function buildWorkspaceAllowedActions(perms: IncomeWorkspacePermissions):
       'update_income_document_draft',
       'cancel_income_document_draft',
     );
+  }
+  if (perms.issue) {
+    actions.push('issue_income_document');
   }
   return actions;
 }

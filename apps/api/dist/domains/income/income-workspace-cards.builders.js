@@ -32,6 +32,12 @@ export function buildIncomeWorkspaceCards(perms, counts, options) {
             allowed_actions: editActions,
         },
         {
+            key: 'documents',
+            label: 'מסמכים',
+            count: counts.issued_documents,
+            allowed_actions: perms.view ? ['open'] : [],
+        },
+        {
             key: 'drafts',
             label: 'טיוטות',
             count: counts.drafts,
@@ -83,6 +89,9 @@ export function buildWorkspaceAllowedActions(perms) {
         actions.push('view_workspace');
     if (perms.edit) {
         actions.push('select_issuer_context', 'create_income_customer', 'create_one_time_income_customer', 'create_income_item', 'create_income_document_draft', 'update_income_document_draft', 'cancel_income_document_draft');
+    }
+    if (perms.issue) {
+        actions.push('issue_income_document');
     }
     return actions;
 }
