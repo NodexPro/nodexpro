@@ -31,6 +31,7 @@ import { DocflowCommunicationReviewPage } from './pages/DocflowCommunicationRevi
 import { DocflowInvitesManagementPage } from './pages/DocflowInvitesManagementPage';
 import { DocflowMessengerPage } from './pages/DocflowMessengerPage';
 import { WorkEngineQueue } from './pages/WorkEngineQueue';
+import { IncomeWorkspacePage } from './pages/IncomeWorkspacePage';
 import { I18nProvider } from './i18n/I18nProvider';
 
 function PwaUpdatePrompt() {
@@ -142,6 +143,7 @@ function AppRoutes() {
         <Route path="m/docflow/invites" element={<DocflowInvitesManagementPage />} />
         <Route path="m/docflow/review" element={<DocflowCommunicationReviewPage />} />
         <Route path="m/docflow/messenger" element={<DocflowMessengerPage />} />
+        <Route path="m/income" element={<IncomeWorkspacePage />} />
         <Route path="m/client-operations" element={<ClientOperationsRegistry />} />
         <Route path="m/client-operations/clients/:clientId" element={<ClientOperationsClientCase />} />
         <Route path="work-engine/queue" element={<WorkEngineQueue />} />

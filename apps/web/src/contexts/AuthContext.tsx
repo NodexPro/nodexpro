@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { apiJson } from '../api/client';
 import { AUTH } from '../api/endpoints';
 import { setBackendActiveOrganizationId } from '../api/org-context';
-import type { SidebarAccountBlockModel, UiLanguageCode } from '../types/session';
+import type { SessionNavItemDto, ShellProfile, SidebarAccountBlockModel, UiLanguageCode } from '../types/session';
 
 export interface MeData {
   user: { id: string; email: string; fullName: string | null; status: string };
@@ -13,6 +13,10 @@ export interface MeData {
   enabledModules: string[];
   navItems: { path: string; label: string; order: number }[];
   moduleAppNavItems?: { path: string; label: string }[];
+  shell_profile?: ShellProfile;
+  default_route?: string;
+  visible_nav_items?: SessionNavItemDto[];
+  income_onboarding_complete?: boolean;
   sidebar_account_block: SidebarAccountBlockModel;
   session_state?: 'platform_owner' | 'needs_onboarding' | 'needs_org_selection' | 'ready' | 'blocked';
   redirect_to?: string;

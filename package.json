@@ -4,6 +4,7 @@
   "scripts": {
     "architecture:check": "node ./scripts/architecture-check.mjs check",
     "architecture:baseline": "node ./scripts/architecture-check.mjs baseline",
-    "architecture:report": "node ./scripts/architecture-check.mjs report"
+    "architecture:report": "node ./scripts/architecture-check.mjs report",
+    "income:web-contract": "node ./scripts/check-income-web-contract.mjs"
   }
 }

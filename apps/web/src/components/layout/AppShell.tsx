@@ -32,7 +32,17 @@ export function AppShell() {
 
   if (auth.status !== 'authenticated') return null;
   const { me } = auth;
-  let navItems = me.navItems?.length ? me.navItems : buildNavItemsFallback(me.permissions, me.enabledModules);
+
+  const shellNav =
+    me.visible_nav_items?.length && me.shell_profile
+      ? me.visible_nav_items.map((n) => ({ path: n.path, label: n.label, order: n.order }))
+      : null;
+
+  let navItems = shellNav?.length
+    ? shellNav
+    : me.navItems?.length
+      ? me.navItems
+      : buildNavItemsFallback(me.permissions, me.enabledModules);
   if (canSeeModulesCatalog(me.permissions) && !navItems.some((n) => n.path === '/modules')) {
     navItems = [...navItems, { path: '/modules', label: 'Modules', order: 30 }].sort((a, b) => a.order - b.order);
   }
@@ -105,6 +115,7 @@ function buildModuleSubnavFromEnabled(enabled: string[]): { path: string; label:
   const map: Record<string, { path: string; label: string; moduleCode: string }> = {
     'client-operations': { path: '/m/client-operations', label: 'Nodex לקוחות', moduleCode: 'client-operations' },
     docflow: { path: '/m/docflow/invites', label: 'DocFlow Chat', moduleCode: 'docflow' },
+    income: { path: '/m/income', label: 'הכנסות', moduleCode: 'income' },
   };
   return (enabled ?? [])
     .filter((c) => c !== 'core')
@@ -115,6 +126,7 @@ function inferModuleCodeFromPath(path: string): string | null {
   if (path.startsWith('/m/core')) return 'core';
   if (path.startsWith('/m/client-operations')) return 'client-operations';
   if (path.startsWith('/m/docflow')) return 'docflow';
+  if (path.startsWith('/m/income')) return 'income';
   return null;
 }
 

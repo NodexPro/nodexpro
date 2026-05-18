@@ -1,5 +1,13 @@
 export type UiLanguageCode = 'en' | 'he';
 
+export type ShellProfile = 'income_only' | 'full_platform';
+
+export interface SessionNavItemDto {
+  path: string;
+  label: string;
+  order: number;
+}
+
 export type SidebarAccountBlockModel = {
   organization_name: string | null;
   user_display_name: string;

@@ -333,6 +333,14 @@ export const docflowPortalFileOpen = (fileAssetId: string) =>
   `/docflow/portal/files/${encodeURIComponent(fileAssetId)}/open`;
 
 // Platform owner Country Pack API (owner-only, not tenant workspace)
+/** Income module (INC-7) — aggregate + commands only. */
+export const INCOME = {
+  workspaceContextAggregate: '/income/aggregates/workspace-context',
+  workspaceAggregate: '/income/aggregates/workspace',
+  commands: '/income/commands',
+  documentDownload: (documentId: string) => `/income/documents/${encodeURIComponent(documentId)}/download`,
+} as const;
+
 export const OWNER = {
   /** Backend read model: current session may access platform-owner APIs */
   session: '/owner/session',
