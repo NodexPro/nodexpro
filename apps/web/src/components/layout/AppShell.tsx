@@ -115,7 +115,7 @@ function buildModuleSubnavFromEnabled(enabled: string[]): { path: string; label:
   const map: Record<string, { path: string; label: string; moduleCode: string }> = {
     'client-operations': { path: '/m/client-operations', label: 'Nodex לקוחות', moduleCode: 'client-operations' },
     docflow: { path: '/m/docflow/invites', label: 'DocFlow Chat', moduleCode: 'docflow' },
-    income: { path: '/m/income', label: 'הכנסות', moduleCode: 'income' },
+    invoice: { path: '/m/income', label: 'הכנסות', moduleCode: 'invoice' },
   };
   return (enabled ?? [])
     .filter((c) => c !== 'core')
@@ -126,7 +126,7 @@ function inferModuleCodeFromPath(path: string): string | null {
   if (path.startsWith('/m/core')) return 'core';
   if (path.startsWith('/m/client-operations')) return 'client-operations';
   if (path.startsWith('/m/docflow')) return 'docflow';
-  if (path.startsWith('/m/income')) return 'income';
+  if (path.startsWith('/m/income')) return 'invoice';
   return null;
 }
 

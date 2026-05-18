@@ -30,6 +30,18 @@ test('income-only commercial module set returns income_only shell', () => {
   assert.ok(!paths.includes('/clients'));
 });
 
+test('invoice-only commercial module (legacy code) returns income_only shell', () => {
+  const shell = computeSessionShellFromModules({
+    commercialModuleCodes: ['invoice'],
+    permissions: ['settings:read'],
+    allCoreNavItems: coreNav,
+    moduleAppNavItems: moduleNav,
+    incomeOnboardingComplete: true,
+  });
+  assert.equal(shell.shell_profile, 'income_only');
+  assert.equal(shell.default_route, '/m/income');
+});
+
 test('income-only incomplete onboarding routes to settings', () => {
   const shell = computeSessionShellFromModules({
     commercialModuleCodes: ['income'],

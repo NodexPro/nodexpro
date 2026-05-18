@@ -3,9 +3,11 @@ import { supabaseAdmin } from '../db/client.js';
 import { forbidden } from '../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../shared/audit-events.js';
 import { resolveEntitlement } from '../domains/modules/entitlement.service.js';
+import { resolveModuleEntitlementCode } from '../shared/module-entitlement.pure.js';
 
 export function requireModuleActive(moduleCode: string) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    const entitlementModuleCode = resolveModuleEntitlementCode(moduleCode);
     const ctx = req.context;
     const email = (ctx?.user?.email ?? '').trim().toLowerCase();
     if (!ctx?.organizationId) {
@@ -18,7 +20,11 @@ export function requireModuleActive(moduleCode: string) {
       return;
     }
 
-    const { data: mod } = await supabaseAdmin.from('modules').select('id, code').eq('code', moduleCode).single();
+    const { data: mod } = await supabaseAdmin
+      .from('modules')
+      .select('id, code')
+      .eq('code', entitlementModuleCode)
+      .single();
     if (!mod) {
       console.warn('[docflow][deny] requireModuleActive: module not found', {
         module: moduleCode,

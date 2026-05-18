@@ -2,8 +2,10 @@ import { supabaseAdmin } from '../db/client.js';
 import { forbidden } from '../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../shared/audit-events.js';
 import { resolveEntitlement } from '../domains/modules/entitlement.service.js';
+import { resolveModuleEntitlementCode } from '../shared/module-entitlement.pure.js';
 export function requireModuleActive(moduleCode) {
     return async (req, _res, next) => {
+        const entitlementModuleCode = resolveModuleEntitlementCode(moduleCode);
         const ctx = req.context;
         const email = (ctx?.user?.email ?? '').trim().toLowerCase();
         if (!ctx?.organizationId) {
@@ -15,7 +17,11 @@ export function requireModuleActive(moduleCode) {
             next(forbidden('Organization context required'));
             return;
         }
-        const { data: mod } = await supabaseAdmin.from('modules').select('id, code').eq('code', moduleCode).single();
+        const { data: mod } = await supabaseAdmin
+            .from('modules')
+            .select('id, code')
+            .eq('code', entitlementModuleCode)
+            .single();
         if (!mod) {
             console.warn('[docflow][deny] requireModuleActive: module not found', {
                 module: moduleCode,

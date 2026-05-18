@@ -2,6 +2,8 @@
  * Pure session shell decision (no I/O).
  */
 
+import { isIncomeCommercialModuleCode } from '../../shared/module-entitlement.pure.js';
+
 export type ShellProfile = 'income_only' | 'full_platform';
 
 function canAccessSettings(permissions: string[]): boolean {
@@ -39,7 +41,8 @@ export function computeSessionShellFromModules(params: {
   incomeOnboardingComplete: boolean;
 }): SessionShellModel {
   const incomeOnly =
-    params.commercialModuleCodes.length === 1 && params.commercialModuleCodes[0] === 'income';
+    params.commercialModuleCodes.length === 1 &&
+    isIncomeCommercialModuleCode(params.commercialModuleCodes[0] ?? '');
 
   if (incomeOnly) {
     const incomeNav = { ...incomeModuleNavItem(params.moduleAppNavItems), order: 0 };

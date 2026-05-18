@@ -1,6 +1,7 @@
 /**
  * Pure session shell decision (no I/O).
  */
+import { isIncomeCommercialModuleCode } from '../../shared/module-entitlement.pure.js';
 function canAccessSettings(permissions) {
     return permissions.includes('access_settings') || permissions.includes('settings:read');
 }
@@ -12,7 +13,8 @@ function incomeModuleNavItem(moduleAppNavItems) {
     });
 }
 export function computeSessionShellFromModules(params) {
-    const incomeOnly = params.commercialModuleCodes.length === 1 && params.commercialModuleCodes[0] === 'income';
+    const incomeOnly = params.commercialModuleCodes.length === 1 &&
+        isIncomeCommercialModuleCode(params.commercialModuleCodes[0] ?? '');
     if (incomeOnly) {
         const incomeNav = { ...incomeModuleNavItem(params.moduleAppNavItems), order: 0 };
         const visible = [incomeNav];
