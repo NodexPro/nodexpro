@@ -8,9 +8,11 @@ export function buildIncomeWorkspaceCards(
     items: number;
     drafts: number;
   },
+  options?: { canCreateDocument?: boolean },
 ): IncomeWorkspaceCard[] {
+  const canCreateDocument = options?.canCreateDocument ?? perms.edit;
   const editActions = perms.edit ? ['open'] : [];
-  const createDraftActions = perms.edit ? ['create_income_document_draft'] : [];
+  const createDraftActions = canCreateDocument ? ['create_income_document_draft'] : [];
   const createCustomerActions = perms.edit
     ? ['create_income_customer', 'create_one_time_income_customer']
     : [];

@@ -8,6 +8,8 @@ import { badRequest, notFound } from '../../shared/errors.js';
 import { assertRowMatchesIssuerScope, optionalJsonObject, optionalPriceReference, optionalString, optionalUuid, parseIncomeDocumentType, parseIncomeItemType, reqJsonArray, reqNonEmptyString, reqUuid, } from './income.guards.js';
 import { applySelectIncomeIssuerContext, buildIncomeWorkspaceContextAggregate, } from './income-issuer-context.service.js';
 import { assertIncomeEditPermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
+import { parseDraftPayloadBody, validateDraftAgainstDocumentTypeRules, } from './income-document-draft.helpers.js';
+import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
 import { INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, } from './income.types.js';
 const ALLOWED_COMMANDS = new Set([
@@ -128,24 +130,34 @@ async function executeCreateIncomeItem(ctx, body) {
 async function executeCreateDraft(ctx, body) {
     const scope = await loadActiveIncomeIssuerScope(ctx);
     assertIncomeEditPermission(scope);
-    const document_type = parseIncomeDocumentType(body.document_type);
-    const income_customer_id = optionalUuid(body.income_customer_id, 'income_customer_id');
-    const one_time_customer_snapshot_json = optionalJsonObject(body.one_time_customer_snapshot_json, 'one_time_customer_snapshot_json');
-    const draft_lines_json = reqJsonArray(body.draft_lines_json, 'draft_lines_json');
-    if (income_customer_id) {
-        await loadIncomeCustomerInScope(scope, income_customer_id);
+    const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
+    const payload = parseDraftPayloadBody(body, parseIncomeDocumentType, optionalUuid, reqJsonArray);
+    assertDocumentTypeEnabled(available_document_types, payload.document_type);
+    const docType = findAvailableDocumentType(available_document_types, payload.document_type);
+    if (!docType)
+        throw badRequest('document_type is invalid');
+    if (payload.income_customer_id) {
+        await loadIncomeCustomerInScope(scope, payload.income_customer_id);
     }
+    const { validation_warnings_json, draft_totals_preview_json } = validateDraftAgainstDocumentTypeRules(payload, docType);
     const { error } = await supabaseAdmin.from('income_document_drafts').insert({
         organization_id: scope.org_id,
         represented_client_id: scope.represented_client_id,
         issuer_business_id: scope.issuer_business_id,
         actor_user_id: scope.actor_user_id,
         acting_mode: scope.acting_mode,
-        document_type,
-        income_customer_id,
-        one_time_customer_snapshot_json,
-        draft_lines_json,
-        draft_totals_preview_json: null,
+        document_type: payload.document_type,
+        income_customer_id: payload.income_customer_id,
+        one_time_customer_snapshot_json: payload.one_time_customer_snapshot_json,
+        draft_lines_json: payload.draft_lines_json,
+        payment_terms_json: payload.payment_terms_json,
+        due_date: payload.due_date,
+        payment_received_json: payload.payment_received_json,
+        notes: payload.notes,
+        currency: payload.currency,
+        language: payload.language,
+        draft_totals_preview_json,
+        validation_warnings_json,
         status: 'draft',
     });
     if (error)
@@ -157,10 +169,10 @@ async function executeCreateDraft(ctx, body) {
         entityType: 'income_document_draft',
         action: AUDIT_ACTIONS.INCOME_DOCUMENT_DRAFT_CREATED,
         payload: {
-            document_type,
-            income_customer_id,
+            document_type: payload.document_type,
+            income_customer_id: payload.income_customer_id,
             issuer_business_id: scope.issuer_business_id,
-            line_count: draft_lines_json.length,
+            line_count: payload.draft_lines_json.length,
         },
     });
 }
@@ -172,20 +184,31 @@ async function executeUpdateDraft(ctx, body) {
     if (existing.status === 'cancelled') {
         throw badRequest('Cannot update a cancelled draft');
     }
-    const document_type = parseIncomeDocumentType(body.document_type);
-    const income_customer_id = optionalUuid(body.income_customer_id, 'income_customer_id');
-    const one_time_customer_snapshot_json = optionalJsonObject(body.one_time_customer_snapshot_json, 'one_time_customer_snapshot_json');
-    const draft_lines_json = reqJsonArray(body.draft_lines_json, 'draft_lines_json');
-    if (income_customer_id) {
-        await loadIncomeCustomerInScope(scope, income_customer_id);
+    const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
+    const payload = parseDraftPayloadBody(body, parseIncomeDocumentType, optionalUuid, reqJsonArray);
+    assertDocumentTypeEnabled(available_document_types, payload.document_type);
+    const docType = findAvailableDocumentType(available_document_types, payload.document_type);
+    if (!docType)
+        throw badRequest('document_type is invalid');
+    if (payload.income_customer_id) {
+        await loadIncomeCustomerInScope(scope, payload.income_customer_id);
     }
+    const { validation_warnings_json, draft_totals_preview_json } = validateDraftAgainstDocumentTypeRules(payload, docType);
     const { error } = await supabaseAdmin
         .from('income_document_drafts')
         .update({
-        document_type,
-        income_customer_id,
-        one_time_customer_snapshot_json,
-        draft_lines_json,
+        document_type: payload.document_type,
+        income_customer_id: payload.income_customer_id,
+        one_time_customer_snapshot_json: payload.one_time_customer_snapshot_json,
+        draft_lines_json: payload.draft_lines_json,
+        payment_terms_json: payload.payment_terms_json,
+        due_date: payload.due_date,
+        payment_received_json: payload.payment_received_json,
+        notes: payload.notes,
+        currency: payload.currency,
+        language: payload.language,
+        draft_totals_preview_json,
+        validation_warnings_json,
     })
         .eq('id', draft_id)
         .eq('organization_id', scope.org_id);
@@ -198,7 +221,11 @@ async function executeUpdateDraft(ctx, body) {
         entityType: 'income_document_draft',
         entityId: draft_id,
         action: AUDIT_ACTIONS.INCOME_DOCUMENT_DRAFT_UPDATED,
-        payload: { document_type, income_customer_id, line_count: draft_lines_json.length },
+        payload: {
+            document_type: payload.document_type,
+            income_customer_id: payload.income_customer_id,
+            line_count: payload.draft_lines_json.length,
+        },
     });
 }
 async function executeCancelDraft(ctx, body) {

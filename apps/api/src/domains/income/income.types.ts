@@ -137,16 +137,46 @@ export interface IncomeTableModel<T> {
   empty_state: { visible: boolean; title: string; description: string | null };
 }
 
+export type IncomeDocumentTypeSource = 'country_pack' | 'fallback_il';
+
+export interface IncomeAvailableDocumentType {
+  key: IncomeDocumentType;
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  requires_payment_received: boolean;
+  requires_due_date: boolean;
+  allows_credit: boolean;
+  source: IncomeDocumentTypeSource;
+  country_code: string;
+  ruleset_id: string | null;
+  legal_hint: string | null;
+}
+
+export interface IncomeDocumentCreationStep {
+  key: string;
+  label: string;
+  required: boolean | 'depends_on_document_type';
+}
+
+export interface IncomeDocumentCreationSchema {
+  steps: IncomeDocumentCreationStep[];
+  allowed_actions: string[];
+}
+
 export interface IncomeWorkspaceAggregate {
   aggregate_key: typeof INCOME_WORKSPACE_AGGREGATE_KEY;
   org_id: string;
   actor_user_id: string;
   issuer_context: IncomeIssuerContextSummary;
+  available_document_types: IncomeAvailableDocumentType[];
+  document_creation_schema: IncomeDocumentCreationSchema;
   cards: IncomeWorkspaceCard[];
   customers_table_model: IncomeTableModel<IncomeCustomersTableRow>;
   items_table_model: IncomeTableModel<IncomeItemsTableRow>;
   drafts_table_model: IncomeTableModel<IncomeDraftsTableRow>;
   allowed_actions: string[];
+  warnings: IncomeWorkspaceWarning[];
 }
 
 export type IncomeCommandType =

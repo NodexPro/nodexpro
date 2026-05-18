@@ -5,6 +5,25 @@ import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import { updateUserStoredActiveOrganizationId } from '../auth/active-organization.service.js';
 import type { RequestContext } from '../../shared/context.js';
 import type { CreateOrganizationResponse } from '../../types/api.js';
+import { syncIncomeIssuerProfileFromOrganization } from '../income/income-issuer-profile-sync.service.js';
+
+async function seedOrganizationSettingsOnCreate(
+  orgId: string,
+  params: { name: string; countryCode: string },
+): Promise<void> {
+  const country = String(params.countryCode ?? 'IL').trim().toUpperCase().slice(0, 2) || 'IL';
+  await supabaseAdmin.from('organization_settings').upsert(
+    {
+      organization_id: orgId,
+      organization_name: params.name.trim(),
+      country,
+      default_currency: 'ILS',
+      default_document_language: 'he',
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'organization_id' },
+  );
+}
 
 export async function createOrganization(ctx: RequestContext, params: { name: string; legalName?: string; countryCode: string; timezone?: string }): Promise<CreateOrganizationResponse> {
   const { data: org } = await supabaseAdmin
@@ -71,6 +90,9 @@ export async function createOrganization(ctx: RequestContext, params: { name: st
       });
     }
   }
+
+  await seedOrganizationSettingsOnCreate(org.id, { name: params.name, countryCode: params.countryCode });
+  await syncIncomeIssuerProfileFromOrganization(org.id, { actorUserId: ctx.user.id, audit: true });
 
   await writeAudit({
     organizationId: org.id,

@@ -1,6 +1,7 @@
-export function buildIncomeWorkspaceCards(perms, counts) {
+export function buildIncomeWorkspaceCards(perms, counts, options) {
+    const canCreateDocument = options?.canCreateDocument ?? perms.edit;
     const editActions = perms.edit ? ['open'] : [];
-    const createDraftActions = perms.edit ? ['create_income_document_draft'] : [];
+    const createDraftActions = canCreateDocument ? ['create_income_document_draft'] : [];
     const createCustomerActions = perms.edit
         ? ['create_income_customer', 'create_one_time_income_customer']
         : [];

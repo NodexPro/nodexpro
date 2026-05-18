@@ -23,6 +23,7 @@ import {
   type IncomeWorkspacePermissions,
   type IncomeWorkspaceWarning,
 } from './income.types.js';
+import { syncIncomeIssuerProfileFromOrganization } from './income-issuer-profile-sync.service.js';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -73,54 +74,15 @@ interface ClientIssuerRow {
   is_archived: boolean;
 }
 
-async function loadOrganizationNames(orgId: string): Promise<{ name: string; legal_name: string | null }> {
-  const { data, error } = await supabaseAdmin
-    .from('organizations')
-    .select('name, legal_name')
-    .eq('id', orgId)
-    .single();
-  if (error || !data) throw notFound('Organization not found');
-  return {
-    name: String((data as { name: string }).name ?? '').trim(),
-    legal_name:
-      (data as { legal_name: string | null }).legal_name != null
-        ? String((data as { legal_name: string | null }).legal_name).trim() || null
-        : null,
-  };
-}
-
-/** Ensures the tenant-owned issuer profile exists; returns its id. */
+/** Ensures the tenant-owned issuer profile exists; syncs from Core when missing or stale. */
 export async function ensureOrgIncomeIssuerProfile(orgId: string): Promise<OrgIssuerProfileRow> {
-  const { data: existing } = await supabaseAdmin
-    .from('income_issuer_profiles')
-    .select('id, organization_id, display_name, legal_name')
-    .eq('organization_id', orgId)
-    .maybeSingle();
-
-  if (existing) return existing as OrgIssuerProfileRow;
-
-  const org = await loadOrganizationNames(orgId);
-  const displayName = org.legal_name || org.name || 'Office';
-  const { data: inserted, error } = await supabaseAdmin
-    .from('income_issuer_profiles')
-    .insert({
-      organization_id: orgId,
-      display_name: displayName,
-      legal_name: org.legal_name,
-    })
-    .select('id, organization_id, display_name, legal_name')
-    .single();
-
-  if (error || !inserted) {
-    const { data: raced } = await supabaseAdmin
-      .from('income_issuer_profiles')
-      .select('id, organization_id, display_name, legal_name')
-      .eq('organization_id', orgId)
-      .maybeSingle();
-    if (raced) return raced as OrgIssuerProfileRow;
-    throw error ?? new Error('Failed to create income issuer profile');
-  }
-  return inserted as OrgIssuerProfileRow;
+  const synced = await syncIncomeIssuerProfileFromOrganization(orgId, { audit: false });
+  return {
+    id: synced.id,
+    organization_id: synced.organization_id,
+    display_name: synced.display_name,
+    legal_name: synced.legal_name,
+  };
 }
 
 async function loadClientForIssuer(orgId: string, clientId: string): Promise<ClientIssuerRow | null> {

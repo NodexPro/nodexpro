@@ -4,6 +4,8 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { forbidden } from '../../shared/errors.js';
 import { loadActiveIncomeIssuerScope, toIssuerContextSummary } from './income-issuer-scope.service.js';
+import { buildDocumentCreationSchema } from './income-document-creation-schema.builders.js';
+import { resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
 import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './income-workspace-cards.builders.js';
 import { INCOME_WORKSPACE_AGGREGATE_KEY, } from './income.types.js';
 const DOCUMENT_TYPE_LABELS = {
@@ -185,6 +187,8 @@ export async function buildIncomeWorkspaceAggregate(ctx) {
         countScoped('income_items', scope, { column: 'active', value: true }),
         countScoped('income_document_drafts', scope, { column: 'status', value: 'draft' }),
     ]);
+    const docTypesResult = await resolveAvailableDocumentTypes(scope.org_id, scope);
+    const canCreateDocument = scope.permissions.edit && docTypesResult.available_document_types.some((t) => t.enabled);
     const customers = await loadCustomers(scope);
     const customerNames = new Map(customers.map((c) => [c.customer_id, c.display_name]));
     const items = await loadItems(scope);
@@ -194,14 +198,17 @@ export async function buildIncomeWorkspaceAggregate(ctx) {
         org_id: scope.org_id,
         actor_user_id: scope.actor_user_id,
         issuer_context: toIssuerContextSummary(scope),
+        available_document_types: docTypesResult.available_document_types,
+        document_creation_schema: buildDocumentCreationSchema(scope.permissions),
         cards: buildIncomeWorkspaceCards(scope.permissions, {
             customers: customersCount,
             items: itemsCount,
             drafts: draftsCount,
-        }),
+        }, { canCreateDocument }),
         customers_table_model: customersTableModel(customers),
         items_table_model: itemsTableModel(items),
         drafts_table_model: draftsTableModel(drafts),
         allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
+        warnings: docTypesResult.warnings,
     };
 }

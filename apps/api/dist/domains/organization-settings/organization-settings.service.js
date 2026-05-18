@@ -9,6 +9,7 @@ import * as legalIdentityService from '../trial/legal-identity.service.js';
 import * as trialService from '../trial/trial.service.js';
 import * as fileAccess from '../file-access/file-access.service.js';
 import { resolveActiveRulesetByDate } from '../country-pack/ruleset.service.js';
+import { syncIncomeIssuerProfileFromOrganization } from '../income/income-issuer-profile-sync.service.js';
 const LEGAL_ENTITY_TYPES = ['exempt_dealer', 'registered_dealer', 'company', 'other_corporation', 'other'];
 const LEGAL_ENTITY_TYPE_TO_LABEL_KEY = {
     exempt_dealer: 'settings.legalIdLabel.exemptDealer',
@@ -445,5 +446,6 @@ export async function patchOrganizationSettings(ctx, orgId, body) {
     if (body.organizationName !== undefined && body.organizationName?.trim()) {
         await supabaseAdmin.from('organizations').update({ name: body.organizationName.trim(), updated_at: new Date().toISOString() }).eq('id', orgId);
     }
+    await syncIncomeIssuerProfileFromOrganization(orgId, { actorUserId: ctx.user.id, audit: true });
     return getOrganizationSettings(ctx, orgId);
 }

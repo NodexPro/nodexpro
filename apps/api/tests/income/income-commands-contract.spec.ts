@@ -45,3 +45,10 @@ test('workspace aggregate builder scopes queries by issuer', () => {
   assert.match(workspaceSource, /applyIssuerScopeToBuilder/);
   assert.match(workspaceSource, /represented_client_id/);
 });
+
+test('workspace aggregate includes available_document_types and document_creation_schema', () => {
+  const typesSource = readFileSync(join(dir, '../../src/domains/income/income.types.ts'), 'utf8');
+  assert.match(typesSource, /available_document_types:\s*IncomeAvailableDocumentType\[\]/);
+  assert.match(typesSource, /document_creation_schema:\s*IncomeDocumentCreationSchema/);
+  assert.match(workspaceSource, /resolveAvailableDocumentTypes/);
+});

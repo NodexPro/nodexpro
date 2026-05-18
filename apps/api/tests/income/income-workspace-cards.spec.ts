@@ -13,6 +13,16 @@ test('workspace cards include non-empty allowed_acting_modes via separate builde
   assert.equal(modes.length, 2);
 });
 
+test('new_document card omits create action when document creation is disabled', () => {
+  const cards = buildIncomeWorkspaceCards(
+    { view: true, edit: true, issue: true, issue_on_behalf: true },
+    { customers: 0, items: 0, drafts: 0 },
+    { canCreateDocument: false },
+  );
+  const newDoc = cards.find((c) => c.key === 'new_document');
+  assert.deepEqual(newDoc?.allowed_actions, []);
+});
+
 test('workspace cards never use empty arrays for customers/items/drafts counts', () => {
   const cards = buildIncomeWorkspaceCards(
     { view: true, edit: true, issue: true, issue_on_behalf: true },

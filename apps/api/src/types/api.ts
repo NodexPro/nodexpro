@@ -22,6 +22,14 @@ export interface SidebarAccountBlockModel {
   };
 }
 
+export type ShellProfile = 'income_only' | 'full_platform';
+
+export interface SessionNavItemDto {
+  path: string;
+  label: string;
+  order: number;
+}
+
 export interface MeResponse {
   user: {
     id: string;
@@ -34,9 +42,15 @@ export interface MeResponse {
   permissions: string[];
   enabledModules: string[];
   /** Nav items for sidebar: core routes only (no /m/* module apps). */
-  navItems: { path: string; label: string; order: number }[];
+  navItems: SessionNavItemDto[];
   /** Active module apps shown under Modules in sidebar. */
   moduleAppNavItems?: { path: string; label: string }[];
+  /** Backend-owned shell routing (INC-3.5). */
+  shell_profile: ShellProfile;
+  default_route: string;
+  /** Backend-filtered nav for the active shell. */
+  visible_nav_items: SessionNavItemDto[];
+  income_onboarding_complete: boolean;
   /** Ready-to-render sidebar account block (session aggregate). */
   sidebar_account_block: SidebarAccountBlockModel;
 }

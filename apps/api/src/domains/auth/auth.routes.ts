@@ -19,6 +19,7 @@ import { createClient } from '@supabase/supabase-js';
 import { config } from '../../config.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import type { RequestContext } from '../../shared/context.js';
+import { resolveSessionShell } from './session-shell.service.js';
 
 const router = Router();
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
@@ -145,6 +146,12 @@ async function buildMeResponse(
   navItems.sort((a, b) => a.order - b.order);
 
   const uiLanguage = resolveUiLanguage(ctx);
+  const shell = await resolveSessionShell({
+    activeOrgId,
+    permissions,
+    allCoreNavItems: navItems,
+    moduleAppNavItems,
+  });
   const meCore: MeCoreForSidebar = {
     user: { id: ctx.user.id, email: ctx.user.email, fullName: ctx.user.fullName, status: ctx.user.status },
     organizations: orgList,
@@ -153,6 +160,10 @@ async function buildMeResponse(
     enabledModules,
     navItems,
     moduleAppNavItems: moduleAppNavItems.map(({ path, label }) => ({ path, label })),
+    shell_profile: shell.shell_profile,
+    default_route: shell.default_route,
+    visible_nav_items: shell.visible_nav_items,
+    income_onboarding_complete: shell.income_onboarding_complete,
   };
   return {
     ...meCore,
@@ -178,7 +189,12 @@ function toAuthSessionAggregate(me: MeResponse): AuthSessionAggregateResponse {
   if (!me.activeOrganizationId) {
     return { ...me, session_state: 'needs_org_selection', redirect_to: '/select-org', allowed_actions: ['select_organization'] };
   }
-  return { ...me, session_state: 'ready', redirect_to: '/dashboard', allowed_actions: [] };
+  return {
+    ...me,
+    session_state: 'ready',
+    redirect_to: me.default_route || '/dashboard',
+    allowed_actions: [],
+  };
 }
 
 router.post('/register', async (req, res, next) => {

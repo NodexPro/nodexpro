@@ -244,6 +244,8 @@ export const AUDIT_ACTIONS = {
     INCOME_DOCUMENT_DRAFT_CREATED: 'income.document_draft_created',
     INCOME_DOCUMENT_DRAFT_UPDATED: 'income.document_draft_updated',
     INCOME_DOCUMENT_DRAFT_CANCELLED: 'income.document_draft_cancelled',
+    /** Income INC-3.5 — issuer profile projection synced from Core org business profile. */
+    INCOME_ISSUER_PROFILE_SYNCED: 'income.issuer_profile_synced',
 };
 export async function writeAudit(params) {
     await supabaseAdmin.from('audit_log').insert({
