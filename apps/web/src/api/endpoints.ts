@@ -5,6 +5,7 @@ export const WORK_ENGINE = {
   aggregateFoundation: '/work-engine/aggregates/foundation',
   aggregateQueue: '/work-engine/aggregates/queue',
   aggregateInvoicesTab: '/work-engine/aggregates/invoices-tab',
+  aggregateClientsTab: '/work-engine/aggregates/clients-tab',
   commands: '/work-engine/commands',
 } as const;
 

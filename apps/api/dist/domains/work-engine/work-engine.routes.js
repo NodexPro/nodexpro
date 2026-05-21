@@ -7,6 +7,7 @@
  *   - GET  /aggregates/foundation   -> work_engine_foundation_aggregate
  *   - GET  /aggregates/queue        -> work_engine_queue_aggregate (Stage 3D);
  *   - GET  /aggregates/invoices-tab -> work_engine_invoices_tab_aggregate (INC-8);
+ *   - GET  /aggregates/clients-tab  -> work_engine_clients_tab_aggregate (embedded CO registry);
  *                                      backend-ready queue table with rows,
  *                                      summary_cards, filters, pagination,
  *                                      pending_mapping_section. Supports
@@ -37,12 +38,14 @@ import { Router } from 'express';
 import { config } from '../../config.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
+import { requirePermission } from '../../middleware/requirePermission.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
 import { runWorkEngineScheduler } from './work-engine.scheduler.service.js';
 import { executeWorkEngineCommand } from './work-engine.commands.service.js';
 import { acceptWorkEngineEvent } from './work-engine.event-intake.service.js';
 import { buildWorkEngineFoundationAggregate, buildWorkEngineQueueAggregate, } from './work-engine.read-models.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.read-model.service.js';
+import { buildWorkEngineClientsTabAggregate } from './work-engine-clients-tab.read-model.service.js';
 const router = Router();
 function requireInternalCronSecret(req) {
     const secret = String(req.headers['x-internal-cron-secret'] ?? '').trim();
@@ -140,6 +143,16 @@ officeRouter.get('/aggregates/invoices-tab', async (req, res, next) => {
         const ctx = req.context;
         const orgId = ctx.organizationId;
         const aggregate = await buildWorkEngineInvoicesTabAggregate({ orgId });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+officeRouter.get('/aggregates/clients-tab', requirePermission('client_operations.view'), async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        const aggregate = await buildWorkEngineClientsTabAggregate({ ctx });
         return res.json(aggregate);
     }
     catch (e) {

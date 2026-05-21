@@ -483,6 +483,46 @@ export async function fetchWorkEngineInvoicesTabAggregate(): Promise<WorkEngineI
   return apiJson<WorkEngineInvoicesTabAggregate>(WORK_ENGINE.aggregateInvoicesTab);
 }
 
+export type WorkEngineClientsTabAggregate = {
+  aggregate_key: 'work_engine_clients_tab_aggregate';
+  org_id: string;
+  workspace_tabs: AccountantWorkspaceTab[];
+  title: string;
+  description: string;
+  source_module: 'client_operations';
+  embedded_view: 'client_operations_first_screen';
+  client_operations_aggregate: {
+    rows: Array<{
+      client_id: string;
+      client_name: string | null;
+      tax_id: string | null;
+      business_type: string | null;
+      payroll_flag: boolean | null;
+      material_brought_flag: boolean | null;
+      vat_status: string | null;
+      income_tax_advance_status: string | null;
+      national_insurance_status: string | null;
+      national_insurance_deductions_status: string | null;
+      income_tax_deductions_status: string | null;
+      assigned_handler_user_id: string | null;
+      notes_cell_text_he: string | null;
+      operational_notes_count: number;
+      vat_due_registry_display_he: string | null;
+    }>;
+    note_types: Array<{
+      code: string;
+      label_he: string;
+      sort_order: number;
+      allows_reminder: boolean;
+    }>;
+  };
+  allowed_actions: string[];
+};
+
+export async function fetchWorkEngineClientsTabAggregate(): Promise<WorkEngineClientsTabAggregate> {
+  return apiJson<WorkEngineClientsTabAggregate>(WORK_ENGINE.aggregateClientsTab);
+}
+
 export async function fetchWorkEngineQueueAggregate(
   filters: WorkEngineQueueFiltersInput,
 ): Promise<WorkEngineQueueAggregate> {

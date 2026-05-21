@@ -10,13 +10,16 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  fetchWorkEngineClientsTabAggregate,
   fetchWorkEngineInvoicesTabAggregate,
   fetchWorkEngineQueueAggregate,
   type AccountantWorkspaceTab,
+  type WorkEngineClientsTabAggregate,
   type WorkEngineInvoicesTabAggregate,
   type WorkEngineQueueFiltersInput,
 } from '../../api/work-engine';
 import { userFacingApiMessage } from '../../api/client';
+import { ClientOperationsRegistryView } from '../client-operations/ClientOperationsRegistryView';
 import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
 
 const QUEUE_SHELL_FILTERS: WorkEngineQueueFiltersInput = {
@@ -218,6 +221,68 @@ function WorkEngineDisabledTabPanel(props: {
   );
 }
 
+function WorkEngineClientsTabPanel(props: {
+  onWorkspaceTabs: (tabs: AccountantWorkspaceTab[]) => void;
+}) {
+  const { onWorkspaceTabs } = props;
+  const [aggregate, setAggregate] = useState<WorkEngineClientsTabAggregate | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<WorkEngineClientsTabAggregate['client_operations_aggregate']['rows']>([]);
+
+  const loadAggregate = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setLoading(true);
+      setError(null);
+      try {
+        const agg = await fetchWorkEngineClientsTabAggregate();
+        setAggregate(agg);
+        setRows(agg.client_operations_aggregate.rows ?? []);
+        if (agg.workspace_tabs) onWorkspaceTabs(agg.workspace_tabs);
+      } catch (e) {
+        setError(userFacingApiMessage(e));
+      } finally {
+        if (!opts?.silent) setLoading(false);
+      }
+    },
+    [onWorkspaceTabs],
+  );
+
+  useEffect(() => {
+    void loadAggregate();
+  }, [loadAggregate]);
+
+  const canEdit = aggregate?.allowed_actions.includes('client_operations.edit') ?? false;
+
+  if (loading && !aggregate) {
+    return <p className="nx-we-queue__subtitle">טוען לקוחות…</p>;
+  }
+
+  if (error && !aggregate) {
+    return <div className="nx-we-banner-error">{error}</div>;
+  }
+
+  if (!aggregate) return null;
+
+  return (
+    <>
+      <h1 className="nx-we-queue__title">{aggregate.title}</h1>
+      <p className="nx-we-queue__subtitle">{aggregate.description}</p>
+      {error ? <div className="nx-we-banner-error">{error}</div> : null}
+      <ClientOperationsRegistryView
+        rows={rows}
+        onRowsChange={setRows}
+        noteTypes={aggregate.client_operations_aggregate.note_types}
+        loading={loading}
+        error={error ?? ''}
+        canEdit={canEdit}
+        showPageHeader={false}
+        onReloadRegistry={() => void loadAggregate({ silent: true })}
+      />
+    </>
+  );
+}
+
 function WorkEngineInvoicesTabPanel(props: {
   onWorkspaceTabs: (tabs: AccountantWorkspaceTab[]) => void;
 }) {
@@ -292,9 +357,11 @@ export function WorkEngineTabHost(props: {
   const activeTabDef = visibleTabs.find((t) => t.key === tabKey) ?? null;
   const showWorkQueue = tabKey === 'work';
   const showInvoices = tabKey === 'invoices' && (activeTabDef?.enabled ?? true);
+  const showClients = tabKey === 'clients' && (activeTabDef?.enabled ?? true);
   const showDisabled =
     !showWorkQueue &&
     !showInvoices &&
+    !showClients &&
     (activeTabDef == null || !activeTabDef.enabled || !activeTabDef.aggregate_route);
 
   return (
@@ -305,6 +372,7 @@ export function WorkEngineTabHost(props: {
 
       {showWorkQueue ? renderWorkTab(setWorkspaceTabs) : null}
       {showInvoices ? <WorkEngineInvoicesTabPanel onWorkspaceTabs={setWorkspaceTabs} /> : null}
+      {showClients ? <WorkEngineClientsTabPanel onWorkspaceTabs={setWorkspaceTabs} /> : null}
       {showDisabled ? (
         <WorkEngineDisabledTabPanel
           tabKey={tabKey}

@@ -25,8 +25,15 @@ test('workspace_tabs seeds use embedded routes and aggregate_route', () => {
   assert.doesNotMatch(readModelsSource, /route: '\/m\/income'/);
 });
 
+test('clients tab enabled with clients-tab aggregate_route', () => {
+  assert.match(
+    readModelsSource,
+    /key: 'clients'[\s\S]*aggregate_route: '\/work-engine\/aggregates\/clients-tab'/,
+  );
+});
+
 test('disabled tabs expose disabled_reason without aggregate_route', () => {
-  assert.match(readModelsSource, /key: 'clients'[\s\S]*aggregate_route: null/);
+  assert.match(readModelsSource, /key: 'vat'[\s\S]*aggregate_route: null/);
   assert.match(readModelsSource, /disabled_reason: 'Coming soon'/);
 });
 

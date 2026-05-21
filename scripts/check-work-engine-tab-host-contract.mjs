@@ -38,14 +38,30 @@ if (host.includes('navigate(tab.route)')) errors.push('tab host must not navigat
 if (!host.includes('fetchWorkEngineInvoicesTabAggregate')) {
   errors.push('invoices tab must fetch invoices-tab aggregate');
 }
+if (!host.includes('fetchWorkEngineClientsTabAggregate')) {
+  errors.push('clients tab must fetch clients-tab aggregate');
+}
+if (!host.includes('ClientOperationsRegistryView')) {
+  errors.push('clients tab must render ClientOperationsRegistryView');
+}
 if (!page.includes('WorkEngineTabHost')) errors.push('WorkEngineQueue must use WorkEngineTabHost');
 if (page.includes('fetchWorkEngineInvoicesTabAggregate')) {
   errors.push('invoices fetch must live in tab host only');
 }
+if (page.includes('moduleClientOperationsRegistry')) {
+  errors.push('WorkEngineQueue page must not fetch client-operations registry directly');
+}
 if (page.includes("navigate(tab.route)")) errors.push('queue page must not navigate tab.route');
 
 if (!api.includes('aggregate_route')) errors.push('AccountantWorkspaceTab missing aggregate_route type');
+if (!api.includes('fetchWorkEngineClientsTabAggregate')) {
+  errors.push('missing fetchWorkEngineClientsTabAggregate');
+}
+if (!api.includes('aggregateClientsTab')) errors.push('missing WORK_ENGINE.aggregateClientsTab');
 if (!backend.includes('aggregate_route')) errors.push('backend workspace_tabs missing aggregate_route');
+if (!backend.includes('/work-engine/aggregates/clients-tab')) {
+  errors.push('backend clients tab missing aggregate_route path');
+}
 
 const forbidden = [
   /\/m\/income/,

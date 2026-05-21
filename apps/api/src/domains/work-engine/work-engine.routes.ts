@@ -7,6 +7,7 @@
  *   - GET  /aggregates/foundation   -> work_engine_foundation_aggregate
  *   - GET  /aggregates/queue        -> work_engine_queue_aggregate (Stage 3D);
  *   - GET  /aggregates/invoices-tab -> work_engine_invoices_tab_aggregate (INC-8);
+ *   - GET  /aggregates/clients-tab  -> work_engine_clients_tab_aggregate (embedded CO registry);
  *                                      backend-ready queue table with rows,
  *                                      summary_cards, filters, pagination,
  *                                      pending_mapping_section. Supports
@@ -38,6 +39,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { config } from '../../config.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
+import { requirePermission } from '../../middleware/requirePermission.js';
 import type { RequestContext } from '../../shared/context.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
 import { runWorkEngineScheduler } from './work-engine.scheduler.service.js';
@@ -49,6 +51,7 @@ import {
   type WorkEngineQueueFilters,
 } from './work-engine.read-models.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.read-model.service.js';
+import { buildWorkEngineClientsTabAggregate } from './work-engine-clients-tab.read-model.service.js';
 import type {
   WorkEngineCommandType,
   WorkEventEnvelope,
@@ -170,6 +173,20 @@ officeRouter.get(
       const ctx = req.context as RequestContext;
       const orgId = ctx.organizationId!;
       const aggregate = await buildWorkEngineInvoicesTabAggregate({ orgId });
+      return res.json(aggregate);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+officeRouter.get(
+  '/aggregates/clients-tab',
+  requirePermission('client_operations.view'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const ctx = req.context as RequestContext;
+      const aggregate = await buildWorkEngineClientsTabAggregate({ ctx });
       return res.json(aggregate);
     } catch (e) {
       next(e);

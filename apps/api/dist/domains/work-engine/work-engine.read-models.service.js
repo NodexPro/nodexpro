@@ -800,8 +800,7 @@ const ACCOUNTANT_WORKSPACE_TAB_SEEDS = [
         label: 'לקוחות',
         subtitle: 'תפעול לקוחות',
         icon_key: 'clients',
-        aggregate_route: null,
-        disabled_reason: 'Coming soon',
+        aggregate_route: '/work-engine/aggregates/clients-tab',
     },
     {
         key: 'invoices',
