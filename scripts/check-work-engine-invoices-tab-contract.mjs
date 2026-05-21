@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
-const queuePage = path.join(repoRoot, 'apps/web/src/pages/WorkEngineQueue.tsx');
+const tabHost = path.join(repoRoot, 'apps/web/src/components/work-engine/WorkEngineTabHost.tsx');
 const tableComponent = path.join(
   repoRoot,
   'apps/web/src/components/work-engine/WorkEngineModuleTabTable.tsx',
@@ -19,7 +19,7 @@ function read(p) {
   return fs.readFileSync(p, 'utf8');
 }
 
-const page = read(queuePage);
+const page = read(tabHost);
 const table = read(tableComponent);
 const api = read(workEngineApi);
 
@@ -32,12 +32,15 @@ if (!api.includes('aggregateInvoicesTab')) {
   errors.push('missing WORK_ENGINE.aggregateInvoicesTab endpoint');
 }
 if (!page.includes('fetchWorkEngineInvoicesTabAggregate')) {
-  errors.push('WorkEngineQueue must load invoices-tab aggregate');
+  errors.push('tab host must load invoices-tab aggregate');
 }
 if (!page.includes('WorkEngineModuleTabTable')) {
-  errors.push('WorkEngineQueue must render WorkEngineModuleTabTable');
+  errors.push('tab host must render WorkEngineModuleTabTable');
 }
-if (page.includes('tab=invoices') === false && !page.includes("get('tab') === 'invoices'")) {
+if (
+  !page.includes("tabKey === 'invoices'") &&
+  !page.includes('resolveWorkEngineTabKey')
+) {
   errors.push('missing invoices tab routing');
 }
 

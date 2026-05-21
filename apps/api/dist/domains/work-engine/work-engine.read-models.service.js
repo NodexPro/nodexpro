@@ -786,47 +786,37 @@ function pendingReasonLabel(reason) {
             return reason;
     }
 }
-/** Routes that exist in the web app today (Stage 11A — backend registry only). */
-const ACCOUNTANT_WORKSPACE_REGISTERED_ROUTES = new Set([
-    '/work-engine/queue',
-    '/work-engine/queue?tab=invoices',
-    '/m/client-operations',
-    '/documents',
-]);
+/** Embedded command-center tabs — backend owns enablement and aggregate targets. */
 const ACCOUNTANT_WORKSPACE_TAB_SEEDS = [
     {
-        key: 'work_engine',
+        key: 'work',
         label: 'Work Engine',
         subtitle: 'Command Center',
         icon_key: 'work_engine',
-        route: '/work-engine/queue',
-        badge_count: null,
-        badge_variant: null,
+        aggregate_route: '/work-engine/aggregates/queue',
     },
     {
         key: 'clients',
-        label: 'Clients',
-        subtitle: 'Client Operations',
+        label: 'לקוחות',
+        subtitle: 'תפעול לקוחות',
         icon_key: 'clients',
-        route: '/m/client-operations',
-        badge_count: null,
-        badge_variant: null,
+        aggregate_route: null,
+        disabled_reason: 'Coming soon',
     },
     {
         key: 'invoices',
         label: 'חשבוניות',
         subtitle: 'מעקב גבייה ותשלומים',
         icon_key: 'invoices',
-        route: '/work-engine/queue?tab=invoices',
-        badge_count: null,
-        badge_variant: null,
+        aggregate_route: '/work-engine/aggregates/invoices-tab',
     },
     {
         key: 'payroll',
         label: 'Payroll',
         subtitle: 'Salary & Benefits',
         icon_key: 'payroll',
-        route: '/m/payroll',
+        aggregate_route: null,
+        disabled_reason: 'Coming soon',
         badge_count: 0,
         badge_variant: 'neutral',
     },
@@ -835,7 +825,8 @@ const ACCOUNTANT_WORKSPACE_TAB_SEEDS = [
         label: 'VAT',
         subtitle: 'Tax Reporting',
         icon_key: 'vat',
-        route: '/m/vat',
+        aggregate_route: null,
+        disabled_reason: 'Coming soon',
         badge_count: 0,
         badge_variant: 'neutral',
     },
@@ -844,16 +835,16 @@ const ACCOUNTANT_WORKSPACE_TAB_SEEDS = [
         label: 'Documents',
         subtitle: 'Files & Requests',
         icon_key: 'documents',
-        route: '/documents',
-        badge_count: null,
-        badge_variant: null,
+        aggregate_route: null,
+        disabled_reason: 'Coming soon',
     },
     {
         key: 'bank',
         label: 'Bank',
         subtitle: 'Reconciliation',
         icon_key: 'bank',
-        route: '/m/bank',
+        aggregate_route: null,
+        disabled_reason: 'Coming soon',
         badge_count: 0,
         badge_variant: 'neutral',
     },
@@ -862,26 +853,34 @@ const ACCOUNTANT_WORKSPACE_TAB_SEEDS = [
         label: 'Reports',
         subtitle: 'Analytics',
         icon_key: 'reports',
-        route: '/m/reports',
+        aggregate_route: null,
+        disabled_reason: 'Coming soon',
         badge_count: 0,
         badge_variant: 'neutral',
     },
 ];
+function embeddedWorkEngineTabRoute(tabKey) {
+    return tabKey === 'work'
+        ? '/work-engine/queue?tab=work'
+        : `/work-engine/queue?tab=${tabKey}`;
+}
 export function buildAccountantWorkspaceTabs(activeKey) {
-    return ACCOUNTANT_WORKSPACE_TAB_SEEDS.map((seed) => {
-        const routeRegistered = ACCOUNTANT_WORKSPACE_REGISTERED_ROUTES.has(seed.route);
-        const enabled = routeRegistered;
+    const normalizedActive = activeKey === 'work_engine' ? 'work' : activeKey;
+    return ACCOUNTANT_WORKSPACE_TAB_SEEDS.filter((seed) => !seed.hidden).map((seed) => {
+        const enabled = !!seed.aggregate_route;
         return {
             key: seed.key,
             label: seed.label,
             subtitle: seed.subtitle,
             icon_key: seed.icon_key,
-            route: seed.route,
-            active: seed.key === activeKey,
+            route: embeddedWorkEngineTabRoute(seed.key),
+            active: seed.key === normalizedActive,
             badge_count: seed.badge_count ?? null,
             badge_variant: seed.badge_variant ?? null,
             enabled,
-            disabled_reason: enabled ? null : 'Coming soon',
+            disabled_reason: enabled ? null : seed.disabled_reason ?? 'Coming soon',
+            aggregate_route: seed.aggregate_route,
+            hidden: false,
         };
     });
 }
@@ -1891,7 +1890,7 @@ export async function buildWorkEngineQueueAggregate(params) {
         org_id: orgId,
         generated_at: new Date().toISOString(),
         queue_view_mode: 'work_items',
-        workspace_tabs: buildAccountantWorkspaceTabs('work_engine'),
+        workspace_tabs: buildAccountantWorkspaceTabs('work'),
         reminder_review_summary: reminderReviewSummary,
         banner: reminderBanner,
         snooze_presets: REMINDER_SNOOZE_PRESETS.map((p) => ({

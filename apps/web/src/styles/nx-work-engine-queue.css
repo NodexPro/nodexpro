@@ -37,6 +37,12 @@
   color: #64748b;
 }
 
+.nx-we-module-tab__placeholder {
+  padding: 32px 16px;
+  text-align: center;
+  color: #64748b;
+}
+
 .nx-we-module-tab__summary {
   display: flex;
   flex-wrap: wrap;

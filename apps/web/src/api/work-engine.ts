@@ -353,6 +353,8 @@ export type AccountantWorkspaceTab = {
   badge_variant: WorkspaceTabBadgeVariant;
   enabled: boolean;
   disabled_reason: string | null;
+  aggregate_route: string | null;
+  hidden: boolean;
 };
 
 export type WorkEngineQueueAggregate = {

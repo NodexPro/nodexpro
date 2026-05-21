@@ -22,12 +22,10 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   executeWorkEngineQueueCommand,
-  fetchWorkEngineInvoicesTabAggregate,
   fetchWorkEngineQueueAggregate,
-  type WorkEngineInvoicesTabAggregate,
   type QueueAllowedActionCommand,
   type QueueOverflowMenuItem,
   type QueueOwnershipCommand,
@@ -45,7 +43,7 @@ import {
   type WorkEngineQueueTableModel,
 } from '../api/work-engine';
 import { ApiError, userFacingApiMessage } from '../api/client';
-import { WorkEngineModuleTabTable } from '../components/work-engine/WorkEngineModuleTabTable';
+import { WorkEngineTabHost } from '../components/work-engine/WorkEngineTabHost';
 import '../styles/nx-work-engine-queue.css';
 
 type FilterState = {
@@ -111,14 +109,19 @@ type EscalationModalState = {
 };
 
 export function WorkEngineQueue() {
-  const [searchParams] = useSearchParams();
-  if (searchParams.get('tab') === 'invoices') {
-    return <WorkEngineInvoicesTabView />;
-  }
-  return <WorkEngineQueueMain />;
+  return (
+    <WorkEngineTabHost
+      renderWorkTab={(onWorkspaceTabs) => (
+        <WorkEngineQueueMain onWorkspaceTabs={onWorkspaceTabs} />
+      )}
+    />
+  );
 }
 
-function WorkEngineQueueMain() {
+export function WorkEngineQueueMain(props: {
+  onWorkspaceTabs?: (tabs: AccountantWorkspaceTab[]) => void;
+}) {
+  const { onWorkspaceTabs } = props;
   const navigate = useNavigate();
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
   const [aggregate, setAggregate] = useState<WorkEngineQueueAggregate | null>(null);
@@ -136,12 +139,13 @@ function WorkEngineQueueMain() {
     try {
       const agg = await fetchWorkEngineQueueAggregate(filtersToApi(f));
       setAggregate(agg);
+      if (agg.workspace_tabs && onWorkspaceTabs) onWorkspaceTabs(agg.workspace_tabs);
     } catch (e) {
       setError(userFacingApiMessage(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onWorkspaceTabs]);
 
   useEffect(() => {
     void loadAggregate(filters);
@@ -168,12 +172,14 @@ function WorkEngineQueueMain() {
         refreshed &&
         (refreshed as WorkEngineQueueAggregate).aggregate_key === 'work_engine_queue_aggregate'
       ) {
-        setAggregate(refreshed as WorkEngineQueueAggregate);
+        const next = refreshed as WorkEngineQueueAggregate;
+        setAggregate(next);
+        if (next.workspace_tabs && onWorkspaceTabs) onWorkspaceTabs(next.workspace_tabs);
         return;
       }
       void loadAggregate(filters);
     },
-    [filters, loadAggregate],
+    [filters, loadAggregate, onWorkspaceTabs],
   );
 
   const handleCommandFailure = useCallback(
@@ -320,11 +326,7 @@ function WorkEngineQueueMain() {
   const banner = aggregate.banner;
 
   return (
-    <div className="nx-we-queue nx-we-queue--with-workspace-tabs">
-      {aggregate.workspace_tabs && aggregate.workspace_tabs.length > 0 ? (
-        <AccountantWorkspaceTabs tabs={aggregate.workspace_tabs} />
-      ) : null}
-
+    <>
       <h1 className="nx-we-queue__title">Work Engine — Queue</h1>
       <p className="nx-we-queue__subtitle">
         Backend-driven workflow inbox. All states, labels, and actions are owned by the
@@ -426,7 +428,7 @@ function WorkEngineQueueMain() {
           }}
         />
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -439,197 +441,6 @@ function buildModalForAction(row: WorkEngineQueueRow, cmd: QueueAllowedActionCom
   if (cmd === 'apply_override') return { kind: 'apply_override', row };
   if (cmd === 'archive') return { kind: 'archive', row };
   return null;
-}
-
-const WORKSPACE_TAB_ICONS: Record<string, ReactNode> = {
-  work_engine: (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 6h6v6H4V6zm10 0h6v6h-6V6zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z" fill="currentColor" />
-    </svg>
-  ),
-  invoices: (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm7 1.5V9h4.5M8 13h8M8 17h5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  payroll: (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M12 3v18M7 8h10M7 12h8M7 16h6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  ),
-  vat: (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M5 7h14v10H5V7zm3 3h8M8 14h5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  ),
-  documents: (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M8 4h7l5 5v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  clients: (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm8 1a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM4 19c0-2.2 2.2-4 5-4s5 1.8 5 4M14 19c0-1.5 1.7-3 4-3"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  ),
-  bank: (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M4 10h16L12 4 4 10zm2 2v6h3v-6H6zm5 0v6h3v-6h-3zm5 0v6h3v-6h-3z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  reports: (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M6 19V9m6 10V5m6 14v-8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  ),
-};
-
-function workspaceTabIcon(iconKey: string): ReactNode {
-  return WORKSPACE_TAB_ICONS[iconKey] ?? WORKSPACE_TAB_ICONS.work_engine;
-}
-
-function WorkEngineInvoicesTabView() {
-  const [aggregate, setAggregate] = useState<WorkEngineInvoicesTabAggregate | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const agg = await fetchWorkEngineInvoicesTabAggregate();
-        if (!cancelled) setAggregate(agg);
-      } catch (e) {
-        if (!cancelled) setError(userFacingApiMessage(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (loading && !aggregate) {
-    return <div className="nx-we-queue nx-we-queue--with-workspace-tabs">טוען חשבוניות…</div>;
-  }
-
-  if (error && !aggregate) {
-    return <div className="nx-we-queue nx-we-queue--with-workspace-tabs nx-we-banner-error">{error}</div>;
-  }
-
-  if (!aggregate) return null;
-
-  return (
-    <div className="nx-we-queue nx-we-queue--with-workspace-tabs">
-      {aggregate.workspace_tabs?.length ? (
-        <AccountantWorkspaceTabs tabs={aggregate.workspace_tabs} />
-      ) : null}
-      <h1 className="nx-we-queue__title">{aggregate.title}</h1>
-      <p className="nx-we-queue__subtitle">{aggregate.description}</p>
-      {error ? <div className="nx-we-banner-error">{error}</div> : null}
-      <WorkEngineModuleTabTable table={aggregate.table_model} summary={aggregate.summary} />
-    </div>
-  );
-}
-
-export function AccountantWorkspaceTabs(props: { tabs: AccountantWorkspaceTab[] }) {
-  const navigate = useNavigate();
-  const { tabs } = props;
-
-  return (
-    <nav className="nx-aw-tabs" aria-label="Accountant workspace modules">
-      <div className="nx-aw-tabs__scroll" role="tablist">
-        {tabs.map((tab) => {
-          const showBadge = tab.badge_count !== null;
-          const badgeVariant = tab.badge_variant ?? 'neutral';
-          const tabClass = [
-            'nx-aw-tabs__tab',
-            tab.active ? 'nx-aw-tabs__tab--active' : '',
-            !tab.enabled ? 'nx-aw-tabs__tab--disabled' : '',
-          ]
-            .filter(Boolean)
-            .join(' ');
-
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              className={tabClass}
-              role="tab"
-              aria-selected={tab.active}
-              disabled={!tab.enabled}
-              title={!tab.enabled ? tab.disabled_reason ?? undefined : undefined}
-              aria-current={tab.active ? 'page' : undefined}
-              onClick={() => {
-                if (!tab.enabled) return;
-                navigate(tab.route);
-              }}
-            >
-              <span className="nx-aw-tabs__icon">{workspaceTabIcon(tab.icon_key)}</span>
-              <span className="nx-aw-tabs__body">
-                <span className="nx-aw-tabs__label">{tab.label}</span>
-                <span className="nx-aw-tabs__subtitle">{tab.subtitle}</span>
-              </span>
-              {showBadge ? (
-                <span
-                  className={`nx-aw-tabs__badge nx-aw-tabs__badge--${badgeVariant}`}
-                  aria-label={`${tab.badge_count} items`}
-                >
-                  {tab.badge_count}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-    </nav>
-  );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
