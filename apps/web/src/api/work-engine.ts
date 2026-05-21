@@ -494,6 +494,12 @@ export type WorkEngineInvoicesDocumentCreationEntrypoint = {
       }[];
     };
     office_client_issuer_options: WorkEngineOfficeClientIssuerOption[];
+    office_client_display_labels: {
+      tax_id_label: string;
+      phone_label: string;
+      email_label: string;
+      address_label: string;
+    };
     recipient_step: { title: string; description: string };
     document_details_step: {
       document_date_label: string;

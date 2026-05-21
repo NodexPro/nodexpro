@@ -89,6 +89,12 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(ctx) {
                 ],
             },
             office_client_issuer_options: officeClientOptions,
+            office_client_display_labels: {
+                tax_id_label: 'ת.ז / ח.פ',
+                phone_label: 'טלפון',
+                email_label: 'אימייל',
+                address_label: 'כתובת',
+            },
             recipient_step: {
                 title: 'מקבל המסמך / לקוח במסמך',
                 description: 'לקוח המשרד הוא המנפיק. כאן בוחרים את הלקוח או הנמען שמקבל את המסמך (לא את לקוח המשרד).',

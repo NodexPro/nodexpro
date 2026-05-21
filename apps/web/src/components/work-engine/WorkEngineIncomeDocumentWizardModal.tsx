@@ -327,7 +327,21 @@ export function WorkEngineIncomeDocumentWizardModal({
               {selectedOfficeClient.business_type_label ? (
                 <div>{selectedOfficeClient.business_type_label}</div>
               ) : null}
-              {selectedOfficeClient.tax_id ? <div>מזהה: {selectedOfficeClient.tax_id}</div> : null}
+              {selectedOfficeClient.tax_id ? (
+                <div>
+                  {wizard.office_client_display_labels.tax_id_label}: {selectedOfficeClient.tax_id}
+                </div>
+              ) : null}
+              {selectedOfficeClient.phone ? (
+                <div>
+                  {wizard.office_client_display_labels.phone_label}: {selectedOfficeClient.phone}
+                </div>
+              ) : null}
+              {selectedOfficeClient.email ? (
+                <div>
+                  {wizard.office_client_display_labels.email_label}: {selectedOfficeClient.email}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

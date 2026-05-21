@@ -55,6 +55,48 @@ if (/1000|2000|3000|4000|61111/.test(wizard)) {
 if (/backdated|מוקדם ממסמך/.test(wizard)) {
   errors.push('wizard must not validate backdated document dates on frontend');
 }
+
+const wizardForbidden = [
+  /עוסק\s*מורשה/,
+  /עוסק\s*פטור/,
+  /osek_murshe/,
+  /osek_patur/,
+  /normalizeIssuerBusinessType/,
+  /mapClientOperationsBusinessType/,
+  /business_type\s*===/,
+  /business_type\s*==/,
+  /fetchClientOperations/,
+  /client-operations/,
+  /client_operations/,
+  /\/m\/client-operations/,
+  /CLIENT_OPERATIONS/,
+];
+for (const re of wizardForbidden) {
+  if (re.test(wizard)) {
+    errors.push(`wizard forbidden pattern: ${re}`);
+  }
+}
+
+if (!wizard.includes('office_client_issuer_options')) {
+  errors.push('wizard must render office_client_issuer_options from aggregate');
+}
+if (!wizard.includes('office_client_display_labels')) {
+  errors.push('wizard must use backend office_client_display_labels for prefill captions');
+}
+if (!wizard.includes('business_type_label')) {
+  errors.push('wizard must render business_type_label from backend only');
+}
+if (/מזהה:/.test(wizard)) {
+  errors.push('wizard must not hardcode tax_id label (use office_client_display_labels)');
+}
+
+const invoicesPanelSource = read(tabHost);
+if (
+  /WorkEngineInvoicesTabPanel[\s\S]*ClientOperationsRegistryView/.test(invoicesPanelSource) ||
+  /showInvoices[\s\S]*ClientOperationsRegistryView/.test(invoicesPanelSource)
+) {
+  errors.push('invoices tab must not embed Client Operations registry');
+}
 if (
   !page.includes("tabKey === 'invoices'") &&
   !page.includes('resolveWorkEngineTabKey')

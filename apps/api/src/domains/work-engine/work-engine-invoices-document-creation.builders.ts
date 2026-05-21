@@ -52,6 +52,13 @@ export type WorkEngineInvoicesDocumentCreationEntrypoint = {
       }[];
     };
     office_client_issuer_options: WorkEngineOfficeClientIssuerOption[];
+    /** Display labels for office-client prefill (same semantics as Client Operations profile). */
+    office_client_display_labels: {
+      tax_id_label: string;
+      phone_label: string;
+      email_label: string;
+      address_label: string;
+    };
     recipient_step: {
       title: string;
       description: string;
@@ -162,6 +169,12 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(
         ],
       },
       office_client_issuer_options: officeClientOptions,
+      office_client_display_labels: {
+        tax_id_label: 'ת.ז / ח.פ',
+        phone_label: 'טלפון',
+        email_label: 'אימייל',
+        address_label: 'כתובת',
+      },
       recipient_step: {
         title: 'מקבל המסמך / לקוח במסמך',
         description:
