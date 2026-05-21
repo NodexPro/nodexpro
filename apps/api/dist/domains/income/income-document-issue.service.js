@@ -12,6 +12,7 @@ import { allocateIncomeDocumentNumber } from './income-document-numbering.servic
 import { assertDraftReadyToIssue, buildLegalSnapshotForIssue, buildTotalsSnapshotForIssue, } from './income-document-issue.pure.js';
 import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
+import { emitIncomeWorkEventsAfterDocumentIssued } from './income-work-engine-bridge.js';
 async function loadFullDraftForIssue(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
@@ -136,6 +137,7 @@ export async function executeIssueIncomeDocument(ctx, body) {
         document_number: allocated.document_number,
         document_status: 'issued',
         issue_date,
+        due_date: draft.due_date,
         currency: draft.currency ?? 'ILS',
         language: draft.language ?? 'he',
         lines_snapshot_json: lines,
@@ -198,5 +200,20 @@ export async function executeIssueIncomeDocument(ctx, body) {
         },
     });
     await renderIncomeDocumentPdf(ctx, scope.org_id, issuedId);
+    void emitIncomeWorkEventsAfterDocumentIssued({
+        ctx,
+        orgId: scope.org_id,
+        incomeDocumentId: issuedId,
+        representedClientId: scope.represented_client_id,
+        documentType: draft.document_type,
+        documentNumber: allocated.document_number,
+        issueDate: issue_date,
+        dueDate: draft.due_date,
+        currency: draft.currency ?? 'ILS',
+        customerSnapshotJson: customer_snapshot_json,
+        totalsSnapshotJson: totals_snapshot_json,
+    }).catch(() => {
+        /* fire-and-forget — Income issue must not fail on Work Engine intake */
+    });
     return issuedId;
 }

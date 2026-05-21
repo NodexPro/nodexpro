@@ -447,6 +447,40 @@ function appendFilterParams(qs: URLSearchParams, f: WorkEngineQueueFiltersInput)
   if (typeof f.offset === 'number' && Number.isFinite(f.offset)) qs.set('offset', String(f.offset));
 }
 
+export type WorkEngineInvoicesTabColumnType = 'text' | 'money_reference' | 'date' | 'status';
+
+export type WorkEngineInvoicesTabColumn = {
+  key: string;
+  label: string;
+  type: WorkEngineInvoicesTabColumnType;
+};
+
+export type WorkEngineInvoicesTabAggregate = {
+  aggregate_key: 'work_engine_invoices_tab_aggregate';
+  org_id: string;
+  workspace_tabs: AccountantWorkspaceTab[];
+  title: string;
+  description: string;
+  table_model: {
+    columns: WorkEngineInvoicesTabColumn[];
+    rows: Array<Record<string, string | number | null>>;
+    empty_state: { visible: boolean; title: string; description: string | null };
+  };
+  summary: {
+    rows_count: number;
+    sum_paid_reference: number;
+    avg_paid_reference: number;
+    currency: string;
+  };
+  filters: [];
+  allowed_actions: string[];
+  gaps: string[];
+};
+
+export async function fetchWorkEngineInvoicesTabAggregate(): Promise<WorkEngineInvoicesTabAggregate> {
+  return apiJson<WorkEngineInvoicesTabAggregate>(WORK_ENGINE.aggregateInvoicesTab);
+}
+
 export async function fetchWorkEngineQueueAggregate(
   filters: WorkEngineQueueFiltersInput,
 ): Promise<WorkEngineQueueAggregate> {

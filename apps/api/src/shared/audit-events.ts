@@ -260,6 +260,8 @@ export const AUDIT_ACTIONS = {
   INCOME_PDF_RENDER_SUCCEEDED: 'income.pdf_render_succeeded',
   INCOME_PDF_RENDER_FAILED: 'income.pdf_render_failed',
   INCOME_PDF_DOWNLOADED: 'income.pdf_downloaded',
+  /** Income INC-8 — Work Engine intake bridge failure (additive). */
+  INCOME_WORK_ENGINE_BRIDGE_INTAKE_FAILED: 'income.work_engine_bridge.intake_failed',
 } as const;
 
 type AuditPayload = Record<string, unknown>;

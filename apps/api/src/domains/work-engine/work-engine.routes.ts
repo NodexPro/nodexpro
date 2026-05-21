@@ -6,6 +6,7 @@
  * Endpoints (single command surface — no per-command routes):
  *   - GET  /aggregates/foundation   -> work_engine_foundation_aggregate
  *   - GET  /aggregates/queue        -> work_engine_queue_aggregate (Stage 3D);
+ *   - GET  /aggregates/invoices-tab -> work_engine_invoices_tab_aggregate (INC-8);
  *                                      backend-ready queue table with rows,
  *                                      summary_cards, filters, pagination,
  *                                      pending_mapping_section. Supports
@@ -47,6 +48,7 @@ import {
   buildWorkEngineQueueAggregate,
   type WorkEngineQueueFilters,
 } from './work-engine.read-models.service.js';
+import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.read-model.service.js';
 import type {
   WorkEngineCommandType,
   WorkEventEnvelope,
@@ -154,6 +156,20 @@ officeRouter.get(
               }
             : undefined,
       });
+      return res.json(aggregate);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+officeRouter.get(
+  '/aggregates/invoices-tab',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const ctx = req.context as RequestContext;
+      const orgId = ctx.organizationId!;
+      const aggregate = await buildWorkEngineInvoicesTabAggregate({ orgId });
       return res.json(aggregate);
     } catch (e) {
       next(e);

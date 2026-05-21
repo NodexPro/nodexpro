@@ -789,6 +789,7 @@ function pendingReasonLabel(reason) {
 /** Routes that exist in the web app today (Stage 11A — backend registry only). */
 const ACCOUNTANT_WORKSPACE_REGISTERED_ROUTES = new Set([
     '/work-engine/queue',
+    '/work-engine/queue?tab=invoices',
     '/m/client-operations',
     '/documents',
 ]);
@@ -813,12 +814,12 @@ const ACCOUNTANT_WORKSPACE_TAB_SEEDS = [
     },
     {
         key: 'invoices',
-        label: 'Invoices',
-        subtitle: 'Sales & Billing',
+        label: 'חשבוניות',
+        subtitle: 'מעקב גבייה ותשלומים',
         icon_key: 'invoices',
-        route: '/m/invoices',
-        badge_count: 0,
-        badge_variant: 'neutral',
+        route: '/work-engine/queue?tab=invoices',
+        badge_count: null,
+        badge_variant: null,
     },
     {
         key: 'payroll',
@@ -866,7 +867,7 @@ const ACCOUNTANT_WORKSPACE_TAB_SEEDS = [
         badge_variant: 'neutral',
     },
 ];
-function buildAccountantWorkspaceTabs(activeKey) {
+export function buildAccountantWorkspaceTabs(activeKey) {
     return ACCOUNTANT_WORKSPACE_TAB_SEEDS.map((seed) => {
         const routeRegistered = ACCOUNTANT_WORKSPACE_REGISTERED_ROUTES.has(seed.route);
         const enabled = routeRegistered;
@@ -949,11 +950,13 @@ function moduleLabel(key) {
             return 'DocFlow';
         case 'work_engine':
             return 'Work Engine';
+        case 'income':
+            return 'הכנסות';
         default:
             return humanizeKey(key);
     }
 }
-function workTypeLabel(key) {
+export function workTypeLabel(key) {
     switch (key) {
         case 'payroll_document_collection':
             return 'Payroll Documents';
@@ -963,6 +966,8 @@ function workTypeLabel(key) {
             return 'Annual Report Documents';
         case 'docflow_thread_followup':
             return 'Conversation';
+        case 'invoice_collection_followup':
+            return 'גבייה עבור חשבונית באיחור';
         default:
             return humanizeKey(key);
     }

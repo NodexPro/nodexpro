@@ -6,6 +6,7 @@
  * Endpoints (single command surface — no per-command routes):
  *   - GET  /aggregates/foundation   -> work_engine_foundation_aggregate
  *   - GET  /aggregates/queue        -> work_engine_queue_aggregate (Stage 3D);
+ *   - GET  /aggregates/invoices-tab -> work_engine_invoices_tab_aggregate (INC-8);
  *                                      backend-ready queue table with rows,
  *                                      summary_cards, filters, pagination,
  *                                      pending_mapping_section. Supports
@@ -41,6 +42,7 @@ import { runWorkEngineScheduler } from './work-engine.scheduler.service.js';
 import { executeWorkEngineCommand } from './work-engine.commands.service.js';
 import { acceptWorkEngineEvent } from './work-engine.event-intake.service.js';
 import { buildWorkEngineFoundationAggregate, buildWorkEngineQueueAggregate, } from './work-engine.read-models.service.js';
+import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.read-model.service.js';
 const router = Router();
 function requireInternalCronSecret(req) {
     const secret = String(req.headers['x-internal-cron-secret'] ?? '').trim();
@@ -127,6 +129,17 @@ officeRouter.get('/aggregates/queue', async (req, res, next) => {
                 }
                 : undefined,
         });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+officeRouter.get('/aggregates/invoices-tab', async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        const orgId = ctx.organizationId;
+        const aggregate = await buildWorkEngineInvoicesTabAggregate({ orgId });
         return res.json(aggregate);
     }
     catch (e) {

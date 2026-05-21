@@ -120,6 +120,11 @@ test('numbering uses backend rpc only', () => {
 test('issue service uses income accounting boundary not direct accounting-base tables', () => {
   assert.match(issueServiceSource, /income-accounting-posting\.service/);
   assert.doesNotMatch(issueServiceSource, /from\s+['"].*\/accounting-base\//);
-  assert.doesNotMatch(issueServiceSource, /from\s+['"].*work-engine/i);
   assert.doesNotMatch(issueServiceSource, /from\s+['"].*docflow/i);
+});
+
+test('issue service emits Work Engine work_events via bridge only', () => {
+  assert.match(issueServiceSource, /emitIncomeWorkEventsAfterDocumentIssued/);
+  assert.match(issueServiceSource, /income-work-engine-bridge/);
+  assert.doesNotMatch(issueServiceSource, /\.from\(['"]work_items['"]\)/);
 });

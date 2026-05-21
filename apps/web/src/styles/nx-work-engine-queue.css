@@ -1,3 +1,54 @@
+/* INC-8 — Work Engine module tab (Invoices) Excel-like table */
+.nx-we-module-tab {
+  direction: rtl;
+  min-width: 0;
+}
+
+.nx-we-module-tab__table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.nx-we-module-tab__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.nx-we-module-tab__table th,
+.nx-we-module-tab__table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.nx-we-module-tab__table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+}
+
+.nx-we-module-tab__empty {
+  text-align: center;
+  padding: 24px !important;
+  color: #64748b;
+}
+
+.nx-we-module-tab__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
 /* Stage 4 — Work Engine queue workspace
  * Backend-driven page. No layout depends on row content semantics.
  */

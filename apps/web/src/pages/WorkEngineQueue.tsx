@@ -22,10 +22,12 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   executeWorkEngineQueueCommand,
+  fetchWorkEngineInvoicesTabAggregate,
   fetchWorkEngineQueueAggregate,
+  type WorkEngineInvoicesTabAggregate,
   type QueueAllowedActionCommand,
   type QueueOverflowMenuItem,
   type QueueOwnershipCommand,
@@ -43,6 +45,7 @@ import {
   type WorkEngineQueueTableModel,
 } from '../api/work-engine';
 import { ApiError, userFacingApiMessage } from '../api/client';
+import { WorkEngineModuleTabTable } from '../components/work-engine/WorkEngineModuleTabTable';
 import '../styles/nx-work-engine-queue.css';
 
 type FilterState = {
@@ -108,6 +111,14 @@ type EscalationModalState = {
 };
 
 export function WorkEngineQueue() {
+  const [searchParams] = useSearchParams();
+  if (searchParams.get('tab') === 'invoices') {
+    return <WorkEngineInvoicesTabView />;
+  }
+  return <WorkEngineQueueMain />;
+}
+
+function WorkEngineQueueMain() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
   const [aggregate, setAggregate] = useState<WorkEngineQueueAggregate | null>(null);
@@ -520,7 +531,54 @@ function workspaceTabIcon(iconKey: string): ReactNode {
   return WORKSPACE_TAB_ICONS[iconKey] ?? WORKSPACE_TAB_ICONS.work_engine;
 }
 
-function AccountantWorkspaceTabs(props: { tabs: AccountantWorkspaceTab[] }) {
+function WorkEngineInvoicesTabView() {
+  const [aggregate, setAggregate] = useState<WorkEngineInvoicesTabAggregate | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const agg = await fetchWorkEngineInvoicesTabAggregate();
+        if (!cancelled) setAggregate(agg);
+      } catch (e) {
+        if (!cancelled) setError(userFacingApiMessage(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading && !aggregate) {
+    return <div className="nx-we-queue nx-we-queue--with-workspace-tabs">טוען חשבוניות…</div>;
+  }
+
+  if (error && !aggregate) {
+    return <div className="nx-we-queue nx-we-queue--with-workspace-tabs nx-we-banner-error">{error}</div>;
+  }
+
+  if (!aggregate) return null;
+
+  return (
+    <div className="nx-we-queue nx-we-queue--with-workspace-tabs">
+      {aggregate.workspace_tabs?.length ? (
+        <AccountantWorkspaceTabs tabs={aggregate.workspace_tabs} />
+      ) : null}
+      <h1 className="nx-we-queue__title">{aggregate.title}</h1>
+      <p className="nx-we-queue__subtitle">{aggregate.description}</p>
+      {error ? <div className="nx-we-banner-error">{error}</div> : null}
+      <WorkEngineModuleTabTable table={aggregate.table_model} summary={aggregate.summary} />
+    </div>
+  );
+}
+
+export function AccountantWorkspaceTabs(props: { tabs: AccountantWorkspaceTab[] }) {
   const navigate = useNavigate();
   const { tabs } = props;
 

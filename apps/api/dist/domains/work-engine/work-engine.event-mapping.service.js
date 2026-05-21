@@ -82,6 +82,13 @@ const SAFE_EVENT_MAPPINGS = {
         initial_state: 'waiting_human',
         requires_period_key: true,
     },
+    /** INC-8 — Income invoice overdue → collection follow-up (display/reference payload only). */
+    'income.invoice_overdue': {
+        module_key: 'income',
+        work_type: 'invoice_collection_followup',
+        initial_state: 'waiting_client',
+        requires_period_key: true,
+    },
 };
 export const MAPPING_REASON = {
     UNKNOWN_EVENT_MAPPING: 'unknown_event_mapping',

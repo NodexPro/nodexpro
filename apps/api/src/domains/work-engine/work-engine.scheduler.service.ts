@@ -16,6 +16,8 @@ import { config } from '../../config.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError } from '../../shared/errors.js';
 import { reprocessPendingWorkEventsForOrg } from './work-engine.event-intake.service.js';
+import { scanAndEmitIncomeInvoiceOverdueForOrg } from '../income/income-work-engine-bridge.js';
+import type { RequestContext } from '../../shared/context.js';
 import { wakeExpiredSnoozedReminderCandidates } from './work-engine.reminder-review.service.js';
 import { recomputeWorkItemSlaStatus } from './work-engine.sla.service.js';
 
@@ -85,6 +87,39 @@ async function listSchedulerOrgIds(singleOrgId?: string): Promise<string[]> {
   }
 
   return [...seen].sort();
+}
+
+async function pickSchedulerActorUserId(orgId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('memberships')
+    .select('user_id')
+    .eq('organization_id', orgId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  const userId = (data as { user_id?: string } | null)?.user_id;
+  return userId && String(userId).trim() ? String(userId) : null;
+}
+
+function buildSchedulerIncomeBridgeContext(orgId: string, userId: string): RequestContext {
+  return {
+    user: {
+      id: userId,
+      authUserId: userId,
+      email: 'scheduler@internal',
+      fullName: 'Work Engine Scheduler',
+      status: 'active',
+      uiLanguage: 'he',
+    },
+    membership: {
+      organizationId: orgId,
+      userId,
+      roleId: 'scheduler',
+      roleCode: 'owner',
+      permissions: [],
+    },
+    organizationId: orgId,
+  };
 }
 
 async function listActiveWorkItemIdsForOrg(
@@ -216,6 +251,14 @@ export async function runWorkEngineScheduler(
           dryRun,
         });
         summary.snoozed_woken += wake.woken;
+
+        if (!dryRun) {
+          const actorUserId = await pickSchedulerActorUserId(orgId);
+          if (actorUserId) {
+            const bridgeCtx = buildSchedulerIncomeBridgeContext(orgId, actorUserId);
+            await scanAndEmitIncomeInvoiceOverdueForOrg(orgId, bridgeCtx);
+          }
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e ?? 'unknown_error');
         summary.errors.push({ org_id: orgId, error: msg });
