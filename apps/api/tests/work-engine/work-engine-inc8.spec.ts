@@ -83,6 +83,8 @@ test('invoices tab aggregate includes document creation wizard entrypoint', () =
   assert.match(invoicesTabSource, /document_creation_entrypoint/);
   assert.match(invoicesTabSource, /buildWorkEngineInvoicesDocumentCreationEntrypoint/);
   assert.match(invoicesTabSource, /open_income_document_wizard/);
+  assert.match(invoicesWizardSource, /loadClientOperationsCoreClientsForOrg/);
+  assert.match(invoicesWizardSource, /clientOperationsBusinessTypeDisplayHe/);
   assert.match(invoicesWizardSource, /office_client_issuer_options/);
   assert.match(invoicesWizardSource, /המשרד —/);
   assert.match(invoicesWizardSource, /לקוח מהמשרד/);

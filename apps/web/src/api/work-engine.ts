@@ -468,6 +468,7 @@ export type WorkEngineOfficeClientIssuerOption = {
   business_type_label: string | null;
   address_json: Record<string, unknown> | null;
   phone: string | null;
+  email: string | null;
   vat_registration_status: string | null;
   country_code: string;
   enabled: boolean;

@@ -1,67 +1,29 @@
 /**
  * INC-8.5 — Work Engine invoices tab document creation wizard schema.
  */
-import { supabaseAdmin } from '../../db/client.js';
 import { hasPermission } from '../rbac/rbac.service.js';
+import { buildClientOperationsAddressJson, clientOperationsBusinessTypeDisplayHe, loadClientOperationsCoreClientsForOrg, mapClientOperationsBusinessTypeForIncomeIssuer, } from '../client-operations/client-operations-client-core.read.js';
 import { ensureOrgIncomeIssuerProfile } from '../income/income-issuer-context.service.js';
 import { loadIncomeIssuerProfileProjection } from '../income/income-issuer-profile-sync.service.js';
-import { normalizeIssuerBusinessType } from '../income/income-document-types.fallback.js';
 import { INCOME_PERMISSIONS } from '../income/income.types.js';
-function businessTypeLabelHe(raw) {
-    if (!raw)
-        return null;
-    const map = {
-        osek_patur: 'עוסק פטור',
-        osek_murshe: 'עוסק מורשה',
-        company: 'חברה',
-        nonprofit: 'עמותה',
-        unknown: 'לא מוגדר',
-    };
-    return map[raw] ?? raw;
-}
 async function loadOfficeClientIssuerOptions(orgId) {
-    const { data: clientList } = await supabaseAdmin
-        .from('clients')
-        .select('id, display_name, legal_name, is_archived')
-        .eq('organization_id', orgId)
-        .eq('is_archived', false)
-        .order('display_name', { ascending: true })
-        .limit(500);
-    const clients = (clientList ?? []);
-    if (clients.length === 0)
-        return [];
-    const clientIds = clients.map((c) => c.id);
-    const { data: profiles } = await supabaseAdmin
-        .from('client_operational_profiles')
-        .select('client_id, business_type, vat_registered_flag')
-        .eq('organization_id', orgId)
-        .in('client_id', clientIds);
-    const { data: clientRows } = await supabaseAdmin
-        .from('clients')
-        .select('id, display_name, legal_name, tax_id, phone, address_json, country_code')
-        .eq('organization_id', orgId)
-        .in('id', clientIds);
-    const profileByClient = new Map((profiles ?? []).map((p) => [String(p.client_id), p]));
-    const clientById = new Map((clientRows ?? []).map((c) => [String(c.id), c]));
-    return clients.map((c) => {
-        const full = clientById.get(c.id);
-        const prof = profileByClient.get(c.id);
-        const businessType = normalizeIssuerBusinessType(prof?.business_type ?? null);
-        const vatFlag = prof?.vat_registered_flag;
-        const displayName = full?.legal_name?.trim() || full?.display_name || c.display_name;
+    const coreClients = await loadClientOperationsCoreClientsForOrg(orgId);
+    return coreClients.map((c) => {
+        const businessTypeNorm = mapClientOperationsBusinessTypeForIncomeIssuer(c.business_type);
         return {
             issuer_business_id: c.id,
             represented_client_id: c.id,
-            label: displayName,
-            display_name: displayName,
-            legal_name: full?.legal_name ?? c.legal_name,
-            tax_id: full?.tax_id ?? null,
-            business_type: businessType,
-            business_type_label: businessTypeLabelHe(businessType),
-            address_json: full?.address_json ?? null,
-            phone: full?.phone ?? null,
-            vat_registration_status: vatFlag === true ? 'registered' : vatFlag === false ? 'not_registered' : null,
-            country_code: full?.country_code ?? 'IL',
+            label: c.display_name,
+            display_name: c.display_name,
+            legal_name: null,
+            tax_id: c.tax_id,
+            business_type: businessTypeNorm,
+            business_type_label: clientOperationsBusinessTypeDisplayHe(c.business_type),
+            address_json: buildClientOperationsAddressJson(c.address, c.city),
+            phone: c.phone,
+            email: c.email,
+            vat_registration_status: null,
+            country_code: 'IL',
             enabled: true,
             disabled_reason: null,
         };
@@ -156,6 +118,7 @@ export function issuerSnapshotToPrefillBlock(snapshot) {
         business_type_label: snapshot.business_type_label,
         address_json: snapshot.address_json,
         phone: snapshot.phone,
+        email: snapshot.email ?? null,
         country_code: snapshot.country_code,
         vat_registration_status: snapshot.vat_registration_status,
     };
