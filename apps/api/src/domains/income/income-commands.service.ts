@@ -25,6 +25,7 @@ import {
   buildIncomeWorkspaceContextAggregate,
 } from './income-issuer-context.service.js';
 import {
+  activeIncomeIssuerScopeFromContextAggregate,
   assertIncomeEditPermission,
   assertIncomeIssuePermission,
   loadActiveIncomeIssuerScope,
@@ -85,10 +86,9 @@ async function commandResponse(
 async function selectIssuerContextCommandResponse(
   ctx: RequestContext,
 ): Promise<SelectIncomeIssuerContextCommandResponse> {
-  const [income_workspace_context_aggregate, income_workspace_aggregate] = await Promise.all([
-    buildIncomeWorkspaceContextAggregate(ctx),
-    buildIncomeWorkspaceAggregate(ctx),
-  ]);
+  const income_workspace_context_aggregate = await buildIncomeWorkspaceContextAggregate(ctx);
+  const scope = activeIncomeIssuerScopeFromContextAggregate(income_workspace_context_aggregate);
+  const income_workspace_aggregate = await buildIncomeWorkspaceAggregate(ctx, scope);
   return {
     ok: true,
     command: INCOME_COMMAND_SELECT_ISSUER,

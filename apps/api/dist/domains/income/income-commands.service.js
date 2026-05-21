@@ -7,7 +7,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, notFound } from '../../shared/errors.js';
 import { assertRowMatchesIssuerScope, optionalJsonObject, optionalPriceReference, optionalString, optionalUuid, parseIncomeDocumentType, parseIncomeItemType, reqJsonArray, reqNonEmptyString, reqUuid, } from './income.guards.js';
 import { applySelectIncomeIssuerContext, buildIncomeWorkspaceContextAggregate, } from './income-issuer-context.service.js';
-import { assertIncomeEditPermission, assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
+import { activeIncomeIssuerScopeFromContextAggregate, assertIncomeEditPermission, assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
 import { parseDraftPayloadBody, validateDraftAgainstDocumentTypeRules, } from './income-document-draft.helpers.js';
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
@@ -35,10 +35,9 @@ async function commandResponse(ctx, command) {
     };
 }
 async function selectIssuerContextCommandResponse(ctx) {
-    const [income_workspace_context_aggregate, income_workspace_aggregate] = await Promise.all([
-        buildIncomeWorkspaceContextAggregate(ctx),
-        buildIncomeWorkspaceAggregate(ctx),
-    ]);
+    const income_workspace_context_aggregate = await buildIncomeWorkspaceContextAggregate(ctx);
+    const scope = activeIncomeIssuerScopeFromContextAggregate(income_workspace_context_aggregate);
+    const income_workspace_aggregate = await buildIncomeWorkspaceAggregate(ctx, scope);
     return {
         ok: true,
         command: INCOME_COMMAND_SELECT_ISSUER,

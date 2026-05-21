@@ -82,13 +82,21 @@ test('receipt requires payment_received and not due_date', () => {
   assert.equal(receipt?.requires_due_date, false);
 });
 
-test('office_representative resolver maps Client Operations Hebrew עוסק מורשה', () => {
+test('office_representative resolver reads Client Operations core client row', () => {
   assert.match(coreReadSource, /עוסק מורשה[\s\S]*return 'osek_murshe'/);
+  assert.match(resolverSource, /loadClientOperationsCoreClient\(orgId, scope\.represented_client_id\)/);
   assert.match(resolverSource, /mapClientOperationsBusinessTypeForIncomeIssuer\(raw\)/);
-  assert.doesNotMatch(
-    resolverSource,
-    /normalizeIssuerBusinessType\(raw\)/,
+  assert.doesNotMatch(resolverSource, /from\('client_operational_profiles'\)/);
+});
+
+test('select issuer command builds workspace aggregate from same context scope', () => {
+  const commandsSource = readFileSync(
+    join(dir, '../../src/domains/income/income-commands.service.ts'),
+    'utf8',
   );
+  assert.doesNotMatch(commandsSource, /Promise\.all\([\s\S]*buildIncomeWorkspaceContextAggregate[\s\S]*buildIncomeWorkspaceAggregate/);
+  assert.match(commandsSource, /activeIncomeIssuerScopeFromContextAggregate/);
+  assert.match(commandsSource, /buildIncomeWorkspaceAggregate\(ctx, scope\)/);
 });
 
 test('osek_murshe (from עוסק מורשה) enables tax_invoice receipt and credit', () => {

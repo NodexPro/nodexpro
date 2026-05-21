@@ -3,6 +3,19 @@
  */
 import { forbidden } from '../../shared/errors.js';
 import { buildIncomeWorkspaceContextAggregate } from './income-issuer-context.service.js';
+/** Single scope truth from context aggregate (after select_income_issuer_context). */
+export function activeIncomeIssuerScopeFromContextAggregate(contextAgg) {
+    return {
+        org_id: contextAgg.org_id,
+        actor_user_id: contextAgg.actor_user_id,
+        acting_mode: contextAgg.acting_mode,
+        issuer_business_id: contextAgg.active_issuer_business_id,
+        represented_client_id: contextAgg.represented_client_id,
+        issuer_label: contextAgg.issuer_label,
+        represented_client_label: contextAgg.represented_client_label,
+        permissions: contextAgg.permissions,
+    };
+}
 export function toIssuerContextSummary(scope) {
     return {
         acting_mode: scope.acting_mode,

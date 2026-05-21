@@ -5,7 +5,10 @@
 
 import { supabaseAdmin } from '../../db/client.js';
 import type { ActiveIncomeIssuerScope } from './income.guards.js';
-import { mapClientOperationsBusinessTypeForIncomeIssuer } from '../client-operations/client-operations-client-core.read.js';
+import {
+  loadClientOperationsCoreClient,
+  mapClientOperationsBusinessTypeForIncomeIssuer,
+} from '../client-operations/client-operations-client-core.read.js';
 import {
   buildAvailableDocumentTypesForBusiness,
   normalizeIssuerBusinessType,
@@ -28,13 +31,8 @@ export async function resolveIssuerBusinessType(
   scope: ActiveIncomeIssuerScope,
 ): Promise<{ business_type: IncomeIssuerBusinessType; raw: string | null }> {
   if (scope.acting_mode === 'office_representative' && scope.represented_client_id) {
-    const { data } = await supabaseAdmin
-      .from('client_operational_profiles')
-      .select('business_type')
-      .eq('organization_id', orgId)
-      .eq('client_id', scope.represented_client_id)
-      .maybeSingle();
-    const raw = (data as { business_type?: string | null } | null)?.business_type ?? null;
+    const core = await loadClientOperationsCoreClient(orgId, scope.represented_client_id);
+    const raw = core?.business_type ?? null;
     return {
       business_type: mapClientOperationsBusinessTypeForIncomeIssuer(raw),
       raw,

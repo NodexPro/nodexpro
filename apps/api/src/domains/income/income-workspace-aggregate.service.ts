@@ -355,8 +355,11 @@ function draftsTableModel(rows: IncomeDraftsTableRow[]): IncomeTableModel<Income
   };
 }
 
-export async function buildIncomeWorkspaceAggregate(ctx: RequestContext): Promise<IncomeWorkspaceAggregate> {
-  const scope = await loadActiveIncomeIssuerScope(ctx);
+export async function buildIncomeWorkspaceAggregate(
+  ctx: RequestContext,
+  scopeOverride?: ActiveIncomeIssuerScope,
+): Promise<IncomeWorkspaceAggregate> {
+  const scope = scopeOverride ?? (await loadActiveIncomeIssuerScope(ctx));
   if (!scope.permissions.view) throw forbidden('income.view required');
 
   const [customersCount, itemsCount, draftsCount, issuedCount, postedCount, postingFailedCount] =

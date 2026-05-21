@@ -3,7 +3,7 @@
  * TEMPORARY_COUNTRY_PACK_PENDING: legal eligibility via fallback_il until pack exposes income document rules.
  */
 import { supabaseAdmin } from '../../db/client.js';
-import { mapClientOperationsBusinessTypeForIncomeIssuer } from '../client-operations/client-operations-client-core.read.js';
+import { loadClientOperationsCoreClient, mapClientOperationsBusinessTypeForIncomeIssuer, } from '../client-operations/client-operations-client-core.read.js';
 import { buildAvailableDocumentTypesForBusiness, normalizeIssuerBusinessType, } from './income-document-types.fallback.js';
 import { mapLegalEntityTypeToIncomeBusinessType } from './income-org-business-profile.mapping.js';
 import { loadOrgBusinessProfileForIncome } from './income-org-business-profile.js';
@@ -11,13 +11,8 @@ import { loadIncomeIssuerProfileProjection } from './income-issuer-profile-sync.
 export { assertDocumentTypeEnabled, buildAvailableDocumentTypesForBusiness, findAvailableDocumentType, } from './income-document-types.fallback.js';
 export async function resolveIssuerBusinessType(orgId, scope) {
     if (scope.acting_mode === 'office_representative' && scope.represented_client_id) {
-        const { data } = await supabaseAdmin
-            .from('client_operational_profiles')
-            .select('business_type')
-            .eq('organization_id', orgId)
-            .eq('client_id', scope.represented_client_id)
-            .maybeSingle();
-        const raw = data?.business_type ?? null;
+        const core = await loadClientOperationsCoreClient(orgId, scope.represented_client_id);
+        const raw = core?.business_type ?? null;
         return {
             business_type: mapClientOperationsBusinessTypeForIncomeIssuer(raw),
             raw,

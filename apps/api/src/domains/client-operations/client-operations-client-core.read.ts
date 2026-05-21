@@ -24,19 +24,27 @@ export type ClientOperationsCoreClientRow = {
   business_type: string | null;
 };
 
+/** Trim stored DB text (same row Client Operations reads). */
+export function normalizeStoredClientOperationsBusinessTypeRaw(
+  raw: string | null | undefined,
+): string | null {
+  if (raw == null) return null;
+  const s = String(raw).replace(/\u00a0/g, ' ').trim();
+  return s || null;
+}
+
 /** Display label = stored Client Operations profile value (Hebrew). */
 export function clientOperationsBusinessTypeDisplayHe(
   raw: string | null | undefined,
 ): string | null {
-  const s = String(raw ?? '').trim();
-  return s || null;
+  return normalizeStoredClientOperationsBusinessTypeRaw(raw);
 }
 
 /** Map CO profile business_type → Income issuer eligibility codes. */
 export function mapClientOperationsBusinessTypeForIncomeIssuer(
   raw: string | null | undefined,
 ): IncomeIssuerBusinessType {
-  const s = String(raw ?? '').trim();
+  const s = normalizeStoredClientOperationsBusinessTypeRaw(raw) ?? '';
   if (s === CLIENT_OPERATIONS_BUSINESS_TYPE_OSEK_PATUR) return 'osek_patur';
   if (s === CLIENT_OPERATIONS_BUSINESS_TYPE_OSEK_MURSHE) return 'osek_murshe';
   if (s === 'חברה' || s === 'תאגיד') return 'company';

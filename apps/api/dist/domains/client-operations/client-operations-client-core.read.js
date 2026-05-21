@@ -7,14 +7,20 @@ import { normalizeIssuerBusinessType, } from '../income/income-document-types.fa
 /** Hebrew profile values — must match client-operations.service ALLOWED_BUSINESS_TYPES. */
 export const CLIENT_OPERATIONS_BUSINESS_TYPE_OSEK_PATUR = 'עוסק פטור';
 export const CLIENT_OPERATIONS_BUSINESS_TYPE_OSEK_MURSHE = 'עוסק מורשה';
+/** Trim stored DB text (same row Client Operations reads). */
+export function normalizeStoredClientOperationsBusinessTypeRaw(raw) {
+    if (raw == null)
+        return null;
+    const s = String(raw).replace(/\u00a0/g, ' ').trim();
+    return s || null;
+}
 /** Display label = stored Client Operations profile value (Hebrew). */
 export function clientOperationsBusinessTypeDisplayHe(raw) {
-    const s = String(raw ?? '').trim();
-    return s || null;
+    return normalizeStoredClientOperationsBusinessTypeRaw(raw);
 }
 /** Map CO profile business_type → Income issuer eligibility codes. */
 export function mapClientOperationsBusinessTypeForIncomeIssuer(raw) {
-    const s = String(raw ?? '').trim();
+    const s = normalizeStoredClientOperationsBusinessTypeRaw(raw) ?? '';
     if (s === CLIENT_OPERATIONS_BUSINESS_TYPE_OSEK_PATUR)
         return 'osek_patur';
     if (s === CLIENT_OPERATIONS_BUSINESS_TYPE_OSEK_MURSHE)
