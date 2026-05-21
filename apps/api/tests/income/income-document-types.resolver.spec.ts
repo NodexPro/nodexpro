@@ -1,9 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import {
   assertDocumentTypeEnabled,
   buildAvailableDocumentTypesForBusiness,
 } from '../../src/domains/income/income-document-types.fallback.js';
+const dir = dirname(fileURLToPath(import.meta.url));
+const resolverSource = readFileSync(
+  join(dir, '../../src/domains/income/income-document-types.resolver.ts'),
+  'utf8',
+);
+const coreReadSource = readFileSync(
+  join(dir, '../../src/domains/client-operations/client-operations-client-core.read.ts'),
+  'utf8',
+);
 
 function enabledKeys(businessType: Parameters<typeof buildAvailableDocumentTypesForBusiness>[0]): string[] {
   return buildAvailableDocumentTypesForBusiness(businessType)
@@ -68,4 +80,24 @@ test('receipt requires payment_received and not due_date', () => {
   const receipt = buildAvailableDocumentTypesForBusiness('osek_murshe').find((t) => t.key === 'receipt');
   assert.equal(receipt?.requires_payment_received, true);
   assert.equal(receipt?.requires_due_date, false);
+});
+
+test('office_representative resolver maps Client Operations Hebrew עוסק מורשה', () => {
+  assert.match(coreReadSource, /עוסק מורשה[\s\S]*return 'osek_murshe'/);
+  assert.match(resolverSource, /mapClientOperationsBusinessTypeForIncomeIssuer\(raw\)/);
+  assert.doesNotMatch(
+    resolverSource,
+    /normalizeIssuerBusinessType\(raw\)/,
+  );
+});
+
+test('osek_murshe (from עוסק מורשה) enables tax_invoice receipt and credit', () => {
+  const bt = 'osek_murshe' as const;
+  const enabled = enabledKeys(bt);
+  assert.ok(enabled.includes('tax_invoice'));
+  assert.ok(enabled.includes('tax_invoice_receipt'));
+  assert.ok(enabled.includes('credit_tax_invoice'));
+  assert.ok(enabled.includes('receipt'));
+  const tax = buildAvailableDocumentTypesForBusiness(bt).find((t) => t.key === 'tax_invoice');
+  assert.equal(tax?.disabled_reason, null);
 });

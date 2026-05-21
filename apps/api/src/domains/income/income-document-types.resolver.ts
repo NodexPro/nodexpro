@@ -5,6 +5,7 @@
 
 import { supabaseAdmin } from '../../db/client.js';
 import type { ActiveIncomeIssuerScope } from './income.guards.js';
+import { mapClientOperationsBusinessTypeForIncomeIssuer } from '../client-operations/client-operations-client-core.read.js';
 import {
   buildAvailableDocumentTypesForBusiness,
   normalizeIssuerBusinessType,
@@ -34,7 +35,10 @@ export async function resolveIssuerBusinessType(
       .eq('client_id', scope.represented_client_id)
       .maybeSingle();
     const raw = (data as { business_type?: string | null } | null)?.business_type ?? null;
-    return { business_type: normalizeIssuerBusinessType(raw), raw };
+    return {
+      business_type: mapClientOperationsBusinessTypeForIncomeIssuer(raw),
+      raw,
+    };
   }
 
   const projection = await loadIncomeIssuerProfileProjection(orgId);

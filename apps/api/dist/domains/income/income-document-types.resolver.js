@@ -3,6 +3,7 @@
  * TEMPORARY_COUNTRY_PACK_PENDING: legal eligibility via fallback_il until pack exposes income document rules.
  */
 import { supabaseAdmin } from '../../db/client.js';
+import { mapClientOperationsBusinessTypeForIncomeIssuer } from '../client-operations/client-operations-client-core.read.js';
 import { buildAvailableDocumentTypesForBusiness, normalizeIssuerBusinessType, } from './income-document-types.fallback.js';
 import { mapLegalEntityTypeToIncomeBusinessType } from './income-org-business-profile.mapping.js';
 import { loadOrgBusinessProfileForIncome } from './income-org-business-profile.js';
@@ -17,7 +18,10 @@ export async function resolveIssuerBusinessType(orgId, scope) {
             .eq('client_id', scope.represented_client_id)
             .maybeSingle();
         const raw = data?.business_type ?? null;
-        return { business_type: normalizeIssuerBusinessType(raw), raw };
+        return {
+            business_type: mapClientOperationsBusinessTypeForIncomeIssuer(raw),
+            raw,
+        };
     }
     const projection = await loadIncomeIssuerProfileProjection(orgId);
     if (projection?.normalized_income_business_type) {
