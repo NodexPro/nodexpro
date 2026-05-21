@@ -28,6 +28,7 @@ export function parseDraftPayloadBody(body, parseDocumentType, optionalUuid, req
         draft_lines_json: reqJsonArray(body.draft_lines_json, 'draft_lines_json'),
         payment_terms_json: optionalJsonObject(body.payment_terms_json, 'payment_terms_json'),
         due_date: parseOptionalDate(body.due_date, 'due_date'),
+        document_date: parseOptionalDate(body.document_date ?? body.issue_date, 'document_date'),
         payment_received_json: optionalJsonObject(body.payment_received_json, 'payment_received_json'),
         notes: optionalString(body.notes),
         currency: optionalString(body.currency) ?? 'ILS',

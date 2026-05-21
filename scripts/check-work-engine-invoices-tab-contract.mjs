@@ -22,6 +22,9 @@ function read(p) {
 const page = read(tabHost);
 const table = read(tableComponent);
 const api = read(workEngineApi);
+const wizard = read(
+  path.join(repoRoot, 'apps/web/src/components/work-engine/WorkEngineIncomeDocumentWizardModal.tsx'),
+);
 
 const errors = [];
 
@@ -36,6 +39,21 @@ if (!page.includes('fetchWorkEngineInvoicesTabAggregate')) {
 }
 if (!page.includes('WorkEngineModuleTabTable')) {
   errors.push('tab host must render WorkEngineModuleTabTable');
+}
+if (!page.includes('WorkEngineIncomeDocumentWizardModal')) {
+  errors.push('tab host must open Work Engine income wizard modal');
+}
+if (!api.includes('document_creation_entrypoint')) {
+  errors.push('invoices-tab aggregate type must include document_creation_entrypoint');
+}
+if (!wizard.includes('nx-we-wizard-issuer-grid')) {
+  errors.push('wizard must render equal-size issuer buttons from backend schema');
+}
+if (/1000|2000|3000|4000|61111/.test(wizard)) {
+  errors.push('wizard must not hardcode IL document numbering');
+}
+if (/backdated|מוקדם ממסמך/.test(wizard)) {
+  errors.push('wizard must not validate backdated document dates on frontend');
 }
 if (
   !page.includes("tabKey === 'invoices'") &&

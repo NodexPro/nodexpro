@@ -12,15 +12,28 @@ export interface IncomeRenderLineRow {
   amount_reference: number | null;
 }
 
+export interface IncomeRenderPartyBlock {
+  legal_name: string;
+  display_name: string;
+  tax_id: string | null;
+  phone: string | null;
+  address_lines: string[];
+  business_type_label: string | null;
+}
+
 export interface IncomeDocumentRenderSnapshot {
   captured_at: string;
-  issuer: {
-    legal_name: string;
+  issuer: IncomeRenderPartyBlock;
+  customer: {
     display_name: string;
     tax_id: string | null;
+    phone: string | null;
+    email: string | null;
     address_lines: string[];
   };
-  customer: {
+  /** INC-8.5 — PDF layout: issuer left, recipient right (Hebrew RTL). */
+  issuer_block: IncomeRenderPartyBlock;
+  recipient_block: {
     display_name: string;
     tax_id: string | null;
     phone: string | null;
@@ -117,21 +130,31 @@ export function buildIncomeDocumentRenderSnapshot(input: {
       ? 'מסמך הונפק במערכת NodexPro — עותק להמחאה בלבד'
       : 'Issued via NodexPro — for reference only');
 
+  const issuerBlock: IncomeRenderPartyBlock = {
+    legal_name: String(issuer.legal_name ?? issuer.display_name ?? '').trim() || 'Issuer',
+    display_name: String(issuer.display_name ?? issuer.legal_name ?? '').trim() || 'Issuer',
+    tax_id: issuer.tax_id != null ? String(issuer.tax_id).trim() || null : null,
+    phone: issuer.phone != null ? String(issuer.phone).trim() || null : null,
+    address_lines: parseAddressLines(issuer.address_json),
+    business_type_label:
+      issuer.business_type_label != null
+        ? String(issuer.business_type_label).trim() || null
+        : null,
+  };
+  const recipientBlock = {
+    display_name: String(customer.display_name ?? '').trim() || (language === 'he' ? 'לקוח' : 'Customer'),
+    tax_id: customer.tax_id != null ? String(customer.tax_id).trim() || null : null,
+    phone: customer.phone != null ? String(customer.phone).trim() || null : null,
+    email: customer.email != null ? String(customer.email).trim() || null : null,
+    address_lines: parseAddressLines(customer.address_json),
+  };
+
   return {
     captured_at: new Date().toISOString(),
-    issuer: {
-      legal_name: String(issuer.legal_name ?? issuer.display_name ?? '').trim() || 'Issuer',
-      display_name: String(issuer.display_name ?? issuer.legal_name ?? '').trim() || 'Issuer',
-      tax_id: issuer.tax_id != null ? String(issuer.tax_id).trim() || null : null,
-      address_lines: parseAddressLines(issuer.address_json),
-    },
-    customer: {
-      display_name: String(customer.display_name ?? '').trim() || (language === 'he' ? 'לקוח' : 'Customer'),
-      tax_id: customer.tax_id != null ? String(customer.tax_id).trim() || null : null,
-      phone: customer.phone != null ? String(customer.phone).trim() || null : null,
-      email: customer.email != null ? String(customer.email).trim() || null : null,
-      address_lines: parseAddressLines(customer.address_json),
-    },
+    issuer: issuerBlock,
+    issuer_block: issuerBlock,
+    recipient_block: recipientBlock,
+    customer: recipientBlock,
     document: {
       document_type: input.document_type,
       document_type_label: documentTypeLabel(input.document_type, language),

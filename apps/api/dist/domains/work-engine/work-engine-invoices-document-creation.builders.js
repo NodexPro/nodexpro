@@ -1,0 +1,162 @@
+/**
+ * INC-8.5 — Work Engine invoices tab document creation wizard schema.
+ */
+import { supabaseAdmin } from '../../db/client.js';
+import { hasPermission } from '../rbac/rbac.service.js';
+import { ensureOrgIncomeIssuerProfile } from '../income/income-issuer-context.service.js';
+import { loadIncomeIssuerProfileProjection } from '../income/income-issuer-profile-sync.service.js';
+import { normalizeIssuerBusinessType } from '../income/income-document-types.fallback.js';
+import { INCOME_PERMISSIONS } from '../income/income.types.js';
+function businessTypeLabelHe(raw) {
+    if (!raw)
+        return null;
+    const map = {
+        osek_patur: 'עוסק פטור',
+        osek_murshe: 'עוסק מורשה',
+        company: 'חברה',
+        nonprofit: 'עמותה',
+        unknown: 'לא מוגדר',
+    };
+    return map[raw] ?? raw;
+}
+async function loadOfficeClientIssuerOptions(orgId) {
+    const { data: clientList } = await supabaseAdmin
+        .from('clients')
+        .select('id, display_name, legal_name, is_archived')
+        .eq('organization_id', orgId)
+        .eq('is_archived', false)
+        .order('display_name', { ascending: true })
+        .limit(500);
+    const clients = (clientList ?? []);
+    if (clients.length === 0)
+        return [];
+    const clientIds = clients.map((c) => c.id);
+    const { data: profiles } = await supabaseAdmin
+        .from('client_operational_profiles')
+        .select('client_id, business_type, vat_registered_flag')
+        .eq('organization_id', orgId)
+        .in('client_id', clientIds);
+    const { data: clientRows } = await supabaseAdmin
+        .from('clients')
+        .select('id, display_name, legal_name, tax_id, phone, address_json, country_code')
+        .eq('organization_id', orgId)
+        .in('id', clientIds);
+    const profileByClient = new Map((profiles ?? []).map((p) => [String(p.client_id), p]));
+    const clientById = new Map((clientRows ?? []).map((c) => [String(c.id), c]));
+    return clients.map((c) => {
+        const full = clientById.get(c.id);
+        const prof = profileByClient.get(c.id);
+        const businessType = normalizeIssuerBusinessType(prof?.business_type ?? null);
+        const vatFlag = prof?.vat_registered_flag;
+        const displayName = full?.legal_name?.trim() || full?.display_name || c.display_name;
+        return {
+            issuer_business_id: c.id,
+            represented_client_id: c.id,
+            label: displayName,
+            display_name: displayName,
+            legal_name: full?.legal_name ?? c.legal_name,
+            tax_id: full?.tax_id ?? null,
+            business_type: businessType,
+            business_type_label: businessTypeLabelHe(businessType),
+            address_json: full?.address_json ?? null,
+            phone: full?.phone ?? null,
+            vat_registration_status: vatFlag === true ? 'registered' : vatFlag === false ? 'not_registered' : null,
+            country_code: full?.country_code ?? 'IL',
+            enabled: true,
+            disabled_reason: null,
+        };
+    });
+}
+export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(ctx) {
+    const orgId = ctx.organizationId;
+    const perms = {
+        view: hasPermission(ctx.membership?.permissions ?? [], INCOME_PERMISSIONS.view),
+        edit: hasPermission(ctx.membership?.permissions ?? [], INCOME_PERMISSIONS.edit),
+        issue: hasPermission(ctx.membership?.permissions ?? [], INCOME_PERMISSIONS.issue),
+        issue_on_behalf: hasPermission(ctx.membership?.permissions ?? [], INCOME_PERMISSIONS.issueOnBehalf),
+    };
+    const allowed = perms.view && perms.edit && perms.issue;
+    let disabledReason = null;
+    if (!perms.view)
+        disabledReason = 'נדרשת הרשאת income.view';
+    else if (!perms.edit)
+        disabledReason = 'נדרשת הרשאת income.edit';
+    else if (!perms.issue)
+        disabledReason = 'נדרשת הרשאת income.issue';
+    const orgIssuer = await ensureOrgIncomeIssuerProfile(orgId);
+    const profile = await loadIncomeIssuerProfileProjection(orgId);
+    const officeName = profile?.display_name ?? orgIssuer.display_name;
+    const officeClientOptions = perms.issue_on_behalf
+        ? await loadOfficeClientIssuerOptions(orgId)
+        : [];
+    return {
+        button_label: '+ מסמך',
+        allowed,
+        allowed_action: 'open_income_document_wizard',
+        disabled_reason: disabledReason,
+        wizard: {
+            steps: [
+                { key: 'issuer_choice', label: 'בחירת מנפיק' },
+                { key: 'office_client', label: 'לקוח מהמשרד', when: 'office_representative' },
+                { key: 'document_type', label: 'סוג מסמך' },
+                { key: 'recipient', label: 'מקבל המסמך' },
+                { key: 'document_details', label: 'פרטי מסמך' },
+                { key: 'preview_issue', label: 'תצוגה והפקה' },
+            ],
+            issuer_choice: {
+                title: 'מי מנפיק את המסמך?',
+                options: [
+                    {
+                        key: 'self',
+                        label: `המשרד — ${officeName}`,
+                        acting_mode: 'self',
+                        issuer_business_id: orgIssuer.id,
+                        enabled: perms.view,
+                        disabled_reason: perms.view ? null : 'נדרשת הרשאת income.view',
+                    },
+                    {
+                        key: 'office_client',
+                        label: 'לקוח מהמשרד',
+                        acting_mode: 'office_representative',
+                        issuer_business_id: null,
+                        enabled: perms.issue_on_behalf && perms.view,
+                        disabled_reason: !perms.issue_on_behalf
+                            ? 'נדרשת הרשאת income.issue_on_behalf'
+                            : null,
+                    },
+                ],
+            },
+            office_client_issuer_options: officeClientOptions,
+            recipient_step: {
+                title: 'מקבל המסמך / לקוח במסמך',
+                description: 'לקוח המשרד הוא המנפיק. כאן בוחרים את הלקוח או הנמען שמקבל את המסמך (לא את לקוח המשרד).',
+            },
+            document_details_step: {
+                document_date_label: 'תאריך מסמך',
+                document_date_required: true,
+                notes_label: 'הערות',
+            },
+            income_commands: {
+                select_issuer: 'select_income_issuer_context',
+                create_customer: 'create_income_customer',
+                create_one_time_customer: 'create_one_time_income_customer',
+                create_draft: 'create_income_document_draft',
+                update_draft: 'update_income_document_draft',
+                issue_document: 'issue_income_document',
+            },
+        },
+    };
+}
+export function issuerSnapshotToPrefillBlock(snapshot) {
+    return {
+        display_name: snapshot.display_name,
+        legal_name: snapshot.legal_name,
+        tax_id: snapshot.tax_id,
+        business_type: snapshot.business_type,
+        business_type_label: snapshot.business_type_label,
+        address_json: snapshot.address_json,
+        phone: snapshot.phone,
+        country_code: snapshot.country_code,
+        vat_registration_status: snapshot.vat_registration_status,
+    };
+}

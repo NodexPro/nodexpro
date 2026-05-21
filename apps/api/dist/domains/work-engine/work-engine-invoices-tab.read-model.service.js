@@ -7,6 +7,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { forbidden } from '../../shared/errors.js';
 import { buildAccountantWorkspaceTabs } from './work-engine.read-models.service.js';
+import { buildWorkEngineInvoicesDocumentCreationEntrypoint } from './work-engine-invoices-document-creation.builders.js';
 import { amountReferenceFromTotalsSnapshot, customerDisplayFromSnapshot, isOverdueByDueDate, } from '../income/income-work-engine-bridge.pure.js';
 export const WORK_ENGINE_INVOICES_TAB_COLUMNS = [
     { key: 'client_name', label: 'לקוח', type: 'text' },
@@ -30,7 +31,7 @@ function collectionStatusLabel(dueDate, todayIso) {
     return 'פתוח';
 }
 export async function buildWorkEngineInvoicesTabAggregate(params) {
-    const orgId = params.orgId;
+    const orgId = params.ctx.organizationId;
     if (!orgId)
         throw forbidden('Organization context required');
     const todayIso = new Date().toISOString().slice(0, 10);
@@ -118,7 +119,8 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
             currency,
         },
         filters: [],
-        allowed_actions: ['view_invoices_tab'],
+        allowed_actions: ['view_invoices_tab', 'open_income_document_wizard'],
+        document_creation_entrypoint: await buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx),
         gaps: [
             'income.invoice_paid — payment status not implemented (INC-8)',
             'income.invoice_partially_paid — not implemented',

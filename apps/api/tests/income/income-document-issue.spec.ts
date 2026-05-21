@@ -112,8 +112,10 @@ test('issue command wired and returns workspace aggregate', () => {
   assert.match(commandsSource, /income_workspace_aggregate: await buildIncomeWorkspaceAggregate/);
 });
 
-test('numbering uses backend rpc only', () => {
-  assert.match(numberingSource, /allocate_income_document_number/);
+test('numbering uses backend IL series policy only', () => {
+  assert.match(numberingSource, /income-document-numbering-policy/);
+  assert.match(numberingSource, /IL_NUMBERING_POLICY_KEY/);
+  assert.match(numberingSource, /computeNextIlSeriesNumber/);
   assert.doesNotMatch(numberingSource, /document_number.*\+.*1/);
 });
 

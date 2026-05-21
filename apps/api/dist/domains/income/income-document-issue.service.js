@@ -6,17 +6,25 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, notFound } from '../../shared/errors.js';
 import { assertRowMatchesIssuerScope, reqUuid, } from './income.guards.js';
 import { assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
-import { loadIncomeIssuerProfileProjection } from './income-issuer-profile-sync.service.js';
+import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
+import { assertIncomeDocumentIssueDateAllowed, resolveIssueDateFromDraft, } from './income-document-issue-date.validation.js';
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { allocateIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { assertDraftReadyToIssue, buildLegalSnapshotForIssue, buildTotalsSnapshotForIssue, } from './income-document-issue.pure.js';
 import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { emitIncomeWorkEventsAfterDocumentIssued } from './income-work-engine-bridge.js';
+function optionalIssueDateFromBody(body) {
+    const raw = body.document_date ?? body.issue_date;
+    if (raw == null || raw === '')
+        return null;
+    const s = String(raw).trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
 async function loadFullDraftForIssue(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
-        .select('id, organization_id, issuer_business_id, represented_client_id, actor_user_id, acting_mode, document_type, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, draft_totals_preview_json, payment_terms_json, due_date, payment_received_json, notes, currency, language, status')
+        .select('id, organization_id, issuer_business_id, represented_client_id, actor_user_id, acting_mode, document_type, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, draft_totals_preview_json, payment_terms_json, due_date, document_date, payment_received_json, notes, currency, language, status')
         .eq('id', draftId)
         .eq('organization_id', scope.org_id)
         .maybeSingle();
@@ -60,24 +68,6 @@ async function buildCustomerSnapshot(scope, draft) {
         ...(draft.one_time_customer_snapshot_json ?? {}),
     };
 }
-async function buildIssuerSnapshot(orgId) {
-    const profile = await loadIncomeIssuerProfileProjection(orgId);
-    if (!profile) {
-        return { source: 'income_issuer_profile', incomplete: true };
-    }
-    return {
-        source: 'income_issuer_profile',
-        display_name: profile.display_name,
-        legal_name: profile.legal_name,
-        tax_id: profile.tax_id,
-        normalized_income_business_type: profile.normalized_income_business_type,
-        country_code: profile.country_code,
-        vat_registration_status: profile.vat_registration_status,
-        default_currency: profile.default_currency,
-        default_language: profile.default_language,
-        business_type_source: profile.business_type_source,
-    };
-}
 export async function executeIssueIncomeDocument(ctx, body) {
     const scope = await loadActiveIncomeIssuerScope(ctx);
     assertIncomeIssuePermission(scope);
@@ -94,7 +84,12 @@ export async function executeIssueIncomeDocument(ctx, body) {
     const docType = findAvailableDocumentType(docTypesResult.available_document_types, draft.document_type);
     if (!docType)
         throw badRequest('document_type is invalid');
-    const issue_date = new Date().toISOString().slice(0, 10);
+    const issue_date = resolveIssueDateFromDraft(draft.document_date, optionalIssueDateFromBody(body));
+    await assertIncomeDocumentIssueDateAllowed({
+        scope,
+        documentType: draft.document_type,
+        issueDate: issue_date,
+    });
     const allocated = await allocateIncomeDocumentNumber(scope, draft.document_type, issue_date);
     await writeAudit({
         organizationId: scope.org_id,
@@ -112,7 +107,7 @@ export async function executeIssueIncomeDocument(ctx, body) {
     });
     const lines = Array.isArray(draft.draft_lines_json) ? draft.draft_lines_json : [];
     const customer_snapshot_json = await buildCustomerSnapshot(scope, draft);
-    const issuer_snapshot_json = await buildIssuerSnapshot(scope.org_id);
+    const issuer_snapshot_json = await buildIncomeIssuerSnapshotForScope(scope);
     const legal_snapshot_json = buildLegalSnapshotForIssue({
         country_code: docTypesResult.country_code,
         ruleset_id: docType.ruleset_id,

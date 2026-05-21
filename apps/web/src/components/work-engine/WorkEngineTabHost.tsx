@@ -21,6 +21,7 @@ import {
 import { userFacingApiMessage } from '../../api/client';
 import { ClientOperationsRegistryView } from '../client-operations/ClientOperationsRegistryView';
 import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
+import { WorkEngineIncomeDocumentWizardModal } from './WorkEngineIncomeDocumentWizardModal';
 
 const QUEUE_SHELL_FILTERS: WorkEngineQueueFiltersInput = {
   limit: 50,
@@ -290,28 +291,26 @@ function WorkEngineInvoicesTabPanel(props: {
   const [aggregate, setAggregate] = useState<WorkEngineInvoicesTabAggregate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardBusy, setWizardBusy] = useState(false);
+
+  const loadAggregate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const agg = await fetchWorkEngineInvoicesTabAggregate();
+      setAggregate(agg);
+      if (agg.workspace_tabs) onWorkspaceTabs(agg.workspace_tabs);
+    } catch (e) {
+      setError(userFacingApiMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [onWorkspaceTabs]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const agg = await fetchWorkEngineInvoicesTabAggregate();
-        if (!cancelled) {
-          setAggregate(agg);
-          if (agg.workspace_tabs) onWorkspaceTabs(agg.workspace_tabs);
-        }
-      } catch (e) {
-        if (!cancelled) setError(userFacingApiMessage(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [onWorkspaceTabs]);
+    void loadAggregate();
+  }, [loadAggregate]);
 
   if (loading && !aggregate) {
     return <p className="nx-we-queue__subtitle">טוען חשבוניות…</p>;
@@ -323,12 +322,40 @@ function WorkEngineInvoicesTabPanel(props: {
 
   if (!aggregate) return null;
 
+  const entry = aggregate.document_creation_entrypoint;
+  const canOpenWizard =
+    entry.allowed && aggregate.allowed_actions.includes(entry.allowed_action);
+
   return (
     <>
-      <h1 className="nx-we-queue__title">{aggregate.title}</h1>
-      <p className="nx-we-queue__subtitle">{aggregate.description}</p>
+      <div className="nx-we-invoices-tab__header">
+        <div>
+          <h1 className="nx-we-queue__title">{aggregate.title}</h1>
+          <p className="nx-we-queue__subtitle">{aggregate.description}</p>
+        </div>
+        {canOpenWizard ? (
+          <button
+            type="button"
+            className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+            disabled={wizardBusy}
+            onClick={() => setWizardOpen(true)}
+          >
+            {entry.button_label}
+          </button>
+        ) : null}
+      </div>
       {error ? <div className="nx-we-banner-error">{error}</div> : null}
       <WorkEngineModuleTabTable table={aggregate.table_model} summary={aggregate.summary} />
+      {wizardOpen ? (
+        <WorkEngineIncomeDocumentWizardModal
+          open={wizardOpen}
+          busy={wizardBusy}
+          entrypoint={entry}
+          onClose={() => setWizardOpen(false)}
+          onBusyChange={setWizardBusy}
+          onCompleted={() => void loadAggregate()}
+        />
+      ) : null}
     </>
   );
 }

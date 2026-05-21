@@ -110,24 +110,57 @@ export async function renderIncomeDocumentPdfBuffer(snapshot) {
         ? `מס׳ ${snapshot.document.document_number} · ${snapshot.document.issue_date}`
         : `No. ${snapshot.document.document_number} · ${snapshot.document.issue_date}`, 11, muted);
     y -= 12;
+    const issuerParty = snapshot.issuer_block ?? snapshot.issuer;
+    const recipientParty = snapshot.recipient_block ?? snapshot.customer;
     const issuerLines = [
-        snapshot.issuer.legal_name,
-        snapshot.issuer.tax_id ? (rtl ? `ע.מ/ח.פ: ${snapshot.issuer.tax_id}` : `Tax ID: ${snapshot.issuer.tax_id}`) : '',
-        ...snapshot.issuer.address_lines,
+        issuerParty.legal_name,
+        issuerParty.business_type_label ?? '',
+        issuerParty.tax_id ? (rtl ? `ע.מ/ח.פ: ${issuerParty.tax_id}` : `Tax ID: ${issuerParty.tax_id}`) : '',
+        issuerParty.phone ?? '',
+        ...issuerParty.address_lines,
     ].filter(Boolean);
     const customerLines = [
-        snapshot.customer.display_name,
-        snapshot.customer.tax_id ? (rtl ? `מזהה: ${snapshot.customer.tax_id}` : `ID: ${snapshot.customer.tax_id}`) : '',
-        snapshot.customer.phone ?? '',
-        snapshot.customer.email ?? '',
-        ...snapshot.customer.address_lines,
+        recipientParty.display_name,
+        recipientParty.tax_id ? (rtl ? `מזהה: ${recipientParty.tax_id}` : `ID: ${recipientParty.tax_id}`) : '',
+        recipientParty.phone ?? '',
+        recipientParty.email ?? '',
+        ...recipientParty.address_lines,
     ].filter(Boolean);
-    drawLine(rtl ? 'מנפיק' : 'Issuer', 10, muted);
-    drawBlock(issuerLines, 11, titleColor);
-    y -= 8;
-    drawLine(rtl ? 'לקוח' : 'Customer', 10, muted);
-    drawBlock(customerLines, 11, titleColor);
-    y -= 16;
+    const headerY = y;
+    const colW = contentW / 2 - 8;
+    const leftX = margin;
+    const rightX = margin + colW + 16;
+    const drawPartyColumn = (x, title, lines) => {
+        let cy = headerY;
+        const drawAt = (text, size, color) => {
+            const runs = splitFontRuns(text, fontHe, fontLat);
+            if (rtl) {
+                let rx = x + colW;
+                for (let i = runs.length - 1; i >= 0; i--) {
+                    const run = runs[i];
+                    const w = run.font.widthOfTextAtSize(run.text, size);
+                    rx -= w;
+                    page.drawText(run.text, { x: rx, y: cy - size, size, font: run.font, color });
+                }
+            }
+            else {
+                let lx = x;
+                for (const run of runs) {
+                    page.drawText(run.text, { x: lx, y: cy - size, size, font: run.font, color });
+                    lx += run.font.widthOfTextAtSize(run.text, size);
+                }
+            }
+            cy -= lh(size);
+        };
+        drawAt(title, 10, muted);
+        for (const line of lines) {
+            drawAt(line, 11, titleColor);
+        }
+        return cy;
+    };
+    const issuerEndY = drawPartyColumn(rtl ? rightX : leftX, rtl ? 'מנפיק' : 'Issuer', issuerLines);
+    const recipientEndY = drawPartyColumn(rtl ? leftX : rightX, rtl ? 'לכבוד' : 'Bill to', customerLines);
+    y = Math.min(issuerEndY, recipientEndY) - 16;
     const colDesc = rtl ? contentW * 0.45 : contentW * 0.45;
     const colQty = contentW * 0.12;
     const colUnit = contentW * 0.18;

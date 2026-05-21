@@ -21,6 +21,10 @@ const invoicesTabSource = readFileSync(
   join(dir, '../../src/domains/work-engine/work-engine-invoices-tab.read-model.service.ts'),
   'utf8',
 );
+const invoicesWizardSource = readFileSync(
+  join(dir, '../../src/domains/work-engine/work-engine-invoices-document-creation.builders.ts'),
+  'utf8',
+);
 const schedulerSource = readFileSync(
   join(dir, '../../src/domains/work-engine/work-engine.scheduler.service.ts'),
   'utf8',
@@ -73,4 +77,13 @@ test('issue service emits work events via bridge only (no direct work_items)', (
 test('scheduler scans income overdue without DocFlow or reminders', () => {
   assert.match(schedulerSource, /scanAndEmitIncomeInvoiceOverdueForOrg/);
   assert.doesNotMatch(schedulerSource, /sendEmail|docflow.*send|generate_reminder/i);
+});
+
+test('invoices tab aggregate includes document creation wizard entrypoint', () => {
+  assert.match(invoicesTabSource, /document_creation_entrypoint/);
+  assert.match(invoicesTabSource, /buildWorkEngineInvoicesDocumentCreationEntrypoint/);
+  assert.match(invoicesTabSource, /open_income_document_wizard/);
+  assert.match(invoicesWizardSource, /office_client_issuer_options/);
+  assert.match(invoicesWizardSource, /המשרד —/);
+  assert.match(invoicesWizardSource, /לקוח מהמשרד/);
 });

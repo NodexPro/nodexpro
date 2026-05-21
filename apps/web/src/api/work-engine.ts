@@ -457,6 +457,52 @@ export type WorkEngineInvoicesTabColumn = {
   type: WorkEngineInvoicesTabColumnType;
 };
 
+export type WorkEngineOfficeClientIssuerOption = {
+  issuer_business_id: string;
+  represented_client_id: string;
+  label: string;
+  display_name: string;
+  legal_name: string | null;
+  tax_id: string | null;
+  business_type: string | null;
+  business_type_label: string | null;
+  address_json: Record<string, unknown> | null;
+  phone: string | null;
+  vat_registration_status: string | null;
+  country_code: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+};
+
+export type WorkEngineInvoicesDocumentCreationEntrypoint = {
+  button_label: string;
+  allowed: boolean;
+  allowed_action: string;
+  disabled_reason: string | null;
+  wizard: {
+    steps: { key: string; label: string; when?: string }[];
+    issuer_choice: {
+      title: string;
+      options: {
+        key: string;
+        label: string;
+        acting_mode: 'self' | 'office_representative';
+        issuer_business_id: string | null;
+        enabled: boolean;
+        disabled_reason: string | null;
+      }[];
+    };
+    office_client_issuer_options: WorkEngineOfficeClientIssuerOption[];
+    recipient_step: { title: string; description: string };
+    document_details_step: {
+      document_date_label: string;
+      document_date_required: boolean;
+      notes_label: string;
+    };
+    income_commands: Record<string, string>;
+  };
+};
+
 export type WorkEngineInvoicesTabAggregate = {
   aggregate_key: 'work_engine_invoices_tab_aggregate';
   org_id: string;
@@ -476,6 +522,7 @@ export type WorkEngineInvoicesTabAggregate = {
   };
   filters: [];
   allowed_actions: string[];
+  document_creation_entrypoint: WorkEngineInvoicesDocumentCreationEntrypoint;
   gaps: string[];
 };
 

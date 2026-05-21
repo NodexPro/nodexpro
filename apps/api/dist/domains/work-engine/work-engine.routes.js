@@ -141,8 +141,7 @@ officeRouter.get('/aggregates/queue', async (req, res, next) => {
 officeRouter.get('/aggregates/invoices-tab', async (req, res, next) => {
     try {
         const ctx = req.context;
-        const orgId = ctx.organizationId;
-        const aggregate = await buildWorkEngineInvoicesTabAggregate({ orgId });
+        const aggregate = await buildWorkEngineInvoicesTabAggregate({ ctx });
         return res.json(aggregate);
     }
     catch (e) {
