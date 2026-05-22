@@ -156,6 +156,12 @@ if (/subtotal_reference|vat_reference|grand_total_reference|amount_reference\s*\
 if (!docDetailsStep.includes('add_line')) {
   errors.push('document details must add lines via backend add_line command');
 }
+if (!docDetailsStep.includes('document_fields')) {
+  errors.push('document details must use line_items.document_fields for currency/vat selects');
+}
+if (!docDetailsStep.includes('lockUi: false')) {
+  errors.push('document details line edits must not lock wizard UI on each keystroke');
+}
 if (!docDetailsStep.includes('step.line_items.columns')) {
   errors.push('document details table must render columns from aggregate schema');
 }

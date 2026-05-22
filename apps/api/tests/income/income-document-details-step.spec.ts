@@ -45,14 +45,25 @@ test('document details header title includes office client, type, number preview
 });
 
 test('line table column schema matches document details spec', () => {
-  const expectedKeys = ['description', 'quantity', 'unit_price', 'currency', 'vat', 'line_total'];
+  const expectedKeys = [
+    'description',
+    'quantity',
+    'unit_price',
+    'currency',
+    'vat',
+    'line_total',
+    'actions',
+  ];
   for (const key of expectedKeys) {
     assert.ok(buildersSource.includes(`key: '${key}'`), `missing column key: ${key}`);
   }
   assert.ok(buildersSource.includes("label: 'פירוט *'"));
+  assert.ok(buildersSource.includes("label: 'פעולות'"));
   assert.ok(buildersSource.includes('הוסף שורה'));
+  assert.ok(buildersSource.includes('document_fields'));
   assert.ok(!buildersSource.includes("key: 'row_number'"));
-  assert.ok(!buildersSource.includes("key: 'actions'"));
+  assert.ok(!buildersSource.includes("value: 'zero'"));
+  assert.ok(!buildersSource.includes('מע״מ אפס'));
 });
 
 test('VAT default uses IL fallback 18% from legal resolver module', () => {
@@ -85,4 +96,10 @@ test('document details UI does not hardcode VAT 18%', () => {
   assert.ok(!/0\.18/.test(docDetailsStepSource));
   assert.ok(!/מע״מ רגיל \(18%\)/.test(docDetailsStepSource));
   assert.ok(!/17%/.test(docDetailsStepSource));
+});
+
+test('line edits commit on blur without global busy lock', () => {
+  assert.ok(docDetailsStepSource.includes('lockUi: false'));
+  assert.ok(docDetailsStepSource.includes('onBlur'));
+  assert.ok(!docDetailsStepSource.includes('scheduleLineUpdate'));
 });

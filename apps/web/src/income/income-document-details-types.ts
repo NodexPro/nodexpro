@@ -10,13 +10,19 @@ export type IncomeDocumentDetailsSettingField = {
   disabled_reason: string | null;
 };
 
+export type IncomeDocumentDetailsSelectField = {
+  input_type: 'select';
+  value: string;
+  options: { value: string; label: string }[];
+  editable: boolean;
+  disabled_reason: string | null;
+};
+
 export type IncomeDocumentDetailsLineRow = {
   line_id: string;
-  description: { value: string; editable: boolean };
+  description: { value: string; editable: boolean; placeholder: string };
   quantity: { value: string; editable: boolean };
   unit_price: { value: string; display: string; editable: boolean };
-  currency: { display: string };
-  vat: { label: string };
   line_total: { display: string };
   allowed_actions: string[];
 };
@@ -31,6 +37,10 @@ export type IncomeDocumentDetailsStep = {
   settings_schema: IncomeDocumentDetailsSettingField[];
   line_items: {
     columns: { key: string; label: string }[];
+    document_fields: {
+      currency: IncomeDocumentDetailsSelectField;
+      vat_mode: IncomeDocumentDetailsSelectField;
+    };
     rows: IncomeDocumentDetailsLineRow[];
     allowed_actions: string[];
     add_row_label: string;
