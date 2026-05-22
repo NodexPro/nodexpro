@@ -5,6 +5,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { forbidden } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import type { ActiveIncomeIssuerScope } from './income.guards.js';
 import { loadActiveIncomeIssuerScope, toIssuerContextSummary } from './income-issuer-scope.service.js';
 import { buildDocumentCreationSchema } from './income-document-creation-schema.builders.js';
@@ -64,7 +65,7 @@ async function countScoped(
   query = applyIssuerScopeToBuilder(query, scope);
   if (statusFilter) query = query.eq(statusFilter.column, statusFilter.value);
   const { count, error } = await query;
-  if (error) throw error;
+  throwIfSupabaseError(error, `countScoped:${table}`);
   return count ?? 0;
 }
 
@@ -76,7 +77,7 @@ async function loadCustomers(scope: ActiveIncomeIssuerScope): Promise<IncomeCust
     .limit(500);
   query = applyIssuerScopeToBuilder(query, scope);
   const { data, error } = await query;
-  if (error) throw error;
+  throwIfSupabaseError(error, 'loadIncomeWorkspaceCustomers');
   return (data ?? []).map((row) => {
     const r = row as {
       id: string;
@@ -113,7 +114,7 @@ async function loadItems(scope: ActiveIncomeIssuerScope): Promise<IncomeItemsTab
     .limit(500);
   query = applyIssuerScopeToBuilder(query, scope);
   const { data, error } = await query;
-  if (error) throw error;
+  throwIfSupabaseError(error, 'loadIncomeWorkspaceItems');
   return (data ?? []).map((row) => {
     const r = row as {
       id: string;
@@ -153,7 +154,7 @@ async function loadDrafts(
     .limit(500);
   query = applyIssuerScopeToBuilder(query, scope);
   const { data, error } = await query;
-  if (error) throw error;
+  throwIfSupabaseError(error, 'loadIncomeWorkspaceDrafts');
 
   const canEdit = scope.permissions.edit;
   const canIssue = scope.permissions.issue;
@@ -207,7 +208,7 @@ async function loadIssuedDocuments(
     .limit(500);
   query = applyIssuerScopeToBuilder(query, scope);
   const { data, error } = await query;
-  if (error) throw error;
+  throwIfSupabaseError(error, 'loadIncomeWorkspaceIssuedDocuments');
 
   const canRetryPosting = scope.permissions.issue;
   const canView = scope.permissions.view;

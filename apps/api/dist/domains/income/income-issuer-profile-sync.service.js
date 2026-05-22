@@ -3,6 +3,8 @@
  */
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
+import { AppError } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { isOrgBusinessProfileCompleteForIncome } from './income-org-business-profile.mapping.js';
 import { loadOrgBusinessProfileForIncome } from './income-org-business-profile.js';
 export async function syncIncomeIssuerProfileFromOrganization(orgId, opts) {
@@ -25,8 +27,10 @@ export async function syncIncomeIssuerProfileFromOrganization(orgId, opts) {
         .upsert(row, { onConflict: 'organization_id' })
         .select('id, organization_id, display_name, legal_name, tax_id, normalized_income_business_type, country_code, vat_registration_status, default_currency, default_language, business_type_source')
         .single();
-    if (error || !data)
-        throw error ?? new Error('Failed to sync income issuer profile');
+    throwIfSupabaseError(error, 'syncIncomeIssuerProfile');
+    if (!data) {
+        throw new AppError(502, 'Failed to sync income issuer profile', 'INCOME_ISSUER_PROFILE_SYNC_FAILED');
+    }
     if (opts?.audit !== false && opts?.actorUserId) {
         await writeAudit({
             organizationId: orgId,

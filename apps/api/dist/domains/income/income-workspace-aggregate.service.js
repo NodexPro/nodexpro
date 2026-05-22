@@ -3,6 +3,7 @@
  */
 import { supabaseAdmin } from '../../db/client.js';
 import { forbidden } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { loadActiveIncomeIssuerScope, toIssuerContextSummary } from './income-issuer-scope.service.js';
 import { buildDocumentCreationSchema } from './income-document-creation-schema.builders.js';
 import { resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
@@ -37,8 +38,7 @@ async function countScoped(table, scope, statusFilter) {
     if (statusFilter)
         query = query.eq(statusFilter.column, statusFilter.value);
     const { count, error } = await query;
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, `countScoped:${table}`);
     return count ?? 0;
 }
 async function loadCustomers(scope) {
@@ -49,8 +49,7 @@ async function loadCustomers(scope) {
         .limit(500);
     query = applyIssuerScopeToBuilder(query, scope);
     const { data, error } = await query;
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'loadIncomeWorkspaceCustomers');
     return (data ?? []).map((row) => {
         const r = row;
         return {
@@ -75,8 +74,7 @@ async function loadItems(scope) {
         .limit(500);
     query = applyIssuerScopeToBuilder(query, scope);
     const { data, error } = await query;
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'loadIncomeWorkspaceItems');
     return (data ?? []).map((row) => {
         const r = row;
         return {
@@ -101,8 +99,7 @@ async function loadDrafts(scope, customerNames) {
         .limit(500);
     query = applyIssuerScopeToBuilder(query, scope);
     const { data, error } = await query;
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'loadIncomeWorkspaceDrafts');
     const canEdit = scope.permissions.edit;
     const canIssue = scope.permissions.issue;
     return (data ?? []).map((row) => {
@@ -143,8 +140,7 @@ async function loadIssuedDocuments(scope) {
         .limit(500);
     query = applyIssuerScopeToBuilder(query, scope);
     const { data, error } = await query;
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'loadIncomeWorkspaceIssuedDocuments');
     const canRetryPosting = scope.permissions.issue;
     const canView = scope.permissions.view;
     const pdfStatusLabel = (status) => {

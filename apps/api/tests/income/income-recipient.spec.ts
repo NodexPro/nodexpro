@@ -109,3 +109,19 @@ test('recipient display line is backend formatted', () => {
   assert.match(line, /Acme/);
   assert.match(line, /123/);
 });
+
+test('recipient search quotes PostgREST or filter values', () => {
+  assert.match(recipientService, /quotePostgrestFilterValue/);
+  assert.match(recipientService, /display_name\.ilike\.\$\{pattern\}/);
+});
+
+test('select_income_recipient returns not-found AppError code when row missing', () => {
+  assert.match(commandsSource, /INCOME_RECIPIENT_NOT_FOUND/);
+  assert.match(commandsSource, /loadIncomeRecipientById/);
+  assert.match(commandsSource, /selectedFromSavedRow\(row\)/);
+});
+
+test('supabase errors are mapped in recipient and workspace aggregate services', () => {
+  assert.match(recipientService, /throwIfSupabaseError/);
+  assert.match(workspaceAggSource, /throwIfSupabaseError/);
+});

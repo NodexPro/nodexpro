@@ -352,11 +352,16 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         assertIncomeEditPermission(scope);
         const income_customer_id = reqUuid(body.income_customer_id, 'income_customer_id');
         const row = await loadIncomeRecipientById(scope, income_customer_id);
-        if (!row)
-            throw notFound('Income recipient not found');
-        return recipientCommandResponse(ctx, command, scope, {
+        if (!row) {
+            throw notFound('Income recipient not found for the active issuer. Refresh the list and try again.', 'INCOME_RECIPIENT_NOT_FOUND');
+        }
+        const overlay = {
             selected: selectedFromSavedRow(row),
-        });
+        };
+        const searchQuery = String(body.search_query ?? '').trim();
+        if (searchQuery)
+            overlay.search_query = searchQuery;
+        return recipientCommandResponse(ctx, command, scope, overlay);
     }
     if (command === INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT) {
         const scope = await loadActiveIncomeIssuerScope(ctx);

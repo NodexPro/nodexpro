@@ -3,6 +3,7 @@
  * Backend-owned issuer truth; no documents, accounting, work engine, or docflow.
  */
 import { supabaseAdmin } from '../../db/client.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { hasPermission } from '../rbac/rbac.service.js';
@@ -115,8 +116,7 @@ async function upsertPersistedWorkspace(orgId, userId, row) {
         issuer_business_id: row.issuer_business_id,
         represented_client_id: row.represented_client_id,
     }, { onConflict: 'organization_id,user_id' });
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'upsertIncomeUserWorkspaceContext');
 }
 async function resolveEffectiveWorkspace(orgId, persisted, orgIssuer) {
     const warnings = [];

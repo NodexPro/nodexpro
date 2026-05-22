@@ -3,6 +3,7 @@
  */
 
 import { supabaseAdmin } from '../../db/client.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import type { ActiveIncomeIssuerScope } from './income.guards.js';
 import type { IncomeWorkspacePermissions } from './income.types.js';
 import {
@@ -91,6 +92,32 @@ function escapeIlikePattern(q: string): string {
   return q.replace(/[%_\\]/g, '\\$&');
 }
 
+/** PostgREST .or() values must be double-quoted when they contain filter metacharacters. */
+function quotePostgrestFilterValue(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function normalizeAddressJson(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return null;
+}
+
 function addressPartsFromJson(address_json: Record<string, unknown> | null): {
   address_line: string | null;
   city: string | null;
@@ -114,9 +141,9 @@ function mapCustomerRow(row: {
   tax_id: string | null;
   phone: string | null;
   email: string | null;
-  address_json: Record<string, unknown> | null;
+  address_json: unknown;
 }): IncomeRecipientListRow {
-  const { address_line, city } = addressPartsFromJson(row.address_json);
+  const { address_line, city } = addressPartsFromJson(normalizeAddressJson(row.address_json));
   return {
     income_customer_id: row.id,
     display_name: row.display_name,
@@ -184,7 +211,7 @@ async function loadCustomerRows(scope: ActiveIncomeIssuerScope, limit: number): 
     .limit(limit);
   query = applyIssuerScopeToCustomersQuery(query, scope);
   const { data, error } = await query;
-  if (error) throw error;
+  throwIfSupabaseError(error, 'loadIncomeCustomers');
   return (data ?? []) as Array<{
     id: string;
     display_name: string;
@@ -212,7 +239,7 @@ export async function searchIncomeRecipients(
   const q = queryText.trim();
   if (!q) return loadRecentIncomeRecipients(scope, limit);
 
-  const pattern = `%${escapeIlikePattern(q)}%`;
+  const pattern = quotePostgrestFilterValue(`%${escapeIlikePattern(q)}%`);
   let query = supabaseAdmin
     .from('income_customers')
     .select('id, display_name, tax_id, phone, email, address_json, updated_at')
@@ -223,7 +250,7 @@ export async function searchIncomeRecipients(
     .limit(limit);
   query = applyIssuerScopeToCustomersQuery(query, scope);
   const { data, error } = await query;
-  if (error) throw error;
+  throwIfSupabaseError(error, 'searchIncomeRecipients');
   return (data ?? []).map((row) =>
     mapCustomerRow(
       row as {
@@ -232,7 +259,7 @@ export async function searchIncomeRecipients(
         tax_id: string | null;
         phone: string | null;
         email: string | null;
-        address_json: Record<string, unknown> | null;
+        address_json: unknown;
       },
     ),
   );
@@ -248,7 +275,7 @@ export async function loadIncomeRecipientById(
     .eq('id', incomeCustomerId);
   query = applyIssuerScopeToCustomersQuery(query, scope);
   const { data, error } = await query.maybeSingle();
-  if (error) throw error;
+  throwIfSupabaseError(error, 'loadIncomeRecipientById');
   if (!data) return null;
   return mapCustomerRow(
     data as {
@@ -257,7 +284,7 @@ export async function loadIncomeRecipientById(
       tax_id: string | null;
       phone: string | null;
       email: string | null;
-      address_json: Record<string, unknown> | null;
+      address_json: unknown;
     },
   );
 }
@@ -338,7 +365,7 @@ export async function insertSavedIncomeRecipient(
     })
     .select('id, display_name, tax_id, phone, email, address_json')
     .single();
-  if (error) throw error;
+  throwIfSupabaseError(error, 'insertSavedIncomeRecipient');
   return mapCustomerRow(
     data as {
       id: string;
@@ -346,7 +373,7 @@ export async function insertSavedIncomeRecipient(
       tax_id: string | null;
       phone: string | null;
       email: string | null;
-      address_json: Record<string, unknown> | null;
+      address_json: unknown;
     },
   );
 }

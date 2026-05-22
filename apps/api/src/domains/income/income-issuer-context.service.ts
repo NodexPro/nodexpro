@@ -4,6 +4,7 @@
  */
 
 import { supabaseAdmin } from '../../db/client.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
@@ -183,7 +184,7 @@ async function upsertPersistedWorkspace(
     },
     { onConflict: 'organization_id,user_id' },
   );
-  if (error) throw error;
+  throwIfSupabaseError(error, 'upsertIncomeUserWorkspaceContext');
 }
 
 async function resolveEffectiveWorkspace(

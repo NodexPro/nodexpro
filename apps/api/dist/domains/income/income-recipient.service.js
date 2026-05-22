@@ -2,6 +2,7 @@
  * Income document recipients (buyers) — scoped to active issuer, not Core clients.
  */
 import { supabaseAdmin } from '../../db/client.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { buildRecipientAddressJson, buildRecipientSnapshotJson, recipientDisplayLine, } from './income-recipient.validation.js';
 function applyIssuerScopeToCustomersQuery(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,6 +23,33 @@ query, scope) {
 function escapeIlikePattern(q) {
     return q.replace(/[%_\\]/g, '\\$&');
 }
+/** PostgREST .or() values must be double-quoted when they contain filter metacharacters. */
+function quotePostgrestFilterValue(value) {
+    return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+function normalizeAddressJson(raw) {
+    if (raw == null)
+        return null;
+    if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (!trimmed)
+            return null;
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                return parsed;
+            }
+            return null;
+        }
+        catch {
+            return null;
+        }
+    }
+    if (typeof raw === 'object' && !Array.isArray(raw)) {
+        return raw;
+    }
+    return null;
+}
 function addressPartsFromJson(address_json) {
     if (!address_json || typeof address_json !== 'object') {
         return { address_line: null, city: null };
@@ -35,7 +63,7 @@ function addressPartsFromJson(address_json) {
     return { address_line: address, city };
 }
 function mapCustomerRow(row) {
-    const { address_line, city } = addressPartsFromJson(row.address_json);
+    const { address_line, city } = addressPartsFromJson(normalizeAddressJson(row.address_json));
     return {
         income_customer_id: row.id,
         display_name: row.display_name,
@@ -85,8 +113,7 @@ async function loadCustomerRows(scope, limit) {
         .limit(limit);
     query = applyIssuerScopeToCustomersQuery(query, scope);
     const { data, error } = await query;
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'loadIncomeCustomers');
     return (data ?? []);
 }
 export async function loadRecentIncomeRecipients(scope, limit = 8) {
@@ -97,7 +124,7 @@ export async function searchIncomeRecipients(scope, queryText, limit = 20) {
     const q = queryText.trim();
     if (!q)
         return loadRecentIncomeRecipients(scope, limit);
-    const pattern = `%${escapeIlikePattern(q)}%`;
+    const pattern = quotePostgrestFilterValue(`%${escapeIlikePattern(q)}%`);
     let query = supabaseAdmin
         .from('income_customers')
         .select('id, display_name, tax_id, phone, email, address_json, updated_at')
@@ -106,8 +133,7 @@ export async function searchIncomeRecipients(scope, queryText, limit = 20) {
         .limit(limit);
     query = applyIssuerScopeToCustomersQuery(query, scope);
     const { data, error } = await query;
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'searchIncomeRecipients');
     return (data ?? []).map((row) => mapCustomerRow(row));
 }
 export async function loadIncomeRecipientById(scope, incomeCustomerId) {
@@ -117,8 +143,7 @@ export async function loadIncomeRecipientById(scope, incomeCustomerId) {
         .eq('id', incomeCustomerId);
     query = applyIssuerScopeToCustomersQuery(query, scope);
     const { data, error } = await query.maybeSingle();
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'loadIncomeRecipientById');
     if (!data)
         return null;
     return mapCustomerRow(data);
@@ -186,7 +211,6 @@ export async function insertSavedIncomeRecipient(scope, fields, actorUserId) {
     })
         .select('id, display_name, tax_id, phone, email, address_json')
         .single();
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'insertSavedIncomeRecipient');
     return mapCustomerRow(data);
 }
