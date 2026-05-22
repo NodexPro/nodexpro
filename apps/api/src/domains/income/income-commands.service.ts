@@ -613,8 +613,8 @@ export async function executeIncomeCommand(
   if (command === INCOME_COMMAND_BEGIN_WIZARD_DRAFT) {
     const scope = await loadActiveIncomeIssuerScope(ctx);
     assertIncomeEditPermission(scope);
-    const overlay = await beginIncomeWizardDocumentDraft(scope, body, {});
-    return wizardDraftCommandResponse(ctx, command, scope, {}, overlay);
+    const { wizardOverlay, recipientOverlay } = await beginIncomeWizardDocumentDraft(scope, body, {});
+    return wizardDraftCommandResponse(ctx, command, scope, recipientOverlay, wizardOverlay);
   }
 
   const wizardDraftCmd = async (

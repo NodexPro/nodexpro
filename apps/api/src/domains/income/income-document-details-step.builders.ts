@@ -89,6 +89,8 @@ export type IncomeWizardDraftRow = {
   delivery_contact_json: Record<string, unknown> | null;
   document_settings_json: unknown;
   validation_warnings_json: unknown;
+  income_customer_id: string | null;
+  one_time_customer_snapshot_json: Record<string, unknown> | null;
 };
 
 function issuerDisplayName(scope: ActiveIncomeIssuerScope): string {

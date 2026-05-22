@@ -5,6 +5,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import type { ActiveIncomeIssuerScope } from './income.guards.js';
 import { assertRowMatchesIssuerScope } from './income.guards.js';
 import { validateDraftAgainstDocumentTypeRules } from './income-document-draft.helpers.js';
@@ -54,7 +55,7 @@ export async function loadWizardDraftRow(
     .eq('id', draftId)
     .eq('organization_id', scope.org_id)
     .maybeSingle();
-  if (error) throw error;
+  throwIfSupabaseError(error, 'loadWizardDraftRow');
   if (!data) throw notFound('Income document draft not found');
   const row = data as IncomeWizardDraftRow & {
     organization_id: string;
@@ -151,8 +152,8 @@ function validationForRow(
   const { validation_warnings_json } = validateDraftAgainstDocumentTypeRules(
     {
       document_type: row.document_type,
-      income_customer_id: null,
-      one_time_customer_snapshot_json: null,
+      income_customer_id: row.income_customer_id ?? null,
+      one_time_customer_snapshot_json: row.one_time_customer_snapshot_json ?? null,
       draft_lines_json: serializeDraftLines(lines),
       payment_terms_json: null,
       due_date: row.due_date,
@@ -168,36 +169,50 @@ function validationForRow(
   return { validation_warnings_json, draft_totals_preview_json: totals };
 }
 
+/** Resolve wizard draft recipient from overlay or begin_wizard command body (backend truth). */
+export async function resolveIncomeRecipientSelectedForDraft(
+  scope: ActiveIncomeIssuerScope,
+  body: Record<string, unknown>,
+  recipientOverlay: RecipientSearchOverlay = {},
+): Promise<IncomeRecipientSelected> {
+  if (recipientOverlay.selected) return recipientOverlay.selected;
+
+  const income_customer_id = optionalUuid(body.income_customer_id, 'income_customer_id');
+  const one_time_customer_snapshot_json = optionalJsonObject(
+    body.one_time_customer_snapshot_json,
+    'one_time_customer_snapshot_json',
+  );
+  if (income_customer_id) {
+    const row = await loadIncomeRecipientById(scope, income_customer_id);
+    if (!row) throw badRequest('Income recipient not found');
+    return selectedFromSavedRow(row);
+  }
+  if (one_time_customer_snapshot_json) {
+    return {
+      kind: 'snapshot',
+      income_customer_id: null,
+      display_line: String(one_time_customer_snapshot_json.display_name ?? 'מקבל'),
+      snapshot: one_time_customer_snapshot_json,
+    };
+  }
+  throw badRequest('Select a document recipient before document details');
+}
+
+export type BeginWizardDraftResult = {
+  wizardOverlay: WizardDraftOverlay;
+  recipientOverlay: RecipientSearchOverlay;
+};
+
 export async function beginIncomeWizardDocumentDraft(
   scope: ActiveIncomeIssuerScope,
   body: Record<string, unknown>,
-  recipientOverlay: RecipientSearchOverlay,
-): Promise<WizardDraftOverlay> {
+  recipientOverlay: RecipientSearchOverlay = {},
+): Promise<BeginWizardDraftResult> {
   const document_type = parseIncomeDocumentType(body.document_type);
   if (!document_type) throw badRequest('document_type is required');
   const docType = await resolveDocType(scope, document_type);
 
-  let selected = recipientOverlay.selected ?? null;
-  if (!selected) {
-    const income_customer_id = optionalUuid(body.income_customer_id, 'income_customer_id');
-    const one_time_customer_snapshot_json = optionalJsonObject(
-      body.one_time_customer_snapshot_json,
-      'one_time_customer_snapshot_json',
-    );
-    if (income_customer_id) {
-      const row = await loadIncomeRecipientById(scope, income_customer_id);
-      if (!row) throw badRequest('Income recipient not found');
-      selected = selectedFromSavedRow(row);
-    } else if (one_time_customer_snapshot_json) {
-      selected = {
-        kind: 'snapshot',
-        income_customer_id: null,
-        display_line: String(one_time_customer_snapshot_json.display_name ?? 'מקבל'),
-        snapshot: one_time_customer_snapshot_json,
-      };
-    }
-  }
-  if (!selected) throw badRequest('Select a document recipient before document details');
+  const selected = await resolveIncomeRecipientSelectedForDraft(scope, body, recipientOverlay);
   const recipient = recipientFieldsFromSelected(selected);
 
   const document_date =
@@ -223,6 +238,8 @@ export async function beginIncomeWizardDocumentDraft(
       : null,
     document_settings_json: settings,
     validation_warnings_json: [],
+    income_customer_id: recipient.income_customer_id,
+    one_time_customer_snapshot_json: recipient.one_time_customer_snapshot_json,
   };
 
   const { validation_warnings_json, draft_totals_preview_json } = validationForRow(draftRow, docType);
@@ -253,7 +270,7 @@ export async function beginIncomeWizardDocumentDraft(
     })
     .select('id')
     .single();
-  if (error) throw error;
+  throwIfSupabaseError(error, 'beginIncomeWizardDocumentDraft');
 
   const draftId = String((data as { id: string }).id);
   await writeAudit({
@@ -263,10 +280,19 @@ export async function beginIncomeWizardDocumentDraft(
     entityType: 'income_document_draft',
     entityId: draftId,
     action: AUDIT_ACTIONS.INCOME_DOCUMENT_DRAFT_CREATED,
-    payload: { document_type, wizard: true, line_count: 1 },
+    payload: {
+      document_type,
+      wizard: true,
+      line_count: 1,
+      income_customer_id: recipient.income_customer_id,
+      one_time_snapshot: recipient.one_time_customer_snapshot_json != null,
+    },
   });
 
-  return buildOverlayForDraft(scope, draftId, true);
+  return {
+    wizardOverlay: await buildOverlayForDraft(scope, draftId, true),
+    recipientOverlay: { selected },
+  };
 }
 
 export async function addIncomeDocumentLine(
