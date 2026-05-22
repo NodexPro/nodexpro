@@ -126,8 +126,17 @@ if (!wizard.includes('recipientPending') || !wizard.includes('onPendingChange'))
 if (!recipientField.includes('nx-we-recipient-search--wizard')) {
   errors.push('recipient field must use wizard workspace layout (not tiny dropdown)');
 }
-if (!recipientField.includes('selectInFlight') && !recipientField.includes('pending')) {
-  errors.push('recipient field must guard duplicate select commands');
+if (!recipientField.includes('selectInFlight')) {
+  errors.push('recipient field must guard duplicate select commands via selectInFlight ref');
+}
+if (!recipientField.includes('skipSearchEffectRef')) {
+  errors.push('recipient field must skip debounced search after programmatic query from select');
+}
+if (!recipientField.includes('already selected, no command')) {
+  errors.push('commitPendingCreate must not re-send select when recipient already chosen');
+}
+if (/pending\?\.kind === 'search'/.test(recipientField) && /onPendingChange\(pending !== null\)/.test(recipientField)) {
+  errors.push('search pending must not lock wizard footer');
 }
 if (!api.includes('recipient_search')) {
   errors.push('work-engine API types must include wizard.recipient_search');

@@ -22,7 +22,7 @@ type RecipientFieldKey =
 
 type CreateFieldValues = Record<RecipientFieldKey, string>;
 
-type PendingKind = 'search' | 'select' | 'create';
+type PendingKind = 'select' | 'create';
 
 type PendingState = {
   kind: PendingKind;
@@ -38,6 +38,15 @@ const EMPTY_CREATE: CreateFieldValues = {
   city: '',
   save_for_future: '',
 };
+
+const DEV = import.meta.env.DEV;
+
+function devLog(message: string, detail?: Record<string, unknown>) {
+  if (DEV) {
+    // eslint-disable-next-line no-console
+    console.debug(`[WE recipient] ${message}`, detail ?? '');
+  }
+}
 
 export type WorkEngineRecipientSearchFieldHandle = {
   /** Commits inline new recipient via backend command when form is open; otherwise returns current aggregate if selected. */
@@ -68,23 +77,58 @@ export const WorkEngineRecipientSearchField = forwardRef<
   const [showCreateInline, setShowCreateInline] = useState(false);
   const [createValues, setCreateValues] = useState<CreateFieldValues>(EMPTY_CREATE);
   const [pending, setPending] = useState<PendingState | null>(null);
+  const [searching, setSearching] = useState(false);
+
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectInFlight = useRef(false);
+  const createInFlight = useRef(false);
+  const searchInFlight = useRef(false);
+  const skipSearchEffectRef = useRef(false);
+  const initialSearchDone = useRef(false);
+  const mountedRef = useRef(true);
 
-  const interactionsLocked = busy || pending !== null;
+  const selectedCustomerId =
+    model?.selected?.kind === 'saved' ? model.selected.income_customer_id : null;
+
+  const recipientCommandLocked = busy || pending !== null;
+
+  const clearRecipientPending = useCallback(() => {
+    if (!mountedRef.current) return;
+    setPending(null);
+    onPendingChange(false);
+  }, [onPendingChange]);
+
+  const setRecipientPending = useCallback(
+    (next: PendingState) => {
+      if (!mountedRef.current) return;
+      setPending(next);
+      onPendingChange(true);
+    },
+    [onPendingChange],
+  );
 
   useEffect(() => {
-    onPendingChange(pending !== null);
-  }, [pending, onPendingChange]);
-
-  const setPendingSafe = useCallback((next: PendingState | null) => {
-    setPending(next);
-  }, []);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+      selectInFlight.current = false;
+      createInFlight.current = false;
+      searchInFlight.current = false;
+      onPendingChange(false);
+    };
+  }, [onPendingChange]);
 
   const runSearch = useCallback(
     async (q: string) => {
-      if (!cmds.search_recipients || interactionsLocked) return;
-      setPendingSafe({ kind: 'search' });
+      if (!cmds.search_recipients || !mountedRef.current) return;
+      if (selectInFlight.current || createInFlight.current || searchInFlight.current) {
+        devLog('search_income_recipients skipped — command already in flight');
+        return;
+      }
+      searchInFlight.current = true;
+      setSearching(true);
+      devLog('search_income_recipients', { query: q });
       onError(null);
       try {
         const res = await executeIncomeCommand(cmds.search_recipients, { query: q });
@@ -94,22 +138,36 @@ export const WorkEngineRecipientSearchField = forwardRef<
       } catch (e) {
         onError(e instanceof Error ? e.message : 'שגיאת חיפוש');
       } finally {
-        setPendingSafe(null);
+        searchInFlight.current = false;
+        if (mountedRef.current) setSearching(false);
       }
     },
-    [cmds.search_recipients, interactionsLocked, onError, onWorkspaceAgg, setPendingSafe],
+    [cmds.search_recipients, onError, onWorkspaceAgg],
   );
 
   useEffect(() => {
-    if (!model || interactionsLocked) return;
+    if (!model || selectInFlight.current || createInFlight.current) return;
+
+    if (skipSearchEffectRef.current) {
+      skipSearchEffectRef.current = false;
+      return;
+    }
+
+    if (!initialSearchDone.current) {
+      initialSearchDone.current = true;
+      void runSearch(query);
+      return;
+    }
+
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => {
       void runSearch(query);
     }, 280);
+
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
-  }, [query, model, runSearch, interactionsLocked]);
+  }, [query, model, runSearch]);
 
   const listRows = useMemo(() => {
     if (!model) return [];
@@ -119,8 +177,6 @@ export const WorkEngineRecipientSearchField = forwardRef<
 
   const fieldErrors = model?.field_errors ?? {};
   const selectedLine = model?.selected?.display_line ?? null;
-  const selectedCustomerId =
-    model?.selected?.kind === 'saved' ? model.selected.income_customer_id : null;
 
   const textFields = shell.create_fields_schema.filter((f) => f.input_type === 'text');
   const saveField = shell.create_fields_schema.find((f) => f.key === 'save_for_future');
@@ -138,12 +194,17 @@ export const WorkEngineRecipientSearchField = forwardRef<
   );
 
   const commitInlineCreate = useCallback(async (): Promise<IncomeWorkspaceAggregate | null> => {
-    if (selectInFlight.current) return null;
+    if (createInFlight.current || selectInFlight.current) {
+      devLog('create recipient skipped — command already in flight');
+      return null;
+    }
     const saveForFuture = createValues.save_for_future === 'true';
     const command = saveForFuture ? cmds.save_recipient_for_future : cmds.set_recipient_snapshot;
     if (!command) return null;
-    selectInFlight.current = true;
-    setPendingSafe({ kind: 'create' });
+
+    createInFlight.current = true;
+    setRecipientPending({ kind: 'create' });
+    devLog(saveForFuture ? 'save_income_recipient_for_future' : 'set_income_recipient_snapshot');
     onError(null);
     try {
       const res = await executeIncomeCommand(command, buildCreateBody());
@@ -152,7 +213,11 @@ export const WorkEngineRecipientSearchField = forwardRef<
       onWorkspaceAgg(agg);
       const errs = agg.recipient_search?.field_errors ?? {};
       if (Object.keys(errs).length > 0) return null;
-      if (!agg.recipient_search?.selected) return null;
+      if (!agg.recipient_search?.selected) {
+        onError('מקבל לא נשמר');
+        return null;
+      }
+      skipSearchEffectRef.current = true;
       setQuery(agg.recipient_search.selected.display_line);
       setShowCreateInline(false);
       setCreateValues(EMPTY_CREATE);
@@ -161,27 +226,34 @@ export const WorkEngineRecipientSearchField = forwardRef<
       onError(e instanceof Error ? e.message : 'שגיאה');
       return null;
     } finally {
-      selectInFlight.current = false;
-      setPendingSafe(null);
+      createInFlight.current = false;
+      clearRecipientPending();
     }
   }, [
     buildCreateBody,
+    clearRecipientPending,
     cmds.save_recipient_for_future,
     cmds.set_recipient_snapshot,
     createValues.save_for_future,
     onError,
     onWorkspaceAgg,
-    setPendingSafe,
+    setRecipientPending,
   ]);
 
   useImperativeHandle(
     ref,
     () => ({
       commitPendingCreate: async () => {
+        if (selectInFlight.current || createInFlight.current) {
+          devLog('commitPendingCreate skipped — command in flight');
+          return null;
+        }
         if (showCreateInline && createValues.display_name.trim()) {
+          devLog('commitPendingCreate → inline create command only');
           return commitInlineCreate();
         }
         if (workspaceAgg?.recipient_search?.selected) {
+          devLog('commitPendingCreate → already selected, no command');
           return workspaceAgg;
         }
         return null;
@@ -191,29 +263,51 @@ export const WorkEngineRecipientSearchField = forwardRef<
   );
 
   const handleSelectRecipient = async (incomeCustomerId: string) => {
-    if (selectInFlight.current || pending !== null) return;
+    if (selectInFlight.current) {
+      devLog('select_income_recipient ignored — already in flight');
+      return;
+    }
+    if (selectedCustomerId === incomeCustomerId && model?.selected) {
+      devLog('select_income_recipient skipped — already selected', { incomeCustomerId });
+      return;
+    }
+
+    if (searchTimer.current) {
+      clearTimeout(searchTimer.current);
+      searchTimer.current = null;
+    }
+
     selectInFlight.current = true;
-    setPendingSafe({ kind: 'select', targetId: incomeCustomerId });
+    setRecipientPending({ kind: 'select', targetId: incomeCustomerId });
+    devLog('select_income_recipient', { income_customer_id: incomeCustomerId });
     onError(null);
+
     try {
       const res = await executeIncomeCommand(cmds.select_recipient, {
         income_customer_id: incomeCustomerId,
       });
-      if ('income_workspace_aggregate' in res) {
-        onWorkspaceAgg(res.income_workspace_aggregate);
-        setQuery(res.income_workspace_aggregate.recipient_search.selected?.display_line ?? '');
-        setShowCreateInline(false);
-        setCreateValues(EMPTY_CREATE);
+      if (!('income_workspace_aggregate' in res)) {
+        onError('תגובת שרת לא תקינה');
+        return;
       }
+      const agg = res.income_workspace_aggregate;
+      onWorkspaceAgg(agg);
+      const selected = agg.recipient_search?.selected;
+      if (!selected) {
+        onError('מקבל לא נבחר');
+        return;
+      }
+      skipSearchEffectRef.current = true;
+      setQuery(selected.display_line);
+      setShowCreateInline(false);
+      setCreateValues(EMPTY_CREATE);
     } catch (e) {
       onError(e instanceof Error ? e.message : 'שגיאה');
     } finally {
       selectInFlight.current = false;
-      setPendingSafe(null);
+      clearRecipientPending();
     }
   };
-
-  const showPanelLoading = pending?.kind === 'search' || pending?.kind === 'select';
 
   return (
     <div className="nx-we-recipient-search nx-we-recipient-search--wizard" dir="rtl">
@@ -224,15 +318,15 @@ export const WorkEngineRecipientSearchField = forwardRef<
             type="search"
             value={query}
             placeholder={shell.placeholder}
-            disabled={interactionsLocked || !workspaceAgg}
-            aria-busy={pending?.kind === 'search'}
+            disabled={recipientCommandLocked || !workspaceAgg}
+            aria-busy={searching}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        {pending?.kind === 'search' ? (
+        {searching && !pending ? (
           <span className="nx-we-recipient-search__status" role="status">
             <span className="nx-we-recipient-search__spinner" aria-hidden />
-            טוען...
+            מחפש...
           </span>
         ) : null}
       </div>
@@ -248,8 +342,8 @@ export const WorkEngineRecipientSearchField = forwardRef<
 
       {model ? (
         <div
-          className={`nx-we-recipient-search__panel ${showPanelLoading ? 'nx-we-recipient-search__panel--loading' : ''}`}
-          aria-busy={showPanelLoading}
+          className={`nx-we-recipient-search__panel ${pending || searching ? 'nx-we-recipient-search__panel--loading' : ''}`}
+          aria-busy={pending?.kind === 'select' || searching}
         >
           {listRows.map((row) => {
             const isPendingRow = pending?.kind === 'select' && pending.targetId === row.income_customer_id;
@@ -259,7 +353,7 @@ export const WorkEngineRecipientSearchField = forwardRef<
                 key={row.income_customer_id}
                 type="button"
                 className={`nx-we-recipient-search__option ${isSelectedRow ? 'nx-we-recipient-search__option--selected' : ''} ${isPendingRow ? 'nx-we-recipient-search__option--pending' : ''}`}
-                disabled={interactionsLocked}
+                disabled={recipientCommandLocked}
                 onClick={() => void handleSelectRecipient(row.income_customer_id)}
               >
                 <span className="nx-we-recipient-search__option-text">{row.display_line}</span>
@@ -272,16 +366,16 @@ export const WorkEngineRecipientSearchField = forwardRef<
               </button>
             );
           })}
-          {model.empty_state.visible && listRows.length === 0 && pending?.kind !== 'search' ? (
+          {model.empty_state.visible && listRows.length === 0 && !searching ? (
             <div className="nx-we-recipient-search__empty">{model.empty_state.message}</div>
           ) : null}
           <button
             type="button"
             className="nx-we-recipient-search__option nx-we-recipient-search__option--create"
-            disabled={interactionsLocked || !model.create_new_action.enabled}
+            disabled={recipientCommandLocked || !model.create_new_action.enabled}
             title={model.create_new_action.disabled_reason ?? undefined}
             onClick={() => {
-              if (interactionsLocked) return;
+              if (recipientCommandLocked) return;
               setShowCreateInline(true);
             }}
           >
@@ -307,7 +401,7 @@ export const WorkEngineRecipientSearchField = forwardRef<
                 </label>
                 <input
                   value={createValues[field.key as RecipientFieldKey] ?? ''}
-                  disabled={interactionsLocked}
+                  disabled={recipientCommandLocked}
                   onChange={(e) =>
                     setCreateValues((v) => ({ ...v, [field.key]: e.target.value }))
                   }
@@ -323,7 +417,7 @@ export const WorkEngineRecipientSearchField = forwardRef<
               <input
                 type="checkbox"
                 checked={createValues.save_for_future === 'true'}
-                disabled={interactionsLocked}
+                disabled={recipientCommandLocked}
                 onChange={(e) =>
                   setCreateValues((v) => ({
                     ...v,

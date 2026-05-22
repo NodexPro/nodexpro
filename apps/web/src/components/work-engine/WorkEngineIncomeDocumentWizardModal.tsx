@@ -171,11 +171,15 @@ export function WorkEngineIncomeDocumentWizardModal({
       return;
     }
     if (activeStepKey === 'recipient') {
+      if (recipientPending) return;
+      const alreadySelected = workspaceAgg?.recipient_search?.selected;
       onBusyChange(true);
       try {
-        const refreshed = await recipientFieldRef.current?.commitPendingCreate();
+        const refreshed = alreadySelected
+          ? workspaceAgg
+          : await recipientFieldRef.current?.commitPendingCreate();
         const truth = refreshed ?? workspaceAgg;
-        if (refreshed) {
+        if (refreshed && refreshed !== workspaceAgg) {
           setWorkspaceAgg(refreshed);
         }
         if (!truth?.recipient_search?.selected) {
