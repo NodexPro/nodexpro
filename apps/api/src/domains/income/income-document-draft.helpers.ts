@@ -5,6 +5,7 @@ import {
   computeDraftTotalsPreview,
   parseDocumentSettingsJson,
 } from './income-document-draft-totals.pure.js';
+import { incomeDraftVatFallbackResolution } from './income-draft-vat-fallback.pure.js';
 import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.types.js';
 
 export interface ParsedDraftPayload {
@@ -94,7 +95,7 @@ export function validateDraftAgainstDocumentTypeRules(
 
   const lines = normalizeDraftLines(payload.draft_lines_json);
   const settings = parseDocumentSettingsJson(payload.document_settings_json ?? null);
-  const totals = computeDraftTotalsPreview(lines, payload.currency, settings);
+  const totals = computeDraftTotalsPreview(lines, payload.currency, settings, incomeDraftVatFallbackResolution());
 
   return {
     validation_warnings_json: warnings,

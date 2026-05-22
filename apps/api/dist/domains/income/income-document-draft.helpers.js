@@ -2,6 +2,7 @@ import { badRequest } from '../../shared/errors.js';
 import { optionalJsonObject, optionalString } from './income.guards.js';
 import { normalizeDraftLines } from './income-document-draft-lines.pure.js';
 import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
+import { incomeDraftVatFallbackResolution } from './income-draft-vat-fallback.pure.js';
 function parseOptionalDate(value, field) {
     if (value === null || value === undefined || value === '')
         return null;
@@ -59,7 +60,7 @@ export function validateDraftAgainstDocumentTypeRules(payload, docType) {
     }
     const lines = normalizeDraftLines(payload.draft_lines_json);
     const settings = parseDocumentSettingsJson(payload.document_settings_json ?? null);
-    const totals = computeDraftTotalsPreview(lines, payload.currency, settings);
+    const totals = computeDraftTotalsPreview(lines, payload.currency, settings, incomeDraftVatFallbackResolution());
     return {
         validation_warnings_json: warnings,
         draft_totals_preview_json: totals,

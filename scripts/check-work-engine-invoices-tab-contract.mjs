@@ -153,8 +153,17 @@ if (!wizard.includes('document_details_step')) {
 if (/subtotal_reference|vat_reference|grand_total_reference|amount_reference\s*\*|\.reduce\(/.test(docDetailsStep)) {
   errors.push('document details UI must not calculate financial totals');
 }
-if (!docDetailsStep.includes('reorder_lines')) {
-  errors.push('document details must reorder lines via backend command');
+if (!docDetailsStep.includes('add_line')) {
+  errors.push('document details must add lines via backend add_line command');
+}
+if (!docDetailsStep.includes('step.line_items.columns')) {
+  errors.push('document details table must render columns from aggregate schema');
+}
+if (/row_number|0\.18|17%|מע״מ רגיל/.test(docDetailsStep)) {
+  errors.push('document details UI must not hardcode row numbers or VAT labels');
+}
+if (!docDetailsStep.includes('step.header.title')) {
+  errors.push('document details must render backend header.title only');
 }
 
 const invoicesPanelSource = read(tabHost);

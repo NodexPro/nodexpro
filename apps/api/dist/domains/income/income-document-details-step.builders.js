@@ -1,6 +1,9 @@
 import { formatMoneyReference, normalizeDraftLines, } from './income-document-draft-lines.pure.js';
 import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
+import { buildDocumentDetailsHeaderTitle } from './income-document-details-header.pure.js';
+import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
+import { loadIncomeRecipientById } from './income-recipient.service.js';
 const DOCUMENT_TYPE_LABELS = {
     receipt: 'קבלה',
     tax_invoice: 'חשבונית מס',
@@ -9,10 +12,28 @@ const DOCUMENT_TYPE_LABELS = {
     deal_invoice: 'חשבונית עסקה',
     quote: 'הצעת מחיר',
 };
-function issuerDisplayName(scope) {
-    return scope.represented_client_label ?? scope.issuer_label;
+const CURRENCY_DISPLAY = {
+    ILS: '₪',
+    USD: '$',
+    EUR: '€',
+};
+function currencyDisplayLabel(code) {
+    return CURRENCY_DISPLAY[code] ?? code;
 }
-function buildSettingsSchema(row, docType, canEdit) {
+async function resolveRecipientDisplayName(scope, row) {
+    if (row.income_customer_id) {
+        const customer = await loadIncomeRecipientById(scope, row.income_customer_id);
+        if (customer?.display_name?.trim())
+            return customer.display_name.trim();
+    }
+    const snap = row.one_time_customer_snapshot_json;
+    if (snap && typeof snap.display_name === 'string' && snap.display_name.trim()) {
+        return snap.display_name.trim();
+    }
+    return '—';
+}
+export { buildDocumentDetailsHeaderTitle } from './income-document-details-header.pure.js';
+function buildSettingsSchema(row, docType, canEdit, vatResolution) {
     const settings = parseDocumentSettingsJson(row.document_settings_json);
     const paymentNote = row.payment_received_json && typeof row.payment_received_json.note === 'string'
         ? row.payment_received_json.note
@@ -64,7 +85,7 @@ function buildSettingsSchema(row, docType, canEdit) {
             value: settings.vat_mode,
             required: true,
             options: [
-                { value: 'standard', label: 'מע״מ רגיל (17%)' },
+                { value: 'standard', label: vatResolution.standard_vat_mode_option_label },
                 { value: 'exempt', label: 'פטור ממע״מ' },
                 { value: 'zero', label: 'מע״מ אפס' },
             ],
@@ -113,11 +134,14 @@ function buildSettingsSchema(row, docType, canEdit) {
     }
     return fields;
 }
-function buildLineRows(lines, totals, canEdit) {
-    const vatLabel = totals.vat_rate_label ?? '—';
-    return lines.map((line, index) => ({
+function buildLineRows(lines, totals, settings, vatResolution, canEdit) {
+    const vatLineLabel = settings.vat_mode === 'standard'
+        ? vatResolution.standard_vat_mode_option_label
+        : settings.vat_mode === 'zero'
+            ? 'מע״מ אפס (0%)'
+            : 'פטור ממע״מ';
+    return lines.map((line) => ({
         line_id: line.line_id,
-        row_number: index + 1,
         description: { value: line.description, editable: canEdit },
         quantity: { value: String(line.quantity), editable: canEdit },
         unit_price: {
@@ -125,7 +149,8 @@ function buildLineRows(lines, totals, canEdit) {
             display: formatMoneyReference(line.unit_price_reference, totals.currency),
             editable: canEdit,
         },
-        vat: { label: vatLabel },
+        currency: { display: currencyDisplayLabel(totals.currency) },
+        vat: { label: vatLineLabel },
         line_total: {
             display: formatMoneyReference(line.amount_reference, totals.currency),
         },
@@ -135,14 +160,17 @@ function buildLineRows(lines, totals, canEdit) {
 export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdit) {
     const lines = normalizeDraftLines(row.draft_lines_json);
     const settings = parseDocumentSettingsJson(row.document_settings_json);
-    const totals = computeDraftTotalsPreview(lines, row.currency, settings);
+    const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
+    const vatResolution = await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate);
+    const totals = computeDraftTotalsPreview(lines, row.currency, settings, vatResolution);
     const docTypeLabel = row.document_type && DOCUMENT_TYPE_LABELS[row.document_type]
         ? DOCUMENT_TYPE_LABELS[row.document_type]
         : 'מסמך';
-    const issuerName = issuerDisplayName(scope);
     const numberPreview = row.document_type != null
         ? await previewNextIncomeDocumentNumber(scope, row.document_type)
         : null;
+    const recipientName = await resolveRecipientDisplayName(scope, row);
+    const headerTitle = buildDocumentDetailsHeaderTitle(scope, docTypeLabel, numberPreview, recipientName);
     const warnings = Array.isArray(row.validation_warnings_json)
         ? row.validation_warnings_json
             .filter((w) => w && typeof w === 'object')
@@ -166,22 +194,21 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
     return {
         draft_id: row.id,
         header: {
-            title: `הפקת ${docTypeLabel} עבור ${issuerName}`,
+            title: headerTitle,
             subtitle: docType?.legal_hint ?? null,
             document_number_preview: numberPreview,
         },
-        settings_schema: buildSettingsSchema(row, docType, canEdit),
+        settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution),
         line_items: {
             columns: [
-                { key: 'row_number', label: '#' },
-                { key: 'description', label: 'תיאור' },
-                { key: 'quantity', label: 'כמות' },
-                { key: 'unit_price', label: 'מחיר ליח׳' },
+                { key: 'description', label: 'פירוט *' },
+                { key: 'quantity', label: 'כמות *' },
+                { key: 'unit_price', label: "מחיר ליח' *" },
+                { key: 'currency', label: 'מטבע' },
                 { key: 'vat', label: 'מע״מ' },
                 { key: 'line_total', label: 'סה״כ' },
-                { key: 'actions', label: 'פעולות' },
             ],
-            rows: buildLineRows(lines, totals, canEdit),
+            rows: buildLineRows(lines, totals, settings, vatResolution, canEdit),
             allowed_actions: lineActions,
             add_row_label: '+ הוסף שורה',
             empty_state: {
@@ -191,7 +218,12 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             totals: {
                 subtotal: { label: 'סכום ביניים', display: totals.subtotal_display },
                 vat: totals.vat_display != null
-                    ? { label: 'מע״מ', display: totals.vat_display }
+                    ? {
+                        label: settings.vat_mode === 'standard'
+                            ? `מע״מ (${vatResolution.standard_rate_percent_label})`
+                            : 'מע״מ',
+                        display: totals.vat_display,
+                    }
                     : null,
                 grand_total: { label: 'סה״כ לתשלום', display: totals.grand_total_display },
                 currency: totals.currency,

@@ -366,11 +366,6 @@
   color: #64748b;
 }
 
-.nx-we-doc-details__number-preview {
-  margin: 0;
-  font-size: 13px;
-  color: #334155;
-}
 
 .nx-we-doc-details__warnings {
   margin: 0;
@@ -453,6 +448,19 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
+}
+
+.nx-we-doc-details__col--description {
+  width: 42%;
+}
+
+.nx-we-doc-details__col--quantity,
+.nx-we-doc-details__col--unit_price,
+.nx-we-doc-details__col--currency,
+.nx-we-doc-details__col--vat,
+.nx-we-doc-details__col--line_total {
+  width: 11.6%;
 }
 
 .nx-we-doc-details__table th {
@@ -471,38 +479,34 @@
   vertical-align: middle;
 }
 
-.nx-we-doc-details__row--drag {
-  background: #eff6ff;
-}
-
-.nx-we-doc-details__cell-num {
+.nx-we-doc-details__desc-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  color: #64748b;
-  white-space: nowrap;
+  gap: 8px;
+  min-width: 0;
 }
 
-.nx-we-doc-details__drag {
-  cursor: grab;
-  color: #94a3b8;
-  font-size: 12px;
-  user-select: none;
+.nx-we-doc-details__desc-cell .nx-we-doc-details__cell-input--wide {
+  flex: 1;
+  min-width: 0;
 }
 
 .nx-we-doc-details__cell-input {
   width: 100%;
-  min-width: 80px;
+  box-sizing: border-box;
   padding: 6px 8px;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   font-size: 13px;
 }
 
-.nx-we-doc-details__cell-input--narrow {
-  min-width: 56px;
-  max-width: 88px;
+.nx-we-doc-details__cell-input--wide {
+  min-width: 120px;
+}
+
+.nx-we-doc-details__cell-input--compact {
+  min-width: 0;
+  text-align: center;
 }
 
 .nx-we-doc-details__cell-muted {

@@ -12,10 +12,10 @@ export type IncomeDocumentDetailsSettingField = {
 
 export type IncomeDocumentDetailsLineRow = {
   line_id: string;
-  row_number: number;
   description: { value: string; editable: boolean };
   quantity: { value: string; editable: boolean };
   unit_price: { value: string; display: string; editable: boolean };
+  currency: { display: string };
   vat: { label: string };
   line_total: { display: string };
   allowed_actions: string[];

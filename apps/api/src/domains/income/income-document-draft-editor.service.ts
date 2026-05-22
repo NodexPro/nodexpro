@@ -27,6 +27,7 @@ import {
   DEFAULT_DOCUMENT_SETTINGS,
   parseDocumentSettingsJson,
 } from './income-document-draft-totals.pure.js';
+import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { findAvailableDocumentType, resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
 import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.types.js';
 import { optionalJsonObject, optionalString, optionalUuid, parseIncomeDocumentType, reqUuid } from './income.guards.js';
@@ -142,13 +143,19 @@ async function buildOverlayForDraft(
   return { active_wizard_draft_id: draftId, document_details_step: step };
 }
 
-function validationForRow(
+async function validationForRow(
+  scope: ActiveIncomeIssuerScope,
   row: IncomeWizardDraftRow,
   docType: IncomeAvailableDocumentType,
-): { validation_warnings_json: Record<string, unknown>[]; draft_totals_preview_json: Record<string, unknown> } {
+): Promise<{ validation_warnings_json: Record<string, unknown>[]; draft_totals_preview_json: Record<string, unknown> }> {
   const lines = normalizeDraftLines(row.draft_lines_json);
   const settings = parseDocumentSettingsJson(row.document_settings_json);
-  const totals = computeDraftTotalsPreview(lines, row.currency, settings);
+  const vatResolution = await resolveIncomeDraftVatForOrg(
+    scope.org_id,
+    'IL',
+    row.document_date ?? new Date().toISOString().slice(0, 10),
+  );
+  const totals = computeDraftTotalsPreview(lines, row.currency, settings, vatResolution);
   const { validation_warnings_json } = validateDraftAgainstDocumentTypeRules(
     {
       document_type: row.document_type,
@@ -242,7 +249,7 @@ export async function beginIncomeWizardDocumentDraft(
     one_time_customer_snapshot_json: recipient.one_time_customer_snapshot_json,
   };
 
-  const { validation_warnings_json, draft_totals_preview_json } = validationForRow(draftRow, docType);
+  const { validation_warnings_json, draft_totals_preview_json } = await validationForRow(scope, draftRow, docType);
 
   const { data, error } = await supabaseAdmin
     .from('income_document_drafts')
@@ -304,7 +311,7 @@ export async function addIncomeDocumentLine(
   const lines = normalizeDraftLines(row.draft_lines_json);
   lines.push(createEmptyDraftLine(lines.length));
   const docType = await resolveDocType(scope, row.document_type!);
-  const validation = validationForRow({ ...row, draft_lines_json: serializeDraftLines(lines) }, docType);
+  const validation = await validationForRow(scope, { ...row, draft_lines_json: serializeDraftLines(lines) }, docType);
   await persistWizardDraft(scope, draft_id, {
     draft_lines_json: serializeDraftLines(lines),
     ...validation,
@@ -322,7 +329,7 @@ export async function updateIncomeDocumentLine(
   const row = await loadWizardDraftRow(scope, draft_id);
   const lines = applyLineFieldUpdate(normalizeDraftLines(row.draft_lines_json), line_id, body);
   const docType = await resolveDocType(scope, row.document_type!);
-  const validation = validationForRow({ ...row, draft_lines_json: serializeDraftLines(lines) }, docType);
+  const validation = await validationForRow(scope, { ...row, draft_lines_json: serializeDraftLines(lines) }, docType);
   await persistWizardDraft(scope, draft_id, {
     draft_lines_json: serializeDraftLines(lines),
     ...validation,
@@ -340,7 +347,7 @@ export async function deleteIncomeDocumentLine(
   const row = await loadWizardDraftRow(scope, draft_id);
   const lines = deleteDraftLine(normalizeDraftLines(row.draft_lines_json), line_id);
   const docType = await resolveDocType(scope, row.document_type!);
-  const validation = validationForRow({ ...row, draft_lines_json: serializeDraftLines(lines) }, docType);
+  const validation = await validationForRow(scope, { ...row, draft_lines_json: serializeDraftLines(lines) }, docType);
   await persistWizardDraft(scope, draft_id, {
     draft_lines_json: serializeDraftLines(lines),
     ...validation,
@@ -359,7 +366,7 @@ export async function reorderIncomeDocumentLines(
   const row = await loadWizardDraftRow(scope, draft_id);
   const lines = reorderDraftLines(normalizeDraftLines(row.draft_lines_json), ordered_line_ids);
   const docType = await resolveDocType(scope, row.document_type!);
-  const validation = validationForRow({ ...row, draft_lines_json: serializeDraftLines(lines) }, docType);
+  const validation = await validationForRow(scope, { ...row, draft_lines_json: serializeDraftLines(lines) }, docType);
   await persistWizardDraft(scope, draft_id, {
     draft_lines_json: serializeDraftLines(lines),
     ...validation,
@@ -410,7 +417,7 @@ export async function updateIncomeDocumentDraftSettings(
 
   const merged = { ...row, ...patch } as IncomeWizardDraftRow;
   const docType = await resolveDocType(scope, row.document_type!);
-  const validation = validationForRow(merged, docType);
+  const validation = await validationForRow(scope, merged, docType);
   await persistWizardDraft(scope, draft_id, { ...patch, ...validation }, { action: 'update_settings', setting_key: key });
   return buildOverlayForDraft(scope, draft_id, true);
 }
@@ -423,7 +430,7 @@ export async function updateIncomeDocumentNotes(
   const notes = optionalString(body.notes);
   const row = await loadWizardDraftRow(scope, draft_id);
   const docType = await resolveDocType(scope, row.document_type!);
-  const validation = validationForRow({ ...row, notes: notes ?? null }, docType);
+  const validation = await validationForRow(scope, { ...row, notes: notes ?? null }, docType);
   await persistWizardDraft(scope, draft_id, { notes: notes ?? null, ...validation }, { action: 'update_notes' });
   return buildOverlayForDraft(scope, draft_id, true);
 }

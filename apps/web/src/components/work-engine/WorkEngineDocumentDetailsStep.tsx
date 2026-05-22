@@ -1,5 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
-import type { IncomeDocumentDetailsStep } from '../../income/income-document-details-types';
+import type {
+  IncomeDocumentDetailsLineRow,
+  IncomeDocumentDetailsStep,
+} from '../../income/income-document-details-types';
 import type { IncomeWorkspaceAggregate } from '../../income/income-workspace-types';
 import { executeIncomeCommand } from '../../api/income';
 
@@ -12,6 +15,69 @@ type Props = {
   onError: (msg: string | null) => void;
 };
 
+function renderLineCell(
+  colKey: string,
+  row: IncomeDocumentDetailsLineRow,
+  opts: {
+    busy: boolean;
+    onDescription: (v: string) => void;
+    onQuantity: (v: string) => void;
+    onUnitPrice: (v: string) => void;
+    onDelete: () => void;
+  },
+) {
+  switch (colKey) {
+    case 'description':
+      return (
+        <div className="nx-we-doc-details__desc-cell">
+          <input
+            className="nx-we-doc-details__cell-input nx-we-doc-details__cell-input--wide"
+            value={row.description.value}
+            disabled={opts.busy || !row.description.editable}
+            onChange={(e) => opts.onDescription(e.target.value)}
+          />
+          {row.allowed_actions.includes('delete_income_document_line') ? (
+            <button
+              type="button"
+              className="nx-we-doc-details__delete"
+              disabled={opts.busy}
+              title="מחק שורה"
+              onClick={opts.onDelete}
+            >
+              מחק
+            </button>
+          ) : null}
+        </div>
+      );
+    case 'quantity':
+      return (
+        <input
+          className="nx-we-doc-details__cell-input nx-we-doc-details__cell-input--compact"
+          value={row.quantity.value}
+          disabled={opts.busy || !row.quantity.editable}
+          onChange={(e) => opts.onQuantity(e.target.value)}
+        />
+      );
+    case 'unit_price':
+      return (
+        <input
+          className="nx-we-doc-details__cell-input nx-we-doc-details__cell-input--compact"
+          value={row.unit_price.value}
+          disabled={opts.busy || !row.unit_price.editable}
+          onChange={(e) => opts.onUnitPrice(e.target.value)}
+        />
+      );
+    case 'currency':
+      return <span className="nx-we-doc-details__cell-muted">{row.currency.display}</span>;
+    case 'vat':
+      return <span className="nx-we-doc-details__cell-muted">{row.vat.label}</span>;
+    case 'line_total':
+      return <span className="nx-we-doc-details__cell-total">{row.line_total.display}</span>;
+    default:
+      return null;
+  }
+}
+
 export function WorkEngineDocumentDetailsStep({
   step,
   commands,
@@ -21,7 +87,6 @@ export function WorkEngineDocumentDetailsStep({
   onError,
 }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(true);
-  const [dragLineId, setDragLineId] = useState<string | null>(null);
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lineTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -79,30 +144,12 @@ export function WorkEngineDocumentDetailsStep({
     }, 450);
   };
 
-  const handleReorder = async (targetLineId: string) => {
-    if (!dragLineId || dragLineId === targetLineId) return;
-    const ids = step.line_items.rows.map((r) => r.line_id);
-    const from = ids.indexOf(dragLineId);
-    const to = ids.indexOf(targetLineId);
-    if (from < 0 || to < 0) return;
-    const next = [...ids];
-    next.splice(from, 1);
-    next.splice(to, 0, dragLineId);
-    setDragLineId(null);
-    await runCommand('reorder_lines', { draft_id: draftId, ordered_line_ids: next });
-  };
-
   return (
     <div className="nx-we-doc-details" dir="rtl">
       <header className="nx-we-doc-details__header">
         <h3 className="nx-we-doc-details__title">{step.header.title}</h3>
         {step.header.subtitle ? (
           <p className="nx-we-doc-details__subtitle">{step.header.subtitle}</p>
-        ) : null}
-        {step.header.document_number_preview ? (
-          <p className="nx-we-doc-details__number-preview">
-            מספר צפוי: <strong>{step.header.document_number_preview}</strong>
-          </p>
         ) : null}
       </header>
 
@@ -186,73 +233,42 @@ export function WorkEngineDocumentDetailsStep({
 
         <div className="nx-we-doc-details__table-wrap">
           <table className="nx-we-doc-details__table">
+            <colgroup>
+              {step.line_items.columns.map((col) => (
+                <col
+                  key={col.key}
+                  className={`nx-we-doc-details__col nx-we-doc-details__col--${col.key}`}
+                />
+              ))}
+            </colgroup>
             <thead>
               <tr>
                 {step.line_items.columns.map((col) => (
-                  <th key={col.key}>{col.label}</th>
+                  <th key={col.key} className={`nx-we-doc-details__th--${col.key}`}>
+                    {col.label}
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {step.line_items.rows.map((row) => (
-                <tr
-                  key={row.line_id}
-                  draggable={!busy && step.line_items.allowed_actions.includes('reorder_income_document_lines')}
-                  onDragStart={() => setDragLineId(row.line_id)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => void handleReorder(row.line_id)}
-                  className={dragLineId === row.line_id ? 'nx-we-doc-details__row--drag' : ''}
-                >
-                  <td className="nx-we-doc-details__cell-num">
-                    <span className="nx-we-doc-details__drag" aria-hidden>
-                      ⋮⋮
-                    </span>
-                    {row.row_number}
-                  </td>
-                  <td>
-                    <input
-                      className="nx-we-doc-details__cell-input"
-                      value={row.description.value}
-                      disabled={busy || !row.description.editable}
-                      onChange={(e) =>
-                        scheduleLineUpdate(row.line_id, { description: e.target.value })
-                      }
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="nx-we-doc-details__cell-input nx-we-doc-details__cell-input--narrow"
-                      value={row.quantity.value}
-                      disabled={busy || !row.quantity.editable}
-                      onChange={(e) => scheduleLineUpdate(row.line_id, { quantity: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="nx-we-doc-details__cell-input nx-we-doc-details__cell-input--narrow"
-                      value={row.unit_price.value}
-                      disabled={busy || !row.unit_price.editable}
-                      onChange={(e) =>
-                        scheduleLineUpdate(row.line_id, { unit_price_reference: e.target.value })
-                      }
-                    />
-                  </td>
-                  <td className="nx-we-doc-details__cell-muted">{row.vat.label}</td>
-                  <td className="nx-we-doc-details__cell-total">{row.line_total.display}</td>
-                  <td>
-                    {row.allowed_actions.includes('delete_income_document_line') ? (
-                      <button
-                        type="button"
-                        className="nx-we-doc-details__delete"
-                        disabled={busy}
-                        onClick={() =>
-                          void runCommand('delete_line', { draft_id: draftId, line_id: row.line_id })
-                        }
-                      >
-                        מחק
-                      </button>
-                    ) : null}
-                  </td>
+                <tr key={row.line_id}>
+                  {step.line_items.columns.map((col) => (
+                    <td key={col.key} className={`nx-we-doc-details__td--${col.key}`}>
+                      {renderLineCell(col.key, row, {
+                        busy,
+                        onDescription: (v) => scheduleLineUpdate(row.line_id, { description: v }),
+                        onQuantity: (v) => scheduleLineUpdate(row.line_id, { quantity: v }),
+                        onUnitPrice: (v) =>
+                          scheduleLineUpdate(row.line_id, { unit_price_reference: v }),
+                        onDelete: () =>
+                          void runCommand('delete_line', {
+                            draft_id: draftId,
+                            line_id: row.line_id,
+                          }),
+                      })}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

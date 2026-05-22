@@ -1,6 +1,7 @@
 import { formatMoneyReference } from './income-document-draft-lines.pure.js';
-/** TEMPORARY_COUNTRY_PACK_PENDING — IL standard VAT rate fallback for draft preview only. */
-export const IL_DRAFT_VAT_RATE = 0.17;
+import { IL_DRAFT_VAT_FALLBACK_RATE } from './income-draft-vat-fallback.pure.js';
+/** @deprecated use IL_DRAFT_VAT_FALLBACK_RATE — kept for tests importing legacy name */
+export const IL_DRAFT_VAT_RATE = IL_DRAFT_VAT_FALLBACK_RATE;
 export const DEFAULT_DOCUMENT_SETTINGS = {
     vat_mode: 'standard',
     amount_rounding: 'none',
@@ -20,7 +21,7 @@ function roundAmount(value, rounding) {
         return Math.round(value * 100) / 100;
     return Math.round(value * 100) / 100;
 }
-export function computeDraftTotalsPreview(lines, currency, settings) {
+export function computeDraftTotalsPreview(lines, currency, settings, vatResolution) {
     let subtotal = 0;
     for (const line of lines) {
         if (line.amount_reference != null && Number.isFinite(line.amount_reference)) {
@@ -31,8 +32,8 @@ export function computeDraftTotalsPreview(lines, currency, settings) {
     let vat = null;
     let vatLabel = null;
     if (settings.vat_mode === 'standard' && subtotal > 0) {
-        vat = roundAmount(subtotal * IL_DRAFT_VAT_RATE, settings.amount_rounding);
-        vatLabel = '17%';
+        vat = roundAmount(subtotal * vatResolution.standard_rate, settings.amount_rounding);
+        vatLabel = vatResolution.standard_rate_percent_label;
     }
     else if (settings.vat_mode === 'zero') {
         vat = 0;
