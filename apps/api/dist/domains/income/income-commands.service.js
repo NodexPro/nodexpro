@@ -309,8 +309,15 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         return commandResponse(ctx, command);
     }
     if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
-        await executeIssueIncomeDocument(ctx, body);
-        return commandResponse(ctx, command);
+        const issueResult = await executeIssueIncomeDocument(ctx, body);
+        const response = await commandResponse(ctx, command);
+        return {
+            ...response,
+            meta: {
+                idempotent_replay: issueResult.idempotentReplay,
+                income_document_id: issueResult.issuedDocumentId,
+            },
+        };
     }
     if (command === INCOME_COMMAND_RETRY_ACCOUNTING_POSTING) {
         const scope = await loadActiveIncomeIssuerScope(ctx);

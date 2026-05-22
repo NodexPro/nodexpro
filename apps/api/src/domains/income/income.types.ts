@@ -221,10 +221,16 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_RETRY_ACCOUNTING_POSTING
   | typeof INCOME_COMMAND_RETRY_PDF_RENDER;
 
+export interface IncomeCommandResponseMeta {
+  idempotent_replay?: boolean;
+  income_document_id?: string;
+}
+
 export interface IncomeCommandResponse {
   ok: true;
   command: IncomeCommandType;
   income_workspace_aggregate: IncomeWorkspaceAggregate;
+  meta?: IncomeCommandResponseMeta;
 }
 
 /** INC-1b + INC-2: select issuer returns both refreshed aggregates. */

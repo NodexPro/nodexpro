@@ -25,6 +25,14 @@ const commandsSource = readFileSync(
   join(dir, '../../src/domains/income/income-commands.service.ts'),
   'utf8',
 );
+const idempotencySource = readFileSync(
+  join(dir, '../../src/domains/income/income-issue-idempotency.ts'),
+  'utf8',
+);
+const migration128 = readFileSync(
+  join(dir, '../../../../supabase/migrations/128_income_issue_idempotency_hardening.sql'),
+  'utf8',
+);
 
 const selfScope = {
   org_id: 'a1111111-1111-4111-8111-111111111111',
@@ -129,4 +137,37 @@ test('issue service emits Work Engine work_events via bridge only', () => {
   assert.match(issueServiceSource, /emitIncomeWorkEventsAfterDocumentIssued/);
   assert.match(issueServiceSource, /income-work-engine-bridge/);
   assert.doesNotMatch(issueServiceSource, /\.from\(['"]work_items['"]\)/);
+});
+
+test('migration enforces unique org_id + source_draft_id on income_documents', () => {
+  assert.match(migration128, /uq_income_documents_org_source_draft/);
+  assert.match(migration128, /organization_id,\s*source_draft_id/);
+  assert.match(migration128, /where source_draft_id is not null/);
+});
+
+test('income_command_idempotency table supports issue_income_document lease', () => {
+  assert.match(migration128, /income_command_idempotency/);
+  assert.match(migration128, /unique \(organization_id, idempotency_key\)/);
+  assert.match(idempotencySource, /INCOME_COMMAND_ISSUE_DOCUMENT/);
+  assert.match(idempotencySource, /income_document_id/);
+});
+
+test('issue flow checks existing document before allocate and handles unique violation', () => {
+  assert.match(issueServiceSource, /findIssuedDocumentBySourceDraft/);
+  assert.match(issueServiceSource, /isUniqueViolation/);
+  assert.match(issueServiceSource, /parseIssueIdempotencyKey/);
+  assert.match(issueServiceSource, /beginIncomeIssueIdempotency/);
+  assert.doesNotMatch(issueServiceSource, /success:\s*true/);
+});
+
+test('issue command returns refreshed workspace aggregate with issue meta', () => {
+  assert.match(commandsSource, /income_workspace_aggregate: await buildIncomeWorkspaceAggregate/);
+  assert.match(commandsSource, /idempotent_replay: issueResult\.idempotentReplay/);
+  assert.match(commandsSource, /income_document_id: issueResult\.issuedDocumentId/);
+});
+
+test('concurrent duplicate issue returns idempotent replay or existing document id', () => {
+  assert.match(issueServiceSource, /idempotentReplay: true/);
+  assert.match(issueServiceSource, /INCOME_DRAFT_ALREADY_ISSUED/);
+  assert.match(issueServiceSource, /finishIdempotentIssue/);
 });

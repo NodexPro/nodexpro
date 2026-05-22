@@ -1,11 +1,12 @@
 /**
- * INC-4 — Issue income document from draft (immutable document snapshot; no PDF/delivery/AB/WE/DocFlow).
+ * INC-4 — Issue income document from draft (immutable document snapshot).
+ * Hardened: one document per draft (DB unique) + optional command idempotency lease.
  */
 
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { badRequest, notFound } from '../../shared/errors.js';
+import { badRequest, conflict, notFound } from '../../shared/errors.js';
 import {
   assertRowMatchesIssuerScope,
   reqUuid,
@@ -34,13 +35,31 @@ import {
 import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { emitIncomeWorkEventsAfterDocumentIssued } from './income-work-engine-bridge.js';
+import {
+  abortIncomeIssueIdempotency,
+  beginIncomeIssueIdempotency,
+  completeIncomeIssueIdempotency,
+  parseIssueIdempotencyKey,
+  type IncomeIssueIdempotencyLease,
+} from './income-issue-idempotency.js';
 import type { IncomeDocumentType } from './income.types.js';
+
+const PG_UNIQUE_VIOLATION = '23505';
+
+export interface IssueIncomeDocumentResult {
+  issuedDocumentId: string;
+  idempotentReplay: boolean;
+}
 
 function optionalIssueDateFromBody(body: Record<string, unknown>): string | null {
   const raw = body.document_date ?? body.issue_date;
   if (raw == null || raw === '') return null;
   const s = String(raw).trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string } | undefined)?.code === PG_UNIQUE_VIOLATION;
 }
 
 interface FullDraftRow {
@@ -63,6 +82,7 @@ interface FullDraftRow {
   currency: string | null;
   language: string | null;
   status: string;
+  issued_document_id: string | null;
 }
 
 async function loadFullDraftForIssue(
@@ -72,7 +92,7 @@ async function loadFullDraftForIssue(
   const { data, error } = await supabaseAdmin
     .from('income_document_drafts')
     .select(
-      'id, organization_id, issuer_business_id, represented_client_id, actor_user_id, acting_mode, document_type, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, draft_totals_preview_json, payment_terms_json, due_date, document_date, payment_received_json, notes, currency, language, status',
+      'id, organization_id, issuer_business_id, represented_client_id, actor_user_id, acting_mode, document_type, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, draft_totals_preview_json, payment_terms_json, due_date, document_date, payment_received_json, notes, currency, language, status, issued_document_id',
     )
     .eq('id', draftId)
     .eq('organization_id', scope.org_id)
@@ -82,6 +102,64 @@ async function loadFullDraftForIssue(
   const row = data as FullDraftRow;
   assertRowMatchesIssuerScope(scope, row);
   return row;
+}
+
+async function findIssuedDocumentBySourceDraft(
+  orgId: string,
+  sourceDraftId: string,
+): Promise<{ id: string } | null> {
+  const { data, error } = await supabaseAdmin
+    .from('income_documents')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('source_draft_id', sourceDraftId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { id: String((data as { id: string }).id) };
+}
+
+async function syncDraftMarkedIssued(
+  scope: ActiveIncomeIssuerScope,
+  draftId: string,
+  issuedDocumentId: string,
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('income_document_drafts')
+    .update({
+      status: 'issued',
+      issued_document_id: issuedDocumentId,
+      issued_at: new Date().toISOString(),
+    })
+    .eq('id', draftId)
+    .eq('organization_id', scope.org_id)
+    .in('status', ['draft', 'issued']);
+  if (error) throw error;
+}
+
+async function resolveAlreadyIssuedDocumentId(
+  scope: ActiveIncomeIssuerScope,
+  draft: FullDraftRow,
+): Promise<string | null> {
+  if (draft.issued_document_id) {
+    const { data, error } = await supabaseAdmin
+      .from('income_documents')
+      .select('id')
+      .eq('id', draft.issued_document_id)
+      .eq('organization_id', scope.org_id)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return String((data as { id: string }).id);
+  }
+  const byDraft = await findIssuedDocumentBySourceDraft(scope.org_id, draft.id);
+  if (byDraft) {
+    await syncDraftMarkedIssued(scope, draft.id, byDraft.id);
+    return byDraft.id;
+  }
+  if (draft.status === 'issued') {
+    throw conflict('Draft is already issued but issued document is missing', 'INCOME_DRAFT_ALREADY_ISSUED');
+  }
+  return null;
 }
 
 async function buildCustomerSnapshot(
@@ -131,16 +209,12 @@ async function buildCustomerSnapshot(
   };
 }
 
-export async function executeIssueIncomeDocument(
+async function issueNewDocumentFromDraft(
   ctx: RequestContext,
+  scope: ActiveIncomeIssuerScope,
+  draft: FullDraftRow,
   body: Record<string, unknown>,
 ): Promise<string> {
-  const scope = await loadActiveIncomeIssuerScope(ctx);
-  assertIncomeIssuePermission(scope);
-
-  const draft_id = reqUuid(body.draft_id, 'draft_id');
-  const draft = await loadFullDraftForIssue(scope, draft_id);
-
   try {
     assertDraftReadyToIssue(draft);
   } catch (e) {
@@ -164,22 +238,6 @@ export async function executeIssueIncomeDocument(
     documentType: draft.document_type!,
     issueDate: issue_date,
   });
-  const allocated = await allocateIncomeDocumentNumber(scope, draft.document_type!, issue_date);
-
-  await writeAudit({
-    organizationId: scope.org_id,
-    actorUserId: scope.actor_user_id,
-    moduleCode: 'income',
-    entityType: 'income_document_numbering_sequence',
-    action: AUDIT_ACTIONS.INCOME_DOCUMENT_NUMBER_ALLOCATED,
-    payload: {
-      document_type: draft.document_type,
-      document_number: allocated.document_number,
-      sequence_number: allocated.sequence_number,
-      year: allocated.year,
-      issuer_business_id: scope.issuer_business_id,
-    },
-  });
 
   const lines = Array.isArray(draft.draft_lines_json) ? draft.draft_lines_json : [];
   const customer_snapshot_json = await buildCustomerSnapshot(scope, draft);
@@ -198,6 +256,24 @@ export async function executeIssueIncomeDocument(
     draft.currency ?? 'ILS',
     lines.length,
   );
+
+  const allocated = await allocateIncomeDocumentNumber(scope, draft.document_type!, issue_date);
+
+  await writeAudit({
+    organizationId: scope.org_id,
+    actorUserId: scope.actor_user_id,
+    moduleCode: 'income',
+    entityType: 'income_document_numbering_sequence',
+    action: AUDIT_ACTIONS.INCOME_DOCUMENT_NUMBER_ALLOCATED,
+    payload: {
+      document_type: draft.document_type,
+      document_number: allocated.document_number,
+      sequence_number: allocated.sequence_number,
+      year: allocated.year,
+      issuer_business_id: scope.issuer_business_id,
+      source_draft_id: draft.id,
+    },
+  });
 
   const { data: issued, error: insertErr } = await supabaseAdmin
     .from('income_documents')
@@ -226,7 +302,17 @@ export async function executeIssueIncomeDocument(
     .select('id')
     .single();
 
-  if (insertErr || !issued) throw insertErr ?? new Error('Failed to create issued income document');
+  if (insertErr) {
+    if (isUniqueViolation(insertErr)) {
+      const existing = await findIssuedDocumentBySourceDraft(scope.org_id, draft.id);
+      if (existing) {
+        await syncDraftMarkedIssued(scope, draft.id, existing.id);
+        return existing.id;
+      }
+    }
+    throw insertErr;
+  }
+  if (!issued) throw new Error('Failed to create issued income document');
 
   const issuedId = (issued as { id: string }).id;
 
@@ -246,23 +332,36 @@ export async function executeIssueIncomeDocument(
       notes: draft.notes,
     });
   } catch (postingErr) {
-    await supabaseAdmin.from('income_documents').delete().eq('id', issuedId).eq('organization_id', scope.org_id);
+    await supabaseAdmin
+      .from('income_documents')
+      .delete()
+      .eq('id', issuedId)
+      .eq('organization_id', scope.org_id);
     throw postingErr;
   }
 
-  const { error: draftUpdateErr } = await supabaseAdmin
+  const { data: draftUpdated, error: draftUpdateErr } = await supabaseAdmin
     .from('income_document_drafts')
     .update({
       status: 'issued',
       issued_document_id: issuedId,
       issued_at: new Date().toISOString(),
     })
-    .eq('id', draft_id)
+    .eq('id', draft.id)
     .eq('organization_id', scope.org_id)
-    .eq('status', 'draft');
+    .eq('status', 'draft')
+    .select('id')
+    .maybeSingle();
 
-  if (draftUpdateErr) {
-    throw draftUpdateErr;
+  if (draftUpdateErr) throw draftUpdateErr;
+
+  if (!draftUpdated) {
+    const raced = await findIssuedDocumentBySourceDraft(scope.org_id, draft.id);
+    if (raced?.id === issuedId || raced) {
+      await syncDraftMarkedIssued(scope, draft.id, raced?.id ?? issuedId);
+      return raced?.id ?? issuedId;
+    }
+    throw conflict('Draft was modified during issue', 'INCOME_DRAFT_ISSUE_CONFLICT');
   }
 
   await writeAudit({
@@ -273,7 +372,7 @@ export async function executeIssueIncomeDocument(
     entityId: issuedId,
     action: AUDIT_ACTIONS.INCOME_DOCUMENT_ISSUED,
     payload: {
-      source_draft_id: draft_id,
+      source_draft_id: draft.id,
       document_type: draft.document_type,
       document_number: allocated.document_number,
       issuer_business_id: scope.issuer_business_id,
@@ -299,4 +398,79 @@ export async function executeIssueIncomeDocument(
   });
 
   return issuedId;
+}
+
+async function finishIdempotentIssue(
+  scope: ActiveIncomeIssuerScope,
+  draftId: string,
+  issuedDocumentId: string,
+  lease: IncomeIssueIdempotencyLease | null,
+): Promise<IssueIncomeDocumentResult> {
+  await syncDraftMarkedIssued(scope, draftId, issuedDocumentId);
+  if (lease?.kind === 'fresh') {
+    await completeIncomeIssueIdempotency({
+      leaseRowId: lease.leaseRowId,
+      incomeDocumentId: issuedDocumentId,
+      sourceDraftId: draftId,
+    });
+  }
+  return { issuedDocumentId, idempotentReplay: true };
+}
+
+export async function executeIssueIncomeDocument(
+  ctx: RequestContext,
+  body: Record<string, unknown>,
+): Promise<IssueIncomeDocumentResult> {
+  const scope = await loadActiveIncomeIssuerScope(ctx);
+  assertIncomeIssuePermission(scope);
+
+  const draft_id = reqUuid(body.draft_id, 'draft_id');
+  const idempotencyKey = parseIssueIdempotencyKey(body);
+
+  let lease: IncomeIssueIdempotencyLease | null = null;
+  if (idempotencyKey) {
+    lease = await beginIncomeIssueIdempotency({
+      organizationId: scope.org_id,
+      idempotencyKey,
+      sourceDraftId: draft_id,
+    });
+    if (lease.kind === 'replay') {
+      return finishIdempotentIssue(scope, draft_id, lease.incomeDocumentId, null);
+    }
+  }
+
+  try {
+    const existingEarly = await findIssuedDocumentBySourceDraft(scope.org_id, draft_id);
+    if (existingEarly) {
+      return finishIdempotentIssue(scope, draft_id, existingEarly.id, lease);
+    }
+
+    const draft = await loadFullDraftForIssue(scope, draft_id);
+
+    const alreadyIssuedId = await resolveAlreadyIssuedDocumentId(scope, draft);
+    if (alreadyIssuedId) {
+      return finishIdempotentIssue(scope, draft_id, alreadyIssuedId, lease);
+    }
+
+    if (draft.status !== 'draft') {
+      throw conflict('Draft cannot be issued', 'INCOME_DRAFT_ALREADY_ISSUED');
+    }
+
+    const issuedDocumentId = await issueNewDocumentFromDraft(ctx, scope, draft, body);
+
+    if (lease?.kind === 'fresh') {
+      await completeIncomeIssueIdempotency({
+        leaseRowId: lease.leaseRowId,
+        incomeDocumentId: issuedDocumentId,
+        sourceDraftId: draft_id,
+      });
+    }
+
+    return { issuedDocumentId, idempotentReplay: false };
+  } catch (e) {
+    if (lease?.kind === 'fresh') {
+      await abortIncomeIssueIdempotency(lease.leaseRowId);
+    }
+    throw e;
+  }
 }
