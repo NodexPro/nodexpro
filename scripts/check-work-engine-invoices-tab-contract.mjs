@@ -120,6 +120,15 @@ if (/אישור מקבל/.test(recipientField)) {
 if (!wizard.includes('nx-we-income-wizard-modal')) {
   errors.push('wizard must use enlarged nx-we-income-wizard-modal');
 }
+if (!wizard.includes('recipientPending') || !wizard.includes('onPendingChange')) {
+  errors.push('wizard must disable footer while recipient command is in flight');
+}
+if (!recipientField.includes('nx-we-recipient-search--wizard')) {
+  errors.push('recipient field must use wizard workspace layout (not tiny dropdown)');
+}
+if (!recipientField.includes('selectInFlight') && !recipientField.includes('pending')) {
+  errors.push('recipient field must guard duplicate select commands');
+}
 if (!api.includes('recipient_search')) {
   errors.push('work-engine API types must include wizard.recipient_search');
 }

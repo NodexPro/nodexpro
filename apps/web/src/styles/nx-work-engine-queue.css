@@ -128,39 +128,128 @@
   direction: rtl;
 }
 
-.nx-we-recipient-search__dropdown {
-  position: absolute;
-  z-index: 20;
-  right: 0;
-  left: 0;
-  margin-top: 4px;
-  max-height: 220px;
+/* Wizard recipient step — fills modal body; scrollable results panel */
+.nx-we-recipient-search--wizard {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+}
+
+.nx-we-recipient-search__search-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.nx-we-recipient-search__search-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.nx-we-recipient-search__panel {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: 8px;
   background: #fff;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.nx-we-recipient-search__panel--loading {
+  opacity: 0.92;
 }
 
 .nx-we-recipient-search__option {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border: none;
   border-bottom: 1px solid #f1f5f9;
   background: #fff;
   text-align: right;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
-.nx-we-recipient-search__option:hover {
+.nx-we-recipient-search__option:hover:not(:disabled) {
   background: #f8fafc;
+}
+
+.nx-we-recipient-search__option:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.nx-we-recipient-search__option--selected {
+  background: #eff6ff;
+  border-right: 3px solid #2563eb;
+}
+
+.nx-we-recipient-search__option--pending {
+  background: #eff6ff;
+}
+
+.nx-we-recipient-search__option-text {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+
+.nx-we-recipient-search__option-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  flex-shrink: 0;
 }
 
 .nx-we-recipient-search__option--create {
   font-weight: 600;
   color: #2563eb;
+  justify-content: flex-start;
+}
+
+.nx-we-recipient-search__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.nx-we-recipient-search__status--bar {
+  margin: 0;
+  padding: 8px 12px;
+  background: #eff6ff;
+  border-radius: 6px;
+}
+
+.nx-we-recipient-search__spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #bfdbfe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: nx-we-recipient-spin 0.7s linear infinite;
+}
+
+@keyframes nx-we-recipient-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .nx-we-recipient-search__empty {
@@ -207,12 +296,12 @@
   }
 }
 
-/* Work Engine income wizard — body grows with content; no empty inner scrollbar on desktop */
+/* Work Engine income wizard — working modal (not a tiny confirm dialog) */
 .nx-we-income-wizard-modal.nx-modal {
-  width: min(920px, 94vw);
-  max-width: 94vw;
-  max-height: min(88vh, 900px);
-  height: auto;
+  width: min(1150px, 96vw);
+  max-width: 96vw;
+  height: min(82vh, 900px);
+  max-height: 82vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -222,18 +311,33 @@
   flex-shrink: 0;
 }
 
-/* Override global .nx-modal-body { flex:1; min-height:0; overflow-y:auto } */
-.nx-we-income-wizard-modal.nx-accounting-editor-modal .nx-modal-body,
 .nx-we-income-wizard-modal .nx-modal-body {
-  flex: 0 1 auto !important;
-  min-height: auto !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
   overflow-x: hidden;
-  overflow-y: visible;
-  max-height: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.nx-we-income-wizard-modal--recipient-step .nx-modal-body {
+  overflow: hidden !important;
+}
+
+.nx-we-income-wizard-modal--recipient-step .nx-we-recipient-search--wizard {
+  min-height: 100%;
 }
 
 .nx-we-income-wizard-modal .nx-modal-footer {
   flex-shrink: 0;
+}
+
+@media (max-width: 767px), (max-height: 640px) {
+  .nx-we-income-wizard-modal.nx-modal {
+    width: min(100vw - 24px, 96vw);
+    height: min(90vh, 900px);
+    max-height: 90vh;
+  }
 }
 
 /* Work Engine — document details step (premium issuing UX) */

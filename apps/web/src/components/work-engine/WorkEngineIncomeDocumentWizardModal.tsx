@@ -58,6 +58,7 @@ export function WorkEngineIncomeDocumentWizardModal({
   const [, setContextAgg] = useState<IncomeWorkspaceContextAggregate | null>(null);
   const [workspaceAgg, setWorkspaceAgg] = useState<IncomeWorkspaceAggregate | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recipientPending, setRecipientPending] = useState(false);
   const recipientFieldRef = useRef<WorkEngineRecipientSearchFieldHandle>(null);
   const [form, setForm] = useState<FormState>(() => ({
     document_type: '',
@@ -83,6 +84,7 @@ export function WorkEngineIncomeDocumentWizardModal({
 
   const documentDetailsStep = workspaceAgg?.document_details_step ?? null;
   const activeDraftId = workspaceAgg?.active_wizard_draft_id ?? null;
+  const footerLocked = busy || recipientPending;
 
   const runSelectIssuer = useCallback(async () => {
     const cmds = wizard.income_commands;
@@ -314,6 +316,7 @@ export function WorkEngineIncomeDocumentWizardModal({
           busy={busy}
           onWorkspaceAgg={setWorkspaceAgg}
           onError={setError}
+          onPendingChange={setRecipientPending}
         />
       );
     }
@@ -369,19 +372,34 @@ export function WorkEngineIncomeDocumentWizardModal({
   const stepTitle =
     visibleSteps[stepIndex]?.label ?? wizard.issuer_choice.title;
 
+  const modalStepClass =
+    activeStepKey === 'recipient'
+      ? 'nx-we-income-wizard-modal--recipient-step'
+      : activeStepKey === 'document_details'
+        ? 'nx-we-income-wizard-modal--details-step'
+        : '';
+
   return (
     <div className="nx-modal-overlay" role="dialog" aria-modal="true">
-      <div className="nx-modal nx-accounting-editor-modal nx-we-income-wizard-modal" dir="rtl">
+      <div
+        className={`nx-modal nx-accounting-editor-modal nx-we-income-wizard-modal ${modalStepClass}`.trim()}
+        dir="rtl"
+      >
         <div className="nx-modal-header">
           <h2>{stepTitle}</h2>
-          <button type="button" className="nx-modal-close" onClick={onClose} disabled={busy}>
+          <button type="button" className="nx-modal-close" onClick={onClose} disabled={footerLocked}>
             סגירה
           </button>
         </div>
         <div className="nx-modal-body">{error ? <div className="nx-we-banner-error">{error}</div> : null}{renderBody()}</div>
         <div className="nx-modal-footer nx-tax-nested-modal-footer">
           {stepIndex > 0 ? (
-            <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={handleBack}>
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              disabled={footerLocked}
+              onClick={handleBack}
+            >
               הקודם
             </button>
           ) : null}
@@ -389,16 +407,16 @@ export function WorkEngineIncomeDocumentWizardModal({
             <button
               type="button"
               className="nx-btn nx-btn-primary nx-btn-taxes-compact"
-              disabled={busy}
+              disabled={footerLocked}
               onClick={() => void handleNext()}
             >
-              הבא
+              {recipientPending ? 'טוען...' : 'הבא'}
             </button>
           ) : (
             <button
               type="button"
               className="nx-btn nx-btn-primary nx-btn-taxes-compact"
-              disabled={busy || !form.document_type || !activeDraftId}
+              disabled={footerLocked || !form.document_type || !activeDraftId}
               onClick={() => void handleSaveAndIssue()}
             >
               הפק מסמך
