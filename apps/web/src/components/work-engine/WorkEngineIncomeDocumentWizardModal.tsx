@@ -332,6 +332,7 @@ export function WorkEngineIncomeDocumentWizardModal({
         <WorkEngineDocumentDetailsStep
           step={documentDetailsStep}
           commands={wizard.income_commands}
+          workspaceAgg={workspaceAgg}
           busy={busy}
           onBusyChange={onBusyChange}
           onWorkspaceAgg={setWorkspaceAgg}

@@ -268,10 +268,15 @@ export type IncomeCommandType =
   | 'update_income_document_notes'
   | 'update_income_document_delivery_contact';
 
+export interface IncomeCommandResponseMeta {
+  workspace_aggregate_mode?: 'full' | 'wizard_patch';
+}
+
 export interface IncomeCommandResponse {
   ok: true;
   command: IncomeCommandType;
   income_workspace_aggregate: IncomeWorkspaceAggregate;
+  meta?: IncomeCommandResponseMeta;
 }
 
 export interface SelectIncomeIssuerContextCommandResponse {

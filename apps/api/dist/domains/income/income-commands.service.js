@@ -13,7 +13,7 @@ import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableD
 import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
-import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
+import { buildIncomeWorkspaceAggregate, buildIncomeWorkspaceWizardPatchAggregate, } from './income-workspace-aggregate.service.js';
 import { insertSavedIncomeRecipient, loadIncomeRecipientById, searchIncomeRecipients, selectedFromInputFields, selectedFromSavedRow, } from './income-recipient.service.js';
 import { assertRecipientInputValid, parseRecipientInputBody, validateRecipientInputFields, } from './income-recipient.validation.js';
 import { beginIncomeWizardDocumentDraft, addIncomeDocumentLine, updateIncomeDocumentLine, deleteIncomeDocumentLine, reorderIncomeDocumentLines, updateIncomeDocumentDraftSettings, updateIncomeDocumentNotes, updateIncomeDocumentDeliveryContact, } from './income-document-draft-editor.service.js';
@@ -49,11 +49,12 @@ async function commandResponse(ctx, command, recipientOverlay = {}, wizardDraftO
         income_workspace_aggregate: await buildIncomeWorkspaceAggregate(ctx, undefined, recipientOverlay, wizardDraftOverlay),
     };
 }
-async function wizardDraftCommandResponse(ctx, command, scope, recipientOverlay, wizardDraftOverlay) {
+async function wizardDraftCommandResponse(_ctx, command, scope, recipientOverlay, wizardDraftOverlay) {
     return {
         ok: true,
         command,
-        income_workspace_aggregate: await buildIncomeWorkspaceAggregate(ctx, scope, recipientOverlay, wizardDraftOverlay),
+        income_workspace_aggregate: await buildIncomeWorkspaceWizardPatchAggregate(scope, wizardDraftOverlay, recipientOverlay),
+        meta: { workspace_aggregate_mode: 'wizard_patch' },
     };
 }
 async function recipientCommandResponse(ctx, command, scope, overlay) {

@@ -42,7 +42,10 @@ import {
 import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
-import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
+import {
+  buildIncomeWorkspaceAggregate,
+  buildIncomeWorkspaceWizardPatchAggregate,
+} from './income-workspace-aggregate.service.js';
 import {
   insertSavedIncomeRecipient,
   loadIncomeRecipientById,
@@ -139,7 +142,7 @@ async function commandResponse(
 }
 
 async function wizardDraftCommandResponse(
-  ctx: RequestContext,
+  _ctx: RequestContext,
   command: IncomeCommandType,
   scope: ActiveIncomeIssuerScope,
   recipientOverlay: RecipientSearchOverlay,
@@ -148,12 +151,12 @@ async function wizardDraftCommandResponse(
   return {
     ok: true,
     command,
-    income_workspace_aggregate: await buildIncomeWorkspaceAggregate(
-      ctx,
+    income_workspace_aggregate: await buildIncomeWorkspaceWizardPatchAggregate(
       scope,
-      recipientOverlay,
       wizardDraftOverlay,
+      recipientOverlay,
     ),
+    meta: { workspace_aggregate_mode: 'wizard_patch' },
   };
 }
 

@@ -11,7 +11,11 @@ import {
   type IncomeDocumentSettings,
 } from './income-document-draft-totals.pure.js';
 import { buildDocumentDetailsHeaderTitle } from './income-document-details-header.pure.js';
-import type { IncomeDraftVatResolution } from './income-draft-vat-fallback.pure.js';
+import {
+  compactVatSelectLabel,
+  readVatResolutionFromDraftPreview,
+  type IncomeDraftVatResolution,
+} from './income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { loadIncomeRecipientById } from './income-recipient.service.js';
@@ -106,6 +110,7 @@ export type IncomeWizardDraftRow = {
   delivery_contact_json: Record<string, unknown> | null;
   document_settings_json: unknown;
   validation_warnings_json: unknown;
+  draft_totals_preview_json?: unknown;
   income_customer_id: string | null;
   one_time_customer_snapshot_json: Record<string, unknown> | null;
 };
@@ -139,13 +144,37 @@ function buildDocumentLineTableFields(
       input_type: 'select',
       value: vatUi,
       options: [
-        { value: 'standard', label: vatResolution.standard_vat_mode_option_label },
-        { value: 'exempt', label: 'פטור ממע״מ' },
+        { value: 'standard', label: compactVatSelectLabel(vatResolution) },
+        { value: 'exempt', label: 'פטור' },
       ],
       editable: canEdit,
       disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
     },
   };
+}
+
+function readWizardUiCacheFromDraftPreview(raw: unknown): {
+  document_number_preview: string | null;
+  recipient_display_name: string | null;
+} {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { document_number_preview: null, recipient_display_name: null };
+  }
+  const o = raw as Record<string, unknown>;
+  return {
+    document_number_preview:
+      typeof o.document_number_preview === 'string' ? o.document_number_preview : null,
+    recipient_display_name:
+      typeof o.recipient_display_name === 'string' ? o.recipient_display_name : null,
+  };
+}
+
+function recipientDisplayNameFromRow(row: IncomeWizardDraftRow): string | null {
+  const snap = row.one_time_customer_snapshot_json;
+  if (snap && typeof snap.display_name === 'string' && snap.display_name.trim()) {
+    return snap.display_name.trim();
+  }
+  return null;
 }
 
 async function resolveRecipientDisplayName(
@@ -301,27 +330,43 @@ function buildLineRows(
   }));
 }
 
+export type BuildIncomeDocumentDetailsStepOptions = {
+  vatResolution?: IncomeDraftVatResolution;
+  totalsPreview?: DraftTotalsPreview;
+};
+
 export async function buildIncomeDocumentDetailsStep(
   scope: ActiveIncomeIssuerScope,
   row: IncomeWizardDraftRow,
   docType: IncomeAvailableDocumentType | null,
   canEdit: boolean,
+  options: BuildIncomeDocumentDetailsStepOptions = {},
 ): Promise<IncomeDocumentDetailsStep> {
   const lines = normalizeDraftLines(row.draft_lines_json);
   const settings = parseDocumentSettingsJson(row.document_settings_json);
   const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
-  const vatResolution = await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate);
-  const totals = computeDraftTotalsPreview(lines, row.currency, settings, vatResolution);
+  const vatResolution =
+    options.vatResolution ??
+    readVatResolutionFromDraftPreview(row.draft_totals_preview_json, documentDate) ??
+    (await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate));
+  const totals =
+    options.totalsPreview ??
+    computeDraftTotalsPreview(lines, row.currency, settings, vatResolution);
+
+  const uiCache = readWizardUiCacheFromDraftPreview(row.draft_totals_preview_json);
 
   const docTypeLabel =
     row.document_type && DOCUMENT_TYPE_LABELS[row.document_type]
       ? DOCUMENT_TYPE_LABELS[row.document_type]
       : 'מסמך';
-  const numberPreview =
-    row.document_type != null
-      ? await previewNextIncomeDocumentNumber(scope, row.document_type)
-      : null;
-  const recipientName = await resolveRecipientDisplayName(scope, row);
+  let numberPreview = uiCache.document_number_preview;
+  if (!numberPreview && row.document_type != null) {
+    numberPreview = await previewNextIncomeDocumentNumber(scope, row.document_type);
+  }
+  let recipientName = uiCache.recipient_display_name ?? recipientDisplayNameFromRow(row);
+  if (!recipientName) {
+    recipientName = await resolveRecipientDisplayName(scope, row);
+  }
   const headerTitle = buildDocumentDetailsHeaderTitle(scope, docTypeLabel, numberPreview, recipientName);
 
   const warnings = Array.isArray(row.validation_warnings_json)

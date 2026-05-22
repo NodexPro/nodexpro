@@ -78,12 +78,12 @@ test('VAT default uses IL fallback 18% from legal resolver module', () => {
 test('add_income_document_line returns refreshed overlay via draft editor', () => {
   assert.ok(draftEditorSource.includes('export async function addIncomeDocumentLine'));
   assert.ok(draftEditorSource.includes('createEmptyDraftLine(lines.length)'));
-  assert.ok(draftEditorSource.includes('return buildOverlayForDraft(scope, draft_id, true)'));
+  assert.ok(draftEditorSource.includes('wizardDraftMutationOverlay'));
 });
 
 test('update_income_document_line returns refreshed overlay', () => {
   assert.ok(draftEditorSource.includes('export async function updateIncomeDocumentLine'));
-  assert.ok(draftEditorSource.includes('return buildOverlayForDraft(scope, draft_id, true)'));
+  assert.ok(draftEditorSource.includes('wizardDraftMutationOverlay'));
 });
 
 test('document details UI does not calculate financial totals', () => {

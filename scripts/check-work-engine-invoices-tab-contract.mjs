@@ -162,6 +162,12 @@ if (!docDetailsStep.includes('document_fields')) {
 if (!docDetailsStep.includes('lockUi: false')) {
   errors.push('document details line edits must not lock wizard UI on each keystroke');
 }
+if (!docDetailsStep.includes('mergeIncomeWorkspaceWizardPatch')) {
+  errors.push('document details must merge wizard_patch aggregates without dropping recipient');
+}
+if (!docDetailsStep.includes('workspaceAgg')) {
+  errors.push('document details must receive workspaceAgg for wizard_patch merge');
+}
 if (!docDetailsStep.includes('step.line_items.columns')) {
   errors.push('document details table must render columns from aggregate schema');
 }

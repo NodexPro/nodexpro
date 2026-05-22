@@ -472,11 +472,11 @@
 }
 
 .nx-we-doc-details__col--currency {
-  width: 110px;
+  width: 72px;
 }
 
 .nx-we-doc-details__col--vat {
-  width: 140px;
+  width: 200px;
 }
 
 .nx-we-doc-details__col--line_total {
@@ -543,6 +543,22 @@
   font-size: 14px;
   background: #fff;
   color: #0f172a;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.nx-we-doc-details__cell-select--vat {
+  min-width: 11rem;
+  font-size: 13px;
+}
+
+.nx-we-doc-details__cell-select--currency {
+  min-width: 3.5rem;
+  text-align: center;
+}
+
+.nx-we-doc-details__td--vat {
+  overflow: visible;
 }
 
 .nx-we-doc-details__cell-total {

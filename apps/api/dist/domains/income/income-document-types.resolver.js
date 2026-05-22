@@ -55,7 +55,17 @@ async function tryCountryPackRulesetId(orgId) {
     const rulesetId = data?.active_ruleset_id ?? null;
     return rulesetId && String(rulesetId).trim() ? String(rulesetId) : null;
 }
+const DOC_TYPES_CACHE_TTL_MS = 120_000;
+const docTypesCache = new Map();
+function docTypesCacheKey(orgId, scope) {
+    return `${orgId}|${scope.issuer_business_id}|${scope.represented_client_id ?? ''}|${scope.acting_mode}`;
+}
 export async function resolveAvailableDocumentTypes(orgId, scope) {
+    const cacheKey = docTypesCacheKey(orgId, scope);
+    const cached = docTypesCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < DOC_TYPES_CACHE_TTL_MS) {
+        return cached.result;
+    }
     const country_code = await resolveOrgCountryCode(orgId);
     const ruleset_id = await tryCountryPackRulesetId(orgId);
     const { business_type, raw } = await resolveIssuerBusinessType(orgId, scope);
@@ -82,5 +92,7 @@ export async function resolveAvailableDocumentTypes(orgId, scope) {
             message: `Document types use Israel fallback rules until Country Pack defines types for ${country_code}.`,
         });
     }
-    return { available_document_types, warnings, business_type, country_code };
+    const result = { available_document_types, warnings, business_type, country_code };
+    docTypesCache.set(cacheKey, { at: Date.now(), result });
+    return result;
 }

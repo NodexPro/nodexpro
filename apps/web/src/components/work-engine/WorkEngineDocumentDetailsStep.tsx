@@ -6,12 +6,14 @@ import type {
 } from '../../income/income-document-details-types';
 import type { IncomeWorkspaceAggregate } from '../../income/income-workspace-types';
 import { executeIncomeCommand } from '../../api/income';
+import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
 
 type Props = {
   step: IncomeDocumentDetailsStep;
   commands: Record<string, string>;
   busy: boolean;
   onBusyChange: (busy: boolean) => void;
+  workspaceAgg: IncomeWorkspaceAggregate | null;
   onWorkspaceAgg: (agg: IncomeWorkspaceAggregate) => void;
   onError: (msg: string | null) => void;
 };
@@ -54,11 +56,13 @@ function DocumentSelectField({
   field,
   disabled,
   className,
+  title,
   onChange,
 }: {
   field: IncomeDocumentDetailsSelectField;
   disabled: boolean;
   className?: string;
+  title?: string;
   onChange: (value: string) => void;
 }) {
   return (
@@ -66,7 +70,7 @@ function DocumentSelectField({
       className={className}
       value={field.value}
       disabled={disabled || !field.editable}
-      title={field.disabled_reason ?? undefined}
+      title={title ?? field.disabled_reason ?? undefined}
       onChange={(e) => onChange(e.target.value)}
     >
       {field.options.map((opt) => (
@@ -78,9 +82,14 @@ function DocumentSelectField({
   );
 }
 
+function currencyDisplay(field: IncomeDocumentDetailsSelectField): string {
+  return field.options.find((o) => o.value === field.value)?.label ?? field.value;
+}
+
 function LineRowEditor({
   row,
   docFields,
+  showDocumentFields,
   busy,
   onCommit,
   onDocumentFieldChange,
@@ -88,6 +97,7 @@ function LineRowEditor({
 }: {
   row: IncomeDocumentDetailsLineRow;
   docFields: IncomeDocumentDetailsStep['line_items']['document_fields'];
+  showDocumentFields: boolean;
   busy: boolean;
   onCommit: (lineId: string, patch: Record<string, unknown>) => void;
   onDocumentFieldChange: (key: 'currency' | 'vat_mode', value: string) => void;
@@ -198,20 +208,31 @@ function LineRowEditor({
         />
       </td>
       <td className="nx-we-doc-details__td--currency">
-        <DocumentSelectField
-          field={docFields.currency}
-          disabled={busy}
-          className="nx-we-doc-details__cell-select"
-          onChange={(v) => onDocumentFieldChange('currency', v)}
-        />
+        {showDocumentFields ? (
+          <DocumentSelectField
+            field={docFields.currency}
+            disabled={busy}
+            className="nx-we-doc-details__cell-select nx-we-doc-details__cell-select--currency"
+            onChange={(v) => onDocumentFieldChange('currency', v)}
+          />
+        ) : (
+          <span className="nx-we-doc-details__cell-muted">{currencyDisplay(docFields.currency)}</span>
+        )}
       </td>
       <td className="nx-we-doc-details__td--vat">
-        <DocumentSelectField
-          field={docFields.vat_mode}
-          disabled={busy}
-          className="nx-we-doc-details__cell-select"
-          onChange={(v) => onDocumentFieldChange('vat_mode', v)}
-        />
+        {showDocumentFields ? (
+          <DocumentSelectField
+            field={docFields.vat_mode}
+            disabled={busy}
+            className="nx-we-doc-details__cell-select nx-we-doc-details__cell-select--vat"
+            title={docFields.vat_mode.options.find((o) => o.value === docFields.vat_mode.value)?.label}
+            onChange={(v) => onDocumentFieldChange('vat_mode', v)}
+          />
+        ) : (
+          <span className="nx-we-doc-details__cell-muted">
+            {docFields.vat_mode.options.find((o) => o.value === docFields.vat_mode.value)?.label ?? '—'}
+          </span>
+        )}
       </td>
       <td className="nx-we-doc-details__td--line_total">
         <span className="nx-we-doc-details__cell-total">{row.line_total.display}</span>
@@ -236,6 +257,7 @@ function LineRowEditor({
 export function WorkEngineDocumentDetailsStep({
   step,
   commands,
+  workspaceAgg,
   busy,
   onBusyChange,
   onWorkspaceAgg,
@@ -250,14 +272,24 @@ export function WorkEngineDocumentDetailsStep({
   const draftId = step.draft_id;
   const canAdd = step.line_items.allowed_actions.includes('add_income_document_line');
   const docFields = step.line_items.document_fields;
+  const [addingLine, setAddingLine] = useState(false);
+  const commandsInFlight = useRef(0);
 
   const applyAggregate = useCallback(
     (res: unknown) => {
-      if (res && typeof res === 'object' && 'income_workspace_aggregate' in res) {
-        onWorkspaceAgg((res as { income_workspace_aggregate: IncomeWorkspaceAggregate }).income_workspace_aggregate);
+      if (!res || typeof res !== 'object' || !('income_workspace_aggregate' in res)) return;
+      const payload = res as {
+        income_workspace_aggregate: IncomeWorkspaceAggregate;
+        meta?: { workspace_aggregate_mode?: 'full' | 'wizard_patch' };
+      };
+      const next = payload.income_workspace_aggregate;
+      if (payload.meta?.workspace_aggregate_mode === 'wizard_patch') {
+        onWorkspaceAgg(mergeIncomeWorkspaceWizardPatch(workspaceAgg, next));
+        return;
       }
+      onWorkspaceAgg(next);
     },
-    [onWorkspaceAgg],
+    [onWorkspaceAgg, workspaceAgg],
   );
 
   const runCommand = useCallback(
@@ -265,6 +297,7 @@ export function WorkEngineDocumentDetailsStep({
       const command = commands[commandKey];
       if (!command) throw new Error(`Missing command: ${commandKey}`);
       const lockUi = opts?.lockUi !== false;
+      commandsInFlight.current += 1;
       if (lockUi) onBusyChange(true);
       onError(null);
       try {
@@ -274,6 +307,7 @@ export function WorkEngineDocumentDetailsStep({
         onError(e instanceof Error ? e.message : 'שגיאה');
         throw e;
       } finally {
+        commandsInFlight.current = Math.max(0, commandsInFlight.current - 1);
         if (lockUi) onBusyChange(false);
       }
     },
@@ -288,11 +322,23 @@ export function WorkEngineDocumentDetailsStep({
   );
 
   const handleDocumentFieldChange = (key: 'currency' | 'vat_mode', value: string) => {
-    void runCommand('update_draft_settings', {
-      draft_id: draftId,
-      setting_key: key,
-      setting_value: value,
-    });
+    const current = key === 'currency' ? docFields.currency.value : docFields.vat_mode.value;
+    if (value === current) return;
+    void runCommand(
+      'update_draft_settings',
+      { draft_id: draftId, setting_key: key, setting_value: value },
+      { lockUi: false },
+    );
+  };
+
+  const handleAddLine = async () => {
+    if (addingLine || commandsInFlight.current > 0) return;
+    setAddingLine(true);
+    try {
+      await runCommand('add_line', { draft_id: draftId }, { lockUi: false });
+    } finally {
+      setAddingLine(false);
+    }
   };
 
   const handleSettingChange = (key: string, value: string) => {
@@ -401,8 +447,8 @@ export function WorkEngineDocumentDetailsStep({
             <button
               type="button"
               className="nx-btn nx-btn-taxes-compact"
-              disabled={busy}
-              onClick={() => void runCommand('add_line', { draft_id: draftId })}
+              disabled={busy || addingLine}
+              onClick={() => void handleAddLine()}
             >
               {step.line_items.add_row_label}
             </button>
@@ -420,7 +466,7 @@ export function WorkEngineDocumentDetailsStep({
               <col className="nx-we-doc-details__col nx-we-doc-details__col--quantity" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--unit_price" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--currency" />
-              <col className="nx-we-doc-details__col nx-we-doc-details__col--vat" />
+              <col className="nx-we-doc-details__col nx-we-doc-details__col--vat" span={1} />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--line_total" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--actions" />
             </colgroup>
@@ -434,16 +480,21 @@ export function WorkEngineDocumentDetailsStep({
               </tr>
             </thead>
             <tbody>
-              {step.line_items.rows.map((row) => (
+              {step.line_items.rows.map((row, index) => (
                 <tr key={row.line_id}>
                   <LineRowEditor
                     row={row}
                     docFields={docFields}
-                    busy={busy}
+                    showDocumentFields={index === 0}
+                    busy={busy || addingLine}
                     onCommit={commitLine}
                     onDocumentFieldChange={handleDocumentFieldChange}
                     onDelete={() =>
-                      void runCommand('delete_line', { draft_id: draftId, line_id: row.line_id })
+                      void runCommand(
+                        'delete_line',
+                        { draft_id: draftId, line_id: row.line_id },
+                        { lockUi: false },
+                      )
                     }
                   />
                 </tr>

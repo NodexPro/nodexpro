@@ -10,7 +10,7 @@ import { resolveAvailableDocumentTypes } from './income-document-types.resolver.
 import { accountingDisplayStatusLabel, resolveAccountingDisplayStatus, } from './income-accounting-posting.mapping.js';
 import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './income-workspace-cards.builders.js';
-import { buildIncomeRecipientSearchModel, } from './income-recipient.service.js';
+import { buildIncomeRecipientSearchModel, buildRecipientCreateFieldsSchema, recipientSearchAllowedActions, } from './income-recipient.service.js';
 import { INCOME_WORKSPACE_AGGREGATE_KEY, } from './income.types.js';
 const DOCUMENT_TYPE_LABELS = {
     receipt: 'קבלה',
@@ -267,6 +267,64 @@ function draftsTableModel(rows) {
             title: 'אין טיוטות',
             description: null,
         },
+    };
+}
+function emptyIncomeTableModel(title) {
+    return {
+        columns: [],
+        rows: [],
+        empty_state: { visible: true, title, description: null },
+    };
+}
+function minimalRecipientSearchStub(scope) {
+    const canEdit = scope.permissions.edit;
+    return {
+        label: 'מקבל המסמך',
+        placeholder: 'חיפוש לפי שם / ח.פ / ע.מ / טלפון / אימייל',
+        recent_recipients: [],
+        search_results: [],
+        empty_state: { visible: false, message: 'לא נמצאו מקבלים שמורים' },
+        create_new_action: {
+            label: '+ יצירת מקבל חדש',
+            enabled: canEdit,
+            disabled_reason: canEdit ? null : 'נדרשת הרשאת income.edit',
+        },
+        create_fields_schema: buildRecipientCreateFieldsSchema(),
+        save_for_future_label: 'שמור לשימוש עתידי',
+        save_for_future_available: canEdit,
+        selected: null,
+        field_errors: {},
+        allowed_actions: recipientSearchAllowedActions(scope.permissions),
+    };
+}
+/**
+ * Lightweight workspace aggregate for Work Engine wizard draft mutations.
+ * Skips customers/items/drafts/issued tables and count queries (major latency win).
+ */
+export async function buildIncomeWorkspaceWizardPatchAggregate(scope, wizardDraftOverlay, recipientOverlay = {}) {
+    const recipient_search = {
+        ...minimalRecipientSearchStub(scope),
+        ...(recipientOverlay.selected != null ? { selected: recipientOverlay.selected } : {}),
+        ...(recipientOverlay.field_errors != null ? { field_errors: recipientOverlay.field_errors } : {}),
+    };
+    return {
+        aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
+        org_id: scope.org_id,
+        actor_user_id: scope.actor_user_id,
+        issuer_context: toIssuerContextSummary(scope),
+        available_document_types: [],
+        document_creation_schema: { steps: [], allowed_actions: [] },
+        cards: [],
+        customers_table_model: emptyIncomeTableModel('אין לקוחות הכנסות'),
+        items_table_model: emptyIncomeTableModel('אין פריטים'),
+        drafts_table_model: emptyIncomeTableModel('אין טיוטות'),
+        issued_documents_table_model: emptyIncomeTableModel('אין מסמכים שהונפקו'),
+        issued_documents_count: 0,
+        recipient_search,
+        document_details_step: wizardDraftOverlay.document_details_step ?? null,
+        active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
+        allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
+        warnings: [],
     };
 }
 export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride, recipientOverlay = {}, wizardDraftOverlay = {}) {

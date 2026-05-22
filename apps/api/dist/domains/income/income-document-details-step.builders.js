@@ -1,6 +1,7 @@
 import { formatMoneyReference, normalizeDraftLines, } from './income-document-draft-lines.pure.js';
 import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
 import { buildDocumentDetailsHeaderTitle } from './income-document-details-header.pure.js';
+import { compactVatSelectLabel, readVatResolutionFromDraftPreview, } from './income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { loadIncomeRecipientById } from './income-recipient.service.js';
@@ -34,13 +35,30 @@ function buildDocumentLineTableFields(row, settings, vatResolution, canEdit) {
             input_type: 'select',
             value: vatUi,
             options: [
-                { value: 'standard', label: vatResolution.standard_vat_mode_option_label },
-                { value: 'exempt', label: 'פטור ממע״מ' },
+                { value: 'standard', label: compactVatSelectLabel(vatResolution) },
+                { value: 'exempt', label: 'פטור' },
             ],
             editable: canEdit,
             disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
         },
     };
+}
+function readWizardUiCacheFromDraftPreview(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return { document_number_preview: null, recipient_display_name: null };
+    }
+    const o = raw;
+    return {
+        document_number_preview: typeof o.document_number_preview === 'string' ? o.document_number_preview : null,
+        recipient_display_name: typeof o.recipient_display_name === 'string' ? o.recipient_display_name : null,
+    };
+}
+function recipientDisplayNameFromRow(row) {
+    const snap = row.one_time_customer_snapshot_json;
+    if (snap && typeof snap.display_name === 'string' && snap.display_name.trim()) {
+        return snap.display_name.trim();
+    }
+    return null;
 }
 async function resolveRecipientDisplayName(scope, row) {
     if (row.income_customer_id) {
@@ -175,19 +193,27 @@ function buildLineRows(lines, totals, canEdit) {
         allowed_actions: canEdit ? ['update_income_document_line', 'delete_income_document_line'] : [],
     }));
 }
-export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdit) {
+export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdit, options = {}) {
     const lines = normalizeDraftLines(row.draft_lines_json);
     const settings = parseDocumentSettingsJson(row.document_settings_json);
     const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
-    const vatResolution = await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate);
-    const totals = computeDraftTotalsPreview(lines, row.currency, settings, vatResolution);
+    const vatResolution = options.vatResolution ??
+        readVatResolutionFromDraftPreview(row.draft_totals_preview_json, documentDate) ??
+        (await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate));
+    const totals = options.totalsPreview ??
+        computeDraftTotalsPreview(lines, row.currency, settings, vatResolution);
+    const uiCache = readWizardUiCacheFromDraftPreview(row.draft_totals_preview_json);
     const docTypeLabel = row.document_type && DOCUMENT_TYPE_LABELS[row.document_type]
         ? DOCUMENT_TYPE_LABELS[row.document_type]
         : 'מסמך';
-    const numberPreview = row.document_type != null
-        ? await previewNextIncomeDocumentNumber(scope, row.document_type)
-        : null;
-    const recipientName = await resolveRecipientDisplayName(scope, row);
+    let numberPreview = uiCache.document_number_preview;
+    if (!numberPreview && row.document_type != null) {
+        numberPreview = await previewNextIncomeDocumentNumber(scope, row.document_type);
+    }
+    let recipientName = uiCache.recipient_display_name ?? recipientDisplayNameFromRow(row);
+    if (!recipientName) {
+        recipientName = await resolveRecipientDisplayName(scope, row);
+    }
     const headerTitle = buildDocumentDetailsHeaderTitle(scope, docTypeLabel, numberPreview, recipientName);
     const warnings = Array.isArray(row.validation_warnings_json)
         ? row.validation_warnings_json

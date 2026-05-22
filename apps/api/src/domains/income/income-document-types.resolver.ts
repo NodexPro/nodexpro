@@ -88,10 +88,23 @@ export interface ResolveAvailableDocumentTypesResult {
   country_code: string;
 }
 
+const DOC_TYPES_CACHE_TTL_MS = 120_000;
+const docTypesCache = new Map<string, { at: number; result: ResolveAvailableDocumentTypesResult }>();
+
+function docTypesCacheKey(orgId: string, scope: ActiveIncomeIssuerScope): string {
+  return `${orgId}|${scope.issuer_business_id}|${scope.represented_client_id ?? ''}|${scope.acting_mode}`;
+}
+
 export async function resolveAvailableDocumentTypes(
   orgId: string,
   scope: ActiveIncomeIssuerScope,
 ): Promise<ResolveAvailableDocumentTypesResult> {
+  const cacheKey = docTypesCacheKey(orgId, scope);
+  const cached = docTypesCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < DOC_TYPES_CACHE_TTL_MS) {
+    return cached.result;
+  }
+
   const country_code = await resolveOrgCountryCode(orgId);
   const ruleset_id = await tryCountryPackRulesetId(orgId);
   const { business_type, raw } = await resolveIssuerBusinessType(orgId, scope);
@@ -129,5 +142,7 @@ export async function resolveAvailableDocumentTypes(
     });
   }
 
-  return { available_document_types, warnings, business_type, country_code };
+  const result = { available_document_types, warnings, business_type, country_code };
+  docTypesCache.set(cacheKey, { at: Date.now(), result });
+  return result;
 }

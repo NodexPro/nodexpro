@@ -257,6 +257,8 @@ export type IncomeCommandType =
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;
   income_document_id?: string;
+  /** `wizard_patch` = lightweight aggregate for Work Engine wizard line/settings edits. */
+  workspace_aggregate_mode?: 'full' | 'wizard_patch';
 }
 
 export interface IncomeCommandResponse {
