@@ -500,7 +500,18 @@ export type WorkEngineInvoicesDocumentCreationEntrypoint = {
       email_label: string;
       address_label: string;
     };
-    recipient_step: { title: string; description: string };
+    recipient_search: {
+      label: string;
+      placeholder: string;
+      create_fields_schema: Array<{
+        key: string;
+        label: string;
+        required: boolean;
+        input_type: 'text' | 'checkbox';
+        placeholder: string | null;
+      }>;
+      save_for_future_label: string;
+    };
     document_details_step: {
       document_date_label: string;
       document_date_required: boolean;

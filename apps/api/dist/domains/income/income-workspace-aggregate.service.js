@@ -9,6 +9,7 @@ import { resolveAvailableDocumentTypes } from './income-document-types.resolver.
 import { accountingDisplayStatusLabel, resolveAccountingDisplayStatus, } from './income-accounting-posting.mapping.js';
 import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './income-workspace-cards.builders.js';
+import { buildIncomeRecipientSearchModel, } from './income-recipient.service.js';
 import { INCOME_WORKSPACE_AGGREGATE_KEY, } from './income.types.js';
 const DOCUMENT_TYPE_LABELS = {
     receipt: 'קבלה',
@@ -272,7 +273,7 @@ function draftsTableModel(rows) {
         },
     };
 }
-export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride) {
+export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride, recipientOverlay = {}) {
     const scope = scopeOverride ?? (await loadActiveIncomeIssuerScope(ctx));
     if (!scope.permissions.view)
         throw forbidden('income.view required');
@@ -297,6 +298,7 @@ export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride) {
     const items = await loadItems(scope);
     const drafts = await loadDrafts(scope, customerNames);
     const issuedDocuments = await loadIssuedDocuments(scope);
+    const recipient_search = await buildIncomeRecipientSearchModel(scope, scope.permissions, recipientOverlay);
     return {
         aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
         org_id: scope.org_id,
@@ -317,6 +319,7 @@ export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride) {
         drafts_table_model: draftsTableModel(drafts),
         issued_documents_table_model: issuedDocumentsTableModel(issuedDocuments),
         issued_documents_count: issuedCount,
+        recipient_search,
         allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
         warnings: docTypesResult.warnings,
     };

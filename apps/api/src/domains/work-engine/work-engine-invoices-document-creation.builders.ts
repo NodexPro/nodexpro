@@ -12,6 +12,7 @@ import {
 } from '../client-operations/client-operations-client-core.read.js';
 import { ensureOrgIncomeIssuerProfile } from '../income/income-issuer-context.service.js';
 import { loadIncomeIssuerProfileProjection } from '../income/income-issuer-profile-sync.service.js';
+import { buildRecipientCreateFieldsSchema } from '../income/income-recipient.service.js';
 import { INCOME_PERMISSIONS } from '../income/income.types.js';
 import type { IncomeIssuerSnapshotBlock } from '../income/income-issuer-snapshot.service.js';
 
@@ -59,9 +60,11 @@ export type WorkEngineInvoicesDocumentCreationEntrypoint = {
       email_label: string;
       address_label: string;
     };
-    recipient_step: {
-      title: string;
-      description: string;
+    recipient_search: {
+      label: string;
+      placeholder: string;
+      create_fields_schema: ReturnType<typeof buildRecipientCreateFieldsSchema>;
+      save_for_future_label: string;
     };
     document_details_step: {
       document_date_label: string;
@@ -70,8 +73,10 @@ export type WorkEngineInvoicesDocumentCreationEntrypoint = {
     };
     income_commands: {
       select_issuer: string;
-      create_customer: string;
-      create_one_time_customer: string;
+      search_recipients: string;
+      select_recipient: string;
+      set_recipient_snapshot: string;
+      save_recipient_for_future: string;
       create_draft: string;
       update_draft: string;
       issue_document: string;
@@ -175,10 +180,11 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(
         email_label: 'אימייל',
         address_label: 'כתובת',
       },
-      recipient_step: {
-        title: 'מקבל המסמך / לקוח במסמך',
-        description:
-          'לקוח המשרד הוא המנפיק. כאן בוחרים את הלקוח או הנמען שמקבל את המסמך (לא את לקוח המשרד).',
+      recipient_search: {
+        label: 'מקבל המסמך',
+        placeholder: 'חיפוש לפי שם / ח.פ / ע.מ / טלפון / אימייל',
+        create_fields_schema: buildRecipientCreateFieldsSchema(),
+        save_for_future_label: 'שמור לשימוש עתידי',
       },
       document_details_step: {
         document_date_label: 'תאריך מסמך',
@@ -187,8 +193,10 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(
       },
       income_commands: {
         select_issuer: 'select_income_issuer_context',
-        create_customer: 'create_income_customer',
-        create_one_time_customer: 'create_one_time_income_customer',
+        search_recipients: 'search_income_recipients',
+        select_recipient: 'select_income_recipient',
+        set_recipient_snapshot: 'set_income_recipient_snapshot',
+        save_recipient_for_future: 'save_income_recipient_for_future',
         create_draft: 'create_income_document_draft',
         update_draft: 'update_income_document_draft',
         issue_document: 'issue_income_document',

@@ -172,6 +172,54 @@ export interface IncomeDocumentCreationSchema {
   allowed_actions: string[];
 }
 
+export interface IncomeRecipientListRow {
+  income_customer_id: string;
+  display_name: string;
+  tax_id: string | null;
+  phone: string | null;
+  email: string | null;
+  address_line: string | null;
+  city: string | null;
+  display_line: string;
+}
+
+export interface IncomeRecipientCreateFieldSchema {
+  key: string;
+  label: string;
+  required: boolean;
+  input_type: 'text' | 'checkbox';
+  placeholder: string | null;
+}
+
+export type IncomeRecipientSelected =
+  | {
+      kind: 'saved';
+      income_customer_id: string;
+      display_line: string;
+      snapshot: null;
+    }
+  | {
+      kind: 'snapshot';
+      income_customer_id: null;
+      display_line: string;
+      snapshot: Record<string, unknown>;
+    };
+
+export interface IncomeRecipientSearchModel {
+  label: string;
+  placeholder: string;
+  recent_recipients: IncomeRecipientListRow[];
+  search_results: IncomeRecipientListRow[];
+  empty_state: { visible: boolean; message: string };
+  create_new_action: { label: string; enabled: boolean; disabled_reason: string | null };
+  create_fields_schema: IncomeRecipientCreateFieldSchema[];
+  save_for_future_label: string;
+  save_for_future_available: boolean;
+  selected: IncomeRecipientSelected | null;
+  field_errors: Record<string, string>;
+  allowed_actions: string[];
+}
+
 export interface IncomeWorkspaceAggregate {
   aggregate_key: 'income_workspace_aggregate';
   org_id: string;
@@ -185,6 +233,7 @@ export interface IncomeWorkspaceAggregate {
   drafts_table_model: IncomeTableModel<IncomeDraftsTableRow>;
   issued_documents_table_model: IncomeTableModel<IncomeIssuedDocumentsTableRow>;
   issued_documents_count: number;
+  recipient_search: IncomeRecipientSearchModel;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
 }
@@ -198,6 +247,10 @@ export type IncomeCommandType =
   | 'update_income_document_draft'
   | 'cancel_income_document_draft'
   | 'issue_income_document'
+  | 'search_income_recipients'
+  | 'select_income_recipient'
+  | 'set_income_recipient_snapshot'
+  | 'save_income_recipient_for_future'
   | 'retry_income_document_accounting_posting'
   | 'retry_income_document_pdf_render';
 

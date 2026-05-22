@@ -44,8 +44,25 @@ import { executeIssueIncomeDocument } from './income-document-issue.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
 import {
+  insertSavedIncomeRecipient,
+  loadIncomeRecipientById,
+  searchIncomeRecipients,
+  selectedFromInputFields,
+  selectedFromSavedRow,
+  type RecipientSearchOverlay,
+} from './income-recipient.service.js';
+import {
+  assertRecipientInputValid,
+  parseRecipientInputBody,
+  validateRecipientInputFields,
+} from './income-recipient.validation.js';
+import {
   INCOME_COMMAND_CANCEL_DRAFT,
   INCOME_COMMAND_ISSUE_DOCUMENT,
+  INCOME_COMMAND_SEARCH_RECIPIENTS,
+  INCOME_COMMAND_SELECT_RECIPIENT,
+  INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT,
+  INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE,
   INCOME_COMMAND_RETRY_ACCOUNTING_POSTING,
   INCOME_COMMAND_RETRY_PDF_RENDER,
   INCOME_COMMAND_CREATE_CUSTOMER,
@@ -68,6 +85,10 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_UPDATE_DRAFT,
   INCOME_COMMAND_CANCEL_DRAFT,
   INCOME_COMMAND_ISSUE_DOCUMENT,
+  INCOME_COMMAND_SEARCH_RECIPIENTS,
+  INCOME_COMMAND_SELECT_RECIPIENT,
+  INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT,
+  INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE,
   INCOME_COMMAND_RETRY_ACCOUNTING_POSTING,
   INCOME_COMMAND_RETRY_PDF_RENDER,
 ]);
@@ -75,11 +96,25 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
 async function commandResponse(
   ctx: RequestContext,
   command: IncomeCommandType,
+  recipientOverlay: RecipientSearchOverlay = {},
 ): Promise<IncomeCommandResponse> {
   return {
     ok: true,
     command,
-    income_workspace_aggregate: await buildIncomeWorkspaceAggregate(ctx),
+    income_workspace_aggregate: await buildIncomeWorkspaceAggregate(ctx, undefined, recipientOverlay),
+  };
+}
+
+async function recipientCommandResponse(
+  ctx: RequestContext,
+  command: IncomeCommandType,
+  scope: ActiveIncomeIssuerScope,
+  overlay: RecipientSearchOverlay,
+): Promise<IncomeCommandResponse> {
+  return {
+    ok: true,
+    command,
+    income_workspace_aggregate: await buildIncomeWorkspaceAggregate(ctx, scope, overlay),
   };
 }
 
@@ -424,6 +459,67 @@ export async function executeIncomeCommand(
   if (command === INCOME_COMMAND_CANCEL_DRAFT) {
     await executeCancelDraft(ctx, body);
     return commandResponse(ctx, command);
+  }
+
+  if (command === INCOME_COMMAND_SEARCH_RECIPIENTS) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const query = String(body.query ?? '').trim();
+    const search_results = await searchIncomeRecipients(scope, query);
+    return recipientCommandResponse(ctx, command, scope, {
+      search_query: query,
+      search_results,
+    });
+  }
+
+  if (command === INCOME_COMMAND_SELECT_RECIPIENT) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const income_customer_id = reqUuid(body.income_customer_id, 'income_customer_id');
+    const row = await loadIncomeRecipientById(scope, income_customer_id);
+    if (!row) throw notFound('Income recipient not found');
+    return recipientCommandResponse(ctx, command, scope, {
+      selected: selectedFromSavedRow(row),
+    });
+  }
+
+  if (command === INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const fields = parseRecipientInputBody(body);
+    const field_errors = validateRecipientInputFields(fields);
+    if (Object.keys(field_errors).length > 0) {
+      return recipientCommandResponse(ctx, command, scope, { field_errors, selected: null });
+    }
+    return recipientCommandResponse(ctx, command, scope, {
+      selected: selectedFromInputFields(fields),
+      field_errors: {},
+    });
+  }
+
+  if (command === INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const fields = assertRecipientInputValid(body);
+    const row = await insertSavedIncomeRecipient(scope, fields, scope.actor_user_id);
+    await writeAudit({
+      organizationId: scope.org_id,
+      actorUserId: scope.actor_user_id,
+      moduleCode: 'income',
+      entityType: 'income_customer',
+      entityId: row.income_customer_id,
+      action: AUDIT_ACTIONS.INCOME_CUSTOMER_CREATED,
+      payload: {
+        display_name: fields.display_name,
+        is_one_time: false,
+        issuer_business_id: scope.issuer_business_id,
+        save_for_future: true,
+      },
+    });
+    return recipientCommandResponse(ctx, command, scope, {
+      selected: selectedFromSavedRow(row),
+      field_errors: {},
+    });
   }
 
   if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {

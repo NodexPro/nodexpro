@@ -5,6 +5,7 @@ import { hasPermission } from '../rbac/rbac.service.js';
 import { buildClientOperationsAddressJson, clientOperationsBusinessTypeDisplayHe, loadClientOperationsCoreClientsForOrg, mapClientOperationsBusinessTypeForIncomeIssuer, } from '../client-operations/client-operations-client-core.read.js';
 import { ensureOrgIncomeIssuerProfile } from '../income/income-issuer-context.service.js';
 import { loadIncomeIssuerProfileProjection } from '../income/income-issuer-profile-sync.service.js';
+import { buildRecipientCreateFieldsSchema } from '../income/income-recipient.service.js';
 import { INCOME_PERMISSIONS } from '../income/income.types.js';
 async function loadOfficeClientIssuerOptions(orgId) {
     const coreClients = await loadClientOperationsCoreClientsForOrg(orgId);
@@ -95,9 +96,11 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(ctx) {
                 email_label: 'אימייל',
                 address_label: 'כתובת',
             },
-            recipient_step: {
-                title: 'מקבל המסמך / לקוח במסמך',
-                description: 'לקוח המשרד הוא המנפיק. כאן בוחרים את הלקוח או הנמען שמקבל את המסמך (לא את לקוח המשרד).',
+            recipient_search: {
+                label: 'מקבל המסמך',
+                placeholder: 'חיפוש לפי שם / ח.פ / ע.מ / טלפון / אימייל',
+                create_fields_schema: buildRecipientCreateFieldsSchema(),
+                save_for_future_label: 'שמור לשימוש עתידי',
             },
             document_details_step: {
                 document_date_label: 'תאריך מסמך',
@@ -106,8 +109,10 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(ctx) {
             },
             income_commands: {
                 select_issuer: 'select_income_issuer_context',
-                create_customer: 'create_income_customer',
-                create_one_time_customer: 'create_one_time_income_customer',
+                search_recipients: 'search_income_recipients',
+                select_recipient: 'select_income_recipient',
+                set_recipient_snapshot: 'set_income_recipient_snapshot',
+                save_recipient_for_future: 'save_income_recipient_for_future',
                 create_draft: 'create_income_document_draft',
                 update_draft: 'update_income_document_draft',
                 issue_document: 'issue_income_document',

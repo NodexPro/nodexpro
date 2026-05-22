@@ -16,6 +16,10 @@ import {
 import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './income-workspace-cards.builders.js';
 import {
+  buildIncomeRecipientSearchModel,
+  type RecipientSearchOverlay,
+} from './income-recipient.service.js';
+import {
   INCOME_WORKSPACE_AGGREGATE_KEY,
   type IncomeCustomersTableRow,
   type IncomeDocumentType,
@@ -358,6 +362,7 @@ function draftsTableModel(rows: IncomeDraftsTableRow[]): IncomeTableModel<Income
 export async function buildIncomeWorkspaceAggregate(
   ctx: RequestContext,
   scopeOverride?: ActiveIncomeIssuerScope,
+  recipientOverlay: RecipientSearchOverlay = {},
 ): Promise<IncomeWorkspaceAggregate> {
   const scope = scopeOverride ?? (await loadActiveIncomeIssuerScope(ctx));
   if (!scope.permissions.view) throw forbidden('income.view required');
@@ -387,6 +392,11 @@ export async function buildIncomeWorkspaceAggregate(
   const items = await loadItems(scope);
   const drafts = await loadDrafts(scope, customerNames);
   const issuedDocuments = await loadIssuedDocuments(scope);
+  const recipient_search = await buildIncomeRecipientSearchModel(
+    scope,
+    scope.permissions,
+    recipientOverlay,
+  );
 
   return {
     aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
@@ -412,6 +422,7 @@ export async function buildIncomeWorkspaceAggregate(
     drafts_table_model: draftsTableModel(drafts),
     issued_documents_table_model: issuedDocumentsTableModel(issuedDocuments),
     issued_documents_count: issuedCount,
+    recipient_search,
     allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
     warnings: docTypesResult.warnings,
   };

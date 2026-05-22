@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
 import type {
   IncomeAvailableDocumentType,
-  IncomeCustomersTableRow,
   IncomeWorkspaceAggregate,
   IncomeWorkspaceContextAggregate,
   SelectIncomeIssuerContextCommandResponse,
 } from '../../api/income';
+import { WorkEngineRecipientSearchField } from './WorkEngineRecipientSearchField';
 import {
   executeIncomeCommand,
   pickDraftIdAfterSave,
@@ -23,12 +23,6 @@ type DraftLine = {
 type FormState = {
   document_type: string;
   document_date: string;
-  customer_mode: 'existing' | 'one_time';
-  income_customer_id: string;
-  one_time_display_name: string;
-  one_time_phone: string;
-  one_time_email: string;
-  one_time_tax_id: string;
   lines: DraftLine[];
   due_date: string;
   payment_received_note: string;
@@ -44,7 +38,23 @@ const EMPTY_LINE: DraftLine = {
   amount_reference: '',
 };
 
-function buildDraftPayload(form: FormState): Record<string, unknown> {
+function recipientDraftFields(
+  workspaceAgg: IncomeWorkspaceAggregate | null,
+): { income_customer_id: string | null; one_time_customer_snapshot_json: Record<string, unknown> | null } {
+  const selected = workspaceAgg?.recipient_search?.selected ?? null;
+  if (!selected) {
+    return { income_customer_id: null, one_time_customer_snapshot_json: null };
+  }
+  if (selected.kind === 'saved') {
+    return { income_customer_id: selected.income_customer_id, one_time_customer_snapshot_json: null };
+  }
+  return { income_customer_id: null, one_time_customer_snapshot_json: selected.snapshot };
+}
+
+function buildDraftPayload(
+  form: FormState,
+  workspaceAgg: IncomeWorkspaceAggregate | null,
+): Record<string, unknown> {
   const lines = form.lines
     .map((l) => {
       const amount = Number(l.amount_reference);
@@ -73,21 +83,7 @@ function buildDraftPayload(form: FormState): Record<string, unknown> {
       : null,
   };
 
-  if (form.customer_mode === 'existing' && form.income_customer_id.trim()) {
-    payload.income_customer_id = form.income_customer_id.trim();
-    payload.one_time_customer_snapshot_json = null;
-  } else if (form.customer_mode === 'one_time' && form.one_time_display_name.trim()) {
-    payload.income_customer_id = null;
-    payload.one_time_customer_snapshot_json = {
-      display_name: form.one_time_display_name.trim(),
-      phone: form.one_time_phone.trim() || null,
-      email: form.one_time_email.trim() || null,
-      tax_id: form.one_time_tax_id.trim() || null,
-    };
-  } else {
-    payload.income_customer_id = null;
-    payload.one_time_customer_snapshot_json = null;
-  }
+  Object.assign(payload, recipientDraftFields(workspaceAgg));
 
   return payload;
 }
@@ -120,12 +116,6 @@ export function WorkEngineIncomeDocumentWizardModal({
   const [form, setForm] = useState<FormState>(() => ({
     document_type: '',
     document_date: new Date().toISOString().slice(0, 10),
-    customer_mode: 'one_time',
-    income_customer_id: '',
-    one_time_display_name: '',
-    one_time_phone: '',
-    one_time_email: '',
-    one_time_tax_id: '',
     lines: [{ ...EMPTY_LINE }],
     due_date: '',
     payment_received_note: '',
@@ -147,7 +137,6 @@ export function WorkEngineIncomeDocumentWizardModal({
   const activeStepKey = visibleSteps[Math.min(stepIndex, visibleSteps.length - 1)]?.key ?? '';
   const isLastStep = stepIndex >= visibleSteps.length - 1;
 
-  const customers: IncomeCustomersTableRow[] = workspaceAgg?.customers_table_model.rows ?? [];
   const selectedDocType = documentTypes.find((d) => d.key === form.document_type) ?? null;
   const selectedOfficeClient =
     wizard.office_client_issuer_options.find((o) => o.represented_client_id === officeClientId) ??
@@ -215,6 +204,12 @@ export function WorkEngineIncomeDocumentWizardModal({
       }
       return;
     }
+    if (activeStepKey === 'recipient') {
+      if (!workspaceAgg?.recipient_search?.selected) {
+        setError('בחר מקבל למסמך');
+        return;
+      }
+    }
     if (activeStepKey === 'preview_issue') return;
     setStepIndex((i) => i + 1);
   };
@@ -227,34 +222,11 @@ export function WorkEngineIncomeDocumentWizardModal({
     try {
       const cmds = wizard.income_commands;
       let ws = workspaceAgg;
-      if (form.customer_mode === 'one_time' && form.one_time_display_name.trim() && !form.income_customer_id) {
-        const custRes = await executeIncomeCommand(cmds.create_one_time_customer, {
-          display_name: form.one_time_display_name.trim(),
-          phone: form.one_time_phone.trim() || null,
-          email: form.one_time_email.trim() || null,
-          tax_id: form.one_time_tax_id.trim() || null,
-        });
-        if ('income_workspace_aggregate' in custRes) {
-          ws = custRes.income_workspace_aggregate;
-          setWorkspaceAgg(ws);
-          const created = ws.customers_table_model.rows.find(
-            (c) => c.display_name === form.one_time_display_name.trim(),
-          );
-          if (created) {
-            setForm((f) => ({
-              ...f,
-              customer_mode: 'existing',
-              income_customer_id: created.customer_id,
-            }));
-          }
-        }
+      if (!ws?.recipient_search?.selected) {
+        throw new Error('מקבל המסמך לא נבחר');
       }
 
-      const payload = buildDraftPayload(
-        form.customer_mode === 'existing' && form.income_customer_id
-          ? form
-          : { ...form, customer_mode: 'existing' as const, income_customer_id: form.income_customer_id },
-      );
+      const payload = buildDraftPayload(form, ws);
       const previousIds = new Set(ws?.drafts_table_model.rows.map((r) => r.draft_id) ?? []);
       let draftId = savedDraftId;
       if (draftId) {
@@ -370,68 +342,13 @@ export function WorkEngineIncomeDocumentWizardModal({
     }
     if (activeStepKey === 'recipient') {
       return (
-        <>
-          <p className="nx-we-queue__subtitle" style={{ marginTop: 0 }}>
-            {wizard.recipient_step.description}
-          </p>
-          <div className="nx-income-field">
-            <label>סוג מקבל</label>
-            <select
-              value={form.customer_mode}
-              disabled={busy}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, customer_mode: e.target.value as 'existing' | 'one_time' }))
-              }
-            >
-              <option value="existing">לקוח קיים</option>
-              <option value="one_time">לקוח חד-פעמי</option>
-            </select>
-          </div>
-          {form.customer_mode === 'existing' ? (
-            <div className="nx-income-field">
-              <label>לקוח במסמך</label>
-              <select
-                value={form.income_customer_id}
-                disabled={busy}
-                onChange={(e) => setForm((f) => ({ ...f, income_customer_id: e.target.value }))}
-              >
-                <option value="">בחר לקוח</option>
-                {customers.map((c) => (
-                  <option key={c.customer_id} value={c.customer_id}>
-                    {c.display_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <>
-              <div className="nx-income-field">
-                <label>שם</label>
-                <input
-                  value={form.one_time_display_name}
-                  disabled={busy}
-                  onChange={(e) => setForm((f) => ({ ...f, one_time_display_name: e.target.value }))}
-                />
-              </div>
-              <div className="nx-income-field">
-                <label>טלפון</label>
-                <input
-                  value={form.one_time_phone}
-                  disabled={busy}
-                  onChange={(e) => setForm((f) => ({ ...f, one_time_phone: e.target.value }))}
-                />
-              </div>
-              <div className="nx-income-field">
-                <label>מספר זיהוי</label>
-                <input
-                  value={form.one_time_tax_id}
-                  disabled={busy}
-                  onChange={(e) => setForm((f) => ({ ...f, one_time_tax_id: e.target.value }))}
-                />
-              </div>
-            </>
-          )}
-        </>
+        <WorkEngineRecipientSearchField
+          wizard={wizard}
+          workspaceAgg={workspaceAgg}
+          busy={busy}
+          onWorkspaceAgg={setWorkspaceAgg}
+          onError={setError}
+        />
       );
     }
     if (activeStepKey === 'document_details') {
@@ -544,10 +461,7 @@ export function WorkEngineIncomeDocumentWizardModal({
             <strong>תאריך:</strong> {form.document_date}
           </p>
           <p>
-            <strong>מקבל:</strong>{' '}
-            {form.customer_mode === 'existing'
-              ? customers.find((c) => c.customer_id === form.income_customer_id)?.display_name
-              : form.one_time_display_name}
+            <strong>מקבל:</strong> {workspaceAgg?.recipient_search?.selected?.display_line ?? '—'}
           </p>
           <p style={{ color: '#6b7280', fontSize: 12 }}>
             מספר מסמך ואימות תאריך ייקבעו בהפקה בשרת בלבד.

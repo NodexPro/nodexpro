@@ -25,6 +25,9 @@ const api = read(workEngineApi);
 const wizard = read(
   path.join(repoRoot, 'apps/web/src/components/work-engine/WorkEngineIncomeDocumentWizardModal.tsx'),
 );
+const recipientField = read(
+  path.join(repoRoot, 'apps/web/src/components/work-engine/WorkEngineRecipientSearchField.tsx'),
+);
 
 const errors = [];
 
@@ -88,6 +91,22 @@ if (!wizard.includes('business_type_label')) {
 }
 if (/מזהה:/.test(wizard)) {
   errors.push('wizard must not hardcode tax_id label (use office_client_display_labels)');
+}
+
+if (!wizard.includes('WorkEngineRecipientSearchField')) {
+  errors.push('wizard must use WorkEngineRecipientSearchField for recipient step');
+}
+if (/לקוח חד-פעמי|לקוח קיים|customer_mode/.test(wizard + recipientField)) {
+  errors.push('wizard must not offer one-time vs permanent recipient choice');
+}
+if (!recipientField.includes('recipient_search')) {
+  errors.push('recipient field must render from income_workspace_aggregate.recipient_search');
+}
+if (!recipientField.includes('search_recipients')) {
+  errors.push('recipient field must call search_recipients command');
+}
+if (!api.includes('recipient_search')) {
+  errors.push('work-engine API types must include wizard.recipient_search');
 }
 
 const invoicesPanelSource = read(tabHost);

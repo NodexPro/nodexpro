@@ -1,3 +1,5 @@
+import type { IncomeRecipientSearchModel } from './income-recipient.service.js';
+
 export const INCOME_CONTEXT_AGGREGATE_KEY = 'income_workspace_context_aggregate' as const;
 export const INCOME_WORKSPACE_AGGREGATE_KEY = 'income_workspace_aggregate' as const;
 
@@ -9,6 +11,10 @@ export const INCOME_COMMAND_CREATE_DRAFT = 'create_income_document_draft' as con
 export const INCOME_COMMAND_UPDATE_DRAFT = 'update_income_document_draft' as const;
 export const INCOME_COMMAND_CANCEL_DRAFT = 'cancel_income_document_draft' as const;
 export const INCOME_COMMAND_ISSUE_DOCUMENT = 'issue_income_document' as const;
+export const INCOME_COMMAND_SEARCH_RECIPIENTS = 'search_income_recipients' as const;
+export const INCOME_COMMAND_SELECT_RECIPIENT = 'select_income_recipient' as const;
+export const INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT = 'set_income_recipient_snapshot' as const;
+export const INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE = 'save_income_recipient_for_future' as const;
 export const INCOME_COMMAND_RETRY_ACCOUNTING_POSTING = 'retry_income_document_accounting_posting' as const;
 export const INCOME_COMMAND_RETRY_PDF_RENDER = 'retry_income_document_pdf_render' as const;
 
@@ -205,6 +211,7 @@ export interface IncomeWorkspaceAggregate {
   drafts_table_model: IncomeTableModel<IncomeDraftsTableRow>;
   issued_documents_table_model: IncomeTableModel<IncomeIssuedDocumentsTableRow>;
   issued_documents_count: number;
+  recipient_search: IncomeRecipientSearchModel;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
 }
@@ -218,6 +225,10 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_UPDATE_DRAFT
   | typeof INCOME_COMMAND_CANCEL_DRAFT
   | typeof INCOME_COMMAND_ISSUE_DOCUMENT
+  | typeof INCOME_COMMAND_SEARCH_RECIPIENTS
+  | typeof INCOME_COMMAND_SELECT_RECIPIENT
+  | typeof INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT
+  | typeof INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE
   | typeof INCOME_COMMAND_RETRY_ACCOUNTING_POSTING
   | typeof INCOME_COMMAND_RETRY_PDF_RENDER;
 
