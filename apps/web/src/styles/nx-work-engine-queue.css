@@ -207,30 +207,51 @@
   }
 }
 
-/* Work Engine income wizard — larger desktop modal, footer always visible */
+/* Work Engine income wizard — body grows with content; no empty inner scrollbar on desktop */
 .nx-we-income-wizard-modal.nx-modal {
   width: min(920px, 94vw);
   max-width: 94vw;
   max-height: min(88vh, 900px);
+  height: auto;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
+.nx-we-income-wizard-modal .nx-modal-header {
+  flex-shrink: 0;
+}
+
+/* Override global .nx-modal-body { flex:1; min-height:0; overflow-y:auto } */
+.nx-we-income-wizard-modal.nx-accounting-editor-modal .nx-modal-body,
 .nx-we-income-wizard-modal .nx-modal-body {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  min-height: 0;
+  flex: 0 1 auto !important;
+  min-height: auto !important;
+  overflow-x: hidden;
+  overflow-y: visible;
   max-height: none;
-}
-
-@media (min-width: 768px) {
-  .nx-we-income-wizard-modal .nx-modal-body {
-    overflow-y: visible;
-  }
 }
 
 .nx-we-income-wizard-modal .nx-modal-footer {
   flex-shrink: 0;
+}
+
+/* Mobile / short viewport: same natural height; scroll only when content exceeds cap */
+@media (max-width: 767px), (max-height: 640px) {
+  .nx-we-income-wizard-modal.nx-accounting-editor-modal .nx-modal-body,
+  .nx-we-income-wizard-modal .nx-modal-body {
+    max-height: calc(min(88vh, 900px) - 11.5rem);
+    overflow-y: auto !important;
+  }
+}
+
+/* Desktop tall steps (document lines): scroll only when content exceeds viewport budget */
+@media (min-width: 768px) and (min-height: 641px) {
+  .nx-we-income-wizard-modal.nx-accounting-editor-modal .nx-modal-body,
+  .nx-we-income-wizard-modal .nx-modal-body {
+    max-height: calc(min(88vh, 900px) - 11.5rem);
+    overflow-y: auto;
+  }
 }
 
 .nx-we-wizard-issuer-btn:disabled {
