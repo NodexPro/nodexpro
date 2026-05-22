@@ -1,11 +1,14 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type {
   IncomeAvailableDocumentType,
   IncomeWorkspaceAggregate,
   IncomeWorkspaceContextAggregate,
   SelectIncomeIssuerContextCommandResponse,
 } from '../../api/income';
-import { WorkEngineRecipientSearchField } from './WorkEngineRecipientSearchField';
+import {
+  WorkEngineRecipientSearchField,
+  type WorkEngineRecipientSearchFieldHandle,
+} from './WorkEngineRecipientSearchField';
 import {
   executeIncomeCommand,
   pickDraftIdAfterSave,
@@ -113,6 +116,7 @@ export function WorkEngineIncomeDocumentWizardModal({
   const [workspaceAgg, setWorkspaceAgg] = useState<IncomeWorkspaceAggregate | null>(null);
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const recipientFieldRef = useRef<WorkEngineRecipientSearchFieldHandle>(null);
   const [form, setForm] = useState<FormState>(() => ({
     document_type: '',
     document_date: new Date().toISOString().slice(0, 10),
@@ -205,10 +209,24 @@ export function WorkEngineIncomeDocumentWizardModal({
       return;
     }
     if (activeStepKey === 'recipient') {
-      if (!workspaceAgg?.recipient_search?.selected) {
-        setError('בחר מקבל למסמך');
-        return;
+      onBusyChange(true);
+      try {
+        const refreshed = await recipientFieldRef.current?.commitPendingCreate();
+        const truth = refreshed ?? workspaceAgg;
+        if (refreshed) {
+          setWorkspaceAgg(refreshed);
+        }
+        if (!truth?.recipient_search?.selected) {
+          setError('בחר מקבל למסמך');
+          return;
+        }
+        setStepIndex((i) => i + 1);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'שגיאה');
+      } finally {
+        onBusyChange(false);
       }
+      return;
     }
     if (activeStepKey === 'preview_issue') return;
     setStepIndex((i) => i + 1);
@@ -343,6 +361,7 @@ export function WorkEngineIncomeDocumentWizardModal({
     if (activeStepKey === 'recipient') {
       return (
         <WorkEngineRecipientSearchField
+          ref={recipientFieldRef}
           wizard={wizard}
           workspaceAgg={workspaceAgg}
           busy={busy}
@@ -477,7 +496,7 @@ export function WorkEngineIncomeDocumentWizardModal({
 
   return (
     <div className="nx-modal-overlay" role="dialog" aria-modal="true">
-      <div className="nx-modal nx-accounting-editor-modal" dir="rtl">
+      <div className="nx-modal nx-accounting-editor-modal nx-we-income-wizard-modal" dir="rtl">
         <div className="nx-modal-header">
           <h2>{stepTitle}</h2>
           <button type="button" className="nx-modal-close" onClick={onClose} disabled={busy}>

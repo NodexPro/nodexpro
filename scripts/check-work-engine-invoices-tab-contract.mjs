@@ -105,6 +105,18 @@ if (!recipientField.includes('recipient_search')) {
 if (!recipientField.includes('search_recipients')) {
   errors.push('recipient field must call search_recipients command');
 }
+if (!recipientField.includes('commitPendingCreate')) {
+  errors.push('recipient field must expose commitPendingCreate for Next step');
+}
+if (!wizard.includes('recipientFieldRef')) {
+  errors.push('wizard must commit recipient via ref on Next (backend truth only)');
+}
+if (/אישור מקבל/.test(recipientField)) {
+  errors.push('recipient field must not use extra confirm button; Next commits via command');
+}
+if (!wizard.includes('nx-we-income-wizard-modal')) {
+  errors.push('wizard must use enlarged nx-we-income-wizard-modal');
+}
 if (!api.includes('recipient_search')) {
   errors.push('work-engine API types must include wizard.recipient_search');
 }
