@@ -54,17 +54,17 @@ function lineDraftFromRow(row: IncomeDocumentDetailsLineRow): LineDraft {
 function buildCommitPatch(draft: LineDraft): Record<string, unknown> {
   const unitRaw = draft.unit_price.trim();
   const unitNum = unitRaw === '' ? null : Number(unitRaw);
-  return {
+  const patch: Record<string, unknown> = {
     description: draft.description,
     quantity: draft.quantity.trim() || '1',
     unit_price_reference: unitNum != null && Number.isFinite(unitNum) ? unitNum : null,
     currency: draft.currency,
     price_includes_vat: draft.price_includes_vat,
-    exchange_rate_to_ils_override:
-      draft.currency !== 'ILS' && draft.exchange_rate_override.trim()
-        ? draft.exchange_rate_override.trim()
-        : null,
   };
+  if (draft.currency !== 'ILS' && draft.exchange_rate_override.trim()) {
+    patch.exchange_rate_to_ils_override = draft.exchange_rate_override.trim();
+  }
+  return patch;
 }
 
 function LineRowEditor({

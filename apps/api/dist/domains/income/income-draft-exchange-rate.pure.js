@@ -20,9 +20,55 @@ const IL_DRAFT_FX_FALLBACK_TO_ILS = {
     EUR: 4.0,
     GBP: 4.65,
 };
+const CURRENCY_ALIASES = {
+    '₪': 'ILS',
+    NIS: 'ILS',
+    'ש"ח': 'ILS',
+    'ש״ח': 'ILS',
+};
 export function isAllowedDraftLineCurrency(code) {
     return INCOME_DRAFT_ALLOWED_CURRENCIES.includes(code);
 }
+function resolveCurrencyCode(trimmed) {
+    const alias = CURRENCY_ALIASES[trimmed] ?? CURRENCY_ALIASES[trimmed.toUpperCase()];
+    if (alias)
+        return alias;
+    const code = trimmed.toUpperCase();
+    if (isAllowedDraftLineCurrency(code))
+        return code;
+    return null;
+}
+/** Normalize stored/UI currency (₪ → ILS); unknown values default to ILS. */
+export function parseDraftLineCurrency(raw) {
+    const trimmed = String(raw ?? 'ILS').trim();
+    return resolveCurrencyCode(trimmed) ?? 'ILS';
+}
+/** Strict currency from command patch — throws when not supported. */
+export function parseDraftLineCurrencyFromPatch(raw) {
+    const trimmed = String(raw ?? '').trim();
+    const resolved = resolveCurrencyCode(trimmed);
+    if (!resolved) {
+        throw new Error('DRAFT_LINE_CURRENCY_INVALID');
+    }
+    return resolved;
+}
+export const DRAFT_LINE_CURRENCY_INVALID_MESSAGE = 'מטבע לא נתמך';
+/**
+ * Parse optional user override. ILS always null (rate 1). Non-ILS: null = use backend default.
+ * Throws only when user supplied an explicit non-positive rate.
+ */
+export function parseDraftLineExchangeRateOverride(currency, raw) {
+    if (currency === 'ILS')
+        return null;
+    if (raw === undefined || raw === null || raw === '')
+        return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) {
+        throw new Error('DRAFT_LINE_EXCHANGE_RATE_INVALID');
+    }
+    return n;
+}
+export const DRAFT_LINE_EXCHANGE_RATE_INVALID_MESSAGE = 'שער חליפין חייב להיות מספר חיובי (למטבע זר בלבד)';
 export function draftCurrencyLabel(code) {
     return CURRENCY_LABELS[code] ?? code;
 }

@@ -35,9 +35,62 @@ export type DraftExchangeRateResolution = {
   as_of_date: string;
 };
 
+const CURRENCY_ALIASES: Record<string, IncomeDraftLineCurrency> = {
+  '₪': 'ILS',
+  NIS: 'ILS',
+  'ש"ח': 'ILS',
+  'ש״ח': 'ILS',
+};
+
 export function isAllowedDraftLineCurrency(code: string): code is IncomeDraftLineCurrency {
   return (INCOME_DRAFT_ALLOWED_CURRENCIES as readonly string[]).includes(code);
 }
+
+function resolveCurrencyCode(trimmed: string): IncomeDraftLineCurrency | null {
+  const alias = CURRENCY_ALIASES[trimmed] ?? CURRENCY_ALIASES[trimmed.toUpperCase()];
+  if (alias) return alias;
+  const code = trimmed.toUpperCase();
+  if (isAllowedDraftLineCurrency(code)) return code;
+  return null;
+}
+
+/** Normalize stored/UI currency (₪ → ILS); unknown values default to ILS. */
+export function parseDraftLineCurrency(raw: unknown): IncomeDraftLineCurrency {
+  const trimmed = String(raw ?? 'ILS').trim();
+  return resolveCurrencyCode(trimmed) ?? 'ILS';
+}
+
+/** Strict currency from command patch — throws when not supported. */
+export function parseDraftLineCurrencyFromPatch(raw: unknown): IncomeDraftLineCurrency {
+  const trimmed = String(raw ?? '').trim();
+  const resolved = resolveCurrencyCode(trimmed);
+  if (!resolved) {
+    throw new Error('DRAFT_LINE_CURRENCY_INVALID');
+  }
+  return resolved;
+}
+
+export const DRAFT_LINE_CURRENCY_INVALID_MESSAGE = 'מטבע לא נתמך';
+
+/**
+ * Parse optional user override. ILS always null (rate 1). Non-ILS: null = use backend default.
+ * Throws only when user supplied an explicit non-positive rate.
+ */
+export function parseDraftLineExchangeRateOverride(
+  currency: IncomeDraftLineCurrency,
+  raw: unknown,
+): number | null {
+  if (currency === 'ILS') return null;
+  if (raw === undefined || raw === null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error('DRAFT_LINE_EXCHANGE_RATE_INVALID');
+  }
+  return n;
+}
+
+export const DRAFT_LINE_EXCHANGE_RATE_INVALID_MESSAGE =
+  'שער חליפין חייב להיות מספר חיובי (למטבע זר בלבד)';
 
 export function draftCurrencyLabel(code: IncomeDraftLineCurrency): string {
   return CURRENCY_LABELS[code] ?? code;
