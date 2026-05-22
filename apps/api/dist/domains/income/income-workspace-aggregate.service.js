@@ -273,7 +273,7 @@ function draftsTableModel(rows) {
         },
     };
 }
-export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride, recipientOverlay = {}) {
+export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride, recipientOverlay = {}, wizardDraftOverlay = {}) {
     const scope = scopeOverride ?? (await loadActiveIncomeIssuerScope(ctx));
     if (!scope.permissions.view)
         throw forbidden('income.view required');
@@ -320,6 +320,8 @@ export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride, recipien
         issued_documents_table_model: issuedDocumentsTableModel(issuedDocuments),
         issued_documents_count: issuedCount,
         recipient_search,
+        document_details_step: wizardDraftOverlay.document_details_step ?? null,
+        active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
         allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
         warnings: docTypesResult.warnings,
     };

@@ -28,6 +28,9 @@ const wizard = read(
 const recipientField = read(
   path.join(repoRoot, 'apps/web/src/components/work-engine/WorkEngineRecipientSearchField.tsx'),
 );
+const docDetailsStep = read(
+  path.join(repoRoot, 'apps/web/src/components/work-engine/WorkEngineDocumentDetailsStep.tsx'),
+);
 
 const errors = [];
 
@@ -119,6 +122,21 @@ if (!wizard.includes('nx-we-income-wizard-modal')) {
 }
 if (!api.includes('recipient_search')) {
   errors.push('work-engine API types must include wizard.recipient_search');
+}
+if (!wizard.includes('WorkEngineDocumentDetailsStep')) {
+  errors.push('wizard must use WorkEngineDocumentDetailsStep for document_details');
+}
+if (!wizard.includes('begin_wizard_draft')) {
+  errors.push('wizard must begin draft via begin_wizard_draft command on recipient Next');
+}
+if (!wizard.includes('document_details_step')) {
+  errors.push('wizard must pass document_details_step from income_workspace_aggregate');
+}
+if (/subtotal_reference|vat_reference|grand_total_reference|amount_reference\s*\*|\.reduce\(/.test(docDetailsStep)) {
+  errors.push('document details UI must not calculate financial totals');
+}
+if (!docDetailsStep.includes('reorder_lines')) {
+  errors.push('document details must reorder lines via backend command');
 }
 
 const invoicesPanelSource = read(tabHost);

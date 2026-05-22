@@ -14,6 +14,14 @@ export const INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT = 'set_income_recipient_snaps
 export const INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE = 'save_income_recipient_for_future';
 export const INCOME_COMMAND_RETRY_ACCOUNTING_POSTING = 'retry_income_document_accounting_posting';
 export const INCOME_COMMAND_RETRY_PDF_RENDER = 'retry_income_document_pdf_render';
+export const INCOME_COMMAND_BEGIN_WIZARD_DRAFT = 'begin_income_wizard_document_draft';
+export const INCOME_COMMAND_ADD_LINE = 'add_income_document_line';
+export const INCOME_COMMAND_UPDATE_LINE = 'update_income_document_line';
+export const INCOME_COMMAND_DELETE_LINE = 'delete_income_document_line';
+export const INCOME_COMMAND_REORDER_LINES = 'reorder_income_document_lines';
+export const INCOME_COMMAND_UPDATE_DRAFT_SETTINGS = 'update_income_document_draft_settings';
+export const INCOME_COMMAND_UPDATE_NOTES = 'update_income_document_notes';
+export const INCOME_COMMAND_UPDATE_DELIVERY_CONTACT = 'update_income_document_delivery_contact';
 export const INCOME_MODULE_CODE = 'income';
 export const INCOME_PERMISSIONS = {
     view: 'income.view',

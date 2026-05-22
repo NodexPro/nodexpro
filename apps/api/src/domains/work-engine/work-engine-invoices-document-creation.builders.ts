@@ -77,8 +77,14 @@ export type WorkEngineInvoicesDocumentCreationEntrypoint = {
       select_recipient: string;
       set_recipient_snapshot: string;
       save_recipient_for_future: string;
-      create_draft: string;
-      update_draft: string;
+      begin_wizard_draft: string;
+      add_line: string;
+      update_line: string;
+      delete_line: string;
+      reorder_lines: string;
+      update_draft_settings: string;
+      update_notes: string;
+      update_delivery_contact: string;
       issue_document: string;
     };
   };
@@ -197,8 +203,14 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(
         select_recipient: 'select_income_recipient',
         set_recipient_snapshot: 'set_income_recipient_snapshot',
         save_recipient_for_future: 'save_income_recipient_for_future',
-        create_draft: 'create_income_document_draft',
-        update_draft: 'update_income_document_draft',
+        begin_wizard_draft: 'begin_income_wizard_document_draft',
+        add_line: 'add_income_document_line',
+        update_line: 'update_income_document_line',
+        delete_line: 'delete_income_document_line',
+        reorder_lines: 'reorder_income_document_lines',
+        update_draft_settings: 'update_income_document_draft_settings',
+        update_notes: 'update_income_document_notes',
+        update_delivery_contact: 'update_income_document_delivery_contact',
         issue_document: 'issue_income_document',
       },
     },

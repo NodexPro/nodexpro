@@ -57,8 +57,23 @@ import {
   validateRecipientInputFields,
 } from './income-recipient.validation.js';
 import {
+  beginIncomeWizardDocumentDraft,
+  addIncomeDocumentLine,
+  updateIncomeDocumentLine,
+  deleteIncomeDocumentLine,
+  reorderIncomeDocumentLines,
+  updateIncomeDocumentDraftSettings,
+  updateIncomeDocumentNotes,
+  updateIncomeDocumentDeliveryContact,
+  type WizardDraftOverlay,
+} from './income-document-draft-editor.service.js';
+import {
+  INCOME_COMMAND_ADD_LINE,
+  INCOME_COMMAND_BEGIN_WIZARD_DRAFT,
   INCOME_COMMAND_CANCEL_DRAFT,
+  INCOME_COMMAND_DELETE_LINE,
   INCOME_COMMAND_ISSUE_DOCUMENT,
+  INCOME_COMMAND_REORDER_LINES,
   INCOME_COMMAND_SEARCH_RECIPIENTS,
   INCOME_COMMAND_SELECT_RECIPIENT,
   INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT,
@@ -71,6 +86,10 @@ import {
   INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER,
   INCOME_COMMAND_SELECT_ISSUER,
   INCOME_COMMAND_UPDATE_DRAFT,
+  INCOME_COMMAND_UPDATE_DRAFT_SETTINGS,
+  INCOME_COMMAND_UPDATE_DELIVERY_CONTACT,
+  INCOME_COMMAND_UPDATE_LINE,
+  INCOME_COMMAND_UPDATE_NOTES,
   type IncomeCommandResponse,
   type IncomeCommandType,
   type SelectIncomeIssuerContextCommandResponse,
@@ -91,17 +110,50 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE,
   INCOME_COMMAND_RETRY_ACCOUNTING_POSTING,
   INCOME_COMMAND_RETRY_PDF_RENDER,
+  INCOME_COMMAND_BEGIN_WIZARD_DRAFT,
+  INCOME_COMMAND_ADD_LINE,
+  INCOME_COMMAND_UPDATE_LINE,
+  INCOME_COMMAND_DELETE_LINE,
+  INCOME_COMMAND_REORDER_LINES,
+  INCOME_COMMAND_UPDATE_DRAFT_SETTINGS,
+  INCOME_COMMAND_UPDATE_NOTES,
+  INCOME_COMMAND_UPDATE_DELIVERY_CONTACT,
 ]);
 
 async function commandResponse(
   ctx: RequestContext,
   command: IncomeCommandType,
   recipientOverlay: RecipientSearchOverlay = {},
+  wizardDraftOverlay: WizardDraftOverlay = {},
 ): Promise<IncomeCommandResponse> {
   return {
     ok: true,
     command,
-    income_workspace_aggregate: await buildIncomeWorkspaceAggregate(ctx, undefined, recipientOverlay),
+    income_workspace_aggregate: await buildIncomeWorkspaceAggregate(
+      ctx,
+      undefined,
+      recipientOverlay,
+      wizardDraftOverlay,
+    ),
+  };
+}
+
+async function wizardDraftCommandResponse(
+  ctx: RequestContext,
+  command: IncomeCommandType,
+  scope: ActiveIncomeIssuerScope,
+  recipientOverlay: RecipientSearchOverlay,
+  wizardDraftOverlay: WizardDraftOverlay,
+): Promise<IncomeCommandResponse> {
+  return {
+    ok: true,
+    command,
+    income_workspace_aggregate: await buildIncomeWorkspaceAggregate(
+      ctx,
+      scope,
+      recipientOverlay,
+      wizardDraftOverlay,
+    ),
   };
 }
 
@@ -548,6 +600,44 @@ export async function executeIncomeCommand(
     const income_document_id = reqUuid(body.income_document_id, 'income_document_id');
     await renderIncomeDocumentPdf(ctx, scope.org_id, income_document_id);
     return commandResponse(ctx, command);
+  }
+
+  if (command === INCOME_COMMAND_BEGIN_WIZARD_DRAFT) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const overlay = await beginIncomeWizardDocumentDraft(scope, body, {});
+    return wizardDraftCommandResponse(ctx, command, scope, {}, overlay);
+  }
+
+  const wizardDraftCmd = async (
+    runner: (scope: ActiveIncomeIssuerScope, body: Record<string, unknown>) => Promise<WizardDraftOverlay>,
+  ): Promise<IncomeCommandResponse> => {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const overlay = await runner(scope, body);
+    return wizardDraftCommandResponse(ctx, command, scope, {}, overlay);
+  };
+
+  if (command === INCOME_COMMAND_ADD_LINE) {
+    return wizardDraftCmd(addIncomeDocumentLine);
+  }
+  if (command === INCOME_COMMAND_UPDATE_LINE) {
+    return wizardDraftCmd(updateIncomeDocumentLine);
+  }
+  if (command === INCOME_COMMAND_DELETE_LINE) {
+    return wizardDraftCmd(deleteIncomeDocumentLine);
+  }
+  if (command === INCOME_COMMAND_REORDER_LINES) {
+    return wizardDraftCmd(reorderIncomeDocumentLines);
+  }
+  if (command === INCOME_COMMAND_UPDATE_DRAFT_SETTINGS) {
+    return wizardDraftCmd(updateIncomeDocumentDraftSettings);
+  }
+  if (command === INCOME_COMMAND_UPDATE_NOTES) {
+    return wizardDraftCmd(updateIncomeDocumentNotes);
+  }
+  if (command === INCOME_COMMAND_UPDATE_DELIVERY_CONTACT) {
+    return wizardDraftCmd(updateIncomeDocumentDeliveryContact);
   }
 
   throw badRequest(`Unhandled income command: ${command}`);

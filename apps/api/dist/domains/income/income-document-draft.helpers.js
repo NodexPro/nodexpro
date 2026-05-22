@@ -1,5 +1,7 @@
 import { badRequest } from '../../shared/errors.js';
 import { optionalJsonObject, optionalString } from './income.guards.js';
+import { normalizeDraftLines } from './income-document-draft-lines.pure.js';
+import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
 function parseOptionalDate(value, field) {
     if (value === null || value === undefined || value === '')
         return null;
@@ -55,22 +57,11 @@ export function validateDraftAgainstDocumentTypeRules(payload, docType) {
             message: 'Select an income customer or provide a one-time customer snapshot.',
         });
     }
-    let subtotalReference = 0;
-    for (const line of payload.draft_lines_json) {
-        if (line && typeof line === 'object' && !Array.isArray(line)) {
-            const amount = Number(line.amount_reference);
-            if (Number.isFinite(amount))
-                subtotalReference += amount;
-        }
-    }
+    const lines = normalizeDraftLines(payload.draft_lines_json);
+    const settings = parseDocumentSettingsJson(payload.document_settings_json ?? null);
+    const totals = computeDraftTotalsPreview(lines, payload.currency, settings);
     return {
         validation_warnings_json: warnings,
-        draft_totals_preview_json: {
-            preview: true,
-            not_financial_truth: true,
-            currency: payload.currency,
-            line_count: payload.draft_lines_json.length,
-            subtotal_reference: subtotalReference > 0 ? subtotalReference : null,
-        },
+        draft_totals_preview_json: totals,
     };
 }

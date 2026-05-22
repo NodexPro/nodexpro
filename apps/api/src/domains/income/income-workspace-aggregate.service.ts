@@ -19,6 +19,7 @@ import {
   buildIncomeRecipientSearchModel,
   type RecipientSearchOverlay,
 } from './income-recipient.service.js';
+import type { WizardDraftOverlay } from './income-document-draft-editor.service.js';
 import {
   INCOME_WORKSPACE_AGGREGATE_KEY,
   type IncomeCustomersTableRow,
@@ -363,6 +364,7 @@ export async function buildIncomeWorkspaceAggregate(
   ctx: RequestContext,
   scopeOverride?: ActiveIncomeIssuerScope,
   recipientOverlay: RecipientSearchOverlay = {},
+  wizardDraftOverlay: WizardDraftOverlay = {},
 ): Promise<IncomeWorkspaceAggregate> {
   const scope = scopeOverride ?? (await loadActiveIncomeIssuerScope(ctx));
   if (!scope.permissions.view) throw forbidden('income.view required');
@@ -423,6 +425,8 @@ export async function buildIncomeWorkspaceAggregate(
     issued_documents_table_model: issuedDocumentsTableModel(issuedDocuments),
     issued_documents_count: issuedCount,
     recipient_search,
+    document_details_step: wizardDraftOverlay.document_details_step ?? null,
+    active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
     allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
     warnings: docTypesResult.warnings,
   };

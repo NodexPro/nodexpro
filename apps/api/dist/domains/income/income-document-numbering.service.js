@@ -78,3 +78,27 @@ export async function allocateIncomeDocumentNumber(scope, documentType, _issueDa
     }
     throw badRequest('Failed to allocate document number after retries');
 }
+/** Read-only preview of the next document number (does not allocate). */
+export async function previewNextIncomeDocumentNumber(scope, documentType) {
+    const policy = resolveIlSeriesPolicy(documentType);
+    const year = IL_NUMBERING_SERIES_YEAR;
+    let q = supabaseAdmin
+        .from('income_document_numbering_sequences')
+        .select('current_number')
+        .eq('organization_id', scope.org_id)
+        .eq('issuer_business_id', scope.issuer_business_id)
+        .eq('document_type', documentType)
+        .eq('year', year);
+    if (scope.represented_client_id) {
+        q = q.eq('represented_client_id', scope.represented_client_id);
+    }
+    else {
+        q = q.is('represented_client_id', null);
+    }
+    const { data, error } = await q.maybeSingle();
+    if (error)
+        throw error;
+    const current = data ? Number(data.current_number) : 0;
+    const { next_number } = computeNextIlSeriesNumber(current, policy);
+    return formatIlSeriesDocumentNumber(next_number);
+}

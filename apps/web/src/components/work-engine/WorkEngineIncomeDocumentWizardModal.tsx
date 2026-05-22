@@ -9,86 +9,29 @@ import {
   WorkEngineRecipientSearchField,
   type WorkEngineRecipientSearchFieldHandle,
 } from './WorkEngineRecipientSearchField';
-import {
-  executeIncomeCommand,
-  pickDraftIdAfterSave,
-} from '../../api/income';
+import { WorkEngineDocumentDetailsStep } from './WorkEngineDocumentDetailsStep';
+import { executeIncomeCommand } from '../../api/income';
 import type { WorkEngineInvoicesDocumentCreationEntrypoint } from '../../api/work-engine';
 import '../../styles/nx-modal.css';
 
-type DraftLine = {
-  description: string;
-  quantity: string;
-  unit_price_reference: string;
-  amount_reference: string;
-};
-
 type FormState = {
   document_type: string;
-  document_date: string;
-  lines: DraftLine[];
-  due_date: string;
-  payment_received_note: string;
-  notes: string;
-  currency: string;
-  language: string;
 };
 
-const EMPTY_LINE: DraftLine = {
-  description: '',
-  quantity: '1',
-  unit_price_reference: '',
-  amount_reference: '',
-};
-
-function recipientDraftFields(
-  workspaceAgg: IncomeWorkspaceAggregate | null,
-): { income_customer_id: string | null; one_time_customer_snapshot_json: Record<string, unknown> | null } {
-  const selected = workspaceAgg?.recipient_search?.selected ?? null;
-  if (!selected) {
-    return { income_customer_id: null, one_time_customer_snapshot_json: null };
-  }
-  if (selected.kind === 'saved') {
-    return { income_customer_id: selected.income_customer_id, one_time_customer_snapshot_json: null };
-  }
-  return { income_customer_id: null, one_time_customer_snapshot_json: selected.snapshot };
-}
-
-function buildDraftPayload(
-  form: FormState,
+function recipientFieldsForBegin(
   workspaceAgg: IncomeWorkspaceAggregate | null,
 ): Record<string, unknown> {
-  const lines = form.lines
-    .map((l) => {
-      const amount = Number(l.amount_reference);
-      const qty = Number(l.quantity);
-      const unit = Number(l.unit_price_reference);
-      const line: Record<string, unknown> = {};
-      if (l.description.trim()) line.description = l.description.trim();
-      if (Number.isFinite(qty)) line.quantity = qty;
-      if (Number.isFinite(unit)) line.unit_price_reference = unit;
-      if (Number.isFinite(amount)) line.amount_reference = amount;
-      return line;
-    })
-    .filter((l) => Object.keys(l).length > 0);
+  const selected = workspaceAgg?.recipient_search?.selected ?? null;
+  if (!selected) return {};
+  if (selected.kind === 'saved') {
+    return { income_customer_id: selected.income_customer_id };
+  }
+  return { one_time_customer_snapshot_json: selected.snapshot };
+}
 
-  const payload: Record<string, unknown> = {
-    document_type: form.document_type || null,
-    document_date: form.document_date.trim() || null,
-    draft_lines_json: lines,
-    currency: form.currency.trim() || 'ILS',
-    language: form.language.trim() || 'he',
-    notes: form.notes.trim() || null,
-    due_date: form.due_date.trim() || null,
-    payment_terms_json: null,
-    payment_received_json: form.payment_received_note.trim()
-      ? { note: form.payment_received_note.trim() }
-      : null,
-  };
-
-  Object.assign(payload, recipientDraftFields(workspaceAgg));
-
-  return payload;
+function settingValue(step: IncomeWorkspaceAggregate['document_details_step'], key: string): string | null {
+  const field = step?.settings_schema.find((f) => f.key === key);
+  return field?.value ?? null;
 }
 
 type Props = {
@@ -114,18 +57,10 @@ export function WorkEngineIncomeDocumentWizardModal({
   const [officeClientId, setOfficeClientId] = useState('');
   const [, setContextAgg] = useState<IncomeWorkspaceContextAggregate | null>(null);
   const [workspaceAgg, setWorkspaceAgg] = useState<IncomeWorkspaceAggregate | null>(null);
-  const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const recipientFieldRef = useRef<WorkEngineRecipientSearchFieldHandle>(null);
   const [form, setForm] = useState<FormState>(() => ({
     document_type: '',
-    document_date: new Date().toISOString().slice(0, 10),
-    lines: [{ ...EMPTY_LINE }],
-    due_date: '',
-    payment_received_note: '',
-    notes: '',
-    currency: 'ILS',
-    language: 'he',
   }));
 
   const documentTypes: IncomeAvailableDocumentType[] =
@@ -145,6 +80,9 @@ export function WorkEngineIncomeDocumentWizardModal({
   const selectedOfficeClient =
     wizard.office_client_issuer_options.find((o) => o.represented_client_id === officeClientId) ??
     null;
+
+  const documentDetailsStep = workspaceAgg?.document_details_step ?? null;
+  const activeDraftId = workspaceAgg?.active_wizard_draft_id ?? null;
 
   const runSelectIssuer = useCallback(async () => {
     const cmds = wizard.income_commands;
@@ -169,6 +107,20 @@ export function WorkEngineIncomeDocumentWizardModal({
     setContextAgg(res.income_workspace_context_aggregate);
     setWorkspaceAgg(res.income_workspace_aggregate);
   }, [issuerChoice, selectedOfficeClient, wizard]);
+
+  const beginWizardDraft = useCallback(
+    async (ws: IncomeWorkspaceAggregate) => {
+      const cmds = wizard.income_commands;
+      const res = await executeIncomeCommand(cmds.begin_wizard_draft, {
+        document_type: form.document_type,
+        ...recipientFieldsForBegin(ws),
+      });
+      if ('income_workspace_aggregate' in res) {
+        setWorkspaceAgg(res.income_workspace_aggregate);
+      }
+    },
+    [form.document_type, wizard.income_commands],
+  );
 
   const handleNext = async () => {
     setError(null);
@@ -208,6 +160,14 @@ export function WorkEngineIncomeDocumentWizardModal({
       }
       return;
     }
+    if (activeStepKey === 'document_type') {
+      if (!form.document_type) {
+        setError('בחר סוג מסמך');
+        return;
+      }
+      setStepIndex((i) => i + 1);
+      return;
+    }
     if (activeStepKey === 'recipient') {
       onBusyChange(true);
       try {
@@ -220,6 +180,11 @@ export function WorkEngineIncomeDocumentWizardModal({
           setError('בחר מקבל למסמך');
           return;
         }
+        if (!form.document_type) {
+          setError('בחר סוג מסמך');
+          return;
+        }
+        await beginWizardDraft(truth);
         setStepIndex((i) => i + 1);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'שגיאה');
@@ -239,30 +204,12 @@ export function WorkEngineIncomeDocumentWizardModal({
     onBusyChange(true);
     try {
       const cmds = wizard.income_commands;
-      let ws = workspaceAgg;
-      if (!ws?.recipient_search?.selected) {
-        throw new Error('מקבל המסמך לא נבחר');
-      }
-
-      const payload = buildDraftPayload(form, ws);
-      const previousIds = new Set(ws?.drafts_table_model.rows.map((r) => r.draft_id) ?? []);
-      let draftId = savedDraftId;
-      if (draftId) {
-        await executeIncomeCommand(cmds.update_draft, { draft_id: draftId, ...payload });
-      } else {
-        const res = await executeIncomeCommand(cmds.create_draft, payload);
-        const agg = 'income_workspace_aggregate' in res ? res.income_workspace_aggregate : ws;
-        if (agg) {
-          ws = agg;
-          setWorkspaceAgg(agg);
-          draftId = pickDraftIdAfterSave(agg, previousIds);
-          if (draftId) setSavedDraftId(draftId);
-        }
-      }
-      if (!draftId) throw new Error('טיוטה לא נשמרה');
+      const draftId = activeDraftId;
+      if (!draftId) throw new Error('טיוטה לא נמצאה');
+      const document_date = settingValue(documentDetailsStep, 'document_date');
       await executeIncomeCommand(cmds.issue_document, {
         draft_id: draftId,
-        document_date: form.document_date.trim() || null,
+        document_date: document_date?.trim() || null,
       });
       onCompleted();
       onClose();
@@ -371,119 +318,47 @@ export function WorkEngineIncomeDocumentWizardModal({
       );
     }
     if (activeStepKey === 'document_details') {
-      const details = wizard.document_details_step;
+      if (!documentDetailsStep) {
+        return <p className="nx-we-doc-details__empty">טוען פרטי מסמך…</p>;
+      }
       return (
-        <>
-          <div className="nx-income-field">
-            <label>{details.document_date_label}</label>
-            <input
-              type="date"
-              value={form.document_date}
-              required={details.document_date_required}
-              disabled={busy}
-              onChange={(e) => setForm((f) => ({ ...f, document_date: e.target.value }))}
-            />
-          </div>
-          {form.lines.map((line, idx) => (
-            <div key={idx} className="nx-income-line-row">
-              <div className="nx-income-field">
-                <label>תיאור</label>
-                <input
-                  value={line.description}
-                  disabled={busy}
-                  onChange={(e) =>
-                    setForm((f) => {
-                      const lines = [...f.lines];
-                      lines[idx] = { ...lines[idx], description: e.target.value };
-                      return { ...f, lines };
-                    })
-                  }
-                />
-              </div>
-              <div className="nx-income-field">
-                <label>כמות</label>
-                <input
-                  value={line.quantity}
-                  disabled={busy}
-                  onChange={(e) =>
-                    setForm((f) => {
-                      const lines = [...f.lines];
-                      lines[idx] = { ...lines[idx], quantity: e.target.value };
-                      return { ...f, lines };
-                    })
-                  }
-                />
-              </div>
-              <div className="nx-income-field">
-                <label>סכום</label>
-                <input
-                  value={line.amount_reference}
-                  disabled={busy}
-                  onChange={(e) =>
-                    setForm((f) => {
-                      const lines = [...f.lines];
-                      lines[idx] = { ...lines[idx], amount_reference: e.target.value };
-                      return { ...f, lines };
-                    })
-                  }
-                />
-              </div>
-            </div>
-          ))}
-          <button
-            type="button"
-            className="nx-btn nx-btn-taxes-compact"
-            disabled={busy}
-            onClick={() => setForm((f) => ({ ...f, lines: [...f.lines, { ...EMPTY_LINE }] }))}
-          >
-            + שורה
-          </button>
-          {selectedDocType?.requires_due_date ? (
-            <div className="nx-income-field">
-              <label>תאריך לתשלום</label>
-              <input
-                type="date"
-                value={form.due_date}
-                disabled={busy}
-                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
-              />
-            </div>
-          ) : null}
-          {selectedDocType?.requires_payment_received ? (
-            <div className="nx-income-field">
-              <label>פרטי תשלום</label>
-              <input
-                value={form.payment_received_note}
-                disabled={busy}
-                onChange={(e) => setForm((f) => ({ ...f, payment_received_note: e.target.value }))}
-              />
-            </div>
-          ) : null}
-          <div className="nx-income-field">
-            <label>{details.notes_label}</label>
-            <textarea
-              value={form.notes}
-              disabled={busy}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-            />
-          </div>
-        </>
+        <WorkEngineDocumentDetailsStep
+          step={documentDetailsStep}
+          commands={wizard.income_commands}
+          busy={busy}
+          onBusyChange={onBusyChange}
+          onWorkspaceAgg={setWorkspaceAgg}
+          onError={setError}
+        />
       );
     }
     if (activeStepKey === 'preview_issue') {
+      const header = documentDetailsStep?.header;
       return (
-        <div style={{ fontSize: 14 }} dir="rtl">
+        <div className="nx-we-doc-details__preview" dir="rtl">
+          {header ? <h3 className="nx-we-doc-details__title">{header.title}</h3> : null}
           <p>
             <strong>סוג:</strong> {selectedDocType?.label ?? form.document_type}
           </p>
           <p>
-            <strong>תאריך:</strong> {form.document_date}
+            <strong>תאריך:</strong> {settingValue(documentDetailsStep, 'document_date') ?? '—'}
           </p>
           <p>
             <strong>מקבל:</strong> {workspaceAgg?.recipient_search?.selected?.display_line ?? '—'}
           </p>
-          <p style={{ color: '#6b7280', fontSize: 12 }}>
-            מספר מסמך ואימות תאריך ייקבעו בהפקה בשרת בלבד.
+          {documentDetailsStep?.line_items.totals ? (
+            <p>
+              <strong>{documentDetailsStep.line_items.totals.grand_total.label}:</strong>{' '}
+              {documentDetailsStep.line_items.totals.grand_total.display}
+            </p>
+          ) : null}
+          {header?.document_number_preview ? (
+            <p>
+              <strong>מספר צפוי:</strong> {header.document_number_preview}
+            </p>
+          ) : null}
+          <p className="nx-we-doc-details__hint">
+            מספר מסמך סופי ואימות ייקבעו בהפקה בשרת בלבד.
           </p>
         </div>
       );
@@ -511,14 +386,19 @@ export function WorkEngineIncomeDocumentWizardModal({
             </button>
           ) : null}
           {!isLastStep ? (
-            <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" disabled={busy} onClick={() => void handleNext()}>
+            <button
+              type="button"
+              className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+              disabled={busy}
+              onClick={() => void handleNext()}
+            >
               הבא
             </button>
           ) : (
             <button
               type="button"
               className="nx-btn nx-btn-primary nx-btn-taxes-compact"
-              disabled={busy || !form.document_type}
+              disabled={busy || !form.document_type || !activeDraftId}
               onClick={() => void handleSaveAndIssue()}
             >
               הפק מסמך

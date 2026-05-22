@@ -1,3 +1,4 @@
+import type { IncomeDocumentDetailsStep } from './income-document-details-step.builders.js';
 import type { IncomeRecipientSearchModel } from './income-recipient.service.js';
 
 export const INCOME_CONTEXT_AGGREGATE_KEY = 'income_workspace_context_aggregate' as const;
@@ -17,6 +18,16 @@ export const INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT = 'set_income_recipient_snaps
 export const INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE = 'save_income_recipient_for_future' as const;
 export const INCOME_COMMAND_RETRY_ACCOUNTING_POSTING = 'retry_income_document_accounting_posting' as const;
 export const INCOME_COMMAND_RETRY_PDF_RENDER = 'retry_income_document_pdf_render' as const;
+export const INCOME_COMMAND_BEGIN_WIZARD_DRAFT = 'begin_income_wizard_document_draft' as const;
+export const INCOME_COMMAND_ADD_LINE = 'add_income_document_line' as const;
+export const INCOME_COMMAND_UPDATE_LINE = 'update_income_document_line' as const;
+export const INCOME_COMMAND_DELETE_LINE = 'delete_income_document_line' as const;
+export const INCOME_COMMAND_REORDER_LINES = 'reorder_income_document_lines' as const;
+export const INCOME_COMMAND_UPDATE_DRAFT_SETTINGS = 'update_income_document_draft_settings' as const;
+export const INCOME_COMMAND_UPDATE_NOTES = 'update_income_document_notes' as const;
+export const INCOME_COMMAND_UPDATE_DELIVERY_CONTACT = 'update_income_document_delivery_contact' as const;
+
+export type { IncomeDocumentDetailsStep } from './income-document-details-step.builders.js';
 
 export const INCOME_MODULE_CODE = 'income' as const;
 
@@ -212,6 +223,9 @@ export interface IncomeWorkspaceAggregate {
   issued_documents_table_model: IncomeTableModel<IncomeIssuedDocumentsTableRow>;
   issued_documents_count: number;
   recipient_search: IncomeRecipientSearchModel;
+  /** Present while Work Engine income wizard has an active draft on document_details step. */
+  document_details_step: IncomeDocumentDetailsStep | null;
+  active_wizard_draft_id: string | null;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
 }
@@ -230,7 +244,15 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT
   | typeof INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE
   | typeof INCOME_COMMAND_RETRY_ACCOUNTING_POSTING
-  | typeof INCOME_COMMAND_RETRY_PDF_RENDER;
+  | typeof INCOME_COMMAND_RETRY_PDF_RENDER
+  | typeof INCOME_COMMAND_BEGIN_WIZARD_DRAFT
+  | typeof INCOME_COMMAND_ADD_LINE
+  | typeof INCOME_COMMAND_UPDATE_LINE
+  | typeof INCOME_COMMAND_DELETE_LINE
+  | typeof INCOME_COMMAND_REORDER_LINES
+  | typeof INCOME_COMMAND_UPDATE_DRAFT_SETTINGS
+  | typeof INCOME_COMMAND_UPDATE_NOTES
+  | typeof INCOME_COMMAND_UPDATE_DELIVERY_CONTACT;
 
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;

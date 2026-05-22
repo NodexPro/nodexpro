@@ -220,6 +220,10 @@ export interface IncomeRecipientSearchModel {
   allowed_actions: string[];
 }
 
+import type { IncomeDocumentDetailsStep } from './income-document-details-types.js';
+
+export type { IncomeDocumentDetailsStep } from './income-document-details-types.js';
+
 export interface IncomeWorkspaceAggregate {
   aggregate_key: 'income_workspace_aggregate';
   org_id: string;
@@ -234,6 +238,8 @@ export interface IncomeWorkspaceAggregate {
   issued_documents_table_model: IncomeTableModel<IncomeIssuedDocumentsTableRow>;
   issued_documents_count: number;
   recipient_search: IncomeRecipientSearchModel;
+  document_details_step: IncomeDocumentDetailsStep | null;
+  active_wizard_draft_id: string | null;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
 }
@@ -252,7 +258,15 @@ export type IncomeCommandType =
   | 'set_income_recipient_snapshot'
   | 'save_income_recipient_for_future'
   | 'retry_income_document_accounting_posting'
-  | 'retry_income_document_pdf_render';
+  | 'retry_income_document_pdf_render'
+  | 'begin_income_wizard_document_draft'
+  | 'add_income_document_line'
+  | 'update_income_document_line'
+  | 'delete_income_document_line'
+  | 'reorder_income_document_lines'
+  | 'update_income_document_draft_settings'
+  | 'update_income_document_notes'
+  | 'update_income_document_delivery_contact';
 
 export interface IncomeCommandResponse {
   ok: true;

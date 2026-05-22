@@ -4,7 +4,6 @@
 import { AppError } from '../../shared/errors.js';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^[\d+\-\s()]{7,20}$/;
-const TAX_ID_RE = /^[\d]{5,12}$/;
 export function parseRecipientInputBody(body) {
     const display_name = String(body.display_name ?? '').trim();
     const tax_id = String(body.tax_id ?? '').trim() || null;
