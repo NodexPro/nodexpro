@@ -46,8 +46,8 @@ test('document details header title includes office client, type, number preview
 
 test('line table column schema matches document details spec', () => {
   const expectedKeys = [
-    'row_number',
     'drag',
+    'row_number',
     'description',
     'quantity',
     'unit_price',

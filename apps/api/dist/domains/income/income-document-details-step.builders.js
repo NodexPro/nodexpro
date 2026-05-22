@@ -1,6 +1,6 @@
 import { formatMoneyReference, normalizeDraftLines, } from './income-document-draft-lines.pure.js';
 import { allowedCurrencyOptions, resolveDraftExchangeRateToIls, } from './income-draft-exchange-rate.pure.js';
-import { computeDraftLineAmounts } from './income-draft-line-compute.pure.js';
+import { computeDraftLineAmounts, recomputeDraftLineAmounts } from './income-draft-line-compute.pure.js';
 import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
 import { buildDocumentDetailsHeaderTitle } from './income-document-details-header.pure.js';
 import { compactVatSelectLabel, readVatResolutionFromDraftPreview, } from './income-draft-vat-fallback.pure.js';
@@ -250,14 +250,14 @@ function buildLineRows(lines, settings, vatResolution, documentDate, canEdit) {
     });
 }
 export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdit, options = {}) {
-    const lines = normalizeDraftLines(row.draft_lines_json);
     const settings = parseDocumentSettingsJson(row.document_settings_json);
     const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
     const vatResolution = options.vatResolution ??
         readVatResolutionFromDraftPreview(row.draft_totals_preview_json, documentDate) ??
         (await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate));
+    const lines = recomputeDraftLineAmounts(normalizeDraftLines(row.draft_lines_json), settings, vatResolution, documentDate);
     const totals = options.totalsPreview ??
-        computeDraftTotalsPreview(lines, row.currency, settings, vatResolution);
+        computeDraftTotalsPreview(lines, 'ILS', settings, vatResolution, documentDate);
     const uiCache = readWizardUiCacheFromDraftPreview(row.draft_totals_preview_json);
     const docTypeLabel = row.document_type && DOCUMENT_TYPE_LABELS[row.document_type]
         ? DOCUMENT_TYPE_LABELS[row.document_type]
@@ -301,8 +301,8 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
         settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution),
         line_items: {
             columns: [
-                { key: 'row_number', label: '#' },
                 { key: 'drag', label: '' },
+                { key: 'row_number', label: '#' },
                 { key: 'description', label: 'פירוט *' },
                 { key: 'quantity', label: 'כמות *' },
                 { key: 'unit_price', label: "מחיר ליח'" },

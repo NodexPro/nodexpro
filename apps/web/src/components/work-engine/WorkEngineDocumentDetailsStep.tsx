@@ -22,7 +22,6 @@ type LineDraft = {
   quantity: string;
   unit_price: string;
   currency: string;
-  vat_rate_code: string;
   price_includes_vat: boolean;
   exchange_rate_override: string;
 };
@@ -47,31 +46,19 @@ function lineDraftFromRow(row: IncomeDocumentDetailsLineRow): LineDraft {
     quantity: row.quantity.value,
     unit_price: row.unit_price.value,
     currency: row.currency.value,
-    vat_rate_code: row.vat_rate_code,
     price_includes_vat: row.price_includes_vat,
     exchange_rate_override: row.exchange_rate_override?.value ?? '',
   };
 }
 
-function draftsEqual(a: LineDraft, b: LineDraft): boolean {
-  return (
-    a.description === b.description &&
-    a.quantity === b.quantity &&
-    a.unit_price === b.unit_price &&
-    a.currency === b.currency &&
-    a.vat_rate_code === b.vat_rate_code &&
-    a.price_includes_vat === b.price_includes_vat &&
-    a.exchange_rate_override === b.exchange_rate_override
-  );
-}
-
 function buildCommitPatch(draft: LineDraft): Record<string, unknown> {
+  const unitRaw = draft.unit_price.trim();
+  const unitNum = unitRaw === '' ? null : Number(unitRaw);
   return {
     description: draft.description,
     quantity: draft.quantity.trim() || '1',
-    unit_price_reference: draft.unit_price.trim() || null,
+    unit_price_reference: unitNum != null && Number.isFinite(unitNum) ? unitNum : null,
     currency: draft.currency,
-    vat_rate_code: draft.vat_rate_code,
     price_includes_vat: draft.price_includes_vat,
     exchange_rate_to_ils_override:
       draft.currency !== 'ILS' && draft.exchange_rate_override.trim()
@@ -98,49 +85,41 @@ function LineRowEditor({
   onDrop: (lineId: string) => void;
 }) {
   const [draft, setDraft] = useState<LineDraft>(() => lineDraftFromRow(row));
-  const focusedRef = useRef<string | null>(null);
   const lineIdRef = useRef(row.id);
+  const wasSavingRef = useRef(false);
 
   useEffect(() => {
     if (row.id !== lineIdRef.current) {
       lineIdRef.current = row.id;
       setDraft(lineDraftFromRow(row));
-      focusedRef.current = null;
+      wasSavingRef.current = false;
       return;
     }
-    if (!focusedRef.current && !saving) {
-      const serverDraft = lineDraftFromRow(row);
-      setDraft((current) => (draftsEqual(current, serverDraft) ? current : serverDraft));
+    if (wasSavingRef.current && !saving) {
+      setDraft(lineDraftFromRow(row));
     }
-  }, [row, saving]);
+    wasSavingRef.current = saving;
+  }, [
+    row.id,
+    saving,
+    row.description.value,
+    row.quantity.value,
+    row.unit_price.value,
+    row.currency.value,
+    row.price_includes_vat,
+    row.exchange_rate_override?.value,
+    row.line_total_display,
+  ]);
 
-  const serverDraft = lineDraftFromRow(row);
   const disabled = saving || !row.description.editable;
   const showFx = draft.currency !== 'ILS';
 
   const commitDraft = () => {
-    const patch = buildCommitPatch(draft);
-    const merged: LineDraft = {
-      description: String(patch.description ?? ''),
-      quantity: String(patch.quantity ?? '1'),
-      unit_price: patch.unit_price_reference != null ? String(patch.unit_price_reference) : '',
-      currency: String(patch.currency ?? row.currency.value),
-      vat_rate_code: String(patch.vat_rate_code ?? row.vat_rate_code),
-      price_includes_vat: Boolean(patch.price_includes_vat),
-      exchange_rate_override:
-        patch.exchange_rate_to_ils_override != null
-          ? String(patch.exchange_rate_to_ils_override)
-          : '',
-    };
-    if (draftsEqual(merged, serverDraft)) return;
-    onCommit(row.id, patch);
+    onCommit(row.id, buildCommitPatch(draft));
   };
 
   return (
     <>
-      <td className="nx-we-doc-details__td--row_number">
-        <span className="nx-we-doc-details__row-num">{row.row_number}</span>
-      </td>
       <td className="nx-we-doc-details__td--drag">
         {row.can_drag ? (
           <button
@@ -149,7 +128,10 @@ function LineRowEditor({
             draggable
             disabled={disabled}
             title="גרור לשינוי סדר"
-            onDragStart={() => onDragStart(row.id)}
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = 'move';
+              onDragStart(row.id);
+            }}
             onDragOver={onDragOver}
             onDrop={(e) => {
               e.preventDefault();
@@ -158,7 +140,12 @@ function LineRowEditor({
           >
             ⋮⋮
           </button>
-        ) : null}
+        ) : (
+          <span className="nx-we-doc-details__drag-placeholder" aria-hidden />
+        )}
+      </td>
+      <td className="nx-we-doc-details__td--row_number">
+        <span className="nx-we-doc-details__row-num">{row.row_number}</span>
       </td>
       <td className="nx-we-doc-details__td--description">
         <input
@@ -166,12 +153,6 @@ function LineRowEditor({
           value={draft.description}
           placeholder={row.description.placeholder}
           disabled={disabled}
-          onFocus={() => {
-            focusedRef.current = 'description';
-          }}
-          onBlur={() => {
-            focusedRef.current = null;
-          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
@@ -193,12 +174,6 @@ function LineRowEditor({
                 className="nx-we-doc-details__cell-input nx-we-doc-details__cell-input--fx"
                 value={draft.exchange_rate_override}
                 disabled={disabled || !row.exchange_rate_editable}
-                onFocus={() => {
-                  focusedRef.current = 'fx';
-                }}
-                onBlur={() => {
-                  focusedRef.current = null;
-                }}
                 onChange={(e) =>
                   setDraft((d) => ({
                     ...d,
@@ -217,12 +192,6 @@ function LineRowEditor({
           inputMode="decimal"
           value={draft.quantity}
           disabled={disabled}
-          onFocus={() => {
-            focusedRef.current = 'quantity';
-          }}
-          onBlur={() => {
-            focusedRef.current = null;
-          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
@@ -241,12 +210,6 @@ function LineRowEditor({
           inputMode="decimal"
           value={draft.unit_price}
           disabled={disabled}
-          onFocus={() => {
-            focusedRef.current = 'unit_price';
-          }}
-          onBlur={() => {
-            focusedRef.current = null;
-          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
@@ -279,35 +242,21 @@ function LineRowEditor({
         </select>
       </td>
       <td className="nx-we-doc-details__td--vat">
-        <div className="nx-we-doc-details__vat-stack">
-          <select
-            className="nx-we-doc-details__cell-select nx-we-doc-details__cell-select--vat-rate"
-            value={draft.vat_rate_code}
-            disabled={disabled || row.allowed_vat_rates.length <= 1}
-            title={row.vat_rate_label}
-            onChange={(e) => setDraft((d) => ({ ...d, vat_rate_code: e.target.value }))}
-          >
-            {row.allowed_vat_rates.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <select
-            className="nx-we-doc-details__cell-select nx-we-doc-details__cell-select--vat-mode"
-            value={draft.price_includes_vat ? 'true' : 'false'}
-            disabled={disabled || draft.vat_rate_code === 'exempt'}
-            onChange={(e) =>
-              setDraft((d) => ({ ...d, price_includes_vat: e.target.value === 'true' }))
-            }
-          >
-            {row.price_mode_options.map((opt) => (
-              <option key={String(opt.value)} value={String(opt.value)}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          className="nx-we-doc-details__cell-select nx-we-doc-details__cell-select--vat-mode"
+          value={draft.price_includes_vat ? 'true' : 'false'}
+          disabled={disabled || row.vat_rate_code === 'exempt'}
+          title="כולל מע״מ / לפני מע״מ"
+          onChange={(e) =>
+            setDraft((d) => ({ ...d, price_includes_vat: e.target.value === 'true' }))
+          }
+        >
+          {row.price_mode_options.map((opt) => (
+            <option key={String(opt.value)} value={String(opt.value)}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </td>
       <td className="nx-we-doc-details__td--confirm">
         {row.allowed_actions.includes('update_income_document_line') ? (
@@ -567,8 +516,8 @@ export function WorkEngineDocumentDetailsStep({
         <div className="nx-we-doc-details__table-wrap">
           <table className="nx-we-doc-details__table">
             <colgroup>
-              <col className="nx-we-doc-details__col nx-we-doc-details__col--row_number" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--drag" />
+              <col className="nx-we-doc-details__col nx-we-doc-details__col--row_number" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--description" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--quantity" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--unit_price" />

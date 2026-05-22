@@ -440,7 +440,12 @@ export async function updateIncomeDocumentLine(
   const line_id = String(body.line_id ?? '').trim();
   if (!line_id) throw badRequest('line_id is required');
   const row = await loadWizardDraftRow(scope, draft_id);
-  const lines = applyLineFieldUpdate(normalizeDraftLines(row.draft_lines_json), line_id, body);
+  const settings = parseDocumentSettingsJson(row.document_settings_json);
+  let lines = applyLineFieldUpdate(normalizeDraftLines(row.draft_lines_json), line_id, body);
+  lines = lines.map((l) => ({
+    ...l,
+    vat_rate_code: settings.vat_mode === 'exempt' ? 'exempt' : 'standard',
+  }));
   const docType = await resolveDocType(scope, row.document_type!);
   const serialized = serializeDraftLines(lines);
   return wizardDraftMutationOverlay(

@@ -8,7 +8,7 @@ import {
   allowedCurrencyOptions,
   resolveDraftExchangeRateToIls,
 } from './income-draft-exchange-rate.pure.js';
-import { computeDraftLineAmounts } from './income-draft-line-compute.pure.js';
+import { computeDraftLineAmounts, recomputeDraftLineAmounts } from './income-draft-line-compute.pure.js';
 import {
   computeDraftTotalsPreview,
   parseDocumentSettingsJson,
@@ -438,16 +438,21 @@ export async function buildIncomeDocumentDetailsStep(
   canEdit: boolean,
   options: BuildIncomeDocumentDetailsStepOptions = {},
 ): Promise<IncomeDocumentDetailsStep> {
-  const lines = normalizeDraftLines(row.draft_lines_json);
   const settings = parseDocumentSettingsJson(row.document_settings_json);
   const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
   const vatResolution =
     options.vatResolution ??
     readVatResolutionFromDraftPreview(row.draft_totals_preview_json, documentDate) ??
     (await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate));
+  const lines = recomputeDraftLineAmounts(
+    normalizeDraftLines(row.draft_lines_json),
+    settings,
+    vatResolution,
+    documentDate,
+  );
   const totals =
     options.totalsPreview ??
-    computeDraftTotalsPreview(lines, row.currency, settings, vatResolution);
+    computeDraftTotalsPreview(lines, 'ILS', settings, vatResolution, documentDate);
 
   const uiCache = readWizardUiCacheFromDraftPreview(row.draft_totals_preview_json);
 
@@ -499,8 +504,8 @@ export async function buildIncomeDocumentDetailsStep(
     settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution),
     line_items: {
       columns: [
-        { key: 'row_number', label: '#' },
         { key: 'drag', label: '' },
+        { key: 'row_number', label: '#' },
         { key: 'description', label: 'פירוט *' },
         { key: 'quantity', label: 'כמות *' },
         { key: 'unit_price', label: "מחיר ליח'" },

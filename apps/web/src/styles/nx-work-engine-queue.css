@@ -464,11 +464,11 @@
 
 /* פירוט = remainder; fixed compact columns per spec */
 .nx-we-doc-details__col--row_number {
-  width: 36px;
+  width: 28px;
 }
 
 .nx-we-doc-details__col--drag {
-  width: 32px;
+  width: 28px;
 }
 
 .nx-we-doc-details__col--description {
@@ -488,7 +488,7 @@
 }
 
 .nx-we-doc-details__col--vat {
-  width: 110px;
+  width: 100px;
 }
 
 .nx-we-doc-details__col--confirm {
@@ -563,16 +563,9 @@
   text-overflow: clip;
 }
 
-.nx-we-doc-details__vat-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.nx-we-doc-details__cell-select--vat-rate,
 .nx-we-doc-details__cell-select--vat-mode {
   width: 100%;
-  max-width: 110px;
+  max-width: 100px;
   font-size: 12px;
   padding: 5px 6px;
 }
@@ -589,10 +582,11 @@
 
 .nx-we-doc-details__row-num {
   display: inline-block;
-  min-width: 1.25rem;
+  width: 100%;
   text-align: center;
   color: #64748b;
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .nx-we-doc-details__drag {
@@ -609,19 +603,29 @@
   width: 36px;
   height: 32px;
   padding: 0;
-  border: 1px solid #16a34a;
+  border: none;
   border-radius: 6px;
-  background: #f0fdf4;
-  color: #15803d;
+  background: linear-gradient(135deg, #38bdf8 0%, #3b82f6 30%, #4f46e5 65%, #7c3aed 100%);
+  color: #fff;
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
   line-height: 1;
+  box-shadow: 0 1px 3px rgba(59, 130, 246, 0.35);
+}
+
+.nx-we-doc-details__confirm:hover:not(:disabled) {
+  filter: brightness(1.05);
 }
 
 .nx-we-doc-details__confirm:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
+}
+
+.nx-we-doc-details__drag-placeholder {
+  display: inline-block;
+  width: 20px;
 }
 
 .nx-we-doc-details__row--saving {
