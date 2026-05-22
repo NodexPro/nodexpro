@@ -10,13 +10,14 @@ import {
 import { computeDraftTotalsPreview } from '../../src/domains/income/income-document-draft-totals.pure.js';
 import { incomeDraftVatFallbackResolution } from '../../src/domains/income/income-draft-vat-fallback.pure.js';
 
-test('normalizes lines with stable line_id and computed amount', () => {
+test('normalizes lines with stable line_id and per-row currency', () => {
   const lines = normalizeDraftLines([
-    { description: 'A', quantity: 2, unit_price_reference: 50 },
+    { description: 'A', quantity: 2, unit_price_reference: 50, currency: 'USD' },
   ]);
   assert.equal(lines.length, 1);
   assert.ok(lines[0].line_id);
-  assert.equal(lines[0].amount_reference, 100);
+  assert.equal(lines[0].currency, 'USD');
+  assert.equal(lines[0].quantity, 2);
   assert.equal(lines[0].sort_index, 0);
 });
 
@@ -43,6 +44,7 @@ test('computes draft totals preview on server (not financial truth)', () => {
       amount_rounding: 'none',
     },
     incomeDraftVatFallbackResolution(),
+    '2026-05-21',
   );
   assert.equal(totals.not_financial_truth, true);
   assert.equal(totals.vat_reference, 18);

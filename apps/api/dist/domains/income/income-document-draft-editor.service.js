@@ -9,6 +9,7 @@ import { assertRowMatchesIssuerScope } from './income.guards.js';
 import { validateDraftAgainstDocumentTypeRules } from './income-document-draft.helpers.js';
 import { buildIncomeDocumentDetailsStep, } from './income-document-details-step.builders.js';
 import { applyLineFieldUpdate, createEmptyDraftLine, deleteDraftLine, normalizeDraftLines, reorderDraftLines, serializeDraftLines, } from './income-document-draft-lines.pure.js';
+import { recomputeDraftLineAmounts } from './income-draft-line-compute.pure.js';
 import { computeDraftTotalsPreview, DEFAULT_DOCUMENT_SETTINGS, parseDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
 import { readVatResolutionFromDraftPreview, vatResolutionCachePayload, } from './income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
@@ -89,14 +90,14 @@ async function buildOverlayForDraft(scope, draftId, canEdit, rowOverride, docTyp
     return { active_wizard_draft_id: draftId, document_details_step: step };
 }
 async function validationForRow(scope, row, docType) {
-    const lines = normalizeDraftLines(row.draft_lines_json);
     const settings = parseDocumentSettingsJson(row.document_settings_json);
     const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
     let vatResolution = readVatResolutionFromDraftPreview(row.draft_totals_preview_json, documentDate);
     if (!vatResolution) {
         vatResolution = await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate);
     }
-    const totalsPreview = computeDraftTotalsPreview(lines, row.currency, settings, vatResolution);
+    const lines = recomputeDraftLineAmounts(normalizeDraftLines(row.draft_lines_json), settings, vatResolution, documentDate);
+    const totalsPreview = computeDraftTotalsPreview(lines, 'ILS', settings, vatResolution, documentDate);
     const { validation_warnings_json } = validateDraftAgainstDocumentTypeRules({
         document_type: row.document_type,
         income_customer_id: row.income_customer_id ?? null,
@@ -144,6 +145,7 @@ async function validationForRow(scope, row, docType) {
     return {
         validation_warnings_json,
         draft_totals_preview_json,
+        draft_lines_json: serializeDraftLines(lines),
         vatResolution,
         totalsPreview,
     };
@@ -254,6 +256,7 @@ async function wizardDraftMutationOverlay(scope, draft_id, loadedRow, rowForVali
     const validation = await validationForRow(scope, rowForValidation, docType);
     const saved = await persistWizardDraft(scope, draft_id, {
         ...persistPatch,
+        draft_lines_json: validation.draft_lines_json,
         validation_warnings_json: validation.validation_warnings_json,
         draft_totals_preview_json: validation.draft_totals_preview_json,
     }, auditPayload, loadedRow);
@@ -265,8 +268,13 @@ async function wizardDraftMutationOverlay(scope, draft_id, loadedRow, rowForVali
 export async function addIncomeDocumentLine(scope, body) {
     const draft_id = reqUuid(body.draft_id, 'draft_id');
     const row = await loadWizardDraftRow(scope, draft_id);
+    const settings = parseDocumentSettingsJson(row.document_settings_json);
     const lines = normalizeDraftLines(row.draft_lines_json);
-    lines.push(createEmptyDraftLine(lines.length));
+    lines.push(createEmptyDraftLine(lines.length, {
+        currency: 'ILS',
+        vat_rate_code: settings.vat_mode === 'exempt' ? 'exempt' : 'standard',
+        price_includes_vat: false,
+    }));
     const docType = await resolveDocType(scope, row.document_type);
     const serialized = serializeDraftLines(lines);
     return wizardDraftMutationOverlay(scope, draft_id, row, { ...row, draft_lines_json: serialized }, docType, { draft_lines_json: serialized }, { action: 'add_line', line_count: lines.length });

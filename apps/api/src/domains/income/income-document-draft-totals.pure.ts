@@ -1,5 +1,9 @@
 import type { IncomeDraftLineRecord } from './income-document-draft-lines.pure.js';
 import { formatMoneyReference } from './income-document-draft-lines.pure.js';
+import {
+  computeDraftLineAmounts,
+  recomputeDraftLineAmounts,
+} from './income-draft-line-compute.pure.js';
 import type { IncomeDraftVatResolution } from './income-draft-vat-fallback.pure.js';
 import { IL_DRAFT_VAT_FALLBACK_RATE } from './income-draft-vat-fallback.pure.js';
 
@@ -52,43 +56,59 @@ export function computeDraftTotalsPreview(
   currency: string,
   settings: IncomeDocumentSettings,
   vatResolution: IncomeDraftVatResolution,
+  documentDate?: string,
 ): DraftTotalsPreview {
+  const asOf = documentDate?.trim() || new Date().toISOString().slice(0, 10);
+  const computedLines = recomputeDraftLineAmounts(lines, settings, vatResolution, asOf);
+
   let subtotal = 0;
-  for (const line of lines) {
-    if (line.amount_reference != null && Number.isFinite(line.amount_reference)) {
-      subtotal += line.amount_reference;
+  let vat = 0;
+  let hasAmount = false;
+  for (const line of computedLines) {
+    const amounts = computeDraftLineAmounts(line, settings, vatResolution, asOf);
+    if (amounts.line_net_ils != null) {
+      subtotal += amounts.line_net_ils;
+      hasAmount = true;
+    }
+    if (amounts.line_vat_ils != null) {
+      vat += amounts.line_vat_ils;
     }
   }
-  subtotal = roundAmount(subtotal, settings.amount_rounding);
 
-  let vat: number | null = null;
+  subtotal = roundAmount(subtotal, settings.amount_rounding);
+  vat = roundAmount(vat, settings.amount_rounding);
+
+  const displayCurrency = 'ILS';
   let vatLabel: string | null = null;
-  if (settings.vat_mode === 'standard' && subtotal > 0) {
-    vat = roundAmount(subtotal * vatResolution.standard_rate, settings.amount_rounding);
+  if (settings.vat_mode === 'standard' && vat > 0) {
     vatLabel = vatResolution.standard_rate_percent_label;
   } else if (settings.vat_mode === 'zero') {
-    vat = 0;
     vatLabel = '0%';
   }
 
-  const grand =
-    subtotal > 0
-      ? roundAmount(subtotal + (vat ?? 0), settings.amount_rounding)
-      : subtotal === 0
-        ? 0
-        : null;
+  const grand = hasAmount
+    ? roundAmount(subtotal + vat, settings.amount_rounding)
+    : subtotal === 0 && computedLines.length > 0
+      ? 0
+      : null;
+
+  const showVat =
+    settings.vat_mode === 'standard' && (vat > 0 || (hasAmount && subtotal > 0));
 
   return {
     preview: true,
     not_financial_truth: true,
-    currency,
-    line_count: lines.length,
-    subtotal_reference: subtotal > 0 ? subtotal : subtotal === 0 ? 0 : null,
-    vat_reference: vat,
+    currency: displayCurrency,
+    line_count: computedLines.length,
+    subtotal_reference: hasAmount ? subtotal : subtotal === 0 && computedLines.length > 0 ? 0 : null,
+    vat_reference: showVat ? vat : settings.vat_mode === 'zero' ? 0 : null,
     grand_total_reference: grand,
-    subtotal_display: formatMoneyReference(subtotal > 0 || subtotal === 0 ? subtotal : null, currency),
-    vat_display: vat != null ? formatMoneyReference(vat, currency) : null,
-    grand_total_display: formatMoneyReference(grand, currency),
+    subtotal_display: formatMoneyReference(
+      hasAmount ? subtotal : subtotal === 0 && computedLines.length > 0 ? 0 : null,
+      displayCurrency,
+    ),
+    vat_display: showVat ? formatMoneyReference(vat, displayCurrency) : null,
+    grand_total_display: formatMoneyReference(grand, displayCurrency),
     vat_rate_label: vatLabel,
   };
 }

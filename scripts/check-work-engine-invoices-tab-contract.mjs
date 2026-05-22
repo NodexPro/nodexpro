@@ -156,8 +156,11 @@ if (/subtotal_reference|vat_reference|grand_total_reference|amount_reference\s*\
 if (!docDetailsStep.includes('add_line')) {
   errors.push('document details must add lines via backend add_line command');
 }
-if (!docDetailsStep.includes('document_fields')) {
-  errors.push('document details must use line_items.document_fields for currency/vat selects');
+if (!docDetailsStep.includes('row.currency')) {
+  errors.push('document details must render per-row currency from aggregate');
+}
+if (!docDetailsStep.includes('nx-we-doc-details__confirm')) {
+  errors.push('document details must expose per-row V confirm button');
 }
 if (!docDetailsStep.includes('lockUi: false')) {
   errors.push('document details line edits must not lock wizard UI on each keystroke');
@@ -171,8 +174,11 @@ if (!docDetailsStep.includes('workspaceAgg')) {
 if (!docDetailsStep.includes('step.line_items.columns')) {
   errors.push('document details table must render columns from aggregate schema');
 }
-if (/row_number|0\.18|17%|מע״מ רגיל/.test(docDetailsStep)) {
-  errors.push('document details UI must not hardcode row numbers or VAT labels');
+if (!docDetailsStep.includes('row.row_number')) {
+  errors.push('document details must render backend row_number only');
+}
+if (/0\.18|17%|מע״מ רגיל/.test(docDetailsStep)) {
+  errors.push('document details UI must not hardcode VAT rate labels');
 }
 if (!docDetailsStep.includes('step.header.title')) {
   errors.push('document details must render backend header.title only');

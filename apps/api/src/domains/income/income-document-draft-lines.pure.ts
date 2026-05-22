@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { badRequest } from '../../shared/errors.js';
+import type { IncomeDraftLineCurrency } from './income-draft-exchange-rate.pure.js';
+import { isAllowedDraftLineCurrency } from './income-draft-exchange-rate.pure.js';
+import type { LineVatRateCode } from './income-draft-line-compute.pure.js';
 
 export type IncomeDraftLineRecord = {
   line_id: string;
@@ -7,8 +10,27 @@ export type IncomeDraftLineRecord = {
   description: string;
   quantity: number;
   unit_price_reference: number | null;
+  currency: IncomeDraftLineCurrency;
+  exchange_rate_to_ils_override: number | null;
+  price_includes_vat: boolean;
+  vat_rate_code: LineVatRateCode;
   amount_reference: number | null;
 };
+
+function parseLineVatRateCode(raw: unknown): LineVatRateCode {
+  return raw === 'exempt' ? 'exempt' : 'standard';
+}
+
+function parsePriceIncludesVat(raw: unknown): boolean {
+  if (raw === true || raw === 'true' || raw === 1 || raw === '1') return true;
+  return false;
+}
+
+function parseCurrency(raw: unknown): IncomeDraftLineCurrency {
+  const code = String(raw ?? 'ILS').trim().toUpperCase();
+  if (isAllowedDraftLineCurrency(code)) return code;
+  return 'ILS';
+}
 
 export function normalizeDraftLines(raw: unknown): IncomeDraftLineRecord[] {
   const arr = Array.isArray(raw) ? raw : [];
@@ -22,17 +44,21 @@ export function normalizeDraftLines(raw: unknown): IncomeDraftLineRecord[] {
     const quantity = Number.isFinite(quantityRaw) && quantityRaw > 0 ? quantityRaw : 1;
     const unitRaw = Number(o.unit_price_reference);
     const unit_price_reference = Number.isFinite(unitRaw) ? unitRaw : null;
+    const overrideRaw = Number(o.exchange_rate_to_ils_override);
+    const exchange_rate_to_ils_override =
+      Number.isFinite(overrideRaw) && overrideRaw > 0 ? overrideRaw : null;
     const amountRaw = Number(o.amount_reference);
-    let amount_reference = Number.isFinite(amountRaw) ? amountRaw : null;
-    if (amount_reference == null && unit_price_reference != null) {
-      amount_reference = Math.round(quantity * unit_price_reference * 100) / 100;
-    }
+    const amount_reference = Number.isFinite(amountRaw) ? amountRaw : null;
     lines.push({
       line_id,
       sort_index: Number.isFinite(Number(o.sort_index)) ? Number(o.sort_index) : index,
       description,
       quantity,
       unit_price_reference,
+      currency: parseCurrency(o.currency),
+      exchange_rate_to_ils_override,
+      price_includes_vat: parsePriceIncludesVat(o.price_includes_vat),
+      vat_rate_code: parseLineVatRateCode(o.vat_rate_code),
       amount_reference,
     });
   });
@@ -46,17 +72,28 @@ export function serializeDraftLines(lines: IncomeDraftLineRecord[]): unknown[] {
     description: l.description,
     quantity: l.quantity,
     unit_price_reference: l.unit_price_reference,
+    currency: l.currency,
+    exchange_rate_to_ils_override: l.exchange_rate_to_ils_override,
+    price_includes_vat: l.price_includes_vat,
+    vat_rate_code: l.vat_rate_code,
     amount_reference: l.amount_reference,
   }));
 }
 
-export function createEmptyDraftLine(sortIndex: number): IncomeDraftLineRecord {
+export function createEmptyDraftLine(
+  sortIndex: number,
+  defaults?: Partial<Pick<IncomeDraftLineRecord, 'currency' | 'vat_rate_code' | 'price_includes_vat'>>,
+): IncomeDraftLineRecord {
   return {
     line_id: randomUUID(),
     sort_index: sortIndex,
     description: '',
     quantity: 1,
     unit_price_reference: null,
+    currency: defaults?.currency ?? 'ILS',
+    exchange_rate_to_ils_override: null,
+    price_includes_vat: defaults?.price_includes_vat ?? false,
+    vat_rate_code: defaults?.vat_rate_code ?? 'standard',
     amount_reference: null,
   };
 }
@@ -72,7 +109,10 @@ export function applyLineFieldUpdate(
   let description = current.description;
   let quantity = current.quantity;
   let unit_price_reference = current.unit_price_reference;
-  let amount_reference = current.amount_reference;
+  let currency = current.currency;
+  let exchange_rate_to_ils_override = current.exchange_rate_to_ils_override;
+  let price_includes_vat = current.price_includes_vat;
+  let vat_rate_code = current.vat_rate_code;
 
   if (patch.description !== undefined) {
     description = String(patch.description ?? '').trim();
@@ -92,22 +132,30 @@ export function applyLineFieldUpdate(
       unit_price_reference = n;
     }
   }
-  if (patch.amount_reference !== undefined) {
-    const v = patch.amount_reference;
-    if (v === null || v === '') {
-      amount_reference = null;
-    } else {
-      const n = Number(v);
-      if (!Number.isFinite(n)) throw badRequest('amount_reference must be numeric');
-      amount_reference = n;
+  if (patch.currency !== undefined) {
+    const next = String(patch.currency ?? '').trim().toUpperCase();
+    if (!isAllowedDraftLineCurrency(next)) throw badRequest('currency not allowed');
+    currency = next;
+    if (next === 'ILS') exchange_rate_to_ils_override = null;
+    else if (patch.exchange_rate_to_ils_override === undefined) {
+      exchange_rate_to_ils_override = null;
     }
   }
-
-  if (patch.amount_reference === undefined && patch.unit_price_reference !== undefined && unit_price_reference != null) {
-    amount_reference = Math.round(quantity * unit_price_reference * 100) / 100;
+  if (patch.exchange_rate_to_ils_override !== undefined || patch.exchange_rate_override !== undefined) {
+    const raw = patch.exchange_rate_to_ils_override ?? patch.exchange_rate_override;
+    if (raw === null || raw === '') {
+      exchange_rate_to_ils_override = null;
+    } else {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n <= 0) throw badRequest('exchange_rate must be a positive number');
+      exchange_rate_to_ils_override = n;
+    }
   }
-  if (patch.amount_reference === undefined && patch.quantity !== undefined && unit_price_reference != null) {
-    amount_reference = Math.round(quantity * unit_price_reference * 100) / 100;
+  if (patch.price_includes_vat !== undefined) {
+    price_includes_vat = parsePriceIncludesVat(patch.price_includes_vat);
+  }
+  if (patch.vat_rate_code !== undefined) {
+    vat_rate_code = parseLineVatRateCode(patch.vat_rate_code);
   }
 
   const next = [...lines];
@@ -116,7 +164,11 @@ export function applyLineFieldUpdate(
     description,
     quantity,
     unit_price_reference,
-    amount_reference,
+    currency,
+    exchange_rate_to_ils_override,
+    price_includes_vat,
+    vat_rate_code,
+    amount_reference: current.amount_reference,
   };
   return next;
 }
@@ -143,7 +195,8 @@ export function deleteDraftLine(lines: IncomeDraftLineRecord[], lineId: string):
 
 export function formatMoneyReference(amount: number | null, currency: string): string {
   if (amount == null || !Number.isFinite(amount)) return '—';
-  const symbol = currency === 'ILS' ? '₪' : currency;
+  const symbol =
+    currency === 'ILS' ? '₪' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency;
   const formatted = amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${symbol}${formatted}`;
 }

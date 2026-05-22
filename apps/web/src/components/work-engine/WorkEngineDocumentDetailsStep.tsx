@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import type {
   IncomeDocumentDetailsLineRow,
-  IncomeDocumentDetailsSelectField,
   IncomeDocumentDetailsStep,
 } from '../../income/income-document-details-types';
 import type { IncomeWorkspaceAggregate } from '../../income/income-workspace-types';
@@ -22,6 +21,10 @@ type LineDraft = {
   description: string;
   quantity: string;
   unit_price: string;
+  currency: string;
+  vat_rate_code: string;
+  price_includes_vat: boolean;
+  exchange_rate_override: string;
 };
 
 function sanitizeQuantityInput(raw: string): string {
@@ -43,114 +46,169 @@ function lineDraftFromRow(row: IncomeDocumentDetailsLineRow): LineDraft {
     description: row.description.value,
     quantity: row.quantity.value,
     unit_price: row.unit_price.value,
+    currency: row.currency.value,
+    vat_rate_code: row.vat_rate_code,
+    price_includes_vat: row.price_includes_vat,
+    exchange_rate_override: row.exchange_rate_override?.value ?? '',
   };
 }
 
 function draftsEqual(a: LineDraft, b: LineDraft): boolean {
   return (
-    a.description === b.description && a.quantity === b.quantity && a.unit_price === b.unit_price
+    a.description === b.description &&
+    a.quantity === b.quantity &&
+    a.unit_price === b.unit_price &&
+    a.currency === b.currency &&
+    a.vat_rate_code === b.vat_rate_code &&
+    a.price_includes_vat === b.price_includes_vat &&
+    a.exchange_rate_override === b.exchange_rate_override
   );
 }
 
-function DocumentSelectField({
-  field,
-  disabled,
-  className,
-  title,
-  onChange,
-}: {
-  field: IncomeDocumentDetailsSelectField;
-  disabled: boolean;
-  className?: string;
-  title?: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <select
-      className={className}
-      value={field.value}
-      disabled={disabled || !field.editable}
-      title={title ?? field.disabled_reason ?? undefined}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      {field.options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function currencyDisplay(field: IncomeDocumentDetailsSelectField): string {
-  return field.options.find((o) => o.value === field.value)?.label ?? field.value;
+function buildCommitPatch(draft: LineDraft): Record<string, unknown> {
+  return {
+    description: draft.description,
+    quantity: draft.quantity.trim() || '1',
+    unit_price_reference: draft.unit_price.trim() || null,
+    currency: draft.currency,
+    vat_rate_code: draft.vat_rate_code,
+    price_includes_vat: draft.price_includes_vat,
+    exchange_rate_to_ils_override:
+      draft.currency !== 'ILS' && draft.exchange_rate_override.trim()
+        ? draft.exchange_rate_override.trim()
+        : null,
+  };
 }
 
 function LineRowEditor({
   row,
-  docFields,
-  showDocumentFields,
-  busy,
+  saving,
   onCommit,
-  onDocumentFieldChange,
   onDelete,
+  onDragStart,
+  onDragOver,
+  onDrop,
 }: {
   row: IncomeDocumentDetailsLineRow;
-  docFields: IncomeDocumentDetailsStep['line_items']['document_fields'];
-  showDocumentFields: boolean;
-  busy: boolean;
+  saving: boolean;
   onCommit: (lineId: string, patch: Record<string, unknown>) => void;
-  onDocumentFieldChange: (key: 'currency' | 'vat_mode', value: string) => void;
   onDelete: () => void;
+  onDragStart: (lineId: string) => void;
+  onDragOver: (e: DragEvent) => void;
+  onDrop: (lineId: string) => void;
 }) {
   const [draft, setDraft] = useState<LineDraft>(() => lineDraftFromRow(row));
   const focusedRef = useRef<string | null>(null);
-  const lineIdRef = useRef(row.line_id);
+  const lineIdRef = useRef(row.id);
 
   useEffect(() => {
-    if (row.line_id !== lineIdRef.current) {
-      lineIdRef.current = row.line_id;
+    if (row.id !== lineIdRef.current) {
+      lineIdRef.current = row.id;
       setDraft(lineDraftFromRow(row));
       focusedRef.current = null;
       return;
     }
-    if (!focusedRef.current) {
+    if (!focusedRef.current && !saving) {
       const serverDraft = lineDraftFromRow(row);
       setDraft((current) => (draftsEqual(current, serverDraft) ? current : serverDraft));
     }
-  }, [row.line_id, row.description.value, row.quantity.value, row.unit_price.value]);
-
-  const commitIfChanged = (patch: Record<string, unknown>, server: LineDraft) => {
-    const next = { ...draft, ...patch };
-    if (draftsEqual(next, server)) return;
-    onCommit(row.line_id, patch);
-  };
+  }, [row, saving]);
 
   const serverDraft = lineDraftFromRow(row);
+  const disabled = saving || !row.description.editable;
+  const showFx = draft.currency !== 'ILS';
+
+  const commitDraft = () => {
+    const patch = buildCommitPatch(draft);
+    const merged: LineDraft = {
+      description: String(patch.description ?? ''),
+      quantity: String(patch.quantity ?? '1'),
+      unit_price: patch.unit_price_reference != null ? String(patch.unit_price_reference) : '',
+      currency: String(patch.currency ?? row.currency.value),
+      vat_rate_code: String(patch.vat_rate_code ?? row.vat_rate_code),
+      price_includes_vat: Boolean(patch.price_includes_vat),
+      exchange_rate_override:
+        patch.exchange_rate_to_ils_override != null
+          ? String(patch.exchange_rate_to_ils_override)
+          : '',
+    };
+    if (draftsEqual(merged, serverDraft)) return;
+    onCommit(row.id, patch);
+  };
 
   return (
     <>
+      <td className="nx-we-doc-details__td--row_number">
+        <span className="nx-we-doc-details__row-num">{row.row_number}</span>
+      </td>
+      <td className="nx-we-doc-details__td--drag">
+        {row.can_drag ? (
+          <button
+            type="button"
+            className="nx-we-doc-details__drag"
+            draggable
+            disabled={disabled}
+            title="גרור לשינוי סדר"
+            onDragStart={() => onDragStart(row.id)}
+            onDragOver={onDragOver}
+            onDrop={(e) => {
+              e.preventDefault();
+              onDrop(row.id);
+            }}
+          >
+            ⋮⋮
+          </button>
+        ) : null}
+      </td>
       <td className="nx-we-doc-details__td--description">
         <input
           className="nx-we-doc-details__cell-input nx-we-doc-details__cell-input--description"
           value={draft.description}
           placeholder={row.description.placeholder}
-          disabled={busy || !row.description.editable}
+          disabled={disabled}
           onFocus={() => {
             focusedRef.current = 'description';
           }}
           onBlur={() => {
             focusedRef.current = null;
-            commitIfChanged({ description: draft.description }, serverDraft);
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
-              (e.target as HTMLInputElement).blur();
+              commitDraft();
             }
           }}
           onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
         />
+        {showFx ? (
+          <div className="nx-we-doc-details__fx-row">
+            <span className="nx-we-doc-details__fx-label">
+              שער יציג להיום: {row.exchange_rate_default}
+            </span>
+            <label className="nx-we-doc-details__fx-override">
+              <span>שער מותאם</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                className="nx-we-doc-details__cell-input nx-we-doc-details__cell-input--fx"
+                value={draft.exchange_rate_override}
+                disabled={disabled || !row.exchange_rate_editable}
+                onFocus={() => {
+                  focusedRef.current = 'fx';
+                }}
+                onBlur={() => {
+                  focusedRef.current = null;
+                }}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    exchange_rate_override: sanitizeUnitPriceInput(e.target.value),
+                  }))
+                }
+              />
+            </label>
+          </div>
+        ) : null}
       </td>
       <td className="nx-we-doc-details__td--quantity">
         <input
@@ -158,20 +216,17 @@ function LineRowEditor({
           type="text"
           inputMode="decimal"
           value={draft.quantity}
-          disabled={busy || !row.quantity.editable}
+          disabled={disabled}
           onFocus={() => {
             focusedRef.current = 'quantity';
           }}
           onBlur={() => {
             focusedRef.current = null;
-            const q = draft.quantity.trim() || '1';
-            setDraft((d) => ({ ...d, quantity: q }));
-            commitIfChanged({ quantity: q }, serverDraft);
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
-              (e.target as HTMLInputElement).blur();
+              commitDraft();
             }
           }}
           onChange={(e) =>
@@ -185,21 +240,17 @@ function LineRowEditor({
           type="text"
           inputMode="decimal"
           value={draft.unit_price}
-          disabled={busy || !row.unit_price.editable}
+          disabled={disabled}
           onFocus={() => {
             focusedRef.current = 'unit_price';
           }}
           onBlur={() => {
             focusedRef.current = null;
-            commitIfChanged(
-              { unit_price_reference: draft.unit_price.trim() || null },
-              serverDraft,
-            );
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
-              (e.target as HTMLInputElement).blur();
+              commitDraft();
             }
           }}
           onChange={(e) =>
@@ -208,41 +259,78 @@ function LineRowEditor({
         />
       </td>
       <td className="nx-we-doc-details__td--currency">
-        {showDocumentFields ? (
-          <DocumentSelectField
-            field={docFields.currency}
-            disabled={busy}
-            className="nx-we-doc-details__cell-select nx-we-doc-details__cell-select--currency"
-            onChange={(v) => onDocumentFieldChange('currency', v)}
-          />
-        ) : (
-          <span className="nx-we-doc-details__cell-muted">{currencyDisplay(docFields.currency)}</span>
-        )}
+        <select
+          className="nx-we-doc-details__cell-select nx-we-doc-details__cell-select--currency"
+          value={draft.currency}
+          disabled={disabled || !row.currency.editable}
+          onChange={(e) =>
+            setDraft((d) => ({
+              ...d,
+              currency: e.target.value,
+              exchange_rate_override: e.target.value === 'ILS' ? '' : d.exchange_rate_override,
+            }))
+          }
+        >
+          {row.currency.options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </td>
       <td className="nx-we-doc-details__td--vat">
-        {showDocumentFields ? (
-          <DocumentSelectField
-            field={docFields.vat_mode}
-            disabled={busy}
-            className="nx-we-doc-details__cell-select nx-we-doc-details__cell-select--vat"
-            title={docFields.vat_mode.options.find((o) => o.value === docFields.vat_mode.value)?.label}
-            onChange={(v) => onDocumentFieldChange('vat_mode', v)}
-          />
-        ) : (
-          <span className="nx-we-doc-details__cell-muted">
-            {docFields.vat_mode.options.find((o) => o.value === docFields.vat_mode.value)?.label ?? '—'}
-          </span>
-        )}
+        <div className="nx-we-doc-details__vat-stack">
+          <select
+            className="nx-we-doc-details__cell-select nx-we-doc-details__cell-select--vat-rate"
+            value={draft.vat_rate_code}
+            disabled={disabled || row.allowed_vat_rates.length <= 1}
+            title={row.vat_rate_label}
+            onChange={(e) => setDraft((d) => ({ ...d, vat_rate_code: e.target.value }))}
+          >
+            {row.allowed_vat_rates.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="nx-we-doc-details__cell-select nx-we-doc-details__cell-select--vat-mode"
+            value={draft.price_includes_vat ? 'true' : 'false'}
+            disabled={disabled || draft.vat_rate_code === 'exempt'}
+            onChange={(e) =>
+              setDraft((d) => ({ ...d, price_includes_vat: e.target.value === 'true' }))
+            }
+          >
+            {row.price_mode_options.map((opt) => (
+              <option key={String(opt.value)} value={String(opt.value)}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </td>
+      <td className="nx-we-doc-details__td--confirm">
+        {row.allowed_actions.includes('update_income_document_line') ? (
+          <button
+            type="button"
+            className="nx-we-doc-details__confirm"
+            disabled={disabled}
+            title="שמור שורה"
+            onClick={() => commitDraft()}
+          >
+            {saving ? '…' : '✓'}
+          </button>
+        ) : null}
       </td>
       <td className="nx-we-doc-details__td--line_total">
-        <span className="nx-we-doc-details__cell-total">{row.line_total.display}</span>
+        <span className="nx-we-doc-details__cell-total">{row.line_total_display}</span>
       </td>
-      <td className="nx-we-doc-details__td--actions">
+      <td className="nx-we-doc-details__td--delete">
         {row.allowed_actions.includes('delete_income_document_line') ? (
           <button
             type="button"
             className="nx-we-doc-details__delete"
-            disabled={busy}
+            disabled={disabled}
             title="מחק שורה"
             onClick={onDelete}
           >
@@ -271,8 +359,9 @@ export function WorkEngineDocumentDetailsStep({
 
   const draftId = step.draft_id;
   const canAdd = step.line_items.allowed_actions.includes('add_income_document_line');
-  const docFields = step.line_items.document_fields;
   const [addingLine, setAddingLine] = useState(false);
+  const [savingLineId, setSavingLineId] = useState<string | null>(null);
+  const dragLineIdRef = useRef<string | null>(null);
   const commandsInFlight = useRef(0);
 
   const applyAggregate = useCallback(
@@ -315,24 +404,40 @@ export function WorkEngineDocumentDetailsStep({
   );
 
   const commitLine = useCallback(
-    (lineId: string, patch: Record<string, unknown>) => {
-      void runCommand('update_line', { draft_id: draftId, line_id: lineId, ...patch }, { lockUi: false });
+    async (lineId: string, patch: Record<string, unknown>) => {
+      setSavingLineId(lineId);
+      try {
+        await runCommand('update_line', { draft_id: draftId, line_id: lineId, ...patch }, { lockUi: false });
+      } finally {
+        setSavingLineId((current) => (current === lineId ? null : current));
+      }
     },
     [draftId, runCommand],
   );
 
-  const handleDocumentFieldChange = (key: 'currency' | 'vat_mode', value: string) => {
-    const current = key === 'currency' ? docFields.currency.value : docFields.vat_mode.value;
-    if (value === current) return;
-    void runCommand(
-      'update_draft_settings',
-      { draft_id: draftId, setting_key: key, setting_value: value },
-      { lockUi: false },
-    );
-  };
+  const handleReorder = useCallback(
+    (targetLineId: string) => {
+      const fromId = dragLineIdRef.current;
+      dragLineIdRef.current = null;
+      if (!fromId || fromId === targetLineId) return;
+      const ids = step.line_items.rows.map((r) => r.id);
+      const fromIdx = ids.indexOf(fromId);
+      const toIdx = ids.indexOf(targetLineId);
+      if (fromIdx < 0 || toIdx < 0) return;
+      const next = [...ids];
+      next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, fromId);
+      void runCommand(
+        'reorder_lines',
+        { draft_id: draftId, ordered_line_ids: next },
+        { lockUi: false },
+      );
+    },
+    [draftId, runCommand, step.line_items.rows],
+  );
 
   const handleAddLine = async () => {
-    if (addingLine || commandsInFlight.current > 0) return;
+    if (addingLine) return;
     setAddingLine(true);
     try {
       await runCommand('add_line', { draft_id: draftId }, { lockUi: false });
@@ -462,13 +567,16 @@ export function WorkEngineDocumentDetailsStep({
         <div className="nx-we-doc-details__table-wrap">
           <table className="nx-we-doc-details__table">
             <colgroup>
+              <col className="nx-we-doc-details__col nx-we-doc-details__col--row_number" />
+              <col className="nx-we-doc-details__col nx-we-doc-details__col--drag" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--description" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--quantity" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--unit_price" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--currency" />
-              <col className="nx-we-doc-details__col nx-we-doc-details__col--vat" span={1} />
+              <col className="nx-we-doc-details__col nx-we-doc-details__col--vat" />
+              <col className="nx-we-doc-details__col nx-we-doc-details__col--confirm" />
               <col className="nx-we-doc-details__col nx-we-doc-details__col--line_total" />
-              <col className="nx-we-doc-details__col nx-we-doc-details__col--actions" />
+              <col className="nx-we-doc-details__col nx-we-doc-details__col--delete" />
             </colgroup>
             <thead>
               <tr>
@@ -480,22 +588,24 @@ export function WorkEngineDocumentDetailsStep({
               </tr>
             </thead>
             <tbody>
-              {step.line_items.rows.map((row, index) => (
-                <tr key={row.line_id}>
+              {step.line_items.rows.map((row) => (
+                <tr key={row.id} className={savingLineId === row.id ? 'nx-we-doc-details__row--saving' : ''}>
                   <LineRowEditor
                     row={row}
-                    docFields={docFields}
-                    showDocumentFields={index === 0}
-                    busy={busy || addingLine}
-                    onCommit={commitLine}
-                    onDocumentFieldChange={handleDocumentFieldChange}
+                    saving={savingLineId === row.id}
+                    onCommit={(lineId, patch) => void commitLine(lineId, patch)}
                     onDelete={() =>
                       void runCommand(
                         'delete_line',
-                        { draft_id: draftId, line_id: row.line_id },
+                        { draft_id: draftId, line_id: row.id },
                         { lockUi: false },
                       )
                     }
+                    onDragStart={(lineId) => {
+                      dragLineIdRef.current = lineId;
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={handleReorder}
                   />
                 </tr>
               ))}

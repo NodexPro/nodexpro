@@ -46,22 +46,24 @@ test('document details header title includes office client, type, number preview
 
 test('line table column schema matches document details spec', () => {
   const expectedKeys = [
+    'row_number',
+    'drag',
     'description',
     'quantity',
     'unit_price',
     'currency',
     'vat',
+    'confirm',
     'line_total',
-    'actions',
+    'delete',
   ];
   for (const key of expectedKeys) {
     assert.ok(buildersSource.includes(`key: '${key}'`), `missing column key: ${key}`);
   }
   assert.ok(buildersSource.includes("label: 'פירוט *'"));
-  assert.ok(buildersSource.includes("label: 'פעולות'"));
   assert.ok(buildersSource.includes('הוסף שורה'));
-  assert.ok(buildersSource.includes('document_fields'));
-  assert.ok(!buildersSource.includes("key: 'row_number'"));
+  assert.ok(buildersSource.includes('line_total_display'));
+  assert.ok(buildersSource.includes('price_includes_vat'));
   assert.ok(!buildersSource.includes("value: 'zero'"));
   assert.ok(!buildersSource.includes('מע״מ אפס'));
 });
@@ -77,7 +79,7 @@ test('VAT default uses IL fallback 18% from legal resolver module', () => {
 
 test('add_income_document_line returns refreshed overlay via draft editor', () => {
   assert.ok(draftEditorSource.includes('export async function addIncomeDocumentLine'));
-  assert.ok(draftEditorSource.includes('createEmptyDraftLine(lines.length)'));
+  assert.ok(draftEditorSource.includes('createEmptyDraftLine(lines.length,'));
   assert.ok(draftEditorSource.includes('wizardDraftMutationOverlay'));
 });
 
@@ -98,8 +100,9 @@ test('document details UI does not hardcode VAT 18%', () => {
   assert.ok(!/17%/.test(docDetailsStepSource));
 });
 
-test('line edits commit on blur without global busy lock', () => {
+test('line edits commit via V button without global busy lock', () => {
   assert.ok(docDetailsStepSource.includes('lockUi: false'));
-  assert.ok(docDetailsStepSource.includes('onBlur'));
+  assert.ok(docDetailsStepSource.includes('nx-we-doc-details__confirm'));
+  assert.ok(docDetailsStepSource.includes('commitDraft'));
   assert.ok(!docDetailsStepSource.includes('scheduleLineUpdate'));
 });

@@ -22,6 +22,7 @@ import {
   reorderDraftLines,
   serializeDraftLines,
 } from './income-document-draft-lines.pure.js';
+import { recomputeDraftLineAmounts } from './income-draft-line-compute.pure.js';
 import {
   computeDraftTotalsPreview,
   DEFAULT_DOCUMENT_SETTINGS,
@@ -169,17 +170,23 @@ async function validationForRow(
 ): Promise<{
   validation_warnings_json: Record<string, unknown>[];
   draft_totals_preview_json: Record<string, unknown>;
+  draft_lines_json: unknown[];
   vatResolution: IncomeDraftVatResolution;
   totalsPreview: DraftTotalsPreview;
 }> {
-  const lines = normalizeDraftLines(row.draft_lines_json);
   const settings = parseDocumentSettingsJson(row.document_settings_json);
   const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
   let vatResolution = readVatResolutionFromDraftPreview(row.draft_totals_preview_json, documentDate);
   if (!vatResolution) {
     vatResolution = await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate);
   }
-  const totalsPreview = computeDraftTotalsPreview(lines, row.currency, settings, vatResolution);
+  const lines = recomputeDraftLineAmounts(
+    normalizeDraftLines(row.draft_lines_json),
+    settings,
+    vatResolution,
+    documentDate,
+  );
+  const totalsPreview = computeDraftTotalsPreview(lines, 'ILS', settings, vatResolution, documentDate);
   const { validation_warnings_json } = validateDraftAgainstDocumentTypeRules(
     {
       document_type: row.document_type,
@@ -237,6 +244,7 @@ async function validationForRow(
   return {
     validation_warnings_json,
     draft_totals_preview_json,
+    draft_lines_json: serializeDraftLines(lines),
     vatResolution,
     totalsPreview,
   };
@@ -383,6 +391,7 @@ async function wizardDraftMutationOverlay(
     draft_id,
     {
       ...persistPatch,
+      draft_lines_json: validation.draft_lines_json,
       validation_warnings_json: validation.validation_warnings_json,
       draft_totals_preview_json: validation.draft_totals_preview_json,
     },
@@ -401,8 +410,15 @@ export async function addIncomeDocumentLine(
 ): Promise<WizardDraftOverlay> {
   const draft_id = reqUuid(body.draft_id, 'draft_id');
   const row = await loadWizardDraftRow(scope, draft_id);
+  const settings = parseDocumentSettingsJson(row.document_settings_json);
   const lines = normalizeDraftLines(row.draft_lines_json);
-  lines.push(createEmptyDraftLine(lines.length));
+  lines.push(
+    createEmptyDraftLine(lines.length, {
+      currency: 'ILS',
+      vat_rate_code: settings.vat_mode === 'exempt' ? 'exempt' : 'standard',
+      price_includes_vat: false,
+    }),
+  );
   const docType = await resolveDocType(scope, row.document_type!);
   const serialized = serializeDraftLines(lines);
   return wizardDraftMutationOverlay(

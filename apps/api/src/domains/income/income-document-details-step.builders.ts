@@ -5,6 +5,11 @@ import {
   type IncomeDraftLineRecord,
 } from './income-document-draft-lines.pure.js';
 import {
+  allowedCurrencyOptions,
+  resolveDraftExchangeRateToIls,
+} from './income-draft-exchange-rate.pure.js';
+import { computeDraftLineAmounts } from './income-draft-line-compute.pure.js';
+import {
   computeDraftTotalsPreview,
   parseDocumentSettingsJson,
   type DraftTotalsPreview,
@@ -51,12 +56,34 @@ export type IncomeDocumentDetailsSelectField = {
 };
 
 export type IncomeDocumentDetailsLineRow = {
-  line_id: string;
+  id: string;
+  row_number: number;
+  can_drag: boolean;
   description: { value: string; editable: boolean; placeholder: string };
   quantity: { value: string; editable: boolean };
-  unit_price: { value: string; display: string; editable: boolean };
-  line_total: { display: string };
+  unit_price: { value: string; editable: boolean };
+  currency: {
+    value: string;
+    editable: boolean;
+    options: { value: string; label: string }[];
+  };
+  allowed_currencies: { value: string; label: string }[];
+  vat_rate_code: string;
+  vat_rate_label: string;
+  allowed_vat_rates: { value: string; label: string }[];
+  price_includes_vat: boolean;
+  price_mode_options: { value: boolean; label: string }[];
+  exchange_rate_default: string | null;
+  exchange_rate_override: { value: string; editable: boolean } | null;
+  exchange_rate_source_label: string | null;
+  exchange_rate_editable: boolean;
+  line_total_display: string;
+  field_errors: { code: string; message: string }[];
   allowed_actions: string[];
+  /** @deprecated use id */
+  line_id: string;
+  /** @deprecated use line_total_display */
+  line_total: { display: string };
 };
 
 export type IncomeDocumentDetailsLineTableFields = {
@@ -248,7 +275,7 @@ function buildSettingsSchema(
     },
     {
       key: 'vat_mode',
-      label: 'סוג מע״מ',
+      label: 'מע״מ מסמך',
       input_type: 'select',
       value: effectiveVatModeForUi(settings.vat_mode),
       required: true,
@@ -256,7 +283,7 @@ function buildSettingsSchema(
         { value: 'standard', label: vatResolution.standard_vat_mode_option_label },
         { value: 'exempt', label: 'פטור ממע״מ' },
       ],
-      visible: false,
+      visible: true,
       disabled: !canEdit,
       disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
     },
@@ -305,29 +332,98 @@ function buildSettingsSchema(
   return fields;
 }
 
+const PRICE_MODE_OPTIONS: { value: boolean; label: string }[] = [
+  { value: false, label: 'לפני מע״מ' },
+  { value: true, label: 'כולל מע״מ' },
+];
+
+function lineAllowedVatRates(
+  settings: IncomeDocumentSettings,
+  vatResolution: IncomeDraftVatResolution,
+): { value: string; label: string }[] {
+  if (settings.vat_mode === 'exempt') {
+    return [{ value: 'exempt', label: 'פטור' }];
+  }
+  return [
+    { value: 'standard', label: compactVatSelectLabel(vatResolution) },
+    { value: 'exempt', label: 'פטור' },
+  ];
+}
+
 function buildLineRows(
   lines: IncomeDraftLineRecord[],
-  totals: DraftTotalsPreview,
+  settings: IncomeDocumentSettings,
+  vatResolution: IncomeDraftVatResolution,
+  documentDate: string,
   canEdit: boolean,
 ): IncomeDocumentDetailsLineRow[] {
-  return lines.map((line) => ({
-    line_id: line.line_id,
-    description: {
-      value: line.description,
-      editable: canEdit,
-      placeholder: 'תיאור שירות או מוצר',
-    },
-    quantity: { value: String(line.quantity), editable: canEdit },
-    unit_price: {
-      value: line.unit_price_reference != null ? String(line.unit_price_reference) : '',
-      display: formatMoneyReference(line.unit_price_reference, totals.currency),
-      editable: canEdit,
-    },
-    line_total: {
-      display: formatMoneyReference(line.amount_reference, totals.currency),
-    },
-    allowed_actions: canEdit ? ['update_income_document_line', 'delete_income_document_line'] : [],
-  }));
+  const currencyOptions = allowedCurrencyOptions();
+  const allowedVatRates = lineAllowedVatRates(settings, vatResolution);
+
+  return lines.map((line, index) => {
+    const amounts = computeDraftLineAmounts(line, settings, vatResolution, documentDate);
+    const fxDefault = resolveDraftExchangeRateToIls(line.currency, documentDate, null);
+    const fxEffective = resolveDraftExchangeRateToIls(
+      line.currency,
+      documentDate,
+      line.exchange_rate_to_ils_override,
+    );
+    const vatLabel =
+      allowedVatRates.find((o) => o.value === line.vat_rate_code)?.label ??
+      (line.vat_rate_code === 'exempt' ? 'פטור' : compactVatSelectLabel(vatResolution));
+    const lineTotalDisplay = formatMoneyReference(amounts.line_total_ils, 'ILS');
+    const showFx = line.currency !== 'ILS';
+
+    return {
+      id: line.line_id,
+      line_id: line.line_id,
+      row_number: index + 1,
+      can_drag: canEdit && lines.length > 1,
+      description: {
+        value: line.description,
+        editable: canEdit,
+        placeholder: 'תיאור שירות או מוצר',
+      },
+      quantity: { value: String(line.quantity), editable: canEdit },
+      unit_price: {
+        value: line.unit_price_reference != null ? String(line.unit_price_reference) : '',
+        editable: canEdit,
+      },
+      currency: {
+        value: line.currency,
+        editable: canEdit,
+        options: currencyOptions.map((o) => ({ value: o.value, label: o.label })),
+      },
+      allowed_currencies: currencyOptions.map((o) => ({ value: o.value, label: o.label })),
+      vat_rate_code: line.vat_rate_code,
+      vat_rate_label: vatLabel,
+      allowed_vat_rates: allowedVatRates,
+      price_includes_vat: line.price_includes_vat,
+      price_mode_options: PRICE_MODE_OPTIONS,
+      exchange_rate_default: showFx ? fxDefault.rate_display : null,
+      exchange_rate_override: showFx
+        ? {
+            value:
+              line.exchange_rate_to_ils_override != null
+                ? String(line.exchange_rate_to_ils_override)
+                : '',
+            editable: canEdit,
+          }
+        : null,
+      exchange_rate_source_label: showFx ? fxEffective.source_label : null,
+      exchange_rate_editable: showFx && canEdit,
+      line_total_display: lineTotalDisplay,
+      line_total: { display: lineTotalDisplay },
+      field_errors: [],
+      allowed_actions: canEdit
+        ? [
+            'update_income_document_line',
+            'delete_income_document_line',
+            'reorder_income_document_lines',
+          ]
+        : [],
+    };
+  });
 }
 
 export type BuildIncomeDocumentDetailsStepOptions = {
@@ -403,16 +499,19 @@ export async function buildIncomeDocumentDetailsStep(
     settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution),
     line_items: {
       columns: [
+        { key: 'row_number', label: '#' },
+        { key: 'drag', label: '' },
         { key: 'description', label: 'פירוט *' },
         { key: 'quantity', label: 'כמות *' },
         { key: 'unit_price', label: "מחיר ליח'" },
         { key: 'currency', label: 'מטבע' },
         { key: 'vat', label: 'מע״מ' },
+        { key: 'confirm', label: '' },
         { key: 'line_total', label: 'סה״כ' },
-        { key: 'actions', label: 'פעולות' },
+        { key: 'delete', label: '' },
       ],
       document_fields: buildDocumentLineTableFields(row, settings, vatResolution, canEdit),
-      rows: buildLineRows(lines, totals, canEdit),
+      rows: buildLineRows(lines, settings, vatResolution, documentDate, canEdit),
       allowed_actions: lineActions,
       add_row_label: '+ הוסף שורה',
       empty_state: {
