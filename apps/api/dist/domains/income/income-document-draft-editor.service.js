@@ -96,9 +96,9 @@ async function validationForRow(scope, row, docType) {
     if (!vatResolution) {
         vatResolution = await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate);
     }
-    const lines = recomputeDraftLineAmounts(normalizeDraftLines(row.draft_lines_json), settings, vatResolution, documentDate);
-    const totalsPreview = computeDraftTotalsPreview(lines, 'ILS', settings, vatResolution, documentDate);
-    const { validation_warnings_json } = validateDraftAgainstDocumentTypeRules({
+    const lines = await recomputeDraftLineAmounts(normalizeDraftLines(row.draft_lines_json), settings, vatResolution, documentDate);
+    const totalsPreview = await computeDraftTotalsPreview(lines, 'ILS', settings, vatResolution, documentDate);
+    const { validation_warnings_json } = await validateDraftAgainstDocumentTypeRules({
         document_type: row.document_type,
         income_customer_id: row.income_customer_id ?? null,
         one_time_customer_snapshot_json: row.one_time_customer_snapshot_json ?? null,

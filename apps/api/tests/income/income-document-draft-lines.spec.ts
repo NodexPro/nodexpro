@@ -30,13 +30,13 @@ test('reorders by line_id list from backend command payload', () => {
   assert.equal(reordered[1].line_id, a.line_id);
 });
 
-test('computes draft totals preview on server (not financial truth)', () => {
+test('computes draft totals preview on server (not financial truth)', async () => {
   const lines = normalizeDraftLines(serializeDraftLines([createEmptyDraftLine(0)]));
   const updated = applyLineFieldUpdate(lines, lines[0].line_id, {
     unit_price_reference: 100,
     quantity: 1,
   });
-  const totals = computeDraftTotalsPreview(
+  const totals = await computeDraftTotalsPreview(
     updated,
     'ILS',
     {

@@ -1,6 +1,6 @@
 import { formatMoneyReference, normalizeDraftLines, } from './income-document-draft-lines.pure.js';
-import { allowedCurrencyOptions, resolveDraftExchangeRateToIls, } from './income-draft-exchange-rate.pure.js';
-import { computeDraftLineAmounts, recomputeDraftLineAmounts } from './income-draft-line-compute.pure.js';
+import { allowedCurrencyOptions } from './income-draft-exchange-rate.pure.js';
+import { computeDraftLineAmounts, recomputeDraftLineAmounts, resolveFxMapForDraftLines, resolveLineFx, } from './income-draft-line-compute.pure.js';
 import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
 import { buildDocumentDetailsHeaderTitle } from './income-document-details-header.pure.js';
 import { compactVatSelectLabel, readVatResolutionFromDraftPreview, } from './income-draft-vat-fallback.pure.js';
@@ -188,13 +188,30 @@ function lineAllowedVatRates(settings, vatResolution) {
         { value: 'exempt', label: 'פטור' },
     ];
 }
-function buildLineRows(lines, settings, vatResolution, documentDate, canEdit) {
+async function buildLineRows(lines, settings, vatResolution, documentDate, canEdit) {
     const currencyOptions = allowedCurrencyOptions();
     const allowedVatRates = lineAllowedVatRates(settings, vatResolution);
+    const officialByCurrency = await resolveFxMapForDraftLines(lines, documentDate);
     return lines.map((line, index) => {
-        const amounts = computeDraftLineAmounts(line, settings, vatResolution, documentDate);
-        const fxDefault = resolveDraftExchangeRateToIls(line.currency, documentDate, null);
-        const fxEffective = resolveDraftExchangeRateToIls(line.currency, documentDate, line.exchange_rate_to_ils_override);
+        const fx = resolveLineFx(line, documentDate, officialByCurrency);
+        const field_errors = [];
+        let amounts = {
+            line_total_ils: null,
+            exchange_rate_effective: 1,
+        };
+        if (!fx && line.currency !== 'ILS') {
+            field_errors.push({
+                code: 'exchange_rate_unavailable',
+                message: 'לא ניתן לטעון שער יציג מבנק ישראל לתאריך המסמך',
+            });
+        }
+        else if (fx) {
+            const computed = computeDraftLineAmounts(line, settings, vatResolution, fx);
+            amounts = {
+                line_total_ils: computed.line_total_ils,
+                exchange_rate_effective: computed.exchange_rate_effective,
+            };
+        }
         const vatLabel = allowedVatRates.find((o) => o.value === line.vat_rate_code)?.label ??
             (line.vat_rate_code === 'exempt' ? 'פטור' : compactVatSelectLabel(vatResolution));
         const lineTotalDisplay = formatMoneyReference(amounts.line_total_ils, 'ILS');
@@ -225,7 +242,9 @@ function buildLineRows(lines, settings, vatResolution, documentDate, canEdit) {
             allowed_vat_rates: allowedVatRates,
             price_includes_vat: line.price_includes_vat,
             price_mode_options: PRICE_MODE_OPTIONS,
-            exchange_rate_default: showFx ? fxDefault.rate_display : null,
+            exchange_rate_official: showFx ? (fx?.rate_official_display ?? null) : null,
+            exchange_rate_effective: showFx ? fx?.rate_display ?? null : '1.0000',
+            exchange_rate_default: showFx ? (fx?.rate_official_display ?? null) : null,
             exchange_rate_override: showFx
                 ? {
                     value: line.exchange_rate_to_ils_override != null
@@ -234,11 +253,12 @@ function buildLineRows(lines, settings, vatResolution, documentDate, canEdit) {
                     editable: canEdit,
                 }
                 : null,
-            exchange_rate_source_label: showFx ? fxEffective.source_label : null,
+            exchange_rate_date: showFx ? (fx?.exchange_rate_date ?? documentDate) : null,
+            exchange_rate_source_label: showFx ? (fx?.source_label ?? null) : null,
             exchange_rate_editable: showFx && canEdit,
             line_total_display: lineTotalDisplay,
             line_total: { display: lineTotalDisplay },
-            field_errors: [],
+            field_errors,
             allowed_actions: canEdit
                 ? [
                     'update_income_document_line',
@@ -255,9 +275,9 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
     const vatResolution = options.vatResolution ??
         readVatResolutionFromDraftPreview(row.draft_totals_preview_json, documentDate) ??
         (await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate));
-    const lines = recomputeDraftLineAmounts(normalizeDraftLines(row.draft_lines_json), settings, vatResolution, documentDate);
+    const lines = await recomputeDraftLineAmounts(normalizeDraftLines(row.draft_lines_json), settings, vatResolution, documentDate);
     const totals = options.totalsPreview ??
-        computeDraftTotalsPreview(lines, 'ILS', settings, vatResolution, documentDate);
+        (await computeDraftTotalsPreview(lines, 'ILS', settings, vatResolution, documentDate));
     const uiCache = readWizardUiCacheFromDraftPreview(row.draft_totals_preview_json);
     const docTypeLabel = row.document_type && DOCUMENT_TYPE_LABELS[row.document_type]
         ? DOCUMENT_TYPE_LABELS[row.document_type]
@@ -313,7 +333,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
                 { key: 'delete', label: '' },
             ],
             document_fields: buildDocumentLineTableFields(row, settings, vatResolution, canEdit),
-            rows: buildLineRows(lines, settings, vatResolution, documentDate, canEdit),
+            rows: await buildLineRows(lines, settings, vatResolution, documentDate, canEdit),
             allowed_actions: lineActions,
             add_row_label: '+ הוסף שורה',
             empty_state: {

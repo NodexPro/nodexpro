@@ -29,10 +29,14 @@ export type IncomeDocumentDetailsLineRow = {
   allowed_vat_rates: { value: string; label: string }[];
   price_includes_vat: boolean;
   price_mode_options: { value: boolean; label: string }[];
-  exchange_rate_default: string | null;
+  exchange_rate_official: string | null;
+  exchange_rate_effective: string | null;
   exchange_rate_override: { value: string; editable: boolean } | null;
+  exchange_rate_date: string | null;
   exchange_rate_source_label: string | null;
   exchange_rate_editable: boolean;
+  /** @deprecated use exchange_rate_official */
+  exchange_rate_default?: string | null;
   line_total_display: string;
   line_total: { display: string };
   field_errors: { code: string; message: string }[];

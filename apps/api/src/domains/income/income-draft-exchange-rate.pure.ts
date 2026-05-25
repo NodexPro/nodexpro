@@ -1,7 +1,9 @@
 /**
- * Income wizard draft FX — backend-owned preview rates (not Accounting Base truth).
- * TEMPORARY_DRAFT_FX_PENDING: replace with Country Pack / official rate feed when available.
+ * Income wizard draft FX — types + merge official BOI rate with user override.
  */
+
+import type { BoiOfficialRate } from './income-boi-exchange-rate.pure.js';
+import { boiSourceLabel, formatBoiRateDisplay, normalizeIsoDate } from './income-boi-exchange-rate.pure.js';
 
 export type IncomeDraftLineCurrency = 'ILS' | 'USD' | 'EUR' | 'GBP';
 
@@ -19,20 +21,15 @@ const CURRENCY_LABELS: Record<IncomeDraftLineCurrency, string> = {
   GBP: '£',
 };
 
-/** IL preview fallbacks — updated when legal/official feed is wired. */
-const IL_DRAFT_FX_FALLBACK_TO_ILS: Record<Exclude<IncomeDraftLineCurrency, 'ILS'>, number> = {
-  USD: 3.65,
-  EUR: 4.0,
-  GBP: 4.65,
-};
-
 export type DraftExchangeRateResolution = {
   currency: IncomeDraftLineCurrency;
   rate_to_ils: number;
   rate_display: string;
+  rate_official: number | null;
+  rate_official_display: string | null;
+  exchange_rate_date: string;
   source_label: string;
-  source: 'fallback_il' | 'override';
-  as_of_date: string;
+  source: 'ils' | 'boi_exact' | 'boi_previous' | 'override';
 };
 
 const CURRENCY_ALIASES: Record<string, IncomeDraftLineCurrency> = {
@@ -54,13 +51,11 @@ function resolveCurrencyCode(trimmed: string): IncomeDraftLineCurrency | null {
   return null;
 }
 
-/** Normalize stored/UI currency (₪ → ILS); unknown values default to ILS. */
 export function parseDraftLineCurrency(raw: unknown): IncomeDraftLineCurrency {
   const trimmed = String(raw ?? 'ILS').trim();
   return resolveCurrencyCode(trimmed) ?? 'ILS';
 }
 
-/** Strict currency from command patch — throws when not supported. */
 export function parseDraftLineCurrencyFromPatch(raw: unknown): IncomeDraftLineCurrency {
   const trimmed = String(raw ?? '').trim();
   const resolved = resolveCurrencyCode(trimmed);
@@ -72,10 +67,6 @@ export function parseDraftLineCurrencyFromPatch(raw: unknown): IncomeDraftLineCu
 
 export const DRAFT_LINE_CURRENCY_INVALID_MESSAGE = 'מטבע לא נתמך';
 
-/**
- * Parse optional user override. ILS always null (rate 1). Non-ILS: null = use backend default.
- * Throws only when user supplied an explicit non-positive rate.
- */
 export function parseDraftLineExchangeRateOverride(
   currency: IncomeDraftLineCurrency,
   raw: unknown,
@@ -103,44 +94,64 @@ export function allowedCurrencyOptions(): { value: IncomeDraftLineCurrency; labe
   }));
 }
 
-function formatRateDisplay(rate: number): string {
-  return rate.toFixed(4);
-}
-
-/** Default exchange rate to ILS for draft preview (1 unit foreign → ILS). */
-export function resolveDraftExchangeRateToIls(
+export function buildDraftExchangeRateResolution(
   currency: IncomeDraftLineCurrency,
   documentDate: string,
+  official: BoiOfficialRate | null,
   override: number | null,
-): DraftExchangeRateResolution {
-  const as_of_date = documentDate.trim() || new Date().toISOString().slice(0, 10);
+): DraftExchangeRateResolution | null {
+  const requested = normalizeIsoDate(documentDate);
+
   if (currency === 'ILS') {
     return {
       currency,
       rate_to_ils: 1,
       rate_display: '1.0000',
+      rate_official: 1,
+      rate_official_display: '1.0000',
+      exchange_rate_date: requested,
       source_label: 'שקל — ללא המרה',
-      source: 'fallback_il',
-      as_of_date,
+      source: 'ils',
     };
   }
+
   if (override != null && Number.isFinite(override) && override > 0) {
     return {
       currency,
       rate_to_ils: override,
-      rate_display: formatRateDisplay(override),
+      rate_display: formatBoiRateDisplay(override),
+      rate_official: official?.rate_to_ils ?? null,
+      rate_official_display: official?.rate_display ?? null,
+      exchange_rate_date: official?.rate_date ?? requested,
       source_label: 'שער מותאם',
       source: 'override',
-      as_of_date,
     };
   }
-  const fallback = IL_DRAFT_FX_FALLBACK_TO_ILS[currency];
+
+  if (!official) return null;
+
   return {
     currency,
-    rate_to_ils: fallback,
-    rate_display: formatRateDisplay(fallback),
-    source_label: 'שער יציג להיום',
-    source: 'fallback_il',
-    as_of_date,
+    rate_to_ils: official.rate_to_ils,
+    rate_display: official.rate_display,
+    rate_official: official.rate_to_ils,
+    rate_official_display: official.rate_display,
+    exchange_rate_date: official.rate_date,
+    source_label: boiSourceLabel(
+      official.exact_date_match,
+      official.rate_date,
+      official.requested_date,
+    ),
+    source: official.exact_date_match ? 'boi_exact' : 'boi_previous',
   };
+}
+
+/** @deprecated use buildDraftExchangeRateResolution — sync stub for legacy callers in tests */
+export function resolveDraftExchangeRateToIls(
+  currency: IncomeDraftLineCurrency,
+  documentDate: string,
+  override: number | null,
+  official?: BoiOfficialRate | null,
+): DraftExchangeRateResolution | null {
+  return buildDraftExchangeRateResolution(currency, documentDate, official ?? null, override);
 }

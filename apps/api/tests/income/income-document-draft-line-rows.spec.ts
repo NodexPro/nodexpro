@@ -10,8 +10,8 @@ import {
   serializeDraftLines,
 } from '../../src/domains/income/income-document-draft-lines.pure.js';
 import { computeDraftTotalsPreview } from '../../src/domains/income/income-document-draft-totals.pure.js';
+import { buildDraftExchangeRateResolution } from '../../src/domains/income/income-draft-exchange-rate.pure.js';
 import { computeDraftLineAmounts } from '../../src/domains/income/income-draft-line-compute.pure.js';
-import { resolveDraftExchangeRateToIls } from '../../src/domains/income/income-draft-exchange-rate.pure.js';
 import { incomeDraftVatFallbackResolution } from '../../src/domains/income/income-draft-vat-fallback.pure.js';
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -40,15 +40,22 @@ test('each line can have its own currency', () => {
   assert.ok(buildersSource.includes('currency: {'));
 });
 
-test('non-ILS row exposes default exchange rate and override field', () => {
-  const line = createEmptyDraftLine(0, { currency: 'USD' });
-  line.unit_price_reference = 10;
-  const fx = resolveDraftExchangeRateToIls('USD', documentDate, null);
-  assert.ok(fx.rate_to_ils > 0);
-  assert.match(fx.source_label, /שער/);
-  assert.ok(buildersSource.includes('exchange_rate_default'));
+test('non-ILS row exposes official exchange rate and override field', () => {
+  const official = {
+    currency: 'USD',
+    rate_to_ils: 3.7245,
+    rate_display: '3.7245',
+    rate_date: '2026-05-21',
+    requested_date: '2026-05-21',
+    exact_date_match: true,
+    source: 'boi_sdmx' as const,
+  };
+  const fx = buildDraftExchangeRateResolution('USD', documentDate, official, null);
+  assert.ok(fx && fx.rate_to_ils > 0);
+  assert.match(fx!.source_label, /שער יציג/);
+  assert.ok(buildersSource.includes('exchange_rate_official'));
   assert.ok(buildersSource.includes('exchange_rate_override'));
-  assert.ok(frontendSource.includes('שער יציג להיום'));
+  assert.ok(frontendSource.includes('שער יציג ל-'));
   assert.ok(frontendSource.includes('שער מותאם'));
 });
 
@@ -69,7 +76,7 @@ test('frontend does not calculate totals VAT or exchange rate', () => {
   assert.ok(!frontendSource.includes('rate_to_ils *'));
   assert.ok(!frontendSource.match(/vat.*\*.*0\./));
   assert.ok(frontendSource.includes('line_total_display'));
-  assert.ok(frontendSource.includes('exchange_rate_default'));
+  assert.ok(frontendSource.includes('exchange_rate_official'));
 });
 
 test('per-line USD with override recalculates ILS total on backend', () => {
@@ -77,7 +84,17 @@ test('per-line USD with override recalculates ILS total on backend', () => {
   line.unit_price_reference = 100;
   line.quantity = 1;
   line = applyLineFieldUpdate([line], line.line_id, { exchange_rate_to_ils_override: 4 })[0];
-  const amounts = computeDraftLineAmounts(line, settings, vat, documentDate);
+  const official = {
+    currency: 'USD',
+    rate_to_ils: 3.65,
+    rate_display: '3.6500',
+    rate_date: '2026-05-21',
+    requested_date: '2026-05-21',
+    exact_date_match: true,
+    source: 'boi_sdmx' as const,
+  };
+  const fx = buildDraftExchangeRateResolution('USD', documentDate, official, 4)!;
+  const amounts = computeDraftLineAmounts(line, settings, vat, fx);
   assert.equal(amounts.line_total_ils, 472);
 });
 
@@ -85,17 +102,18 @@ test('price includes VAT uses gross split on backend', () => {
   let line = createEmptyDraftLine(0, { currency: 'ILS', price_includes_vat: true, vat_rate_code: 'standard' });
   line.unit_price_reference = 118;
   line.quantity = 1;
-  const amounts = computeDraftLineAmounts(line, settings, vat, documentDate);
+  const fx = buildDraftExchangeRateResolution('ILS', documentDate, null, null)!;
+  const amounts = computeDraftLineAmounts(line, settings, vat, fx);
   assert.equal(amounts.line_total_ils, 118);
   assert.equal(amounts.line_vat_ils, 18);
 });
 
-test('document totals are backend-calculated from line ILS amounts', () => {
+test('document totals are backend-calculated from line ILS amounts', async () => {
   let line = createEmptyDraftLine(0);
   line.unit_price_reference = 100;
   line.quantity = 1;
   const lines = normalizeDraftLines(serializeDraftLines([line]));
-  const totals = computeDraftTotalsPreview(lines, 'ILS', settings, vat, documentDate);
+  const totals = await computeDraftTotalsPreview(lines, 'ILS', settings, vat, documentDate);
   assert.equal(totals.grand_total_reference, 118);
   assert.equal(totals.not_financial_truth, true);
 });

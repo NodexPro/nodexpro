@@ -1,4 +1,5 @@
-import { resolveDraftExchangeRateToIls } from './income-draft-exchange-rate.pure.js';
+import { buildDraftExchangeRateResolution, } from './income-draft-exchange-rate.pure.js';
+import { resolveOfficialBoiRatesForCurrencies, } from './income-exchange-rate.service.js';
 function round2(n) {
     return Math.round(n * 100) / 100;
 }
@@ -10,8 +11,7 @@ function effectiveVatRate(lineVatCode, settings, vatResolution) {
         return 0;
     return vatResolution.standard_rate;
 }
-export function computeDraftLineAmounts(line, settings, vatResolution, documentDate) {
-    const fx = resolveDraftExchangeRateToIls(line.currency, documentDate, line.exchange_rate_to_ils_override);
+export function computeDraftLineAmounts(line, settings, vatResolution, fx) {
     const qty = line.quantity;
     const unit = line.unit_price_reference;
     if (unit == null || !Number.isFinite(unit) || qty <= 0) {
@@ -55,9 +55,27 @@ export function computeDraftLineAmounts(line, settings, vatResolution, documentD
         exchange_rate_effective: fx.rate_to_ils,
     };
 }
-export function recomputeDraftLineAmounts(lines, settings, vatResolution, documentDate) {
+export async function resolveFxMapForDraftLines(lines, documentDate) {
+    const currencies = lines.map((l) => l.currency);
+    const official = await resolveOfficialBoiRatesForCurrencies(currencies, documentDate);
+    const map = new Map();
+    for (const c of currencies) {
+        map.set(c, c === 'ILS' ? null : (official.get(c) ?? null));
+    }
+    return map;
+}
+export function resolveLineFx(line, documentDate, officialByCurrency) {
+    const official = officialByCurrency.get(line.currency) ?? null;
+    return buildDraftExchangeRateResolution(line.currency, documentDate, official, line.exchange_rate_to_ils_override);
+}
+export async function recomputeDraftLineAmounts(lines, settings, vatResolution, documentDate) {
+    const officialByCurrency = await resolveFxMapForDraftLines(lines, documentDate);
     return lines.map((line) => {
-        const amounts = computeDraftLineAmounts(line, settings, vatResolution, documentDate);
+        const fx = resolveLineFx(line, documentDate, officialByCurrency);
+        if (!fx) {
+            return { ...line, amount_reference: null };
+        }
+        const amounts = computeDraftLineAmounts(line, settings, vatResolution, fx);
         return {
             ...line,
             amount_reference: amounts.line_total_ils,

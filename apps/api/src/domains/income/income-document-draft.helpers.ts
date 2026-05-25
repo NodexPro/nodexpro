@@ -68,10 +68,13 @@ export function parseDraftPayloadBody(
   };
 }
 
-export function validateDraftAgainstDocumentTypeRules(
+export async function validateDraftAgainstDocumentTypeRules(
   payload: ParsedDraftPayload,
   docType: IncomeAvailableDocumentType,
-): { validation_warnings_json: Record<string, unknown>[]; draft_totals_preview_json: Record<string, unknown> } {
+): Promise<{
+  validation_warnings_json: Record<string, unknown>[];
+  draft_totals_preview_json: Record<string, unknown>;
+}> {
   const warnings: Record<string, unknown>[] = [];
 
   if (docType.requires_payment_received && !payload.payment_received_json) {
@@ -95,7 +98,14 @@ export function validateDraftAgainstDocumentTypeRules(
 
   const lines = normalizeDraftLines(payload.draft_lines_json);
   const settings = parseDocumentSettingsJson(payload.document_settings_json ?? null);
-  const totals = computeDraftTotalsPreview(lines, payload.currency, settings, incomeDraftVatFallbackResolution());
+  const documentDate = payload.document_date ?? new Date().toISOString().slice(0, 10);
+  const totals = await computeDraftTotalsPreview(
+    lines,
+    payload.currency,
+    settings,
+    incomeDraftVatFallbackResolution(),
+    documentDate,
+  );
 
   return {
     validation_warnings_json: warnings,

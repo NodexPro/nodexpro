@@ -2,7 +2,8 @@ import type { IncomeDraftLineRecord } from './income-document-draft-lines.pure.j
 import { formatMoneyReference } from './income-document-draft-lines.pure.js';
 import {
   computeDraftLineAmounts,
-  recomputeDraftLineAmounts,
+  resolveFxMapForDraftLines,
+  resolveLineFx,
 } from './income-draft-line-compute.pure.js';
 import type { IncomeDraftVatResolution } from './income-draft-vat-fallback.pure.js';
 import { IL_DRAFT_VAT_FALLBACK_RATE } from './income-draft-vat-fallback.pure.js';
@@ -51,21 +52,23 @@ export type DraftTotalsPreview = {
   vat_rate_label: string | null;
 };
 
-export function computeDraftTotalsPreview(
+export async function computeDraftTotalsPreview(
   lines: IncomeDraftLineRecord[],
   currency: string,
   settings: IncomeDocumentSettings,
   vatResolution: IncomeDraftVatResolution,
   documentDate?: string,
-): DraftTotalsPreview {
+): Promise<DraftTotalsPreview> {
   const asOf = documentDate?.trim() || new Date().toISOString().slice(0, 10);
-  const computedLines = recomputeDraftLineAmounts(lines, settings, vatResolution, asOf);
+  const officialByCurrency = await resolveFxMapForDraftLines(lines, asOf);
 
   let subtotal = 0;
   let vat = 0;
   let hasAmount = false;
-  for (const line of computedLines) {
-    const amounts = computeDraftLineAmounts(line, settings, vatResolution, asOf);
+  for (const line of lines) {
+    const fx = resolveLineFx(line, asOf, officialByCurrency);
+    if (!fx) continue;
+    const amounts = computeDraftLineAmounts(line, settings, vatResolution, fx);
     if (amounts.line_net_ils != null) {
       subtotal += amounts.line_net_ils;
       hasAmount = true;
@@ -88,7 +91,7 @@ export function computeDraftTotalsPreview(
 
   const grand = hasAmount
     ? roundAmount(subtotal + vat, settings.amount_rounding)
-    : subtotal === 0 && computedLines.length > 0
+    : subtotal === 0 && lines.length > 0
       ? 0
       : null;
 
@@ -99,12 +102,12 @@ export function computeDraftTotalsPreview(
     preview: true,
     not_financial_truth: true,
     currency: displayCurrency,
-    line_count: computedLines.length,
-    subtotal_reference: hasAmount ? subtotal : subtotal === 0 && computedLines.length > 0 ? 0 : null,
+    line_count: lines.length,
+    subtotal_reference: hasAmount ? subtotal : subtotal === 0 && lines.length > 0 ? 0 : null,
     vat_reference: showVat ? vat : settings.vat_mode === 'zero' ? 0 : null,
     grand_total_reference: grand,
     subtotal_display: formatMoneyReference(
-      hasAmount ? subtotal : subtotal === 0 && computedLines.length > 0 ? 0 : null,
+      hasAmount ? subtotal : subtotal === 0 && lines.length > 0 ? 0 : null,
       displayCurrency,
     ),
     vat_display: showVat ? formatMoneyReference(vat, displayCurrency) : null,

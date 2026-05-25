@@ -328,7 +328,7 @@ async function executeCreateDraft(ctx: RequestContext, body: Record<string, unkn
   }
 
   const { validation_warnings_json, draft_totals_preview_json } =
-    validateDraftAgainstDocumentTypeRules(payload, docType);
+    await validateDraftAgainstDocumentTypeRules(payload, docType);
 
   const { error } = await supabaseAdmin.from('income_document_drafts').insert({
     organization_id: scope.org_id,
@@ -395,7 +395,7 @@ async function executeUpdateDraft(ctx: RequestContext, body: Record<string, unkn
   }
 
   const { validation_warnings_json, draft_totals_preview_json } =
-    validateDraftAgainstDocumentTypeRules(payload, docType);
+    await validateDraftAgainstDocumentTypeRules(payload, docType);
 
   const { error } = await supabaseAdmin
     .from('income_document_drafts')

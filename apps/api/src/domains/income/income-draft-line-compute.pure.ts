@@ -1,6 +1,13 @@
 import type { IncomeDraftLineRecord } from './income-document-draft-lines.pure.js';
 import type { IncomeDraftLineCurrency } from './income-draft-exchange-rate.pure.js';
-import { resolveDraftExchangeRateToIls } from './income-draft-exchange-rate.pure.js';
+import {
+  buildDraftExchangeRateResolution,
+  type DraftExchangeRateResolution,
+} from './income-draft-exchange-rate.pure.js';
+import type { BoiOfficialRate } from './income-boi-exchange-rate.pure.js';
+import {
+  resolveOfficialBoiRatesForCurrencies,
+} from './income-exchange-rate.service.js';
 import type { IncomeDraftVatResolution } from './income-draft-vat-fallback.pure.js';
 import type { IncomeDocumentSettings } from './income-document-draft-totals.pure.js';
 
@@ -35,13 +42,8 @@ export function computeDraftLineAmounts(
   line: IncomeDraftLineRecord,
   settings: IncomeDocumentSettings,
   vatResolution: IncomeDraftVatResolution,
-  documentDate: string,
+  fx: DraftExchangeRateResolution,
 ): ComputedDraftLineAmounts {
-  const fx = resolveDraftExchangeRateToIls(
-    line.currency,
-    documentDate,
-    line.exchange_rate_to_ils_override,
-  );
   const qty = line.quantity;
   const unit = line.unit_price_reference;
   if (unit == null || !Number.isFinite(unit) || qty <= 0) {
@@ -88,14 +90,46 @@ export function computeDraftLineAmounts(
   };
 }
 
-export function recomputeDraftLineAmounts(
+export async function resolveFxMapForDraftLines(
+  lines: IncomeDraftLineRecord[],
+  documentDate: string,
+): Promise<Map<IncomeDraftLineCurrency, BoiOfficialRate | null>> {
+  const currencies = lines.map((l) => l.currency);
+  const official = await resolveOfficialBoiRatesForCurrencies(currencies, documentDate);
+  const map = new Map<IncomeDraftLineCurrency, BoiOfficialRate | null>();
+  for (const c of currencies) {
+    map.set(c, c === 'ILS' ? null : (official.get(c) ?? null));
+  }
+  return map;
+}
+
+export function resolveLineFx(
+  line: IncomeDraftLineRecord,
+  documentDate: string,
+  officialByCurrency: Map<IncomeDraftLineCurrency, BoiOfficialRate | null>,
+): DraftExchangeRateResolution | null {
+  const official = officialByCurrency.get(line.currency) ?? null;
+  return buildDraftExchangeRateResolution(
+    line.currency,
+    documentDate,
+    official,
+    line.exchange_rate_to_ils_override,
+  );
+}
+
+export async function recomputeDraftLineAmounts(
   lines: IncomeDraftLineRecord[],
   settings: IncomeDocumentSettings,
   vatResolution: IncomeDraftVatResolution,
   documentDate: string,
-): IncomeDraftLineRecord[] {
+): Promise<IncomeDraftLineRecord[]> {
+  const officialByCurrency = await resolveFxMapForDraftLines(lines, documentDate);
   return lines.map((line) => {
-    const amounts = computeDraftLineAmounts(line, settings, vatResolution, documentDate);
+    const fx = resolveLineFx(line, documentDate, officialByCurrency);
+    if (!fx) {
+      return { ...line, amount_reference: null };
+    }
+    const amounts = computeDraftLineAmounts(line, settings, vatResolution, fx);
     return {
       ...line,
       amount_reference: amounts.line_total_ils,

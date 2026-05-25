@@ -164,7 +164,7 @@ function LineRowEditor({
         {showFx ? (
           <div className="nx-we-doc-details__fx-row">
             <span className="nx-we-doc-details__fx-label">
-              שער יציג להיום: {row.exchange_rate_default}
+              שער יציג ל-{row.exchange_rate_date ?? '—'}: {row.exchange_rate_official ?? '—'}
             </span>
             <label className="nx-we-doc-details__fx-override">
               <span>שער מותאם</span>
@@ -174,6 +174,13 @@ function LineRowEditor({
                 className="nx-we-doc-details__cell-input nx-we-doc-details__cell-input--fx"
                 value={draft.exchange_rate_override}
                 disabled={disabled || !row.exchange_rate_editable}
+                onBlur={() => commitDraft()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitDraft();
+                  }
+                }}
                 onChange={(e) =>
                   setDraft((d) => ({
                     ...d,
@@ -182,6 +189,13 @@ function LineRowEditor({
                 }
               />
             </label>
+            {row.field_errors.length > 0 ? (
+              <ul className="nx-we-doc-details__row-errors">
+                {row.field_errors.map((err) => (
+                  <li key={err.code}>{err.message}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
       </td>

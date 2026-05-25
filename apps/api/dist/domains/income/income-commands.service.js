@@ -174,7 +174,7 @@ async function executeCreateDraft(ctx, body) {
     if (payload.income_customer_id) {
         await loadIncomeCustomerInScope(scope, payload.income_customer_id);
     }
-    const { validation_warnings_json, draft_totals_preview_json } = validateDraftAgainstDocumentTypeRules(payload, docType);
+    const { validation_warnings_json, draft_totals_preview_json } = await validateDraftAgainstDocumentTypeRules(payload, docType);
     const { error } = await supabaseAdmin.from('income_document_drafts').insert({
         organization_id: scope.org_id,
         represented_client_id: scope.represented_client_id,
@@ -232,7 +232,7 @@ async function executeUpdateDraft(ctx, body) {
     if (payload.income_customer_id) {
         await loadIncomeCustomerInScope(scope, payload.income_customer_id);
     }
-    const { validation_warnings_json, draft_totals_preview_json } = validateDraftAgainstDocumentTypeRules(payload, docType);
+    const { validation_warnings_json, draft_totals_preview_json } = await validateDraftAgainstDocumentTypeRules(payload, docType);
     const { error } = await supabaseAdmin
         .from('income_document_drafts')
         .update({

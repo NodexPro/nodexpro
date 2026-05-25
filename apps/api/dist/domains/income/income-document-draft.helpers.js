@@ -38,7 +38,7 @@ export function parseDraftPayloadBody(body, parseDocumentType, optionalUuid, req
         language: parseLanguage(body.language),
     };
 }
-export function validateDraftAgainstDocumentTypeRules(payload, docType) {
+export async function validateDraftAgainstDocumentTypeRules(payload, docType) {
     const warnings = [];
     if (docType.requires_payment_received && !payload.payment_received_json) {
         warnings.push({
@@ -60,7 +60,8 @@ export function validateDraftAgainstDocumentTypeRules(payload, docType) {
     }
     const lines = normalizeDraftLines(payload.draft_lines_json);
     const settings = parseDocumentSettingsJson(payload.document_settings_json ?? null);
-    const totals = computeDraftTotalsPreview(lines, payload.currency, settings, incomeDraftVatFallbackResolution());
+    const documentDate = payload.document_date ?? new Date().toISOString().slice(0, 10);
+    const totals = await computeDraftTotalsPreview(lines, payload.currency, settings, incomeDraftVatFallbackResolution(), documentDate);
     return {
         validation_warnings_json: warnings,
         draft_totals_preview_json: totals,
