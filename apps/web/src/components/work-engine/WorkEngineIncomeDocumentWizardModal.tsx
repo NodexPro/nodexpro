@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   IncomeAvailableDocumentType,
   IncomeWorkspaceAggregate,
@@ -41,7 +41,14 @@ type Props = {
   onClose: () => void;
   onBusyChange: (busy: boolean) => void;
   onCompleted: () => void;
+  initialWorkspaceAgg?: IncomeWorkspaceAggregate | null;
 };
+
+function stepIndexForKey(steps: { key: string }[], key: string | null | undefined): number | null {
+  if (!key) return null;
+  const idx = steps.findIndex((s) => s.key === key);
+  return idx >= 0 ? idx : null;
+}
 
 export function WorkEngineIncomeDocumentWizardModal({
   open,
@@ -50,13 +57,16 @@ export function WorkEngineIncomeDocumentWizardModal({
   onClose,
   onBusyChange,
   onCompleted,
+  initialWorkspaceAgg,
 }: Props) {
   const wizard = entrypoint.wizard;
   const [stepIndex, setStepIndex] = useState(0);
   const [issuerChoice, setIssuerChoice] = useState<'self' | 'office_client' | null>(null);
   const [officeClientId, setOfficeClientId] = useState('');
   const [, setContextAgg] = useState<IncomeWorkspaceContextAggregate | null>(null);
-  const [workspaceAgg, setWorkspaceAgg] = useState<IncomeWorkspaceAggregate | null>(null);
+  const [workspaceAgg, setWorkspaceAgg] = useState<IncomeWorkspaceAggregate | null>(
+    initialWorkspaceAgg ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [recipientPending, setRecipientPending] = useState(false);
   const recipientFieldRef = useRef<WorkEngineRecipientSearchFieldHandle>(null);
@@ -73,6 +83,19 @@ export function WorkEngineIncomeDocumentWizardModal({
       return true;
     });
   }, [wizard.steps, issuerChoice]);
+
+  useEffect(() => {
+    const startingStepKey = workspaceAgg?.wizard_starting_step_key ?? null;
+    const idx = stepIndexForKey(visibleSteps, startingStepKey);
+    if (idx != null) setStepIndex(idx);
+  }, [visibleSteps, workspaceAgg?.wizard_starting_step_key]);
+
+  useEffect(() => {
+    const docTypeFromDraft = (workspaceAgg as any)?.document_details_step?.document_type_key ?? null;
+    if (docTypeFromDraft && form.document_type !== docTypeFromDraft) {
+      setForm((f) => ({ ...f, document_type: String(docTypeFromDraft) }));
+    }
+  }, [workspaceAgg, form.document_type]);
 
   const activeStepKey = visibleSteps[Math.min(stepIndex, visibleSteps.length - 1)]?.key ?? '';
   const isLastStep = stepIndex >= visibleSteps.length - 1;
@@ -221,6 +244,27 @@ export function WorkEngineIncomeDocumentWizardModal({
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'שגיאה בהפקה');
+    } finally {
+      onBusyChange(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    setError(null);
+    const cmds = wizard.income_commands;
+    const draftId = activeDraftId;
+    if (!draftId) {
+      setError('טיוטה לא נמצאה');
+      return;
+    }
+    onBusyChange(true);
+    try {
+      const res = await executeIncomeCommand(cmds.save_draft, { draft_id: draftId });
+      if ('income_workspace_aggregate' in res) {
+        setWorkspaceAgg(res.income_workspace_aggregate);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'שגיאה בשמירה');
     } finally {
       onBusyChange(false);
     }
@@ -406,6 +450,27 @@ export function WorkEngineIncomeDocumentWizardModal({
               onClick={handleBack}
             >
               הקודם
+            </button>
+          ) : null}
+          {activeStepKey === 'document_details' ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              disabled={footerLocked || !activeDraftId}
+              onClick={() => void handleSaveDraft()}
+              title={documentDetailsStep?.draft_state_display?.label ?? undefined}
+            >
+              שמירת טיוטה
+            </button>
+          ) : null}
+          {activeStepKey === 'document_details' ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              disabled={footerLocked || !activeDraftId}
+              onClick={() => setStepIndex((i) => i + 1)}
+            >
+              תצוגה מקדימה
             </button>
           ) : null}
           {!isLastStep ? (

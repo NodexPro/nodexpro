@@ -121,6 +121,8 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(ctx) {
                 update_draft_settings: 'update_income_document_draft_settings',
                 update_notes: 'update_income_document_notes',
                 update_delivery_contact: 'update_income_document_delivery_contact',
+                save_draft: 'save_income_document_draft',
+                resume_draft: 'resume_income_document_draft',
                 issue_document: 'issue_income_document',
             },
         },

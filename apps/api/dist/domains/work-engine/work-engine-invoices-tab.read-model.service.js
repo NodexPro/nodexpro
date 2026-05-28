@@ -9,6 +9,14 @@ import { forbidden } from '../../shared/errors.js';
 import { buildAccountantWorkspaceTabs } from './work-engine.read-models.service.js';
 import { buildWorkEngineInvoicesDocumentCreationEntrypoint } from './work-engine-invoices-document-creation.builders.js';
 import { amountReferenceFromTotalsSnapshot, customerDisplayFromSnapshot, isOverdueByDueDate, } from '../income/income-work-engine-bridge.pure.js';
+const DOCUMENT_TYPE_LABELS = {
+    receipt: 'קבלה',
+    tax_invoice: 'חשבונית מס',
+    tax_invoice_receipt: 'חשבונית מס קבלה',
+    credit_tax_invoice: 'חשבונית מס זיכוי',
+    deal_invoice: 'חשבונית עסקה',
+    quote: 'הצעת מחיר',
+};
 export const WORK_ENGINE_INVOICES_TAB_COLUMNS = [
     { key: 'client_name', label: 'לקוח', type: 'text' },
     { key: 'amount_due_reference', label: 'סכום לתשלום', type: 'money_reference' },
@@ -35,6 +43,16 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
     if (!orgId)
         throw forbidden('Organization context required');
     const todayIso = new Date().toISOString().slice(0, 10);
+    const { data: drafts, error: dErr } = await supabaseAdmin
+        .from('income_document_drafts')
+        .select('id, represented_client_id, document_type, status, updated_at, draft_lines_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json')
+        .eq('organization_id', orgId)
+        .eq('status', 'draft')
+        .not('represented_client_id', 'is', null)
+        .order('updated_at', { ascending: false })
+        .limit(20);
+    if (dErr)
+        throw dErr;
     const { data: docs, error } = await supabaseAdmin
         .from('income_documents')
         .select('id, represented_client_id, document_number, document_type, issue_date, due_date, currency, customer_snapshot_json, totals_snapshot_json')
@@ -50,6 +68,11 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
             .map((d) => d.represented_client_id)
             .filter((id) => !!id)),
     ];
+    for (const raw of drafts ?? []) {
+        const rid = raw.represented_client_id;
+        if (rid)
+            clientIds.push(rid);
+    }
     const clientNameById = new Map();
     if (clientIds.length > 0) {
         const { data: clients, error: cErr } = await supabaseAdmin
@@ -97,6 +120,42 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
         });
     }
     const avgPaidReference = paidCount > 0 ? Math.round((sumPaidReference / paidCount) * 100) / 100 : 0;
+    const draft_entrypoints = (drafts ?? []).map((raw) => {
+        const d = raw;
+        const docTypeLabel = d.document_type ? DOCUMENT_TYPE_LABELS[d.document_type] ?? d.document_type : 'מסמך';
+        const issuerName = clientNameById.get(d.represented_client_id) ?? '—';
+        const recipient = typeof d.draft_totals_preview_json?.recipient_display_name === 'string'
+            ? String(d.draft_totals_preview_json.recipient_display_name)
+            : typeof d.one_time_customer_snapshot_json?.display_name === 'string'
+                ? String(d.one_time_customer_snapshot_json.display_name)
+                : '—';
+        const line_count = typeof d.draft_totals_preview_json?.line_count === 'number'
+            ? Number(d.draft_totals_preview_json.line_count)
+            : Array.isArray(d.draft_lines_json)
+                ? d.draft_lines_json.length
+                : 0;
+        const total_display = typeof d.draft_totals_preview_json?.grand_total_display === 'string'
+            ? String(d.draft_totals_preview_json.grand_total_display)
+            : null;
+        return {
+            draft_id: d.id,
+            title: `${issuerName} · ${docTypeLabel}`,
+            subtitle: `ל-${recipient}`,
+            status_label: 'טיוטה',
+            last_saved_at: d.updated_at ?? todayIso,
+            total_display,
+            line_count,
+            allowed_actions: [
+                {
+                    command: 'resume_income_document_draft',
+                    label: 'המשך עריכה',
+                    enabled: true,
+                    reason: null,
+                    command_payload: { draft_id: d.id },
+                },
+            ],
+        };
+    }) ?? [];
     return {
         aggregate_key: 'work_engine_invoices_tab_aggregate',
         org_id: orgId,
@@ -121,6 +180,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
         filters: [],
         allowed_actions: ['view_invoices_tab', 'open_income_document_wizard'],
         document_creation_entrypoint: await buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx),
+        draft_entrypoints,
         gaps: [
             'income.invoice_paid — payment status not implemented (INC-8)',
             'income.invoice_partially_paid — not implemented',

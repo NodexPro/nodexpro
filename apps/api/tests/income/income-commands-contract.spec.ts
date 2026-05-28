@@ -87,3 +87,11 @@ test('issued document rows expose pdf_render_status', () => {
   assert.match(typesSource, /pdf_download_path/);
   assert.match(workspaceSource, /pdf_status_label/);
 });
+
+test('resume_income_document_draft command is registered and returns starting step key', () => {
+  assert.match(commandsSource, /INCOME_COMMAND_RESUME_DRAFT/);
+  assert.match(commandsSource, /resumeIncomeDocumentDraftFromContext/);
+  assert.match(commandsSource, /starting_step_key/);
+  const typesSource = readFileSync(join(dir, '../../src/domains/income/income.types.ts'), 'utf8');
+  assert.match(typesSource, /wizard_starting_step_key\?:\s*string\s*\|\s*null/);
+});

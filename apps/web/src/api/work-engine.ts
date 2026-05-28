@@ -517,7 +517,10 @@ export type WorkEngineInvoicesDocumentCreationEntrypoint = {
       document_date_required: boolean;
       notes_label: string;
     };
-    income_commands: Record<string, string>;
+    income_commands: Record<string, string> & {
+      resume_draft: string;
+      save_draft: string;
+    };
   };
 };
 
@@ -541,6 +544,22 @@ export type WorkEngineInvoicesTabAggregate = {
   filters: [];
   allowed_actions: string[];
   document_creation_entrypoint: WorkEngineInvoicesDocumentCreationEntrypoint;
+  draft_entrypoints: Array<{
+    draft_id: string;
+    title: string;
+    subtitle: string | null;
+    status_label: string;
+    last_saved_at: string;
+    total_display: string | null;
+    line_count: number;
+    allowed_actions: Array<{
+      command: 'resume_income_document_draft';
+      label: string;
+      enabled: boolean;
+      reason: string | null;
+      command_payload: { draft_id: string };
+    }>;
+  }>;
   gaps: string[];
 };
 

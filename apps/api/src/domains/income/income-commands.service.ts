@@ -65,6 +65,9 @@ import {
   updateIncomeDocumentLine,
   deleteIncomeDocumentLine,
   reorderIncomeDocumentLines,
+  saveIncomeDocumentDraft,
+  resumeIncomeDocumentDraft,
+  resumeIncomeDocumentDraftFromContext,
   updateIncomeDocumentDraftSettings,
   updateIncomeDocumentNotes,
   updateIncomeDocumentDeliveryContact,
@@ -77,6 +80,8 @@ import {
   INCOME_COMMAND_DELETE_LINE,
   INCOME_COMMAND_ISSUE_DOCUMENT,
   INCOME_COMMAND_REORDER_LINES,
+  INCOME_COMMAND_SAVE_DRAFT,
+  INCOME_COMMAND_RESUME_DRAFT,
   INCOME_COMMAND_SEARCH_RECIPIENTS,
   INCOME_COMMAND_SELECT_RECIPIENT,
   INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT,
@@ -121,6 +126,8 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_UPDATE_DRAFT_SETTINGS,
   INCOME_COMMAND_UPDATE_NOTES,
   INCOME_COMMAND_UPDATE_DELIVERY_CONTACT,
+  INCOME_COMMAND_SAVE_DRAFT,
+  INCOME_COMMAND_RESUME_DRAFT,
 ]);
 
 async function commandResponse(
@@ -147,6 +154,7 @@ async function wizardDraftCommandResponse(
   scope: ActiveIncomeIssuerScope,
   recipientOverlay: RecipientSearchOverlay,
   wizardDraftOverlay: WizardDraftOverlay,
+  startingStepKey: string | null = null,
 ): Promise<IncomeCommandResponse> {
   return {
     ok: true,
@@ -155,6 +163,7 @@ async function wizardDraftCommandResponse(
       scope,
       wizardDraftOverlay,
       recipientOverlay,
+      startingStepKey,
     ),
     meta: { workspace_aggregate_mode: 'wizard_patch' },
   };
@@ -619,6 +628,17 @@ export async function executeIncomeCommand(
     const { wizardOverlay, recipientOverlay } = await beginIncomeWizardDocumentDraft(scope, body, {});
     return wizardDraftCommandResponse(ctx, command, scope, recipientOverlay, wizardOverlay);
   }
+  if (command === INCOME_COMMAND_RESUME_DRAFT) {
+    const resumed = await resumeIncomeDocumentDraftFromContext(ctx, body);
+    return wizardDraftCommandResponse(
+      ctx,
+      command,
+      resumed.scope,
+      resumed.result.recipientOverlay,
+      resumed.result.wizardOverlay,
+      resumed.result.starting_step_key,
+    );
+  }
 
   const wizardDraftCmd = async (
     runner: (scope: ActiveIncomeIssuerScope, body: Record<string, unknown>) => Promise<WizardDraftOverlay>,
@@ -649,6 +669,9 @@ export async function executeIncomeCommand(
   }
   if (command === INCOME_COMMAND_UPDATE_DELIVERY_CONTACT) {
     return wizardDraftCmd(updateIncomeDocumentDeliveryContact);
+  }
+  if (command === INCOME_COMMAND_SAVE_DRAFT) {
+    return wizardDraftCmd(saveIncomeDocumentDraft);
   }
 
   throw badRequest(`Unhandled income command: ${command}`);

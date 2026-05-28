@@ -403,6 +403,7 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(
   scope: ActiveIncomeIssuerScope,
   wizardDraftOverlay: WizardDraftOverlay,
   recipientOverlay: RecipientSearchOverlay = {},
+  startingStepKey: string | null = null,
 ): Promise<IncomeWorkspaceAggregate> {
   const recipient_search = {
     ...minimalRecipientSearchStub(scope),
@@ -425,6 +426,7 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(
     issued_documents_count: 0,
     recipient_search,
     document_details_step: wizardDraftOverlay.document_details_step ?? null,
+    wizard_starting_step_key: startingStepKey,
     active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
     allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
     warnings: [],

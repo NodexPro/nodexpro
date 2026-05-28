@@ -313,6 +313,15 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
         : [];
     return {
         draft_id: row.id,
+        document_type_key: row.document_type ?? null,
+        draft_state_display: {
+            status: 'draft',
+            label: 'טיוטה',
+            tone: 'neutral',
+            last_saved_at: typeof row.updated_at === 'string' ? row.updated_at : null,
+            saved_by_label: null,
+            allowed_actions: canEdit ? ['save_income_document_draft'] : [],
+        },
         header: {
             title: headerTitle,
             subtitle: docType?.legal_hint ?? null,

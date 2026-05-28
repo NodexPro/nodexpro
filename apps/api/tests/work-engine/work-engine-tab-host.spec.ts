@@ -43,3 +43,10 @@ test('tab host uses query param switching not module navigation', () => {
   assert.doesNotMatch(tabHostSource, /\/m\/income/);
   assert.match(tabHostSource, /fetchWorkEngineInvoicesTabAggregate/);
 });
+
+test('invoices tab host renders draft entrypoints and resumes via allowed backend action', () => {
+  assert.match(tabHostSource, /draft_entrypoints/);
+  assert.match(tabHostSource, /resume_income_document_draft/);
+  assert.match(tabHostSource, /allowed_actions\.find/);
+  assert.doesNotMatch(tabHostSource, /wizard\.income_commands\.resume_draft/);
+});

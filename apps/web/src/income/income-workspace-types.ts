@@ -239,6 +239,7 @@ export interface IncomeWorkspaceAggregate {
   issued_documents_count: number;
   recipient_search: IncomeRecipientSearchModel;
   document_details_step: IncomeDocumentDetailsStep | null;
+  wizard_starting_step_key?: string | null;
   active_wizard_draft_id: string | null;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
@@ -266,7 +267,9 @@ export type IncomeCommandType =
   | 'reorder_income_document_lines'
   | 'update_income_document_draft_settings'
   | 'update_income_document_notes'
-  | 'update_income_document_delivery_contact';
+  | 'update_income_document_delivery_contact'
+  | 'save_income_document_draft'
+  | 'resume_income_document_draft';
 
 export interface IncomeCommandResponseMeta {
   workspace_aggregate_mode?: 'full' | 'wizard_patch';

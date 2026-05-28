@@ -26,6 +26,8 @@ export const INCOME_COMMAND_REORDER_LINES = 'reorder_income_document_lines' as c
 export const INCOME_COMMAND_UPDATE_DRAFT_SETTINGS = 'update_income_document_draft_settings' as const;
 export const INCOME_COMMAND_UPDATE_NOTES = 'update_income_document_notes' as const;
 export const INCOME_COMMAND_UPDATE_DELIVERY_CONTACT = 'update_income_document_delivery_contact' as const;
+export const INCOME_COMMAND_SAVE_DRAFT = 'save_income_document_draft' as const;
+export const INCOME_COMMAND_RESUME_DRAFT = 'resume_income_document_draft' as const;
 
 export type { IncomeDocumentDetailsStep } from './income-document-details-step.builders.js';
 
@@ -225,6 +227,8 @@ export interface IncomeWorkspaceAggregate {
   recipient_search: IncomeRecipientSearchModel;
   /** Present while Work Engine income wizard has an active draft on document_details step. */
   document_details_step: IncomeDocumentDetailsStep | null;
+  /** Work Engine wizard — backend-owned start step key when resuming. */
+  wizard_starting_step_key?: string | null;
   active_wizard_draft_id: string | null;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
@@ -252,7 +256,9 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_REORDER_LINES
   | typeof INCOME_COMMAND_UPDATE_DRAFT_SETTINGS
   | typeof INCOME_COMMAND_UPDATE_NOTES
-  | typeof INCOME_COMMAND_UPDATE_DELIVERY_CONTACT;
+  | typeof INCOME_COMMAND_UPDATE_DELIVERY_CONTACT
+  | typeof INCOME_COMMAND_SAVE_DRAFT
+  | typeof INCOME_COMMAND_RESUME_DRAFT;
 
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;

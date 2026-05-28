@@ -17,7 +17,70 @@ import { previewNextIncomeDocumentNumber } from './income-document-numbering.ser
 import { findAvailableDocumentType, resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
 import { optionalJsonObject, optionalString, optionalUuid, parseIncomeDocumentType, reqUuid } from './income.guards.js';
 import { loadIncomeRecipientById, selectedFromSavedRow, } from './income-recipient.service.js';
-const DRAFT_SELECT = 'id, organization_id, issuer_business_id, represented_client_id, document_type, document_date, due_date, notes, currency, language, draft_lines_json, payment_received_json, delivery_contact_json, document_settings_json, validation_warnings_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json, status';
+import { hasPermission } from '../rbac/rbac.service.js';
+import { INCOME_PERMISSIONS } from './income.types.js';
+async function loadIssuerDisplayName(orgId, issuerBusinessId) {
+    const { data, error } = await supabaseAdmin
+        .from('clients')
+        .select('id, display_name')
+        .eq('organization_id', orgId)
+        .eq('id', issuerBusinessId)
+        .maybeSingle();
+    if (error)
+        throw error;
+    const row = data;
+    return row?.display_name?.trim() ? String(row.display_name).trim() : '—';
+}
+function scopePermissionsFromContext(ctx) {
+    const perms = ctx.membership?.permissions ?? [];
+    return {
+        view: hasPermission(perms, INCOME_PERMISSIONS.view),
+        edit: hasPermission(perms, INCOME_PERMISSIONS.edit),
+        issue: hasPermission(perms, INCOME_PERMISSIONS.issue),
+        issue_on_behalf: hasPermission(perms, INCOME_PERMISSIONS.issueOnBehalf),
+    };
+}
+async function buildScopeForDraftResume(ctx, draft) {
+    const orgId = ctx.organizationId;
+    if (!orgId)
+        throw badRequest('Organization context required');
+    const issuerLabel = await loadIssuerDisplayName(orgId, draft.issuer_business_id);
+    const acting_mode = draft.represented_client_id ? 'office_representative' : 'self';
+    return {
+        org_id: orgId,
+        actor_user_id: ctx.user.id,
+        acting_mode,
+        issuer_business_id: draft.issuer_business_id,
+        represented_client_id: draft.represented_client_id,
+        issuer_label: issuerLabel,
+        represented_client_label: draft.represented_client_id ? issuerLabel : null,
+        permissions: scopePermissionsFromContext(ctx),
+    };
+}
+export async function resumeIncomeDocumentDraftFromContext(ctx, body) {
+    const draft_id = reqUuid(body.draft_id, 'draft_id');
+    const orgId = ctx.organizationId;
+    if (!orgId)
+        throw badRequest('Organization context required');
+    const { data, error } = await supabaseAdmin
+        .from('income_document_drafts')
+        .select('id, organization_id, issuer_business_id, represented_client_id')
+        .eq('organization_id', orgId)
+        .eq('id', draft_id)
+        .maybeSingle();
+    if (error)
+        throw error;
+    if (!data)
+        throw notFound('Income document draft not found');
+    const row = data;
+    const scope = await buildScopeForDraftResume(ctx, row);
+    // Permission + scope enforced before resume.
+    if (!scope.permissions.edit)
+        throw badRequest('נדרשת הרשאת income.edit');
+    const result = await resumeIncomeDocumentDraft(scope, { draft_id });
+    return { scope, result };
+}
+const DRAFT_SELECT = 'id, organization_id, issuer_business_id, represented_client_id, document_type, document_date, due_date, notes, currency, language, draft_lines_json, payment_received_json, delivery_contact_json, document_settings_json, validation_warnings_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json, status, updated_at';
 export async function loadWizardDraftRow(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
@@ -390,6 +453,60 @@ export async function updateIncomeDocumentDeliveryContact(scope, body) {
     const docType = row.document_type != null ? await resolveDocType(scope, row.document_type) : null;
     const saved = await persistWizardDraft(scope, draft_id, { delivery_contact_json }, { action: 'update_delivery_contact', snapshot_only: true });
     return buildOverlayForDraft(scope, draft_id, true, saved, docType);
+}
+export async function saveIncomeDocumentDraft(scope, body) {
+    const draft_id = reqUuid(body.draft_id, 'draft_id');
+    const row = await loadWizardDraftRow(scope, draft_id);
+    const docType = await resolveDocType(scope, row.document_type);
+    // Re-run validation + totals + BOI FX resolution and persist refreshed preview JSON.
+    return wizardDraftMutationOverlay(scope, draft_id, row, row, docType, {}, { action: 'save_draft' });
+}
+function startingStepKeyForDraftRow(row) {
+    if (!row.document_type)
+        return 'document_type';
+    if (!row.income_customer_id && !row.one_time_customer_snapshot_json)
+        return 'recipient';
+    return 'document_details';
+}
+async function recipientOverlayForDraftRow(scope, row) {
+    if (row.income_customer_id) {
+        const saved = await loadIncomeRecipientById(scope, row.income_customer_id);
+        return saved ? { selected: selectedFromSavedRow(saved) } : {};
+    }
+    if (row.one_time_customer_snapshot_json) {
+        const snap = row.one_time_customer_snapshot_json;
+        return {
+            selected: {
+                kind: 'snapshot',
+                income_customer_id: null,
+                display_line: String(snap.display_name ?? 'מקבל'),
+                snapshot: snap,
+            },
+        };
+    }
+    return {};
+}
+export async function resumeIncomeDocumentDraft(scope, body) {
+    const draft_id = reqUuid(body.draft_id, 'draft_id');
+    const row = await loadWizardDraftRow(scope, draft_id);
+    const starting_step_key = startingStepKeyForDraftRow(row);
+    const recipientOverlay = await recipientOverlayForDraftRow(scope, row);
+    const wizardOverlay = starting_step_key === 'document_details'
+        ? await buildOverlayForDraft(scope, draft_id, true, row, row.document_type ? await resolveDocType(scope, row.document_type) : null)
+        : { active_wizard_draft_id: draft_id, document_details_step: null };
+    // Audit: resume is user action (not workflow event).
+    void writeAudit({
+        organizationId: scope.org_id,
+        actorUserId: scope.actor_user_id,
+        moduleCode: 'income',
+        entityType: 'income_document_draft',
+        entityId: draft_id,
+        action: AUDIT_ACTIONS.INCOME_DOCUMENT_DRAFT_RESUMED,
+        payload: { wizard: true, starting_step_key },
+    }).catch(() => {
+        /* audit must not block wizard UX */
+    });
+    return { wizardOverlay: { ...wizardOverlay, active_wizard_draft_id: draft_id }, recipientOverlay, starting_step_key };
 }
 export async function wizardDraftOverlayForActiveDraft(scope, draftId, canEdit) {
     if (!draftId)

@@ -99,6 +99,15 @@ export type IncomeDocumentDetailsLineTableFields = {
 
 export type IncomeDocumentDetailsStep = {
   draft_id: string;
+  document_type_key?: IncomeDocumentType | null;
+  draft_state_display?: {
+    status: 'draft';
+    label: string;
+    tone: 'neutral' | 'good' | 'warning' | 'danger';
+    last_saved_at: string | null;
+    saved_by_label: string | null;
+    allowed_actions: string[];
+  };
   header: {
     title: string;
     subtitle: string | null;
@@ -146,6 +155,7 @@ export type IncomeWizardDraftRow = {
   draft_totals_preview_json?: unknown;
   income_customer_id: string | null;
   one_time_customer_snapshot_json: Record<string, unknown> | null;
+  updated_at?: string | null;
 };
 
 const CURRENCY_OPTIONS = [
@@ -519,6 +529,15 @@ export async function buildIncomeDocumentDetailsStep(
 
   return {
     draft_id: row.id,
+    document_type_key: row.document_type ?? null,
+    draft_state_display: {
+      status: 'draft',
+      label: 'טיוטה',
+      tone: 'neutral',
+      last_saved_at: typeof row.updated_at === 'string' ? row.updated_at : null,
+      saved_by_label: null,
+      allowed_actions: canEdit ? ['save_income_document_draft'] : [],
+    },
     header: {
       title: headerTitle,
       subtitle: docType?.legal_hint ?? null,

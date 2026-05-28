@@ -45,6 +45,15 @@ export type IncomeDocumentDetailsLineRow = {
 
 export type IncomeDocumentDetailsStep = {
   draft_id: string;
+  document_type_key?: string | null;
+  draft_state_display?: {
+    status: 'draft';
+    label: string;
+    tone: 'neutral' | 'good' | 'warning' | 'danger';
+    last_saved_at: string | null;
+    saved_by_label: string | null;
+    allowed_actions: string[];
+  };
   header: {
     title: string;
     subtitle: string | null;

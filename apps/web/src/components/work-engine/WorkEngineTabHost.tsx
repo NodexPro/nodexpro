@@ -19,9 +19,11 @@ import {
   type WorkEngineQueueFiltersInput,
 } from '../../api/work-engine';
 import { userFacingApiMessage } from '../../api/client';
+import { executeIncomeCommand } from '../../api/income';
 import { ClientOperationsRegistryView } from '../client-operations/ClientOperationsRegistryView';
 import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
 import { WorkEngineIncomeDocumentWizardModal } from './WorkEngineIncomeDocumentWizardModal';
+import type { IncomeWorkspaceAggregate } from '../../api/income';
 
 const QUEUE_SHELL_FILTERS: WorkEngineQueueFiltersInput = {
   limit: 50,
@@ -293,6 +295,7 @@ function WorkEngineInvoicesTabPanel(props: {
   const [error, setError] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardBusy, setWizardBusy] = useState(false);
+  const [wizardInitialAgg, setWizardInitialAgg] = useState<IncomeWorkspaceAggregate | null>(null);
 
   const loadAggregate = useCallback(async () => {
     setLoading(true);
@@ -338,12 +341,72 @@ function WorkEngineInvoicesTabPanel(props: {
             type="button"
             className="nx-btn nx-btn-primary nx-btn-taxes-compact"
             disabled={wizardBusy}
-            onClick={() => setWizardOpen(true)}
+            onClick={() => {
+              setWizardInitialAgg(null);
+              setWizardOpen(true);
+            }}
           >
             {entry.button_label}
           </button>
         ) : null}
       </div>
+      {aggregate.draft_entrypoints.length > 0 ? (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }} dir="rtl">
+            טיוטות אחרונות
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+            {aggregate.draft_entrypoints.map((d) => (
+              <button
+                key={d.draft_id}
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                style={{
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  height: 'auto',
+                  padding: '10px 12px',
+                  textAlign: 'right',
+                }}
+                disabled={wizardBusy || !d.allowed_actions[0]?.enabled}
+                title={d.allowed_actions[0]?.reason ?? undefined}
+                onClick={async () => {
+                  setWizardBusy(true);
+                  try {
+                    const action = d.allowed_actions.find((a) => a.command === 'resume_income_document_draft') ?? null;
+                    if (!action?.enabled) return;
+                    // Resume via backend allowed action only (no frontend assumptions).
+                    const res = await executeIncomeCommand(action.command, action.command_payload);
+                    if ('income_workspace_aggregate' in res) {
+                      setWizardInitialAgg(res.income_workspace_aggregate);
+                      setWizardOpen(true);
+                    }
+                  } catch (e) {
+                    setError(userFacingApiMessage(e));
+                  } finally {
+                    setWizardBusy(false);
+                  }
+                }}
+              >
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                  <strong style={{ fontSize: 14, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {d.title}
+                  </strong>
+                  {d.subtitle ? (
+                    <span style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {d.subtitle}
+                    </span>
+                  ) : null}
+                </span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 12, color: '#475569' }}>{d.status_label}</span>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>{d.total_display ?? '—'}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {error ? <div className="nx-we-banner-error">{error}</div> : null}
       <WorkEngineModuleTabTable table={aggregate.table_model} summary={aggregate.summary} />
       {wizardOpen ? (
@@ -351,7 +414,11 @@ function WorkEngineInvoicesTabPanel(props: {
           open={wizardOpen}
           busy={wizardBusy}
           entrypoint={entry}
-          onClose={() => setWizardOpen(false)}
+          initialWorkspaceAgg={wizardInitialAgg}
+          onClose={() => {
+            setWizardOpen(false);
+            setWizardInitialAgg(null);
+          }}
           onBusyChange={setWizardBusy}
           onCompleted={() => void loadAggregate()}
         />
