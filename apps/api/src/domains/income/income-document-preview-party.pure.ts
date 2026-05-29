@@ -22,6 +22,36 @@ export function isLikelyInternalIdentifier(value: string): boolean {
   return false;
 }
 
+/** Short alphanumeric codes (e.g. NYC) used as internal client shortcuts — not public business names. */
+export function isLikelyInternalShortCode(value: string): boolean {
+  const s = value.trim();
+  if (!s || s.length > 8) return false;
+  if (/[\u0590-\u05FF]/.test(s) || /\s/.test(s)) return false;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(s)) return false;
+  if (s.length <= 6 && /^[A-Z0-9_-]+$/.test(s)) return true;
+  if (s.length <= 4) return true;
+  return false;
+}
+
+export function hasPublicBusinessSignals(party: IncomePreviewPublicParty): boolean {
+  if (party.tax_id?.trim()) return true;
+  if (party.address?.trim()) return true;
+  if (party.phone?.trim()) return true;
+  if (party.email?.trim()) return true;
+  const name = party.display_name.trim();
+  if (name.length >= 10) return true;
+  if (/[\u0590-\u05FF]/.test(name)) return true;
+  if (/\s/.test(name)) return true;
+  return false;
+}
+
+function resolvePublicDisplayName(party: IncomePreviewPublicParty, fallbackDisplayName: string): string {
+  const raw = party.display_name.trim();
+  if (!raw || isLikelyInternalIdentifier(raw)) return fallbackDisplayName;
+  if (isLikelyInternalShortCode(raw) && !hasPublicBusinessSignals(party)) return fallbackDisplayName;
+  return raw;
+}
+
 export function publicDisplayName(value: string | null | undefined, fallback = '—'): string {
   const s = typeof value === 'string' ? value.trim() : '';
   if (!s || isLikelyInternalIdentifier(s)) return fallback;
@@ -30,7 +60,7 @@ export function publicDisplayName(value: string | null | undefined, fallback = '
 
 export function publicDisplayNameOrNull(value: string | null | undefined): string | null {
   const s = typeof value === 'string' ? value.trim() : '';
-  if (!s || isLikelyInternalIdentifier(s)) return null;
+  if (!s || isLikelyInternalIdentifier(s) || isLikelyInternalShortCode(s)) return null;
   return s;
 }
 
@@ -45,7 +75,7 @@ export function toPublicPreviewParty(
   fallbackDisplayName = '—',
 ): IncomePreviewPublicParty {
   return {
-    display_name: publicDisplayName(party.display_name, fallbackDisplayName),
+    display_name: resolvePublicDisplayName(party, fallbackDisplayName),
     tax_id: publicOptionalField(party.tax_id),
     address: publicOptionalField(party.address),
     phone: publicOptionalField(party.phone),

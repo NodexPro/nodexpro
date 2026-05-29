@@ -102,6 +102,16 @@ export function WorkEngineIncomePreviewStep({
               {action.label}
             </button>
           ))}
+          {brandingEntrypoint?.visible ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact nx-we-preview-toolbar__branding"
+              disabled={busy || !brandingEntrypoint.allowed_actions.length}
+              onClick={() => setBrandingOpen(true)}
+            >
+              הגדרות מסמך
+            </button>
+          ) : null}
         </div>
 
         <div className="nx-we-preview-canvas">
@@ -164,19 +174,6 @@ export function WorkEngineIncomePreviewStep({
           ))}
         </PreviewSidebarSection>
 
-        {brandingEntrypoint?.visible ? (
-          <div className="nx-we-preview-sidebar__section nx-we-preview-sidebar__section--flat">
-            <button
-              type="button"
-              className="nx-income-branding-gear-btn nx-income-branding-gear-btn--compact"
-              disabled={busy || !brandingEntrypoint.allowed_actions.length}
-              onClick={() => setBrandingOpen(true)}
-            >
-              {brandingEntrypoint.button_label}
-            </button>
-          </div>
-        ) : null}
-
         <PreviewSidebarSection title="הנחה לפני מע״מ" defaultOpen={false}>
           <ReadOnlyRow
             label="הנחה פעילה"
@@ -216,6 +213,7 @@ export function WorkEngineIncomePreviewStep({
 
       <IncomeDocumentBrandingSettingsModal
         open={brandingOpen}
+        portal
         title={brandingEntrypoint?.modal_title ?? 'הגדרות מסמך'}
         profile={brandingProfile ?? step.document_branding_profile ?? null}
         commands={

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isLikelyInternalIdentifier,
+  isLikelyInternalShortCode,
   publicDisplayName,
   toPublicPreviewParty,
 } from '../../src/domains/income/income-document-preview-party.pure.js';
@@ -29,4 +30,23 @@ test('toPublicPreviewParty strips internal display values', () => {
   );
   assert.equal(party.display_name, 'לקוח');
   assert.equal(party.tax_id, '514000000');
+});
+
+test('isLikelyInternalShortCode detects NYC-style codes', () => {
+  assert.equal(isLikelyInternalShortCode('NYC'), true);
+  assert.equal(isLikelyInternalShortCode('חברת דוגמה בע״מ'), false);
+});
+
+test('toPublicPreviewParty hides short internal code when no public business signals', () => {
+  const party = toPublicPreviewParty(
+    {
+      display_name: 'NYC',
+      tax_id: null,
+      address: null,
+      phone: null,
+      email: null,
+    },
+    'לקוח',
+  );
+  assert.equal(party.display_name, 'לקוח');
 });

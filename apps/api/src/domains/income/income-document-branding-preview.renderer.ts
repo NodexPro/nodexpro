@@ -167,7 +167,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc__issuer-name { font-size: 18px; font-weight: 700; color: ${primary}; }
 .nx-doc__issuer-subtitle { font-size: 12px; color: #475569; margin-top: 4px; }
 .nx-doc__issuer-line { font-size: 12px; color: #334155; margin-top: 2px; }
-.nx-doc__recipient { background: ${secondary}; border-right: 4px solid ${primary}; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
+.nx-doc__recipient { background: #f8fafc; border: 1px solid #e2e8f0; border-right: 3px solid ${primary}; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
 .nx-doc__recipient-name { font-weight: 700; color: ${primary}; }
 .nx-doc__recipient-line { font-size: 12px; color: #334155; }
 .nx-doc__title { font-size: 20px; font-weight: 700; color: ${primary}; margin: 8px 0; }
@@ -176,7 +176,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc__table th { background: ${tableHeader}; color: #fff; padding: 8px 6px; font-size: 12px; text-align: right; }
 .nx-doc__table td { border-bottom: 1px solid #e2e8f0; padding: 8px 6px; font-size: 12px; vertical-align: top; }
 .nx-doc__totals-wrap { display: flex; justify-content: flex-end; margin-top: 12px; }
-.nx-doc__totals { min-width: 280px; background: ${secondary}; border: 1px solid ${totalsColor}; border-radius: 8px; padding: 12px; }
+.nx-doc__totals { min-width: 280px; background: #f8fafc; border: 1px solid #e2e8f0; border-top: 3px solid ${totalsColor}; border-radius: 8px; padding: 12px; }
 .nx-doc__total-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; }
 .nx-doc__total-row--discount { color: #b45309; }
 .nx-doc__grand-total { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid ${totalsColor}; font-size: 15px; color: ${totalsColor}; }
