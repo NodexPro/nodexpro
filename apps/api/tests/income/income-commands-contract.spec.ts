@@ -118,3 +118,17 @@ test('update_income_document_discount command is registered', () => {
   assert.match(detailsSource, /document_discount/);
   assert.match(detailsSource, /totals_block/);
 });
+
+test('document branding profile commands and aggregate are registered', () => {
+  assert.match(commandsSource, /INCOME_COMMAND_UPDATE_BRANDING_PROFILE/);
+  assert.match(commandsSource, /INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO/);
+  assert.match(commandsSource, /INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE/);
+  assert.match(commandsSource, /executeUploadIncomeDocumentLogo/);
+  const detailsSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-details-step.builders.ts'),
+    'utf8',
+  );
+  assert.match(detailsSource, /document_branding_profile/);
+  assert.match(detailsSource, /renderIncomeBrandedPreviewHtml/);
+  assert.doesNotMatch(detailsSource, /PROG4BIZ/);
+});

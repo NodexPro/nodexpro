@@ -26,6 +26,7 @@ export const INCOME_COMMAND_SAVE_DRAFT = 'save_income_document_draft';
 export const INCOME_COMMAND_RESUME_DRAFT = 'resume_income_document_draft';
 export const INCOME_COMMAND_GENERATE_PREVIEW = 'generate_income_document_preview';
 export const INCOME_COMMAND_UPDATE_DISCOUNT = 'update_income_document_discount';
+export { INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, } from './income-document-branding.types.js';
 export const INCOME_MODULE_CODE = 'income';
 export const INCOME_PERMISSIONS = {
     view: 'income.view',

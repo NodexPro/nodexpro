@@ -12,6 +12,7 @@ import {
 import { WorkEngineDocumentDetailsStep } from './WorkEngineDocumentDetailsStep';
 import { WorkEngineIncomePreviewStep } from './WorkEngineIncomePreviewStep';
 import { executeIncomeCommand } from '../../api/income';
+import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
 import type { WorkEngineInvoicesDocumentCreationEntrypoint } from '../../api/work-engine';
 import '../../styles/nx-modal.css';
 
@@ -288,6 +289,21 @@ export function WorkEngineIncomeDocumentWizardModal({
     [visibleSteps],
   );
 
+  const handleBrandingCommand = async (command: string, body: Record<string, unknown>) => {
+    setError(null);
+    onBusyChange(true);
+    try {
+      const res = await executeIncomeCommand(command, body);
+      if ('income_workspace_aggregate' in res) {
+        setWorkspaceAgg((prev) => mergeIncomeWorkspaceWizardPatch(prev, res.income_workspace_aggregate));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'שגיאה בעדכון מיתוג');
+    } finally {
+      onBusyChange(false);
+    }
+  };
+
   const handleGeneratePreview = async (advanceToPreview = false) => {
     setError(null);
     const cmds = wizard.income_commands;
@@ -433,8 +449,15 @@ export function WorkEngineIncomeDocumentWizardModal({
       return (
         <WorkEngineIncomePreviewStep
           step={documentDetailsStep}
+          draftId={activeDraftId ?? documentDetailsStep.draft_id}
+          brandingCommands={{
+            update_branding_profile: wizard.income_commands.update_branding_profile,
+            upload_document_logo: wizard.income_commands.upload_document_logo,
+            upload_document_signature: wizard.income_commands.upload_document_signature,
+          }}
           busy={busy}
           onGeneratePreview={() => void handleGeneratePreview(false)}
+          onBrandingCommand={handleBrandingCommand}
         />
       );
     }

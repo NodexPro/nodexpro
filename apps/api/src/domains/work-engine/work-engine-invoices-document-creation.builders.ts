@@ -89,6 +89,9 @@ export type WorkEngineInvoicesDocumentCreationEntrypoint = {
       resume_draft: string;
       generate_preview: string;
       update_discount: string;
+      update_branding_profile: string;
+      upload_document_logo: string;
+      upload_document_signature: string;
       issue_document: string;
     };
   };
@@ -220,6 +223,9 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(
         resume_draft: 'resume_income_document_draft',
         generate_preview: 'generate_income_document_preview',
         update_discount: 'update_income_document_discount',
+        update_branding_profile: 'update_income_document_branding_profile',
+        upload_document_logo: 'upload_income_document_logo',
+        upload_document_signature: 'upload_income_document_signature',
         issue_document: 'issue_income_document',
       },
     },

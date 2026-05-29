@@ -30,6 +30,16 @@ export const INCOME_COMMAND_SAVE_DRAFT = 'save_income_document_draft' as const;
 export const INCOME_COMMAND_RESUME_DRAFT = 'resume_income_document_draft' as const;
 export const INCOME_COMMAND_GENERATE_PREVIEW = 'generate_income_document_preview' as const;
 export const INCOME_COMMAND_UPDATE_DISCOUNT = 'update_income_document_discount' as const;
+export {
+  INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+  INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
+  INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
+} from './income-document-branding.types.js';
+import {
+  INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+  INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
+  INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
+} from './income-document-branding.types.js';
 
 export type { IncomeDocumentDetailsStep } from './income-document-details-step.builders.js';
 
@@ -262,7 +272,10 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_SAVE_DRAFT
   | typeof INCOME_COMMAND_RESUME_DRAFT
   | typeof INCOME_COMMAND_GENERATE_PREVIEW
-  | typeof INCOME_COMMAND_UPDATE_DISCOUNT;
+  | typeof INCOME_COMMAND_UPDATE_DISCOUNT
+  | typeof INCOME_COMMAND_UPDATE_BRANDING_PROFILE
+  | typeof INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO
+  | typeof INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE;
 
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;

@@ -246,6 +246,9 @@ export const AUDIT_ACTIONS = {
     INCOME_DOCUMENT_DRAFT_RESUMED: 'income.draft_resumed',
     INCOME_DOCUMENT_PREVIEW_GENERATED: 'income.document_preview_generated',
     INCOME_DOCUMENT_DISCOUNT_UPDATED: 'income.document_discount_updated',
+    INCOME_DOCUMENT_BRANDING_UPDATED: 'income.document_branding_updated',
+    INCOME_DOCUMENT_BRANDING_LOGO_UPLOADED: 'income.document_branding_logo_uploaded',
+    INCOME_DOCUMENT_BRANDING_SIGNATURE_UPLOADED: 'income.document_branding_signature_uploaded',
     INCOME_DOCUMENT_DRAFT_CANCELLED: 'income.document_draft_cancelled',
     /** Income INC-3.5 — issuer profile projection synced from Core org business profile. */
     INCOME_ISSUER_PROFILE_SYNCED: 'income.issuer_profile_synced',

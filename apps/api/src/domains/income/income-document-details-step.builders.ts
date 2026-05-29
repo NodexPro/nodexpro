@@ -32,6 +32,9 @@ import {
 import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
+import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfile } from './income-document-branding.service.js';
+import { renderIncomeBrandedPreviewHtml } from './income-document-branding-preview.renderer.js';
+import type { IncomeDocumentBrandingProfileAggregate } from './income-document-branding.types.js';
 import { loadIncomeRecipientById } from './income-recipient.service.js';
 import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.types.js';
 import { supabaseAdmin } from '../../db/client.js';
@@ -137,133 +140,6 @@ function formatPreviewDate(iso: string | null): string {
   if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '—';
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
-}
-
-function renderIncomePreviewHtml(params: {
-  docTypeLabel: string;
-  numberPreview: string | null;
-  issuer: IncomeDocumentPreviewPartyBlock;
-  recipient: IncomeDocumentPreviewPartyBlock;
-  document_date: string | null;
-  due_date: string | null;
-  currency: string;
-  lineRows: Array<{
-    row_number: number;
-    description: string;
-    quantity: string;
-    unit_price: string;
-    currency: string;
-    vat_rate_label: string;
-    total: string;
-  }>;
-  totals: {
-    subtotal_before_discount: string;
-    discount: string | null;
-    subtotal_after_discount: string;
-    vat_label: string | null;
-    vat: string | null;
-    grand_total: string;
-  };
-  notes: string | null;
-}): string {
-  const p = params;
-  const issuerLine = (label: string, value: string | null) =>
-    value ? `<div class="nx-doc__issuer-line"><span>${escapeHtml(label)}</span> ${escapeHtml(value)}</div>` : '';
-  const recipientLine = (value: string | null) =>
-    value ? `<div class="nx-doc__recipient-line">${escapeHtml(value)}</div>` : '';
-
-  const linesHtml =
-    p.lineRows.length > 0
-      ? p.lineRows
-          .map(
-            (r) => `<tr>
-            <td>${r.row_number}</td>
-            <td>${escapeHtml(r.description || '—')}</td>
-            <td>${escapeHtml(r.quantity)}</td>
-            <td>${escapeHtml(r.unit_price)}</td>
-            <td>${escapeHtml(r.currency)}</td>
-            <td>${escapeHtml(r.vat_rate_label)}</td>
-            <td>${escapeHtml(r.total)}</td>
-          </tr>`,
-          )
-          .join('')
-      : `<tr><td colspan="7" style="text-align:center;color:#64748b;padding:16px">אין שורות במסמך</td></tr>`;
-
-  return `
-<div class="nx-doc" dir="rtl">
-  <div class="nx-doc__header">
-    <div class="nx-doc__issuer">
-      <div class="nx-doc__logo" aria-hidden="true">PROG4BIZ</div>
-      <div class="nx-doc__issuer-name">${escapeHtml(p.issuer.display_name)}</div>
-      ${issuerLine('ח.פ/ע.מ', p.issuer.tax_id)}
-      ${issuerLine('כתובת', p.issuer.address)}
-      ${issuerLine('טלפון', p.issuer.phone)}
-      ${issuerLine('אימייל', p.issuer.email)}
-    </div>
-    <div class="nx-doc__title-block">
-      <div class="nx-doc__recipient">
-        ${recipientLine(p.recipient.display_name)}
-        ${recipientLine(p.recipient.address)}
-        ${recipientLine(p.recipient.tax_id ? `ח.פ/ע.מ ${p.recipient.tax_id}` : null)}
-      </div>
-      <div class="nx-doc__title">${escapeHtml(p.docTypeLabel)} ${escapeHtml(p.numberPreview ?? '')}</div>
-      <div class="nx-doc__dates">
-        <span>תאריך מסמך: ${escapeHtml(formatPreviewDate(p.document_date))}</span>
-        <span>תאריך לתשלום: ${escapeHtml(formatPreviewDate(p.due_date))}</span>
-      </div>
-    </div>
-  </div>
-
-  <table class="nx-doc__table">
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>תיאור</th>
-        <th>כמות</th>
-        <th>מחיר ליחידה</th>
-        <th>מטבע</th>
-        <th>מע״מ</th>
-        <th>סה״כ</th>
-      </tr>
-    </thead>
-    <tbody>${linesHtml}</tbody>
-  </table>
-
-  <div class="nx-doc__totals-wrap">
-    <div class="nx-doc__totals">
-      <div class="nx-doc__total-row"><span>סכום ביניים</span><span>${escapeHtml(p.totals.subtotal_before_discount)}</span></div>
-      ${
-        p.totals.discount
-          ? `<div class="nx-doc__total-row nx-doc__total-row--discount"><span>הנחה לפני מע״מ</span><span>${escapeHtml(p.totals.discount)}</span></div>
-      <div class="nx-doc__total-row"><span>סכום לאחר הנחה</span><span>${escapeHtml(p.totals.subtotal_after_discount)}</span></div>`
-          : ''
-      }
-      ${
-        p.totals.vat
-          ? `<div class="nx-doc__total-row"><span>${escapeHtml(p.totals.vat_label ?? 'מע״מ')}</span><span>${escapeHtml(p.totals.vat)}</span></div>`
-          : ''
-      }
-      <div class="nx-doc__grand-total">
-        <span>סה״כ לתשלום</span>
-        <strong>${escapeHtml(p.totals.grand_total)}</strong>
-      </div>
-    </div>
-  </div>
-
-  <div class="nx-doc__footer">
-    ${
-      p.notes && p.notes.trim()
-        ? `<div class="nx-doc__footer-block"><div class="nx-doc__footer-title">הערות</div><div class="nx-doc__footer-text">${escapeHtml(p.notes)}</div></div>`
-        : ''
-    }
-    <div class="nx-doc__footer-block">
-      <div class="nx-doc__footer-title">פרטי תשלום</div>
-      <div class="nx-doc__footer-text">TEMPORARY_BRANDING_PENDING — פרטי בנק יוצגו מהגדרות מנפיק</div>
-    </div>
-    <div class="nx-doc__signature">חתימה וחותמת</div>
-  </div>
-</div>
-  `.trim();
 }
 
 export type IncomeDocumentDetailsSettingField = {
@@ -397,6 +273,7 @@ export type IncomeDocumentDetailsStep = {
     hint: string | null;
   };
   validation_warnings: { code: string; message: string }[];
+  document_branding_profile: IncomeDocumentBrandingProfileAggregate | null;
 };
 
 export type IncomeDocumentPreviewValidationMessage = {
@@ -951,9 +828,13 @@ export async function buildIncomeDocumentDetailsStep(
         ? `מע״מ (${vatResolution.standard_rate_percent_label})`
         : 'מע״מ'
       : null;
+  const brandingProfileAggregate = await buildDocumentBrandingProfileAggregate(scope, canEdit);
+  const resolvedBranding =
+    previewGeneratedAt != null ? await loadResolvedBrandingProfile(scope) : null;
   const previewHtml =
-    previewGeneratedAt != null
-      ? renderIncomePreviewHtml({
+    previewGeneratedAt != null && resolvedBranding
+      ? renderIncomeBrandedPreviewHtml({
+          branding: resolvedBranding,
           docTypeLabel,
           numberPreview,
           issuer: issuerBlock,
@@ -974,6 +855,7 @@ export async function buildIncomeDocumentDetailsStep(
             grand_total: totals.grand_total_display,
           },
           notes: row.notes ?? null,
+          company_subtitle: resolvedBranding.company_subtitle,
         })
       : '';
 
@@ -999,6 +881,7 @@ export async function buildIncomeDocumentDetailsStep(
     document_type_key: row.document_type ?? null,
     document_discount: documentDiscount,
     totals_block: totalsBlock,
+    document_branding_profile: brandingProfileAggregate,
     document_preview: {
       visible: previewGeneratedAt != null,
       preview_status: previewGeneratedAt != null ? 'ready' : 'not_generated',

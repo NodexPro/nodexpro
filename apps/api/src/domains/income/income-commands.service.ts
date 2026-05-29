@@ -76,6 +76,11 @@ import {
   type WizardDraftOverlay,
 } from './income-document-draft-editor.service.js';
 import {
+  executeUpdateIncomeDocumentBrandingProfile,
+  executeUploadIncomeDocumentLogo,
+  executeUploadIncomeDocumentSignature,
+} from './income-document-branding.commands.js';
+import {
   INCOME_COMMAND_ADD_LINE,
   INCOME_COMMAND_BEGIN_WIZARD_DRAFT,
   INCOME_COMMAND_CANCEL_DRAFT,
@@ -86,6 +91,9 @@ import {
   INCOME_COMMAND_RESUME_DRAFT,
   INCOME_COMMAND_GENERATE_PREVIEW,
   INCOME_COMMAND_UPDATE_DISCOUNT,
+  INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+  INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
+  INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
   INCOME_COMMAND_SEARCH_RECIPIENTS,
   INCOME_COMMAND_SELECT_RECIPIENT,
   INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT,
@@ -134,6 +142,9 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_RESUME_DRAFT,
   INCOME_COMMAND_GENERATE_PREVIEW,
   INCOME_COMMAND_UPDATE_DISCOUNT,
+  INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+  INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
+  INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
 ]);
 
 async function commandResponse(
@@ -687,6 +698,24 @@ export async function executeIncomeCommand(
   }
   if (command === INCOME_COMMAND_UPDATE_DISCOUNT) {
     return wizardDraftCmd(updateIncomeDocumentDiscount);
+  }
+  if (command === INCOME_COMMAND_UPDATE_BRANDING_PROFILE) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const overlay = await executeUpdateIncomeDocumentBrandingProfile(scope, body);
+    return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+  }
+  if (command === INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const overlay = await executeUploadIncomeDocumentLogo(ctx, scope, body);
+    return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+  }
+  if (command === INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const overlay = await executeUploadIncomeDocumentSignature(ctx, scope, body);
+    return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
   }
 
   throw badRequest(`Unhandled income command: ${command}`);

@@ -589,3 +589,23 @@ export async function wizardDraftOverlayForActiveDraft(scope, draftId, canEdit) 
         return {};
     }
 }
+/** Rebuild wizard overlay after issuer branding changed (refreshes preview HTML when already generated). */
+export async function refreshWizardDraftOverlayAfterBranding(scope, draftId) {
+    const row = await loadWizardDraftRow(scope, draftId);
+    const priorCache = row.draft_totals_preview_json &&
+        typeof row.draft_totals_preview_json === 'object' &&
+        !Array.isArray(row.draft_totals_preview_json)
+        ? row.draft_totals_preview_json
+        : {};
+    const mergedRow = typeof priorCache.preview_generated_at === 'string'
+        ? {
+            ...row,
+            draft_totals_preview_json: {
+                ...priorCache,
+                preview_generated_at: new Date().toISOString(),
+            },
+        }
+        : row;
+    const docType = mergedRow.document_type != null ? await resolveDocType(scope, mergedRow.document_type) : null;
+    return buildOverlayForDraft(scope, draftId, true, mergedRow, docType);
+}

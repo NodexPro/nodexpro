@@ -1,10 +1,18 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { IncomeDocumentDetailsStep } from '../../income/income-document-details-types';
+import { WorkEngineIncomeBrandingSidebar } from './WorkEngineIncomeBrandingSidebar';
 
 type Props = {
   step: IncomeDocumentDetailsStep;
+  draftId: string;
+  brandingCommands: {
+    update_branding_profile: string;
+    upload_document_logo: string;
+    upload_document_signature: string;
+  };
   busy: boolean;
   onGeneratePreview: () => void;
+  onBrandingCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
 };
 
 function settingDisplay(step: IncomeDocumentDetailsStep, key: string): string {
@@ -51,7 +59,14 @@ function ReadOnlyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function WorkEngineIncomePreviewStep({ step, busy, onGeneratePreview }: Props) {
+export function WorkEngineIncomePreviewStep({
+  step,
+  draftId,
+  brandingCommands,
+  busy,
+  onGeneratePreview,
+  onBrandingCommand,
+}: Props) {
   const preview = step.document_preview;
   const toolbar = preview?.toolbar_actions ?? [];
   const showPaper = preview?.visible && preview.preview_html?.trim();
@@ -132,7 +147,7 @@ export function WorkEngineIncomePreviewStep({ step, busy, onGeneratePreview }: P
           ))}
         </PreviewSidebarSection>
 
-        <PreviewSidebarSection title="הגדרות מסמך" defaultOpen={false}>
+        <PreviewSidebarSection title="הגדרות מסמך (טיוטה)" defaultOpen={false}>
           {settingsFields.map((field) => (
             <ReadOnlyRow
               key={field.key}
@@ -145,6 +160,16 @@ export function WorkEngineIncomePreviewStep({ step, busy, onGeneratePreview }: P
             />
           ))}
         </PreviewSidebarSection>
+
+        {step.document_branding_profile ? (
+          <WorkEngineIncomeBrandingSidebar
+            profile={step.document_branding_profile}
+            draftId={draftId}
+            commands={brandingCommands}
+            busy={busy}
+            onCommand={onBrandingCommand}
+          />
+        ) : null}
 
         <PreviewSidebarSection title="הנחה לפני מע״מ" defaultOpen={false}>
           <ReadOnlyRow

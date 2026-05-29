@@ -1,0 +1,3 @@
+export const INCOME_COMMAND_UPDATE_BRANDING_PROFILE = 'update_income_document_branding_profile';
+export const INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO = 'upload_income_document_logo';
+export const INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE = 'upload_income_document_signature';

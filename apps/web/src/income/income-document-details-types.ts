@@ -71,11 +71,19 @@ export type IncomeDocumentDetailsTotalsBlock = {
   currency: string;
 };
 
+export type {
+  IncomeDocumentBrandingProfileAggregate,
+  IncomeDocumentBrandingSection,
+  IncomeDocumentBrandingField,
+  IncomeDocumentBrandingAssetSlot,
+} from './income-document-branding-types';
+
 export type IncomeDocumentDetailsStep = {
   draft_id: string;
   document_type_key?: string | null;
   document_discount: IncomeDocumentDetailsDiscount;
   totals_block: IncomeDocumentDetailsTotalsBlock;
+  document_branding_profile?: import('./income-document-branding-types').IncomeDocumentBrandingProfileAggregate | null;
   document_preview?: {
     visible: boolean;
     preview_status: 'ready' | 'not_generated';
