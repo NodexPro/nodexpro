@@ -575,7 +575,9 @@ export async function generateIncomeDocumentPreview(
 ): Promise<WizardDraftOverlay> {
   const draft_id = reqUuid(body.draft_id, 'draft_id');
   const row = await loadWizardDraftRow(scope, draft_id);
-  if (!row.document_type) throw badRequest('document_type is required');
+  if (!row.document_type) {
+    throw badRequest('document_type is required before preview', 'INCOME_PREVIEW_DOCUMENT_TYPE_REQUIRED');
+  }
   const docType = await resolveDocType(scope, row.document_type);
 
   const overlay = await wizardDraftMutationOverlay(

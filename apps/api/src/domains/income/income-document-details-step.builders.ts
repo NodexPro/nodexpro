@@ -31,9 +31,11 @@ import {
 } from './income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
+import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { loadIncomeRecipientById } from './income-recipient.service.js';
 import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.types.js';
 import { supabaseAdmin } from '../../db/client.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 
 const DOCUMENT_TYPE_LABELS: Record<IncomeDocumentType, string> = {
   receipt: 'קבלה',
@@ -53,7 +55,8 @@ function previewPartyAddressLine(addressJson: unknown): string | null {
   return parts.length ? parts.join(', ') : null;
 }
 
-function escapeHtml(s: string): string {
+function escapeHtml(value: unknown): string {
+  const s = value == null ? '' : String(value);
   return s
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -65,28 +68,13 @@ function escapeHtml(s: string): string {
 async function loadIssuerPreviewBlock(
   scope: ActiveIncomeIssuerScope,
 ): Promise<IncomeDocumentPreviewPartyBlock> {
-  const { data, error } = await supabaseAdmin
-    .from('clients')
-    .select('id, display_name, tax_id, address_json, phone, email')
-    .eq('organization_id', scope.org_id)
-    .eq('id', scope.issuer_business_id)
-    .maybeSingle();
-  if (error) throw error;
-  const row = data as
-    | {
-        display_name?: string | null;
-        tax_id?: string | null;
-        address_json?: unknown;
-        phone?: string | null;
-        email?: string | null;
-      }
-    | null;
+  const snap = await buildIncomeIssuerSnapshotForScope(scope);
   return {
-    display_name: row?.display_name?.trim() ? String(row.display_name).trim() : scope.issuer_label,
-    tax_id: row?.tax_id?.trim() ? String(row.tax_id).trim() : null,
-    address: previewPartyAddressLine(row?.address_json),
-    phone: row?.phone?.trim() ? String(row.phone).trim() : null,
-    email: row?.email?.trim() ? String(row.email).trim() : null,
+    display_name: snap.display_name?.trim() ? snap.display_name.trim() : scope.issuer_label,
+    tax_id: snap.tax_id?.trim() ? snap.tax_id.trim() : null,
+    address: previewPartyAddressLine(snap.address_json),
+    phone: snap.phone?.trim() ? snap.phone.trim() : null,
+    email: snap.email?.trim() ? snap.email.trim() : null,
   };
 }
 
@@ -117,7 +105,7 @@ async function loadRecipientPreviewBlock(
       .eq('issuer_business_id', scope.issuer_business_id)
       .eq('id', row.income_customer_id)
       .maybeSingle();
-    if (error) throw error;
+    throwIfSupabaseError(error, 'loadRecipientPreviewBlock');
     const saved = data as
       | {
           display_name?: string | null;

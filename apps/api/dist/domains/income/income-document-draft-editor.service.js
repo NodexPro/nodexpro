@@ -381,8 +381,9 @@ export async function updateIncomeDocumentDiscount(scope, body) {
 export async function generateIncomeDocumentPreview(scope, body) {
     const draft_id = reqUuid(body.draft_id, 'draft_id');
     const row = await loadWizardDraftRow(scope, draft_id);
-    if (!row.document_type)
-        throw badRequest('document_type is required');
+    if (!row.document_type) {
+        throw badRequest('document_type is required before preview', 'INCOME_PREVIEW_DOCUMENT_TYPE_REQUIRED');
+    }
     const docType = await resolveDocType(scope, row.document_type);
     const overlay = await wizardDraftMutationOverlay(scope, draft_id, row, row, docType, {}, { action: 'generate_preview', document_type: row.document_type }, { totals_preview_patch: { preview_generated_at: new Date().toISOString() } });
     void writeAudit({

@@ -100,6 +100,12 @@ test('generate_income_document_preview command is registered and returns wizard_
   assert.match(commandsSource, /INCOME_COMMAND_GENERATE_PREVIEW/);
   assert.match(commandsSource, /generateIncomeDocumentPreview/);
   assert.match(commandsSource, /wizard_patch/);
+  const detailsSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-details-step.builders.ts'),
+    'utf8',
+  );
+  assert.match(detailsSource, /buildIncomeIssuerSnapshotForScope/);
+  assert.doesNotMatch(detailsSource, /from\('clients'\)[\s\S]*address_json/);
 });
 
 test('update_income_document_discount command is registered', () => {
