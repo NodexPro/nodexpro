@@ -10,6 +10,7 @@ import {
   type WorkEngineRecipientSearchFieldHandle,
 } from './WorkEngineRecipientSearchField';
 import { WorkEngineDocumentDetailsStep } from './WorkEngineDocumentDetailsStep';
+import { WorkEngineIncomePreviewStep } from './WorkEngineIncomePreviewStep';
 import { executeIncomeCommand } from '../../api/income';
 import type { WorkEngineInvoicesDocumentCreationEntrypoint } from '../../api/work-engine';
 import '../../styles/nx-modal.css';
@@ -221,6 +222,19 @@ export function WorkEngineIncomeDocumentWizardModal({
       }
       return;
     }
+    if (activeStepKey === 'document_details') {
+      const nextKey = visibleSteps[stepIndex + 1]?.key;
+      if (nextKey === 'preview' && !documentDetailsStep?.document_preview?.visible) {
+        await handleGeneratePreview(true);
+        return;
+      }
+      setStepIndex((i) => i + 1);
+      return;
+    }
+    if (activeStepKey === 'preview') {
+      setStepIndex((i) => i + 1);
+      return;
+    }
     if (activeStepKey === 'issue') return;
     setStepIndex((i) => i + 1);
   };
@@ -269,7 +283,12 @@ export function WorkEngineIncomeDocumentWizardModal({
     }
   };
 
-  const handleGeneratePreview = async () => {
+  const previewStepIndex = useMemo(
+    () => visibleSteps.findIndex((s) => s.key === 'preview'),
+    [visibleSteps],
+  );
+
+  const handleGeneratePreview = async (advanceToPreview = false) => {
     setError(null);
     const cmds = wizard.income_commands;
     const draftId = activeDraftId;
@@ -282,6 +301,9 @@ export function WorkEngineIncomeDocumentWizardModal({
       const res = await executeIncomeCommand(cmds.generate_preview, { draft_id: draftId });
       if ('income_workspace_aggregate' in res) {
         setWorkspaceAgg(res.income_workspace_aggregate);
+        if (advanceToPreview && previewStepIndex >= 0) {
+          setStepIndex(previewStepIndex);
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'שגיאה ביצירת תצוגה');
@@ -405,40 +427,15 @@ export function WorkEngineIncomeDocumentWizardModal({
       );
     }
     if (activeStepKey === 'preview') {
-      const preview = documentDetailsStep?.document_preview ?? null;
-      if (!preview?.visible) {
-        return (
-          <div dir="rtl" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-            <div style={{ marginBottom: 10, color: '#475569', fontSize: 13 }}>
-              לחץ על <strong>תצוגה מקדימה</strong> כדי לייצר תצוגה מהשרת.
-            </div>
-          </div>
-        );
+      if (!documentDetailsStep) {
+        return <p className="nx-we-doc-details__empty">טוען תצוגה מקדימה…</p>;
       }
       return (
-        <div dir="rtl" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-          {preview.validation_messages?.length ? (
-            <div style={{ marginBottom: 10 }}>
-              {preview.validation_messages.map((m, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 8,
-                    padding: '8px 10px',
-                    marginBottom: 6,
-                    background: '#f8fafc',
-                    color: '#0f172a',
-                    fontSize: 13,
-                  }}
-                >
-                  {m.label}
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <div dangerouslySetInnerHTML={{ __html: preview.preview_html }} />
-        </div>
+        <WorkEngineIncomePreviewStep
+          step={documentDetailsStep}
+          busy={busy}
+          onGeneratePreview={() => void handleGeneratePreview(false)}
+        />
       );
     }
     if (activeStepKey === 'issue') {
@@ -461,9 +458,11 @@ export function WorkEngineIncomeDocumentWizardModal({
   const modalStepClass =
     activeStepKey === 'recipient'
       ? 'nx-we-income-wizard-modal--recipient-step'
-      : activeStepKey === 'document_details' || activeStepKey === 'preview'
-        ? 'nx-we-income-wizard-modal--details-step'
-        : '';
+      : activeStepKey === 'preview'
+        ? 'nx-we-income-wizard-modal--preview-step'
+        : activeStepKey === 'document_details'
+          ? 'nx-we-income-wizard-modal--details-step'
+          : '';
 
   return (
     <div className="nx-modal-overlay" role="dialog" aria-modal="true">
@@ -505,7 +504,7 @@ export function WorkEngineIncomeDocumentWizardModal({
               type="button"
               className="nx-btn nx-btn-taxes-compact"
               disabled={footerLocked || !activeDraftId}
-              onClick={() => void handleGeneratePreview()}
+              onClick={() => void handleGeneratePreview(true)}
             >
               תצוגה מקדימה
             </button>

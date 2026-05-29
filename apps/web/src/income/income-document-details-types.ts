@@ -106,6 +106,12 @@ export type IncomeDocumentDetailsStep = {
       blocking: boolean;
     }>;
     allowed_actions: string[];
+    toolbar_actions: Array<{
+      action: string;
+      label: string;
+      enabled: boolean;
+      reason: string | null;
+    }>;
   } | null;
   draft_state_display?: {
     status: 'draft';

@@ -145,6 +145,12 @@ async function loadRecipientPreviewBlock(
   };
 }
 
+function formatPreviewDate(iso: string | null): string {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
 function renderIncomePreviewHtml(params: {
   docTypeLabel: string;
   numberPreview: string | null;
@@ -173,84 +179,18 @@ function renderIncomePreviewHtml(params: {
   notes: string | null;
 }): string {
   const p = params;
-  const metaLine = (label: string, value: string | null) =>
-    value ? `<div><span class="k">${escapeHtml(label)}</span> ${escapeHtml(value)}</div>` : '';
-  const partyLine = (label: string, value: string | null) =>
-    value ? `<div><span class="k">${escapeHtml(label)}</span> ${escapeHtml(value)}</div>` : '';
+  const issuerLine = (label: string, value: string | null) =>
+    value ? `<div class="nx-doc__issuer-line"><span>${escapeHtml(label)}</span> ${escapeHtml(value)}</div>` : '';
+  const recipientLine = (value: string | null) =>
+    value ? `<div class="nx-doc__recipient-line">${escapeHtml(value)}</div>` : '';
 
-  return `
-<div class="nx-preview" dir="rtl" style="font-family: Arial, Helvetica, sans-serif;">
-  <style>
-    .nx-preview { color: #0f172a; }
-    .nx-preview .k { color: #64748b; font-size: 12px; }
-    .nx-preview .section { border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; background: #fff; }
-    .nx-preview .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .nx-preview h2 { margin: 0 0 8px 0; font-size: 18px; }
-    .nx-preview .title { display:flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-    .nx-preview table { width: 100%; border-collapse: collapse; }
-    .nx-preview th, .nx-preview td { border-bottom: 1px solid #e2e8f0; padding: 8px 6px; font-size: 13px; vertical-align: top; }
-    .nx-preview th { color: #475569; font-weight: 700; text-align: right; background: #f8fafc; }
-    .nx-preview .totals { display:flex; justify-content: flex-end; }
-    .nx-preview .totals .box { width: 320px; }
-    .nx-preview .totals .row { display:flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; }
-    .nx-preview .totals .row strong { font-size: 14px; }
-  </style>
-
-  <div class="section">
-    <div class="title">
-      <h2>${escapeHtml(p.docTypeLabel)}</h2>
-      <div class="k">${escapeHtml(p.numberPreview ?? 'טיוטה')}</div>
-    </div>
-
-    <div class="grid2">
-      <div>
-        <div style="font-weight:700; font-size:14px; margin-bottom:6px;">${escapeHtml(p.issuer.display_name)}</div>
-        ${partyLine('ח.פ/ע.מ:', p.issuer.tax_id)}
-        ${partyLine('כתובת:', p.issuer.address)}
-        ${partyLine('טלפון:', p.issuer.phone)}
-        ${partyLine('אימייל:', p.issuer.email)}
-      </div>
-      <div>
-        <div style="font-weight:700; font-size:14px; margin-bottom:6px;">לכבוד: ${escapeHtml(p.recipient.display_name)}</div>
-        ${partyLine('ח.פ/ע.מ:', p.recipient.tax_id)}
-        ${partyLine('כתובת:', p.recipient.address)}
-        ${partyLine('אימייל:', p.recipient.email)}
-      </div>
-    </div>
-
-    <div style="margin-top:12px;" class="grid2">
-      <div>
-        ${metaLine('תאריך מסמך:', p.document_date)}
-        ${metaLine('תאריך לתשלום:', p.due_date)}
-      </div>
-      <div>
-        ${metaLine('מטבע:', p.currency)}
-      </div>
-    </div>
-  </div>
-
-  <div style="height:12px"></div>
-
-  <div class="section">
-    <table>
-      <thead>
-        <tr>
-          <th style="width:34px">#</th>
-          <th>פירוט</th>
-          <th style="width:76px">כמות</th>
-          <th style="width:110px">מחיר ליח'</th>
-          <th style="width:70px">מטבע</th>
-          <th style="width:90px">מע״מ</th>
-          <th style="width:120px">סה״כ</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${p.lineRows
+  const linesHtml =
+    p.lineRows.length > 0
+      ? p.lineRows
           .map(
-            (r) => `
-          <tr>
+            (r) => `<tr>
             <td>${r.row_number}</td>
-            <td>${escapeHtml(r.description)}</td>
+            <td>${escapeHtml(r.description || '—')}</td>
             <td>${escapeHtml(r.quantity)}</td>
             <td>${escapeHtml(r.unit_price)}</td>
             <td>${escapeHtml(r.currency)}</td>
@@ -258,42 +198,82 @@ function renderIncomePreviewHtml(params: {
             <td>${escapeHtml(r.total)}</td>
           </tr>`,
           )
-          .join('')}
-      </tbody>
-    </table>
+          .join('')
+      : `<tr><td colspan="7" style="text-align:center;color:#64748b;padding:16px">אין שורות במסמך</td></tr>`;
 
-    <div style="height:12px"></div>
-
-    <div class="totals">
-      <div class="box">
-        <div class="row"><span>סכום ביניים</span><span>${escapeHtml(p.totals.subtotal_before_discount)}</span></div>
-        ${
-          p.totals.discount
-            ? `<div class="row"><span>הנחה לפני מע״מ</span><span>${escapeHtml(p.totals.discount)}</span></div>
-        <div class="row"><span>סכום לאחר הנחה</span><span>${escapeHtml(p.totals.subtotal_after_discount)}</span></div>`
-            : ''
-        }
-        ${
-          p.totals.vat
-            ? `<div class="row"><span>${escapeHtml(p.totals.vat_label ?? 'מע״מ')}</span><span>${escapeHtml(
-                p.totals.vat,
-              )}</span></div>`
-            : ''
-        }
-        <div class="row"><strong>סה״כ לתשלום</strong><strong>${escapeHtml(p.totals.grand_total)}</strong></div>
+  return `
+<div class="nx-doc" dir="rtl">
+  <div class="nx-doc__header">
+    <div class="nx-doc__issuer">
+      <div class="nx-doc__logo" aria-hidden="true">PROG4BIZ</div>
+      <div class="nx-doc__issuer-name">${escapeHtml(p.issuer.display_name)}</div>
+      ${issuerLine('ח.פ/ע.מ', p.issuer.tax_id)}
+      ${issuerLine('כתובת', p.issuer.address)}
+      ${issuerLine('טלפון', p.issuer.phone)}
+      ${issuerLine('אימייל', p.issuer.email)}
+    </div>
+    <div class="nx-doc__title-block">
+      <div class="nx-doc__recipient">
+        ${recipientLine(p.recipient.display_name)}
+        ${recipientLine(p.recipient.address)}
+        ${recipientLine(p.recipient.tax_id ? `ח.פ/ע.מ ${p.recipient.tax_id}` : null)}
+      </div>
+      <div class="nx-doc__title">${escapeHtml(p.docTypeLabel)} ${escapeHtml(p.numberPreview ?? '')}</div>
+      <div class="nx-doc__dates">
+        <span>תאריך מסמך: ${escapeHtml(formatPreviewDate(p.document_date))}</span>
+        <span>תאריך לתשלום: ${escapeHtml(formatPreviewDate(p.due_date))}</span>
       </div>
     </div>
   </div>
 
-  ${
-    p.notes && p.notes.trim()
-      ? `<div style="height:12px"></div>
-  <div class="section">
-    <div style="font-weight:700; margin-bottom:6px;">הערות</div>
-    <div style="white-space:pre-wrap; font-size:13px;">${escapeHtml(p.notes)}</div>
-  </div>`
-      : ''
-  }
+  <table class="nx-doc__table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>תיאור</th>
+        <th>כמות</th>
+        <th>מחיר ליחידה</th>
+        <th>מטבע</th>
+        <th>מע״מ</th>
+        <th>סה״כ</th>
+      </tr>
+    </thead>
+    <tbody>${linesHtml}</tbody>
+  </table>
+
+  <div class="nx-doc__totals-wrap">
+    <div class="nx-doc__totals">
+      <div class="nx-doc__total-row"><span>סכום ביניים</span><span>${escapeHtml(p.totals.subtotal_before_discount)}</span></div>
+      ${
+        p.totals.discount
+          ? `<div class="nx-doc__total-row nx-doc__total-row--discount"><span>הנחה לפני מע״מ</span><span>${escapeHtml(p.totals.discount)}</span></div>
+      <div class="nx-doc__total-row"><span>סכום לאחר הנחה</span><span>${escapeHtml(p.totals.subtotal_after_discount)}</span></div>`
+          : ''
+      }
+      ${
+        p.totals.vat
+          ? `<div class="nx-doc__total-row"><span>${escapeHtml(p.totals.vat_label ?? 'מע״מ')}</span><span>${escapeHtml(p.totals.vat)}</span></div>`
+          : ''
+      }
+      <div class="nx-doc__grand-total">
+        <span>סה״כ לתשלום</span>
+        <strong>${escapeHtml(p.totals.grand_total)}</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="nx-doc__footer">
+    ${
+      p.notes && p.notes.trim()
+        ? `<div class="nx-doc__footer-block"><div class="nx-doc__footer-title">הערות</div><div class="nx-doc__footer-text">${escapeHtml(p.notes)}</div></div>`
+        : ''
+    }
+    <div class="nx-doc__footer-block">
+      <div class="nx-doc__footer-title">פרטי תשלום</div>
+      <div class="nx-doc__footer-text">TEMPORARY_BRANDING_PENDING — פרטי בנק יוצגו מהגדרות מנפיק</div>
+    </div>
+    <div class="nx-doc__signature">חתימה וחותמת</div>
+  </div>
 </div>
   `.trim();
 }
@@ -446,6 +426,13 @@ export type IncomeDocumentPreviewPartyBlock = {
   email: string | null;
 };
 
+export type IncomeDocumentPreviewToolbarAction = {
+  action: string;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+};
+
 export type IncomeDocumentPreviewModel = {
   visible: boolean;
   preview_status: 'ready' | 'not_generated';
@@ -459,7 +446,16 @@ export type IncomeDocumentPreviewModel = {
   preview_html: string;
   validation_messages: IncomeDocumentPreviewValidationMessage[];
   allowed_actions: string[];
+  toolbar_actions: IncomeDocumentPreviewToolbarAction[];
 };
+
+function buildPreviewToolbarActions(): IncomeDocumentPreviewToolbarAction[] {
+  return [
+    { action: 'preview_export_pdf', label: 'PDF', enabled: false, reason: 'זמין לאחר הפקה' },
+    { action: 'preview_print', label: 'הדפסה', enabled: false, reason: 'זמין לאחר הפקה' },
+    { action: 'preview_download', label: 'הורדה', enabled: false, reason: 'זמין לאחר הפקה' },
+  ];
+}
 
 export type IncomeWizardDraftRow = {
   id: string;
@@ -1028,6 +1024,7 @@ export async function buildIncomeDocumentDetailsStep(
       preview_html: previewHtml,
       validation_messages: previewMessages,
       allowed_actions: canEdit ? ['generate_income_document_preview'] : [],
+      toolbar_actions: buildPreviewToolbarActions(),
     },
     draft_state_display: {
       status: 'draft',
