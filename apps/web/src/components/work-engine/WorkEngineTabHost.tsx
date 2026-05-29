@@ -22,6 +22,8 @@ import { userFacingApiMessage } from '../../api/client';
 import { executeIncomeCommand } from '../../api/income';
 import { ClientOperationsRegistryView } from '../client-operations/ClientOperationsRegistryView';
 import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
+import { IncomeDocumentBrandingGearButton } from '../income/IncomeDocumentBrandingGearButton';
+import { IncomeDocumentBrandingSettingsModal } from '../income/IncomeDocumentBrandingSettingsModal';
 import { WorkEngineIncomeDocumentWizardModal } from './WorkEngineIncomeDocumentWizardModal';
 import type { IncomeWorkspaceAggregate } from '../../api/income';
 
@@ -296,6 +298,8 @@ function WorkEngineInvoicesTabPanel(props: {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardBusy, setWizardBusy] = useState(false);
   const [wizardInitialAgg, setWizardInitialAgg] = useState<IncomeWorkspaceAggregate | null>(null);
+  const [brandingOpen, setBrandingOpen] = useState(false);
+  const [brandingBusy, setBrandingBusy] = useState(false);
 
   const loadAggregate = useCallback(async () => {
     setLoading(true);
@@ -333,7 +337,14 @@ function WorkEngineInvoicesTabPanel(props: {
     <>
       <div className="nx-we-invoices-tab__header">
         <div>
-          <h1 className="nx-we-queue__title">{aggregate.title}</h1>
+          <h1 className="nx-we-queue__title nx-we-invoices-tab__title">
+            <span>{aggregate.title}</span>
+            <IncomeDocumentBrandingGearButton
+              entrypoint={aggregate.document_branding_settings_entrypoint}
+              disabled={wizardBusy || brandingBusy}
+              onClick={() => setBrandingOpen(true)}
+            />
+          </h1>
           <p className="nx-we-queue__subtitle">{aggregate.description}</p>
         </div>
         {canOpenWizard ? (
@@ -415,6 +426,8 @@ function WorkEngineInvoicesTabPanel(props: {
           busy={wizardBusy}
           entrypoint={entry}
           initialWorkspaceAgg={wizardInitialAgg}
+          issuerBrandingProfile={aggregate.document_branding_profile}
+          issuerBrandingEntrypoint={aggregate.document_branding_settings_entrypoint}
           onClose={() => {
             setWizardOpen(false);
             setWizardInitialAgg(null);
@@ -423,6 +436,43 @@ function WorkEngineInvoicesTabPanel(props: {
           onCompleted={() => void loadAggregate()}
         />
       ) : null}
+      <IncomeDocumentBrandingSettingsModal
+        open={brandingOpen}
+        portal
+        title={aggregate.document_branding_settings_entrypoint?.modal_title ?? 'הגדרות מסמך'}
+        profile={aggregate.document_branding_profile}
+        commands={
+          aggregate.document_branding_settings_entrypoint?.commands ?? {
+            update_branding_profile: 'update_income_document_branding_profile',
+            upload_document_logo: 'upload_income_document_logo',
+            upload_document_signature: 'upload_income_document_signature',
+          }
+        }
+        busy={brandingBusy}
+        onClose={() => setBrandingOpen(false)}
+        onCommand={async (command, body) => {
+          setBrandingBusy(true);
+          try {
+            const res = await executeIncomeCommand(command, body);
+            if ('income_workspace_aggregate' in res) {
+              const w = res.income_workspace_aggregate;
+              setAggregate((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      document_branding_profile: w.document_branding_profile,
+                      document_branding_settings_entrypoint: w.document_branding_settings_entrypoint,
+                    }
+                  : prev,
+              );
+            }
+          } catch (e) {
+            setError(userFacingApiMessage(e));
+          } finally {
+            setBrandingBusy(false);
+          }
+        }}
+      />
     </>
   );
 }

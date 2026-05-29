@@ -873,8 +873,10 @@
   border-bottom: 1px solid #e5e7eb;
 }
 
-.nx-we-preview-toolbar__branding {
-  margin-inline-start: auto;
+.nx-we-invoices-tab__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .nx-we-preview-canvas {

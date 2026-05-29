@@ -1,30 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { IncomeDocumentDetailsStep } from '../../income/income-document-details-types';
-import type {
-  IncomeDocumentBrandingProfileAggregate,
-  IncomeDocumentBrandingSettingsEntrypoint,
-} from '../../income/income-document-branding-types';
-import { IncomeDocumentBrandingSettingsModal } from '../income/IncomeDocumentBrandingSettingsModal';
 
 type Props = {
   step: IncomeDocumentDetailsStep;
-  draftId: string;
-  brandingProfile: IncomeDocumentBrandingProfileAggregate | null;
-  brandingEntrypoint: IncomeDocumentBrandingSettingsEntrypoint | null;
   busy: boolean;
   onGeneratePreview: () => void;
-  onBrandingCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
 };
-
-function settingDisplay(step: IncomeDocumentDetailsStep, key: string): string {
-  const field = step.settings_schema.find((f) => f.key === key);
-  if (!field?.value) return '—';
-  if (field.input_type === 'select' && field.options?.length) {
-    const opt = field.options.find((o) => o.value === field.value);
-    return opt?.label ?? field.value;
-  }
-  return field.value;
-}
 
 function PreviewSidebarSection({
   title,
@@ -60,16 +41,7 @@ function ReadOnlyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function WorkEngineIncomePreviewStep({
-  step,
-  draftId,
-  brandingProfile,
-  brandingEntrypoint,
-  busy,
-  onGeneratePreview,
-  onBrandingCommand,
-}: Props) {
-  const [brandingOpen, setBrandingOpen] = useState(false);
+export function WorkEngineIncomePreviewStep({ step, busy, onGeneratePreview }: Props) {
   const preview = step.document_preview;
   const toolbar = preview?.toolbar_actions ?? [];
   const showPaper = preview?.visible && preview.preview_html?.trim();
@@ -78,14 +50,12 @@ export function WorkEngineIncomePreviewStep({
     () => [
       { label: 'סוג מסמך', value: preview?.document_type_label ?? '—' },
       { label: 'מספר מסמך', value: preview?.document_number_preview ?? step.header.document_number_preview ?? 'טיוטה' },
-      { label: 'תאריך מסמך', value: preview?.dates.document_date ?? settingDisplay(step, 'document_date') },
-      { label: 'תאריך לתשלום', value: preview?.dates.due_date ?? settingDisplay(step, 'due_date') },
-      { label: 'מטבע', value: preview?.currency ?? settingDisplay(step, 'currency') },
+      { label: 'תאריך מסמך', value: preview?.dates.document_date ?? '—' },
+      { label: 'תאריך לתשלום', value: preview?.dates.due_date ?? '—' },
+      { label: 'מטבע', value: preview?.currency ?? '—' },
     ],
     [preview, step],
   );
-
-  const settingsFields = step.settings_schema.filter((f) => f.visible);
 
   return (
     <div className="nx-we-preview-layout" dir="rtl">
@@ -102,16 +72,6 @@ export function WorkEngineIncomePreviewStep({
               {action.label}
             </button>
           ))}
-          {brandingEntrypoint?.visible ? (
-            <button
-              type="button"
-              className="nx-btn nx-btn-taxes-compact nx-we-preview-toolbar__branding"
-              disabled={busy || !brandingEntrypoint.allowed_actions.length}
-              onClick={() => setBrandingOpen(true)}
-            >
-              הגדרות מסמך
-            </button>
-          ) : null}
         </div>
 
         <div className="nx-we-preview-canvas">
@@ -160,40 +120,6 @@ export function WorkEngineIncomePreviewStep({
           ))}
         </PreviewSidebarSection>
 
-        <PreviewSidebarSection title="הגדרות מסמך (טיוטה)" defaultOpen={false}>
-          {settingsFields.map((field) => (
-            <ReadOnlyRow
-              key={field.key}
-              label={field.label}
-              value={
-                field.input_type === 'select'
-                  ? field.options?.find((o) => o.value === field.value)?.label ?? field.value ?? '—'
-                  : field.value ?? '—'
-              }
-            />
-          ))}
-        </PreviewSidebarSection>
-
-        <PreviewSidebarSection title="הנחה לפני מע״מ" defaultOpen={false}>
-          <ReadOnlyRow
-            label="הנחה פעילה"
-            value={step.document_discount.enabled ? 'כן' : 'לא'}
-          />
-          {step.document_discount.enabled ? (
-            <>
-              <ReadOnlyRow
-                label="סוג"
-                value={step.document_discount.type === 'percent' ? 'אחוז' : 'סכום קבוע'}
-              />
-              <ReadOnlyRow label="ערך" value={step.document_discount.value || '—'} />
-              <ReadOnlyRow
-                label="סכום מחושב"
-                value={step.document_discount.calculated_discount_amount_display ?? '—'}
-              />
-            </>
-          ) : null}
-        </PreviewSidebarSection>
-
         <PreviewSidebarSection title="סיכום">
           <div className="nx-we-preview-sidebar__totals">
             {step.totals_block.rows.map((row) => (
@@ -210,24 +136,6 @@ export function WorkEngineIncomePreviewStep({
           </div>
         </PreviewSidebarSection>
       </aside>
-
-      <IncomeDocumentBrandingSettingsModal
-        open={brandingOpen}
-        portal
-        title={brandingEntrypoint?.modal_title ?? 'הגדרות מסמך'}
-        profile={brandingProfile ?? step.document_branding_profile ?? null}
-        commands={
-          brandingEntrypoint?.commands ?? {
-            update_branding_profile: 'update_income_document_branding_profile',
-            upload_document_logo: 'upload_income_document_logo',
-            upload_document_signature: 'upload_income_document_signature',
-          }
-        }
-        busy={busy}
-        draftId={draftId}
-        onClose={() => setBrandingOpen(false)}
-        onCommand={onBrandingCommand}
-      />
     </div>
   );
 }

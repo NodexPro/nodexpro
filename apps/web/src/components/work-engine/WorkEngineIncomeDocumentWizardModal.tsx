@@ -12,8 +12,11 @@ import {
 import { WorkEngineDocumentDetailsStep } from './WorkEngineDocumentDetailsStep';
 import { WorkEngineIncomePreviewStep } from './WorkEngineIncomePreviewStep';
 import { executeIncomeCommand } from '../../api/income';
-import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
 import type { WorkEngineInvoicesDocumentCreationEntrypoint } from '../../api/work-engine';
+import type {
+  IncomeDocumentBrandingProfileAggregate,
+  IncomeDocumentBrandingSettingsEntrypoint,
+} from '../../income/income-document-branding-types';
 import '../../styles/nx-modal.css';
 
 type FormState = {
@@ -44,6 +47,8 @@ type Props = {
   onBusyChange: (busy: boolean) => void;
   onCompleted: () => void;
   initialWorkspaceAgg?: IncomeWorkspaceAggregate | null;
+  issuerBrandingProfile?: IncomeDocumentBrandingProfileAggregate | null;
+  issuerBrandingEntrypoint?: IncomeDocumentBrandingSettingsEntrypoint | null;
 };
 
 function stepIndexForKey(steps: { key: string }[], key: string | null | undefined): number | null {
@@ -60,6 +65,8 @@ export function WorkEngineIncomeDocumentWizardModal({
   onBusyChange,
   onCompleted,
   initialWorkspaceAgg,
+  issuerBrandingProfile,
+  issuerBrandingEntrypoint,
 }: Props) {
   const wizard = entrypoint.wizard;
   const [stepIndex, setStepIndex] = useState(0);
@@ -75,6 +82,20 @@ export function WorkEngineIncomeDocumentWizardModal({
   const [form, setForm] = useState<FormState>(() => ({
     document_type: '',
   }));
+
+  useEffect(() => {
+    if (!issuerBrandingProfile && !issuerBrandingEntrypoint) return;
+    setWorkspaceAgg((prev) =>
+      prev
+        ? {
+            ...prev,
+            document_branding_profile: issuerBrandingProfile ?? prev.document_branding_profile,
+            document_branding_settings_entrypoint:
+              issuerBrandingEntrypoint ?? prev.document_branding_settings_entrypoint,
+          }
+        : prev,
+    );
+  }, [issuerBrandingProfile, issuerBrandingEntrypoint]);
 
   const documentTypes: IncomeAvailableDocumentType[] =
     workspaceAgg?.available_document_types ?? [];
@@ -289,21 +310,6 @@ export function WorkEngineIncomeDocumentWizardModal({
     [visibleSteps],
   );
 
-  const handleBrandingCommand = async (command: string, body: Record<string, unknown>) => {
-    setError(null);
-    onBusyChange(true);
-    try {
-      const res = await executeIncomeCommand(command, body);
-      if ('income_workspace_aggregate' in res) {
-        setWorkspaceAgg((prev) => mergeIncomeWorkspaceWizardPatch(prev, res.income_workspace_aggregate));
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'שגיאה בעדכון מיתוג');
-    } finally {
-      onBusyChange(false);
-    }
-  };
-
   const handleGeneratePreview = async (advanceToPreview = false) => {
     setError(null);
     const cmds = wizard.income_commands;
@@ -449,12 +455,8 @@ export function WorkEngineIncomeDocumentWizardModal({
       return (
         <WorkEngineIncomePreviewStep
           step={documentDetailsStep}
-          draftId={activeDraftId ?? documentDetailsStep.draft_id}
-          brandingProfile={workspaceAgg?.document_branding_profile ?? null}
-          brandingEntrypoint={workspaceAgg?.document_branding_settings_entrypoint ?? null}
           busy={busy}
           onGeneratePreview={() => void handleGeneratePreview(false)}
-          onBrandingCommand={handleBrandingCommand}
         />
       );
     }

@@ -16,6 +16,9 @@
 
 .nx-income-workspace__title {
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-size: clamp(28px, 4vw, 38px);
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -392,6 +395,32 @@
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 12px;
+}
+
+.nx-income-branding-gear-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.nx-income-branding-gear-icon:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.nx-income-branding-gear-icon:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .nx-income-branding-gear-btn {

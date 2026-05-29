@@ -20,6 +20,7 @@ import {
 } from '../api/income';
 import { IncomeCardsGrid } from '../components/income/IncomeCardsGrid';
 import { IncomeCustomersTable } from '../components/income/IncomeCustomersTable';
+import { IncomeDocumentBrandingGearButton } from '../components/income/IncomeDocumentBrandingGearButton';
 import { IncomeDocumentBrandingSettingsModal } from '../components/income/IncomeDocumentBrandingSettingsModal';
 import { IncomeDocumentWizardModal } from '../components/income/IncomeDocumentWizardModal';
 import { IncomeDocumentsTable } from '../components/income/IncomeDocumentsTable';
@@ -274,22 +275,16 @@ export function IncomeWorkspacePage() {
       <header className="nx-income-workspace__header">
         <div className="nx-income-workspace__title-row">
           <div>
-            <h1 className="nx-income-workspace__title">חשבוניות</h1>
+            <h1 className="nx-income-workspace__title">
+              <span>חשבוניות</span>
+              <IncomeDocumentBrandingGearButton
+                entrypoint={workspace.document_branding_settings_entrypoint}
+                disabled={busy}
+                onClick={() => setBrandingOpen(true)}
+              />
+            </h1>
             <p className="nx-income-workspace__subtitle">ניהול מסמכים, לקוחות ופריטים — נתונים מהשרת בלבד</p>
           </div>
-          {workspace.document_branding_settings_entrypoint?.visible ? (
-            <button
-              type="button"
-              className="nx-income-branding-gear-btn"
-              disabled={
-                busy ||
-                !workspace.document_branding_settings_entrypoint.allowed_actions.length
-              }
-              onClick={() => setBrandingOpen(true)}
-            >
-              {workspace.document_branding_settings_entrypoint.button_label}
-            </button>
-          ) : null}
         </div>
         <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={() => void load()}>
           רענון

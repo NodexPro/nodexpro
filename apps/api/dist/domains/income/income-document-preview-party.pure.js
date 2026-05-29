@@ -65,7 +65,7 @@ export function publicDisplayName(value, fallback = '—') {
 }
 export function publicDisplayNameOrNull(value) {
     const s = typeof value === 'string' ? value.trim() : '';
-    if (!s || isLikelyInternalIdentifier(s))
+    if (!s || isLikelyInternalIdentifier(s) || isLikelyInternalShortCode(s))
         return null;
     return s;
 }

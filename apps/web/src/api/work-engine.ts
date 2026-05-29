@@ -14,6 +14,10 @@
 
 import { apiJson } from './client';
 import { WORK_ENGINE } from './endpoints';
+import type {
+  IncomeDocumentBrandingProfileAggregate,
+  IncomeDocumentBrandingSettingsEntrypoint,
+} from '../income/income-document-branding-types';
 
 export type WorkEngineQueueFiltersInput = {
   state?: string | null;
@@ -563,6 +567,8 @@ export type WorkEngineInvoicesTabAggregate = {
     }>;
   }>;
   gaps: string[];
+  document_branding_profile: IncomeDocumentBrandingProfileAggregate | null;
+  document_branding_settings_entrypoint: IncomeDocumentBrandingSettingsEntrypoint | null;
 };
 
 export async function fetchWorkEngineInvoicesTabAggregate(): Promise<WorkEngineInvoicesTabAggregate> {

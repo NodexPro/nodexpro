@@ -9,6 +9,8 @@ import { forbidden } from '../../shared/errors.js';
 import { buildAccountantWorkspaceTabs } from './work-engine.read-models.service.js';
 import { buildWorkEngineInvoicesDocumentCreationEntrypoint } from './work-engine-invoices-document-creation.builders.js';
 import { amountReferenceFromTotalsSnapshot, customerDisplayFromSnapshot, isOverdueByDueDate, } from '../income/income-work-engine-bridge.pure.js';
+import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
+import { buildDocumentBrandingProfileAggregate, buildDocumentBrandingSettingsEntrypoint, } from '../income/income-document-branding.service.js';
 const DOCUMENT_TYPE_LABELS = {
     receipt: 'קבלה',
     tax_invoice: 'חשבונית מס',
@@ -156,6 +158,19 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
             ],
         };
     }) ?? [];
+    let document_branding_profile = null;
+    let document_branding_settings_entrypoint = null;
+    try {
+        const issuerScope = await loadActiveIncomeIssuerScope(params.ctx);
+        if (issuerScope.permissions.view) {
+            document_branding_profile = await buildDocumentBrandingProfileAggregate(issuerScope, issuerScope.permissions.edit);
+            document_branding_settings_entrypoint = buildDocumentBrandingSettingsEntrypoint(issuerScope.permissions);
+        }
+    }
+    catch {
+        document_branding_profile = null;
+        document_branding_settings_entrypoint = null;
+    }
     return {
         aggregate_key: 'work_engine_invoices_tab_aggregate',
         org_id: orgId,
@@ -188,5 +203,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
             'amount_paid_reference — awaiting payment pipeline',
             'self_mode_documents_excluded — requires represented_client_id',
         ],
+        document_branding_profile,
+        document_branding_settings_entrypoint,
     };
 }
