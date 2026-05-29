@@ -42,6 +42,10 @@ import {
 } from './income-document-branding.types.js';
 
 export type { IncomeDocumentDetailsStep } from './income-document-details-step.builders.js';
+export type {
+  IncomeDocumentBrandingProfileAggregate,
+  IncomeDocumentBrandingSettingsEntrypoint,
+} from './income-document-branding.types.js';
 
 export const INCOME_MODULE_CODE = 'income' as const;
 
@@ -242,6 +246,8 @@ export interface IncomeWorkspaceAggregate {
   /** Work Engine wizard — backend-owned start step key when resuming. */
   wizard_starting_step_key?: string | null;
   active_wizard_draft_id: string | null;
+  document_branding_profile: import('./income-document-branding.types.js').IncomeDocumentBrandingProfileAggregate | null;
+  document_branding_settings_entrypoint: import('./income-document-branding.types.js').IncomeDocumentBrandingSettingsEntrypoint | null;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
 }

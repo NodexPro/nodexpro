@@ -57,6 +57,25 @@ async function commandResponse(ctx, command, recipientOverlay = {}, wizardDraftO
         income_workspace_aggregate: await buildIncomeWorkspaceAggregate(ctx, undefined, recipientOverlay, wizardDraftOverlay),
     };
 }
+function hasDraftIdInBody(body) {
+    const raw = body.draft_id;
+    return raw !== null && raw !== undefined && String(raw).trim() !== '';
+}
+async function brandingCommandResponse(ctx, command, body, run) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const overlay = await run(scope, body);
+    if (hasDraftIdInBody(body)) {
+        return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+    }
+    const income_workspace_aggregate = await buildIncomeWorkspaceAggregate(ctx, scope, {}, overlay);
+    return {
+        ok: true,
+        command,
+        income_workspace_aggregate,
+        meta: { workspace_aggregate_mode: 'full' },
+    };
+}
 async function wizardDraftCommandResponse(_ctx, command, scope, recipientOverlay, wizardDraftOverlay, startingStepKey = null) {
     return {
         ok: true,
@@ -484,22 +503,13 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         return wizardDraftCmd(updateIncomeDocumentDiscount);
     }
     if (command === INCOME_COMMAND_UPDATE_BRANDING_PROFILE) {
-        const scope = await loadActiveIncomeIssuerScope(ctx);
-        assertIncomeEditPermission(scope);
-        const overlay = await executeUpdateIncomeDocumentBrandingProfile(scope, body);
-        return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+        return brandingCommandResponse(ctx, command, body, executeUpdateIncomeDocumentBrandingProfile);
     }
     if (command === INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO) {
-        const scope = await loadActiveIncomeIssuerScope(ctx);
-        assertIncomeEditPermission(scope);
-        const overlay = await executeUploadIncomeDocumentLogo(ctx, scope, body);
-        return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+        return brandingCommandResponse(ctx, command, body, (scope, b) => executeUploadIncomeDocumentLogo(ctx, scope, b));
     }
     if (command === INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE) {
-        const scope = await loadActiveIncomeIssuerScope(ctx);
-        assertIncomeEditPermission(scope);
-        const overlay = await executeUploadIncomeDocumentSignature(ctx, scope, body);
-        return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+        return brandingCommandResponse(ctx, command, body, (scope, b) => executeUploadIncomeDocumentSignature(ctx, scope, b));
     }
     throw badRequest(`Unhandled income command: ${command}`);
 }

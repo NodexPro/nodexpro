@@ -6,21 +6,24 @@ import type {
   IncomeDocumentBrandingSection,
 } from '../../income/income-document-branding-types';
 
-type Props = {
-  profile: IncomeDocumentBrandingProfileAggregate;
-  draftId: string;
-  commands: {
-    update_branding_profile: string;
-    upload_document_logo: string;
-    upload_document_signature: string;
-  };
-  busy: boolean;
-  onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
+export type IncomeBrandingCommandsMap = {
+  update_branding_profile: string;
+  upload_document_logo: string;
+  upload_document_signature: string;
 };
 
-function SidebarSection({
+type Props = {
+  profile: IncomeDocumentBrandingProfileAggregate;
+  commands: IncomeBrandingCommandsMap;
+  busy: boolean;
+  draftId?: string | null;
+  onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
+  layout?: 'modal' | 'compact';
+};
+
+function PanelSection({
   title,
-  defaultOpen = false,
+  defaultOpen = true,
   children,
 }: {
   title: string;
@@ -29,16 +32,12 @@ function SidebarSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="nx-we-preview-sidebar__section">
-      <button
-        type="button"
-        className="nx-we-preview-sidebar__section-toggle"
-        onClick={() => setOpen((o) => !o)}
-      >
+    <section className="nx-income-branding__section">
+      <button type="button" className="nx-income-branding__section-toggle" onClick={() => setOpen((o) => !o)}>
         <span>{title}</span>
         <span aria-hidden>{open ? '▾' : '◂'}</span>
       </button>
-      {open ? <div className="nx-we-preview-sidebar__section-body">{children}</div> : null}
+      {open ? <div className="nx-income-branding__section-body">{children}</div> : null}
     </section>
   );
 }
@@ -60,7 +59,7 @@ function BrandingFieldInput({
 }) {
   if (field.input_type === 'boolean') {
     return (
-      <label className="nx-we-branding-field nx-we-branding-field--bool">
+      <label className="nx-income-branding-field nx-income-branding-field--bool">
         <input
           type="checkbox"
           checked={value === 'true'}
@@ -73,14 +72,9 @@ function BrandingFieldInput({
   }
   if (field.input_type === 'select' && field.options?.length) {
     return (
-      <label className="nx-we-branding-field">
-        <span className="nx-we-preview-sidebar__label">{field.label}</span>
-        <select
-          className="nx-we-branding-input"
-          value={value}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-        >
+      <label className="nx-income-branding-field">
+        <span className="nx-income-branding-field__label">{field.label}</span>
+        <select className="nx-income-branding-input" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
           {field.options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -92,30 +86,24 @@ function BrandingFieldInput({
   }
   if (field.input_type === 'textarea') {
     return (
-      <label className="nx-we-branding-field">
-        <span className="nx-we-preview-sidebar__label">{field.label}</span>
+      <label className="nx-income-branding-field">
+        <span className="nx-income-branding-field__label">{field.label}</span>
         <textarea
-          className="nx-we-branding-input nx-we-branding-input--textarea"
+          className="nx-income-branding-input nx-income-branding-input--textarea"
           value={value}
           disabled={disabled}
           rows={3}
           onChange={(e) => onChange(e.target.value)}
         />
-        {field.hint ? <span className="nx-we-branding-hint">{field.hint}</span> : null}
+        {field.hint ? <span className="nx-income-branding-hint">{field.hint}</span> : null}
       </label>
     );
   }
   return (
-    <label className="nx-we-branding-field">
-      <span className="nx-we-preview-sidebar__label">{field.label}</span>
-      <input
-        className="nx-we-branding-input"
-        type={field.input_type === 'color' ? 'text' : 'text'}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {field.hint ? <span className="nx-we-branding-hint">{field.hint}</span> : null}
+    <label className="nx-income-branding-field">
+      <span className="nx-income-branding-field__label">{field.label}</span>
+      <input className="nx-income-branding-input" type="text" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+      {field.hint ? <span className="nx-income-branding-hint">{field.hint}</span> : null}
     </label>
   );
 }
@@ -128,7 +116,7 @@ function BrandingSectionForm({
   onCommand,
 }: {
   section: IncomeDocumentBrandingSection;
-  draftId: string;
+  draftId?: string | null;
   updateCommand: string;
   busy: boolean;
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
@@ -143,19 +131,16 @@ function BrandingSectionForm({
   }, [section]);
 
   const save = async () => {
-    const body: Record<string, unknown> = { draft_id: draftId, section: section.key };
+    const body: Record<string, unknown> = { section: section.key };
+    if (draftId) body.draft_id = draftId;
     for (const field of section.fields) {
-      if (field.input_type === 'boolean') {
-        body[field.key] = draft[field.key] === 'true';
-      } else {
-        body[field.key] = draft[field.key] ?? '';
-      }
+      body[field.key] = field.input_type === 'boolean' ? draft[field.key] === 'true' : (draft[field.key] ?? '');
     }
     await onCommand(updateCommand, body);
   };
 
   return (
-    <div className="nx-we-branding-section-form">
+    <div className="nx-income-branding-section-form">
       {section.fields
         .filter((f) => f.visible)
         .map((field) => (
@@ -168,12 +153,7 @@ function BrandingSectionForm({
           />
         ))}
       {canSave ? (
-        <button
-          type="button"
-          className="nx-btn nx-btn-primary nx-btn-taxes-compact nx-we-branding-save"
-          disabled={busy}
-          onClick={() => void save()}
-        >
+        <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" disabled={busy} onClick={() => void save()}>
           שמירה
         </button>
       ) : null}
@@ -188,7 +168,7 @@ function AssetUploadSlot({
   onCommand,
 }: {
   slot: IncomeDocumentBrandingAssetSlot;
-  draftId: string;
+  draftId?: string | null;
   busy: boolean;
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
 }) {
@@ -203,28 +183,28 @@ function AssetUploadSlot({
       const bytes = new Uint8Array(buf);
       let binary = '';
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-      const file_base64 = btoa(binary);
-      await onCommand(slot.upload_command, {
-        draft_id: draftId,
+      const body: Record<string, unknown> = {
         file_name: file.name,
         mime_type: file.type || 'image/png',
-        file_base64,
-      });
+        file_base64: btoa(binary),
+      };
+      if (draftId) body.draft_id = draftId;
+      await onCommand(slot.upload_command, body);
     },
     [canUpload, draftId, onCommand, slot.upload_command],
   );
 
   return (
-    <div className="nx-we-branding-asset">
-      <div className="nx-we-preview-sidebar__label">{slot.label}</div>
+    <div className="nx-income-branding-asset">
+      <div className="nx-income-branding-field__label">{slot.label}</div>
       {slot.preview_data_url ? (
-        <img src={slot.preview_data_url} alt="" className="nx-we-branding-asset__preview" />
+        <img src={slot.preview_data_url} alt="" className="nx-income-branding-asset__preview" />
       ) : (
-        <div className="nx-we-branding-asset__empty">אין קובץ</div>
+        <div className="nx-income-branding-asset__empty">אין קובץ</div>
       )}
-      {slot.hint ? <div className="nx-we-branding-hint">{slot.hint}</div> : null}
+      {slot.hint ? <div className="nx-income-branding-hint">{slot.hint}</div> : null}
       {canUpload ? (
-        <label className="nx-btn nx-btn-taxes-compact nx-we-branding-upload">
+        <label className="nx-btn nx-btn-taxes-compact nx-income-branding-upload">
           העלאה
           <input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} hidden onChange={(e) => void onFile(e)} />
         </label>
@@ -233,14 +213,50 @@ function AssetUploadSlot({
   );
 }
 
-export function WorkEngineIncomeBrandingSidebar({ profile, draftId, commands, busy, onCommand }: Props) {
+export function IncomeDocumentBrandingSettingsPanel({
+  profile,
+  commands,
+  busy,
+  draftId,
+  onCommand,
+  layout = 'modal',
+}: Props) {
+  const designSection = profile.sections.find((s) => s.key === 'document_design');
+  const signatureSection = profile.sections.find((s) => s.key === 'signature');
+  const otherSections = profile.sections.filter(
+    (s) => s.key !== 'document_design' && s.key !== 'signature',
+  );
+
   return (
-    <SidebarSection title={profile.title} defaultOpen>
-      <AssetUploadSlot slot={profile.logo} draftId={draftId} busy={busy} onCommand={onCommand} />
-      <AssetUploadSlot slot={profile.signature} draftId={draftId} busy={busy} onCommand={onCommand} />
-      {profile.sections.map((section) => (
-        <div key={section.key} className="nx-we-branding-subsection">
-          <div className="nx-we-branding-subsection__title">{section.title}</div>
+    <div className={`nx-income-branding nx-income-branding--${layout}`} dir="rtl">
+      {designSection ? (
+        <PanelSection title={designSection.title} defaultOpen>
+          <AssetUploadSlot slot={profile.logo} draftId={draftId} busy={busy} onCommand={onCommand} />
+          <BrandingSectionForm
+            section={designSection}
+            draftId={draftId}
+            updateCommand={commands.update_branding_profile}
+            busy={busy}
+            onCommand={onCommand}
+          />
+        </PanelSection>
+      ) : null}
+
+      {signatureSection ? (
+        <PanelSection title={signatureSection.title} defaultOpen={layout === 'modal'}>
+          <AssetUploadSlot slot={profile.signature} draftId={draftId} busy={busy} onCommand={onCommand} />
+          <BrandingSectionForm
+            section={signatureSection}
+            draftId={draftId}
+            updateCommand={commands.update_branding_profile}
+            busy={busy}
+            onCommand={onCommand}
+          />
+        </PanelSection>
+      ) : null}
+
+      {otherSections.map((section) => (
+        <PanelSection key={section.key} title={section.title} defaultOpen={layout === 'modal'}>
           <BrandingSectionForm
             section={section}
             draftId={draftId}
@@ -248,8 +264,8 @@ export function WorkEngineIncomeBrandingSidebar({ profile, draftId, commands, bu
             busy={busy}
             onCommand={onCommand}
           />
-        </div>
+        </PanelSection>
       ))}
-    </SidebarSection>
+    </div>
   );
 }

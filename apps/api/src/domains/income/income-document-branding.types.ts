@@ -121,3 +121,15 @@ export type IncomeDocumentBrandingProfileAggregate = {
   signature: IncomeDocumentBrandingAssetSlot;
   allowed_actions: string[];
 };
+
+export type IncomeDocumentBrandingSettingsEntrypoint = {
+  visible: boolean;
+  button_label: string;
+  modal_title: string;
+  allowed_actions: string[];
+  commands: {
+    update_branding_profile: string;
+    upload_document_logo: string;
+    upload_document_signature: string;
+  };
+};

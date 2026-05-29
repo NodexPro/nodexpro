@@ -31,6 +31,7 @@ import {
 } from './income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
+import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfile } from './income-document-branding.service.js';
 import { renderIncomeBrandedPreviewHtml } from './income-document-branding-preview.renderer.js';
@@ -72,13 +73,16 @@ async function loadIssuerPreviewBlock(
   scope: ActiveIncomeIssuerScope,
 ): Promise<IncomeDocumentPreviewPartyBlock> {
   const snap = await buildIncomeIssuerSnapshotForScope(scope);
-  return {
-    display_name: snap.display_name?.trim() ? snap.display_name.trim() : scope.issuer_label,
-    tax_id: snap.tax_id?.trim() ? snap.tax_id.trim() : null,
-    address: previewPartyAddressLine(snap.address_json),
-    phone: snap.phone?.trim() ? snap.phone.trim() : null,
-    email: snap.email?.trim() ? snap.email.trim() : null,
-  };
+  return toPublicPreviewParty(
+    {
+      display_name: snap.display_name?.trim() ? snap.display_name.trim() : scope.issuer_label,
+      tax_id: snap.tax_id?.trim() ? snap.tax_id.trim() : null,
+      address: previewPartyAddressLine(snap.address_json),
+      phone: snap.phone?.trim() ? snap.phone.trim() : null,
+      email: snap.email?.trim() ? snap.email.trim() : null,
+    },
+    scope.issuer_label,
+  );
 }
 
 async function loadRecipientPreviewBlock(
@@ -89,16 +93,19 @@ async function loadRecipientPreviewBlock(
   const snap = row.one_time_customer_snapshot_json;
   if (snap && typeof snap === 'object' && !Array.isArray(snap)) {
     const s = snap as Record<string, unknown>;
-    return {
-      display_name:
-        typeof s.display_name === 'string' && s.display_name.trim()
-          ? s.display_name.trim()
-          : fallbackDisplayName,
-      tax_id: typeof s.tax_id === 'string' && s.tax_id.trim() ? s.tax_id.trim() : null,
-      address: previewPartyAddressLine(s.address_json),
-      phone: typeof s.phone === 'string' && s.phone.trim() ? s.phone.trim() : null,
-      email: typeof s.email === 'string' && s.email.trim() ? s.email.trim() : null,
-    };
+    return toPublicPreviewParty(
+      {
+        display_name:
+          typeof s.display_name === 'string' && s.display_name.trim()
+            ? s.display_name.trim()
+            : fallbackDisplayName,
+        tax_id: typeof s.tax_id === 'string' && s.tax_id.trim() ? s.tax_id.trim() : null,
+        address: previewPartyAddressLine(s.address_json),
+        phone: typeof s.phone === 'string' && s.phone.trim() ? s.phone.trim() : null,
+        email: typeof s.email === 'string' && s.email.trim() ? s.email.trim() : null,
+      },
+      fallbackDisplayName,
+    );
   }
   if (row.income_customer_id) {
     const { data, error } = await supabaseAdmin
@@ -118,22 +125,28 @@ async function loadRecipientPreviewBlock(
           address_json?: unknown;
         }
       | null;
-    return {
-      display_name:
-        saved?.display_name?.trim() ? String(saved.display_name).trim() : fallbackDisplayName,
-      tax_id: saved?.tax_id?.trim() ? String(saved.tax_id).trim() : null,
-      address: previewPartyAddressLine(saved?.address_json),
-      phone: saved?.phone?.trim() ? String(saved.phone).trim() : null,
-      email: saved?.email?.trim() ? String(saved.email).trim() : null,
-    };
+    return toPublicPreviewParty(
+      {
+        display_name:
+          saved?.display_name?.trim() ? String(saved.display_name).trim() : fallbackDisplayName,
+        tax_id: saved?.tax_id?.trim() ? String(saved.tax_id).trim() : null,
+        address: previewPartyAddressLine(saved?.address_json),
+        phone: saved?.phone?.trim() ? String(saved.phone).trim() : null,
+        email: saved?.email?.trim() ? String(saved.email).trim() : null,
+      },
+      fallbackDisplayName,
+    );
   }
-  return {
-    display_name: fallbackDisplayName,
-    tax_id: null,
-    address: null,
-    phone: null,
-    email: null,
-  };
+  return toPublicPreviewParty(
+    {
+      display_name: fallbackDisplayName,
+      tax_id: null,
+      address: null,
+      phone: null,
+      email: null,
+    },
+    fallbackDisplayName,
+  );
 }
 
 function formatPreviewDate(iso: string | null): string {
@@ -770,6 +783,16 @@ export async function buildIncomeDocumentDetailsStep(
   if (!recipientName) {
     recipientName = await resolveRecipientDisplayName(scope, row);
   }
+  recipientName = toPublicPreviewParty(
+    {
+      display_name: recipientName,
+      tax_id: null,
+      address: null,
+      phone: null,
+      email: null,
+    },
+    '—',
+  ).display_name;
   const headerTitle = buildDocumentDetailsHeaderTitle(scope, docTypeLabel, numberPreview, recipientName);
 
   const warnings = Array.isArray(row.validation_warnings_json)

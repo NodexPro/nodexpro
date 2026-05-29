@@ -221,6 +221,10 @@ export interface IncomeRecipientSearchModel {
 }
 
 import type { IncomeDocumentDetailsStep } from './income-document-details-types.js';
+import type {
+  IncomeDocumentBrandingProfileAggregate,
+  IncomeDocumentBrandingSettingsEntrypoint,
+} from './income-document-branding-types.js';
 
 export type { IncomeDocumentDetailsStep } from './income-document-details-types.js';
 
@@ -241,6 +245,8 @@ export interface IncomeWorkspaceAggregate {
   document_details_step: IncomeDocumentDetailsStep | null;
   wizard_starting_step_key?: string | null;
   active_wizard_draft_id: string | null;
+  document_branding_profile: IncomeDocumentBrandingProfileAggregate | null;
+  document_branding_settings_entrypoint: IncomeDocumentBrandingSettingsEntrypoint | null;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
 }

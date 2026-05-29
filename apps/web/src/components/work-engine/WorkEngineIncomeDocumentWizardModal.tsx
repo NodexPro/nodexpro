@@ -450,11 +450,8 @@ export function WorkEngineIncomeDocumentWizardModal({
         <WorkEngineIncomePreviewStep
           step={documentDetailsStep}
           draftId={activeDraftId ?? documentDetailsStep.draft_id}
-          brandingCommands={{
-            update_branding_profile: wizard.income_commands.update_branding_profile,
-            upload_document_logo: wizard.income_commands.upload_document_logo,
-            upload_document_signature: wizard.income_commands.upload_document_signature,
-          }}
+          brandingProfile={workspaceAgg?.document_branding_profile ?? null}
+          brandingEntrypoint={workspaceAgg?.document_branding_settings_entrypoint ?? null}
           busy={busy}
           onGeneratePreview={() => void handleGeneratePreview(false)}
           onBrandingCommand={handleBrandingCommand}

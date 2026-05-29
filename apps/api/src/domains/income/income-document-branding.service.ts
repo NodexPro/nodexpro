@@ -30,7 +30,9 @@ import type {
   IncomeDocumentBrandingField,
   IncomeDocumentBrandingProfileAggregate,
   IncomeDocumentBrandingSection,
+  IncomeDocumentBrandingSettingsEntrypoint,
 } from './income-document-branding.types.js';
+import type { IncomeWorkspacePermissions } from './income.types.js';
 import {
   INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
   INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
@@ -226,6 +228,29 @@ function selectField(
   };
 }
 
+export function buildDocumentBrandingSettingsEntrypoint(
+  permissions: IncomeWorkspacePermissions,
+): IncomeDocumentBrandingSettingsEntrypoint {
+  const canEdit = permissions.edit;
+  return {
+    visible: permissions.view,
+    button_label: '⚙ הגדרות מסמך',
+    modal_title: 'הגדרות מסמך',
+    allowed_actions: canEdit
+      ? [
+          INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+          INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
+          INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
+        ]
+      : [],
+    commands: {
+      update_branding_profile: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+      upload_document_logo: INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
+      upload_document_signature: INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
+    },
+  };
+}
+
 export async function buildDocumentBrandingProfileAggregate(
   scope: ActiveIncomeIssuerScope,
   canEdit: boolean,
@@ -237,56 +262,27 @@ export async function buildDocumentBrandingProfileAggregate(
   const uploadSigActions = canEdit ? [INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE] : [];
 
   const display = resolved.display_options;
-  const displaySection: IncomeDocumentBrandingSection = {
-    key: 'display_options',
-    title: 'תצוגה במסמך',
+
+  const documentDesignSection: IncomeDocumentBrandingSection = {
+    key: 'document_design',
+    title: 'עיצוב מסמך',
     save_command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
     allowed_actions: editActions,
     fields: [
-      boolField('show_logo', 'הצג לוגו', display.show_logo, canEdit),
-      boolField('show_business_address', 'הצג כתובת עסק', display.show_business_address, canEdit),
-      boolField('show_business_phone', 'הצג טלפון', display.show_business_phone, canEdit),
-      boolField('show_business_email', 'הצג אימייל', display.show_business_email, canEdit),
-      boolField('show_business_tax_id', 'הצג ח.פ/ע.מ', display.show_business_tax_id, canEdit),
-      boolField('show_due_date', 'הצג תאריך לתשלום', display.show_due_date, canEdit),
-      boolField('show_payment_terms', 'הצג תנאי תשלום', display.show_payment_terms, canEdit),
-      boolField('show_signature', 'הצג חתימה', display.show_signature, canEdit),
-      boolField('show_footer', 'הצג כותרת תחתונה', display.show_footer, canEdit),
-      boolField('show_bank_details', 'הצג פרטי בנק', display.show_bank_details, canEdit),
-      boolField('show_notes', 'הצג הערות', display.show_notes, canEdit),
-      boolField('show_item_index', 'הצג מספר שורה', display.show_item_index, canEdit),
-      boolField('show_discount_row', 'הצג שורת הנחה', display.show_discount_row, canEdit),
-      boolField('show_vat_row', 'הצג שורת מע״מ', display.show_vat_row, canEdit),
-      boolField('show_currency', 'הצג מטבע בשורות', display.show_currency, canEdit),
+      boolField('show_logo', 'הצג לוגו במסמך', display.show_logo, canEdit),
+      colorField('primary_color', 'צבע ראשי', resolved.primary_color, canEdit),
+      colorField('table_header_color', 'צבע כותרת טבלה', resolved.table_header_color, canEdit),
+      colorField('totals_color', 'צבע בלוק סיכום', resolved.totals_color, canEdit),
       selectField(
         'client_block_position',
         'מיקום בלוק לקוח',
         display.client_block_position,
         [
-          { value: 'right', label: 'ימין (כמו GreenInvoice)' },
+          { value: 'right', label: 'ימין' },
           { value: 'left', label: 'שמאל' },
         ],
         canEdit,
       ),
-      selectField(
-        'quantity_position',
-        'מיקום עמודת כמות',
-        display.quantity_position,
-        [
-          { value: 'before_description', label: 'לפני תיאור' },
-          { value: 'after_description', label: 'אחרי תיאור' },
-        ],
-        canEdit,
-      ),
-    ],
-  };
-
-  const identitySection: IncomeDocumentBrandingSection = {
-    key: 'identity',
-    title: 'זהות וצבעים',
-    save_command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
-    allowed_actions: editActions,
-    fields: [
       textField(
         'company_subtitle',
         'משפט שיוצג מתחת לשם העסק',
@@ -295,25 +291,40 @@ export async function buildDocumentBrandingProfileAggregate(
         'textarea',
         'מערכות הנהלת חשבונות לעסקים קטנים ובינוניים',
       ),
-      colorField('primary_color', 'צבע ראשי (כותרת / לקוח)', resolved.primary_color, canEdit),
-      colorField('secondary_color', 'צבע משני (רקע)', resolved.secondary_color, canEdit),
-      colorField('table_header_color', 'צבע כותרת טבלה', resolved.table_header_color, canEdit),
-      colorField('totals_color', 'צבע בלוק סיכום', resolved.totals_color, canEdit),
     ],
   };
 
-  const footerSection: IncomeDocumentBrandingSection = {
-    key: 'footer_bank',
-    title: 'כותרת תחתונה ובנק',
+  const signatureSection: IncomeDocumentBrandingSection = {
+    key: 'signature',
+    title: 'חתימה',
+    save_command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+    allowed_actions: editActions,
+    fields: [boolField('show_signature', 'הצג חתימה במסמך', display.show_signature, canEdit)],
+  };
+
+  const paymentSection: IncomeDocumentBrandingSection = {
+    key: 'payment_details',
+    title: 'פרטי תשלום',
+    save_command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+    allowed_actions: editActions,
+    fields: [
+      textField('bank_name', 'שם בנק', resolved.bank_name, canEdit),
+      textField('bank_branch', 'סניף', resolved.bank_branch, canEdit),
+      textField('bank_account', 'מספר חשבון', resolved.bank_account, canEdit),
+      textField('iban', 'IBAN', resolved.iban, canEdit),
+      textField('swift', 'SWIFT', resolved.swift, canEdit),
+    ],
+  };
+
+  const notesSection: IncomeDocumentBrandingSection = {
+    key: 'notes_terms',
+    title: 'הערות ותנאים',
     save_command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
     allowed_actions: editActions,
     fields: [
       textField('footer_text', 'טקסט כותרת תחתונה', resolved.footer_text, canEdit, 'textarea'),
-      textField('bank_name', 'שם בנק', resolved.bank_name, canEdit),
-      textField('bank_branch', 'סניף', resolved.bank_branch, canEdit),
-      textField('bank_account', 'מספר חשבון', resolved.bank_account, canEdit),
-      textField('swift', 'SWIFT', resolved.swift, canEdit),
-      textField('iban', 'IBAN', resolved.iban, canEdit),
+      textField('customer_notes', 'הערות לקוח (ברירת מחדל)', resolved.customer_notes, canEdit, 'textarea'),
+      textField('terms_and_conditions', 'תנאים והגבלות', resolved.terms_and_conditions, canEdit, 'textarea'),
     ],
   };
 
@@ -331,49 +342,14 @@ export async function buildDocumentBrandingProfileAggregate(
         'text',
         '{{document_type}} {{document_number}}',
       ),
-      textField(
-        'email_body_template',
-        'גוף אימייל',
-        resolved.email_body_template,
-        canEdit,
-        'textarea',
-      ),
+      textField('email_body_template', 'גוף אימייל', resolved.email_body_template, canEdit, 'textarea'),
     ],
-  };
-
-  const notesSection: IncomeDocumentBrandingSection = {
-    key: 'customer_notes_terms',
-    title: 'הערות לקוח ותנאים',
-    save_command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
-    allowed_actions: editActions,
-    fields: [
-      textField('customer_notes', 'הערות לקוח (Customer Notes)', resolved.customer_notes, canEdit, 'textarea'),
-      textField(
-        'terms_and_conditions',
-        'תנאים והגבלות',
-        resolved.terms_and_conditions,
-        canEdit,
-        'textarea',
-      ),
-    ],
-  };
-
-  const paymentFields: IncomeDocumentBrandingField[] = resolved.payment_methods.map((m) =>
-    boolField(`payment_method_${m.key}`, m.label, m.enabled, canEdit),
-  );
-
-  const paymentSection: IncomeDocumentBrandingSection = {
-    key: 'payment_methods',
-    title: 'אמצעי תשלום',
-    save_command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
-    allowed_actions: editActions,
-    fields: paymentFields,
   };
 
   return {
     profile_id: row.id,
     title: 'אגדרות מסמך',
-    sections: [identitySection, displaySection, footerSection, emailSection, notesSection, paymentSection],
+    sections: [documentDesignSection, signatureSection, paymentSection, notesSection, emailSection],
     logo: {
       label: 'לוגו מסמך',
       file_asset_id: row.logo_file_asset_id,
@@ -414,16 +390,48 @@ export async function updateIncomeDocumentBrandingProfile(
   const row = await ensureIncomeDocumentBrandingProfile(scope);
   const patch: Record<string, unknown> = {};
 
-  if (section === 'identity') {
+  if (section === 'document_design' || section === 'identity') {
     patch.company_subtitle = optionalTrimmedString(body.company_subtitle, 500);
     patch.primary_color = normalizeHexColor(body.primary_color, DEFAULT_PRIMARY_COLOR, 'primary_color');
-    patch.secondary_color = normalizeHexColor(body.secondary_color, DEFAULT_SECONDARY_COLOR, 'secondary_color');
     patch.table_header_color = normalizeHexColor(
       body.table_header_color,
       DEFAULT_PRIMARY_COLOR,
       'table_header_color',
     );
     patch.totals_color = normalizeHexColor(body.totals_color, DEFAULT_PRIMARY_COLOR, 'totals_color');
+    const clientPos = normalizeClientBlockPosition(
+      body.client_block_position ?? row.client_block_position,
+    );
+    const current = parseDisplayOptionsJson(row.display_options, clientPos);
+    const next: IncomeBrandingDisplayOptions = {
+      ...current,
+      show_logo: body.show_logo === undefined ? current.show_logo : parseBooleanBody(body.show_logo),
+      client_block_position: clientPos,
+    };
+    patch.display_options = serializeDisplayOptionsJson(next);
+    patch.client_block_position = clientPos;
+  } else if (section === 'signature') {
+    const clientPos = normalizeClientBlockPosition(row.client_block_position);
+    const current = parseDisplayOptionsJson(row.display_options, clientPos);
+    const next: IncomeBrandingDisplayOptions = {
+      ...current,
+      show_signature:
+        body.show_signature === undefined ? current.show_signature : parseBooleanBody(body.show_signature),
+    };
+    patch.display_options = serializeDisplayOptionsJson(next);
+  } else if (section === 'payment_details' || section === 'footer_bank') {
+    patch.bank_name = optionalTrimmedString(body.bank_name, 200);
+    patch.bank_branch = optionalTrimmedString(body.bank_branch, 100);
+    patch.bank_account = optionalTrimmedString(body.bank_account, 100);
+    patch.swift = optionalTrimmedString(body.swift, 50);
+    patch.iban = optionalTrimmedString(body.iban, 50);
+    if (section === 'footer_bank') {
+      patch.footer_text = optionalTrimmedString(body.footer_text, 2000);
+    }
+  } else if (section === 'notes_terms' || section === 'customer_notes_terms') {
+    patch.footer_text = optionalTrimmedString(body.footer_text, 2000);
+    patch.customer_notes = optionalTrimmedString(body.customer_notes, 4000);
+    patch.terms_and_conditions = optionalTrimmedString(body.terms_and_conditions, 8000);
   } else if (section === 'display_options') {
     const clientPos = normalizeClientBlockPosition(body.client_block_position);
     const current = parseDisplayOptionsJson(row.display_options, clientPos);
@@ -478,19 +486,9 @@ export async function updateIncomeDocumentBrandingProfile(
     };
     patch.display_options = serializeDisplayOptionsJson(next);
     patch.client_block_position = clientPos;
-  } else if (section === 'footer_bank') {
-    patch.footer_text = optionalTrimmedString(body.footer_text, 2000);
-    patch.bank_name = optionalTrimmedString(body.bank_name, 200);
-    patch.bank_branch = optionalTrimmedString(body.bank_branch, 100);
-    patch.bank_account = optionalTrimmedString(body.bank_account, 100);
-    patch.swift = optionalTrimmedString(body.swift, 50);
-    patch.iban = optionalTrimmedString(body.iban, 50);
   } else if (section === 'email_templates') {
     patch.email_subject_template = optionalTrimmedString(body.email_subject_template, 500);
     patch.email_body_template = optionalTrimmedString(body.email_body_template, 8000);
-  } else if (section === 'customer_notes_terms') {
-    patch.customer_notes = optionalTrimmedString(body.customer_notes, 4000);
-    patch.terms_and_conditions = optionalTrimmedString(body.terms_and_conditions, 8000);
   } else if (section === 'payment_methods') {
     const methods = parsePaymentMethodsJson(row.payment_methods);
     const next: IncomeBrandingPaymentMethod[] = methods.map((m) => ({

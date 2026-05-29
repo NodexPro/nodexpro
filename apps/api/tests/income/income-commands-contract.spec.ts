@@ -132,3 +132,16 @@ test('document branding profile commands and aggregate are registered', () => {
   assert.match(detailsSource, /renderIncomeBrandedPreviewHtml/);
   assert.doesNotMatch(detailsSource, /PROG4BIZ/);
 });
+
+test('income workspace aggregate exposes document branding settings entrypoint', () => {
+  const aggSource = readFileSync(
+    join(dir, '../../src/domains/income/income-workspace-aggregate.service.ts'),
+    'utf8',
+  );
+  const typesSource = readFileSync(join(dir, '../../src/domains/income/income.types.ts'), 'utf8');
+  assert.match(aggSource, /document_branding_profile/);
+  assert.match(aggSource, /document_branding_settings_entrypoint/);
+  assert.match(aggSource, /buildDocumentBrandingSettingsEntrypoint/);
+  assert.match(typesSource, /document_branding_settings_entrypoint/);
+  assert.match(commandsSource, /brandingCommandResponse/);
+});

@@ -11,6 +11,7 @@ import { accountingDisplayStatusLabel, resolveAccountingDisplayStatus, } from '.
 import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './income-workspace-cards.builders.js';
 import { buildIncomeRecipientSearchModel, buildRecipientCreateFieldsSchema, recipientSearchAllowedActions, } from './income-recipient.service.js';
+import { buildDocumentBrandingProfileAggregate, buildDocumentBrandingSettingsEntrypoint, } from './income-document-branding.service.js';
 import { INCOME_WORKSPACE_AGGREGATE_KEY, } from './income.types.js';
 const DOCUMENT_TYPE_LABELS = {
     receipt: 'קבלה',
@@ -307,6 +308,8 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(scope, wizardDraf
         ...(recipientOverlay.selected != null ? { selected: recipientOverlay.selected } : {}),
         ...(recipientOverlay.field_errors != null ? { field_errors: recipientOverlay.field_errors } : {}),
     };
+    const canEdit = scope.permissions.edit;
+    const brandingProfile = await buildDocumentBrandingProfileAggregate(scope, canEdit);
     return {
         aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
         org_id: scope.org_id,
@@ -324,6 +327,8 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(scope, wizardDraf
         document_details_step: wizardDraftOverlay.document_details_step ?? null,
         wizard_starting_step_key: startingStepKey,
         active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
+        document_branding_profile: brandingProfile,
+        document_branding_settings_entrypoint: buildDocumentBrandingSettingsEntrypoint(scope.permissions),
         allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
         warnings: [],
     };
@@ -354,6 +359,8 @@ export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride, recipien
     const drafts = await loadDrafts(scope, customerNames);
     const issuedDocuments = await loadIssuedDocuments(scope);
     const recipient_search = await buildIncomeRecipientSearchModel(scope, scope.permissions, recipientOverlay);
+    const canEdit = scope.permissions.edit;
+    const brandingProfile = await buildDocumentBrandingProfileAggregate(scope, canEdit);
     return {
         aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
         org_id: scope.org_id,
@@ -377,6 +384,8 @@ export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride, recipien
         recipient_search,
         document_details_step: wizardDraftOverlay.document_details_step ?? null,
         active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
+        document_branding_profile: brandingProfile,
+        document_branding_settings_entrypoint: buildDocumentBrandingSettingsEntrypoint(scope.permissions),
         allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
         warnings: docTypesResult.warnings,
     };

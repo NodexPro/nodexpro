@@ -25,6 +25,12 @@ export function mergeIncomeWorkspaceWizardPatch(
     allowed_actions: patch.allowed_actions,
     document_details_step: patch.document_details_step,
     active_wizard_draft_id: patch.active_wizard_draft_id,
+    document_branding_profile:
+      patch.document_branding_profile ?? previous.document_branding_profile ?? null,
+    document_branding_settings_entrypoint:
+      patch.document_branding_settings_entrypoint ??
+      previous.document_branding_settings_entrypoint ??
+      null,
     recipient_search: preserveRecipient ? previous.recipient_search : patch.recipient_search,
   };
 }

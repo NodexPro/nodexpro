@@ -1,15 +1,16 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { IncomeDocumentDetailsStep } from '../../income/income-document-details-types';
-import { WorkEngineIncomeBrandingSidebar } from './WorkEngineIncomeBrandingSidebar';
+import type {
+  IncomeDocumentBrandingProfileAggregate,
+  IncomeDocumentBrandingSettingsEntrypoint,
+} from '../../income/income-document-branding-types';
+import { IncomeDocumentBrandingSettingsModal } from '../income/IncomeDocumentBrandingSettingsModal';
 
 type Props = {
   step: IncomeDocumentDetailsStep;
   draftId: string;
-  brandingCommands: {
-    update_branding_profile: string;
-    upload_document_logo: string;
-    upload_document_signature: string;
-  };
+  brandingProfile: IncomeDocumentBrandingProfileAggregate | null;
+  brandingEntrypoint: IncomeDocumentBrandingSettingsEntrypoint | null;
   busy: boolean;
   onGeneratePreview: () => void;
   onBrandingCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
@@ -62,11 +63,13 @@ function ReadOnlyRow({ label, value }: { label: string; value: string }) {
 export function WorkEngineIncomePreviewStep({
   step,
   draftId,
-  brandingCommands,
+  brandingProfile,
+  brandingEntrypoint,
   busy,
   onGeneratePreview,
   onBrandingCommand,
 }: Props) {
+  const [brandingOpen, setBrandingOpen] = useState(false);
   const preview = step.document_preview;
   const toolbar = preview?.toolbar_actions ?? [];
   const showPaper = preview?.visible && preview.preview_html?.trim();
@@ -161,14 +164,17 @@ export function WorkEngineIncomePreviewStep({
           ))}
         </PreviewSidebarSection>
 
-        {step.document_branding_profile ? (
-          <WorkEngineIncomeBrandingSidebar
-            profile={step.document_branding_profile}
-            draftId={draftId}
-            commands={brandingCommands}
-            busy={busy}
-            onCommand={onBrandingCommand}
-          />
+        {brandingEntrypoint?.visible ? (
+          <div className="nx-we-preview-sidebar__section nx-we-preview-sidebar__section--flat">
+            <button
+              type="button"
+              className="nx-income-branding-gear-btn nx-income-branding-gear-btn--compact"
+              disabled={busy || !brandingEntrypoint.allowed_actions.length}
+              onClick={() => setBrandingOpen(true)}
+            >
+              {brandingEntrypoint.button_label}
+            </button>
+          </div>
         ) : null}
 
         <PreviewSidebarSection title="הנחה לפני מע״מ" defaultOpen={false}>
@@ -207,6 +213,23 @@ export function WorkEngineIncomePreviewStep({
           </div>
         </PreviewSidebarSection>
       </aside>
+
+      <IncomeDocumentBrandingSettingsModal
+        open={brandingOpen}
+        title={brandingEntrypoint?.modal_title ?? 'הגדרות מסמך'}
+        profile={brandingProfile ?? step.document_branding_profile ?? null}
+        commands={
+          brandingEntrypoint?.commands ?? {
+            update_branding_profile: 'update_income_document_branding_profile',
+            upload_document_logo: 'upload_income_document_logo',
+            upload_document_signature: 'upload_income_document_signature',
+          }
+        }
+        busy={busy}
+        draftId={draftId}
+        onClose={() => setBrandingOpen(false)}
+        onCommand={onBrandingCommand}
+      />
     </div>
   );
 }

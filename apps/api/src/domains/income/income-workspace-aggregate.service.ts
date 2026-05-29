@@ -24,6 +24,10 @@ import {
 } from './income-recipient.service.js';
 import type { WizardDraftOverlay } from './income-document-draft-editor.service.js';
 import {
+  buildDocumentBrandingProfileAggregate,
+  buildDocumentBrandingSettingsEntrypoint,
+} from './income-document-branding.service.js';
+import {
   INCOME_WORKSPACE_AGGREGATE_KEY,
   type IncomeCustomersTableRow,
   type IncomeDocumentType,
@@ -411,6 +415,9 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(
     ...(recipientOverlay.field_errors != null ? { field_errors: recipientOverlay.field_errors } : {}),
   };
 
+  const canEdit = scope.permissions.edit;
+  const brandingProfile = await buildDocumentBrandingProfileAggregate(scope, canEdit);
+
   return {
     aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
     org_id: scope.org_id,
@@ -428,6 +435,8 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(
     document_details_step: wizardDraftOverlay.document_details_step ?? null,
     wizard_starting_step_key: startingStepKey,
     active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
+    document_branding_profile: brandingProfile,
+    document_branding_settings_entrypoint: buildDocumentBrandingSettingsEntrypoint(scope.permissions),
     allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
     warnings: [],
   };
@@ -473,6 +482,9 @@ export async function buildIncomeWorkspaceAggregate(
     recipientOverlay,
   );
 
+  const canEdit = scope.permissions.edit;
+  const brandingProfile = await buildDocumentBrandingProfileAggregate(scope, canEdit);
+
   return {
     aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
     org_id: scope.org_id,
@@ -500,6 +512,8 @@ export async function buildIncomeWorkspaceAggregate(
     recipient_search,
     document_details_step: wizardDraftOverlay.document_details_step ?? null,
     active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
+    document_branding_profile: brandingProfile,
+    document_branding_settings_entrypoint: buildDocumentBrandingSettingsEntrypoint(scope.permissions),
     allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
     warnings: docTypesResult.warnings,
   };

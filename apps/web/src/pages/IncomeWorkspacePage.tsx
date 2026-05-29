@@ -20,6 +20,7 @@ import {
 } from '../api/income';
 import { IncomeCardsGrid } from '../components/income/IncomeCardsGrid';
 import { IncomeCustomersTable } from '../components/income/IncomeCustomersTable';
+import { IncomeDocumentBrandingSettingsModal } from '../components/income/IncomeDocumentBrandingSettingsModal';
 import { IncomeDocumentWizardModal } from '../components/income/IncomeDocumentWizardModal';
 import { IncomeDocumentsTable } from '../components/income/IncomeDocumentsTable';
 import { IncomeDraftsTable } from '../components/income/IncomeDraftsTable';
@@ -62,6 +63,7 @@ export function IncomeWorkspacePage() {
   const [editingDraft, setEditingDraft] = useState<IncomeDraftsTableRow | null>(null);
   const [presetDocumentType, setPresetDocumentType] = useState<string | null>(null);
   const [simpleModal, setSimpleModal] = useState<SimpleFormModal>(null);
+  const [brandingOpen, setBrandingOpen] = useState(false);
 
   const [customerForm, setCustomerForm] = useState({ display_name: '', phone: '', email: '', tax_id: '' });
   const [itemForm, setItemForm] = useState({
@@ -270,9 +272,24 @@ export function IncomeWorkspacePage() {
   return (
     <div className="nx-income-workspace" dir="rtl" lang="he">
       <header className="nx-income-workspace__header">
-        <div>
-          <h1 className="nx-income-workspace__title">הכנסות</h1>
-          <p className="nx-income-workspace__subtitle">ניהול מסמכים, לקוחות ופריטים — נתונים מהשרת בלבד</p>
+        <div className="nx-income-workspace__title-row">
+          <div>
+            <h1 className="nx-income-workspace__title">חשבוניות</h1>
+            <p className="nx-income-workspace__subtitle">ניהול מסמכים, לקוחות ופריטים — נתונים מהשרת בלבד</p>
+          </div>
+          {workspace.document_branding_settings_entrypoint?.visible ? (
+            <button
+              type="button"
+              className="nx-income-branding-gear-btn"
+              disabled={
+                busy ||
+                !workspace.document_branding_settings_entrypoint.allowed_actions.length
+              }
+              onClick={() => setBrandingOpen(true)}
+            >
+              {workspace.document_branding_settings_entrypoint.button_label}
+            </button>
+          ) : null}
         </div>
         <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={() => void load()}>
           רענון
@@ -476,6 +493,24 @@ export function IncomeWorkspacePage() {
           </div>
         </div>
       ) : null}
+
+      <IncomeDocumentBrandingSettingsModal
+        open={brandingOpen}
+        title={workspace.document_branding_settings_entrypoint?.modal_title ?? 'הגדרות מסמך'}
+        profile={workspace.document_branding_profile}
+        commands={
+          workspace.document_branding_settings_entrypoint?.commands ?? {
+            update_branding_profile: 'update_income_document_branding_profile',
+            upload_document_logo: 'upload_income_document_logo',
+            upload_document_signature: 'upload_income_document_signature',
+          }
+        }
+        busy={busy}
+        onClose={() => setBrandingOpen(false)}
+        onCommand={async (command, body) => {
+          await runCommand(command, body);
+        }}
+      />
 
       {toast ? (
         <div className={`nx-income-toast nx-income-toast--${toast.kind}`} role="status">

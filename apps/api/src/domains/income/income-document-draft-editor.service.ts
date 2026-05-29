@@ -51,6 +51,7 @@ import {
 } from './income-recipient.service.js';
 import type { RequestContext } from '../../shared/context.js';
 import { hasPermission } from '../rbac/rbac.service.js';
+import { publicDisplayNameOrNull } from './income-document-preview-party.pure.js';
 import { INCOME_PERMISSIONS } from './income.types.js';
 
 async function loadIssuerDisplayName(orgId: string, issuerBusinessId: string): Promise<string> {
@@ -310,11 +311,13 @@ async function validationForRow(
   if (!recipient_display_name) {
     const snap = row.one_time_customer_snapshot_json;
     if (snap && typeof snap.display_name === 'string' && snap.display_name.trim()) {
-      recipient_display_name = snap.display_name.trim();
+      recipient_display_name = publicDisplayNameOrNull(snap.display_name.trim());
     } else if (row.income_customer_id) {
       const customer = await loadIncomeRecipientById(scope, row.income_customer_id);
-      recipient_display_name = customer?.display_name?.trim() ?? null;
+      recipient_display_name = publicDisplayNameOrNull(customer?.display_name?.trim() ?? null);
     }
+  } else {
+    recipient_display_name = publicDisplayNameOrNull(recipient_display_name);
   }
 
   const draft_totals_preview_json = {

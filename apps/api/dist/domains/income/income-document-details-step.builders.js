@@ -7,6 +7,7 @@ import { buildDocumentDetailsHeaderTitle } from './income-document-details-heade
 import { compactVatSelectLabel, readVatResolutionFromDraftPreview, } from './income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
+import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfile } from './income-document-branding.service.js';
 import { renderIncomeBrandedPreviewHtml } from './income-document-branding-preview.renderer.js';
@@ -41,19 +42,19 @@ function escapeHtml(value) {
 }
 async function loadIssuerPreviewBlock(scope) {
     const snap = await buildIncomeIssuerSnapshotForScope(scope);
-    return {
+    return toPublicPreviewParty({
         display_name: snap.display_name?.trim() ? snap.display_name.trim() : scope.issuer_label,
         tax_id: snap.tax_id?.trim() ? snap.tax_id.trim() : null,
         address: previewPartyAddressLine(snap.address_json),
         phone: snap.phone?.trim() ? snap.phone.trim() : null,
         email: snap.email?.trim() ? snap.email.trim() : null,
-    };
+    }, scope.issuer_label);
 }
 async function loadRecipientPreviewBlock(scope, row, fallbackDisplayName) {
     const snap = row.one_time_customer_snapshot_json;
     if (snap && typeof snap === 'object' && !Array.isArray(snap)) {
         const s = snap;
-        return {
+        return toPublicPreviewParty({
             display_name: typeof s.display_name === 'string' && s.display_name.trim()
                 ? s.display_name.trim()
                 : fallbackDisplayName,
@@ -61,7 +62,7 @@ async function loadRecipientPreviewBlock(scope, row, fallbackDisplayName) {
             address: previewPartyAddressLine(s.address_json),
             phone: typeof s.phone === 'string' && s.phone.trim() ? s.phone.trim() : null,
             email: typeof s.email === 'string' && s.email.trim() ? s.email.trim() : null,
-        };
+        }, fallbackDisplayName);
     }
     if (row.income_customer_id) {
         const { data, error } = await supabaseAdmin
@@ -73,21 +74,21 @@ async function loadRecipientPreviewBlock(scope, row, fallbackDisplayName) {
             .maybeSingle();
         throwIfSupabaseError(error, 'loadRecipientPreviewBlock');
         const saved = data;
-        return {
+        return toPublicPreviewParty({
             display_name: saved?.display_name?.trim() ? String(saved.display_name).trim() : fallbackDisplayName,
             tax_id: saved?.tax_id?.trim() ? String(saved.tax_id).trim() : null,
             address: previewPartyAddressLine(saved?.address_json),
             phone: saved?.phone?.trim() ? String(saved.phone).trim() : null,
             email: saved?.email?.trim() ? String(saved.email).trim() : null,
-        };
+        }, fallbackDisplayName);
     }
-    return {
+    return toPublicPreviewParty({
         display_name: fallbackDisplayName,
         tax_id: null,
         address: null,
         phone: null,
         email: null,
-    };
+    }, fallbackDisplayName);
 }
 function formatPreviewDate(iso) {
     if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso))
@@ -448,6 +449,13 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
     if (!recipientName) {
         recipientName = await resolveRecipientDisplayName(scope, row);
     }
+    recipientName = toPublicPreviewParty({
+        display_name: recipientName,
+        tax_id: null,
+        address: null,
+        phone: null,
+        email: null,
+    }, '—').display_name;
     const headerTitle = buildDocumentDetailsHeaderTitle(scope, docTypeLabel, numberPreview, recipientName);
     const warnings = Array.isArray(row.validation_warnings_json)
         ? row.validation_warnings_json

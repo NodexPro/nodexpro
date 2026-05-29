@@ -42,5 +42,5 @@ test('validation checks later issued documents in same issuer/type series', () =
 
 test('work engine wizard has no frontend backdate or numbering rules', () => {
   assert.doesNotMatch(webWizardSource, /61111|לא ניתן להפיק/);
-  assert.match(webWizardSource, /מספר מסמך ואימות תאריך ייקבעו בהפקה בשרת/);
+  assert.match(webWizardSource, /מספר מסמך.*ייקבעו בהפקה בשרת/);
 });
