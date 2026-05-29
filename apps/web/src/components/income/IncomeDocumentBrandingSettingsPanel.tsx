@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import type {
   IncomeDocumentBrandingAssetSlot,
   IncomeDocumentBrandingField,
   IncomeDocumentBrandingProfileAggregate,
-  IncomeDocumentBrandingSection,
+  IncomeDocumentBrandingTab,
 } from '../../income/income-document-branding-types';
 
 export type IncomeBrandingCommandsMap = {
@@ -16,34 +16,46 @@ type Props = {
   profile: IncomeDocumentBrandingProfileAggregate;
   commands: IncomeBrandingCommandsMap;
   busy: boolean;
-  draftId?: string | null;
+  activeTab: string;
+  onActiveTabChange: (key: string) => void;
+  draft: Record<string, string>;
+  onDraftChange: Dispatch<SetStateAction<Record<string, string>>>;
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
-  layout?: 'modal' | 'compact';
 };
 
-function PanelSection({
-  title,
-  defaultOpen = true,
-  children,
-}: {
-  title: string;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <section className="nx-income-branding__section">
-      <button type="button" className="nx-income-branding__section-toggle" onClick={() => setOpen((o) => !o)}>
-        <span>{title}</span>
-        <span aria-hidden>{open ? '▾' : '◂'}</span>
-      </button>
-      {open ? <div className="nx-income-branding__section-body">{children}</div> : null}
-    </section>
-  );
+export function fieldToDraftValue(field: IncomeDocumentBrandingField): string {
+  return typeof field.value === 'boolean' ? (field.value ? 'true' : 'false') : String(field.value ?? '');
 }
 
-function fieldDraftValue(field: IncomeDocumentBrandingField): string {
-  return typeof field.value === 'boolean' ? (field.value ? 'true' : 'false') : String(field.value ?? '');
+export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggregate): Record<string, string> {
+  const draft: Record<string, string> = {
+    color_preset_key: profile.selected_color_preset_key,
+  };
+  for (const tab of profile.tabs) {
+    for (const field of tab.fields) {
+      if (field.visible) draft[field.key] = fieldToDraftValue(field);
+    }
+  }
+  return draft;
+}
+
+export function buildBrandingModalSaveBody(
+  profile: IncomeDocumentBrandingProfileAggregate,
+  draft: Record<string, string>,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { section: profile.save_section_key };
+  for (const tab of profile.tabs) {
+    for (const field of tab.fields) {
+      if (!field.visible) continue;
+      if (field.input_type === 'boolean') {
+        body[field.key] = draft[field.key] === 'true';
+      } else if (field.input_type !== 'color_preset') {
+        body[field.key] = draft[field.key] ?? '';
+      }
+    }
+  }
+  body.color_preset_key = draft.color_preset_key ?? profile.selected_color_preset_key;
+  return body;
 }
 
 function BrandingFieldInput({
@@ -74,7 +86,12 @@ function BrandingFieldInput({
     return (
       <label className="nx-income-branding-field">
         <span className="nx-income-branding-field__label">{field.label}</span>
-        <select className="nx-income-branding-input" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+        <select
+          className="nx-income-branding-input"
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+        >
           {field.options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -102,73 +119,73 @@ function BrandingFieldInput({
   return (
     <label className="nx-income-branding-field">
       <span className="nx-income-branding-field__label">{field.label}</span>
-      <input className="nx-income-branding-input" type="text" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+      <input
+        className="nx-income-branding-input"
+        type="text"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      />
       {field.hint ? <span className="nx-income-branding-hint">{field.hint}</span> : null}
     </label>
   );
 }
 
-function BrandingSectionForm({
-  section,
-  draftId,
-  updateCommand,
-  busy,
-  onCommand,
+function ColorPresetPicker({
+  label,
+  presets,
+  selectedKey,
+  disabled,
+  onSelect,
 }: {
-  section: IncomeDocumentBrandingSection;
-  draftId?: string | null;
-  updateCommand: string;
-  busy: boolean;
-  onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
+  label: string;
+  presets: IncomeDocumentBrandingProfileAggregate['color_presets'];
+  selectedKey: string;
+  disabled: boolean;
+  onSelect: (key: string) => void;
 }) {
-  const canSave = section.allowed_actions.includes(updateCommand);
-  const [draft, setDraft] = useState<Record<string, string>>(() =>
-    Object.fromEntries(section.fields.map((f) => [f.key, fieldDraftValue(f)])),
-  );
-
-  useEffect(() => {
-    setDraft(Object.fromEntries(section.fields.map((f) => [f.key, fieldDraftValue(f)])));
-  }, [section]);
-
-  const save = async () => {
-    const body: Record<string, unknown> = { section: section.key };
-    if (draftId) body.draft_id = draftId;
-    for (const field of section.fields) {
-      body[field.key] = field.input_type === 'boolean' ? draft[field.key] === 'true' : (draft[field.key] ?? '');
-    }
-    await onCommand(updateCommand, body);
-  };
-
   return (
-    <div className="nx-income-branding-section-form">
-      {section.fields
-        .filter((f) => f.visible)
-        .map((field) => (
-          <BrandingFieldInput
-            key={field.key}
-            field={field}
-            value={draft[field.key] ?? fieldDraftValue(field)}
-            disabled={!field.editable || busy}
-            onChange={(next) => setDraft((d) => ({ ...d, [field.key]: next }))}
-          />
-        ))}
-      {canSave ? (
-        <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" disabled={busy} onClick={() => void save()}>
-          שמירה
-        </button>
-      ) : null}
+    <div className="nx-income-branding-color-presets">
+      <div className="nx-income-branding-field__label">{label}</div>
+      <div className="nx-income-branding-color-presets__grid" role="listbox" aria-label={label}>
+        {presets.map((preset) => {
+          const selected = preset.key === selectedKey;
+          const isNodex = preset.key === 'nodexpro';
+          return (
+            <button
+              key={preset.key}
+              type="button"
+              role="option"
+              aria-selected={selected}
+              disabled={disabled}
+              className={`nx-income-branding-swatch${selected ? ' nx-income-branding-swatch--selected' : ''}`}
+              title={preset.label}
+              onClick={() => onSelect(preset.key)}
+            >
+              <span
+                className={`nx-income-branding-swatch__circle${isNodex ? ' nx-income-branding-swatch__circle--nodexpro' : ''}`}
+                style={
+                  isNodex
+                    ? undefined
+                    : { background: preset.primary_color, borderColor: preset.secondary_color }
+                }
+              />
+              <span className="nx-income-branding-swatch__label">{preset.label}</span>
+              {selected ? <span className="nx-income-branding-swatch__check" aria-hidden>✓</span> : null}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 function AssetUploadSlot({
   slot,
-  draftId,
   busy,
   onCommand,
 }: {
   slot: IncomeDocumentBrandingAssetSlot;
-  draftId?: string | null;
   busy: boolean;
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
 }) {
@@ -183,15 +200,13 @@ function AssetUploadSlot({
       const bytes = new Uint8Array(buf);
       let binary = '';
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-      const body: Record<string, unknown> = {
+      await onCommand(slot.upload_command, {
         file_name: file.name,
         mime_type: file.type || 'image/png',
         file_base64: btoa(binary),
-      };
-      if (draftId) body.draft_id = draftId;
-      await onCommand(slot.upload_command, body);
+      });
     },
-    [canUpload, draftId, onCommand, slot.upload_command],
+    [canUpload, onCommand, slot.upload_command],
   );
 
   return (
@@ -213,59 +228,106 @@ function AssetUploadSlot({
   );
 }
 
+function TabPanel({
+  tab,
+  profile,
+  draft,
+  busy,
+  canEdit,
+  onCommand,
+  onDraftChange,
+}: {
+  tab: IncomeDocumentBrandingTab;
+  profile: IncomeDocumentBrandingProfileAggregate;
+  draft: Record<string, string>;
+  busy: boolean;
+  canEdit: boolean;
+  onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
+  onDraftChange: Dispatch<SetStateAction<Record<string, string>>>;
+}) {
+  return (
+    <div className="nx-income-branding-tab-panel">
+      {tab.key === 'design' ? <AssetUploadSlot slot={profile.logo} busy={busy} onCommand={onCommand} /> : null}
+      {tab.key === 'business' ? (
+        <AssetUploadSlot slot={profile.signature} busy={busy} onCommand={onCommand} />
+      ) : null}
+      {tab.fields
+        .filter((f) => f.visible && f.input_type !== 'color_preset')
+        .map((field) => (
+          <BrandingFieldInput
+            key={field.key}
+            field={field}
+            value={draft[field.key] ?? fieldToDraftValue(field)}
+            disabled={!field.editable || busy || !canEdit}
+            onChange={(next) => onDraftChange((d) => ({ ...d, [field.key]: next }))}
+          />
+        ))}
+      {tab.fields.some((f) => f.input_type === 'color_preset') ? (
+        <ColorPresetPicker
+          label="ערכת צבעים"
+          presets={profile.color_presets}
+          selectedKey={draft.color_preset_key ?? profile.selected_color_preset_key}
+          disabled={busy || !canEdit}
+          onSelect={(key) => onDraftChange((d) => ({ ...d, color_preset_key: key }))}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 export function IncomeDocumentBrandingSettingsPanel({
   profile,
   commands,
   busy,
-  draftId,
+  activeTab,
+  onActiveTabChange,
+  draft,
+  onDraftChange,
   onCommand,
-  layout = 'modal',
 }: Props) {
-  const designSection = profile.sections.find((s) => s.key === 'document_design');
-  const signatureSection = profile.sections.find((s) => s.key === 'signature');
-  const otherSections = profile.sections.filter(
-    (s) => s.key !== 'document_design' && s.key !== 'signature',
-  );
+  const canEdit = profile.allowed_actions.includes(commands.update_branding_profile);
+  const activeTabDef = profile.tabs.find((t) => t.key === activeTab) ?? profile.tabs[0];
 
   return (
-    <div className={`nx-income-branding nx-income-branding--${layout}`} dir="rtl">
-      {designSection ? (
-        <PanelSection title={designSection.title} defaultOpen>
-          <AssetUploadSlot slot={profile.logo} draftId={draftId} busy={busy} onCommand={onCommand} />
-          <BrandingSectionForm
-            section={designSection}
-            draftId={draftId}
-            updateCommand={commands.update_branding_profile}
-            busy={busy}
-            onCommand={onCommand}
-          />
-        </PanelSection>
+    <div className="nx-income-branding" dir="rtl">
+      <nav className="nx-income-branding-tabs" aria-label="הגדרות מסמך">
+        {profile.tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className={`nx-income-branding-tabs__btn${activeTab === tab.key ? ' nx-income-branding-tabs__btn--active' : ''}`}
+            onClick={() => onActiveTabChange(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+      {activeTabDef ? (
+        <TabPanel
+          tab={activeTabDef}
+          profile={profile}
+          draft={draft}
+          busy={busy}
+          canEdit={canEdit}
+          onCommand={onCommand}
+          onDraftChange={onDraftChange}
+        />
       ) : null}
-
-      {signatureSection ? (
-        <PanelSection title={signatureSection.title} defaultOpen={layout === 'modal'}>
-          <AssetUploadSlot slot={profile.signature} draftId={draftId} busy={busy} onCommand={onCommand} />
-          <BrandingSectionForm
-            section={signatureSection}
-            draftId={draftId}
-            updateCommand={commands.update_branding_profile}
-            busy={busy}
-            onCommand={onCommand}
-          />
-        </PanelSection>
-      ) : null}
-
-      {otherSections.map((section) => (
-        <PanelSection key={section.key} title={section.title} defaultOpen={layout === 'modal'}>
-          <BrandingSectionForm
-            section={section}
-            draftId={draftId}
-            updateCommand={commands.update_branding_profile}
-            busy={busy}
-            onCommand={onCommand}
-          />
-        </PanelSection>
-      ))}
     </div>
   );
+}
+
+export function useBrandingModalState(profile: IncomeDocumentBrandingProfileAggregate | null) {
+  const [activeTab, setActiveTab] = useState(profile?.tabs[0]?.key ?? 'design');
+  const [draft, setDraft] = useState<Record<string, string>>(() =>
+    profile ? buildDraftFromProfile(profile) : {},
+  );
+
+  useEffect(() => {
+    if (!profile) return;
+    setDraft(buildDraftFromProfile(profile));
+    setActiveTab(profile.tabs[0]?.key ?? 'design');
+  }, [profile]);
+
+  return { activeTab, setActiveTab, draft, setDraft };
 }

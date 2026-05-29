@@ -73,9 +73,10 @@ export type IncomeDocumentDetailsTotalsBlock = {
 
 export type {
   IncomeDocumentBrandingProfileAggregate,
-  IncomeDocumentBrandingSection,
+  IncomeDocumentBrandingTab,
   IncomeDocumentBrandingField,
   IncomeDocumentBrandingAssetSlot,
+  IncomeDocumentBrandingColorPreset,
 } from './income-document-branding-types';
 
 export type IncomeDocumentDetailsStep = {

@@ -84,10 +84,21 @@ export type IncomeBrandingResolvedProfile = {
   signature_data_url: string | null;
 };
 
+export type IncomeDocumentBrandingColorPreset = {
+  key: string;
+  label: string;
+  primary_color: string;
+  table_header_color: string;
+  totals_color: string;
+  secondary_color: string;
+  text_color: string;
+  print_safe: boolean;
+};
+
 export type IncomeDocumentBrandingField = {
   key: string;
   label: string;
-  input_type: 'text' | 'textarea' | 'color' | 'boolean' | 'select';
+  input_type: 'text' | 'textarea' | 'color' | 'boolean' | 'select' | 'color_preset';
   value: string | boolean;
   options?: { value: string; label: string }[];
   visible: boolean;
@@ -96,12 +107,10 @@ export type IncomeDocumentBrandingField = {
   hint: string | null;
 };
 
-export type IncomeDocumentBrandingSection = {
+export type IncomeDocumentBrandingTab = {
   key: string;
-  title: string;
+  label: string;
   fields: IncomeDocumentBrandingField[];
-  save_command: string;
-  allowed_actions: string[];
 };
 
 export type IncomeDocumentBrandingAssetSlot = {
@@ -116,7 +125,10 @@ export type IncomeDocumentBrandingAssetSlot = {
 export type IncomeDocumentBrandingProfileAggregate = {
   profile_id: string;
   title: string;
-  sections: IncomeDocumentBrandingSection[];
+  tabs: IncomeDocumentBrandingTab[];
+  color_presets: IncomeDocumentBrandingColorPreset[];
+  selected_color_preset_key: string;
+  save_section_key: string;
   logo: IncomeDocumentBrandingAssetSlot;
   signature: IncomeDocumentBrandingAssetSlot;
   allowed_actions: string[];

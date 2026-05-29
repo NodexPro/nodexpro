@@ -147,6 +147,125 @@ export function resolveBrandingProfile(
   };
 }
 
+export type IncomeBrandingColorPreset = {
+  key: string;
+  label: string;
+  primary_color: string;
+  table_header_color: string;
+  totals_color: string;
+  secondary_color: string;
+  text_color: string;
+  print_safe: boolean;
+};
+
+/** Print-safe muted palettes — no pure black backgrounds, no neon. */
+export const INCOME_BRANDING_COLOR_PRESETS: IncomeBrandingColorPreset[] = [
+  {
+    key: 'blue',
+    label: 'כחול',
+    primary_color: '#1f4b99',
+    table_header_color: '#1f4b99',
+    totals_color: '#1f4b99',
+    secondary_color: '#e8eef7',
+    text_color: '#0f172a',
+    print_safe: true,
+  },
+  {
+    key: 'green',
+    label: 'ירוק',
+    primary_color: '#1e5c4a',
+    table_header_color: '#1e5c4a',
+    totals_color: '#1e5c4a',
+    secondary_color: '#eef6f3',
+    text_color: '#0f172a',
+    print_safe: true,
+  },
+  {
+    key: 'red',
+    label: 'אדום עמום',
+    primary_color: '#8b3a3a',
+    table_header_color: '#8b3a3a',
+    totals_color: '#8b3a3a',
+    secondary_color: '#faf3f3',
+    text_color: '#0f172a',
+    print_safe: true,
+  },
+  {
+    key: 'light',
+    label: 'בהיר',
+    primary_color: '#475569',
+    table_header_color: '#64748b',
+    totals_color: '#64748b',
+    secondary_color: '#f8fafc',
+    text_color: '#0f172a',
+    print_safe: true,
+  },
+  {
+    key: 'navy',
+    label: 'כחול כהה',
+    primary_color: '#1e293b',
+    table_header_color: '#334155',
+    totals_color: '#334155',
+    secondary_color: '#f1f5f9',
+    text_color: '#0f172a',
+    print_safe: true,
+  },
+  {
+    key: 'purple',
+    label: 'סגול',
+    primary_color: '#4c3d6e',
+    table_header_color: '#4c3d6e',
+    totals_color: '#4c3d6e',
+    secondary_color: '#f3f0f7',
+    text_color: '#0f172a',
+    print_safe: true,
+  },
+  {
+    key: 'teal',
+    label: 'טורקיז',
+    primary_color: '#0f5c5c',
+    table_header_color: '#0f5c5c',
+    totals_color: '#0f5c5c',
+    secondary_color: '#eef7f7',
+    text_color: '#0f172a',
+    print_safe: true,
+  },
+  {
+    key: 'nodexpro',
+    label: 'NodexPro',
+    primary_color: '#4f46e5',
+    table_header_color: '#3b82f6',
+    totals_color: '#4f46e5',
+    secondary_color: '#eef2ff',
+    text_color: '#0f172a',
+    print_safe: true,
+  },
+];
+
+export function getBrandingColorPresets(): IncomeBrandingColorPreset[] {
+  return INCOME_BRANDING_COLOR_PRESETS.map((p) => ({ ...p }));
+}
+
+export function resolveBrandingColorPreset(key: string): IncomeBrandingColorPreset | null {
+  const k = key.trim();
+  return INCOME_BRANDING_COLOR_PRESETS.find((p) => p.key === k) ?? null;
+}
+
+export function matchBrandingColorPresetKey(
+  primaryColor: string,
+  tableHeaderColor: string,
+  totalsColor: string,
+): string {
+  const p = coerceHexColor(primaryColor, DEFAULT_PRIMARY_COLOR);
+  const t = coerceHexColor(tableHeaderColor, DEFAULT_PRIMARY_COLOR);
+  const tot = coerceHexColor(totalsColor, DEFAULT_PRIMARY_COLOR);
+  const hit = INCOME_BRANDING_COLOR_PRESETS.find(
+    (preset) =>
+      preset.primary_color === p && preset.table_header_color === t && preset.totals_color === tot,
+  );
+  return hit?.key ?? 'blue';
+}
+
 export function optionalTrimmedString(value: unknown, maxLen: number): string | null {
   if (value === null || value === undefined) return null;
   const s = String(value).trim();

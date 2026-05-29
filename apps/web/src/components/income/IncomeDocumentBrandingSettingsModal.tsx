@@ -1,8 +1,12 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { IncomeDocumentBrandingProfileAggregate } from '../../income/income-document-branding-types';
-import type { IncomeBrandingCommandsMap } from './IncomeDocumentBrandingSettingsPanel';
-import { IncomeDocumentBrandingSettingsPanel } from './IncomeDocumentBrandingSettingsPanel';
+import {
+  IncomeDocumentBrandingSettingsPanel,
+  buildBrandingModalSaveBody,
+  useBrandingModalState,
+  type IncomeBrandingCommandsMap,
+} from './IncomeDocumentBrandingSettingsPanel';
 
 type Props = {
   open: boolean;
@@ -10,10 +14,8 @@ type Props = {
   profile: IncomeDocumentBrandingProfileAggregate | null;
   commands: IncomeBrandingCommandsMap;
   busy: boolean;
-  draftId?: string | null;
   onClose: () => void;
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
-  /** Render in document.body so wizard/preview stacking does not clip the dialog. */
   portal?: boolean;
 };
 
@@ -23,11 +25,12 @@ export function IncomeDocumentBrandingSettingsModal({
   profile,
   commands,
   busy,
-  draftId,
   onClose,
   onCommand,
   portal = false,
 }: Props) {
+  const { activeTab, setActiveTab, draft, setDraft } = useBrandingModalState(profile);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -39,6 +42,13 @@ export function IncomeDocumentBrandingSettingsModal({
 
   if (!open) return null;
 
+  const canSave = Boolean(profile?.allowed_actions.includes(commands.update_branding_profile));
+
+  const handleSave = async () => {
+    if (!profile || !canSave) return;
+    await onCommand(commands.update_branding_profile, buildBrandingModalSaveBody(profile, draft));
+  };
+
   const dialog = (
     <div
       className="nx-income-branding-overlay"
@@ -49,17 +59,11 @@ export function IncomeDocumentBrandingSettingsModal({
         if (!busy) onClose();
       }}
     >
-      <div
-        className="nx-income-branding-modal nx-accounting-editor-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="nx-income-branding-modal" onClick={(e) => e.stopPropagation()}>
         <div className="nx-income-branding-modal__head">
-          <h2 id="income-branding-title" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+          <h2 id="income-branding-title" className="nx-income-branding-modal__title">
             {title}
           </h2>
-          <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={onClose}>
-            סגירה
-          </button>
         </div>
         <div className="nx-income-branding-modal__body">
           {profile ? (
@@ -67,13 +71,28 @@ export function IncomeDocumentBrandingSettingsModal({
               profile={profile}
               commands={commands}
               busy={busy}
-              draftId={draftId}
+              activeTab={activeTab}
+              onActiveTabChange={setActiveTab}
+              draft={draft}
+              onDraftChange={setDraft}
               onCommand={onCommand}
-              layout="modal"
             />
           ) : (
             <p>טוען הגדרות…</p>
           )}
+        </div>
+        <div className="nx-income-branding-modal__footer">
+          <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={onClose}>
+            ביטול
+          </button>
+          <button
+            type="button"
+            className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+            disabled={busy || !canSave}
+            onClick={() => void handleSave()}
+          >
+            שמירה
+          </button>
         </div>
       </div>
     </div>
