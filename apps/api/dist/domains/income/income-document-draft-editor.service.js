@@ -10,7 +10,8 @@ import { validateDraftAgainstDocumentTypeRules } from './income-document-draft.h
 import { buildIncomeDocumentDetailsStep, } from './income-document-details-step.builders.js';
 import { applyLineFieldUpdate, createEmptyDraftLine, deleteDraftLine, normalizeDraftLines, reorderDraftLines, serializeDraftLines, } from './income-document-draft-lines.pure.js';
 import { recomputeDraftLineAmounts } from './income-draft-line-compute.pure.js';
-import { computeDraftTotalsPreview, DEFAULT_DOCUMENT_SETTINGS, parseDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
+import { computeDraftTotalsPreview, DEFAULT_DOCUMENT_SETTINGS, parseDocumentSettingsJson, serializeDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
+import { normalizeDocumentDiscountInput, validateDocumentDiscount, } from './income-document-discount.pure.js';
 import { readVatResolutionFromDraftPreview, vatResolutionCachePayload, } from './income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
@@ -315,18 +316,87 @@ export async function beginIncomeWizardDocumentDraft(scope, body, recipientOverl
         recipientOverlay: { selected },
     };
 }
-async function wizardDraftMutationOverlay(scope, draft_id, loadedRow, rowForValidation, docType, persistPatch, auditPayload) {
+async function wizardDraftMutationOverlay(scope, draft_id, loadedRow, rowForValidation, docType, persistPatch, auditPayload, options) {
     const validation = await validationForRow(scope, rowForValidation, docType);
+    const draftTotalsPatched = options?.totals_preview_patch && validation.draft_totals_preview_json
+        ? { ...validation.draft_totals_preview_json, ...options.totals_preview_patch }
+        : validation.draft_totals_preview_json;
     const saved = await persistWizardDraft(scope, draft_id, {
         ...persistPatch,
         draft_lines_json: validation.draft_lines_json,
         validation_warnings_json: validation.validation_warnings_json,
-        draft_totals_preview_json: validation.draft_totals_preview_json,
+        draft_totals_preview_json: draftTotalsPatched,
     }, auditPayload, loadedRow);
     return buildOverlayForDraft(scope, draft_id, true, saved, docType, {
         vatResolution: validation.vatResolution,
         totalsPreview: validation.totalsPreview,
     });
+}
+export async function updateIncomeDocumentDiscount(scope, body) {
+    const draft_id = reqUuid(body.draft_id, 'draft_id');
+    const row = await loadWizardDraftRow(scope, draft_id);
+    if (!row.document_type)
+        throw badRequest('document_type is required');
+    const docType = await resolveDocType(scope, row.document_type);
+    const settings = parseDocumentSettingsJson(row.document_settings_json);
+    const enabled = body.enabled === true;
+    const discount = normalizeDocumentDiscountInput(enabled, body.type, body.value);
+    const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
+    let vatResolution = readVatResolutionFromDraftPreview(row.draft_totals_preview_json, documentDate);
+    if (!vatResolution) {
+        vatResolution = await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate);
+    }
+    const lines = await recomputeDraftLineAmounts(normalizeDraftLines(row.draft_lines_json), settings, vatResolution, documentDate);
+    const preTotals = await computeDraftTotalsPreview(lines, row.currency, settings, vatResolution, documentDate);
+    const subtotalBefore = preTotals.subtotal_before_discount_reference ?? 0;
+    const fieldErrors = validateDocumentDiscount(discount, subtotalBefore);
+    if (Object.keys(fieldErrors).length > 0) {
+        throw badRequest(fieldErrors.value ?? 'Invalid document discount');
+    }
+    const nextSettings = { ...settings, discount };
+    const patch = { document_settings_json: serializeDocumentSettingsJson(nextSettings) };
+    const merged = { ...row, ...patch };
+    const priorCache = row.draft_totals_preview_json &&
+        typeof row.draft_totals_preview_json === 'object' &&
+        !Array.isArray(row.draft_totals_preview_json)
+        ? row.draft_totals_preview_json
+        : {};
+    const totalsPreviewPatch = typeof priorCache.preview_generated_at === 'string'
+        ? { preview_generated_at: new Date().toISOString() }
+        : {};
+    const overlay = await wizardDraftMutationOverlay(scope, draft_id, row, merged, docType, patch, { action: 'update_discount', type: discount.type, value: discount.value, enabled: discount.enabled }, { totals_preview_patch: totalsPreviewPatch });
+    void writeAudit({
+        organizationId: scope.org_id,
+        actorUserId: scope.actor_user_id,
+        moduleCode: 'income',
+        entityType: 'income_document_draft',
+        entityId: draft_id,
+        action: AUDIT_ACTIONS.INCOME_DOCUMENT_DISCOUNT_UPDATED,
+        payload: { draft_id, type: discount.type, value: discount.value, enabled: discount.enabled },
+    }).catch(() => {
+        /* audit must not block wizard UX */
+    });
+    return overlay;
+}
+export async function generateIncomeDocumentPreview(scope, body) {
+    const draft_id = reqUuid(body.draft_id, 'draft_id');
+    const row = await loadWizardDraftRow(scope, draft_id);
+    if (!row.document_type)
+        throw badRequest('document_type is required');
+    const docType = await resolveDocType(scope, row.document_type);
+    const overlay = await wizardDraftMutationOverlay(scope, draft_id, row, row, docType, {}, { action: 'generate_preview', document_type: row.document_type }, { totals_preview_patch: { preview_generated_at: new Date().toISOString() } });
+    void writeAudit({
+        organizationId: scope.org_id,
+        actorUserId: scope.actor_user_id,
+        moduleCode: 'income',
+        entityType: 'income_document_draft',
+        entityId: draft_id,
+        action: AUDIT_ACTIONS.INCOME_DOCUMENT_PREVIEW_GENERATED,
+        payload: { draft_id, preview_mode: 'wizard_step', document_type: row.document_type, issuer_scope: scope.acting_mode },
+    }).catch(() => {
+        /* audit must not block preview UX */
+    });
+    return overlay;
 }
 export async function addIncomeDocumentLine(scope, body) {
     const draft_id = reqUuid(body.draft_id, 'draft_id');

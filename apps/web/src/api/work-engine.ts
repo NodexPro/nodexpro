@@ -520,6 +520,8 @@ export type WorkEngineInvoicesDocumentCreationEntrypoint = {
     income_commands: Record<string, string> & {
       resume_draft: string;
       save_draft: string;
+      generate_preview: string;
+      update_discount: string;
     };
   };
 };

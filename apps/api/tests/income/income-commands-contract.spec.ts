@@ -95,3 +95,20 @@ test('resume_income_document_draft command is registered and returns starting st
   const typesSource = readFileSync(join(dir, '../../src/domains/income/income.types.ts'), 'utf8');
   assert.match(typesSource, /wizard_starting_step_key\?:\s*string\s*\|\s*null/);
 });
+
+test('generate_income_document_preview command is registered and returns wizard_patch', () => {
+  assert.match(commandsSource, /INCOME_COMMAND_GENERATE_PREVIEW/);
+  assert.match(commandsSource, /generateIncomeDocumentPreview/);
+  assert.match(commandsSource, /wizard_patch/);
+});
+
+test('update_income_document_discount command is registered', () => {
+  assert.match(commandsSource, /INCOME_COMMAND_UPDATE_DISCOUNT/);
+  assert.match(commandsSource, /updateIncomeDocumentDiscount/);
+  const detailsSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-details-step.builders.ts'),
+    'utf8',
+  );
+  assert.match(detailsSource, /document_discount/);
+  assert.match(detailsSource, /totals_block/);
+});

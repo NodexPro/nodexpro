@@ -324,8 +324,25 @@ export function WorkEngineDocumentDetailsStep({
   const canAdd = step.line_items.allowed_actions.includes('add_income_document_line');
   const [addingLine, setAddingLine] = useState(false);
   const [savingLineId, setSavingLineId] = useState<string | null>(null);
+  const [savingDiscount, setSavingDiscount] = useState(false);
+  const [discountEnabled, setDiscountEnabled] = useState(step.document_discount.enabled);
+  const [discountType, setDiscountType] = useState<'percent' | 'fixed_amount'>(
+    step.document_discount.type,
+  );
+  const [discountValue, setDiscountValue] = useState(step.document_discount.value);
   const dragLineIdRef = useRef<string | null>(null);
   const commandsInFlight = useRef(0);
+
+  useEffect(() => {
+    setDiscountEnabled(step.document_discount.enabled);
+    setDiscountType(step.document_discount.type);
+    setDiscountValue(step.document_discount.value);
+  }, [
+    step.draft_id,
+    step.document_discount.enabled,
+    step.document_discount.type,
+    step.document_discount.value,
+  ]);
 
   const applyAggregate = useCallback(
     (res: unknown) => {
@@ -576,21 +593,102 @@ export function WorkEngineDocumentDetailsStep({
           </table>
         </div>
 
-        <footer className="nx-we-doc-details__totals">
-          <div className="nx-we-doc-details__total-row">
-            <span>{step.line_items.totals.subtotal.label}</span>
-            <strong>{step.line_items.totals.subtotal.display}</strong>
-          </div>
-          {step.line_items.totals.vat ? (
-            <div className="nx-we-doc-details__total-row">
-              <span>{step.line_items.totals.vat.label}</span>
-              <strong>{step.line_items.totals.vat.display}</strong>
+        <section className="nx-we-doc-details__discount">
+          <h4>הנחה לפני מע״מ</h4>
+          <label className="nx-we-doc-details__discount-toggle">
+            <input
+              type="checkbox"
+              checked={discountEnabled}
+              disabled={busy || savingDiscount || !step.document_discount.editable}
+              onChange={(e) => setDiscountEnabled(e.target.checked)}
+            />
+            <span>הפעל הנחה</span>
+          </label>
+          {discountEnabled ? (
+            <div className="nx-we-doc-details__discount-fields">
+              <div className="nx-we-doc-details__discount-type" role="radiogroup" aria-label="סוג הנחה">
+                <label>
+                  <input
+                    type="radio"
+                    name={`discount-type-${draftId}`}
+                    checked={discountType === 'percent'}
+                    disabled={busy || savingDiscount || !step.document_discount.editable}
+                    onChange={() => setDiscountType('percent')}
+                  />
+                  %
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name={`discount-type-${draftId}`}
+                    checked={discountType === 'fixed_amount'}
+                    disabled={busy || savingDiscount || !step.document_discount.editable}
+                    onChange={() => setDiscountType('fixed_amount')}
+                  />
+                  ₪
+                </label>
+              </div>
+              <input
+                type="text"
+                inputMode="decimal"
+                className="nx-we-doc-details__discount-value"
+                value={discountValue}
+                disabled={busy || savingDiscount || !step.document_discount.editable}
+                placeholder={discountType === 'percent' ? '10' : '100'}
+                onChange={(e) => setDiscountValue(e.target.value)}
+              />
+              {step.document_discount.calculated_discount_amount_display ? (
+                <div className="nx-we-doc-details__discount-calc">
+                  סכום הנחה: {step.document_discount.calculated_discount_amount_display}
+                </div>
+              ) : null}
             </div>
           ) : null}
-          <div className="nx-we-doc-details__total-row nx-we-doc-details__total-row--grand">
-            <span>{step.line_items.totals.grand_total.label}</span>
-            <strong>{step.line_items.totals.grand_total.display}</strong>
-          </div>
+          {step.document_discount.field_errors.value ? (
+            <div className="nx-we-doc-details__field-error">{step.document_discount.field_errors.value}</div>
+          ) : null}
+          {step.document_discount.allowed_actions.includes('update_income_document_discount') ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              disabled={busy || savingDiscount}
+              onClick={() => {
+                void (async () => {
+                  setSavingDiscount(true);
+                  onError(null);
+                  try {
+                    const res = await executeIncomeCommand(commands.update_discount, {
+                      draft_id: draftId,
+                      enabled: discountEnabled,
+                      type: discountType,
+                      value: discountValue.trim() === '' ? 0 : discountValue.trim(),
+                    });
+                    applyAggregate(res);
+                  } catch (e) {
+                    onError(e instanceof Error ? e.message : 'שגיאה בעדכון הנחה');
+                  } finally {
+                    setSavingDiscount(false);
+                  }
+                })();
+              }}
+            >
+              {savingDiscount ? 'שומר…' : 'שמירת הנחה'}
+            </button>
+          ) : null}
+        </section>
+
+        <footer className="nx-we-doc-details__totals nx-we-doc-details__totals--block">
+          {step.totals_block.rows.map((row) => (
+            <div
+              key={row.key}
+              className={`nx-we-doc-details__total-row${
+                row.emphasized ? ' nx-we-doc-details__total-row--grand' : ''
+              } nx-we-doc-details__total-row--${row.tone}`}
+            >
+              <span>{row.label}</span>
+              <strong>{row.amount_display}</strong>
+            </div>
+          ))}
         </footer>
       </section>
 

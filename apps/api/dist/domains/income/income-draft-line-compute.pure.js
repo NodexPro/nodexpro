@@ -3,7 +3,7 @@ import { resolveOfficialBoiRatesForCurrencies, } from './income-exchange-rate.se
 function round2(n) {
     return Math.round(n * 100) / 100;
 }
-function effectiveVatRate(lineVatCode, settings, vatResolution) {
+export function effectiveLineVatRate(lineVatCode, settings, vatResolution) {
     const code = lineVatCode === 'exempt' || settings.vat_mode === 'exempt' ? 'exempt' : lineVatCode;
     if (code === 'exempt')
         return 0;
@@ -26,7 +26,7 @@ export function computeDraftLineAmounts(line, settings, vatResolution, fx) {
         };
     }
     const gross = round2(qty * unit);
-    const rate = effectiveVatRate(line.vat_rate_code, settings, vatResolution);
+    const rate = effectiveLineVatRate(line.vat_rate_code, settings, vatResolution);
     let net;
     let vat;
     if (rate <= 0) {

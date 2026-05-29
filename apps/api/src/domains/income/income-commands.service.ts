@@ -68,6 +68,8 @@ import {
   saveIncomeDocumentDraft,
   resumeIncomeDocumentDraft,
   resumeIncomeDocumentDraftFromContext,
+  generateIncomeDocumentPreview,
+  updateIncomeDocumentDiscount,
   updateIncomeDocumentDraftSettings,
   updateIncomeDocumentNotes,
   updateIncomeDocumentDeliveryContact,
@@ -82,6 +84,8 @@ import {
   INCOME_COMMAND_REORDER_LINES,
   INCOME_COMMAND_SAVE_DRAFT,
   INCOME_COMMAND_RESUME_DRAFT,
+  INCOME_COMMAND_GENERATE_PREVIEW,
+  INCOME_COMMAND_UPDATE_DISCOUNT,
   INCOME_COMMAND_SEARCH_RECIPIENTS,
   INCOME_COMMAND_SELECT_RECIPIENT,
   INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT,
@@ -128,6 +132,8 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_UPDATE_DELIVERY_CONTACT,
   INCOME_COMMAND_SAVE_DRAFT,
   INCOME_COMMAND_RESUME_DRAFT,
+  INCOME_COMMAND_GENERATE_PREVIEW,
+  INCOME_COMMAND_UPDATE_DISCOUNT,
 ]);
 
 async function commandResponse(
@@ -672,6 +678,15 @@ export async function executeIncomeCommand(
   }
   if (command === INCOME_COMMAND_SAVE_DRAFT) {
     return wizardDraftCmd(saveIncomeDocumentDraft);
+  }
+  if (command === INCOME_COMMAND_GENERATE_PREVIEW) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const overlay = await generateIncomeDocumentPreview(scope, body);
+    return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+  }
+  if (command === INCOME_COMMAND_UPDATE_DISCOUNT) {
+    return wizardDraftCmd(updateIncomeDocumentDiscount);
   }
 
   throw badRequest(`Unhandled income command: ${command}`);

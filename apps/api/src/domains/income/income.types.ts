@@ -28,6 +28,8 @@ export const INCOME_COMMAND_UPDATE_NOTES = 'update_income_document_notes' as con
 export const INCOME_COMMAND_UPDATE_DELIVERY_CONTACT = 'update_income_document_delivery_contact' as const;
 export const INCOME_COMMAND_SAVE_DRAFT = 'save_income_document_draft' as const;
 export const INCOME_COMMAND_RESUME_DRAFT = 'resume_income_document_draft' as const;
+export const INCOME_COMMAND_GENERATE_PREVIEW = 'generate_income_document_preview' as const;
+export const INCOME_COMMAND_UPDATE_DISCOUNT = 'update_income_document_discount' as const;
 
 export type { IncomeDocumentDetailsStep } from './income-document-details-step.builders.js';
 
@@ -258,7 +260,9 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_UPDATE_NOTES
   | typeof INCOME_COMMAND_UPDATE_DELIVERY_CONTACT
   | typeof INCOME_COMMAND_SAVE_DRAFT
-  | typeof INCOME_COMMAND_RESUME_DRAFT;
+  | typeof INCOME_COMMAND_RESUME_DRAFT
+  | typeof INCOME_COMMAND_GENERATE_PREVIEW
+  | typeof INCOME_COMMAND_UPDATE_DISCOUNT;
 
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;

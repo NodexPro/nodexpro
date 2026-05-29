@@ -269,7 +269,9 @@ export type IncomeCommandType =
   | 'update_income_document_notes'
   | 'update_income_document_delivery_contact'
   | 'save_income_document_draft'
-  | 'resume_income_document_draft';
+  | 'resume_income_document_draft'
+  | 'generate_income_document_preview'
+  | 'update_income_document_discount';
 
 export interface IncomeCommandResponseMeta {
   workspace_aggregate_mode?: 'full' | 'wizard_patch';

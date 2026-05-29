@@ -43,9 +43,70 @@ export type IncomeDocumentDetailsLineRow = {
   allowed_actions: string[];
 };
 
+export type IncomeDocumentDetailsDiscount = {
+  enabled: boolean;
+  editable: boolean;
+  type: 'percent' | 'fixed_amount';
+  value: string;
+  currency: string;
+  amount_display: string | null;
+  percent_display: string | null;
+  calculated_discount_amount_display: string | null;
+  affects_vat: true;
+  field_errors: Record<string, string>;
+  allowed_actions: string[];
+};
+
+export type IncomeDocumentDetailsTotalsRow = {
+  key: string;
+  label: string;
+  amount_display: string;
+  tone: 'neutral' | 'good' | 'warning' | 'danger';
+  emphasized: boolean;
+};
+
+export type IncomeDocumentDetailsTotalsBlock = {
+  rows: IncomeDocumentDetailsTotalsRow[];
+  grand_total_display: string;
+  currency: string;
+};
+
 export type IncomeDocumentDetailsStep = {
   draft_id: string;
   document_type_key?: string | null;
+  document_discount: IncomeDocumentDetailsDiscount;
+  totals_block: IncomeDocumentDetailsTotalsBlock;
+  document_preview?: {
+    visible: boolean;
+    preview_status: 'ready' | 'not_generated';
+    generated_at: string | null;
+    document_type_label: string;
+    document_number_preview: string | null;
+    issuer: {
+      display_name: string;
+      tax_id: string | null;
+      address: string | null;
+      phone: string | null;
+      email: string | null;
+    };
+    recipient: {
+      display_name: string;
+      tax_id: string | null;
+      address: string | null;
+      phone: string | null;
+      email: string | null;
+    };
+    dates: { document_date: string | null; due_date: string | null };
+    currency: string;
+    preview_html: string;
+    validation_messages: Array<{
+      severity: 'info' | 'warning' | 'danger';
+      label: string;
+      field: string | null;
+      blocking: boolean;
+    }>;
+    allowed_actions: string[];
+  } | null;
   draft_state_display?: {
     status: 'draft';
     label: string;

@@ -100,7 +100,6 @@ export function WorkEngineIncomeDocumentWizardModal({
   const activeStepKey = visibleSteps[Math.min(stepIndex, visibleSteps.length - 1)]?.key ?? '';
   const isLastStep = stepIndex >= visibleSteps.length - 1;
 
-  const selectedDocType = documentTypes.find((d) => d.key === form.document_type) ?? null;
   const selectedOfficeClient =
     wizard.office_client_issuer_options.find((o) => o.represented_client_id === officeClientId) ??
     null;
@@ -222,7 +221,7 @@ export function WorkEngineIncomeDocumentWizardModal({
       }
       return;
     }
-    if (activeStepKey === 'preview_issue') return;
+    if (activeStepKey === 'issue') return;
     setStepIndex((i) => i + 1);
   };
 
@@ -265,6 +264,27 @@ export function WorkEngineIncomeDocumentWizardModal({
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'שגיאה בשמירה');
+    } finally {
+      onBusyChange(false);
+    }
+  };
+
+  const handleGeneratePreview = async () => {
+    setError(null);
+    const cmds = wizard.income_commands;
+    const draftId = activeDraftId;
+    if (!draftId) {
+      setError('טיוטה לא נמצאה');
+      return;
+    }
+    onBusyChange(true);
+    try {
+      const res = await executeIncomeCommand(cmds.generate_preview, { draft_id: draftId });
+      if ('income_workspace_aggregate' in res) {
+        setWorkspaceAgg(res.income_workspace_aggregate);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'שגיאה ביצירת תצוגה');
     } finally {
       onBusyChange(false);
     }
@@ -384,31 +404,48 @@ export function WorkEngineIncomeDocumentWizardModal({
         />
       );
     }
-    if (activeStepKey === 'preview_issue') {
+    if (activeStepKey === 'preview') {
+      const preview = documentDetailsStep?.document_preview ?? null;
+      if (!preview?.visible) {
+        return (
+          <div dir="rtl" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+            <div style={{ marginBottom: 10, color: '#475569', fontSize: 13 }}>
+              לחץ על <strong>תצוגה מקדימה</strong> כדי לייצר תצוגה מהשרת.
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div dir="rtl" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+          {preview.validation_messages?.length ? (
+            <div style={{ marginBottom: 10 }}>
+              {preview.validation_messages.map((m, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    marginBottom: 6,
+                    background: '#f8fafc',
+                    color: '#0f172a',
+                    fontSize: 13,
+                  }}
+                >
+                  {m.label}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div dangerouslySetInnerHTML={{ __html: preview.preview_html }} />
+        </div>
+      );
+    }
+    if (activeStepKey === 'issue') {
       const header = documentDetailsStep?.header;
       return (
         <div className="nx-we-doc-details__preview" dir="rtl">
           {header ? <h3 className="nx-we-doc-details__title">{header.title}</h3> : null}
-          <p>
-            <strong>סוג:</strong> {selectedDocType?.label ?? form.document_type}
-          </p>
-          <p>
-            <strong>תאריך:</strong> {settingValue(documentDetailsStep, 'document_date') ?? '—'}
-          </p>
-          <p>
-            <strong>מקבל:</strong> {workspaceAgg?.recipient_search?.selected?.display_line ?? '—'}
-          </p>
-          {documentDetailsStep?.line_items.totals ? (
-            <p>
-              <strong>{documentDetailsStep.line_items.totals.grand_total.label}:</strong>{' '}
-              {documentDetailsStep.line_items.totals.grand_total.display}
-            </p>
-          ) : null}
-          {header?.document_number_preview ? (
-            <p>
-              <strong>מספר צפוי:</strong> {header.document_number_preview}
-            </p>
-          ) : null}
           <p className="nx-we-doc-details__hint">
             מספר מסמך סופי ואימות ייקבעו בהפקה בשרת בלבד.
           </p>
@@ -424,7 +461,7 @@ export function WorkEngineIncomeDocumentWizardModal({
   const modalStepClass =
     activeStepKey === 'recipient'
       ? 'nx-we-income-wizard-modal--recipient-step'
-      : activeStepKey === 'document_details'
+      : activeStepKey === 'document_details' || activeStepKey === 'preview'
         ? 'nx-we-income-wizard-modal--details-step'
         : '';
 
@@ -468,7 +505,7 @@ export function WorkEngineIncomeDocumentWizardModal({
               type="button"
               className="nx-btn nx-btn-taxes-compact"
               disabled={footerLocked || !activeDraftId}
-              onClick={() => setStepIndex((i) => i + 1)}
+              onClick={() => void handleGeneratePreview()}
             >
               תצוגה מקדימה
             </button>

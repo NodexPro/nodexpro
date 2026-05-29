@@ -24,6 +24,8 @@ export const INCOME_COMMAND_UPDATE_NOTES = 'update_income_document_notes';
 export const INCOME_COMMAND_UPDATE_DELIVERY_CONTACT = 'update_income_document_delivery_contact';
 export const INCOME_COMMAND_SAVE_DRAFT = 'save_income_document_draft';
 export const INCOME_COMMAND_RESUME_DRAFT = 'resume_income_document_draft';
+export const INCOME_COMMAND_GENERATE_PREVIEW = 'generate_income_document_preview';
+export const INCOME_COMMAND_UPDATE_DISCOUNT = 'update_income_document_discount';
 export const INCOME_MODULE_CODE = 'income';
 export const INCOME_PERMISSIONS = {
     view: 'income.view',

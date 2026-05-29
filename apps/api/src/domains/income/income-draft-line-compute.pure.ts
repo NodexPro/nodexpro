@@ -27,7 +27,7 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function effectiveVatRate(
+export function effectiveLineVatRate(
   lineVatCode: LineVatRateCode,
   settings: IncomeDocumentSettings,
   vatResolution: IncomeDraftVatResolution,
@@ -59,7 +59,7 @@ export function computeDraftLineAmounts(
   }
 
   const gross = round2(qty * unit);
-  const rate = effectiveVatRate(line.vat_rate_code, settings, vatResolution);
+  const rate = effectiveLineVatRate(line.vat_rate_code, settings, vatResolution);
 
   let net: number;
   let vat: number;

@@ -1,12 +1,29 @@
 import { formatMoneyReference } from './income-document-draft-lines.pure.js';
 import { computeDraftLineAmounts, resolveFxMapForDraftLines, resolveLineFx, } from './income-draft-line-compute.pure.js';
+import { computeDiscountAmountIls } from './income-document-discount.pure.js';
 import { IL_DRAFT_VAT_FALLBACK_RATE } from './income-draft-vat-fallback.pure.js';
 /** @deprecated use IL_DRAFT_VAT_FALLBACK_RATE — kept for tests importing legacy name */
 export const IL_DRAFT_VAT_RATE = IL_DRAFT_VAT_FALLBACK_RATE;
+export const DEFAULT_DOCUMENT_DISCOUNT = {
+    enabled: false,
+    type: 'percent',
+    value: 0,
+};
 export const DEFAULT_DOCUMENT_SETTINGS = {
     vat_mode: 'standard',
     amount_rounding: 'none',
+    discount: { ...DEFAULT_DOCUMENT_DISCOUNT },
 };
+function parseDiscountJson(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+        return { ...DEFAULT_DOCUMENT_DISCOUNT };
+    const o = raw;
+    const enabled = o.enabled === true;
+    const type = o.type === 'fixed_amount' ? 'fixed_amount' : 'percent';
+    const num = Number(o.value);
+    const value = Number.isFinite(num) ? Math.max(0, num) : 0;
+    return { enabled, type, value: enabled ? value : 0 };
+}
 export function parseDocumentSettingsJson(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw))
         return { ...DEFAULT_DOCUMENT_SETTINGS };
@@ -15,7 +32,15 @@ export function parseDocumentSettingsJson(raw) {
         ? o.vat_mode
         : DEFAULT_DOCUMENT_SETTINGS.vat_mode;
     const amount_rounding = o.amount_rounding === 'nearest_agora' ? 'nearest_agora' : DEFAULT_DOCUMENT_SETTINGS.amount_rounding;
-    return { vat_mode, amount_rounding };
+    const discount = parseDiscountJson(o.discount);
+    return { vat_mode, amount_rounding, discount };
+}
+export function serializeDocumentSettingsJson(settings) {
+    return {
+        vat_mode: settings.vat_mode,
+        amount_rounding: settings.amount_rounding,
+        discount: settings.discount,
+    };
 }
 function roundAmount(value, rounding) {
     if (rounding === 'nearest_agora')
@@ -25,25 +50,41 @@ function roundAmount(value, rounding) {
 export async function computeDraftTotalsPreview(lines, currency, settings, vatResolution, documentDate) {
     const asOf = documentDate?.trim() || new Date().toISOString().slice(0, 10);
     const officialByCurrency = await resolveFxMapForDraftLines(lines, asOf);
-    let subtotal = 0;
-    let vat = 0;
+    const displayCurrency = 'ILS';
+    const lineNets = [];
     let hasAmount = false;
     for (const line of lines) {
         const fx = resolveLineFx(line, asOf, officialByCurrency);
         if (!fx)
             continue;
         const amounts = computeDraftLineAmounts(line, settings, vatResolution, fx);
-        if (amounts.line_net_ils != null) {
-            subtotal += amounts.line_net_ils;
-            hasAmount = true;
-        }
-        if (amounts.line_vat_ils != null) {
-            vat += amounts.line_vat_ils;
-        }
+        if (amounts.line_net_ils == null)
+            continue;
+        hasAmount = true;
+        const netIls = amounts.line_net_ils;
+        const vatRate = netIls > 0 && amounts.line_vat_ils != null ? amounts.line_vat_ils / netIls : 0;
+        lineNets.push({ netIls, vatRate });
     }
-    subtotal = roundAmount(subtotal, settings.amount_rounding);
+    let subtotalBefore = 0;
+    for (const ln of lineNets) {
+        subtotalBefore += ln.netIls;
+    }
+    subtotalBefore = roundAmount(subtotalBefore, settings.amount_rounding);
+    const discountAmount = computeDiscountAmountIls(settings.discount, subtotalBefore, settings.amount_rounding);
+    const subtotalAfter = hasAmount || (subtotalBefore === 0 && lines.length > 0)
+        ? roundAmount(Math.max(0, subtotalBefore - discountAmount), settings.amount_rounding)
+        : 0;
+    const discountFactor = subtotalBefore > 0 && settings.discount.enabled && discountAmount > 0
+        ? subtotalAfter / subtotalBefore
+        : 1;
+    let vat = 0;
+    for (const ln of lineNets) {
+        if (ln.netIls <= 0)
+            continue;
+        const discountedNet = roundAmount(ln.netIls * discountFactor, settings.amount_rounding);
+        vat += roundAmount(discountedNet * ln.vatRate, settings.amount_rounding);
+    }
     vat = roundAmount(vat, settings.amount_rounding);
-    const displayCurrency = 'ILS';
     let vatLabel = null;
     if (settings.vat_mode === 'standard' && vat > 0) {
         vatLabel = vatResolution.standard_rate_percent_label;
@@ -52,22 +93,45 @@ export async function computeDraftTotalsPreview(lines, currency, settings, vatRe
         vatLabel = '0%';
     }
     const grand = hasAmount
-        ? roundAmount(subtotal + vat, settings.amount_rounding)
-        : subtotal === 0 && lines.length > 0
+        ? roundAmount(subtotalAfter + vat, settings.amount_rounding)
+        : subtotalBefore === 0 && lines.length > 0
             ? 0
             : null;
-    const showVat = settings.vat_mode === 'standard' && (vat > 0 || (hasAmount && subtotal > 0));
+    const showVat = settings.vat_mode === 'standard' && (vat > 0 || (hasAmount && subtotalAfter > 0));
+    const subtotalBeforeRef = hasAmount
+        ? subtotalBefore
+        : subtotalBefore === 0 && lines.length > 0
+            ? 0
+            : null;
+    const discountRef = settings.discount.enabled && discountAmount > 0 ? discountAmount : settings.discount.enabled ? 0 : null;
+    const subtotalAfterRef = hasAmount
+        ? subtotalAfter
+        : subtotalBefore === 0 && lines.length > 0
+            ? 0
+            : null;
     return {
         preview: true,
         not_financial_truth: true,
         currency: displayCurrency,
         line_count: lines.length,
-        subtotal_reference: hasAmount ? subtotal : subtotal === 0 && lines.length > 0 ? 0 : null,
+        subtotal_before_discount_reference: subtotalBeforeRef,
+        discount_amount_reference: discountRef,
+        subtotal_after_discount_reference: subtotalAfterRef,
+        subtotal_reference: subtotalBeforeRef,
         vat_reference: showVat ? vat : settings.vat_mode === 'zero' ? 0 : null,
         grand_total_reference: grand,
-        subtotal_display: formatMoneyReference(hasAmount ? subtotal : subtotal === 0 && lines.length > 0 ? 0 : null, displayCurrency),
+        subtotal_before_discount_display: formatMoneyReference(subtotalBeforeRef, displayCurrency),
+        discount_amount_display: discountRef != null && discountRef > 0
+            ? formatMoneyReference(discountRef, displayCurrency)
+            : settings.discount.enabled
+                ? formatMoneyReference(0, displayCurrency)
+                : null,
+        subtotal_after_discount_display: formatMoneyReference(subtotalAfterRef, displayCurrency),
+        subtotal_display: formatMoneyReference(subtotalBeforeRef, displayCurrency),
         vat_display: showVat ? formatMoneyReference(vat, displayCurrency) : null,
         grand_total_display: formatMoneyReference(grand, displayCurrency),
         vat_rate_label: vatLabel,
+        discount_enabled: settings.discount.enabled,
+        exchange_context: { display_currency: displayCurrency, document_date: asOf },
     };
 }

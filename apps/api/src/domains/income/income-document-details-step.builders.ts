@@ -15,8 +15,14 @@ import {
   computeDraftTotalsPreview,
   parseDocumentSettingsJson,
   type DraftTotalsPreview,
+  type IncomeDocumentDiscount,
   type IncomeDocumentSettings,
 } from './income-document-draft-totals.pure.js';
+import {
+  formatDiscountAmountDisplay,
+  formatDiscountPercentDisplay,
+  validateDocumentDiscount,
+} from './income-document-discount.pure.js';
 import { buildDocumentDetailsHeaderTitle } from './income-document-details-header.pure.js';
 import {
   compactVatSelectLabel,
@@ -27,6 +33,7 @@ import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { loadIncomeRecipientById } from './income-recipient.service.js';
 import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.types.js';
+import { supabaseAdmin } from '../../db/client.js';
 
 const DOCUMENT_TYPE_LABELS: Record<IncomeDocumentType, string> = {
   receipt: 'קבלה',
@@ -36,6 +43,260 @@ const DOCUMENT_TYPE_LABELS: Record<IncomeDocumentType, string> = {
   deal_invoice: 'חשבונית עסקה',
   quote: 'הצעת מחיר',
 };
+
+function previewPartyAddressLine(addressJson: unknown): string | null {
+  if (!addressJson || typeof addressJson !== 'object' || Array.isArray(addressJson)) return null;
+  const o = addressJson as Record<string, unknown>;
+  const parts = [o.line1, o.line2, o.city, o.zip]
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+async function loadIssuerPreviewBlock(
+  scope: ActiveIncomeIssuerScope,
+): Promise<IncomeDocumentPreviewPartyBlock> {
+  const { data, error } = await supabaseAdmin
+    .from('clients')
+    .select('id, display_name, tax_id, address_json, phone, email')
+    .eq('organization_id', scope.org_id)
+    .eq('id', scope.issuer_business_id)
+    .maybeSingle();
+  if (error) throw error;
+  const row = data as
+    | {
+        display_name?: string | null;
+        tax_id?: string | null;
+        address_json?: unknown;
+        phone?: string | null;
+        email?: string | null;
+      }
+    | null;
+  return {
+    display_name: row?.display_name?.trim() ? String(row.display_name).trim() : scope.issuer_label,
+    tax_id: row?.tax_id?.trim() ? String(row.tax_id).trim() : null,
+    address: previewPartyAddressLine(row?.address_json),
+    phone: row?.phone?.trim() ? String(row.phone).trim() : null,
+    email: row?.email?.trim() ? String(row.email).trim() : null,
+  };
+}
+
+async function loadRecipientPreviewBlock(
+  scope: ActiveIncomeIssuerScope,
+  row: IncomeWizardDraftRow,
+  fallbackDisplayName: string,
+): Promise<IncomeDocumentPreviewPartyBlock> {
+  const snap = row.one_time_customer_snapshot_json;
+  if (snap && typeof snap === 'object' && !Array.isArray(snap)) {
+    const s = snap as Record<string, unknown>;
+    return {
+      display_name:
+        typeof s.display_name === 'string' && s.display_name.trim()
+          ? s.display_name.trim()
+          : fallbackDisplayName,
+      tax_id: typeof s.tax_id === 'string' && s.tax_id.trim() ? s.tax_id.trim() : null,
+      address: previewPartyAddressLine(s.address_json),
+      phone: typeof s.phone === 'string' && s.phone.trim() ? s.phone.trim() : null,
+      email: typeof s.email === 'string' && s.email.trim() ? s.email.trim() : null,
+    };
+  }
+  if (row.income_customer_id) {
+    const { data, error } = await supabaseAdmin
+      .from('income_customers')
+      .select('id, display_name, tax_id, phone, email, address_json')
+      .eq('organization_id', scope.org_id)
+      .eq('issuer_business_id', scope.issuer_business_id)
+      .eq('id', row.income_customer_id)
+      .maybeSingle();
+    if (error) throw error;
+    const saved = data as
+      | {
+          display_name?: string | null;
+          tax_id?: string | null;
+          phone?: string | null;
+          email?: string | null;
+          address_json?: unknown;
+        }
+      | null;
+    return {
+      display_name:
+        saved?.display_name?.trim() ? String(saved.display_name).trim() : fallbackDisplayName,
+      tax_id: saved?.tax_id?.trim() ? String(saved.tax_id).trim() : null,
+      address: previewPartyAddressLine(saved?.address_json),
+      phone: saved?.phone?.trim() ? String(saved.phone).trim() : null,
+      email: saved?.email?.trim() ? String(saved.email).trim() : null,
+    };
+  }
+  return {
+    display_name: fallbackDisplayName,
+    tax_id: null,
+    address: null,
+    phone: null,
+    email: null,
+  };
+}
+
+function renderIncomePreviewHtml(params: {
+  docTypeLabel: string;
+  numberPreview: string | null;
+  issuer: IncomeDocumentPreviewPartyBlock;
+  recipient: IncomeDocumentPreviewPartyBlock;
+  document_date: string | null;
+  due_date: string | null;
+  currency: string;
+  lineRows: Array<{
+    row_number: number;
+    description: string;
+    quantity: string;
+    unit_price: string;
+    currency: string;
+    vat_rate_label: string;
+    total: string;
+  }>;
+  totals: {
+    subtotal_before_discount: string;
+    discount: string | null;
+    subtotal_after_discount: string;
+    vat_label: string | null;
+    vat: string | null;
+    grand_total: string;
+  };
+  notes: string | null;
+}): string {
+  const p = params;
+  const metaLine = (label: string, value: string | null) =>
+    value ? `<div><span class="k">${escapeHtml(label)}</span> ${escapeHtml(value)}</div>` : '';
+  const partyLine = (label: string, value: string | null) =>
+    value ? `<div><span class="k">${escapeHtml(label)}</span> ${escapeHtml(value)}</div>` : '';
+
+  return `
+<div class="nx-preview" dir="rtl" style="font-family: Arial, Helvetica, sans-serif;">
+  <style>
+    .nx-preview { color: #0f172a; }
+    .nx-preview .k { color: #64748b; font-size: 12px; }
+    .nx-preview .section { border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; background: #fff; }
+    .nx-preview .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .nx-preview h2 { margin: 0 0 8px 0; font-size: 18px; }
+    .nx-preview .title { display:flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .nx-preview table { width: 100%; border-collapse: collapse; }
+    .nx-preview th, .nx-preview td { border-bottom: 1px solid #e2e8f0; padding: 8px 6px; font-size: 13px; vertical-align: top; }
+    .nx-preview th { color: #475569; font-weight: 700; text-align: right; background: #f8fafc; }
+    .nx-preview .totals { display:flex; justify-content: flex-end; }
+    .nx-preview .totals .box { width: 320px; }
+    .nx-preview .totals .row { display:flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; }
+    .nx-preview .totals .row strong { font-size: 14px; }
+  </style>
+
+  <div class="section">
+    <div class="title">
+      <h2>${escapeHtml(p.docTypeLabel)}</h2>
+      <div class="k">${escapeHtml(p.numberPreview ?? 'טיוטה')}</div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <div style="font-weight:700; font-size:14px; margin-bottom:6px;">${escapeHtml(p.issuer.display_name)}</div>
+        ${partyLine('ח.פ/ע.מ:', p.issuer.tax_id)}
+        ${partyLine('כתובת:', p.issuer.address)}
+        ${partyLine('טלפון:', p.issuer.phone)}
+        ${partyLine('אימייל:', p.issuer.email)}
+      </div>
+      <div>
+        <div style="font-weight:700; font-size:14px; margin-bottom:6px;">לכבוד: ${escapeHtml(p.recipient.display_name)}</div>
+        ${partyLine('ח.פ/ע.מ:', p.recipient.tax_id)}
+        ${partyLine('כתובת:', p.recipient.address)}
+        ${partyLine('אימייל:', p.recipient.email)}
+      </div>
+    </div>
+
+    <div style="margin-top:12px;" class="grid2">
+      <div>
+        ${metaLine('תאריך מסמך:', p.document_date)}
+        ${metaLine('תאריך לתשלום:', p.due_date)}
+      </div>
+      <div>
+        ${metaLine('מטבע:', p.currency)}
+      </div>
+    </div>
+  </div>
+
+  <div style="height:12px"></div>
+
+  <div class="section">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:34px">#</th>
+          <th>פירוט</th>
+          <th style="width:76px">כמות</th>
+          <th style="width:110px">מחיר ליח'</th>
+          <th style="width:70px">מטבע</th>
+          <th style="width:90px">מע״מ</th>
+          <th style="width:120px">סה״כ</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${p.lineRows
+          .map(
+            (r) => `
+          <tr>
+            <td>${r.row_number}</td>
+            <td>${escapeHtml(r.description)}</td>
+            <td>${escapeHtml(r.quantity)}</td>
+            <td>${escapeHtml(r.unit_price)}</td>
+            <td>${escapeHtml(r.currency)}</td>
+            <td>${escapeHtml(r.vat_rate_label)}</td>
+            <td>${escapeHtml(r.total)}</td>
+          </tr>`,
+          )
+          .join('')}
+      </tbody>
+    </table>
+
+    <div style="height:12px"></div>
+
+    <div class="totals">
+      <div class="box">
+        <div class="row"><span>סכום ביניים</span><span>${escapeHtml(p.totals.subtotal_before_discount)}</span></div>
+        ${
+          p.totals.discount
+            ? `<div class="row"><span>הנחה לפני מע״מ</span><span>${escapeHtml(p.totals.discount)}</span></div>
+        <div class="row"><span>סכום לאחר הנחה</span><span>${escapeHtml(p.totals.subtotal_after_discount)}</span></div>`
+            : ''
+        }
+        ${
+          p.totals.vat
+            ? `<div class="row"><span>${escapeHtml(p.totals.vat_label ?? 'מע״מ')}</span><span>${escapeHtml(
+                p.totals.vat,
+              )}</span></div>`
+            : ''
+        }
+        <div class="row"><strong>סה״כ לתשלום</strong><strong>${escapeHtml(p.totals.grand_total)}</strong></div>
+      </div>
+    </div>
+  </div>
+
+  ${
+    p.notes && p.notes.trim()
+      ? `<div style="height:12px"></div>
+  <div class="section">
+    <div style="font-weight:700; margin-bottom:6px;">הערות</div>
+    <div style="white-space:pre-wrap; font-size:13px;">${escapeHtml(p.notes)}</div>
+  </div>`
+      : ''
+  }
+</div>
+  `.trim();
+}
 
 export type IncomeDocumentDetailsSettingField = {
   key: string;
@@ -97,9 +358,40 @@ export type IncomeDocumentDetailsLineTableFields = {
   vat_mode: IncomeDocumentDetailsSelectField;
 };
 
+export type IncomeDocumentDetailsDiscount = {
+  enabled: boolean;
+  editable: boolean;
+  type: 'percent' | 'fixed_amount';
+  value: string;
+  currency: string;
+  amount_display: string | null;
+  percent_display: string | null;
+  calculated_discount_amount_display: string | null;
+  affects_vat: true;
+  field_errors: Record<string, string>;
+  allowed_actions: string[];
+};
+
+export type IncomeDocumentDetailsTotalsRow = {
+  key: string;
+  label: string;
+  amount_display: string;
+  tone: 'neutral' | 'good' | 'warning' | 'danger';
+  emphasized: boolean;
+};
+
+export type IncomeDocumentDetailsTotalsBlock = {
+  rows: IncomeDocumentDetailsTotalsRow[];
+  grand_total_display: string;
+  currency: string;
+};
+
 export type IncomeDocumentDetailsStep = {
   draft_id: string;
   document_type_key?: IncomeDocumentType | null;
+  document_discount: IncomeDocumentDetailsDiscount;
+  totals_block: IncomeDocumentDetailsTotalsBlock;
+  document_preview?: IncomeDocumentPreviewModel | null;
   draft_state_display?: {
     status: 'draft';
     label: string;
@@ -137,6 +429,36 @@ export type IncomeDocumentDetailsStep = {
     hint: string | null;
   };
   validation_warnings: { code: string; message: string }[];
+};
+
+export type IncomeDocumentPreviewValidationMessage = {
+  severity: 'info' | 'warning' | 'danger';
+  label: string;
+  field: string | null;
+  blocking: boolean;
+};
+
+export type IncomeDocumentPreviewPartyBlock = {
+  display_name: string;
+  tax_id: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+};
+
+export type IncomeDocumentPreviewModel = {
+  visible: boolean;
+  preview_status: 'ready' | 'not_generated';
+  generated_at: string | null;
+  document_type_label: string;
+  document_number_preview: string | null;
+  issuer: IncomeDocumentPreviewPartyBlock;
+  recipient: IncomeDocumentPreviewPartyBlock;
+  dates: { document_date: string | null; due_date: string | null };
+  currency: string;
+  preview_html: string;
+  validation_messages: IncomeDocumentPreviewValidationMessage[];
+  allowed_actions: string[];
 };
 
 export type IncomeWizardDraftRow = {
@@ -199,9 +521,10 @@ function buildDocumentLineTableFields(
 function readWizardUiCacheFromDraftPreview(raw: unknown): {
   document_number_preview: string | null;
   recipient_display_name: string | null;
+  preview_generated_at: string | null;
 } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { document_number_preview: null, recipient_display_name: null };
+    return { document_number_preview: null, recipient_display_name: null, preview_generated_at: null };
   }
   const o = raw as Record<string, unknown>;
   return {
@@ -209,6 +532,8 @@ function readWizardUiCacheFromDraftPreview(raw: unknown): {
       typeof o.document_number_preview === 'string' ? o.document_number_preview : null,
     recipient_display_name:
       typeof o.recipient_display_name === 'string' ? o.recipient_display_name : null,
+    preview_generated_at:
+      typeof o.preview_generated_at === 'string' ? o.preview_generated_at : null,
   };
 }
 
@@ -464,6 +789,89 @@ export type BuildIncomeDocumentDetailsStepOptions = {
   totalsPreview?: DraftTotalsPreview;
 };
 
+function buildDocumentDiscountModel(
+  settings: IncomeDocumentSettings,
+  totals: DraftTotalsPreview,
+  canEdit: boolean,
+): IncomeDocumentDetailsDiscount {
+  const d: IncomeDocumentDiscount = settings.discount;
+  const subtotalBefore = totals.subtotal_before_discount_reference ?? 0;
+  const fieldErrors = validateDocumentDiscount(d, subtotalBefore);
+  return {
+    enabled: d.enabled,
+    editable: canEdit,
+    type: d.type,
+    value: d.enabled ? String(d.value) : '',
+    currency: totals.currency,
+    amount_display:
+      d.type === 'fixed_amount' && d.enabled
+        ? formatDiscountAmountDisplay(d.value, totals.currency)
+        : null,
+    percent_display:
+      d.type === 'percent' && d.enabled ? formatDiscountPercentDisplay(d.value) : null,
+    calculated_discount_amount_display: totals.discount_amount_display,
+    affects_vat: true,
+    field_errors: fieldErrors,
+    allowed_actions: canEdit ? ['update_income_document_discount'] : [],
+  };
+}
+
+function buildTotalsBlock(
+  totals: DraftTotalsPreview,
+  settings: IncomeDocumentSettings,
+  vatResolution: IncomeDraftVatResolution,
+): IncomeDocumentDetailsTotalsBlock {
+  const rows: IncomeDocumentDetailsTotalsRow[] = [
+    {
+      key: 'subtotal_before_discount',
+      label: 'סכום ביניים',
+      amount_display: totals.subtotal_before_discount_display,
+      tone: 'neutral',
+      emphasized: false,
+    },
+  ];
+  if (totals.discount_enabled && totals.discount_amount_display) {
+    rows.push({
+      key: 'discount',
+      label: 'הנחה לפני מע״מ',
+      amount_display: `−${totals.discount_amount_display.replace(/^−/, '')}`,
+      tone: 'neutral',
+      emphasized: false,
+    });
+    rows.push({
+      key: 'subtotal_after_discount',
+      label: 'סכום לאחר הנחה',
+      amount_display: totals.subtotal_after_discount_display,
+      tone: 'neutral',
+      emphasized: false,
+    });
+  }
+  if (totals.vat_display != null) {
+    rows.push({
+      key: 'vat',
+      label:
+        settings.vat_mode === 'standard'
+          ? `מע״מ (${vatResolution.standard_rate_percent_label})`
+          : 'מע״מ',
+      amount_display: totals.vat_display,
+      tone: 'neutral',
+      emphasized: false,
+    });
+  }
+  rows.push({
+    key: 'grand_total',
+    label: 'סה״כ לתשלום',
+    amount_display: totals.grand_total_display,
+    tone: 'good',
+    emphasized: true,
+  });
+  return {
+    rows,
+    grand_total_display: totals.grand_total_display,
+    currency: totals.currency,
+  };
+}
+
 export async function buildIncomeDocumentDetailsStep(
   scope: ActiveIncomeIssuerScope,
   row: IncomeWizardDraftRow,
@@ -513,6 +921,78 @@ export async function buildIncomeDocumentDetailsStep(
         .filter((w) => w.message)
     : [];
 
+  const previewMessages: IncomeDocumentPreviewValidationMessage[] = warnings.map((w) => ({
+    severity: 'warning',
+    label: w.message,
+    field: null,
+    blocking: false,
+  }));
+
+  const previewGeneratedAt = uiCache.preview_generated_at;
+  const issuerBlock =
+    previewGeneratedAt != null
+      ? await loadIssuerPreviewBlock(scope)
+      : {
+          display_name: scope.issuer_label,
+          tax_id: null,
+          address: null,
+          phone: null,
+          email: null,
+        };
+  const recipientBlock =
+    previewGeneratedAt != null
+      ? await loadRecipientPreviewBlock(scope, row, recipientName ?? '—')
+      : {
+          display_name: recipientName ?? '—',
+          tax_id: null,
+          address: null,
+          phone: null,
+          email: null,
+        };
+  const previewLineRows =
+    previewGeneratedAt != null
+      ? (await buildLineRows(lines, settings, vatResolution, documentDate, false)).map((r) => ({
+          row_number: r.row_number,
+          description: r.description.value,
+          quantity: r.quantity.value,
+          unit_price: r.unit_price.value,
+          currency: r.currency.value,
+          vat_rate_label: r.vat_rate_label,
+          total: r.line_total_display,
+        }))
+      : [];
+  const previewVatLabel =
+    totals.vat_display != null
+      ? settings.vat_mode === 'standard'
+        ? `מע״מ (${vatResolution.standard_rate_percent_label})`
+        : 'מע״מ'
+      : null;
+  const previewHtml =
+    previewGeneratedAt != null
+      ? renderIncomePreviewHtml({
+          docTypeLabel,
+          numberPreview,
+          issuer: issuerBlock,
+          recipient: recipientBlock,
+          document_date: row.document_date ?? null,
+          due_date: row.due_date ?? null,
+          currency: row.currency,
+          lineRows: previewLineRows,
+          totals: {
+            subtotal_before_discount: totals.subtotal_before_discount_display,
+            discount:
+              totals.discount_enabled && totals.discount_amount_display
+                ? `−${totals.discount_amount_display.replace(/^−/, '')}`
+                : null,
+            subtotal_after_discount: totals.subtotal_after_discount_display,
+            vat_label: previewVatLabel,
+            vat: totals.vat_display ?? null,
+            grand_total: totals.grand_total_display,
+          },
+          notes: row.notes ?? null,
+        })
+      : '';
+
   const deliveryEmail =
     row.delivery_contact_json && typeof row.delivery_contact_json.email === 'string'
       ? row.delivery_contact_json.email
@@ -527,9 +1007,28 @@ export async function buildIncomeDocumentDetailsStep(
       ]
     : [];
 
+  const documentDiscount = buildDocumentDiscountModel(settings, totals, canEdit);
+  const totalsBlock = buildTotalsBlock(totals, settings, vatResolution);
+
   return {
     draft_id: row.id,
     document_type_key: row.document_type ?? null,
+    document_discount: documentDiscount,
+    totals_block: totalsBlock,
+    document_preview: {
+      visible: previewGeneratedAt != null,
+      preview_status: previewGeneratedAt != null ? 'ready' : 'not_generated',
+      generated_at: previewGeneratedAt,
+      document_type_label: docTypeLabel,
+      document_number_preview: numberPreview,
+      issuer: issuerBlock,
+      recipient: recipientBlock,
+      dates: { document_date: row.document_date ?? null, due_date: row.due_date ?? null },
+      currency: row.currency,
+      preview_html: previewHtml,
+      validation_messages: previewMessages,
+      allowed_actions: canEdit ? ['generate_income_document_preview'] : [],
+    },
     draft_state_display: {
       status: 'draft',
       label: 'טיוטה',
@@ -566,7 +1065,7 @@ export async function buildIncomeDocumentDetailsStep(
         message: 'הוסף שורה ראשונה למסמך',
       },
       totals: {
-        subtotal: { label: 'סכום ביניים', display: totals.subtotal_display },
+        subtotal: { label: 'סכום ביניים', display: totals.subtotal_before_discount_display },
         vat:
           totals.vat_display != null
             ? {

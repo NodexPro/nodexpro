@@ -50,3 +50,23 @@ test('invoices tab host renders draft entrypoints and resumes via allowed backen
   assert.match(tabHostSource, /allowed_actions\.find/);
   assert.doesNotMatch(tabHostSource, /wizard\.income_commands\.resume_draft/);
 });
+
+test('wizard modal renders backend preview html only', () => {
+  const wizardSource = readFileSync(
+    join(dir, '../../../web/src/components/work-engine/WorkEngineIncomeDocumentWizardModal.tsx'),
+    'utf8',
+  );
+  assert.match(wizardSource, /dangerouslySetInnerHTML/);
+  assert.match(wizardSource, /document_preview/);
+  assert.doesNotMatch(wizardSource, /<table>|subtotal|vat|grand_total/i);
+});
+
+test('document details step renders backend totals_block only', () => {
+  const detailsSource = readFileSync(
+    join(dir, '../../../web/src/components/work-engine/WorkEngineDocumentDetailsStep.tsx'),
+    'utf8',
+  );
+  assert.match(detailsSource, /totals_block\.rows/);
+  assert.match(detailsSource, /update_discount/);
+  assert.doesNotMatch(detailsSource, /subtotal\s*\+|vat\s*\*|discountAmount/i);
+});

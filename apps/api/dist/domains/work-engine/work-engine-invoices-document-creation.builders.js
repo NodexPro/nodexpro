@@ -64,7 +64,8 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(ctx) {
                 { key: 'document_type', label: 'סוג מסמך' },
                 { key: 'recipient', label: 'מקבל המסמך' },
                 { key: 'document_details', label: 'פרטי מסמך' },
-                { key: 'preview_issue', label: 'תצוגה והפקה' },
+                { key: 'preview', label: 'תצוגה מקדימה' },
+                { key: 'issue', label: 'הפקה' },
             ],
             issuer_choice: {
                 title: 'מי מנפיק את המסמך?',
@@ -123,6 +124,8 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(ctx) {
                 update_delivery_contact: 'update_income_document_delivery_contact',
                 save_draft: 'save_income_document_draft',
                 resume_draft: 'resume_income_document_draft',
+                generate_preview: 'generate_income_document_preview',
+                update_discount: 'update_income_document_discount',
                 issue_document: 'issue_income_document',
             },
         },
