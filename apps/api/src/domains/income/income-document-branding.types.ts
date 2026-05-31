@@ -1,4 +1,6 @@
 export const INCOME_COMMAND_UPDATE_BRANDING_PROFILE = 'update_income_document_branding_profile' as const;
+export const INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT =
+  'update_income_document_branding_profile_preview_draft' as const;
 export const INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO = 'upload_income_document_logo' as const;
 export const INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE = 'upload_income_document_signature' as const;
 
@@ -194,6 +196,16 @@ export type IncomeDocumentBrandingStudioLivePreview = {
   sample_document_number_display: string | null;
 };
 
+/** Ephemeral preview result — no DB write. */
+export type IncomeDocumentBrandingStudioPreviewDraftResult = {
+  studio_live_preview: IncomeDocumentBrandingStudioLivePreview;
+  selected_document_style_key: IncomeDocumentStyleTemplateKey;
+  selected_color_theme_key: string;
+  selected_layout_template_key: IncomeLayoutTemplateKey | null;
+  selected_logo_size_key: IncomeLogoSizeKey;
+  document_style_templates: IncomeDocumentStyleTemplate[];
+};
+
 export type IncomeDocumentBrandingStudioFields = {
   show_logo: boolean;
   company_subtitle: string | null;
@@ -225,6 +237,7 @@ export type IncomeDocumentBrandingStudio = {
   fields: IncomeDocumentBrandingStudioFields;
   save_section_key: 'modal';
   save_command: typeof INCOME_COMMAND_UPDATE_BRANDING_PROFILE;
+  preview_draft_command: typeof INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT;
 };
 
 export type IncomeDocumentBrandingProfileAggregate = {
@@ -250,7 +263,14 @@ export type IncomeDocumentBrandingSettingsEntrypoint = {
   allowed_actions: string[];
   commands: {
     update_branding_profile: string;
+    preview_branding_profile_draft: string;
     upload_document_logo: string;
     upload_document_signature: string;
   };
+};
+
+export type IncomeBrandingPreviewDraftCommandResponse = {
+  ok: true;
+  command: typeof INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT;
+  document_branding_studio_preview: IncomeDocumentBrandingStudioPreviewDraftResult;
 };

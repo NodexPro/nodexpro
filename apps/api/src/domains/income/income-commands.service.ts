@@ -77,6 +77,7 @@ import {
 } from './income-document-draft-editor.service.js';
 import {
   executeUpdateIncomeDocumentBrandingProfile,
+  executeUpdateIncomeDocumentBrandingProfilePreviewDraft,
   executeUploadIncomeDocumentLogo,
   executeUploadIncomeDocumentSignature,
 } from './income-document-branding.commands.js';
@@ -92,6 +93,7 @@ import {
   INCOME_COMMAND_GENERATE_PREVIEW,
   INCOME_COMMAND_UPDATE_DISCOUNT,
   INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+  INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
   INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
   INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
   INCOME_COMMAND_SEARCH_RECIPIENTS,
@@ -112,6 +114,7 @@ import {
   INCOME_COMMAND_UPDATE_NOTES,
   type IncomeCommandResponse,
   type IncomeCommandType,
+  type IncomeBrandingPreviewDraftCommandResponse,
   type SelectIncomeIssuerContextCommandResponse,
 } from './income.types.js';
 
@@ -143,6 +146,7 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_GENERATE_PREVIEW,
   INCOME_COMMAND_UPDATE_DISCOUNT,
   INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+  INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
   INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
   INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
 ]);
@@ -527,7 +531,9 @@ export async function executeIncomeCommand(
   ctx: RequestContext,
   body: Record<string, unknown>,
   auditMeta?: { ipAddress?: string | null; userAgent?: string | null },
-): Promise<IncomeCommandResponse | SelectIncomeIssuerContextCommandResponse> {
+): Promise<
+  IncomeCommandResponse | SelectIncomeIssuerContextCommandResponse | IncomeBrandingPreviewDraftCommandResponse
+> {
   const command = String(body.command ?? '').trim() as IncomeCommandType;
   if (!command) throw badRequest('command is required');
   if (!ALLOWED_COMMANDS.has(command)) {
@@ -727,6 +733,19 @@ export async function executeIncomeCommand(
   }
   if (command === INCOME_COMMAND_UPDATE_DISCOUNT) {
     return wizardDraftCmd(updateIncomeDocumentDiscount);
+  }
+  if (command === INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const document_branding_studio_preview = await executeUpdateIncomeDocumentBrandingProfilePreviewDraft(
+      scope,
+      body,
+    );
+    return {
+      ok: true,
+      command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
+      document_branding_studio_preview,
+    };
   }
   if (command === INCOME_COMMAND_UPDATE_BRANDING_PROFILE) {
     return brandingCommandResponse(ctx, command, body, executeUpdateIncomeDocumentBrandingProfile);

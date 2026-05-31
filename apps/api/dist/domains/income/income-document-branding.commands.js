@@ -1,6 +1,9 @@
 import { optionalUuid } from './income.guards.js';
 import { refreshWizardDraftOverlayAfterBranding, } from './income-document-draft-editor.service.js';
-import { updateIncomeDocumentBrandingProfile, uploadIncomeDocumentLogo, uploadIncomeDocumentSignature, } from './income-document-branding.service.js';
+import { updateIncomeDocumentBrandingProfile, previewIncomeDocumentBrandingProfileDraft, uploadIncomeDocumentLogo, uploadIncomeDocumentSignature, } from './income-document-branding.service.js';
+export async function executeUpdateIncomeDocumentBrandingProfilePreviewDraft(scope, body) {
+    return previewIncomeDocumentBrandingProfileDraft(scope, body);
+}
 export async function executeUpdateIncomeDocumentBrandingProfile(scope, body) {
     await updateIncomeDocumentBrandingProfile(scope, body);
     const draft_id = optionalUuid(body.draft_id, 'draft_id');

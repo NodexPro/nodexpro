@@ -106,6 +106,16 @@ export type IncomeDocumentBrandingStudio = {
   fields: IncomeDocumentBrandingStudioFields;
   save_section_key: 'modal';
   save_command: string;
+  preview_draft_command: string;
+};
+
+export type IncomeDocumentBrandingStudioPreviewDraftResult = {
+  studio_live_preview: IncomeDocumentBrandingStudioLivePreview;
+  selected_document_style_key: IncomeDocumentStyleTemplateKey;
+  selected_color_theme_key: string;
+  selected_layout_template_key: IncomeLayoutTemplateKey | null;
+  selected_logo_size_key: IncomeLogoSizeKey;
+  document_style_templates: IncomeDocumentStyleTemplate[];
 };
 
 export type IncomeDocumentBrandingProfileAggregate = {
@@ -124,9 +134,16 @@ export type IncomeDocumentBrandingSettingsEntrypoint = {
   allowed_actions: string[];
   commands: {
     update_branding_profile: string;
+    preview_branding_profile_draft: string;
     upload_document_logo: string;
     upload_document_signature: string;
   };
+};
+
+export type IncomeBrandingPreviewDraftCommandResponse = {
+  ok: true;
+  command: 'update_income_document_branding_profile_preview_draft';
+  document_branding_studio_preview: IncomeDocumentBrandingStudioPreviewDraftResult;
 };
 
 export type IncomeBrandingStudioDraft = {

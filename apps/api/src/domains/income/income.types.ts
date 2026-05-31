@@ -32,11 +32,13 @@ export const INCOME_COMMAND_GENERATE_PREVIEW = 'generate_income_document_preview
 export const INCOME_COMMAND_UPDATE_DISCOUNT = 'update_income_document_discount' as const;
 export {
   INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+  INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
   INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
   INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
 } from './income-document-branding.types.js';
 import {
   INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+  INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
   INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
   INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
 } from './income-document-branding.types.js';
@@ -45,6 +47,8 @@ export type { IncomeDocumentDetailsStep } from './income-document-details-step.b
 export type {
   IncomeDocumentBrandingProfileAggregate,
   IncomeDocumentBrandingSettingsEntrypoint,
+  IncomeBrandingPreviewDraftCommandResponse,
+  IncomeDocumentBrandingStudioPreviewDraftResult,
 } from './income-document-branding.types.js';
 
 export const INCOME_MODULE_CODE = 'income' as const;
@@ -280,6 +284,7 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_GENERATE_PREVIEW
   | typeof INCOME_COMMAND_UPDATE_DISCOUNT
   | typeof INCOME_COMMAND_UPDATE_BRANDING_PROFILE
+  | typeof INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT
   | typeof INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO
   | typeof INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE;
 

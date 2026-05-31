@@ -171,13 +171,30 @@ test('frontend panel source uses studio aggregate only', async () => {
   assert.match(panel, /dangerouslySetInnerHTML/);
 });
 
-test('service builds studio aggregate with live preview', async () => {
+test('preview draft command is registered and does not persist', async () => {
   const { readFile } = await import('node:fs/promises');
+  const commands = await readFile(
+    new URL('../../src/domains/income/income-commands.service.ts', import.meta.url),
+    'utf8',
+  );
   const service = await readFile(
     new URL('../../src/domains/income/income-document-branding.service.ts', import.meta.url),
     'utf8',
   );
-  assert.match(service, /document_branding_studio/);
-  assert.match(service, /color_theme_key/);
-  assert.match(service, /renderStudioSamplePreviewHtml/);
+  assert.match(commands, /INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT/);
+  assert.match(commands, /previewIncomeDocumentBrandingProfileDraft/);
+  assert.match(service, /export async function previewIncomeDocumentBrandingProfileDraft/);
+  assert.match(service, /renderStudioSamplePreviewHtml\(resolved\)/);
+});
+
+test('frontend panel debounces backend preview refresh', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const panel = await readFile(
+    new URL('../../../web/src/components/income/IncomeDocumentBrandingSettingsPanel.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(panel, /onPreviewDraft/);
+  assert.match(panel, /buildBrandingPreviewDraftBody/);
+  assert.match(panel, /previewRequestRef/);
+  assert.match(panel, /250/);
 });

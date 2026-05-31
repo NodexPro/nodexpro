@@ -19,7 +19,7 @@ import {
   type WorkEngineQueueFiltersInput,
 } from '../../api/work-engine';
 import { userFacingApiMessage } from '../../api/client';
-import { executeIncomeCommand } from '../../api/income';
+import { executeIncomeCommand, isBrandingPreviewDraftCommandResponse } from '../../api/income';
 import { ClientOperationsRegistryView } from '../client-operations/ClientOperationsRegistryView';
 import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
 import { IncomeDocumentBrandingGearButton } from '../income/IncomeDocumentBrandingGearButton';
@@ -442,6 +442,7 @@ function WorkEngineInvoicesTabPanel(props: {
         commands={
           aggregate.document_branding_settings_entrypoint?.commands ?? {
             update_branding_profile: 'update_income_document_branding_profile',
+            preview_branding_profile_draft: 'update_income_document_branding_profile_preview_draft',
             upload_document_logo: 'upload_income_document_logo',
             upload_document_signature: 'upload_income_document_signature',
           }
@@ -469,6 +470,14 @@ function WorkEngineInvoicesTabPanel(props: {
           } finally {
             setBrandingBusy(false);
           }
+        }}
+        onPreviewDraft={async (body) => {
+          const cmd =
+            aggregate.document_branding_settings_entrypoint?.commands.preview_branding_profile_draft ??
+            'update_income_document_branding_profile_preview_draft';
+          const res = await executeIncomeCommand(cmd, body);
+          if (isBrandingPreviewDraftCommandResponse(res)) return res.document_branding_studio_preview;
+          return null;
         }}
       />
     </div>

@@ -9,6 +9,7 @@ import {
   executeIncomeCommand,
   fetchIncomeWorkspaceAggregate,
   fetchIncomeWorkspaceContextAggregate,
+  isBrandingPreviewDraftCommandResponse,
   pickDraftIdAfterSave,
   type IncomeCommandResponse,
   type IncomeDraftsTableRow,
@@ -17,6 +18,7 @@ import {
   type IncomeWorkspaceCard,
   type IncomeWorkspaceContextAggregate,
   type SelectIncomeIssuerContextCommandResponse,
+  type IncomeBrandingPreviewDraftCommandResponse,
 } from '../api/income';
 import { IncomeCardsGrid } from '../components/income/IncomeCardsGrid';
 import { IncomeCustomersTable } from '../components/income/IncomeCustomersTable';
@@ -114,11 +116,16 @@ export function IncomeWorkspacePage() {
     async (
       command: string,
       body: Record<string, unknown>,
-    ): Promise<IncomeCommandResponse | SelectIncomeIssuerContextCommandResponse> => {
+    ): Promise<
+      IncomeCommandResponse | SelectIncomeIssuerContextCommandResponse | IncomeBrandingPreviewDraftCommandResponse
+    > => {
       setBusy(true);
       setError(null);
       try {
         const res = await executeIncomeCommand(command, body);
+        if (isBrandingPreviewDraftCommandResponse(res)) {
+          return res;
+        }
         if (isSelectIssuerResponse(res)) {
           setContext(res.income_workspace_context_aggregate);
           applyWorkspace(res.income_workspace_aggregate);
@@ -502,6 +509,7 @@ export function IncomeWorkspacePage() {
         commands={
           workspace.document_branding_settings_entrypoint?.commands ?? {
             update_branding_profile: 'update_income_document_branding_profile',
+            preview_branding_profile_draft: 'update_income_document_branding_profile_preview_draft',
             upload_document_logo: 'upload_income_document_logo',
             upload_document_signature: 'upload_income_document_signature',
           }
@@ -510,6 +518,14 @@ export function IncomeWorkspacePage() {
         onClose={() => setBrandingOpen(false)}
         onCommand={async (command, body) => {
           await runCommand(command, body);
+        }}
+        onPreviewDraft={async (body) => {
+          const cmd =
+            workspace.document_branding_settings_entrypoint?.commands.preview_branding_profile_draft ??
+            'update_income_document_branding_profile_preview_draft';
+          const res = await executeIncomeCommand(cmd, body);
+          if (isBrandingPreviewDraftCommandResponse(res)) return res.document_branding_studio_preview;
+          return null;
         }}
       />
 

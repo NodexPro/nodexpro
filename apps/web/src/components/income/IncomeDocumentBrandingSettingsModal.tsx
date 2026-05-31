@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import type { IncomeDocumentBrandingProfileAggregate } from '../../income/income-document-branding-types';
+import type { IncomeDocumentBrandingProfileAggregate, IncomeDocumentBrandingStudioPreviewDraftResult } from '../../income/income-document-branding-types';
 import {
   IncomeDocumentBrandingSettingsPanel,
   buildBrandingModalSaveBody,
@@ -16,6 +16,7 @@ type Props = {
   busy: boolean;
   onClose: () => void;
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
+  onPreviewDraft: (body: Record<string, unknown>) => Promise<IncomeDocumentBrandingStudioPreviewDraftResult | null>;
   portal?: boolean;
 };
 
@@ -27,6 +28,7 @@ export function IncomeDocumentBrandingSettingsModal({
   busy,
   onClose,
   onCommand,
+  onPreviewDraft,
   portal = false,
 }: Props) {
   const { activeSection, setActiveSection, draft, setDraft } = useBrandingModalState(profile);
@@ -76,6 +78,7 @@ export function IncomeDocumentBrandingSettingsModal({
               draft={draft}
               onDraftChange={setDraft}
               onCommand={onCommand}
+              onPreviewDraft={onPreviewDraft}
             />
           ) : (
             <p>טוען הגדרות…</p>

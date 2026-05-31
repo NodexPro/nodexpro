@@ -17,6 +17,7 @@ import type {
   IncomeWorkspaceContextAggregate,
   SelectIncomeIssuerContextCommandResponse,
 } from '../income/income-workspace-types';
+import type { IncomeBrandingPreviewDraftCommandResponse } from '../income/income-document-branding-types';
 
 export type {
   IncomeActingMode,
@@ -39,6 +40,17 @@ export type {
   SelectIncomeIssuerContextCommandResponse,
 } from '../income/income-workspace-types';
 
+export type { IncomeBrandingPreviewDraftCommandResponse } from '../income/income-document-branding-types';
+
+export function isBrandingPreviewDraftCommandResponse(
+  res: IncomeCommandResponse | SelectIncomeIssuerContextCommandResponse | IncomeBrandingPreviewDraftCommandResponse,
+): res is IncomeBrandingPreviewDraftCommandResponse {
+  return (
+    res.command === 'update_income_document_branding_profile_preview_draft' &&
+    'document_branding_studio_preview' in res
+  );
+}
+
 export async function fetchIncomeWorkspaceContextAggregate(): Promise<IncomeWorkspaceContextAggregate> {
   return apiJson<IncomeWorkspaceContextAggregate>(INCOME.workspaceContextAggregate);
 }
@@ -50,8 +62,12 @@ export async function fetchIncomeWorkspaceAggregate(): Promise<IncomeWorkspaceAg
 export async function executeIncomeCommand(
   command: string,
   body: Record<string, unknown>,
-): Promise<IncomeCommandResponse | SelectIncomeIssuerContextCommandResponse> {
-  return apiJson<IncomeCommandResponse | SelectIncomeIssuerContextCommandResponse>(INCOME.commands, {
+): Promise<
+  IncomeCommandResponse | SelectIncomeIssuerContextCommandResponse | IncomeBrandingPreviewDraftCommandResponse
+> {
+  return apiJson<
+    IncomeCommandResponse | SelectIncomeIssuerContextCommandResponse | IncomeBrandingPreviewDraftCommandResponse
+  >(INCOME.commands, {
     method: 'POST',
     body: JSON.stringify({ command, ...body }),
   });

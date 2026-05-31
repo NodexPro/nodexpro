@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import type {
   IncomeBrandingStudioDraft,
   IncomeBrandingStudioSectionKey,
@@ -6,12 +6,15 @@ import type {
   IncomeDocumentBrandingAssetSlot,
   IncomeDocumentBrandingProfileAggregate,
   IncomeDocumentBrandingStudio,
+  IncomeDocumentBrandingStudioLivePreview,
+  IncomeDocumentBrandingStudioPreviewDraftResult,
   IncomeDocumentStyleTemplate,
   IncomeLogoSizeOption,
 } from '../../income/income-document-branding-types';
 
 export type IncomeBrandingCommandsMap = {
   update_branding_profile: string;
+  preview_branding_profile_draft: string;
   upload_document_logo: string;
   upload_document_signature: string;
 };
@@ -25,6 +28,7 @@ type Props = {
   draft: IncomeBrandingStudioDraft;
   onDraftChange: Dispatch<SetStateAction<IncomeBrandingStudioDraft>>;
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
+  onPreviewDraft: (body: Record<string, unknown>) => Promise<IncomeDocumentBrandingStudioPreviewDraftResult | null>;
 };
 
 function boolToDraft(value: boolean): string {
@@ -52,6 +56,28 @@ export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggr
     email_body_template: f.email_body_template ?? '',
     customer_notes: f.customer_notes ?? '',
     terms_and_conditions: f.terms_and_conditions ?? '',
+  };
+}
+
+export function buildBrandingPreviewDraftBody(draft: IncomeBrandingStudioDraft): Record<string, unknown> {
+  return {
+    document_style_key: draft.document_style_key,
+    color_theme_key: draft.color_theme_key,
+    layout_template_key: draft.layout_template_key.trim() ? draft.layout_template_key : null,
+    logo_size_key: draft.logo_size_key,
+    show_logo: draft.show_logo === 'true',
+    company_subtitle: draft.company_subtitle,
+    show_signature: draft.show_signature === 'true',
+    footer_text: draft.footer_text,
+    bank_name: draft.bank_name,
+    bank_branch: draft.bank_branch,
+    bank_account: draft.bank_account,
+    iban: draft.iban,
+    swift: draft.swift,
+    email_subject_template: draft.email_subject_template,
+    email_body_template: draft.email_body_template,
+    customer_notes: draft.customer_notes,
+    terms_and_conditions: draft.terms_and_conditions,
   };
 }
 
@@ -330,6 +356,8 @@ function AssetUploadSlot({
 
 function StudioSectionContent({
   section,
+  styleTemplates,
+  colorThemePresets,
   studio,
   profile,
   draft,
@@ -340,6 +368,8 @@ function StudioSectionContent({
   onCommand,
 }: {
   section: IncomeBrandingStudioSectionKey;
+  styleTemplates: IncomeDocumentStyleTemplate[];
+  colorThemePresets: IncomeColorThemePreset[];
   studio: IncomeDocumentBrandingStudio;
   profile: IncomeDocumentBrandingProfileAggregate;
   draft: IncomeBrandingStudioDraft;
@@ -357,7 +387,7 @@ function StudioSectionContent({
         <h3 className="nx-branding-studio-section__title">סגנון מסמך</h3>
         <p className="nx-branding-studio-section__lead">בחרו את מבנה המסמך — הפריסה, הריווח והאופי הכללי.</p>
         <div className="nx-branding-studio-style-grid" role="listbox" aria-label="סגנון מסמך">
-          {studio.document_style_templates.map((template) => (
+          {styleTemplates.map((template) => (
             <DocumentStyleTemplateCard
               key={template.key}
               template={template}
@@ -370,7 +400,7 @@ function StudioSectionContent({
         <h3 className="nx-branding-studio-section__title nx-branding-studio-section__title--spaced">ערכת צבעים</h3>
         <p className="nx-branding-studio-section__lead">בחרו צבעים — גרדיאנט, כותרת טבלה, סה״כ וקו הדגשה ללקוח.</p>
         <div className="nx-branding-studio-theme-grid" role="listbox" aria-label="ערכת צבעים">
-          {studio.color_theme_presets.map((preset) => (
+          {colorThemePresets.map((preset) => (
             <ColorThemeCard
               key={preset.key}
               preset={preset}
@@ -533,10 +563,62 @@ export function IncomeDocumentBrandingSettingsPanel({
   draft,
   onDraftChange,
   onCommand,
+  onPreviewDraft,
 }: Props) {
   const studio = profile.document_branding_studio;
   const canEdit = profile.allowed_actions.includes(commands.update_branding_profile);
-  const preview = studio.studio_live_preview;
+  const canPreview = profile.allowed_actions.includes(commands.preview_branding_profile_draft);
+  const previewRequestRef = useRef(0);
+  const debounceRef = useRef<number | null>(null);
+
+  const [livePreview, setLivePreview] = useState<IncomeDocumentBrandingStudioLivePreview>(
+    studio.studio_live_preview,
+  );
+  const [styleTemplates, setStyleTemplates] = useState(studio.document_style_templates);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLivePreview(studio.studio_live_preview);
+    setStyleTemplates(studio.document_style_templates);
+    setPreviewError(null);
+  }, [profile]);
+
+  const refreshPreview = useCallback(
+    async (nextDraft: IncomeBrandingStudioDraft) => {
+      if (!canPreview) return;
+      const requestId = ++previewRequestRef.current;
+      setPreviewLoading(true);
+      setPreviewError(null);
+      try {
+        const result = await onPreviewDraft(buildBrandingPreviewDraftBody(nextDraft));
+        if (requestId !== previewRequestRef.current) return;
+        if (result) {
+          setLivePreview(result.studio_live_preview);
+          setStyleTemplates(result.document_style_templates);
+        }
+      } catch {
+        if (requestId !== previewRequestRef.current) return;
+        setPreviewError('לא ניתן לרענן תצוגה מקדימה');
+      } finally {
+        if (requestId === previewRequestRef.current) setPreviewLoading(false);
+      }
+    },
+    [canPreview, onPreviewDraft],
+  );
+
+  useEffect(() => {
+    if (!canPreview || busy) return;
+    if (debounceRef.current != null) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => {
+      void refreshPreview(draft);
+    }, 250);
+    return () => {
+      if (debounceRef.current != null) window.clearTimeout(debounceRef.current);
+    };
+  }, [draft, canPreview, busy, refreshPreview]);
+
+  const preview = livePreview;
 
   return (
     <div className="nx-branding-studio" dir="rtl">
@@ -555,6 +637,8 @@ export function IncomeDocumentBrandingSettingsPanel({
       <div className="nx-branding-studio-content">
         <StudioSectionContent
           section={activeSection}
+          styleTemplates={styleTemplates}
+          colorThemePresets={studio.color_theme_presets}
           studio={studio}
           profile={profile}
           draft={draft}
@@ -572,15 +656,23 @@ export function IncomeDocumentBrandingSettingsPanel({
             {preview.sample_document_type_label}
             {preview.sample_document_number_display ? ` · ${preview.sample_document_number_display}` : ' · טיוטה'}
           </span>
+          {previewError ? <span className="nx-branding-studio-preview__warn">{previewError}</span> : null}
         </div>
-        {preview.visible && preview.preview_html ? (
-          <div
-            className="nx-branding-studio-preview__doc nx-invoice-ui"
-            dangerouslySetInnerHTML={{ __html: preview.preview_html }}
-          />
-        ) : (
-          <p className="nx-branding-studio-preview__empty">אין תצוגה מקדימה</p>
-        )}
+        <div className="nx-branding-studio-preview__frame">
+          {previewLoading ? (
+            <div className="nx-branding-studio-preview__loading" aria-live="polite">
+              מעדכן תצוגה…
+            </div>
+          ) : null}
+          {preview.visible && preview.preview_html ? (
+            <div
+              className="nx-branding-studio-preview__doc nx-invoice-ui"
+              dangerouslySetInnerHTML={{ __html: preview.preview_html }}
+            />
+          ) : (
+            <p className="nx-branding-studio-preview__empty">אין תצוגה מקדימה</p>
+          )}
+        </div>
       </aside>
     </div>
   );

@@ -134,6 +134,7 @@ test('document branding aggregate exposes studio shape', async () => {
 
 test('document branding profile commands and aggregate are registered', () => {
   assert.match(commandsSource, /INCOME_COMMAND_UPDATE_BRANDING_PROFILE/);
+  assert.match(commandsSource, /INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT/);
   assert.match(commandsSource, /INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO/);
   assert.match(commandsSource, /INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE/);
   assert.match(commandsSource, /executeUploadIncomeDocumentLogo/);

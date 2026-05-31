@@ -6,9 +6,17 @@ import {
 } from './income-document-draft-editor.service.js';
 import {
   updateIncomeDocumentBrandingProfile,
+  previewIncomeDocumentBrandingProfileDraft,
   uploadIncomeDocumentLogo,
   uploadIncomeDocumentSignature,
 } from './income-document-branding.service.js';
+
+export async function executeUpdateIncomeDocumentBrandingProfilePreviewDraft(
+  scope: ActiveIncomeIssuerScope,
+  body: Record<string, unknown>,
+) {
+  return previewIncomeDocumentBrandingProfileDraft(scope, body);
+}
 
 export async function executeUpdateIncomeDocumentBrandingProfile(
   scope: ActiveIncomeIssuerScope,

@@ -50,12 +50,14 @@ import type {
   IncomeDocumentBrandingProfileAggregate,
   IncomeDocumentBrandingSettingsEntrypoint,
   IncomeDocumentBrandingStudio,
+  IncomeDocumentBrandingStudioPreviewDraftResult,
   IncomeDocumentStyleTemplateKey,
   IncomeLayoutTemplateKey,
 } from './income-document-branding.types.js';
 import type { IncomeWorkspacePermissions } from './income.types.js';
 import {
   INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+  INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
   INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
   INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
 } from './income-document-branding.types.js';
@@ -318,6 +320,7 @@ function buildDocumentBrandingStudio(
     },
     save_section_key: 'modal',
     save_command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+    preview_draft_command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
   };
 }
 
@@ -332,12 +335,14 @@ export function buildDocumentBrandingSettingsEntrypoint(
     allowed_actions: canEdit
       ? [
           INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+          INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
           INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
           INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
         ]
       : [],
     commands: {
       update_branding_profile: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+      preview_branding_profile_draft: INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
       upload_document_logo: INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
       upload_document_signature: INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
     },
@@ -380,10 +385,58 @@ export async function buildDocumentBrandingProfileAggregate(
     allowed_actions: canEdit
       ? [
           INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+          INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
           INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
           INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
         ]
       : [],
+  };
+}
+
+function mergeBrandingDraftBodyOntoRow(
+  row: IncomeBrandingProfileRow,
+  body: Record<string, unknown>,
+): IncomeBrandingProfileRow {
+  const patch: Record<string, unknown> = {};
+  applyModalBrandingPatch(row, body, patch);
+  return { ...row, ...patch } as IncomeBrandingProfileRow;
+}
+
+async function resolveBrandingProfileForRow(
+  row: IncomeBrandingProfileRow,
+): Promise<IncomeBrandingResolvedProfile> {
+  const logo_data_url = row.logo_file_asset_id
+    ? await fileAssetToDataUrl(row.logo_file_asset_id)
+    : null;
+  const signature_data_url = row.signature_file_asset_id
+    ? await fileAssetToDataUrl(row.signature_file_asset_id)
+    : null;
+  return resolveBrandingProfile(row, { logo_data_url, signature_data_url });
+}
+
+export async function previewIncomeDocumentBrandingProfileDraft(
+  scope: ActiveIncomeIssuerScope,
+  body: Record<string, unknown>,
+): Promise<IncomeDocumentBrandingStudioPreviewDraftResult> {
+  const row = await ensureIncomeDocumentBrandingProfile(scope);
+  const draftRow = mergeBrandingDraftBodyOntoRow(row, body);
+  const resolved = await resolveBrandingProfileForRow(draftRow);
+  const layoutOverride = draftRow.layout_template_key?.trim()
+    ? (draftRow.layout_template_key.trim() as IncomeLayoutTemplateKey)
+    : null;
+
+  return {
+    studio_live_preview: {
+      visible: true,
+      preview_html: renderStudioSamplePreviewHtml(resolved),
+      sample_document_type_label: 'הצעת מחיר',
+      sample_document_number_display: null,
+    },
+    selected_document_style_key: resolved.document_style_key,
+    selected_color_theme_key: resolved.color_theme_key,
+    selected_layout_template_key: layoutOverride,
+    selected_logo_size_key: resolved.logo_size_key,
+    document_style_templates: getDocumentStyleTemplates(resolved.color_theme_key),
   };
 }
 

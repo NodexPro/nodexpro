@@ -17,8 +17,8 @@ import { buildIncomeWorkspaceAggregate, buildIncomeWorkspaceWizardPatchAggregate
 import { insertSavedIncomeRecipient, loadIncomeRecipientById, searchIncomeRecipients, selectedFromInputFields, selectedFromSavedRow, } from './income-recipient.service.js';
 import { assertRecipientInputValid, parseRecipientInputBody, validateRecipientInputFields, } from './income-recipient.validation.js';
 import { beginIncomeWizardDocumentDraft, addIncomeDocumentLine, updateIncomeDocumentLine, deleteIncomeDocumentLine, reorderIncomeDocumentLines, saveIncomeDocumentDraft, resumeIncomeDocumentDraftFromContext, generateIncomeDocumentPreview, updateIncomeDocumentDiscount, updateIncomeDocumentDraftSettings, updateIncomeDocumentNotes, updateIncomeDocumentDeliveryContact, } from './income-document-draft-editor.service.js';
-import { executeUpdateIncomeDocumentBrandingProfile, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
-import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, } from './income.types.js';
+import { executeUpdateIncomeDocumentBrandingProfile, executeUpdateIncomeDocumentBrandingProfilePreviewDraft, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
+import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, } from './income.types.js';
 const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_SELECT_ISSUER,
     INCOME_COMMAND_CREATE_CUSTOMER,
@@ -47,6 +47,7 @@ const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_GENERATE_PREVIEW,
     INCOME_COMMAND_UPDATE_DISCOUNT,
     INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
+    INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
     INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
     INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
 ]);
@@ -501,6 +502,16 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
     }
     if (command === INCOME_COMMAND_UPDATE_DISCOUNT) {
         return wizardDraftCmd(updateIncomeDocumentDiscount);
+    }
+    if (command === INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT) {
+        const scope = await loadActiveIncomeIssuerScope(ctx);
+        assertIncomeEditPermission(scope);
+        const document_branding_studio_preview = await executeUpdateIncomeDocumentBrandingProfilePreviewDraft(scope, body);
+        return {
+            ok: true,
+            command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
+            document_branding_studio_preview,
+        };
     }
     if (command === INCOME_COMMAND_UPDATE_BRANDING_PROFILE) {
         return brandingCommandResponse(ctx, command, body, executeUpdateIncomeDocumentBrandingProfile);
