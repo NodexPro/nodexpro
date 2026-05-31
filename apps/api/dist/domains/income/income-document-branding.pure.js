@@ -559,3 +559,67 @@ export function formatDocumentNumberDisplay(numberPreview) {
     const n = String(numberPreview ?? '').trim();
     return n || 'טיוטה';
 }
+const INCOME_EMAIL_TEMPLATE_TOKENS = [
+    {
+        key: 'document_type',
+        label: 'סוג מסמך',
+        token: '{{document_type}}',
+        example_value: 'הצעת מחיר',
+    },
+    {
+        key: 'document_number',
+        label: 'מספר מסמך',
+        token: '{{document_number}}',
+        example_value: 'טיוטה',
+    },
+    {
+        key: 'client_name',
+        label: 'שם לקוח',
+        token: '{{client_name}}',
+        example_value: 'לקוח לדוגמה',
+    },
+    {
+        key: 'business_name',
+        label: 'שם העסק',
+        token: '{{business_name}}',
+        example_value: 'שם העסק',
+    },
+];
+export function getEmailTemplateTokens() {
+    return INCOME_EMAIL_TEMPLATE_TOKENS.map((token) => ({ ...token }));
+}
+export function renderEmailTemplateFriendly(template, tokens = INCOME_EMAIL_TEMPLATE_TOKENS) {
+    if (!template?.trim())
+        return '';
+    let result = template;
+    for (const entry of tokens) {
+        result = result.split(entry.token).join(entry.example_value);
+    }
+    return result;
+}
+export function encodeEmailTemplateFromFriendly(friendly, tokens = INCOME_EMAIL_TEMPLATE_TOKENS) {
+    if (friendly === null || friendly === undefined)
+        return null;
+    const trimmed = friendly.trim();
+    if (!trimmed)
+        return null;
+    let result = trimmed;
+    const sorted = [...tokens].sort((a, b) => b.example_value.length - a.example_value.length);
+    for (const entry of sorted) {
+        result = result.split(entry.example_value).join(entry.token);
+    }
+    return result;
+}
+export function buildEmailTemplatePreview(subjectTemplate, bodyTemplate, tokens = INCOME_EMAIL_TEMPLATE_TOKENS) {
+    return {
+        subject_preview: renderEmailTemplateFriendly(subjectTemplate, tokens),
+        body_preview: renderEmailTemplateFriendly(bodyTemplate, tokens),
+    };
+}
+export function buildEmailTemplateEditor(subjectTemplate, bodyTemplate, tokens = INCOME_EMAIL_TEMPLATE_TOKENS) {
+    return {
+        subject_friendly: renderEmailTemplateFriendly(subjectTemplate, tokens),
+        body_friendly: renderEmailTemplateFriendly(bodyTemplate, tokens),
+        helper_text: 'אפשר להוסיף משתנים כמו סוג מסמך ומספר מסמך.',
+    };
+}

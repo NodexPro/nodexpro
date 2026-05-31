@@ -4,10 +4,13 @@ import {
   DEFAULT_COLOR_THEME_KEY,
   DEFAULT_DOCUMENT_STYLE_KEY,
   applyColorThemeToColorColumns,
+  encodeEmailTemplateFromFriendly,
   formatDocumentNumberDisplay,
   getColorThemePresets,
   getDocumentStyleTemplates,
+  getEmailTemplateTokens,
   matchColorThemeKeyFromLegacyColors,
+  renderEmailTemplateFriendly,
   resolveBrandingProfile,
   resolveColorThemePreset,
   resolveDocumentStyleTemplate,
@@ -182,9 +185,10 @@ test('preview draft command is registered and does not persist', async () => {
     'utf8',
   );
   assert.match(commands, /INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT/);
-  assert.match(commands, /previewIncomeDocumentBrandingProfileDraft/);
+  assert.match(commands, /executeUpdateIncomeDocumentBrandingProfilePreviewDraft/);
   assert.match(service, /export async function previewIncomeDocumentBrandingProfileDraft/);
   assert.match(service, /renderStudioSamplePreviewHtml\(resolved\)/);
+  assert.match(service, /email_template_preview/);
 });
 
 test('frontend panel debounces backend preview refresh', async () => {
@@ -197,4 +201,60 @@ test('frontend panel debounces backend preview refresh', async () => {
   assert.match(panel, /buildBrandingPreviewDraftBody/);
   assert.match(panel, /previewRequestRef/);
   assert.match(panel, /250/);
+});
+
+test('email template tokens expose Hebrew labels and example values', () => {
+  const tokens = getEmailTemplateTokens();
+  assert.equal(tokens.length, 4);
+  assert.deepEqual(
+    tokens.map((t) => t.key),
+    ['document_type', 'document_number', 'client_name', 'business_name'],
+  );
+  assert.ok(tokens.every((t) => t.label && t.token && t.example_value));
+  assert.equal(tokens[0]?.label, 'סוג מסמך');
+  assert.equal(tokens[0]?.example_value, 'הצעת מחיר');
+});
+
+test('email template friendly render and encode roundtrip', () => {
+  const tokens = getEmailTemplateTokens();
+  const storedSubject = '{{document_type}} מספר {{document_number}}';
+  const storedBody =
+    'שלום,\n\nמצורפת {{document_type}} מספר {{document_number}}.\n\nתודה רבה.';
+
+  const friendlySubject = renderEmailTemplateFriendly(storedSubject, tokens);
+  const friendlyBody = renderEmailTemplateFriendly(storedBody, tokens);
+
+  assert.equal(friendlySubject, 'הצעת מחיר מספר טיוטה');
+  assert.match(friendlyBody, /שלום,/);
+  assert.match(friendlyBody, /מצורפת הצעת מחיר מספר טיוטה/);
+
+  assert.equal(encodeEmailTemplateFromFriendly(friendlySubject, tokens), storedSubject);
+  assert.equal(encodeEmailTemplateFromFriendly(friendlyBody, tokens), storedBody);
+});
+
+test('branding studio aggregate exposes email template metadata', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const service = await readFile(
+    new URL('../../src/domains/income/income-document-branding.service.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(service, /email_template_tokens/);
+  assert.match(service, /email_template_editor/);
+  assert.match(service, /email_template_preview/);
+  assert.match(service, /buildEmailTemplateStudioParts/);
+});
+
+test('email tab UI uses friendly fields and Hebrew token chips', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const panel = await readFile(
+    new URL('../../../web/src/components/income/IncomeDocumentBrandingSettingsPanel.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(panel, /email_subject_friendly/);
+  assert.match(panel, /email_body_friendly/);
+  assert.match(panel, /משתנים זמינים/);
+  assert.match(panel, /nx-branding-studio-email-token/);
+  assert.match(panel, /buildBrandingModalSaveBody[\s\S]*email_subject_friendly/);
+  assert.doesNotMatch(panel, /hint="\{\{document_type\}\}/);
+  assert.doesNotMatch(panel, /value=\{draft\.email_subject_template\}/);
 });

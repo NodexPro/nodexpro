@@ -9,6 +9,8 @@ import type {
   IncomeDocumentBrandingStudioLivePreview,
   IncomeDocumentBrandingStudioPreviewDraftResult,
   IncomeDocumentStyleTemplate,
+  IncomeEmailTemplatePreview,
+  IncomeEmailTemplateToken,
   IncomeLogoSizeOption,
 } from '../../income/income-document-branding-types';
 
@@ -52,8 +54,8 @@ export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggr
     bank_account: f.bank_account ?? '',
     iban: f.iban ?? '',
     swift: f.swift ?? '',
-    email_subject_template: f.email_subject_template ?? '',
-    email_body_template: f.email_body_template ?? '',
+    email_subject_friendly: studio.email_template_editor.subject_friendly,
+    email_body_friendly: studio.email_template_editor.body_friendly,
     customer_notes: f.customer_notes ?? '',
     terms_and_conditions: f.terms_and_conditions ?? '',
   };
@@ -74,8 +76,8 @@ export function buildBrandingPreviewDraftBody(draft: IncomeBrandingStudioDraft):
     bank_account: draft.bank_account,
     iban: draft.iban,
     swift: draft.swift,
-    email_subject_template: draft.email_subject_template,
-    email_body_template: draft.email_body_template,
+    email_subject_friendly: draft.email_subject_friendly,
+    email_body_friendly: draft.email_body_friendly,
     customer_notes: draft.customer_notes,
     terms_and_conditions: draft.terms_and_conditions,
   };
@@ -101,8 +103,8 @@ export function buildBrandingModalSaveBody(
     bank_account: draft.bank_account,
     iban: draft.iban,
     swift: draft.swift,
-    email_subject_template: draft.email_subject_template,
-    email_body_template: draft.email_body_template,
+    email_subject_friendly: draft.email_subject_friendly,
+    email_body_friendly: draft.email_body_friendly,
     customer_notes: draft.customer_notes,
     terms_and_conditions: draft.terms_and_conditions,
   };
@@ -216,6 +218,170 @@ function LogoSizePicker({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function insertAtSelection(
+  value: string,
+  insertion: string,
+  selectionStart: number,
+  selectionEnd: number,
+): { next: string; cursor: number } {
+  const next = value.slice(0, selectionStart) + insertion + value.slice(selectionEnd);
+  return { next, cursor: selectionStart + insertion.length };
+}
+
+function EmailTemplateEditorSection({
+  studio,
+  draft,
+  emailPreview,
+  disabled,
+  onDraftChange,
+}: {
+  studio: IncomeDocumentBrandingStudio;
+  draft: IncomeBrandingStudioDraft;
+  emailPreview: IncomeEmailTemplatePreview;
+  disabled: boolean;
+  onDraftChange: Dispatch<SetStateAction<IncomeBrandingStudioDraft>>;
+}) {
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const subjectSelectionRef = useRef({ start: 0, end: 0 });
+  const bodySelectionRef = useRef({ start: 0, end: 0 });
+
+  const insertToken = useCallback(
+    (target: 'subject' | 'body', token: IncomeEmailTemplateToken) => {
+      if (target === 'subject') {
+        const { start, end } = subjectSelectionRef.current;
+        const { next, cursor } = insertAtSelection(draft.email_subject_friendly, token.example_value, start, end);
+        onDraftChange((d) => ({ ...d, email_subject_friendly: next }));
+        window.requestAnimationFrame(() => {
+          const input = subjectRef.current;
+          if (!input) return;
+          input.focus();
+          input.setSelectionRange(cursor, cursor);
+          subjectSelectionRef.current = { start: cursor, end: cursor };
+        });
+        return;
+      }
+      const { start, end } = bodySelectionRef.current;
+      const { next, cursor } = insertAtSelection(draft.email_body_friendly, token.example_value, start, end);
+      onDraftChange((d) => ({ ...d, email_body_friendly: next }));
+      window.requestAnimationFrame(() => {
+        const textarea = bodyRef.current;
+        if (!textarea) return;
+        textarea.focus();
+        textarea.setSelectionRange(cursor, cursor);
+        bodySelectionRef.current = { start: cursor, end: cursor };
+      });
+    },
+    [draft.email_body_friendly, draft.email_subject_friendly, onDraftChange],
+  );
+
+  return (
+    <div className="nx-branding-studio-section">
+      <div className="nx-branding-studio-email-editor">
+        <label className="nx-branding-studio-field">
+          <span className="nx-branding-studio-field__label nx-field-label">נושא אימייל</span>
+          <input
+            ref={subjectRef}
+            className="nx-branding-studio-field__input"
+            type="text"
+            value={draft.email_subject_friendly}
+            disabled={disabled}
+            onChange={(e) => onDraftChange((d) => ({ ...d, email_subject_friendly: e.target.value }))}
+            onSelect={(e) => {
+              const input = e.currentTarget;
+              subjectSelectionRef.current = { start: input.selectionStart ?? 0, end: input.selectionEnd ?? 0 };
+            }}
+          />
+          <span className="nx-branding-studio-hint">{studio.email_template_editor.helper_text}</span>
+        </label>
+
+        <div className="nx-branding-studio-email-tokens">
+          <span className="nx-branding-studio-email-tokens__label">משתנים זמינים</span>
+          <div className="nx-branding-studio-email-tokens__chips">
+            {studio.email_template_tokens.map((token) => (
+              <button
+                key={token.key}
+                type="button"
+                className="nx-branding-studio-email-token"
+                disabled={disabled}
+                onClick={() => insertToken('subject', token)}
+              >
+                {token.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <label className="nx-branding-studio-field">
+          <span className="nx-branding-studio-field__label nx-field-label">גוף האימייל</span>
+          <textarea
+            ref={bodyRef}
+            className="nx-branding-studio-field__input nx-branding-studio-field__input--textarea"
+            value={draft.email_body_friendly}
+            disabled={disabled}
+            rows={6}
+            onChange={(e) => onDraftChange((d) => ({ ...d, email_body_friendly: e.target.value }))}
+            onSelect={(e) => {
+              const textarea = e.currentTarget;
+              bodySelectionRef.current = {
+                start: textarea.selectionStart ?? 0,
+                end: textarea.selectionEnd ?? 0,
+              };
+            }}
+          />
+          <span className="nx-branding-studio-hint">{studio.email_template_editor.helper_text}</span>
+        </label>
+
+        <div className="nx-branding-studio-email-tokens">
+          <span className="nx-branding-studio-email-tokens__label">משתנים זמינים</span>
+          <div className="nx-branding-studio-email-tokens__chips">
+            {studio.email_template_tokens.map((token) => (
+              <button
+                key={token.key}
+                type="button"
+                className="nx-branding-studio-email-token"
+                disabled={disabled}
+                onClick={() => insertToken('body', token)}
+              >
+                {token.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="nx-branding-studio-email-preview" aria-label="תצוגה מקדימה של אימייל">
+        <span className="nx-branding-studio-email-preview__title">תצוגה מקדימה</span>
+        <div className="nx-branding-studio-email-preview__card">
+          <div className="nx-branding-studio-email-preview__row">
+            <span className="nx-branding-studio-email-preview__label">נושא:</span>
+            <span className="nx-branding-studio-email-preview__value">{emailPreview.subject_preview || '—'}</span>
+          </div>
+          <div className="nx-branding-studio-email-preview__row nx-branding-studio-email-preview__row--body">
+            <span className="nx-branding-studio-email-preview__label">גוף:</span>
+            <pre className="nx-branding-studio-email-preview__body">{emailPreview.body_preview || '—'}</pre>
+          </div>
+        </div>
+      </div>
+
+      <StudioField
+        label="הערות ללקוח (ברירת מחדל)"
+        value={draft.customer_notes}
+        disabled={disabled}
+        multiline
+        onChange={(v) => onDraftChange((d) => ({ ...d, customer_notes: v }))}
+      />
+      <StudioField
+        label="תנאים והגבלות"
+        value={draft.terms_and_conditions}
+        disabled={disabled}
+        multiline
+        onChange={(v) => onDraftChange((d) => ({ ...d, terms_and_conditions: v }))}
+      />
     </div>
   );
 }
@@ -366,6 +532,7 @@ function StudioSectionContent({
   commands,
   onDraftChange,
   onCommand,
+  emailPreview,
 }: {
   section: IncomeBrandingStudioSectionKey;
   styleTemplates: IncomeDocumentStyleTemplate[];
@@ -378,6 +545,7 @@ function StudioSectionContent({
   commands: IncomeBrandingCommandsMap;
   onDraftChange: Dispatch<SetStateAction<IncomeBrandingStudioDraft>>;
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
+  emailPreview: IncomeEmailTemplatePreview;
 }) {
   const disabled = busy || !canEdit;
 
@@ -521,36 +689,13 @@ function StudioSectionContent({
   }
 
   return (
-    <div className="nx-branding-studio-section">
-      <StudioField
-        label="נושא אימייל"
-        value={draft.email_subject_template}
-        disabled={disabled}
-        hint="{{document_type}} {{document_number}}"
-        onChange={(v) => onDraftChange((d) => ({ ...d, email_subject_template: v }))}
-      />
-      <StudioField
-        label="גוף אימייל"
-        value={draft.email_body_template}
-        disabled={disabled}
-        multiline
-        onChange={(v) => onDraftChange((d) => ({ ...d, email_body_template: v }))}
-      />
-      <StudioField
-        label="הערות ללקוח (ברירת מחדל)"
-        value={draft.customer_notes}
-        disabled={disabled}
-        multiline
-        onChange={(v) => onDraftChange((d) => ({ ...d, customer_notes: v }))}
-      />
-      <StudioField
-        label="תנאים והגבלות"
-        value={draft.terms_and_conditions}
-        disabled={disabled}
-        multiline
-        onChange={(v) => onDraftChange((d) => ({ ...d, terms_and_conditions: v }))}
-      />
-    </div>
+    <EmailTemplateEditorSection
+      studio={studio}
+      draft={draft}
+      emailPreview={emailPreview}
+      disabled={disabled}
+      onDraftChange={onDraftChange}
+    />
   );
 }
 
@@ -574,12 +719,14 @@ export function IncomeDocumentBrandingSettingsPanel({
   const [livePreview, setLivePreview] = useState<IncomeDocumentBrandingStudioLivePreview>(
     studio.studio_live_preview,
   );
+  const [emailPreview, setEmailPreview] = useState<IncomeEmailTemplatePreview>(studio.email_template_preview);
   const [styleTemplates, setStyleTemplates] = useState(studio.document_style_templates);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     setLivePreview(studio.studio_live_preview);
+    setEmailPreview(studio.email_template_preview);
     setStyleTemplates(studio.document_style_templates);
     setPreviewError(null);
   }, [profile]);
@@ -596,6 +743,7 @@ export function IncomeDocumentBrandingSettingsPanel({
         if (result) {
           setLivePreview(result.studio_live_preview);
           setStyleTemplates(result.document_style_templates);
+          setEmailPreview(result.email_template_preview);
         }
       } catch {
         if (requestId !== previewRequestRef.current) return;
@@ -672,6 +820,7 @@ export function IncomeDocumentBrandingSettingsPanel({
           commands={commands}
           onDraftChange={onDraftChange}
           onCommand={onCommand}
+          emailPreview={emailPreview}
         />
       </div>
     </div>

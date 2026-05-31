@@ -196,6 +196,24 @@ export type IncomeDocumentBrandingStudioLivePreview = {
   sample_document_number_display: string | null;
 };
 
+export type IncomeEmailTemplateToken = {
+  key: string;
+  label: string;
+  token: string;
+  example_value: string;
+};
+
+export type IncomeEmailTemplateEditor = {
+  subject_friendly: string;
+  body_friendly: string;
+  helper_text: string;
+};
+
+export type IncomeEmailTemplatePreview = {
+  subject_preview: string;
+  body_preview: string;
+};
+
 /** Ephemeral preview result — no DB write. */
 export type IncomeDocumentBrandingStudioPreviewDraftResult = {
   studio_live_preview: IncomeDocumentBrandingStudioLivePreview;
@@ -204,6 +222,7 @@ export type IncomeDocumentBrandingStudioPreviewDraftResult = {
   selected_layout_template_key: IncomeLayoutTemplateKey | null;
   selected_logo_size_key: IncomeLogoSizeKey;
   document_style_templates: IncomeDocumentStyleTemplate[];
+  email_template_preview: IncomeEmailTemplatePreview;
 };
 
 export type IncomeDocumentBrandingStudioFields = {
@@ -234,6 +253,9 @@ export type IncomeDocumentBrandingStudio = {
   selected_logo_size_key: IncomeLogoSizeKey;
   advanced_layout_visible: boolean;
   studio_live_preview: IncomeDocumentBrandingStudioLivePreview;
+  email_template_tokens: IncomeEmailTemplateToken[];
+  email_template_editor: IncomeEmailTemplateEditor;
+  email_template_preview: IncomeEmailTemplatePreview;
   fields: IncomeDocumentBrandingStudioFields;
   save_section_key: 'modal';
   save_command: typeof INCOME_COMMAND_UPDATE_BRANDING_PROFILE;

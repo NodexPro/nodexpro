@@ -4,7 +4,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { isSupabaseMissingColumnError, isSupabaseMissingTableError, throwIfSupabaseError, } from '../../shared/supabase-errors.js';
 import { assertFileAllowedForSettingsImage, validateOrgFileOwnership, } from '../file-access/file-access.service.js';
 import { renderStudioSamplePreviewHtml } from './income-document-branding-preview.renderer.js';
-import { DEFAULT_DISPLAY_OPTIONS, DEFAULT_PAYMENT_METHODS, DEFAULT_PRIMARY_COLOR, DEFAULT_SECONDARY_COLOR, DEFAULT_COLOR_THEME_KEY, DEFAULT_DOCUMENT_STYLE_KEY, DEFAULT_LOGO_SIZE_KEY, normalizeClientBlockPosition, optionalTrimmedString, parseDisplayOptionsJson, parsePaymentMethodsJson, applyColorThemeToColorColumns, applyDocumentStyleTemplateKey, getColorThemePresets, getDocumentStyleTemplates, getLayoutTemplates, getLogoSizeOptions, resolveBrandingProfile, resolveColorThemeKeyForRow, resolveColorThemePreset, resolveDocumentStyleKeyForRow, resolveDocumentStyleTemplate, resolveLayoutTemplate, resolveLogoSizeKey, serializeDisplayOptionsJson, serializePaymentMethodsJson, } from './income-document-branding.pure.js';
+import { DEFAULT_DISPLAY_OPTIONS, DEFAULT_PAYMENT_METHODS, DEFAULT_PRIMARY_COLOR, DEFAULT_SECONDARY_COLOR, DEFAULT_COLOR_THEME_KEY, DEFAULT_DOCUMENT_STYLE_KEY, DEFAULT_LOGO_SIZE_KEY, normalizeClientBlockPosition, optionalTrimmedString, parseDisplayOptionsJson, parsePaymentMethodsJson, applyColorThemeToColorColumns, applyDocumentStyleTemplateKey, getColorThemePresets, getDocumentStyleTemplates, getLayoutTemplates, getLogoSizeOptions, resolveBrandingProfile, resolveColorThemeKeyForRow, resolveColorThemePreset, resolveDocumentStyleKeyForRow, resolveDocumentStyleTemplate, resolveLayoutTemplate, resolveLogoSizeKey, serializeDisplayOptionsJson, serializePaymentMethodsJson, getEmailTemplateTokens, buildEmailTemplateEditor, buildEmailTemplatePreview, encodeEmailTemplateFromFriendly, } from './income-document-branding.pure.js';
 import { INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, } from './income-document-branding.types.js';
 const BUCKET_ORG_ASSETS = 'organization-assets';
 const BRANDING_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -129,8 +129,8 @@ async function bootstrapFromOrganizationSettings(scope) {
         bank_account: typeof s?.bank_account_number === 'string' ? s.bank_account_number : null,
         iban: typeof s?.iban === 'string' ? s.iban : null,
         swift: typeof s?.swift === 'string' ? s.swift : null,
-        email_subject_template: '{{document_type}} {{document_number}}',
-        email_body_template: 'שלום,\n\nמצורף {{document_type}} מספר {{document_number}}\n\nתודה רבה.',
+        email_subject_template: '{{document_type}} מספר {{document_number}}',
+        email_body_template: 'שלום,\n\nמצורפת {{document_type}} מספר {{document_number}}.\n\nתודה רבה.',
         display_options: serializeDisplayOptionsJson(display),
         payment_methods: serializePaymentMethodsJson(DEFAULT_PAYMENT_METHODS),
         document_attachments: [],
@@ -176,12 +176,21 @@ export async function loadResolvedBrandingProfile(scope) {
         : null;
     return resolveBrandingProfile(row, { logo_data_url, signature_data_url });
 }
+function buildEmailTemplateStudioParts(resolved) {
+    const tokens = getEmailTemplateTokens();
+    return {
+        email_template_tokens: tokens,
+        email_template_editor: buildEmailTemplateEditor(resolved.email_subject_template, resolved.email_body_template, tokens),
+        email_template_preview: buildEmailTemplatePreview(resolved.email_subject_template, resolved.email_body_template, tokens),
+    };
+}
 function buildDocumentBrandingStudio(resolved, row) {
     const display = resolved.display_options;
     const colorThemeKey = resolved.color_theme_key;
     const layoutOverride = row.layout_template_key?.trim()
         ? row.layout_template_key.trim()
         : null;
+    const emailParts = buildEmailTemplateStudioParts(resolved);
     return {
         navigation_sections: [
             { key: 'document_style', label: '🎨 סגנון מסמך' },
@@ -205,6 +214,7 @@ function buildDocumentBrandingStudio(resolved, row) {
             sample_document_type_label: 'הצעת מחיר',
             sample_document_number_display: null,
         },
+        ...emailParts,
         fields: {
             show_logo: display.show_logo,
             company_subtitle: resolved.company_subtitle,
@@ -307,6 +317,7 @@ export async function previewIncomeDocumentBrandingProfileDraft(scope, body) {
     const layoutOverride = draftRow.layout_template_key?.trim()
         ? draftRow.layout_template_key.trim()
         : null;
+    const emailParts = buildEmailTemplateStudioParts(resolved);
     return {
         studio_live_preview: {
             visible: true,
@@ -319,7 +330,26 @@ export async function previewIncomeDocumentBrandingProfileDraft(scope, body) {
         selected_layout_template_key: layoutOverride,
         selected_logo_size_key: resolved.logo_size_key,
         document_style_templates: getDocumentStyleTemplates(resolved.color_theme_key),
+        email_template_preview: emailParts.email_template_preview,
     };
+}
+function applyEmailTemplatePatch(body, patch) {
+    const tokens = getEmailTemplateTokens();
+    if (body.email_subject_friendly !== undefined || body.email_body_friendly !== undefined) {
+        if (body.email_subject_friendly !== undefined) {
+            patch.email_subject_template = encodeEmailTemplateFromFriendly(String(body.email_subject_friendly), tokens);
+        }
+        if (body.email_body_friendly !== undefined) {
+            patch.email_body_template = encodeEmailTemplateFromFriendly(String(body.email_body_friendly), tokens);
+        }
+        return;
+    }
+    if (body.email_subject_template !== undefined) {
+        patch.email_subject_template = optionalTrimmedString(body.email_subject_template, 500);
+    }
+    if (body.email_body_template !== undefined) {
+        patch.email_body_template = optionalTrimmedString(body.email_body_template, 8000);
+    }
 }
 function applyModalBrandingPatch(row, body, patch) {
     if (body.clear_logo === true) {
@@ -364,8 +394,7 @@ function applyModalBrandingPatch(row, body, patch) {
     patch.bank_account = optionalTrimmedString(body.bank_account, 100);
     patch.swift = optionalTrimmedString(body.swift, 50);
     patch.iban = optionalTrimmedString(body.iban, 50);
-    patch.email_subject_template = optionalTrimmedString(body.email_subject_template, 500);
-    patch.email_body_template = optionalTrimmedString(body.email_body_template, 8000);
+    applyEmailTemplatePatch(body, patch);
     patch.customer_notes = optionalTrimmedString(body.customer_notes, 4000);
     patch.terms_and_conditions = optionalTrimmedString(body.terms_and_conditions, 8000);
     const clientPos = normalizeClientBlockPosition(body.client_block_position ?? row.client_block_position);
@@ -480,8 +509,7 @@ export async function updateIncomeDocumentBrandingProfile(scope, body) {
         patch.client_block_position = clientPos;
     }
     else if (section === 'email_templates') {
-        patch.email_subject_template = optionalTrimmedString(body.email_subject_template, 500);
-        patch.email_body_template = optionalTrimmedString(body.email_body_template, 8000);
+        applyEmailTemplatePatch(body, patch);
     }
     else if (section === 'payment_methods') {
         const methods = parsePaymentMethodsJson(row.payment_methods);

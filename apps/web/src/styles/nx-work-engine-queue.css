@@ -1254,6 +1254,11 @@
   flex-direction: column;
   gap: 4px;
   font-size: 13px;
+}
+
+.nx-we-preview-paper__content .nx-doc__doc-type-banner--subtle .nx-doc__dates,
+.nx-we-preview-paper__content .nx-doc__header--modern .nx-doc__dates,
+.nx-we-preview-paper__content .nx-doc__header--minimal .nx-doc__dates {
   color: #475569;
 }
 

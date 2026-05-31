@@ -200,3 +200,19 @@
   line-height: var(--nx-type-helper-line-height);
   color: var(--nx-type-muted-color);
 }
+
+/*
+ * Backend-rendered document preview — gradient title banner contrast.
+ * Scoped to classic-style banners only; subtle variants keep dark-on-light hierarchy.
+ */
+.nx-branding-studio-preview__doc .nx-doc__doc-type-banner:not(.nx-doc__doc-type-banner--subtle) .nx-doc__title,
+.nx-we-preview-paper__content .nx-doc__doc-type-banner:not(.nx-doc__doc-type-banner--subtle) .nx-doc__title {
+  color: #ffffff !important;
+}
+
+.nx-branding-studio-preview__doc .nx-doc__doc-type-banner:not(.nx-doc__doc-type-banner--subtle) .nx-doc__dates,
+.nx-branding-studio-preview__doc .nx-doc__doc-type-banner:not(.nx-doc__doc-type-banner--subtle) .nx-doc__dates span,
+.nx-we-preview-paper__content .nx-doc__doc-type-banner:not(.nx-doc__doc-type-banner--subtle) .nx-doc__dates,
+.nx-we-preview-paper__content .nx-doc__doc-type-banner:not(.nx-doc__doc-type-banner--subtle) .nx-doc__dates span {
+  color: rgba(255, 255, 255, 0.85) !important;
+}

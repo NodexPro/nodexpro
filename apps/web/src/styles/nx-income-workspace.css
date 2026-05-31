@@ -1099,6 +1099,101 @@
   font-size: 13px;
 }
 
+.nx-branding-studio-email-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nx-branding-studio-email-tokens {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nx-branding-studio-email-tokens__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.nx-branding-studio-email-tokens__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.nx-branding-studio-email-token {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.nx-branding-studio-email-token:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.nx-branding-studio-email-token:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.nx-branding-studio-email-preview {
+  margin-top: 8px;
+  margin-bottom: 12px;
+}
+
+.nx-branding-studio-email-preview__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+.nx-branding-studio-email-preview__card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nx-branding-studio-email-preview__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nx-branding-studio-email-preview__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.nx-branding-studio-email-preview__value {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.nx-branding-studio-email-preview__body {
+  margin: 0;
+  font-family: Arial, Helvetica, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #0f172a;
+  white-space: pre-wrap;
+}
+
 /* Backend mini-preview markup (cards) */
 .nx-studio-theme-mini,
 .nx-studio-style-mini {
