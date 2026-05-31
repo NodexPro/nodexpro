@@ -4,8 +4,7 @@ import {
   isSupabaseMissingColumnError,
   isSupabaseMissingTableError,
 } from '../../src/shared/supabase-errors.js';
-import { applyDocumentStyleToColorColumns } from '../../src/domains/income/income-document-branding.pure.js';
-import { resolveDocumentStylePreset } from '../../src/domains/income/income-document-branding.pure.js';
+import { applyColorThemeToColorColumns, resolveColorThemePreset } from '../../src/domains/income/income-document-branding.pure.js';
 
 test('isSupabaseMissingColumnError detects PGRST204 for document_style_key', () => {
   assert.equal(
@@ -34,10 +33,10 @@ test('isSupabaseMissingTableError detects missing branding table', () => {
   );
 });
 
-test('modal save patch includes document_style_key and legacy color columns', () => {
-  const style = resolveDocumentStylePreset('elegant_purple')!;
-  const patch = applyDocumentStyleToColorColumns(style);
-  assert.equal(patch.document_style_key, 'elegant_purple');
+test('modal save patch includes color_theme_key and legacy color columns', () => {
+  const theme = resolveColorThemePreset('royal_purple')!;
+  const patch = applyColorThemeToColorColumns(theme);
+  assert.equal(patch.color_theme_key, 'royal_purple');
   assert.equal(patch.table_header_color, '#4c3d6e');
-  assert.equal(patch.primary_color, style.gradient.from);
+  assert.equal(patch.primary_color, theme.gradient.from);
 });

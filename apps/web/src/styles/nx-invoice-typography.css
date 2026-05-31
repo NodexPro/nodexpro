@@ -4,7 +4,7 @@
  */
 
 :root {
-  --nx-font-family-invoice: Inter, Arial, Helvetica, sans-serif;
+  --nx-font-family-invoice: Arial, Helvetica, "Segoe UI", sans-serif;
 
   --nx-type-page-title-size: 32px;
   --nx-type-page-title-weight: 700;

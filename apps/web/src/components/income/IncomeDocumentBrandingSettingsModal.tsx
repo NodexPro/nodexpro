@@ -29,7 +29,7 @@ export function IncomeDocumentBrandingSettingsModal({
   onCommand,
   portal = false,
 }: Props) {
-  const { activeTab, setActiveTab, draft, setDraft } = useBrandingModalState(profile);
+  const { activeSection, setActiveSection, draft, setDraft } = useBrandingModalState(profile);
 
   useEffect(() => {
     if (!open) return;
@@ -59,7 +59,7 @@ export function IncomeDocumentBrandingSettingsModal({
         if (!busy) onClose();
       }}
     >
-      <div className="nx-income-branding-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="nx-income-branding-modal nx-income-branding-modal--studio" onClick={(e) => e.stopPropagation()}>
         <div className="nx-income-branding-modal__head">
           <h2 id="income-branding-title" className="nx-income-branding-modal__title nx-modal-title">
             {title}
@@ -71,8 +71,8 @@ export function IncomeDocumentBrandingSettingsModal({
               profile={profile}
               commands={commands}
               busy={busy}
-              activeTab={activeTab}
-              onActiveTabChange={setActiveTab}
+              activeSection={activeSection}
+              onActiveSectionChange={setActiveSection}
               draft={draft}
               onDraftChange={setDraft}
               onCommand={onCommand}

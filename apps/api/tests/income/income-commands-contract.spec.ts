@@ -119,15 +119,17 @@ test('update_income_document_discount command is registered', () => {
   assert.match(detailsSource, /totals_block/);
 });
 
-test('document branding aggregate exposes document style presets', async () => {
+test('document branding aggregate exposes studio shape', async () => {
   const { readFile } = await import('node:fs/promises');
   const types = await readFile(
     new URL('../../src/domains/income/income-document-branding.types.ts', import.meta.url),
     'utf8',
   );
-  assert.match(types, /document_style_presets/);
+  assert.match(types, /document_branding_studio/);
+  assert.match(types, /color_theme_presets/);
+  assert.match(types, /document_style_templates/);
+  assert.match(types, /selected_color_theme_key/);
   assert.match(types, /selected_document_style_key/);
-  assert.match(types, /document_style_key/);
 });
 
 test('document branding profile commands and aggregate are registered', () => {

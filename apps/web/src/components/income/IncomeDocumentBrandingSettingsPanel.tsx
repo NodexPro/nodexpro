@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import type {
+  IncomeBrandingStudioDraft,
+  IncomeBrandingStudioSectionKey,
+  IncomeColorThemePreset,
   IncomeDocumentBrandingAssetSlot,
-  IncomeDocumentBrandingField,
   IncomeDocumentBrandingProfileAggregate,
-  IncomeDocumentBrandingTab,
-  IncomeDocumentStylePreset,
+  IncomeDocumentBrandingStudio,
+  IncomeDocumentStyleTemplate,
+  IncomeLogoSizeOption,
 } from '../../income/income-document-branding-types';
 
 export type IncomeBrandingCommandsMap = {
@@ -17,188 +20,236 @@ type Props = {
   profile: IncomeDocumentBrandingProfileAggregate;
   commands: IncomeBrandingCommandsMap;
   busy: boolean;
-  activeTab: string;
-  onActiveTabChange: (key: string) => void;
-  draft: Record<string, string>;
-  onDraftChange: Dispatch<SetStateAction<Record<string, string>>>;
+  activeSection: IncomeBrandingStudioSectionKey;
+  onActiveSectionChange: (key: IncomeBrandingStudioSectionKey) => void;
+  draft: IncomeBrandingStudioDraft;
+  onDraftChange: Dispatch<SetStateAction<IncomeBrandingStudioDraft>>;
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
 };
 
-export function fieldToDraftValue(field: IncomeDocumentBrandingField): string {
-  return typeof field.value === 'boolean' ? (field.value ? 'true' : 'false') : String(field.value ?? '');
+function boolToDraft(value: boolean): string {
+  return value ? 'true' : 'false';
 }
 
-export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggregate): Record<string, string> {
-  const draft: Record<string, string> = {
-    document_style_key: profile.selected_document_style_key,
+export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggregate): IncomeBrandingStudioDraft {
+  const studio = profile.document_branding_studio;
+  const f = studio.fields;
+  return {
+    document_style_key: studio.selected_document_style_key,
+    color_theme_key: studio.selected_color_theme_key,
+    layout_template_key: studio.selected_layout_template_key ?? '',
+    logo_size_key: studio.selected_logo_size_key,
+    show_logo: boolToDraft(f.show_logo),
+    company_subtitle: f.company_subtitle ?? '',
+    show_signature: boolToDraft(f.show_signature),
+    footer_text: f.footer_text ?? '',
+    bank_name: f.bank_name ?? '',
+    bank_branch: f.bank_branch ?? '',
+    bank_account: f.bank_account ?? '',
+    iban: f.iban ?? '',
+    swift: f.swift ?? '',
+    email_subject_template: f.email_subject_template ?? '',
+    email_body_template: f.email_body_template ?? '',
+    customer_notes: f.customer_notes ?? '',
+    terms_and_conditions: f.terms_and_conditions ?? '',
   };
-  for (const tab of profile.tabs) {
-    for (const field of tab.fields) {
-      if (field.visible) draft[field.key] = fieldToDraftValue(field);
-    }
-  }
-  return draft;
 }
 
 export function buildBrandingModalSaveBody(
   profile: IncomeDocumentBrandingProfileAggregate,
-  draft: Record<string, string>,
+  draft: IncomeBrandingStudioDraft,
 ): Record<string, unknown> {
-  const body: Record<string, unknown> = { section: profile.save_section_key };
-  for (const tab of profile.tabs) {
-    for (const field of tab.fields) {
-      if (!field.visible) continue;
-      if (field.input_type === 'boolean') {
-        body[field.key] = draft[field.key] === 'true';
-      } else if (field.input_type !== 'document_style') {
-        body[field.key] = draft[field.key] ?? '';
-      }
-    }
-  }
-  body.document_style_key = draft.document_style_key ?? profile.selected_document_style_key;
-  return body;
+  const studio = profile.document_branding_studio;
+  return {
+    section: studio.save_section_key,
+    document_style_key: draft.document_style_key,
+    color_theme_key: draft.color_theme_key,
+    layout_template_key: draft.layout_template_key.trim() ? draft.layout_template_key : null,
+    logo_size_key: draft.logo_size_key,
+    show_logo: draft.show_logo === 'true',
+    company_subtitle: draft.company_subtitle,
+    show_signature: draft.show_signature === 'true',
+    footer_text: draft.footer_text,
+    bank_name: draft.bank_name,
+    bank_branch: draft.bank_branch,
+    bank_account: draft.bank_account,
+    iban: draft.iban,
+    swift: draft.swift,
+    email_subject_template: draft.email_subject_template,
+    email_body_template: draft.email_body_template,
+    customer_notes: draft.customer_notes,
+    terms_and_conditions: draft.terms_and_conditions,
+  };
 }
 
-function BrandingFieldInput({
-  field,
-  value,
-  disabled,
-  onChange,
-}: {
-  field: IncomeDocumentBrandingField;
-  value: string;
-  disabled: boolean;
-  onChange: (next: string) => void;
-}) {
-  if (field.input_type === 'boolean') {
-    return (
-      <label className="nx-income-branding-field nx-income-branding-field--bool">
-        <input
-          type="checkbox"
-          checked={value === 'true'}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
-        />
-        <span>{field.label}</span>
-      </label>
-    );
-  }
-  if (field.input_type === 'select' && field.options?.length) {
-    return (
-      <label className="nx-income-branding-field">
-        <span className="nx-income-branding-field__label nx-field-label">{field.label}</span>
-        <select
-          className="nx-income-branding-input"
-          value={value}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {field.options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-    );
-  }
-  if (field.input_type === 'textarea') {
-    return (
-      <label className="nx-income-branding-field">
-        <span className="nx-income-branding-field__label nx-field-label">{field.label}</span>
-        <textarea
-          className="nx-income-branding-input nx-income-branding-input--textarea"
-          value={value}
-          disabled={disabled}
-          rows={3}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        {field.hint ? <span className="nx-income-branding-hint">{field.hint}</span> : null}
-      </label>
-    );
-  }
+function MarkupPreview({ markup, className }: { markup: string; className?: string }) {
   return (
-    <label className="nx-income-branding-field">
-      <span className="nx-income-branding-field__label nx-field-label">{field.label}</span>
-      <input
-        className="nx-income-branding-input"
-        type="text"
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {field.hint ? <span className="nx-income-branding-hint">{field.hint}</span> : null}
-    </label>
+    <div
+      className={className}
+      aria-hidden
+      dangerouslySetInnerHTML={{ __html: markup }}
+    />
   );
 }
 
-function DocumentStyleCard({
-  preset,
+function DocumentStyleTemplateCard({
+  template,
   selected,
   disabled,
   onSelect,
 }: {
-  preset: IncomeDocumentStylePreset;
+  template: IncomeDocumentStyleTemplate;
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
 }) {
-  const gradient = `linear-gradient(135deg, ${preset.gradient.from} 0%, ${preset.gradient.to} 100%)`;
   return (
     <button
       type="button"
       role="option"
       aria-selected={selected}
       disabled={disabled}
-      className={`nx-income-branding-style-card${selected ? ' nx-income-branding-style-card--selected' : ''}`}
+      className={`nx-branding-studio-style-card${selected ? ' nx-branding-studio-style-card--selected' : ''}`}
       onClick={onSelect}
     >
-      <div className="nx-income-branding-style-card__preview" aria-hidden>
-        <div className="nx-income-branding-style-card__header" style={{ background: gradient }} />
-        <div
-          className="nx-income-branding-style-card__recipient"
-          style={{
-            background: preset.recipient_block_background,
-            borderColor: preset.recipient_block_border,
-          }}
-        />
-        <div className="nx-income-branding-style-card__table" style={{ background: preset.table_header_color }} />
-        <div className="nx-income-branding-style-card__totals" style={{ borderColor: preset.totals_accent_color }} />
-      </div>
-      <span className="nx-income-branding-style-card__label">{preset.label}</span>
-      {selected ? <span className="nx-income-branding-style-card__check" aria-hidden>✓</span> : null}
+      <MarkupPreview markup={template.mini_preview_markup} className="nx-branding-studio-style-card__mini" />
+      <span className="nx-branding-studio-style-card__title">{template.label}</span>
+      <span className="nx-branding-studio-style-card__desc">{template.description}</span>
+      {selected ? <span className="nx-branding-studio-style-card__check" aria-hidden>✓</span> : null}
     </button>
   );
 }
 
-function DocumentStylePicker({
-  label,
-  presets,
-  selectedKey,
+function ColorThemeCard({
+  preset,
+  selected,
   disabled,
   onSelect,
 }: {
-  label: string;
-  presets: IncomeDocumentStylePreset[];
+  preset: IncomeColorThemePreset;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={selected}
+      disabled={disabled}
+      className={`nx-branding-studio-theme-card${selected ? ' nx-branding-studio-theme-card--selected' : ''}`}
+      onClick={onSelect}
+    >
+      <MarkupPreview markup={preset.mini_preview_markup} className="nx-branding-studio-theme-card__mini" />
+      <span className="nx-branding-studio-theme-card__label">{preset.label}</span>
+      {selected ? <span className="nx-branding-studio-theme-card__check" aria-hidden>✓</span> : null}
+    </button>
+  );
+}
+
+function LogoSizePicker({
+  options,
+  selectedKey,
+  logoPreviewUrl,
+  disabled,
+  onSelect,
+}: {
+  options: IncomeLogoSizeOption[];
   selectedKey: string;
+  logoPreviewUrl: string | null;
   disabled: boolean;
   onSelect: (key: string) => void;
 }) {
   return (
-    <div className="nx-income-branding-style-presets">
-      <div className="nx-income-branding-field__label nx-field-label">{label}</div>
-      <div className="nx-income-branding-style-presets__grid" role="listbox" aria-label={label}>
-        {presets.map((preset) => (
-          <DocumentStyleCard
-            key={preset.key}
-            preset={preset}
-            selected={preset.key === selectedKey}
-            disabled={disabled}
-            onSelect={() => onSelect(preset.key)}
+    <div className="nx-branding-studio-logo-sizes">
+      <div className="nx-branding-studio-logo-sizes__preview">
+        {logoPreviewUrl ? (
+          <img
+            src={logoPreviewUrl}
+            alt=""
+            className={`nx-branding-studio-logo-sizes__img nx-branding-studio-logo-sizes__img--${selectedKey}`}
           />
+        ) : (
+          <div className={`nx-branding-studio-logo-sizes__placeholder nx-branding-studio-logo-sizes__img--${selectedKey}`}>
+            לוגו
+          </div>
+        )}
+      </div>
+      <div className="nx-branding-studio-logo-sizes__options" role="listbox" aria-label="גודל לוגו">
+        {options.map((opt) => (
+          <button
+            key={opt.key}
+            type="button"
+            role="option"
+            aria-selected={opt.key === selectedKey}
+            disabled={disabled}
+            className={`nx-branding-studio-logo-size${opt.key === selectedKey ? ' nx-branding-studio-logo-size--selected' : ''}`}
+            onClick={() => onSelect(opt.key)}
+          >
+            {opt.label}
+          </button>
         ))}
       </div>
     </div>
+  );
+}
+
+function StudioField({
+  label,
+  value,
+  disabled,
+  multiline,
+  hint,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  multiline?: boolean;
+  hint?: string;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <label className="nx-branding-studio-field">
+      <span className="nx-branding-studio-field__label nx-field-label">{label}</span>
+      {multiline ? (
+        <textarea
+          className="nx-branding-studio-field__input nx-branding-studio-field__input--textarea"
+          value={value}
+          disabled={disabled}
+          rows={3}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      ) : (
+        <input
+          className="nx-branding-studio-field__input"
+          type="text"
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+      {hint ? <span className="nx-branding-studio-hint">{hint}</span> : null}
+    </label>
+  );
+}
+
+function StudioBoolField({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <label className="nx-branding-studio-field nx-branding-studio-field--bool">
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <span>{label}</span>
+    </label>
   );
 }
 
@@ -247,22 +298,22 @@ function AssetUploadSlot({
   }, [canEdit, onCommand, slot.can_remove, slotKind, updateCommand]);
 
   return (
-    <div className="nx-income-branding-asset">
-      <div className="nx-income-branding-field__label nx-field-label">{slot.label}</div>
+    <div className="nx-branding-studio-asset">
+      <div className="nx-branding-studio-field__label nx-field-label">{slot.label}</div>
       {slot.recommended_size_hint ? (
-        <p className="nx-income-branding-hint nx-income-branding-asset__recommended">{slot.recommended_size_hint}</p>
+        <p className="nx-branding-studio-hint nx-branding-studio-asset__recommended">{slot.recommended_size_hint}</p>
       ) : null}
-      <div className="nx-income-branding-asset__frame">
+      <div className="nx-branding-studio-asset__frame">
         {slot.preview_data_url ? (
-          <img src={slot.preview_data_url} alt="" className="nx-income-branding-asset__preview" />
+          <img src={slot.preview_data_url} alt="" className="nx-branding-studio-asset__preview" />
         ) : (
-          <div className="nx-income-branding-asset__empty">אין קובץ</div>
+          <div className="nx-branding-studio-asset__empty">אין קובץ</div>
         )}
       </div>
-      {slot.hint ? <div className="nx-income-branding-hint">{slot.hint}</div> : null}
-      <div className="nx-income-branding-asset__actions">
+      {slot.hint ? <div className="nx-branding-studio-hint">{slot.hint}</div> : null}
+      <div className="nx-branding-studio-asset__actions">
         {canUpload ? (
-          <label className="nx-btn nx-btn-taxes-compact nx-income-branding-upload">
+          <label className="nx-btn nx-btn-taxes-compact nx-branding-studio-upload">
             {slot.preview_data_url ? 'החלפה' : 'העלאה'}
             <input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} hidden onChange={(e) => void onFile(e)} />
           </label>
@@ -277,30 +328,96 @@ function AssetUploadSlot({
   );
 }
 
-function TabPanel({
-  tab,
+function StudioSectionContent({
+  section,
+  studio,
   profile,
-  commands,
   draft,
   busy,
   canEdit,
-  onCommand,
+  commands,
   onDraftChange,
+  onCommand,
 }: {
-  tab: IncomeDocumentBrandingTab;
+  section: IncomeBrandingStudioSectionKey;
+  studio: IncomeDocumentBrandingStudio;
   profile: IncomeDocumentBrandingProfileAggregate;
-  commands: IncomeBrandingCommandsMap;
-  draft: Record<string, string>;
+  draft: IncomeBrandingStudioDraft;
   busy: boolean;
   canEdit: boolean;
+  commands: IncomeBrandingCommandsMap;
+  onDraftChange: Dispatch<SetStateAction<IncomeBrandingStudioDraft>>;
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
-  onDraftChange: Dispatch<SetStateAction<Record<string, string>>>;
 }) {
-  const styleField = tab.fields.find((f) => f.input_type === 'document_style');
+  const disabled = busy || !canEdit;
 
-  return (
-    <div className="nx-income-branding-tab-panel">
-      {tab.key === 'design' ? (
+  if (section === 'document_style') {
+    return (
+      <div className="nx-branding-studio-section">
+        <h3 className="nx-branding-studio-section__title">סגנון מסמך</h3>
+        <p className="nx-branding-studio-section__lead">בחרו את מבנה המסמך — הפריסה, הריווח והאופי הכללי.</p>
+        <div className="nx-branding-studio-style-grid" role="listbox" aria-label="סגנון מסמך">
+          {studio.document_style_templates.map((template) => (
+            <DocumentStyleTemplateCard
+              key={template.key}
+              template={template}
+              selected={draft.document_style_key === template.key}
+              disabled={disabled}
+              onSelect={() => onDraftChange((d) => ({ ...d, document_style_key: template.key }))}
+            />
+          ))}
+        </div>
+        <h3 className="nx-branding-studio-section__title nx-branding-studio-section__title--spaced">ערכת צבעים</h3>
+        <p className="nx-branding-studio-section__lead">בחרו צבעים — גרדיאנט, כותרת טבלה, סה״כ וקו הדגשה ללקוח.</p>
+        <div className="nx-branding-studio-theme-grid" role="listbox" aria-label="ערכת צבעים">
+          {studio.color_theme_presets.map((preset) => (
+            <ColorThemeCard
+              key={preset.key}
+              preset={preset}
+              selected={draft.color_theme_key === preset.key}
+              disabled={disabled}
+              onSelect={() => onDraftChange((d) => ({ ...d, color_theme_key: preset.key }))}
+            />
+          ))}
+        </div>
+        {studio.advanced_layout_visible ? (
+          <details className="nx-branding-studio-advanced">
+            <summary className="nx-branding-studio-advanced__summary">מתקדם — פריסת בלוקים</summary>
+            <div className="nx-branding-studio-advanced__body">
+              {studio.layout_templates.map((layout) => (
+                <label key={layout.key} className="nx-branding-studio-advanced__option">
+                  <input
+                    type="radio"
+                    name="layout_template_key"
+                    checked={
+                      (draft.layout_template_key || studio.selected_layout_template_key || '') === layout.key ||
+                      (!draft.layout_template_key && !studio.selected_layout_template_key && false)
+                    }
+                    disabled={disabled}
+                    onChange={() => onDraftChange((d) => ({ ...d, layout_template_key: layout.key }))}
+                  />
+                  <MarkupPreview markup={layout.mini_preview_markup} className="nx-branding-studio-advanced__mini" />
+                  <span>{layout.label}</span>
+                </label>
+              ))}
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                disabled={disabled}
+                onClick={() => onDraftChange((d) => ({ ...d, layout_template_key: '' }))}
+              >
+                ברירת מחדל לפי סגנון
+              </button>
+            </div>
+          </details>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (section === 'logo_branding') {
+    return (
+      <div className="nx-branding-studio-section">
         <AssetUploadSlot
           slot={profile.logo}
           slotKind="logo"
@@ -309,8 +426,33 @@ function TabPanel({
           updateCommand={commands.update_branding_profile}
           onCommand={onCommand}
         />
-      ) : null}
-      {tab.key === 'business' ? (
+        <StudioBoolField
+          label="הצג לוגו במסמך"
+          checked={draft.show_logo === 'true'}
+          disabled={disabled}
+          onChange={(v) => onDraftChange((d) => ({ ...d, show_logo: boolToDraft(v) }))}
+        />
+        <LogoSizePicker
+          options={studio.logo_size_options}
+          selectedKey={draft.logo_size_key}
+          logoPreviewUrl={profile.logo.preview_data_url}
+          disabled={disabled}
+          onSelect={(key) => onDraftChange((d) => ({ ...d, logo_size_key: key }))}
+        />
+        <StudioField
+          label="משפט שיוצג מתחת לשם העסק"
+          value={draft.company_subtitle}
+          disabled={disabled}
+          multiline
+          onChange={(v) => onDraftChange((d) => ({ ...d, company_subtitle: v }))}
+        />
+      </div>
+    );
+  }
+
+  if (section === 'business') {
+    return (
+      <div className="nx-branding-studio-section">
         <AssetUploadSlot
           slot={profile.signature}
           slotKind="signature"
@@ -319,27 +461,65 @@ function TabPanel({
           updateCommand={commands.update_branding_profile}
           onCommand={onCommand}
         />
-      ) : null}
-      {tab.fields
-        .filter((f) => f.visible && f.input_type !== 'document_style')
-        .map((field) => (
-          <BrandingFieldInput
-            key={field.key}
-            field={field}
-            value={draft[field.key] ?? fieldToDraftValue(field)}
-            disabled={!field.editable || busy || !canEdit}
-            onChange={(next) => onDraftChange((d) => ({ ...d, [field.key]: next }))}
-          />
-        ))}
-      {styleField ? (
-        <DocumentStylePicker
-          label={styleField.label}
-          presets={profile.document_style_presets}
-          selectedKey={draft.document_style_key ?? profile.selected_document_style_key}
-          disabled={busy || !canEdit}
-          onSelect={(key) => onDraftChange((d) => ({ ...d, document_style_key: key }))}
+        <StudioBoolField
+          label="הצג חתימה במסמך"
+          checked={draft.show_signature === 'true'}
+          disabled={disabled}
+          onChange={(v) => onDraftChange((d) => ({ ...d, show_signature: boolToDraft(v) }))}
         />
-      ) : null}
+        <StudioField
+          label="טקסט כותרת תחתונה"
+          value={draft.footer_text}
+          disabled={disabled}
+          multiline
+          onChange={(v) => onDraftChange((d) => ({ ...d, footer_text: v }))}
+        />
+      </div>
+    );
+  }
+
+  if (section === 'payment') {
+    return (
+      <div className="nx-branding-studio-section">
+        <StudioField label="שם בנק" value={draft.bank_name} disabled={disabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_name: v }))} />
+        <StudioField label="סניף" value={draft.bank_branch} disabled={disabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_branch: v }))} />
+        <StudioField label="מספר חשבון" value={draft.bank_account} disabled={disabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_account: v }))} />
+        <StudioField label="IBAN" value={draft.iban} disabled={disabled} onChange={(v) => onDraftChange((d) => ({ ...d, iban: v }))} />
+        <StudioField label="SWIFT" value={draft.swift} disabled={disabled} onChange={(v) => onDraftChange((d) => ({ ...d, swift: v }))} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="nx-branding-studio-section">
+      <StudioField
+        label="נושא אימייל"
+        value={draft.email_subject_template}
+        disabled={disabled}
+        hint="{{document_type}} {{document_number}}"
+        onChange={(v) => onDraftChange((d) => ({ ...d, email_subject_template: v }))}
+      />
+      <StudioField
+        label="גוף אימייל"
+        value={draft.email_body_template}
+        disabled={disabled}
+        multiline
+        onChange={(v) => onDraftChange((d) => ({ ...d, email_body_template: v }))}
+      />
+      <StudioField
+        label="הערות ללקוח (ברירת מחדל)"
+        value={draft.customer_notes}
+        disabled={disabled}
+        multiline
+        onChange={(v) => onDraftChange((d) => ({ ...d, customer_notes: v }))}
+      />
+      <StudioField
+        label="תנאים והגבלות"
+        value={draft.terms_and_conditions}
+        disabled={disabled}
+        multiline
+        onChange={(v) => onDraftChange((d) => ({ ...d, terms_and_conditions: v }))}
+      />
     </div>
   );
 }
@@ -348,56 +528,77 @@ export function IncomeDocumentBrandingSettingsPanel({
   profile,
   commands,
   busy,
-  activeTab,
-  onActiveTabChange,
+  activeSection,
+  onActiveSectionChange,
   draft,
   onDraftChange,
   onCommand,
 }: Props) {
+  const studio = profile.document_branding_studio;
   const canEdit = profile.allowed_actions.includes(commands.update_branding_profile);
-  const activeTabDef = profile.tabs.find((t) => t.key === activeTab) ?? profile.tabs[0];
+  const preview = studio.studio_live_preview;
 
   return (
-    <div className="nx-income-branding" dir="rtl">
-      <nav className="nx-income-branding-tabs" aria-label="הגדרות מסמך">
-        {profile.tabs.map((tab) => (
+    <div className="nx-branding-studio" dir="rtl">
+      <nav className="nx-branding-studio-nav" aria-label="הגדרות מסמך">
+        {studio.navigation_sections.map((section) => (
           <button
-            key={tab.key}
+            key={section.key}
             type="button"
-            className={`nx-income-branding-tabs__btn${activeTab === tab.key ? ' nx-income-branding-tabs__btn--active' : ''}`}
-            onClick={() => onActiveTabChange(tab.key)}
+            className={`nx-branding-studio-nav__btn${activeSection === section.key ? ' nx-branding-studio-nav__btn--active' : ''}`}
+            onClick={() => onActiveSectionChange(section.key)}
           >
-            {tab.label}
+            {section.label}
           </button>
         ))}
       </nav>
-      {activeTabDef ? (
-        <TabPanel
-          tab={activeTabDef}
+      <div className="nx-branding-studio-content">
+        <StudioSectionContent
+          section={activeSection}
+          studio={studio}
           profile={profile}
-          commands={commands}
           draft={draft}
           busy={busy}
           canEdit={canEdit}
-          onCommand={onCommand}
+          commands={commands}
           onDraftChange={onDraftChange}
+          onCommand={onCommand}
         />
-      ) : null}
+      </div>
+      <aside className="nx-branding-studio-preview" aria-label="תצוגה מקדימה">
+        <div className="nx-branding-studio-preview__head">
+          <span className="nx-branding-studio-preview__title">תצוגה מקדימה</span>
+          <span className="nx-branding-studio-preview__meta">
+            {preview.sample_document_type_label}
+            {preview.sample_document_number_display ? ` · ${preview.sample_document_number_display}` : ' · טיוטה'}
+          </span>
+        </div>
+        {preview.visible && preview.preview_html ? (
+          <div
+            className="nx-branding-studio-preview__doc nx-invoice-ui"
+            dangerouslySetInnerHTML={{ __html: preview.preview_html }}
+          />
+        ) : (
+          <p className="nx-branding-studio-preview__empty">אין תצוגה מקדימה</p>
+        )}
+      </aside>
     </div>
   );
 }
 
 export function useBrandingModalState(profile: IncomeDocumentBrandingProfileAggregate | null) {
-  const [activeTab, setActiveTab] = useState(profile?.tabs[0]?.key ?? 'design');
-  const [draft, setDraft] = useState<Record<string, string>>(() =>
-    profile ? buildDraftFromProfile(profile) : {},
+  const [activeSection, setActiveSection] = useState<IncomeBrandingStudioSectionKey>(
+    profile?.document_branding_studio.navigation_sections[0]?.key ?? 'document_style',
+  );
+  const [draft, setDraft] = useState<IncomeBrandingStudioDraft>(() =>
+    profile ? buildDraftFromProfile(profile) : ({} as IncomeBrandingStudioDraft),
   );
 
   useEffect(() => {
     if (!profile) return;
     setDraft(buildDraftFromProfile(profile));
-    setActiveTab(profile.tabs[0]?.key ?? 'design');
+    setActiveSection(profile.document_branding_studio.navigation_sections[0]?.key ?? 'document_style');
   }, [profile]);
 
-  return { activeTab, setActiveTab, draft, setDraft };
+  return { activeSection, setActiveSection, draft, setDraft };
 }

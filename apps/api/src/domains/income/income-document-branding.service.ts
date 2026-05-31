@@ -13,22 +13,32 @@ import {
   validateOrgFileOwnership,
 } from '../file-access/file-access.service.js';
 import type { ActiveIncomeIssuerScope } from './income.guards.js';
+import { renderStudioSamplePreviewHtml } from './income-document-branding-preview.renderer.js';
 import {
   DEFAULT_DISPLAY_OPTIONS,
   DEFAULT_PAYMENT_METHODS,
   DEFAULT_PRIMARY_COLOR,
   DEFAULT_SECONDARY_COLOR,
+  DEFAULT_COLOR_THEME_KEY,
+  DEFAULT_DOCUMENT_STYLE_KEY,
+  DEFAULT_LOGO_SIZE_KEY,
   normalizeClientBlockPosition,
-  normalizeHexColor,
   optionalTrimmedString,
   parseDisplayOptionsJson,
   parsePaymentMethodsJson,
-  DEFAULT_DOCUMENT_STYLE_KEY,
-  applyDocumentStyleToColorColumns,
-  getDocumentStylePresets,
+  applyColorThemeToColorColumns,
+  applyDocumentStyleTemplateKey,
+  getColorThemePresets,
+  getDocumentStyleTemplates,
+  getLayoutTemplates,
+  getLogoSizeOptions,
   resolveBrandingProfile,
+  resolveColorThemeKeyForRow,
+  resolveColorThemePreset,
   resolveDocumentStyleKeyForRow,
-  resolveDocumentStylePreset,
+  resolveDocumentStyleTemplate,
+  resolveLayoutTemplate,
+  resolveLogoSizeKey,
   serializeDisplayOptionsJson,
   serializePaymentMethodsJson,
 } from './income-document-branding.pure.js';
@@ -37,10 +47,11 @@ import type {
   IncomeBrandingPaymentMethod,
   IncomeBrandingProfileRow,
   IncomeBrandingResolvedProfile,
-  IncomeDocumentBrandingField,
   IncomeDocumentBrandingProfileAggregate,
-  IncomeDocumentBrandingTab,
   IncomeDocumentBrandingSettingsEntrypoint,
+  IncomeDocumentBrandingStudio,
+  IncomeDocumentStyleTemplateKey,
+  IncomeLayoutTemplateKey,
 } from './income-document-branding.types.js';
 import type { IncomeWorkspacePermissions } from './income.types.js';
 import {
@@ -54,7 +65,9 @@ const BRANDING_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const BRANDING_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
 
 const BRANDING_MIGRATION_HINT =
-  'Run Supabase migrations 130_income_document_branding_profiles.sql and 131_income_document_branding_document_style_key.sql on production.';
+  'Run Supabase migrations 130_income_document_branding_profiles.sql, 131_income_document_branding_document_style_key.sql, and 132_income_document_branding_studio_keys.sql on production.';
+
+const STUDIO_OPTIONAL_COLUMNS = ['color_theme_key', 'layout_template_key', 'logo_size_key'] as const;
 
 function omitPatchKey(patch: Record<string, unknown>, key: string): Record<string, unknown> {
   const next = { ...patch };
@@ -79,6 +92,17 @@ async function persistBrandingProfilePatch(
   };
 
   let { data, error } = await runUpdate(patch);
+  if (error) {
+    let nextPatch = { ...patch };
+    for (const col of STUDIO_OPTIONAL_COLUMNS) {
+      if (col in nextPatch && isSupabaseMissingColumnError(error as SupabaseErrorLike, col)) {
+        console.warn(`[income-branding] ${col} column missing — persisting without until migration 132 is applied`);
+        nextPatch = omitPatchKey(nextPatch, col);
+        ({ data, error } = await runUpdate(nextPatch));
+        if (!error) break;
+      }
+    }
+  }
   if (
     error &&
     'document_style_key' in patch &&
@@ -169,6 +193,8 @@ async function bootstrapFromOrganizationSettings(
     signature_file_asset_id: (s?.signature_image_file_asset_id as string | null) ?? null,
     company_subtitle: typeof s?.display_name_on_documents === 'string' ? s.display_name_on_documents : null,
     document_style_key: DEFAULT_DOCUMENT_STYLE_KEY,
+    color_theme_key: DEFAULT_COLOR_THEME_KEY,
+    logo_size_key: DEFAULT_LOGO_SIZE_KEY,
     primary_color: DEFAULT_PRIMARY_COLOR,
     secondary_color: DEFAULT_SECONDARY_COLOR,
     table_header_color: DEFAULT_PRIMARY_COLOR,
@@ -242,61 +268,56 @@ export async function loadResolvedBrandingProfile(
   return resolveBrandingProfile(row, { logo_data_url, signature_data_url });
 }
 
-function boolField(
-  key: string,
-  label: string,
-  value: boolean,
-  editable: boolean,
-): IncomeDocumentBrandingField {
-  return {
-    key,
-    label,
-    input_type: 'boolean',
-    value,
-    visible: true,
-    editable,
-    disabled_reason: editable ? null : 'נדרשת הרשאת עריכה',
-    hint: null,
-  };
-}
+function buildDocumentBrandingStudio(
+  resolved: IncomeBrandingResolvedProfile,
+  row: IncomeBrandingProfileRow,
+): IncomeDocumentBrandingStudio {
+  const display = resolved.display_options;
+  const colorThemeKey = resolved.color_theme_key;
+  const layoutOverride = row.layout_template_key?.trim()
+    ? (row.layout_template_key.trim() as IncomeLayoutTemplateKey)
+    : null;
 
-function textField(
-  key: string,
-  label: string,
-  value: string | null,
-  editable: boolean,
-  input_type: 'text' | 'textarea' = 'text',
-  hint: string | null = null,
-): IncomeDocumentBrandingField {
   return {
-    key,
-    label,
-    input_type,
-    value: value ?? '',
-    visible: true,
-    editable,
-    disabled_reason: editable ? null : 'נדרשת הרשאת עריכה',
-    hint,
-  };
-}
-
-function selectField(
-  key: string,
-  label: string,
-  value: string,
-  options: { value: string; label: string }[],
-  editable: boolean,
-): IncomeDocumentBrandingField {
-  return {
-    key,
-    label,
-    input_type: 'select',
-    value,
-    options,
-    visible: true,
-    editable,
-    disabled_reason: editable ? null : 'נדרשת הרשאת עריכה',
-    hint: null,
+    navigation_sections: [
+      { key: 'document_style', label: '🎨 סגנון מסמך' },
+      { key: 'logo_branding', label: '🖼 לוגו ומיתוג' },
+      { key: 'business', label: '🏢 פרטי עסק' },
+      { key: 'payment', label: '💳 תשלום' },
+      { key: 'email', label: '✉ אימייל' },
+    ],
+    document_style_templates: getDocumentStyleTemplates(colorThemeKey),
+    color_theme_presets: getColorThemePresets(),
+    layout_templates: getLayoutTemplates(),
+    logo_size_options: getLogoSizeOptions(),
+    selected_document_style_key: resolved.document_style_key,
+    selected_color_theme_key: colorThemeKey,
+    selected_layout_template_key: layoutOverride,
+    selected_logo_size_key: resolved.logo_size_key,
+    advanced_layout_visible: true,
+    studio_live_preview: {
+      visible: true,
+      preview_html: renderStudioSamplePreviewHtml(resolved),
+      sample_document_type_label: 'הצעת מחיר',
+      sample_document_number_display: null,
+    },
+    fields: {
+      show_logo: display.show_logo,
+      company_subtitle: resolved.company_subtitle,
+      show_signature: display.show_signature,
+      footer_text: resolved.footer_text,
+      bank_name: resolved.bank_name,
+      bank_branch: resolved.bank_branch,
+      bank_account: resolved.bank_account,
+      iban: resolved.iban,
+      swift: resolved.swift,
+      email_subject_template: resolved.email_subject_template,
+      email_body_template: resolved.email_body_template,
+      customer_notes: resolved.customer_notes,
+      terms_and_conditions: resolved.terms_and_conditions,
+    },
+    save_section_key: 'modal',
+    save_command: INCOME_COMMAND_UPDATE_BRANDING_PROFILE,
   };
 }
 
@@ -332,79 +353,10 @@ export async function buildDocumentBrandingProfileAggregate(
   const uploadLogoActions = canEdit ? [INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO] : [];
   const uploadSigActions = canEdit ? [INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE] : [];
 
-  const display = resolved.display_options;
-  const selectedStyleKey = resolved.document_style_key;
-
-  const tabs: IncomeDocumentBrandingTab[] = [
-    {
-      key: 'design',
-      label: 'עיצוב',
-      fields: [
-        boolField('show_logo', 'הצג לוגו במסמך', display.show_logo, canEdit),
-        textField(
-          'company_subtitle',
-          'משפט שיוצג מתחת לשם העסק',
-          resolved.company_subtitle,
-          canEdit,
-          'textarea',
-        ),
-        {
-          key: 'document_style_key',
-          label: 'בחירת סגנון מסמך',
-          input_type: 'document_style',
-          value: selectedStyleKey,
-          visible: true,
-          editable: canEdit,
-          disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
-          hint: null,
-        },
-      ],
-    },
-    {
-      key: 'business',
-      label: 'פרטי עסק',
-      fields: [
-        boolField('show_signature', 'הצג חתימה במסמך', display.show_signature, canEdit),
-        textField('footer_text', 'טקסט כותרת תחתונה', resolved.footer_text, canEdit, 'textarea'),
-      ],
-    },
-    {
-      key: 'payment',
-      label: 'תשלום',
-      fields: [
-        textField('bank_name', 'שם בנק', resolved.bank_name, canEdit),
-        textField('bank_branch', 'סניף', resolved.bank_branch, canEdit),
-        textField('bank_account', 'מספר חשבון', resolved.bank_account, canEdit),
-        textField('iban', 'IBAN', resolved.iban, canEdit),
-        textField('swift', 'SWIFT', resolved.swift, canEdit),
-      ],
-    },
-    {
-      key: 'email',
-      label: 'אימייל',
-      fields: [
-        textField(
-          'email_subject_template',
-          'נושא אימייל',
-          resolved.email_subject_template,
-          canEdit,
-          'text',
-          '{{document_type}} {{document_number}}',
-        ),
-        textField('email_body_template', 'גוף אימייל', resolved.email_body_template, canEdit, 'textarea'),
-        textField('customer_notes', 'הערות ללקוח (ברירת מחדל)', resolved.customer_notes, canEdit, 'textarea'),
-        textField('terms_and_conditions', 'תנאים והגבלות', resolved.terms_and_conditions, canEdit, 'textarea'),
-      ],
-    },
-  ];
-
   return {
     profile_id: row.id,
     title: 'הגדרות מסמך',
-    tabs,
-    document_style_presets: getDocumentStylePresets(),
-    selected_document_style_key: selectedStyleKey,
-    save_section_key: 'modal',
+    document_branding_studio: buildDocumentBrandingStudio(resolved, row),
     logo: {
       label: 'לוגו מסמך',
       file_asset_id: row.logo_file_asset_id,
@@ -447,14 +399,38 @@ function applyModalBrandingPatch(
     patch.signature_file_asset_id = null;
   }
 
-  const styleKey =
-    String(body.document_style_key ?? body.color_preset_key ?? '').trim() ||
-    resolveDocumentStyleKeyForRow(row);
-  const style = resolveDocumentStylePreset(styleKey);
-  if (!style) {
+  const docStyleRaw = String(body.document_style_key ?? '').trim();
+  const docStyleKey = docStyleRaw || resolveDocumentStyleKeyForRow(row);
+  if (!resolveDocumentStyleTemplate(docStyleKey)) {
     throw badRequest('document_style_key is invalid', 'BRANDING_DOCUMENT_STYLE_INVALID');
   }
-  Object.assign(patch, applyDocumentStyleToColorColumns(style));
+  Object.assign(patch, applyDocumentStyleTemplateKey(docStyleKey as IncomeDocumentStyleTemplateKey));
+
+  const colorKey =
+    String(body.color_theme_key ?? body.color_preset_key ?? '').trim() ||
+    resolveColorThemeKeyForRow(row);
+  const theme = resolveColorThemePreset(colorKey);
+  if (!theme) {
+    throw badRequest('color_theme_key is invalid', 'BRANDING_COLOR_THEME_INVALID');
+  }
+  Object.assign(patch, applyColorThemeToColorColumns(theme));
+  patch.document_style_key = docStyleKey;
+
+  if (body.layout_template_key === null || body.layout_template_key === '') {
+    patch.layout_template_key = null;
+  } else {
+    const layoutKey = String(body.layout_template_key ?? '').trim();
+    if (layoutKey) {
+      if (!resolveLayoutTemplate(layoutKey)) {
+        throw badRequest('layout_template_key is invalid', 'BRANDING_LAYOUT_TEMPLATE_INVALID');
+      }
+      patch.layout_template_key = layoutKey;
+    }
+  }
+
+  if (body.logo_size_key !== undefined) {
+    patch.logo_size_key = resolveLogoSizeKey(body.logo_size_key);
+  }
 
   patch.company_subtitle = optionalTrimmedString(body.company_subtitle, 500);
   patch.footer_text = optionalTrimmedString(body.footer_text, 2000);
@@ -500,13 +476,17 @@ export async function updateIncomeDocumentBrandingProfile(
   if (section === 'modal') {
     applyModalBrandingPatch(row, body, patch);
   } else if (section === 'document_design' || section === 'identity') {
-    const styleKey = String(body.document_style_key ?? '').trim();
-    if (styleKey) {
-      const style = resolveDocumentStylePreset(styleKey);
-      if (!style) {
-        throw badRequest('document_style_key is invalid', 'BRANDING_DOCUMENT_STYLE_INVALID');
+    const colorKey = String(body.color_theme_key ?? body.document_style_key ?? '').trim();
+    if (colorKey) {
+      const theme = resolveColorThemePreset(colorKey);
+      if (!theme) {
+        throw badRequest('color_theme_key is invalid', 'BRANDING_COLOR_THEME_INVALID');
       }
-      Object.assign(patch, applyDocumentStyleToColorColumns(style));
+      Object.assign(patch, applyColorThemeToColorColumns(theme));
+    }
+    const docStyleKey = String(body.document_style_key ?? '').trim();
+    if (docStyleKey && resolveDocumentStyleTemplate(docStyleKey)) {
+      Object.assign(patch, applyDocumentStyleTemplateKey(docStyleKey as IncomeDocumentStyleTemplateKey));
     }
     patch.company_subtitle = optionalTrimmedString(body.company_subtitle, 500);
     const clientPos = normalizeClientBlockPosition(
