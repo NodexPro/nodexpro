@@ -1,13 +1,41 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest } from '../../shared/errors.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import { isSupabaseMissingColumnError, isSupabaseMissingTableError, throwIfSupabaseError, } from '../../shared/supabase-errors.js';
 import { assertFileAllowedForSettingsImage, validateOrgFileOwnership, } from '../file-access/file-access.service.js';
 import { DEFAULT_DISPLAY_OPTIONS, DEFAULT_PAYMENT_METHODS, DEFAULT_PRIMARY_COLOR, DEFAULT_SECONDARY_COLOR, normalizeClientBlockPosition, optionalTrimmedString, parseDisplayOptionsJson, parsePaymentMethodsJson, DEFAULT_DOCUMENT_STYLE_KEY, applyDocumentStyleToColorColumns, getDocumentStylePresets, resolveBrandingProfile, resolveDocumentStyleKeyForRow, resolveDocumentStylePreset, serializeDisplayOptionsJson, serializePaymentMethodsJson, } from './income-document-branding.pure.js';
 import { INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, } from './income-document-branding.types.js';
 const BUCKET_ORG_ASSETS = 'organization-assets';
 const BRANDING_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const BRANDING_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
+const BRANDING_MIGRATION_HINT = 'Run Supabase migrations 130_income_document_branding_profiles.sql and 131_income_document_branding_document_style_key.sql on production.';
+function omitPatchKey(patch, key) {
+    const next = { ...patch };
+    delete next[key];
+    return next;
+}
+async function persistBrandingProfilePatch(rowId, orgId, patch, context) {
+    const runUpdate = async (payload) => {
+        return supabaseAdmin
+            .from('income_document_branding_profiles')
+            .update(payload)
+            .eq('id', rowId)
+            .eq('organization_id', orgId)
+            .select('*')
+            .single();
+    };
+    let { data, error } = await runUpdate(patch);
+    if (error &&
+        'document_style_key' in patch &&
+        isSupabaseMissingColumnError(error, 'document_style_key')) {
+        console.warn('[income-branding] document_style_key column missing — persisting colors only until migration 131 is applied');
+        ({ data, error } = await runUpdate(omitPatchKey(patch, 'document_style_key')));
+    }
+    throwIfSupabaseError(error, context, {
+        migrationHint: BRANDING_MIGRATION_HINT,
+    });
+    return data;
+}
 let bucketEnsured = false;
 async function ensureOrgAssetsBucket() {
     if (bucketEnsured)
@@ -45,7 +73,9 @@ async function loadBrandingRow(scope) {
         .eq('organization_id', scope.org_id)
         .eq('issuer_business_id', scope.issuer_business_id)
         .maybeSingle();
-    throwIfSupabaseError(error, 'loadBrandingRow');
+    throwIfSupabaseError(error, 'loadBrandingRow', {
+        migrationHint: BRANDING_MIGRATION_HINT,
+    });
     return data ?? null;
 }
 async function bootstrapFromOrganizationSettings(scope) {
@@ -54,7 +84,9 @@ async function bootstrapFromOrganizationSettings(scope) {
         .select('logo_file_asset_id, signature_image_file_asset_id, display_name_on_documents, document_footer_note, display_phone_on_documents, display_website_on_documents, display_address_on_documents, display_bank_details_on_documents, bank_name, bank_branch, bank_account_number, iban, swift')
         .eq('organization_id', scope.org_id)
         .maybeSingle();
-    throwIfSupabaseError(error, 'bootstrapBrandingFromOrgSettings');
+    throwIfSupabaseError(error, 'bootstrapBrandingFromOrgSettings', {
+        migrationHint: BRANDING_MIGRATION_HINT,
+    });
     const s = settings;
     const display = {
         ...DEFAULT_DISPLAY_OPTIONS,
@@ -88,12 +120,28 @@ async function bootstrapFromOrganizationSettings(scope) {
         document_attachments: [],
         default_payment_terms: null,
     };
-    const { data, error: insErr } = await supabaseAdmin
+    let { data, error: insErr } = await supabaseAdmin
         .from('income_document_branding_profiles')
         .insert(insert)
         .select('*')
         .single();
-    throwIfSupabaseError(insErr, 'insertBrandingProfile');
+    if (insErr &&
+        isSupabaseMissingColumnError(insErr, 'document_style_key')) {
+        console.warn('[income-branding] document_style_key column missing on insert — bootstrap without style key until migration 131');
+        ({ data, error: insErr } = await supabaseAdmin
+            .from('income_document_branding_profiles')
+            .insert(omitPatchKey(insert, 'document_style_key'))
+            .select('*')
+            .single());
+    }
+    if (insErr && isSupabaseMissingTableError(insErr, 'income_document_branding_profiles')) {
+        throwIfSupabaseError(insErr, 'insertBrandingProfile', {
+            migrationHint: BRANDING_MIGRATION_HINT,
+        });
+    }
+    throwIfSupabaseError(insErr, 'insertBrandingProfile', {
+        migrationHint: BRANDING_MIGRATION_HINT,
+    });
     return data;
 }
 export async function ensureIncomeDocumentBrandingProfile(scope) {
@@ -410,14 +458,7 @@ export async function updateIncomeDocumentBrandingProfile(scope, body) {
     else {
         throw badRequest(`Unknown branding section: ${section}`, 'BRANDING_SECTION_INVALID');
     }
-    const { data, error } = await supabaseAdmin
-        .from('income_document_branding_profiles')
-        .update(patch)
-        .eq('id', row.id)
-        .eq('organization_id', scope.org_id)
-        .select('*')
-        .single();
-    throwIfSupabaseError(error, 'updateIncomeDocumentBrandingProfile');
+    const data = await persistBrandingProfilePatch(row.id, scope.org_id, patch, 'updateIncomeDocumentBrandingProfile');
     void writeAudit({
         organizationId: scope.org_id,
         actorUserId: scope.actor_user_id,
@@ -480,14 +521,7 @@ async function uploadBrandingImage(ctx, scope, body, slot) {
     const patch = slot === 'logo'
         ? { logo_file_asset_id: fileId }
         : { signature_file_asset_id: fileId };
-    const { data, error } = await supabaseAdmin
-        .from('income_document_branding_profiles')
-        .update(patch)
-        .eq('id', row.id)
-        .eq('organization_id', scope.org_id)
-        .select('*')
-        .single();
-    throwIfSupabaseError(error, 'linkBrandingImage');
+    const data = await persistBrandingProfilePatch(row.id, scope.org_id, patch, 'linkBrandingImage');
     void writeAudit({
         organizationId: scope.org_id,
         actorUserId: scope.actor_user_id,

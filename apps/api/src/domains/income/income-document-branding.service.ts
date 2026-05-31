@@ -2,7 +2,12 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { badRequest } from '../../shared/errors.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import {
+  isSupabaseMissingColumnError,
+  isSupabaseMissingTableError,
+  throwIfSupabaseError,
+  type SupabaseErrorLike,
+} from '../../shared/supabase-errors.js';
 import {
   assertFileAllowedForSettingsImage,
   validateOrgFileOwnership,
@@ -48,6 +53,49 @@ const BUCKET_ORG_ASSETS = 'organization-assets';
 const BRANDING_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const BRANDING_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
 
+const BRANDING_MIGRATION_HINT =
+  'Run Supabase migrations 130_income_document_branding_profiles.sql and 131_income_document_branding_document_style_key.sql on production.';
+
+function omitPatchKey(patch: Record<string, unknown>, key: string): Record<string, unknown> {
+  const next = { ...patch };
+  delete next[key];
+  return next;
+}
+
+async function persistBrandingProfilePatch(
+  rowId: string,
+  orgId: string,
+  patch: Record<string, unknown>,
+  context: string,
+): Promise<IncomeBrandingProfileRow> {
+  const runUpdate = async (payload: Record<string, unknown>) => {
+    return supabaseAdmin
+      .from('income_document_branding_profiles')
+      .update(payload)
+      .eq('id', rowId)
+      .eq('organization_id', orgId)
+      .select('*')
+      .single();
+  };
+
+  let { data, error } = await runUpdate(patch);
+  if (
+    error &&
+    'document_style_key' in patch &&
+    isSupabaseMissingColumnError(error as SupabaseErrorLike, 'document_style_key')
+  ) {
+    console.warn(
+      '[income-branding] document_style_key column missing — persisting colors only until migration 131 is applied',
+    );
+    ({ data, error } = await runUpdate(omitPatchKey(patch, 'document_style_key')));
+  }
+
+  throwIfSupabaseError(error as SupabaseErrorLike | null, context, {
+    migrationHint: BRANDING_MIGRATION_HINT,
+  });
+  return data as IncomeBrandingProfileRow;
+}
+
 let bucketEnsured = false;
 async function ensureOrgAssetsBucket(): Promise<void> {
   if (bucketEnsured) return;
@@ -85,7 +133,9 @@ async function loadBrandingRow(scope: ActiveIncomeIssuerScope): Promise<IncomeBr
     .eq('organization_id', scope.org_id)
     .eq('issuer_business_id', scope.issuer_business_id)
     .maybeSingle();
-  throwIfSupabaseError(error, 'loadBrandingRow');
+  throwIfSupabaseError(error as SupabaseErrorLike | null, 'loadBrandingRow', {
+    migrationHint: BRANDING_MIGRATION_HINT,
+  });
   return (data as IncomeBrandingProfileRow | null) ?? null;
 }
 
@@ -99,7 +149,9 @@ async function bootstrapFromOrganizationSettings(
     )
     .eq('organization_id', scope.org_id)
     .maybeSingle();
-  throwIfSupabaseError(error, 'bootstrapBrandingFromOrgSettings');
+  throwIfSupabaseError(error as SupabaseErrorLike | null, 'bootstrapBrandingFromOrgSettings', {
+    migrationHint: BRANDING_MIGRATION_HINT,
+  });
 
   const s = settings as Record<string, unknown> | null;
   const display: IncomeBrandingDisplayOptions = {
@@ -137,12 +189,35 @@ async function bootstrapFromOrganizationSettings(
     default_payment_terms: null,
   };
 
-  const { data, error: insErr } = await supabaseAdmin
+  let { data, error: insErr } = await supabaseAdmin
     .from('income_document_branding_profiles')
     .insert(insert)
     .select('*')
     .single();
-  throwIfSupabaseError(insErr, 'insertBrandingProfile');
+
+  if (
+    insErr &&
+    isSupabaseMissingColumnError(insErr as SupabaseErrorLike, 'document_style_key')
+  ) {
+    console.warn(
+      '[income-branding] document_style_key column missing on insert — bootstrap without style key until migration 131',
+    );
+    ({ data, error: insErr } = await supabaseAdmin
+      .from('income_document_branding_profiles')
+      .insert(omitPatchKey(insert, 'document_style_key'))
+      .select('*')
+      .single());
+  }
+
+  if (insErr && isSupabaseMissingTableError(insErr as SupabaseErrorLike, 'income_document_branding_profiles')) {
+    throwIfSupabaseError(insErr as SupabaseErrorLike, 'insertBrandingProfile', {
+      migrationHint: BRANDING_MIGRATION_HINT,
+    });
+  }
+
+  throwIfSupabaseError(insErr as SupabaseErrorLike | null, 'insertBrandingProfile', {
+    migrationHint: BRANDING_MIGRATION_HINT,
+  });
   return data as IncomeBrandingProfileRow;
 }
 
@@ -538,14 +613,12 @@ export async function updateIncomeDocumentBrandingProfile(
     throw badRequest(`Unknown branding section: ${section}`, 'BRANDING_SECTION_INVALID');
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('income_document_branding_profiles')
-    .update(patch)
-    .eq('id', row.id)
-    .eq('organization_id', scope.org_id)
-    .select('*')
-    .single();
-  throwIfSupabaseError(error, 'updateIncomeDocumentBrandingProfile');
+  const data = await persistBrandingProfilePatch(
+    row.id,
+    scope.org_id,
+    patch,
+    'updateIncomeDocumentBrandingProfile',
+  );
 
   void writeAudit({
     organizationId: scope.org_id,
@@ -557,7 +630,7 @@ export async function updateIncomeDocumentBrandingProfile(
     payload: { section, issuer_business_id: scope.issuer_business_id },
   }).catch(() => {});
 
-  return data as IncomeBrandingProfileRow;
+  return data;
 }
 
 async function uploadBrandingImage(
@@ -620,14 +693,7 @@ async function uploadBrandingImage(
       ? { logo_file_asset_id: fileId }
       : { signature_file_asset_id: fileId };
 
-  const { data, error } = await supabaseAdmin
-    .from('income_document_branding_profiles')
-    .update(patch)
-    .eq('id', row.id)
-    .eq('organization_id', scope.org_id)
-    .select('*')
-    .single();
-  throwIfSupabaseError(error, 'linkBrandingImage');
+  const data = await persistBrandingProfilePatch(row.id, scope.org_id, patch, 'linkBrandingImage');
 
   void writeAudit({
     organizationId: scope.org_id,
@@ -642,7 +708,7 @@ async function uploadBrandingImage(
     payload: { file_asset_id: fileId, issuer_business_id: scope.issuer_business_id },
   }).catch(() => {});
 
-  return data as IncomeBrandingProfileRow;
+  return data;
 }
 
 export async function uploadIncomeDocumentLogo(
