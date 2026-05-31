@@ -3,7 +3,7 @@ import { badRequest } from '../../shared/errors.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertFileAllowedForSettingsImage, validateOrgFileOwnership, } from '../file-access/file-access.service.js';
-import { DEFAULT_DISPLAY_OPTIONS, DEFAULT_PAYMENT_METHODS, DEFAULT_PRIMARY_COLOR, DEFAULT_SECONDARY_COLOR, normalizeClientBlockPosition, normalizeHexColor, optionalTrimmedString, parseDisplayOptionsJson, parsePaymentMethodsJson, getBrandingColorPresets, matchBrandingColorPresetKey, resolveBrandingColorPreset, resolveBrandingProfile, serializeDisplayOptionsJson, serializePaymentMethodsJson, } from './income-document-branding.pure.js';
+import { DEFAULT_DISPLAY_OPTIONS, DEFAULT_PAYMENT_METHODS, DEFAULT_PRIMARY_COLOR, DEFAULT_SECONDARY_COLOR, normalizeClientBlockPosition, optionalTrimmedString, parseDisplayOptionsJson, parsePaymentMethodsJson, DEFAULT_DOCUMENT_STYLE_KEY, applyDocumentStyleToColorColumns, getDocumentStylePresets, resolveBrandingProfile, resolveDocumentStyleKeyForRow, resolveDocumentStylePreset, serializeDisplayOptionsJson, serializePaymentMethodsJson, } from './income-document-branding.pure.js';
 import { INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, } from './income-document-branding.types.js';
 const BUCKET_ORG_ASSETS = 'organization-assets';
 const BRANDING_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -69,6 +69,7 @@ async function bootstrapFromOrganizationSettings(scope) {
         logo_file_asset_id: s?.logo_file_asset_id ?? null,
         signature_file_asset_id: s?.signature_image_file_asset_id ?? null,
         company_subtitle: typeof s?.display_name_on_documents === 'string' ? s.display_name_on_documents : null,
+        document_style_key: DEFAULT_DOCUMENT_STYLE_KEY,
         primary_color: DEFAULT_PRIMARY_COLOR,
         secondary_color: DEFAULT_SECONDARY_COLOR,
         table_header_color: DEFAULT_PRIMARY_COLOR,
@@ -174,28 +175,24 @@ export async function buildDocumentBrandingProfileAggregate(scope, canEdit) {
     const uploadLogoActions = canEdit ? [INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO] : [];
     const uploadSigActions = canEdit ? [INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE] : [];
     const display = resolved.display_options;
-    const selectedColorPresetKey = matchBrandingColorPresetKey(resolved.primary_color, resolved.table_header_color, resolved.totals_color);
+    const selectedStyleKey = resolved.document_style_key;
     const tabs = [
         {
             key: 'design',
             label: 'עיצוב',
             fields: [
                 boolField('show_logo', 'הצג לוגו במסמך', display.show_logo, canEdit),
+                textField('company_subtitle', 'משפט שיוצג מתחת לשם העסק', resolved.company_subtitle, canEdit, 'textarea'),
                 {
-                    key: 'color_preset_key',
-                    label: 'ערכת צבעים',
-                    input_type: 'color_preset',
-                    value: selectedColorPresetKey,
+                    key: 'document_style_key',
+                    label: 'בחירת סגנון מסמך',
+                    input_type: 'document_style',
+                    value: selectedStyleKey,
                     visible: true,
                     editable: canEdit,
                     disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
-                    hint: 'בחירת ערכת צבעים להדפסה ולתצוגה',
+                    hint: null,
                 },
-                selectField('client_block_position', 'מיקום בלוק לקוח', display.client_block_position, [
-                    { value: 'right', label: 'ימין' },
-                    { value: 'left', label: 'שמאל' },
-                ], canEdit),
-                textField('company_subtitle', 'משפט מתחת לשם העסק', resolved.company_subtitle, canEdit, 'textarea'),
             ],
         },
         {
@@ -232,8 +229,8 @@ export async function buildDocumentBrandingProfileAggregate(scope, canEdit) {
         profile_id: row.id,
         title: 'הגדרות מסמך',
         tabs,
-        color_presets: getBrandingColorPresets(),
-        selected_color_preset_key: selectedColorPresetKey,
+        document_style_presets: getDocumentStylePresets(),
+        selected_document_style_key: selectedStyleKey,
         save_section_key: 'modal',
         logo: {
             label: 'לוגו מסמך',
@@ -242,6 +239,8 @@ export async function buildDocumentBrandingProfileAggregate(scope, canEdit) {
             upload_command: INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
             allowed_actions: uploadLogoActions,
             hint: 'PNG, JPEG או WebP — עד 5MB',
+            recommended_size_hint: 'מומלץ להעלות לוגו בגודל מינימלי 300×200 פיקסלים',
+            can_remove: canEdit && Boolean(row.logo_file_asset_id),
         },
         signature: {
             label: 'חתימה',
@@ -250,6 +249,8 @@ export async function buildDocumentBrandingProfileAggregate(scope, canEdit) {
             upload_command: INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
             allowed_actions: uploadSigActions,
             hint: 'PNG, JPEG או WebP — עד 5MB',
+            recommended_size_hint: null,
+            can_remove: canEdit && Boolean(row.signature_file_asset_id),
         },
         allowed_actions: canEdit
             ? [
@@ -261,15 +262,19 @@ export async function buildDocumentBrandingProfileAggregate(scope, canEdit) {
     };
 }
 function applyModalBrandingPatch(row, body, patch) {
-    const presetKey = String(body.color_preset_key ?? '').trim();
-    const preset = resolveBrandingColorPreset(presetKey);
-    if (!preset) {
-        throw badRequest('color_preset_key is invalid', 'BRANDING_COLOR_PRESET_INVALID');
+    if (body.clear_logo === true) {
+        patch.logo_file_asset_id = null;
     }
-    patch.primary_color = preset.primary_color;
-    patch.table_header_color = preset.table_header_color;
-    patch.totals_color = preset.totals_color;
-    patch.secondary_color = preset.secondary_color;
+    if (body.clear_signature === true) {
+        patch.signature_file_asset_id = null;
+    }
+    const styleKey = String(body.document_style_key ?? body.color_preset_key ?? '').trim() ||
+        resolveDocumentStyleKeyForRow(row);
+    const style = resolveDocumentStylePreset(styleKey);
+    if (!style) {
+        throw badRequest('document_style_key is invalid', 'BRANDING_DOCUMENT_STYLE_INVALID');
+    }
+    Object.assign(patch, applyDocumentStyleToColorColumns(style));
     patch.company_subtitle = optionalTrimmedString(body.company_subtitle, 500);
     patch.footer_text = optionalTrimmedString(body.footer_text, 2000);
     patch.bank_name = optionalTrimmedString(body.bank_name, 200);
@@ -305,10 +310,15 @@ export async function updateIncomeDocumentBrandingProfile(scope, body) {
         applyModalBrandingPatch(row, body, patch);
     }
     else if (section === 'document_design' || section === 'identity') {
+        const styleKey = String(body.document_style_key ?? '').trim();
+        if (styleKey) {
+            const style = resolveDocumentStylePreset(styleKey);
+            if (!style) {
+                throw badRequest('document_style_key is invalid', 'BRANDING_DOCUMENT_STYLE_INVALID');
+            }
+            Object.assign(patch, applyDocumentStyleToColorColumns(style));
+        }
         patch.company_subtitle = optionalTrimmedString(body.company_subtitle, 500);
-        patch.primary_color = normalizeHexColor(body.primary_color, DEFAULT_PRIMARY_COLOR, 'primary_color');
-        patch.table_header_color = normalizeHexColor(body.table_header_color, DEFAULT_PRIMARY_COLOR, 'table_header_color');
-        patch.totals_color = normalizeHexColor(body.totals_color, DEFAULT_PRIMARY_COLOR, 'totals_color');
         const clientPos = normalizeClientBlockPosition(body.client_block_position ?? row.client_block_position);
         const current = parseDisplayOptionsJson(row.display_options, clientPos);
         const next = {

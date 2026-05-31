@@ -28,7 +28,7 @@ export function IncomeDataTable<T>({
   return (
     <section className="nx-income-panel" id={panelId} aria-labelledby={`${panelId}-title`}>
       <div className="nx-income-panel__head">
-        <h2 className="nx-income-panel__title" id={`${panelId}-title`}>
+        <h2 className="nx-income-panel__title nx-subsection-title" id={`${panelId}-title`}>
           {title}
         </h2>
         {headerAction}

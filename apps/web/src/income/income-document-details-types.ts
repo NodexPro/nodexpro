@@ -76,7 +76,7 @@ export type {
   IncomeDocumentBrandingTab,
   IncomeDocumentBrandingField,
   IncomeDocumentBrandingAssetSlot,
-  IncomeDocumentBrandingColorPreset,
+  IncomeDocumentStylePreset,
 } from './income-document-branding-types';
 
 export type IncomeDocumentDetailsStep = {

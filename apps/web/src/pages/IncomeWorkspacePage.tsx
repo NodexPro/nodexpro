@@ -244,7 +244,7 @@ export function IncomeWorkspacePage() {
 
   if (loading) {
     return (
-      <div className="nx-income-workspace" dir="rtl" lang="he">
+      <div className="nx-income-workspace nx-invoice-ui" dir="rtl" lang="he">
         <div className="nx-income-skeleton-grid">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="nx-income-skeleton-card" />
@@ -257,8 +257,8 @@ export function IncomeWorkspacePage() {
 
   if (error && !workspace) {
     return (
-      <div className="nx-income-workspace" dir="rtl" lang="he">
-        <p role="alert" style={{ color: '#b91c1c' }}>
+      <div className="nx-income-workspace nx-invoice-ui" dir="rtl" lang="he">
+        <p role="alert" className="nx-body-text" style={{ color: '#b91c1c' }}>
           {error}
         </p>
         <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={() => void load()}>
@@ -271,11 +271,11 @@ export function IncomeWorkspacePage() {
   if (!workspace || !context) return null;
 
   return (
-    <div className="nx-income-workspace" dir="rtl" lang="he">
+    <div className="nx-income-workspace nx-invoice-ui" dir="rtl" lang="he">
       <header className="nx-income-workspace__header">
         <div className="nx-income-workspace__title-row">
           <div>
-            <h1 className="nx-income-workspace__title">
+            <h1 className="nx-income-workspace__title nx-page-title">
               <span>חשבוניות</span>
               <IncomeDocumentBrandingGearButton
                 entrypoint={workspace.document_branding_settings_entrypoint}
@@ -283,7 +283,9 @@ export function IncomeWorkspacePage() {
                 onClick={() => setBrandingOpen(true)}
               />
             </h1>
-            <p className="nx-income-workspace__subtitle">ניהול מסמכים, לקוחות ופריטים — נתונים מהשרת בלבד</p>
+            <p className="nx-income-workspace__subtitle nx-body-text nx-body-text--muted">
+              ניהול מסמכים, לקוחות ופריטים — נתונים מהשרת בלבד
+            </p>
           </div>
         </div>
         <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={() => void load()}>
@@ -292,9 +294,13 @@ export function IncomeWorkspacePage() {
       </header>
 
       {warnings.length > 0 ? (
-        <div role="status" style={{ padding: 12, borderRadius: 10, background: '#fffbeb', border: '1px solid #fde68a' }}>
+        <div
+          role="status"
+          className="nx-income-warnings"
+          style={{ padding: 12, borderRadius: 10, background: '#fffbeb', border: '1px solid #fde68a' }}
+        >
           {warnings.map((w) => (
-            <p key={w.code} style={{ margin: '4px 0', fontSize: 13 }}>
+            <p key={w.code} className="nx-body-text" style={{ margin: '4px 0' }}>
               {w.message}
             </p>
           ))}
@@ -348,10 +354,10 @@ export function IncomeWorkspacePage() {
       />
 
       {simpleModal?.kind === 'customer' ? (
-        <div className="nx-income-wizard-overlay" role="dialog" aria-modal="true">
-          <div className="nx-income-wizard nx-accounting-editor-modal" style={{ maxWidth: 440 }}>
+        <div className="nx-income-wizard-overlay nx-invoice-ui" role="dialog" aria-modal="true">
+          <div className="nx-income-wizard nx-income-wizard--compact nx-accounting-editor-modal">
             <div className="nx-income-wizard__head">
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>לקוח חדש</h2>
+              <h2 className="nx-modal-title">לקוח חדש</h2>
             </div>
             <div className="nx-income-wizard__body">
               <div className="nx-income-field">
@@ -415,10 +421,10 @@ export function IncomeWorkspacePage() {
       ) : null}
 
       {simpleModal?.kind === 'item' ? (
-        <div className="nx-income-wizard-overlay" role="dialog" aria-modal="true">
-          <div className="nx-income-wizard nx-accounting-editor-modal" style={{ maxWidth: 440 }}>
+        <div className="nx-income-wizard-overlay nx-invoice-ui" role="dialog" aria-modal="true">
+          <div className="nx-income-wizard nx-income-wizard--compact nx-accounting-editor-modal">
             <div className="nx-income-wizard__head">
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>פריט חדש</h2>
+              <h2 className="nx-modal-title">פריט חדש</h2>
             </div>
             <div className="nx-income-wizard__body">
               <div className="nx-income-field">

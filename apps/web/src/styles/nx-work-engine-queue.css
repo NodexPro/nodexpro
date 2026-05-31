@@ -1,3 +1,5 @@
+@import './nx-invoice-typography.css';
+
 /* INC-8 — Work Engine module tab (Invoices) Excel-like table */
 .nx-we-module-tab {
   direction: rtl;
@@ -14,7 +16,6 @@
 .nx-we-module-tab__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
 }
 
 .nx-we-module-tab__table th,
@@ -27,7 +28,6 @@
 
 .nx-we-module-tab__table th {
   background: #f8fafc;
-  font-weight: 600;
   color: #334155;
 }
 
@@ -51,7 +51,8 @@
   padding: 10px 12px;
   background: #f8fafc;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--nx-type-body-size);
+  font-weight: var(--nx-type-body-weight);
   color: #475569;
 }
 
@@ -77,15 +78,23 @@
 
 .nx-we-queue__title {
   margin: 0 0 4px;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+}
+
+.nx-invoice-ui .nx-we-queue__title {
+  font-size: var(--nx-type-page-title-size);
+  font-weight: var(--nx-type-page-title-weight);
+  line-height: var(--nx-type-page-title-line-height);
+  letter-spacing: var(--nx-type-page-title-letter-spacing);
 }
 
 .nx-we-queue__subtitle {
   margin: 0 0 18px;
-  font-size: 13px;
   color: #64748b;
+}
+
+.nx-invoice-ui .nx-we-queue__subtitle {
+  font-size: var(--nx-type-body-size);
+  font-weight: var(--nx-type-body-weight);
 }
 
 .nx-we-invoices-tab__header {
@@ -111,10 +120,61 @@
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background: #fff;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--nx-type-body-size);
+  font-weight: var(--nx-type-field-label-weight);
   cursor: pointer;
   text-align: center;
+}
+
+.nx-we-invoices-drafts {
+  margin-bottom: 14px;
+}
+
+.nx-we-invoices-drafts__label {
+  margin: 0 0 8px;
+  color: var(--nx-type-muted-color);
+}
+
+.nx-we-invoices-drafts__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.nx-we-invoices-draft-card {
+  justify-content: space-between;
+  gap: 10px;
+  height: auto;
+  padding: 10px 12px;
+  text-align: right;
+}
+
+.nx-we-invoices-draft-card__main,
+.nx-we-invoices-draft-card__meta-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.nx-we-invoices-draft-card__meta-col {
+  align-items: flex-start;
+}
+
+.nx-we-invoices-draft-card__title {
+  color: var(--nx-type-body-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-we-invoices-draft-card__subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-we-wizard-prefill {
+  margin-top: 12px;
+  color: var(--nx-type-muted-color);
 }
 
 .nx-we-wizard-issuer-btn--selected {
@@ -296,15 +356,7 @@
   }
 }
 
-/* Work Engine income wizard — single font stack */
-.nx-we-income-wizard-modal,
-.nx-we-income-wizard-modal .nx-we-doc-details,
-.nx-we-income-wizard-modal .nx-we-doc-details input,
-.nx-we-income-wizard-modal .nx-we-doc-details select,
-.nx-we-income-wizard-modal .nx-we-doc-details textarea,
-.nx-we-income-wizard-modal .nx-we-doc-details button {
-  font-family: Arial, Helvetica, sans-serif;
-}
+/* Work Engine income wizard — inherits Inter stack from .nx-invoice-ui */
 
 /* Work Engine income wizard — working modal (not a tiny confirm dialog) */
 .nx-we-income-wizard-modal.nx-modal {
@@ -355,8 +407,12 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
-  font-size: 14px;
   color: #1e293b;
+}
+
+.nx-invoice-ui .nx-we-doc-details {
+  font-size: var(--nx-type-body-size);
+  font-weight: var(--nx-type-body-weight);
 }
 
 .nx-we-doc-details__header {
@@ -366,16 +422,23 @@
 
 .nx-we-doc-details__title {
   margin: 0 0 4px;
-  font-size: 17px;
-  font-weight: 700;
   color: #0f172a;
-  line-height: 1.35;
+}
+
+.nx-invoice-ui .nx-we-doc-details__title {
+  font-size: var(--nx-type-subsection-title-size);
+  font-weight: var(--nx-type-subsection-title-weight);
+  line-height: var(--nx-type-subsection-title-line-height);
 }
 
 .nx-we-doc-details__subtitle {
   margin: 0;
-  font-size: 13px;
   color: #64748b;
+}
+
+.nx-invoice-ui .nx-we-doc-details__subtitle {
+  font-size: var(--nx-type-body-size);
+  font-weight: var(--nx-type-body-weight);
 }
 
 .nx-we-doc-details__field-errors {
@@ -1129,18 +1192,21 @@
   min-width: 0;
 }
 
-.nx-we-preview-paper__content .nx-doc__logo {
-  font-size: 22px;
-  font-weight: 800;
-  color: #1f4b99;
-  letter-spacing: 0.02em;
-  margin-bottom: 8px;
+.nx-we-preview-paper__content .nx-doc__logo-img {
+  max-width: 260px;
+  max-height: 120px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin-bottom: 10px;
 }
 
 .nx-we-preview-paper__content .nx-doc__issuer-name {
   font-size: 16px;
   font-weight: 700;
   margin-bottom: 6px;
+  color: #172033;
 }
 
 .nx-we-preview-paper__content .nx-doc__issuer-line {
@@ -1166,24 +1232,20 @@
   font-size: 13px;
   line-height: 1.5;
   margin-bottom: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-right: 3px solid #1f4b99;
-  border-radius: 6px;
-  padding: 10px 12px;
-  color: #0f172a;
 }
 
 .nx-we-preview-paper__content .nx-doc__recipient-name {
   font-weight: 700;
-  color: #1f4b99;
+}
+
+.nx-we-preview-paper__content .nx-doc__doc-type-banner {
+  margin-bottom: 10px;
 }
 
 .nx-we-preview-paper__content .nx-doc__title {
   font-size: 18px;
   font-weight: 700;
-  margin-bottom: 8px;
-  color: #0f172a;
+  margin: 0;
 }
 
 .nx-we-preview-paper__content .nx-doc__dates {
@@ -1201,8 +1263,6 @@
 }
 
 .nx-we-preview-paper__content .nx-doc__table thead th {
-  background: #1f4b99;
-  color: #fff;
   font-weight: 600;
   height: 48px;
   padding: 10px 8px;

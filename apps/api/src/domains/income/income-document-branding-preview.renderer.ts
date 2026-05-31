@@ -1,4 +1,5 @@
 import type { IncomeBrandingResolvedProfile } from './income-document-branding.types.js';
+import { gradientCss } from './income-document-branding.pure.js';
 
 function escapeHtml(value: unknown): string {
   const s = value == null ? '' : String(value);
@@ -59,10 +60,14 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }): string {
   const b = params.branding;
   const d = b.display_options;
-  const primary = b.primary_color;
-  const secondary = b.secondary_color;
-  const tableHeader = b.table_header_color;
-  const totalsColor = b.totals_color;
+  const style = b.document_style;
+  const headerGradient = gradientCss(style.gradient);
+  const tableHeader = style.table_header_color;
+  const totalsAccent = style.totals_accent_color;
+  const recipientBg = style.recipient_block_background;
+  const recipientBorder = style.recipient_block_border;
+  const issuerText = style.text_on_light;
+  const tableHeaderText = style.text_on_dark;
   const clientRight = b.client_block_position === 'right';
 
   const issuerLine = (label: string, value: string | null, visible: boolean) =>
@@ -82,19 +87,19 @@ export function renderIncomeBrandedPreviewHtml(params: {
       ? `<div class="nx-doc__issuer-subtitle">${escapeHtml(params.company_subtitle ?? b.company_subtitle)}</div>`
       : '';
 
-  const recipientLines: string[] = [];
-  recipientLines.push(`<div class="nx-doc__recipient-line nx-doc__recipient-name">${escapeHtml(params.recipient.display_name)}</div>`);
-  if (params.recipient.address) {
-    recipientLines.push(`<div class="nx-doc__recipient-line">${escapeHtml(params.recipient.address)}</div>`);
-  }
-  if (params.recipient.tax_id) {
-    recipientLines.push(
-      `<div class="nx-doc__recipient-line">${escapeHtml(`ח.פ/ע.מ ${params.recipient.tax_id}`)}</div>`,
-    );
-  }
-  if (params.recipient.phone) {
-    recipientLines.push(`<div class="nx-doc__recipient-line">${escapeHtml(params.recipient.phone)}</div>`);
-  }
+  const recipientField = (label: string, value: string | null) =>
+    value
+      ? `<div class="nx-doc__recipient-field"><span class="nx-doc__recipient-label">${escapeHtml(label)}</span> <span>${escapeHtml(value)}</span></div>`
+      : '';
+
+  const recipientBlock = `
+    <div class="nx-doc__recipient-heading">לכבוד:</div>
+    <div class="nx-doc__recipient-line nx-doc__recipient-name">${escapeHtml(params.recipient.display_name)}</div>
+    ${recipientField('ח.פ / ע.מ:', params.recipient.tax_id)}
+    ${recipientField('כתובת:', params.recipient.address)}
+    ${recipientField('טלפון:', params.recipient.phone)}
+    ${recipientField('אימייל:', params.recipient.email)}
+  `;
 
   const qtyCol = d.show_item_index;
   const showCurrencyCol = d.show_currency;
@@ -158,30 +163,33 @@ export function renderIncomeBrandedPreviewHtml(params: {
 
   return `
 <style>
-.nx-doc { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 13px; line-height: 1.45; }
+.nx-doc { font-family: Inter, Arial, Helvetica, sans-serif; color: ${issuerText}; font-size: 13px; line-height: 1.45; }
 .nx-doc__header { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
 .nx-doc__issuer { flex: 1; min-width: 0; }
 .nx-doc__title-block { flex: 1; min-width: 0; text-align: ${clientRight ? 'right' : 'left'}; }
-.nx-doc__logo-img, .nx-doc__logo-placeholder { max-height: 56px; max-width: 180px; margin-bottom: 8px; }
-.nx-doc__logo-placeholder { width: 120px; height: 40px; background: ${secondary}; border-radius: 4px; }
-.nx-doc__issuer-name { font-size: 18px; font-weight: 700; color: ${primary}; }
+.nx-doc__logo-img { max-width: 260px; max-height: 120px; width: auto; height: auto; object-fit: contain; display: block; margin-bottom: 10px; }
+.nx-doc__logo-placeholder { width: 200px; height: 80px; background: ${recipientBg}; border: 1px dashed ${recipientBorder}; border-radius: 6px; margin-bottom: 10px; }
+.nx-doc__issuer-name { font-size: 18px; font-weight: 700; color: ${issuerText}; }
 .nx-doc__issuer-subtitle { font-size: 12px; color: #475569; margin-top: 4px; }
 .nx-doc__issuer-line { font-size: 12px; color: #334155; margin-top: 2px; }
-.nx-doc__recipient { background: #f8fafc; border: 1px solid #e2e8f0; border-right: 3px solid ${primary}; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
-.nx-doc__recipient-name { font-weight: 700; color: ${primary}; }
-.nx-doc__recipient-line { font-size: 12px; color: #334155; }
-.nx-doc__title { font-size: 20px; font-weight: 700; color: ${primary}; margin: 8px 0; }
-.nx-doc__dates { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #475569; }
+.nx-doc__recipient { background: ${recipientBg}; border: 1px solid #e2e8f0; border-inline-start: 4px solid ${recipientBorder}; padding: 12px 14px; border-radius: 8px; margin-bottom: 14px; color: ${issuerText}; }
+.nx-doc__recipient-heading { font-weight: 700; margin-bottom: 6px; color: ${issuerText}; }
+.nx-doc__recipient-name { font-weight: 700; margin-bottom: 4px; color: ${issuerText}; }
+.nx-doc__recipient-field { font-size: 12px; margin-top: 3px; color: #334155; }
+.nx-doc__recipient-label { font-weight: 600; color: #475569; }
+.nx-doc__doc-type-banner { background: ${headerGradient}; color: ${style.text_on_dark}; padding: 10px 14px; border-radius: 8px; margin-bottom: 10px; }
+.nx-doc__title { font-size: 20px; font-weight: 700; margin: 0; color: ${style.text_on_dark}; }
+.nx-doc__dates { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #475569; margin-top: 8px; }
 .nx-doc__table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-.nx-doc__table th { background: ${tableHeader}; color: #fff; padding: 8px 6px; font-size: 12px; text-align: right; }
-.nx-doc__table td { border-bottom: 1px solid #e2e8f0; padding: 8px 6px; font-size: 12px; vertical-align: top; }
+.nx-doc__table th { background: ${tableHeader}; color: ${tableHeaderText}; padding: 8px 6px; font-size: 12px; text-align: right; }
+.nx-doc__table td { border-bottom: 1px solid #e2e8f0; padding: 8px 6px; font-size: 12px; vertical-align: top; color: ${issuerText}; }
 .nx-doc__totals-wrap { display: flex; justify-content: flex-end; margin-top: 12px; }
-.nx-doc__totals { min-width: 280px; background: #f8fafc; border: 1px solid #e2e8f0; border-top: 3px solid ${totalsColor}; border-radius: 8px; padding: 12px; }
-.nx-doc__total-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; }
+.nx-doc__totals { min-width: 280px; background: #f8fafc; border: 1px solid #e2e8f0; border-top: 3px solid ${totalsAccent}; border-radius: 8px; padding: 12px; }
+.nx-doc__total-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; color: ${issuerText}; }
 .nx-doc__total-row--discount { color: #b45309; }
-.nx-doc__grand-total { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid ${totalsColor}; font-size: 15px; color: ${totalsColor}; }
+.nx-doc__grand-total { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid ${totalsAccent}; font-size: 15px; color: ${totalsAccent}; font-weight: 700; }
 .nx-doc__footer { margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
-.nx-doc__footer-title { font-weight: 700; color: ${primary}; margin-bottom: 4px; }
+.nx-doc__footer-title { font-weight: 700; color: ${issuerText}; margin-bottom: 4px; }
 .nx-doc__footer-text { font-size: 12px; color: #334155; white-space: pre-wrap; }
 .nx-doc__signature { margin-top: 20px; text-align: left; }
 .nx-doc__signature-img { max-height: 64px; max-width: 200px; }
@@ -198,8 +206,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
       ${issuerLine('אימייל', params.issuer.email, d.show_business_email)}
     </div>
     <div class="nx-doc__title-block">
-      <div class="nx-doc__recipient">${recipientLines.join('')}</div>
-      <div class="nx-doc__title">${escapeHtml(params.docTypeLabel)} ${escapeHtml(params.numberPreview ?? '')}</div>
+      <div class="nx-doc__recipient">${recipientBlock}</div>
+      <div class="nx-doc__doc-type-banner">
+        <div class="nx-doc__title">${escapeHtml(params.docTypeLabel)} ${escapeHtml(params.numberPreview ?? '')}</div>
+      </div>
       <div class="nx-doc__dates">
         <span>תאריך מסמך: ${escapeHtml(formatPreviewDate(params.document_date))}</span>
         ${d.show_due_date ? `<span>תאריך לתשלום: ${escapeHtml(formatPreviewDate(params.due_date))}</span>` : ''}

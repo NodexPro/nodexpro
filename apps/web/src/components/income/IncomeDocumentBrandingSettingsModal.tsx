@@ -51,7 +51,7 @@ export function IncomeDocumentBrandingSettingsModal({
 
   const dialog = (
     <div
-      className="nx-income-branding-overlay"
+      className="nx-income-branding-overlay nx-invoice-ui"
       role="dialog"
       aria-modal="true"
       aria-labelledby="income-branding-title"
@@ -61,7 +61,7 @@ export function IncomeDocumentBrandingSettingsModal({
     >
       <div className="nx-income-branding-modal" onClick={(e) => e.stopPropagation()}>
         <div className="nx-income-branding-modal__head">
-          <h2 id="income-branding-title" className="nx-income-branding-modal__title">
+          <h2 id="income-branding-title" className="nx-income-branding-modal__title nx-modal-title">
             {title}
           </h2>
         </div>

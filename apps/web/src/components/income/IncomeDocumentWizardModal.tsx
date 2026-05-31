@@ -189,7 +189,7 @@ export function IncomeDocumentWizardModal({
       return (
         <div className="nx-income-field">
           <label>הקשר מנפיק</label>
-          <p style={{ margin: 0, fontSize: 14 }}>
+          <p className="nx-body-text" style={{ margin: 0 }}>
             {issuerContext.issuer_label}
             {issuerContext.represented_client_label ? ` · ${issuerContext.represented_client_label}` : ''}
           </p>
@@ -210,7 +210,7 @@ export function IncomeDocumentWizardModal({
               onClick={() => setForm((f) => ({ ...f, document_type: dt.key }))}
             >
               <strong>{dt.label}</strong>
-              {dt.legal_hint ? <span style={{ fontSize: 12, color: '#6b7280' }}>{dt.legal_hint}</span> : null}
+              {dt.legal_hint ? <span className="nx-helper-text">{dt.legal_hint}</span> : null}
             </button>
           ))}
         </div>
@@ -399,24 +399,12 @@ export function IncomeDocumentWizardModal({
 
     const payload = buildDraftPayload(form);
     return (
-      <div style={{ display: 'grid', gap: 8, fontSize: 14 }}>
-        <p style={{ margin: 0, color: '#6b7280' }}>תצוגה מקדימה — הנתונים יישלחו לשרת כפי שהוזנו.</p>
-        <pre
-          style={{
-            margin: 0,
-            padding: 12,
-            borderRadius: 8,
-            background: '#f9fafb',
-            border: '1px solid #e5e7eb',
-            overflow: 'auto',
-            fontSize: 12,
-            direction: 'ltr',
-            textAlign: 'left',
-          }}
-        >
-          {JSON.stringify(payload, null, 2)}
-        </pre>
-        {savedDraftId ? <p style={{ margin: 0 }}>מזהה טיוטה: {savedDraftId}</p> : null}
+      <div className="nx-income-wizard-preview">
+        <p className="nx-helper-text" style={{ margin: 0 }}>
+          תצוגה מקדימה — הנתונים יישלחו לשרת כפי שהוזנו.
+        </p>
+        <pre className="nx-income-wizard-preview__code">{JSON.stringify(payload, null, 2)}</pre>
+        {savedDraftId ? <p className="nx-body-text" style={{ margin: 0 }}>מזהה טיוטה: {savedDraftId}</p> : null}
       </div>
     );
   };
@@ -429,10 +417,10 @@ export function IncomeDocumentWizardModal({
   };
 
   return (
-    <div className="nx-income-wizard-overlay" role="dialog" aria-modal="true" aria-labelledby="income-wizard-title">
+    <div className="nx-income-wizard-overlay nx-invoice-ui" role="dialog" aria-modal="true" aria-labelledby="income-wizard-title">
       <div className="nx-income-wizard nx-accounting-editor-modal">
         <div className="nx-income-wizard__head">
-          <h2 id="income-wizard-title" style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>
+          <h2 id="income-wizard-title" className="nx-modal-title">
             {editingDraft ? 'עריכת טיוטת מסמך' : '+ מסמך'}
           </h2>
           <div className="nx-income-wizard__steps">

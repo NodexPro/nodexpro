@@ -18,7 +18,7 @@ export function IncomeIssuerContextSwitcher({ context, busy, onSelectOption }: P
       <span className="nx-income-issuer-bar__label">מנפיק פעיל:</span>
       <strong>{context.issuer_label}</strong>
       {context.represented_client_label ? (
-        <span style={{ fontSize: 13, color: '#6b7280' }}> · {context.represented_client_label}</span>
+        <span className="nx-helper-text"> · {context.represented_client_label}</span>
       ) : null}
       {canSwitch ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginInlineStart: 'auto' }}>

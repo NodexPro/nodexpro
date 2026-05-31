@@ -320,7 +320,9 @@ function WorkEngineInvoicesTabPanel(props: {
   }, [loadAggregate]);
 
   if (loading && !aggregate) {
-    return <p className="nx-we-queue__subtitle">טוען חשבוניות…</p>;
+    return (
+      <p className="nx-invoice-ui nx-we-queue__subtitle nx-body-text nx-body-text--muted">טוען חשבוניות…</p>
+    );
   }
 
   if (error && !aggregate) {
@@ -334,10 +336,10 @@ function WorkEngineInvoicesTabPanel(props: {
     entry.allowed && aggregate.allowed_actions.includes(entry.allowed_action);
 
   return (
-    <>
+    <div className="nx-invoice-ui nx-we-invoices-tab">
       <div className="nx-we-invoices-tab__header">
         <div>
-          <h1 className="nx-we-queue__title nx-we-invoices-tab__title">
+          <h1 className="nx-we-queue__title nx-we-invoices-tab__title nx-page-title">
             <span>{aggregate.title}</span>
             <IncomeDocumentBrandingGearButton
               entrypoint={aggregate.document_branding_settings_entrypoint}
@@ -345,7 +347,7 @@ function WorkEngineInvoicesTabPanel(props: {
               onClick={() => setBrandingOpen(true)}
             />
           </h1>
-          <p className="nx-we-queue__subtitle">{aggregate.description}</p>
+          <p className="nx-we-queue__subtitle nx-body-text nx-body-text--muted">{aggregate.description}</p>
         </div>
         {canOpenWizard ? (
           <button
@@ -399,19 +401,15 @@ function WorkEngineInvoicesTabPanel(props: {
                   }
                 }}
               >
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                  <strong style={{ fontSize: 14, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {d.title}
-                  </strong>
+                <span className="nx-we-invoices-draft-card__main">
+                  <strong className="nx-we-invoices-draft-card__title nx-body-text">{d.title}</strong>
                   {d.subtitle ? (
-                    <span style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {d.subtitle}
-                    </span>
+                    <span className="nx-we-invoices-draft-card__subtitle nx-helper-text">{d.subtitle}</span>
                   ) : null}
                 </span>
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: 12, color: '#475569' }}>{d.status_label}</span>
-                  <span style={{ fontSize: 12, color: '#64748b' }}>{d.total_display ?? '—'}</span>
+                <span className="nx-we-invoices-draft-card__meta-col">
+                  <span className="nx-helper-text">{d.status_label}</span>
+                  <span className="nx-helper-text">{d.total_display ?? '—'}</span>
                 </span>
               </button>
             ))}
@@ -473,7 +471,7 @@ function WorkEngineInvoicesTabPanel(props: {
           }
         }}
       />
-    </>
+    </div>
   );
 }
 

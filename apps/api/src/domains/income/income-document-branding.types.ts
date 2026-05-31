@@ -32,6 +32,24 @@ export type IncomeBrandingPaymentMethod = {
   enabled: boolean;
 };
 
+export type IncomeDocumentStyleGradient = {
+  from: string;
+  to: string;
+};
+
+export type IncomeDocumentStylePreset = {
+  key: string;
+  label: string;
+  gradient: IncomeDocumentStyleGradient;
+  table_header_color: string;
+  totals_accent_color: string;
+  recipient_block_background: string;
+  recipient_block_border: string;
+  text_on_dark: string;
+  text_on_light: string;
+  print_safe: boolean;
+};
+
 export type IncomeBrandingProfileRow = {
   id: string;
   organization_id: string;
@@ -40,6 +58,7 @@ export type IncomeBrandingProfileRow = {
   logo_file_asset_id: string | null;
   signature_file_asset_id: string | null;
   company_subtitle: string | null;
+  document_style_key: string;
   primary_color: string;
   secondary_color: string;
   table_header_color: string;
@@ -62,6 +81,8 @@ export type IncomeBrandingProfileRow = {
 };
 
 export type IncomeBrandingResolvedProfile = {
+  document_style_key: string;
+  document_style: IncomeDocumentStylePreset;
   company_subtitle: string | null;
   primary_color: string;
   secondary_color: string;
@@ -84,21 +105,10 @@ export type IncomeBrandingResolvedProfile = {
   signature_data_url: string | null;
 };
 
-export type IncomeDocumentBrandingColorPreset = {
-  key: string;
-  label: string;
-  primary_color: string;
-  table_header_color: string;
-  totals_color: string;
-  secondary_color: string;
-  text_color: string;
-  print_safe: boolean;
-};
-
 export type IncomeDocumentBrandingField = {
   key: string;
   label: string;
-  input_type: 'text' | 'textarea' | 'color' | 'boolean' | 'select' | 'color_preset';
+  input_type: 'text' | 'textarea' | 'boolean' | 'select' | 'document_style';
   value: string | boolean;
   options?: { value: string; label: string }[];
   visible: boolean;
@@ -120,14 +130,16 @@ export type IncomeDocumentBrandingAssetSlot = {
   upload_command: string;
   allowed_actions: string[];
   hint: string | null;
+  recommended_size_hint: string | null;
+  can_remove: boolean;
 };
 
 export type IncomeDocumentBrandingProfileAggregate = {
   profile_id: string;
   title: string;
   tabs: IncomeDocumentBrandingTab[];
-  color_presets: IncomeDocumentBrandingColorPreset[];
-  selected_color_preset_key: string;
+  document_style_presets: IncomeDocumentStylePreset[];
+  selected_document_style_key: string;
   save_section_key: string;
   logo: IncomeDocumentBrandingAssetSlot;
   signature: IncomeDocumentBrandingAssetSlot;

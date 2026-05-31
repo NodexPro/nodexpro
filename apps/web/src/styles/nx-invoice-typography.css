@@ -1,0 +1,202 @@
+/**
+ * Shared typography — Income module + Work Engine Invoices tab (+ related modals).
+ * UI-only; apply `.nx-invoice-ui` on page roots and portaled modals.
+ */
+
+:root {
+  --nx-font-family-invoice: Inter, Arial, Helvetica, sans-serif;
+
+  --nx-type-page-title-size: 32px;
+  --nx-type-page-title-weight: 700;
+  --nx-type-page-title-line-height: 1.15;
+  --nx-type-page-title-letter-spacing: -0.02em;
+
+  --nx-type-section-title-size: 24px;
+  --nx-type-section-title-weight: 700;
+  --nx-type-section-title-line-height: 1.2;
+
+  --nx-type-card-title-size: 20px;
+  --nx-type-card-title-weight: 600;
+  --nx-type-card-title-line-height: 1.25;
+
+  --nx-type-modal-title-size: 20px;
+  --nx-type-modal-title-weight: 700;
+  --nx-type-modal-title-line-height: 1.2;
+
+  --nx-type-subsection-title-size: 16px;
+  --nx-type-subsection-title-weight: 600;
+  --nx-type-subsection-title-line-height: 1.3;
+
+  --nx-type-field-label-size: 14px;
+  --nx-type-field-label-weight: 600;
+  --nx-type-field-label-line-height: 1.3;
+
+  --nx-type-body-size: 14px;
+  --nx-type-body-weight: 400;
+  --nx-type-body-line-height: 1.45;
+
+  --nx-type-table-size: 14px;
+  --nx-type-table-weight: 400;
+  --nx-type-table-line-height: 1.4;
+
+  --nx-type-helper-size: 12px;
+  --nx-type-helper-weight: 400;
+  --nx-type-helper-line-height: 1.35;
+
+  --nx-type-muted-color: #64748b;
+  --nx-type-body-color: #0f172a;
+}
+
+/* Scope: font family + default body */
+.nx-invoice-ui {
+  font-family: var(--nx-font-family-invoice);
+  font-size: var(--nx-type-body-size);
+  font-weight: var(--nx-type-body-weight);
+  line-height: var(--nx-type-body-line-height);
+  color: var(--nx-type-body-color);
+}
+
+.nx-invoice-ui .nx-page-title {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--nx-type-page-title-size);
+  font-weight: var(--nx-type-page-title-weight);
+  line-height: var(--nx-type-page-title-line-height);
+  letter-spacing: var(--nx-type-page-title-letter-spacing);
+  color: var(--nx-type-body-color);
+}
+
+.nx-invoice-ui .nx-section-title {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--nx-type-section-title-size);
+  font-weight: var(--nx-type-section-title-weight);
+  line-height: var(--nx-type-section-title-line-height);
+  color: var(--nx-type-body-color);
+}
+
+.nx-invoice-ui .nx-card-title {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--nx-type-card-title-size);
+  font-weight: var(--nx-type-card-title-weight);
+  line-height: var(--nx-type-card-title-line-height);
+  color: var(--nx-type-body-color);
+}
+
+.nx-invoice-ui .nx-modal-title {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--nx-type-modal-title-size);
+  font-weight: var(--nx-type-modal-title-weight);
+  line-height: var(--nx-type-modal-title-line-height);
+  letter-spacing: normal;
+  color: var(--nx-type-body-color);
+}
+
+.nx-invoice-ui .nx-modal-header h2,
+.nx-invoice-ui .nx-modal-header h3 {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--nx-type-modal-title-size);
+  font-weight: var(--nx-type-modal-title-weight);
+  line-height: var(--nx-type-modal-title-line-height);
+  color: var(--nx-type-body-color);
+}
+
+.nx-invoice-ui .nx-subsection-title {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--nx-type-subsection-title-size);
+  font-weight: var(--nx-type-subsection-title-weight);
+  line-height: var(--nx-type-subsection-title-line-height);
+  color: var(--nx-type-body-color);
+}
+
+.nx-invoice-ui .nx-field-label {
+  font-family: inherit;
+  font-size: var(--nx-type-field-label-size);
+  font-weight: var(--nx-type-field-label-weight);
+  line-height: var(--nx-type-field-label-line-height);
+  color: #374151;
+}
+
+.nx-invoice-ui .nx-body-text {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--nx-type-body-size);
+  font-weight: var(--nx-type-body-weight);
+  line-height: var(--nx-type-body-line-height);
+  color: var(--nx-type-body-color);
+}
+
+.nx-invoice-ui .nx-body-text--muted {
+  color: var(--nx-type-muted-color);
+}
+
+.nx-invoice-ui .nx-table-text {
+  font-family: inherit;
+  font-size: var(--nx-type-table-size);
+  font-weight: var(--nx-type-table-weight);
+  line-height: var(--nx-type-table-line-height);
+}
+
+.nx-invoice-ui .nx-helper-text {
+  font-family: inherit;
+  font-size: var(--nx-type-helper-size);
+  font-weight: var(--nx-type-helper-weight);
+  line-height: var(--nx-type-helper-line-height);
+  color: var(--nx-type-muted-color);
+}
+
+/* Unified table headers + cells */
+.nx-invoice-ui .nx-income-table,
+.nx-invoice-ui .nx-we-module-tab__table,
+.nx-invoice-ui .nx-we-doc-details__table {
+  font-family: inherit;
+  font-size: var(--nx-type-table-size);
+  font-weight: var(--nx-type-table-weight);
+  line-height: var(--nx-type-table-line-height);
+}
+
+.nx-invoice-ui .nx-income-table th,
+.nx-invoice-ui .nx-we-module-tab__table th,
+.nx-invoice-ui .nx-we-doc-details__table th {
+  font-size: var(--nx-type-field-label-size);
+  font-weight: var(--nx-type-field-label-weight);
+  line-height: var(--nx-type-field-label-line-height);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Form labels (income fields, branding, doc details) */
+.nx-invoice-ui .nx-income-field > label,
+.nx-invoice-ui .nx-income-branding-field__label,
+.nx-invoice-ui .nx-we-doc-details__field > label,
+.nx-invoice-ui .nx-we-recipient-search__search-field > label {
+  font-family: inherit;
+  font-size: var(--nx-type-field-label-size);
+  font-weight: var(--nx-type-field-label-weight);
+  line-height: var(--nx-type-field-label-line-height);
+  color: #374151;
+}
+
+.nx-invoice-ui .nx-income-field input,
+.nx-invoice-ui .nx-income-field select,
+.nx-invoice-ui .nx-income-field textarea,
+.nx-invoice-ui .nx-income-branding-input,
+.nx-invoice-ui .nx-we-doc-details__field input,
+.nx-invoice-ui .nx-we-doc-details__field select,
+.nx-invoice-ui .nx-we-doc-details__field textarea {
+  font-family: inherit;
+  font-size: var(--nx-type-body-size);
+  font-weight: var(--nx-type-body-weight);
+}
+
+.nx-invoice-ui .nx-income-hint,
+.nx-invoice-ui .nx-income-branding-hint {
+  font-size: var(--nx-type-helper-size);
+  font-weight: var(--nx-type-helper-weight);
+  line-height: var(--nx-type-helper-line-height);
+  color: var(--nx-type-muted-color);
+}

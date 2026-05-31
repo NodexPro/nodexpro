@@ -373,7 +373,7 @@ export function WorkEngineIncomeDocumentWizardModal({
             ))}
           </select>
           {selectedOfficeClient ? (
-            <div className="nx-we-wizard-prefill" style={{ marginTop: 12, fontSize: 13 }}>
+            <div className="nx-we-wizard-prefill nx-helper-text">
               <div>{selectedOfficeClient.display_name}</div>
               {selectedOfficeClient.business_type_label ? (
                 <div>{selectedOfficeClient.business_type_label}</div>
@@ -412,7 +412,7 @@ export function WorkEngineIncomeDocumentWizardModal({
             >
               <strong>{dt.label}</strong>
               {dt.disabled_reason ? (
-                <span style={{ fontSize: 12, color: '#6b7280' }}>{dt.disabled_reason}</span>
+                <span className="nx-helper-text">{dt.disabled_reason}</span>
               ) : null}
             </button>
           ))}
@@ -487,13 +487,13 @@ export function WorkEngineIncomeDocumentWizardModal({
           : '';
 
   return (
-    <div className="nx-modal-overlay" role="dialog" aria-modal="true">
+    <div className="nx-modal-overlay nx-invoice-ui" role="dialog" aria-modal="true">
       <div
         className={`nx-modal nx-accounting-editor-modal nx-we-income-wizard-modal ${modalStepClass}`.trim()}
         dir="rtl"
       >
         <div className="nx-modal-header">
-          <h2>{stepTitle}</h2>
+          <h2 className="nx-modal-title">{stepTitle}</h2>
           <button type="button" className="nx-modal-close" onClick={onClose} disabled={footerLocked}>
             סגירה
           </button>
