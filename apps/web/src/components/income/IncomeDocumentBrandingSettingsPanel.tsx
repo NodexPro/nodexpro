@@ -634,21 +634,6 @@ export function IncomeDocumentBrandingSettingsPanel({
           </button>
         ))}
       </nav>
-      <div className="nx-branding-studio-content">
-        <StudioSectionContent
-          section={activeSection}
-          styleTemplates={styleTemplates}
-          colorThemePresets={studio.color_theme_presets}
-          studio={studio}
-          profile={profile}
-          draft={draft}
-          busy={busy}
-          canEdit={canEdit}
-          commands={commands}
-          onDraftChange={onDraftChange}
-          onCommand={onCommand}
-        />
-      </div>
       <aside className="nx-branding-studio-preview" aria-label="תצוגה מקדימה">
         <div className="nx-branding-studio-preview__head">
           <span className="nx-branding-studio-preview__title">תצוגה מקדימה</span>
@@ -674,6 +659,21 @@ export function IncomeDocumentBrandingSettingsPanel({
           )}
         </div>
       </aside>
+      <div className="nx-branding-studio-content">
+        <StudioSectionContent
+          section={activeSection}
+          styleTemplates={styleTemplates}
+          colorThemePresets={studio.color_theme_presets}
+          studio={studio}
+          profile={profile}
+          draft={draft}
+          busy={busy}
+          canEdit={canEdit}
+          commands={commands}
+          onDraftChange={onDraftChange}
+          onCommand={onCommand}
+        />
+      </div>
     </div>
   );
 }

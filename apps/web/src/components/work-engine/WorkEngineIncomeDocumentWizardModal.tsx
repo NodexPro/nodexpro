@@ -487,7 +487,7 @@ export function WorkEngineIncomeDocumentWizardModal({
           : '';
 
   return (
-    <div className="nx-modal-overlay nx-invoice-ui" role="dialog" aria-modal="true">
+    <div className="nx-modal-overlay nx-invoice-ui nx-invoice-designer-ui" role="dialog" aria-modal="true">
       <div
         className={`nx-modal nx-accounting-editor-modal nx-we-income-wizard-modal ${modalStepClass}`.trim()}
         dir="rtl"

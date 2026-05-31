@@ -1,0 +1,60 @@
+/**
+ * NodexPro gradient scrollbars — Income Branding Studio + invoice designer modals only.
+ * Scope with `.nx-invoice-designer-ui` on modal overlay roots (not global app).
+ */
+
+.nx-invoice-designer-ui {
+  --nx-designer-scroll-size: 7px;
+  --nx-designer-scroll-track: #eef6ff;
+  --nx-designer-scroll-track-hover: #e3f0ff;
+  --nx-designer-scroll-thumb-start: #3eaef4;
+  --nx-designer-scroll-thumb-end: #6a45f5;
+  --nx-designer-scroll-thumb-hover-start: #56b8f6;
+  --nx-designer-scroll-thumb-hover-end: #7b57f7;
+  scrollbar-color: #6a45f5 #eef6ff;
+  scrollbar-width: thin;
+}
+
+.nx-invoice-designer-ui,
+.nx-invoice-designer-ui * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nx-designer-scroll-thumb-end) var(--nx-designer-scroll-track);
+}
+
+.nx-invoice-designer-ui::-webkit-scrollbar,
+.nx-invoice-designer-ui *::-webkit-scrollbar {
+  width: var(--nx-designer-scroll-size);
+  height: var(--nx-designer-scroll-size);
+}
+
+.nx-invoice-designer-ui::-webkit-scrollbar-track,
+.nx-invoice-designer-ui *::-webkit-scrollbar-track {
+  background: var(--nx-designer-scroll-track);
+  border-radius: 999px;
+}
+
+.nx-invoice-designer-ui::-webkit-scrollbar-thumb,
+.nx-invoice-designer-ui *::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    var(--nx-designer-scroll-thumb-start) 0%,
+    var(--nx-designer-scroll-thumb-end) 100%
+  );
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background-clip: padding-box;
+}
+
+.nx-invoice-designer-ui::-webkit-scrollbar-thumb:hover,
+.nx-invoice-designer-ui *::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    var(--nx-designer-scroll-thumb-hover-start) 0%,
+    var(--nx-designer-scroll-thumb-hover-end) 100%
+  );
+}
+
+.nx-invoice-designer-ui::-webkit-scrollbar-corner,
+.nx-invoice-designer-ui *::-webkit-scrollbar-corner {
+  background: transparent;
+}

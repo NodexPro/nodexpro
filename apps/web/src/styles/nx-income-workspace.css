@@ -1,4 +1,5 @@
 @import './nx-invoice-typography.css';
+@import './nx-invoice-designer-scrollbars.css';
 
 .nx-income-workspace {
   display: flex;
@@ -708,25 +709,37 @@
   margin-top: 6px;
 }
 
-/* Document Branding Studio — side nav + content + live preview */
+/* Document Branding Studio — nav | live preview | settings */
 .nx-income-branding-modal--studio {
-  width: min(1180px, 98vw);
-  max-height: min(92vh, 900px);
+  width: min(1240px, 96vw);
+  height: min(88vh, 920px);
+  max-height: min(88vh, 920px);
+}
+
+.nx-income-branding-modal--studio .nx-income-branding-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 24px 12px;
 }
 
 .nx-branding-studio {
   display: grid;
-  grid-template-columns: 220px minmax(320px, 350px) minmax(480px, 550px);
-  gap: 0;
-  min-height: 520px;
+  grid-template-columns: 200px minmax(520px, 1fr) minmax(360px, 380px);
+  grid-template-areas: 'nav preview content';
+  gap: 24px;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .nx-branding-studio-nav {
+  grid-area: nav;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 0 12px 0 0;
+  min-height: 0;
+  padding-inline-end: 4px;
   border-inline-start: 1px solid #e2e8f0;
 }
 
@@ -752,22 +765,31 @@
   color: #1d4ed8;
 }
 
-.nx-branding-studio-content {
-  padding: 0 16px;
-  overflow: auto;
-  max-height: min(68vh, 640px);
-}
-
 .nx-branding-studio-preview {
-  border-inline-start: 1px solid #e2e8f0;
-  padding: 0 0 0 16px;
+  grid-area: preview;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  position: sticky;
-  top: 0;
-  align-self: start;
-  max-height: min(68vh, 640px);
+  min-height: 0;
+  overflow: hidden;
+  border-inline-start: 1px solid #e2e8f0;
+  border-inline-end: 1px solid #e2e8f0;
+  padding: 0 20px;
+}
+
+.nx-branding-studio-content {
+  grid-area: content;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-inline-start: 4px;
+  padding-inline-end: 2px;
+}
+
+.nx-branding-studio-section {
+  width: 100%;
+  min-width: 0;
 }
 
 .nx-branding-studio-preview__head {
@@ -791,8 +813,10 @@
 
 .nx-branding-studio-preview__frame {
   position: relative;
-  flex: 1;
-  min-height: 480px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .nx-branding-studio-preview__loading {
@@ -815,13 +839,21 @@
 }
 
 .nx-branding-studio-preview__doc {
-  flex: 1;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 12px;
-  min-height: 480px;
+}
+
+.nx-branding-studio-preview__empty {
+  margin: 0;
+  padding: 24px 12px;
+  color: #64748b;
+  font-size: 13px;
 }
 
 .nx-branding-studio-preview__doc .nx-doc {
@@ -853,12 +885,14 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  width: 100%;
 }
 
 .nx-branding-studio-theme-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  width: 100%;
 }
 
 .nx-branding-studio-style-card,
@@ -868,6 +902,8 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
   padding: 10px;
   border: 2px solid #e2e8f0;
   border-radius: 12px;
@@ -956,7 +992,6 @@
 
 .nx-branding-studio-asset__frame {
   width: 100%;
-  max-width: 300px;
   height: 180px;
   border: 1px dashed #cbd5e1;
   border-radius: 10px;
@@ -1150,18 +1185,63 @@
   margin: 4px 8px;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1080px) {
+  .nx-income-branding-modal--studio {
+    width: min(96vw, 960px);
+    height: min(92vh, 920px);
+  }
+
+  .nx-income-branding-modal--studio .nx-income-branding-modal__body {
+    overflow-y: auto;
+  }
+
   .nx-branding-studio {
-    grid-template-columns: 200px 1fr;
-    grid-template-rows: auto minmax(400px, 1fr);
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(420px, auto);
+    grid-template-areas:
+      'nav'
+      'content'
+      'preview';
+    gap: 16px;
+    height: auto;
+    min-height: min(100%, 720px);
+    overflow: visible;
+  }
+
+  .nx-branding-studio-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    border-inline-start: none;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 12px;
+  }
+
+  .nx-branding-studio-content {
+    overflow: visible;
+    max-height: none;
   }
 
   .nx-branding-studio-preview {
-    grid-column: 1 / -1;
     border-inline-start: none;
+    border-inline-end: none;
     border-top: 1px solid #e2e8f0;
     padding: 16px 0 0;
-    position: static;
-    max-height: none;
+    min-height: 420px;
+  }
+
+  .nx-branding-studio-style-grid,
+  .nx-branding-studio-theme-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .nx-income-branding-modal--studio .nx-income-branding-modal__body {
+    padding: 12px 16px 8px;
+  }
+
+  .nx-branding-studio {
+    gap: 12px;
   }
 }

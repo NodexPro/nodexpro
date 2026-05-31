@@ -417,7 +417,7 @@ export function IncomeDocumentWizardModal({
   };
 
   return (
-    <div className="nx-income-wizard-overlay nx-invoice-ui" role="dialog" aria-modal="true" aria-labelledby="income-wizard-title">
+    <div className="nx-income-wizard-overlay nx-invoice-ui nx-invoice-designer-ui" role="dialog" aria-modal="true" aria-labelledby="income-wizard-title">
       <div className="nx-income-wizard nx-accounting-editor-modal">
         <div className="nx-income-wizard__head">
           <h2 id="income-wizard-title" className="nx-modal-title">

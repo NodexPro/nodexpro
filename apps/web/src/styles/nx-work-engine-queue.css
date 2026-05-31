@@ -1,4 +1,5 @@
 @import './nx-invoice-typography.css';
+@import './nx-invoice-designer-scrollbars.css';
 
 /* INC-8 — Work Engine module tab (Invoices) Excel-like table */
 .nx-we-module-tab {

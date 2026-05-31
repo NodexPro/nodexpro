@@ -53,7 +53,7 @@ export function IncomeDocumentBrandingSettingsModal({
 
   const dialog = (
     <div
-      className="nx-income-branding-overlay nx-invoice-ui"
+      className="nx-income-branding-overlay nx-invoice-ui nx-invoice-designer-ui"
       role="dialog"
       aria-modal="true"
       aria-labelledby="income-branding-title"
