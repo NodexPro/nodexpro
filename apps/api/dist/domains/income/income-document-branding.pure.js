@@ -1,4 +1,5 @@
 import { badRequest } from '../../shared/errors.js';
+import { STUDIO_DOCUMENT_STYLE_KEYS } from './income-document-branding.types.js';
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 export const DEFAULT_DOCUMENT_STYLE_KEY = 'classic';
 export const DEFAULT_COLOR_THEME_KEY = 'modern_blue';
@@ -66,28 +67,22 @@ function buildStyleMiniPreview(styleKey, theme) {
     const grad = gradientCss(theme.gradient);
     if (styleKey === 'elegant') {
         return `<div class="nx-studio-style-mini nx-studio-style-mini--elegant" dir="rtl">
-<div class="nx-studio-style-mini__row"><span class="nx-studio-style-mini__logo"></span><span class="nx-studio-style-mini__company"></span></div>
+<div class="nx-studio-style-mini__row"><span class="nx-studio-style-mini__logo nx-studio-style-mini__logo--large"></span><span class="nx-studio-style-mini__company"></span></div>
 <div class="nx-studio-style-mini__rule" style="background:${accent}"></div>
-<div class="nx-studio-style-mini__recipient" style="border-inline-start-color:${accent}"></div>
+<div class="nx-studio-style-mini__recipient nx-studio-style-mini__recipient--elegant" style="border-inline-start-color:${accent}"></div>
+<div class="nx-studio-style-mini__title-line nx-studio-style-mini__title-line--elegant" style="border-bottom-color:${accent}"></div>
 <div class="nx-studio-style-mini__table" style="background:${header}"></div>
-<div class="nx-studio-style-mini__totals" style="border-top-color:${totals}"></div>
+<div class="nx-studio-style-mini__totals nx-studio-style-mini__totals--elegant" style="border-top-color:${totals}"></div>
 </div>`;
     }
     if (styleKey === 'modern') {
         return `<div class="nx-studio-style-mini nx-studio-style-mini--modern" dir="rtl">
-<div class="nx-studio-style-mini__logo-line"></div>
-<div class="nx-studio-style-mini__rule"></div>
-<div class="nx-studio-style-mini__recipient"></div>
-<div class="nx-studio-style-mini__table" style="background:${header}"></div>
-<div class="nx-studio-style-mini__totals" style="border-top-color:${totals}"></div>
-</div>`;
-    }
-    if (styleKey === 'minimal') {
-        return `<div class="nx-studio-style-mini nx-studio-style-mini--minimal" dir="rtl">
-<div class="nx-studio-style-mini__compact-header"></div>
-<div class="nx-studio-style-mini__recipient"></div>
-<div class="nx-studio-style-mini__table" style="background:#e2e8f0"></div>
-<div class="nx-studio-style-mini__totals" style="border-top-color:${totals}"></div>
+<div class="nx-studio-style-mini__modern-top"><span class="nx-studio-style-mini__logo nx-studio-style-mini__logo--small"></span><span class="nx-studio-style-mini__company-lines"></span></div>
+<div class="nx-studio-style-mini__rule nx-studio-style-mini__rule--thin"></div>
+<div class="nx-studio-style-mini__recipient nx-studio-style-mini__recipient--open"></div>
+<div class="nx-studio-style-mini__title-line" style="border-bottom-color:${accent}"></div>
+<div class="nx-studio-style-mini__table nx-studio-style-mini__table--light" style="border-bottom:2px solid ${header}"></div>
+<div class="nx-studio-style-mini__totals nx-studio-style-mini__totals--open" style="border-top-color:${totals}"></div>
 </div>`;
     }
     return `<div class="nx-studio-style-mini nx-studio-style-mini--classic" dir="rtl">
@@ -212,26 +207,20 @@ const STYLE_TEMPLATE_DEFS = [
     {
         key: 'classic',
         label: 'קלאסי',
-        description: 'פריסה עסקית קלאסית — לוגו, לקוח, כותרת מסמך',
+        description: 'מסמך מסורתי — לוגו ופרטי עסק, בלוק לקוח מול כותרת בולטת',
         default_layout_template_key: 'logo_left_client_right',
     },
     {
         key: 'modern',
         label: 'מודרני',
-        description: 'קווים דקים ומינימום עיטור',
+        description: 'ריווח נקי, קווים דקים, כותרת קלה ללא בלוק צבע מלא',
         default_layout_template_key: 'logo_left_client_right',
     },
     {
         key: 'elegant',
         label: 'אלגנטי',
-        description: 'פרימיום עסקי — לוגו משמאל, פרטי חברה מימין',
+        description: 'פרימיום עסקי — לוגו גדול, קווי הדגשה עדינים, סה״כ אלגנטי',
         default_layout_template_key: 'logo_left_client_right',
-    },
-    {
-        key: 'minimal',
-        label: 'מינימלי',
-        description: 'ריווח מרבי ומינימום צבע',
-        default_layout_template_key: 'israeli_classic',
     },
 ];
 export const INCOME_DOCUMENT_STYLE_TEMPLATES = STYLE_TEMPLATE_DEFS.map((s) => {
@@ -287,10 +276,22 @@ export function getDocumentStylePresets() {
 }
 export function getDocumentStyleTemplates(selectedThemeKey) {
     const theme = resolveColorThemePreset(selectedThemeKey ?? DEFAULT_COLOR_THEME_KEY);
-    return STYLE_TEMPLATE_DEFS.map((s) => ({
-        ...s,
-        mini_preview_markup: buildStyleMiniPreview(s.key, theme),
-    }));
+    return STUDIO_DOCUMENT_STYLE_KEYS.map((key) => {
+        const def = STYLE_TEMPLATE_DEFS.find((s) => s.key === key);
+        return {
+            ...def,
+            mini_preview_markup: buildStyleMiniPreview(key, theme),
+        };
+    });
+}
+export function normalizeStudioDocumentStyleKey(key) {
+    const k = String(key ?? '').trim();
+    if (k === 'minimal')
+        return 'modern';
+    if (STUDIO_DOCUMENT_STYLE_KEYS.includes(k)) {
+        return k;
+    }
+    return DEFAULT_DOCUMENT_STYLE_KEY;
 }
 export function getLayoutTemplates() {
     return INCOME_LAYOUT_TEMPLATES.map((t) => ({ ...t }));
@@ -312,8 +313,11 @@ export function resolveDocumentStylePreset(key) {
     return resolveColorThemePreset(k);
 }
 export function resolveDocumentStyleTemplate(key) {
-    const k = key.trim();
-    const def = STYLE_TEMPLATE_DEFS.find((s) => s.key === k);
+    const raw = String(key ?? '').trim();
+    if (LEGACY_COLOR_KEYS.has(raw))
+        return null;
+    const normalized = normalizeStudioDocumentStyleKey(raw || null);
+    const def = STYLE_TEMPLATE_DEFS.find((s) => s.key === normalized);
     if (!def)
         return null;
     const theme = resolveColorThemePreset(DEFAULT_COLOR_THEME_KEY);
@@ -334,13 +338,10 @@ export function resolveLogoSizeKey(value) {
 }
 export function resolveDocumentStyleKeyForRow(row) {
     const raw = String(row.document_style_key ?? '').trim();
-    if (raw && resolveDocumentStyleTemplate(raw)) {
-        return raw;
-    }
     if (LEGACY_COLOR_KEYS.has(raw)) {
         return DEFAULT_DOCUMENT_STYLE_KEY;
     }
-    return DEFAULT_DOCUMENT_STYLE_KEY;
+    return normalizeStudioDocumentStyleKey(raw || null);
 }
 export function resolveColorThemeKeyForRow(row) {
     const explicit = String(row.color_theme_key ?? '').trim();

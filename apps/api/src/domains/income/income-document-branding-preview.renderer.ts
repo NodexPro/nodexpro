@@ -119,14 +119,14 @@ export function renderIncomeBrandedPreviewHtml(params: {
     ${recipientField('אימייל:', params.recipient.email)}
   `;
 
-  const docTitleHtml = `
-    <div class="nx-doc__doc-meta">
+  const docTitleInner = `
       <div class="nx-doc__title">${escapeHtml(params.docTypeLabel)} · ${escapeHtml(numberDisplay)}</div>
       <div class="nx-doc__dates">
         <span>תאריך מסמך: ${escapeHtml(formatPreviewDate(params.document_date))}</span>
         ${d.show_due_date ? `<span>תאריך לתשלום: ${escapeHtml(formatPreviewDate(params.due_date))}</span>` : ''}
-      </div>
-    </div>`;
+      </div>`;
+
+  const docTitleHtml = `<div class="nx-doc__doc-meta">${docTitleInner}</div>`;
 
   const qtyCol = d.show_item_index;
   const showCurrencyCol = d.show_currency;
@@ -189,9 +189,9 @@ export function renderIncomeBrandedPreviewHtml(params: {
         : '';
 
   const bannerClass =
-    styleKey === 'modern' || styleKey === 'minimal' || styleKey === 'elegant'
-      ? 'nx-doc__doc-type-banner nx-doc__doc-type-banner--subtle'
-      : 'nx-doc__doc-type-banner';
+    styleKey === 'classic'
+      ? 'nx-doc__doc-type-banner'
+      : 'nx-doc__doc-type-banner nx-doc__doc-type-banner--subtle';
 
   let headerHtml = '';
   if (styleKey === 'elegant') {
@@ -202,7 +202,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
       <div class="nx-doc__elegant-company">${issuerDetails}<div class="nx-doc__elegant-accent"></div></div>
     </div>
     <div class="nx-doc__elegant-divider"></div>
-    <div class="nx-doc__recipient">${recipientBlock}</div>
+    <div class="nx-doc__recipient nx-doc__recipient--elegant">${recipientBlock}</div>
     <div class="${bannerClass}">${docTitleHtml}</div>
   </div>`;
   } else if (styleKey === 'modern') {
@@ -213,16 +213,9 @@ export function renderIncomeBrandedPreviewHtml(params: {
       <div class="nx-doc__modern-issuer">${issuerDetails}</div>
     </div>
     <div class="nx-doc__modern-rule"></div>
-    <div class="nx-doc__recipient">${recipientBlock}</div>
-    <div class="nx-doc__modern-rule"></div>
-    ${docTitleHtml}
-  </div>`;
-  } else if (styleKey === 'minimal') {
-    headerHtml = `
-  <div class="nx-doc__header nx-doc__header--minimal">
-    <div class="nx-doc__minimal-top">${logoHtml}<div class="nx-doc__minimal-issuer">${issuerDetails}</div></div>
-    <div class="nx-doc__recipient">${recipientBlock}</div>
-    ${docTitleHtml}
+    <div class="nx-doc__recipient nx-doc__recipient--modern">${recipientBlock}</div>
+    <div class="nx-doc__modern-rule nx-doc__modern-rule--spaced"></div>
+    <div class="nx-doc__doc-meta nx-doc__doc-meta--modern">${docTitleInner}</div>
   </div>`;
   } else {
     headerHtml = `
@@ -239,11 +232,18 @@ export function renderIncomeBrandedPreviewHtml(params: {
   }
 
   const totalsBoxClass =
-    styleKey === 'minimal'
-      ? 'nx-doc__totals nx-doc__totals--minimal'
-      : styleKey === 'elegant'
-        ? 'nx-doc__totals nx-doc__totals--elegant'
+    styleKey === 'elegant'
+      ? 'nx-doc__totals nx-doc__totals--elegant'
+      : styleKey === 'modern'
+        ? 'nx-doc__totals nx-doc__totals--modern'
         : 'nx-doc__totals';
+
+  const tableClass =
+    styleKey === 'modern'
+      ? 'nx-doc__table nx-doc__table--modern'
+      : styleKey === 'elegant'
+        ? 'nx-doc__table nx-doc__table--elegant'
+        : 'nx-doc__table';
 
   return `
 <style>
@@ -263,29 +263,38 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc__recipient-field { font-size: 12px; margin-top: 3px; color: #334155; }
 .nx-doc__recipient-label { font-weight: 600; color: #475569; }
 .nx-doc__doc-type-banner { background: ${headerGradient}; color: ${theme.text_on_dark}; padding: 10px 14px; border-radius: 8px; margin-bottom: 10px; }
-.nx-doc__doc-type-banner--subtle { background: transparent; color: ${issuerText}; padding: 8px 0; border-radius: 0; border-bottom: 2px solid ${recipientAccent}; margin-bottom: 8px; }
+.nx-doc__doc-type-banner--subtle { background: transparent; color: ${issuerText}; padding: 10px 0 8px; border-radius: 0; border-bottom: 1px solid ${recipientAccent}; margin-bottom: 8px; }
 .nx-doc__title { font-size: 20px; font-weight: 700; margin: 0; }
 .nx-doc__doc-type-banner .nx-doc__title { color: ${theme.text_on_dark}; }
-.nx-doc__doc-type-banner--subtle .nx-doc__title { color: ${issuerText}; }
+.nx-doc__doc-type-banner--subtle .nx-doc__title { color: ${issuerText}; font-size: 19px; }
 .nx-doc__dates { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #475569; margin-top: 8px; }
 .nx-doc__header--elegant .nx-doc__elegant-top { display: flex; justify-content: space-between; gap: 32px; align-items: flex-start; }
 .nx-doc__header--elegant .nx-doc__elegant-logo { flex: 0 0 auto; }
+.nx-doc__header--elegant .nx-doc__elegant-logo .nx-doc__logo-img { max-width: ${Math.round(logoDims.maxWidthPx * 1.1)}px; max-height: ${Math.round(logoDims.maxHeightPx * 1.1)}px; }
 .nx-doc__header--elegant .nx-doc__elegant-company { flex: 1; text-align: left; }
-.nx-doc__header--elegant .nx-doc__elegant-accent { height: 1px; background: ${recipientAccent}; margin-top: 10px; max-width: 220px; margin-inline-start: auto; }
-.nx-doc__header--elegant .nx-doc__elegant-divider { height: 1px; background: #e2e8f0; margin: 18px 0; }
-.nx-doc__header--modern .nx-doc__modern-top { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 8px; }
-.nx-doc__header--modern .nx-doc__modern-rule { height: 1px; background: #e2e8f0; margin: 10px 0; }
-.nx-doc__header--minimal .nx-doc__minimal-top { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
-.nx-doc__header--minimal .nx-doc__minimal-issuer .nx-doc__issuer-name { font-size: 15px; }
+.nx-doc__header--elegant .nx-doc__elegant-accent { height: 1px; background: ${recipientAccent}; margin-top: 10px; max-width: 220px; margin-inline-start: auto; opacity: 0.85; }
+.nx-doc__header--elegant .nx-doc__elegant-divider { height: 1px; background: #e8e0d4; margin: 18px 0; }
+.nx-doc__recipient--elegant { background: ${recipientBg}; border: 1px solid ${recipientBorder}; border-inline-start: 2px solid ${recipientAccent}; box-shadow: none; }
+.nx-doc__header--modern { margin-bottom: 28px; }
+.nx-doc__header--modern .nx-doc__modern-top { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 14px; }
+.nx-doc__header--modern .nx-doc__modern-issuer .nx-doc__issuer-name { font-size: 17px; }
+.nx-doc__header--modern .nx-doc__modern-rule { height: 1px; background: #e2e8f0; margin: 0; }
+.nx-doc__header--modern .nx-doc__modern-rule--spaced { margin: 18px 0 14px; }
+.nx-doc__recipient--modern { background: transparent; border: none; border-inline-start: none; border-bottom: 1px solid #e2e8f0; border-radius: 0; padding: 0 0 14px; margin-bottom: 0; }
+.nx-doc__doc-meta--modern { padding: 4px 0 0; }
+.nx-doc__doc-meta--modern .nx-doc__title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.nx-doc__doc-meta--modern .nx-doc__dates { margin-top: 10px; color: #64748b; }
 .nx-doc__table { width: 100%; border-collapse: collapse; margin: 16px 0; }
 .nx-doc__table th { background: ${tableHeader}; color: ${tableHeaderText}; padding: 8px 6px; font-size: 12px; text-align: right; }
-.nx-doc__header--minimal .nx-doc__table th { background: #e2e8f0; color: #334155; }
+.nx-doc__table--modern th { background: transparent; color: ${issuerText}; border-bottom: 2px solid ${tableHeader}; font-weight: 700; padding-bottom: 10px; }
+.nx-doc__table--elegant th { padding: 10px 8px; letter-spacing: 0.01em; }
 .nx-doc__table td { border-bottom: 1px solid #e2e8f0; padding: 8px 6px; font-size: 12px; vertical-align: top; color: ${issuerText}; }
+.nx-doc__table--modern td { padding: 10px 6px; border-bottom-color: #eef2f7; }
 .nx-doc__header--elegant .nx-doc__table td { padding: 10px 8px; }
 .nx-doc__totals-wrap { display: flex; justify-content: flex-end; margin-top: 12px; }
 .nx-doc__totals { min-width: 280px; background: #f8fafc; border: 1px solid #e2e8f0; border-top: 3px solid ${totalsAccent}; border-radius: 8px; padding: 12px; }
-.nx-doc__totals--elegant { background: #fff; border-top-width: 1px; border-top-color: ${totalsAccent}; }
-.nx-doc__totals--minimal { background: #fff; border: none; border-top: 2px solid ${totalsAccent}; border-radius: 0; padding-top: 10px; }
+.nx-doc__totals--elegant { background: transparent; border: none; border-top: 1px solid ${totalsAccent}; border-radius: 0; padding: 14px 0 0; min-width: 300px; }
+.nx-doc__totals--modern { background: transparent; border: none; border-top: 1px solid #e2e8f0; border-radius: 0; padding: 14px 0 0; box-shadow: none; }
 .nx-doc__total-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; color: ${issuerText}; }
 .nx-doc__total-row--discount { color: #b45309; }
 .nx-doc__grand-total { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid ${totalsAccent}; font-size: 15px; color: ${totalsAccent}; font-weight: 700; }
@@ -298,7 +307,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 <div class="nx-doc nx-doc--${styleKey}" dir="rtl">
   ${headerHtml}
 
-  <table class="nx-doc__table">
+  <table class="${tableClass}">
     <thead>${tableHead}</thead>
     <tbody>${linesHtml}</tbody>
   </table>

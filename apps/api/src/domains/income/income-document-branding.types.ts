@@ -8,7 +8,16 @@ export type IncomeBrandingClientBlockPosition = 'left' | 'right';
 
 export type IncomeBrandingQuantityPosition = 'before_description' | 'after_description';
 
-export type IncomeDocumentStyleTemplateKey = 'classic' | 'modern' | 'elegant' | 'minimal';
+export type IncomeDocumentStyleTemplateKey = 'classic' | 'modern' | 'elegant';
+
+/** Legacy DB value — resolved to `modern` in studio/preview; not offered in UI. */
+export type IncomeDocumentStyleTemplateKeyLegacy = IncomeDocumentStyleTemplateKey | 'minimal';
+
+export const STUDIO_DOCUMENT_STYLE_KEYS: IncomeDocumentStyleTemplateKey[] = [
+  'classic',
+  'modern',
+  'elegant',
+];
 
 export type IncomeLayoutTemplateKey =
   | 'logo_left_client_right'

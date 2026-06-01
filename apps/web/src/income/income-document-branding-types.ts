@@ -3,7 +3,7 @@ export type IncomeDocumentStyleGradient = {
   to: string;
 };
 
-export type IncomeDocumentStyleTemplateKey = 'classic' | 'modern' | 'elegant' | 'minimal';
+export type IncomeDocumentStyleTemplateKey = 'classic' | 'modern' | 'elegant';
 
 export type IncomeLayoutTemplateKey =
   | 'logo_left_client_right'
@@ -171,7 +171,6 @@ export type IncomeBrandingPreviewDraftCommandResponse = {
 export type IncomeBrandingStudioDraft = {
   document_style_key: string;
   color_theme_key: string;
-  layout_template_key: string;
   logo_size_key: string;
   show_logo: string;
   company_subtitle: string;

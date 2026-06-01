@@ -43,7 +43,6 @@ export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggr
   return {
     document_style_key: studio.selected_document_style_key,
     color_theme_key: studio.selected_color_theme_key,
-    layout_template_key: studio.selected_layout_template_key ?? '',
     logo_size_key: studio.selected_logo_size_key,
     show_logo: boolToDraft(f.show_logo),
     company_subtitle: f.company_subtitle ?? '',
@@ -65,7 +64,6 @@ export function buildBrandingPreviewDraftBody(draft: IncomeBrandingStudioDraft):
   return {
     document_style_key: draft.document_style_key,
     color_theme_key: draft.color_theme_key,
-    layout_template_key: draft.layout_template_key.trim() ? draft.layout_template_key : null,
     logo_size_key: draft.logo_size_key,
     show_logo: draft.show_logo === 'true',
     company_subtitle: draft.company_subtitle,
@@ -92,7 +90,6 @@ export function buildBrandingModalSaveBody(
     section: studio.save_section_key,
     document_style_key: draft.document_style_key,
     color_theme_key: draft.color_theme_key,
-    layout_template_key: draft.layout_template_key.trim() ? draft.layout_template_key : null,
     logo_size_key: draft.logo_size_key,
     show_logo: draft.show_logo === 'true',
     company_subtitle: draft.company_subtitle,
@@ -578,37 +575,6 @@ function StudioSectionContent({
             />
           ))}
         </div>
-        {studio.advanced_layout_visible ? (
-          <details className="nx-branding-studio-advanced">
-            <summary className="nx-branding-studio-advanced__summary">מתקדם — פריסת בלוקים</summary>
-            <div className="nx-branding-studio-advanced__body">
-              {studio.layout_templates.map((layout) => (
-                <label key={layout.key} className="nx-branding-studio-advanced__option">
-                  <input
-                    type="radio"
-                    name="layout_template_key"
-                    checked={
-                      (draft.layout_template_key || studio.selected_layout_template_key || '') === layout.key ||
-                      (!draft.layout_template_key && !studio.selected_layout_template_key && false)
-                    }
-                    disabled={disabled}
-                    onChange={() => onDraftChange((d) => ({ ...d, layout_template_key: layout.key }))}
-                  />
-                  <MarkupPreview markup={layout.mini_preview_markup} className="nx-branding-studio-advanced__mini" />
-                  <span>{layout.label}</span>
-                </label>
-              ))}
-              <button
-                type="button"
-                className="nx-btn nx-btn-taxes-compact"
-                disabled={disabled}
-                onClick={() => onDraftChange((d) => ({ ...d, layout_template_key: '' }))}
-              >
-                ברירת מחדל לפי סגנון
-              </button>
-            </div>
-          </details>
-        ) : null}
       </div>
     );
   }

@@ -4,7 +4,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { isSupabaseMissingColumnError, isSupabaseMissingTableError, throwIfSupabaseError, } from '../../shared/supabase-errors.js';
 import { assertFileAllowedForSettingsImage, validateOrgFileOwnership, } from '../file-access/file-access.service.js';
 import { renderStudioSamplePreviewHtml } from './income-document-branding-preview.renderer.js';
-import { DEFAULT_DISPLAY_OPTIONS, DEFAULT_PAYMENT_METHODS, DEFAULT_PRIMARY_COLOR, DEFAULT_SECONDARY_COLOR, DEFAULT_COLOR_THEME_KEY, DEFAULT_DOCUMENT_STYLE_KEY, DEFAULT_LOGO_SIZE_KEY, normalizeClientBlockPosition, optionalTrimmedString, parseDisplayOptionsJson, parsePaymentMethodsJson, applyColorThemeToColorColumns, applyDocumentStyleTemplateKey, getColorThemePresets, getDocumentStyleTemplates, getLayoutTemplates, getLogoSizeOptions, resolveBrandingProfile, resolveColorThemeKeyForRow, resolveColorThemePreset, resolveDocumentStyleKeyForRow, resolveDocumentStyleTemplate, resolveLayoutTemplate, resolveLogoSizeKey, serializeDisplayOptionsJson, serializePaymentMethodsJson, getEmailTemplateTokens, buildEmailTemplateEditor, buildEmailTemplatePreview, encodeEmailTemplateFromFriendly, } from './income-document-branding.pure.js';
+import { DEFAULT_DISPLAY_OPTIONS, DEFAULT_PAYMENT_METHODS, DEFAULT_PRIMARY_COLOR, DEFAULT_SECONDARY_COLOR, DEFAULT_COLOR_THEME_KEY, DEFAULT_DOCUMENT_STYLE_KEY, DEFAULT_LOGO_SIZE_KEY, normalizeClientBlockPosition, optionalTrimmedString, parseDisplayOptionsJson, parsePaymentMethodsJson, normalizeStudioDocumentStyleKey, applyColorThemeToColorColumns, applyDocumentStyleTemplateKey, getColorThemePresets, getDocumentStyleTemplates, getLogoSizeOptions, resolveBrandingProfile, resolveColorThemeKeyForRow, resolveColorThemePreset, resolveDocumentStyleKeyForRow, resolveDocumentStyleTemplate, resolveLogoSizeKey, serializeDisplayOptionsJson, serializePaymentMethodsJson, getEmailTemplateTokens, buildEmailTemplateEditor, buildEmailTemplatePreview, encodeEmailTemplateFromFriendly, } from './income-document-branding.pure.js';
 import { INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, } from './income-document-branding.types.js';
 const BUCKET_ORG_ASSETS = 'organization-assets';
 const BRANDING_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -184,12 +184,9 @@ function buildEmailTemplateStudioParts(resolved) {
         email_template_preview: buildEmailTemplatePreview(resolved.email_subject_template, resolved.email_body_template, tokens),
     };
 }
-function buildDocumentBrandingStudio(resolved, row) {
+function buildDocumentBrandingStudio(resolved, _row) {
     const display = resolved.display_options;
     const colorThemeKey = resolved.color_theme_key;
-    const layoutOverride = row.layout_template_key?.trim()
-        ? row.layout_template_key.trim()
-        : null;
     const emailParts = buildEmailTemplateStudioParts(resolved);
     return {
         navigation_sections: [
@@ -201,13 +198,13 @@ function buildDocumentBrandingStudio(resolved, row) {
         ],
         document_style_templates: getDocumentStyleTemplates(colorThemeKey),
         color_theme_presets: getColorThemePresets(),
-        layout_templates: getLayoutTemplates(),
+        layout_templates: [],
         logo_size_options: getLogoSizeOptions(),
         selected_document_style_key: resolved.document_style_key,
         selected_color_theme_key: colorThemeKey,
-        selected_layout_template_key: layoutOverride,
+        selected_layout_template_key: null,
         selected_logo_size_key: resolved.logo_size_key,
-        advanced_layout_visible: true,
+        advanced_layout_visible: false,
         studio_live_preview: {
             visible: true,
             preview_html: renderStudioSamplePreviewHtml(resolved),
@@ -314,9 +311,6 @@ export async function previewIncomeDocumentBrandingProfileDraft(scope, body) {
     const row = await ensureIncomeDocumentBrandingProfile(scope);
     const draftRow = mergeBrandingDraftBodyOntoRow(row, body);
     const resolved = await resolveBrandingProfileForRow(draftRow);
-    const layoutOverride = draftRow.layout_template_key?.trim()
-        ? draftRow.layout_template_key.trim()
-        : null;
     const emailParts = buildEmailTemplateStudioParts(resolved);
     return {
         studio_live_preview: {
@@ -327,7 +321,7 @@ export async function previewIncomeDocumentBrandingProfileDraft(scope, body) {
         },
         selected_document_style_key: resolved.document_style_key,
         selected_color_theme_key: resolved.color_theme_key,
-        selected_layout_template_key: layoutOverride,
+        selected_layout_template_key: null,
         selected_logo_size_key: resolved.logo_size_key,
         document_style_templates: getDocumentStyleTemplates(resolved.color_theme_key),
         email_template_preview: emailParts.email_template_preview,
@@ -359,7 +353,7 @@ function applyModalBrandingPatch(row, body, patch) {
         patch.signature_file_asset_id = null;
     }
     const docStyleRaw = String(body.document_style_key ?? '').trim();
-    const docStyleKey = docStyleRaw || resolveDocumentStyleKeyForRow(row);
+    const docStyleKey = normalizeStudioDocumentStyleKey(docStyleRaw || resolveDocumentStyleKeyForRow(row));
     if (!resolveDocumentStyleTemplate(docStyleKey)) {
         throw badRequest('document_style_key is invalid', 'BRANDING_DOCUMENT_STYLE_INVALID');
     }
@@ -372,18 +366,6 @@ function applyModalBrandingPatch(row, body, patch) {
     }
     Object.assign(patch, applyColorThemeToColorColumns(theme));
     patch.document_style_key = docStyleKey;
-    if (body.layout_template_key === null || body.layout_template_key === '') {
-        patch.layout_template_key = null;
-    }
-    else {
-        const layoutKey = String(body.layout_template_key ?? '').trim();
-        if (layoutKey) {
-            if (!resolveLayoutTemplate(layoutKey)) {
-                throw badRequest('layout_template_key is invalid', 'BRANDING_LAYOUT_TEMPLATE_INVALID');
-            }
-            patch.layout_template_key = layoutKey;
-        }
-    }
     if (body.logo_size_key !== undefined) {
         patch.logo_size_key = resolveLogoSizeKey(body.logo_size_key);
     }

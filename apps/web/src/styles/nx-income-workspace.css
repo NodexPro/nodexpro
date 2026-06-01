@@ -1280,6 +1280,66 @@
   margin: 4px 8px;
 }
 
+.nx-studio-style-mini__logo--small {
+  width: 22px;
+  height: 16px;
+}
+
+.nx-studio-style-mini__logo--large {
+  width: 36px;
+  height: 26px;
+}
+
+.nx-studio-style-mini__modern-top {
+  display: flex;
+  gap: 8px;
+  padding: 8px 8px 4px;
+  align-items: center;
+}
+
+.nx-studio-style-mini__company-lines {
+  flex: 1;
+  height: 14px;
+  background: linear-gradient(#e2e8f0 0 4px, transparent 4px 8px, #eef2f7 8px 10px, transparent 10px);
+  border-radius: 2px;
+}
+
+.nx-studio-style-mini__rule--thin {
+  margin: 2px 8px 6px;
+}
+
+.nx-studio-style-mini__recipient--open {
+  margin: 0 8px 6px;
+  min-height: 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 0;
+}
+
+.nx-studio-style-mini__recipient--elegant {
+  margin: 0 8px 6px;
+}
+
+.nx-studio-style-mini__title-line {
+  height: 0;
+  margin: 0 8px 8px;
+  border-bottom: 2px solid #94a3b8;
+}
+
+.nx-studio-style-mini__title-line--elegant {
+  border-bottom-width: 1px;
+}
+
+.nx-studio-style-mini__table--light {
+  background: transparent !important;
+}
+
+.nx-studio-style-mini__totals--open,
+.nx-studio-style-mini__totals--elegant {
+  background: transparent;
+}
+
 @media (max-width: 1080px) {
   .nx-income-branding-modal--studio {
     width: min(96vw, 960px);

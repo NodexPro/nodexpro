@@ -10,6 +10,7 @@ import {
   getDocumentStyleTemplates,
   getEmailTemplateTokens,
   matchColorThemeKeyFromLegacyColors,
+  normalizeStudioDocumentStyleKey,
   renderEmailTemplateFriendly,
   resolveBrandingProfile,
   resolveColorThemePreset,
@@ -26,12 +27,17 @@ test('color theme presets expose 8 studio themes', () => {
   assert.ok(presets.some((p) => p.key === 'nodexpro_gradient'));
 });
 
-test('document style templates expose 4 layout archetypes', () => {
+test('document style templates expose 3 studio archetypes', () => {
   const templates = getDocumentStyleTemplates();
-  assert.equal(templates.length, 4);
-  assert.ok(templates.some((t) => t.key === 'classic'));
-  assert.ok(templates.some((t) => t.key === 'elegant'));
+  assert.equal(templates.length, 3);
+  assert.deepEqual(
+    templates.map((t) => t.key),
+    ['classic', 'modern', 'elegant'],
+  );
   assert.ok(templates.every((t) => t.mini_preview_markup.includes('nx-studio-style-mini')));
+  assert.ok(templates.some((t) => t.mini_preview_markup.includes('nx-studio-style-mini__banner')));
+  assert.ok(templates.some((t) => t.mini_preview_markup.includes('nx-studio-style-mini--modern')));
+  assert.ok(templates.some((t) => t.mini_preview_markup.includes('nx-studio-style-mini--elegant')));
 });
 
 test('invalid color theme key is rejected by resolver', () => {
@@ -157,9 +163,139 @@ test('matchColorThemeKeyFromLegacyColors maps known blue palette', () => {
   assert.equal(matchColorThemeKeyFromLegacyColors('#1f4b99', '#1f4b99', '#1f4b99'), 'modern_blue');
 });
 
-test('resolveDocumentStyleTemplate accepts four archetypes', () => {
-  assert.ok(resolveDocumentStyleTemplate('minimal'));
+test('resolveDocumentStyleTemplate accepts three studio archetypes', () => {
+  assert.ok(resolveDocumentStyleTemplate('classic'));
+  assert.ok(resolveDocumentStyleTemplate('modern'));
+  assert.ok(resolveDocumentStyleTemplate('elegant'));
+  assert.equal(resolveDocumentStyleTemplate('minimal')?.key, 'modern');
   assert.equal(resolveDocumentStyleTemplate('classic_blue'), null);
+});
+
+test('legacy minimal saved profile resolves to modern without breaking read', () => {
+  const row: IncomeBrandingProfileRow = {
+    id: 'p-min',
+    organization_id: 'o1',
+    issuer_business_id: 'b1',
+    represented_client_id: null,
+    logo_file_asset_id: null,
+    signature_file_asset_id: null,
+    company_subtitle: null,
+    document_style_key: 'minimal',
+    color_theme_key: 'modern_blue',
+    primary_color: '#1f4b99',
+    secondary_color: '#e8eef7',
+    table_header_color: '#1f4b99',
+    totals_color: '#1f4b99',
+    client_block_position: 'right',
+    footer_text: null,
+    bank_name: null,
+    bank_branch: null,
+    bank_account: null,
+    swift: null,
+    iban: null,
+    email_subject_template: null,
+    email_body_template: null,
+    customer_notes: null,
+    terms_and_conditions: null,
+    display_options: {},
+    payment_methods: [],
+    document_attachments: [],
+    default_payment_terms: null,
+  };
+  const resolved = resolveBrandingProfile(row, { logo_data_url: null, signature_data_url: null });
+  assert.equal(normalizeStudioDocumentStyleKey('minimal'), 'modern');
+  assert.equal(resolved.document_style_key, 'modern');
+});
+
+test('preview html differs across classic modern and elegant styles', () => {
+  const baseRow: IncomeBrandingProfileRow = {
+    id: 'p1',
+    organization_id: 'o1',
+    issuer_business_id: 'b1',
+    represented_client_id: null,
+    logo_file_asset_id: null,
+    signature_file_asset_id: null,
+    company_subtitle: 'סלוגן',
+    document_style_key: 'classic',
+    color_theme_key: 'elegant_gold',
+    primary_color: '#8a6d3b',
+    secondary_color: '#faf8f3',
+    table_header_color: '#8a6d3b',
+    totals_color: '#8a6d3b',
+    client_block_position: 'right',
+    footer_text: null,
+    bank_name: null,
+    bank_branch: null,
+    bank_account: null,
+    swift: null,
+    iban: null,
+    email_subject_template: null,
+    email_body_template: null,
+    customer_notes: null,
+    terms_and_conditions: null,
+    display_options: {},
+    payment_methods: [],
+    document_attachments: [],
+    default_payment_terms: null,
+  };
+  const previewParams = {
+    docTypeLabel: 'הצעת מחיר',
+    numberPreview: null as string | null,
+    issuer: { display_name: 'Test4', tax_id: '123', address: 'רחוב 1', phone: '050', email: 'a@b.c' },
+    recipient: { display_name: 'לקוח', tax_id: '999', address: 'כתובת', phone: '052', email: 'c@d.e' },
+    document_date: '2026-05-01',
+    due_date: null,
+    currency: 'ILS',
+    lineRows: [] as const,
+    totals: {
+      subtotal_before_discount: '100',
+      discount: null,
+      subtotal_after_discount: '100',
+      vat_label: 'מע״מ',
+      vat: '17',
+      grand_total: '117',
+    },
+    notes: null,
+    company_subtitle: null,
+  };
+
+  const classicHtml = renderIncomeBrandedPreviewHtml({
+    branding: resolveBrandingProfile(baseRow, { logo_data_url: null, signature_data_url: null }),
+    ...previewParams,
+  });
+  const modernHtml = renderIncomeBrandedPreviewHtml({
+    branding: resolveBrandingProfile({ ...baseRow, document_style_key: 'modern' }, { logo_data_url: null, signature_data_url: null }),
+    ...previewParams,
+  });
+  const elegantHtml = renderIncomeBrandedPreviewHtml({
+    branding: resolveBrandingProfile({ ...baseRow, document_style_key: 'elegant' }, { logo_data_url: null, signature_data_url: null }),
+    ...previewParams,
+  });
+
+  const previewBody = (html: string) => {
+    const idx = html.indexOf('</style>');
+    return idx >= 0 ? html.slice(idx + 8) : html;
+  };
+
+  const classicBody = previewBody(classicHtml);
+  const modernBody = previewBody(modernHtml);
+  const elegantBody = previewBody(elegantHtml);
+
+  assert.match(classicBody, /nx-doc__header--classic/);
+  assert.match(classicBody, /<div class="nx-doc__doc-type-banner"><div class="nx-doc__doc-meta">/);
+  assert.doesNotMatch(classicBody, /class="nx-doc__doc-type-banner nx-doc__doc-type-banner--subtle"/);
+  assert.doesNotMatch(classicBody, /nx-doc__header--modern/);
+
+  assert.match(modernBody, /nx-doc__header--modern/);
+  assert.match(modernBody, /nx-doc__table--modern/);
+  assert.match(modernBody, /nx-doc__totals--modern/);
+  assert.doesNotMatch(modernBody, /<div class="nx-doc__doc-type-banner"/);
+
+  assert.match(elegantBody, /nx-doc__header--elegant/);
+  assert.match(elegantBody, /nx-doc__totals--elegant/);
+  assert.match(elegantBody, /nx-doc__recipient--elegant/);
+  assert.notEqual(classicBody, modernBody);
+  assert.notEqual(modernBody, elegantBody);
 });
 
 test('frontend panel source uses studio aggregate only', async () => {
@@ -242,6 +378,21 @@ test('branding studio aggregate exposes email template metadata', async () => {
   assert.match(service, /email_template_editor/);
   assert.match(service, /email_template_preview/);
   assert.match(service, /buildEmailTemplateStudioParts/);
+  assert.match(service, /advanced_layout_visible: false/);
+  assert.match(service, /layout_templates: \[\]/);
+});
+
+test('studio style UI renders aggregate templates only', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const panel = await readFile(
+    new URL('../../../web/src/components/income/IncomeDocumentBrandingSettingsPanel.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(panel, /styleTemplates\.map/);
+  assert.doesNotMatch(panel, /מתקדם — פריסת בלוקים/);
+  assert.doesNotMatch(panel, /key: 'minimal'/);
+  assert.doesNotMatch(panel, /key: "minimal"/);
+  assert.doesNotMatch(panel, /layout_template_key/);
 });
 
 test('email tab UI uses friendly fields and Hebrew token chips', async () => {
