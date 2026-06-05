@@ -870,6 +870,10 @@
   border-top-color: var(--nx-doc-theme-accent);
 }
 
+.nx-branding-studio-preview__doc .nx-doc__grand-total strong {
+  color: inherit;
+}
+
 .nx-branding-studio-section__title {
   margin: 0 0 6px;
   font-size: 16px;

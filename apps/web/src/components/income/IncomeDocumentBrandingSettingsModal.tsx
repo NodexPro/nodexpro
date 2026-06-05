@@ -18,6 +18,7 @@ type Props = {
   onCommand: (command: string, body: Record<string, unknown>) => Promise<void>;
   onPreviewDraft: (body: Record<string, unknown>) => Promise<IncomeDocumentBrandingStudioPreviewDraftResult | null>;
   portal?: boolean;
+  saveBodyExtra?: Record<string, unknown>;
 };
 
 export function IncomeDocumentBrandingSettingsModal({
@@ -30,6 +31,7 @@ export function IncomeDocumentBrandingSettingsModal({
   onCommand,
   onPreviewDraft,
   portal = false,
+  saveBodyExtra,
 }: Props) {
   const { activeSection, setActiveSection, draft, setDraft } = useBrandingModalState(profile);
 
@@ -48,7 +50,7 @@ export function IncomeDocumentBrandingSettingsModal({
 
   const handleSave = async () => {
     if (!profile || !canSave) return;
-    await onCommand(commands.update_branding_profile, buildBrandingModalSaveBody(profile, draft));
+    await onCommand(commands.update_branding_profile, buildBrandingModalSaveBody(profile, draft, saveBodyExtra));
   };
 
   const dialog = (

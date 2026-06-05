@@ -1174,7 +1174,7 @@
   cursor: pointer;
 }
 
-/* Backend-owned document HTML inside A4 paper */
+/* Backend-owned document HTML inside A4 paper — typography/chrome only; layout + theme from preview_html */
 .nx-we-preview-paper__content .nx-doc {
   color: #0f172a;
   font-size: 14px;
@@ -1182,15 +1182,7 @@
 }
 
 .nx-we-preview-paper__content .nx-doc__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
   margin-bottom: 28px;
-}
-
-.nx-we-preview-paper__content .nx-doc__issuer {
-  flex: 1 1 45%;
-  min-width: 0;
 }
 
 .nx-we-preview-paper__content .nx-doc__logo-img {
@@ -1218,15 +1210,6 @@
 
 .nx-we-preview-paper__content .nx-doc__issuer-line span {
   color: #64748b;
-}
-
-.nx-we-preview-paper__content .nx-doc__title-block {
-  flex: 1 1 45%;
-  min-width: 0;
-  background: transparent;
-  color: #0f172a;
-  padding: 0;
-  border-radius: 0;
 }
 
 .nx-we-preview-paper__content .nx-doc__recipient {
@@ -1311,21 +1294,40 @@
   margin-top: 12px;
   padding: 12px 14px;
   background: #f8fafc;
-  color: #0f172a;
   border: 1px solid #e2e8f0;
-  border-top: 3px solid #1f4b99;
+  border-top: 3px solid var(--nx-doc-theme-accent);
   border-radius: 8px;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
+  color: var(--nx-doc-theme-accent);
 }
 
 .nx-we-preview-paper__content .nx-doc__grand-total strong {
   font-size: 20px;
   font-weight: 700;
   line-height: 1.1;
-  color: #1f4b99;
+  color: inherit;
+}
+
+.nx-we-preview-paper__content .nx-doc__totals--modern,
+.nx-we-preview-paper__content .nx-doc__totals--elegant {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--nx-doc-theme-accent);
+  border-radius: 0;
+  padding: 14px 0 0;
+  box-shadow: none;
+}
+
+.nx-we-preview-paper__content .nx-doc__totals--modern .nx-doc__grand-total,
+.nx-we-preview-paper__content .nx-doc__totals--elegant .nx-doc__grand-total {
+  background: transparent;
+  border: none;
+  border-top: 2px solid var(--nx-doc-theme-accent);
+  border-radius: 0;
+  padding: 12px 0 0;
 }
 
 .nx-we-preview-paper__content .nx-doc__footer {

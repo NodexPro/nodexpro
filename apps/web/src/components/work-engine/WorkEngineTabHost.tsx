@@ -20,6 +20,7 @@ import {
 } from '../../api/work-engine';
 import { userFacingApiMessage } from '../../api/client';
 import { executeIncomeCommand, isBrandingPreviewDraftCommandResponse } from '../../api/income';
+import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
 import { ClientOperationsRegistryView } from '../client-operations/ClientOperationsRegistryView';
 import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
 import { IncomeDocumentBrandingGearButton } from '../income/IncomeDocumentBrandingGearButton';
@@ -459,11 +460,19 @@ function WorkEngineInvoicesTabPanel(props: {
                 prev
                   ? {
                       ...prev,
-                      document_branding_profile: w.document_branding_profile,
-                      document_branding_settings_entrypoint: w.document_branding_settings_entrypoint,
+                      document_branding_profile: w.document_branding_profile ?? prev.document_branding_profile,
+                      document_branding_settings_entrypoint:
+                        w.document_branding_settings_entrypoint ?? prev.document_branding_settings_entrypoint,
                     }
                   : prev,
               );
+              if (
+                wizardOpen &&
+                'meta' in res &&
+                res.meta?.workspace_aggregate_mode === 'wizard_patch'
+              ) {
+                setWizardInitialAgg((prev) => mergeIncomeWorkspaceWizardPatch(prev, w));
+              }
             }
           } catch (e) {
             setError(userFacingApiMessage(e));
@@ -471,6 +480,11 @@ function WorkEngineInvoicesTabPanel(props: {
             setBrandingBusy(false);
           }
         }}
+        saveBodyExtra={
+          wizardOpen && wizardInitialAgg?.active_wizard_draft_id
+            ? { draft_id: wizardInitialAgg.active_wizard_draft_id }
+            : undefined
+        }
         onPreviewDraft={async (body) => {
           const cmd =
             aggregate.document_branding_settings_entrypoint?.commands.preview_branding_profile_draft ??

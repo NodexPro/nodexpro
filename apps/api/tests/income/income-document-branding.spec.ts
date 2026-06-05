@@ -307,6 +307,82 @@ test('preview html differs across classic modern and elegant styles', () => {
   assert.notEqual(modernBody, elegantBody);
 });
 
+test('work engine preview css does not hardcode blue on branded grand total', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const css = await readFile(
+    new URL('../../../web/src/styles/nx-work-engine-queue.css', import.meta.url),
+    'utf8',
+  );
+  const grandTotalStrongBlock = css.match(
+    /\.nx-we-preview-paper__content \.nx-doc__grand-total strong\s*\{[^}]+\}/,
+  )?.[0];
+  assert.ok(grandTotalStrongBlock, 'expected work engine grand total strong rule');
+  assert.doesNotMatch(grandTotalStrongBlock!, /#1f4b99/i);
+  assert.match(grandTotalStrongBlock!, /color:\s*inherit/);
+  assert.match(css, /\.nx-we-preview-paper__content \.nx-doc__grand-total[\s\S]*?var\(--nx-doc-theme-accent\)/);
+});
+
+test('saved document style and theme are reflected in preview html output', () => {
+  const row: IncomeBrandingProfileRow = {
+    id: 'p1',
+    organization_id: 'o1',
+    issuer_business_id: 'b1',
+    represented_client_id: null,
+    logo_file_asset_id: null,
+    signature_file_asset_id: null,
+    company_subtitle: null,
+    document_style_key: 'elegant',
+    color_theme_key: 'elegant_gold',
+    primary_color: '#8a6d3b',
+    secondary_color: '#faf8f3',
+    table_header_color: '#8a6d3b',
+    totals_color: '#8a6d3b',
+    client_block_position: 'right',
+    footer_text: null,
+    bank_name: null,
+    bank_branch: null,
+    bank_account: null,
+    swift: null,
+    iban: null,
+    email_subject_template: null,
+    email_body_template: null,
+    customer_notes: null,
+    terms_and_conditions: null,
+    display_options: {},
+    payment_methods: [],
+    document_attachments: [],
+    default_payment_terms: null,
+  };
+  const resolved = resolveBrandingProfile(row, { logo_data_url: null, signature_data_url: null });
+  assert.equal(resolved.document_style_key, 'elegant');
+  assert.equal(resolved.color_theme_key, 'elegant_gold');
+  const html = renderIncomeBrandedPreviewHtml({
+    branding: resolved,
+    docTypeLabel: 'חשבונית מס',
+    numberPreview: '1001',
+    issuer: { display_name: 'Biz', tax_id: '1', address: 'A', phone: '2', email: 'a@b.c' },
+    recipient: { display_name: 'Client', tax_id: '9', address: 'B', phone: '3', email: 'c@d.e' },
+    document_date: '2026-05-01',
+    due_date: '2026-06-01',
+    currency: 'ILS',
+    lineRows: [],
+    totals: {
+      subtotal_before_discount: '2,220.51 ₪',
+      discount: null,
+      subtotal_after_discount: '2,220.51 ₪',
+      vat_label: 'מע״מ',
+      vat: '375.49 ₪',
+      grand_total: '2,596.00 ₪',
+    },
+    notes: null,
+    company_subtitle: null,
+  });
+  assert.match(html, /nx-doc nx-doc--elegant/);
+  assert.match(html, /nx-doc__header--elegant/);
+  assert.match(html, /--nx-doc-theme-accent:\s*#8a6d3b/);
+  assert.doesNotMatch(html, /#1f4b99/);
+});
+
 test('frontend panel source uses studio aggregate only', async () => {
   const { readFile } = await import('node:fs/promises');
   const panel = await readFile(

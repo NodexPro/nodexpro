@@ -12,6 +12,7 @@ import {
 import { WorkEngineDocumentDetailsStep } from './WorkEngineDocumentDetailsStep';
 import { WorkEngineIncomePreviewStep } from './WorkEngineIncomePreviewStep';
 import { executeIncomeCommand } from '../../api/income';
+import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
 import type { WorkEngineInvoicesDocumentCreationEntrypoint } from '../../api/work-engine';
 import type {
   IncomeDocumentBrandingProfileAggregate,
@@ -82,6 +83,11 @@ export function WorkEngineIncomeDocumentWizardModal({
   const [form, setForm] = useState<FormState>(() => ({
     document_type: '',
   }));
+
+  useEffect(() => {
+    if (!initialWorkspaceAgg) return;
+    setWorkspaceAgg((prev) => mergeIncomeWorkspaceWizardPatch(prev, initialWorkspaceAgg));
+  }, [initialWorkspaceAgg]);
 
   useEffect(() => {
     if (!issuerBrandingProfile && !issuerBrandingEntrypoint) return;

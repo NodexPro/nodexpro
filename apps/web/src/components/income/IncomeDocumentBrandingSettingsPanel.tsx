@@ -84,6 +84,7 @@ export function buildBrandingPreviewDraftBody(draft: IncomeBrandingStudioDraft):
 export function buildBrandingModalSaveBody(
   profile: IncomeDocumentBrandingProfileAggregate,
   draft: IncomeBrandingStudioDraft,
+  extra?: Record<string, unknown>,
 ): Record<string, unknown> {
   const studio = profile.document_branding_studio;
   return {
@@ -104,6 +105,7 @@ export function buildBrandingModalSaveBody(
     email_body_friendly: draft.email_body_friendly,
     customer_notes: draft.customer_notes,
     terms_and_conditions: draft.terms_and_conditions,
+    ...extra,
   };
 }
 
