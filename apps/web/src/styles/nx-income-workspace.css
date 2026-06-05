@@ -863,6 +863,13 @@
   border-radius: 6px;
 }
 
+/* Backend inline theme wins; do not apply work-engine default blue accents here. */
+.nx-branding-studio-preview__doc .nx-doc__grand-total,
+.nx-branding-studio-preview__doc .nx-doc__grand-total strong {
+  color: var(--nx-doc-theme-accent);
+  border-top-color: var(--nx-doc-theme-accent);
+}
+
 .nx-branding-studio-section__title {
   margin: 0 0 6px;
   font-size: 16px;

@@ -86,7 +86,7 @@ function buildStyleMiniPreview(styleKey, theme) {
 </div>`;
     }
     return `<div class="nx-studio-style-mini nx-studio-style-mini--classic" dir="rtl">
-<div class="nx-studio-style-mini__row"><span class="nx-studio-style-mini__logo"></span><span class="nx-studio-style-mini__recipient" style="border-inline-start-color:${accent}"></span></div>
+<div class="nx-studio-style-mini__classic-columns"><span class="nx-studio-style-mini__logo"></span><span class="nx-studio-style-mini__recipient" style="border-inline-start-color:${accent}"></span></div>
 <div class="nx-studio-style-mini__banner" style="background:${grad}"></div>
 <div class="nx-studio-style-mini__table" style="background:${header}"></div>
 <div class="nx-studio-style-mini__totals" style="border-top-color:${totals}"></div>
@@ -207,19 +207,19 @@ const STYLE_TEMPLATE_DEFS = [
     {
         key: 'classic',
         label: 'קלאסי',
-        description: 'מסמך מסורתי — לוגו ופרטי עסק, בלוק לקוח מול כותרת בולטת',
+        description: 'לקוח משמאל · עסק מימין · כותרת מסמך בשורה נפרדת',
         default_layout_template_key: 'logo_left_client_right',
     },
     {
         key: 'modern',
         label: 'מודרני',
-        description: 'ריווח נקי, קווים דקים, כותרת קלה ללא בלוק צבע מלא',
+        description: 'עסק למעלה · לקוח מתחת · ריווח פתוח בלי בלוק צבע לכותרת',
         default_layout_template_key: 'logo_left_client_right',
     },
     {
         key: 'elegant',
         label: 'אלגנטי',
-        description: 'פרימיום עסקי — לוגו גדול, קווי הדגשה עדינים, סה״כ אלגנטי',
+        description: 'לוגו גדול · עסק מימין · לקוח משמאל · חתימה בכותרת',
         default_layout_template_key: 'logo_left_client_right',
     },
 ];
@@ -551,6 +551,19 @@ export function optionalTrimmedString(value, maxLen) {
 }
 export function gradientCss(gradient) {
     return `linear-gradient(135deg, ${gradient.from} 0%, ${gradient.to} 100%)`;
+}
+/** Single palette for branded preview HTML — table, totals, banner, accents must match. */
+export function resolveBrandingPreviewThemePalette(theme) {
+    return {
+        gradient_css: gradientCss(theme.gradient),
+        table_header_color: theme.table_header_color,
+        totals_accent_color: theme.totals_accent_color,
+        recipient_accent_color: theme.recipient_accent_color,
+        recipient_block_background: theme.recipient_block_background,
+        recipient_block_border: theme.recipient_block_border,
+        text_on_dark: theme.text_on_dark,
+        text_on_light: theme.text_on_light,
+    };
 }
 export function resolveLogoSizeDimensions(logoSizeKey) {
     const opt = INCOME_LOGO_SIZE_OPTIONS.find((o) => o.key === logoSizeKey) ?? INCOME_LOGO_SIZE_OPTIONS[1];

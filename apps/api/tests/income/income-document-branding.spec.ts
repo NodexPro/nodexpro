@@ -12,6 +12,7 @@ import {
   matchColorThemeKeyFromLegacyColors,
   normalizeStudioDocumentStyleKey,
   renderEmailTemplateFriendly,
+  resolveBrandingPreviewThemePalette,
   resolveBrandingProfile,
   resolveColorThemePreset,
   resolveDocumentStyleTemplate,
@@ -282,9 +283,17 @@ test('preview html differs across classic modern and elegant styles', () => {
   const elegantBody = previewBody(elegantHtml);
 
   assert.match(classicBody, /nx-doc__header--classic/);
+  assert.match(classicBody, /nx-doc__classic-columns/);
   assert.match(classicBody, /<div class="nx-doc__doc-type-banner"><div class="nx-doc__doc-meta">/);
   assert.doesNotMatch(classicBody, /class="nx-doc__doc-type-banner nx-doc__doc-type-banner--subtle"/);
   assert.doesNotMatch(classicBody, /nx-doc__header--modern/);
+
+  const goldTheme = resolveColorThemePreset('elegant_gold')!;
+  const goldPalette = resolveBrandingPreviewThemePalette(goldTheme);
+  assert.equal(goldPalette.totals_accent_color, '#8a6d3b');
+  assert.match(classicHtml, /--nx-doc-theme-accent:\s*#8a6d3b/);
+  assert.match(classicHtml, /\.nx-doc__grand-total strong \{ color: var\(--nx-doc-theme-accent\)/);
+  assert.doesNotMatch(classicHtml, /#1f4b99/);
 
   assert.match(modernBody, /nx-doc__header--modern/);
   assert.match(modernBody, /nx-doc__table--modern/);
