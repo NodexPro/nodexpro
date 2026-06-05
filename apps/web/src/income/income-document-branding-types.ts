@@ -15,10 +15,57 @@ export type IncomeLogoSizeKey = 'small' | 'medium' | 'large';
 
 export type IncomeBrandingStudioSectionKey =
   | 'document_style'
-  | 'logo_branding'
+  | 'branding'
   | 'business'
+  | 'document_content'
   | 'payment'
-  | 'email';
+  | 'email'
+  | 'advanced';
+
+export type IncomeBrandingStudioNavSection = {
+  key: IncomeBrandingStudioSectionKey;
+  label: string;
+  description: string;
+  icon_key: string;
+};
+
+export type IncomeBrandingDisplayOptionControl = {
+  key: string;
+  label: string;
+  value: boolean;
+  draft_field: string;
+};
+
+export type IncomeBrandingIssuerIdentityPreview = {
+  business_name: string;
+  tax_id: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  read_only: boolean;
+  helper_text: string | null;
+};
+
+export type IncomeBrandingPaymentMethod = {
+  key: string;
+  label: string;
+  enabled: boolean;
+};
+
+export type IncomeBrandingPaymentSettingsPanel = {
+  mode: 'issuer_profile' | 'represented_client';
+  editable: boolean;
+  warning_message: string | null;
+  payment_methods: IncomeBrandingPaymentMethod[];
+};
+
+export type IncomeDocumentTypeStyleDefault = {
+  document_type_key: string;
+  document_type_label: string;
+  default_document_style_key: IncomeDocumentStyleTemplateKey;
+  default_color_theme_key: string;
+};
 
 export type IncomeDocumentStyleTemplate = {
   key: IncomeDocumentStyleTemplateKey;
@@ -41,6 +88,10 @@ export type IncomeColorThemePreset = {
   text_on_light: string;
   print_safe: boolean;
   mini_preview_markup: string;
+};
+
+export type IncomeColorThemePresetStudio = IncomeColorThemePreset & {
+  studio_label: string;
 };
 
 export type IncomeLayoutTemplate = {
@@ -110,9 +161,14 @@ export type IncomeDocumentBrandingStudioFields = {
 };
 
 export type IncomeDocumentBrandingStudio = {
-  navigation_sections: Array<{ key: IncomeBrandingStudioSectionKey; label: string }>;
+  navigation_sections: IncomeBrandingStudioNavSection[];
   document_style_templates: IncomeDocumentStyleTemplate[];
   color_theme_presets: IncomeColorThemePreset[];
+  studio_color_theme_presets: IncomeColorThemePresetStudio[];
+  display_option_controls: IncomeBrandingDisplayOptionControl[];
+  issuer_identity_preview: IncomeBrandingIssuerIdentityPreview;
+  payment_settings_panel: IncomeBrandingPaymentSettingsPanel;
+  document_type_style_defaults: IncomeDocumentTypeStyleDefault[];
   layout_templates: IncomeLayoutTemplate[];
   logo_size_options: IncomeLogoSizeOption[];
   selected_document_style_key: IncomeDocumentStyleTemplateKey;
@@ -173,8 +229,18 @@ export type IncomeBrandingStudioDraft = {
   color_theme_key: string;
   logo_size_key: string;
   show_logo: string;
-  company_subtitle: string;
   show_signature: string;
+  show_footer: string;
+  show_notes: string;
+  show_payment_terms: string;
+  show_bank_details: string;
+  show_due_date: string;
+  show_vat_row: string;
+  payment_method_bank_transfer: string;
+  payment_method_credit_card: string;
+  payment_method_cash: string;
+  payment_method_check: string;
+  company_subtitle: string;
   footer_text: string;
   bank_name: string;
   bank_branch: string;

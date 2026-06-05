@@ -13,6 +13,8 @@ import {
   normalizeStudioDocumentStyleKey,
   renderEmailTemplateFriendly,
   resolveBrandingPreviewThemePalette,
+  getStudioNavigationSections,
+  getStudioColorThemePresets,
   resolveBrandingProfile,
   resolveColorThemePreset,
   resolveDocumentStyleTemplate,
@@ -20,12 +22,25 @@ import {
 import { renderIncomeBrandedPreviewHtml } from '../../src/domains/income/income-document-branding-preview.renderer.js';
 import type { IncomeBrandingProfileRow } from '../../src/domains/income/income-document-branding.types.js';
 
-test('color theme presets expose 8 studio themes', () => {
+test('color theme presets expose 9 studio themes including black and white', () => {
   const presets = getColorThemePresets();
-  assert.equal(presets.length, 8);
+  assert.equal(presets.length, 9);
   assert.ok(presets.every((p) => p.print_safe));
-  assert.ok(presets.some((p) => p.key === 'modern_blue'));
-  assert.ok(presets.some((p) => p.key === 'nodexpro_gradient'));
+  assert.ok(presets.some((p) => p.key === 'black_white'));
+});
+
+test('studio navigation exposes seven SaaS sections', () => {
+  const sections = getStudioNavigationSections();
+  assert.equal(sections.length, 7);
+  assert.ok(sections.some((s) => s.key === 'branding'));
+  assert.ok(sections.some((s) => s.key === 'document_content'));
+  assert.ok(sections.every((s) => s.description.trim().length > 0));
+});
+
+test('studio color catalog exposes curated theme cards', () => {
+  const presets = getStudioColorThemePresets();
+  assert.equal(presets.length, 5);
+  assert.ok(presets.some((p) => p.key === 'black_white' && p.studio_label === 'Black & White'));
 });
 
 test('document style templates expose 3 studio archetypes', () => {

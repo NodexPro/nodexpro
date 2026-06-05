@@ -43,8 +43,17 @@ import {
   getEmailTemplateTokens,
   buildEmailTemplateEditor,
   buildEmailTemplatePreview,
+  buildDisplayOptionControls,
+  buildIssuerIdentityPreview,
+  buildPaymentSettingsPanel,
+  getDocumentTypeStyleDefaults,
+  getStudioColorThemePresets,
+  getStudioNavigationSections,
+  mergeDisplayOptionsFromStudioBody,
+  mergePaymentMethodsFromStudioBody,
   encodeEmailTemplateFromFriendly,
 } from './income-document-branding.pure.js';
+import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import type {
   IncomeBrandingDisplayOptions,
   IncomeBrandingPaymentMethod,
@@ -289,25 +298,46 @@ function buildEmailTemplateStudioParts(resolved: IncomeBrandingResolvedProfile) 
   };
 }
 
-function buildDocumentBrandingStudio(
+function formatIssuerAddressLine(addressJson: unknown): string | null {
+  if (!addressJson || typeof addressJson !== 'object' || Array.isArray(addressJson)) return null;
+  const o = addressJson as Record<string, unknown>;
+  const parts = [o.line1, o.line2, o.city, o.postal_code].filter(
+    (p) => typeof p === 'string' && p.trim(),
+  ) as string[];
+  return parts.length ? parts.join(', ') : null;
+}
+
+async function buildDocumentBrandingStudio(
+  scope: ActiveIncomeIssuerScope,
   resolved: IncomeBrandingResolvedProfile,
-  _row: IncomeBrandingProfileRow,
-): IncomeDocumentBrandingStudio {
+  row: IncomeBrandingProfileRow,
+): Promise<IncomeDocumentBrandingStudio> {
   const display = resolved.display_options;
   const colorThemeKey = resolved.color_theme_key;
+  const issuerSnap = await buildIncomeIssuerSnapshotForScope(scope);
 
   const emailParts = buildEmailTemplateStudioParts(resolved);
 
   return {
-    navigation_sections: [
-      { key: 'document_style', label: '🎨 סגנון מסמך' },
-      { key: 'logo_branding', label: '🖼 לוגו ומיתוג' },
-      { key: 'business', label: '🏢 פרטי עסק' },
-      { key: 'payment', label: '💳 תשלום' },
-      { key: 'email', label: '✉ אימייל' },
-    ],
+    navigation_sections: getStudioNavigationSections(),
     document_style_templates: getDocumentStyleTemplates(colorThemeKey),
     color_theme_presets: getColorThemePresets(),
+    studio_color_theme_presets: getStudioColorThemePresets(),
+    display_option_controls: buildDisplayOptionControls(display),
+    issuer_identity_preview: buildIssuerIdentityPreview({
+      display_name: issuerSnap.display_name?.trim() || scope.issuer_label,
+      tax_id: issuerSnap.tax_id?.trim() || null,
+      address: formatIssuerAddressLine(issuerSnap.address_json),
+      phone: issuerSnap.phone?.trim() || null,
+      email: issuerSnap.email?.trim() || null,
+      read_only: true,
+      helper_text: 'פרטי העסק נשמרים בפרופיל העסק. כאן מוצגת תצוגה מקדימה של מה שיודפס במסמך.',
+    }),
+    payment_settings_panel: buildPaymentSettingsPanel({
+      represented_client_id: scope.represented_client_id,
+      payment_methods: resolved.payment_methods,
+    }),
+    document_type_style_defaults: getDocumentTypeStyleDefaults(),
     layout_templates: [],
     logo_size_options: getLogoSizeOptions(),
     selected_document_style_key: resolved.document_style_key,
@@ -380,7 +410,7 @@ export async function buildDocumentBrandingProfileAggregate(
   return {
     profile_id: row.id,
     title: 'הגדרות מסמך',
-    document_branding_studio: buildDocumentBrandingStudio(resolved, row),
+    document_branding_studio: await buildDocumentBrandingStudio(scope, resolved, row),
     logo: {
       label: 'לוגו מסמך',
       file_asset_id: row.logo_file_asset_id,
@@ -534,15 +564,21 @@ function applyModalBrandingPatch(
     body.client_block_position ?? row.client_block_position,
   );
   const current = parseDisplayOptionsJson(row.display_options, clientPos);
-  const next: IncomeBrandingDisplayOptions = {
-    ...current,
-    show_logo: body.show_logo === undefined ? current.show_logo : parseBooleanBody(body.show_logo),
-    show_signature:
-      body.show_signature === undefined ? current.show_signature : parseBooleanBody(body.show_signature),
-    client_block_position: clientPos,
-  };
-  patch.display_options = serializeDisplayOptionsJson(next);
+  patch.display_options = serializeDisplayOptionsJson(
+    mergeDisplayOptionsFromStudioBody(body, current, clientPos),
+  );
   patch.client_block_position = clientPos;
+
+  if (
+    body.payment_method_bank_transfer !== undefined ||
+    body.payment_method_credit_card !== undefined ||
+    body.payment_method_cash !== undefined ||
+    body.payment_method_check !== undefined
+  ) {
+    patch.payment_methods = serializePaymentMethodsJson(
+      mergePaymentMethodsFromStudioBody(body, parsePaymentMethodsJson(row.payment_methods)),
+    );
+  }
 }
 
 function parseBooleanBody(value: unknown): boolean {

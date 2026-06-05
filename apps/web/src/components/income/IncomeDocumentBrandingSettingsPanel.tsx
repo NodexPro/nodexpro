@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type Dispat
 import type {
   IncomeBrandingStudioDraft,
   IncomeBrandingStudioSectionKey,
-  IncomeColorThemePreset,
+  IncomeColorThemePresetStudio,
   IncomeDocumentBrandingAssetSlot,
   IncomeDocumentBrandingProfileAggregate,
   IncomeDocumentBrandingStudio,
@@ -37,16 +37,44 @@ function boolToDraft(value: boolean): string {
   return value ? 'true' : 'false';
 }
 
+const NAV_SECTION_ICONS: Record<string, string> = {
+  layout: '▦',
+  palette: '◐',
+  building: '⌂',
+  blocks: '☰',
+  payment: '₪',
+  email: '✉',
+  advanced: '⚙',
+};
+
 export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggregate): IncomeBrandingStudioDraft {
   const studio = profile.document_branding_studio;
   const f = studio.fields;
+  const displayField = (key: string, fallback: boolean) => {
+    const control = studio.display_option_controls.find((c) => c.draft_field === key);
+    return boolToDraft(control?.value ?? fallback);
+  };
+  const paymentField = (key: string) => {
+    const method = studio.payment_settings_panel.payment_methods.find((m) => m.key === key);
+    return boolToDraft(method?.enabled ?? false);
+  };
   return {
     document_style_key: studio.selected_document_style_key,
     color_theme_key: studio.selected_color_theme_key,
     logo_size_key: studio.selected_logo_size_key,
-    show_logo: boolToDraft(f.show_logo),
+    show_logo: displayField('show_logo', f.show_logo),
+    show_signature: displayField('show_signature', f.show_signature),
+    show_footer: displayField('show_footer', true),
+    show_notes: displayField('show_notes', true),
+    show_payment_terms: displayField('show_payment_terms', true),
+    show_bank_details: displayField('show_bank_details', true),
+    show_due_date: displayField('show_due_date', true),
+    show_vat_row: displayField('show_vat_row', true),
+    payment_method_bank_transfer: paymentField('bank_transfer'),
+    payment_method_credit_card: paymentField('credit_card'),
+    payment_method_cash: paymentField('cash'),
+    payment_method_check: paymentField('check'),
     company_subtitle: f.company_subtitle ?? '',
-    show_signature: boolToDraft(f.show_signature),
     footer_text: f.footer_text ?? '',
     bank_name: f.bank_name ?? '',
     bank_branch: f.bank_branch ?? '',
@@ -66,8 +94,18 @@ export function buildBrandingPreviewDraftBody(draft: IncomeBrandingStudioDraft):
     color_theme_key: draft.color_theme_key,
     logo_size_key: draft.logo_size_key,
     show_logo: draft.show_logo === 'true',
-    company_subtitle: draft.company_subtitle,
     show_signature: draft.show_signature === 'true',
+    show_footer: draft.show_footer === 'true',
+    show_notes: draft.show_notes === 'true',
+    show_payment_terms: draft.show_payment_terms === 'true',
+    show_bank_details: draft.show_bank_details === 'true',
+    show_due_date: draft.show_due_date === 'true',
+    show_vat_row: draft.show_vat_row === 'true',
+    payment_method_bank_transfer: draft.payment_method_bank_transfer === 'true',
+    payment_method_credit_card: draft.payment_method_credit_card === 'true',
+    payment_method_cash: draft.payment_method_cash === 'true',
+    payment_method_check: draft.payment_method_check === 'true',
+    company_subtitle: draft.company_subtitle,
     footer_text: draft.footer_text,
     bank_name: draft.bank_name,
     bank_branch: draft.bank_branch,
@@ -93,8 +131,18 @@ export function buildBrandingModalSaveBody(
     color_theme_key: draft.color_theme_key,
     logo_size_key: draft.logo_size_key,
     show_logo: draft.show_logo === 'true',
-    company_subtitle: draft.company_subtitle,
     show_signature: draft.show_signature === 'true',
+    show_footer: draft.show_footer === 'true',
+    show_notes: draft.show_notes === 'true',
+    show_payment_terms: draft.show_payment_terms === 'true',
+    show_bank_details: draft.show_bank_details === 'true',
+    show_due_date: draft.show_due_date === 'true',
+    show_vat_row: draft.show_vat_row === 'true',
+    payment_method_bank_transfer: draft.payment_method_bank_transfer === 'true',
+    payment_method_credit_card: draft.payment_method_credit_card === 'true',
+    payment_method_cash: draft.payment_method_cash === 'true',
+    payment_method_check: draft.payment_method_check === 'true',
+    company_subtitle: draft.company_subtitle,
     footer_text: draft.footer_text,
     bank_name: draft.bank_name,
     bank_branch: draft.bank_branch,
@@ -153,7 +201,7 @@ function ColorThemeCard({
   disabled,
   onSelect,
 }: {
-  preset: IncomeColorThemePreset;
+  preset: IncomeColorThemePresetStudio;
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
@@ -168,7 +216,7 @@ function ColorThemeCard({
       onClick={onSelect}
     >
       <MarkupPreview markup={preset.mini_preview_markup} className="nx-branding-studio-theme-card__mini" />
-      <span className="nx-branding-studio-theme-card__label">{preset.label}</span>
+      <span className="nx-branding-studio-theme-card__label">{preset.studio_label}</span>
       {selected ? <span className="nx-branding-studio-theme-card__check" aria-hidden>✓</span> : null}
     </button>
   );
@@ -280,6 +328,8 @@ function EmailTemplateEditorSection({
 
   return (
     <div className="nx-branding-studio-section">
+      <h3 className="nx-branding-studio-section__title">אימייל</h3>
+      <p className="nx-branding-studio-section__lead">תבנית שליחת מסמך ללקוח — תצוגה מקדימה מהשרת.</p>
       <div className="nx-branding-studio-email-editor">
         <label className="nx-branding-studio-field">
           <span className="nx-branding-studio-field__label nx-field-label">נושא אימייל</span>
@@ -366,21 +416,6 @@ function EmailTemplateEditorSection({
           </div>
         </div>
       </div>
-
-      <StudioField
-        label="הערות ללקוח (ברירת מחדל)"
-        value={draft.customer_notes}
-        disabled={disabled}
-        multiline
-        onChange={(v) => onDraftChange((d) => ({ ...d, customer_notes: v }))}
-      />
-      <StudioField
-        label="תנאים והגבלות"
-        value={draft.terms_and_conditions}
-        disabled={disabled}
-        multiline
-        onChange={(v) => onDraftChange((d) => ({ ...d, terms_and_conditions: v }))}
-      />
     </div>
   );
 }
@@ -522,7 +557,6 @@ function AssetUploadSlot({
 function StudioSectionContent({
   section,
   styleTemplates,
-  colorThemePresets,
   studio,
   profile,
   draft,
@@ -535,7 +569,6 @@ function StudioSectionContent({
 }: {
   section: IncomeBrandingStudioSectionKey;
   styleTemplates: IncomeDocumentStyleTemplate[];
-  colorThemePresets: IncomeColorThemePreset[];
   studio: IncomeDocumentBrandingStudio;
   profile: IncomeDocumentBrandingProfileAggregate;
   draft: IncomeBrandingStudioDraft;
@@ -547,12 +580,15 @@ function StudioSectionContent({
   emailPreview: IncomeEmailTemplatePreview;
 }) {
   const disabled = busy || !canEdit;
+  const identity = studio.issuer_identity_preview;
+  const paymentPanel = studio.payment_settings_panel;
+  const paymentDisabled = disabled || !paymentPanel.editable;
 
   if (section === 'document_style') {
     return (
       <div className="nx-branding-studio-section">
         <h3 className="nx-branding-studio-section__title">סגנון מסמך</h3>
-        <p className="nx-branding-studio-section__lead">בחרו את מבנה המסמך — הפריסה, הריווח והאופי הכללי.</p>
+        <p className="nx-branding-studio-section__lead">בחרו פריסת מסמך — קלאסי, מודרני או אלגנטי. התצוגה המקדימה מתעדכנת מהשרת.</p>
         <div className="nx-branding-studio-style-grid" role="listbox" aria-label="סגנון מסמך">
           {styleTemplates.map((template) => (
             <DocumentStyleTemplateCard
@@ -564,10 +600,61 @@ function StudioSectionContent({
             />
           ))}
         </div>
+        <h3 className="nx-branding-studio-section__title nx-branding-studio-section__title--spaced">ברירות מחדל לפי סוג מסמך</h3>
+        <p className="nx-branding-studio-section__lead">ברירות מחדל לסוגי מסמך — פרופיל המשתמש הוא המקור הסופי.</p>
+        <table className="nx-branding-studio-defaults-table">
+          <thead>
+            <tr>
+              <th>סוג מסמך</th>
+              <th>סגנון</th>
+              <th>ערכת צבע</th>
+            </tr>
+          </thead>
+          <tbody>
+            {studio.document_type_style_defaults.map((row) => (
+              <tr key={row.document_type_key}>
+                <td>{row.document_type_label}</td>
+                <td>{row.default_document_style_key}</td>
+                <td>{row.default_color_theme_key}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (section === 'branding') {
+    return (
+      <div className="nx-branding-studio-section">
+        <h3 className="nx-branding-studio-section__title">מיתוג</h3>
+        <p className="nx-branding-studio-section__lead">לוגו, חתימה וערכת צבעים — כל שינוי משקף את תצוגת המסמך.</p>
+        <AssetUploadSlot
+          slot={profile.logo}
+          slotKind="logo"
+          busy={busy}
+          canEdit={canEdit}
+          updateCommand={commands.update_branding_profile}
+          onCommand={onCommand}
+        />
+        <AssetUploadSlot
+          slot={profile.signature}
+          slotKind="signature"
+          busy={busy}
+          canEdit={canEdit}
+          updateCommand={commands.update_branding_profile}
+          onCommand={onCommand}
+        />
+        <LogoSizePicker
+          options={studio.logo_size_options}
+          selectedKey={draft.logo_size_key}
+          logoPreviewUrl={profile.logo.preview_data_url}
+          disabled={disabled}
+          onSelect={(key) => onDraftChange((d) => ({ ...d, logo_size_key: key }))}
+        />
         <h3 className="nx-branding-studio-section__title nx-branding-studio-section__title--spaced">ערכת צבעים</h3>
-        <p className="nx-branding-studio-section__lead">בחרו צבעים — גרדיאנט, כותרת טבלה, סה״כ וקו הדגשה ללקוח.</p>
         <div className="nx-branding-studio-theme-grid" role="listbox" aria-label="ערכת צבעים">
-          {colorThemePresets.map((preset) => (
+          {studio.studio_color_theme_presets.map((preset) => (
             <ColorThemeCard
               key={preset.key}
               preset={preset}
@@ -581,30 +668,33 @@ function StudioSectionContent({
     );
   }
 
-  if (section === 'logo_branding') {
+  if (section === 'business') {
     return (
       <div className="nx-branding-studio-section">
-        <AssetUploadSlot
-          slot={profile.logo}
-          slotKind="logo"
-          busy={busy}
-          canEdit={canEdit}
-          updateCommand={commands.update_branding_profile}
-          onCommand={onCommand}
-        />
-        <StudioBoolField
-          label="הצג לוגו במסמך"
-          checked={draft.show_logo === 'true'}
-          disabled={disabled}
-          onChange={(v) => onDraftChange((d) => ({ ...d, show_logo: boolToDraft(v) }))}
-        />
-        <LogoSizePicker
-          options={studio.logo_size_options}
-          selectedKey={draft.logo_size_key}
-          logoPreviewUrl={profile.logo.preview_data_url}
-          disabled={disabled}
-          onSelect={(key) => onDraftChange((d) => ({ ...d, logo_size_key: key }))}
-        />
+        <h3 className="nx-branding-studio-section__title">פרטי עסק</h3>
+        <p className="nx-branding-studio-section__lead">{identity.helper_text}</p>
+        <div className="nx-branding-studio-identity-card">
+          <div className="nx-branding-studio-identity-card__row">
+            <span className="nx-branding-studio-identity-card__label">שם העסק</span>
+            <span className="nx-branding-studio-identity-card__value">{identity.business_name || '—'}</span>
+          </div>
+          <div className="nx-branding-studio-identity-card__row">
+            <span className="nx-branding-studio-identity-card__label">ח.פ / ע.מ</span>
+            <span className="nx-branding-studio-identity-card__value">{identity.tax_id || '—'}</span>
+          </div>
+          <div className="nx-branding-studio-identity-card__row">
+            <span className="nx-branding-studio-identity-card__label">כתובת</span>
+            <span className="nx-branding-studio-identity-card__value">{identity.address || '—'}</span>
+          </div>
+          <div className="nx-branding-studio-identity-card__row">
+            <span className="nx-branding-studio-identity-card__label">טלפון</span>
+            <span className="nx-branding-studio-identity-card__value">{identity.phone || '—'}</span>
+          </div>
+          <div className="nx-branding-studio-identity-card__row">
+            <span className="nx-branding-studio-identity-card__label">אימייל</span>
+            <span className="nx-branding-studio-identity-card__value">{identity.email || '—'}</span>
+          </div>
+        </div>
         <StudioField
           label="משפט שיוצג מתחת לשם העסק"
           value={draft.company_subtitle}
@@ -616,29 +706,47 @@ function StudioSectionContent({
     );
   }
 
-  if (section === 'business') {
+  if (section === 'document_content') {
     return (
       <div className="nx-branding-studio-section">
-        <AssetUploadSlot
-          slot={profile.signature}
-          slotKind="signature"
-          busy={busy}
-          canEdit={canEdit}
-          updateCommand={commands.update_branding_profile}
-          onCommand={onCommand}
-        />
-        <StudioBoolField
-          label="הצג חתימה במסמך"
-          checked={draft.show_signature === 'true'}
-          disabled={disabled}
-          onChange={(v) => onDraftChange((d) => ({ ...d, show_signature: boolToDraft(v) }))}
-        />
+        <h3 className="nx-branding-studio-section__title">תוכן המסמך</h3>
+        <p className="nx-branding-studio-section__lead">בחרו אילו בלוקים יוצגו במסמך — השינוי משפיע על תצוגת המקדימה.</p>
+        <div className="nx-branding-studio-toggle-list">
+          {studio.display_option_controls.map((control) => (
+            <StudioBoolField
+              key={control.key}
+              label={control.label}
+              checked={draft[control.draft_field as keyof IncomeBrandingStudioDraft] === 'true'}
+              disabled={disabled}
+              onChange={(v) =>
+                onDraftChange((d) => ({
+                  ...d,
+                  [control.draft_field]: boolToDraft(v),
+                }))
+              }
+            />
+          ))}
+        </div>
         <StudioField
           label="טקסט כותרת תחתונה"
           value={draft.footer_text}
           disabled={disabled}
           multiline
           onChange={(v) => onDraftChange((d) => ({ ...d, footer_text: v }))}
+        />
+        <StudioField
+          label="הערות ללקוח (ברירת מחדל)"
+          value={draft.customer_notes}
+          disabled={disabled}
+          multiline
+          onChange={(v) => onDraftChange((d) => ({ ...d, customer_notes: v }))}
+        />
+        <StudioField
+          label="תנאים והגבלות"
+          value={draft.terms_and_conditions}
+          disabled={disabled}
+          multiline
+          onChange={(v) => onDraftChange((d) => ({ ...d, terms_and_conditions: v }))}
         />
       </div>
     );
@@ -647,11 +755,48 @@ function StudioSectionContent({
   if (section === 'payment') {
     return (
       <div className="nx-branding-studio-section">
-        <StudioField label="שם בנק" value={draft.bank_name} disabled={disabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_name: v }))} />
-        <StudioField label="סניף" value={draft.bank_branch} disabled={disabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_branch: v }))} />
-        <StudioField label="מספר חשבון" value={draft.bank_account} disabled={disabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_account: v }))} />
-        <StudioField label="IBAN" value={draft.iban} disabled={disabled} onChange={(v) => onDraftChange((d) => ({ ...d, iban: v }))} />
-        <StudioField label="SWIFT" value={draft.swift} disabled={disabled} onChange={(v) => onDraftChange((d) => ({ ...d, swift: v }))} />
+        <h3 className="nx-branding-studio-section__title">תשלום</h3>
+        {paymentPanel.warning_message ? (
+          <div className="nx-branding-studio-callout">{paymentPanel.warning_message}</div>
+        ) : (
+          <p className="nx-branding-studio-section__lead">אמצעי תשלום ופרטי חשבון לעסק — נשמרים בפרופיל המיתוג.</p>
+        )}
+        <div className="nx-branding-studio-toggle-list">
+          {paymentPanel.payment_methods.map((method) => (
+            <StudioBoolField
+              key={method.key}
+              label={method.label}
+              checked={draft[`payment_method_${method.key}` as keyof IncomeBrandingStudioDraft] === 'true'}
+              disabled={paymentDisabled}
+              onChange={(v) =>
+                onDraftChange((d) => ({
+                  ...d,
+                  [`payment_method_${method.key}`]: boolToDraft(v),
+                }))
+              }
+            />
+          ))}
+        </div>
+        {draft.payment_method_bank_transfer === 'true' && paymentPanel.editable ? (
+          <>
+            <StudioField label="שם בנק" value={draft.bank_name} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_name: v }))} />
+            <StudioField label="סניף" value={draft.bank_branch} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_branch: v }))} />
+            <StudioField label="מספר חשבון" value={draft.bank_account} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_account: v }))} />
+            <StudioField label="IBAN" value={draft.iban} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, iban: v }))} />
+            <StudioField label="SWIFT" value={draft.swift} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, swift: v }))} />
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (section === 'advanced') {
+    return (
+      <div className="nx-branding-studio-section">
+        <h3 className="nx-branding-studio-section__title">מתקדם</h3>
+        <div className="nx-branding-studio-empty-state">
+          הגדרות PDF, גופנים, שוליים ומספור עמודים — יתווספו בגרסה הבאה.
+        </div>
       </div>
     );
   }
@@ -738,18 +883,6 @@ export function IncomeDocumentBrandingSettingsPanel({
 
   return (
     <div className="nx-branding-studio" dir="rtl">
-      <nav className="nx-branding-studio-nav" aria-label="הגדרות מסמך">
-        {studio.navigation_sections.map((section) => (
-          <button
-            key={section.key}
-            type="button"
-            className={`nx-branding-studio-nav__btn${activeSection === section.key ? ' nx-branding-studio-nav__btn--active' : ''}`}
-            onClick={() => onActiveSectionChange(section.key)}
-          >
-            {section.label}
-          </button>
-        ))}
-      </nav>
       <aside className="nx-branding-studio-preview" aria-label="תצוגה מקדימה">
         <div className="nx-branding-studio-preview__head">
           <span className="nx-branding-studio-preview__title">תצוגה מקדימה</span>
@@ -779,7 +912,6 @@ export function IncomeDocumentBrandingSettingsPanel({
         <StudioSectionContent
           section={activeSection}
           styleTemplates={styleTemplates}
-          colorThemePresets={studio.color_theme_presets}
           studio={studio}
           profile={profile}
           draft={draft}
@@ -791,6 +923,24 @@ export function IncomeDocumentBrandingSettingsPanel({
           emailPreview={emailPreview}
         />
       </div>
+      <nav className="nx-branding-studio-nav" aria-label="הגדרות מסמך">
+        {studio.navigation_sections.map((section) => (
+          <button
+            key={section.key}
+            type="button"
+            className={`nx-branding-studio-nav__btn${activeSection === section.key ? ' nx-branding-studio-nav__btn--active' : ''}`}
+            onClick={() => onActiveSectionChange(section.key)}
+          >
+            <span className="nx-branding-studio-nav__icon" aria-hidden>
+              {NAV_SECTION_ICONS[section.icon_key] ?? '•'}
+            </span>
+            <span className="nx-branding-studio-nav__text">
+              <span className="nx-branding-studio-nav__label">{section.label}</span>
+              <span className="nx-branding-studio-nav__desc">{section.description}</span>
+            </span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

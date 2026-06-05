@@ -1,8 +1,15 @@
 import { badRequest } from '../../shared/errors.js';
 import type {
   IncomeBrandingClientBlockPosition,
+  IncomeBrandingDisplayOptionControl,
   IncomeBrandingDisplayOptions,
+  IncomeBrandingIssuerIdentityPreview,
   IncomeBrandingPaymentMethod,
+  IncomeBrandingPaymentSettingsPanel,
+  IncomeBrandingStudioNavSection,
+  IncomeBrandingStudioSectionKey,
+  IncomeColorThemePresetStudio,
+  IncomeDocumentTypeStyleDefault,
   IncomeBrandingProfileRow,
   IncomeBrandingQuantityPosition,
   IncomeBrandingResolvedProfile,
@@ -202,6 +209,19 @@ const COLOR_THEME_DEFS: Omit<IncomeColorThemePreset, 'mini_preview_markup'>[] = 
     print_safe: true,
   },
   {
+    key: 'black_white',
+    label: 'Black & White',
+    gradient: { from: '#ffffff', to: '#ffffff' },
+    table_header_color: '#1e293b',
+    totals_accent_color: '#1e293b',
+    recipient_accent_color: '#64748b',
+    recipient_block_background: '#ffffff',
+    recipient_block_border: '#cbd5e1',
+    text_on_dark: '#ffffff',
+    text_on_light: '#0f172a',
+    print_safe: true,
+  },
+  {
     key: 'minimal_light',
     label: 'Minimal Light',
     gradient: { from: '#94a3b8', to: '#cbd5e1' },
@@ -312,6 +332,137 @@ export function getColorThemePresets(): IncomeColorThemePreset[] {
     gradient: { ...p.gradient },
     mini_preview_markup: buildThemeMiniPreview(p),
   }));
+}
+
+const STUDIO_COLOR_THEME_CATALOG: Array<{ key: string; studio_label: string }> = [
+  { key: 'modern_blue', studio_label: 'Professional Blue' },
+  { key: 'emerald', studio_label: 'Emerald' },
+  { key: 'executive_navy', studio_label: 'Graphite' },
+  { key: 'elegant_gold', studio_label: 'Elegant Gold' },
+  { key: 'black_white', studio_label: 'Black & White' },
+];
+
+export function getStudioColorThemePresets(): IncomeColorThemePresetStudio[] {
+  return STUDIO_COLOR_THEME_CATALOG.map(({ key, studio_label }) => {
+    const preset = resolveColorThemePreset(key);
+    if (!preset) return null;
+    return {
+      ...preset,
+      gradient: { ...preset.gradient },
+      mini_preview_markup: buildThemeMiniPreview(preset),
+      studio_label,
+    };
+  }).filter((p): p is IncomeColorThemePresetStudio => p != null);
+}
+
+export const INCOME_DOCUMENT_TYPE_STYLE_DEFAULTS: IncomeDocumentTypeStyleDefault[] = [
+  { document_type_key: 'quote', document_type_label: 'הצעת מחיר', default_document_style_key: 'elegant', default_color_theme_key: 'elegant_gold' },
+  { document_type_key: 'tax_invoice', document_type_label: 'חשבונית מס', default_document_style_key: 'classic', default_color_theme_key: 'modern_blue' },
+  { document_type_key: 'receipt', document_type_label: 'קבלה', default_document_style_key: 'modern', default_color_theme_key: 'clean_gray' },
+  { document_type_key: 'credit_note', document_type_label: 'זיכוי', default_document_style_key: 'classic', default_color_theme_key: 'modern_blue' },
+];
+
+export function getDocumentTypeStyleDefaults(): IncomeDocumentTypeStyleDefault[] {
+  return INCOME_DOCUMENT_TYPE_STYLE_DEFAULTS.map((d) => ({ ...d }));
+}
+
+export function getStudioNavigationSections(): IncomeBrandingStudioNavSection[] {
+  return [
+    { key: 'document_style', label: 'סגנון מסמך', description: 'פריסת המסמך — קלאסי, מודרני או אלגנטי', icon_key: 'layout' },
+    { key: 'branding', label: 'מיתוג', description: 'לוגו, חתימה וערכת צבעים', icon_key: 'palette' },
+    { key: 'business', label: 'פרטי עסק', description: 'זהות העסק כפי שתופיע במסמך', icon_key: 'building' },
+    { key: 'document_content', label: 'תוכן המסמך', description: 'בחירת בלוקים שיוצגו במסמך', icon_key: 'blocks' },
+    { key: 'payment', label: 'תשלום', description: 'אמצעי תשלום ופרטי חשבון', icon_key: 'payment' },
+    { key: 'email', label: 'אימייל', description: 'תבנית שליחת מסמך ללקוח', icon_key: 'email' },
+    { key: 'advanced', label: 'מתקדם', description: 'הגדרות PDF וטיפוגרפיה — בקרוב', icon_key: 'advanced' },
+  ];
+}
+
+export function buildDisplayOptionControls(display: IncomeBrandingDisplayOptions): IncomeBrandingDisplayOptionControl[] {
+  return [
+    { key: 'show_logo', label: 'הצג לוגו', value: display.show_logo, draft_field: 'show_logo' },
+    { key: 'show_signature', label: 'הצג חתימה', value: display.show_signature, draft_field: 'show_signature' },
+    { key: 'show_footer', label: 'הצג כותרת תחתונה', value: display.show_footer, draft_field: 'show_footer' },
+    { key: 'show_notes', label: 'הצג הערות', value: display.show_notes, draft_field: 'show_notes' },
+    { key: 'show_payment_terms', label: 'הצג בלוק תשלום', value: display.show_payment_terms, draft_field: 'show_payment_terms' },
+    { key: 'show_bank_details', label: 'הצג פרטי בנק', value: display.show_bank_details, draft_field: 'show_bank_details' },
+    { key: 'show_due_date', label: 'הצג תאריך לתשלום', value: display.show_due_date, draft_field: 'show_due_date' },
+    { key: 'show_vat_row', label: 'הצג סיכום מע״מ', value: display.show_vat_row, draft_field: 'show_vat_row' },
+  ];
+}
+
+function parseBooleanBody(value: unknown): boolean {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
+export function mergeDisplayOptionsFromStudioBody(
+  body: Record<string, unknown>,
+  current: IncomeBrandingDisplayOptions,
+  clientPos: IncomeBrandingClientBlockPosition,
+): IncomeBrandingDisplayOptions {
+  const bool = (key: keyof IncomeBrandingDisplayOptions, fallback: boolean): boolean =>
+    body[key] === undefined ? fallback : parseBooleanBody(body[key]);
+  return {
+    ...current,
+    show_logo: bool('show_logo', current.show_logo),
+    show_signature: bool('show_signature', current.show_signature),
+    show_footer: bool('show_footer', current.show_footer),
+    show_notes: bool('show_notes', current.show_notes),
+    show_payment_terms: bool('show_payment_terms', current.show_payment_terms),
+    show_bank_details: bool('show_bank_details', current.show_bank_details),
+    show_due_date: bool('show_due_date', current.show_due_date),
+    show_vat_row: bool('show_vat_row', current.show_vat_row),
+    client_block_position: clientPos,
+  };
+}
+
+export function mergePaymentMethodsFromStudioBody(
+  body: Record<string, unknown>,
+  methods: IncomeBrandingPaymentMethod[],
+): IncomeBrandingPaymentMethod[] {
+  return methods.map((m) => ({
+    ...m,
+    enabled:
+      body[`payment_method_${m.key}`] === undefined
+        ? m.enabled
+        : parseBooleanBody(body[`payment_method_${m.key}`]),
+  }));
+}
+
+export function buildPaymentSettingsPanel(params: {
+  represented_client_id: string | null;
+  payment_methods: IncomeBrandingPaymentMethod[];
+}): IncomeBrandingPaymentSettingsPanel {
+  const isOffice = Boolean(params.represented_client_id);
+  return {
+    mode: isOffice ? 'represented_client' : 'issuer_profile',
+    editable: !isOffice,
+    warning_message: isOffice
+      ? 'פרטי תשלום נלקחים מפרופיל הלקוח ב-Client Operations. עריכה כאן אינה זמינה במצב נציג משרד.'
+      : null,
+    payment_methods: params.payment_methods.map((m) => ({ ...m })),
+  };
+}
+
+export function buildIssuerIdentityPreview(params: {
+  display_name: string;
+  tax_id: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  read_only: boolean;
+  helper_text: string | null;
+}): IncomeBrandingIssuerIdentityPreview {
+  return {
+    business_name: params.display_name,
+    tax_id: params.tax_id,
+    address: params.address,
+    phone: params.phone,
+    email: params.email,
+    website: null,
+    read_only: params.read_only,
+    helper_text: params.helper_text,
+  };
 }
 
 /** @deprecated Use getColorThemePresets */
