@@ -71,6 +71,7 @@ export interface IncomeClientDocumentManagementRow {
   tax_invoice_count: number;
   receipt_count: number;
   credit_count: number;
+  document_type_counters?: IncomeClientDocumentTypeCounter[];
   unpaid_amount_reference: number | null;
   unpaid_amount_display: string;
   last_document_date: string | null;
@@ -79,6 +80,56 @@ export interface IncomeClientDocumentManagementRow {
   last_activity_display: string;
   status_label: string;
   actions: IncomeClientDocumentManagementRowAction[];
+}
+
+export type IncomeClientDocumentTypeCounterKey =
+  | 'quote'
+  | 'deal_invoice'
+  | 'tax_invoice'
+  | 'tax_invoice_receipt'
+  | 'receipt'
+  | 'credit_tax_invoice'
+  | 'draft';
+
+export interface IncomeClientDocumentTypeCounter {
+  key: IncomeClientDocumentTypeCounterKey;
+  label: string;
+  count: number;
+  tone: string;
+  tooltip_label: string;
+  action_key: 'open_documents_by_type';
+}
+
+export interface WorkEngineInvoicesClientDocumentsByTypeRow {
+  row_id: string;
+  document_number: string | null;
+  document_type_label: string | null;
+  issue_date_display: string | null;
+  created_at_display: string | null;
+  customer_display_name: string | null;
+  amount_display: string;
+  status_label: string;
+  document_id: string | null;
+  draft_id: string | null;
+  can_view_document: boolean;
+  can_edit_draft: boolean;
+  pdf_download_path: string | null;
+  allowed_actions: string[];
+}
+
+export interface WorkEngineInvoicesClientDocumentsByTypeAggregate {
+  aggregate_key: 'work_engine_invoices_client_documents_by_type_aggregate';
+  represented_client_id: string;
+  client_display_name: string;
+  document_type_key: IncomeClientDocumentTypeCounterKey;
+  document_type_label: string;
+  selected_year: number;
+  available_years: number[];
+  is_draft_mode: boolean;
+  table_columns: Array<{ key: string; label: string }>;
+  rows: WorkEngineInvoicesClientDocumentsByTypeRow[];
+  allowed_actions: string[];
+  empty_state: { visible: boolean; title: string; description: string | null };
 }
 
 export interface IncomeClientDocumentManagementReportItem {
@@ -198,6 +249,7 @@ export function resolveIncomeClientDocumentManagementPanel(
     rows: (panel.rows ?? []).map((row) => ({
       ...row,
       actions: row.actions ?? [],
+      document_type_counters: row.document_type_counters ?? [],
     })),
     report_catalog: panel.report_catalog ?? [],
     empty_state: {

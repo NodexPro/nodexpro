@@ -10,7 +10,10 @@ import {
   amountReferenceFromTotalsSnapshot,
   isInvoiceCollectionDocumentType,
 } from './income-work-engine-bridge.pure.js';
-import { resolveOfficeClientGroupKey } from './income-client-document-management-panel.pure.js';
+import {
+  excludeSelfModeActingFilter,
+  resolveOfficeClientGroupKey,
+} from './income-client-document-management-panel.pure.js';
 import {
   INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
   INCOME_COMMAND_SELECT_ISSUER,
@@ -20,6 +23,7 @@ import type {
   IncomeClientDocumentManagementReportItem,
   IncomeClientDocumentManagementRow,
   IncomeClientDocumentManagementRowAction,
+  IncomeClientDocumentTypeCounter,
   IncomeDocumentType,
   IncomeWorkspacePermissions,
 } from './income.types.js';
@@ -172,6 +176,76 @@ function incrementTypeCount(acc: Acc, documentType: IncomeDocumentType): void {
   else if (documentType === 'credit_tax_invoice') acc.credit_count += 1;
 }
 
+function incrementIssuedTypeCount(acc: Acc, documentType: IncomeDocumentType): void {
+  if (documentType === 'quote') acc.quote_issued_count += 1;
+  else if (documentType === 'deal_invoice') acc.deal_issued_count += 1;
+  else if (documentType === 'tax_invoice') acc.tax_invoice_issued_count += 1;
+  else if (documentType === 'tax_invoice_receipt') acc.tax_invoice_receipt_issued_count += 1;
+  else if (documentType === 'receipt') acc.receipt_issued_count += 1;
+  else if (documentType === 'credit_tax_invoice') acc.credit_issued_count += 1;
+}
+
+function buildDocumentTypeCounters(acc: Acc): IncomeClientDocumentTypeCounter[] {
+  return [
+    {
+      key: 'quote',
+      label: 'הצעת מחיר',
+      count: acc.quote_issued_count,
+      tone: 'blue',
+      tooltip_label: 'הצעות מחיר',
+      action_key: 'open_documents_by_type',
+    },
+    {
+      key: 'deal_invoice',
+      label: 'חשבון עסקה',
+      count: acc.deal_issued_count,
+      tone: 'purple',
+      tooltip_label: 'חשבונות עסקה',
+      action_key: 'open_documents_by_type',
+    },
+    {
+      key: 'tax_invoice',
+      label: 'חשבונית מס',
+      count: acc.tax_invoice_issued_count,
+      tone: 'cyan',
+      tooltip_label: 'חשבוניות מס',
+      action_key: 'open_documents_by_type',
+    },
+    {
+      key: 'tax_invoice_receipt',
+      label: 'חשבונית מס/קבלה',
+      count: acc.tax_invoice_receipt_issued_count,
+      tone: 'teal',
+      tooltip_label: 'חשבוניות מס/קבלה',
+      action_key: 'open_documents_by_type',
+    },
+    {
+      key: 'receipt',
+      label: 'קבלה',
+      count: acc.receipt_issued_count,
+      tone: 'green',
+      tooltip_label: 'קבלות',
+      action_key: 'open_documents_by_type',
+    },
+    {
+      key: 'credit_tax_invoice',
+      label: 'זיכוי',
+      count: acc.credit_issued_count,
+      tone: 'red',
+      tooltip_label: 'זיכויים',
+      action_key: 'open_documents_by_type',
+    },
+    {
+      key: 'draft',
+      label: 'טיוטות',
+      count: acc.draft_documents_count,
+      tone: 'slate',
+      tooltip_label: 'טיוטות',
+      action_key: 'open_documents_by_type',
+    },
+  ];
+}
+
 type Acc = {
   represented_client_id: string;
   total_documents_count: number;
@@ -181,6 +255,12 @@ type Acc = {
   tax_invoice_count: number;
   receipt_count: number;
   credit_count: number;
+  quote_issued_count: number;
+  deal_issued_count: number;
+  tax_invoice_issued_count: number;
+  tax_invoice_receipt_issued_count: number;
+  receipt_issued_count: number;
+  credit_issued_count: number;
   last_document_date: string | null;
   last_activity_at: string | null;
   unpaid_reference: number;
@@ -199,6 +279,12 @@ function ensureAcc(byClient: Map<string, Acc>, clientId: string, currency = 'ILS
       tax_invoice_count: 0,
       receipt_count: 0,
       credit_count: 0,
+      quote_issued_count: 0,
+      deal_issued_count: 0,
+      tax_invoice_issued_count: 0,
+      tax_invoice_receipt_issued_count: 0,
+      receipt_issued_count: 0,
+      credit_issued_count: 0,
       last_document_date: null,
       last_activity_at: null,
       unpaid_reference: 0,
@@ -226,6 +312,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       'id, represented_client_id, issuer_business_id, acting_mode, document_type, document_status, issue_date, updated_at, currency, totals_snapshot_json, due_date',
     )
     .eq('organization_id', orgId)
+    .or(excludeSelfModeActingFilter())
     .eq('document_status', 'issued')
     .in('document_type', PANEL_DOCUMENT_TYPES)
     .order('issue_date', { ascending: false })
@@ -236,6 +323,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     .from('income_document_drafts')
     .select('id, represented_client_id, issuer_business_id, acting_mode, document_type, status, updated_at')
     .eq('organization_id', orgId)
+    .or(excludeSelfModeActingFilter())
     .eq('status', 'draft')
     .order('updated_at', { ascending: false })
     .limit(5000);
@@ -264,6 +352,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     const acc = ensureAcc(byClient, clientId, row.currency || 'ILS');
     acc.total_documents_count += 1;
     incrementTypeCount(acc, row.document_type);
+    incrementIssuedTypeCount(acc, row.document_type);
     const activityAt = row.updated_at || row.issue_date;
     if (!acc.last_activity_at || (activityAt && activityAt > acc.last_activity_at)) {
       acc.last_activity_at = activityAt;
@@ -366,6 +455,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
         tax_invoice_count: acc.tax_invoice_count,
         receipt_count: acc.receipt_count,
         credit_count: acc.credit_count,
+        document_type_counters: buildDocumentTypeCounters(acc),
         unpaid_amount_reference: unpaidRef,
         unpaid_amount_display:
           unpaidRef != null ? formatMoneyReference(unpaidRef, acc.currency) : '—',

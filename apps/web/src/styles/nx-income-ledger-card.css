@@ -150,21 +150,39 @@
 }
 
 .nx-income-ledger-modal__top-action:disabled {
-  opacity: 0.45;
+  opacity: 0.38;
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
-.nx-income-ledger-modal__close {
-  border-color: #e5e7eb;
+.nx-income-ledger-modal__close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
   background: #ffffff;
   color: #64748b;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 
-.nx-income-ledger-modal__close:hover:not(:disabled) {
+.nx-income-ledger-modal__close-btn:hover {
   background: linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%);
   color: #ffffff;
   border-color: transparent;
+  transform: translateY(-1px);
 }
 
 .nx-income-ledger-modal__body {
@@ -341,6 +359,7 @@
   }
 
   .nx-income-ledger-modal__header-actions,
+  .nx-income-ledger-modal__close-btn,
   .nx-income-ledger-modal__view,
   .nx-income-ledger-modal__picker,
   .nx-income-ledger-modal__source-note {

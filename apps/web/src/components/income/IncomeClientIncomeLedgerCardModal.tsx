@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { IncomeClientIncomeLedgerCardAggregate } from '../../api/income';
 import {
   downloadIncomeDocumentPdf,
@@ -157,9 +157,26 @@ export function IncomeClientIncomeLedgerCardModal({
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = useCallback(() => {
     window.print();
-  };
+  }, []);
+
+  const handleTopAction = useCallback(
+    (action: (typeof DEFAULT_TOP_ACTIONS)[number] | NonNullable<typeof aggregate>['top_actions'][number]) => {
+      if (busy || !action.enabled) return;
+      if (action.key === 'print_ledger') handlePrint();
+    },
+    [busy, handlePrint],
+  );
+
+  const handleClose = useCallback(
+    (e: MouseEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    },
+    [onClose],
+  );
 
   if (!open) return null;
 
@@ -180,28 +197,35 @@ export function IncomeClientIncomeLedgerCardModal({
           <div className="nx-income-ledger-modal__header-top">
             <h2 className="nx-income-ledger-modal__title">כרטסת הכנסות</h2>
             <div className="nx-income-ledger-modal__header-actions">
-              {topActions.map((action) => (
-                <button
-                  key={action.key}
-                  type="button"
-                  className="nx-income-ledger-modal__top-action"
-                  disabled={busy || !action.enabled}
-                  title={action.enabled ? action.label : (action.disabled_reason ?? action.label)}
-                  aria-label={action.label}
-                  onClick={() => {
-                    if (action.key === 'print_ledger') handlePrint();
-                  }}
-                >
-                  <TopActionIcon iconKey={action.icon_key} />
-                  <span className="nx-income-ledger-modal__top-action-label">{action.label}</span>
-                </button>
-              ))}
+              {topActions.map((action) => {
+                const isSend = action.key === 'send_ledger';
+                const isPrint = action.key === 'print_ledger';
+                const ariaLabel = isSend ? 'שליחה' : isPrint ? 'הדפסה' : action.label;
+                const title = action.enabled
+                  ? action.label
+                  : (action.disabled_reason ?? (isSend ? 'בקרוב' : action.label));
+                return (
+                  <button
+                    key={action.key}
+                    type="button"
+                    className="nx-income-ledger-modal__top-action"
+                    disabled={busy || !action.enabled}
+                    title={title}
+                    aria-label={ariaLabel}
+                    aria-disabled={busy || !action.enabled}
+                    onClick={() => handleTopAction(action)}
+                  >
+                    <TopActionIcon iconKey={action.icon_key} />
+                    <span className="nx-income-ledger-modal__top-action-label">{action.label}</span>
+                  </button>
+                );
+              })}
               <button
                 type="button"
-                className="nx-income-ledger-modal__top-action nx-income-ledger-modal__close"
-                disabled={busy}
+                className="nx-income-ledger-modal__close-btn"
                 aria-label="סגירה"
-                onClick={onClose}
+                title="סגירה"
+                onClick={handleClose}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
                   <path
@@ -211,7 +235,6 @@ export function IncomeClientIncomeLedgerCardModal({
                     strokeLinecap="round"
                   />
                 </svg>
-                <span className="nx-income-ledger-modal__top-action-label">סגירה</span>
               </button>
             </div>
           </div>

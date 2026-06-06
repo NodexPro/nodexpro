@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   IncomeClientDocumentManagementPanel,
   IncomeClientDocumentManagementReportItem,
@@ -110,6 +110,7 @@ type PanelProps = {
   panel: IncomeClientDocumentManagementPanel;
   busy: boolean;
   onAction: (result: IncomeClientDocumentPanelActionResult) => void | Promise<void>;
+  renderDocumentsCell?: (row: IncomeClientDocumentManagementRow) => ReactNode;
 };
 
 function ActionButton({
@@ -169,8 +170,12 @@ function renderDataCell(
   colKey: VisualColumnKey,
   busy: boolean,
   onAction: PanelProps['onAction'],
+  renderDocumentsCell?: PanelProps['renderDocumentsCell'],
 ) {
   if (colKey === 'client') return <ClientCell row={row} />;
+  if (colKey === 'total_documents_count' && renderDocumentsCell) {
+    return renderDocumentsCell(row);
+  }
   if (colKey === 'status_label') {
     return (
       <span className="nx-income-cdm__status" data-status={row.status_label}>
@@ -230,7 +235,12 @@ function renderDataCell(
   );
 }
 
-export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction }: PanelProps) {
+export function IncomeClientDocumentManagementPanelView({
+  panel,
+  busy,
+  onAction,
+  renderDocumentsCell,
+}: PanelProps) {
   if (!panel?.visible) return null;
 
   const visualColumns = resolveVisualColumns(panel.columns ?? []);
@@ -291,7 +301,7 @@ export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction 
                               : undefined
                         }
                       >
-                        {renderDataCell(row, col.key, busy, onAction)}
+                        {renderDataCell(row, col.key, busy, onAction, renderDocumentsCell)}
                       </td>
                     ))}
                   </tr>

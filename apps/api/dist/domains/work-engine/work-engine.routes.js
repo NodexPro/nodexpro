@@ -7,6 +7,8 @@
  *   - GET  /aggregates/foundation   -> work_engine_foundation_aggregate
  *   - GET  /aggregates/queue        -> work_engine_queue_aggregate (Stage 3D);
  *   - GET  /aggregates/invoices-tab -> work_engine_invoices_tab_aggregate (INC-8);
+ *   - GET  /aggregates/invoices-client-documents-by-type
+ *            -> work_engine_invoices_client_documents_by_type_aggregate;
  *   - GET  /aggregates/clients-tab  -> work_engine_clients_tab_aggregate (embedded CO registry);
  *                                      backend-ready queue table with rows,
  *                                      summary_cards, filters, pagination,
@@ -45,6 +47,7 @@ import { executeWorkEngineCommand } from './work-engine.commands.service.js';
 import { acceptWorkEngineEvent } from './work-engine.event-intake.service.js';
 import { buildWorkEngineFoundationAggregate, buildWorkEngineQueueAggregate, } from './work-engine.read-models.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.read-model.service.js';
+import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from './work-engine-invoices-client-documents-by-type.read-model.service.js';
 import { buildWorkEngineClientsTabAggregate } from './work-engine-clients-tab.read-model.service.js';
 const router = Router();
 function requireInternalCronSecret(req) {
@@ -142,6 +145,28 @@ officeRouter.get('/aggregates/invoices-tab', async (req, res, next) => {
     try {
         const ctx = req.context;
         const aggregate = await buildWorkEngineInvoicesTabAggregate({ ctx });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+officeRouter.get('/aggregates/invoices-client-documents-by-type', async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        const representedClientId = String(req.query.represented_client_id ?? '').trim();
+        const documentTypeKey = String(req.query.document_type_key ?? '').trim();
+        const yearRaw = req.query.year;
+        const year = yearRaw != null && String(yearRaw).trim() !== '' ? Number(yearRaw) : null;
+        if (year != null && !Number.isFinite(year)) {
+            throw badRequest('year must be a number');
+        }
+        const aggregate = await buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+            ctx,
+            representedClientId,
+            documentTypeKey,
+            year,
+        });
         return res.json(aggregate);
     }
     catch (e) {

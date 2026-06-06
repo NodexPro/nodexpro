@@ -19,6 +19,10 @@ import type {
   IncomeDocumentBrandingSettingsEntrypoint,
 } from '../income/income-document-branding-types';
 import type { IncomeClientDocumentManagementPanel } from '../income/income-workspace-types';
+import type {
+  IncomeClientDocumentTypeCounterKey,
+  WorkEngineInvoicesClientDocumentsByTypeAggregate,
+} from '../income/income-workspace-types';
 
 export type WorkEngineQueueFiltersInput = {
   state?: string | null;
@@ -575,6 +579,21 @@ export type WorkEngineInvoicesTabAggregate = {
 
 export async function fetchWorkEngineInvoicesTabAggregate(): Promise<WorkEngineInvoicesTabAggregate> {
   return apiJson<WorkEngineInvoicesTabAggregate>(WORK_ENGINE.aggregateInvoicesTab);
+}
+
+export async function fetchWorkEngineInvoicesClientDocumentsByTypeAggregate(params: {
+  representedClientId: string;
+  documentTypeKey: IncomeClientDocumentTypeCounterKey;
+  year?: number | null;
+}): Promise<WorkEngineInvoicesClientDocumentsByTypeAggregate> {
+  const qs = new URLSearchParams({
+    represented_client_id: params.representedClientId,
+    document_type_key: params.documentTypeKey,
+  });
+  if (params.year != null) qs.set('year', String(params.year));
+  return apiJson<WorkEngineInvoicesClientDocumentsByTypeAggregate>(
+    `${WORK_ENGINE.aggregateInvoicesClientDocumentsByType}?${qs.toString()}`,
+  );
 }
 
 export type WorkEngineClientsTabAggregate = {

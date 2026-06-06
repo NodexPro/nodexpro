@@ -23,13 +23,14 @@ import { executeIncomeCommand, isBrandingPreviewDraftCommandResponse } from '../
 import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
 import { ClientOperationsRegistryView } from '../client-operations/ClientOperationsRegistryView';
 import { resolveIncomeClientDocumentManagementPanel } from '../../income/income-workspace-types';
-import { IncomeClientDocumentManagementShell } from '../income/IncomeClientDocumentManagementShell';
+import { WorkEngineClientDocumentManagementShell } from './WorkEngineClientDocumentManagementShell';
 import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
 import { IncomeDocumentBrandingGearButton } from '../income/IncomeDocumentBrandingGearButton';
 import { IncomeDocumentBrandingSettingsModal } from '../income/IncomeDocumentBrandingSettingsModal';
 import { WorkEngineIncomeDocumentWizardModal } from './WorkEngineIncomeDocumentWizardModal';
 import type { IncomeWorkspaceAggregate } from '../../api/income';
 import '../../styles/nx-income-client-document-management.css';
+import '../../styles/nx-work-engine-client-documents.css';
 import '../../styles/nx-income-ledger-card.css';
 
 const QUEUE_SHELL_FILTERS: WorkEngineQueueFiltersInput = {
@@ -400,7 +401,7 @@ function WorkEngineInvoicesTabPanel(props: {
         ) : null}
       </div>
 
-      <IncomeClientDocumentManagementShell
+      <WorkEngineClientDocumentManagementShell
         panel={clientDocumentPanel}
         busy={panelBusy}
         customersTableModel={customersTableModel}
@@ -423,6 +424,20 @@ function WorkEngineInvoicesTabPanel(props: {
         }}
         onOpenBranding={() => setBrandingOpen(true)}
         onError={(message) => setError(message)}
+        onEditDraft={async (draftId) => {
+          setWizardBusy(true);
+          try {
+            const res = await executeIncomeCommand('resume_income_document_draft', { draft_id: draftId });
+            if ('income_workspace_aggregate' in res) {
+              setWizardInitialAgg(res.income_workspace_aggregate);
+              setWizardOpen(true);
+            }
+          } catch (e) {
+            setError(userFacingApiMessage(e));
+          } finally {
+            setWizardBusy(false);
+          }
+        }}
       />
 
       {!showClientDocumentPanel && draftEntrypoints.length > 0 ? (

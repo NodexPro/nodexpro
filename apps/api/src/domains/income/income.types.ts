@@ -117,6 +117,59 @@ export interface IncomeClientDocumentManagementRowAction {
   disabled_reason: string | null;
 }
 
+export type IncomeClientDocumentTypeCounterKey =
+  | 'quote'
+  | 'deal_invoice'
+  | 'tax_invoice'
+  | 'tax_invoice_receipt'
+  | 'receipt'
+  | 'credit_tax_invoice'
+  | 'draft';
+
+export interface IncomeClientDocumentTypeCounter {
+  key: IncomeClientDocumentTypeCounterKey;
+  label: string;
+  count: number;
+  tone: string;
+  tooltip_label: string;
+  action_key: 'open_documents_by_type';
+}
+
+export const WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY =
+  'work_engine_invoices_client_documents_by_type_aggregate' as const;
+
+export interface WorkEngineInvoicesClientDocumentsByTypeRow {
+  row_id: string;
+  document_number: string | null;
+  document_type_label: string | null;
+  issue_date_display: string | null;
+  created_at_display: string | null;
+  customer_display_name: string | null;
+  amount_display: string;
+  status_label: string;
+  document_id: string | null;
+  draft_id: string | null;
+  can_view_document: boolean;
+  can_edit_draft: boolean;
+  pdf_download_path: string | null;
+  allowed_actions: string[];
+}
+
+export interface WorkEngineInvoicesClientDocumentsByTypeAggregate {
+  aggregate_key: typeof WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY;
+  represented_client_id: string;
+  client_display_name: string;
+  document_type_key: IncomeClientDocumentTypeCounterKey;
+  document_type_label: string;
+  selected_year: number;
+  available_years: number[];
+  is_draft_mode: boolean;
+  table_columns: Array<{ key: string; label: string }>;
+  rows: WorkEngineInvoicesClientDocumentsByTypeRow[];
+  allowed_actions: string[];
+  empty_state: { visible: boolean; title: string; description: string | null };
+}
+
 export const INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY =
   'income_client_document_management_panel' as const;
 
@@ -133,6 +186,7 @@ export interface IncomeClientDocumentManagementRow {
   tax_invoice_count: number;
   receipt_count: number;
   credit_count: number;
+  document_type_counters: IncomeClientDocumentTypeCounter[];
   unpaid_amount_reference: number | null;
   unpaid_amount_display: string;
   last_document_date: string | null;
