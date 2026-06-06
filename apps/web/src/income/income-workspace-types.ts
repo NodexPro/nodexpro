@@ -41,6 +41,57 @@ export interface IncomeWorkspacePermissions {
   issue_on_behalf: boolean;
 }
 
+export type IncomeClientDocumentManagementActionIconKey =
+  | 'settings'
+  | 'end_customers'
+  | 'reports'
+  | 'more';
+
+export interface IncomeClientDocumentManagementRowAction {
+  key: string;
+  label: string;
+  icon_key: IncomeClientDocumentManagementActionIconKey;
+  command: string | null;
+  command_payload: Record<string, unknown>;
+  enabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface IncomeClientDocumentManagementRow {
+  client_id: string;
+  client_name: string;
+  logo_preview_url: string | null;
+  client_initials: string;
+  last_document_label: string;
+  last_document_at: string | null;
+  documents_count: number;
+  unpaid_display: string;
+  last_activity_at: string | null;
+  last_activity_label: string;
+  actions: IncomeClientDocumentManagementRowAction[];
+}
+
+export interface IncomeClientDocumentManagementReportItem {
+  key: string;
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface IncomeClientDocumentManagementPanel {
+  visible: boolean;
+  title: string;
+  description: string | null;
+  columns: Array<{ key: string; label: string }>;
+  rows: IncomeClientDocumentManagementRow[];
+  report_catalog: IncomeClientDocumentManagementReportItem[];
+  empty_state: {
+    visible: boolean;
+    title: string;
+    description: string | null;
+  };
+}
+
 export interface IncomeWorkspaceContextAggregate {
   aggregate_key: 'income_workspace_context_aggregate';
   org_id: string;
@@ -55,6 +106,7 @@ export interface IncomeWorkspaceContextAggregate {
   permissions: IncomeWorkspacePermissions;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
+  client_document_management_panel: IncomeClientDocumentManagementPanel;
 }
 
 export interface IncomeIssuerContextSummary {

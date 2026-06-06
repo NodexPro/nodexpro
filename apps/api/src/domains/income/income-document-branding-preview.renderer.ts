@@ -168,6 +168,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
     if (b.bank_account) bankLines.push(`חשבון: ${escapeHtml(b.bank_account)}`);
     if (b.iban) bankLines.push(`IBAN: ${escapeHtml(b.iban)}`);
     if (b.swift) bankLines.push(`SWIFT: ${escapeHtml(b.swift)}`);
+    if (b.payment_instructions) bankLines.push(escapeHtml(b.payment_instructions));
   }
 
   const paymentLabels = b.payment_methods.filter((m) => m.enabled).map((m) => escapeHtml(m.label));

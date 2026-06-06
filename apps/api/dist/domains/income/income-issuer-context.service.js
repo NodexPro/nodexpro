@@ -9,6 +9,7 @@ import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { hasPermission } from '../rbac/rbac.service.js';
 import { resolveIncomeIssuerBusinessDisplay } from './income-issuer-display.js';
 import { buildAllowedActingModes, buildAllowedActions, buildIssuerOptions, } from './income-workspace-context.builders.js';
+import { buildIncomeClientDocumentManagementPanel } from './income-client-document-management-panel.service.js';
 import { INCOME_CONTEXT_AGGREGATE_KEY, INCOME_COMMAND_SELECT_ISSUER, INCOME_PERMISSIONS, } from './income.types.js';
 import { syncIncomeIssuerProfileFromOrganization } from './income-issuer-profile-sync.service.js';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -216,6 +217,10 @@ export async function buildIncomeWorkspaceContextAggregate(ctx) {
         permissions: perms,
         allowed_actions: buildAllowedActions(perms),
         warnings,
+        client_document_management_panel: await buildIncomeClientDocumentManagementPanel({
+            ctx,
+            perms,
+        }),
     };
 }
 export async function applySelectIncomeIssuerContext(ctx, body, auditMeta) {

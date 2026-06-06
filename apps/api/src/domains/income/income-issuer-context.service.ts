@@ -15,6 +15,7 @@ import {
   buildAllowedActions,
   buildIssuerOptions,
 } from './income-workspace-context.builders.js';
+import { buildIncomeClientDocumentManagementPanel } from './income-client-document-management-panel.service.js';
 import {
   INCOME_CONTEXT_AGGREGATE_KEY,
   INCOME_COMMAND_SELECT_ISSUER,
@@ -314,6 +315,10 @@ export async function buildIncomeWorkspaceContextAggregate(
     permissions: perms,
     allowed_actions: buildAllowedActions(perms),
     warnings,
+    client_document_management_panel: await buildIncomeClientDocumentManagementPanel({
+      ctx,
+      perms,
+    }),
   };
 }
 

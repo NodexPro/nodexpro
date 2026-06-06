@@ -61,8 +61,10 @@ export const DEFAULT_DISPLAY_OPTIONS = {
 export const DEFAULT_PAYMENT_METHODS = [
     { key: 'bank_transfer', label: 'העברה בנקאית', enabled: true },
     { key: 'credit_card', label: 'כרטיס אשראי', enabled: false },
-    { key: 'cash', label: 'מזומן', enabled: false },
     { key: 'check', label: "צ'ק", enabled: false },
+    { key: 'cash', label: 'מזומן', enabled: false },
+    { key: 'paypal', label: 'PayPal', enabled: false },
+    { key: 'bit', label: 'Bit', enabled: false },
 ];
 function buildThemeMiniPreview(theme) {
     const grad = gradientCss(theme.gradient);
@@ -452,11 +454,13 @@ export function mergePaymentMethodsFromStudioBody(body, methods) {
     }));
 }
 export function buildPaymentSettingsPanel(params) {
-    const isOffice = Boolean(params.represented_client_id);
+    const isOfficeRepresentative = Boolean(params.represented_client_id);
+    const isClientBrandingProfile = isOfficeRepresentative && params.represented_client_id === params.issuer_business_id;
+    const editable = !isOfficeRepresentative || isClientBrandingProfile;
     return {
-        mode: isOffice ? 'represented_client' : 'issuer_profile',
-        editable: !isOffice,
-        warning_message: isOffice
+        mode: isOfficeRepresentative ? 'represented_client' : 'issuer_profile',
+        editable,
+        warning_message: isOfficeRepresentative && !isClientBrandingProfile
             ? 'פרטי תשלום נלקחים מפרופיל הלקוח ב-Client Operations. עריכה כאן אינה זמינה במצב נציג משרד.'
             : null,
         payment_methods: params.payment_methods.map((m) => ({ ...m })),
@@ -727,23 +731,28 @@ export function serializeDisplayOptionsJson(opts) {
     return { ...opts };
 }
 export function parsePaymentMethodsJson(raw) {
-    if (!Array.isArray(raw) || raw.length === 0)
-        return DEFAULT_PAYMENT_METHODS.map((m) => ({ ...m }));
-    const out = [];
-    for (const item of raw) {
-        if (!item || typeof item !== 'object' || Array.isArray(item))
-            continue;
-        const o = item;
-        const key = typeof o.key === 'string' ? o.key.trim() : '';
-        if (!key)
-            continue;
-        out.push({
-            key,
-            label: typeof o.label === 'string' && o.label.trim() ? o.label.trim() : key,
-            enabled: o.enabled === true,
-        });
+    const byKey = new Map();
+    if (Array.isArray(raw)) {
+        for (const item of raw) {
+            if (!item || typeof item !== 'object' || Array.isArray(item))
+                continue;
+            const o = item;
+            const key = typeof o.key === 'string' ? o.key.trim() : '';
+            if (!key)
+                continue;
+            byKey.set(key, {
+                key,
+                label: typeof o.label === 'string' && o.label.trim() ? o.label.trim() : key,
+                enabled: o.enabled === true,
+            });
+        }
     }
-    return out.length ? out : DEFAULT_PAYMENT_METHODS.map((m) => ({ ...m }));
+    return DEFAULT_PAYMENT_METHODS.map((defaultMethod) => {
+        const existing = byKey.get(defaultMethod.key);
+        return existing
+            ? { ...defaultMethod, ...existing, label: existing.label || defaultMethod.label }
+            : { ...defaultMethod };
+    });
 }
 export function serializePaymentMethodsJson(methods) {
     return methods.map((m) => ({ key: m.key, label: m.label, enabled: m.enabled }));
@@ -811,6 +820,7 @@ export function resolveBrandingProfile(row, assets) {
         bank_account: row.bank_account?.trim() ? row.bank_account.trim() : null,
         swift: row.swift?.trim() ? row.swift.trim() : null,
         iban: row.iban?.trim() ? row.iban.trim() : null,
+        payment_instructions: row.payment_instructions?.trim() ? row.payment_instructions.trim() : null,
         email_subject_template: row.email_subject_template?.trim() ? row.email_subject_template.trim() : null,
         email_body_template: row.email_body_template?.trim() ? row.email_body_template.trim() : null,
         customer_notes: row.customer_notes?.trim() ? row.customer_notes.trim() : null,

@@ -363,6 +363,7 @@ async function buildDocumentBrandingStudio(
     issuer_identity_preview: buildStudioSampleIssuerIdentityPreview(),
     payment_settings_panel: buildPaymentSettingsPanel({
       represented_client_id: scope.represented_client_id,
+      issuer_business_id: scope.issuer_business_id,
       payment_methods: resolved.payment_methods,
     }),
     document_type_style_defaults: getDocumentTypeStyleDefaults(),
@@ -394,6 +395,7 @@ async function buildDocumentBrandingStudio(
       bank_account: resolved.bank_account,
       iban: resolved.iban,
       swift: resolved.swift,
+      payment_instructions: resolved.payment_instructions,
       email_subject_template: resolved.email_subject_template,
       email_body_template: resolved.email_body_template,
       customer_notes: resolved.customer_notes,
@@ -597,6 +599,7 @@ function applyModalBrandingPatch(
   patch.bank_account = optionalTrimmedString(body.bank_account, 100);
   patch.swift = optionalTrimmedString(body.swift, 50);
   patch.iban = optionalTrimmedString(body.iban, 50);
+  patch.payment_instructions = optionalTrimmedString(body.payment_instructions, 4000);
   applyEmailTemplatePatch(body, patch);
   patch.customer_notes = optionalTrimmedString(body.customer_notes, 4000);
   patch.terms_and_conditions = optionalTrimmedString(body.terms_and_conditions, 8000);
@@ -611,10 +614,7 @@ function applyModalBrandingPatch(
   patch.client_block_position = clientPos;
 
   if (
-    body.payment_method_bank_transfer !== undefined ||
-    body.payment_method_credit_card !== undefined ||
-    body.payment_method_cash !== undefined ||
-    body.payment_method_check !== undefined
+    DEFAULT_PAYMENT_METHODS.some((method) => body[`payment_method_${method.key}`] !== undefined)
   ) {
     patch.payment_methods = serializePaymentMethodsJson(
       mergePaymentMethodsFromStudioBody(body, parsePaymentMethodsJson(row.payment_methods)),

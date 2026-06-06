@@ -193,6 +193,7 @@ export type IncomeBrandingProfileRow = {
   bank_account: string | null;
   swift: string | null;
   iban: string | null;
+  payment_instructions: string | null;
   email_subject_template: string | null;
   email_body_template: string | null;
   customer_notes: string | null;
@@ -223,6 +224,7 @@ export type IncomeBrandingResolvedProfile = {
   bank_account: string | null;
   swift: string | null;
   iban: string | null;
+  payment_instructions: string | null;
   email_subject_template: string | null;
   email_body_template: string | null;
   customer_notes: string | null;
@@ -312,6 +314,7 @@ export type IncomeDocumentBrandingStudioFields = {
   bank_account: string | null;
   iban: string | null;
   swift: string | null;
+  payment_instructions: string | null;
   email_subject_template: string | null;
   email_body_template: string | null;
   customer_notes: string | null;

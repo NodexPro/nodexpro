@@ -21,6 +21,13 @@ import {
   type IncomeBrandingPreviewDraftCommandResponse,
 } from '../api/income';
 import { IncomeCardsGrid } from '../components/income/IncomeCardsGrid';
+import {
+  IncomeClientDocumentManagementPanelView,
+  IncomeClientDocumentMoreMenu,
+  IncomeClientDocumentReportsModal,
+  IncomeClientEndCustomersModal,
+  type IncomeClientDocumentPanelActionResult,
+} from '../components/income/IncomeClientDocumentManagementPanel';
 import { IncomeCustomersTable } from '../components/income/IncomeCustomersTable';
 import { IncomeDocumentBrandingGearButton } from '../components/income/IncomeDocumentBrandingGearButton';
 import { IncomeDocumentBrandingSettingsModal } from '../components/income/IncomeDocumentBrandingSettingsModal';
@@ -30,6 +37,7 @@ import { IncomeDraftsTable } from '../components/income/IncomeDraftsTable';
 import { IncomeIssuerContextSwitcher } from '../components/income/IncomeIssuerContextSwitcher';
 import { IncomeItemsTable } from '../components/income/IncomeItemsTable';
 import '../styles/nx-income-workspace.css';
+import '../styles/nx-income-client-document-management.css';
 import '../styles/nx-modal.css';
 
 type Toast = { kind: 'ok' | 'err'; message: string } | null;
@@ -67,6 +75,13 @@ export function IncomeWorkspacePage() {
   const [presetDocumentType, setPresetDocumentType] = useState<string | null>(null);
   const [simpleModal, setSimpleModal] = useState<SimpleFormModal>(null);
   const [brandingOpen, setBrandingOpen] = useState(false);
+  const [endCustomersOpen, setEndCustomersOpen] = useState(false);
+  const [endCustomersClientName, setEndCustomersClientName] = useState('');
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const [reportsClientName, setReportsClientName] = useState('');
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [moreMenuClientName, setMoreMenuClientName] = useState('');
+  const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLButtonElement | null>(null);
 
   const [customerForm, setCustomerForm] = useState({ display_name: '', phone: '', email: '', tax_id: '' });
   const [itemForm, setItemForm] = useState({
@@ -187,6 +202,37 @@ export function IncomeWorkspacePage() {
     });
   };
 
+  const handleClientDocumentPanelAction = async (result: IncomeClientDocumentPanelActionResult) => {
+    if (result.kind === 'reports') {
+      setReportsClientName(result.clientName);
+      setReportsOpen(true);
+      return;
+    }
+    if (result.kind === 'more') {
+      setMoreMenuClientName(result.clientName);
+      setMoreMenuAnchor(result.anchor);
+      setMoreMenuOpen(true);
+      return;
+    }
+
+    const { action } = result;
+    if (!action.command) return;
+
+    const payload = { ...action.command_payload };
+    const openBranding = payload.open_document_branding_studio === true;
+    const openEndCustomers = payload.open_end_customers_panel === true;
+    delete payload.open_document_branding_studio;
+    delete payload.open_end_customers_panel;
+
+    await runCommand(action.command, payload);
+
+    if (openBranding) setBrandingOpen(true);
+    if (openEndCustomers) {
+      setEndCustomersClientName(result.clientName);
+      setEndCustomersOpen(true);
+    }
+  };
+
   const handleDraftAction = async (row: IncomeDraftsTableRow, action: string) => {
     if (action === 'update_income_document_draft') {
       openWizard(row, row.document_type);
@@ -277,6 +323,9 @@ export function IncomeWorkspacePage() {
 
   if (!workspace || !context) return null;
 
+  const clientDocumentPanel = context.client_document_management_panel;
+  const showClientDocumentPanel = clientDocumentPanel.visible;
+
   return (
     <div className="nx-income-workspace nx-invoice-ui" dir="rtl" lang="he">
       <header className="nx-income-workspace__header">
@@ -291,7 +340,9 @@ export function IncomeWorkspacePage() {
               />
             </h1>
             <p className="nx-income-workspace__subtitle nx-body-text nx-body-text--muted">
-              ניהול מסמכים, לקוחות ופריטים — נתונים מהשרת בלבד
+              {showClientDocumentPanel
+                ? 'ניהול מסמכים לפי לקוח — הגדרות, לקוחות קצה ודוחות'
+                : 'ניהול מסמכים, לקוחות ופריטים — נתונים מהשרת בלבד'}
             </p>
           </div>
         </div>
@@ -316,14 +367,22 @@ export function IncomeWorkspacePage() {
 
       <IncomeIssuerContextSwitcher context={context} busy={busy} onSelectOption={(o) => void handleIssuerSelect(o)} />
 
+      <IncomeClientDocumentManagementPanelView
+        panel={clientDocumentPanel}
+        busy={busy}
+        onAction={(result) => void handleClientDocumentPanelAction(result)}
+      />
+
       <IncomeCardsGrid cards={workspace.cards} onCardAction={handleCardAction} />
 
-      <IncomeCustomersTable
-        model={workspace.customers_table_model}
-        canCreate={canCreateCustomer}
-        busy={busy}
-        onCreateCustomer={() => setSimpleModal({ kind: 'customer' })}
-      />
+      {!showClientDocumentPanel ? (
+        <IncomeCustomersTable
+          model={workspace.customers_table_model}
+          canCreate={canCreateCustomer}
+          busy={busy}
+          onCreateCustomer={() => setSimpleModal({ kind: 'customer' })}
+        />
+      ) : null}
 
       <IncomeItemsTable
         model={workspace.items_table_model}
@@ -504,7 +563,12 @@ export function IncomeWorkspacePage() {
 
       <IncomeDocumentBrandingSettingsModal
         open={brandingOpen}
-        title={workspace.document_branding_settings_entrypoint?.modal_title ?? 'הגדרות מסמך'}
+        title={
+          workspace.document_branding_settings_entrypoint?.modal_title ??
+          (workspace.issuer_context.represented_client_label
+            ? `הגדרות מסמך — ${workspace.issuer_context.represented_client_label}`
+            : 'הגדרות מסמך')
+        }
         profile={workspace.document_branding_profile}
         commands={
           workspace.document_branding_settings_entrypoint?.commands ?? {
@@ -527,6 +591,30 @@ export function IncomeWorkspacePage() {
           if (isBrandingPreviewDraftCommandResponse(res)) return res.document_branding_studio_preview;
           return null;
         }}
+      />
+
+      <IncomeClientEndCustomersModal
+        open={endCustomersOpen}
+        clientName={endCustomersClientName || workspace.issuer_context.represented_client_label || 'לקוח'}
+        model={workspace.customers_table_model}
+        busy={busy}
+        onClose={() => setEndCustomersOpen(false)}
+      />
+
+      <IncomeClientDocumentReportsModal
+        open={reportsOpen}
+        clientName={reportsClientName}
+        catalog={clientDocumentPanel.report_catalog}
+        busy={busy}
+        onClose={() => setReportsOpen(false)}
+      />
+
+      <IncomeClientDocumentMoreMenu
+        open={moreMenuOpen}
+        clientName={moreMenuClientName}
+        anchorEl={moreMenuAnchor}
+        busy={busy}
+        onClose={() => setMoreMenuOpen(false)}
       />
 
       {toast ? (

@@ -174,6 +174,7 @@ export type IncomeDocumentBrandingStudioFields = {
   bank_account: string | null;
   iban: string | null;
   swift: string | null;
+  payment_instructions: string | null;
   email_subject_template: string | null;
   email_body_template: string | null;
   customer_notes: string | null;
@@ -272,6 +273,8 @@ export type IncomeBrandingStudioDraft = {
   payment_method_credit_card: string;
   payment_method_cash: string;
   payment_method_check: string;
+  payment_method_paypal: string;
+  payment_method_bit: string;
   company_subtitle: string;
   footer_text: string;
   bank_name: string;
@@ -279,6 +282,7 @@ export type IncomeBrandingStudioDraft = {
   bank_account: string;
   iban: string;
   swift: string;
+  payment_instructions: string;
   email_subject_friendly: string;
   email_body_friendly: string;
   customer_notes: string;

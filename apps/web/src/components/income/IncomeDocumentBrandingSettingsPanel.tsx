@@ -144,6 +144,8 @@ export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggr
     payment_method_credit_card: paymentField('credit_card'),
     payment_method_cash: paymentField('cash'),
     payment_method_check: paymentField('check'),
+    payment_method_paypal: paymentField('paypal'),
+    payment_method_bit: paymentField('bit'),
     company_subtitle: f.company_subtitle ?? '',
     footer_text: f.footer_text ?? '',
     bank_name: f.bank_name ?? '',
@@ -151,6 +153,7 @@ export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggr
     bank_account: f.bank_account ?? '',
     iban: f.iban ?? '',
     swift: f.swift ?? '',
+    payment_instructions: f.payment_instructions ?? '',
     email_subject_friendly: studio.email_template_editor.subject_friendly,
     email_body_friendly: studio.email_template_editor.body_friendly,
     customer_notes: f.customer_notes ?? '',
@@ -177,6 +180,8 @@ export function buildBrandingPreviewDraftBody(draft: IncomeBrandingStudioDraft):
     payment_method_credit_card: draft.payment_method_credit_card === 'true',
     payment_method_cash: draft.payment_method_cash === 'true',
     payment_method_check: draft.payment_method_check === 'true',
+    payment_method_paypal: draft.payment_method_paypal === 'true',
+    payment_method_bit: draft.payment_method_bit === 'true',
     company_subtitle: draft.company_subtitle,
     footer_text: draft.footer_text,
     bank_name: draft.bank_name,
@@ -184,6 +189,7 @@ export function buildBrandingPreviewDraftBody(draft: IncomeBrandingStudioDraft):
     bank_account: draft.bank_account,
     iban: draft.iban,
     swift: draft.swift,
+    payment_instructions: draft.payment_instructions,
     email_subject_friendly: draft.email_subject_friendly,
     email_body_friendly: draft.email_body_friendly,
     customer_notes: draft.customer_notes,
@@ -216,6 +222,8 @@ export function buildBrandingModalSaveBody(
     payment_method_credit_card: draft.payment_method_credit_card === 'true',
     payment_method_cash: draft.payment_method_cash === 'true',
     payment_method_check: draft.payment_method_check === 'true',
+    payment_method_paypal: draft.payment_method_paypal === 'true',
+    payment_method_bit: draft.payment_method_bit === 'true',
     company_subtitle: draft.company_subtitle,
     footer_text: draft.footer_text,
     bank_name: draft.bank_name,
@@ -223,6 +231,7 @@ export function buildBrandingModalSaveBody(
     bank_account: draft.bank_account,
     iban: draft.iban,
     swift: draft.swift,
+    payment_instructions: draft.payment_instructions,
     email_subject_friendly: draft.email_subject_friendly,
     email_body_friendly: draft.email_body_friendly,
     customer_notes: draft.customer_notes,
@@ -912,6 +921,13 @@ function StudioSectionContent({
             <StudioField label="מספר חשבון" value={draft.bank_account} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_account: v }))} />
             <StudioField label="IBAN" value={draft.iban} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, iban: v }))} />
             <StudioField label="SWIFT" value={draft.swift} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, swift: v }))} />
+            <StudioField
+              label="הוראות תשלום"
+              value={draft.payment_instructions}
+              disabled={paymentDisabled}
+              multiline
+              onChange={(v) => onDraftChange((d) => ({ ...d, payment_instructions: v }))}
+            />
           </div>
         ) : null}
       </div>
