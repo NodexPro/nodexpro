@@ -17,6 +17,8 @@ import {
   isOverdueByDueDate,
 } from '../income/income-work-engine-bridge.pure.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
+import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
+import { buildIncomeClientDocumentManagementPanel } from '../income/income-client-document-management-panel.service.js';
 import {
   buildDocumentBrandingProfileAggregate,
   buildDocumentBrandingSettingsEntrypoint,
@@ -25,6 +27,7 @@ import type {
   IncomeDocumentBrandingProfileAggregate,
   IncomeDocumentBrandingSettingsEntrypoint,
 } from '../income/income-document-branding.types.js';
+import type { IncomeClientDocumentManagementPanel } from '../income/income.types.js';
 
 export type WorkEngineInvoicesTabColumnType = 'text' | 'money_reference' | 'date' | 'status';
 
@@ -75,6 +78,7 @@ export type WorkEngineInvoicesTabAggregate = {
   gaps: string[];
   document_branding_profile: IncomeDocumentBrandingProfileAggregate | null;
   document_branding_settings_entrypoint: IncomeDocumentBrandingSettingsEntrypoint | null;
+  client_document_management_panel: IncomeClientDocumentManagementPanel;
 };
 
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
@@ -112,6 +116,63 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
 }): Promise<WorkEngineInvoicesTabAggregate> {
   const orgId = params.ctx.organizationId!;
   if (!orgId) throw forbidden('Organization context required');
+
+  const incomePerms = incomeWorkspacePermissionsFromContext(params.ctx);
+  const client_document_management_panel = await buildIncomeClientDocumentManagementPanel({
+    ctx: params.ctx,
+    perms: incomePerms,
+  });
+
+  let document_branding_profile: IncomeDocumentBrandingProfileAggregate | null = null;
+  let document_branding_settings_entrypoint: IncomeDocumentBrandingSettingsEntrypoint | null = null;
+  try {
+    const issuerScope = await loadActiveIncomeIssuerScope(params.ctx);
+    if (issuerScope.permissions.view) {
+      document_branding_profile = await buildDocumentBrandingProfileAggregate(
+        issuerScope,
+        issuerScope.permissions.edit,
+      );
+      document_branding_settings_entrypoint = buildDocumentBrandingSettingsEntrypoint(
+        issuerScope.permissions,
+      );
+    }
+  } catch {
+    document_branding_profile = null;
+    document_branding_settings_entrypoint = null;
+  }
+
+  if (client_document_management_panel.visible) {
+    return {
+      aggregate_key: 'work_engine_invoices_tab_aggregate',
+      org_id: orgId,
+      workspace_tabs: buildAccountantWorkspaceTabs('invoices'),
+      title: 'חשבוניות',
+      description: 'ניהול מסמכים לפי לקוח — הגדרות, לקוחות קצה ודוחות',
+      table_model: {
+        columns: [],
+        rows: [],
+        empty_state: {
+          visible: false,
+          title: '',
+          description: null,
+        },
+      },
+      summary: {
+        rows_count: client_document_management_panel.rows.length,
+        sum_paid_reference: 0,
+        avg_paid_reference: 0,
+        currency: 'ILS',
+      },
+      filters: [],
+      allowed_actions: ['view_invoices_tab', 'open_income_document_wizard'],
+      document_creation_entrypoint: await buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx),
+      draft_entrypoints: [],
+      gaps: [],
+      document_branding_profile,
+      document_branding_settings_entrypoint,
+      client_document_management_panel,
+    };
+  }
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -266,22 +327,25 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       };
     }) ?? [];
 
-  let document_branding_profile: IncomeDocumentBrandingProfileAggregate | null = null;
-  let document_branding_settings_entrypoint: IncomeDocumentBrandingSettingsEntrypoint | null = null;
-  try {
-    const issuerScope = await loadActiveIncomeIssuerScope(params.ctx);
-    if (issuerScope.permissions.view) {
-      document_branding_profile = await buildDocumentBrandingProfileAggregate(
-        issuerScope,
-        issuerScope.permissions.edit,
-      );
-      document_branding_settings_entrypoint = buildDocumentBrandingSettingsEntrypoint(
-        issuerScope.permissions,
-      );
+  let document_branding_profile_legacy: IncomeDocumentBrandingProfileAggregate | null = document_branding_profile;
+  let document_branding_settings_entrypoint_legacy: IncomeDocumentBrandingSettingsEntrypoint | null =
+    document_branding_settings_entrypoint;
+  if (!document_branding_profile_legacy) {
+    try {
+      const issuerScope = await loadActiveIncomeIssuerScope(params.ctx);
+      if (issuerScope.permissions.view) {
+        document_branding_profile_legacy = await buildDocumentBrandingProfileAggregate(
+          issuerScope,
+          issuerScope.permissions.edit,
+        );
+        document_branding_settings_entrypoint_legacy = buildDocumentBrandingSettingsEntrypoint(
+          issuerScope.permissions,
+        );
+      }
+    } catch {
+      document_branding_profile_legacy = null;
+      document_branding_settings_entrypoint_legacy = null;
     }
-  } catch {
-    document_branding_profile = null;
-    document_branding_settings_entrypoint = null;
   }
 
   return {
@@ -316,7 +380,8 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       'amount_paid_reference — awaiting payment pipeline',
       'self_mode_documents_excluded — requires represented_client_id',
     ],
-    document_branding_profile,
-    document_branding_settings_entrypoint,
+    document_branding_profile: document_branding_profile_legacy,
+    document_branding_settings_entrypoint: document_branding_settings_entrypoint_legacy,
+    client_document_management_panel,
   };
 }

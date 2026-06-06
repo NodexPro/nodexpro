@@ -58,16 +58,25 @@ export interface IncomeClientDocumentManagementRowAction {
 }
 
 export interface IncomeClientDocumentManagementRow {
-  client_id: string;
-  client_name: string;
-  logo_preview_url: string | null;
+  represented_client_id: string;
+  client_display_name: string;
+  client_logo_url: string | null;
   client_initials: string;
-  last_document_label: string;
-  last_document_at: string | null;
-  documents_count: number;
-  unpaid_display: string;
+  tax_id: string | null;
+  email: string | null;
+  total_documents_count: number;
+  quote_count: number;
+  deal_count: number;
+  tax_invoice_count: number;
+  receipt_count: number;
+  credit_count: number;
+  unpaid_amount_reference: number | null;
+  unpaid_amount_display: string;
+  last_document_date: string | null;
+  last_document_date_display: string;
   last_activity_at: string | null;
-  last_activity_label: string;
+  last_activity_display: string;
+  status_label: string;
   actions: IncomeClientDocumentManagementRowAction[];
 }
 
@@ -79,6 +88,7 @@ export interface IncomeClientDocumentManagementReportItem {
 }
 
 export interface IncomeClientDocumentManagementPanel {
+  aggregate_key: 'income_client_document_management_panel';
   visible: boolean;
   title: string;
   description: string | null;

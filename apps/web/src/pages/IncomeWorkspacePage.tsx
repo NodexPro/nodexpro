@@ -22,12 +22,8 @@ import {
 } from '../api/income';
 import { IncomeCardsGrid } from '../components/income/IncomeCardsGrid';
 import {
-  IncomeClientDocumentManagementPanelView,
-  IncomeClientDocumentMoreMenu,
-  IncomeClientDocumentReportsModal,
-  IncomeClientEndCustomersModal,
-  type IncomeClientDocumentPanelActionResult,
-} from '../components/income/IncomeClientDocumentManagementPanel';
+  IncomeClientDocumentManagementShell,
+} from '../components/income/IncomeClientDocumentManagementShell';
 import { IncomeCustomersTable } from '../components/income/IncomeCustomersTable';
 import { IncomeDocumentBrandingGearButton } from '../components/income/IncomeDocumentBrandingGearButton';
 import { IncomeDocumentBrandingSettingsModal } from '../components/income/IncomeDocumentBrandingSettingsModal';
@@ -75,13 +71,6 @@ export function IncomeWorkspacePage() {
   const [presetDocumentType, setPresetDocumentType] = useState<string | null>(null);
   const [simpleModal, setSimpleModal] = useState<SimpleFormModal>(null);
   const [brandingOpen, setBrandingOpen] = useState(false);
-  const [endCustomersOpen, setEndCustomersOpen] = useState(false);
-  const [endCustomersClientName, setEndCustomersClientName] = useState('');
-  const [reportsOpen, setReportsOpen] = useState(false);
-  const [reportsClientName, setReportsClientName] = useState('');
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [moreMenuClientName, setMoreMenuClientName] = useState('');
-  const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLButtonElement | null>(null);
 
   const [customerForm, setCustomerForm] = useState({ display_name: '', phone: '', email: '', tax_id: '' });
   const [itemForm, setItemForm] = useState({
@@ -200,37 +189,6 @@ export function IncomeWorkspacePage() {
       issuer_business_id: option.issuer_business_id,
       represented_client_id: option.represented_client_id,
     });
-  };
-
-  const handleClientDocumentPanelAction = async (result: IncomeClientDocumentPanelActionResult) => {
-    if (result.kind === 'reports') {
-      setReportsClientName(result.clientName);
-      setReportsOpen(true);
-      return;
-    }
-    if (result.kind === 'more') {
-      setMoreMenuClientName(result.clientName);
-      setMoreMenuAnchor(result.anchor);
-      setMoreMenuOpen(true);
-      return;
-    }
-
-    const { action } = result;
-    if (!action.command) return;
-
-    const payload = { ...action.command_payload };
-    const openBranding = payload.open_document_branding_studio === true;
-    const openEndCustomers = payload.open_end_customers_panel === true;
-    delete payload.open_document_branding_studio;
-    delete payload.open_end_customers_panel;
-
-    await runCommand(action.command, payload);
-
-    if (openBranding) setBrandingOpen(true);
-    if (openEndCustomers) {
-      setEndCustomersClientName(result.clientName);
-      setEndCustomersOpen(true);
-    }
   };
 
   const handleDraftAction = async (row: IncomeDraftsTableRow, action: string) => {
@@ -365,39 +323,50 @@ export function IncomeWorkspacePage() {
         </div>
       ) : null}
 
-      <IncomeIssuerContextSwitcher context={context} busy={busy} onSelectOption={(o) => void handleIssuerSelect(o)} />
-
-      <IncomeClientDocumentManagementPanelView
-        panel={clientDocumentPanel}
-        busy={busy}
-        onAction={(result) => void handleClientDocumentPanelAction(result)}
-      />
-
-      <IncomeCardsGrid cards={workspace.cards} onCardAction={handleCardAction} />
-
       {!showClientDocumentPanel ? (
-        <IncomeCustomersTable
-          model={workspace.customers_table_model}
-          canCreate={canCreateCustomer}
-          busy={busy}
-          onCreateCustomer={() => setSimpleModal({ kind: 'customer' })}
-        />
+        <IncomeIssuerContextSwitcher context={context} busy={busy} onSelectOption={(o) => void handleIssuerSelect(o)} />
       ) : null}
 
-      <IncomeItemsTable
-        model={workspace.items_table_model}
-        canCreate={canCreateItem}
+      <IncomeClientDocumentManagementShell
+        panel={clientDocumentPanel}
         busy={busy}
-        onCreateItem={() => setSimpleModal({ kind: 'item' })}
+        customersTableModel={workspace.customers_table_model}
+        onBusyChange={setBusy}
+        onAfterIssuerSelect={(res) => {
+          setContext(res.income_workspace_context_aggregate);
+          applyWorkspace(res.income_workspace_aggregate);
+        }}
+        onOpenBranding={() => setBrandingOpen(true)}
+        onError={(message) => setToast({ kind: 'err', message })}
       />
 
-      <IncomeDraftsTable model={workspace.drafts_table_model} busy={busy} onRowAction={(r, a) => void handleDraftAction(r, a)} />
+      {!showClientDocumentPanel ? (
+        <>
+          <IncomeCardsGrid cards={workspace.cards} onCardAction={handleCardAction} />
 
-      <IncomeDocumentsTable
-        model={workspace.issued_documents_table_model}
-        busy={busy}
-        onRowAction={(r, a) => void handleIssuedAction(r, a)}
-      />
+          <IncomeCustomersTable
+            model={workspace.customers_table_model}
+            canCreate={canCreateCustomer}
+            busy={busy}
+            onCreateCustomer={() => setSimpleModal({ kind: 'customer' })}
+          />
+
+          <IncomeItemsTable
+            model={workspace.items_table_model}
+            canCreate={canCreateItem}
+            busy={busy}
+            onCreateItem={() => setSimpleModal({ kind: 'item' })}
+          />
+
+          <IncomeDraftsTable model={workspace.drafts_table_model} busy={busy} onRowAction={(r, a) => void handleDraftAction(r, a)} />
+
+          <IncomeDocumentsTable
+            model={workspace.issued_documents_table_model}
+            busy={busy}
+            onRowAction={(r, a) => void handleIssuedAction(r, a)}
+          />
+        </>
+      ) : null}
 
       <IncomeDocumentWizardModal
         open={wizardOpen}
@@ -591,30 +560,6 @@ export function IncomeWorkspacePage() {
           if (isBrandingPreviewDraftCommandResponse(res)) return res.document_branding_studio_preview;
           return null;
         }}
-      />
-
-      <IncomeClientEndCustomersModal
-        open={endCustomersOpen}
-        clientName={endCustomersClientName || workspace.issuer_context.represented_client_label || 'לקוח'}
-        model={workspace.customers_table_model}
-        busy={busy}
-        onClose={() => setEndCustomersOpen(false)}
-      />
-
-      <IncomeClientDocumentReportsModal
-        open={reportsOpen}
-        clientName={reportsClientName}
-        catalog={clientDocumentPanel.report_catalog}
-        busy={busy}
-        onClose={() => setReportsOpen(false)}
-      />
-
-      <IncomeClientDocumentMoreMenu
-        open={moreMenuOpen}
-        clientName={moreMenuClientName}
-        anchorEl={moreMenuAnchor}
-        busy={busy}
-        onClose={() => setMoreMenuOpen(false)}
       />
 
       {toast ? (

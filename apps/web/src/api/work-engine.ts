@@ -18,6 +18,7 @@ import type {
   IncomeDocumentBrandingProfileAggregate,
   IncomeDocumentBrandingSettingsEntrypoint,
 } from '../income/income-document-branding-types';
+import type { IncomeClientDocumentManagementPanel } from '../income/income-workspace-types';
 
 export type WorkEngineQueueFiltersInput = {
   state?: string | null;
@@ -569,6 +570,7 @@ export type WorkEngineInvoicesTabAggregate = {
   gaps: string[];
   document_branding_profile: IncomeDocumentBrandingProfileAggregate | null;
   document_branding_settings_entrypoint: IncomeDocumentBrandingSettingsEntrypoint | null;
+  client_document_management_panel: IncomeClientDocumentManagementPanel;
 };
 
 export async function fetchWorkEngineInvoicesTabAggregate(): Promise<WorkEngineInvoicesTabAggregate> {

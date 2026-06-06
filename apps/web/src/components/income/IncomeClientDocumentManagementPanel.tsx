@@ -53,16 +53,23 @@ function ActionButton({
 function ClientCell({ row }: { row: IncomeClientDocumentManagementRow }) {
   return (
     <div className="nx-income-cdm__client">
-      {row.logo_preview_url ? (
-        <img className="nx-income-cdm__logo" src={row.logo_preview_url} alt="" />
+      {row.client_logo_url ? (
+        <img className="nx-income-cdm__logo" src={row.client_logo_url} alt="" />
       ) : (
         <span className="nx-income-cdm__logo-fallback" aria-hidden>
           {row.client_initials}
         </span>
       )}
-      <span className="nx-income-cdm__client-name">{row.client_name}</span>
+      <span className="nx-income-cdm__client-name">{row.client_display_name}</span>
     </div>
   );
+}
+
+function renderRowCell(row: IncomeClientDocumentManagementRow, columnKey: string): string {
+  if (columnKey === 'client') return row.client_display_name;
+  const value = (row as unknown as Record<string, unknown>)[columnKey];
+  if (value == null || value === '') return '—';
+  return String(value);
 }
 
 export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction }: PanelProps) {
@@ -101,47 +108,56 @@ export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction 
               </thead>
               <tbody>
                 {panel.rows.map((row) => (
-                  <tr key={row.client_id}>
-                    <td>
-                      <ClientCell row={row} />
-                    </td>
-                    <td>{row.last_document_label}</td>
-                    <td>{row.documents_count}</td>
-                    <td className={row.unpaid_display === '—' ? 'nx-income-cdm__muted' : undefined}>
-                      {row.unpaid_display}
-                    </td>
-                    <td className="nx-income-cdm__muted">{row.last_activity_label}</td>
-                    <td>
-                      <div className="nx-income-cdm__actions">
-                        {row.actions.map((action) => (
-                          <ActionButton
-                            key={action.key}
-                            action={action}
-                            busy={busy}
-                            onClick={(anchor) => {
-                              if (action.key === 'reports') {
-                                void onAction({
-                                  kind: 'reports',
-                                  clientId: row.client_id,
-                                  clientName: row.client_name,
-                                });
-                                return;
-                              }
-                              if (action.key === 'more') {
-                                void onAction({
-                                  kind: 'more',
-                                  clientId: row.client_id,
-                                  clientName: row.client_name,
-                                  anchor,
-                                });
-                                return;
-                              }
-                              void onAction({ kind: 'command', action, clientName: row.client_name });
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </td>
+                  <tr key={row.represented_client_id}>
+                    {panel.columns.map((col) => (
+                      <td key={col.key}>
+                        {col.key === 'client' ? (
+                          <ClientCell row={row} />
+                        ) : col.key === 'actions' ? (
+                          <div className="nx-income-cdm__actions">
+                            {row.actions.map((action) => (
+                              <ActionButton
+                                key={action.key}
+                                action={action}
+                                busy={busy}
+                                onClick={(anchor) => {
+                                  if (action.key === 'open_reports') {
+                                    void onAction({
+                                      kind: 'reports',
+                                      clientId: row.represented_client_id,
+                                      clientName: row.client_display_name,
+                                    });
+                                    return;
+                                  }
+                                  if (action.key === 'more') {
+                                    void onAction({
+                                      kind: 'more',
+                                      clientId: row.represented_client_id,
+                                      clientName: row.client_display_name,
+                                      anchor,
+                                    });
+                                    return;
+                                  }
+                                  void onAction({
+                                    kind: 'command',
+                                    action,
+                                    clientName: row.client_display_name,
+                                  });
+                                }}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <span
+                            className={
+                              renderRowCell(row, col.key) === '—' ? 'nx-income-cdm__muted' : undefined
+                            }
+                          >
+                            {renderRowCell(row, col.key)}
+                          </span>
+                        )}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>

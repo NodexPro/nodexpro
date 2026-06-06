@@ -22,11 +22,13 @@ import { userFacingApiMessage } from '../../api/client';
 import { executeIncomeCommand, isBrandingPreviewDraftCommandResponse } from '../../api/income';
 import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
 import { ClientOperationsRegistryView } from '../client-operations/ClientOperationsRegistryView';
+import { IncomeClientDocumentManagementShell } from '../income/IncomeClientDocumentManagementShell';
 import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
 import { IncomeDocumentBrandingGearButton } from '../income/IncomeDocumentBrandingGearButton';
 import { IncomeDocumentBrandingSettingsModal } from '../income/IncomeDocumentBrandingSettingsModal';
 import { WorkEngineIncomeDocumentWizardModal } from './WorkEngineIncomeDocumentWizardModal';
 import type { IncomeWorkspaceAggregate } from '../../api/income';
+import '../../styles/nx-income-client-document-management.css';
 
 const QUEUE_SHELL_FILTERS: WorkEngineQueueFiltersInput = {
   limit: 50,
@@ -301,6 +303,8 @@ function WorkEngineInvoicesTabPanel(props: {
   const [wizardInitialAgg, setWizardInitialAgg] = useState<IncomeWorkspaceAggregate | null>(null);
   const [brandingOpen, setBrandingOpen] = useState(false);
   const [brandingBusy, setBrandingBusy] = useState(false);
+  const [panelBusy, setPanelBusy] = useState(false);
+  const [issuerWorkspace, setIssuerWorkspace] = useState<IncomeWorkspaceAggregate | null>(null);
 
   const loadAggregate = useCallback(async () => {
     setLoading(true);
@@ -332,9 +336,22 @@ function WorkEngineInvoicesTabPanel(props: {
 
   if (!aggregate) return null;
 
+  const clientDocumentPanel = aggregate.client_document_management_panel;
+  const showClientDocumentPanel = clientDocumentPanel.visible;
   const entry = aggregate.document_creation_entrypoint;
   const canOpenWizard =
     entry.allowed && aggregate.allowed_actions.includes(entry.allowed_action);
+  const customersTableModel =
+    issuerWorkspace?.customers_table_model ??
+    ({
+      columns: [
+        { key: 'display_name', label: 'שם' },
+        { key: 'phone', label: 'טלפון' },
+        { key: 'email', label: 'אימייל' },
+      ],
+      rows: [],
+      empty_state: { visible: true, title: 'אין לקוחות', description: null },
+    } satisfies IncomeWorkspaceAggregate['customers_table_model']);
 
   return (
     <div className="nx-invoice-ui nx-we-invoices-tab">
@@ -344,7 +361,7 @@ function WorkEngineInvoicesTabPanel(props: {
             <span>{aggregate.title}</span>
             <IncomeDocumentBrandingGearButton
               entrypoint={aggregate.document_branding_settings_entrypoint}
-              disabled={wizardBusy || brandingBusy}
+              disabled={wizardBusy || brandingBusy || panelBusy}
               onClick={() => setBrandingOpen(true)}
             />
           </h1>
@@ -354,7 +371,7 @@ function WorkEngineInvoicesTabPanel(props: {
           <button
             type="button"
             className="nx-btn nx-btn-primary nx-btn-taxes-compact"
-            disabled={wizardBusy}
+            disabled={wizardBusy || panelBusy}
             onClick={() => {
               setWizardInitialAgg(null);
               setWizardOpen(true);
@@ -364,7 +381,32 @@ function WorkEngineInvoicesTabPanel(props: {
           </button>
         ) : null}
       </div>
-      {aggregate.draft_entrypoints.length > 0 ? (
+
+      <IncomeClientDocumentManagementShell
+        panel={clientDocumentPanel}
+        busy={panelBusy}
+        customersTableModel={customersTableModel}
+        onBusyChange={setPanelBusy}
+        onAfterIssuerSelect={(res) => {
+          setIssuerWorkspace(res.income_workspace_aggregate);
+          setAggregate((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  document_branding_profile:
+                    res.income_workspace_aggregate.document_branding_profile ?? prev.document_branding_profile,
+                  document_branding_settings_entrypoint:
+                    res.income_workspace_aggregate.document_branding_settings_entrypoint ??
+                    prev.document_branding_settings_entrypoint,
+                }
+              : prev,
+          );
+        }}
+        onOpenBranding={() => setBrandingOpen(true)}
+        onError={(message) => setError(message)}
+      />
+
+      {!showClientDocumentPanel && aggregate.draft_entrypoints.length > 0 ? (
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }} dir="rtl">
             טיוטות אחרונות
@@ -418,7 +460,9 @@ function WorkEngineInvoicesTabPanel(props: {
         </div>
       ) : null}
       {error ? <div className="nx-we-banner-error">{error}</div> : null}
-      <WorkEngineModuleTabTable table={aggregate.table_model} summary={aggregate.summary} />
+      {!showClientDocumentPanel ? (
+        <WorkEngineModuleTabTable table={aggregate.table_model} summary={aggregate.summary} />
+      ) : null}
       {wizardOpen ? (
         <WorkEngineIncomeDocumentWizardModal
           open={wizardOpen}

@@ -46,7 +46,9 @@ function parseActingMode(value: unknown): IncomeActingMode {
   throw badRequest('acting_mode must be self or office_representative');
 }
 
-function incomePermissionsFromContext(ctx: RequestContext): IncomeWorkspacePermissions {
+export function incomeWorkspacePermissionsFromContext(
+  ctx: RequestContext,
+): IncomeWorkspacePermissions {
   const perms = ctx.membership?.permissions ?? [];
   return {
     view: hasPermission(perms, INCOME_PERMISSIONS.view),
@@ -54,6 +56,10 @@ function incomePermissionsFromContext(ctx: RequestContext): IncomeWorkspacePermi
     issue: hasPermission(perms, INCOME_PERMISSIONS.issue),
     issue_on_behalf: hasPermission(perms, INCOME_PERMISSIONS.issueOnBehalf),
   };
+}
+
+function incomePermissionsFromContext(ctx: RequestContext): IncomeWorkspacePermissions {
+  return incomeWorkspacePermissionsFromContext(ctx);
 }
 
 interface OrgIssuerProfileRow {

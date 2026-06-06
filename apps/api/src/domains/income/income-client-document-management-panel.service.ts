@@ -10,7 +10,10 @@ import {
   amountReferenceFromTotalsSnapshot,
   isInvoiceCollectionDocumentType,
 } from './income-work-engine-bridge.pure.js';
-import { INCOME_COMMAND_SELECT_ISSUER } from './income.types.js';
+import {
+  INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
+  INCOME_COMMAND_SELECT_ISSUER,
+} from './income.types.js';
 import type {
   IncomeClientDocumentManagementPanel,
   IncomeClientDocumentManagementReportItem,
@@ -28,15 +31,6 @@ const PANEL_DOCUMENT_TYPES: IncomeDocumentType[] = [
   'receipt',
   'credit_tax_invoice',
 ];
-
-const DOCUMENT_TYPE_LABELS: Record<IncomeDocumentType, string> = {
-  quote: 'הצעת מחיר',
-  deal_invoice: 'חשבון עסקה',
-  tax_invoice: 'חשבונית מס',
-  tax_invoice_receipt: 'חשבונית מס/קבלה',
-  receipt: 'קבלה',
-  credit_tax_invoice: 'זיכוי',
-};
 
 const REPORT_CATALOG: IncomeClientDocumentManagementReportItem[] = [
   { key: 'income_summary', label: 'דוח הכנסות', enabled: false, disabled_reason: 'בקרוב' },
@@ -80,7 +74,7 @@ function buildRowActions(
   const canEdit = perms.edit;
   return [
     {
-      key: 'document_settings',
+      key: 'open_branding_studio',
       label: 'הגדרות מסמך',
       icon_key: 'settings',
       command: INCOME_COMMAND_SELECT_ISSUER,
@@ -95,7 +89,7 @@ function buildRowActions(
       disabled_reason: canEdit ? null : 'אין הרשאת עריכה',
     },
     {
-      key: 'end_customers',
+      key: 'open_end_customers',
       label: 'לקוחות הלקוח',
       icon_key: 'end_customers',
       command: INCOME_COMMAND_SELECT_ISSUER,
@@ -110,7 +104,7 @@ function buildRowActions(
       disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
     },
     {
-      key: 'reports',
+      key: 'open_reports',
       label: 'דוחות',
       icon_key: 'reports',
       command: null,
@@ -134,6 +128,51 @@ function formatMoneyReference(amount: number, currency: string): string {
   return `${amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
+function formatDateDisplay(iso: string | null): string {
+  if (!iso) return '—';
+  const d = iso.length >= 10 ? iso.slice(0, 10) : iso;
+  return new Date(d).toLocaleDateString('he-IL');
+}
+
+function emptyPanel(visible: boolean): IncomeClientDocumentManagementPanel {
+  return {
+    aggregate_key: INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
+    visible,
+    title: 'ניהול מסמכים לפי לקוח',
+    description: visible ? 'לקוחות שכבר הופקו עבורם מסמכי הכנסה' : null,
+    columns: [],
+    rows: [],
+    report_catalog: visible ? REPORT_CATALOG : [],
+    empty_state: {
+      visible: false,
+      title: visible ? 'אין עדיין לקוחות עם מסמכים' : '',
+      description: visible ? 'לאחר הפקת מסמך עבור לקוח — הוא יופיע כאן.' : null,
+    },
+  };
+}
+
+function incrementTypeCount(acc: Acc, documentType: IncomeDocumentType): void {
+  if (documentType === 'quote') acc.quote_count += 1;
+  else if (documentType === 'deal_invoice') acc.deal_count += 1;
+  else if (documentType === 'tax_invoice' || documentType === 'tax_invoice_receipt') acc.tax_invoice_count += 1;
+  else if (documentType === 'receipt') acc.receipt_count += 1;
+  else if (documentType === 'credit_tax_invoice') acc.credit_count += 1;
+}
+
+type Acc = {
+  represented_client_id: string;
+  total_documents_count: number;
+  quote_count: number;
+  deal_count: number;
+  tax_invoice_count: number;
+  receipt_count: number;
+  credit_count: number;
+  last_document_date: string | null;
+  last_activity_at: string | null;
+  unpaid_reference: number;
+  currency: string;
+};
+
 export async function buildIncomeClientDocumentManagementPanel(params: {
   ctx: RequestContext;
   perms: IncomeWorkspacePermissions;
@@ -142,19 +181,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
   const visible = params.perms.issue_on_behalf;
 
   if (!visible) {
-    return {
-      visible: false,
-      title: 'ניהול מסמכים לפי לקוח',
-      description: null,
-      columns: [],
-      rows: [],
-      report_catalog: [],
-      empty_state: {
-        visible: false,
-        title: '',
-        description: null,
-      },
-    };
+    return emptyPanel(false);
   }
 
   const { data: docs, error: docsErr } = await supabaseAdmin
@@ -169,16 +196,6 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     .limit(5000);
   throwIfSupabaseError(docsErr, 'loadClientDocumentManagementDocs');
 
-  type Acc = {
-    client_id: string;
-    documents_count: number;
-    last_document_type: IncomeDocumentType | null;
-    last_document_at: string | null;
-    last_activity_at: string | null;
-    unpaid_reference: number;
-    currency: string;
-  };
-
   const byClient = new Map<string, Acc>();
 
   for (const raw of docs ?? []) {
@@ -189,30 +206,33 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       updated_at: string;
       currency: string;
       totals_snapshot_json: Record<string, unknown> | null;
-      due_date: string | null;
     };
     const clientId = row.represented_client_id;
     let acc = byClient.get(clientId);
     if (!acc) {
       acc = {
-        client_id: clientId,
-        documents_count: 0,
-        last_document_type: null,
-        last_document_at: null,
+        represented_client_id: clientId,
+        total_documents_count: 0,
+        quote_count: 0,
+        deal_count: 0,
+        tax_invoice_count: 0,
+        receipt_count: 0,
+        credit_count: 0,
+        last_document_date: null,
         last_activity_at: null,
         unpaid_reference: 0,
         currency: row.currency || 'ILS',
       };
       byClient.set(clientId, acc);
     }
-    acc.documents_count += 1;
+    acc.total_documents_count += 1;
+    incrementTypeCount(acc, row.document_type);
     const activityAt = row.updated_at || row.issue_date;
     if (!acc.last_activity_at || (activityAt && activityAt > acc.last_activity_at)) {
       acc.last_activity_at = activityAt;
     }
-    if (!acc.last_document_at || (row.issue_date && row.issue_date > acc.last_document_at)) {
-      acc.last_document_at = row.issue_date;
-      acc.last_document_type = row.document_type;
+    if (!acc.last_document_date || (row.issue_date && row.issue_date > acc.last_document_date)) {
+      acc.last_document_date = row.issue_date;
     }
     if (isInvoiceCollectionDocumentType(row.document_type)) {
       const amount = amountReferenceFromTotalsSnapshot(row.totals_snapshot_json);
@@ -223,17 +243,29 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
   }
 
   const clientIds = [...byClient.keys()];
-  const clientNameById = new Map<string, string>();
+  const clientMetaById = new Map<
+    string,
+    { display_name: string; tax_id: string | null; email: string | null }
+  >();
   if (clientIds.length > 0) {
     const { data: clients, error: clientsErr } = await supabaseAdmin
       .from('clients')
-      .select('id, display_name')
+      .select('id, display_name, tax_id, email')
       .eq('organization_id', orgId)
       .in('id', clientIds);
     throwIfSupabaseError(clientsErr, 'loadClientDocumentManagementClients');
     for (const c of clients ?? []) {
-      const client = c as { id: string; display_name: string };
-      clientNameById.set(client.id, client.display_name);
+      const client = c as {
+        id: string;
+        display_name: string;
+        tax_id: string | null;
+        email: string | null;
+      };
+      clientMetaById.set(client.id, {
+        display_name: client.display_name,
+        tax_id: client.tax_id,
+        email: client.email,
+      });
     }
   }
 
@@ -259,42 +291,47 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
   const rows: IncomeClientDocumentManagementRow[] = clientIds
     .map((clientId) => {
       const acc = byClient.get(clientId)!;
-      const clientName = clientNameById.get(clientId) ?? clientId;
-      const lastDocLabel =
-        acc.last_document_type != null
-          ? DOCUMENT_TYPE_LABELS[acc.last_document_type]
-          : '—';
+      const meta = clientMetaById.get(clientId);
+      const clientName = meta?.display_name ?? clientId;
+      const unpaidRef = acc.unpaid_reference > 0 ? acc.unpaid_reference : null;
       return {
-        client_id: clientId,
-        client_name: clientName,
-        logo_preview_url: logoByClientId.get(clientId) ?? null,
+        represented_client_id: clientId,
+        client_display_name: clientName,
+        client_logo_url: logoByClientId.get(clientId) ?? null,
         client_initials: clientName.trim().slice(0, 2) || '—',
-        last_document_label: lastDocLabel,
-        last_document_at: acc.last_document_at,
-        documents_count: acc.documents_count,
-        unpaid_display:
-          acc.unpaid_reference > 0
-            ? formatMoneyReference(acc.unpaid_reference, acc.currency)
-            : '—',
+        tax_id: meta?.tax_id ?? null,
+        email: meta?.email ?? null,
+        total_documents_count: acc.total_documents_count,
+        quote_count: acc.quote_count,
+        deal_count: acc.deal_count,
+        tax_invoice_count: acc.tax_invoice_count,
+        receipt_count: acc.receipt_count,
+        credit_count: acc.credit_count,
+        unpaid_amount_reference: unpaidRef,
+        unpaid_amount_display:
+          unpaidRef != null ? formatMoneyReference(unpaidRef, acc.currency) : '—',
+        last_document_date: acc.last_document_date,
+        last_document_date_display: formatDateDisplay(acc.last_document_date),
         last_activity_at: acc.last_activity_at,
-        last_activity_label: acc.last_activity_at
-          ? new Date(acc.last_activity_at).toLocaleDateString('he-IL')
-          : '—',
+        last_activity_display: formatDateDisplay(acc.last_activity_at),
+        status_label: unpaidRef != null ? 'פתוח לגבייה' : 'פעיל',
         actions: buildRowActions(clientId, params.perms),
       };
     })
-    .sort((a, b) => a.client_name.localeCompare(b.client_name, 'he'));
+    .sort((a, b) => a.client_display_name.localeCompare(b.client_display_name, 'he'));
 
   return {
+    aggregate_key: INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
     visible: true,
     title: 'ניהול מסמכים לפי לקוח',
     description: 'לקוחות שכבר הופקו עבורם מסמכי הכנסה',
     columns: [
       { key: 'client', label: 'לקוח' },
-      { key: 'last_document', label: 'מסמך אחרון' },
-      { key: 'documents_count', label: 'מספר מסמכים' },
-      { key: 'unpaid', label: 'לא שולם' },
-      { key: 'last_activity', label: 'פעילות אחרונה' },
+      { key: 'total_documents_count', label: 'מסמכים' },
+      { key: 'unpaid_amount_display', label: 'לא שולם' },
+      { key: 'last_document_date_display', label: 'מסמך אחרון' },
+      { key: 'last_activity_display', label: 'פעילות אחרונה' },
+      { key: 'status_label', label: 'סטטוס' },
       { key: 'actions', label: '' },
     ],
     rows,

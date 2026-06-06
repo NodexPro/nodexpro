@@ -34,3 +34,4 @@ export const INCOME_PERMISSIONS = {
     issue: 'income.issue',
     issueOnBehalf: 'income.issue_on_behalf',
 };
+export const INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY = 'income_client_document_management_panel';

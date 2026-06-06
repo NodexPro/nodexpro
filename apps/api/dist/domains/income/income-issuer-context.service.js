@@ -28,7 +28,7 @@ function parseActingMode(value) {
         return mode;
     throw badRequest('acting_mode must be self or office_representative');
 }
-function incomePermissionsFromContext(ctx) {
+export function incomeWorkspacePermissionsFromContext(ctx) {
     const perms = ctx.membership?.permissions ?? [];
     return {
         view: hasPermission(perms, INCOME_PERMISSIONS.view),
@@ -36,6 +36,9 @@ function incomePermissionsFromContext(ctx) {
         issue: hasPermission(perms, INCOME_PERMISSIONS.issue),
         issue_on_behalf: hasPermission(perms, INCOME_PERMISSIONS.issueOnBehalf),
     };
+}
+function incomePermissionsFromContext(ctx) {
+    return incomeWorkspacePermissionsFromContext(ctx);
 }
 /** Ensures the tenant-owned issuer profile exists; syncs from Core when missing or stale. */
 export async function ensureOrgIncomeIssuerProfile(orgId) {
