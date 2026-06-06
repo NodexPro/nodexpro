@@ -35,6 +35,7 @@ import { IncomeIssuerContextSwitcher } from '../components/income/IncomeIssuerCo
 import { IncomeItemsTable } from '../components/income/IncomeItemsTable';
 import '../styles/nx-income-workspace.css';
 import '../styles/nx-income-client-document-management.css';
+import '../styles/nx-income-ledger-card.css';
 import '../styles/nx-modal.css';
 
 type Toast = { kind: 'ok' | 'err'; message: string } | null;

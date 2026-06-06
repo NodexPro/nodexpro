@@ -4,6 +4,7 @@
  * Allowed reads:
  *   GET /income/aggregates/workspace-context
  *   GET /income/aggregates/workspace
+ *   GET /income/aggregates/client-income-ledger-card
  *   GET /income/documents/:id/download (binary)
  *
  * Writes: POST /income/commands
@@ -12,6 +13,7 @@
 import { apiFetch, apiJson } from './client';
 import { INCOME } from './endpoints';
 import type {
+  IncomeClientIncomeLedgerCardAggregate,
   IncomeCommandResponse,
   IncomeWorkspaceAggregate,
   IncomeWorkspaceContextAggregate,
@@ -26,6 +28,7 @@ export type {
   IncomeClientDocumentManagementReportItem,
   IncomeClientDocumentManagementRow,
   IncomeClientDocumentManagementRowAction,
+  IncomeClientIncomeLedgerCardAggregate,
   IncomeCommandResponse,
   IncomeCommandType,
   IncomeCustomersTableRow,
@@ -66,6 +69,21 @@ export async function fetchIncomeWorkspaceContextAggregate(): Promise<IncomeWork
 
 export async function fetchIncomeWorkspaceAggregate(): Promise<IncomeWorkspaceAggregate> {
   return apiJson<IncomeWorkspaceAggregate>(INCOME.workspaceAggregate);
+}
+
+export async function fetchIncomeClientIncomeLedgerCardAggregate(params: {
+  representedClientId: string;
+  endCustomerId?: string | null;
+  year?: number | null;
+}): Promise<IncomeClientIncomeLedgerCardAggregate> {
+  const q = new URLSearchParams({
+    represented_client_id: params.representedClientId,
+  });
+  if (params.endCustomerId) q.set('end_customer_id', params.endCustomerId);
+  if (params.year != null) q.set('year', String(params.year));
+  return apiJson<IncomeClientIncomeLedgerCardAggregate>(
+    `${INCOME.clientIncomeLedgerCardAggregate}?${q.toString()}`,
+  );
 }
 
 export async function executeIncomeCommand(

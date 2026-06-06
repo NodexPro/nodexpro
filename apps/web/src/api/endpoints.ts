@@ -339,6 +339,7 @@ export const docflowPortalFileOpen = (fileAssetId: string) =>
 export const INCOME = {
   workspaceContextAggregate: '/income/aggregates/workspace-context',
   workspaceAggregate: '/income/aggregates/workspace',
+  clientIncomeLedgerCardAggregate: '/income/aggregates/client-income-ledger-card',
   commands: '/income/commands',
   documentDownload: (documentId: string) => `/income/documents/${encodeURIComponent(documentId)}/download`,
 } as const;

@@ -11,6 +11,7 @@ import { executeIncomeCommand } from './income-commands.service.js';
 import { buildIncomeWorkspaceContextAggregate } from './income-issuer-context.service.js';
 import { downloadIncomeDocumentPdfBuffer } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
+import { buildIncomeClientIncomeLedgerCardAggregate } from './income-client-income-ledger-card.service.js';
 import { INCOME_MODULE_CODE, INCOME_PERMISSIONS } from './income.types.js';
 const router = Router();
 router.get('/aggregates/workspace-context', requirePermission(INCOME_PERMISSIONS.view), async (req, res, next) => {
@@ -25,6 +26,24 @@ router.get('/aggregates/workspace-context', requirePermission(INCOME_PERMISSIONS
 router.get('/aggregates/workspace', requirePermission(INCOME_PERMISSIONS.view), async (req, res, next) => {
     try {
         const aggregate = await buildIncomeWorkspaceAggregate(req.context);
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+router.get('/aggregates/client-income-ledger-card', requirePermission(INCOME_PERMISSIONS.view), async (req, res, next) => {
+    try {
+        const representedClientId = String(req.query.represented_client_id ?? '').trim();
+        const endCustomerIdRaw = String(req.query.end_customer_id ?? '').trim();
+        const yearRaw = String(req.query.year ?? '').trim();
+        const year = yearRaw ? Number(yearRaw) : null;
+        const aggregate = await buildIncomeClientIncomeLedgerCardAggregate({
+            ctx: req.context,
+            representedClientId,
+            endCustomerId: endCustomerIdRaw || null,
+            year: year != null && Number.isFinite(year) ? year : null,
+        });
         return res.json(aggregate);
     }
     catch (e) {

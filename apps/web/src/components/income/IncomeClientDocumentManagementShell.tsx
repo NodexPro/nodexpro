@@ -13,6 +13,7 @@ import {
   IncomeClientEndCustomersModal,
   type IncomeClientDocumentPanelActionResult,
 } from './IncomeClientDocumentManagementPanel';
+import { IncomeClientIncomeLedgerCardModal } from './IncomeClientIncomeLedgerCardModal';
 
 function isSelectIssuerResponse(
   res: unknown,
@@ -53,6 +54,8 @@ export function IncomeClientDocumentManagementShell({
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [moreMenuClientName, setMoreMenuClientName] = useState('');
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLButtonElement | null>(null);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [ledgerClientId, setLedgerClientId] = useState<string | null>(null);
 
   useEffect(() => {
     setEndCustomersModel(customersTableModel);
@@ -63,6 +66,11 @@ export function IncomeClientDocumentManagementShell({
       if (result.kind === 'reports') {
         setReportsClientName(result.clientName);
         setReportsOpen(true);
+        return;
+      }
+      if (result.kind === 'ledger') {
+        setLedgerClientId(result.clientId);
+        setLedgerOpen(true);
         return;
       }
       if (result.kind === 'more') {
@@ -134,6 +142,18 @@ export function IncomeClientDocumentManagementShell({
         anchorEl={moreMenuAnchor}
         busy={busy}
         onClose={() => setMoreMenuOpen(false)}
+      />
+
+      <IncomeClientIncomeLedgerCardModal
+        open={ledgerOpen}
+        representedClientId={ledgerClientId}
+        busy={busy}
+        onBusyChange={onBusyChange}
+        onClose={() => {
+          setLedgerOpen(false);
+          setLedgerClientId(null);
+        }}
+        onError={onError}
       />
     </>
   );

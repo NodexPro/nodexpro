@@ -30,6 +30,7 @@ import { IncomeDocumentBrandingSettingsModal } from '../income/IncomeDocumentBra
 import { WorkEngineIncomeDocumentWizardModal } from './WorkEngineIncomeDocumentWizardModal';
 import type { IncomeWorkspaceAggregate } from '../../api/income';
 import '../../styles/nx-income-client-document-management.css';
+import '../../styles/nx-income-ledger-card.css';
 
 const QUEUE_SHELL_FILTERS: WorkEngineQueueFiltersInput = {
   limit: 50,

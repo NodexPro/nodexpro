@@ -102,6 +102,7 @@ export type IncomeClientDocumentManagementActionIconKey =
   | 'settings'
   | 'end_customers'
   | 'reports'
+  | 'ledger'
   | 'more';
 
 export interface IncomeClientDocumentManagementRowAction {
@@ -160,6 +161,75 @@ export interface IncomeClientDocumentManagementPanel {
     title: string;
     description: string | null;
   };
+}
+
+export const INCOME_CLIENT_INCOME_LEDGER_CARD_AGGREGATE_KEY =
+  'income_client_income_ledger_card_aggregate' as const;
+
+export interface IncomeClientIncomeLedgerCardEndCustomerOption {
+  end_customer_id: string;
+  display_name: string;
+  tax_id: string | null;
+  email: string | null;
+  open_balance_display: string;
+  open_balance_reference: number;
+  open_invoice_count: number;
+  currency: string;
+}
+
+export interface IncomeClientIncomeLedgerCardMovementRow {
+  row_id: string;
+  movement_type: 'invoice' | 'payment' | 'credit';
+  income_label: string;
+  debit_amount_display: string | null;
+  credit_amount_display: string | null;
+  balance_display: string;
+  balance_reference: number;
+  balance_tone: 'open' | 'zero' | 'neutral';
+  document_number: string;
+  issue_date_display: string;
+  document_id: string | null;
+  can_view_document: boolean;
+  allowed_actions: string[];
+}
+
+export interface IncomeClientIncomeLedgerCardTopAction {
+  key: string;
+  label: string;
+  icon_key: 'send' | 'print';
+  enabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface IncomeClientIncomeLedgerCardAggregate {
+  aggregate_key: typeof INCOME_CLIENT_INCOME_LEDGER_CARD_AGGREGATE_KEY;
+  financial_source: 'TEMPORARY_ACCOUNTING_BASE_PENDING';
+  represented_client_id: string;
+  represented_client_display_name: string;
+  selected_end_customer_id: string | null;
+  selected_end_customer_display_name: string | null;
+  selected_year: number;
+  available_years: number[];
+  end_customer_options: IncomeClientIncomeLedgerCardEndCustomerOption[];
+  show_customer_picker: boolean;
+  summary: {
+    total_debit_display: string;
+    total_credit_display: string;
+    open_balance_display: string;
+    invoice_count: number;
+    payment_count: number;
+    currency: string;
+  };
+  table_columns: Array<{ key: string; label: string }>;
+  rows: IncomeClientIncomeLedgerCardMovementRow[];
+  allowed_actions: string[];
+  top_actions: IncomeClientIncomeLedgerCardTopAction[];
+  empty_state: {
+    visible: boolean;
+    title: string;
+    description: string | null;
+  };
+  document_download_path_template: string;
 }
 
 export interface IncomeWorkspaceContextAggregate {

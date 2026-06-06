@@ -91,6 +91,18 @@ function buildRowActions(clientId, perms) {
             disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
         },
         {
+            key: 'open_income_ledger_card',
+            label: 'כרטסת הכנסות',
+            icon_key: 'ledger',
+            command: null,
+            command_payload: {
+                open_income_ledger_card: true,
+                represented_client_id: clientId,
+            },
+            enabled: perms.view,
+            disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
+        },
+        {
             key: 'more',
             label: 'פעולות נוספות',
             icon_key: 'more',

@@ -1,11 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap');
 
 .nx-income-cdm {
-  --nx-cdm-accent-1: #5b5cf0;
-  --nx-cdm-accent-2: #6c63ff;
-  --nx-cdm-accent-3: #8b5cf6;
+  --nx-brand-blue: #2563eb;
+  --nx-brand-purple: #7c3aed;
+  --nx-brand-indigo: #4f46e5;
+  --nx-brand-cyan: #38bdf8;
+  --nx-cdm-gradient: linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%);
   --nx-cdm-border: #e5e7eb;
-  --nx-cdm-hover: #f8fafc;
+  --nx-cdm-row-border: #eef2f7;
   font-family: Heebo, Arial, Helvetica, 'Segoe UI', sans-serif;
   margin-block: 24px 32px;
 }
@@ -14,7 +16,7 @@
   background: #ffffff;
   border: 1px solid var(--nx-cdm-border);
   border-radius: 18px;
-  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
   overflow: hidden;
 }
 
@@ -25,7 +27,7 @@
   gap: 16px;
   padding: 22px 24px 18px;
   border-bottom: 1px solid var(--nx-cdm-border);
-  background: linear-gradient(135deg, rgba(91, 92, 240, 0.04) 0%, rgba(139, 92, 246, 0.06) 100%);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.04) 0%, rgba(124, 58, 237, 0.06) 100%);
 }
 
 .nx-income-cdm__head-main {
@@ -35,9 +37,9 @@
 .nx-income-cdm__title {
   margin: 0;
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.25;
-  background: linear-gradient(135deg, var(--nx-cdm-accent-1) 0%, var(--nx-cdm-accent-2) 45%, var(--nx-cdm-accent-3) 100%);
+  background: var(--nx-cdm-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -57,7 +59,8 @@
 .nx-income-cdm__table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 920px;
+  min-width: 980px;
+  direction: rtl;
 }
 
 .nx-income-cdm__table th,
@@ -65,24 +68,36 @@
   padding: 14px 16px;
   text-align: right;
   vertical-align: middle;
-  border-bottom: 1px solid var(--nx-cdm-border);
+  border-bottom: 1px solid var(--nx-cdm-row-border);
   font-size: 14px;
 }
 
 .nx-income-cdm__table th {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #64748b;
-  background: #fafafa;
+  font-size: 13px;
+  font-weight: 800;
+  color: #475569;
+  background: #f8fafc;
+  border-bottom: 1px solid var(--nx-cdm-border);
 }
 
 .nx-income-cdm__table tbody tr {
-  transition: background 0.15s ease;
+  background: #ffffff;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .nx-income-cdm__table tbody tr:hover {
-  background: var(--nx-cdm-hover);
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.035), rgba(37, 99, 235, 0.025));
+  box-shadow: inset 3px 0 0 rgba(124, 58, 237, 0.3);
+}
+
+.nx-income-cdm__cell--client {
+  min-width: 240px;
+}
+
+.nx-income-cdm__cell--actions {
+  text-align: left;
+  width: 1%;
+  white-space: nowrap;
 }
 
 .nx-income-cdm__client {
@@ -92,34 +107,57 @@
   min-width: 0;
 }
 
-.nx-income-cdm__logo,
-.nx-income-cdm__logo-fallback {
+.nx-income-cdm__avatar {
   flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  border: 1px solid var(--nx-cdm-border);
-  background: #ffffff;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(124, 58, 237, 0.14));
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nx-income-cdm__logo {
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+  background: #ffffff;
 }
 
 .nx-income-cdm__logo-fallback {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
   font-size: 13px;
-  font-weight: 700;
-  color: var(--nx-cdm-accent-1);
-  background: rgba(91, 92, 240, 0.08);
+  font-weight: 800;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+}
+
+.nx-income-cdm__client-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .nx-income-cdm__client-name {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 800;
   color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-income-cdm__client-sub {
+  font-size: 12px;
+  color: #64748b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -129,11 +167,39 @@
   color: #64748b;
 }
 
+.nx-income-cdm__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.nx-income-cdm__status[data-status='פעיל'] {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+
+.nx-income-cdm__status[data-status='טיוטות פעילות'] {
+  background: rgba(124, 58, 237, 0.12);
+  color: #6d28d9;
+}
+
+.nx-income-cdm__status[data-status='פתוח לגבייה'] {
+  background: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+}
+
 .nx-income-cdm__actions {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
+  direction: ltr;
   white-space: nowrap;
 }
 
@@ -141,18 +207,33 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(124, 58, 237, 0.1));
+  color: var(--nx-brand-indigo);
+  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.1);
   cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  transition: transform 0.12s ease, opacity 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .nx-income-cdm__action:hover:not(:disabled) {
+  background: var(--nx-cdm-gradient);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 14px 28px rgba(79, 70, 229, 0.22);
   transform: translateY(-1px);
+}
+
+.nx-income-cdm__action:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.18);
 }
 
 .nx-income-cdm__action:disabled {
@@ -161,23 +242,46 @@
 }
 
 .nx-income-cdm__action--settings {
-  background: rgba(91, 92, 240, 0.1);
-  color: #5b5cf0;
+  color: var(--nx-brand-purple);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(79, 70, 229, 0.08));
 }
 
 .nx-income-cdm__action--end_customers {
-  background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+  color: var(--nx-brand-blue);
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.16);
 }
 
 .nx-income-cdm__action--reports {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
+  color: var(--nx-brand-indigo);
+  background: rgba(79, 70, 229, 0.08);
+  border-color: rgba(79, 70, 229, 0.16);
 }
 
 .nx-income-cdm__action--more {
-  background: rgba(107, 114, 128, 0.1);
-  color: #6b7280;
+  color: #64748b;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  box-shadow: none;
+}
+
+.nx-income-cdm__action--more:hover:not(:disabled) {
+  background: var(--nx-cdm-gradient);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 14px 28px rgba(79, 70, 229, 0.22);
+}
+
+.nx-income-cdm__action--ledger {
+  color: var(--nx-brand-indigo);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(124, 58, 237, 0.1));
+}
+
+.nx-income-cdm__action-letter {
+  font-family: Heebo, Arial, Helvetica, 'Segoe UI', sans-serif;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .nx-income-cdm__empty {
@@ -188,7 +292,7 @@
 .nx-income-cdm__empty-title {
   margin: 0;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 800;
   color: #0f172a;
 }
 
@@ -259,7 +363,7 @@
 }
 
 .nx-income-cdm-more-menu button:hover:not(:disabled) {
-  background: var(--nx-cdm-hover);
+  background: #f8fafc;
 }
 
 .nx-income-cdm-more-menu button:disabled {

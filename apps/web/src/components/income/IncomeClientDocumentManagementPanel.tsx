@@ -9,16 +9,102 @@ import type {
 } from '../../api/income';
 import { IncomeDataTable } from './IncomeDataTable';
 
-const ACTION_GLYPH: Record<string, string> = {
-  settings: '⚙',
-  end_customers: '👥',
-  reports: '📊',
-  more: '⋯',
-};
+/** RTL visual order (first = far right). Display-only; backend column order unchanged. */
+const VISUAL_COLUMN_KEYS = [
+  'client',
+  'status_label',
+  'total_documents_count',
+  'unpaid_amount_display',
+  'last_document_date_display',
+  'last_activity_display',
+  'actions',
+] as const;
+
+type VisualColumnKey = (typeof VISUAL_COLUMN_KEYS)[number];
+
+function resolveVisualColumns(
+  columns: Array<{ key: string; label: string }>,
+): Array<{ key: VisualColumnKey; label: string }> {
+  const byKey = new Map(columns.map((col) => [col.key, col]));
+  return VISUAL_COLUMN_KEYS.flatMap((key) => {
+    const col = byKey.get(key);
+    return col ? [{ key, label: col.label }] : [];
+  });
+}
+
+function ActionIcon({ iconKey }: { iconKey: string }) {
+  switch (iconKey) {
+    case 'settings':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path
+            d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <path
+            d="M19.4 13.5a7.6 7.6 0 0 0 .1-3l2-1.2-2-3.5-2.3.7a7.8 7.8 0 0 0-2.6-1.5L14.2 2h-4.4l-.4 2.9a7.8 7.8 0 0 0-2.6 1.5l-2.3-.7-2 3.5 2 1.2a7.6 7.6 0 0 0-.1 3l-2 1.2 2 3.5 2.3-.7a7.8 7.8 0 0 0 2.6 1.5l.4 2.9h4.4l.4-2.9a7.8 7.8 0 0 0 2.6-1.5l2.3.7 2-3.5-2-1.2Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case 'end_customers':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path
+            d="M16 11a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <path
+            d="M4 19c.8-2.8 3.2-4.5 8-4.5s7.2 1.7 8 4.5"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+          <path
+            d="M18 8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+          />
+          <path
+            d="M21 19c-.5-1.8-1.8-3-4-3.4"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case 'reports':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M5 19V9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M12 19V5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M19 19v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M4 19h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      );
+    case 'more':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <circle cx="6" cy="12" r="1.6" fill="currentColor" />
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+          <circle cx="18" cy="12" r="1.6" fill="currentColor" />
+        </svg>
+      );
+    case 'ledger':
+      return <span className="nx-income-cdm__action-letter">כ</span>;
+    default:
+      return null;
+  }
+}
 
 export type IncomeClientDocumentPanelActionResult =
   | { kind: 'command'; action: IncomeClientDocumentManagementRowAction; clientName: string }
   | { kind: 'reports'; clientId: string; clientName: string }
+  | { kind: 'ledger'; clientId: string; clientName: string }
   | { kind: 'more'; clientId: string; clientName: string; anchor: HTMLButtonElement };
 
 type PanelProps = {
@@ -45,22 +131,29 @@ function ActionButton({
       aria-label={action.label}
       onClick={(e) => onClick(e.currentTarget)}
     >
-      {ACTION_GLYPH[action.icon_key] ?? '•'}
+      <ActionIcon iconKey={action.icon_key} />
     </button>
   );
 }
 
 function ClientCell({ row }: { row: IncomeClientDocumentManagementRow }) {
+  const subtext = [row.tax_id, row.email].filter(Boolean).join(' · ');
+
   return (
     <div className="nx-income-cdm__client">
-      {row.client_logo_url ? (
-        <img className="nx-income-cdm__logo" src={row.client_logo_url} alt="" />
-      ) : (
-        <span className="nx-income-cdm__logo-fallback" aria-hidden>
-          {row.client_initials}
-        </span>
-      )}
-      <span className="nx-income-cdm__client-name">{row.client_display_name}</span>
+      <div className="nx-income-cdm__avatar">
+        {row.client_logo_url ? (
+          <img className="nx-income-cdm__logo" src={row.client_logo_url} alt="" />
+        ) : (
+          <span className="nx-income-cdm__logo-fallback" aria-hidden>
+            {row.client_initials}
+          </span>
+        )}
+      </div>
+      <div className="nx-income-cdm__client-meta">
+        <span className="nx-income-cdm__client-name">{row.client_display_name}</span>
+        {subtext ? <span className="nx-income-cdm__client-sub">{subtext}</span> : null}
+      </div>
     </div>
   );
 }
@@ -72,14 +165,80 @@ function renderRowCell(row: IncomeClientDocumentManagementRow, columnKey: string
   return String(value);
 }
 
+function renderDataCell(
+  row: IncomeClientDocumentManagementRow,
+  colKey: VisualColumnKey,
+  busy: boolean,
+  onAction: PanelProps['onAction'],
+) {
+  if (colKey === 'client') return <ClientCell row={row} />;
+  if (colKey === 'status_label') {
+    return (
+      <span className="nx-income-cdm__status" data-status={row.status_label}>
+        {row.status_label}
+      </span>
+    );
+  }
+  if (colKey === 'actions') {
+    return (
+      <div className="nx-income-cdm__actions">
+        {row.actions.map((action) => (
+          <ActionButton
+            key={action.key}
+            action={action}
+            busy={busy}
+            onClick={(anchor) => {
+                                  if (action.key === 'open_reports') {
+                                    void onAction({
+                                      kind: 'reports',
+                                      clientId: row.represented_client_id,
+                                      clientName: row.client_display_name,
+                                    });
+                                    return;
+                                  }
+                                  if (action.key === 'open_income_ledger_card') {
+                                    void onAction({
+                                      kind: 'ledger',
+                                      clientId: row.represented_client_id,
+                                      clientName: row.client_display_name,
+                                    });
+                                    return;
+                                  }
+                                  if (action.key === 'more') {
+                void onAction({
+                  kind: 'more',
+                  clientId: row.represented_client_id,
+                  clientName: row.client_display_name,
+                  anchor,
+                });
+                return;
+              }
+              void onAction({
+                kind: 'command',
+                action,
+                clientName: row.client_display_name,
+              });
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  const value = renderRowCell(row, colKey);
+  return (
+    <span className={value === '—' ? 'nx-income-cdm__muted' : undefined}>{value}</span>
+  );
+}
+
 export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction }: PanelProps) {
   if (!panel?.visible) return null;
 
-  const columns = panel.columns ?? [];
+  const visualColumns = resolveVisualColumns(panel.columns ?? []);
   const rows = panel.rows ?? [];
 
   return (
-    <section className="nx-income-cdm" aria-labelledby="income-cdm-title">
+    <section className="nx-income-cdm" dir="rtl" aria-labelledby="income-cdm-title">
       <div className="nx-income-cdm__card">
         <div className="nx-income-cdm__head">
           <div className="nx-income-cdm__head-main">
@@ -102,8 +261,18 @@ export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction 
             <table className="nx-income-cdm__table">
               <thead>
                 <tr>
-                  {columns.map((col) => (
-                    <th key={col.key} scope="col">
+                  {visualColumns.map((col) => (
+                    <th
+                      key={col.key}
+                      scope="col"
+                      className={
+                        col.key === 'client'
+                          ? 'nx-income-cdm__cell--client'
+                          : col.key === 'actions'
+                            ? 'nx-income-cdm__cell--actions'
+                            : undefined
+                      }
+                    >
                       {col.label}
                     </th>
                   ))}
@@ -112,53 +281,18 @@ export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction 
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.represented_client_id}>
-                    {columns.map((col) => (
-                      <td key={col.key}>
-                        {col.key === 'client' ? (
-                          <ClientCell row={row} />
-                        ) : col.key === 'actions' ? (
-                          <div className="nx-income-cdm__actions">
-                            {row.actions.map((action) => (
-                              <ActionButton
-                                key={action.key}
-                                action={action}
-                                busy={busy}
-                                onClick={(anchor) => {
-                                  if (action.key === 'open_reports') {
-                                    void onAction({
-                                      kind: 'reports',
-                                      clientId: row.represented_client_id,
-                                      clientName: row.client_display_name,
-                                    });
-                                    return;
-                                  }
-                                  if (action.key === 'more') {
-                                    void onAction({
-                                      kind: 'more',
-                                      clientId: row.represented_client_id,
-                                      clientName: row.client_display_name,
-                                      anchor,
-                                    });
-                                    return;
-                                  }
-                                  void onAction({
-                                    kind: 'command',
-                                    action,
-                                    clientName: row.client_display_name,
-                                  });
-                                }}
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <span
-                            className={
-                              renderRowCell(row, col.key) === '—' ? 'nx-income-cdm__muted' : undefined
-                            }
-                          >
-                            {renderRowCell(row, col.key)}
-                          </span>
-                        )}
+                    {visualColumns.map((col) => (
+                      <td
+                        key={col.key}
+                        className={
+                          col.key === 'client'
+                            ? 'nx-income-cdm__cell--client'
+                            : col.key === 'actions'
+                              ? 'nx-income-cdm__cell--actions'
+                              : undefined
+                        }
+                      >
+                        {renderDataCell(row, col.key, busy, onAction)}
                       </td>
                     ))}
                   </tr>
