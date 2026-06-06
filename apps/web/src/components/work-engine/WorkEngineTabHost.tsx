@@ -22,6 +22,7 @@ import { userFacingApiMessage } from '../../api/client';
 import { executeIncomeCommand, isBrandingPreviewDraftCommandResponse } from '../../api/income';
 import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
 import { ClientOperationsRegistryView } from '../client-operations/ClientOperationsRegistryView';
+import { resolveIncomeClientDocumentManagementPanel } from '../../income/income-workspace-types';
 import { IncomeClientDocumentManagementShell } from '../income/IncomeClientDocumentManagementShell';
 import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
 import { IncomeDocumentBrandingGearButton } from '../income/IncomeDocumentBrandingGearButton';
@@ -336,7 +337,9 @@ function WorkEngineInvoicesTabPanel(props: {
 
   if (!aggregate) return null;
 
-  const clientDocumentPanel = aggregate.client_document_management_panel;
+  const clientDocumentPanel = resolveIncomeClientDocumentManagementPanel(
+    aggregate.client_document_management_panel,
+  );
   const showClientDocumentPanel = clientDocumentPanel.visible;
   const entry = aggregate.document_creation_entrypoint;
   const canOpenWizard =

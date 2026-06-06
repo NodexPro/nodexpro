@@ -102,6 +102,31 @@ export interface IncomeClientDocumentManagementPanel {
   };
 }
 
+/** Safe fallback when backend aggregate predates client_document_management_panel. */
+export const EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL: IncomeClientDocumentManagementPanel = {
+  aggregate_key: 'income_client_document_management_panel',
+  visible: false,
+  title: 'ניהול מסמכים לפי לקוח',
+  description: null,
+  columns: [],
+  rows: [],
+  report_catalog: [],
+  empty_state: {
+    visible: false,
+    title: '',
+    description: null,
+  },
+};
+
+export function resolveIncomeClientDocumentManagementPanel(
+  panel: IncomeClientDocumentManagementPanel | null | undefined,
+): IncomeClientDocumentManagementPanel {
+  if (panel && typeof panel.visible === 'boolean') {
+    return panel;
+  }
+  return EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL;
+}
+
 export interface IncomeWorkspaceContextAggregate {
   aggregate_key: 'income_workspace_context_aggregate';
   org_id: string;
@@ -116,7 +141,7 @@ export interface IncomeWorkspaceContextAggregate {
   permissions: IncomeWorkspacePermissions;
   allowed_actions: string[];
   warnings: IncomeWorkspaceWarning[];
-  client_document_management_panel: IncomeClientDocumentManagementPanel;
+  client_document_management_panel?: IncomeClientDocumentManagementPanel;
 }
 
 export interface IncomeIssuerContextSummary {

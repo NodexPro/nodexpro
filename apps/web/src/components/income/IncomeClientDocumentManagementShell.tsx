@@ -102,7 +102,7 @@ export function IncomeClientDocumentManagementShell({
     [onAfterIssuerSelect, onBusyChange, onError, onOpenBranding],
   );
 
-  if (!panel.visible) return null;
+  if (!panel?.visible) return null;
 
   return (
     <>

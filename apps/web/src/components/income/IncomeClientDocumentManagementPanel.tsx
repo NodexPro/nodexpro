@@ -73,7 +73,10 @@ function renderRowCell(row: IncomeClientDocumentManagementRow, columnKey: string
 }
 
 export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction }: PanelProps) {
-  if (!panel.visible) return null;
+  if (!panel?.visible) return null;
+
+  const columns = panel.columns ?? [];
+  const rows = panel.rows ?? [];
 
   return (
     <section className="nx-income-cdm" aria-labelledby="income-cdm-title">
@@ -87,7 +90,7 @@ export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction 
           </div>
         </div>
 
-        {panel.empty_state.visible ? (
+        {(panel.empty_state?.visible ?? false) ? (
           <div className="nx-income-cdm__empty">
             <p className="nx-income-cdm__empty-title">{panel.empty_state.title}</p>
             {panel.empty_state.description ? (
@@ -99,7 +102,7 @@ export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction 
             <table className="nx-income-cdm__table">
               <thead>
                 <tr>
-                  {panel.columns.map((col) => (
+                  {columns.map((col) => (
                     <th key={col.key} scope="col">
                       {col.label}
                     </th>
@@ -107,9 +110,9 @@ export function IncomeClientDocumentManagementPanelView({ panel, busy, onAction 
                 </tr>
               </thead>
               <tbody>
-                {panel.rows.map((row) => (
+                {rows.map((row) => (
                   <tr key={row.represented_client_id}>
-                    {panel.columns.map((col) => (
+                    {columns.map((col) => (
                       <td key={col.key}>
                         {col.key === 'client' ? (
                           <ClientCell row={row} />

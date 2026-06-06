@@ -44,6 +44,11 @@ export type {
   SelectIncomeIssuerContextCommandResponse,
 } from '../income/income-workspace-types';
 
+export {
+  EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL,
+  resolveIncomeClientDocumentManagementPanel,
+} from '../income/income-workspace-types';
+
 export type { IncomeBrandingPreviewDraftCommandResponse } from '../income/income-document-branding-types';
 
 export function isBrandingPreviewDraftCommandResponse(

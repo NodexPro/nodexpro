@@ -19,6 +19,7 @@ import {
   type IncomeWorkspaceContextAggregate,
   type SelectIncomeIssuerContextCommandResponse,
   type IncomeBrandingPreviewDraftCommandResponse,
+  resolveIncomeClientDocumentManagementPanel,
 } from '../api/income';
 import { IncomeCardsGrid } from '../components/income/IncomeCardsGrid';
 import {
@@ -281,7 +282,9 @@ export function IncomeWorkspacePage() {
 
   if (!workspace || !context) return null;
 
-  const clientDocumentPanel = context.client_document_management_panel;
+  const clientDocumentPanel = resolveIncomeClientDocumentManagementPanel(
+    context.client_document_management_panel,
+  );
   const showClientDocumentPanel = clientDocumentPanel.visible;
 
   return (
