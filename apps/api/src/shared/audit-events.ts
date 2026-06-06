@@ -240,6 +240,7 @@ export const AUDIT_ACTIONS = {
   INCOME_ISSUER_CONTEXT_SELECTED: 'income.issuer_context_selected',
   /** Income INC-2 — customers, items, drafts (operational only). */
   INCOME_CUSTOMER_CREATED: 'income.customer_created',
+  INCOME_CUSTOMER_UPDATED: 'income.customer_updated',
   INCOME_ONE_TIME_CUSTOMER_CREATED: 'income.one_time_customer_created',
   INCOME_ITEM_CREATED: 'income.item_created',
   INCOME_DOCUMENT_DRAFT_CREATED: 'income.document_draft_created',

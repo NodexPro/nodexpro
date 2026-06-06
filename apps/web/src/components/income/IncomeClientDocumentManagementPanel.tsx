@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   IncomeClientDocumentManagementPanel,
   IncomeClientDocumentManagementReportItem,
@@ -7,7 +7,6 @@ import type {
   IncomeCustomersTableRow,
   IncomeTableModel,
 } from '../../api/income';
-import { IncomeDataTable } from './IncomeDataTable';
 
 /** RTL visual order (first = far right). Display-only; backend column order unchanged. */
 const VISUAL_COLUMN_KEYS = [
@@ -182,7 +181,7 @@ function renderDataCell(
   if (colKey === 'actions') {
     return (
       <div className="nx-income-cdm__actions">
-        {row.actions.map((action) => (
+        {(row.actions ?? []).map((action) => (
           <ActionButton
             key={action.key}
             action={action}
@@ -329,7 +328,7 @@ export function IncomeClientDocumentReportsModal({
         </div>
         <div className="nx-income-wizard__body">
           <div className="nx-income-cdm-reports">
-            {catalog.map((item) => (
+            {(catalog ?? []).map((item) => (
               <div
                 key={item.key}
                 className={`nx-income-cdm-report-row${item.enabled ? '' : ' nx-income-cdm-report-row--disabled'}`}
@@ -357,46 +356,232 @@ export function IncomeClientEndCustomersModal({
   clientName,
   model,
   busy,
+  canCreate,
+  canEdit,
   onClose,
+  onCreateCustomer,
+  onUpdateCustomer,
 }: {
   open: boolean;
   clientName: string;
   model: IncomeTableModel<IncomeCustomersTableRow>;
   busy: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
   onClose: () => void;
+  onCreateCustomer: (payload: {
+    display_name: string;
+    phone: string | null;
+    email: string | null;
+    tax_id: string | null;
+  }) => Promise<void>;
+  onUpdateCustomer: (
+    customerId: string,
+    payload: {
+      display_name: string;
+      phone: string | null;
+      email: string | null;
+      tax_id: string | null;
+    },
+  ) => Promise<void>;
 }) {
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create');
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
+  const [form, setForm] = useState({ display_name: '', phone: '', email: '', tax_id: '' });
+  const [submitting, setSubmitting] = useState(false);
+
+  const columns = model?.columns ?? [];
+  const rows = model?.rows ?? [];
+
+  const openCreate = () => {
+    setEditorMode('create');
+    setEditingCustomerId(null);
+    setForm({ display_name: '', phone: '', email: '', tax_id: '' });
+    setEditorOpen(true);
+  };
+
+  const openEdit = (row: IncomeCustomersTableRow) => {
+    setEditorMode('edit');
+    setEditingCustomerId(row.customer_id);
+    setForm({
+      display_name: row.display_name ?? '',
+      phone: row.phone ?? '',
+      email: row.email ?? '',
+      tax_id: row.tax_id ?? '',
+    });
+    setEditorOpen(true);
+  };
+
+  const submitEditor = async () => {
+    const payload = {
+      display_name: form.display_name.trim(),
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      tax_id: form.tax_id.trim() || null,
+    };
+    if (!payload.display_name) return;
+    setSubmitting(true);
+    try {
+      if (editorMode === 'create') {
+        await onCreateCustomer(payload);
+      } else if (editingCustomerId) {
+        await onUpdateCustomer(editingCustomerId, payload);
+      }
+      setEditorOpen(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (!open) return null;
 
   return (
-    <div className="nx-income-wizard-overlay nx-invoice-ui nx-income-cdm-modal" role="dialog" aria-modal="true">
-      <div className="nx-income-wizard nx-accounting-editor-modal" style={{ maxWidth: 920 }}>
-        <div className="nx-income-wizard__head">
-          <h2 className="nx-modal-title">לקוחות — {clientName}</h2>
-        </div>
-        <div className="nx-income-wizard__body">
-          <IncomeDataTable
-            title=""
-            panelId="income-cdm-end-customers"
-            columns={model.columns}
-            rows={model.rows}
-            emptyState={model.empty_state}
-            rowKey={(r) => r.customer_id}
-            renderCell={(row, key) => {
-              const v = (row as unknown as Record<string, unknown>)[key];
-              if (v == null || v === '') return '—';
-              if (typeof v === 'boolean') return v ? 'כן' : 'לא';
-              return String(v);
-            }}
-          />
-        </div>
-        <div className="nx-income-wizard__footer nx-modal-footer nx-tax-nested-modal-footer">
-          <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={onClose}>
-            סגירה
-          </button>
+    <>
+      <div className="nx-income-wizard-overlay nx-invoice-ui nx-income-cdm-modal" role="dialog" aria-modal="true">
+        <div className="nx-income-cdm-end-customers nx-income-wizard nx-accounting-editor-modal">
+          <div className="nx-income-wizard__head nx-income-cdm-end-customers__head">
+            <h2 className="nx-modal-title">לקוחות — {clientName}</h2>
+            {canCreate ? (
+              <button
+                type="button"
+                className="nx-income-cdm-end-customers__add"
+                disabled={busy || submitting}
+                onClick={openCreate}
+              >
+                הוסף לקוח חדש
+              </button>
+            ) : null}
+          </div>
+          <div className="nx-income-wizard__body">
+            <div className="nx-income-cdm-end-customers__table-wrap">
+              <table className="nx-income-cdm-end-customers__table">
+                <thead>
+                  <tr>
+                    {columns.map((col) => (
+                      <th key={col.key} scope="col">
+                        {col.label}
+                      </th>
+                    ))}
+                    {canEdit ? <th scope="col" className="nx-income-cdm-end-customers__actions-col" /> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.customer_id}>
+                      {columns.map((col) => (
+                        <td key={col.key}>
+                          {renderEndCustomerCell(row, col.key)}
+                        </td>
+                      ))}
+                      {canEdit ? (
+                        <td className="nx-income-cdm-end-customers__actions-col">
+                          <button
+                            type="button"
+                            className="nx-income-cdm-end-customers__edit"
+                            disabled={busy || submitting}
+                            aria-label={`עריכת ${row.display_name}`}
+                            title="עריכה"
+                            onClick={() => openEdit(row)}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                              <path
+                                d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="nx-income-wizard__footer nx-modal-footer nx-tax-nested-modal-footer">
+            <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy || submitting} onClick={onClose}>
+              סגירה
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {editorOpen ? (
+        <div className="nx-income-wizard-overlay nx-invoice-ui nx-income-cdm-modal" role="dialog" aria-modal="true">
+          <div className="nx-income-cdm-end-customers-editor nx-income-wizard nx-income-wizard--compact nx-accounting-editor-modal">
+            <div className="nx-income-wizard__head">
+              <h2 className="nx-modal-title">
+                {editorMode === 'create' ? 'הוסף לקוח חדש' : 'עריכת לקוח'}
+              </h2>
+            </div>
+            <div className="nx-income-wizard__body">
+              <div className="nx-income-field">
+                <label>שם</label>
+                <input
+                  value={form.display_name}
+                  disabled={busy || submitting}
+                  onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
+                />
+              </div>
+              <div className="nx-income-field">
+                <label>טלפון</label>
+                <input
+                  value={form.phone}
+                  disabled={busy || submitting}
+                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                />
+              </div>
+              <div className="nx-income-field">
+                <label>אימייל</label>
+                <input
+                  value={form.email}
+                  disabled={busy || submitting}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                />
+              </div>
+              <div className="nx-income-field">
+                <label>מספר זיהוי</label>
+                <input
+                  value={form.tax_id}
+                  disabled={busy || submitting}
+                  onChange={(e) => setForm((f) => ({ ...f, tax_id: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="nx-income-wizard__footer nx-modal-footer nx-tax-nested-modal-footer">
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                disabled={busy || submitting}
+                onClick={() => setEditorOpen(false)}
+              >
+                סגירה
+              </button>
+              <button
+                type="button"
+                className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+                disabled={busy || submitting || !form.display_name.trim()}
+                onClick={() => void submitEditor()}
+              >
+                {submitting ? 'שומר…' : 'שמירה'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
+}
+
+function renderEndCustomerCell(row: IncomeCustomersTableRow, columnKey: string): string {
+  const value = (row as unknown as Record<string, unknown>)[columnKey];
+  if (value == null || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'כן' : 'לא';
+  return String(value);
 }
 
 export function IncomeClientDocumentMoreMenu({

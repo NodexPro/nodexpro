@@ -17,18 +17,26 @@
 }
 
 .nx-income-ledger-modal__header {
-  height: 72px;
   border-bottom: 1px solid #e5e7eb;
-  padding: 20px 28px;
+  padding: 16px 28px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  direction: rtl;
+  flex-shrink: 0;
+}
+
+.nx-income-ledger-modal__header-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  direction: rtl;
+  width: 100%;
 }
 
 .nx-income-ledger-modal__header-main {
   min-width: 0;
+  flex: 1;
 }
 
 .nx-income-ledger-modal__title {
@@ -36,25 +44,82 @@
   font-size: 24px;
   font-weight: 900;
   color: #0f172a;
+  line-height: 1.2;
 }
 
-.nx-income-ledger-modal__subtitle {
-  margin: 4px 0 0;
-  font-size: 14px;
+.nx-income-ledger-modal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  width: 100%;
+  padding-top: 2px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.nx-income-ledger-modal__meta-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.nx-income-ledger-modal__meta-label {
   color: #64748b;
+  font-weight: 600;
+}
+
+.nx-income-ledger-modal__meta-value {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.nx-income-ledger-modal__meta-sep {
+  color: #cbd5e1;
+  user-select: none;
+}
+
+.nx-income-ledger-modal__year {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.nx-income-ledger-modal__year select,
+.nx-income-ledger-modal__customer-select select {
+  height: 36px;
+  min-width: 88px;
+  max-width: 220px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.nx-income-ledger-modal__customer-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .nx-income-ledger-modal__header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
+  direction: ltr;
 }
 
 .nx-income-ledger-modal__top-action {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
   height: 42px;
   padding: 0 14px;
   border-radius: 14px;
@@ -62,16 +127,26 @@
   background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(124, 58, 237, 0.1));
   color: #4f46e5;
   box-shadow: 0 8px 20px rgba(79, 70, 229, 0.1);
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 700;
   cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.nx-income-ledger-modal__top-action-label {
+  line-height: 1;
 }
 
 .nx-income-ledger-modal__top-action:hover:not(:disabled) {
   background: linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%);
   color: #ffffff;
   border-color: transparent;
+  transform: translateY(-1px);
 }
 
 .nx-income-ledger-modal__top-action:disabled {
@@ -80,180 +155,50 @@
 }
 
 .nx-income-ledger-modal__close {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid #e5e7eb;
+  border-color: #e5e7eb;
   background: #ffffff;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
+  color: #64748b;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.nx-income-ledger-modal__close:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%);
+  color: #ffffff;
+  border-color: transparent;
 }
 
 .nx-income-ledger-modal__body {
-  padding: 20px 28px 28px;
+  padding: 16px 28px 24px;
   overflow: auto;
   direction: rtl;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .nx-income-ledger-modal__source-note {
-  margin: 0 0 16px;
-  padding: 10px 14px;
-  border-radius: 12px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
   background: #fffbeb;
   border: 1px solid #fde68a;
   color: #92400e;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
-.nx-income-ledger-modal__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 18px;
-}
-
-.nx-income-ledger-modal__chip {
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  padding: 10px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.nx-income-ledger-modal__chip-label {
-  font-size: 12px;
-  color: #64748b;
-  font-weight: 600;
-}
-
-.nx-income-ledger-modal__chip-value {
-  font-size: 14px;
-  color: #0f172a;
-  font-weight: 800;
-}
-
-.nx-income-ledger-modal__year {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #475569;
-}
-
-.nx-income-ledger-modal__year select {
-  height: 42px;
-  border-radius: 12px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  padding: 0 12px;
-  font-family: inherit;
-  font-size: 14px;
-}
-
-.nx-income-ledger-modal__picker-title {
-  margin: 0 0 12px;
-  font-size: 18px;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.nx-income-ledger-modal__picker-search {
-  width: 100%;
-  max-width: 420px;
-  height: 42px;
-  border-radius: 12px;
-  border: 1px solid #cbd5e1;
-  padding: 0 14px;
-  margin-bottom: 16px;
-  font-family: inherit;
-}
-
-.nx-income-ledger-modal__picker-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
-}
-
-.nx-income-ledger-modal__picker-card {
-  text-align: right;
-  border: 1px solid #e5e7eb;
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
-  padding: 16px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.nx-income-ledger-modal__picker-card:hover:not(:disabled) {
-  border-color: rgba(124, 58, 237, 0.35);
-  box-shadow: 0 14px 32px rgba(79, 70, 229, 0.12);
-}
-
-.nx-income-ledger-modal__picker-name {
-  display: block;
-  font-size: 15px;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.nx-income-ledger-modal__picker-meta,
-.nx-income-ledger-modal__picker-balance,
-.nx-income-ledger-modal__picker-count {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.nx-income-ledger-modal__summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.nx-income-ledger-modal__summary-card {
-  border-radius: 18px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.nx-income-ledger-modal__summary-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: #64748b;
-}
-
-.nx-income-ledger-modal__summary-value {
-  font-size: 18px;
-  font-weight: 900;
-  color: #0f172a;
-}
-
-.nx-income-ledger-modal__summary-value--debit {
-  color: #dc2626;
-}
-
-.nx-income-ledger-modal__summary-value--credit {
-  color: #16a34a;
+.nx-income-ledger-modal__picker {
+  display: none;
 }
 
 .nx-income-ledger-modal__table-wrap {
-  border-radius: 18px;
+  flex: 1;
+  min-height: 280px;
+  border-radius: 12px;
   border: 1px solid #e5e7eb;
-  overflow: hidden;
+  overflow: auto;
   background: #ffffff;
 }
 
@@ -261,26 +206,76 @@
   width: 100%;
   border-collapse: collapse;
   direction: rtl;
+  table-layout: fixed;
 }
 
 .nx-income-ledger-modal__table th,
 .nx-income-ledger-modal__table td {
-  padding: 14px 16px;
+  padding: 10px 14px;
   text-align: right;
   border-bottom: 1px solid #eef2f7;
-  font-size: 14px;
+  font-size: 13px;
   vertical-align: middle;
 }
 
-.nx-income-ledger-modal__table th {
+.nx-income-ledger-modal__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: #f8fafc;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
   color: #475569;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.nx-income-ledger-modal__table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .nx-income-ledger-modal__table tbody tr {
-  min-height: 58px;
+  min-height: 48px;
+}
+
+.nx-income-ledger-modal__table tbody tr:hover {
+  background: #fafbfc;
+}
+
+.nx-income-ledger-modal__income-col {
+  width: 18%;
+  font-weight: 600;
+  color: #334155;
+}
+
+.nx-income-ledger-modal__num-col {
+  width: 12%;
+  text-align: left;
+  direction: ltr;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.nx-income-ledger-modal__table thead .nx-income-ledger-modal__num-col {
+  text-align: left;
+}
+
+.nx-income-ledger-modal__doc-col {
+  width: 12%;
+  font-variant-numeric: tabular-nums;
+  color: #475569;
+}
+
+.nx-income-ledger-modal__date-col {
+  width: 12%;
+  font-variant-numeric: tabular-nums;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.nx-income-ledger-modal__view-col {
+  width: 64px;
+  text-align: center;
 }
 
 .nx-income-ledger-modal__debit {
@@ -299,7 +294,7 @@
 }
 
 .nx-income-ledger-modal__balance--open {
-  color: #b91c1c;
+  color: #0f172a;
 }
 
 .nx-income-ledger-modal__view {
@@ -313,6 +308,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  margin-inline: auto;
 }
 
 .nx-income-ledger-modal__view:hover:not(:disabled) {
@@ -321,17 +317,21 @@
   border-color: transparent;
 }
 
-.nx-income-ledger-modal__empty,
-.nx-income-ledger-modal__loading {
-  padding: 32px;
-  text-align: center;
-  color: #64748b;
+.nx-income-ledger-modal__footer-row td {
+  border-top: 2px solid #e5e7eb;
+  background: #f8fafc;
+  padding: 12px 14px;
 }
 
-@media (max-width: 960px) {
-  .nx-income-ledger-modal__summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.nx-income-ledger-modal__footer-label {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 900;
+  color: #475569;
+}
+
+.nx-income-ledger-modal__footer-balance {
+  font-size: 15px;
 }
 
 @media print {
@@ -352,5 +352,10 @@
     max-width: none;
     max-height: none;
     box-shadow: none;
+  }
+
+  .nx-income-ledger-modal__table-wrap {
+    overflow: visible;
+    border: 1px solid #e5e7eb;
   }
 }

@@ -335,6 +335,7 @@ export function IncomeWorkspacePage() {
         panel={clientDocumentPanel}
         busy={busy}
         customersTableModel={workspace.customers_table_model}
+        customersAllowedActions={workspace.allowed_actions ?? []}
         onBusyChange={setBusy}
         onAfterIssuerSelect={(res) => {
           setContext(res.income_workspace_context_aggregate);

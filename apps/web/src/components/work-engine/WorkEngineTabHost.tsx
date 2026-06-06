@@ -342,9 +342,23 @@ function WorkEngineInvoicesTabPanel(props: {
     aggregate.client_document_management_panel,
   );
   const showClientDocumentPanel = clientDocumentPanel.visible;
+  const allowedActions = aggregate.allowed_actions ?? [];
   const entry = aggregate.document_creation_entrypoint;
-  const canOpenWizard =
-    entry.allowed && aggregate.allowed_actions.includes(entry.allowed_action);
+  const canOpenWizard = Boolean(
+    entry?.allowed && entry.allowed_action && allowedActions.includes(entry.allowed_action),
+  );
+  const draftEntrypoints = aggregate.draft_entrypoints ?? [];
+  const tableModel = aggregate.table_model ?? {
+    columns: [],
+    rows: [],
+    empty_state: { visible: false, title: '', description: null },
+  };
+  const tableSummary = aggregate.summary ?? {
+    rows_count: 0,
+    sum_paid_reference: 0,
+    avg_paid_reference: 0,
+    currency: 'ILS',
+  };
   const customersTableModel =
     issuerWorkspace?.customers_table_model ??
     ({
@@ -381,7 +395,7 @@ function WorkEngineInvoicesTabPanel(props: {
               setWizardOpen(true);
             }}
           >
-            {entry.button_label}
+            {entry?.button_label ?? 'מסמך חדש'}
           </button>
         ) : null}
       </div>
@@ -390,6 +404,7 @@ function WorkEngineInvoicesTabPanel(props: {
         panel={clientDocumentPanel}
         busy={panelBusy}
         customersTableModel={customersTableModel}
+        customersAllowedActions={issuerWorkspace?.allowed_actions ?? []}
         onBusyChange={setPanelBusy}
         onAfterIssuerSelect={(res) => {
           setIssuerWorkspace(res.income_workspace_aggregate);
@@ -410,13 +425,13 @@ function WorkEngineInvoicesTabPanel(props: {
         onError={(message) => setError(message)}
       />
 
-      {!showClientDocumentPanel && aggregate.draft_entrypoints.length > 0 ? (
+      {!showClientDocumentPanel && draftEntrypoints.length > 0 ? (
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }} dir="rtl">
             טיוטות אחרונות
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
-            {aggregate.draft_entrypoints.map((d) => (
+            {draftEntrypoints.map((d) => (
               <button
                 key={d.draft_id}
                 type="button"
@@ -428,12 +443,13 @@ function WorkEngineInvoicesTabPanel(props: {
                   padding: '10px 12px',
                   textAlign: 'right',
                 }}
-                disabled={wizardBusy || !d.allowed_actions[0]?.enabled}
-                title={d.allowed_actions[0]?.reason ?? undefined}
+                disabled={wizardBusy || !(d.allowed_actions ?? [])[0]?.enabled}
+                title={(d.allowed_actions ?? [])[0]?.reason ?? undefined}
                 onClick={async () => {
                   setWizardBusy(true);
                   try {
-                    const action = d.allowed_actions.find((a) => a.command === 'resume_income_document_draft') ?? null;
+                    const action =
+                      (d.allowed_actions ?? []).find((a) => a.command === 'resume_income_document_draft') ?? null;
                     if (!action?.enabled) return;
                     // Resume via backend allowed action only (no frontend assumptions).
                     const res = await executeIncomeCommand(action.command, action.command_payload);
@@ -465,9 +481,9 @@ function WorkEngineInvoicesTabPanel(props: {
       ) : null}
       {error ? <div className="nx-we-banner-error">{error}</div> : null}
       {!showClientDocumentPanel ? (
-        <WorkEngineModuleTabTable table={aggregate.table_model} summary={aggregate.summary} />
+        <WorkEngineModuleTabTable table={tableModel} summary={tableSummary} />
       ) : null}
-      {wizardOpen ? (
+      {wizardOpen && entry?.wizard ? (
         <WorkEngineIncomeDocumentWizardModal
           open={wizardOpen}
           busy={wizardBusy}

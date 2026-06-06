@@ -386,3 +386,105 @@
   background: #ffffff;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
 }
+
+.nx-income-cdm-end-customers {
+  max-width: 920px;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
+}
+
+.nx-income-cdm-end-customers__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  direction: rtl;
+}
+
+.nx-income-cdm-end-customers__add {
+  height: 42px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%);
+  color: #ffffff;
+  font-family: Heebo, Arial, Helvetica, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(79, 70, 229, 0.2);
+  white-space: nowrap;
+}
+
+.nx-income-cdm-end-customers__add:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.nx-income-cdm-end-customers__add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nx-income-cdm-end-customers__table-wrap {
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  overflow: auto;
+  background: #ffffff;
+}
+
+.nx-income-cdm-end-customers__table {
+  width: 100%;
+  border-collapse: collapse;
+  direction: rtl;
+}
+
+.nx-income-cdm-end-customers__table th,
+.nx-income-cdm-end-customers__table td {
+  padding: 12px 14px;
+  text-align: right;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 13px;
+}
+
+.nx-income-cdm-end-customers__table thead th {
+  background: #f8fafc;
+  font-weight: 800;
+  color: #475569;
+}
+
+.nx-income-cdm-end-customers__actions-col {
+  width: 56px;
+  text-align: center;
+}
+
+.nx-income-cdm-end-customers__edit {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(124, 58, 237, 0.1));
+  color: #4f46e5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.nx-income-cdm-end-customers__edit:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.nx-income-cdm-end-customers__edit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-income-cdm-end-customers-editor {
+  max-width: 520px;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.22);
+}

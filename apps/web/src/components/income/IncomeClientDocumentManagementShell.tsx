@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
   IncomeClientDocumentManagementPanel,
+  IncomeCommandResponse,
   IncomeCustomersTableRow,
   IncomeTableModel,
   SelectIncomeIssuerContextCommandResponse,
@@ -15,6 +16,16 @@ import {
 } from './IncomeClientDocumentManagementPanel';
 import { IncomeClientIncomeLedgerCardModal } from './IncomeClientIncomeLedgerCardModal';
 
+const EMPTY_CUSTOMERS_TABLE_MODEL: IncomeTableModel<IncomeCustomersTableRow> = {
+  columns: [
+    { key: 'display_name', label: 'שם' },
+    { key: 'phone', label: 'טלפון' },
+    { key: 'email', label: 'אימייל' },
+  ],
+  rows: [],
+  empty_state: { visible: false, title: '', description: null },
+};
+
 function isSelectIssuerResponse(
   res: unknown,
 ): res is SelectIncomeIssuerContextCommandResponse {
@@ -27,10 +38,15 @@ function isSelectIssuerResponse(
   );
 }
 
+function isIncomeCommandResponse(res: unknown): res is IncomeCommandResponse {
+  return typeof res === 'object' && res != null && 'income_workspace_aggregate' in res;
+}
+
 type ShellProps = {
   panel: IncomeClientDocumentManagementPanel;
   busy: boolean;
   customersTableModel: IncomeTableModel<IncomeCustomersTableRow>;
+  customersAllowedActions?: string[];
   onBusyChange?: (busy: boolean) => void;
   onAfterIssuerSelect?: (response: SelectIncomeIssuerContextCommandResponse) => void;
   onOpenBranding?: () => void;
@@ -41,6 +57,7 @@ export function IncomeClientDocumentManagementShell({
   panel,
   busy,
   customersTableModel,
+  customersAllowedActions = [],
   onBusyChange,
   onAfterIssuerSelect,
   onOpenBranding,
@@ -56,10 +73,79 @@ export function IncomeClientDocumentManagementShell({
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLButtonElement | null>(null);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [ledgerClientId, setLedgerClientId] = useState<string | null>(null);
+  const [ledgerClientName, setLedgerClientName] = useState('');
 
   useEffect(() => {
     setEndCustomersModel(customersTableModel);
   }, [customersTableModel]);
+
+  const applyCustomersTableFromResponse = useCallback((res: unknown) => {
+    if (isSelectIssuerResponse(res)) {
+      onAfterIssuerSelect?.(res);
+      setEndCustomersModel(
+        res.income_workspace_aggregate.customers_table_model ?? EMPTY_CUSTOMERS_TABLE_MODEL,
+      );
+      return;
+    }
+    if (isIncomeCommandResponse(res)) {
+      setEndCustomersModel(
+        res.income_workspace_aggregate.customers_table_model ?? EMPTY_CUSTOMERS_TABLE_MODEL,
+      );
+    }
+  }, [onAfterIssuerSelect]);
+
+  const canCreateCustomer =
+    customersAllowedActions.includes('create_income_customer_for_issuer') ||
+    customersAllowedActions.includes('create_income_customer');
+  const canEditCustomer = customersAllowedActions.includes('update_income_customer_for_issuer');
+
+  const handleCreateCustomer = useCallback(
+    async (payload: {
+      display_name: string;
+      phone: string | null;
+      email: string | null;
+      tax_id: string | null;
+    }) => {
+      onBusyChange?.(true);
+      try {
+        const res = await executeIncomeCommand('create_income_customer_for_issuer', payload);
+        applyCustomersTableFromResponse(res);
+      } catch (e) {
+        onError?.(e instanceof Error ? e.message : String(e));
+        throw e;
+      } finally {
+        onBusyChange?.(false);
+      }
+    },
+    [applyCustomersTableFromResponse, onBusyChange, onError],
+  );
+
+  const handleUpdateCustomer = useCallback(
+    async (
+      customerId: string,
+      payload: {
+        display_name: string;
+        phone: string | null;
+        email: string | null;
+        tax_id: string | null;
+      },
+    ) => {
+      onBusyChange?.(true);
+      try {
+        const res = await executeIncomeCommand('update_income_customer_for_issuer', {
+          income_customer_id: customerId,
+          ...payload,
+        });
+        applyCustomersTableFromResponse(res);
+      } catch (e) {
+        onError?.(e instanceof Error ? e.message : String(e));
+        throw e;
+      } finally {
+        onBusyChange?.(false);
+      }
+    },
+    [applyCustomersTableFromResponse, onBusyChange, onError],
+  );
 
   const handlePanelAction = useCallback(
     async (result: IncomeClientDocumentPanelActionResult) => {
@@ -70,6 +156,7 @@ export function IncomeClientDocumentManagementShell({
       }
       if (result.kind === 'ledger') {
         setLedgerClientId(result.clientId);
+        setLedgerClientName(result.clientName);
         setLedgerOpen(true);
         return;
       }
@@ -92,10 +179,7 @@ export function IncomeClientDocumentManagementShell({
       onBusyChange?.(true);
       try {
         const res = await executeIncomeCommand(action.command, payload);
-        if (isSelectIssuerResponse(res)) {
-          onAfterIssuerSelect?.(res);
-          setEndCustomersModel(res.income_workspace_aggregate.customers_table_model);
-        }
+        applyCustomersTableFromResponse(res);
         if (openBranding) onOpenBranding?.();
         if (openEndCustomers) {
           setEndCustomersClientName(result.clientName);
@@ -107,7 +191,7 @@ export function IncomeClientDocumentManagementShell({
         onBusyChange?.(false);
       }
     },
-    [onAfterIssuerSelect, onBusyChange, onError, onOpenBranding],
+    [applyCustomersTableFromResponse, onBusyChange, onError, onOpenBranding],
   );
 
   if (!panel?.visible) return null;
@@ -125,13 +209,17 @@ export function IncomeClientDocumentManagementShell({
         clientName={endCustomersClientName}
         model={endCustomersModel}
         busy={busy}
+        canCreate={canCreateCustomer}
+        canEdit={canEditCustomer}
         onClose={() => setEndCustomersOpen(false)}
+        onCreateCustomer={handleCreateCustomer}
+        onUpdateCustomer={handleUpdateCustomer}
       />
 
       <IncomeClientDocumentReportsModal
         open={reportsOpen}
         clientName={reportsClientName}
-        catalog={panel.report_catalog}
+        catalog={panel.report_catalog ?? []}
         busy={busy}
         onClose={() => setReportsOpen(false)}
       />
@@ -147,11 +235,13 @@ export function IncomeClientDocumentManagementShell({
       <IncomeClientIncomeLedgerCardModal
         open={ledgerOpen}
         representedClientId={ledgerClientId}
+        representedClientDisplayName={ledgerClientName}
         busy={busy}
         onBusyChange={onBusyChange}
         onClose={() => {
           setLedgerOpen(false);
           setLedgerClientId(null);
+          setLedgerClientName('');
         }}
         onError={onError}
       />

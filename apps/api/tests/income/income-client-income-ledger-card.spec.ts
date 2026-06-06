@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  buildLedgerEndCustomerOptions,
   computeLedgerMovementRows,
   formatLedgerCreditDisplay,
   sumLedgerDebitCredit,
@@ -73,5 +74,30 @@ describe('income client ledger card pure', () => {
     ];
     const totals = sumLedgerDebitCredit(movements);
     assert.equal(totals.open_balance_reference, 1500);
+  });
+
+  it('includes all income customers even with zero balance', () => {
+    const options = buildLedgerEndCustomerOptions({
+      customers: [
+        {
+          id: 'cust-1',
+          display_name: 'Alpha',
+          tax_id: null,
+          email: null,
+        },
+        {
+          id: 'cust-2',
+          display_name: 'Beta',
+          tax_id: '123',
+          email: 'a@b.c',
+        },
+      ],
+      statsByCustomerId: new Map(),
+    });
+
+    assert.equal(options.length, 2);
+    assert.equal(options[0]?.end_customer_id, 'cust-1');
+    assert.equal(options[0]?.open_balance_display, '₪0.00');
+    assert.equal(options[1]?.open_balance_display, '₪0.00');
   });
 });

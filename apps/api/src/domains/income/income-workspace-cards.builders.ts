@@ -121,6 +121,8 @@ export function buildWorkspaceAllowedActions(perms: IncomeWorkspacePermissions):
     actions.push(
       'select_issuer_context',
       'create_income_customer',
+      'create_income_customer_for_issuer',
+      'update_income_customer_for_issuer',
       'create_one_time_income_customer',
       'create_income_item',
       'create_income_document_draft',

@@ -39,7 +39,9 @@ export function WorkEngineModuleTabTable(props: {
   summary: WorkEngineModuleTabSummary;
 }) {
   const { table, summary } = props;
-  const empty = table.empty_state?.visible === true && table.rows.length === 0;
+  const columns = table?.columns ?? [];
+  const rows = table?.rows ?? [];
+  const empty = table?.empty_state?.visible === true && rows.length === 0;
 
   return (
     <div className="nx-we-module-tab">
@@ -47,7 +49,7 @@ export function WorkEngineModuleTabTable(props: {
         <table className="nx-we-module-tab__table">
           <thead>
             <tr>
-              {table.columns.map((col) => (
+              {columns.map((col) => (
                 <th key={col.key} scope="col">
                   {col.label}
                 </th>
@@ -57,17 +59,17 @@ export function WorkEngineModuleTabTable(props: {
           <tbody>
             {empty ? (
               <tr>
-                <td colSpan={table.columns.length} className="nx-we-module-tab__empty">
-                  <strong>{table.empty_state?.title}</strong>
-                  {table.empty_state?.description ? (
+                <td colSpan={columns.length || 1} className="nx-we-module-tab__empty">
+                  <strong>{table?.empty_state?.title ?? ''}</strong>
+                  {table?.empty_state?.description ? (
                     <p>{table.empty_state.description}</p>
                   ) : null}
                 </td>
               </tr>
             ) : (
-              table.rows.map((row, idx) => (
+              rows.map((row, idx) => (
                 <tr key={String(row.income_document_id ?? idx)}>
-                  {table.columns.map((col) => (
+                  {columns.map((col) => (
                     <td key={col.key} data-col-type={col.type}>
                       {formatCell(row[col.key] as string | number | null, col.type)}
                     </td>
@@ -81,15 +83,15 @@ export function WorkEngineModuleTabTable(props: {
 
       <footer className="nx-we-module-tab__summary" aria-label="סיכום טבלה">
         <span>
-          שורות: <strong>{summary.rows_count}</strong>
+          שורות: <strong>{summary?.rows_count ?? 0}</strong>
         </span>
         <span>
-          סה״כ שולם (הפניה): <strong>{formatCell(summary.sum_paid_reference, 'money_reference')}</strong>{' '}
-          {summary.currency}
+          סה״כ שולם (הפניה): <strong>{formatCell(summary?.sum_paid_reference ?? 0, 'money_reference')}</strong>{' '}
+          {summary?.currency ?? 'ILS'}
         </span>
         <span>
-          ממוצע שולם (הפניה): <strong>{formatCell(summary.avg_paid_reference, 'money_reference')}</strong>{' '}
-          {summary.currency}
+          ממוצע שולם (הפניה): <strong>{formatCell(summary?.avg_paid_reference ?? 0, 'money_reference')}</strong>{' '}
+          {summary?.currency ?? 'ILS'}
         </span>
       </footer>
     </div>

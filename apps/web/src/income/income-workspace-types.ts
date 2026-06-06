@@ -188,10 +188,23 @@ export const EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL: IncomeClientDocument
 export function resolveIncomeClientDocumentManagementPanel(
   panel: IncomeClientDocumentManagementPanel | null | undefined,
 ): IncomeClientDocumentManagementPanel {
-  if (panel && typeof panel.visible === 'boolean') {
-    return panel;
+  if (!panel || typeof panel.visible !== 'boolean') {
+    return EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL;
   }
-  return EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL;
+  return {
+    ...EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL,
+    ...panel,
+    columns: panel.columns ?? [],
+    rows: (panel.rows ?? []).map((row) => ({
+      ...row,
+      actions: row.actions ?? [],
+    })),
+    report_catalog: panel.report_catalog ?? [],
+    empty_state: {
+      ...EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL.empty_state,
+      ...(panel.empty_state ?? {}),
+    },
+  };
 }
 
 export interface IncomeWorkspaceContextAggregate {
@@ -408,6 +421,8 @@ export interface IncomeWorkspaceAggregate {
 export type IncomeCommandType =
   | 'select_income_issuer_context'
   | 'create_income_customer'
+  | 'create_income_customer_for_issuer'
+  | 'update_income_customer_for_issuer'
   | 'create_one_time_income_customer'
   | 'create_income_item'
   | 'create_income_document_draft'

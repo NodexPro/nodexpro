@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { IncomeClientIncomeLedgerCardAggregate } from '../../api/income';
 import {
   downloadIncomeDocumentPdf,
@@ -9,13 +9,30 @@ import {
 type Props = {
   open: boolean;
   representedClientId: string | null;
+  representedClientDisplayName?: string | null;
   busy: boolean;
   onBusyChange?: (busy: boolean) => void;
   onClose: () => void;
   onError?: (message: string) => void;
 };
 
-function TopActionIcon({ iconKey }: { iconKey: 'send' | 'print' }) {
+/** RTL visual order (first column = far right). Display-only. */
+const LEDGER_TABLE_COLUMNS = [
+  { key: 'income_label', label: 'הכנסה' },
+  { key: 'debit_amount_display', label: 'חובה' },
+  { key: 'credit_amount_display', label: 'זכות' },
+  { key: 'balance_display', label: 'יתרה' },
+  { key: 'document_number', label: 'מס חש' },
+  { key: 'issue_date_display', label: 'תאריך הפקה' },
+  { key: 'view', label: 'צפייה' },
+] as const;
+
+const DEFAULT_TOP_ACTIONS = [
+  { key: 'send_ledger', label: 'שליחה', icon_key: 'send' as const, enabled: false, disabled_reason: 'בקרוב' },
+  { key: 'print_ledger', label: 'הדפסה', icon_key: 'print' as const, enabled: true, disabled_reason: null },
+];
+
+function TopActionIcon({ iconKey }: { iconKey: string }) {
   if (iconKey === 'send') {
     return (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -56,9 +73,29 @@ function TopActionIcon({ iconKey }: { iconKey: 'send' | 'print' }) {
   );
 }
 
+function resolveFooterBalanceDisplay(aggregate: IncomeClientIncomeLedgerCardAggregate): string {
+  const rows = aggregate.rows ?? [];
+  if (rows.length > 0) {
+    return rows[rows.length - 1]?.balance_display ?? aggregate.summary?.open_balance_display ?? '₪0.00';
+  }
+  return aggregate.summary?.open_balance_display ?? '₪0.00';
+}
+
+function columnClassName(key: string): string | undefined {
+  if (key === 'debit_amount_display' || key === 'credit_amount_display' || key === 'balance_display') {
+    return 'nx-income-ledger-modal__num-col';
+  }
+  if (key === 'view') return 'nx-income-ledger-modal__view-col';
+  if (key === 'income_label') return 'nx-income-ledger-modal__income-col';
+  if (key === 'document_number') return 'nx-income-ledger-modal__doc-col';
+  if (key === 'issue_date_display') return 'nx-income-ledger-modal__date-col';
+  return undefined;
+}
+
 export function IncomeClientIncomeLedgerCardModal({
   open,
   representedClientId,
+  representedClientDisplayName,
   busy,
   onBusyChange,
   onClose,
@@ -66,7 +103,6 @@ export function IncomeClientIncomeLedgerCardModal({
 }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
   const [aggregate, setAggregate] = useState<IncomeClientIncomeLedgerCardAggregate | null>(null);
-  const [customerFilter, setCustomerFilter] = useState('');
 
   const loadAggregate = useCallback(
     async (params: { endCustomerId?: string | null; year?: number | null }) => {
@@ -91,23 +127,13 @@ export function IncomeClientIncomeLedgerCardModal({
   useEffect(() => {
     if (!open || !representedClientId) {
       setAggregate(null);
-      setCustomerFilter('');
       return;
     }
     void loadAggregate({});
   }, [loadAggregate, open, representedClientId]);
 
-  const filteredOptions = useMemo(() => {
-    if (!aggregate) return [];
-    const q = customerFilter.trim().toLowerCase();
-    if (!q) return aggregate.end_customer_options;
-    return aggregate.end_customer_options.filter((o) => {
-      const hay = `${o.display_name} ${o.tax_id ?? ''} ${o.email ?? ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [aggregate, customerFilter]);
-
   const handleSelectCustomer = (endCustomerId: string) => {
+    if (!endCustomerId) return;
     void loadAggregate({ endCustomerId });
   };
 
@@ -119,7 +145,7 @@ export function IncomeClientIncomeLedgerCardModal({
   };
 
   const handleViewDocument = async (documentId: string | null) => {
-    if (!documentId || !aggregate) return;
+    if (!documentId || !aggregate?.document_download_path_template) return;
     const path = aggregate.document_download_path_template.replace('{document_id}', documentId);
     try {
       onBusyChange?.(true);
@@ -137,40 +163,103 @@ export function IncomeClientIncomeLedgerCardModal({
 
   if (!open) return null;
 
+  const officeClientName =
+    aggregate?.represented_client_display_name ?? representedClientDisplayName ?? '—';
+  const topActions =
+    aggregate?.top_actions?.length ? aggregate.top_actions : DEFAULT_TOP_ACTIONS;
+  const endCustomerOptions = aggregate?.end_customer_options ?? [];
+  const yearOptions =
+    aggregate?.available_years?.length ? aggregate.available_years : [new Date().getFullYear()];
+  const selectedYear = aggregate?.selected_year ?? yearOptions[0]!;
+  const footerBalanceDisplay = aggregate ? resolveFooterBalanceDisplay(aggregate) : '₪0.00';
+
   return (
     <div className="nx-income-wizard-overlay nx-invoice-ui nx-income-ledger-modal" role="dialog" aria-modal="true">
       <div className="nx-income-ledger-modal__dialog">
         <header className="nx-income-ledger-modal__header">
-          <div className="nx-income-ledger-modal__header-main">
+          <div className="nx-income-ledger-modal__header-top">
             <h2 className="nx-income-ledger-modal__title">כרטסת הכנסות</h2>
-            <p className="nx-income-ledger-modal__subtitle">תנועות חובה / זכות / יתרה לפי לקוח</p>
-          </div>
-          <div className="nx-income-ledger-modal__header-actions">
-            {(aggregate?.top_actions ?? []).map((action) => (
+            <div className="nx-income-ledger-modal__header-actions">
+              {topActions.map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  className="nx-income-ledger-modal__top-action"
+                  disabled={busy || !action.enabled}
+                  title={action.enabled ? action.label : (action.disabled_reason ?? action.label)}
+                  aria-label={action.label}
+                  onClick={() => {
+                    if (action.key === 'print_ledger') handlePrint();
+                  }}
+                >
+                  <TopActionIcon iconKey={action.icon_key} />
+                  <span className="nx-income-ledger-modal__top-action-label">{action.label}</span>
+                </button>
+              ))}
               <button
-                key={action.key}
                 type="button"
-                className="nx-income-ledger-modal__top-action"
-                disabled={busy || !action.enabled}
-                title={action.enabled ? action.label : (action.disabled_reason ?? action.label)}
-                aria-label={action.label}
-                onClick={() => {
-                  if (action.key === 'print_ledger') handlePrint();
-                }}
+                className="nx-income-ledger-modal__top-action nx-income-ledger-modal__close"
+                disabled={busy}
+                aria-label="סגירה"
+                onClick={onClose}
               >
-                <TopActionIcon iconKey={action.icon_key} />
-                <span>{action.label}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path
+                    d="M18 6 6 18M6 6l12 12"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="nx-income-ledger-modal__top-action-label">סגירה</span>
               </button>
-            ))}
-            <button
-              type="button"
-              className="nx-income-ledger-modal__close"
-              disabled={busy}
-              aria-label="סגירה"
-              onClick={onClose}
-            >
-              ×
-            </button>
+            </div>
+          </div>
+
+          <div className="nx-income-ledger-modal__meta">
+            <span className="nx-income-ledger-modal__meta-item">
+              <span className="nx-income-ledger-modal__meta-label">לקוח משרד:</span>
+              <span className="nx-income-ledger-modal__meta-value">{officeClientName}</span>
+            </span>
+            <label className="nx-income-ledger-modal__meta-item nx-income-ledger-modal__customer-select">
+              <span className="nx-income-ledger-modal__meta-label">לקוח:</span>
+              <select
+                value={aggregate?.selected_end_customer_id ?? ''}
+                disabled={busy || !aggregate || endCustomerOptions.length === 0}
+                onChange={(e) => handleSelectCustomer(e.target.value)}
+              >
+                {!aggregate || endCustomerOptions.length === 0 ? (
+                  <option value="">—</option>
+                ) : (
+                  <>
+                    {!aggregate.selected_end_customer_id ? (
+                      <option value="" disabled>
+                        בחר לקוח
+                      </option>
+                    ) : null}
+                    {endCustomerOptions.map((option) => (
+                      <option key={option.end_customer_id} value={option.end_customer_id}>
+                        {option.display_name}
+                      </option>
+                    ))}
+                  </>
+                )}
+              </select>
+            </label>
+            <label className="nx-income-ledger-modal__year">
+              <span className="nx-income-ledger-modal__meta-label">שנה:</span>
+              <select
+                value={selectedYear}
+                disabled={busy || !aggregate || !aggregate.selected_end_customer_id}
+                onChange={(e) => handleYearChange(Number(e.target.value))}
+              >
+                {yearOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </header>
 
@@ -181,167 +270,75 @@ export function IncomeClientIncomeLedgerCardModal({
             </p>
           ) : null}
 
-          {aggregate && !aggregate.show_customer_picker && aggregate.selected_end_customer_id ? (
-            <div className="nx-income-ledger-modal__chips">
-              <div className="nx-income-ledger-modal__chip">
-                <span className="nx-income-ledger-modal__chip-label">לקוח המשרד</span>
-                <span className="nx-income-ledger-modal__chip-value">
-                  {aggregate.represented_client_display_name}
-                </span>
-              </div>
-              <div className="nx-income-ledger-modal__chip">
-                <span className="nx-income-ledger-modal__chip-label">לקוח</span>
-                <span className="nx-income-ledger-modal__chip-value">
-                  {aggregate.selected_end_customer_display_name ?? '—'}
-                </span>
-              </div>
-              <label className="nx-income-ledger-modal__year">
-                <span>שנה:</span>
-                <select
-                  value={aggregate.selected_year}
-                  disabled={busy}
-                  onChange={(e) => handleYearChange(Number(e.target.value))}
-                >
-                  {aggregate.available_years.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
+          <div className="nx-income-ledger-modal__table-wrap">
+            <table className="nx-income-ledger-modal__table">
+              <thead>
+                <tr>
+                  {LEDGER_TABLE_COLUMNS.map((col) => (
+                    <th key={col.key} scope="col" className={columnClassName(col.key)}>
+                      {col.label}
+                    </th>
                   ))}
-                </select>
-              </label>
-            </div>
-          ) : null}
-
-          {aggregate?.show_customer_picker ? (
-            <div className="nx-income-ledger-modal__picker">
-              <h3 className="nx-income-ledger-modal__picker-title">בחר לקוח קצה</h3>
-              <input
-                type="search"
-                className="nx-income-ledger-modal__picker-search"
-                placeholder="חיפוש לפי שם / ח.פ / אימייל"
-                value={customerFilter}
-                disabled={busy}
-                onChange={(e) => setCustomerFilter(e.target.value)}
-              />
-              <div className="nx-income-ledger-modal__picker-grid">
-                {filteredOptions.map((option) => (
-                  <button
-                    key={option.end_customer_id}
-                    type="button"
-                    className="nx-income-ledger-modal__picker-card"
-                    disabled={busy}
-                    onClick={() => handleSelectCustomer(option.end_customer_id)}
-                  >
-                    <span className="nx-income-ledger-modal__picker-name">{option.display_name}</span>
-                    <span className="nx-income-ledger-modal__picker-meta">
-                      {[option.tax_id, option.email].filter(Boolean).join(' · ') || '—'}
-                    </span>
-                    <span className="nx-income-ledger-modal__picker-balance">
-                      יתרה פתוחה: {option.open_balance_display}
-                    </span>
-                    <span className="nx-income-ledger-modal__picker-count">
-                      {option.open_invoice_count} חשבוניות פתוחות
-                    </span>
-                  </button>
+                </tr>
+              </thead>
+              <tbody>
+                {(aggregate?.rows ?? []).map((row) => (
+                  <tr key={row.row_id}>
+                    <td className="nx-income-ledger-modal__income-col">{row.income_label}</td>
+                    <td className="nx-income-ledger-modal__debit nx-income-ledger-modal__num-col">
+                      {row.debit_amount_display ?? '—'}
+                    </td>
+                    <td className="nx-income-ledger-modal__credit nx-income-ledger-modal__num-col">
+                      {row.credit_amount_display ?? '—'}
+                    </td>
+                    <td
+                      className={`nx-income-ledger-modal__balance nx-income-ledger-modal__num-col${
+                        row.balance_tone === 'open' ? ' nx-income-ledger-modal__balance--open' : ''
+                      }`}
+                    >
+                      {row.balance_display}
+                    </td>
+                    <td className="nx-income-ledger-modal__doc-col">{row.document_number}</td>
+                    <td className="nx-income-ledger-modal__date-col">{row.issue_date_display}</td>
+                    <td className="nx-income-ledger-modal__view-col">
+                      {row.can_view_document ? (
+                        <button
+                          type="button"
+                          className="nx-income-ledger-modal__view"
+                          disabled={busy}
+                          aria-label="צפייה במסמך"
+                          title="צפייה במסמך"
+                          onClick={() => void handleViewDocument(row.document_id)}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <path
+                              d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                            />
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                          </svg>
+                        </button>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            </div>
-          ) : null}
-
-          {aggregate && !aggregate.show_customer_picker ? (
-            <>
-              <div className="nx-income-ledger-modal__summary">
-                <div className="nx-income-ledger-modal__summary-card">
-                  <span className="nx-income-ledger-modal__summary-label">סה״כ חובה</span>
-                  <span className="nx-income-ledger-modal__summary-value nx-income-ledger-modal__summary-value--debit">
-                    {aggregate.summary.total_debit_display}
-                  </span>
-                </div>
-                <div className="nx-income-ledger-modal__summary-card">
-                  <span className="nx-income-ledger-modal__summary-label">סה״כ זכות</span>
-                  <span className="nx-income-ledger-modal__summary-value nx-income-ledger-modal__summary-value--credit">
-                    {aggregate.summary.total_credit_display}
-                  </span>
-                </div>
-                <div className="nx-income-ledger-modal__summary-card">
-                  <span className="nx-income-ledger-modal__summary-label">יתרה פתוחה</span>
-                  <span className="nx-income-ledger-modal__summary-value">
-                    {aggregate.summary.open_balance_display}
-                  </span>
-                </div>
-                <div className="nx-income-ledger-modal__summary-card">
-                  <span className="nx-income-ledger-modal__summary-label">מסמכים</span>
-                  <span className="nx-income-ledger-modal__summary-value">
-                    {aggregate.summary.invoice_count} חש / {aggregate.summary.payment_count} תשלומים
-                  </span>
-                </div>
-              </div>
-
-              {aggregate.empty_state.visible ? (
-                <div className="nx-income-ledger-modal__empty">
-                  <p>{aggregate.empty_state.title}</p>
-                  {aggregate.empty_state.description ? <p>{aggregate.empty_state.description}</p> : null}
-                </div>
-              ) : (
-                <div className="nx-income-ledger-modal__table-wrap">
-                  <table className="nx-income-ledger-modal__table">
-                    <thead>
-                      <tr>
-                        {aggregate.table_columns.map((col) => (
-                          <th key={col.key} scope="col">
-                            {col.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {aggregate.rows.map((row) => (
-                        <tr key={row.row_id}>
-                          <td>{row.income_label}</td>
-                          <td className="nx-income-ledger-modal__debit">{row.debit_amount_display ?? '—'}</td>
-                          <td className="nx-income-ledger-modal__credit">{row.credit_amount_display ?? '—'}</td>
-                          <td
-                            className={`nx-income-ledger-modal__balance${
-                              row.balance_tone === 'open' ? ' nx-income-ledger-modal__balance--open' : ''
-                            }`}
-                          >
-                            {row.balance_display}
-                          </td>
-                          <td>{row.document_number}</td>
-                          <td>{row.issue_date_display}</td>
-                          <td>
-                            {row.can_view_document ? (
-                              <button
-                                type="button"
-                                className="nx-income-ledger-modal__view"
-                                disabled={busy}
-                                aria-label="צפייה במסמך"
-                                title="צפייה במסמך"
-                                onClick={() => void handleViewDocument(row.document_id)}
-                              >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                                  <path
-                                    d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
-                                    stroke="currentColor"
-                                    strokeWidth="1.8"
-                                  />
-                                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-                                </svg>
-                              </button>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          ) : null}
-
-          {!aggregate && busy ? <p className="nx-income-ledger-modal__loading">טוען כרטסת…</p> : null}
+              </tbody>
+              <tfoot>
+                <tr className="nx-income-ledger-modal__footer-row">
+                  <td colSpan={3} className="nx-income-ledger-modal__footer-label">
+                    יתרה
+                  </td>
+                  <td className="nx-income-ledger-modal__balance nx-income-ledger-modal__num-col nx-income-ledger-modal__footer-balance">
+                    {footerBalanceDisplay}
+                  </td>
+                  <td colSpan={3} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       </div>
     </div>

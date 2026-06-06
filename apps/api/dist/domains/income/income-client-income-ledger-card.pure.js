@@ -93,3 +93,25 @@ export function sumLedgerDebitCredit(movements) {
     const open_balance_reference = Math.round((total_debit_reference - total_credit_reference) * 100) / 100;
     return { total_debit_reference, total_credit_reference, open_balance_reference };
 }
+/** All issuer-scoped income customers — not filtered by open balance or tax invoices. */
+export function buildLedgerEndCustomerOptions(params) {
+    const defaultCurrency = params.defaultCurrency ?? 'ILS';
+    return params.customers
+        .map((customer) => {
+        const stats = params.statsByCustomerId.get(customer.id);
+        const movements = stats?.movements ?? [];
+        const { open_balance_reference } = sumLedgerDebitCredit(movements);
+        const currency = stats?.currency ?? defaultCurrency;
+        return {
+            end_customer_id: customer.id,
+            display_name: customer.display_name,
+            tax_id: customer.tax_id,
+            email: customer.email,
+            open_balance_display: formatLedgerMoneyReference(Math.max(0, open_balance_reference), currency),
+            open_balance_reference,
+            open_invoice_count: stats?.open_invoice_count ?? 0,
+            currency,
+        };
+    })
+        .sort((a, b) => a.display_name.localeCompare(b.display_name, 'he'));
+}

@@ -6,6 +6,8 @@ export const INCOME_WORKSPACE_AGGREGATE_KEY = 'income_workspace_aggregate' as co
 
 export const INCOME_COMMAND_SELECT_ISSUER = 'select_income_issuer_context' as const;
 export const INCOME_COMMAND_CREATE_CUSTOMER = 'create_income_customer' as const;
+export const INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER = 'create_income_customer_for_issuer' as const;
+export const INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER = 'update_income_customer_for_issuer' as const;
 export const INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER = 'create_one_time_income_customer' as const;
 export const INCOME_COMMAND_CREATE_ITEM = 'create_income_item' as const;
 export const INCOME_COMMAND_CREATE_DRAFT = 'create_income_document_draft' as const;
@@ -394,6 +396,8 @@ export interface IncomeWorkspaceAggregate {
 export type IncomeCommandType =
   | typeof INCOME_COMMAND_SELECT_ISSUER
   | typeof INCOME_COMMAND_CREATE_CUSTOMER
+  | typeof INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER
+  | typeof INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER
   | typeof INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER
   | typeof INCOME_COMMAND_CREATE_ITEM
   | typeof INCOME_COMMAND_CREATE_DRAFT

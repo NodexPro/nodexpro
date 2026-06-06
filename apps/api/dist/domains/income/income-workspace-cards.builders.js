@@ -102,7 +102,7 @@ export function buildWorkspaceAllowedActions(perms) {
     if (perms.view)
         actions.push('view_workspace');
     if (perms.edit) {
-        actions.push('select_issuer_context', 'create_income_customer', 'create_one_time_income_customer', 'create_income_item', 'create_income_document_draft', 'update_income_document_draft', 'cancel_income_document_draft');
+        actions.push('select_issuer_context', 'create_income_customer', 'create_income_customer_for_issuer', 'update_income_customer_for_issuer', 'create_one_time_income_customer', 'create_income_item', 'create_income_document_draft', 'update_income_document_draft', 'cancel_income_document_draft');
     }
     if (perms.issue) {
         actions.push('issue_income_document', 'retry_income_document_accounting_posting', 'retry_income_document_pdf_render');

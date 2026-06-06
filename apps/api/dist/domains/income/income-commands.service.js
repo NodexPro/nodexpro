@@ -18,10 +18,12 @@ import { insertSavedIncomeRecipient, loadIncomeRecipientById, searchIncomeRecipi
 import { assertRecipientInputValid, parseRecipientInputBody, validateRecipientInputFields, } from './income-recipient.validation.js';
 import { beginIncomeWizardDocumentDraft, addIncomeDocumentLine, updateIncomeDocumentLine, deleteIncomeDocumentLine, reorderIncomeDocumentLines, saveIncomeDocumentDraft, resumeIncomeDocumentDraftFromContext, generateIncomeDocumentPreview, updateIncomeDocumentDiscount, updateIncomeDocumentDraftSettings, updateIncomeDocumentNotes, updateIncomeDocumentDeliveryContact, } from './income-document-draft-editor.service.js';
 import { executeUpdateIncomeDocumentBrandingProfile, executeUpdateIncomeDocumentBrandingProfilePreviewDraft, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
-import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, } from './income.types.js';
+import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, } from './income.types.js';
 const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_SELECT_ISSUER,
     INCOME_COMMAND_CREATE_CUSTOMER,
+    INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER,
+    INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER,
     INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER,
     INCOME_COMMAND_CREATE_ITEM,
     INCOME_COMMAND_CREATE_DRAFT,
@@ -138,7 +140,9 @@ async function loadDraftInScope(scope, draftId) {
 async function insertIncomeCustomer(scope, body, isOneTime, auditAction) {
     assertIncomeEditPermission(scope);
     const display_name = reqNonEmptyString(body.display_name, 'display_name');
-    const { error } = await supabaseAdmin.from('income_customers').insert({
+    const { data, error } = await supabaseAdmin
+        .from('income_customers')
+        .insert({
         organization_id: scope.org_id,
         represented_client_id: scope.represented_client_id,
         issuer_business_id: scope.issuer_business_id,
@@ -150,7 +154,49 @@ async function insertIncomeCustomer(scope, body, isOneTime, auditAction) {
         is_one_time: isOneTime,
         status: 'active',
         created_by_user_id: scope.actor_user_id,
+    })
+        .select('id')
+        .single();
+    if (error)
+        throw error;
+    const row = data;
+    await writeAudit({
+        organizationId: scope.org_id,
+        actorUserId: scope.actor_user_id,
+        moduleCode: 'income',
+        entityType: 'income_customer',
+        entityId: row.id,
+        action: auditAction,
+        payload: { display_name, is_one_time: isOneTime, issuer_business_id: scope.issuer_business_id },
     });
+    return row;
+}
+async function executeUpdateIncomeCustomerForIssuer(ctx, body) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const income_customer_id = reqUuid(body.income_customer_id, 'income_customer_id');
+    await loadIncomeCustomerInScope(scope, income_customer_id);
+    const patch = {};
+    if ('display_name' in body) {
+        patch.display_name = reqNonEmptyString(body.display_name, 'display_name');
+    }
+    if ('phone' in body) {
+        patch.phone = optionalString(body.phone);
+    }
+    if ('email' in body) {
+        patch.email = optionalString(body.email);
+    }
+    if ('tax_id' in body) {
+        patch.tax_id = optionalString(body.tax_id);
+    }
+    if (Object.keys(patch).length === 0) {
+        throw badRequest('At least one customer field is required');
+    }
+    const { error } = await supabaseAdmin
+        .from('income_customers')
+        .update(patch)
+        .eq('id', income_customer_id)
+        .eq('organization_id', scope.org_id);
     if (error)
         throw error;
     await writeAudit({
@@ -158,9 +204,15 @@ async function insertIncomeCustomer(scope, body, isOneTime, auditAction) {
         actorUserId: scope.actor_user_id,
         moduleCode: 'income',
         entityType: 'income_customer',
-        action: auditAction,
-        payload: { display_name, is_one_time: isOneTime, issuer_business_id: scope.issuer_business_id },
+        entityId: income_customer_id,
+        action: AUDIT_ACTIONS.INCOME_CUSTOMER_UPDATED,
+        payload: {
+            issuer_business_id: scope.issuer_business_id,
+            represented_client_id: scope.represented_client_id,
+            fields: Object.keys(patch),
+        },
     });
+    return commandResponse(ctx, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER);
 }
 async function executeCreateIncomeItem(ctx, body) {
     const scope = await loadActiveIncomeIssuerScope(ctx);
@@ -344,6 +396,14 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         const scope = await loadActiveIncomeIssuerScope(ctx);
         await insertIncomeCustomer(scope, body, false, AUDIT_ACTIONS.INCOME_CUSTOMER_CREATED);
         return commandResponse(ctx, command);
+    }
+    if (command === INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER) {
+        const scope = await loadActiveIncomeIssuerScope(ctx);
+        await insertIncomeCustomer(scope, body, false, AUDIT_ACTIONS.INCOME_CUSTOMER_CREATED);
+        return commandResponse(ctx, command);
+    }
+    if (command === INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER) {
+        return executeUpdateIncomeCustomerForIssuer(ctx, body);
     }
     if (command === INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER) {
         const scope = await loadActiveIncomeIssuerScope(ctx);

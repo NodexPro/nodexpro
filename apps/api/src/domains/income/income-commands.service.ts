@@ -103,6 +103,8 @@ import {
   INCOME_COMMAND_RETRY_ACCOUNTING_POSTING,
   INCOME_COMMAND_RETRY_PDF_RENDER,
   INCOME_COMMAND_CREATE_CUSTOMER,
+  INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER,
+  INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER,
   INCOME_COMMAND_CREATE_DRAFT,
   INCOME_COMMAND_CREATE_ITEM,
   INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER,
@@ -121,6 +123,8 @@ import {
 const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_SELECT_ISSUER,
   INCOME_COMMAND_CREATE_CUSTOMER,
+  INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER,
+  INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER,
   INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER,
   INCOME_COMMAND_CREATE_ITEM,
   INCOME_COMMAND_CREATE_DRAFT,
@@ -310,31 +314,88 @@ async function insertIncomeCustomer(
   body: Record<string, unknown>,
   isOneTime: boolean,
   auditAction: string,
-): Promise<void> {
+): Promise<{ id: string }> {
   assertIncomeEditPermission(scope);
   const display_name = reqNonEmptyString(body.display_name, 'display_name');
-  const { error } = await supabaseAdmin.from('income_customers').insert({
-    organization_id: scope.org_id,
-    represented_client_id: scope.represented_client_id,
-    issuer_business_id: scope.issuer_business_id,
-    display_name,
-    phone: optionalString(body.phone),
-    email: optionalString(body.email),
-    tax_id: optionalString(body.tax_id),
-    address_json: optionalJsonObject(body.address_json, 'address_json'),
-    is_one_time: isOneTime,
-    status: 'active',
-    created_by_user_id: scope.actor_user_id,
-  });
+  const { data, error } = await supabaseAdmin
+    .from('income_customers')
+    .insert({
+      organization_id: scope.org_id,
+      represented_client_id: scope.represented_client_id,
+      issuer_business_id: scope.issuer_business_id,
+      display_name,
+      phone: optionalString(body.phone),
+      email: optionalString(body.email),
+      tax_id: optionalString(body.tax_id),
+      address_json: optionalJsonObject(body.address_json, 'address_json'),
+      is_one_time: isOneTime,
+      status: 'active',
+      created_by_user_id: scope.actor_user_id,
+    })
+    .select('id')
+    .single();
   if (error) throw error;
+  const row = data as { id: string };
   await writeAudit({
     organizationId: scope.org_id,
     actorUserId: scope.actor_user_id,
     moduleCode: 'income',
     entityType: 'income_customer',
+    entityId: row.id,
     action: auditAction,
     payload: { display_name, is_one_time: isOneTime, issuer_business_id: scope.issuer_business_id },
   });
+  return row;
+}
+
+async function executeUpdateIncomeCustomerForIssuer(
+  ctx: RequestContext,
+  body: Record<string, unknown>,
+): Promise<IncomeCommandResponse> {
+  const scope = await loadActiveIncomeIssuerScope(ctx);
+  assertIncomeEditPermission(scope);
+  const income_customer_id = reqUuid(body.income_customer_id, 'income_customer_id');
+  await loadIncomeCustomerInScope(scope, income_customer_id);
+
+  const patch: Record<string, unknown> = {};
+  if ('display_name' in body) {
+    patch.display_name = reqNonEmptyString(body.display_name, 'display_name');
+  }
+  if ('phone' in body) {
+    patch.phone = optionalString(body.phone);
+  }
+  if ('email' in body) {
+    patch.email = optionalString(body.email);
+  }
+  if ('tax_id' in body) {
+    patch.tax_id = optionalString(body.tax_id);
+  }
+  if (Object.keys(patch).length === 0) {
+    throw badRequest('At least one customer field is required');
+  }
+
+  const { error } = await supabaseAdmin
+    .from('income_customers')
+    .update(patch)
+    .eq('id', income_customer_id)
+    .eq('organization_id', scope.org_id);
+  if (error) throw error;
+
+  await writeAudit({
+    organizationId: scope.org_id,
+    actorUserId: scope.actor_user_id,
+    moduleCode: 'income',
+    entityType: 'income_customer',
+    entityId: income_customer_id,
+    action: AUDIT_ACTIONS.INCOME_CUSTOMER_UPDATED,
+    payload: {
+      issuer_business_id: scope.issuer_business_id,
+      represented_client_id: scope.represented_client_id,
+      fields: Object.keys(patch),
+    },
+  });
+
+  return commandResponse(ctx, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER);
 }
 
 async function executeCreateIncomeItem(
@@ -549,6 +610,16 @@ export async function executeIncomeCommand(
     const scope = await loadActiveIncomeIssuerScope(ctx);
     await insertIncomeCustomer(scope, body, false, AUDIT_ACTIONS.INCOME_CUSTOMER_CREATED);
     return commandResponse(ctx, command);
+  }
+
+  if (command === INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER) {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    await insertIncomeCustomer(scope, body, false, AUDIT_ACTIONS.INCOME_CUSTOMER_CREATED);
+    return commandResponse(ctx, command);
+  }
+
+  if (command === INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER) {
+    return executeUpdateIncomeCustomerForIssuer(ctx, body);
   }
 
   if (command === INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER) {

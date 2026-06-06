@@ -6,7 +6,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { incomeWorkspacePermissionsFromContext } from './income-issuer-context.service.js';
-import { computeLedgerMovementRows, formatLedgerCreditDisplay, formatLedgerMoneyReference, INCOME_LEDGER_FINANCIAL_SOURCE, issueYearFromIso, ledgerAmountFromTotalsSnapshot, sumLedgerDebitCredit, } from './income-client-income-ledger-card.pure.js';
+import { buildLedgerEndCustomerOptions, computeLedgerMovementRows, formatLedgerCreditDisplay, formatLedgerMoneyReference, INCOME_LEDGER_FINANCIAL_SOURCE, issueYearFromIso, ledgerAmountFromTotalsSnapshot, sumLedgerDebitCredit, } from './income-client-income-ledger-card.pure.js';
 import { INCOME_CLIENT_INCOME_LEDGER_CARD_AGGREGATE_KEY, } from './income.types.js';
 const LEDGER_DOCUMENT_TYPES = [
     'tax_invoice',
@@ -15,21 +15,6 @@ const LEDGER_DOCUMENT_TYPES = [
     'credit_tax_invoice',
 ];
 const TAX_INVOICE_TYPES = new Set(['tax_invoice', 'tax_invoice_receipt']);
-function customerKeyFromDoc(doc) {
-    if (doc.income_customer_id)
-        return doc.income_customer_id;
-    const name = doc.customer_snapshot_json?.display_name;
-    if (name != null && String(name).trim()) {
-        return `snapshot:${String(name).trim().toLowerCase()}`;
-    }
-    return null;
-}
-function customerDisplayFromDoc(doc) {
-    const snap = doc.customer_snapshot_json?.display_name;
-    if (snap != null && String(snap).trim())
-        return String(snap).trim();
-    return '—';
-}
 function movementsFromDocument(doc) {
     const amount = ledgerAmountFromTotalsSnapshot(doc.totals_snapshot_json);
     if (amount <= 0)
@@ -138,73 +123,70 @@ async function loadLedgerDocuments(orgId, representedClientId) {
     throwIfSupabaseError(error, 'loadLedgerDocuments');
     return (data ?? []);
 }
-async function loadIncomeCustomersMeta(orgId, representedClientId, customerIds) {
-    const map = new Map();
-    if (customerIds.length === 0)
-        return map;
+async function loadAllIncomeCustomersForRepresentedClient(orgId, representedClientId) {
     const { data, error } = await supabaseAdmin
         .from('income_customers')
         .select('id, display_name, tax_id, email')
         .eq('organization_id', orgId)
         .eq('represented_client_id', representedClientId)
-        .in('id', customerIds);
-    throwIfSupabaseError(error, 'loadLedgerIncomeCustomers');
-    for (const raw of data ?? []) {
+        .eq('status', 'active')
+        .order('display_name', { ascending: true })
+        .limit(5000);
+    throwIfSupabaseError(error, 'loadAllIncomeCustomersForRepresentedClient');
+    return (data ?? []).map((raw) => {
         const row = raw;
-        map.set(row.id, {
+        return {
+            id: row.id,
             display_name: row.display_name,
             tax_id: row.tax_id,
             email: row.email,
-        });
-    }
-    return map;
+        };
+    });
 }
-function buildEndCustomerOptions(params) {
+async function assertEndCustomerBelongsToRepresentedClient(params) {
+    const { data, error } = await supabaseAdmin
+        .from('income_customers')
+        .select('id, display_name, status')
+        .eq('organization_id', params.orgId)
+        .eq('represented_client_id', params.representedClientId)
+        .eq('id', params.endCustomerId)
+        .maybeSingle();
+    throwIfSupabaseError(error, 'assertEndCustomerBelongsToRepresentedClient');
+    const row = data;
+    if (!row || row.status !== 'active') {
+        throw badRequest('end_customer_id is not eligible for ledger card');
+    }
+    return { display_name: row.display_name };
+}
+function buildDocStatsByCustomerId(docs) {
     const byCustomer = new Map();
-    for (const doc of params.docs) {
-        const key = customerKeyFromDoc(doc);
+    for (const doc of docs) {
+        const key = doc.income_customer_id;
         if (!key)
             continue;
         let bucket = byCustomer.get(key);
         if (!bucket) {
-            bucket = { docs: [], hasTaxInvoice: false };
+            bucket = { docs: [] };
             byCustomer.set(key, bucket);
         }
         bucket.docs.push(doc);
-        if (TAX_INVOICE_TYPES.has(doc.document_type))
-            bucket.hasTaxInvoice = true;
     }
-    const options = [];
+    const stats = new Map();
     for (const [customerId, bucket] of byCustomer) {
-        if (!bucket.hasTaxInvoice)
-            continue;
         const movements = bucket.docs.flatMap(movementsFromDocument);
-        const { open_balance_reference, total_debit_reference, total_credit_reference } = sumLedgerDebitCredit(movements);
-        if (open_balance_reference <= 0.005)
-            continue;
-        const meta = params.customerMeta.get(customerId);
-        const sampleDoc = bucket.docs[0];
-        const currency = sampleDoc.currency || 'ILS';
-        const display_name = meta?.display_name ??
-            customerDisplayFromDoc(sampleDoc);
         const openInvoiceCount = bucket.docs.filter((d) => TAX_INVOICE_TYPES.has(d.document_type)).length;
-        options.push({
-            end_customer_id: customerId,
-            display_name,
-            tax_id: meta?.tax_id ?? null,
-            email: meta?.email ?? null,
-            open_balance_display: formatLedgerMoneyReference(open_balance_reference, currency),
-            open_balance_reference,
+        stats.set(customerId, {
+            movements,
             open_invoice_count: openInvoiceCount,
-            currency,
+            currency: bucket.docs[0]?.currency || 'ILS',
         });
     }
-    return options.sort((a, b) => a.display_name.localeCompare(b.display_name, 'he'));
+    return stats;
 }
-function resolveAvailableYears(docs, customerKey) {
+function resolveAvailableYears(docs, endCustomerId) {
     const years = new Set();
     for (const doc of docs) {
-        if (customerKey && customerKeyFromDoc(doc) !== customerKey)
+        if (doc.income_customer_id !== endCustomerId)
             continue;
         const y = issueYearFromIso(doc.issue_date);
         if (y != null)
@@ -229,24 +211,32 @@ export async function buildIncomeClientIncomeLedgerCardAggregate(params) {
     if (!representedClientId)
         throw badRequest('represented_client_id is required');
     const client = await loadRepresentedClient(orgId, representedClientId);
-    const docs = await loadLedgerDocuments(orgId, representedClientId);
-    const incomeCustomerIds = [
-        ...new Set(docs.map((d) => d.income_customer_id).filter((id) => Boolean(id))),
-    ];
-    const customerMeta = await loadIncomeCustomersMeta(orgId, representedClientId, incomeCustomerIds);
-    const endCustomerOptions = buildEndCustomerOptions({ docs, customerMeta });
+    const [docs, customers] = await Promise.all([
+        loadLedgerDocuments(orgId, representedClientId),
+        loadAllIncomeCustomersForRepresentedClient(orgId, representedClientId),
+    ]);
+    const statsByCustomerId = buildDocStatsByCustomerId(docs);
+    const endCustomerOptions = buildLedgerEndCustomerOptions({
+        customers,
+        statsByCustomerId,
+    });
     let selectedEndCustomerId = params.endCustomerId?.trim() || null;
     if (!selectedEndCustomerId && endCustomerOptions.length === 1) {
         selectedEndCustomerId = endCustomerOptions[0].end_customer_id;
     }
-    if (selectedEndCustomerId &&
-        !endCustomerOptions.some((o) => o.end_customer_id === selectedEndCustomerId)) {
-        throw badRequest('end_customer_id is not eligible for ledger card');
+    if (selectedEndCustomerId) {
+        await assertEndCustomerBelongsToRepresentedClient({
+            orgId,
+            representedClientId,
+            endCustomerId: selectedEndCustomerId,
+        });
     }
     const customerDocs = selectedEndCustomerId
-        ? docs.filter((d) => customerKeyFromDoc(d) === selectedEndCustomerId)
+        ? docs.filter((d) => d.income_customer_id === selectedEndCustomerId)
         : [];
-    const availableYears = resolveAvailableYears(customerDocs, selectedEndCustomerId);
+    const availableYears = selectedEndCustomerId
+        ? resolveAvailableYears(customerDocs, selectedEndCustomerId)
+        : [new Date().getFullYear()];
     const selectedYear = selectedEndCustomerId
         ? resolveSelectedYear(availableYears, params.year ?? null)
         : new Date().getFullYear();
@@ -307,14 +297,9 @@ export async function buildIncomeClientIncomeLedgerCardAggregate(params) {
             },
         ],
         empty_state: {
-            visible: endCustomerOptions.length === 0 ||
-                (Boolean(selectedEndCustomerId) && rows.length === 0),
-            title: endCustomerOptions.length === 0
-                ? 'אין לקוחות עם יתרה פתוחה'
-                : 'אין תנועות לשנה שנבחרה',
-            description: endCustomerOptions.length === 0
-                ? 'כרטסת מציגה לקוחות קצה עם חשבוניות מס שלא שולמו במלואן.'
-                : null,
+            visible: false,
+            title: '',
+            description: null,
         },
         document_download_path_template: '/api/v1/income/documents/{document_id}/download',
     };
