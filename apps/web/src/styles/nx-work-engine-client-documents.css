@@ -7,6 +7,28 @@
   min-width: 320px;
 }
 
+.nx-we-invoices-cdm .nx-we-doc-counters {
+  min-width: 380px;
+  flex: 1 1 auto;
+}
+
+.nx-we-invoices-cdm .nx-income-cdm__table {
+  min-width: 920px;
+}
+
+.nx-we-invoices-cdm .nx-income-cdm__table td:has(.nx-we-doc-counters) {
+  min-width: 400px;
+  width: 36%;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.nx-income-cdm__table td:has(.nx-we-doc-counters) {
+  min-width: 360px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
 .nx-we-doc-counter {
   --nx-we-doc-counter-accent: #64748b;
   --nx-we-doc-counter-bg: rgba(100, 116, 139, 0.08);
@@ -60,12 +82,6 @@
 
 .nx-we-doc-counter:disabled {
   cursor: not-allowed;
-}
-
-.nx-income-cdm__table td:has(.nx-we-doc-counters) {
-  min-width: 360px;
-  padding-top: 10px;
-  padding-bottom: 10px;
 }
 
 .nx-we-documents-modal {

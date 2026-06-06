@@ -48,6 +48,8 @@ import { acceptWorkEngineEvent } from './work-engine.event-intake.service.js';
 import { buildWorkEngineFoundationAggregate, buildWorkEngineQueueAggregate, } from './work-engine.read-models.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from './work-engine-invoices-client-documents-by-type.read-model.service.js';
+import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
+import { executeWorkEngineInvoiceRetainerCommand } from './work-engine-invoice-retainer.commands.service.js';
 import { buildWorkEngineClientsTabAggregate } from './work-engine-clients-tab.read-model.service.js';
 const router = Router();
 function requireInternalCronSecret(req) {
@@ -168,6 +170,34 @@ officeRouter.get('/aggregates/invoices-client-documents-by-type', async (req, re
             year,
         });
         return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+officeRouter.get('/aggregates/invoice-retainer-setup', async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        const representedClientId = String(req.query.represented_client_id ?? '').trim();
+        const endCustomerId = String(req.query.end_customer_id ?? '').trim() || null;
+        const aggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
+            ctx,
+            representedClientId,
+            endCustomerId,
+        });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+officeRouter.post('/commands/invoice-retainer', async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        const command = String(req.body?.command ?? '').trim();
+        const payload = (req.body?.payload ?? req.body ?? {});
+        const out = await executeWorkEngineInvoiceRetainerCommand(ctx, command, payload);
+        return res.json(out);
     }
     catch (e) {
         next(e);

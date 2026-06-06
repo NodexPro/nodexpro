@@ -105,6 +105,7 @@ export type IncomeClientDocumentManagementActionIconKey =
   | 'end_customers'
   | 'reports'
   | 'ledger'
+  | 'retainer'
   | 'more';
 
 export interface IncomeClientDocumentManagementRowAction {

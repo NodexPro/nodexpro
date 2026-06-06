@@ -166,6 +166,7 @@ export function IncomeClientDocumentManagementShell({
         setMoreMenuOpen(true);
         return;
       }
+      if (result.kind !== 'command') return;
 
       const { action } = result;
       if (!action.command) return;

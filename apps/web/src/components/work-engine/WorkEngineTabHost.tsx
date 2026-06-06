@@ -31,6 +31,7 @@ import { WorkEngineIncomeDocumentWizardModal } from './WorkEngineIncomeDocumentW
 import type { IncomeWorkspaceAggregate } from '../../api/income';
 import '../../styles/nx-income-client-document-management.css';
 import '../../styles/nx-work-engine-client-documents.css';
+import '../../styles/nx-work-engine-invoice-retainer.css';
 import '../../styles/nx-income-ledger-card.css';
 
 const QUEUE_SHELL_FILTERS: WorkEngineQueueFiltersInput = {
@@ -424,6 +425,11 @@ function WorkEngineInvoicesTabPanel(props: {
         }}
         onOpenBranding={() => setBrandingOpen(true)}
         onError={(message) => setError(message)}
+        onInvoicesTabRefresh={(invoicesTabAggregate) => {
+          setAggregate((prev) =>
+            prev ? ({ ...prev, ...invoicesTabAggregate } as WorkEngineInvoicesTabAggregate) : prev,
+          );
+        }}
         onEditDraft={async (draftId) => {
           setWizardBusy(true);
           try {

@@ -75,9 +75,10 @@ async function fileAssetToDataUrl(fileAssetId: string): Promise<string | null> {
 function buildRowActions(
   clientId: string,
   perms: IncomeWorkspacePermissions,
+  options?: { includeRetainerAction?: boolean },
 ): IncomeClientDocumentManagementRowAction[] {
   const canEdit = perms.edit;
-  return [
+  const actions: IncomeClientDocumentManagementRowAction[] = [
     {
       key: 'open_branding_studio',
       label: 'הגדרות מסמך',
@@ -129,7 +130,24 @@ function buildRowActions(
       enabled: perms.view,
       disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
     },
-    {
+  ];
+
+  if (options?.includeRetainerAction) {
+    actions.push({
+      key: 'open_invoice_retainer_setup',
+      label: 'ריטיינר חשבוניות',
+      icon_key: 'retainer',
+      command: null,
+      command_payload: {
+        open_invoice_retainer_setup: true,
+        represented_client_id: clientId,
+      },
+      enabled: perms.edit,
+      disabled_reason: perms.edit ? null : 'אין הרשאת עריכה',
+    });
+  }
+
+  actions.push({
       key: 'more',
       label: 'פעולות נוספות',
       icon_key: 'more',
@@ -137,8 +155,9 @@ function buildRowActions(
       command_payload: { open_more_menu: true, client_id: clientId },
       enabled: true,
       disabled_reason: null,
-    },
-  ];
+    });
+
+  return actions;
 }
 
 function formatMoneyReference(amount: number, currency: string): string {
@@ -298,6 +317,7 @@ function ensureAcc(byClient: Map<string, Acc>, clientId: string, currency = 'ILS
 export async function buildIncomeClientDocumentManagementPanel(params: {
   ctx: RequestContext;
   perms: IncomeWorkspacePermissions;
+  includeRetainerAction?: boolean;
 }): Promise<IncomeClientDocumentManagementPanel> {
   const orgId = params.ctx.organizationId!;
   const visible = params.perms.issue_on_behalf;
@@ -471,7 +491,9 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
             : acc.draft_documents_count > 0
               ? 'טיוטות פעילות'
               : 'פעיל',
-        actions: buildRowActions(clientId, params.perms),
+        actions: buildRowActions(clientId, params.perms, {
+          includeRetainerAction: params.includeRetainerAction,
+        }),
       };
     })
     .sort((a, b) => a.client_display_name.localeCompare(b.client_display_name, 'he'));

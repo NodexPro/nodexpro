@@ -48,9 +48,9 @@ async function fileAssetToDataUrl(fileAssetId) {
     const mime = (row.mime_type ?? 'image/png').split(';')[0].trim();
     return `data:${mime};base64,${buf.toString('base64')}`;
 }
-function buildRowActions(clientId, perms) {
+function buildRowActions(clientId, perms, options) {
     const canEdit = perms.edit;
-    return [
+    const actions = [
         {
             key: 'open_branding_studio',
             label: 'הגדרות מסמך',
@@ -102,16 +102,31 @@ function buildRowActions(clientId, perms) {
             enabled: perms.view,
             disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
         },
-        {
-            key: 'more',
-            label: 'פעולות נוספות',
-            icon_key: 'more',
-            command: null,
-            command_payload: { open_more_menu: true, client_id: clientId },
-            enabled: true,
-            disabled_reason: null,
-        },
     ];
+    if (options?.includeRetainerAction) {
+        actions.push({
+            key: 'open_invoice_retainer_setup',
+            label: 'ריטיינר חשבוניות',
+            icon_key: 'retainer',
+            command: null,
+            command_payload: {
+                open_invoice_retainer_setup: true,
+                represented_client_id: clientId,
+            },
+            enabled: perms.edit,
+            disabled_reason: perms.edit ? null : 'אין הרשאת עריכה',
+        });
+    }
+    actions.push({
+        key: 'more',
+        label: 'פעולות נוספות',
+        icon_key: 'more',
+        command: null,
+        command_payload: { open_more_menu: true, client_id: clientId },
+        enabled: true,
+        disabled_reason: null,
+    });
+    return actions;
 }
 function formatMoneyReference(amount, currency) {
     return `${amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -388,7 +403,9 @@ export async function buildIncomeClientDocumentManagementPanel(params) {
                 : acc.draft_documents_count > 0
                     ? 'טיוטות פעילות'
                     : 'פעיל',
-            actions: buildRowActions(clientId, params.perms),
+            actions: buildRowActions(clientId, params.perms, {
+                includeRetainerAction: params.includeRetainerAction,
+            }),
         };
     })
         .sort((a, b) => a.client_display_name.localeCompare(b.client_display_name, 'he'));

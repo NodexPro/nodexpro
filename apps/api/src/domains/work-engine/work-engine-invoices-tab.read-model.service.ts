@@ -121,6 +121,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
   const client_document_management_panel = await buildIncomeClientDocumentManagementPanel({
     ctx: params.ctx,
     perms: incomePerms,
+    includeRetainerAction: true,
   });
 
   let document_branding_profile: IncomeDocumentBrandingProfileAggregate | null = null;

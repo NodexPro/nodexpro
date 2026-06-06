@@ -6,8 +6,10 @@ export const WORK_ENGINE = {
   aggregateQueue: '/work-engine/aggregates/queue',
   aggregateInvoicesTab: '/work-engine/aggregates/invoices-tab',
   aggregateInvoicesClientDocumentsByType: '/work-engine/aggregates/invoices-client-documents-by-type',
+  aggregateInvoiceRetainerSetup: '/work-engine/aggregates/invoice-retainer-setup',
   aggregateClientsTab: '/work-engine/aggregates/clients-tab',
   commands: '/work-engine/commands',
+  commandsInvoiceRetainer: '/work-engine/commands/invoice-retainer',
 } as const;
 
 export const AUTH = {

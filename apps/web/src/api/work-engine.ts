@@ -22,6 +22,8 @@ import type { IncomeClientDocumentManagementPanel } from '../income/income-works
 import type {
   IncomeClientDocumentTypeCounterKey,
   WorkEngineInvoicesClientDocumentsByTypeAggregate,
+  WorkEngineInvoiceRetainerCommandResponse,
+  WorkEngineInvoiceRetainerSetupAggregate,
 } from '../income/income-workspace-types';
 
 export type WorkEngineQueueFiltersInput = {
@@ -594,6 +596,29 @@ export async function fetchWorkEngineInvoicesClientDocumentsByTypeAggregate(para
   return apiJson<WorkEngineInvoicesClientDocumentsByTypeAggregate>(
     `${WORK_ENGINE.aggregateInvoicesClientDocumentsByType}?${qs.toString()}`,
   );
+}
+
+export async function fetchWorkEngineInvoiceRetainerSetupAggregate(params: {
+  representedClientId: string;
+  endCustomerId?: string | null;
+}): Promise<WorkEngineInvoiceRetainerSetupAggregate> {
+  const qs = new URLSearchParams({
+    represented_client_id: params.representedClientId,
+  });
+  if (params.endCustomerId) qs.set('end_customer_id', params.endCustomerId);
+  return apiJson<WorkEngineInvoiceRetainerSetupAggregate>(
+    `${WORK_ENGINE.aggregateInvoiceRetainerSetup}?${qs.toString()}`,
+  );
+}
+
+export async function executeWorkEngineInvoiceRetainerCommand(
+  command: string,
+  payload: Record<string, unknown>,
+): Promise<WorkEngineInvoiceRetainerCommandResponse> {
+  return apiJson<WorkEngineInvoiceRetainerCommandResponse>(WORK_ENGINE.commandsInvoiceRetainer, {
+    method: 'POST',
+    body: JSON.stringify({ command, payload }),
+  });
 }
 
 export type WorkEngineClientsTabAggregate = {

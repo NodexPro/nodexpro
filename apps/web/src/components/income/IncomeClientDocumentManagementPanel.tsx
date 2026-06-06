@@ -23,9 +23,13 @@ type VisualColumnKey = (typeof VISUAL_COLUMN_KEYS)[number];
 
 function resolveVisualColumns(
   columns: Array<{ key: string; label: string }>,
+  hideStatusColumn = false,
 ): Array<{ key: VisualColumnKey; label: string }> {
   const byKey = new Map(columns.map((col) => [col.key, col]));
-  return VISUAL_COLUMN_KEYS.flatMap((key) => {
+  const keys = hideStatusColumn
+    ? VISUAL_COLUMN_KEYS.filter((key) => key !== 'status_label')
+    : VISUAL_COLUMN_KEYS;
+  return keys.flatMap((key) => {
     const col = byKey.get(key);
     return col ? [{ key, label: col.label }] : [];
   });
@@ -95,6 +99,8 @@ function ActionIcon({ iconKey }: { iconKey: string }) {
       );
     case 'ledger':
       return <span className="nx-income-cdm__action-letter">כ</span>;
+    case 'retainer':
+      return <span className="nx-income-cdm__action-letter">ר</span>;
     default:
       return null;
   }
@@ -104,6 +110,7 @@ export type IncomeClientDocumentPanelActionResult =
   | { kind: 'command'; action: IncomeClientDocumentManagementRowAction; clientName: string }
   | { kind: 'reports'; clientId: string; clientName: string }
   | { kind: 'ledger'; clientId: string; clientName: string }
+  | { kind: 'retainer'; clientId: string; clientName: string }
   | { kind: 'more'; clientId: string; clientName: string; anchor: HTMLButtonElement };
 
 type PanelProps = {
@@ -111,6 +118,8 @@ type PanelProps = {
   busy: boolean;
   onAction: (result: IncomeClientDocumentPanelActionResult) => void | Promise<void>;
   renderDocumentsCell?: (row: IncomeClientDocumentManagementRow) => ReactNode;
+  /** Work Engine invoices tab: hide סטטוס column; backend field unchanged. */
+  hideStatusColumn?: boolean;
 };
 
 function ActionButton({
@@ -208,6 +217,14 @@ function renderDataCell(
                                     });
                                     return;
                                   }
+                                  if (action.key === 'open_invoice_retainer_setup') {
+                                    void onAction({
+                                      kind: 'retainer',
+                                      clientId: row.represented_client_id,
+                                      clientName: row.client_display_name,
+                                    });
+                                    return;
+                                  }
                                   if (action.key === 'more') {
                 void onAction({
                   kind: 'more',
@@ -240,14 +257,19 @@ export function IncomeClientDocumentManagementPanelView({
   busy,
   onAction,
   renderDocumentsCell,
+  hideStatusColumn = false,
 }: PanelProps) {
   if (!panel?.visible) return null;
 
-  const visualColumns = resolveVisualColumns(panel.columns ?? []);
+  const visualColumns = resolveVisualColumns(panel.columns ?? [], hideStatusColumn);
   const rows = panel.rows ?? [];
 
   return (
-    <section className="nx-income-cdm" dir="rtl" aria-labelledby="income-cdm-title">
+    <section
+      className={hideStatusColumn ? 'nx-income-cdm nx-we-invoices-cdm' : 'nx-income-cdm'}
+      dir="rtl"
+      aria-labelledby="income-cdm-title"
+    >
       <div className="nx-income-cdm__card">
         <div className="nx-income-cdm__head">
           <div className="nx-income-cdm__head-main">

@@ -18,6 +18,9 @@ import {
 import { IncomeClientIncomeLedgerCardModal } from '../income/IncomeClientIncomeLedgerCardModal';
 import { WorkEngineClientDocumentTypeCounters } from './WorkEngineClientDocumentTypeCounters';
 import { WorkEngineClientDocumentsByTypeModal } from './WorkEngineClientDocumentsByTypeModal';
+import { WorkEngineInvoiceRetainerCustomerModal } from './WorkEngineInvoiceRetainerCustomerModal';
+import { WorkEngineInvoiceRetainerSetupModal } from './WorkEngineInvoiceRetainerSetupModal';
+import type { WorkEngineInvoiceRetainerSetupAggregate } from '../../income/income-workspace-types';
 
 const EMPTY_CUSTOMERS_TABLE_MODEL: IncomeTableModel<IncomeCustomersTableRow> = {
   columns: [
@@ -55,6 +58,7 @@ type ShellProps = {
   onOpenBranding?: () => void;
   onError?: (message: string) => void;
   onEditDraft?: (draftId: string) => void | Promise<void>;
+  onInvoicesTabRefresh?: (aggregate: Record<string, unknown>) => void;
 };
 
 export function WorkEngineClientDocumentManagementShell({
@@ -67,6 +71,7 @@ export function WorkEngineClientDocumentManagementShell({
   onOpenBranding,
   onError,
   onEditDraft,
+  onInvoicesTabRefresh,
 }: ShellProps) {
   const [endCustomersOpen, setEndCustomersOpen] = useState(false);
   const [endCustomersClientName, setEndCustomersClientName] = useState('');
@@ -86,6 +91,14 @@ export function WorkEngineClientDocumentManagementShell({
     documentTypeKey: IncomeClientDocumentTypeCounter['key'];
     documentTypeLabel: string;
   } | null>(null);
+  const [retainerCustomerOpen, setRetainerCustomerOpen] = useState(false);
+  const [retainerClientId, setRetainerClientId] = useState<string | null>(null);
+  const [retainerClientName, setRetainerClientName] = useState('');
+  const [retainerSetupOpen, setRetainerSetupOpen] = useState(false);
+  const [retainerSetupAggregate, setRetainerSetupAggregate] =
+    useState<WorkEngineInvoiceRetainerSetupAggregate | null>(null);
+  const [retainerAddCustomerPending, setRetainerAddCustomerPending] = useState(false);
+  const [retainerListRefreshKey, setRetainerListRefreshKey] = useState(0);
 
   useEffect(() => {
     setEndCustomersModel(customersTableModel);
@@ -178,6 +191,14 @@ export function WorkEngineClientDocumentManagementShell({
         setMoreMenuOpen(true);
         return;
       }
+      if (result.kind === 'retainer') {
+        setRetainerClientId(result.clientId);
+        setRetainerClientName(result.clientName);
+        setRetainerSetupAggregate(null);
+        setRetainerSetupOpen(false);
+        setRetainerCustomerOpen(true);
+        return;
+      }
 
       const { action } = result;
       if (!action.command) return;
@@ -230,6 +251,7 @@ export function WorkEngineClientDocumentManagementShell({
       <IncomeClientDocumentManagementPanelView
         panel={panel}
         busy={busy}
+        hideStatusColumn
         onAction={(result) => void handlePanelAction(result)}
         renderDocumentsCell={(row) => (
           <WorkEngineClientDocumentTypeCounters
@@ -266,7 +288,10 @@ export function WorkEngineClientDocumentManagementShell({
         busy={busy}
         canCreate={canCreateCustomer}
         canEdit={canEditCustomer}
-        onClose={() => setEndCustomersOpen(false)}
+        onClose={() => {
+          setEndCustomersOpen(false);
+          if (retainerCustomerOpen) setRetainerListRefreshKey((k) => k + 1);
+        }}
         onCreateCustomer={handleCreateCustomer}
         onUpdateCustomer={handleUpdateCustomer}
       />
@@ -297,6 +322,61 @@ export function WorkEngineClientDocumentManagementShell({
           setLedgerOpen(false);
           setLedgerClientId(null);
           setLedgerClientName('');
+        }}
+        onError={onError}
+      />
+
+      <WorkEngineInvoiceRetainerCustomerModal
+        open={retainerCustomerOpen}
+        representedClientId={retainerClientId}
+        clientDisplayName={retainerClientName}
+        busy={busy}
+        canAddCustomer={canCreateCustomer}
+        onBusyChange={onBusyChange}
+        onClose={() => {
+          setRetainerCustomerOpen(false);
+          setRetainerClientId(null);
+          setRetainerClientName('');
+        }}
+        onSelectCustomer={(_endCustomerId, aggregate) => {
+          setRetainerSetupAggregate(aggregate);
+          setRetainerSetupOpen(true);
+        }}
+        onAddCustomer={async () => {
+          if (!retainerClientId) return;
+          setRetainerAddCustomerPending(true);
+          onBusyChange?.(true);
+          try {
+            const res = await executeIncomeCommand('select_income_issuer_context', {
+              represented_client_id: retainerClientId,
+              acting_mode: 'office_representative',
+            });
+            applyCustomersTableFromResponse(res);
+            setEndCustomersClientName(retainerClientName);
+            setEndCustomersOpen(true);
+          } catch (e) {
+            onError?.(e instanceof Error ? e.message : String(e));
+          } finally {
+            setRetainerAddCustomerPending(false);
+            onBusyChange?.(false);
+          }
+        }}
+        onError={onError}
+        refreshKey={retainerListRefreshKey}
+      />
+
+      <WorkEngineInvoiceRetainerSetupModal
+        open={retainerSetupOpen}
+        aggregate={retainerSetupAggregate}
+        busy={busy || retainerAddCustomerPending}
+        onBusyChange={onBusyChange}
+        onClose={() => {
+          setRetainerSetupOpen(false);
+          setRetainerSetupAggregate(null);
+        }}
+        onSaved={(aggregate, invoicesTabAggregate) => {
+          setRetainerSetupAggregate(aggregate);
+          if (invoicesTabAggregate) onInvoicesTabRefresh?.(invoicesTabAggregate);
         }}
         onError={onError}
       />

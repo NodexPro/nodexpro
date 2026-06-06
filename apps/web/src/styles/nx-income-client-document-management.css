@@ -277,6 +277,18 @@
   background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(124, 58, 237, 0.1));
 }
 
+.nx-income-cdm__action--retainer {
+  color: #4f46e5;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(124, 58, 237, 0.1));
+}
+
+.nx-income-cdm__action--retainer:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 14px 28px rgba(79, 70, 229, 0.22);
+}
+
 .nx-income-cdm__action-letter {
   font-family: Heebo, Arial, Helvetica, 'Segoe UI', sans-serif;
   font-size: 20px;

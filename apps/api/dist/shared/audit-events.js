@@ -268,6 +268,9 @@ export const AUDIT_ACTIONS = {
     INCOME_PDF_DOWNLOADED: 'income.pdf_downloaded',
     /** Income INC-8 — Work Engine intake bridge failure (additive). */
     INCOME_WORK_ENGINE_BRIDGE_INTAKE_FAILED: 'income.work_engine_bridge.intake_failed',
+    /** Income — recurring document profile (retainer template). */
+    INCOME_RECURRING_DOCUMENT_PROFILE_CREATED: 'income.recurring_document_profile_created',
+    INCOME_RECURRING_DOCUMENT_PROFILE_UPDATED: 'income.recurring_document_profile_updated',
 };
 export async function writeAudit(params) {
     await supabaseAdmin.from('audit_log').insert({
