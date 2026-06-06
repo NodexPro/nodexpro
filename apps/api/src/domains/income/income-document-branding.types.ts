@@ -59,6 +59,8 @@ export type IncomeBrandingIssuerIdentityPreview = {
   website: string | null;
   read_only: boolean;
   helper_text: string | null;
+  sample_only_label: string | null;
+  source_badge_label: string | null;
 };
 
 export type IncomeBrandingPaymentSettingsPanel = {
@@ -73,6 +75,22 @@ export type IncomeDocumentTypeStyleDefault = {
   document_type_label: string;
   default_document_style_key: IncomeDocumentStyleTemplateKey;
   default_color_theme_key: string;
+};
+
+export type IncomeDocumentTypeStyleGroupKey = 'quote_deal' | 'tax_group' | 'receipt' | 'credit';
+
+export type IncomeDocumentTypeStyleOverride = {
+  document_style_key: IncomeDocumentStyleTemplateKey;
+  color_theme_key: string;
+};
+
+export type IncomeDocumentTypeStyleGroup = {
+  group_key: IncomeDocumentTypeStyleGroupKey;
+  group_label: string;
+  types_label: string;
+  sample_document_type_label: string;
+  effective_document_style_key: IncomeDocumentStyleTemplateKey;
+  effective_color_theme_key: string;
 };
 
 export type IncomeColorThemePresetStudio = IncomeColorThemePreset & {
@@ -183,6 +201,7 @@ export type IncomeBrandingProfileRow = {
   payment_methods: unknown;
   document_attachments: unknown;
   default_payment_terms: unknown;
+  document_type_style_overrides?: unknown;
 };
 
 export type IncomeBrandingResolvedProfile = {
@@ -248,6 +267,8 @@ export type IncomeDocumentBrandingStudioLivePreview = {
   preview_html: string;
   sample_document_type_label: string;
   sample_document_number_display: string | null;
+  sample_only_label: string | null;
+  preview_footnote: string | null;
 };
 
 export type IncomeEmailTemplateToken = {
@@ -271,6 +292,8 @@ export type IncomeEmailTemplatePreview = {
 /** Ephemeral preview result — no DB write. */
 export type IncomeDocumentBrandingStudioPreviewDraftResult = {
   studio_live_preview: IncomeDocumentBrandingStudioLivePreview;
+  selected_document_type_group_key: IncomeDocumentTypeStyleGroupKey;
+  document_type_style_groups: IncomeDocumentTypeStyleGroup[];
   selected_document_style_key: IncomeDocumentStyleTemplateKey;
   selected_color_theme_key: string;
   selected_layout_template_key: IncomeLayoutTemplateKey | null;
@@ -303,7 +326,13 @@ export type IncomeDocumentBrandingStudio = {
   display_option_controls: IncomeBrandingDisplayOptionControl[];
   issuer_identity_preview: IncomeBrandingIssuerIdentityPreview;
   payment_settings_panel: IncomeBrandingPaymentSettingsPanel;
+  /** @deprecated Use document_type_style_groups */
   document_type_style_defaults: IncomeDocumentTypeStyleDefault[];
+  document_type_style_groups: IncomeDocumentTypeStyleGroup[];
+  selected_document_type_group_key: IncomeDocumentTypeStyleGroupKey;
+  document_type_style_overrides: Partial<
+    Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>
+  >;
   layout_templates: IncomeLayoutTemplate[];
   logo_size_options: IncomeLogoSizeOption[];
   selected_document_style_key: IncomeDocumentStyleTemplateKey;

@@ -15,18 +15,38 @@ import {
   resolveBrandingPreviewThemePalette,
   getStudioNavigationSections,
   getStudioColorThemePresets,
+  buildStudioSampleIssuerIdentityPreview,
+  buildStudioSampleLivePreview,
   resolveBrandingProfile,
+  resolveBrandingProfileForDocumentTypeGroup,
+  buildDocumentTypeStyleGroups,
   resolveColorThemePreset,
   resolveDocumentStyleTemplate,
 } from '../../src/domains/income/income-document-branding.pure.js';
-import { renderIncomeBrandedPreviewHtml } from '../../src/domains/income/income-document-branding-preview.renderer.js';
+import { renderIncomeBrandedPreviewHtml, renderStudioSamplePreviewHtml } from '../../src/domains/income/income-document-branding-preview.renderer.js';
 import type { IncomeBrandingProfileRow } from '../../src/domains/income/income-document-branding.types.js';
 
-test('color theme presets expose 9 studio themes including black and white', () => {
+test('color theme presets expose 13 studio themes including black and white default', () => {
   const presets = getColorThemePresets();
-  assert.equal(presets.length, 9);
+  assert.equal(presets.length, 13);
   assert.ok(presets.every((p) => p.print_safe));
-  assert.ok(presets.some((p) => p.key === 'black_white'));
+  const blackWhite = presets.find((p) => p.key === 'black_white');
+  assert.ok(blackWhite);
+  assert.equal(blackWhite!.label, 'שחור לבן');
+  assert.equal(blackWhite!.table_header_color, '#111827');
+  assert.equal(blackWhite!.recipient_block_background, '#ffffff');
+  assert.equal(blackWhite!.recipient_block_border, '#d1d5db');
+  assert.equal(blackWhite!.text_on_light, '#111827');
+});
+
+test('studio color catalog exposes full fixed palette', () => {
+  const presets = getStudioColorThemePresets();
+  assert.equal(presets.length, 13);
+  assert.ok(presets.some((p) => p.key === 'black_white' && p.studio_label === 'שחור לבן'));
+  assert.ok(presets.some((p) => p.key === 'pastel_purple'));
+  assert.ok(presets.some((p) => p.key === 'pale_peach'));
+  assert.ok(!presets.some((p) => p.key === 'elegant_gold'));
+  assert.ok(!presets.some((p) => p.key === 'modern_blue'));
 });
 
 test('studio navigation exposes seven SaaS sections', () => {
@@ -37,10 +57,53 @@ test('studio navigation exposes seven SaaS sections', () => {
   assert.ok(sections.every((s) => s.description.trim().length > 0));
 });
 
-test('studio color catalog exposes curated theme cards', () => {
-  const presets = getStudioColorThemePresets();
-  assert.equal(presets.length, 5);
-  assert.ok(presets.some((p) => p.key === 'black_white' && p.studio_label === 'Black & White'));
+test('document type style groups default to classic and black white', () => {
+  const groups = buildDocumentTypeStyleGroups({});
+  assert.equal(groups.length, 4);
+  assert.ok(groups.every((g) => g.effective_document_style_key === 'classic'));
+  assert.ok(groups.every((g) => g.effective_color_theme_key === 'black_white'));
+});
+
+test('document type group overrides resolve effective style for preview', () => {
+  const row: IncomeBrandingProfileRow = {
+    id: 'p1',
+    organization_id: 'o1',
+    issuer_business_id: 'b1',
+    represented_client_id: null,
+    logo_file_asset_id: null,
+    signature_file_asset_id: null,
+    company_subtitle: null,
+    document_style_key: 'classic',
+    color_theme_key: 'black_white',
+    primary_color: '#111827',
+    secondary_color: '#ffffff',
+    table_header_color: '#111827',
+    totals_color: '#111827',
+    client_block_position: 'right',
+    footer_text: null,
+    bank_name: null,
+    bank_branch: null,
+    bank_account: null,
+    swift: null,
+    iban: null,
+    email_subject_template: null,
+    email_body_template: null,
+    customer_notes: null,
+    terms_and_conditions: null,
+    display_options: {},
+    payment_methods: [],
+    document_attachments: [],
+    default_payment_terms: null,
+    document_type_style_overrides: {
+      tax_group: { document_style_key: 'classic', color_theme_key: 'red' },
+    },
+  };
+  const resolved = resolveBrandingProfileForDocumentTypeGroup(row, { logo_data_url: null, signature_data_url: null }, 'tax_group');
+  assert.equal(resolved.color_theme_key, 'red');
+  const html = renderStudioSamplePreviewHtml(resolved, 'חשבונית מס');
+  assert.match(html, /חשבונית מס/);
+  assert.match(html, /לקוח לדוגמה/);
+  assert.doesNotMatch(html, /Test4/);
 });
 
 test('document style templates expose 3 studio archetypes', () => {
@@ -92,14 +155,14 @@ test('legacy profile without studio keys maps to defaults', () => {
   };
   const resolved = resolveBrandingProfile(row, { logo_data_url: null, signature_data_url: null });
   assert.equal(resolved.document_style_key, DEFAULT_DOCUMENT_STYLE_KEY);
-  assert.equal(resolved.color_theme_key, 'modern_blue');
+  assert.equal(resolved.color_theme_key, 'dark_blue');
   assert.ok(resolved.color_theme);
 });
 
 test('applyColorThemeToColorColumns syncs stored color columns from theme', () => {
-  const theme = resolveColorThemePreset('emerald')!;
+  const theme = resolveColorThemePreset('teal')!;
   const cols = applyColorThemeToColorColumns(theme);
-  assert.equal(cols.color_theme_key, 'emerald');
+  assert.equal(cols.color_theme_key, 'teal');
   assert.equal(cols.table_header_color, theme.table_header_color);
   assert.equal(cols.totals_color, theme.totals_accent_color);
 });
@@ -114,11 +177,11 @@ test('preview uses theme tokens, elegant layout, and draft number label', () => 
     signature_file_asset_id: null,
     company_subtitle: 'סלוגן',
     document_style_key: 'elegant',
-    color_theme_key: 'executive_navy',
-    primary_color: '#1e293b',
-    secondary_color: '#f8fafc',
-    table_header_color: '#1e293b',
-    totals_color: '#334155',
+    color_theme_key: 'dark_blue',
+    primary_color: '#1f559a',
+    secondary_color: '#ffffff',
+    table_header_color: '#1f559a',
+    totals_color: '#1f559a',
     client_block_position: 'right',
     footer_text: null,
     bank_name: null,
@@ -176,7 +239,7 @@ test('formatDocumentNumberDisplay shows draft label when no number', () => {
 });
 
 test('matchColorThemeKeyFromLegacyColors maps known blue palette', () => {
-  assert.equal(matchColorThemeKeyFromLegacyColors('#1f4b99', '#1f4b99', '#1f4b99'), 'modern_blue');
+  assert.equal(matchColorThemeKeyFromLegacyColors('#1f4b99', '#1f4b99', '#1f4b99'), 'dark_blue');
 });
 
 test('resolveDocumentStyleTemplate accepts three studio archetypes', () => {
@@ -197,11 +260,11 @@ test('legacy minimal saved profile resolves to modern without breaking read', ()
     signature_file_asset_id: null,
     company_subtitle: null,
     document_style_key: 'minimal',
-    color_theme_key: 'modern_blue',
-    primary_color: '#1f4b99',
-    secondary_color: '#e8eef7',
-    table_header_color: '#1f4b99',
-    totals_color: '#1f4b99',
+    color_theme_key: 'dark_blue',
+    primary_color: '#1f559a',
+    secondary_color: '#ffffff',
+    table_header_color: '#1f559a',
+    totals_color: '#1f559a',
     client_block_position: 'right',
     footer_text: null,
     bank_name: null,
@@ -233,11 +296,11 @@ test('preview html differs across classic modern and elegant styles', () => {
     signature_file_asset_id: null,
     company_subtitle: 'סלוגן',
     document_style_key: 'classic',
-    color_theme_key: 'elegant_gold',
-    primary_color: '#8a6d3b',
-    secondary_color: '#faf8f3',
-    table_header_color: '#8a6d3b',
-    totals_color: '#8a6d3b',
+    color_theme_key: 'yellow',
+    primary_color: '#ffe384',
+    secondary_color: '#ffe384',
+    table_header_color: '#ffe384',
+    totals_color: '#ffe384',
     client_block_position: 'right',
     footer_text: null,
     bank_name: null,
@@ -303,10 +366,10 @@ test('preview html differs across classic modern and elegant styles', () => {
   assert.doesNotMatch(classicBody, /class="nx-doc__doc-type-banner nx-doc__doc-type-banner--subtle"/);
   assert.doesNotMatch(classicBody, /nx-doc__header--modern/);
 
-  const goldTheme = resolveColorThemePreset('elegant_gold')!;
-  const goldPalette = resolveBrandingPreviewThemePalette(goldTheme);
-  assert.equal(goldPalette.totals_accent_color, '#8a6d3b');
-  assert.match(classicHtml, /--nx-doc-theme-accent:\s*#8a6d3b/);
+  const yellowTheme = resolveColorThemePreset('yellow')!;
+  const yellowPalette = resolveBrandingPreviewThemePalette(yellowTheme);
+  assert.equal(yellowPalette.totals_accent_color, '#ffe384');
+  assert.match(classicHtml, /--nx-doc-theme-accent:\s*#ffe384/);
   assert.match(classicHtml, /\.nx-doc__grand-total strong \{ color: var\(--nx-doc-theme-accent\)/);
   assert.doesNotMatch(classicHtml, /#1f4b99/);
 
@@ -347,11 +410,11 @@ test('saved document style and theme are reflected in preview html output', () =
     signature_file_asset_id: null,
     company_subtitle: null,
     document_style_key: 'elegant',
-    color_theme_key: 'elegant_gold',
-    primary_color: '#8a6d3b',
-    secondary_color: '#faf8f3',
-    table_header_color: '#8a6d3b',
-    totals_color: '#8a6d3b',
+    color_theme_key: 'yellow',
+    primary_color: '#ffe384',
+    secondary_color: '#ffe384',
+    table_header_color: '#ffe384',
+    totals_color: '#ffe384',
     client_block_position: 'right',
     footer_text: null,
     bank_name: null,
@@ -370,7 +433,7 @@ test('saved document style and theme are reflected in preview html output', () =
   };
   const resolved = resolveBrandingProfile(row, { logo_data_url: null, signature_data_url: null });
   assert.equal(resolved.document_style_key, 'elegant');
-  assert.equal(resolved.color_theme_key, 'elegant_gold');
+  assert.equal(resolved.color_theme_key, 'yellow');
   const html = renderIncomeBrandedPreviewHtml({
     branding: resolved,
     docTypeLabel: 'חשבונית מס',
@@ -394,7 +457,7 @@ test('saved document style and theme are reflected in preview html output', () =
   });
   assert.match(html, /nx-doc nx-doc--elegant/);
   assert.match(html, /nx-doc__header--elegant/);
-  assert.match(html, /--nx-doc-theme-accent:\s*#8a6d3b/);
+  assert.match(html, /--nx-doc-theme-accent:\s*#ffe384/);
   assert.doesNotMatch(html, /#1f4b99/);
 });
 
@@ -423,7 +486,7 @@ test('preview draft command is registered and does not persist', async () => {
   assert.match(commands, /INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT/);
   assert.match(commands, /executeUpdateIncomeDocumentBrandingProfilePreviewDraft/);
   assert.match(service, /export async function previewIncomeDocumentBrandingProfileDraft/);
-  assert.match(service, /renderStudioSamplePreviewHtml\(resolved\)/);
+  assert.match(service, /renderStudioSamplePreviewHtml\(resolved, groupDef\.sample_document_type_label\)/);
   assert.match(service, /email_template_preview/);
 });
 
@@ -508,4 +571,53 @@ test('email tab UI uses friendly fields and Hebrew token chips', async () => {
   assert.match(panel, /buildBrandingModalSaveBody[\s\S]*email_subject_friendly/);
   assert.doesNotMatch(panel, /hint="\{\{document_type\}\}/);
   assert.doesNotMatch(panel, /value=\{draft\.email_subject_template\}/);
+});
+
+test('studio sample issuer identity uses placeholder business data only', () => {
+  const identity = buildStudioSampleIssuerIdentityPreview();
+  assert.equal(identity.business_name, 'שם העסק');
+  assert.equal(identity.tax_id, '123456789');
+  assert.equal(identity.sample_only_label, 'תצוגת דוגמה בלבד');
+  assert.equal(identity.source_badge_label, 'תצוגת דוגמה בלבד');
+  assert.match(identity.helper_text ?? '', /דוגמה בלבד/);
+});
+
+test('studio sample live preview labels sample-only and uses example customer', () => {
+  const row: IncomeBrandingProfileRow = {
+    id: 'p1',
+    organization_id: 'o1',
+    issuer_business_id: 'b1',
+    represented_client_id: null,
+    logo_file_asset_id: null,
+    signature_file_asset_id: null,
+    company_subtitle: null,
+    document_style_key: 'classic',
+    primary_color: '#2563eb',
+    secondary_color: '#7c3aed',
+    table_header_color: '#2563eb',
+    totals_color: '#2563eb',
+    client_block_position: 'right',
+    footer_text: null,
+    bank_name: null,
+    bank_branch: null,
+    bank_account: null,
+    iban: null,
+    swift: null,
+    email_subject_template: null,
+    email_body_template: null,
+    customer_notes: null,
+    terms_and_conditions: null,
+    logo_size_key: 'medium',
+    color_theme_key: 'professional_blue',
+    display_options_json: null,
+    payment_methods_json: null,
+  };
+  const resolved = resolveBrandingProfile(row, { logo_data_url: null, signature_data_url: null });
+  const preview = buildStudioSampleLivePreview({
+    preview_html: renderStudioSamplePreviewHtml(resolved),
+  });
+  assert.equal(preview.sample_only_label, 'תצוגת דוגמה בלבד');
+  assert.equal(preview.preview_footnote, 'המסמך הסופי נוצר בשרת.');
+  assert.match(preview.preview_html, /לקוח לדוגמה/);
+  assert.doesNotMatch(preview.preview_html, /Test4/);
 });

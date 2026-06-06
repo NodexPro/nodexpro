@@ -1,4 +1,4 @@
-import { formatDocumentNumberDisplay, resolveBrandingPreviewThemePalette, resolveLogoSizeDimensions, } from './income-document-branding.pure.js';
+import { formatDocumentNumberDisplay, resolveBrandingPreviewThemePalette, resolveLogoSizeDimensions, STUDIO_SAMPLE_ISSUER, STUDIO_SAMPLE_RECIPIENT, } from './income-document-branding.pure.js';
 const INVOICE_FONT = 'Arial, Helvetica, "Segoe UI", sans-serif';
 function escapeHtml(value) {
     const s = value == null ? '' : String(value);
@@ -293,24 +293,24 @@ export function renderIncomeBrandedPreviewHtml(params) {
 </div>
   `.trim();
 }
-export function renderStudioSamplePreviewHtml(branding) {
+export function renderStudioSamplePreviewHtml(branding, docTypeLabel = 'הצעת מחיר') {
     return renderIncomeBrandedPreviewHtml({
         branding,
-        docTypeLabel: 'הצעת מחיר',
+        docTypeLabel,
         numberPreview: null,
         issuer: {
-            display_name: 'שם העסק',
-            tax_id: '123456789',
-            address: 'רחוב העסק 1, תל אביב',
-            phone: '03-1234567',
-            email: 'office@example.com',
+            display_name: STUDIO_SAMPLE_ISSUER.display_name,
+            tax_id: STUDIO_SAMPLE_ISSUER.tax_id,
+            address: STUDIO_SAMPLE_ISSUER.address,
+            phone: STUDIO_SAMPLE_ISSUER.phone,
+            email: STUDIO_SAMPLE_ISSUER.email,
         },
         recipient: {
-            display_name: 'לקוח לדוגמה',
-            tax_id: '987654321',
-            address: 'רחוב הלקוח 5',
-            phone: '050-1234567',
-            email: 'client@example.com',
+            display_name: STUDIO_SAMPLE_RECIPIENT.display_name,
+            tax_id: STUDIO_SAMPLE_RECIPIENT.tax_id,
+            address: STUDIO_SAMPLE_RECIPIENT.address,
+            phone: STUDIO_SAMPLE_RECIPIENT.phone,
+            email: STUDIO_SAMPLE_RECIPIENT.email,
         },
         document_date: '2026-05-29',
         due_date: '2026-06-29',

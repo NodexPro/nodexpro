@@ -10,6 +10,9 @@ import type {
   IncomeBrandingStudioSectionKey,
   IncomeColorThemePresetStudio,
   IncomeDocumentTypeStyleDefault,
+  IncomeDocumentTypeStyleGroup,
+  IncomeDocumentTypeStyleGroupKey,
+  IncomeDocumentTypeStyleOverride,
   IncomeBrandingProfileRow,
   IncomeBrandingQuantityPosition,
   IncomeBrandingResolvedProfile,
@@ -28,10 +31,35 @@ import { STUDIO_DOCUMENT_STYLE_KEYS } from './income-document-branding.types.js'
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 export const DEFAULT_DOCUMENT_STYLE_KEY: IncomeDocumentStyleTemplateKey = 'classic';
-export const DEFAULT_COLOR_THEME_KEY = 'modern_blue';
+export const DEFAULT_COLOR_THEME_KEY = 'black_white';
 export const DEFAULT_LOGO_SIZE_KEY: IncomeLogoSizeKey = 'medium';
-export const DEFAULT_PRIMARY_COLOR = '#1f4b99';
-export const DEFAULT_SECONDARY_COLOR = '#e8eef7';
+export const DEFAULT_PRIMARY_COLOR = '#111827';
+export const DEFAULT_SECONDARY_COLOR = '#ffffff';
+
+export const INCOME_DOCUMENT_TYPE_STYLE_GROUP_KEYS = [
+  'quote_deal',
+  'tax_group',
+  'receipt',
+  'credit',
+] as const satisfies readonly IncomeDocumentTypeStyleGroupKey[];
+
+export const LEGACY_COLOR_KEY_TO_THEME: Record<string, string> = {
+  classic_blue: 'dark_blue',
+  soft_green: 'green',
+  elegant_purple: 'pastel_purple',
+  professional_teal: 'teal',
+  soft_gold: 'yellow',
+  business_gray: 'gray',
+  calm_red: 'red',
+  nodexpro_gradient: 'bright_blue',
+  modern_blue: 'dark_blue',
+  executive_navy: 'dark_blue',
+  elegant_gold: 'yellow',
+  emerald: 'teal',
+  royal_purple: 'pastel_purple',
+  clean_gray: 'gray',
+  minimal_light: 'pale_blue',
+};
 
 const LEGACY_COLOR_KEYS = new Set([
   'classic_blue',
@@ -43,17 +71,6 @@ const LEGACY_COLOR_KEYS = new Set([
   'calm_red',
   'nodexpro_gradient',
 ]);
-
-export const LEGACY_COLOR_KEY_TO_THEME: Record<string, string> = {
-  classic_blue: 'modern_blue',
-  soft_green: 'emerald',
-  elegant_purple: 'royal_purple',
-  professional_teal: 'emerald',
-  soft_gold: 'elegant_gold',
-  business_gray: 'clean_gray',
-  calm_red: 'executive_navy',
-  nodexpro_gradient: 'nodexpro_gradient',
-};
 
 export const DEFAULT_DISPLAY_OPTIONS: IncomeBrandingDisplayOptions = {
   show_logo: true,
@@ -129,124 +146,58 @@ function buildStyleMiniPreview(
 </div>`;
 }
 
+function buildAccentColorTheme(
+  key: string,
+  label: string,
+  accentHex: string,
+  options?: { background?: string; border?: string; textOnLight?: string; pale?: boolean },
+): Omit<IncomeColorThemePreset, 'mini_preview_markup'> {
+  const accent = accentHex.toLowerCase();
+  const background = options?.background ?? (options?.pale ? accent : '#ffffff');
+  const border = options?.border ?? '#d1d5db';
+  const textOnLight = options?.textOnLight ?? '#111827';
+  const useDarkHeaderText = options?.pale === true || key === 'yellow' || key === 'pale_peach';
+  return {
+    key,
+    label,
+    gradient: { from: accent, to: accent },
+    table_header_color: accent,
+    totals_accent_color: accent,
+    recipient_accent_color: accent,
+    recipient_block_background: background,
+    recipient_block_border: border,
+    text_on_dark: useDarkHeaderText ? textOnLight : '#ffffff',
+    text_on_light: textOnLight,
+    print_safe: true,
+  };
+}
+
 const COLOR_THEME_DEFS: Omit<IncomeColorThemePreset, 'mini_preview_markup'>[] = [
   {
-    key: 'modern_blue',
-    label: 'Modern Blue',
-    gradient: { from: '#1f4b99', to: '#2f6fd6' },
-    table_header_color: '#1f4b99',
-    totals_accent_color: '#1f4b99',
-    recipient_accent_color: '#1f4b99',
-    recipient_block_background: '#f8fafc',
-    recipient_block_border: '#cbd5e1',
-    text_on_dark: '#ffffff',
-    text_on_light: '#172033',
-    print_safe: true,
-  },
-  {
-    key: 'executive_navy',
-    label: 'Executive Navy',
-    gradient: { from: '#1e293b', to: '#334155' },
-    table_header_color: '#1e293b',
-    totals_accent_color: '#334155',
-    recipient_accent_color: '#334155',
-    recipient_block_background: '#f8fafc',
-    recipient_block_border: '#cbd5e1',
-    text_on_dark: '#ffffff',
-    text_on_light: '#172033',
-    print_safe: true,
-  },
-  {
-    key: 'elegant_gold',
-    label: 'Elegant Gold',
-    gradient: { from: '#8a6d3b', to: '#c4a35a' },
-    table_header_color: '#8a6d3b',
-    totals_accent_color: '#8a6d3b',
-    recipient_accent_color: '#8a6d3b',
-    recipient_block_background: '#faf8f3',
-    recipient_block_border: '#d4c4a8',
-    text_on_dark: '#ffffff',
-    text_on_light: '#172033',
-    print_safe: true,
-  },
-  {
-    key: 'emerald',
-    label: 'Emerald',
-    gradient: { from: '#1e5c4a', to: '#2d7a62' },
-    table_header_color: '#1e5c4a',
-    totals_accent_color: '#1e5c4a',
-    recipient_accent_color: '#1e5c4a',
-    recipient_block_background: '#f8faf9',
-    recipient_block_border: '#cbd5e1',
-    text_on_dark: '#ffffff',
-    text_on_light: '#172033',
-    print_safe: true,
-  },
-  {
-    key: 'royal_purple',
-    label: 'Royal Purple',
-    gradient: { from: '#4c3d6e', to: '#6b5b8a' },
-    table_header_color: '#4c3d6e',
-    totals_accent_color: '#4c3d6e',
-    recipient_accent_color: '#4c3d6e',
-    recipient_block_background: '#f9f8fb',
-    recipient_block_border: '#cbd5e1',
-    text_on_dark: '#ffffff',
-    text_on_light: '#172033',
-    print_safe: true,
-  },
-  {
-    key: 'clean_gray',
-    label: 'Clean Gray',
-    gradient: { from: '#475569', to: '#64748b' },
-    table_header_color: '#475569',
-    totals_accent_color: '#64748b',
-    recipient_accent_color: '#64748b',
-    recipient_block_background: '#f8fafc',
-    recipient_block_border: '#cbd5e1',
-    text_on_dark: '#ffffff',
-    text_on_light: '#172033',
-    print_safe: true,
-  },
-  {
     key: 'black_white',
-    label: 'Black & White',
-    gradient: { from: '#ffffff', to: '#ffffff' },
-    table_header_color: '#1e293b',
-    totals_accent_color: '#1e293b',
-    recipient_accent_color: '#64748b',
+    label: 'שחור לבן',
+    gradient: { from: '#111827', to: '#111827' },
+    table_header_color: '#111827',
+    totals_accent_color: '#111827',
+    recipient_accent_color: '#111827',
     recipient_block_background: '#ffffff',
-    recipient_block_border: '#cbd5e1',
+    recipient_block_border: '#d1d5db',
     text_on_dark: '#ffffff',
-    text_on_light: '#0f172a',
+    text_on_light: '#111827',
     print_safe: true,
   },
-  {
-    key: 'minimal_light',
-    label: 'Minimal Light',
-    gradient: { from: '#94a3b8', to: '#cbd5e1' },
-    table_header_color: '#64748b',
-    totals_accent_color: '#475569',
-    recipient_accent_color: '#64748b',
-    recipient_block_background: '#ffffff',
-    recipient_block_border: '#e2e8f0',
-    text_on_dark: '#ffffff',
-    text_on_light: '#172033',
-    print_safe: true,
-  },
-  {
-    key: 'nodexpro_gradient',
-    label: 'NodexPro Gradient',
-    gradient: { from: '#38bdf8', to: '#7c3aed' },
-    table_header_color: '#4f46e5',
-    totals_accent_color: '#4f46e5',
-    recipient_accent_color: '#4f46e5',
-    recipient_block_background: '#f8fafc',
-    recipient_block_border: '#cbd5e1',
-    text_on_dark: '#ffffff',
-    text_on_light: '#172033',
-    print_safe: true,
-  },
+  buildAccentColorTheme('pastel_purple', 'Pastel Purple', '#D8D0FF', { pale: true }),
+  buildAccentColorTheme('teal', 'Teal', '#3BB6C6'),
+  buildAccentColorTheme('dark_blue', 'Dark Blue', '#1F559A'),
+  buildAccentColorTheme('gray', 'Gray', '#94A3B8'),
+  buildAccentColorTheme('pale_peach', 'Pale Peach', '#F8DED6', { pale: true }),
+  buildAccentColorTheme('pale_green', 'Pale Green', '#DDF5DF', { pale: true }),
+  buildAccentColorTheme('pale_mint', 'Pale Mint', '#D9F1EF', { pale: true }),
+  buildAccentColorTheme('pale_blue', 'Pale Blue', '#DDEAF7', { pale: true }),
+  buildAccentColorTheme('red', 'Red', '#FF3B4A'),
+  buildAccentColorTheme('bright_blue', 'Bright Blue', '#5B9BEF'),
+  buildAccentColorTheme('green', 'Green', '#58C978'),
+  buildAccentColorTheme('yellow', 'Yellow', '#FFE384', { pale: true }),
 ];
 
 export const INCOME_COLOR_THEME_PRESETS: IncomeColorThemePreset[] = COLOR_THEME_DEFS.map((t) => ({
@@ -334,36 +285,210 @@ export function getColorThemePresets(): IncomeColorThemePreset[] {
   }));
 }
 
-const STUDIO_COLOR_THEME_CATALOG: Array<{ key: string; studio_label: string }> = [
-  { key: 'modern_blue', studio_label: 'Professional Blue' },
-  { key: 'emerald', studio_label: 'Emerald' },
-  { key: 'executive_navy', studio_label: 'Graphite' },
-  { key: 'elegant_gold', studio_label: 'Elegant Gold' },
-  { key: 'black_white', studio_label: 'Black & White' },
-];
+const STUDIO_COLOR_THEME_LABELS: Record<string, string> = {
+  black_white: 'שחור לבן',
+  pastel_purple: 'Pastel Purple',
+  teal: 'Teal',
+  dark_blue: 'Dark Blue',
+  gray: 'Gray',
+  pale_peach: 'Pale Peach',
+  pale_green: 'Pale Green',
+  pale_mint: 'Pale Mint',
+  pale_blue: 'Pale Blue',
+  red: 'Red',
+  bright_blue: 'Bright Blue',
+  green: 'Green',
+  yellow: 'Yellow',
+};
 
 export function getStudioColorThemePresets(): IncomeColorThemePresetStudio[] {
-  return STUDIO_COLOR_THEME_CATALOG.map(({ key, studio_label }) => {
-    const preset = resolveColorThemePreset(key);
-    if (!preset) return null;
-    return {
-      ...preset,
-      gradient: { ...preset.gradient },
-      mini_preview_markup: buildThemeMiniPreview(preset),
-      studio_label,
-    };
-  }).filter((p): p is IncomeColorThemePresetStudio => p != null);
+  return INCOME_COLOR_THEME_PRESETS.map((preset) => ({
+    ...preset,
+    gradient: { ...preset.gradient },
+    mini_preview_markup: buildThemeMiniPreview(preset),
+    studio_label: STUDIO_COLOR_THEME_LABELS[preset.key] ?? preset.label,
+  }));
 }
 
+export const INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS: Array<
+  Omit<IncomeDocumentTypeStyleGroup, 'effective_document_style_key' | 'effective_color_theme_key'>
+> = [
+  {
+    group_key: 'quote_deal',
+    group_label: 'הצעת מחיר · חשבון עסקה',
+    types_label: 'הצעת מחיר, חשבון עסקה',
+    sample_document_type_label: 'הצעת מחיר',
+  },
+  {
+    group_key: 'tax_group',
+    group_label: 'חשבונית מס · חשבונית מס/קבלה',
+    types_label: 'חשבונית מס, חשבונית מס/קבלה',
+    sample_document_type_label: 'חשבונית מס',
+  },
+  {
+    group_key: 'receipt',
+    group_label: 'קבלה',
+    types_label: 'קבלה',
+    sample_document_type_label: 'קבלה',
+  },
+  {
+    group_key: 'credit',
+    group_label: 'זיכוי',
+    types_label: 'חשבונית מס זיכוי',
+    sample_document_type_label: 'זיכוי',
+  },
+];
+
 export const INCOME_DOCUMENT_TYPE_STYLE_DEFAULTS: IncomeDocumentTypeStyleDefault[] = [
-  { document_type_key: 'quote', document_type_label: 'הצעת מחיר', default_document_style_key: 'elegant', default_color_theme_key: 'elegant_gold' },
-  { document_type_key: 'tax_invoice', document_type_label: 'חשבונית מס', default_document_style_key: 'classic', default_color_theme_key: 'modern_blue' },
-  { document_type_key: 'receipt', document_type_label: 'קבלה', default_document_style_key: 'modern', default_color_theme_key: 'clean_gray' },
-  { document_type_key: 'credit_note', document_type_label: 'זיכוי', default_document_style_key: 'classic', default_color_theme_key: 'modern_blue' },
+  { document_type_key: 'quote', document_type_label: 'הצעת מחיר', default_document_style_key: 'classic', default_color_theme_key: 'black_white' },
+  { document_type_key: 'tax_invoice', document_type_label: 'חשבונית מס', default_document_style_key: 'classic', default_color_theme_key: 'black_white' },
+  { document_type_key: 'receipt', document_type_label: 'קבלה', default_document_style_key: 'classic', default_color_theme_key: 'black_white' },
+  { document_type_key: 'credit_note', document_type_label: 'זיכוי', default_document_style_key: 'classic', default_color_theme_key: 'black_white' },
 ];
 
 export function getDocumentTypeStyleDefaults(): IncomeDocumentTypeStyleDefault[] {
   return INCOME_DOCUMENT_TYPE_STYLE_DEFAULTS.map((d) => ({ ...d }));
+}
+
+export function normalizeDocumentTypeStyleGroupKey(
+  value: unknown,
+): IncomeDocumentTypeStyleGroupKey | null {
+  const key = String(value ?? '').trim();
+  return INCOME_DOCUMENT_TYPE_STYLE_GROUP_KEYS.includes(key as IncomeDocumentTypeStyleGroupKey)
+    ? (key as IncomeDocumentTypeStyleGroupKey)
+    : null;
+}
+
+export function resolveDocumentTypeStyleGroupKey(documentType: string): IncomeDocumentTypeStyleGroupKey {
+  const key = String(documentType ?? '').trim();
+  if (key === 'tax_invoice' || key === 'tax_invoice_receipt') return 'tax_group';
+  if (key === 'receipt') return 'receipt';
+  if (key === 'credit_tax_invoice' || key === 'credit_note') return 'credit';
+  if (key === 'deal_invoice' || key === 'quote') return 'quote_deal';
+  return 'quote_deal';
+}
+
+export function normalizeColorThemeKey(key: string): string {
+  const trimmed = String(key ?? '').trim();
+  if (!trimmed) return DEFAULT_COLOR_THEME_KEY;
+  if (INCOME_COLOR_THEME_PRESETS.some((preset) => preset.key === trimmed)) return trimmed;
+  return LEGACY_COLOR_KEY_TO_THEME[trimmed] ?? DEFAULT_COLOR_THEME_KEY;
+}
+
+export function parseDocumentTypeStyleOverridesJson(
+  raw: unknown,
+): Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const source = raw as Record<string, unknown>;
+  const out: Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>> = {};
+  for (const groupKey of INCOME_DOCUMENT_TYPE_STYLE_GROUP_KEYS) {
+    const entry = source[groupKey];
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const row = entry as Record<string, unknown>;
+    const styleRaw = String(row.document_style_key ?? '').trim();
+    const colorRaw = String(row.color_theme_key ?? '').trim();
+    if (!styleRaw && !colorRaw) continue;
+    const document_style_key = normalizeStudioDocumentStyleKey(styleRaw || DEFAULT_DOCUMENT_STYLE_KEY);
+    const color_theme_key = normalizeColorThemeKey(colorRaw || DEFAULT_COLOR_THEME_KEY);
+    if (!resolveDocumentStyleTemplate(document_style_key) || !resolveColorThemePreset(color_theme_key)) continue;
+    out[groupKey] = { document_style_key, color_theme_key };
+  }
+  return out;
+}
+
+export function serializeDocumentTypeStyleOverridesJson(
+  overrides: Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const groupKey of INCOME_DOCUMENT_TYPE_STYLE_GROUP_KEYS) {
+    const entry = overrides[groupKey];
+    if (!entry) continue;
+    out[groupKey] = {
+      document_style_key: entry.document_style_key,
+      color_theme_key: entry.color_theme_key,
+    };
+  }
+  return out;
+}
+
+export function resolveEffectiveStyleForGroup(
+  groupKey: IncomeDocumentTypeStyleGroupKey,
+  overrides: Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>>,
+): IncomeDocumentTypeStyleOverride {
+  const stored = overrides[groupKey];
+  if (stored) {
+    return {
+      document_style_key: normalizeStudioDocumentStyleKey(stored.document_style_key),
+      color_theme_key: normalizeColorThemeKey(stored.color_theme_key),
+    };
+  }
+  return {
+    document_style_key: DEFAULT_DOCUMENT_STYLE_KEY,
+    color_theme_key: DEFAULT_COLOR_THEME_KEY,
+  };
+}
+
+export function buildDocumentTypeStyleGroups(
+  overrides: Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>>,
+): IncomeDocumentTypeStyleGroup[] {
+  return INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS.map((def) => {
+    const effective = resolveEffectiveStyleForGroup(def.group_key, overrides);
+    return {
+      ...def,
+      effective_document_style_key: effective.document_style_key,
+      effective_color_theme_key: effective.color_theme_key,
+    };
+  });
+}
+
+export function mergeDocumentTypeStyleOverrides(
+  current: Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>>,
+  incoming: Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>>,
+): Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>> {
+  return { ...current, ...incoming };
+}
+
+export function applyDocumentTypeStyleOverridesFromBody(
+  row: IncomeBrandingProfileRow,
+  body: Record<string, unknown>,
+): Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>> {
+  let overrides = parseDocumentTypeStyleOverridesJson(row.document_type_style_overrides);
+  if (
+    body.document_type_style_overrides &&
+    typeof body.document_type_style_overrides === 'object' &&
+    !Array.isArray(body.document_type_style_overrides)
+  ) {
+    overrides = mergeDocumentTypeStyleOverrides(
+      overrides,
+      parseDocumentTypeStyleOverridesJson(body.document_type_style_overrides),
+    );
+  }
+  const groupKey =
+    normalizeDocumentTypeStyleGroupKey(body.selected_document_type_group_key) ?? 'quote_deal';
+  const hasStyle = body.document_style_key !== undefined;
+  const hasColor = body.color_theme_key !== undefined || body.color_preset_key !== undefined;
+  if (hasStyle || hasColor) {
+    const current = resolveEffectiveStyleForGroup(groupKey, overrides);
+    const document_style_key = hasStyle
+      ? normalizeStudioDocumentStyleKey(String(body.document_style_key))
+      : current.document_style_key;
+    const color_theme_key = hasColor
+      ? String(body.color_theme_key ?? body.color_preset_key ?? '').trim()
+      : current.color_theme_key;
+    if (!resolveDocumentStyleTemplate(document_style_key)) {
+      throw badRequest('document_style_key is invalid', 'BRANDING_DOCUMENT_STYLE_INVALID');
+    }
+    if (!resolveColorThemePreset(color_theme_key)) {
+      throw badRequest('color_theme_key is invalid', 'BRANDING_COLOR_THEME_INVALID');
+    }
+    overrides = mergeDocumentTypeStyleOverrides(overrides, {
+      [groupKey]: {
+        document_style_key,
+        color_theme_key: normalizeColorThemeKey(color_theme_key),
+      },
+    });
+  }
+  return overrides;
 }
 
 export function getStudioNavigationSections(): IncomeBrandingStudioNavSection[] {
@@ -452,6 +577,8 @@ export function buildIssuerIdentityPreview(params: {
   email: string | null;
   read_only: boolean;
   helper_text: string | null;
+  sample_only_label?: string | null;
+  source_badge_label?: string | null;
 }): IncomeBrandingIssuerIdentityPreview {
   return {
     business_name: params.display_name,
@@ -462,6 +589,63 @@ export function buildIssuerIdentityPreview(params: {
     website: null,
     read_only: params.read_only,
     helper_text: params.helper_text,
+    sample_only_label: params.sample_only_label ?? null,
+    source_badge_label: params.source_badge_label ?? null,
+  };
+}
+
+export const STUDIO_SAMPLE_ONLY_LABEL = 'תצוגת דוגמה בלבד';
+
+export const STUDIO_SAMPLE_ISSUER = {
+  display_name: 'שם העסק',
+  tax_id: '123456789',
+  address: 'רחוב העסק 1, תל אביב',
+  phone: '03-1234567',
+  email: 'office@example.com',
+} as const;
+
+export const STUDIO_SAMPLE_RECIPIENT = {
+  display_name: 'לקוח לדוגמה',
+  tax_id: '987654321',
+  address: 'רחוב הלקוח 5',
+  phone: '050-1234567',
+  email: 'client@example.com',
+} as const;
+
+export function buildStudioSampleIssuerIdentityPreview(): IncomeBrandingIssuerIdentityPreview {
+  return buildIssuerIdentityPreview({
+    display_name: STUDIO_SAMPLE_ISSUER.display_name,
+    tax_id: STUDIO_SAMPLE_ISSUER.tax_id,
+    address: STUDIO_SAMPLE_ISSUER.address,
+    phone: STUDIO_SAMPLE_ISSUER.phone,
+    email: STUDIO_SAMPLE_ISSUER.email,
+    read_only: true,
+    helper_text:
+      'פרטי העסק במסמך נלקחים מפרופיל העסק או מהלקוח המיוצג בעת הפקת מסמך — כאן מוצגת דוגמה בלבד.',
+    sample_only_label: STUDIO_SAMPLE_ONLY_LABEL,
+    source_badge_label: STUDIO_SAMPLE_ONLY_LABEL,
+  });
+}
+
+export function buildStudioSampleLivePreview(params: {
+  preview_html: string;
+  sample_document_type_label?: string;
+  sample_document_number_display?: string | null;
+}): {
+  visible: boolean;
+  preview_html: string;
+  sample_document_type_label: string;
+  sample_document_number_display: string | null;
+  sample_only_label: string;
+  preview_footnote: string;
+} {
+  return {
+    visible: true,
+    preview_html: params.preview_html,
+    sample_document_type_label: params.sample_document_type_label ?? 'הצעת מחיר',
+    sample_document_number_display: params.sample_document_number_display ?? null,
+    sample_only_label: STUDIO_SAMPLE_ONLY_LABEL,
+    preview_footnote: 'המסמך הסופי נוצר בשרת.',
   };
 }
 
@@ -499,8 +683,10 @@ export function getLogoSizeOptions(): IncomeLogoSizeOption[] {
 }
 
 export function resolveColorThemePreset(key: string): IncomeColorThemePreset | null {
-  const k = key.trim();
-  return INCOME_COLOR_THEME_PRESETS.find((p) => p.key === k) ?? null;
+  const trimmed = String(key ?? '').trim();
+  if (!trimmed) return null;
+  const normalized = LEGACY_COLOR_KEY_TO_THEME[trimmed] ?? trimmed;
+  return INCOME_COLOR_THEME_PRESETS.find((p) => p.key === normalized) ?? null;
 }
 
 /** @deprecated Use resolveColorThemePreset */
@@ -547,17 +733,15 @@ export function resolveDocumentStyleKeyForRow(row: IncomeBrandingProfileRow): In
 
 export function resolveColorThemeKeyForRow(row: IncomeBrandingProfileRow): string {
   const explicit = String(row.color_theme_key ?? '').trim();
-  if (explicit && resolveColorThemePreset(explicit)) {
-    return explicit;
+  if (explicit) {
+    return normalizeColorThemeKey(explicit);
   }
   const styleRaw = String(row.document_style_key ?? '').trim();
   if (LEGACY_COLOR_KEYS.has(styleRaw)) {
-    return LEGACY_COLOR_KEY_TO_THEME[styleRaw] ?? DEFAULT_COLOR_THEME_KEY;
+    return normalizeColorThemeKey(LEGACY_COLOR_KEY_TO_THEME[styleRaw] ?? DEFAULT_COLOR_THEME_KEY);
   }
-  return matchColorThemeKeyFromLegacyColors(
-    row.primary_color,
-    row.table_header_color,
-    row.totals_color,
+  return normalizeColorThemeKey(
+    matchColorThemeKeyFromLegacyColors(row.primary_color, row.table_header_color, row.totals_color),
   );
 }
 
@@ -583,18 +767,25 @@ export function matchColorThemeKeyFromLegacyColors(
   const tot = coerceHexColor(totalsColor, DEFAULT_PRIMARY_COLOR);
 
   const legacyMap: Record<string, string> = {
-    '#1f4b99': 'modern_blue',
-    '#1e5c4a': 'emerald',
-    '#8b3a3a': 'executive_navy',
-    '#475569': 'clean_gray',
-    '#64748b': 'clean_gray',
-    '#1e293b': 'executive_navy',
-    '#334155': 'executive_navy',
-    '#4c3d6e': 'royal_purple',
-    '#0f5c5c': 'emerald',
-    '#4f46e5': 'nodexpro_gradient',
-    '#3b82f6': 'nodexpro_gradient',
-    '#8a6d3b': 'elegant_gold',
+    '#111827': 'black_white',
+    '#1f559a': 'dark_blue',
+    '#5b9bef': 'bright_blue',
+    '#3bb6c6': 'teal',
+    '#58c978': 'green',
+    '#ff3b4a': 'red',
+    '#ffe384': 'yellow',
+    '#d8d0ff': 'pastel_purple',
+    '#94a3b8': 'gray',
+    '#f8ded6': 'pale_peach',
+    '#ddf5df': 'pale_green',
+    '#d9f1ef': 'pale_mint',
+    '#ddeaf7': 'pale_blue',
+    '#1f4b99': 'dark_blue',
+    '#1e5c4a': 'teal',
+    '#475569': 'gray',
+    '#64748b': 'gray',
+    '#4c3d6e': 'pastel_purple',
+    '#8a6d3b': 'yellow',
   };
 
   for (const preset of INCOME_COLOR_THEME_PRESETS) {
@@ -737,6 +928,51 @@ export function parsePaymentMethodsJson(raw: unknown): IncomeBrandingPaymentMeth
 
 export function serializePaymentMethodsJson(methods: IncomeBrandingPaymentMethod[]): unknown[] {
   return methods.map((m) => ({ key: m.key, label: m.label, enabled: m.enabled }));
+}
+
+export function applyBrandingStyleToResolvedProfile(
+  base: IncomeBrandingResolvedProfile,
+  styleKey: IncomeDocumentStyleTemplateKey,
+  colorThemeKey: string,
+): IncomeBrandingResolvedProfile {
+  const normalizedStyle = normalizeStudioDocumentStyleKey(styleKey);
+  const theme = resolveColorThemePreset(colorThemeKey)!;
+  const styleTemplate = resolveDocumentStyleTemplate(normalizedStyle)!;
+  const colors = applyColorThemeToColorColumns(theme);
+  return {
+    ...base,
+    document_style_key: normalizedStyle,
+    document_style_template: {
+      ...styleTemplate,
+      mini_preview_markup: buildStyleMiniPreview(normalizedStyle, theme),
+    },
+    color_theme_key: theme.key,
+    color_theme: {
+      ...theme,
+      mini_preview_markup: buildThemeMiniPreview(theme),
+    },
+    primary_color: colors.primary_color,
+    secondary_color: colors.secondary_color,
+    table_header_color: colors.table_header_color,
+    totals_color: colors.totals_color,
+  };
+}
+
+export function resolveBrandingProfileForDocumentTypeGroup(
+  row: IncomeBrandingProfileRow,
+  assets: { logo_data_url: string | null; signature_data_url: string | null },
+  groupKey: IncomeDocumentTypeStyleGroupKey,
+  draftOverrides?: Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>>,
+): IncomeBrandingResolvedProfile {
+  const base = resolveBrandingProfile(row, assets);
+  const overrides =
+    draftOverrides ?? parseDocumentTypeStyleOverridesJson(row.document_type_style_overrides);
+  const effective = resolveEffectiveStyleForGroup(groupKey, overrides);
+  return applyBrandingStyleToResolvedProfile(
+    base,
+    effective.document_style_key,
+    effective.color_theme_key,
+  );
 }
 
 export function resolveBrandingProfile(

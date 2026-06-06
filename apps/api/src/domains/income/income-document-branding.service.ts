@@ -44,7 +44,8 @@ import {
   buildEmailTemplateEditor,
   buildEmailTemplatePreview,
   buildDisplayOptionControls,
-  buildIssuerIdentityPreview,
+  buildStudioSampleIssuerIdentityPreview,
+  buildStudioSampleLivePreview,
   buildPaymentSettingsPanel,
   getDocumentTypeStyleDefaults,
   getStudioColorThemePresets,
@@ -52,8 +53,15 @@ import {
   mergeDisplayOptionsFromStudioBody,
   mergePaymentMethodsFromStudioBody,
   encodeEmailTemplateFromFriendly,
+  buildDocumentTypeStyleGroups,
+  parseDocumentTypeStyleOverridesJson,
+  serializeDocumentTypeStyleOverridesJson,
+  applyDocumentTypeStyleOverridesFromBody,
+  resolveBrandingProfileForDocumentTypeGroup,
+  resolveDocumentTypeStyleGroupKey,
+  normalizeDocumentTypeStyleGroupKey,
+  INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS,
 } from './income-document-branding.pure.js';
-import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import type {
   IncomeBrandingDisplayOptions,
   IncomeBrandingPaymentMethod,
@@ -64,6 +72,7 @@ import type {
   IncomeDocumentBrandingStudio,
   IncomeDocumentBrandingStudioPreviewDraftResult,
   IncomeDocumentStyleTemplateKey,
+  IncomeDocumentTypeStyleGroupKey,
 } from './income-document-branding.types.js';
 import type { IncomeWorkspacePermissions } from './income.types.js';
 import {
@@ -78,9 +87,14 @@ const BRANDING_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const BRANDING_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
 
 const BRANDING_MIGRATION_HINT =
-  'Run Supabase migrations 130_income_document_branding_profiles.sql, 131_income_document_branding_document_style_key.sql, and 132_income_document_branding_studio_keys.sql on production.';
+  'Run Supabase migrations 130–133 for income_document_branding_profiles on production.';
 
-const STUDIO_OPTIONAL_COLUMNS = ['color_theme_key', 'layout_template_key', 'logo_size_key'] as const;
+const STUDIO_OPTIONAL_COLUMNS = [
+  'color_theme_key',
+  'layout_template_key',
+  'logo_size_key',
+  'document_type_style_overrides',
+] as const;
 
 function omitPatchKey(patch: Record<string, unknown>, key: string): Record<string, unknown> {
   const next = { ...patch };
@@ -226,6 +240,7 @@ async function bootstrapFromOrganizationSettings(
     payment_methods: serializePaymentMethodsJson(DEFAULT_PAYMENT_METHODS),
     document_attachments: [],
     default_payment_terms: null,
+    document_type_style_overrides: {},
   };
 
   let { data, error: insErr } = await supabaseAdmin
@@ -281,6 +296,25 @@ export async function loadResolvedBrandingProfile(
   return resolveBrandingProfile(row, { logo_data_url, signature_data_url });
 }
 
+export async function loadResolvedBrandingProfileForDocumentType(
+  scope: ActiveIncomeIssuerScope,
+  documentType: string,
+): Promise<IncomeBrandingResolvedProfile> {
+  const row = await ensureIncomeDocumentBrandingProfile(scope);
+  const logo_data_url = row.logo_file_asset_id
+    ? await fileAssetToDataUrl(row.logo_file_asset_id)
+    : null;
+  const signature_data_url = row.signature_file_asset_id
+    ? await fileAssetToDataUrl(row.signature_file_asset_id)
+    : null;
+  const groupKey = resolveDocumentTypeStyleGroupKey(documentType);
+  return resolveBrandingProfileForDocumentTypeGroup(
+    row,
+    { logo_data_url, signature_data_url },
+    groupKey,
+  );
+}
+
 function buildEmailTemplateStudioParts(resolved: IncomeBrandingResolvedProfile) {
   const tokens = getEmailTemplateTokens();
   return {
@@ -298,59 +332,57 @@ function buildEmailTemplateStudioParts(resolved: IncomeBrandingResolvedProfile) 
   };
 }
 
-function formatIssuerAddressLine(addressJson: unknown): string | null {
-  if (!addressJson || typeof addressJson !== 'object' || Array.isArray(addressJson)) return null;
-  const o = addressJson as Record<string, unknown>;
-  const parts = [o.line1, o.line2, o.city, o.postal_code].filter(
-    (p) => typeof p === 'string' && p.trim(),
-  ) as string[];
-  return parts.length ? parts.join(', ') : null;
-}
-
 async function buildDocumentBrandingStudio(
   scope: ActiveIncomeIssuerScope,
   resolved: IncomeBrandingResolvedProfile,
   row: IncomeBrandingProfileRow,
 ): Promise<IncomeDocumentBrandingStudio> {
   const display = resolved.display_options;
-  const colorThemeKey = resolved.color_theme_key;
-  const issuerSnap = await buildIncomeIssuerSnapshotForScope(scope);
-
+  const overrides = parseDocumentTypeStyleOverridesJson(row.document_type_style_overrides);
+  const selectedGroupKey: IncomeDocumentTypeStyleGroupKey = 'quote_deal';
+  const groups = buildDocumentTypeStyleGroups(overrides);
+  const groupDef =
+    INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS.find((entry) => entry.group_key === selectedGroupKey) ??
+    INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS[0]!;
+  const logo_data_url = resolved.logo_data_url;
+  const signature_data_url = resolved.signature_data_url;
+  const resolvedForGroup = resolveBrandingProfileForDocumentTypeGroup(
+    row,
+    { logo_data_url, signature_data_url },
+    selectedGroupKey,
+    overrides,
+  );
   const emailParts = buildEmailTemplateStudioParts(resolved);
 
   return {
     navigation_sections: getStudioNavigationSections(),
-    document_style_templates: getDocumentStyleTemplates(colorThemeKey),
+    document_style_templates: getDocumentStyleTemplates(resolvedForGroup.color_theme_key),
     color_theme_presets: getColorThemePresets(),
     studio_color_theme_presets: getStudioColorThemePresets(),
     display_option_controls: buildDisplayOptionControls(display),
-    issuer_identity_preview: buildIssuerIdentityPreview({
-      display_name: issuerSnap.display_name?.trim() || scope.issuer_label,
-      tax_id: issuerSnap.tax_id?.trim() || null,
-      address: formatIssuerAddressLine(issuerSnap.address_json),
-      phone: issuerSnap.phone?.trim() || null,
-      email: issuerSnap.email?.trim() || null,
-      read_only: true,
-      helper_text: 'פרטי העסק נשמרים בפרופיל העסק. כאן מוצגת תצוגה מקדימה של מה שיודפס במסמך.',
-    }),
+    issuer_identity_preview: buildStudioSampleIssuerIdentityPreview(),
     payment_settings_panel: buildPaymentSettingsPanel({
       represented_client_id: scope.represented_client_id,
       payment_methods: resolved.payment_methods,
     }),
     document_type_style_defaults: getDocumentTypeStyleDefaults(),
+    document_type_style_groups: groups,
+    selected_document_type_group_key: selectedGroupKey,
+    document_type_style_overrides: overrides,
     layout_templates: [],
     logo_size_options: getLogoSizeOptions(),
-    selected_document_style_key: resolved.document_style_key,
-    selected_color_theme_key: colorThemeKey,
+    selected_document_style_key: resolvedForGroup.document_style_key,
+    selected_color_theme_key: resolvedForGroup.color_theme_key,
     selected_layout_template_key: null,
     selected_logo_size_key: resolved.logo_size_key,
     advanced_layout_visible: false,
-    studio_live_preview: {
-      visible: true,
-      preview_html: renderStudioSamplePreviewHtml(resolved),
-      sample_document_type_label: 'הצעת מחיר',
-      sample_document_number_display: null,
-    },
+    studio_live_preview: buildStudioSampleLivePreview({
+      preview_html: renderStudioSamplePreviewHtml(
+        resolvedForGroup,
+        groupDef.sample_document_type_label,
+      ),
+      sample_document_type_label: groupDef.sample_document_type_label,
+    }),
     ...emailParts,
     fields: {
       show_logo: display.show_logo,
@@ -448,11 +480,14 @@ function mergeBrandingDraftBodyOntoRow(
 ): IncomeBrandingProfileRow {
   const patch: Record<string, unknown> = {};
   applyModalBrandingPatch(row, body, patch);
+  const overrides = applyDocumentTypeStyleOverridesFromBody(row, body);
+  patch.document_type_style_overrides = serializeDocumentTypeStyleOverridesJson(overrides);
   return { ...row, ...patch } as IncomeBrandingProfileRow;
 }
 
-async function resolveBrandingProfileForRow(
+async function resolveBrandingProfileForRowWithGroup(
   row: IncomeBrandingProfileRow,
+  groupKey: IncomeDocumentTypeStyleGroupKey,
 ): Promise<IncomeBrandingResolvedProfile> {
   const logo_data_url = row.logo_file_asset_id
     ? await fileAssetToDataUrl(row.logo_file_asset_id)
@@ -460,7 +495,13 @@ async function resolveBrandingProfileForRow(
   const signature_data_url = row.signature_file_asset_id
     ? await fileAssetToDataUrl(row.signature_file_asset_id)
     : null;
-  return resolveBrandingProfile(row, { logo_data_url, signature_data_url });
+  const overrides = parseDocumentTypeStyleOverridesJson(row.document_type_style_overrides);
+  return resolveBrandingProfileForDocumentTypeGroup(
+    row,
+    { logo_data_url, signature_data_url },
+    groupKey,
+    overrides,
+  );
 }
 
 export async function previewIncomeDocumentBrandingProfileDraft(
@@ -469,16 +510,22 @@ export async function previewIncomeDocumentBrandingProfileDraft(
 ): Promise<IncomeDocumentBrandingStudioPreviewDraftResult> {
   const row = await ensureIncomeDocumentBrandingProfile(scope);
   const draftRow = mergeBrandingDraftBodyOntoRow(row, body);
-  const resolved = await resolveBrandingProfileForRow(draftRow);
+  const groupKey =
+    normalizeDocumentTypeStyleGroupKey(body.selected_document_type_group_key) ?? 'quote_deal';
+  const resolved = await resolveBrandingProfileForRowWithGroup(draftRow, groupKey);
+  const overrides = parseDocumentTypeStyleOverridesJson(draftRow.document_type_style_overrides);
+  const groupDef =
+    INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS.find((entry) => entry.group_key === groupKey) ??
+    INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS[0]!;
   const emailParts = buildEmailTemplateStudioParts(resolved);
 
   return {
-    studio_live_preview: {
-      visible: true,
-      preview_html: renderStudioSamplePreviewHtml(resolved),
-      sample_document_type_label: 'הצעת מחיר',
-      sample_document_number_display: null,
-    },
+    studio_live_preview: buildStudioSampleLivePreview({
+      preview_html: renderStudioSamplePreviewHtml(resolved, groupDef.sample_document_type_label),
+      sample_document_type_label: groupDef.sample_document_type_label,
+    }),
+    selected_document_type_group_key: groupKey,
+    document_type_style_groups: buildDocumentTypeStyleGroups(overrides),
     selected_document_style_key: resolved.document_style_key,
     selected_color_theme_key: resolved.color_theme_key,
     selected_layout_template_key: null,
@@ -528,22 +575,16 @@ function applyModalBrandingPatch(
     patch.signature_file_asset_id = null;
   }
 
-  const docStyleRaw = String(body.document_style_key ?? '').trim();
-  const docStyleKey = normalizeStudioDocumentStyleKey(docStyleRaw || resolveDocumentStyleKeyForRow(row));
-  if (!resolveDocumentStyleTemplate(docStyleKey)) {
-    throw badRequest('document_style_key is invalid', 'BRANDING_DOCUMENT_STYLE_INVALID');
+  const overrides = applyDocumentTypeStyleOverridesFromBody(row, body);
+  if (
+    body.document_type_style_overrides !== undefined ||
+    body.document_style_key !== undefined ||
+    body.color_theme_key !== undefined ||
+    body.color_preset_key !== undefined ||
+    body.selected_document_type_group_key !== undefined
+  ) {
+    patch.document_type_style_overrides = serializeDocumentTypeStyleOverridesJson(overrides);
   }
-  Object.assign(patch, applyDocumentStyleTemplateKey(docStyleKey as IncomeDocumentStyleTemplateKey));
-
-  const colorKey =
-    String(body.color_theme_key ?? body.color_preset_key ?? '').trim() ||
-    resolveColorThemeKeyForRow(row);
-  const theme = resolveColorThemePreset(colorKey);
-  if (!theme) {
-    throw badRequest('color_theme_key is invalid', 'BRANDING_COLOR_THEME_INVALID');
-  }
-  Object.assign(patch, applyColorThemeToColorColumns(theme));
-  patch.document_style_key = docStyleKey;
 
   if (body.logo_size_key !== undefined) {
     patch.logo_size_key = resolveLogoSizeKey(body.logo_size_key);

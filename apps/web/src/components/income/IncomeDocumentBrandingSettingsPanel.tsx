@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import type {
   IncomeBrandingStudioDraft,
   IncomeBrandingStudioSectionKey,
+  IncomeColorThemePreset,
   IncomeColorThemePresetStudio,
   IncomeDocumentBrandingAssetSlot,
   IncomeDocumentBrandingProfileAggregate,
@@ -9,6 +10,10 @@ import type {
   IncomeDocumentBrandingStudioLivePreview,
   IncomeDocumentBrandingStudioPreviewDraftResult,
   IncomeDocumentStyleTemplate,
+  IncomeDocumentTypeStyleGroup,
+  IncomeDocumentTypeStyleGroupKey,
+  IncomeDocumentTypeStyleOverride,
+  IncomeBrandingStudioNavSection,
   IncomeEmailTemplatePreview,
   IncomeEmailTemplateToken,
   IncomeLogoSizeOption,
@@ -47,6 +52,69 @@ const NAV_SECTION_ICONS: Record<string, string> = {
   advanced: '⚙',
 };
 
+/** Hidden until backend provides safe studio-only business preview (no client-specific data). */
+const HIDDEN_STUDIO_NAV_SECTIONS: IncomeBrandingStudioSectionKey[] = ['business'];
+
+function filterVisibleStudioNavSections(sections: IncomeBrandingStudioNavSection[]): IncomeBrandingStudioNavSection[] {
+  return sections.filter((section) => !HIDDEN_STUDIO_NAV_SECTIONS.includes(section.key));
+}
+
+function resolveVisibleStudioSection(
+  section: IncomeBrandingStudioSectionKey,
+  sections: IncomeBrandingStudioNavSection[],
+): IncomeBrandingStudioSectionKey {
+  const visible = filterVisibleStudioNavSections(sections);
+  if (visible.some((entry) => entry.key === section)) return section;
+  return visible[0]?.key ?? 'document_style';
+}
+
+function firstVisibleStudioSection(sections: IncomeBrandingStudioNavSection[]): IncomeBrandingStudioSectionKey {
+  return filterVisibleStudioNavSections(sections)[0]?.key ?? 'document_style';
+}
+
+const DEFAULT_GROUP_STYLE: IncomeDocumentTypeStyleOverride = {
+  document_style_key: 'classic',
+  color_theme_key: 'black_white',
+};
+
+function getGroupStyle(
+  draft: IncomeBrandingStudioDraft,
+  groupKey: IncomeDocumentTypeStyleGroupKey,
+): IncomeDocumentTypeStyleOverride {
+  return draft.document_type_style_overrides[groupKey] ?? DEFAULT_GROUP_STYLE;
+}
+
+function patchSelectedGroupStyle(
+  draft: IncomeBrandingStudioDraft,
+  patch: Partial<IncomeDocumentTypeStyleOverride>,
+): IncomeBrandingStudioDraft {
+  const groupKey = draft.selected_document_type_group_key;
+  const current = getGroupStyle(draft, groupKey);
+  const next: IncomeDocumentTypeStyleOverride = { ...current, ...patch };
+  return {
+    ...draft,
+    document_style_key: next.document_style_key,
+    color_theme_key: next.color_theme_key,
+    document_type_style_overrides: {
+      ...draft.document_type_style_overrides,
+      [groupKey]: next,
+    },
+  };
+}
+
+function selectDocumentTypeGroup(
+  draft: IncomeBrandingStudioDraft,
+  groupKey: IncomeDocumentTypeStyleGroupKey,
+): IncomeBrandingStudioDraft {
+  const effective = getGroupStyle(draft, groupKey);
+  return {
+    ...draft,
+    selected_document_type_group_key: groupKey,
+    document_style_key: effective.document_style_key,
+    color_theme_key: effective.color_theme_key,
+  };
+}
+
 export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggregate): IncomeBrandingStudioDraft {
   const studio = profile.document_branding_studio;
   const f = studio.fields;
@@ -62,6 +130,8 @@ export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggr
     document_style_key: studio.selected_document_style_key,
     color_theme_key: studio.selected_color_theme_key,
     logo_size_key: studio.selected_logo_size_key,
+    selected_document_type_group_key: studio.selected_document_type_group_key,
+    document_type_style_overrides: { ...studio.document_type_style_overrides },
     show_logo: displayField('show_logo', f.show_logo),
     show_signature: displayField('show_signature', f.show_signature),
     show_footer: displayField('show_footer', true),
@@ -90,6 +160,8 @@ export function buildDraftFromProfile(profile: IncomeDocumentBrandingProfileAggr
 
 export function buildBrandingPreviewDraftBody(draft: IncomeBrandingStudioDraft): Record<string, unknown> {
   return {
+    selected_document_type_group_key: draft.selected_document_type_group_key,
+    document_type_style_overrides: draft.document_type_style_overrides,
     document_style_key: draft.document_style_key,
     color_theme_key: draft.color_theme_key,
     logo_size_key: draft.logo_size_key,
@@ -127,6 +199,8 @@ export function buildBrandingModalSaveBody(
   const studio = profile.document_branding_studio;
   return {
     section: studio.save_section_key,
+    selected_document_type_group_key: draft.selected_document_type_group_key,
+    document_type_style_overrides: draft.document_type_style_overrides,
     document_style_key: draft.document_style_key,
     color_theme_key: draft.color_theme_key,
     logo_size_key: draft.logo_size_key,
@@ -157,7 +231,69 @@ export function buildBrandingModalSaveBody(
   };
 }
 
-function MarkupPreview({ markup, className }: { markup: string; className?: string }) {
+function DocumentTypeGroupSelector({
+  groups,
+  selectedGroupKey,
+  styleTemplates,
+  themePresets,
+  disabled,
+  onSelectGroup,
+}: {
+  groups: IncomeDocumentTypeStyleGroup[];
+  selectedGroupKey: IncomeDocumentTypeStyleGroupKey;
+  styleTemplates: IncomeDocumentStyleTemplate[];
+  themePresets: IncomeColorThemePreset[];
+  disabled: boolean;
+  onSelectGroup: (groupKey: IncomeDocumentTypeStyleGroupKey) => void;
+}) {
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="nx-branding-studio-doc-type-grid" role="listbox" aria-label="קבוצות סוג מסמך">
+      {groups.map((group) => {
+        const style = styleTemplates.find((template) => template.key === group.effective_document_style_key);
+        const theme = themePresets.find((preset) => preset.key === group.effective_color_theme_key);
+        return (
+          <button
+            key={group.group_key}
+            type="button"
+            role="option"
+            aria-selected={selectedGroupKey === group.group_key}
+            disabled={disabled}
+            className={`nx-branding-studio-doc-type-card${
+              selectedGroupKey === group.group_key ? ' nx-branding-studio-doc-type-card--selected' : ''
+            }`}
+            onClick={() => onSelectGroup(group.group_key)}
+          >
+            <span className="nx-branding-studio-doc-type-card__label">{group.group_label}</span>
+            <span className="nx-branding-studio-doc-type-card__types">{group.types_label}</span>
+            <div className="nx-branding-studio-doc-type-card__previews">
+              {style ? (
+                <MarkupPreview
+                  markup={style.mini_preview_markup}
+                  className="nx-branding-studio-doc-type-card__badge"
+                />
+              ) : null}
+              {theme ? (
+                <MarkupPreview
+                  markup={theme.mini_preview_markup}
+                  className="nx-branding-studio-doc-type-card__badge nx-branding-studio-doc-type-card__badge--theme"
+                />
+              ) : null}
+            </div>
+            <span className="nx-branding-studio-doc-type-card__meta">
+              {group.effective_document_style_key}
+              {' · '}
+              {theme?.label ?? group.effective_color_theme_key}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const MarkupPreview = memo(function MarkupPreview({ markup, className }: { markup: string; className?: string }) {
   return (
     <div
       className={className}
@@ -165,7 +301,7 @@ function MarkupPreview({ markup, className }: { markup: string; className?: stri
       dangerouslySetInnerHTML={{ __html: markup }}
     />
   );
-}
+});
 
 function DocumentStyleTemplateCard({
   template,
@@ -195,13 +331,17 @@ function DocumentStyleTemplateCard({
   );
 }
 
+function colorThemeDisplayLabel(preset: IncomeColorThemePreset | IncomeColorThemePresetStudio): string {
+  return 'studio_label' in preset && preset.studio_label ? preset.studio_label : preset.label;
+}
+
 function ColorThemeCard({
   preset,
   selected,
   disabled,
   onSelect,
 }: {
-  preset: IncomeColorThemePresetStudio;
+  preset: IncomeColorThemePreset | IncomeColorThemePresetStudio;
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
@@ -216,7 +356,7 @@ function ColorThemeCard({
       onClick={onSelect}
     >
       <MarkupPreview markup={preset.mini_preview_markup} className="nx-branding-studio-theme-card__mini" />
-      <span className="nx-branding-studio-theme-card__label">{preset.studio_label}</span>
+      <span className="nx-branding-studio-theme-card__label">{colorThemeDisplayLabel(preset)}</span>
       {selected ? <span className="nx-branding-studio-theme-card__check" aria-hidden>✓</span> : null}
     </button>
   );
@@ -330,6 +470,8 @@ function EmailTemplateEditorSection({
     <div className="nx-branding-studio-section">
       <h3 className="nx-branding-studio-section__title">אימייל</h3>
       <p className="nx-branding-studio-section__lead">תבנית שליחת מסמך ללקוח — תצוגה מקדימה מהשרת.</p>
+      <div className="nx-branding-studio-email-layout">
+        <div className="nx-branding-studio-email-layout__editor">
       <div className="nx-branding-studio-email-editor">
         <label className="nx-branding-studio-field">
           <span className="nx-branding-studio-field__label nx-field-label">נושא אימייל</span>
@@ -402,7 +544,9 @@ function EmailTemplateEditorSection({
           </div>
         </div>
       </div>
+        </div>
 
+      <div className="nx-branding-studio-email-layout__preview">
       <div className="nx-branding-studio-email-preview" aria-label="תצוגה מקדימה של אימייל">
         <span className="nx-branding-studio-email-preview__title">תצוגה מקדימה</span>
         <div className="nx-branding-studio-email-preview__card">
@@ -415,6 +559,8 @@ function EmailTemplateEditorSection({
             <pre className="nx-branding-studio-email-preview__body">{emailPreview.body_preview || '—'}</pre>
           </div>
         </div>
+      </div>
+      </div>
       </div>
     </div>
   );
@@ -557,6 +703,7 @@ function AssetUploadSlot({
 function StudioSectionContent({
   section,
   styleTemplates,
+  styleGroups,
   studio,
   profile,
   draft,
@@ -569,6 +716,7 @@ function StudioSectionContent({
 }: {
   section: IncomeBrandingStudioSectionKey;
   styleTemplates: IncomeDocumentStyleTemplate[];
+  styleGroups: IncomeDocumentTypeStyleGroup[];
   studio: IncomeDocumentBrandingStudio;
   profile: IncomeDocumentBrandingProfileAggregate;
   draft: IncomeBrandingStudioDraft;
@@ -580,7 +728,6 @@ function StudioSectionContent({
   emailPreview: IncomeEmailTemplatePreview;
 }) {
   const disabled = busy || !canEdit;
-  const identity = studio.issuer_identity_preview;
   const paymentPanel = studio.payment_settings_panel;
   const paymentDisabled = disabled || !paymentPanel.editable;
 
@@ -588,38 +735,61 @@ function StudioSectionContent({
     return (
       <div className="nx-branding-studio-section">
         <h3 className="nx-branding-studio-section__title">סגנון מסמך</h3>
-        <p className="nx-branding-studio-section__lead">בחרו פריסת מסמך — קלאסי, מודרני או אלגנטי. התצוגה המקדימה מתעדכנת מהשרת.</p>
-        <div className="nx-branding-studio-style-grid" role="listbox" aria-label="סגנון מסמך">
-          {styleTemplates.map((template) => (
-            <DocumentStyleTemplateCard
-              key={template.key}
-              template={template}
-              selected={draft.document_style_key === template.key}
-              disabled={disabled}
-              onSelect={() => onDraftChange((d) => ({ ...d, document_style_key: template.key }))}
-            />
-          ))}
+        <p className="nx-branding-studio-section__lead">
+          בחרו קבוצת סוג מסמך, ולאחר מכן פריסה וצבע — התצוגה המקדימה מתעדכנת מהשרת.
+        </p>
+        <div className="nx-branding-studio-group">
+          <div className="nx-branding-studio-group__head">
+            <h4 className="nx-branding-studio-group__title">קבוצות סוג מסמך</h4>
+            <p className="nx-branding-studio-group__hint">
+              בחרו קבוצה כדי לערוך את הסגנון והצבע שלה. ברירת מחדל: קלאסי + שחור לבן.
+            </p>
+          </div>
+          <DocumentTypeGroupSelector
+            groups={styleGroups}
+            selectedGroupKey={draft.selected_document_type_group_key}
+            styleTemplates={styleTemplates}
+            themePresets={studio.color_theme_presets}
+            disabled={disabled}
+            onSelectGroup={(groupKey) => onDraftChange((d) => selectDocumentTypeGroup(d, groupKey))}
+          />
         </div>
-        <h3 className="nx-branding-studio-section__title nx-branding-studio-section__title--spaced">ברירות מחדל לפי סוג מסמך</h3>
-        <p className="nx-branding-studio-section__lead">ברירות מחדל לסוגי מסמך — פרופיל המשתמש הוא המקור הסופי.</p>
-        <table className="nx-branding-studio-defaults-table">
-          <thead>
-            <tr>
-              <th>סוג מסמך</th>
-              <th>סגנון</th>
-              <th>ערכת צבע</th>
-            </tr>
-          </thead>
-          <tbody>
-            {studio.document_type_style_defaults.map((row) => (
-              <tr key={row.document_type_key}>
-                <td>{row.document_type_label}</td>
-                <td>{row.default_document_style_key}</td>
-                <td>{row.default_color_theme_key}</td>
-              </tr>
+        <div className="nx-branding-studio-group">
+          <div className="nx-branding-studio-group__head">
+            <h4 className="nx-branding-studio-group__title">פריסת מסמך</h4>
+          </div>
+          <div className="nx-branding-studio-style-grid" role="listbox" aria-label="סגנון מסמך">
+            {styleTemplates.map((template) => (
+              <DocumentStyleTemplateCard
+                key={template.key}
+                template={template}
+                selected={draft.document_style_key === template.key}
+                disabled={disabled}
+                onSelect={() =>
+                  onDraftChange((d) => patchSelectedGroupStyle(d, { document_style_key: template.key }))
+                }
+              />
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
+        <div className="nx-branding-studio-group">
+          <div className="nx-branding-studio-group__head">
+            <h4 className="nx-branding-studio-group__title">ערכת צבעים</h4>
+          </div>
+          <div className="nx-branding-studio-theme-grid" role="listbox" aria-label="ערכת צבעים">
+            {studio.studio_color_theme_presets.map((preset) => (
+              <ColorThemeCard
+                key={preset.key}
+                preset={preset}
+                selected={draft.color_theme_key === preset.key}
+                disabled={disabled}
+                onSelect={() =>
+                  onDraftChange((d) => patchSelectedGroupStyle(d, { color_theme_key: preset.key }))
+                }
+              />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -628,7 +798,8 @@ function StudioSectionContent({
     return (
       <div className="nx-branding-studio-section">
         <h3 className="nx-branding-studio-section__title">מיתוג</h3>
-        <p className="nx-branding-studio-section__lead">לוגו, חתימה וערכת צבעים — כל שינוי משקף את תצוגת המסמך.</p>
+        <p className="nx-branding-studio-section__lead">לוגו, חתימה וגודל לוגו — כל שינוי משקף את תצוגת המסמך.</p>
+        <div className="nx-branding-studio-group">
         <AssetUploadSlot
           slot={profile.logo}
           slotKind="logo"
@@ -652,56 +823,7 @@ function StudioSectionContent({
           disabled={disabled}
           onSelect={(key) => onDraftChange((d) => ({ ...d, logo_size_key: key }))}
         />
-        <h3 className="nx-branding-studio-section__title nx-branding-studio-section__title--spaced">ערכת צבעים</h3>
-        <div className="nx-branding-studio-theme-grid" role="listbox" aria-label="ערכת צבעים">
-          {studio.studio_color_theme_presets.map((preset) => (
-            <ColorThemeCard
-              key={preset.key}
-              preset={preset}
-              selected={draft.color_theme_key === preset.key}
-              disabled={disabled}
-              onSelect={() => onDraftChange((d) => ({ ...d, color_theme_key: preset.key }))}
-            />
-          ))}
         </div>
-      </div>
-    );
-  }
-
-  if (section === 'business') {
-    return (
-      <div className="nx-branding-studio-section">
-        <h3 className="nx-branding-studio-section__title">פרטי עסק</h3>
-        <p className="nx-branding-studio-section__lead">{identity.helper_text}</p>
-        <div className="nx-branding-studio-identity-card">
-          <div className="nx-branding-studio-identity-card__row">
-            <span className="nx-branding-studio-identity-card__label">שם העסק</span>
-            <span className="nx-branding-studio-identity-card__value">{identity.business_name || '—'}</span>
-          </div>
-          <div className="nx-branding-studio-identity-card__row">
-            <span className="nx-branding-studio-identity-card__label">ח.פ / ע.מ</span>
-            <span className="nx-branding-studio-identity-card__value">{identity.tax_id || '—'}</span>
-          </div>
-          <div className="nx-branding-studio-identity-card__row">
-            <span className="nx-branding-studio-identity-card__label">כתובת</span>
-            <span className="nx-branding-studio-identity-card__value">{identity.address || '—'}</span>
-          </div>
-          <div className="nx-branding-studio-identity-card__row">
-            <span className="nx-branding-studio-identity-card__label">טלפון</span>
-            <span className="nx-branding-studio-identity-card__value">{identity.phone || '—'}</span>
-          </div>
-          <div className="nx-branding-studio-identity-card__row">
-            <span className="nx-branding-studio-identity-card__label">אימייל</span>
-            <span className="nx-branding-studio-identity-card__value">{identity.email || '—'}</span>
-          </div>
-        </div>
-        <StudioField
-          label="משפט שיוצג מתחת לשם העסק"
-          value={draft.company_subtitle}
-          disabled={disabled}
-          multiline
-          onChange={(v) => onDraftChange((d) => ({ ...d, company_subtitle: v }))}
-        />
       </div>
     );
   }
@@ -711,22 +833,25 @@ function StudioSectionContent({
       <div className="nx-branding-studio-section">
         <h3 className="nx-branding-studio-section__title">תוכן המסמך</h3>
         <p className="nx-branding-studio-section__lead">בחרו אילו בלוקים יוצגו במסמך — השינוי משפיע על תצוגת המקדימה.</p>
-        <div className="nx-branding-studio-toggle-list">
-          {studio.display_option_controls.map((control) => (
-            <StudioBoolField
-              key={control.key}
-              label={control.label}
-              checked={draft[control.draft_field as keyof IncomeBrandingStudioDraft] === 'true'}
-              disabled={disabled}
-              onChange={(v) =>
-                onDraftChange((d) => ({
-                  ...d,
-                  [control.draft_field]: boolToDraft(v),
-                }))
-              }
-            />
-          ))}
+        <div className="nx-branding-studio-group">
+          <div className="nx-branding-studio-toggle-list nx-branding-studio-toggle-grid">
+            {studio.display_option_controls.map((control) => (
+              <StudioBoolField
+                key={control.key}
+                label={control.label}
+                checked={draft[control.draft_field as keyof IncomeBrandingStudioDraft] === 'true'}
+                disabled={disabled}
+                onChange={(v) =>
+                  onDraftChange((d) => ({
+                    ...d,
+                    [control.draft_field]: boolToDraft(v),
+                  }))
+                }
+              />
+            ))}
+          </div>
         </div>
+        <div className="nx-branding-studio-group">
         <StudioField
           label="טקסט כותרת תחתונה"
           value={draft.footer_text}
@@ -748,6 +873,7 @@ function StudioSectionContent({
           multiline
           onChange={(v) => onDraftChange((d) => ({ ...d, terms_and_conditions: v }))}
         />
+        </div>
       </div>
     );
   }
@@ -761,30 +887,32 @@ function StudioSectionContent({
         ) : (
           <p className="nx-branding-studio-section__lead">אמצעי תשלום ופרטי חשבון לעסק — נשמרים בפרופיל המיתוג.</p>
         )}
-        <div className="nx-branding-studio-toggle-list">
-          {paymentPanel.payment_methods.map((method) => (
-            <StudioBoolField
-              key={method.key}
-              label={method.label}
-              checked={draft[`payment_method_${method.key}` as keyof IncomeBrandingStudioDraft] === 'true'}
-              disabled={paymentDisabled}
-              onChange={(v) =>
-                onDraftChange((d) => ({
-                  ...d,
-                  [`payment_method_${method.key}`]: boolToDraft(v),
-                }))
-              }
-            />
-          ))}
+        <div className="nx-branding-studio-group">
+          <div className="nx-branding-studio-toggle-list nx-branding-studio-payment-chips">
+            {paymentPanel.payment_methods.map((method) => (
+              <StudioBoolField
+                key={method.key}
+                label={method.label}
+                checked={draft[`payment_method_${method.key}` as keyof IncomeBrandingStudioDraft] === 'true'}
+                disabled={paymentDisabled}
+                onChange={(v) =>
+                  onDraftChange((d) => ({
+                    ...d,
+                    [`payment_method_${method.key}`]: boolToDraft(v),
+                  }))
+                }
+              />
+            ))}
+          </div>
         </div>
         {draft.payment_method_bank_transfer === 'true' && paymentPanel.editable ? (
-          <>
+          <div className="nx-branding-studio-group nx-branding-studio-bank-fields">
             <StudioField label="שם בנק" value={draft.bank_name} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_name: v }))} />
             <StudioField label="סניף" value={draft.bank_branch} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_branch: v }))} />
             <StudioField label="מספר חשבון" value={draft.bank_account} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, bank_account: v }))} />
             <StudioField label="IBAN" value={draft.iban} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, iban: v }))} />
             <StudioField label="SWIFT" value={draft.swift} disabled={paymentDisabled} onChange={(v) => onDraftChange((d) => ({ ...d, swift: v }))} />
-          </>
+          </div>
         ) : null}
       </div>
     );
@@ -795,7 +923,13 @@ function StudioSectionContent({
       <div className="nx-branding-studio-section">
         <h3 className="nx-branding-studio-section__title">מתקדם</h3>
         <div className="nx-branding-studio-empty-state">
-          הגדרות PDF, גופנים, שוליים ומספור עמודים — יתווספו בגרסה הבאה.
+          <span className="nx-branding-studio-empty-state__icon" aria-hidden>
+            ⚙
+          </span>
+          <span className="nx-branding-studio-empty-state__title">בקרוב</span>
+          <p className="nx-branding-studio-empty-state__text">
+            הגדרות PDF, גופנים, שוליים ומספור עמודים — יתווספו בגרסה הבאה.
+          </p>
         </div>
       </div>
     );
@@ -834,6 +968,7 @@ export function IncomeDocumentBrandingSettingsPanel({
   );
   const [emailPreview, setEmailPreview] = useState<IncomeEmailTemplatePreview>(studio.email_template_preview);
   const [styleTemplates, setStyleTemplates] = useState(studio.document_style_templates);
+  const [styleGroups, setStyleGroups] = useState(studio.document_type_style_groups);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
@@ -841,6 +976,7 @@ export function IncomeDocumentBrandingSettingsPanel({
     setLivePreview(studio.studio_live_preview);
     setEmailPreview(studio.email_template_preview);
     setStyleTemplates(studio.document_style_templates);
+    setStyleGroups(studio.document_type_style_groups);
     setPreviewError(null);
   }, [profile]);
 
@@ -856,7 +992,14 @@ export function IncomeDocumentBrandingSettingsPanel({
         if (result) {
           setLivePreview(result.studio_live_preview);
           setStyleTemplates(result.document_style_templates);
+          setStyleGroups(result.document_type_style_groups);
           setEmailPreview(result.email_template_preview);
+          onDraftChange((current) => ({
+            ...current,
+            selected_document_type_group_key: result.selected_document_type_group_key,
+            document_style_key: result.selected_document_style_key,
+            color_theme_key: result.selected_color_theme_key,
+          }));
         }
       } catch {
         if (requestId !== previewRequestRef.current) return;
@@ -865,7 +1008,7 @@ export function IncomeDocumentBrandingSettingsPanel({
         if (requestId === previewRequestRef.current) setPreviewLoading(false);
       }
     },
-    [canPreview, onPreviewDraft],
+    [canPreview, onPreviewDraft, onDraftChange],
   );
 
   useEffect(() => {
@@ -880,38 +1023,52 @@ export function IncomeDocumentBrandingSettingsPanel({
   }, [draft, canPreview, busy, refreshPreview]);
 
   const preview = livePreview;
+  const visibleNavSections = filterVisibleStudioNavSections(studio.navigation_sections);
+  const displaySection = resolveVisibleStudioSection(activeSection, studio.navigation_sections);
 
   return (
     <div className="nx-branding-studio" dir="rtl">
       <aside className="nx-branding-studio-preview" aria-label="תצוגה מקדימה">
-        <div className="nx-branding-studio-preview__head">
-          <span className="nx-branding-studio-preview__title">תצוגה מקדימה</span>
-          <span className="nx-branding-studio-preview__meta">
-            {preview.sample_document_type_label}
-            {preview.sample_document_number_display ? ` · ${preview.sample_document_number_display}` : ' · טיוטה'}
-          </span>
-          {previewError ? <span className="nx-branding-studio-preview__warn">{previewError}</span> : null}
-        </div>
-        <div className="nx-branding-studio-preview__frame">
-          {previewLoading ? (
-            <div className="nx-branding-studio-preview__loading" aria-live="polite">
-              מעדכן תצוגה…
+        <div className="nx-branding-studio-preview__card">
+          <div className="nx-branding-studio-preview__head">
+            <span className="nx-branding-studio-preview__title">תצוגה מקדימה</span>
+            {preview.sample_only_label ? (
+              <span className="nx-branding-studio-preview__sample-label">{preview.sample_only_label}</span>
+            ) : null}
+            <span className="nx-branding-studio-preview__pill">
+              {preview.sample_document_type_label}
+              {preview.sample_document_number_display ? ` · ${preview.sample_document_number_display}` : ' · טיוטה'}
+            </span>
+            {previewError ? <span className="nx-branding-studio-preview__warn">{previewError}</span> : null}
+          </div>
+          <div className="nx-branding-studio-preview__frame">
+            <div className="nx-branding-studio-preview__paper">
+              {previewLoading ? (
+                <div className="nx-branding-studio-preview__loading" aria-live="polite">
+                  מעדכן תצוגה…
+                </div>
+              ) : null}
+              {preview.visible && preview.preview_html ? (
+                <div
+                  className="nx-branding-studio-preview__doc nx-invoice-ui"
+                  dangerouslySetInnerHTML={{ __html: preview.preview_html }}
+                />
+              ) : (
+                <p className="nx-branding-studio-preview__empty">אין תצוגה מקדימה</p>
+              )}
             </div>
+          </div>
+          {preview.preview_footnote ? (
+            <p className="nx-branding-studio-preview__footnote">{preview.preview_footnote}</p>
           ) : null}
-          {preview.visible && preview.preview_html ? (
-            <div
-              className="nx-branding-studio-preview__doc nx-invoice-ui"
-              dangerouslySetInnerHTML={{ __html: preview.preview_html }}
-            />
-          ) : (
-            <p className="nx-branding-studio-preview__empty">אין תצוגה מקדימה</p>
-          )}
         </div>
       </aside>
       <div className="nx-branding-studio-content">
+        <div className="nx-branding-studio-content__card">
         <StudioSectionContent
-          section={activeSection}
+          section={displaySection}
           styleTemplates={styleTemplates}
+          styleGroups={styleGroups}
           studio={studio}
           profile={profile}
           draft={draft}
@@ -922,13 +1079,14 @@ export function IncomeDocumentBrandingSettingsPanel({
           onCommand={onCommand}
           emailPreview={emailPreview}
         />
+        </div>
       </div>
       <nav className="nx-branding-studio-nav" aria-label="הגדרות מסמך">
-        {studio.navigation_sections.map((section) => (
+        {visibleNavSections.map((section) => (
           <button
             key={section.key}
             type="button"
-            className={`nx-branding-studio-nav__btn${activeSection === section.key ? ' nx-branding-studio-nav__btn--active' : ''}`}
+            className={`nx-branding-studio-nav__btn${displaySection === section.key ? ' nx-branding-studio-nav__btn--active' : ''}`}
             onClick={() => onActiveSectionChange(section.key)}
           >
             <span className="nx-branding-studio-nav__icon" aria-hidden>
@@ -946,8 +1104,8 @@ export function IncomeDocumentBrandingSettingsPanel({
 }
 
 export function useBrandingModalState(profile: IncomeDocumentBrandingProfileAggregate | null) {
-  const [activeSection, setActiveSection] = useState<IncomeBrandingStudioSectionKey>(
-    profile?.document_branding_studio.navigation_sections[0]?.key ?? 'document_style',
+  const [activeSection, setActiveSection] = useState<IncomeBrandingStudioSectionKey>(() =>
+    profile ? firstVisibleStudioSection(profile.document_branding_studio.navigation_sections) : 'document_style',
   );
   const [draft, setDraft] = useState<IncomeBrandingStudioDraft>(() =>
     profile ? buildDraftFromProfile(profile) : ({} as IncomeBrandingStudioDraft),
@@ -956,7 +1114,9 @@ export function useBrandingModalState(profile: IncomeDocumentBrandingProfileAggr
   useEffect(() => {
     if (!profile) return;
     setDraft(buildDraftFromProfile(profile));
-    setActiveSection(profile.document_branding_studio.navigation_sections[0]?.key ?? 'document_style');
+    setActiveSection((current) =>
+      resolveVisibleStudioSection(current, profile.document_branding_studio.navigation_sections),
+    );
   }, [profile]);
 
   return { activeSection, setActiveSection, draft, setDraft };

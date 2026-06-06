@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import '../../styles/nx-branding-studio.css';
 import type { IncomeDocumentBrandingProfileAggregate, IncomeDocumentBrandingStudioPreviewDraftResult } from '../../income/income-document-branding-types';
 import {
   IncomeDocumentBrandingSettingsPanel,
@@ -55,7 +56,7 @@ export function IncomeDocumentBrandingSettingsModal({
 
   const dialog = (
     <div
-      className="nx-income-branding-overlay nx-invoice-ui nx-invoice-designer-ui"
+      className="nx-income-branding-overlay nx-income-branding-overlay--studio nx-invoice-ui nx-invoice-designer-ui"
       role="dialog"
       aria-modal="true"
       aria-labelledby="income-branding-title"
@@ -63,11 +64,32 @@ export function IncomeDocumentBrandingSettingsModal({
         if (!busy) onClose();
       }}
     >
-      <div className="nx-income-branding-modal nx-income-branding-modal--studio" onClick={(e) => e.stopPropagation()}>
+      <div className="nx-income-branding-modal nx-income-branding-modal--studio" dir="rtl" onClick={(e) => e.stopPropagation()}>
         <div className="nx-income-branding-modal__head">
-          <h2 id="income-branding-title" className="nx-income-branding-modal__title nx-modal-title">
-            {title}
-          </h2>
+          <div className="nx-income-branding-modal__head-brand">
+            <span className="nx-income-branding-modal__head-icon" aria-hidden>
+              <span className="nx-income-branding-modal__head-icon-glyph">▦</span>
+            </span>
+            <div className="nx-income-branding-modal__head-text">
+              <h2 id="income-branding-title" className="nx-income-branding-modal__title nx-modal-title">
+                {title}
+              </h2>
+              <p className="nx-income-branding-modal__subtitle">
+                התאמה אישית של מראה המסמך, פרטי העסק, אפשרויות תשלום ותוכן.
+              </p>
+            </div>
+          </div>
+          <div className="nx-income-branding-modal__head-actions">
+            <button
+              type="button"
+              className="nx-income-branding-modal__close"
+              disabled={busy}
+              aria-label="סגירה"
+              onClick={onClose}
+            >
+              ×
+            </button>
+          </div>
         </div>
         <div className="nx-income-branding-modal__body">
           {profile ? (
@@ -87,12 +109,17 @@ export function IncomeDocumentBrandingSettingsModal({
           )}
         </div>
         <div className="nx-income-branding-modal__footer">
-          <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={onClose}>
+          <button
+            type="button"
+            className="nx-income-branding-modal__btn nx-income-branding-modal__btn--cancel"
+            disabled={busy}
+            onClick={onClose}
+          >
             ביטול
           </button>
           <button
             type="button"
-            className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+            className="nx-income-branding-modal__btn nx-income-branding-modal__btn--save"
             disabled={busy || !canSave}
             onClick={() => void handleSave()}
           >

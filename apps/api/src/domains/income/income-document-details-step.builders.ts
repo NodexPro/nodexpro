@@ -33,7 +33,7 @@ import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
-import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfile } from './income-document-branding.service.js';
+import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
 import { renderIncomeBrandedPreviewHtml } from './income-document-branding-preview.renderer.js';
 import type { IncomeDocumentBrandingProfileAggregate } from './income-document-branding.types.js';
 import { loadIncomeRecipientById } from './income-recipient.service.js';
@@ -853,7 +853,9 @@ export async function buildIncomeDocumentDetailsStep(
       : null;
   const brandingProfileAggregate = await buildDocumentBrandingProfileAggregate(scope, canEdit);
   const resolvedBranding =
-    previewGeneratedAt != null ? await loadResolvedBrandingProfile(scope) : null;
+    previewGeneratedAt != null && row.document_type
+      ? await loadResolvedBrandingProfileForDocumentType(scope, row.document_type)
+      : null;
   const previewHtml =
     previewGeneratedAt != null && resolvedBranding
       ? renderIncomeBrandedPreviewHtml({
