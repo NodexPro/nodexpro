@@ -91,9 +91,10 @@ async function listSchedulerOrgIds(singleOrgId?: string): Promise<string[]> {
 
 async function pickSchedulerActorUserId(orgId: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin
-    .from('memberships')
+    .from('organization_memberships')
     .select('user_id')
     .eq('organization_id', orgId)
+    .eq('status', 'active')
     .limit(1)
     .maybeSingle();
   if (error) throw error;

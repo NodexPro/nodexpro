@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { WorkEngineInvoiceRetainerSetupAggregate } from '../../income/income-workspace-types';
 import { fetchWorkEngineInvoiceRetainerSetupAggregate } from '../../api/work-engine';
 
@@ -30,58 +31,64 @@ export function WorkEngineInvoiceRetainerCustomerModal({
   refreshKey = 0,
 }: Props) {
   const [aggregate, setAggregate] = useState<WorkEngineInvoiceRetainerSetupAggregate | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const loadAggregate = useCallback(async () => {
-    if (!representedClientId) return;
-    setLoading(true);
-    onBusyChange?.(true);
-    try {
-      const agg = await fetchWorkEngineInvoiceRetainerSetupAggregate({
-        representedClientId,
-      });
-      setAggregate(agg);
-    } catch (e) {
-      onError?.(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-      onBusyChange?.(false);
-    }
-  }, [onBusyChange, onError, representedClientId]);
+  const [listLoading, setListLoading] = useState(false);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   useEffect(() => {
     if (!open || !representedClientId) {
       setAggregate(null);
-      setSelectedId(null);
+      setSelectingId(null);
+      setListLoading(false);
       return;
     }
-    void loadAggregate();
-  }, [loadAggregate, open, representedClientId, refreshKey]);
+
+    let cancelled = false;
+    setListLoading(true);
+    setSelectingId(null);
+
+    void fetchWorkEngineInvoiceRetainerSetupAggregate({ representedClientId })
+      .then((agg) => {
+        if (!cancelled) setAggregate(agg);
+      })
+      .catch((e) => {
+        if (!cancelled) onErrorRef.current?.(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setListLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, representedClientId, refreshKey]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy && !loading) onClose();
+      if (e.key === 'Escape' && !busy && !listLoading && !selectingId) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [busy, loading, onClose, open]);
+  }, [busy, listLoading, onClose, open, selectingId]);
 
-  const handleContinue = async () => {
-    if (!representedClientId || !selectedId) return;
-    setLoading(true);
+  const selectCustomer = async (endCustomerId: string, selectable: boolean) => {
+    if (listLoading || selectingId || !selectable || !representedClientId) return;
+
+    setSelectingId(endCustomerId);
     onBusyChange?.(true);
     try {
       const agg = await fetchWorkEngineInvoiceRetainerSetupAggregate({
         representedClientId,
-        endCustomerId: selectedId,
+        endCustomerId,
       });
-      onSelectCustomer(selectedId, agg);
+      onSelectCustomer(endCustomerId, agg);
+      onClose();
     } catch (e) {
       onError?.(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      setSelectingId(null);
       onBusyChange?.(false);
     }
   };
@@ -89,15 +96,16 @@ export function WorkEngineInvoiceRetainerCustomerModal({
   if (!open || !representedClientId) return null;
 
   const rows = aggregate?.end_customers ?? [];
+  const interactionLocked = listLoading || Boolean(selectingId);
 
-  return (
+  const dialog = (
     <div
       className="nx-we-retainer-overlay nx-invoice-ui"
       role="dialog"
       aria-modal="true"
       aria-labelledby="we-retainer-customers-title"
       onClick={() => {
-        if (!busy && !loading) onClose();
+        if (!busy && !interactionLocked) onClose();
       }}
     >
       <div className="nx-we-retainer-modal" dir="rtl" onClick={(e) => e.stopPropagation()}>
@@ -106,13 +114,12 @@ export function WorkEngineInvoiceRetainerCustomerModal({
             <h2 id="we-retainer-customers-title" className="nx-we-retainer-modal__title">
               ריטיינר חשבוניות — {clientDisplayName || aggregate?.client_display_name}
             </h2>
-            <p className="nx-we-retainer-modal__subtitle">בחרו לקוח קצה להגדרת מסמך חוזר</p>
           </div>
           {canAddCustomer && onAddCustomer ? (
             <button
               type="button"
               className="nx-we-retainer-add-btn"
-              disabled={busy || loading}
+              disabled={busy || interactionLocked}
               onClick={() => void onAddCustomer()}
             >
               הוסף לקוח חדש
@@ -122,6 +129,7 @@ export function WorkEngineInvoiceRetainerCustomerModal({
             type="button"
             className="nx-we-retainer-modal__close"
             aria-label="סגירה"
+            disabled={Boolean(selectingId)}
             onClick={onClose}
           >
             ×
@@ -129,7 +137,7 @@ export function WorkEngineInvoiceRetainerCustomerModal({
         </div>
 
         <div className="nx-we-retainer-modal__body">
-          {loading && !aggregate ? (
+          {listLoading && !aggregate ? (
             <p className="nx-we-retainer-note">טוען לקוחות…</p>
           ) : rows.length === 0 ? (
             <p className="nx-we-retainer-note">אין לקוחות קצה פעילים ללקוח משרד זה.</p>
@@ -147,15 +155,26 @@ export function WorkEngineInvoiceRetainerCustomerModal({
                 <tbody>
                   {rows.map((row) => {
                     const sub = [row.email, row.tax_id].filter(Boolean).join(' · ');
+                    const isSelecting = selectingId === row.end_customer_id;
                     return (
-                      <tr key={row.end_customer_id}>
-                        <td>
+                      <tr
+                        key={row.end_customer_id}
+                        className={
+                          isSelecting
+                            ? 'nx-we-retainer-table__row nx-we-retainer-table__row--selected'
+                            : 'nx-we-retainer-table__row'
+                        }
+                        onClick={() => void selectCustomer(row.end_customer_id, row.selectable)}
+                      >
+                        <td className="nx-we-retainer-table__check-col">
                           <input
                             type="checkbox"
-                            checked={selectedId === row.end_customer_id}
-                            disabled={busy || loading || !row.selectable}
-                            aria-label={`בחר ${row.display_name}`}
-                            onChange={() => setSelectedId(row.end_customer_id)}
+                            checked={isSelecting}
+                            readOnly
+                            disabled={interactionLocked || !row.selectable}
+                            aria-label="בחירת לקוח לריטיינר"
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={() => void selectCustomer(row.end_customer_id, row.selectable)}
                           />
                         </td>
                         <td>{row.display_name}</td>
@@ -184,19 +203,18 @@ export function WorkEngineInvoiceRetainerCustomerModal({
         </div>
 
         <div className="nx-we-retainer-modal__footer">
-          <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy || loading} onClick={onClose}>
-            ביטול
-          </button>
           <button
             type="button"
-            className="nx-btn nx-btn-primary nx-btn-taxes-compact"
-            disabled={busy || loading || !selectedId}
-            onClick={() => void handleContinue()}
+            className="nx-btn nx-btn-taxes-compact"
+            disabled={busy || interactionLocked}
+            onClick={onClose}
           >
-            המשך
+            ביטול
           </button>
         </div>
       </div>
     </div>
   );
+
+  return createPortal(dialog, document.body);
 }

@@ -10,6 +10,10 @@ import { formatMoneyReference } from '../income/income-document-draft-lines.pure
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import type { IncomeDocumentType } from '../income/income.types.js';
 import {
+  ensureRetainerDocumentDraftWorkspace,
+  type RecurringDocumentTemplateSnapshot,
+} from './work-engine-invoice-retainer-draft.service.js';
+import {
   RECURRING_SCHEDULER_STATUS,
   RECURRING_WORK_EVENT_TYPE,
   RECURRING_WORK_TYPE,
@@ -22,7 +26,7 @@ import {
 } from './work-engine-invoice-retainer.pure.js';
 import {
   WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY,
-  type WorkEngineInvoiceRetainerProfileForm,
+  type WorkEngineInvoiceRetainerSettings,
   type WorkEngineInvoiceRetainerSetupAggregate,
 } from './work-engine-invoice-retainer.types.js';
 
@@ -44,12 +48,6 @@ const STATUS_LABELS: Record<RecurringProfileStatus, string> = {
   cancelled: 'בוטל',
 };
 
-const DOCUMENT_TYPE_OPTIONS: Array<{ key: IncomeDocumentType; label: string; enabled: boolean }> = [
-  { key: 'deal_invoice', label: DOCUMENT_TYPE_LABELS.deal_invoice, enabled: true },
-  { key: 'quote', label: DOCUMENT_TYPE_LABELS.quote, enabled: true },
-  { key: 'tax_invoice', label: DOCUMENT_TYPE_LABELS.tax_invoice, enabled: true },
-];
-
 const FREQUENCY_OPTIONS = (Object.keys(FREQUENCY_LABELS) as RecurringDocumentFrequency[]).map((key) => ({
   key,
   label: FREQUENCY_LABELS[key],
@@ -65,16 +63,14 @@ type RawProfile = {
   service_period_start: string;
   service_period_end: string;
   auto_advance_period: boolean;
-  line_description_template: string;
-  quantity: number;
   unit_price_before_vat_reference: number;
   currency: string;
-  discount_percent_reference: number | null;
-  discount_amount_reference: number | null;
   price_increase_enabled: boolean;
   price_increase_type: RecurringPriceIncreaseType | null;
   price_increase_value: number | null;
   status: RecurringProfileStatus;
+  source_draft_template_id: string | null;
+  document_template_snapshot: RecurringDocumentTemplateSnapshot | null;
 };
 
 function assertAccess(ctx: RequestContext): void {
@@ -120,7 +116,7 @@ async function loadProfiles(orgId: string, representedClientId: string): Promise
   const { data, error } = await supabaseAdmin
     .from('income_recurring_document_profiles')
     .select(
-      'id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, line_description_template, quantity, unit_price_before_vat_reference, currency, discount_percent_reference, discount_amount_reference, price_increase_enabled, price_increase_type, price_increase_value, status',
+      'id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, unit_price_before_vat_reference, currency, price_increase_enabled, price_increase_type, price_increase_value, status, source_draft_template_id, document_template_snapshot',
     )
     .eq('organization_id', orgId)
     .eq('represented_client_id', representedClientId)
@@ -141,19 +137,31 @@ function formatIsoDefault(dt: Date): string {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
-function buildProfileForm(
+function settingValueFromWorkspace(
+  workspace: WorkEngineInvoiceRetainerSetupAggregate['document_draft_workspace'],
+  key: string,
+): string | null {
+  const field = workspace?.income_workspace_aggregate.document_details_step?.settings_schema.find(
+    (f) => f.key === key,
+  );
+  return field?.value ?? null;
+}
+
+function buildRetainerSettings(
   profile: RawProfile | null,
   endCustomer: { id: string; display_name: string },
   defaults: WorkEngineInvoiceRetainerSetupAggregate['default_values'],
-): WorkEngineInvoiceRetainerProfileForm {
-  const today = new Date();
-  const defaultNext = formatIsoDefault(today);
-  const documentType = profile?.document_type ?? 'deal_invoice';
+  workspace: WorkEngineInvoiceRetainerSetupAggregate['document_draft_workspace'],
+): WorkEngineInvoiceRetainerSettings {
+  const today = formatIsoDefault(new Date());
   const frequency = profile?.frequency ?? 'yearly';
-  const nextDocumentDate = profile?.next_document_date ?? defaultNext;
   const advanceDays = profile?.advance_days ?? defaults.advance_days;
+  const documentDate =
+    settingValueFromWorkspace(workspace, 'document_date') ??
+    profile?.next_document_date ??
+    today;
   const unitPrice = profile?.unit_price_before_vat_reference ?? 0;
-  const currency = profile?.currency ?? defaults.currency;
+  const currency = profile?.currency ?? 'ILS';
   const priceIncreaseEnabled = profile?.price_increase_enabled ?? false;
   const priceIncreaseType = profile?.price_increase_type ?? null;
   const priceIncreaseValue = profile?.price_increase_value ?? null;
@@ -168,39 +176,30 @@ function buildProfileForm(
     profile_id: profile?.id ?? null,
     end_customer_id: endCustomer.id,
     end_customer_display_name: endCustomer.display_name,
-    document_type: documentType,
-    document_type_label: DOCUMENT_TYPE_LABELS[documentType],
+    source_draft_template_id:
+      workspace?.income_workspace_aggregate.active_wizard_draft_id ??
+      profile?.source_draft_template_id ??
+      null,
+    document_template_snapshot: profile?.document_template_snapshot ?? null,
     frequency,
     frequency_label: FREQUENCY_LABELS[frequency],
-    next_document_date: nextDocumentDate,
-    next_document_date_display: formatHebrewDateDisplay(nextDocumentDate),
     advance_days: advanceDays,
-    draft_creation_date: computeDraftCreationDateIso(nextDocumentDate, advanceDays),
     draft_creation_date_display: formatHebrewDateDisplay(
-      computeDraftCreationDateIso(nextDocumentDate, advanceDays),
+      computeDraftCreationDateIso(documentDate, advanceDays),
     ),
-    service_period_start: profile?.service_period_start ?? defaultNext,
-    service_period_start_display: formatHebrewDateDisplay(profile?.service_period_start ?? defaultNext),
-    service_period_end: profile?.service_period_end ?? defaultNext,
-    service_period_end_display: formatHebrewDateDisplay(profile?.service_period_end ?? defaultNext),
+    service_period_start: profile?.service_period_start ?? today,
+    service_period_start_display: formatHebrewDateDisplay(profile?.service_period_start ?? today),
+    service_period_end: profile?.service_period_end ?? today,
+    service_period_end_display: formatHebrewDateDisplay(profile?.service_period_end ?? today),
     auto_advance_period: profile?.auto_advance_period ?? defaults.auto_advance_period,
-    line_description_template: profile?.line_description_template ?? '',
-    quantity: profile?.quantity ?? defaults.quantity,
-    unit_price_before_vat_reference: unitPrice,
-    unit_price_before_vat_display: formatMoneyReference(unitPrice, currency),
-    currency,
-    discount_percent_reference: profile?.discount_percent_reference ?? null,
-    discount_amount_reference: profile?.discount_amount_reference ?? null,
     price_increase_enabled: priceIncreaseEnabled,
     price_increase_type: priceIncreaseType,
     price_increase_value: priceIncreaseValue,
-    next_cycle_unit_price_before_vat_reference: priceIncreaseEnabled ? nextCyclePrice : null,
     next_cycle_unit_price_before_vat_display: priceIncreaseEnabled
       ? formatMoneyReference(nextCyclePrice, currency)
       : null,
     status: profile?.status ?? 'active',
     status_label: STATUS_LABELS[profile?.status ?? 'active'],
-    vat_note: 'חישוב מע״מ יתבצע בהפקת המסמך לפי מדיניות Income הקיימת.',
   };
 }
 
@@ -249,17 +248,25 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
 
   const defaultValues = {
     advance_days: 30,
-    currency: 'ILS',
     auto_advance_period: true,
-    quantity: 1,
   };
 
   const selectedEndCustomerId = params.endCustomerId?.trim() || null;
-  let profileForm: WorkEngineInvoiceRetainerProfileForm | null = null;
+  let documentDraftWorkspace: WorkEngineInvoiceRetainerSetupAggregate['document_draft_workspace'] = null;
+  let retainerSettings: WorkEngineInvoiceRetainerSettings | null = null;
+
   if (selectedEndCustomerId) {
     const customer = customers.find((c) => c.id === selectedEndCustomerId);
     if (!customer) throw badRequest('end_customer_id is not eligible');
-    profileForm = buildProfileForm(profileByCustomerId.get(customer.id) ?? null, customer, defaultValues);
+    const profile = profileByCustomerId.get(customer.id) ?? null;
+    documentDraftWorkspace = await ensureRetainerDocumentDraftWorkspace({
+      ctx: params.ctx,
+      representedClientId,
+      endCustomerId: customer.id,
+      sourceDraftTemplateId: profile?.source_draft_template_id,
+      fallbackDocumentType: (profile?.document_type ?? 'deal_invoice') as IncomeDocumentType,
+    });
+    retainerSettings = buildRetainerSettings(profile, customer, defaultValues, documentDraftWorkspace);
   }
 
   const allowedActions = ['view_invoice_retainer_setup'];
@@ -279,7 +286,8 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     client_display_name: client.display_name,
     selected_end_customer_id: selectedEndCustomerId,
     end_customers: endCustomers,
-    profile: profileForm,
+    document_draft_workspace: documentDraftWorkspace,
+    retainer_settings: retainerSettings,
     recurring_profiles: profiles.map((profile) => ({
       profile_id: profile.id,
       end_customer_id: profile.end_customer_id,
@@ -290,7 +298,6 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
       status_label: STATUS_LABELS[profile.status],
       next_document_date_display: formatHebrewDateDisplay(profile.next_document_date),
     })),
-    document_type_options: DOCUMENT_TYPE_OPTIONS,
     frequency_options: FREQUENCY_OPTIONS,
     default_values: defaultValues,
     allowed_actions: allowedActions,

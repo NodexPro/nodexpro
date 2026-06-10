@@ -341,6 +341,7 @@ export function WorkEngineClientDocumentManagementShell({
         onSelectCustomer={(_endCustomerId, aggregate) => {
           setRetainerSetupAggregate(aggregate);
           setRetainerSetupOpen(true);
+          setRetainerCustomerOpen(false);
         }}
         onAddCustomer={async () => {
           if (!retainerClientId) return;

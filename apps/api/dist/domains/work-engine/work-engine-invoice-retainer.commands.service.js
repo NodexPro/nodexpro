@@ -8,9 +8,9 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
+import { buildDocumentTemplateSnapshotForRetainer } from './work-engine-invoice-retainer-draft.service.js';
 import { WORK_ENGINE_INVOICE_RETAINER_COMMANDS, } from './work-engine-invoice-retainer.types.js';
 const ALLOWED_RETAINER_COMMANDS = new Set(Object.values(WORK_ENGINE_INVOICE_RETAINER_COMMANDS));
-const RETAINER_DOCUMENT_TYPES = new Set(['quote', 'deal_invoice', 'tax_invoice']);
 const RETAINER_FREQUENCIES = new Set(['monthly', 'semi_annual', 'yearly']);
 const RETAINER_INCREASE_TYPES = new Set(['percent', 'amount']);
 function assertEditAccess(ctx) {
@@ -87,10 +87,7 @@ async function loadProfile(params) {
         throw notFound('Recurring profile not found');
     return row;
 }
-function parseProfilePayload(body) {
-    const documentType = reqString(body, 'document_type');
-    if (!RETAINER_DOCUMENT_TYPES.has(documentType))
-        throw badRequest('document_type is invalid');
+function parseRetainerSettingsPayload(body) {
     const frequency = reqString(body, 'frequency');
     if (!RETAINER_FREQUENCIES.has(frequency))
         throw badRequest('frequency is invalid');
@@ -106,22 +103,30 @@ function parseProfilePayload(body) {
         }
     }
     return {
-        document_type: documentType,
         frequency,
-        next_document_date: reqString(body, 'next_document_date'),
         advance_days: Math.max(0, Math.min(365, Math.trunc(reqNumber(body, 'advance_days')))),
         service_period_start: reqString(body, 'service_period_start'),
         service_period_end: reqString(body, 'service_period_end'),
         auto_advance_period: reqBoolean(body, 'auto_advance_period'),
-        line_description_template: reqString(body, 'line_description_template'),
-        quantity: reqNumber(body, 'quantity'),
-        unit_price_before_vat_reference: reqNumber(body, 'unit_price_before_vat_reference'),
-        currency: optionalString(body, 'currency') ?? 'ILS',
-        discount_percent_reference: optionalNumber(body, 'discount_percent_reference'),
-        discount_amount_reference: optionalNumber(body, 'discount_amount_reference'),
         price_increase_enabled: priceIncreaseEnabled,
         price_increase_type: priceIncreaseEnabled ? priceIncreaseType : null,
         price_increase_value: priceIncreaseEnabled ? priceIncreaseValue : null,
+    };
+}
+async function buildProfileWritePayload(params) {
+    const sourceDraftTemplateId = reqString(params.body, 'source_draft_template_id');
+    const retainerSettings = parseRetainerSettingsPayload(params.body);
+    const { snapshot, denormalized } = await buildDocumentTemplateSnapshotForRetainer({
+        orgId: params.orgId,
+        representedClientId: params.representedClientId,
+        endCustomerId: params.endCustomerId,
+        sourceDraftTemplateId,
+    });
+    return {
+        source_draft_template_id: sourceDraftTemplateId,
+        document_template_snapshot: snapshot,
+        ...denormalized,
+        ...retainerSettings,
     };
 }
 async function commandResponse(params) {
@@ -153,7 +158,12 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
     if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.create) {
         const endCustomerId = reqString(body, 'end_customer_id');
         await assertEndCustomerBelongs({ orgId, representedClientId, endCustomerId });
-        const payload = parseProfilePayload(body);
+        const payload = await buildProfileWritePayload({
+            orgId,
+            representedClientId,
+            endCustomerId,
+            body,
+        });
         const { data, error } = await supabaseAdmin
             .from('income_recurring_document_profiles')
             .insert({
@@ -177,7 +187,11 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
             entityType: 'income_recurring_document_profile',
             entityId: data.id,
             action: AUDIT_ACTIONS.INCOME_RECURRING_DOCUMENT_PROFILE_CREATED,
-            payload: { represented_client_id: representedClientId, end_customer_id: endCustomerId },
+            payload: {
+                represented_client_id: representedClientId,
+                end_customer_id: endCustomerId,
+                source_draft_template_id: payload.source_draft_template_id,
+            },
         });
         return commandResponse({
             ctx,
@@ -190,7 +204,12 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
     const profileId = reqString(body, 'profile_id');
     const existing = await loadProfile({ orgId, profileId, representedClientId });
     if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.update) {
-        const payload = parseProfilePayload(body);
+        const payload = await buildProfileWritePayload({
+            orgId,
+            representedClientId,
+            endCustomerId: existing.end_customer_id,
+            body,
+        });
         const { error } = await supabaseAdmin
             .from('income_recurring_document_profiles')
             .update({
@@ -207,7 +226,10 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
             entityType: 'income_recurring_document_profile',
             entityId: profileId,
             action: AUDIT_ACTIONS.INCOME_RECURRING_DOCUMENT_PROFILE_UPDATED,
-            payload: { represented_client_id: representedClientId },
+            payload: {
+                represented_client_id: representedClientId,
+                source_draft_template_id: payload.source_draft_template_id,
+            },
         });
         return commandResponse({
             ctx,

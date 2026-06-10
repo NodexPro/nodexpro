@@ -54,9 +54,10 @@ async function listSchedulerOrgIds(singleOrgId) {
 }
 async function pickSchedulerActorUserId(orgId) {
     const { data, error } = await supabaseAdmin
-        .from('memberships')
+        .from('organization_memberships')
         .select('user_id')
         .eq('organization_id', orgId)
+        .eq('status', 'active')
         .limit(1)
         .maybeSingle();
     if (error)

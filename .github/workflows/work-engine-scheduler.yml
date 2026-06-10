@@ -31,7 +31,7 @@ jobs:
         env:
           WORK_ENGINE_CRON_SECRET: ${{ secrets.WORK_ENGINE_CRON_SECRET }}
           SCHEDULER_URL: https://nodexpro.onrender.com/api/v1/work-engine/internal/scheduler/run
-          REQUEST_BODY: '{"batch_size":100,"max_work_items_per_run":500}'
+          REQUEST_BODY: '{"batch_size":25,"max_work_items_per_run":50}'
         run: |
           set -euo pipefail
 
