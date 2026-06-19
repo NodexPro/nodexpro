@@ -48,13 +48,26 @@ async function loadOfficeClient(orgId, clientId) {
         throw notFound('Office client not found');
     return row;
 }
-async function loadEndCustomers(orgId, representedClientId) {
+function buildOfficeRepresentativeIssuerScope(orgId, actorUserId, representedClientId, permissions) {
+    return {
+        org_id: orgId,
+        actor_user_id: actorUserId,
+        acting_mode: 'office_representative',
+        issuer_business_id: representedClientId,
+        represented_client_id: representedClientId,
+        issuer_label: '',
+        represented_client_label: '',
+        permissions,
+    };
+}
+/** Same scope/filters as income workspace customers_table_model (document wizard / end-customers). */
+async function loadEndCustomers(scope) {
     const { data, error } = await supabaseAdmin
         .from('income_customers')
         .select('id, display_name, email, tax_id, status')
-        .eq('organization_id', orgId)
-        .eq('represented_client_id', representedClientId)
-        .eq('issuer_business_id', representedClientId)
+        .eq('organization_id', scope.org_id)
+        .eq('issuer_business_id', scope.issuer_business_id)
+        .eq('represented_client_id', scope.represented_client_id ?? '')
         .eq('status', 'active')
         .order('display_name', { ascending: true })
         .limit(5000);
@@ -140,10 +153,15 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         throw badRequest('represented_client_id is required');
     const perms = incomeWorkspacePermissionsFromContext(params.ctx);
     const client = await loadOfficeClient(orgId, representedClientId);
-    const [customers, profiles] = await Promise.all([
-        loadEndCustomers(orgId, representedClientId),
-        loadProfiles(orgId, representedClientId),
-    ]);
+    const issuerScope = buildOfficeRepresentativeIssuerScope(orgId, params.ctx.user.id, representedClientId, perms);
+    const customers = await loadEndCustomers(issuerScope);
+    let profiles = [];
+    try {
+        profiles = await loadProfiles(orgId, representedClientId);
+    }
+    catch (e) {
+        console.warn('[work-engine] loadRetainerProfiles failed; customer picker still available', e);
+    }
     const profileByCustomerId = new Map();
     for (const profile of profiles) {
         if (!profileByCustomerId.has(profile.end_customer_id)) {

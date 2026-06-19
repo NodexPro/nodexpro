@@ -7,6 +7,7 @@ import type { RequestContext } from '../../shared/context.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
+import type { ActiveIncomeIssuerScope } from '../income/income.guards.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import type { IncomeDocumentType } from '../income/income.types.js';
 import {
@@ -92,13 +93,32 @@ async function loadOfficeClient(orgId: string, clientId: string) {
   return row;
 }
 
-async function loadEndCustomers(orgId: string, representedClientId: string) {
+function buildOfficeRepresentativeIssuerScope(
+  orgId: string,
+  actorUserId: string,
+  representedClientId: string,
+  permissions: ReturnType<typeof incomeWorkspacePermissionsFromContext>,
+): ActiveIncomeIssuerScope {
+  return {
+    org_id: orgId,
+    actor_user_id: actorUserId,
+    acting_mode: 'office_representative',
+    issuer_business_id: representedClientId,
+    represented_client_id: representedClientId,
+    issuer_label: '',
+    represented_client_label: '',
+    permissions,
+  };
+}
+
+/** Same scope/filters as income workspace customers_table_model (document wizard / end-customers). */
+async function loadEndCustomers(scope: ActiveIncomeIssuerScope) {
   const { data, error } = await supabaseAdmin
     .from('income_customers')
     .select('id, display_name, email, tax_id, status')
-    .eq('organization_id', orgId)
-    .eq('represented_client_id', representedClientId)
-    .eq('issuer_business_id', representedClientId)
+    .eq('organization_id', scope.org_id)
+    .eq('issuer_business_id', scope.issuer_business_id)
+    .eq('represented_client_id', scope.represented_client_id ?? '')
     .eq('status', 'active')
     .order('display_name', { ascending: true })
     .limit(5000);
@@ -217,10 +237,19 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
 
   const perms = incomeWorkspacePermissionsFromContext(params.ctx);
   const client = await loadOfficeClient(orgId, representedClientId);
-  const [customers, profiles] = await Promise.all([
-    loadEndCustomers(orgId, representedClientId),
-    loadProfiles(orgId, representedClientId),
-  ]);
+  const issuerScope = buildOfficeRepresentativeIssuerScope(
+    orgId,
+    params.ctx.user.id,
+    representedClientId,
+    perms,
+  );
+  const customers = await loadEndCustomers(issuerScope);
+  let profiles: RawProfile[] = [];
+  try {
+    profiles = await loadProfiles(orgId, representedClientId);
+  } catch (e) {
+    console.warn('[work-engine] loadRetainerProfiles failed; customer picker still available', e);
+  }
 
   const profileByCustomerId = new Map<string, RawProfile>();
   for (const profile of profiles) {
