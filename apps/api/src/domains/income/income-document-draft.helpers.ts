@@ -80,7 +80,7 @@ export async function validateDraftAgainstDocumentTypeRules(
   if (docType.requires_payment_received && !payload.payment_received_json) {
     warnings.push({
       code: 'payment_received_recommended',
-      message: 'Payment received details are expected for this document type.',
+      message: 'נדרשים פרטי תשלום שהתקבל עבור סוג מסמך זה',
     });
   }
   if (docType.requires_due_date && !payload.due_date) {
@@ -92,7 +92,7 @@ export async function validateDraftAgainstDocumentTypeRules(
   if (!payload.income_customer_id && !payload.one_time_customer_snapshot_json) {
     warnings.push({
       code: 'customer_required',
-      message: 'Select an income customer or provide a one-time customer snapshot.',
+      message: 'יש לבחור לקוח הכנסה או להזין פרטי לקוח חד-פעמי',
     });
   }
 
