@@ -3,7 +3,33 @@
  * TEMPORARY_ACCOUNTING_BASE_PENDING — amounts are reference templates until draft issue/posting.
  */
 
-export type RecurringDocumentFrequency = 'monthly' | 'semi_annual' | 'yearly';
+export type RecurringDocumentFrequency =
+  | 'days_45'
+  | 'days_60'
+  | 'days_90'
+  | 'monthly'
+  | 'semi_annual'
+  | 'yearly'
+  | 'biennial';
+
+export const RECURRING_FREQUENCY_OPTIONS: ReadonlyArray<{
+  key: RecurringDocumentFrequency;
+  label: string;
+}> = [
+  { key: 'days_45', label: '45 ימים' },
+  { key: 'days_60', label: '60 ימים' },
+  { key: 'days_90', label: '90 ימים' },
+  { key: 'yearly', label: 'שנתי' },
+  { key: 'semi_annual', label: 'חצי שנתי' },
+  { key: 'monthly', label: 'חודשי' },
+  { key: 'biennial', label: 'שנתיים' },
+] as const;
+
+export const RECURRING_FREQUENCY_LABELS: Record<RecurringDocumentFrequency, string> =
+  Object.fromEntries(RECURRING_FREQUENCY_OPTIONS.map((o) => [o.key, o.label])) as Record<
+    RecurringDocumentFrequency,
+    string
+  >;
 export type RecurringProfileStatus = 'active' | 'paused' | 'cancelled';
 export type RecurringPriceIncreaseType = 'percent' | 'amount';
 
@@ -34,6 +60,13 @@ function clampDay(year: number, month: number, day: number): number {
   return Math.min(day, daysInMonth(year, month));
 }
 
+export function addDaysToDate(iso: string, days: number): string {
+  const { y, m, d } = parseIsoDateOnly(iso);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return formatIsoDateOnly(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+}
+
 export function addMonthsToDate(iso: string, months: number): string {
   const { y, m, d } = parseIsoDateOnly(iso);
   let total = (y * 12 + (m - 1)) + months;
@@ -43,13 +76,36 @@ export function addMonthsToDate(iso: string, months: number): string {
   return formatIsoDateOnly(ny, nm, nd);
 }
 
+function frequencyAdvanceDays(frequency: RecurringDocumentFrequency): number | null {
+  if (frequency === 'days_45') return 45;
+  if (frequency === 'days_60') return 60;
+  if (frequency === 'days_90') return 90;
+  return null;
+}
+
+function frequencyAdvanceMonths(frequency: RecurringDocumentFrequency): number {
+  if (frequency === 'monthly') return 1;
+  if (frequency === 'semi_annual') return 6;
+  if (frequency === 'biennial') return 24;
+  return 12;
+}
+
 export function advanceServicePeriod(params: {
   service_period_start: string;
   service_period_end: string;
   frequency: RecurringDocumentFrequency;
 }): { service_period_start: string; service_period_end: string; next_document_date: string } {
-  const months =
-    params.frequency === 'monthly' ? 1 : params.frequency === 'semi_annual' ? 6 : 12;
+  const dayStep = frequencyAdvanceDays(params.frequency);
+  if (dayStep != null) {
+    const nextStart = addDaysToDate(params.service_period_start, dayStep);
+    const nextEnd = addDaysToDate(params.service_period_end, dayStep);
+    return {
+      service_period_start: nextStart,
+      service_period_end: nextEnd,
+      next_document_date: nextStart,
+    };
+  }
+  const months = frequencyAdvanceMonths(params.frequency);
   const nextStart = addMonthsToDate(params.service_period_start, months);
   const nextEnd = addMonthsToDate(params.service_period_end, months);
   return {

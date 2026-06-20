@@ -10,8 +10,13 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
+import type { RetainerSettingsOverride } from './work-engine-invoice-retainer.read-model.service.js';
 import { buildDocumentTemplateSnapshotForRetainer } from './work-engine-invoice-retainer-draft.service.js';
-import type { RecurringDocumentFrequency, RecurringPriceIncreaseType } from './work-engine-invoice-retainer.pure.js';
+import {
+  RECURRING_FREQUENCY_OPTIONS,
+  type RecurringDocumentFrequency,
+  type RecurringPriceIncreaseType,
+} from './work-engine-invoice-retainer.pure.js';
 import {
   WORK_ENGINE_INVOICE_RETAINER_COMMANDS,
   type WorkEngineInvoiceRetainerCommandResponse,
@@ -20,7 +25,9 @@ import {
 
 const ALLOWED_RETAINER_COMMANDS = new Set<string>(Object.values(WORK_ENGINE_INVOICE_RETAINER_COMMANDS));
 
-const RETAINER_FREQUENCIES = new Set<RecurringDocumentFrequency>(['monthly', 'semi_annual', 'yearly']);
+const RETAINER_FREQUENCIES = new Set<RecurringDocumentFrequency>(
+  RECURRING_FREQUENCY_OPTIONS.map((o) => o.key),
+);
 const RETAINER_INCREASE_TYPES = new Set<RecurringPriceIncreaseType>(['percent', 'amount']);
 
 function assertEditAccess(ctx: RequestContext): void {
@@ -100,15 +107,27 @@ async function loadProfile(params: {
   return row;
 }
 
-function parseRetainerSettingsPayload(body: Record<string, unknown>) {
-  const frequency = reqString(body, 'frequency') as RecurringDocumentFrequency;
-  if (!RETAINER_FREQUENCIES.has(frequency)) throw badRequest('frequency is invalid');
+function parseRetainerSettingsPayload(body: Record<string, unknown>, opts?: { partial?: boolean }) {
+  const partial = opts?.partial === true;
+  const frequencyRaw = body.frequency;
+  const frequency =
+    frequencyRaw == null || String(frequencyRaw).trim() === ''
+      ? partial
+        ? undefined
+        : (() => {
+            throw badRequest('frequency is required');
+          })()
+      : (reqString(body, 'frequency') as RecurringDocumentFrequency);
+  if (frequency != null && !RETAINER_FREQUENCIES.has(frequency)) throw badRequest('frequency is invalid');
 
-  const priceIncreaseEnabled = reqBoolean(body, 'price_increase_enabled');
+  const priceIncreaseEnabled =
+    body.price_increase_enabled == null && partial
+      ? undefined
+      : reqBoolean(body, 'price_increase_enabled');
   const priceIncreaseType = optionalString(body, 'price_increase_type') as RecurringPriceIncreaseType | null;
   const priceIncreaseValue = optionalNumber(body, 'price_increase_value');
 
-  if (priceIncreaseEnabled) {
+  if (priceIncreaseEnabled === true) {
     if (!priceIncreaseType || !RETAINER_INCREASE_TYPES.has(priceIncreaseType)) {
       throw badRequest('price_increase_type is required when price increase is enabled');
     }
@@ -117,16 +136,41 @@ function parseRetainerSettingsPayload(body: Record<string, unknown>) {
     }
   }
 
+  const advanceDaysRaw = body.advance_days;
+  const advanceDays =
+    advanceDaysRaw == null || advanceDaysRaw === ''
+      ? partial
+        ? undefined
+        : reqNumber(body, 'advance_days')
+      : Math.max(0, Math.min(365, Math.trunc(reqNumber(body, 'advance_days'))));
+
+  const servicePeriodStart =
+    body.service_period_start == null || String(body.service_period_start).trim() === ''
+      ? partial
+        ? undefined
+        : reqString(body, 'service_period_start')
+      : reqString(body, 'service_period_start');
+  const servicePeriodEnd =
+    body.service_period_end == null || String(body.service_period_end).trim() === ''
+      ? partial
+        ? undefined
+        : reqString(body, 'service_period_end')
+      : reqString(body, 'service_period_end');
+  const autoAdvancePeriod =
+    body.auto_advance_period == null && partial
+      ? undefined
+      : reqBoolean(body, 'auto_advance_period');
+
   return {
     frequency,
-    advance_days: Math.max(0, Math.min(365, Math.trunc(reqNumber(body, 'advance_days')))),
-    service_period_start: reqString(body, 'service_period_start'),
-    service_period_end: reqString(body, 'service_period_end'),
-    auto_advance_period: reqBoolean(body, 'auto_advance_period'),
+    advance_days: advanceDays,
+    service_period_start: servicePeriodStart,
+    service_period_end: servicePeriodEnd,
+    auto_advance_period: autoAdvancePeriod,
     price_increase_enabled: priceIncreaseEnabled,
-    price_increase_type: priceIncreaseEnabled ? priceIncreaseType : null,
-    price_increase_value: priceIncreaseEnabled ? priceIncreaseValue : null,
-  };
+    price_increase_type: priceIncreaseEnabled ? priceIncreaseType : priceIncreaseEnabled === false ? null : priceIncreaseType,
+    price_increase_value: priceIncreaseEnabled ? priceIncreaseValue : priceIncreaseEnabled === false ? null : priceIncreaseValue,
+  } satisfies RetainerSettingsOverride;
 }
 
 async function buildProfileWritePayload(params: {
@@ -189,6 +233,23 @@ export async function executeWorkEngineInvoiceRetainerCommand(
   const orgId = ctx.organizationId!;
   const userId = ctx.user?.id ?? null;
   const representedClientId = reqString(body, 'represented_client_id');
+
+  if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.preview) {
+    const endCustomerId = reqString(body, 'end_customer_id');
+    await assertEndCustomerBelongs({ orgId, representedClientId, endCustomerId });
+    const settingsOverride = parseRetainerSettingsPayload(body, { partial: true });
+    const aggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
+      ctx,
+      representedClientId,
+      endCustomerId,
+      settingsOverride,
+    });
+    return {
+      ok: true,
+      command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.preview,
+      work_engine_invoice_retainer_setup_aggregate: aggregate,
+    };
+  }
 
   if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.create) {
     const endCustomerId = reqString(body, 'end_customer_id');

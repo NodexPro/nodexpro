@@ -86,7 +86,7 @@ export async function validateDraftAgainstDocumentTypeRules(
   if (docType.requires_due_date && !payload.due_date) {
     warnings.push({
       code: 'due_date_recommended',
-      message: 'Due date is expected for this document type.',
+      message: 'יש להזין תאריך לתשלום עבור סוג מסמך זה',
     });
   }
   if (!payload.income_customer_id && !payload.one_time_customer_snapshot_json) {

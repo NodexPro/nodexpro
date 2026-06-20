@@ -2,6 +2,16 @@
  * Pure helpers for income recurring document profiles (retainer templates).
  * TEMPORARY_ACCOUNTING_BASE_PENDING — amounts are reference templates until draft issue/posting.
  */
+export const RECURRING_FREQUENCY_OPTIONS = [
+    { key: 'days_45', label: '45 ימים' },
+    { key: 'days_60', label: '60 ימים' },
+    { key: 'days_90', label: '90 ימים' },
+    { key: 'yearly', label: 'שנתי' },
+    { key: 'semi_annual', label: 'חצי שנתי' },
+    { key: 'monthly', label: 'חודשי' },
+    { key: 'biennial', label: 'שנתיים' },
+];
+export const RECURRING_FREQUENCY_LABELS = Object.fromEntries(RECURRING_FREQUENCY_OPTIONS.map((o) => [o.key, o.label]));
 export function parseIsoDateOnly(raw) {
     const s = String(raw ?? '').trim().slice(0, 10);
     const [y, m, d] = s.split('-').map((part) => Number(part));
@@ -25,6 +35,12 @@ function daysInMonth(year, month) {
 function clampDay(year, month, day) {
     return Math.min(day, daysInMonth(year, month));
 }
+export function addDaysToDate(iso, days) {
+    const { y, m, d } = parseIsoDateOnly(iso);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    return formatIsoDateOnly(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+}
 export function addMonthsToDate(iso, months) {
     const { y, m, d } = parseIsoDateOnly(iso);
     let total = (y * 12 + (m - 1)) + months;
@@ -33,8 +49,36 @@ export function addMonthsToDate(iso, months) {
     const nd = clampDay(ny, nm, d);
     return formatIsoDateOnly(ny, nm, nd);
 }
+function frequencyAdvanceDays(frequency) {
+    if (frequency === 'days_45')
+        return 45;
+    if (frequency === 'days_60')
+        return 60;
+    if (frequency === 'days_90')
+        return 90;
+    return null;
+}
+function frequencyAdvanceMonths(frequency) {
+    if (frequency === 'monthly')
+        return 1;
+    if (frequency === 'semi_annual')
+        return 6;
+    if (frequency === 'biennial')
+        return 24;
+    return 12;
+}
 export function advanceServicePeriod(params) {
-    const months = params.frequency === 'monthly' ? 1 : params.frequency === 'semi_annual' ? 6 : 12;
+    const dayStep = frequencyAdvanceDays(params.frequency);
+    if (dayStep != null) {
+        const nextStart = addDaysToDate(params.service_period_start, dayStep);
+        const nextEnd = addDaysToDate(params.service_period_end, dayStep);
+        return {
+            service_period_start: nextStart,
+            service_period_end: nextEnd,
+            next_document_date: nextStart,
+        };
+    }
+    const months = frequencyAdvanceMonths(params.frequency);
     const nextStart = addMonthsToDate(params.service_period_start, months);
     const nextEnd = addMonthsToDate(params.service_period_end, months);
     return {

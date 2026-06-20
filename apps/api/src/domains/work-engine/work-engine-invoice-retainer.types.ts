@@ -20,6 +20,7 @@ export const WORK_ENGINE_INVOICE_RETAINER_COMMANDS = {
   pause: 'pause_income_recurring_document_profile',
   resume: 'resume_income_recurring_document_profile',
   cancel: 'cancel_income_recurring_document_profile',
+  preview: 'preview_income_recurring_document_profile_settings',
 } as const;
 
 export type WorkEngineInvoiceRetainerCommandType =
@@ -44,9 +45,14 @@ export type WorkEngineInvoiceRetainerSettings = {
   end_customer_display_name: string;
   source_draft_template_id: string | null;
   document_template_snapshot: RecurringDocumentTemplateSnapshot | null;
+  document_type: 'quote' | 'deal_invoice' | 'tax_invoice';
+  document_type_label: string;
+  document_type_change_note: string;
   frequency: RecurringDocumentFrequency;
   frequency_label: string;
   advance_days: number;
+  advance_creation_help_text: string;
+  draft_creation_date_label: string;
   draft_creation_date_display: string | null;
   service_period_start: string;
   service_period_start_display: string;
@@ -59,6 +65,7 @@ export type WorkEngineInvoiceRetainerSettings = {
   next_cycle_unit_price_before_vat_display: string | null;
   status: RecurringProfileStatus;
   status_label: string;
+  status_description: string;
   next_document_date: string;
   next_document_date_display: string;
   last_generated_draft_id: string | null;
@@ -76,6 +83,12 @@ export type WorkEngineInvoiceRetainerSetupAggregate = {
   represented_client_id: string;
   client_display_name: string;
   selected_end_customer_id: string | null;
+  identity: {
+    office_client_label: string;
+    end_customer_label: string;
+    document_type_label: string;
+    document_type_change_note: string;
+  } | null;
   end_customers: WorkEngineInvoiceRetainerEndCustomerRow[];
   document_draft_workspace: WorkEngineInvoiceRetainerDocumentDraftWorkspace | null;
   retainer_settings: WorkEngineInvoiceRetainerSettings | null;
