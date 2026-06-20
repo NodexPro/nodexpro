@@ -15,7 +15,8 @@ import { AppError } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { createRecurringCycleDraftFromSnapshot, } from './work-engine-invoice-retainer-draft.service.js';
 import { emitRecurringDocumentDraftCreatedWorkEvent, emitRecurringGenerationFailedWorkEvent, } from './work-engine-invoice-retainer-bridge.js';
-import { RECURRING_SCHEDULER_STATUS_ACTIVE, advanceServicePeriod, buildRecurringSchedulerCycleKey, computeNextUnitPriceBeforeVat, isRecurringProfileDueForDraftGeneration, } from './work-engine-invoice-retainer.pure.js';
+import { recordRecurringCycleDraftCreated, recordRecurringCycleFailed, } from './work-engine-invoice-retainer-cycles.service.js';
+import { RECURRING_SCHEDULER_STATUS_ACTIVE, advanceServicePeriod, buildRecurringSchedulerCycleKey, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, isRecurringProfileDueForDraftGeneration, } from './work-engine-invoice-retainer.pure.js';
 const DEFAULT_BATCH_SIZE = 25;
 const PROFILE_SELECT = 'id, organization_id, represented_client_id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, quantity, unit_price_before_vat_reference, currency, discount_percent_reference, discount_amount_reference, price_increase_enabled, price_increase_type, price_increase_value, document_template_snapshot, last_scheduler_cycle_key';
 function buildSchedulerIssuerScope(orgId, actorUserId, representedClientId) {
@@ -75,6 +76,14 @@ function parseSnapshot(raw) {
     return o;
 }
 async function markProfileGenerationFailed(params) {
+    const draftCreationDate = computeDraftCreationDateIso(params.scheduledDocumentDate, params.profile.advance_days);
+    await recordRecurringCycleFailed({
+        organizationId: params.profile.organization_id,
+        recurringProfileId: params.profile.id,
+        scheduledDocumentDate: params.scheduledDocumentDate,
+        draftCreationDate,
+        failureReason: `${params.errorCode}: ${params.errorMessage}`,
+    });
     const { error } = await supabaseAdmin
         .from('income_recurring_document_profiles')
         .update({
@@ -225,6 +234,14 @@ async function processDueProfile(params) {
             currency: profile.currency,
             discountPercentReference: profile.discount_percent_reference,
             discountAmountReference: profile.discount_amount_reference,
+        });
+        const draftCreationDate = computeDraftCreationDateIso(scheduledDocumentDate, profile.advance_days);
+        await recordRecurringCycleDraftCreated({
+            organizationId: profile.organization_id,
+            recurringProfileId: profile.id,
+            scheduledDocumentDate,
+            draftCreationDate,
+            generatedDraftId: draftId,
         });
         await advanceProfileAfterSuccess({
             profile,

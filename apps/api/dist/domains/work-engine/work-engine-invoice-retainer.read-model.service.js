@@ -8,6 +8,7 @@ import { formatMoneyReference } from '../income/income-document-draft-lines.pure
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
 import { ensureRetainerDocumentDraftWorkspace, } from './work-engine-invoice-retainer-draft.service.js';
+import { loadDocumentNumbersById, loadRecurringProfileCycles, RECURRING_CYCLE_STATUS_LABELS, } from './work-engine-invoice-retainer-cycles.service.js';
 import { RECURRING_SCHEDULER_STATUS_ACTIVE, RECURRING_SCHEDULER_STATUS_FAILED, RECURRING_WORK_EVENT_TYPE, RECURRING_WORK_TYPE, RECURRING_FREQUENCY_LABELS, RECURRING_FREQUENCY_OPTIONS, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
 import { WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY, } from './work-engine-invoice-retainer.types.js';
 const DOCUMENT_TYPE_LABELS = {
@@ -193,6 +194,45 @@ function buildRetainerSettings(profile, endCustomer, defaults, workspace, overri
             : null,
     };
 }
+async function buildChildDocumentsHistory(orgId, profileId) {
+    if (!profileId)
+        return [];
+    let cycles = [];
+    try {
+        cycles = await loadRecurringProfileCycles(orgId, profileId);
+    }
+    catch (e) {
+        console.warn('[work-engine] loadRecurringProfileCycles failed', profileId, e);
+        return [];
+    }
+    const documentIds = cycles
+        .map((cycle) => cycle.generated_document_id)
+        .filter((id) => Boolean(id));
+    const documentNumbers = await loadDocumentNumbersById(orgId, documentIds);
+    return cycles.map((cycle) => {
+        const allowedActions = [];
+        const draftRef = cycle.generated_draft_id
+            ? `טיוטה #${cycle.cycle_number}`
+            : null;
+        const documentRef = cycle.generated_document_id
+            ? (documentNumbers.get(cycle.generated_document_id) ?? `מסמך #${cycle.cycle_number}`)
+            : null;
+        return {
+            cycle_id: cycle.id,
+            cycle_number: cycle.cycle_number,
+            scheduled_document_date_display: formatHebrewDateDisplay(cycle.scheduled_document_date),
+            draft_creation_date_display: formatHebrewDateDisplay(cycle.draft_creation_date),
+            status: cycle.status,
+            status_label: RECURRING_CYCLE_STATUS_LABELS[cycle.status],
+            generated_draft_id: cycle.generated_draft_id,
+            generated_draft_reference_display: draftRef,
+            generated_document_id: cycle.generated_document_id,
+            generated_document_reference_display: documentRef,
+            failure_reason: cycle.failure_reason,
+            allowed_actions: allowedActions,
+        };
+    });
+}
 export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     const orgId = params.ctx.organizationId;
     if (!orgId)
@@ -273,6 +313,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     const selectedProfile = selectedEndCustomerId != null
         ? (profileByCustomerId.get(selectedEndCustomerId) ?? null)
         : null;
+    const childDocumentsHistory = await buildChildDocumentsHistory(orgId, selectedProfile?.id ?? null);
     const schedulerStatus = resolveSchedulerStatus(selectedProfile);
     const schedulerNote = schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
         ? `יצירת טיוטה אחרונה נכשלה (${selectedProfile?.last_generation_error_code ?? 'שגיאה'}). נדרשת בדיקה ידנית.`
@@ -291,6 +332,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         end_customers: endCustomers,
         document_draft_workspace: documentDraftWorkspace,
         retainer_settings: retainerSettings,
+        child_documents_history: childDocumentsHistory,
         recurring_profiles: profiles.map((profile) => ({
             profile_id: profile.id,
             end_customer_id: profile.end_customer_id,

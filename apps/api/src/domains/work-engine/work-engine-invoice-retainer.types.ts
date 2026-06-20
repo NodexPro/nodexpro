@@ -78,6 +78,21 @@ export type WorkEngineInvoiceRetainerDocumentDraftWorkspace = {
   income_commands: Record<string, string>;
 };
 
+export type WorkEngineInvoiceRetainerChildDocumentHistoryRow = {
+  cycle_id: string;
+  cycle_number: number;
+  scheduled_document_date_display: string;
+  draft_creation_date_display: string;
+  status: 'pending' | 'draft_created' | 'issued' | 'cancelled' | 'failed';
+  status_label: string;
+  generated_draft_id: string | null;
+  generated_draft_reference_display: string | null;
+  generated_document_id: string | null;
+  generated_document_reference_display: string | null;
+  failure_reason: string | null;
+  allowed_actions: string[];
+};
+
 export type WorkEngineInvoiceRetainerSetupAggregate = {
   aggregate_key: typeof WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY;
   represented_client_id: string;
@@ -96,6 +111,7 @@ export type WorkEngineInvoiceRetainerSetupAggregate = {
   end_customers: WorkEngineInvoiceRetainerEndCustomerRow[];
   document_draft_workspace: WorkEngineInvoiceRetainerDocumentDraftWorkspace | null;
   retainer_settings: WorkEngineInvoiceRetainerSettings | null;
+  child_documents_history: WorkEngineInvoiceRetainerChildDocumentHistoryRow[];
   recurring_profiles: Array<{
     profile_id: string;
     end_customer_id: string;

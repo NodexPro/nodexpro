@@ -16,6 +16,12 @@ import {
   type RecurringDocumentTemplateSnapshot,
 } from './work-engine-invoice-retainer-draft.service.js';
 import {
+  loadDocumentNumbersById,
+  loadRecurringProfileCycles,
+  RECURRING_CYCLE_STATUS_LABELS,
+  type RawCycleRow,
+} from './work-engine-invoice-retainer-cycles.service.js';
+import {
   RECURRING_SCHEDULER_STATUS_ACTIVE,
   RECURRING_SCHEDULER_STATUS_FAILED,
   RECURRING_WORK_EVENT_TYPE,
@@ -33,6 +39,7 @@ import {
 import {
   WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY,
   type WorkEngineInvoiceRetainerSettings,
+  type WorkEngineInvoiceRetainerChildDocumentHistoryRow,
   type WorkEngineInvoiceRetainerSetupAggregate,
 } from './work-engine-invoice-retainer.types.js';
 
@@ -311,6 +318,51 @@ function buildRetainerSettings(
   };
 }
 
+async function buildChildDocumentsHistory(
+  orgId: string,
+  profileId: string | null,
+): Promise<WorkEngineInvoiceRetainerChildDocumentHistoryRow[]> {
+  if (!profileId) return [];
+
+  let cycles: RawCycleRow[] = [];
+  try {
+    cycles = await loadRecurringProfileCycles(orgId, profileId);
+  } catch (e) {
+    console.warn('[work-engine] loadRecurringProfileCycles failed', profileId, e);
+    return [];
+  }
+
+  const documentIds = cycles
+    .map((cycle) => cycle.generated_document_id)
+    .filter((id): id is string => Boolean(id));
+  const documentNumbers = await loadDocumentNumbersById(orgId, documentIds);
+
+  return cycles.map((cycle) => {
+    const allowedActions: string[] = [];
+    const draftRef = cycle.generated_draft_id
+      ? `טיוטה #${cycle.cycle_number}`
+      : null;
+    const documentRef = cycle.generated_document_id
+      ? (documentNumbers.get(cycle.generated_document_id) ?? `מסמך #${cycle.cycle_number}`)
+      : null;
+
+    return {
+      cycle_id: cycle.id,
+      cycle_number: cycle.cycle_number,
+      scheduled_document_date_display: formatHebrewDateDisplay(cycle.scheduled_document_date),
+      draft_creation_date_display: formatHebrewDateDisplay(cycle.draft_creation_date),
+      status: cycle.status,
+      status_label: RECURRING_CYCLE_STATUS_LABELS[cycle.status],
+      generated_draft_id: cycle.generated_draft_id,
+      generated_draft_reference_display: draftRef,
+      generated_document_id: cycle.generated_document_id,
+      generated_document_reference_display: documentRef,
+      failure_reason: cycle.failure_reason,
+      allowed_actions: allowedActions,
+    };
+  });
+}
+
 export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
   ctx: RequestContext;
   representedClientId: string;
@@ -418,6 +470,10 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     selectedEndCustomerId != null
       ? (profileByCustomerId.get(selectedEndCustomerId) ?? null)
       : null;
+  const childDocumentsHistory = await buildChildDocumentsHistory(
+    orgId,
+    selectedProfile?.id ?? null,
+  );
   const schedulerStatus = resolveSchedulerStatus(selectedProfile);
   const schedulerNote =
     schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
@@ -446,6 +502,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     end_customers: endCustomers,
     document_draft_workspace: documentDraftWorkspace,
     retainer_settings: retainerSettings,
+    child_documents_history: childDocumentsHistory,
     recurring_profiles: profiles.map((profile) => ({
       profile_id: profile.id,
       end_customer_id: profile.end_customer_id,

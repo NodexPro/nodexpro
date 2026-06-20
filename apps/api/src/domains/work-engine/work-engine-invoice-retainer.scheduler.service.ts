@@ -25,9 +25,14 @@ import {
   emitRecurringGenerationFailedWorkEvent,
 } from './work-engine-invoice-retainer-bridge.js';
 import {
+  recordRecurringCycleDraftCreated,
+  recordRecurringCycleFailed,
+} from './work-engine-invoice-retainer-cycles.service.js';
+import {
   RECURRING_SCHEDULER_STATUS_ACTIVE,
   advanceServicePeriod,
   buildRecurringSchedulerCycleKey,
+  computeDraftCreationDateIso,
   computeNextUnitPriceBeforeVat,
   isRecurringProfileDueForDraftGeneration,
   type RecurringDocumentFrequency,
@@ -147,6 +152,19 @@ async function markProfileGenerationFailed(params: {
   errorCode: string;
   errorMessage: string;
 }): Promise<void> {
+  const draftCreationDate = computeDraftCreationDateIso(
+    params.scheduledDocumentDate,
+    params.profile.advance_days,
+  );
+
+  await recordRecurringCycleFailed({
+    organizationId: params.profile.organization_id,
+    recurringProfileId: params.profile.id,
+    scheduledDocumentDate: params.scheduledDocumentDate,
+    draftCreationDate,
+    failureReason: `${params.errorCode}: ${params.errorMessage}`,
+  });
+
   const { error } = await supabaseAdmin
     .from('income_recurring_document_profiles')
     .update({
@@ -327,6 +345,15 @@ async function processDueProfile(params: {
       currency: profile.currency,
       discountPercentReference: profile.discount_percent_reference,
       discountAmountReference: profile.discount_amount_reference,
+    });
+
+    const draftCreationDate = computeDraftCreationDateIso(scheduledDocumentDate, profile.advance_days);
+    await recordRecurringCycleDraftCreated({
+      organizationId: profile.organization_id,
+      recurringProfileId: profile.id,
+      scheduledDocumentDate,
+      draftCreationDate,
+      generatedDraftId: draftId,
     });
 
     await advanceProfileAfterSuccess({
