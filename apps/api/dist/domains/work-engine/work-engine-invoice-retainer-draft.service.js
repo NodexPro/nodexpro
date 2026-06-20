@@ -5,11 +5,11 @@ import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { normalizeDraftLines, serializeDraftLines } from '../income/income-document-draft-lines.pure.js';
-import { resumeIncomeDocumentDraft } from '../income/income-document-draft-editor.service.js';
+import { resumeIncomeDocumentDraft, } from '../income/income-document-draft-editor.service.js';
 import { applySelectIncomeIssuerContext } from '../income/income-issuer-context.service.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 import { INCOME_COMMAND_SELECT_ISSUER } from '../income/income.types.js';
-import { buildIncomeWorkspaceAggregate } from '../income/income-workspace-aggregate.service.js';
+import { buildIncomeWorkspaceWizardPatchAggregate } from '../income/income-workspace-aggregate.service.js';
 import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
 import { findAvailableDocumentType } from '../income/income-document-types.fallback.js';
 import { validateDraftAgainstDocumentTypeRules } from '../income/income-document-draft.helpers.js';
@@ -122,6 +122,7 @@ export async function ensureRetainerDocumentDraftWorkspace(params) {
     const income_commands = entrypoint.wizard.income_commands;
     let recipientOverlay = {};
     let wizardOverlay = {};
+    let startingStepKey = null;
     if (params.sourceDraftTemplateId) {
         try {
             const row = await loadDraftRow(scope.org_id, params.sourceDraftTemplateId);
@@ -133,12 +134,13 @@ export async function ensureRetainerDocumentDraftWorkspace(params) {
             const resumed = await resumeIncomeDocumentDraft(scope, { draft_id: params.sourceDraftTemplateId });
             recipientOverlay = resumed.recipientOverlay;
             wizardOverlay = resumed.wizardOverlay;
+            startingStepKey = resumed.starting_step_key;
         }
         catch {
-            // Stale template id — fall through to fresh draft.
+            // Stale template id — fall through to empty wizard overlay.
         }
     }
-    const income_workspace_aggregate = await buildIncomeWorkspaceAggregate(params.ctx, scope, recipientOverlay, wizardOverlay);
+    const income_workspace_aggregate = await buildIncomeWorkspaceWizardPatchAggregate(scope, wizardOverlay, recipientOverlay, startingStepKey);
     return { income_workspace_aggregate, income_commands };
 }
 export async function createRecurringCycleDraftFromSnapshot(params) {
