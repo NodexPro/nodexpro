@@ -6,6 +6,7 @@ import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
+import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
 import { ensureRetainerDocumentDraftWorkspace, } from './work-engine-invoice-retainer-draft.service.js';
 import { RECURRING_SCHEDULER_STATUS_ACTIVE, RECURRING_SCHEDULER_STATUS_FAILED, RECURRING_WORK_EVENT_TYPE, RECURRING_WORK_TYPE, RECURRING_FREQUENCY_LABELS, RECURRING_FREQUENCY_OPTIONS, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
 import { WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY, } from './work-engine-invoice-retainer.types.js';
@@ -239,6 +240,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     const selectedEndCustomerId = params.endCustomerId?.trim() || null;
     let documentDraftWorkspace = null;
     let retainerSettings = null;
+    let documentTypeOptions = [];
     if (selectedEndCustomerId) {
         const customer = customers.find((c) => c.id === selectedEndCustomerId);
         if (!customer)
@@ -252,13 +254,20 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
             fallbackDocumentType: (profile?.document_type ?? 'deal_invoice'),
         });
         retainerSettings = buildRetainerSettings(profile, customer, defaultValues, documentDraftWorkspace, params.settingsOverride);
+        const docTypesResult = await resolveAvailableDocumentTypes(orgId, issuerScope);
+        documentTypeOptions = docTypesResult.available_document_types
+            .filter((dt) => dt.key === 'quote' || dt.key === 'deal_invoice' || dt.key === 'tax_invoice')
+            .map((dt) => ({
+            key: dt.key,
+            label: dt.label,
+            enabled: dt.enabled,
+            disabled_reason: dt.disabled_reason,
+        }));
     }
     const identity = selectedEndCustomerId && retainerSettings
         ? {
             office_client_label: `לקוח משרד: ${client.display_name}`,
             end_customer_label: `לקוח מקבל המסמך: ${retainerSettings.end_customer_display_name}`,
-            document_type_label: `סוג מסמך: ${retainerSettings.document_type_label}`,
-            document_type_change_note: DOCUMENT_TYPE_CHANGE_NOTE,
         }
         : null;
     const selectedProfile = selectedEndCustomerId != null
@@ -278,6 +287,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         client_display_name: client.display_name,
         selected_end_customer_id: selectedEndCustomerId,
         identity,
+        document_type_options: documentTypeOptions,
         end_customers: endCustomers,
         document_draft_workspace: documentDraftWorkspace,
         retainer_settings: retainerSettings,

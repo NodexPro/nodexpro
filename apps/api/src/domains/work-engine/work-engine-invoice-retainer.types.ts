@@ -86,9 +86,13 @@ export type WorkEngineInvoiceRetainerSetupAggregate = {
   identity: {
     office_client_label: string;
     end_customer_label: string;
-    document_type_label: string;
-    document_type_change_note: string;
   } | null;
+  document_type_options: Array<{
+    key: 'quote' | 'deal_invoice' | 'tax_invoice';
+    label: string;
+    enabled: boolean;
+    disabled_reason: string | null;
+  }>;
   end_customers: WorkEngineInvoiceRetainerEndCustomerRow[];
   document_draft_workspace: WorkEngineInvoiceRetainerDocumentDraftWorkspace | null;
   retainer_settings: WorkEngineInvoiceRetainerSettings | null;

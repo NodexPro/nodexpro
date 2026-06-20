@@ -4,6 +4,7 @@
  */
 
 export type RecurringDocumentFrequency =
+  | 'days_30'
   | 'days_45'
   | 'days_60'
   | 'days_90'
@@ -16,12 +17,13 @@ export const RECURRING_FREQUENCY_OPTIONS: ReadonlyArray<{
   key: RecurringDocumentFrequency;
   label: string;
 }> = [
+  { key: 'days_30', label: '30 ימים' },
   { key: 'days_45', label: '45 ימים' },
   { key: 'days_60', label: '60 ימים' },
   { key: 'days_90', label: '90 ימים' },
-  { key: 'yearly', label: 'שנתי' },
-  { key: 'semi_annual', label: 'חצי שנתי' },
   { key: 'monthly', label: 'חודשי' },
+  { key: 'semi_annual', label: 'חצי שנתי' },
+  { key: 'yearly', label: 'שנתי' },
   { key: 'biennial', label: 'שנתיים' },
 ] as const;
 
@@ -77,6 +79,7 @@ export function addMonthsToDate(iso: string, months: number): string {
 }
 
 function frequencyAdvanceDays(frequency: RecurringDocumentFrequency): number | null {
+  if (frequency === 'days_30') return 30;
   if (frequency === 'days_45') return 45;
   if (frequency === 'days_60') return 60;
   if (frequency === 'days_90') return 90;

@@ -10,6 +10,7 @@ import { formatMoneyReference } from '../income/income-document-draft-lines.pure
 import type { ActiveIncomeIssuerScope } from '../income/income.guards.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import type { IncomeDocumentType } from '../income/income.types.js';
+import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
 import {
   ensureRetainerDocumentDraftWorkspace,
   type RecurringDocumentTemplateSnapshot,
@@ -371,6 +372,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
   const selectedEndCustomerId = params.endCustomerId?.trim() || null;
   let documentDraftWorkspace: WorkEngineInvoiceRetainerSetupAggregate['document_draft_workspace'] = null;
   let retainerSettings: WorkEngineInvoiceRetainerSettings | null = null;
+  let documentTypeOptions: WorkEngineInvoiceRetainerSetupAggregate['document_type_options'] = [];
 
   if (selectedEndCustomerId) {
     const customer = customers.find((c) => c.id === selectedEndCustomerId);
@@ -390,6 +392,18 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
       documentDraftWorkspace,
       params.settingsOverride,
     );
+    const docTypesResult = await resolveAvailableDocumentTypes(orgId, issuerScope);
+    documentTypeOptions = docTypesResult.available_document_types
+      .filter(
+        (dt): dt is typeof dt & { key: 'quote' | 'deal_invoice' | 'tax_invoice' } =>
+          dt.key === 'quote' || dt.key === 'deal_invoice' || dt.key === 'tax_invoice',
+      )
+      .map((dt) => ({
+        key: dt.key,
+        label: dt.label,
+        enabled: dt.enabled,
+        disabled_reason: dt.disabled_reason,
+      }));
   }
 
   const identity =
@@ -397,8 +411,6 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
       ? {
           office_client_label: `לקוח משרד: ${client.display_name}`,
           end_customer_label: `לקוח מקבל המסמך: ${retainerSettings.end_customer_display_name}`,
-          document_type_label: `סוג מסמך: ${retainerSettings.document_type_label}`,
-          document_type_change_note: DOCUMENT_TYPE_CHANGE_NOTE,
         }
       : null;
 
@@ -430,6 +442,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     client_display_name: client.display_name,
     selected_end_customer_id: selectedEndCustomerId,
     identity,
+    document_type_options: documentTypeOptions,
     end_customers: endCustomers,
     document_draft_workspace: documentDraftWorkspace,
     retainer_settings: retainerSettings,

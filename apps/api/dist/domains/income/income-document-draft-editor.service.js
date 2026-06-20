@@ -498,11 +498,21 @@ export async function updateIncomeDocumentDraftSettings(scope, body) {
             throw badRequest('invalid amount_rounding');
         patch.document_settings_json = { ...settings, amount_rounding: value };
     }
+    else if (key === 'document_type') {
+        const dt = parseIncomeDocumentType(value);
+        if (!dt)
+            throw badRequest('document_type is invalid');
+        const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
+        const docType = findAvailableDocumentType(available_document_types, dt);
+        if (!docType?.enabled)
+            throw badRequest('document_type is not available for issuer');
+        patch.document_type = dt;
+    }
     else {
         throw badRequest(`Unknown setting_key: ${key}`);
     }
     const merged = { ...row, ...patch };
-    const docType = await resolveDocType(scope, row.document_type);
+    const docType = await resolveDocType(scope, merged.document_type);
     return wizardDraftMutationOverlay(scope, draft_id, row, merged, docType, patch, {
         action: 'update_settings',
         setting_key: key,
