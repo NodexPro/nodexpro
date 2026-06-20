@@ -15,6 +15,7 @@ import { assertDraftReadyToIssue, buildLegalSnapshotForIssue, buildTotalsSnapsho
 import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { emitIncomeWorkEventsAfterDocumentIssued } from './income-work-engine-bridge.js';
+import { linkRecurringCycleIssuedDocument } from '../work-engine/work-engine-invoice-retainer-cycles.service.js';
 import { abortIncomeIssueIdempotency, beginIncomeIssueIdempotency, completeIncomeIssueIdempotency, parseIssueIdempotencyKey, } from './income-issue-idempotency.js';
 const PG_UNIQUE_VIOLATION = '23505';
 function optionalIssueDateFromBody(body) {
@@ -312,23 +313,45 @@ export async function executeIssueIncomeDocument(ctx, body) {
             sourceDraftId: draft_id,
         });
         if (lease.kind === 'replay') {
+            await linkRecurringCycleIssuedDocument({
+                organizationId: scope.org_id,
+                draftId: draft_id,
+                issuedDocumentId: lease.incomeDocumentId,
+            }).catch(() => undefined);
             return finishIdempotentIssue(scope, draft_id, lease.incomeDocumentId, null);
         }
     }
     try {
         const existingEarly = await findIssuedDocumentBySourceDraft(scope.org_id, draft_id);
         if (existingEarly) {
+            await linkRecurringCycleIssuedDocument({
+                organizationId: scope.org_id,
+                draftId: draft_id,
+                issuedDocumentId: existingEarly.id,
+            }).catch(() => undefined);
             return finishIdempotentIssue(scope, draft_id, existingEarly.id, lease);
         }
         const draft = await loadFullDraftForIssue(scope, draft_id);
         const alreadyIssuedId = await resolveAlreadyIssuedDocumentId(scope, draft);
         if (alreadyIssuedId) {
+            await linkRecurringCycleIssuedDocument({
+                organizationId: scope.org_id,
+                draftId: draft_id,
+                issuedDocumentId: alreadyIssuedId,
+            }).catch(() => undefined);
             return finishIdempotentIssue(scope, draft_id, alreadyIssuedId, lease);
         }
         if (draft.status !== 'draft') {
             throw conflict('Draft cannot be issued', 'INCOME_DRAFT_ALREADY_ISSUED');
         }
         const issuedDocumentId = await issueNewDocumentFromDraft(ctx, scope, draft, body);
+        await linkRecurringCycleIssuedDocument({
+            organizationId: scope.org_id,
+            draftId: draft_id,
+            issuedDocumentId,
+        }).catch((linkErr) => {
+            console.warn('[income-issue] retainer cycle link failed', draft_id, linkErr);
+        });
         if (lease?.kind === 'fresh') {
             await completeIncomeIssueIdempotency({
                 leaseRowId: lease.leaseRowId,

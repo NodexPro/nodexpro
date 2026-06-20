@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { normalizeDraftLines, serializeDraftLines } from '../income/income-document-draft-lines.pure.js';
-import { beginIncomeWizardDocumentDraft, resumeIncomeDocumentDraft, } from '../income/income-document-draft-editor.service.js';
+import { resumeIncomeDocumentDraft } from '../income/income-document-draft-editor.service.js';
 import { applySelectIncomeIssuerContext } from '../income/income-issuer-context.service.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 import { INCOME_COMMAND_SELECT_ISSUER } from '../income/income.types.js';
@@ -137,15 +137,6 @@ export async function ensureRetainerDocumentDraftWorkspace(params) {
         catch {
             // Stale template id — fall through to fresh draft.
         }
-    }
-    if (!wizardOverlay.active_wizard_draft_id) {
-        const document_type = params.fallbackDocumentType ?? 'deal_invoice';
-        const begun = await beginIncomeWizardDocumentDraft(scope, {
-            document_type,
-            income_customer_id: params.endCustomerId,
-        });
-        recipientOverlay = begun.recipientOverlay;
-        wizardOverlay = begun.wizardOverlay;
     }
     const income_workspace_aggregate = await buildIncomeWorkspaceAggregate(params.ctx, scope, recipientOverlay, wizardOverlay);
     return { income_workspace_aggregate, income_commands };

@@ -202,3 +202,30 @@ export async function loadDocumentNumbersById(orgId, documentIds) {
     }
     return map;
 }
+export async function linkRecurringCycleIssuedDocument(params) {
+    const { data, error } = await supabaseAdmin
+        .from('income_recurring_document_cycles')
+        .select('id, recurring_profile_id')
+        .eq('organization_id', params.organizationId)
+        .eq('generated_draft_id', params.draftId)
+        .maybeSingle();
+    throwIfSupabaseError(error, 'loadRecurringCycleForIssueLink');
+    const row = data;
+    if (!row)
+        return;
+    const { error: cycleErr } = await supabaseAdmin
+        .from('income_recurring_document_cycles')
+        .update({
+        status: 'issued',
+        generated_document_id: params.issuedDocumentId,
+        failure_reason: null,
+    })
+        .eq('id', row.id)
+        .eq('organization_id', params.organizationId);
+    throwIfSupabaseError(cycleErr, 'linkRecurringCycleIssuedDocument');
+    await supabaseAdmin
+        .from('income_recurring_document_profiles')
+        .update({ last_generated_document_id: params.issuedDocumentId })
+        .eq('id', row.recurring_profile_id)
+        .eq('organization_id', params.organizationId);
+}

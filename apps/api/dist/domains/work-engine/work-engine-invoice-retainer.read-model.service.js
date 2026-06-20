@@ -233,6 +233,47 @@ async function buildChildDocumentsHistory(orgId, profileId) {
         };
     });
 }
+function buildTemplateDraftState(params) {
+    const draftId = params.workspace?.income_workspace_aggregate.active_wizard_draft_id;
+    if (draftId)
+        return null;
+    return {
+        status: 'missing',
+        prompt_message: 'ליצור טיוטת מסמך עכשיו?',
+        confirm_begin_label: 'כן, צור טיוטה',
+        cancel_label: 'לא עכשיו',
+        begin_document_type: params.documentType,
+        begin_income_customer_id: params.endCustomerId,
+    };
+}
+function buildSaveProfileWithoutTemplatePrompt(workspace) {
+    const draftId = workspace?.income_workspace_aggregate.active_wizard_draft_id;
+    if (draftId)
+        return null;
+    return {
+        message: 'ליצור טיוטת מסמך עכשיו?',
+        confirm_label: 'כן, צור טיוטה',
+        cancel_label: 'לא — שמור הגדרות ריטיינר בלבד',
+    };
+}
+function buildIssueDocumentAction(workspace, canIssue) {
+    const draftId = workspace?.income_workspace_aggregate.active_wizard_draft_id;
+    if (!draftId || !canIssue)
+        return null;
+    const allowed = workspace?.income_workspace_aggregate.allowed_actions ?? [];
+    if (!allowed.includes('issue_income_document')) {
+        return {
+            visible: true,
+            label: 'הפקת מסמך',
+            disabled_reason: 'אין הרשאת הפקה',
+        };
+    }
+    return {
+        visible: true,
+        label: 'הפקת מסמך',
+        disabled_reason: null,
+    };
+}
 export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     const orgId = params.ctx.organizationId;
     if (!orgId)
@@ -281,6 +322,9 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     let documentDraftWorkspace = null;
     let retainerSettings = null;
     let documentTypeOptions = [];
+    let templateDraft = null;
+    let saveProfileWithoutTemplatePrompt = null;
+    let issueDocumentAction = null;
     if (selectedEndCustomerId) {
         const customer = customers.find((c) => c.id === selectedEndCustomerId);
         if (!customer)
@@ -294,6 +338,13 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
             fallbackDocumentType: (profile?.document_type ?? 'deal_invoice'),
         });
         retainerSettings = buildRetainerSettings(profile, customer, defaultValues, documentDraftWorkspace, params.settingsOverride);
+        templateDraft = buildTemplateDraftState({
+            workspace: documentDraftWorkspace,
+            documentType: retainerSettings.document_type,
+            endCustomerId: customer.id,
+        });
+        saveProfileWithoutTemplatePrompt = buildSaveProfileWithoutTemplatePrompt(documentDraftWorkspace);
+        issueDocumentAction = buildIssueDocumentAction(documentDraftWorkspace, perms.issue);
         const docTypesResult = await resolveAvailableDocumentTypes(orgId, issuerScope);
         documentTypeOptions = docTypesResult.available_document_types
             .filter((dt) => dt.key === 'quote' || dt.key === 'deal_invoice' || dt.key === 'tax_invoice')
@@ -331,6 +382,9 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         document_type_options: documentTypeOptions,
         end_customers: endCustomers,
         document_draft_workspace: documentDraftWorkspace,
+        template_draft: templateDraft,
+        save_profile_without_template_prompt: saveProfileWithoutTemplatePrompt,
+        issue_document_action: issueDocumentAction,
         retainer_settings: retainerSettings,
         child_documents_history: childDocumentsHistory,
         recurring_profiles: profiles.map((profile) => ({

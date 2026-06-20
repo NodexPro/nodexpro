@@ -73,6 +73,27 @@ export type WorkEngineInvoiceRetainerSettings = {
   last_generated_at_display: string | null;
 };
 
+export type WorkEngineInvoiceRetainerTemplateDraftState = {
+  status: 'ready' | 'missing';
+  prompt_message: string;
+  confirm_begin_label: string;
+  cancel_label: string;
+  begin_document_type: 'quote' | 'deal_invoice' | 'tax_invoice';
+  begin_income_customer_id: string;
+};
+
+export type WorkEngineInvoiceRetainerSaveProfilePrompt = {
+  message: string;
+  confirm_label: string;
+  cancel_label: string;
+};
+
+export type WorkEngineInvoiceRetainerIssueDocumentAction = {
+  visible: boolean;
+  label: string;
+  disabled_reason: string | null;
+};
+
 export type WorkEngineInvoiceRetainerDocumentDraftWorkspace = {
   income_workspace_aggregate: IncomeWorkspaceAggregate;
   income_commands: Record<string, string>;
@@ -110,6 +131,9 @@ export type WorkEngineInvoiceRetainerSetupAggregate = {
   }>;
   end_customers: WorkEngineInvoiceRetainerEndCustomerRow[];
   document_draft_workspace: WorkEngineInvoiceRetainerDocumentDraftWorkspace | null;
+  template_draft: WorkEngineInvoiceRetainerTemplateDraftState | null;
+  save_profile_without_template_prompt: WorkEngineInvoiceRetainerSaveProfilePrompt | null;
+  issue_document_action: WorkEngineInvoiceRetainerIssueDocumentAction | null;
   retainer_settings: WorkEngineInvoiceRetainerSettings | null;
   child_documents_history: WorkEngineInvoiceRetainerChildDocumentHistoryRow[];
   recurring_profiles: Array<{

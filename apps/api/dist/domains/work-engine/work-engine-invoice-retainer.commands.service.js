@@ -144,8 +144,28 @@ function parseRetainerSettingsPayload(body, opts) {
     };
 }
 async function buildProfileWritePayload(params) {
-    const sourceDraftTemplateId = reqString(params.body, 'source_draft_template_id');
+    const sourceDraftTemplateId = optionalString(params.body, 'source_draft_template_id');
     const retainerSettings = parseRetainerSettingsPayload(params.body);
+    if (!sourceDraftTemplateId) {
+        const documentType = reqString(params.body, 'document_type');
+        if (documentType !== 'quote' && documentType !== 'deal_invoice' && documentType !== 'tax_invoice') {
+            throw badRequest('document_type is invalid');
+        }
+        const periodStart = retainerSettings.service_period_start ?? new Date().toISOString().slice(0, 10);
+        return {
+            source_draft_template_id: null,
+            document_template_snapshot: null,
+            document_type: documentType,
+            next_document_date: periodStart,
+            line_description_template: '—',
+            quantity: 1,
+            unit_price_before_vat_reference: 0,
+            currency: 'ILS',
+            discount_percent_reference: null,
+            discount_amount_reference: null,
+            ...retainerSettings,
+        };
+    }
     const { snapshot, denormalized } = await buildDocumentTemplateSnapshotForRetainer({
         orgId: params.orgId,
         representedClientId: params.representedClientId,
