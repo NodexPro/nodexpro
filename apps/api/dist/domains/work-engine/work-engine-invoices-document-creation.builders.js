@@ -7,6 +7,30 @@ import { ensureOrgIncomeIssuerProfile } from '../income/income-issuer-context.se
 import { loadIncomeIssuerProfileProjection } from '../income/income-issuer-profile-sync.service.js';
 import { buildRecipientCreateFieldsSchema } from '../income/income-recipient.service.js';
 import { INCOME_PERMISSIONS } from '../income/income.types.js';
+/** Static income command map for retainer setup (no office-client list load). */
+export const WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS = {
+    select_issuer: 'select_income_issuer_context',
+    search_recipients: 'search_income_recipients',
+    select_recipient: 'select_income_recipient',
+    set_recipient_snapshot: 'set_income_recipient_snapshot',
+    save_recipient_for_future: 'save_income_recipient_for_future',
+    begin_wizard_draft: 'begin_income_wizard_document_draft',
+    add_line: 'add_income_document_line',
+    update_line: 'update_income_document_line',
+    delete_line: 'delete_income_document_line',
+    reorder_lines: 'reorder_income_document_lines',
+    update_draft_settings: 'update_income_document_draft_settings',
+    update_notes: 'update_income_document_notes',
+    update_delivery_contact: 'update_income_document_delivery_contact',
+    save_draft: 'save_income_document_draft',
+    resume_draft: 'resume_income_document_draft',
+    generate_preview: 'generate_income_document_preview',
+    update_discount: 'update_income_document_discount',
+    update_branding_profile: 'update_income_document_branding_profile',
+    upload_document_logo: 'upload_income_document_logo',
+    upload_document_signature: 'upload_income_document_signature',
+    issue_document: 'issue_income_document',
+};
 async function loadOfficeClientIssuerOptions(orgId) {
     const coreClients = await loadClientOperationsCoreClientsForOrg(orgId);
     return coreClients.map((c) => {
@@ -108,29 +132,7 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(ctx) {
                 document_date_required: true,
                 notes_label: 'הערות',
             },
-            income_commands: {
-                select_issuer: 'select_income_issuer_context',
-                search_recipients: 'search_income_recipients',
-                select_recipient: 'select_income_recipient',
-                set_recipient_snapshot: 'set_income_recipient_snapshot',
-                save_recipient_for_future: 'save_income_recipient_for_future',
-                begin_wizard_draft: 'begin_income_wizard_document_draft',
-                add_line: 'add_income_document_line',
-                update_line: 'update_income_document_line',
-                delete_line: 'delete_income_document_line',
-                reorder_lines: 'reorder_income_document_lines',
-                update_draft_settings: 'update_income_document_draft_settings',
-                update_notes: 'update_income_document_notes',
-                update_delivery_contact: 'update_income_document_delivery_contact',
-                save_draft: 'save_income_document_draft',
-                resume_draft: 'resume_income_document_draft',
-                generate_preview: 'generate_income_document_preview',
-                update_discount: 'update_income_document_discount',
-                update_branding_profile: 'update_income_document_branding_profile',
-                upload_document_logo: 'upload_income_document_logo',
-                upload_document_signature: 'upload_income_document_signature',
-                issue_document: 'issue_income_document',
-            },
+            income_commands: { ...WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS },
         },
     };
 }

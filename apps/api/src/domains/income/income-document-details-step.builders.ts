@@ -661,6 +661,8 @@ async function buildLineRows(
 export type BuildIncomeDocumentDetailsStepOptions = {
   vatResolution?: IncomeDraftVatResolution;
   totalsPreview?: DraftTotalsPreview;
+  /** Retainer / tab reads: skip embedded branding + preview HTML payloads. */
+  lean?: boolean;
 };
 
 function buildDocumentDiscountModel(
@@ -813,8 +815,9 @@ export async function buildIncomeDocumentDetailsStep(
   }));
 
   const previewGeneratedAt = uiCache.preview_generated_at;
+  const lean = options.lean === true;
   const issuerBlock =
-    previewGeneratedAt != null
+    !lean && previewGeneratedAt != null
       ? await loadIssuerPreviewBlock(scope)
       : {
           display_name: scope.issuer_label,
@@ -824,7 +827,7 @@ export async function buildIncomeDocumentDetailsStep(
           email: null,
         };
   const recipientBlock =
-    previewGeneratedAt != null
+    !lean && previewGeneratedAt != null
       ? await loadRecipientPreviewBlock(scope, row, recipientName ?? '—')
       : {
           display_name: recipientName ?? '—',
@@ -834,7 +837,7 @@ export async function buildIncomeDocumentDetailsStep(
           email: null,
         };
   const previewLineRows =
-    previewGeneratedAt != null
+    !lean && previewGeneratedAt != null
       ? (await buildLineRows(lines, settings, vatResolution, documentDate, false)).map((r) => ({
           row_number: r.row_number,
           description: r.description.value,
@@ -851,13 +854,15 @@ export async function buildIncomeDocumentDetailsStep(
         ? `מע״מ (${vatResolution.standard_rate_percent_label})`
         : 'מע״מ'
       : null;
-  const brandingProfileAggregate = await buildDocumentBrandingProfileAggregate(scope, canEdit);
+  const brandingProfileAggregate = lean
+    ? null
+    : await buildDocumentBrandingProfileAggregate(scope, canEdit);
   const resolvedBranding =
-    previewGeneratedAt != null && row.document_type
+    !lean && previewGeneratedAt != null && row.document_type
       ? await loadResolvedBrandingProfileForDocumentType(scope, row.document_type)
       : null;
   const previewHtml =
-    previewGeneratedAt != null && resolvedBranding
+    !lean && previewGeneratedAt != null && resolvedBranding
       ? renderIncomeBrandedPreviewHtml({
           branding: resolvedBranding,
           docTypeLabel,

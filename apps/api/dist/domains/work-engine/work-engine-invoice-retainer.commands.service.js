@@ -6,7 +6,6 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
-import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
 import { buildDocumentTemplateSnapshotForRetainer } from './work-engine-invoice-retainer-draft.service.js';
 import { RECURRING_FREQUENCY_OPTIONS, } from './work-engine-invoice-retainer.pure.js';
@@ -185,17 +184,11 @@ async function commandResponse(params) {
         representedClientId: params.representedClientId,
         endCustomerId: params.endCustomerId,
     });
-    const response = {
+    return {
         ok: true,
         command: params.command,
         work_engine_invoice_retainer_setup_aggregate: aggregate,
     };
-    if (params.includeInvoicesTab) {
-        response.work_engine_invoices_tab_aggregate = await buildWorkEngineInvoicesTabAggregate({
-            ctx: params.ctx,
-        });
-    }
-    return response;
 }
 export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body) {
     if (!ALLOWED_RETAINER_COMMANDS.has(command)) {
@@ -264,7 +257,6 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
             command,
             representedClientId,
             endCustomerId,
-            includeInvoicesTab: true,
         });
     }
     const profileId = reqString(body, 'profile_id');
@@ -329,6 +321,5 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
         command: command,
         representedClientId,
         endCustomerId: existing.end_customer_id,
-        includeInvoicesTab: command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.cancel,
     });
 }

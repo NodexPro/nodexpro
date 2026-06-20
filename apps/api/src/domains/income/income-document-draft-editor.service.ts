@@ -11,6 +11,7 @@ import { assertRowMatchesIssuerScope } from './income.guards.js';
 import { validateDraftAgainstDocumentTypeRules } from './income-document-draft.helpers.js';
 import {
   buildIncomeDocumentDetailsStep,
+  type BuildIncomeDocumentDetailsStepOptions,
   type IncomeDocumentDetailsStep,
   type IncomeWizardDraftRow,
 } from './income-document-details-step.builders.js';
@@ -225,10 +226,7 @@ async function buildOverlayForDraft(
   canEdit: boolean,
   rowOverride?: IncomeWizardDraftRow & { status?: string },
   docTypeOverride?: IncomeAvailableDocumentType | null,
-  stepOptions?: {
-    vatResolution?: IncomeDraftVatResolution;
-    totalsPreview?: DraftTotalsPreview;
-  },
+  stepOptions?: BuildIncomeDocumentDetailsStepOptions,
 ): Promise<WizardDraftOverlay> {
   const row = rowOverride ?? (await loadWizardDraftRow(scope, draftId));
   const docType =
@@ -825,7 +823,7 @@ function startingStepKeyForDraftRow(row: IncomeWizardDraftRow): string {
   return 'document_details';
 }
 
-async function recipientOverlayForDraftRow(
+export async function recipientOverlayForDraftRow(
   scope: ActiveIncomeIssuerScope,
   row: IncomeWizardDraftRow,
 ): Promise<RecipientSearchOverlay> {
@@ -887,10 +885,13 @@ export async function wizardDraftOverlayForActiveDraft(
   scope: ActiveIncomeIssuerScope,
   draftId: string | undefined,
   canEdit: boolean,
+  options?: Pick<BuildIncomeDocumentDetailsStepOptions, 'lean'>,
 ): Promise<WizardDraftOverlay> {
   if (!draftId) return {};
   try {
-    return await buildOverlayForDraft(scope, draftId, canEdit);
+    return await buildOverlayForDraft(scope, draftId, canEdit, undefined, undefined, {
+      lean: options?.lean,
+    });
   } catch {
     return {};
   }

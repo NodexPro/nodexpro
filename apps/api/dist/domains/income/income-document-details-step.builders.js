@@ -473,7 +473,8 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
         blocking: false,
     }));
     const previewGeneratedAt = uiCache.preview_generated_at;
-    const issuerBlock = previewGeneratedAt != null
+    const lean = options.lean === true;
+    const issuerBlock = !lean && previewGeneratedAt != null
         ? await loadIssuerPreviewBlock(scope)
         : {
             display_name: scope.issuer_label,
@@ -482,7 +483,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             phone: null,
             email: null,
         };
-    const recipientBlock = previewGeneratedAt != null
+    const recipientBlock = !lean && previewGeneratedAt != null
         ? await loadRecipientPreviewBlock(scope, row, recipientName ?? '—')
         : {
             display_name: recipientName ?? '—',
@@ -491,7 +492,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             phone: null,
             email: null,
         };
-    const previewLineRows = previewGeneratedAt != null
+    const previewLineRows = !lean && previewGeneratedAt != null
         ? (await buildLineRows(lines, settings, vatResolution, documentDate, false)).map((r) => ({
             row_number: r.row_number,
             description: r.description.value,
@@ -507,11 +508,13 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             ? `מע״מ (${vatResolution.standard_rate_percent_label})`
             : 'מע״מ'
         : null;
-    const brandingProfileAggregate = await buildDocumentBrandingProfileAggregate(scope, canEdit);
-    const resolvedBranding = previewGeneratedAt != null && row.document_type
+    const brandingProfileAggregate = lean
+        ? null
+        : await buildDocumentBrandingProfileAggregate(scope, canEdit);
+    const resolvedBranding = !lean && previewGeneratedAt != null && row.document_type
         ? await loadResolvedBrandingProfileForDocumentType(scope, row.document_type)
         : null;
-    const previewHtml = previewGeneratedAt != null && resolvedBranding
+    const previewHtml = !lean && previewGeneratedAt != null && resolvedBranding
         ? renderIncomeBrandedPreviewHtml({
             branding: resolvedBranding,
             docTypeLabel,

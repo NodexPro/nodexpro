@@ -22,32 +22,6 @@ const REPORT_CATALOG = [
     { key: 'payments', label: 'דוח תשלומים', enabled: false, disabled_reason: 'בקרוב' },
     { key: 'csv_export', label: 'CSV Export', enabled: false, disabled_reason: 'בקרוב' },
 ];
-const BUCKET_ORG_ASSETS = 'organization-assets';
-async function ensureOrgAssetsBucket() {
-    const { error } = await supabaseAdmin.storage.createBucket(BUCKET_ORG_ASSETS, { public: false });
-    if (error && !/already exists/i.test(error.message))
-        throw error;
-}
-async function fileAssetToDataUrl(fileAssetId) {
-    const { data, error } = await supabaseAdmin
-        .from('file_assets')
-        .select('storage_bucket, storage_key, mime_type, archived_at')
-        .eq('id', fileAssetId)
-        .maybeSingle();
-    throwIfSupabaseError(error, 'fileAssetToDataUrl');
-    const row = data;
-    if (!row?.storage_key || row.archived_at)
-        return null;
-    const bucket = row.storage_bucket ?? BUCKET_ORG_ASSETS;
-    if (bucket === BUCKET_ORG_ASSETS)
-        await ensureOrgAssetsBucket();
-    const { data: blob, error: dlErr } = await supabaseAdmin.storage.from(bucket).download(row.storage_key);
-    if (dlErr || !blob)
-        return null;
-    const buf = Buffer.from(await blob.arrayBuffer());
-    const mime = (row.mime_type ?? 'image/png').split(';')[0].trim();
-    return `data:${mime};base64,${buf.toString('base64')}`;
-}
 function buildRowActions(clientId, perms, options) {
     const canEdit = perms.edit;
     const actions = [
@@ -355,21 +329,6 @@ export async function buildIncomeClientDocumentManagementPanel(params) {
             });
         }
     }
-    const logoByClientId = new Map();
-    if (clientIds.length > 0) {
-        const { data: profiles, error: profilesErr } = await supabaseAdmin
-            .from('income_document_branding_profiles')
-            .select('issuer_business_id, logo_file_asset_id')
-            .eq('organization_id', orgId)
-            .in('issuer_business_id', clientIds);
-        throwIfSupabaseError(profilesErr, 'loadClientDocumentManagementLogos');
-        for (const p of profiles ?? []) {
-            const profile = p;
-            if (profile.logo_file_asset_id) {
-                logoByClientId.set(profile.issuer_business_id, await fileAssetToDataUrl(profile.logo_file_asset_id));
-            }
-        }
-    }
     const rows = clientIds
         .map((clientId) => {
         const acc = byClient.get(clientId);
@@ -379,7 +338,7 @@ export async function buildIncomeClientDocumentManagementPanel(params) {
         return {
             represented_client_id: clientId,
             client_display_name: clientName,
-            client_logo_url: logoByClientId.get(clientId) ?? null,
+            client_logo_url: null,
             client_initials: clientName.trim().slice(0, 2) || '—',
             tax_id: meta?.tax_id ?? null,
             email: meta?.email ?? null,

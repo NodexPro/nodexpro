@@ -7,6 +7,7 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import { ensureRetainerDocumentDraftWorkspace, } from './work-engine-invoice-retainer-draft.service.js';
 import { loadDocumentNumbersById, loadRecurringProfileCycles, RECURRING_CYCLE_STATUS_LABELS, } from './work-engine-invoice-retainer-cycles.service.js';
 import { RECURRING_SCHEDULER_STATUS_ACTIVE, RECURRING_SCHEDULER_STATUS_FAILED, RECURRING_WORK_EVENT_TYPE, RECURRING_WORK_TYPE, RECURRING_FREQUENCY_LABELS, RECURRING_FREQUENCY_OPTIONS, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
@@ -31,6 +32,11 @@ const ADVANCE_CREATION_HELP_TEXT = 'כמה ימים לפני תאריך המסמ
 const DRAFT_CREATION_DATE_LABEL = 'תאריך יצירת טיוטה צפוי';
 const DOCUMENT_TYPE_CHANGE_NOTE = 'שינוי סוג מסמך יחול על טיוטות עתידיות בלבד. מסמכים שכבר הופקו לא ישתנו.';
 const FREQUENCY_OPTIONS = RECURRING_FREQUENCY_OPTIONS.filter((option) => option.key !== 'monthly');
+function logRetainerSetupTiming(representedClientId, endCustomerId, label, startMs) {
+    const elapsedMs = Date.now() - startMs;
+    console.info(`[work-engine][invoice-retainer-setup] client=${representedClientId} end_customer=${endCustomerId ?? 'none'} ${label}: ${elapsedMs}ms`);
+    return Date.now();
+}
 function assertAccess(ctx) {
     const perms = incomeWorkspacePermissionsFromContext(ctx);
     if (!perms.view)
@@ -282,10 +288,15 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     const representedClientId = String(params.representedClientId ?? '').trim();
     if (!representedClientId)
         throw badRequest('represented_client_id is required');
+    const selectedEndCustomerIdEarly = params.endCustomerId?.trim() || null;
+    const aggregateStartMs = Date.now();
+    let stepStartMs = aggregateStartMs;
     const perms = incomeWorkspacePermissionsFromContext(params.ctx);
     const client = await loadOfficeClient(orgId, representedClientId);
+    stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerIdEarly, 'load_office_client', stepStartMs);
     const issuerScope = buildOfficeRepresentativeIssuerScope(orgId, params.ctx.user.id, representedClientId, perms);
     const customers = await loadEndCustomers(issuerScope);
+    stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerIdEarly, 'load_end_customers', stepStartMs);
     let profiles = [];
     try {
         profiles = await loadProfiles(orgId, representedClientId);
@@ -293,6 +304,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     catch (e) {
         console.warn('[work-engine] loadRetainerProfiles failed; customer picker still available', e);
     }
+    stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerIdEarly, 'load_profile', stepStartMs);
     const profileByCustomerId = new Map();
     for (const profile of profiles) {
         if (!profileByCustomerId.has(profile.end_customer_id)) {
@@ -318,7 +330,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         advance_days: 30,
         auto_advance_period: true,
     };
-    const selectedEndCustomerId = params.endCustomerId?.trim() || null;
+    const selectedEndCustomerId = selectedEndCustomerIdEarly;
     let documentDraftWorkspace = null;
     let retainerSettings = null;
     let documentTypeOptions = [];
@@ -336,7 +348,11 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
             endCustomerId: customer.id,
             sourceDraftTemplateId: profile?.source_draft_template_id,
             fallbackDocumentType: (profile?.document_type ?? 'deal_invoice'),
+            onTiming: (label, elapsedMs) => {
+                console.info(`[work-engine][invoice-retainer-setup] client=${representedClientId} end_customer=${selectedEndCustomerId} template_draft.${label}: ${elapsedMs}ms`);
+            },
         });
+        stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'template_draft', stepStartMs);
         retainerSettings = buildRetainerSettings(profile, customer, defaultValues, documentDraftWorkspace, params.settingsOverride);
         templateDraft = buildTemplateDraftState({
             workspace: documentDraftWorkspace,
@@ -346,6 +362,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         saveProfileWithoutTemplatePrompt = buildSaveProfileWithoutTemplatePrompt(documentDraftWorkspace);
         issueDocumentAction = buildIssueDocumentAction(documentDraftWorkspace, perms.issue);
         const docTypesResult = await resolveAvailableDocumentTypes(orgId, issuerScope);
+        stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'document_settings', stepStartMs);
         documentTypeOptions = docTypesResult.available_document_types
             .filter((dt) => dt.key === 'quote' || dt.key === 'deal_invoice' || dt.key === 'tax_invoice')
             .map((dt) => ({
@@ -365,6 +382,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         ? (profileByCustomerId.get(selectedEndCustomerId) ?? null)
         : null;
     const childDocumentsHistory = await buildChildDocumentsHistory(orgId, selectedProfile?.id ?? null);
+    stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'child_history', stepStartMs);
     const schedulerStatus = resolveSchedulerStatus(selectedProfile);
     const schedulerNote = schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
         ? `יצירת טיוטה אחרונה נכשלה (${selectedProfile?.last_generation_error_code ?? 'שגיאה'}). נדרשת בדיקה ידנית.`
@@ -373,7 +391,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     if (perms.edit) {
         allowedActions.push('create_income_recurring_document_profile', 'update_income_recurring_document_profile', 'preview_income_recurring_document_profile_settings', 'pause_income_recurring_document_profile', 'resume_income_recurring_document_profile', 'cancel_income_recurring_document_profile');
     }
-    return {
+    const response = {
         aggregate_key: WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY,
         represented_client_id: representedClientId,
         client_display_name: client.display_name,
@@ -405,4 +423,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         work_engine_event_type: RECURRING_WORK_EVENT_TYPE,
         work_type: RECURRING_WORK_TYPE,
     };
+    logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'final_response', aggregateStartMs);
+    logAggregatePayloadBreakdown('work_engine_invoice_retainer_setup_aggregate', response);
+    return response;
 }

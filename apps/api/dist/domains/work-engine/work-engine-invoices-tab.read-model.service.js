@@ -13,6 +13,7 @@ import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.servi
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { buildIncomeClientDocumentManagementPanel } from '../income/income-client-document-management-panel.service.js';
 import { buildDocumentBrandingProfileAggregate, buildDocumentBrandingSettingsEntrypoint, } from '../income/income-document-branding.service.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 const DOCUMENT_TYPE_LABELS = {
     receipt: 'קבלה',
     tax_invoice: 'חשבונית מס',
@@ -57,7 +58,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
     try {
         const issuerScope = await loadActiveIncomeIssuerScope(params.ctx);
         if (issuerScope.permissions.view) {
-            document_branding_profile = await buildDocumentBrandingProfileAggregate(issuerScope, issuerScope.permissions.edit);
+            document_branding_profile = await buildDocumentBrandingProfileAggregate(issuerScope, issuerScope.permissions.edit, { lean: true });
             document_branding_settings_entrypoint = buildDocumentBrandingSettingsEntrypoint(issuerScope.permissions);
         }
     }
@@ -66,7 +67,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
         document_branding_settings_entrypoint = null;
     }
     if (client_document_management_panel.visible) {
-        return {
+        const response = {
             aggregate_key: 'work_engine_invoices_tab_aggregate',
             org_id: orgId,
             workspace_tabs: buildAccountantWorkspaceTabs('invoices'),
@@ -96,6 +97,8 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
             document_branding_settings_entrypoint,
             client_document_management_panel,
         };
+        logAggregatePayloadBreakdown('work_engine_invoices_tab_aggregate', response);
+        return response;
     }
     const todayIso = new Date().toISOString().slice(0, 10);
     const { data: drafts, error: dErr } = await supabaseAdmin
@@ -213,20 +216,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
     }) ?? [];
     let document_branding_profile_legacy = document_branding_profile;
     let document_branding_settings_entrypoint_legacy = document_branding_settings_entrypoint;
-    if (!document_branding_profile_legacy) {
-        try {
-            const issuerScope = await loadActiveIncomeIssuerScope(params.ctx);
-            if (issuerScope.permissions.view) {
-                document_branding_profile_legacy = await buildDocumentBrandingProfileAggregate(issuerScope, issuerScope.permissions.edit);
-                document_branding_settings_entrypoint_legacy = buildDocumentBrandingSettingsEntrypoint(issuerScope.permissions);
-            }
-        }
-        catch {
-            document_branding_profile_legacy = null;
-            document_branding_settings_entrypoint_legacy = null;
-        }
-    }
-    return {
+    const response = {
         aggregate_key: 'work_engine_invoices_tab_aggregate',
         org_id: orgId,
         workspace_tabs: buildAccountantWorkspaceTabs('invoices'),
@@ -262,4 +252,6 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
         document_branding_settings_entrypoint: document_branding_settings_entrypoint_legacy,
         client_document_management_panel,
     };
+    logAggregatePayloadBreakdown('work_engine_invoices_tab_aggregate', response);
+    return response;
 }

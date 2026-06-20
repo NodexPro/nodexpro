@@ -11,6 +11,7 @@ import type { ActiveIncomeIssuerScope } from '../income/income.guards.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import type { IncomeDocumentType } from '../income/income.types.js';
 import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import {
   ensureRetainerDocumentDraftWorkspace,
   type RecurringDocumentTemplateSnapshot,
@@ -75,6 +76,19 @@ const DOCUMENT_TYPE_CHANGE_NOTE =
   'שינוי סוג מסמך יחול על טיוטות עתידיות בלבד. מסמכים שכבר הופקו לא ישתנו.';
 
 const FREQUENCY_OPTIONS = RECURRING_FREQUENCY_OPTIONS.filter((option) => option.key !== 'monthly');
+
+function logRetainerSetupTiming(
+  representedClientId: string,
+  endCustomerId: string | null,
+  label: string,
+  startMs: number,
+): number {
+  const elapsedMs = Date.now() - startMs;
+  console.info(
+    `[work-engine][invoice-retainer-setup] client=${representedClientId} end_customer=${endCustomerId ?? 'none'} ${label}: ${elapsedMs}ms`,
+  );
+  return Date.now();
+}
 
 type RawProfile = {
   id: string;
@@ -428,9 +442,18 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
 
   const representedClientId = String(params.representedClientId ?? '').trim();
   if (!representedClientId) throw badRequest('represented_client_id is required');
+  const selectedEndCustomerIdEarly = params.endCustomerId?.trim() || null;
+  const aggregateStartMs = Date.now();
+  let stepStartMs = aggregateStartMs;
 
   const perms = incomeWorkspacePermissionsFromContext(params.ctx);
   const client = await loadOfficeClient(orgId, representedClientId);
+  stepStartMs = logRetainerSetupTiming(
+    representedClientId,
+    selectedEndCustomerIdEarly,
+    'load_office_client',
+    stepStartMs,
+  );
   const issuerScope = buildOfficeRepresentativeIssuerScope(
     orgId,
     params.ctx.user.id,
@@ -438,12 +461,24 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     perms,
   );
   const customers = await loadEndCustomers(issuerScope);
+  stepStartMs = logRetainerSetupTiming(
+    representedClientId,
+    selectedEndCustomerIdEarly,
+    'load_end_customers',
+    stepStartMs,
+  );
   let profiles: RawProfile[] = [];
   try {
     profiles = await loadProfiles(orgId, representedClientId);
   } catch (e) {
     console.warn('[work-engine] loadRetainerProfiles failed; customer picker still available', e);
   }
+  stepStartMs = logRetainerSetupTiming(
+    representedClientId,
+    selectedEndCustomerIdEarly,
+    'load_profile',
+    stepStartMs,
+  );
 
   const profileByCustomerId = new Map<string, RawProfile>();
   for (const profile of profiles) {
@@ -474,7 +509,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     auto_advance_period: true,
   };
 
-  const selectedEndCustomerId = params.endCustomerId?.trim() || null;
+  const selectedEndCustomerId = selectedEndCustomerIdEarly;
   let documentDraftWorkspace: WorkEngineInvoiceRetainerSetupAggregate['document_draft_workspace'] = null;
   let retainerSettings: WorkEngineInvoiceRetainerSettings | null = null;
   let documentTypeOptions: WorkEngineInvoiceRetainerSetupAggregate['document_type_options'] = [];
@@ -492,7 +527,18 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
       endCustomerId: customer.id,
       sourceDraftTemplateId: profile?.source_draft_template_id,
       fallbackDocumentType: (profile?.document_type ?? 'deal_invoice') as IncomeDocumentType,
+      onTiming: (label, elapsedMs) => {
+        console.info(
+          `[work-engine][invoice-retainer-setup] client=${representedClientId} end_customer=${selectedEndCustomerId} template_draft.${label}: ${elapsedMs}ms`,
+        );
+      },
     });
+    stepStartMs = logRetainerSetupTiming(
+      representedClientId,
+      selectedEndCustomerId,
+      'template_draft',
+      stepStartMs,
+    );
     retainerSettings = buildRetainerSettings(
       profile,
       customer,
@@ -508,6 +554,12 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     saveProfileWithoutTemplatePrompt = buildSaveProfileWithoutTemplatePrompt(documentDraftWorkspace);
     issueDocumentAction = buildIssueDocumentAction(documentDraftWorkspace, perms.issue);
     const docTypesResult = await resolveAvailableDocumentTypes(orgId, issuerScope);
+    stepStartMs = logRetainerSetupTiming(
+      representedClientId,
+      selectedEndCustomerId,
+      'document_settings',
+      stepStartMs,
+    );
     documentTypeOptions = docTypesResult.available_document_types
       .filter(
         (dt): dt is typeof dt & { key: 'quote' | 'deal_invoice' | 'tax_invoice' } =>
@@ -537,6 +589,12 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     orgId,
     selectedProfile?.id ?? null,
   );
+  stepStartMs = logRetainerSetupTiming(
+    representedClientId,
+    selectedEndCustomerId,
+    'child_history',
+    stepStartMs,
+  );
   const schedulerStatus = resolveSchedulerStatus(selectedProfile);
   const schedulerNote =
     schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
@@ -555,7 +613,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     );
   }
 
-  return {
+  const response = {
     aggregate_key: WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY,
     represented_client_id: representedClientId,
     client_display_name: client.display_name,
@@ -587,4 +645,15 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     work_engine_event_type: RECURRING_WORK_EVENT_TYPE,
     work_type: RECURRING_WORK_TYPE,
   };
+  logRetainerSetupTiming(
+    representedClientId,
+    selectedEndCustomerId,
+    'final_response',
+    aggregateStartMs,
+  );
+  logAggregatePayloadBreakdown(
+    'work_engine_invoice_retainer_setup_aggregate',
+    response as unknown as Record<string, unknown>,
+  );
+  return response;
 }

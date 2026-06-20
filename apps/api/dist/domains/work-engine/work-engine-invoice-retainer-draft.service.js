@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { normalizeDraftLines, serializeDraftLines } from '../income/income-document-draft-lines.pure.js';
-import { resumeIncomeDocumentDraft, } from '../income/income-document-draft-editor.service.js';
+import { loadWizardDraftRow, recipientOverlayForDraftRow, wizardDraftOverlayForActiveDraft, } from '../income/income-document-draft-editor.service.js';
 import { applySelectIncomeIssuerContext } from '../income/income-issuer-context.service.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 import { INCOME_COMMAND_SELECT_ISSUER } from '../income/income.types.js';
@@ -18,7 +18,7 @@ import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from '../income
 import { vatResolutionCachePayload } from '../income/income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { buildWorkEngineInvoicesDocumentCreationEntrypoint } from './work-engine-invoices-document-creation.builders.js';
+import { WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS } from './work-engine-invoices-document-creation.builders.js';
 const DRAFT_SELECT = 'id, organization_id, represented_client_id, issuer_business_id, income_customer_id, document_type, document_date, due_date, currency, language, notes, document_settings_json, delivery_contact_json, draft_lines_json, draft_totals_preview_json, status';
 async function loadDraftRow(orgId, draftId) {
     const { data, error } = await supabaseAdmin
@@ -117,9 +117,15 @@ async function ensureIssuerForOfficeClient(ctx, representedClientId) {
     return scope;
 }
 export async function ensureRetainerDocumentDraftWorkspace(params) {
+    const logTiming = (label, startMs) => {
+        const elapsedMs = Date.now() - startMs;
+        params.onTiming?.(label, elapsedMs);
+        return Date.now();
+    };
+    let stepStart = Date.now();
     const scope = await ensureIssuerForOfficeClient(params.ctx, params.representedClientId);
-    const entrypoint = await buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx);
-    const income_commands = entrypoint.wizard.income_commands;
+    stepStart = logTiming('ensure_issuer_scope', stepStart);
+    const income_commands = { ...WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS };
     let recipientOverlay = {};
     let wizardOverlay = {};
     let startingStepKey = null;
@@ -131,16 +137,20 @@ export async function ensureRetainerDocumentDraftWorkspace(params) {
                 representedClientId: params.representedClientId,
                 endCustomerId: params.endCustomerId,
             });
-            const resumed = await resumeIncomeDocumentDraft(scope, { draft_id: params.sourceDraftTemplateId });
-            recipientOverlay = resumed.recipientOverlay;
-            wizardOverlay = resumed.wizardOverlay;
-            startingStepKey = resumed.starting_step_key;
+            stepStart = logTiming('load_template_draft_row', stepStart);
+            const wizardRow = await loadWizardDraftRow(scope, params.sourceDraftTemplateId);
+            recipientOverlay = await recipientOverlayForDraftRow(scope, wizardRow);
+            stepStart = logTiming('recipient_overlay', stepStart);
+            wizardOverlay = await wizardDraftOverlayForActiveDraft(scope, params.sourceDraftTemplateId, scope.permissions.edit, { lean: true });
+            startingStepKey = 'document_details';
+            stepStart = logTiming('lean_document_details_overlay', stepStart);
         }
         catch {
             // Stale template id — fall through to empty wizard overlay.
         }
     }
-    const income_workspace_aggregate = await buildIncomeWorkspaceWizardPatchAggregate(scope, wizardOverlay, recipientOverlay, startingStepKey);
+    const income_workspace_aggregate = await buildIncomeWorkspaceWizardPatchAggregate(scope, wizardOverlay, recipientOverlay, startingStepKey, { includeBrandingProfile: false });
+    logTiming('wizard_patch_aggregate', stepStart);
     return { income_workspace_aggregate, income_commands };
 }
 export async function createRecurringCycleDraftFromSnapshot(params) {

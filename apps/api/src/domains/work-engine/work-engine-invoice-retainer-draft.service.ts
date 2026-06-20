@@ -8,7 +8,9 @@ import { badRequest, forbidden } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { normalizeDraftLines, serializeDraftLines } from '../income/income-document-draft-lines.pure.js';
 import {
-  resumeIncomeDocumentDraft,
+  loadWizardDraftRow,
+  recipientOverlayForDraftRow,
+  wizardDraftOverlayForActiveDraft,
   type WizardDraftOverlay,
 } from '../income/income-document-draft-editor.service.js';
 import { applySelectIncomeIssuerContext } from '../income/income-issuer-context.service.js';
@@ -29,7 +31,7 @@ import {
 import { vatResolutionCachePayload } from '../income/income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { buildWorkEngineInvoicesDocumentCreationEntrypoint } from './work-engine-invoices-document-creation.builders.js';
+import { WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS } from './work-engine-invoices-document-creation.builders.js';
 
 export type RecurringDocumentTemplateSnapshot = {
   snapshot_version: 1;
@@ -193,13 +195,22 @@ export async function ensureRetainerDocumentDraftWorkspace(params: {
   endCustomerId: string;
   sourceDraftTemplateId?: string | null;
   fallbackDocumentType?: IncomeDocumentType | null;
+  onTiming?: (label: string, elapsedMs: number) => void;
 }): Promise<{
   income_workspace_aggregate: IncomeWorkspaceAggregate;
   income_commands: Record<string, string>;
 }> {
+  const logTiming = (label: string, startMs: number) => {
+    const elapsedMs = Date.now() - startMs;
+    params.onTiming?.(label, elapsedMs);
+    return Date.now();
+  };
+  let stepStart = Date.now();
+
   const scope = await ensureIssuerForOfficeClient(params.ctx, params.representedClientId);
-  const entrypoint = await buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx);
-  const income_commands = entrypoint.wizard.income_commands;
+  stepStart = logTiming('ensure_issuer_scope', stepStart);
+
+  const income_commands = { ...WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS };
 
   let recipientOverlay: RecipientSearchOverlay = {};
   let wizardOverlay: WizardDraftOverlay = {};
@@ -213,10 +224,18 @@ export async function ensureRetainerDocumentDraftWorkspace(params: {
         representedClientId: params.representedClientId,
         endCustomerId: params.endCustomerId,
       });
-      const resumed = await resumeIncomeDocumentDraft(scope, { draft_id: params.sourceDraftTemplateId });
-      recipientOverlay = resumed.recipientOverlay;
-      wizardOverlay = resumed.wizardOverlay;
-      startingStepKey = resumed.starting_step_key;
+      stepStart = logTiming('load_template_draft_row', stepStart);
+      const wizardRow = await loadWizardDraftRow(scope, params.sourceDraftTemplateId);
+      recipientOverlay = await recipientOverlayForDraftRow(scope, wizardRow);
+      stepStart = logTiming('recipient_overlay', stepStart);
+      wizardOverlay = await wizardDraftOverlayForActiveDraft(
+        scope,
+        params.sourceDraftTemplateId,
+        scope.permissions.edit,
+        { lean: true },
+      );
+      startingStepKey = 'document_details';
+      stepStart = logTiming('lean_document_details_overlay', stepStart);
     } catch {
       // Stale template id — fall through to empty wizard overlay.
     }
@@ -227,7 +246,9 @@ export async function ensureRetainerDocumentDraftWorkspace(params: {
     wizardOverlay,
     recipientOverlay,
     startingStepKey,
+    { includeBrandingProfile: false },
   );
+  logTiming('wizard_patch_aggregate', stepStart);
 
   return { income_workspace_aggregate, income_commands };
 }

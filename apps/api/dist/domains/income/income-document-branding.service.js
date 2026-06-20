@@ -172,12 +172,13 @@ export async function ensureIncomeDocumentBrandingProfile(scope) {
         return existing;
     return bootstrapFromOrganizationSettings(scope);
 }
-export async function loadResolvedBrandingProfile(scope) {
+export async function loadResolvedBrandingProfile(scope, options) {
     const row = await ensureIncomeDocumentBrandingProfile(scope);
-    const logo_data_url = row.logo_file_asset_id
+    const includeAssetDataUrls = options?.includeAssetDataUrls !== false;
+    const logo_data_url = includeAssetDataUrls && row.logo_file_asset_id
         ? await fileAssetToDataUrl(row.logo_file_asset_id)
         : null;
-    const signature_data_url = row.signature_file_asset_id
+    const signature_data_url = includeAssetDataUrls && row.signature_file_asset_id
         ? await fileAssetToDataUrl(row.signature_file_asset_id)
         : null;
     return resolveBrandingProfile(row, { logo_data_url, signature_data_url });
@@ -201,7 +202,7 @@ function buildEmailTemplateStudioParts(resolved) {
         email_template_preview: buildEmailTemplatePreview(resolved.email_subject_template, resolved.email_body_template, tokens),
     };
 }
-async function buildDocumentBrandingStudio(scope, resolved, row) {
+async function buildDocumentBrandingStudio(scope, resolved, row, options) {
     const display = resolved.display_options;
     const overrides = parseDocumentTypeStyleOverridesJson(row.document_type_style_overrides);
     const selectedGroupKey = 'quote_deal';
@@ -236,7 +237,9 @@ async function buildDocumentBrandingStudio(scope, resolved, row) {
         selected_logo_size_key: resolved.logo_size_key,
         advanced_layout_visible: false,
         studio_live_preview: buildStudioSampleLivePreview({
-            preview_html: renderStudioSamplePreviewHtml(resolvedForGroup, groupDef.sample_document_type_label),
+            preview_html: options?.includeStudioPreviewHtml === false
+                ? ''
+                : renderStudioSamplePreviewHtml(resolvedForGroup, groupDef.sample_document_type_label),
             sample_document_type_label: groupDef.sample_document_type_label,
         }),
         ...emailParts,
@@ -283,15 +286,18 @@ export function buildDocumentBrandingSettingsEntrypoint(permissions) {
         },
     };
 }
-export async function buildDocumentBrandingProfileAggregate(scope, canEdit) {
+export async function buildDocumentBrandingProfileAggregate(scope, canEdit, options) {
     const row = await ensureIncomeDocumentBrandingProfile(scope);
-    const resolved = await loadResolvedBrandingProfile(scope);
+    const lean = options?.lean === true;
+    const resolved = await loadResolvedBrandingProfile(scope, { includeAssetDataUrls: !lean });
     const uploadLogoActions = canEdit ? [INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO] : [];
     const uploadSigActions = canEdit ? [INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE] : [];
     return {
         profile_id: row.id,
         title: 'הגדרות מסמך',
-        document_branding_studio: await buildDocumentBrandingStudio(scope, resolved, row),
+        document_branding_studio: await buildDocumentBrandingStudio(scope, resolved, row, {
+            includeStudioPreviewHtml: !lean,
+        }),
         logo: {
             label: 'לוגו מסמך',
             file_asset_id: row.logo_file_asset_id,

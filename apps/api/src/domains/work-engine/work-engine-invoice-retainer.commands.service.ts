@@ -8,7 +8,6 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
-import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
 import type { RetainerSettingsOverride } from './work-engine-invoice-retainer.read-model.service.js';
 import { buildDocumentTemplateSnapshotForRetainer } from './work-engine-invoice-retainer-draft.service.js';
@@ -223,24 +222,17 @@ async function commandResponse(params: {
   command: WorkEngineInvoiceRetainerCommandType;
   representedClientId: string;
   endCustomerId: string;
-  includeInvoicesTab?: boolean;
 }): Promise<WorkEngineInvoiceRetainerCommandResponse> {
   const aggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
     ctx: params.ctx,
     representedClientId: params.representedClientId,
     endCustomerId: params.endCustomerId,
   });
-  const response: WorkEngineInvoiceRetainerCommandResponse = {
+  return {
     ok: true,
     command: params.command,
     work_engine_invoice_retainer_setup_aggregate: aggregate,
   };
-  if (params.includeInvoicesTab) {
-    response.work_engine_invoices_tab_aggregate = await buildWorkEngineInvoicesTabAggregate({
-      ctx: params.ctx,
-    });
-  }
-  return response;
 }
 
 export async function executeWorkEngineInvoiceRetainerCommand(
@@ -319,7 +311,6 @@ export async function executeWorkEngineInvoiceRetainerCommand(
       command,
       representedClientId,
       endCustomerId,
-      includeInvoicesTab: true,
     });
   }
 
@@ -393,6 +384,5 @@ export async function executeWorkEngineInvoiceRetainerCommand(
     command: command as WorkEngineInvoiceRetainerCommandType,
     representedClientId,
     endCustomerId: existing.end_customer_id,
-    includeInvoicesTab: command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.cancel,
   });
 }

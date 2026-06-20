@@ -408,6 +408,7 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(
   wizardDraftOverlay: WizardDraftOverlay,
   recipientOverlay: RecipientSearchOverlay = {},
   startingStepKey: string | null = null,
+  options?: { includeBrandingProfile?: boolean },
 ): Promise<IncomeWorkspaceAggregate> {
   const recipient_search = {
     ...minimalRecipientSearchStub(scope),
@@ -416,7 +417,10 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(
   };
 
   const canEdit = scope.permissions.edit;
-  const brandingProfile = await buildDocumentBrandingProfileAggregate(scope, canEdit);
+  const includeBrandingProfile = options?.includeBrandingProfile !== false;
+  const brandingProfile = includeBrandingProfile
+    ? await buildDocumentBrandingProfileAggregate(scope, canEdit)
+    : null;
 
   return {
     aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,

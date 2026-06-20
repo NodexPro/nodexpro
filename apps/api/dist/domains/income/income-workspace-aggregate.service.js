@@ -302,14 +302,17 @@ function minimalRecipientSearchStub(scope) {
  * Lightweight workspace aggregate for Work Engine wizard draft mutations.
  * Skips customers/items/drafts/issued tables and count queries (major latency win).
  */
-export async function buildIncomeWorkspaceWizardPatchAggregate(scope, wizardDraftOverlay, recipientOverlay = {}, startingStepKey = null) {
+export async function buildIncomeWorkspaceWizardPatchAggregate(scope, wizardDraftOverlay, recipientOverlay = {}, startingStepKey = null, options) {
     const recipient_search = {
         ...minimalRecipientSearchStub(scope),
         ...(recipientOverlay.selected != null ? { selected: recipientOverlay.selected } : {}),
         ...(recipientOverlay.field_errors != null ? { field_errors: recipientOverlay.field_errors } : {}),
     };
     const canEdit = scope.permissions.edit;
-    const brandingProfile = await buildDocumentBrandingProfileAggregate(scope, canEdit);
+    const includeBrandingProfile = options?.includeBrandingProfile !== false;
+    const brandingProfile = includeBrandingProfile
+        ? await buildDocumentBrandingProfileAggregate(scope, canEdit)
+        : null;
     return {
         aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
         org_id: scope.org_id,

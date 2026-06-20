@@ -28,6 +28,7 @@ import type {
   IncomeDocumentBrandingSettingsEntrypoint,
 } from '../income/income-document-branding.types.js';
 import type { IncomeClientDocumentManagementPanel } from '../income/income.types.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 
 export type WorkEngineInvoicesTabColumnType = 'text' | 'money_reference' | 'date' | 'status';
 
@@ -132,6 +133,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       document_branding_profile = await buildDocumentBrandingProfileAggregate(
         issuerScope,
         issuerScope.permissions.edit,
+        { lean: true },
       );
       document_branding_settings_entrypoint = buildDocumentBrandingSettingsEntrypoint(
         issuerScope.permissions,
@@ -143,7 +145,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
   }
 
   if (client_document_management_panel.visible) {
-    return {
+    const response: WorkEngineInvoicesTabAggregate = {
       aggregate_key: 'work_engine_invoices_tab_aggregate',
       org_id: orgId,
       workspace_tabs: buildAccountantWorkspaceTabs('invoices'),
@@ -173,6 +175,8 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       document_branding_settings_entrypoint,
       client_document_management_panel,
     };
+    logAggregatePayloadBreakdown('work_engine_invoices_tab_aggregate', response);
+    return response;
   }
 
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -328,28 +332,12 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       };
     }) ?? [];
 
-  let document_branding_profile_legacy: IncomeDocumentBrandingProfileAggregate | null = document_branding_profile;
+  let document_branding_profile_legacy: IncomeDocumentBrandingProfileAggregate | null =
+    document_branding_profile;
   let document_branding_settings_entrypoint_legacy: IncomeDocumentBrandingSettingsEntrypoint | null =
     document_branding_settings_entrypoint;
-  if (!document_branding_profile_legacy) {
-    try {
-      const issuerScope = await loadActiveIncomeIssuerScope(params.ctx);
-      if (issuerScope.permissions.view) {
-        document_branding_profile_legacy = await buildDocumentBrandingProfileAggregate(
-          issuerScope,
-          issuerScope.permissions.edit,
-        );
-        document_branding_settings_entrypoint_legacy = buildDocumentBrandingSettingsEntrypoint(
-          issuerScope.permissions,
-        );
-      }
-    } catch {
-      document_branding_profile_legacy = null;
-      document_branding_settings_entrypoint_legacy = null;
-    }
-  }
 
-  return {
+  const response: WorkEngineInvoicesTabAggregate = {
     aggregate_key: 'work_engine_invoices_tab_aggregate',
     org_id: orgId,
     workspace_tabs: buildAccountantWorkspaceTabs('invoices'),
@@ -385,4 +373,6 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
     document_branding_settings_entrypoint: document_branding_settings_entrypoint_legacy,
     client_document_management_panel,
   };
+  logAggregatePayloadBreakdown('work_engine_invoices_tab_aggregate', response);
+  return response;
 }

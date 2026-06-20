@@ -553,7 +553,7 @@ function startingStepKeyForDraftRow(row) {
         return 'recipient';
     return 'document_details';
 }
-async function recipientOverlayForDraftRow(scope, row) {
+export async function recipientOverlayForDraftRow(scope, row) {
     if (row.income_customer_id) {
         const saved = await loadIncomeRecipientById(scope, row.income_customer_id);
         return saved ? { selected: selectedFromSavedRow(saved) } : {};
@@ -593,11 +593,13 @@ export async function resumeIncomeDocumentDraft(scope, body) {
     });
     return { wizardOverlay: { ...wizardOverlay, active_wizard_draft_id: draft_id }, recipientOverlay, starting_step_key };
 }
-export async function wizardDraftOverlayForActiveDraft(scope, draftId, canEdit) {
+export async function wizardDraftOverlayForActiveDraft(scope, draftId, canEdit, options) {
     if (!draftId)
         return {};
     try {
-        return await buildOverlayForDraft(scope, draftId, canEdit);
+        return await buildOverlayForDraft(scope, draftId, canEdit, undefined, undefined, {
+            lean: options?.lean,
+        });
     }
     catch {
         return {};
