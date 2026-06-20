@@ -16,6 +16,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError } from '../../shared/errors.js';
 import { reprocessPendingWorkEventsForOrg } from './work-engine.event-intake.service.js';
 import { scanAndEmitIncomeInvoiceOverdueForOrg } from '../income/income-work-engine-bridge.js';
+import { runWorkEngineRecurringDocumentScheduler } from './work-engine-invoice-retainer.scheduler.service.js';
 import { wakeExpiredSnoozedReminderCandidates } from './work-engine.reminder-review.service.js';
 import { recomputeWorkItemSlaStatus } from './work-engine.sla.service.js';
 const DEFAULT_BATCH_SIZE = 100;
@@ -47,6 +48,19 @@ async function listSchedulerOrgIds(singleOrgId) {
         throw eventErr;
     for (const r of eventRows ?? []) {
         const id = String(r.org_id ?? '').trim();
+        if (id)
+            seen.add(id);
+    }
+    const { data: recurringRows, error: recurringErr } = await supabaseAdmin
+        .from('income_recurring_document_profiles')
+        .select('organization_id')
+        .eq('status', 'active')
+        .not('document_template_snapshot', 'is', null)
+        .limit(2000);
+    if (recurringErr)
+        throw recurringErr;
+    for (const r of recurringRows ?? []) {
+        const id = String(r.organization_id ?? '').trim();
         if (id)
             seen.add(id);
     }
@@ -136,6 +150,10 @@ export async function runWorkEngineScheduler(params) {
         reminders_created: 0,
         escalations_created: 0,
         snoozed_woken: 0,
+        recurring_profiles_scanned: 0,
+        recurring_profiles_due: 0,
+        recurring_drafts_created: 0,
+        recurring_failures: 0,
         errors: [],
     };
     try {
@@ -192,6 +210,16 @@ export async function runWorkEngineScheduler(params) {
                     if (actorUserId) {
                         const bridgeCtx = buildSchedulerIncomeBridgeContext(orgId, actorUserId);
                         await scanAndEmitIncomeInvoiceOverdueForOrg(orgId, bridgeCtx);
+                        const recurring = await runWorkEngineRecurringDocumentScheduler({
+                            org_id: orgId,
+                            batch_size: batchSize,
+                            dry_run: false,
+                            scheduler_ctx: bridgeCtx,
+                        });
+                        summary.recurring_profiles_scanned += recurring.recurring_profiles_scanned;
+                        summary.recurring_profiles_due += recurring.recurring_profiles_due;
+                        summary.recurring_drafts_created += recurring.recurring_drafts_created;
+                        summary.recurring_failures += recurring.recurring_failures;
                     }
                 }
             }
@@ -233,6 +261,10 @@ function emptySummary(opts) {
         reminders_created: 0,
         escalations_created: 0,
         snoozed_woken: 0,
+        recurring_profiles_scanned: 0,
+        recurring_profiles_due: 0,
+        recurring_drafts_created: 0,
+        recurring_failures: 0,
         errors: [],
     };
 }

@@ -59,6 +59,26 @@ export function computeNextUnitPriceBeforeVat(params) {
     }
     return Math.round((current + params.price_increase_value) * 100) / 100;
 }
-export const RECURRING_SCHEDULER_STATUS = 'scheduler_pending';
+export const RECURRING_SCHEDULER_STATUS_PENDING = 'scheduler_pending';
+export const RECURRING_SCHEDULER_STATUS_ACTIVE = 'active';
+export const RECURRING_SCHEDULER_STATUS_FAILED = 'failed';
+/** @deprecated use RECURRING_SCHEDULER_STATUS_PENDING */
+export const RECURRING_SCHEDULER_STATUS = RECURRING_SCHEDULER_STATUS_PENDING;
 export const RECURRING_WORK_EVENT_TYPE = 'recurring_document_draft_created';
 export const RECURRING_WORK_TYPE = 'recurring_invoice_review';
+export const RECURRING_FAILURE_EVENT_TYPE = 'recurring_generation_failed';
+export const RECURRING_FAILURE_WORK_TYPE = 'recurring_generation_failed';
+export const RECURRING_WORK_ENGINE_SOURCE_MODULE = 'work_engine';
+export const RECURRING_WORK_ENGINE_ENTITY_TYPE = 'income_recurring_document_profile';
+export const RECURRING_WORK_ENGINE_SCHEMA_VERSION = 1;
+export function isRecurringProfileDueForDraftGeneration(params) {
+    const draftCreationDate = computeDraftCreationDateIso(params.next_document_date, params.advance_days);
+    return params.today_iso >= draftCreationDate;
+}
+export function buildRecurringSchedulerCycleKey(profileId, scheduledDocumentDate) {
+    return `${profileId}:${scheduledDocumentDate}`;
+}
+/** Synthetic workflow bucket per profile cycle — satisfies work_items.period_key regex. */
+export function recurringProfileWorkPeriodKey(profileId, scheduledDocumentDate) {
+    return `retainer:profile:${profileId}:cycle:${scheduledDocumentDate}`;
+}

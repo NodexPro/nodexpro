@@ -82,7 +82,40 @@ export function computeNextUnitPriceBeforeVat(params: {
   return Math.round((current + params.price_increase_value) * 100) / 100;
 }
 
-export const RECURRING_SCHEDULER_STATUS = 'scheduler_pending' as const;
+export const RECURRING_SCHEDULER_STATUS_PENDING = 'scheduler_pending' as const;
+export const RECURRING_SCHEDULER_STATUS_ACTIVE = 'active' as const;
+export const RECURRING_SCHEDULER_STATUS_FAILED = 'failed' as const;
+export type RecurringSchedulerStatus =
+  | typeof RECURRING_SCHEDULER_STATUS_PENDING
+  | typeof RECURRING_SCHEDULER_STATUS_ACTIVE
+  | typeof RECURRING_SCHEDULER_STATUS_FAILED;
+
+/** @deprecated use RECURRING_SCHEDULER_STATUS_PENDING */
+export const RECURRING_SCHEDULER_STATUS = RECURRING_SCHEDULER_STATUS_PENDING;
 
 export const RECURRING_WORK_EVENT_TYPE = 'recurring_document_draft_created' as const;
 export const RECURRING_WORK_TYPE = 'recurring_invoice_review' as const;
+export const RECURRING_FAILURE_EVENT_TYPE = 'recurring_generation_failed' as const;
+export const RECURRING_FAILURE_WORK_TYPE = 'recurring_generation_failed' as const;
+
+export const RECURRING_WORK_ENGINE_SOURCE_MODULE = 'work_engine' as const;
+export const RECURRING_WORK_ENGINE_ENTITY_TYPE = 'income_recurring_document_profile' as const;
+export const RECURRING_WORK_ENGINE_SCHEMA_VERSION = 1;
+
+export function isRecurringProfileDueForDraftGeneration(params: {
+  today_iso: string;
+  next_document_date: string;
+  advance_days: number;
+}): boolean {
+  const draftCreationDate = computeDraftCreationDateIso(params.next_document_date, params.advance_days);
+  return params.today_iso >= draftCreationDate;
+}
+
+export function buildRecurringSchedulerCycleKey(profileId: string, scheduledDocumentDate: string): string {
+  return `${profileId}:${scheduledDocumentDate}`;
+}
+
+/** Synthetic workflow bucket per profile cycle — satisfies work_items.period_key regex. */
+export function recurringProfileWorkPeriodKey(profileId: string, scheduledDocumentDate: string): string {
+  return `retainer:profile:${profileId}:cycle:${scheduledDocumentDate}`;
+}

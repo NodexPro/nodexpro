@@ -17,6 +17,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError } from '../../shared/errors.js';
 import { reprocessPendingWorkEventsForOrg } from './work-engine.event-intake.service.js';
 import { scanAndEmitIncomeInvoiceOverdueForOrg } from '../income/income-work-engine-bridge.js';
+import { runWorkEngineRecurringDocumentScheduler } from './work-engine-invoice-retainer.scheduler.service.js';
 import type { RequestContext } from '../../shared/context.js';
 import { wakeExpiredSnoozedReminderCandidates } from './work-engine.reminder-review.service.js';
 import { recomputeWorkItemSlaStatus } from './work-engine.sla.service.js';
@@ -50,6 +51,10 @@ export type WorkEngineSchedulerRunSummary = {
   reminders_created: number;
   escalations_created: number;
   snoozed_woken: number;
+  recurring_profiles_scanned: number;
+  recurring_profiles_due: number;
+  recurring_drafts_created: number;
+  recurring_failures: number;
   errors: Array<{ org_id?: string; work_item_id?: string; work_event_id?: string; error: string }>;
 };
 
@@ -83,6 +88,18 @@ async function listSchedulerOrgIds(singleOrgId?: string): Promise<string[]> {
   if (eventErr) throw eventErr;
   for (const r of eventRows ?? []) {
     const id = String((r as { org_id?: string }).org_id ?? '').trim();
+    if (id) seen.add(id);
+  }
+
+  const { data: recurringRows, error: recurringErr } = await supabaseAdmin
+    .from('income_recurring_document_profiles')
+    .select('organization_id')
+    .eq('status', 'active')
+    .not('document_template_snapshot', 'is', null)
+    .limit(2000);
+  if (recurringErr) throw recurringErr;
+  for (const r of recurringRows ?? []) {
+    const id = String((r as { organization_id?: string }).organization_id ?? '').trim();
     if (id) seen.add(id);
   }
 
@@ -198,6 +215,10 @@ export async function runWorkEngineScheduler(
     reminders_created: 0,
     escalations_created: 0,
     snoozed_woken: 0,
+    recurring_profiles_scanned: 0,
+    recurring_profiles_due: 0,
+    recurring_drafts_created: 0,
+    recurring_failures: 0,
     errors: [],
   };
 
@@ -258,6 +279,16 @@ export async function runWorkEngineScheduler(
           if (actorUserId) {
             const bridgeCtx = buildSchedulerIncomeBridgeContext(orgId, actorUserId);
             await scanAndEmitIncomeInvoiceOverdueForOrg(orgId, bridgeCtx);
+            const recurring = await runWorkEngineRecurringDocumentScheduler({
+              org_id: orgId,
+              batch_size: batchSize,
+              dry_run: false,
+              scheduler_ctx: bridgeCtx,
+            });
+            summary.recurring_profiles_scanned += recurring.recurring_profiles_scanned;
+            summary.recurring_profiles_due += recurring.recurring_profiles_due;
+            summary.recurring_drafts_created += recurring.recurring_drafts_created;
+            summary.recurring_failures += recurring.recurring_failures;
           }
         }
       } catch (e) {
@@ -305,6 +336,10 @@ function emptySummary(opts: {
     reminders_created: 0,
     escalations_created: 0,
     snoozed_woken: 0,
+    recurring_profiles_scanned: 0,
+    recurring_profiles_due: 0,
+    recurring_drafts_created: 0,
+    recurring_failures: 0,
     errors: [],
   };
 }

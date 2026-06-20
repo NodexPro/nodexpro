@@ -89,6 +89,20 @@ const SAFE_EVENT_MAPPINGS = {
         initial_state: 'waiting_client',
         requires_period_key: true,
     },
+    /** Retainer Phase 1 — generated draft awaits accountant review (no auto issue/send). */
+    recurring_document_draft_created: {
+        module_key: 'income',
+        work_type: 'recurring_invoice_review',
+        initial_state: 'waiting_human',
+        requires_period_key: true,
+    },
+    /** Retainer Phase 1 — scheduler draft generation failed for a cycle. */
+    recurring_generation_failed: {
+        module_key: 'income',
+        work_type: 'recurring_generation_failed',
+        initial_state: 'new',
+        requires_period_key: true,
+    },
 };
 export const MAPPING_REASON = {
     UNKNOWN_EVENT_MAPPING: 'unknown_event_mapping',

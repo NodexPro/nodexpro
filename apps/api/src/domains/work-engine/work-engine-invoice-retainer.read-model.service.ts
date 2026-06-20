@@ -15,7 +15,8 @@ import {
   type RecurringDocumentTemplateSnapshot,
 } from './work-engine-invoice-retainer-draft.service.js';
 import {
-  RECURRING_SCHEDULER_STATUS,
+  RECURRING_SCHEDULER_STATUS_ACTIVE,
+  RECURRING_SCHEDULER_STATUS_FAILED,
   RECURRING_WORK_EVENT_TYPE,
   RECURRING_WORK_TYPE,
   computeDraftCreationDateIso,
@@ -24,6 +25,7 @@ import {
   type RecurringDocumentFrequency,
   type RecurringPriceIncreaseType,
   type RecurringProfileStatus,
+  type RecurringSchedulerStatus,
 } from './work-engine-invoice-retainer.pure.js';
 import {
   WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY,
@@ -72,6 +74,11 @@ type RawProfile = {
   status: RecurringProfileStatus;
   source_draft_template_id: string | null;
   document_template_snapshot: RecurringDocumentTemplateSnapshot | null;
+  last_generated_draft_id: string | null;
+  last_generated_at: string | null;
+  last_generation_failed_at: string | null;
+  last_generation_error_code: string | null;
+  last_generation_error_message: string | null;
 };
 
 function assertAccess(ctx: RequestContext): void {
@@ -136,7 +143,7 @@ async function loadProfiles(orgId: string, representedClientId: string): Promise
   const { data, error } = await supabaseAdmin
     .from('income_recurring_document_profiles')
     .select(
-      'id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, unit_price_before_vat_reference, currency, price_increase_enabled, price_increase_type, price_increase_value, status, source_draft_template_id, document_template_snapshot',
+      'id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, unit_price_before_vat_reference, currency, price_increase_enabled, price_increase_type, price_increase_value, status, source_draft_template_id, document_template_snapshot, last_generated_draft_id, last_generated_at, last_generation_failed_at, last_generation_error_code, last_generation_error_message',
     )
     .eq('organization_id', orgId)
     .eq('represented_client_id', representedClientId)
@@ -165,6 +172,18 @@ function settingValueFromWorkspace(
     (f) => f.key === key,
   );
   return field?.value ?? null;
+}
+
+function profileSchedulerFailed(profile: RawProfile | null): boolean {
+  if (!profile?.last_generation_error_code) return false;
+  if (!profile.last_generated_at) return true;
+  if (!profile.last_generation_failed_at) return false;
+  return profile.last_generation_failed_at > profile.last_generated_at;
+}
+
+function resolveSchedulerStatus(profile: RawProfile | null): RecurringSchedulerStatus {
+  if (profileSchedulerFailed(profile)) return RECURRING_SCHEDULER_STATUS_FAILED;
+  return RECURRING_SCHEDULER_STATUS_ACTIVE;
 }
 
 function buildRetainerSettings(
@@ -220,6 +239,13 @@ function buildRetainerSettings(
       : null,
     status: profile?.status ?? 'active',
     status_label: STATUS_LABELS[profile?.status ?? 'active'],
+    next_document_date: profile?.next_document_date ?? documentDate,
+    next_document_date_display: formatHebrewDateDisplay(profile?.next_document_date ?? documentDate),
+    last_generated_draft_id: profile?.last_generated_draft_id ?? null,
+    last_generated_at: profile?.last_generated_at ?? null,
+    last_generated_at_display: profile?.last_generated_at
+      ? formatHebrewDateDisplay(profile.last_generated_at.slice(0, 10))
+      : null,
   };
 }
 
@@ -298,6 +324,16 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     retainerSettings = buildRetainerSettings(profile, customer, defaultValues, documentDraftWorkspace);
   }
 
+  const selectedProfile =
+    selectedEndCustomerId != null
+      ? (profileByCustomerId.get(selectedEndCustomerId) ?? null)
+      : null;
+  const schedulerStatus = resolveSchedulerStatus(selectedProfile);
+  const schedulerNote =
+    schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
+      ? `יצירת טיוטה אחרונה נכשלה (${selectedProfile?.last_generation_error_code ?? 'שגיאה'}). נדרשת בדיקה ידנית.`
+      : 'יצירת טיוטות מתוזמנת פעילה. לא נשלח מסמך ללא אישור רואה חשבון.';
+
   const allowedActions = ['view_invoice_retainer_setup'];
   if (perms.edit) {
     allowedActions.push(
@@ -330,9 +366,8 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     frequency_options: FREQUENCY_OPTIONS,
     default_values: defaultValues,
     allowed_actions: allowedActions,
-    scheduler_status: RECURRING_SCHEDULER_STATUS,
-    scheduler_note:
-      'יצירת טיוטות אוטומטית תתבצע על ידי Scheduler (ממתין להפעלה). לא נשלח מסמך ללא אישור רואה חשבון.',
+    scheduler_status: schedulerStatus,
+    scheduler_note: schedulerNote,
     work_engine_event_type: RECURRING_WORK_EVENT_TYPE,
     work_type: RECURRING_WORK_TYPE,
   };

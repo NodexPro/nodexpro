@@ -7,6 +7,7 @@ import type {
   RecurringDocumentFrequency,
   RecurringPriceIncreaseType,
   RecurringProfileStatus,
+  RecurringSchedulerStatus,
 } from './work-engine-invoice-retainer.pure.js';
 import type { RecurringDocumentTemplateSnapshot } from './work-engine-invoice-retainer-draft.service.js';
 
@@ -58,6 +59,11 @@ export type WorkEngineInvoiceRetainerSettings = {
   next_cycle_unit_price_before_vat_display: string | null;
   status: RecurringProfileStatus;
   status_label: string;
+  next_document_date: string;
+  next_document_date_display: string;
+  last_generated_draft_id: string | null;
+  last_generated_at: string | null;
+  last_generated_at_display: string | null;
 };
 
 export type WorkEngineInvoiceRetainerDocumentDraftWorkspace = {
@@ -89,7 +95,7 @@ export type WorkEngineInvoiceRetainerSetupAggregate = {
     auto_advance_period: boolean;
   };
   allowed_actions: string[];
-  scheduler_status: 'scheduler_pending';
+  scheduler_status: RecurringSchedulerStatus;
   scheduler_note: string;
   work_engine_event_type: string;
   work_type: string;

@@ -4,12 +4,20 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
-import { normalizeDraftLines } from '../income/income-document-draft-lines.pure.js';
+import { normalizeDraftLines, serializeDraftLines } from '../income/income-document-draft-lines.pure.js';
 import { beginIncomeWizardDocumentDraft, resumeIncomeDocumentDraft, } from '../income/income-document-draft-editor.service.js';
 import { applySelectIncomeIssuerContext } from '../income/income-issuer-context.service.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 import { INCOME_COMMAND_SELECT_ISSUER } from '../income/income.types.js';
 import { buildIncomeWorkspaceAggregate } from '../income/income-workspace-aggregate.service.js';
+import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
+import { findAvailableDocumentType } from '../income/income-document-types.fallback.js';
+import { validateDraftAgainstDocumentTypeRules } from '../income/income-document-draft.helpers.js';
+import { recomputeDraftLineAmounts } from '../income/income-draft-line-compute.pure.js';
+import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from '../income/income-document-draft-totals.pure.js';
+import { vatResolutionCachePayload } from '../income/income-draft-vat-fallback.pure.js';
+import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
+import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { buildWorkEngineInvoicesDocumentCreationEntrypoint } from './work-engine-invoices-document-creation.builders.js';
 const DRAFT_SELECT = 'id, organization_id, represented_client_id, issuer_business_id, income_customer_id, document_type, document_date, due_date, currency, language, notes, document_settings_json, delivery_contact_json, draft_lines_json, draft_totals_preview_json, status';
 async function loadDraftRow(orgId, draftId) {
@@ -141,4 +149,100 @@ export async function ensureRetainerDocumentDraftWorkspace(params) {
     }
     const income_workspace_aggregate = await buildIncomeWorkspaceAggregate(params.ctx, scope, recipientOverlay, wizardOverlay);
     return { income_workspace_aggregate, income_commands };
+}
+export async function createRecurringCycleDraftFromSnapshot(params) {
+    const snapshot = params.snapshot;
+    if (snapshot.snapshot_kind !== 'document_template_snapshot') {
+        throw badRequest('document_template_snapshot is invalid');
+    }
+    const { available_document_types } = await resolveAvailableDocumentTypes(params.scope.org_id, params.scope);
+    const docType = findAvailableDocumentType(available_document_types, snapshot.document_type);
+    if (!docType)
+        throw badRequest('document_type is not available for issuer');
+    const settings = parseDocumentSettingsJson(snapshot.document_settings_json);
+    const documentDate = params.scheduledDocumentDate;
+    const baseLines = normalizeDraftLines(snapshot.draft_lines_json);
+    const lines = baseLines.length
+        ? baseLines.map((line, index) => ({
+            ...line,
+            sort_index: index,
+            quantity: index === 0 ? params.quantity : line.quantity,
+            unit_price_reference: index === 0 ? params.unitPriceBeforeVatReference : line.unit_price_reference,
+            currency: (index === 0 ? params.currency : line.currency),
+        }))
+        : normalizeDraftLines([
+            {
+                description: '—',
+                quantity: params.quantity,
+                unit_price_reference: params.unitPriceBeforeVatReference,
+                currency: params.currency,
+            },
+        ]);
+    let vatResolution = await resolveIncomeDraftVatForOrg(params.scope.org_id, 'IL', documentDate);
+    const recomputedLines = await recomputeDraftLineAmounts(lines, settings, vatResolution, documentDate);
+    const totalsPreview = await computeDraftTotalsPreview(recomputedLines, params.currency, settings, vatResolution, documentDate);
+    const draftPayload = {
+        document_type: snapshot.document_type,
+        income_customer_id: params.endCustomerId,
+        one_time_customer_snapshot_json: null,
+        draft_lines_json: serializeDraftLines(recomputedLines),
+        payment_terms_json: null,
+        due_date: snapshot.due_date,
+        document_date: documentDate,
+        payment_received_json: null,
+        notes: snapshot.notes,
+        currency: params.currency,
+        language: snapshot.language,
+        document_settings_json: snapshot.document_settings_json,
+    };
+    const { validation_warnings_json } = await validateDraftAgainstDocumentTypeRules(draftPayload, docType);
+    const draft_totals_preview_json = {
+        ...totalsPreview,
+        discount_percent_reference: params.discountPercentReference,
+        discount_amount_reference: params.discountAmountReference,
+        vat_resolution_cache: vatResolutionCachePayload(documentDate, vatResolution),
+    };
+    const { data, error } = await supabaseAdmin
+        .from('income_document_drafts')
+        .insert({
+        organization_id: params.scope.org_id,
+        represented_client_id: params.representedClientId,
+        issuer_business_id: params.representedClientId,
+        actor_user_id: params.scope.actor_user_id,
+        acting_mode: 'office_representative',
+        document_type: snapshot.document_type,
+        income_customer_id: params.endCustomerId,
+        one_time_customer_snapshot_json: null,
+        draft_lines_json: serializeDraftLines(recomputedLines),
+        document_date: documentDate,
+        due_date: snapshot.due_date,
+        currency: params.currency,
+        language: snapshot.language,
+        notes: snapshot.notes,
+        payment_received_json: null,
+        delivery_contact_json: snapshot.delivery_contact_json,
+        document_settings_json: snapshot.document_settings_json,
+        draft_totals_preview_json,
+        validation_warnings_json,
+        status: 'draft',
+    })
+        .select('id')
+        .single();
+    throwIfSupabaseError(error, 'createRecurringCycleDraftFromSnapshot');
+    const draftId = String(data.id);
+    await writeAudit({
+        organizationId: params.scope.org_id,
+        actorUserId: params.scope.actor_user_id,
+        moduleCode: 'income',
+        entityType: 'income_document_draft',
+        entityId: draftId,
+        action: AUDIT_ACTIONS.INCOME_DOCUMENT_DRAFT_CREATED,
+        payload: {
+            document_type: snapshot.document_type,
+            recurring_scheduler: true,
+            income_customer_id: params.endCustomerId,
+            scheduled_document_date: documentDate,
+        },
+    });
+    return draftId;
 }

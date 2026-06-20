@@ -7,7 +7,7 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { ensureRetainerDocumentDraftWorkspace, } from './work-engine-invoice-retainer-draft.service.js';
-import { RECURRING_SCHEDULER_STATUS, RECURRING_WORK_EVENT_TYPE, RECURRING_WORK_TYPE, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
+import { RECURRING_SCHEDULER_STATUS_ACTIVE, RECURRING_SCHEDULER_STATUS_FAILED, RECURRING_WORK_EVENT_TYPE, RECURRING_WORK_TYPE, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
 import { WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY, } from './work-engine-invoice-retainer.types.js';
 const DOCUMENT_TYPE_LABELS = {
     quote: 'הצעת מחיר',
@@ -77,7 +77,7 @@ async function loadEndCustomers(scope) {
 async function loadProfiles(orgId, representedClientId) {
     const { data, error } = await supabaseAdmin
         .from('income_recurring_document_profiles')
-        .select('id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, unit_price_before_vat_reference, currency, price_increase_enabled, price_increase_type, price_increase_value, status, source_draft_template_id, document_template_snapshot')
+        .select('id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, unit_price_before_vat_reference, currency, price_increase_enabled, price_increase_type, price_increase_value, status, source_draft_template_id, document_template_snapshot, last_generated_draft_id, last_generated_at, last_generation_failed_at, last_generation_error_code, last_generation_error_message')
         .eq('organization_id', orgId)
         .eq('represented_client_id', representedClientId)
         .eq('issuer_business_id', representedClientId)
@@ -97,6 +97,20 @@ function formatIsoDefault(dt) {
 function settingValueFromWorkspace(workspace, key) {
     const field = workspace?.income_workspace_aggregate.document_details_step?.settings_schema.find((f) => f.key === key);
     return field?.value ?? null;
+}
+function profileSchedulerFailed(profile) {
+    if (!profile?.last_generation_error_code)
+        return false;
+    if (!profile.last_generated_at)
+        return true;
+    if (!profile.last_generation_failed_at)
+        return false;
+    return profile.last_generation_failed_at > profile.last_generated_at;
+}
+function resolveSchedulerStatus(profile) {
+    if (profileSchedulerFailed(profile))
+        return RECURRING_SCHEDULER_STATUS_FAILED;
+    return RECURRING_SCHEDULER_STATUS_ACTIVE;
 }
 function buildRetainerSettings(profile, endCustomer, defaults, workspace) {
     const today = formatIsoDefault(new Date());
@@ -141,6 +155,13 @@ function buildRetainerSettings(profile, endCustomer, defaults, workspace) {
             : null,
         status: profile?.status ?? 'active',
         status_label: STATUS_LABELS[profile?.status ?? 'active'],
+        next_document_date: profile?.next_document_date ?? documentDate,
+        next_document_date_display: formatHebrewDateDisplay(profile?.next_document_date ?? documentDate),
+        last_generated_draft_id: profile?.last_generated_draft_id ?? null,
+        last_generated_at: profile?.last_generated_at ?? null,
+        last_generated_at_display: profile?.last_generated_at
+            ? formatHebrewDateDisplay(profile.last_generated_at.slice(0, 10))
+            : null,
     };
 }
 export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
@@ -204,6 +225,13 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         });
         retainerSettings = buildRetainerSettings(profile, customer, defaultValues, documentDraftWorkspace);
     }
+    const selectedProfile = selectedEndCustomerId != null
+        ? (profileByCustomerId.get(selectedEndCustomerId) ?? null)
+        : null;
+    const schedulerStatus = resolveSchedulerStatus(selectedProfile);
+    const schedulerNote = schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
+        ? `יצירת טיוטה אחרונה נכשלה (${selectedProfile?.last_generation_error_code ?? 'שגיאה'}). נדרשת בדיקה ידנית.`
+        : 'יצירת טיוטות מתוזמנת פעילה. לא נשלח מסמך ללא אישור רואה חשבון.';
     const allowedActions = ['view_invoice_retainer_setup'];
     if (perms.edit) {
         allowedActions.push('create_income_recurring_document_profile', 'update_income_recurring_document_profile', 'pause_income_recurring_document_profile', 'resume_income_recurring_document_profile', 'cancel_income_recurring_document_profile');
@@ -229,8 +257,8 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         frequency_options: FREQUENCY_OPTIONS,
         default_values: defaultValues,
         allowed_actions: allowedActions,
-        scheduler_status: RECURRING_SCHEDULER_STATUS,
-        scheduler_note: 'יצירת טיוטות אוטומטית תתבצע על ידי Scheduler (ממתין להפעלה). לא נשלח מסמך ללא אישור רואה חשבון.',
+        scheduler_status: schedulerStatus,
+        scheduler_note: schedulerNote,
         work_engine_event_type: RECURRING_WORK_EVENT_TYPE,
         work_type: RECURRING_WORK_TYPE,
     };

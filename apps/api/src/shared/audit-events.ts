@@ -272,6 +272,9 @@ export const AUDIT_ACTIONS = {
   /** Income — recurring document profile (retainer template). */
   INCOME_RECURRING_DOCUMENT_PROFILE_CREATED: 'income.recurring_document_profile_created',
   INCOME_RECURRING_DOCUMENT_PROFILE_UPDATED: 'income.recurring_document_profile_updated',
+  INCOME_RECURRING_PROFILE_DRAFT_CREATED: 'income_recurring_profile_draft_created',
+  INCOME_RECURRING_PROFILE_GENERATION_FAILED: 'income_recurring_profile_generation_failed',
+  INCOME_RECURRING_PROFILE_ADVANCED: 'income_recurring_profile_advanced',
 } as const;
 
 type AuditPayload = Record<string, unknown>;
