@@ -64,7 +64,7 @@ const DRAFT_CREATION_DATE_LABEL = 'תאריך יצירת טיוטה צפוי';
 const DOCUMENT_TYPE_CHANGE_NOTE =
   'שינוי סוג מסמך יחול על טיוטות עתידיות בלבד. מסמכים שכבר הופקו לא ישתנו.';
 
-const FREQUENCY_OPTIONS = [...RECURRING_FREQUENCY_OPTIONS];
+const FREQUENCY_OPTIONS = RECURRING_FREQUENCY_OPTIONS.filter((option) => option.key !== 'monthly');
 
 type RawProfile = {
   id: string;

@@ -29,7 +29,7 @@ const STATUS_DESCRIPTIONS = {
 const ADVANCE_CREATION_HELP_TEXT = 'כמה ימים לפני תאריך המסמך ליצור טיוטה לבדיקה';
 const DRAFT_CREATION_DATE_LABEL = 'תאריך יצירת טיוטה צפוי';
 const DOCUMENT_TYPE_CHANGE_NOTE = 'שינוי סוג מסמך יחול על טיוטות עתידיות בלבד. מסמכים שכבר הופקו לא ישתנו.';
-const FREQUENCY_OPTIONS = [...RECURRING_FREQUENCY_OPTIONS];
+const FREQUENCY_OPTIONS = RECURRING_FREQUENCY_OPTIONS.filter((option) => option.key !== 'monthly');
 function assertAccess(ctx) {
     const perms = incomeWorkspacePermissionsFromContext(ctx);
     if (!perms.view)
