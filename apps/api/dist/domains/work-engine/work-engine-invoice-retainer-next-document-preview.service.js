@@ -6,7 +6,7 @@ import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from '../income
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { computeDraftLineAmounts, resolveLineFx, resolveFxMapForDraftLines } from '../income/income-draft-line-compute.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
-import { computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
+import { computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
 function cloneStep(step) {
     return structuredClone(step);
 }
@@ -156,14 +156,17 @@ async function rebuildProjectedLineTotals(step, orgId, documentDate, settings, v
         },
     };
 }
-function buildPreviewInfoBlock(retainerSettings, nextDocumentDateDisplay) {
+function buildPreviewInfoBlock(retainerSettings, nextDocumentDate, nextDocumentDateDisplay) {
     const advanceDays = retainerSettings?.advance_days ?? null;
+    const draftReviewDateDisplay = nextDocumentDate != null && advanceDays != null
+        ? formatHebrewDateDisplay(computeDraftCreationDateIso(nextDocumentDate, advanceDays))
+        : null;
     return {
         title: 'המסמך הבא',
         document_type_label: retainerSettings?.document_type_label ?? null,
         next_document_date_display: nextDocumentDateDisplay,
         draft_review_date_label: 'טיוטה תיווצר לבדיקה',
-        draft_review_date_display: retainerSettings?.draft_creation_date_display ?? null,
+        draft_review_date_display: draftReviewDateDisplay,
         draft_review_advance_note: advanceDays != null ? `(${advanceDays} ימים לפני מועד המסמך)` : null,
         profile_status_label: retainerSettings?.status_label ?? null,
     };
@@ -221,19 +224,18 @@ function buildSaveAction(visible) {
     };
 }
 function buildUnavailablePreview(message, retainerSettings = null) {
+    const nextDocumentDate = retainerSettings?.next_document_date ?? null;
     const nextDocumentDateDisplay = retainerSettings?.next_document_date_display ??
-        (retainerSettings?.next_document_date
-            ? formatHebrewDateDisplay(retainerSettings.next_document_date)
-            : null);
+        (nextDocumentDate ? formatHebrewDateDisplay(nextDocumentDate) : null);
     return {
         status: 'unavailable',
         unavailable_message: message,
         projection_id: null,
-        next_document_date: retainerSettings?.next_document_date ?? null,
+        next_document_date: nextDocumentDate,
         next_document_date_display: nextDocumentDateDisplay,
         price_increase_applied: false,
         price_increase_note: null,
-        info_block: buildPreviewInfoBlock(retainerSettings, nextDocumentDateDisplay),
+        info_block: buildPreviewInfoBlock(retainerSettings, nextDocumentDate, nextDocumentDateDisplay),
         document_details_step: null,
         save_action: buildSaveAction(false),
         allowed_actions: [],
@@ -285,7 +287,7 @@ export async function buildNextDocumentPreview(params) {
         next_document_date_display: nextDocumentDateDisplay,
         price_increase_applied: priceIncreaseApplied,
         price_increase_note: priceIncreaseNote,
-        info_block: buildPreviewInfoBlock(params.retainerSettings, nextDocumentDateDisplay),
+        info_block: buildPreviewInfoBlock(params.retainerSettings, nextDocumentDate, nextDocumentDateDisplay),
         document_details_step: step,
         save_action: buildSaveAction(true),
         allowed_actions: ['view_retainer_next_document_projection'],
