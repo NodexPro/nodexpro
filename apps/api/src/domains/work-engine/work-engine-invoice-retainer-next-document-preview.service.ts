@@ -35,6 +35,23 @@ type RawProfile = {
   document_template_snapshot: { document_settings_json?: Record<string, unknown> } | null;
 };
 
+const DOCUMENT_TYPE_LABELS: Record<'quote' | 'deal_invoice' | 'tax_invoice', string> = {
+  quote: 'הצעת מחיר',
+  deal_invoice: 'חשבון עסקה',
+  tax_invoice: 'חשבונית מס',
+};
+
+function resolvePreviewDocumentTypeLabel(
+  retainerSettings: WorkEngineInvoiceRetainerSettings | null,
+  step: IncomeDocumentDetailsStep | null,
+): string | null {
+  const fromStep = step?.document_type_key;
+  if (fromStep === 'quote' || fromStep === 'deal_invoice' || fromStep === 'tax_invoice') {
+    return DOCUMENT_TYPE_LABELS[fromStep];
+  }
+  return retainerSettings?.document_type_label ?? null;
+}
+
 function cloneStep(step: IncomeDocumentDetailsStep): IncomeDocumentDetailsStep {
   return structuredClone(step);
 }
@@ -217,6 +234,7 @@ function buildPreviewInfoBlock(
   retainerSettings: WorkEngineInvoiceRetainerSettings | null,
   nextDocumentDate: string | null,
   nextDocumentDateDisplay: string | null,
+  projectedStep: IncomeDocumentDetailsStep | null = null,
 ): WorkEngineInvoiceRetainerNextDocumentPreviewInfoBlock {
   const advanceDays = retainerSettings?.advance_days ?? null;
   const draftReviewDateDisplay =
@@ -225,7 +243,7 @@ function buildPreviewInfoBlock(
       : null;
   return {
     title: 'המסמך הבא',
-    document_type_label: retainerSettings?.document_type_label ?? null,
+    document_type_label: resolvePreviewDocumentTypeLabel(retainerSettings, projectedStep),
     next_document_date_display: nextDocumentDateDisplay,
     draft_review_date_label: 'טיוטה תיווצר לבדיקה',
     draft_review_date_display: draftReviewDateDisplay,
@@ -351,7 +369,13 @@ export async function buildNextDocumentPreview(params: {
   const nextDocumentDate = params.profile.next_document_date;
   const nextDocumentDateDisplay = formatHebrewDateDisplay(nextDocumentDate);
   let step = stripProjectionDocumentNumbers(cloneStep(params.baseStep));
-  step.draft_id = `projection:${params.profile.id}:${nextDocumentDate}`;
+  const projectedDocumentType =
+    step.document_type_key === 'quote' ||
+    step.document_type_key === 'deal_invoice' ||
+    step.document_type_key === 'tax_invoice'
+      ? step.document_type_key
+      : (params.retainerSettings.document_type ?? 'deal_invoice');
+  step.draft_id = `projection:${params.profile.id}:${nextDocumentDate}:${projectedDocumentType}`;
   step = applyNextDocumentDate(step, nextDocumentDate);
   step = applyPriceIncreaseToLines(step, params.profile);
   step = stripProjectionDocumentNumbers(step);
@@ -379,6 +403,7 @@ export async function buildNextDocumentPreview(params: {
       params.retainerSettings,
       nextDocumentDate,
       nextDocumentDateDisplay,
+      step,
     ),
     document_details_step: step,
     save_action: buildSaveAction(true),

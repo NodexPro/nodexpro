@@ -7,6 +7,18 @@ import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver
 import { computeDraftLineAmounts, resolveLineFx, resolveFxMapForDraftLines } from '../income/income-draft-line-compute.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
+const DOCUMENT_TYPE_LABELS = {
+    quote: 'הצעת מחיר',
+    deal_invoice: 'חשבון עסקה',
+    tax_invoice: 'חשבונית מס',
+};
+function resolvePreviewDocumentTypeLabel(retainerSettings, step) {
+    const fromStep = step?.document_type_key;
+    if (fromStep === 'quote' || fromStep === 'deal_invoice' || fromStep === 'tax_invoice') {
+        return DOCUMENT_TYPE_LABELS[fromStep];
+    }
+    return retainerSettings?.document_type_label ?? null;
+}
 function cloneStep(step) {
     return structuredClone(step);
 }
@@ -156,14 +168,14 @@ async function rebuildProjectedLineTotals(step, orgId, documentDate, settings, v
         },
     };
 }
-function buildPreviewInfoBlock(retainerSettings, nextDocumentDate, nextDocumentDateDisplay) {
+function buildPreviewInfoBlock(retainerSettings, nextDocumentDate, nextDocumentDateDisplay, projectedStep = null) {
     const advanceDays = retainerSettings?.advance_days ?? null;
     const draftReviewDateDisplay = nextDocumentDate != null && advanceDays != null
         ? formatHebrewDateDisplay(computeDraftCreationDateIso(nextDocumentDate, advanceDays))
         : null;
     return {
         title: 'המסמך הבא',
-        document_type_label: retainerSettings?.document_type_label ?? null,
+        document_type_label: resolvePreviewDocumentTypeLabel(retainerSettings, projectedStep),
         next_document_date_display: nextDocumentDateDisplay,
         draft_review_date_label: 'טיוטה תיווצר לבדיקה',
         draft_review_date_display: draftReviewDateDisplay,
@@ -266,7 +278,12 @@ export async function buildNextDocumentPreview(params) {
     const nextDocumentDate = params.profile.next_document_date;
     const nextDocumentDateDisplay = formatHebrewDateDisplay(nextDocumentDate);
     let step = stripProjectionDocumentNumbers(cloneStep(params.baseStep));
-    step.draft_id = `projection:${params.profile.id}:${nextDocumentDate}`;
+    const projectedDocumentType = step.document_type_key === 'quote' ||
+        step.document_type_key === 'deal_invoice' ||
+        step.document_type_key === 'tax_invoice'
+        ? step.document_type_key
+        : (params.retainerSettings.document_type ?? 'deal_invoice');
+    step.draft_id = `projection:${params.profile.id}:${nextDocumentDate}:${projectedDocumentType}`;
     step = applyNextDocumentDate(step, nextDocumentDate);
     step = applyPriceIncreaseToLines(step, params.profile);
     step = stripProjectionDocumentNumbers(step);
@@ -287,7 +304,7 @@ export async function buildNextDocumentPreview(params) {
         next_document_date_display: nextDocumentDateDisplay,
         price_increase_applied: priceIncreaseApplied,
         price_increase_note: priceIncreaseNote,
-        info_block: buildPreviewInfoBlock(params.retainerSettings, nextDocumentDate, nextDocumentDateDisplay),
+        info_block: buildPreviewInfoBlock(params.retainerSettings, nextDocumentDate, nextDocumentDateDisplay, step),
         document_details_step: step,
         save_action: buildSaveAction(true),
         allowed_actions: ['view_retainer_next_document_projection'],
