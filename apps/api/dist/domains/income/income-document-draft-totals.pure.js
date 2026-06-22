@@ -33,13 +33,15 @@ export function parseDocumentSettingsJson(raw) {
         : DEFAULT_DOCUMENT_SETTINGS.vat_mode;
     const amount_rounding = o.amount_rounding === 'nearest_agora' ? 'nearest_agora' : DEFAULT_DOCUMENT_SETTINGS.amount_rounding;
     const discount = parseDiscountJson(o.discount);
-    return { vat_mode, amount_rounding, discount };
+    const due_date_manual_override = o.due_date_manual_override === true;
+    return { vat_mode, amount_rounding, discount, due_date_manual_override };
 }
 export function serializeDocumentSettingsJson(settings) {
     return {
         vat_mode: settings.vat_mode,
         amount_rounding: settings.amount_rounding,
         discount: settings.discount,
+        due_date_manual_override: settings.due_date_manual_override === true,
     };
 }
 function roundAmount(value, rounding) {

@@ -17,7 +17,8 @@ import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { findAvailableDocumentType, resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
 import { optionalJsonObject, optionalString, optionalUuid, parseIncomeDocumentType, reqUuid } from './income.guards.js';
-import { loadIncomeRecipientById, selectedFromSavedRow, } from './income-recipient.service.js';
+import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById, selectedFromSavedRow, } from './income-recipient.service.js';
+import { computeDueDateFromPaymentTerms } from './income-customer-payment-terms.pure.js';
 import { hasPermission } from '../rbac/rbac.service.js';
 import { publicDisplayNameOrNull } from './income-document-preview-party.pure.js';
 import { INCOME_PERMISSIONS } from './income.types.js';
@@ -468,6 +469,12 @@ export async function updateIncomeDocumentDraftSettings(scope, body) {
         if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s))
             throw badRequest('document_date must be YYYY-MM-DD');
         patch.document_date = s;
+        if (row.document_type === 'tax_invoice' && row.income_customer_id && !settings.due_date_manual_override) {
+            const paymentTerms = await loadIncomeCustomerDefaultPaymentTerms(scope, row.income_customer_id);
+            if (paymentTerms) {
+                patch.due_date = computeDueDateFromPaymentTerms(s, paymentTerms);
+            }
+        }
     }
     else if (key === 'currency') {
         const c = optionalString(value) ?? 'ILS';
@@ -481,7 +488,12 @@ export async function updateIncomeDocumentDraftSettings(scope, body) {
     }
     else if (key === 'due_date') {
         const s = optionalString(value);
-        patch.due_date = s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+        const parsed = s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+        patch.due_date = parsed;
+        patch.document_settings_json = serializeDocumentSettingsJson({
+            ...settings,
+            due_date_manual_override: parsed != null,
+        });
     }
     else if (key === 'payment_received_note') {
         const note = optionalString(value);

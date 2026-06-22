@@ -6,6 +6,7 @@ import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from '../income
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { computeDraftLineAmounts, resolveLineFx, resolveFxMapForDraftLines } from '../income/income-draft-line-compute.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
+import { computeDueDateFromPaymentTerms, isIncomeCustomerPaymentTermsKey, } from '../income/income-customer-payment-terms.pure.js';
 import { computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
 const DOCUMENT_TYPE_LABELS = {
     quote: 'הצעת מחיר',
@@ -195,7 +196,20 @@ function stripProjectionDocumentNumbers(step) {
     };
 }
 function applyNextDocumentDate(step, nextDocumentDate) {
-    const settingsSchema = step.settings_schema.map((field) => field.key === 'document_date' ? { ...field, value: nextDocumentDate } : field);
+    const paymentTermsRaw = step.settings_schema.find((field) => field.key === 'payment_terms')?.value;
+    const paymentTermsKey = paymentTermsRaw && isIncomeCustomerPaymentTermsKey(paymentTermsRaw) ? paymentTermsRaw : null;
+    const computedDueDate = paymentTermsKey && step.document_type_key === 'tax_invoice'
+        ? computeDueDateFromPaymentTerms(nextDocumentDate, paymentTermsKey)
+        : null;
+    const settingsSchema = step.settings_schema.map((field) => {
+        if (field.key === 'document_date') {
+            return { ...field, value: nextDocumentDate, disabled: true };
+        }
+        if (field.key === 'due_date' && computedDueDate) {
+            return { ...field, value: computedDueDate };
+        }
+        return field;
+    });
     return {
         ...step,
         settings_schema: settingsSchema,
@@ -206,7 +220,16 @@ function applyNextDocumentDate(step, nextDocumentDate) {
             document_number_preview: null,
         },
         draft_state_display: undefined,
-        document_preview: null,
+        document_preview: step.document_preview
+            ? {
+                ...step.document_preview,
+                dates: {
+                    ...step.document_preview.dates,
+                    document_date: nextDocumentDate,
+                    due_date: computedDueDate ?? step.document_preview.dates.due_date,
+                },
+            }
+            : null,
     };
 }
 function buildSaveAction(visible) {

@@ -55,6 +55,10 @@ import {
   type RecipientSearchOverlay,
 } from './income-recipient.service.js';
 import {
+  DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS,
+  parseIncomeCustomerPaymentTermsKey,
+} from './income-customer-payment-terms.pure.js';
+import {
   assertRecipientInputValid,
   parseRecipientInputBody,
   validateRecipientInputFields,
@@ -317,6 +321,10 @@ async function insertIncomeCustomer(
 ): Promise<{ id: string }> {
   assertIncomeEditPermission(scope);
   const display_name = reqNonEmptyString(body.display_name, 'display_name');
+  const default_payment_terms =
+    'default_payment_terms' in body
+      ? parseIncomeCustomerPaymentTermsKey(body.default_payment_terms)
+      : DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS;
   const { data, error } = await supabaseAdmin
     .from('income_customers')
     .insert({
@@ -328,6 +336,7 @@ async function insertIncomeCustomer(
       email: optionalString(body.email),
       tax_id: optionalString(body.tax_id),
       address_json: optionalJsonObject(body.address_json, 'address_json'),
+      default_payment_terms,
       is_one_time: isOneTime,
       status: 'active',
       created_by_user_id: scope.actor_user_id,
@@ -369,6 +378,9 @@ async function executeUpdateIncomeCustomerForIssuer(
   }
   if ('tax_id' in body) {
     patch.tax_id = optionalString(body.tax_id);
+  }
+  if ('default_payment_terms' in body) {
+    patch.default_payment_terms = parseIncomeCustomerPaymentTermsKey(body.default_payment_terms);
   }
   if (Object.keys(patch).length === 0) {
     throw badRequest('At least one customer field is required');

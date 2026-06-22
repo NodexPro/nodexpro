@@ -4,6 +4,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { buildRecipientAddressJson, buildRecipientSnapshotJson, recipientDisplayLine, } from './income-recipient.validation.js';
+import { DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS, isIncomeCustomerPaymentTermsKey, } from './income-customer-payment-terms.pure.js';
 function applyIssuerScopeToCustomersQuery(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 query, scope) {
@@ -147,6 +148,21 @@ export async function loadIncomeRecipientById(scope, incomeCustomerId) {
     if (!data)
         return null;
     return mapCustomerRow(data);
+}
+export async function loadIncomeCustomerDefaultPaymentTerms(scope, incomeCustomerId) {
+    let query = supabaseAdmin
+        .from('income_customers')
+        .select('default_payment_terms')
+        .eq('id', incomeCustomerId);
+    query = applyIssuerScopeToCustomersQuery(query, scope);
+    const { data, error } = await query.maybeSingle();
+    throwIfSupabaseError(error, 'loadIncomeCustomerDefaultPaymentTerms');
+    if (!data)
+        return null;
+    const raw = data.default_payment_terms ?? '';
+    if (isIncomeCustomerPaymentTermsKey(raw))
+        return raw;
+    return DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS;
 }
 export function selectedFromSavedRow(row) {
     return {

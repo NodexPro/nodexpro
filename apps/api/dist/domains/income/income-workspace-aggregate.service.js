@@ -13,6 +13,7 @@ import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './incom
 import { buildIncomeRecipientSearchModel, buildRecipientCreateFieldsSchema, recipientSearchAllowedActions, } from './income-recipient.service.js';
 import { buildDocumentBrandingProfileAggregate, buildDocumentBrandingSettingsEntrypoint, } from './income-document-branding.service.js';
 import { INCOME_WORKSPACE_AGGREGATE_KEY, } from './income.types.js';
+import { DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS, INCOME_CUSTOMER_PAYMENT_TERMS_OPTIONS, incomeCustomerPaymentTermsLabel, isIncomeCustomerPaymentTermsKey, } from './income-customer-payment-terms.pure.js';
 const DOCUMENT_TYPE_LABELS = {
     receipt: 'קבלה',
     tax_invoice: 'חשבונית מס',
@@ -45,7 +46,7 @@ async function countScoped(table, scope, statusFilter) {
 async function loadCustomers(scope) {
     let query = supabaseAdmin
         .from('income_customers')
-        .select('id, display_name, phone, email, tax_id, is_one_time, status, created_at')
+        .select('id, display_name, phone, email, tax_id, default_payment_terms, is_one_time, status, created_at')
         .order('display_name', { ascending: true })
         .limit(500);
     query = applyIssuerScopeToBuilder(query, scope);
@@ -53,12 +54,18 @@ async function loadCustomers(scope) {
     throwIfSupabaseError(error, 'loadIncomeWorkspaceCustomers');
     return (data ?? []).map((row) => {
         const r = row;
+        const rawTerms = r.default_payment_terms ?? '';
+        const paymentTermsKey = isIncomeCustomerPaymentTermsKey(rawTerms)
+            ? rawTerms
+            : DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS;
         return {
             customer_id: r.id,
             display_name: r.display_name,
             phone: r.phone,
             email: r.email,
             tax_id: r.tax_id,
+            default_payment_terms: paymentTermsKey,
+            default_payment_terms_label: incomeCustomerPaymentTermsLabel(paymentTermsKey),
             is_one_time: r.is_one_time,
             status: r.status,
             status_label: r.status === 'archived' ? 'Archived' : 'Active',
@@ -216,6 +223,23 @@ function customersTableModel(rows) {
             title: 'אין לקוחות הכנסות',
             description: null,
         },
+        editor_fields: [
+            { key: 'display_name', label: 'שם', input_type: 'text', required: true },
+            { key: 'phone', label: 'טלפון', input_type: 'text', required: false },
+            { key: 'email', label: 'אימייל', input_type: 'text', required: false },
+            { key: 'tax_id', label: 'מספר זיהוי', input_type: 'text', required: false },
+            {
+                key: 'default_payment_terms',
+                label: 'תנאי תשלום',
+                input_type: 'select',
+                required: true,
+                default_value: DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS,
+                options: INCOME_CUSTOMER_PAYMENT_TERMS_OPTIONS.map((o) => ({
+                    value: o.value,
+                    label: o.label,
+                })),
+            },
+        ],
     };
 }
 function itemsTableModel(rows) {

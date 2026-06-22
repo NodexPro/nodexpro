@@ -328,12 +328,23 @@ export interface IncomeTableColumn {
   label: string;
 }
 
+export interface IncomeCustomerEditorField {
+  key: string;
+  label: string;
+  input_type: 'text' | 'select';
+  required: boolean;
+  options?: { value: string; label: string }[];
+  default_value?: string | null;
+}
+
 export interface IncomeCustomersTableRow {
   customer_id: string;
   display_name: string;
   phone: string | null;
   email: string | null;
   tax_id: string | null;
+  default_payment_terms: string;
+  default_payment_terms_label: string;
   is_one_time: boolean;
   status: string;
   status_label: string;
@@ -394,6 +405,7 @@ export interface IncomeTableModel<T> {
   columns: IncomeTableColumn[];
   rows: T[];
   empty_state: { visible: boolean; title: string; description: string | null };
+  editor_fields?: IncomeCustomerEditorField[];
 }
 
 export type IncomeDocumentTypeSource = 'country_pack' | 'fallback_il';

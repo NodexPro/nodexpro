@@ -15,6 +15,7 @@ import { executeIssueIncomeDocument } from './income-document-issue.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceAggregate, buildIncomeWorkspaceWizardPatchAggregate, } from './income-workspace-aggregate.service.js';
 import { insertSavedIncomeRecipient, loadIncomeRecipientById, searchIncomeRecipients, selectedFromInputFields, selectedFromSavedRow, } from './income-recipient.service.js';
+import { DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS, parseIncomeCustomerPaymentTermsKey, } from './income-customer-payment-terms.pure.js';
 import { assertRecipientInputValid, parseRecipientInputBody, validateRecipientInputFields, } from './income-recipient.validation.js';
 import { beginIncomeWizardDocumentDraft, addIncomeDocumentLine, updateIncomeDocumentLine, deleteIncomeDocumentLine, reorderIncomeDocumentLines, saveIncomeDocumentDraft, resumeIncomeDocumentDraftFromContext, generateIncomeDocumentPreview, updateIncomeDocumentDiscount, updateIncomeDocumentDraftSettings, updateIncomeDocumentNotes, updateIncomeDocumentDeliveryContact, } from './income-document-draft-editor.service.js';
 import { executeUpdateIncomeDocumentBrandingProfile, executeUpdateIncomeDocumentBrandingProfilePreviewDraft, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
@@ -140,6 +141,9 @@ async function loadDraftInScope(scope, draftId) {
 async function insertIncomeCustomer(scope, body, isOneTime, auditAction) {
     assertIncomeEditPermission(scope);
     const display_name = reqNonEmptyString(body.display_name, 'display_name');
+    const default_payment_terms = 'default_payment_terms' in body
+        ? parseIncomeCustomerPaymentTermsKey(body.default_payment_terms)
+        : DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS;
     const { data, error } = await supabaseAdmin
         .from('income_customers')
         .insert({
@@ -151,6 +155,7 @@ async function insertIncomeCustomer(scope, body, isOneTime, auditAction) {
         email: optionalString(body.email),
         tax_id: optionalString(body.tax_id),
         address_json: optionalJsonObject(body.address_json, 'address_json'),
+        default_payment_terms,
         is_one_time: isOneTime,
         status: 'active',
         created_by_user_id: scope.actor_user_id,
@@ -188,6 +193,9 @@ async function executeUpdateIncomeCustomerForIssuer(ctx, body) {
     }
     if ('tax_id' in body) {
         patch.tax_id = optionalString(body.tax_id);
+    }
+    if ('default_payment_terms' in body) {
+        patch.default_payment_terms = parseIncomeCustomerPaymentTermsKey(body.default_payment_terms);
     }
     if (Object.keys(patch).length === 0) {
         throw badRequest('At least one customer field is required');

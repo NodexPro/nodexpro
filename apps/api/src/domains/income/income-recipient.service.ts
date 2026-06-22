@@ -13,6 +13,11 @@ import {
   type RecipientFieldErrors,
   type RecipientInputFields,
 } from './income-recipient.validation.js';
+import {
+  DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS,
+  isIncomeCustomerPaymentTermsKey,
+  type IncomeCustomerPaymentTermsKey,
+} from './income-customer-payment-terms.pure.js';
 
 export type IncomeRecipientListRow = {
   income_customer_id: string;
@@ -287,6 +292,23 @@ export async function loadIncomeRecipientById(
       address_json: unknown;
     },
   );
+}
+
+export async function loadIncomeCustomerDefaultPaymentTerms(
+  scope: ActiveIncomeIssuerScope,
+  incomeCustomerId: string,
+): Promise<IncomeCustomerPaymentTermsKey | null> {
+  let query = supabaseAdmin
+    .from('income_customers')
+    .select('default_payment_terms')
+    .eq('id', incomeCustomerId);
+  query = applyIssuerScopeToCustomersQuery(query, scope);
+  const { data, error } = await query.maybeSingle();
+  throwIfSupabaseError(error, 'loadIncomeCustomerDefaultPaymentTerms');
+  if (!data) return null;
+  const raw = (data as { default_payment_terms: string | null }).default_payment_terms ?? '';
+  if (isIncomeCustomerPaymentTermsKey(raw)) return raw;
+  return DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS;
 }
 
 export function selectedFromSavedRow(row: IncomeRecipientListRow): IncomeRecipientSelected {

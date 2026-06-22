@@ -11,7 +11,8 @@ import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
 import { renderIncomeBrandedPreviewHtml } from './income-document-branding-preview.renderer.js';
-import { loadIncomeRecipientById } from './income-recipient.service.js';
+import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById } from './income-recipient.service.js';
+import { incomeCustomerPaymentTermsLabel, INCOME_CUSTOMER_PAYMENT_TERMS_OPTIONS, resolveTaxInvoiceDueDate, } from './income-customer-payment-terms.pure.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 const DOCUMENT_TYPE_LABELS = {
@@ -164,7 +165,7 @@ async function resolveRecipientDisplayName(scope, row) {
     return '—';
 }
 export { buildDocumentDetailsHeaderTitle } from './income-document-details-header.pure.js';
-function buildSettingsSchema(row, docType, canEdit, vatResolution) {
+function buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment = null) {
     const settings = parseDocumentSettingsJson(row.document_settings_json);
     const paymentNote = row.payment_received_json && typeof row.payment_received_json.note === 'string'
         ? row.payment_received_json.note
@@ -238,7 +239,30 @@ function buildSettingsSchema(row, docType, canEdit, vatResolution) {
             disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
         },
     ];
-    if (docType?.requires_due_date) {
+    if (docType?.key === 'tax_invoice' && taxInvoicePayment) {
+        fields.push({
+            key: 'payment_terms',
+            label: 'תנאי תשלום',
+            input_type: 'select',
+            value: taxInvoicePayment.paymentTermsKey,
+            required: false,
+            options: INCOME_CUSTOMER_PAYMENT_TERMS_OPTIONS.filter((o) => o.value === taxInvoicePayment.paymentTermsKey),
+            visible: true,
+            disabled: true,
+            disabled_reason: 'תנאי תשלום מוגדרים בפרופיל הלקוח',
+        });
+        fields.push({
+            key: 'due_date',
+            label: 'תאריך לתשלום',
+            input_type: 'date',
+            value: taxInvoicePayment.effectiveDueDate,
+            required: false,
+            visible: true,
+            disabled: !canEdit,
+            disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
+        });
+    }
+    else if (docType?.requires_due_date) {
         fields.push({
             key: 'due_date',
             label: 'תאריך לתשלום',
@@ -431,6 +455,25 @@ function buildTotalsBlock(totals, settings, vatResolution) {
 export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdit, options = {}) {
     const settings = parseDocumentSettingsJson(row.document_settings_json);
     const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
+    let taxInvoicePayment = null;
+    let displayDueDate = row.due_date;
+    if (row.document_type === 'tax_invoice' && row.income_customer_id) {
+        const paymentTerms = await loadIncomeCustomerDefaultPaymentTerms(scope, row.income_customer_id);
+        if (paymentTerms) {
+            const effectiveDueDate = resolveTaxInvoiceDueDate({
+                documentDateIso: documentDate,
+                paymentTerms,
+                storedDueDate: row.due_date,
+                dueDateManualOverride: settings.due_date_manual_override === true,
+            });
+            taxInvoicePayment = {
+                paymentTermsKey: paymentTerms,
+                paymentTermsLabel: incomeCustomerPaymentTermsLabel(paymentTerms),
+                effectiveDueDate,
+            };
+            displayDueDate = effectiveDueDate;
+        }
+    }
     const vatResolution = options.vatResolution ??
         readVatResolutionFromDraftPreview(row.draft_totals_preview_json, documentDate) ??
         (await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate));
@@ -522,7 +565,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             issuer: issuerBlock,
             recipient: recipientBlock,
             document_date: row.document_date ?? null,
-            due_date: row.due_date ?? null,
+            due_date: displayDueDate ?? null,
             currency: row.currency,
             lineRows: previewLineRows,
             totals: {
@@ -566,7 +609,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             document_number_preview: numberPreview,
             issuer: issuerBlock,
             recipient: recipientBlock,
-            dates: { document_date: row.document_date ?? null, due_date: row.due_date ?? null },
+            dates: { document_date: row.document_date ?? null, due_date: displayDueDate ?? null },
             currency: row.currency,
             preview_html: previewHtml,
             validation_messages: previewMessages,
@@ -586,7 +629,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             subtitle: docType?.legal_hint ?? null,
             document_number_preview: numberPreview,
         },
-        settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution),
+        settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment),
         line_items: {
             columns: [
                 { key: 'drag', label: '' },

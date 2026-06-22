@@ -25,6 +25,8 @@ export type IncomeDocumentSettings = {
   vat_mode: 'standard' | 'exempt' | 'zero';
   amount_rounding: 'none' | 'nearest_agora';
   discount: IncomeDocumentDiscount;
+  /** When true, tax-invoice due date was manually overridden and should not auto-recalculate. */
+  due_date_manual_override?: boolean;
 };
 
 export const DEFAULT_DOCUMENT_DISCOUNT: IncomeDocumentDiscount = {
@@ -59,7 +61,8 @@ export function parseDocumentSettingsJson(raw: unknown): IncomeDocumentSettings 
   const amount_rounding =
     o.amount_rounding === 'nearest_agora' ? 'nearest_agora' : DEFAULT_DOCUMENT_SETTINGS.amount_rounding;
   const discount = parseDiscountJson(o.discount);
-  return { vat_mode, amount_rounding, discount };
+  const due_date_manual_override = o.due_date_manual_override === true;
+  return { vat_mode, amount_rounding, discount, due_date_manual_override };
 }
 
 export function serializeDocumentSettingsJson(settings: IncomeDocumentSettings): Record<string, unknown> {
@@ -67,6 +70,7 @@ export function serializeDocumentSettingsJson(settings: IncomeDocumentSettings):
     vat_mode: settings.vat_mode,
     amount_rounding: settings.amount_rounding,
     discount: settings.discount,
+    due_date_manual_override: settings.due_date_manual_override === true,
   };
 }
 
