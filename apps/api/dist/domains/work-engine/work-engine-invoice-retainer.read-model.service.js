@@ -11,6 +11,7 @@ import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-met
 import { ensureRetainerDocumentDraftWorkspace, } from './work-engine-invoice-retainer-draft.service.js';
 import { loadDocumentNumbersById, loadRecurringProfileCycles, RECURRING_CYCLE_STATUS_LABELS, } from './work-engine-invoice-retainer-cycles.service.js';
 import { RECURRING_SCHEDULER_STATUS_ACTIVE, RECURRING_SCHEDULER_STATUS_FAILED, RECURRING_WORK_EVENT_TYPE, RECURRING_WORK_TYPE, RECURRING_FREQUENCY_LABELS, RECURRING_FREQUENCY_OPTIONS, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
+import { buildNextDocumentPreview, buildSetupTabs, } from './work-engine-invoice-retainer-next-document-preview.service.js';
 import { WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY, } from './work-engine-invoice-retainer.types.js';
 const DOCUMENT_TYPE_LABELS = {
     quote: 'הצעת מחיר',
@@ -387,6 +388,15 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     const schedulerNote = schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
         ? `יצירת טיוטה אחרונה נכשלה (${selectedProfile?.last_generation_error_code ?? 'שגיאה'}). נדרשת בדיקה ידנית.`
         : 'יצירת טיוטות מתוזמנת פעילה. לא נשלח מסמך ללא אישור רואה חשבון.';
+    const baseDocumentDetailsStep = documentDraftWorkspace?.income_workspace_aggregate.document_details_step ?? null;
+    const nextDocumentPreview = await buildNextDocumentPreview({
+        orgId,
+        profile: selectedProfile,
+        retainerSettings,
+        baseStep: baseDocumentDetailsStep,
+    });
+    const setupTabs = buildSetupTabs(nextDocumentPreview);
+    stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'next_document_preview', stepStartMs);
     const allowedActions = ['view_invoice_retainer_setup'];
     if (perms.edit) {
         allowedActions.push('create_income_recurring_document_profile', 'update_income_recurring_document_profile', 'preview_income_recurring_document_profile_settings', 'pause_income_recurring_document_profile', 'resume_income_recurring_document_profile', 'cancel_income_recurring_document_profile');
@@ -405,6 +415,8 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         issue_document_action: issueDocumentAction,
         retainer_settings: retainerSettings,
         child_documents_history: childDocumentsHistory,
+        setup_tabs: setupTabs,
+        next_document_preview: nextDocumentPreview,
         recurring_profiles: profiles.map((profile) => ({
             profile_id: profile.id,
             end_customer_id: profile.end_customer_id,

@@ -38,6 +38,10 @@ import {
   type RecurringSchedulerStatus,
 } from './work-engine-invoice-retainer.pure.js';
 import {
+  buildNextDocumentPreview,
+  buildSetupTabs,
+} from './work-engine-invoice-retainer-next-document-preview.service.js';
+import {
   WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY,
   type WorkEngineInvoiceRetainerSettings,
   type WorkEngineInvoiceRetainerChildDocumentHistoryRow,
@@ -601,6 +605,22 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
       ? `יצירת טיוטה אחרונה נכשלה (${selectedProfile?.last_generation_error_code ?? 'שגיאה'}). נדרשת בדיקה ידנית.`
       : 'יצירת טיוטות מתוזמנת פעילה. לא נשלח מסמך ללא אישור רואה חשבון.';
 
+  const baseDocumentDetailsStep =
+    documentDraftWorkspace?.income_workspace_aggregate.document_details_step ?? null;
+  const nextDocumentPreview = await buildNextDocumentPreview({
+    orgId,
+    profile: selectedProfile,
+    retainerSettings,
+    baseStep: baseDocumentDetailsStep,
+  });
+  const setupTabs = buildSetupTabs(nextDocumentPreview);
+  stepStartMs = logRetainerSetupTiming(
+    representedClientId,
+    selectedEndCustomerId,
+    'next_document_preview',
+    stepStartMs,
+  );
+
   const allowedActions = ['view_invoice_retainer_setup'];
   if (perms.edit) {
     allowedActions.push(
@@ -627,6 +647,8 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     issue_document_action: issueDocumentAction,
     retainer_settings: retainerSettings,
     child_documents_history: childDocumentsHistory,
+    setup_tabs: setupTabs,
+    next_document_preview: nextDocumentPreview,
     recurring_profiles: profiles.map((profile) => ({
       profile_id: profile.id,
       end_customer_id: profile.end_customer_id,

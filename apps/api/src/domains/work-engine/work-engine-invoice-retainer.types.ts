@@ -2,7 +2,11 @@
  * Work Engine invoice retainer — types.
  */
 
-import type { IncomeDocumentType, IncomeWorkspaceAggregate } from '../income/income.types.js';
+import type {
+  IncomeDocumentDetailsStep,
+  IncomeDocumentType,
+  IncomeWorkspaceAggregate,
+} from '../income/income.types.js';
 import type {
   RecurringDocumentFrequency,
   RecurringPriceIncreaseType,
@@ -99,6 +103,51 @@ export type WorkEngineInvoiceRetainerDocumentDraftWorkspace = {
   income_commands: Record<string, string>;
 };
 
+export type WorkEngineInvoiceRetainerSetupTabKey = 'retainer' | 'next_document';
+
+export type WorkEngineInvoiceRetainerSetupTab = {
+  key: WorkEngineInvoiceRetainerSetupTabKey;
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+};
+
+export type WorkEngineInvoiceRetainerNextDocumentApplyScope = 'next_cycle_only' | 'all_future_cycles';
+
+export type WorkEngineInvoiceRetainerNextDocumentPreview = {
+  status: 'ready' | 'unavailable';
+  unavailable_message: string | null;
+  projection_id: string | null;
+  next_document_date: string | null;
+  next_document_date_display: string | null;
+  price_increase_applied: boolean;
+  price_increase_note: string | null;
+  document_details_step: IncomeDocumentDetailsStep | null;
+  save_action: {
+    visible: boolean;
+    label: string;
+    disabled_reason: string | null;
+    apply_scope_dialog: {
+      title: string;
+      prompt: string;
+      option_next_cycle_only: {
+        key: 'next_cycle_only';
+        label: string;
+        description: string;
+      };
+      option_all_future_cycles: {
+        key: 'all_future_cycles';
+        label: string;
+        description: string;
+      };
+      confirm_label: string;
+      cancel_label: string;
+      persistence_note: string;
+    } | null;
+  };
+  allowed_actions: string[];
+};
+
 export type WorkEngineInvoiceRetainerChildDocumentHistoryRow = {
   cycle_id: string;
   cycle_number: number;
@@ -136,6 +185,11 @@ export type WorkEngineInvoiceRetainerSetupAggregate = {
   issue_document_action: WorkEngineInvoiceRetainerIssueDocumentAction | null;
   retainer_settings: WorkEngineInvoiceRetainerSettings | null;
   child_documents_history: WorkEngineInvoiceRetainerChildDocumentHistoryRow[];
+  setup_tabs: {
+    default_tab_key: 'retainer';
+    tabs: WorkEngineInvoiceRetainerSetupTab[];
+  };
+  next_document_preview: WorkEngineInvoiceRetainerNextDocumentPreview;
   recurring_profiles: Array<{
     profile_id: string;
     end_customer_id: string;
