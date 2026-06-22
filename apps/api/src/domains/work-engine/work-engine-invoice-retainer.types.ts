@@ -114,6 +114,16 @@ export type WorkEngineInvoiceRetainerSetupTab = {
 
 export type WorkEngineInvoiceRetainerNextDocumentApplyScope = 'next_cycle_only' | 'all_future_cycles';
 
+export type WorkEngineInvoiceRetainerNextDocumentPreviewInfoBlock = {
+  title: string;
+  document_type_label: string | null;
+  next_document_date_display: string | null;
+  draft_review_date_label: string;
+  draft_review_date_display: string | null;
+  draft_review_advance_note: string | null;
+  profile_status_label: string | null;
+};
+
 export type WorkEngineInvoiceRetainerNextDocumentPreview = {
   status: 'ready' | 'unavailable';
   unavailable_message: string | null;
@@ -122,6 +132,7 @@ export type WorkEngineInvoiceRetainerNextDocumentPreview = {
   next_document_date_display: string | null;
   price_increase_applied: boolean;
   price_increase_note: string | null;
+  info_block: WorkEngineInvoiceRetainerNextDocumentPreviewInfoBlock;
   document_details_step: IncomeDocumentDetailsStep | null;
   save_action: {
     visible: boolean;
