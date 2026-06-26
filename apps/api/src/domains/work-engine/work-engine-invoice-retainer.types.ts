@@ -176,6 +176,7 @@ export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   status_label: string;
   status_tone: 'success' | 'neutral' | 'warning' | 'danger';
   icon_key: 'check' | 'clock' | 'pause' | 'alert';
+  icon_display: string;
   allowed_actions: string[];
   actions: WorkEngineInvoiceRetainerScheduleProjectionAction[];
 };
@@ -185,12 +186,28 @@ export type WorkEngineInvoiceRetainerScheduleProjectionYear = {
   label: string;
   total_count: number;
   total_count_label: string;
+  yearly_total_amount_display: string;
+  expanded_by_default: boolean;
   rows: WorkEngineInvoiceRetainerScheduleProjectionRow[];
+};
+
+export type WorkEngineInvoiceRetainerScheduleProjectionSummary = {
+  title: string;
+  cycle_label: string;
+  cycle_display: string;
+  status_label: string;
+  documents_in_horizon_label: string;
+  documents_in_horizon_count: number;
+  next_document_label: string;
+  next_document_date_display: string;
 };
 
 export type WorkEngineInvoiceRetainerScheduleProjection = {
   status: 'ready' | 'unavailable';
   unavailable_message: string | null;
+  summary: WorkEngineInvoiceRetainerScheduleProjectionSummary | null;
+  recurrence_rule_display: string | null;
+  default_expanded_year: number | null;
   years: WorkEngineInvoiceRetainerScheduleProjectionYear[];
 };
 

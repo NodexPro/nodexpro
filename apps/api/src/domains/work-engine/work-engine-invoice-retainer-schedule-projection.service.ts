@@ -2,7 +2,7 @@
  * Retainer — schedule tab projection (read-model only).
  */
 
-import { normalizeDraftLines } from '../income/income-document-draft-lines.pure.js';
+import { normalizeDraftLines, formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import {
   computeDraftTotalsPreview,
   parseDocumentSettingsJson,
@@ -37,6 +37,7 @@ import {
 } from './work-engine-invoice-retainer-schedule-projection.pure.js';
 
 const SKIP_PERSISTENCE_DISABLED_REASON = 'שמירת דילוג תתווסף בשלב הבא';
+const FUTURE_ACTION_DISABLED_REASON = 'יתווסף בשלב הבא';
 
 const DOCUMENT_TYPE_LABELS: Record<'quote' | 'deal_invoice' | 'tax_invoice', string> = {
   quote: 'הצעת מחיר',
@@ -110,11 +111,49 @@ function statusDescriptorForCycle(
   };
 }
 
-function buildRowActions(
+function iconDisplayForKey(
+  iconKey: WorkEngineInvoiceRetainerScheduleProjectionRow['icon_key'],
+): string {
+  if (iconKey === 'check') return '✓';
+  if (iconKey === 'pause') return '⏸';
+  if (iconKey === 'alert') return '⚠';
+  return '⏳';
+}
+
+function buildRecurrenceRuleDisplay(
+  frequency: RecurringDocumentFrequency,
+  startDisplay: string,
+): string {
+  const from = `החל מ־${startDisplay}`;
+  if (frequency === 'days_30') return `כל 30 ימים ${from}`;
+  if (frequency === 'days_45') return `כל 45 ימים ${from}`;
+  if (frequency === 'days_60') return `כל 60 ימים ${from}`;
+  if (frequency === 'days_90') return `כל 90 ימים ${from}`;
+  if (frequency === 'monthly') return `כל חודש ${from}`;
+  if (frequency === 'semi_annual') return `פעמיים בשנה ${from}`;
+  if (frequency === 'yearly') return `אחת לשנה ${from}`;
+  if (frequency === 'biennial') return `אחת לשנתיים ${from}`;
+  return from;
+}
+
+function buildRowMenuActions(
   statusKey: string,
   scheduledDate: string,
   today: string,
 ): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
+  const openDocument: WorkEngineInvoiceRetainerScheduleProjectionAction = {
+    key: 'open_document',
+    label: 'פתח מסמך',
+    disabled: true,
+    disabled_reason: FUTURE_ACTION_DISABLED_REASON,
+  };
+  const viewHistory: WorkEngineInvoiceRetainerScheduleProjectionAction = {
+    key: 'view_history',
+    label: 'הצג היסטוריה',
+    disabled: true,
+    disabled_reason: FUTURE_ACTION_DISABLED_REASON,
+  };
+
   if (statusKey === 'skipped') {
     return [
       {
@@ -123,19 +162,37 @@ function buildRowActions(
         disabled: true,
         disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
       },
+      openDocument,
+      viewHistory,
     ];
+  }
+  if (statusKey === 'issued') {
+    return [openDocument, viewHistory];
+  }
+  if (statusKey === 'failed') {
+    return [viewHistory];
   }
   if (statusKey === 'scheduled' && scheduledDate > today) {
     return [
       {
         key: 'skip_cycle',
-        label: 'דלג על המסמך הזה',
+        label: 'דלג',
         disabled: true,
         disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
       },
+      openDocument,
+      viewHistory,
     ];
   }
   return [];
+}
+
+function buildRowActions(
+  statusKey: string,
+  scheduledDate: string,
+  today: string,
+): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
+  return buildRowMenuActions(statusKey, scheduledDate, today);
 }
 
 function unitPriceForCycleIndex(profile: ScheduleProfile, cycleIndex: number): number {
@@ -152,19 +209,24 @@ function unitPriceForCycleIndex(profile: ScheduleProfile, cycleIndex: number): n
   return unitPrice;
 }
 
-async function computeScheduleAmountDisplay(params: {
+async function computeScheduleAmount(params: {
   orgId: string;
   profile: ScheduleProfile;
   documentDate: string;
   cycleIndex: number;
   nextDocumentPreview: WorkEngineInvoiceRetainerNextDocumentPreview | null;
-}): Promise<string> {
+}): Promise<{ amount_display: string; grand_total_reference: number }> {
   if (
     params.nextDocumentPreview?.status === 'ready' &&
     params.profile.next_document_date === params.documentDate &&
     params.nextDocumentPreview.document_details_step?.totals_block?.grand_total_display
   ) {
-    return params.nextDocumentPreview.document_details_step.totals_block.grand_total_display;
+    const display = params.nextDocumentPreview.document_details_step.totals_block.grand_total_display;
+    const parsed = Number(String(display).replace(/[^\d.-]/g, ''));
+    return {
+      amount_display: display,
+      grand_total_reference: Number.isFinite(parsed) ? parsed : 0,
+    };
   }
 
   const snapshot = params.profile.document_template_snapshot;
@@ -196,7 +258,10 @@ async function computeScheduleAmountDisplay(params: {
     vatResolution,
     params.documentDate,
   );
-  return totalsPreview.grand_total_display;
+  return {
+    amount_display: totalsPreview.grand_total_display,
+    grand_total_reference: totalsPreview.grand_total_reference ?? 0,
+  };
 }
 
 function mergeScheduleDates(params: {
@@ -233,6 +298,9 @@ export async function buildRetainerScheduleProjection(params: {
     return {
       status: 'unavailable',
       unavailable_message: 'שמור ריטיינר כדי לראות את לוח הזמנים.',
+      summary: null,
+      recurrence_rule_display: null,
+      default_expanded_year: null,
       years: [],
     };
   }
@@ -248,9 +316,19 @@ export async function buildRetainerScheduleProjection(params: {
     return {
       status: 'unavailable',
       unavailable_message: 'לא ניתן לחשב לוח זמנים ללא תאריך התחלה.',
+      summary: null,
+      recurrence_rule_display: null,
+      default_expanded_year: null,
       years: [],
     };
   }
+
+  const scheduleStartDisplay = formatScheduleRowDateDisplay(scheduleStartDate);
+  const recurrenceRuleDisplay = buildRecurrenceRuleDisplay(
+    params.profile.frequency,
+    scheduleStartDisplay,
+  );
+  const currentYear = Number(today.slice(0, 4));
 
   const scheduleEndDate = resolveScheduleEndDate({
     scheduleStartDate,
@@ -284,27 +362,30 @@ export async function buildRetainerScheduleProjection(params: {
 
   for (const group of grouped) {
     const rows: WorkEngineInvoiceRetainerScheduleProjectionRow[] = [];
+    let yearTotalReference = 0;
     for (const scheduledDate of group.dates) {
       const cycle = cycleByDate.get(scheduledDate) ?? null;
       const status = statusDescriptorForCycle(cycle, scheduledDate, today);
-      const amountDisplay = await computeScheduleAmountDisplay({
+      const amount = await computeScheduleAmount({
         orgId: params.orgId,
         profile: params.profile,
         documentDate: scheduledDate,
         cycleIndex: dateCycleIndex.get(scheduledDate) ?? 0,
         nextDocumentPreview: params.nextDocumentPreview,
       });
+      yearTotalReference += amount.grand_total_reference;
       const actions = buildRowActions(status.status_key, scheduledDate, today);
       rows.push({
         projection_key: formatScheduleProjectionKey(params.profile.id, scheduledDate),
         scheduled_document_date: scheduledDate,
         scheduled_document_date_display: formatScheduleRowDateDisplay(scheduledDate),
         document_type_label: documentTypeLabel,
-        amount_display: amountDisplay,
+        amount_display: amount.amount_display,
         status_key: status.status_key,
         status_label: status.status_label,
         status_tone: status.status_tone,
         icon_key: status.icon_key,
+        icon_display: iconDisplayForKey(status.icon_key),
         allowed_actions: actions.map((action) => action.key),
         actions,
       });
@@ -314,13 +395,29 @@ export async function buildRetainerScheduleProjection(params: {
       label: String(group.year),
       total_count: rows.length,
       total_count_label: formatScheduleYearDocumentsCountLabel(rows.length),
+      yearly_total_amount_display: formatMoneyReference(yearTotalReference, params.profile.currency),
+      expanded_by_default: group.year === currentYear,
       rows,
     });
   }
 
+  const documentsInHorizonCount = years.reduce((sum, year) => sum + year.total_count, 0);
+
   return {
     status: 'ready',
     unavailable_message: null,
+    summary: {
+      title: 'לוח זמנים',
+      cycle_label: 'מחזור',
+      cycle_display: recurrenceRuleDisplay,
+      status_label: params.retainerSettings.status_label,
+      documents_in_horizon_label: 'מסמכים ב־5 השנים הקרובות',
+      documents_in_horizon_count: documentsInHorizonCount,
+      next_document_label: 'המסמך הבא',
+      next_document_date_display: params.retainerSettings.next_document_date_display,
+    },
+    recurrence_rule_display: recurrenceRuleDisplay,
+    default_expanded_year: Number.isFinite(currentYear) ? currentYear : null,
     years,
   };
 }
