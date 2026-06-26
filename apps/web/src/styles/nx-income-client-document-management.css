@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap');
+@import './nx-invoice-typography.css';
 
 .nx-income-cdm {
   --nx-brand-blue: #2563eb;
@@ -8,7 +8,7 @@
   --nx-cdm-gradient: linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%);
   --nx-cdm-border: #e5e7eb;
   --nx-cdm-row-border: #eef2f7;
-  font-family: Heebo, Arial, Helvetica, 'Segoe UI', sans-serif;
+  font-family: Heebo, Arial, sans-serif;
   margin-block: 24px 32px;
 }
 
@@ -290,7 +290,7 @@
 }
 
 .nx-income-cdm__action-letter {
-  font-family: Heebo, Arial, Helvetica, 'Segoe UI', sans-serif;
+  font-family: Heebo, Arial, sans-serif;
   font-size: 20px;
   font-weight: 900;
   line-height: 1;
@@ -315,7 +315,7 @@
 }
 
 .nx-income-cdm-modal {
-  font-family: Heebo, Arial, Helvetica, 'Segoe UI', sans-serif;
+  font-family: Heebo, Arial, sans-serif;
 }
 
 .nx-income-cdm-modal .nx-modal-title {
@@ -421,7 +421,7 @@
   border-radius: 12px;
   background: linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%);
   color: #ffffff;
-  font-family: Heebo, Arial, Helvetica, 'Segoe UI', sans-serif;
+  font-family: Heebo, Arial, sans-serif;
   font-size: 14px;
   font-weight: 800;
   cursor: pointer;

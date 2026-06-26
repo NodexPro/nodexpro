@@ -105,6 +105,7 @@ export function IncomeClientDocumentManagementShell({
       phone: string | null;
       email: string | null;
       tax_id: string | null;
+      default_payment_terms: string;
     }) => {
       onBusyChange?.(true);
       try {
@@ -128,6 +129,7 @@ export function IncomeClientDocumentManagementShell({
         phone: string | null;
         email: string | null;
         tax_id: string | null;
+        default_payment_terms: string;
       },
     ) => {
       onBusyChange?.(true);

@@ -3,8 +3,10 @@
  * UI-only; apply `.nx-invoice-ui` on page roots and portaled modals.
  */
 
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap');
+
 :root {
-  --nx-font-family-invoice: Arial, Helvetica, "Segoe UI", sans-serif;
+  --nx-font-family-invoice: Heebo, Arial, sans-serif;
 
   --nx-type-page-title-size: 32px;
   --nx-type-page-title-weight: 700;

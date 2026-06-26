@@ -4,6 +4,7 @@ import type {
   IncomeClientDocumentManagementReportItem,
   IncomeClientDocumentManagementRow,
   IncomeClientDocumentManagementRowAction,
+  IncomeCustomerEditorField,
   IncomeCustomersTableRow,
   IncomeTableModel,
 } from '../../api/income';
@@ -383,6 +384,79 @@ export function IncomeClientDocumentReportsModal({
   );
 }
 
+export type IncomeEndCustomerFormPayload = {
+  display_name: string;
+  phone: string | null;
+  email: string | null;
+  tax_id: string | null;
+  default_payment_terms: string;
+};
+
+function defaultPaymentTermsFromModel(model: IncomeTableModel<IncomeCustomersTableRow>): string {
+  return (
+    model.editor_fields?.find((field) => field.key === 'default_payment_terms')?.default_value ??
+    'eom_plus_30'
+  );
+}
+
+function emptyCustomerForm(model: IncomeTableModel<IncomeCustomersTableRow>): Record<string, string> {
+  return {
+    display_name: '',
+    phone: '',
+    email: '',
+    tax_id: '',
+    default_payment_terms: defaultPaymentTermsFromModel(model),
+  };
+}
+
+function customerFormFromRow(
+  row: IncomeCustomersTableRow,
+  model: IncomeTableModel<IncomeCustomersTableRow>,
+): Record<string, string> {
+  return {
+    display_name: row.display_name ?? '',
+    phone: row.phone ?? '',
+    email: row.email ?? '',
+    tax_id: row.tax_id ?? '',
+    default_payment_terms: row.default_payment_terms ?? defaultPaymentTermsFromModel(model),
+  };
+}
+
+function renderCustomerEditorField(
+  field: IncomeCustomerEditorField,
+  form: Record<string, string>,
+  disabled: boolean,
+  onChange: (key: string, value: string) => void,
+) {
+  const value = form[field.key] ?? '';
+  return (
+    <div key={field.key} className="nx-income-field">
+      <label>{field.label}</label>
+      {field.input_type === 'select' ? (
+        <select
+          value={value}
+          disabled={disabled}
+          required={field.required}
+          onChange={(e) => onChange(field.key, e.target.value)}
+        >
+          {(field.options ?? []).map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          value={value}
+          disabled={disabled}
+          required={field.required}
+          onChange={(e) => onChange(field.key, e.target.value)}
+        />
+      )}
+    </div>
+  );
+}
+
 export function IncomeClientEndCustomersModal({
   open,
   clientName,
@@ -401,56 +475,40 @@ export function IncomeClientEndCustomersModal({
   canCreate: boolean;
   canEdit: boolean;
   onClose: () => void;
-  onCreateCustomer: (payload: {
-    display_name: string;
-    phone: string | null;
-    email: string | null;
-    tax_id: string | null;
-  }) => Promise<void>;
-  onUpdateCustomer: (
-    customerId: string,
-    payload: {
-      display_name: string;
-      phone: string | null;
-      email: string | null;
-      tax_id: string | null;
-    },
-  ) => Promise<void>;
+  onCreateCustomer: (payload: IncomeEndCustomerFormPayload) => Promise<void>;
+  onUpdateCustomer: (customerId: string, payload: IncomeEndCustomerFormPayload) => Promise<void>;
 }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create');
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
-  const [form, setForm] = useState({ display_name: '', phone: '', email: '', tax_id: '' });
+  const [form, setForm] = useState<Record<string, string>>(() => emptyCustomerForm(model));
   const [submitting, setSubmitting] = useState(false);
 
   const columns = model?.columns ?? [];
   const rows = model?.rows ?? [];
+  const editorFields = model.editor_fields ?? [];
 
   const openCreate = () => {
     setEditorMode('create');
     setEditingCustomerId(null);
-    setForm({ display_name: '', phone: '', email: '', tax_id: '' });
+    setForm(emptyCustomerForm(model));
     setEditorOpen(true);
   };
 
   const openEdit = (row: IncomeCustomersTableRow) => {
     setEditorMode('edit');
     setEditingCustomerId(row.customer_id);
-    setForm({
-      display_name: row.display_name ?? '',
-      phone: row.phone ?? '',
-      email: row.email ?? '',
-      tax_id: row.tax_id ?? '',
-    });
+    setForm(customerFormFromRow(row, model));
     setEditorOpen(true);
   };
 
   const submitEditor = async () => {
-    const payload = {
-      display_name: form.display_name.trim(),
-      phone: form.phone.trim() || null,
-      email: form.email.trim() || null,
-      tax_id: form.tax_id.trim() || null,
+    const payload: IncomeEndCustomerFormPayload = {
+      display_name: (form.display_name ?? '').trim(),
+      phone: (form.phone ?? '').trim() || null,
+      email: (form.email ?? '').trim() || null,
+      tax_id: (form.tax_id ?? '').trim() || null,
+      default_payment_terms: form.default_payment_terms ?? defaultPaymentTermsFromModel(model),
     };
     if (!payload.display_name) return;
     setSubmitting(true);
@@ -551,38 +609,16 @@ export function IncomeClientEndCustomersModal({
               </h2>
             </div>
             <div className="nx-income-wizard__body">
-              <div className="nx-income-field">
-                <label>שם</label>
-                <input
-                  value={form.display_name}
-                  disabled={busy || submitting}
-                  onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
-                />
-              </div>
-              <div className="nx-income-field">
-                <label>טלפון</label>
-                <input
-                  value={form.phone}
-                  disabled={busy || submitting}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                />
-              </div>
-              <div className="nx-income-field">
-                <label>אימייל</label>
-                <input
-                  value={form.email}
-                  disabled={busy || submitting}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                />
-              </div>
-              <div className="nx-income-field">
-                <label>מספר זיהוי</label>
-                <input
-                  value={form.tax_id}
-                  disabled={busy || submitting}
-                  onChange={(e) => setForm((f) => ({ ...f, tax_id: e.target.value }))}
-                />
-              </div>
+              {editorFields.length > 0
+                ? editorFields.map((field) =>
+                    renderCustomerEditorField(
+                      field,
+                      form,
+                      busy || submitting,
+                      (key, value) => setForm((f) => ({ ...f, [key]: value })),
+                    ),
+                  )
+                : null}
             </div>
             <div className="nx-income-wizard__footer nx-modal-footer nx-tax-nested-modal-footer">
               <button
@@ -596,7 +632,7 @@ export function IncomeClientEndCustomersModal({
               <button
                 type="button"
                 className="nx-btn nx-btn-primary nx-btn-taxes-compact"
-                disabled={busy || submitting || !form.display_name.trim()}
+                disabled={busy || submitting || !(form.display_name ?? '').trim()}
                 onClick={() => void submitEditor()}
               >
                 {submitting ? 'שומר…' : 'שמירה'}

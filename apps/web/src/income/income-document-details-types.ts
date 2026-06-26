@@ -8,6 +8,7 @@ export type IncomeDocumentDetailsSettingField = {
   visible: boolean;
   disabled: boolean;
   disabled_reason: string | null;
+  min_value?: string | null;
 };
 
 export type IncomeDocumentDetailsLineRow = {

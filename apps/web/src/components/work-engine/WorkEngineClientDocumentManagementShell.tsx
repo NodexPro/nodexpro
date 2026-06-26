@@ -130,6 +130,7 @@ export function WorkEngineClientDocumentManagementShell({
       phone: string | null;
       email: string | null;
       tax_id: string | null;
+      default_payment_terms: string;
     }) => {
       onBusyChange?.(true);
       try {
@@ -153,6 +154,7 @@ export function WorkEngineClientDocumentManagementShell({
         phone: string | null;
         email: string | null;
         tax_id: string | null;
+        default_payment_terms: string;
       },
     ) => {
       onBusyChange?.(true);

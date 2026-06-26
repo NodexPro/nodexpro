@@ -31,6 +31,7 @@ export type {
   IncomeClientIncomeLedgerCardAggregate,
   IncomeCommandResponse,
   IncomeCommandType,
+  IncomeCustomerEditorField,
   IncomeCustomersTableRow,
   IncomeDocumentCreationSchema,
   IncomeDocumentCreationStep,

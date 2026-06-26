@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo, type DragEvent } from 'react';
 import type {
   IncomeDocumentDetailsLineRow,
   IncomeDocumentDetailsStep,
@@ -15,6 +15,9 @@ type Props = {
   workspaceAgg: IncomeWorkspaceAggregate | null;
   onWorkspaceAgg: (agg: IncomeWorkspaceAggregate) => void;
   onError: (msg: string | null) => void;
+  hideHeader?: boolean;
+  projectionMode?: boolean;
+  onProjectionStepChange?: (step: IncomeDocumentDetailsStep) => void;
 };
 
 type LineDraft = {
@@ -67,7 +70,7 @@ function buildCommitPatch(draft: LineDraft): Record<string, unknown> {
   return patch;
 }
 
-function LineRowEditor({
+const LineRowEditor = memo(function LineRowEditor({
   row,
   saving,
   onCommit,
@@ -303,6 +306,127 @@ function LineRowEditor({
       </td>
     </>
   );
+});
+
+function applyProjectionMutation(
+  step: IncomeDocumentDetailsStep,
+  commandKey: string,
+  body: Record<string, unknown>,
+): IncomeDocumentDetailsStep {
+  if (commandKey === 'update_line') {
+    const lineId = String(body.line_id ?? '');
+    const rows = step.line_items.rows.map((row) => {
+      if (row.line_id !== lineId) return row;
+      const next = { ...row };
+      if (body.description != null) {
+        next.description = { ...next.description, value: String(body.description) };
+      }
+      if (body.quantity != null) {
+        next.quantity = { ...next.quantity, value: String(body.quantity) };
+      }
+      if (body.unit_price_reference != null) {
+        next.unit_price = { ...next.unit_price, value: String(body.unit_price_reference) };
+      }
+      if (body.currency != null) {
+        next.currency = { ...next.currency, value: String(body.currency) };
+      }
+      if (body.price_includes_vat != null) {
+        next.price_includes_vat = body.price_includes_vat === true;
+      }
+      if (body.exchange_rate_to_ils_override != null) {
+        next.exchange_rate_override = next.exchange_rate_override
+          ? { ...next.exchange_rate_override, value: String(body.exchange_rate_to_ils_override) }
+          : { value: String(body.exchange_rate_to_ils_override), editable: true };
+      }
+      return next;
+    });
+    return { ...step, line_items: { ...step.line_items, rows } };
+  }
+  if (commandKey === 'update_draft_settings') {
+    const key = String(body.setting_key ?? '');
+    const value = body.setting_value == null ? '' : String(body.setting_value);
+    const settings_schema = step.settings_schema.map((field) =>
+      field.key === key ? { ...field, value } : field,
+    );
+    return { ...step, settings_schema };
+  }
+  if (commandKey === 'update_notes') {
+    return { ...step, notes: { ...step.notes, value: String(body.notes ?? '') } };
+  }
+  if (commandKey === 'update_delivery_contact') {
+    const email = body.email == null || body.email === '' ? null : String(body.email);
+    return { ...step, delivery_contact: { ...step.delivery_contact, email } };
+  }
+  if (commandKey === 'update_discount') {
+    const enabled = body.enabled === true;
+    const type = body.type === 'fixed_amount' ? 'fixed_amount' : 'percent';
+    const value = body.value == null ? '' : String(body.value);
+    return {
+      ...step,
+      document_discount: {
+        ...step.document_discount,
+        enabled,
+        type,
+        value,
+      },
+    };
+  }
+  if (commandKey === 'delete_line') {
+    const lineId = String(body.line_id ?? '');
+    const rows = step.line_items.rows.filter((row) => row.line_id !== lineId);
+    return { ...step, line_items: { ...step.line_items, rows } };
+  }
+  if (commandKey === 'reorder_lines' && Array.isArray(body.ordered_line_ids)) {
+    const order = body.ordered_line_ids.map((id) => String(id));
+    const byId = new Map(step.line_items.rows.map((row) => [row.line_id, row]));
+    const rows = order.map((id, index) => {
+      const row = byId.get(id);
+      return row ? { ...row, row_number: index + 1 } : null;
+    }).filter((row): row is IncomeDocumentDetailsLineRow => row != null);
+    return { ...step, line_items: { ...step.line_items, rows } };
+  }
+  if (commandKey === 'add_line') {
+    const nextIndex = step.line_items.rows.length + 1;
+    const lineId = `projection-line-${nextIndex}`;
+    const newRow: IncomeDocumentDetailsLineRow = {
+      id: lineId,
+      line_id: lineId,
+      row_number: nextIndex,
+      can_drag: true,
+      description: { value: '', editable: true, placeholder: 'תיאור' },
+      quantity: { value: '1', editable: true },
+      unit_price: { value: '', editable: true },
+      currency: {
+        value: step.line_items.document_fields?.currency?.value ?? 'ILS',
+        editable: true,
+        options: step.line_items.document_fields?.currency?.options ?? [{ value: 'ILS', label: '₪' }],
+      },
+      allowed_currencies: step.line_items.rows[0]?.allowed_currencies ?? [{ value: 'ILS', label: '₪' }],
+      vat_rate_code: 'standard',
+      vat_rate_label: step.line_items.rows[0]?.vat_rate_label ?? 'מע״מ',
+      allowed_vat_rates: step.line_items.rows[0]?.allowed_vat_rates ?? [{ value: 'standard', label: 'מע״מ' }],
+      price_includes_vat: false,
+      price_mode_options: step.line_items.rows[0]?.price_mode_options ?? [
+        { value: false, label: 'לפני מע״מ' },
+        { value: true, label: 'כולל מע״מ' },
+      ],
+      exchange_rate_official: null,
+      exchange_rate_effective: null,
+      exchange_rate_override: null,
+      exchange_rate_date: null,
+      exchange_rate_source_label: null,
+      exchange_rate_editable: false,
+      line_total_display: '—',
+      line_total: { display: '—' },
+      field_errors: [],
+      allowed_actions: ['update_income_document_line', 'delete_income_document_line'],
+    };
+    return {
+      ...step,
+      line_items: { ...step.line_items, rows: [...step.line_items.rows, newRow] },
+    };
+  }
+  return step;
 }
 
 export function WorkEngineDocumentDetailsStep({
@@ -313,15 +437,30 @@ export function WorkEngineDocumentDetailsStep({
   onBusyChange,
   onWorkspaceAgg,
   onError,
+  hideHeader = false,
+  projectionMode = false,
+  onProjectionStepChange,
 }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(true);
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSetting = useRef<{ key: string; value: string } | null>(null);
+  const inFlightSetting = useRef<{ key: string; value: string } | null>(null);
+  const hiddenFieldValuesRef = useRef<Record<string, string>>({});
   const notesDraft = useRef(step.notes.value);
   const emailDraft = useRef(step.delivery_contact.email ?? '');
+  const [settingsDraft, setSettingsDraft] = useState<Record<string, string>>(() => {
+    const draft: Record<string, string> = {};
+    for (const field of step.settings_schema) {
+      if (field.visible) draft[field.key] = field.value ?? '';
+    }
+    return draft;
+  });
 
   const draftId = step.draft_id;
-  const canAdd = step.line_items.allowed_actions.includes('add_income_document_line');
+  const canAdd =
+    projectionMode || step.line_items.allowed_actions.includes('add_income_document_line');
   const [addingLine, setAddingLine] = useState(false);
   const [savingLineId, setSavingLineId] = useState<string | null>(null);
   const [savingDiscount, setSavingDiscount] = useState(false);
@@ -333,6 +472,19 @@ export function WorkEngineDocumentDetailsStep({
   const dragLineIdRef = useRef<string | null>(null);
   const commandsInFlight = useRef(0);
 
+  const visibleSettingsSchema = useMemo(
+    () => step.settings_schema.filter((field) => field.visible && field.key !== 'payment_terms'),
+    [step.settings_schema],
+  );
+
+  const settingsSchemaSignature = useMemo(
+    () =>
+      visibleSettingsSchema
+        .map((field) => `${field.key}:${field.value ?? ''}:${field.input_type}`)
+        .join('|'),
+    [visibleSettingsSchema],
+  );
+
   useEffect(() => {
     setDiscountEnabled(step.document_discount.enabled);
     setDiscountType(step.document_discount.type);
@@ -343,6 +495,57 @@ export function WorkEngineDocumentDetailsStep({
     step.document_discount.type,
     step.document_discount.value,
   ]);
+
+  useEffect(() => {
+    const draft: Record<string, string> = {};
+    for (const field of step.settings_schema) {
+      if (field.visible) draft[field.key] = field.value ?? '';
+    }
+    setSettingsDraft(draft);
+  }, [step.draft_id]);
+
+  useEffect(() => {
+    setSettingsDraft((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      const visibleKeys = new Set(visibleSettingsSchema.map((field) => field.key));
+
+      for (const [key, value] of Object.entries(prev)) {
+        if (!visibleKeys.has(key) && value) {
+          hiddenFieldValuesRef.current[key] = value;
+        }
+      }
+
+      for (const field of visibleSettingsSchema) {
+        const serverValue = field.value ?? '';
+        if (!(field.key in next)) {
+          const preserved = hiddenFieldValuesRef.current[field.key] ?? '';
+          next[field.key] = serverValue || preserved;
+          changed = true;
+          continue;
+        }
+        if (pendingSetting.current?.key === field.key) continue;
+        if (inFlightSetting.current?.key === field.key) {
+          if (serverValue !== inFlightSetting.current.value) continue;
+          inFlightSetting.current = null;
+          hiddenFieldValuesRef.current[field.key] = serverValue;
+        }
+        if (next[field.key] !== serverValue) {
+          if (serverValue === '' && next[field.key]) continue;
+          next[field.key] = serverValue;
+          hiddenFieldValuesRef.current[field.key] = serverValue;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [settingsSchemaSignature, step.document_type_key, visibleSettingsSchema]);
+
+  useEffect(() => {
+    return () => {
+      if (settingsTimer.current) clearTimeout(settingsTimer.current);
+    };
+  }, []);
 
   const applyAggregate = useCallback(
     (res: unknown) => {
@@ -363,6 +566,10 @@ export function WorkEngineDocumentDetailsStep({
 
   const runCommand = useCallback(
     async (commandKey: string, body: Record<string, unknown>, opts?: { lockUi?: boolean }) => {
+      if (projectionMode && onProjectionStepChange) {
+        onProjectionStepChange(applyProjectionMutation(step, commandKey, body));
+        return;
+      }
       const command = commands[commandKey];
       if (!command) throw new Error(`Missing command: ${commandKey}`);
       const lockUi = opts?.lockUi !== false;
@@ -380,7 +587,7 @@ export function WorkEngineDocumentDetailsStep({
         if (lockUi) onBusyChange(false);
       }
     },
-    [applyAggregate, commands, onBusyChange, onError],
+    [applyAggregate, commands, onBusyChange, onError, onProjectionStepChange, projectionMode, step],
   );
 
   const commitLine = useCallback(
@@ -426,12 +633,37 @@ export function WorkEngineDocumentDetailsStep({
     }
   };
 
-  const handleSettingChange = (key: string, value: string) => {
-    void runCommand('update_draft_settings', {
-      draft_id: draftId,
-      setting_key: key,
-      setting_value: value,
+  const flushSettingChange = useCallback(() => {
+    const pending = pendingSetting.current;
+    if (!pending) return;
+    pendingSetting.current = null;
+    inFlightSetting.current = pending;
+    void runCommand(
+      'update_draft_settings',
+      {
+        draft_id: draftId,
+        setting_key: pending.key,
+        setting_value: pending.value,
+      },
+      { lockUi: false },
+    ).catch(() => {
+      inFlightSetting.current = null;
     });
+  }, [draftId, runCommand]);
+
+  const handleSettingChange = (key: string, value: string) => {
+    if (key === 'payment_terms') return;
+    hiddenFieldValuesRef.current[key] = value;
+    setSettingsDraft((prev) => ({ ...prev, [key]: value }));
+    pendingSetting.current = { key, value };
+    if (settingsTimer.current) clearTimeout(settingsTimer.current);
+    settingsTimer.current = setTimeout(flushSettingChange, 400);
+  };
+
+  const handleSettingBlur = (key: string) => {
+    if (pendingSetting.current?.key !== key) return;
+    if (settingsTimer.current) clearTimeout(settingsTimer.current);
+    flushSettingChange();
   };
 
   const handleNotesChange = (value: string) => {
@@ -460,12 +692,14 @@ export function WorkEngineDocumentDetailsStep({
 
   return (
     <div className="nx-we-doc-details" dir="rtl">
-      <header className="nx-we-doc-details__header">
-        <h3 className="nx-we-doc-details__title">{step.header.title}</h3>
-        {step.header.subtitle ? (
-          <p className="nx-we-doc-details__subtitle">{step.header.subtitle}</p>
-        ) : null}
-      </header>
+      {!hideHeader ? (
+        <header className="nx-we-doc-details__header">
+          <h3 className="nx-we-doc-details__title">{step.header.title}</h3>
+          {step.header.subtitle ? (
+            <p className="nx-we-doc-details__subtitle">{step.header.subtitle}</p>
+          ) : null}
+        </header>
+      ) : null}
 
       <section className="nx-we-doc-details__settings">
         <button
@@ -478,17 +712,16 @@ export function WorkEngineDocumentDetailsStep({
         </button>
         {settingsOpen ? (
           <div className="nx-we-doc-details__settings-grid">
-            {step.settings_schema
-              .filter((f) => f.visible)
-              .map((field) => (
+            {visibleSettingsSchema.map((field) => (
                 <label key={field.key} className="nx-we-doc-details__field">
                   <span>{field.label}</span>
                   {field.input_type === 'select' ? (
                     <select
-                      value={field.value ?? ''}
+                      value={settingsDraft[field.key] ?? ''}
                       disabled={busy || field.disabled}
                       title={field.disabled_reason ?? undefined}
                       onChange={(e) => handleSettingChange(field.key, e.target.value)}
+                      onBlur={() => handleSettingBlur(field.key)}
                     >
                       {(field.options ?? []).map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -499,17 +732,21 @@ export function WorkEngineDocumentDetailsStep({
                   ) : field.input_type === 'date' ? (
                     <input
                       type="date"
-                      value={field.value ?? ''}
+                      className="nx-we-doc-details__date-input"
+                      value={settingsDraft[field.key] ?? ''}
+                      min={field.min_value ?? undefined}
                       required={field.required}
                       disabled={busy || field.disabled}
                       onChange={(e) => handleSettingChange(field.key, e.target.value)}
+                      onBlur={() => handleSettingBlur(field.key)}
                     />
                   ) : (
                     <input
                       type="text"
-                      value={field.value ?? ''}
+                      value={settingsDraft[field.key] ?? ''}
                       disabled={busy || field.disabled}
                       onChange={(e) => handleSettingChange(field.key, e.target.value)}
+                      onBlur={() => handleSettingBlur(field.key)}
                     />
                   )}
                 </label>
@@ -647,7 +884,8 @@ export function WorkEngineDocumentDetailsStep({
           {step.document_discount.field_errors.value ? (
             <div className="nx-we-doc-details__field-error">{step.document_discount.field_errors.value}</div>
           ) : null}
-          {step.document_discount.allowed_actions.includes('update_income_document_discount') ? (
+          {step.document_discount.allowed_actions.includes('update_income_document_discount') ||
+          projectionMode ? (
             <button
               type="button"
               className="nx-btn nx-btn-taxes-compact"
@@ -657,6 +895,16 @@ export function WorkEngineDocumentDetailsStep({
                   setSavingDiscount(true);
                   onError(null);
                   try {
+                    if (projectionMode) {
+                      onProjectionStepChange?.(
+                        applyProjectionMutation(step, 'update_discount', {
+                          enabled: discountEnabled,
+                          type: discountType,
+                          value: discountValue.trim() === '' ? 0 : discountValue.trim(),
+                        }),
+                      );
+                      return;
+                    }
                     const res = await executeIncomeCommand(commands.update_discount, {
                       draft_id: draftId,
                       enabled: discountEnabled,

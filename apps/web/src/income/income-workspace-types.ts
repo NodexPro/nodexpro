@@ -133,9 +133,17 @@ export interface WorkEngineInvoicesClientDocumentsByTypeAggregate {
   empty_state: { visible: boolean; title: string; description: string | null };
 }
 
-export type RecurringDocumentFrequency = 'monthly' | 'semi_annual' | 'yearly';
+export type RecurringDocumentFrequency =
+  | 'days_45'
+  | 'days_60'
+  | 'days_90'
+  | 'yearly'
+  | 'semi_annual'
+  | 'monthly'
+  | 'biennial';
 export type RecurringPriceIncreaseType = 'percent' | 'amount';
 export type RecurringProfileStatus = 'active' | 'paused' | 'cancelled';
+export type RecurringSchedulerStatus = 'scheduler_pending' | 'active' | 'failed';
 
 export interface WorkEngineInvoiceRetainerEndCustomerRow {
   end_customer_id: string;
@@ -155,9 +163,14 @@ export interface WorkEngineInvoiceRetainerSettings {
   end_customer_display_name: string;
   source_draft_template_id: string | null;
   document_template_snapshot: Record<string, unknown> | null;
+  document_type: 'quote' | 'deal_invoice' | 'tax_invoice';
+  document_type_label: string;
+  document_type_change_note: string;
   frequency: RecurringDocumentFrequency;
   frequency_label: string;
   advance_days: number;
+  advance_creation_help_text: string;
+  draft_creation_date_label: string;
   draft_creation_date_display: string | null;
   service_period_start: string;
   service_period_start_display: string;
@@ -170,6 +183,12 @@ export interface WorkEngineInvoiceRetainerSettings {
   next_cycle_unit_price_before_vat_display: string | null;
   status: RecurringProfileStatus;
   status_label: string;
+  status_description: string;
+  next_document_date: string;
+  next_document_date_display: string;
+  last_generated_draft_id: string | null;
+  last_generated_at: string | null;
+  last_generated_at_display: string | null;
 }
 
 export interface WorkEngineInvoiceRetainerDocumentDraftWorkspace {
@@ -177,14 +196,125 @@ export interface WorkEngineInvoiceRetainerDocumentDraftWorkspace {
   income_commands: Record<string, string>;
 }
 
+export type WorkEngineInvoiceRetainerSetupTabKey = 'retainer' | 'next_document';
+
+export type WorkEngineInvoiceRetainerNextDocumentApplyScope = 'next_cycle_only' | 'all_future_cycles';
+
+export type WorkEngineInvoiceRetainerChildDocumentHistoryRow = {
+  cycle_id: string;
+  cycle_number: number;
+  scheduled_document_date_display: string;
+  draft_creation_date_display: string;
+  status: 'pending' | 'draft_created' | 'issued' | 'cancelled' | 'failed';
+  status_label: string;
+  generated_draft_id: string | null;
+  generated_draft_reference_display: string | null;
+  generated_document_id: string | null;
+  generated_document_reference_display: string | null;
+  failure_reason: string | null;
+  allowed_actions: string[];
+};
+
+export interface WorkEngineInvoiceRetainerSetupTab {
+  key: WorkEngineInvoiceRetainerSetupTabKey;
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface WorkEngineInvoiceRetainerNextDocumentPreviewInfoBlock {
+  title: string;
+  document_type_label: string | null;
+  next_document_date_display: string | null;
+  draft_review_date_label: string;
+  draft_review_date_display: string | null;
+  draft_review_advance_note: string | null;
+  profile_status_label: string | null;
+}
+
+export interface WorkEngineInvoiceRetainerNextDocumentPreview {
+  status: 'ready' | 'unavailable';
+  unavailable_message: string | null;
+  projection_id: string | null;
+  next_document_date: string | null;
+  next_document_date_display: string | null;
+  price_increase_applied: boolean;
+  price_increase_note: string | null;
+  info_block: WorkEngineInvoiceRetainerNextDocumentPreviewInfoBlock;
+  document_details_step: import('./income-document-details-types').IncomeDocumentDetailsStep | null;
+  save_action: {
+    visible: boolean;
+    label: string;
+    disabled_reason: string | null;
+    apply_scope_dialog: {
+      title: string;
+      prompt: string;
+      option_next_cycle_only: {
+        key: 'next_cycle_only';
+        label: string;
+        description: string;
+      };
+      option_all_future_cycles: {
+        key: 'all_future_cycles';
+        label: string;
+        description: string;
+      };
+      confirm_label: string;
+      cancel_label: string;
+      persistence_note: string;
+    } | null;
+  };
+  allowed_actions: string[];
+}
+
+export interface WorkEngineInvoiceRetainerTemplateDraftState {
+  status: 'ready' | 'missing';
+  prompt_message: string;
+  confirm_begin_label: string;
+  cancel_label: string;
+  begin_document_type: 'quote' | 'deal_invoice' | 'tax_invoice';
+  begin_income_customer_id: string;
+}
+
+export interface WorkEngineInvoiceRetainerSaveProfilePrompt {
+  message: string;
+  confirm_label: string;
+  cancel_label: string;
+}
+
+export interface WorkEngineInvoiceRetainerIssueDocumentAction {
+  visible: boolean;
+  label: string;
+  disabled_reason: string | null;
+}
+
 export interface WorkEngineInvoiceRetainerSetupAggregate {
   aggregate_key: 'work_engine_invoice_retainer_setup_aggregate';
   represented_client_id: string;
   client_display_name: string;
   selected_end_customer_id: string | null;
+  identity: {
+    office_client_label: string;
+    end_customer_label: string;
+  } | null;
+  document_type_options: Array<{
+    key: 'quote' | 'deal_invoice' | 'tax_invoice';
+    label: string;
+    enabled: boolean;
+    disabled_reason: string | null;
+  }>;
   end_customers: WorkEngineInvoiceRetainerEndCustomerRow[];
   document_draft_workspace: WorkEngineInvoiceRetainerDocumentDraftWorkspace | null;
+  template_draft: WorkEngineInvoiceRetainerTemplateDraftState | null;
+  save_profile_without_template_prompt: WorkEngineInvoiceRetainerSaveProfilePrompt | null;
+  issue_document_action: WorkEngineInvoiceRetainerIssueDocumentAction | null;
   retainer_settings: WorkEngineInvoiceRetainerSettings | null;
+  child_documents_history: WorkEngineInvoiceRetainerChildDocumentHistoryRow[];
+  setup_tabs: {
+    default_tab_key: 'retainer';
+    tabs: WorkEngineInvoiceRetainerSetupTab[];
+  };
+  next_document_preview: WorkEngineInvoiceRetainerNextDocumentPreview;
   recurring_profiles: Array<{
     profile_id: string;
     end_customer_id: string;
@@ -201,7 +331,7 @@ export interface WorkEngineInvoiceRetainerSetupAggregate {
     auto_advance_period: boolean;
   };
   allowed_actions: string[];
-  scheduler_status: 'scheduler_pending';
+  scheduler_status: RecurringSchedulerStatus;
   scheduler_note: string;
   work_engine_event_type: string;
   work_type: string;
@@ -212,7 +342,8 @@ export type WorkEngineInvoiceRetainerCommandType =
   | 'update_income_recurring_document_profile'
   | 'pause_income_recurring_document_profile'
   | 'resume_income_recurring_document_profile'
-  | 'cancel_income_recurring_document_profile';
+  | 'cancel_income_recurring_document_profile'
+  | 'preview_income_recurring_document_profile_settings';
 
 export interface WorkEngineInvoiceRetainerCommandResponse {
   ok: true;
@@ -387,12 +518,23 @@ export interface IncomeTableColumn {
   label: string;
 }
 
+export interface IncomeCustomerEditorField {
+  key: string;
+  label: string;
+  input_type: 'text' | 'select';
+  required: boolean;
+  options?: { value: string; label: string }[];
+  default_value?: string | null;
+}
+
 export interface IncomeCustomersTableRow {
   customer_id: string;
   display_name: string;
   phone: string | null;
   email: string | null;
   tax_id: string | null;
+  default_payment_terms: string;
+  default_payment_terms_label: string;
   is_one_time: boolean;
   status: string;
   status_label: string;
@@ -453,6 +595,7 @@ export interface IncomeTableModel<T> {
   columns: IncomeTableColumn[];
   rows: T[];
   empty_state: { visible: boolean; title: string; description: string | null };
+  editor_fields?: IncomeCustomerEditorField[];
 }
 
 export interface IncomeAvailableDocumentType {
