@@ -12,6 +12,7 @@ import { ensureRetainerDocumentDraftWorkspace, } from './work-engine-invoice-ret
 import { loadDocumentNumbersById, loadRecurringProfileCycles, RECURRING_CYCLE_STATUS_LABELS, } from './work-engine-invoice-retainer-cycles.service.js';
 import { RECURRING_SCHEDULER_STATUS_ACTIVE, RECURRING_SCHEDULER_STATUS_FAILED, RECURRING_WORK_EVENT_TYPE, RECURRING_WORK_TYPE, RECURRING_FREQUENCY_LABELS, RECURRING_FREQUENCY_OPTIONS, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
 import { buildNextDocumentPreview, buildSetupTabs, } from './work-engine-invoice-retainer-next-document-preview.service.js';
+import { buildRetainerScheduleProjection, buildScheduleSetupTab, } from './work-engine-invoice-retainer-schedule-projection.service.js';
 import { WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY, } from './work-engine-invoice-retainer.types.js';
 const RETAINER_TEMPLATE_START_DATE_LABEL = 'תאריך התחלה';
 function relabelRetainerTemplateStartDate(step) {
@@ -94,7 +95,7 @@ async function loadEndCustomers(scope) {
 async function loadProfiles(orgId, representedClientId) {
     const { data, error } = await supabaseAdmin
         .from('income_recurring_document_profiles')
-        .select('id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, unit_price_before_vat_reference, currency, price_increase_enabled, price_increase_type, price_increase_value, status, source_draft_template_id, document_template_snapshot, last_generated_draft_id, last_generated_at, last_generation_failed_at, last_generation_error_code, last_generation_error_message')
+        .select('id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, quantity, unit_price_before_vat_reference, discount_percent_reference, discount_amount_reference, currency, price_increase_enabled, price_increase_type, price_increase_value, status, source_draft_template_id, document_template_snapshot, last_generated_draft_id, last_generated_at, last_generation_failed_at, last_generation_error_code, last_generation_error_message')
         .eq('organization_id', orgId)
         .eq('represented_client_id', representedClientId)
         .eq('issuer_business_id', representedClientId)
@@ -402,7 +403,21 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         retainerSettings,
         baseStep: baseDocumentDetailsStep,
     });
-    const setupTabs = buildSetupTabs(nextDocumentPreview);
+    const scheduleCycles = selectedProfile?.id != null
+        ? await loadRecurringProfileCycles(orgId, selectedProfile.id)
+        : [];
+    const retainerScheduleProjection = await buildRetainerScheduleProjection({
+        orgId,
+        profile: selectedProfile,
+        retainerSettings,
+        cycles: scheduleCycles,
+        nextDocumentPreview,
+    });
+    const setupTabsBase = buildSetupTabs(nextDocumentPreview);
+    const setupTabs = {
+        ...setupTabsBase,
+        tabs: [...setupTabsBase.tabs, buildScheduleSetupTab(selectedProfile?.id ?? null)],
+    };
     stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'next_document_preview', stepStartMs);
     if (documentDraftWorkspace?.income_workspace_aggregate.document_details_step) {
         documentDraftWorkspace = {
@@ -433,6 +448,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         child_documents_history: childDocumentsHistory,
         setup_tabs: setupTabs,
         next_document_preview: nextDocumentPreview,
+        retainer_schedule_projection: retainerScheduleProjection,
         recurring_profiles: profiles.map((profile) => ({
             profile_id: profile.id,
             end_customer_id: profile.end_customer_id,

@@ -103,7 +103,7 @@ export type WorkEngineInvoiceRetainerDocumentDraftWorkspace = {
   income_commands: Record<string, string>;
 };
 
-export type WorkEngineInvoiceRetainerSetupTabKey = 'retainer' | 'next_document';
+export type WorkEngineInvoiceRetainerSetupTabKey = 'retainer' | 'next_document' | 'schedule';
 
 export type WorkEngineInvoiceRetainerSetupTab = {
   key: WorkEngineInvoiceRetainerSetupTabKey;
@@ -159,6 +159,41 @@ export type WorkEngineInvoiceRetainerNextDocumentPreview = {
   allowed_actions: string[];
 };
 
+export type WorkEngineInvoiceRetainerScheduleProjectionAction = {
+  key: string;
+  label: string;
+  disabled: boolean;
+  disabled_reason: string | null;
+};
+
+export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
+  projection_key: string;
+  scheduled_document_date: string;
+  scheduled_document_date_display: string;
+  document_type_label: string;
+  amount_display: string;
+  status_key: 'issued' | 'scheduled' | 'skipped' | 'failed';
+  status_label: string;
+  status_tone: 'success' | 'neutral' | 'warning' | 'danger';
+  icon_key: 'check' | 'clock' | 'pause' | 'alert';
+  allowed_actions: string[];
+  actions: WorkEngineInvoiceRetainerScheduleProjectionAction[];
+};
+
+export type WorkEngineInvoiceRetainerScheduleProjectionYear = {
+  year: number;
+  label: string;
+  total_count: number;
+  total_count_label: string;
+  rows: WorkEngineInvoiceRetainerScheduleProjectionRow[];
+};
+
+export type WorkEngineInvoiceRetainerScheduleProjection = {
+  status: 'ready' | 'unavailable';
+  unavailable_message: string | null;
+  years: WorkEngineInvoiceRetainerScheduleProjectionYear[];
+};
+
 export type WorkEngineInvoiceRetainerChildDocumentHistoryRow = {
   cycle_id: string;
   cycle_number: number;
@@ -201,6 +236,7 @@ export type WorkEngineInvoiceRetainerSetupAggregate = {
     tabs: WorkEngineInvoiceRetainerSetupTab[];
   };
   next_document_preview: WorkEngineInvoiceRetainerNextDocumentPreview;
+  retainer_schedule_projection: WorkEngineInvoiceRetainerScheduleProjection;
   recurring_profiles: Array<{
     profile_id: string;
     end_customer_id: string;
