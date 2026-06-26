@@ -13,6 +13,13 @@ import { loadDocumentNumbersById, loadRecurringProfileCycles, RECURRING_CYCLE_ST
 import { RECURRING_SCHEDULER_STATUS_ACTIVE, RECURRING_SCHEDULER_STATUS_FAILED, RECURRING_WORK_EVENT_TYPE, RECURRING_WORK_TYPE, RECURRING_FREQUENCY_LABELS, RECURRING_FREQUENCY_OPTIONS, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
 import { buildNextDocumentPreview, buildSetupTabs, } from './work-engine-invoice-retainer-next-document-preview.service.js';
 import { WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY, } from './work-engine-invoice-retainer.types.js';
+const RETAINER_TEMPLATE_START_DATE_LABEL = 'תאריך התחלה';
+function relabelRetainerTemplateStartDate(step) {
+    return {
+        ...step,
+        settings_schema: step.settings_schema.map((field) => field.key === 'document_date' ? { ...field, label: RETAINER_TEMPLATE_START_DATE_LABEL } : field),
+    };
+}
 const DOCUMENT_TYPE_LABELS = {
     quote: 'הצעת מחיר',
     deal_invoice: 'חשבון עסקה',
@@ -397,6 +404,15 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     });
     const setupTabs = buildSetupTabs(nextDocumentPreview);
     stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'next_document_preview', stepStartMs);
+    if (documentDraftWorkspace?.income_workspace_aggregate.document_details_step) {
+        documentDraftWorkspace = {
+            ...documentDraftWorkspace,
+            income_workspace_aggregate: {
+                ...documentDraftWorkspace.income_workspace_aggregate,
+                document_details_step: relabelRetainerTemplateStartDate(documentDraftWorkspace.income_workspace_aggregate.document_details_step),
+            },
+        };
+    }
     const allowedActions = ['view_invoice_retainer_setup'];
     if (perms.edit) {
         allowedActions.push('create_income_recurring_document_profile', 'update_income_recurring_document_profile', 'preview_income_recurring_document_profile_settings', 'pause_income_recurring_document_profile', 'resume_income_recurring_document_profile', 'cancel_income_recurring_document_profile');

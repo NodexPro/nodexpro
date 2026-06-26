@@ -10,7 +10,6 @@ import { normalizeDraftLines, serializeDraftLines } from '../income/income-docum
 import {
   loadWizardDraftRow,
   recipientOverlayForDraftRow,
-  updateIncomeDocumentDraftSettings,
   wizardDraftOverlayForActiveDraft,
   type WizardDraftOverlay,
 } from '../income/income-document-draft-editor.service.js';
@@ -30,10 +29,6 @@ import {
   parseDocumentSettingsJson,
   serializeDocumentSettingsJson,
 } from '../income/income-document-draft-totals.pure.js';
-import {
-  coerceRetainerTemplateDocumentDate,
-  todayIsoDate,
-} from '../income/income-retainer-template-document-date.pure.js';
 import { vatResolutionCachePayload } from '../income/income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
@@ -235,16 +230,7 @@ export async function ensureRetainerDocumentDraftWorkspace(params: {
       recipientOverlay = await recipientOverlayForDraftRow(scope, wizardRow);
       stepStart = logTiming('recipient_overlay', stepStart);
 
-      const today = todayIsoDate();
       const settings = parseDocumentSettingsJson(wizardRow.document_settings_json);
-      const targetDocumentDate = coerceRetainerTemplateDocumentDate(wizardRow.document_date, today);
-      if (wizardRow.document_date !== targetDocumentDate) {
-        await updateIncomeDocumentDraftSettings(scope, {
-          draft_id: params.sourceDraftTemplateId,
-          setting_key: 'document_date',
-          setting_value: targetDocumentDate,
-        });
-      }
       if (!settings.retainer_template) {
         const { error: markerError } = await supabaseAdmin
           .from('income_document_drafts')
@@ -263,7 +249,7 @@ export async function ensureRetainerDocumentDraftWorkspace(params: {
         scope,
         params.sourceDraftTemplateId,
         scope.permissions.edit,
-        { lean: true, retainer_template_document_date_min: today },
+        { lean: true },
       );
       startingStepKey = 'document_details';
       stepStart = logTiming('lean_document_details_overlay', stepStart);

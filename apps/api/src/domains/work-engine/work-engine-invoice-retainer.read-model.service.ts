@@ -50,6 +50,18 @@ import {
   type WorkEngineInvoiceRetainerSetupAggregate,
   type WorkEngineInvoiceRetainerTemplateDraftState,
 } from './work-engine-invoice-retainer.types.js';
+import type { IncomeDocumentDetailsStep } from '../income/income-document-details-step.builders.js';
+
+const RETAINER_TEMPLATE_START_DATE_LABEL = 'תאריך התחלה';
+
+function relabelRetainerTemplateStartDate(step: IncomeDocumentDetailsStep): IncomeDocumentDetailsStep {
+  return {
+    ...step,
+    settings_schema: step.settings_schema.map((field) =>
+      field.key === 'document_date' ? { ...field, label: RETAINER_TEMPLATE_START_DATE_LABEL } : field,
+    ),
+  };
+}
 
 const DOCUMENT_TYPE_LABELS: Record<'quote' | 'deal_invoice' | 'tax_invoice', string> = {
   quote: 'הצעת מחיר',
@@ -620,6 +632,18 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     'next_document_preview',
     stepStartMs,
   );
+
+  if (documentDraftWorkspace?.income_workspace_aggregate.document_details_step) {
+    documentDraftWorkspace = {
+      ...documentDraftWorkspace,
+      income_workspace_aggregate: {
+        ...documentDraftWorkspace.income_workspace_aggregate,
+        document_details_step: relabelRetainerTemplateStartDate(
+          documentDraftWorkspace.income_workspace_aggregate.document_details_step,
+        ),
+      },
+    };
+  }
 
   const allowedActions = ['view_invoice_retainer_setup'];
   if (perms.edit) {

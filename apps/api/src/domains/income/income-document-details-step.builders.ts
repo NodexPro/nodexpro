@@ -455,7 +455,7 @@ function buildSettingsSchema(
   canEdit: boolean,
   vatResolution: IncomeDraftVatResolution,
   taxInvoicePayment: TaxInvoicePaymentContext | null = null,
-  retainerTemplateDocumentDateMin: string | null = null,
+  retainerTemplateDocumentDateLabel: string | null = null,
 ): IncomeDocumentDetailsSettingField[] {
   const settings = parseDocumentSettingsJson(row.document_settings_json);
   const paymentNote =
@@ -466,14 +466,13 @@ function buildSettingsSchema(
   const fields: IncomeDocumentDetailsSettingField[] = [
     {
       key: 'document_date',
-      label: 'תאריך מסמך',
+      label: retainerTemplateDocumentDateLabel ?? 'תאריך מסמך',
       input_type: 'date',
       value: row.document_date,
       required: true,
       visible: true,
       disabled: !canEdit,
       disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
-      min_value: retainerTemplateDocumentDateMin,
     },
     {
       key: 'currency',
@@ -703,8 +702,8 @@ export type BuildIncomeDocumentDetailsStepOptions = {
   totalsPreview?: DraftTotalsPreview;
   /** Retainer / tab reads: skip embedded branding + preview HTML payloads. */
   lean?: boolean;
-  /** Retainer template tab: document_date cannot be before this ISO date (today). */
-  retainer_template_document_date_min?: string;
+  /** Retainer template tab: alternate label for document_date only. */
+  retainer_template_document_date_label?: string;
 };
 
 function buildDocumentDiscountModel(
@@ -1007,7 +1006,7 @@ export async function buildIncomeDocumentDetailsStep(
       canEdit,
       vatResolution,
       taxInvoicePayment,
-      options.retainer_template_document_date_min ?? null,
+      options.retainer_template_document_date_label ?? null,
     ),
     line_items: {
       columns: [

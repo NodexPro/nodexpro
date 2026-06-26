@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { normalizeDraftLines, serializeDraftLines } from '../income/income-document-draft-lines.pure.js';
-import { loadWizardDraftRow, recipientOverlayForDraftRow, updateIncomeDocumentDraftSettings, wizardDraftOverlayForActiveDraft, } from '../income/income-document-draft-editor.service.js';
+import { loadWizardDraftRow, recipientOverlayForDraftRow, wizardDraftOverlayForActiveDraft, } from '../income/income-document-draft-editor.service.js';
 import { applySelectIncomeIssuerContext } from '../income/income-issuer-context.service.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 import { INCOME_COMMAND_SELECT_ISSUER } from '../income/income.types.js';
@@ -15,7 +15,6 @@ import { findAvailableDocumentType } from '../income/income-document-types.fallb
 import { validateDraftAgainstDocumentTypeRules } from '../income/income-document-draft.helpers.js';
 import { recomputeDraftLineAmounts } from '../income/income-draft-line-compute.pure.js';
 import { computeDraftTotalsPreview, parseDocumentSettingsJson, serializeDocumentSettingsJson, } from '../income/income-document-draft-totals.pure.js';
-import { coerceRetainerTemplateDocumentDate, todayIsoDate, } from '../income/income-retainer-template-document-date.pure.js';
 import { vatResolutionCachePayload } from '../income/income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
@@ -142,16 +141,7 @@ export async function ensureRetainerDocumentDraftWorkspace(params) {
             const wizardRow = await loadWizardDraftRow(scope, params.sourceDraftTemplateId);
             recipientOverlay = await recipientOverlayForDraftRow(scope, wizardRow);
             stepStart = logTiming('recipient_overlay', stepStart);
-            const today = todayIsoDate();
             const settings = parseDocumentSettingsJson(wizardRow.document_settings_json);
-            const targetDocumentDate = coerceRetainerTemplateDocumentDate(wizardRow.document_date, today);
-            if (wizardRow.document_date !== targetDocumentDate) {
-                await updateIncomeDocumentDraftSettings(scope, {
-                    draft_id: params.sourceDraftTemplateId,
-                    setting_key: 'document_date',
-                    setting_value: targetDocumentDate,
-                });
-            }
             if (!settings.retainer_template) {
                 const { error: markerError } = await supabaseAdmin
                     .from('income_document_drafts')
@@ -165,7 +155,7 @@ export async function ensureRetainerDocumentDraftWorkspace(params) {
                     .eq('id', params.sourceDraftTemplateId);
                 throwIfSupabaseError(markerError, 'markRetainerTemplateDraft');
             }
-            wizardOverlay = await wizardDraftOverlayForActiveDraft(scope, params.sourceDraftTemplateId, scope.permissions.edit, { lean: true, retainer_template_document_date_min: today });
+            wizardOverlay = await wizardDraftOverlayForActiveDraft(scope, params.sourceDraftTemplateId, scope.permissions.edit, { lean: true });
             startingStepKey = 'document_details';
             stepStart = logTiming('lean_document_details_overlay', stepStart);
         }
