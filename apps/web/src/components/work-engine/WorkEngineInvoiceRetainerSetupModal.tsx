@@ -12,6 +12,7 @@ import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-works
 import type { IncomeDocumentDetailsStep } from '../../income/income-document-details-types';
 import { WorkEngineDocumentDetailsStep } from './WorkEngineDocumentDetailsStep';
 import { WorkEngineInvoiceRetainerNextDocumentPanel } from './WorkEngineInvoiceRetainerNextDocumentPanel';
+import { WorkEngineInvoiceRetainerSchedulePanel } from './WorkEngineInvoiceRetainerSchedulePanel';
 import { WorkEngineInvoiceRetainerPreviewModal } from './WorkEngineInvoiceRetainerPreviewModal';
 import {
   WorkEngineInvoiceRetainerSettingsPanel,
@@ -22,7 +23,7 @@ import '../../styles/nx-branding-studio.css';
 import '../../styles/nx-work-engine-queue.css';
 
 type RetainerDocumentType = 'quote' | 'deal_invoice' | 'tax_invoice';
-type SetupTabKey = 'retainer' | 'next_document';
+type SetupTabKey = 'retainer' | 'next_document' | 'schedule';
 
 function resolvePaymentTermsDisplay(
   documentType: RetainerDocumentType | null | undefined,
@@ -474,10 +475,20 @@ export function WorkEngineInvoiceRetainerSetupModal({
       enabled: false,
       disabled_reason: aggregate.next_document_preview?.unavailable_message ?? null,
     },
+    {
+      key: 'schedule' as const,
+      label: 'לוח זמנים',
+      enabled: false,
+      disabled_reason:
+        aggregate.retainer_schedule_projection?.unavailable_message ??
+        'שמור ריטיינר כדי לראות את לוח הזמנים.',
+    },
   ];
   const nextDocumentPreview = aggregate.next_document_preview;
+  const scheduleProjection = aggregate.retainer_schedule_projection;
   const isRetainerTab = activeSetupTab === 'retainer';
   const isNextDocumentTab = activeSetupTab === 'next_document';
+  const isScheduleTab = activeSetupTab === 'schedule';
   const paymentTermsDisplay = resolvePaymentTermsDisplay(
     selectedDocumentType,
     isNextDocumentTab ? nextDocumentPreview?.document_details_step ?? null : documentDetailsStep,
@@ -550,6 +561,8 @@ export function WorkEngineInvoiceRetainerSetupModal({
                 onBusyChange={setDraftBusy}
                 onError={setError}
               />
+            ) : isScheduleTab && scheduleProjection ? (
+              <WorkEngineInvoiceRetainerSchedulePanel projection={scheduleProjection} />
             ) : isRetainerTab ? (
               showTemplateDraftPrompt && aggregate.template_draft ? (
               <div className="nx-we-retainer-template-prompt">

@@ -196,7 +196,7 @@ export interface WorkEngineInvoiceRetainerDocumentDraftWorkspace {
   income_commands: Record<string, string>;
 }
 
-export type WorkEngineInvoiceRetainerSetupTabKey = 'retainer' | 'next_document';
+export type WorkEngineInvoiceRetainerSetupTabKey = 'retainer' | 'next_document' | 'schedule';
 
 export type WorkEngineInvoiceRetainerNextDocumentApplyScope = 'next_cycle_only' | 'all_future_cycles';
 
@@ -267,6 +267,59 @@ export interface WorkEngineInvoiceRetainerNextDocumentPreview {
   allowed_actions: string[];
 }
 
+export type WorkEngineInvoiceRetainerScheduleProjectionAction = {
+  key: string;
+  label: string;
+  disabled: boolean;
+  disabled_reason: string | null;
+};
+
+export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
+  projection_key: string;
+  scheduled_document_date: string;
+  scheduled_document_date_display: string;
+  document_type_label: string;
+  amount_display: string;
+  status_key: 'issued' | 'scheduled' | 'skipped' | 'failed';
+  status_label: string;
+  status_tone: 'success' | 'neutral' | 'warning' | 'danger';
+  icon_key: 'check' | 'clock' | 'pause' | 'alert';
+  icon_display: string;
+  allowed_actions: string[];
+  actions: WorkEngineInvoiceRetainerScheduleProjectionAction[];
+};
+
+export type WorkEngineInvoiceRetainerScheduleProjectionYear = {
+  year: number;
+  label: string;
+  total_count: number;
+  total_count_label: string;
+  yearly_total_amount_display: string;
+  expanded_by_default: boolean;
+  rows: WorkEngineInvoiceRetainerScheduleProjectionRow[];
+};
+
+export type WorkEngineInvoiceRetainerScheduleProjectionSummary = {
+  title: string;
+  cycle_label: string;
+  cycle_display: string;
+  status_label: string;
+  documents_in_horizon_label: string;
+  documents_in_horizon_count: number;
+  next_document_label: string;
+  next_document_date_display: string;
+  next_document_date_source?: 'schedule_projection';
+};
+
+export type WorkEngineInvoiceRetainerScheduleProjection = {
+  status: 'ready' | 'unavailable';
+  unavailable_message: string | null;
+  summary: WorkEngineInvoiceRetainerScheduleProjectionSummary | null;
+  recurrence_rule_display: string | null;
+  default_expanded_year: number | null;
+  years: WorkEngineInvoiceRetainerScheduleProjectionYear[];
+};
+
 export interface WorkEngineInvoiceRetainerTemplateDraftState {
   status: 'ready' | 'missing';
   prompt_message: string;
@@ -315,6 +368,7 @@ export interface WorkEngineInvoiceRetainerSetupAggregate {
     tabs: WorkEngineInvoiceRetainerSetupTab[];
   };
   next_document_preview: WorkEngineInvoiceRetainerNextDocumentPreview;
+  retainer_schedule_projection: WorkEngineInvoiceRetainerScheduleProjection;
   recurring_profiles: Array<{
     profile_id: string;
     end_customer_id: string;
