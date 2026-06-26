@@ -1,0 +1,126 @@
+/**
+ * Retainer schedule row lifecycle status — read-model only (no writes).
+ */
+import { RECURRING_FAILURE_WORK_TYPE, RECURRING_WORK_TYPE, } from './work-engine-invoice-retainer.pure.js';
+const OPEN_WORK_ITEM_STATES = new Set([
+    'new',
+    'assigned',
+    'waiting_human',
+    'waiting_client',
+    'client_replied',
+    'review_pending',
+    'overdue',
+    'escalated',
+]);
+const WORK_STATE_LABELS_HE = {
+    new: 'חדש',
+    assigned: 'משויך',
+    waiting_human: 'ממתין למשרד',
+    waiting_client: 'ממתין ללקוח',
+    client_replied: 'תגובת לקוח',
+    review_pending: 'ממתין לאישור',
+    approved: 'אושר',
+    rejected: 'נדחה',
+    overdue: 'באיחור',
+    escalated: 'הסלמה',
+    done: 'הושלם',
+    archived: 'בארכיון',
+};
+export function scheduleRowIconDisplay(iconKey) {
+    if (iconKey === 'check')
+        return '✓';
+    if (iconKey === 'review')
+        return '📝';
+    if (iconKey === 'alert')
+        return '⚠';
+    if (iconKey === 'pause')
+        return '⏸';
+    return '📅';
+}
+export function buildScheduleRowWorkItemHref(workItemId) {
+    return `/work-engine/queue?work_item_id=${encodeURIComponent(workItemId)}`;
+}
+function workStateLabelHe(workState) {
+    return WORK_STATE_LABELS_HE[workState] ?? workState;
+}
+function isOpenWorkItem(workItem) {
+    if (!workItem)
+        return false;
+    return OPEN_WORK_ITEM_STATES.has(workItem.work_state);
+}
+function isWaitingReviewCycle(cycle) {
+    if (cycle.generated_document_id)
+        return false;
+    if (cycle.status === 'failed' || cycle.status === 'cancelled')
+        return false;
+    if (cycle.generated_draft_id)
+        return true;
+    return cycle.status === 'draft_created';
+}
+export function resolveScheduleRowStatus(params) {
+    const cycle = params.cycle;
+    const workItem = params.workItem;
+    if (cycle?.generated_document_id || cycle?.status === 'issued') {
+        return {
+            status_key: 'issued',
+            status_label: 'אושר',
+            status_tone: 'success',
+            icon_key: 'check',
+            icon_display: scheduleRowIconDisplay('check'),
+            work_state_label: null,
+            has_open_task: false,
+            work_item_href: null,
+        };
+    }
+    if (cycle?.status === 'cancelled') {
+        return {
+            status_key: 'skipped',
+            status_label: 'דולג',
+            status_tone: 'muted',
+            icon_key: 'pause',
+            icon_display: scheduleRowIconDisplay('pause'),
+            work_state_label: null,
+            has_open_task: false,
+            work_item_href: null,
+        };
+    }
+    if (cycle?.status === 'failed' || workItem?.work_type === RECURRING_FAILURE_WORK_TYPE) {
+        const openTask = isOpenWorkItem(workItem);
+        return {
+            status_key: 'failed',
+            status_label: 'נכשל',
+            status_tone: 'danger',
+            icon_key: 'alert',
+            icon_display: scheduleRowIconDisplay('alert'),
+            work_state_label: openTask && workItem ? workStateLabelHe(workItem.work_state) : null,
+            has_open_task: openTask,
+            work_item_href: openTask && workItem ? buildScheduleRowWorkItemHref(workItem.work_item_id) : null,
+        };
+    }
+    if (cycle && isWaitingReviewCycle(cycle)) {
+        const reviewWorkItem = workItem?.work_type === RECURRING_WORK_TYPE ? workItem : workItem ?? null;
+        const openTask = isOpenWorkItem(reviewWorkItem);
+        return {
+            status_key: 'waiting_review',
+            status_label: 'ממתין לבדיקה',
+            status_tone: 'warning',
+            icon_key: 'review',
+            icon_display: scheduleRowIconDisplay('review'),
+            work_state_label: openTask && reviewWorkItem ? workStateLabelHe(reviewWorkItem.work_state) : null,
+            has_open_task: openTask,
+            work_item_href: openTask && reviewWorkItem
+                ? buildScheduleRowWorkItemHref(reviewWorkItem.work_item_id)
+                : null,
+        };
+    }
+    return {
+        status_key: 'scheduled',
+        status_label: 'מתוכנן',
+        status_tone: 'neutral',
+        icon_key: 'calendar',
+        icon_display: scheduleRowIconDisplay('calendar'),
+        work_state_label: null,
+        has_open_task: false,
+        work_item_href: null,
+    };
+}

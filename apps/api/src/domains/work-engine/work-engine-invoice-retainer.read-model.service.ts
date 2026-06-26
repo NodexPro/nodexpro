@@ -46,6 +46,8 @@ import {
   buildScheduleSetupTab,
 } from './work-engine-invoice-retainer-schedule-projection.service.js';
 import { resolveProjectedNextScheduleDate } from './work-engine-invoice-retainer-schedule-projection.pure.js';
+import { loadScheduleProjectionWorkItemsByProfile } from './work-engine-invoice-retainer-schedule-work-items.read.js';
+import type { ScheduleRowWorkItemRef } from './work-engine-invoice-retainer-schedule-row-status.pure.js';
 import {
   WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY,
   type WorkEngineInvoiceRetainerSettings,
@@ -686,6 +688,30 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
         })
       : null;
 
+  let scheduleWorkItemsByPeriodKey = new Map<string, ScheduleRowWorkItemRef>();
+  if (selectedProfile?.id) {
+    const loadWorkItemsStartMs = Date.now();
+    try {
+      scheduleWorkItemsByPeriodKey = await loadScheduleProjectionWorkItemsByProfile({
+        orgId,
+        profileId: selectedProfile.id,
+      });
+    } catch (e) {
+      console.warn('[work-engine] loadScheduleProjectionWorkItemsByProfile failed', selectedProfile.id, e);
+    }
+    stepStartMs = logRetainerSetupTiming(
+      representedClientId,
+      selectedEndCustomerId,
+      'load_schedule_work_items',
+      loadWorkItemsStartMs,
+    );
+    logRetainerSetupTimingDetail(
+      representedClientId,
+      selectedEndCustomerId,
+      `schedule_work_items_loaded=${scheduleWorkItemsByPeriodKey.size}`,
+    );
+  }
+
   const schedulerStatus = resolveSchedulerStatus(selectedProfile);
   const schedulerNote =
     schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
@@ -718,10 +744,12 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
       id: cycle.id,
       scheduled_document_date: cycle.scheduled_document_date,
       status: cycle.status,
+      generated_draft_id: cycle.generated_draft_id,
       generated_document_id: cycle.generated_document_id,
     })),
     nextDocumentPreview,
     projectedNextDocumentDate,
+    workItemsByPeriodKey: scheduleWorkItemsByPeriodKey,
     onTiming: (detail) => {
       logRetainerSetupTimingDetail(representedClientId, selectedEndCustomerId, detail);
     },

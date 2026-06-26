@@ -164,6 +164,7 @@ export type WorkEngineInvoiceRetainerScheduleProjectionAction = {
   label: string;
   disabled: boolean;
   disabled_reason: string | null;
+  href: string | null;
 };
 
 export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
@@ -172,11 +173,14 @@ export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   scheduled_document_date_display: string;
   document_type_label: string;
   amount_display: string;
-  status_key: 'issued' | 'scheduled' | 'skipped' | 'failed';
+  status_key: 'issued' | 'waiting_review' | 'scheduled' | 'skipped' | 'failed';
   status_label: string;
-  status_tone: 'success' | 'neutral' | 'warning' | 'danger';
-  icon_key: 'check' | 'clock' | 'pause' | 'alert';
+  status_tone: 'success' | 'neutral' | 'warning' | 'danger' | 'muted';
+  icon_key: 'check' | 'calendar' | 'pause' | 'alert' | 'review';
   icon_display: string;
+  work_state_label: string | null;
+  has_open_task: boolean;
+  work_item_href: string | null;
   allowed_actions: string[];
   actions: WorkEngineInvoiceRetainerScheduleProjectionAction[];
 };

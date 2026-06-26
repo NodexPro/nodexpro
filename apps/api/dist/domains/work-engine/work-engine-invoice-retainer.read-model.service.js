@@ -14,6 +14,7 @@ import { RECURRING_SCHEDULER_STATUS_ACTIVE, RECURRING_SCHEDULER_STATUS_FAILED, R
 import { buildNextDocumentPreview, buildSetupTabs, } from './work-engine-invoice-retainer-next-document-preview.service.js';
 import { buildRetainerScheduleProjection, buildScheduleSetupTab, } from './work-engine-invoice-retainer-schedule-projection.service.js';
 import { resolveProjectedNextScheduleDate } from './work-engine-invoice-retainer-schedule-projection.pure.js';
+import { loadScheduleProjectionWorkItemsByProfile } from './work-engine-invoice-retainer-schedule-work-items.read.js';
 import { WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY, } from './work-engine-invoice-retainer.types.js';
 const RETAINER_TEMPLATE_START_DATE_LABEL = 'תאריך התחלה';
 function relabelRetainerTemplateStartDate(step) {
@@ -423,6 +424,21 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
             })),
         })
         : null;
+    let scheduleWorkItemsByPeriodKey = new Map();
+    if (selectedProfile?.id) {
+        const loadWorkItemsStartMs = Date.now();
+        try {
+            scheduleWorkItemsByPeriodKey = await loadScheduleProjectionWorkItemsByProfile({
+                orgId,
+                profileId: selectedProfile.id,
+            });
+        }
+        catch (e) {
+            console.warn('[work-engine] loadScheduleProjectionWorkItemsByProfile failed', selectedProfile.id, e);
+        }
+        stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'load_schedule_work_items', loadWorkItemsStartMs);
+        logRetainerSetupTimingDetail(representedClientId, selectedEndCustomerId, `schedule_work_items_loaded=${scheduleWorkItemsByPeriodKey.size}`);
+    }
     const schedulerStatus = resolveSchedulerStatus(selectedProfile);
     const schedulerNote = schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
         ? `יצירת טיוטה אחרונה נכשלה (${selectedProfile?.last_generation_error_code ?? 'שגיאה'}). נדרשת בדיקה ידנית.`
@@ -446,10 +462,12 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
             id: cycle.id,
             scheduled_document_date: cycle.scheduled_document_date,
             status: cycle.status,
+            generated_draft_id: cycle.generated_draft_id,
             generated_document_id: cycle.generated_document_id,
         })),
         nextDocumentPreview,
         projectedNextDocumentDate,
+        workItemsByPeriodKey: scheduleWorkItemsByPeriodKey,
         onTiming: (detail) => {
             logRetainerSetupTimingDetail(representedClientId, selectedEndCustomerId, detail);
         },

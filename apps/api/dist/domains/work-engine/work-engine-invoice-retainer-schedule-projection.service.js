@@ -4,8 +4,9 @@
 import { normalizeDraftLines, formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from '../income/income-document-draft-totals.pure.js';
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
-import { computeNextUnitPriceBeforeVat, } from './work-engine-invoice-retainer.pure.js';
+import { computeNextUnitPriceBeforeVat, recurringProfileWorkPeriodKey, } from './work-engine-invoice-retainer.pure.js';
 import { todayIsoDate } from '../income/income-retainer-template-document-date.pure.js';
+import { resolveScheduleRowStatus, } from './work-engine-invoice-retainer-schedule-row-status.pure.js';
 import { formatScheduleProjectionKey, formatScheduleRowDateDisplay, formatScheduleYearDocumentsCountLabel, generateProjectedScheduleDates, groupScheduleDatesByYear, mergeScheduleDates, resolveNextScheduleSummaryDocumentDate, resolveProjectedNextScheduleDate, resolveScheduleEndDate, resolveScheduleStartDate, } from './work-engine-invoice-retainer-schedule-projection.pure.js';
 const SKIP_PERSISTENCE_DISABLED_REASON = 'שמירת דילוג תתווסף בשלב הבא';
 const FUTURE_ACTION_DISABLED_REASON = 'יתווסף בשלב הבא';
@@ -14,46 +15,85 @@ const DOCUMENT_TYPE_LABELS = {
     deal_invoice: 'חשבון עסקה',
     tax_invoice: 'חשבונית מס',
 };
-function statusDescriptorForCycle(cycle, scheduledDate, today) {
-    if (cycle?.status === 'issued' || cycle?.generated_document_id) {
-        return {
-            status_key: 'issued',
-            status_label: 'אושר',
-            status_tone: 'success',
-            icon_key: 'check',
-        };
-    }
-    if (cycle?.status === 'cancelled') {
-        return {
-            status_key: 'skipped',
-            status_label: 'דולג',
-            status_tone: 'warning',
-            icon_key: 'pause',
-        };
-    }
-    if (cycle?.status === 'failed') {
-        return {
-            status_key: 'failed',
-            status_label: 'נכשל',
-            status_tone: 'danger',
-            icon_key: 'alert',
-        };
-    }
-    return {
-        status_key: 'scheduled',
-        status_label: 'מתוכנן',
-        status_tone: 'neutral',
-        icon_key: 'clock',
+function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref) {
+    const actionBase = {
+        disabled: false,
+        disabled_reason: null,
+        href: null,
     };
+    const openDocument = {
+        key: 'open_document',
+        label: 'פתח מסמך',
+        disabled: true,
+        disabled_reason: FUTURE_ACTION_DISABLED_REASON,
+        href: null,
+    };
+    const viewHistory = {
+        key: 'view_history',
+        label: 'הצג היסטוריה',
+        disabled: true,
+        disabled_reason: FUTURE_ACTION_DISABLED_REASON,
+        href: null,
+    };
+    if (statusKey === 'waiting_review' && workItemHref) {
+        return [
+            {
+                key: 'open_work_engine_task',
+                label: 'פתח משימה במכונה',
+                ...actionBase,
+                href: workItemHref,
+            },
+            openDocument,
+            viewHistory,
+        ];
+    }
+    if (statusKey === 'skipped') {
+        return [
+            {
+                key: 'unskip_cycle',
+                label: 'בטל דילוג',
+                disabled: true,
+                disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
+                href: null,
+            },
+            openDocument,
+            viewHistory,
+        ];
+    }
+    if (statusKey === 'issued') {
+        return [openDocument, viewHistory];
+    }
+    if (statusKey === 'failed') {
+        if (workItemHref) {
+            return [
+                {
+                    key: 'open_work_engine_task',
+                    label: 'פתח משימה במכונה',
+                    ...actionBase,
+                    href: workItemHref,
+                },
+                viewHistory,
+            ];
+        }
+        return [viewHistory];
+    }
+    if (statusKey === 'scheduled' && scheduledDate > today) {
+        return [
+            {
+                key: 'skip_cycle',
+                label: 'דלג',
+                disabled: true,
+                disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
+                href: null,
+            },
+            openDocument,
+            viewHistory,
+        ];
+    }
+    return [];
 }
-function iconDisplayForKey(iconKey) {
-    if (iconKey === 'check')
-        return '✓';
-    if (iconKey === 'pause')
-        return '⏸';
-    if (iconKey === 'alert')
-        return '⚠';
-    return '⏳';
+function buildRowActions(statusKey, scheduledDate, today, workItemHref) {
+    return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref);
 }
 function buildRecurrenceRuleDisplay(frequency, startDisplay) {
     const from = `החל מ־${startDisplay}`;
@@ -74,54 +114,6 @@ function buildRecurrenceRuleDisplay(frequency, startDisplay) {
     if (frequency === 'biennial')
         return `אחת לשנתיים ${from}`;
     return from;
-}
-function buildRowMenuActions(statusKey, scheduledDate, today) {
-    const openDocument = {
-        key: 'open_document',
-        label: 'פתח מסמך',
-        disabled: true,
-        disabled_reason: FUTURE_ACTION_DISABLED_REASON,
-    };
-    const viewHistory = {
-        key: 'view_history',
-        label: 'הצג היסטוריה',
-        disabled: true,
-        disabled_reason: FUTURE_ACTION_DISABLED_REASON,
-    };
-    if (statusKey === 'skipped') {
-        return [
-            {
-                key: 'unskip_cycle',
-                label: 'בטל דילוג',
-                disabled: true,
-                disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
-            },
-            openDocument,
-            viewHistory,
-        ];
-    }
-    if (statusKey === 'issued') {
-        return [openDocument, viewHistory];
-    }
-    if (statusKey === 'failed') {
-        return [viewHistory];
-    }
-    if (statusKey === 'scheduled' && scheduledDate > today) {
-        return [
-            {
-                key: 'skip_cycle',
-                label: 'דלג',
-                disabled: true,
-                disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
-            },
-            openDocument,
-            viewHistory,
-        ];
-    }
-    return [];
-}
-function buildRowActions(statusKey, scheduledDate, today) {
-    return buildRowMenuActions(statusKey, scheduledDate, today);
 }
 function unitPriceForCycleIndex(profile, cycleIndex) {
     let unitPrice = profile.unit_price_before_vat_reference;
@@ -290,7 +282,18 @@ export async function buildRetainerScheduleProjection(params) {
         let yearTotalReference = 0;
         for (const scheduledDate of group.dates) {
             const cycle = cycleByDate.get(scheduledDate) ?? null;
-            const status = statusDescriptorForCycle(cycle, scheduledDate, today);
+            const periodKey = recurringProfileWorkPeriodKey(params.profile.id, scheduledDate);
+            const workItem = params.workItemsByPeriodKey?.get(periodKey) ?? null;
+            const status = resolveScheduleRowStatus({
+                cycle: cycle
+                    ? {
+                        status: cycle.status,
+                        generated_draft_id: cycle.generated_draft_id,
+                        generated_document_id: cycle.generated_document_id,
+                    }
+                    : null,
+                workItem,
+            });
             const amount = await computeScheduleAmount({
                 orgId: params.orgId,
                 profile: params.profile,
@@ -302,7 +305,7 @@ export async function buildRetainerScheduleProjection(params) {
             });
             projectionRows += 1;
             yearTotalReference += amount.grand_total_reference;
-            const actions = buildRowActions(status.status_key, scheduledDate, today);
+            const actions = buildRowActions(status.status_key, scheduledDate, today, status.work_item_href);
             rows.push({
                 projection_key: formatScheduleProjectionKey(params.profile.id, scheduledDate),
                 scheduled_document_date: scheduledDate,
@@ -313,7 +316,10 @@ export async function buildRetainerScheduleProjection(params) {
                 status_label: status.status_label,
                 status_tone: status.status_tone,
                 icon_key: status.icon_key,
-                icon_display: iconDisplayForKey(status.icon_key),
+                icon_display: status.icon_display,
+                work_state_label: status.work_state_label,
+                has_open_task: status.has_open_task,
+                work_item_href: status.work_item_href,
                 allowed_actions: actions.map((action) => action.key),
                 actions,
             });
