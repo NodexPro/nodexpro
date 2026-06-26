@@ -171,6 +171,7 @@ export type IncomeDocumentDetailsSettingField = {
   visible: boolean;
   disabled: boolean;
   disabled_reason: string | null;
+  min_value?: string | null;
 };
 
 export type IncomeDocumentDetailsSelectField = {
@@ -454,6 +455,7 @@ function buildSettingsSchema(
   canEdit: boolean,
   vatResolution: IncomeDraftVatResolution,
   taxInvoicePayment: TaxInvoicePaymentContext | null = null,
+  retainerTemplateDocumentDateMin: string | null = null,
 ): IncomeDocumentDetailsSettingField[] {
   const settings = parseDocumentSettingsJson(row.document_settings_json);
   const paymentNote =
@@ -471,6 +473,7 @@ function buildSettingsSchema(
       visible: true,
       disabled: !canEdit,
       disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
+      min_value: retainerTemplateDocumentDateMin,
     },
     {
       key: 'currency',
@@ -700,6 +703,8 @@ export type BuildIncomeDocumentDetailsStepOptions = {
   totalsPreview?: DraftTotalsPreview;
   /** Retainer / tab reads: skip embedded branding + preview HTML payloads. */
   lean?: boolean;
+  /** Retainer template tab: document_date cannot be before this ISO date (today). */
+  retainer_template_document_date_min?: string;
 };
 
 function buildDocumentDiscountModel(
@@ -996,7 +1001,14 @@ export async function buildIncomeDocumentDetailsStep(
       subtitle: docType?.legal_hint ?? null,
       document_number_preview: numberPreview,
     },
-    settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment),
+    settings_schema: buildSettingsSchema(
+      row,
+      docType,
+      canEdit,
+      vatResolution,
+      taxInvoicePayment,
+      options.retainer_template_document_date_min ?? null,
+    ),
     line_items: {
       columns: [
         { key: 'drag', label: '' },

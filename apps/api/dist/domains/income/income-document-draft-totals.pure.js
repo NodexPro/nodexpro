@@ -34,7 +34,8 @@ export function parseDocumentSettingsJson(raw) {
     const amount_rounding = o.amount_rounding === 'nearest_agora' ? 'nearest_agora' : DEFAULT_DOCUMENT_SETTINGS.amount_rounding;
     const discount = parseDiscountJson(o.discount);
     const due_date_manual_override = o.due_date_manual_override === true;
-    return { vat_mode, amount_rounding, discount, due_date_manual_override };
+    const retainer_template = o.retainer_template === true;
+    return { vat_mode, amount_rounding, discount, due_date_manual_override, retainer_template };
 }
 export function serializeDocumentSettingsJson(settings) {
     return {
@@ -42,6 +43,7 @@ export function serializeDocumentSettingsJson(settings) {
         amount_rounding: settings.amount_rounding,
         discount: settings.discount,
         due_date_manual_override: settings.due_date_manual_override === true,
+        ...(settings.retainer_template ? { retainer_template: true } : {}),
     };
 }
 function roundAmount(value, rounding) {

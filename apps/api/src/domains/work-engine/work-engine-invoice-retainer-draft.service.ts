@@ -10,6 +10,7 @@ import { normalizeDraftLines, serializeDraftLines } from '../income/income-docum
 import {
   loadWizardDraftRow,
   recipientOverlayForDraftRow,
+  updateIncomeDocumentDraftSettings,
   wizardDraftOverlayForActiveDraft,
   type WizardDraftOverlay,
 } from '../income/income-document-draft-editor.service.js';
@@ -27,7 +28,12 @@ import { recomputeDraftLineAmounts } from '../income/income-draft-line-compute.p
 import {
   computeDraftTotalsPreview,
   parseDocumentSettingsJson,
+  serializeDocumentSettingsJson,
 } from '../income/income-document-draft-totals.pure.js';
+import {
+  coerceRetainerTemplateDocumentDate,
+  todayIsoDate,
+} from '../income/income-retainer-template-document-date.pure.js';
 import { vatResolutionCachePayload } from '../income/income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
@@ -228,11 +234,36 @@ export async function ensureRetainerDocumentDraftWorkspace(params: {
       const wizardRow = await loadWizardDraftRow(scope, params.sourceDraftTemplateId);
       recipientOverlay = await recipientOverlayForDraftRow(scope, wizardRow);
       stepStart = logTiming('recipient_overlay', stepStart);
+
+      const today = todayIsoDate();
+      const settings = parseDocumentSettingsJson(wizardRow.document_settings_json);
+      const targetDocumentDate = coerceRetainerTemplateDocumentDate(wizardRow.document_date, today);
+      if (wizardRow.document_date !== targetDocumentDate) {
+        await updateIncomeDocumentDraftSettings(scope, {
+          draft_id: params.sourceDraftTemplateId,
+          setting_key: 'document_date',
+          setting_value: targetDocumentDate,
+        });
+      }
+      if (!settings.retainer_template) {
+        const { error: markerError } = await supabaseAdmin
+          .from('income_document_drafts')
+          .update({
+            document_settings_json: serializeDocumentSettingsJson({
+              ...settings,
+              retainer_template: true,
+            }),
+          })
+          .eq('organization_id', scope.org_id)
+          .eq('id', params.sourceDraftTemplateId);
+        throwIfSupabaseError(markerError, 'markRetainerTemplateDraft');
+      }
+
       wizardOverlay = await wizardDraftOverlayForActiveDraft(
         scope,
         params.sourceDraftTemplateId,
         scope.permissions.edit,
-        { lean: true },
+        { lean: true, retainer_template_document_date_min: today },
       );
       startingStepKey = 'document_details';
       stepStart = logTiming('lean_document_details_overlay', stepStart);

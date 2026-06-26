@@ -11,6 +11,8 @@ import { buildIncomeDocumentDetailsStep, } from './income-document-details-step.
 import { applyLineFieldUpdate, createEmptyDraftLine, deleteDraftLine, normalizeDraftLines, reorderDraftLines, serializeDraftLines, } from './income-document-draft-lines.pure.js';
 import { recomputeDraftLineAmounts } from './income-draft-line-compute.pure.js';
 import { computeDraftTotalsPreview, DEFAULT_DOCUMENT_SETTINGS, parseDocumentSettingsJson, serializeDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
+import { assertRetainerTemplateDocumentDateNotBeforeToday, todayIsoDate } from './income-retainer-template-document-date.pure.js';
+import { isIncomeRetainerTemplateDraft } from './income-retainer-template-draft.service.js';
 import { normalizeDocumentDiscountInput, validateDocumentDiscount, } from './income-document-discount.pure.js';
 import { readVatResolutionFromDraftPreview, vatResolutionCachePayload, } from './income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
@@ -152,7 +154,20 @@ async function buildOverlayForDraft(scope, draftId, canEdit, rowOverride, docTyp
         : row.document_type != null
             ? await resolveDocType(scope, row.document_type)
             : null;
-    const step = await buildIncomeDocumentDetailsStep(scope, row, docType, canEdit, stepOptions ?? {});
+    const isRetainerTemplate = await isIncomeRetainerTemplateDraft({
+        orgId: scope.org_id,
+        draftId,
+        documentSettingsJson: row.document_settings_json,
+    });
+    const resolvedStepOptions = {
+        ...(stepOptions ?? {}),
+        ...(isRetainerTemplate
+            ? {
+                retainer_template_document_date_min: stepOptions?.retainer_template_document_date_min ?? todayIsoDate(),
+            }
+            : {}),
+    };
+    const step = await buildIncomeDocumentDetailsStep(scope, row, docType, canEdit, resolvedStepOptions);
     return { active_wizard_draft_id: draftId, document_details_step: step };
 }
 async function validationForRow(scope, row, docType) {
@@ -250,7 +265,11 @@ export async function beginIncomeWizardDocumentDraft(scope, body, recipientOverl
     const recipient = recipientFieldsFromSelected(selected);
     const document_date = optionalString(body.document_date) ?? new Date().toISOString().slice(0, 10);
     const lines = [createEmptyDraftLine(0)];
-    const settings = { ...DEFAULT_DOCUMENT_SETTINGS };
+    const isRetainerTemplate = body.wizard_context === 'retainer_template';
+    const settings = {
+        ...DEFAULT_DOCUMENT_SETTINGS,
+        ...(isRetainerTemplate ? { retainer_template: true } : {}),
+    };
     const currency = optionalString(body.currency) ?? 'ILS';
     const language = optionalString(body.language) === 'en' ? 'en' : 'he';
     const prefilledEmail = await deliveryEmailFromRecipient(scope, selected);
@@ -292,7 +311,7 @@ export async function beginIncomeWizardDocumentDraft(scope, body, recipientOverl
         due_date: null,
         payment_received_json: null,
         delivery_contact_json: draftRow.delivery_contact_json,
-        document_settings_json: settings,
+        document_settings_json: serializeDocumentSettingsJson(settings),
         draft_totals_preview_json,
         validation_warnings_json,
         status: 'draft',
@@ -317,7 +336,9 @@ export async function beginIncomeWizardDocumentDraft(scope, body, recipientOverl
         },
     });
     return {
-        wizardOverlay: await buildOverlayForDraft(scope, draftId, true),
+        wizardOverlay: await buildOverlayForDraft(scope, draftId, true, undefined, undefined, {
+            ...(isRetainerTemplate ? { retainer_template_document_date_min: document_date } : {}),
+        }),
         recipientOverlay: { selected },
     };
 }
@@ -468,6 +489,14 @@ export async function updateIncomeDocumentDraftSettings(scope, body) {
         const s = optionalString(value);
         if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s))
             throw badRequest('document_date must be YYYY-MM-DD');
+        const isRetainerTemplate = await isIncomeRetainerTemplateDraft({
+            orgId: scope.org_id,
+            draftId: draft_id,
+            documentSettingsJson: row.document_settings_json,
+        });
+        if (isRetainerTemplate) {
+            assertRetainerTemplateDocumentDateNotBeforeToday(s);
+        }
         patch.document_date = s;
         if (row.document_type === 'tax_invoice' && row.income_customer_id && !settings.due_date_manual_override) {
             const paymentTerms = await loadIncomeCustomerDefaultPaymentTerms(scope, row.income_customer_id);
@@ -611,6 +640,7 @@ export async function wizardDraftOverlayForActiveDraft(scope, draftId, canEdit, 
     try {
         return await buildOverlayForDraft(scope, draftId, canEdit, undefined, undefined, {
             lean: options?.lean,
+            retainer_template_document_date_min: options?.retainer_template_document_date_min,
         });
     }
     catch {

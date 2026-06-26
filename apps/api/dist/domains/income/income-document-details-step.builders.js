@@ -165,7 +165,7 @@ async function resolveRecipientDisplayName(scope, row) {
     return '—';
 }
 export { buildDocumentDetailsHeaderTitle } from './income-document-details-header.pure.js';
-function buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment = null) {
+function buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment = null, retainerTemplateDocumentDateMin = null) {
     const settings = parseDocumentSettingsJson(row.document_settings_json);
     const paymentNote = row.payment_received_json && typeof row.payment_received_json.note === 'string'
         ? row.payment_received_json.note
@@ -180,6 +180,7 @@ function buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePay
             visible: true,
             disabled: !canEdit,
             disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
+            min_value: retainerTemplateDocumentDateMin,
         },
         {
             key: 'currency',
@@ -629,7 +630,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             subtitle: docType?.legal_hint ?? null,
             document_number_preview: numberPreview,
         },
-        settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment),
+        settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment, options.retainer_template_document_date_min ?? null),
         line_items: {
             columns: [
                 { key: 'drag', label: '' },
