@@ -7,6 +7,7 @@ import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver
 import { computeNextUnitPriceBeforeVat, recurringProfileWorkPeriodKey, } from './work-engine-invoice-retainer.pure.js';
 import { todayIsoDate } from '../income/income-retainer-template-document-date.pure.js';
 import { resolveScheduleRowStatus, } from './work-engine-invoice-retainer-schedule-row-status.pure.js';
+import { resolveScheduleRowMachineState } from './work-engine-invoice-retainer-schedule-row-machine.pure.js';
 import { formatScheduleProjectionKey, formatScheduleRowDateDisplay, formatScheduleYearDocumentsCountLabel, generateProjectedScheduleDates, groupScheduleDatesByYear, mergeScheduleDates, resolveNextScheduleSummaryDocumentDate, resolveProjectedNextScheduleDate, resolveScheduleEndDate, resolveScheduleStartDate, } from './work-engine-invoice-retainer-schedule-projection.pure.js';
 const SKIP_PERSISTENCE_DISABLED_REASON = 'שמירת דילוג תתווסף בשלב הבא';
 const FUTURE_ACTION_DISABLED_REASON = 'יתווסף בשלב הבא';
@@ -294,6 +295,7 @@ export async function buildRetainerScheduleProjection(params) {
                     : null,
                 workItem,
             });
+            const machine = resolveScheduleRowMachineState({ workItem });
             const amount = await computeScheduleAmount({
                 orgId: params.orgId,
                 profile: params.profile,
@@ -320,6 +322,13 @@ export async function buildRetainerScheduleProjection(params) {
                 work_state_label: status.work_state_label,
                 has_open_task: status.has_open_task,
                 work_item_href: status.work_item_href,
+                machine_state: machine.machine_state,
+                machine_state_label: machine.machine_state_label,
+                machine_state_tone: machine.machine_state_tone,
+                machine_has_task: machine.machine_has_task,
+                machine_task_id: machine.machine_task_id,
+                machine_task_url: machine.machine_task_url,
+                machine_task_title: machine.machine_task_title,
                 allowed_actions: actions.map((action) => action.key),
                 actions,
             });

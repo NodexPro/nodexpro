@@ -181,6 +181,13 @@ export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   work_state_label: string | null;
   has_open_task: boolean;
   work_item_href: string | null;
+  machine_state: string | null;
+  machine_state_label: string | null;
+  machine_state_tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral' | 'muted' | null;
+  machine_has_task: boolean;
+  machine_task_id: string | null;
+  machine_task_url: string | null;
+  machine_task_title: string | null;
   allowed_actions: string[];
   actions: WorkEngineInvoiceRetainerScheduleProjectionAction[];
 };
