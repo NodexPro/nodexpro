@@ -298,7 +298,10 @@ export async function buildNextDocumentPreview(params) {
     if (!params.baseStep) {
         return buildUnavailablePreview('אין תבנית מסמך זמינה לתצוגת המסמך הבא.', params.retainerSettings);
     }
-    const nextDocumentDate = params.profile.next_document_date;
+    if (!params.projectedNextDocumentDate) {
+        return buildUnavailablePreview('אין מסמך מתוכנן הבא להצגה.', params.retainerSettings);
+    }
+    const nextDocumentDate = params.projectedNextDocumentDate;
     const nextDocumentDateDisplay = formatHebrewDateDisplay(nextDocumentDate);
     let step = stripProjectionDocumentNumbers(cloneStep(params.baseStep));
     const projectedDocumentType = step.document_type_key === 'quote' ||

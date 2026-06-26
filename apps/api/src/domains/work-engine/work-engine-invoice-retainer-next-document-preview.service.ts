@@ -384,6 +384,7 @@ export async function buildNextDocumentPreview(params: {
   profile: RawProfile | null;
   retainerSettings: WorkEngineInvoiceRetainerSettings | null;
   baseStep: IncomeDocumentDetailsStep | null | undefined;
+  projectedNextDocumentDate: string | null;
 }): Promise<WorkEngineInvoiceRetainerNextDocumentPreview> {
   if (!params.profile || !params.retainerSettings?.profile_id) {
     return buildUnavailablePreview('שמור ריטיינר כדי לצפות במסמך הבא.', params.retainerSettings);
@@ -391,8 +392,11 @@ export async function buildNextDocumentPreview(params: {
   if (!params.baseStep) {
     return buildUnavailablePreview('אין תבנית מסמך זמינה לתצוגת המסמך הבא.', params.retainerSettings);
   }
+  if (!params.projectedNextDocumentDate) {
+    return buildUnavailablePreview('אין מסמך מתוכנן הבא להצגה.', params.retainerSettings);
+  }
 
-  const nextDocumentDate = params.profile.next_document_date;
+  const nextDocumentDate = params.projectedNextDocumentDate;
   const nextDocumentDateDisplay = formatHebrewDateDisplay(nextDocumentDate);
   let step = stripProjectionDocumentNumbers(cloneStep(params.baseStep));
   const projectedDocumentType =

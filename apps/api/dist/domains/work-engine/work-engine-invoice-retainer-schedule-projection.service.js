@@ -6,7 +6,7 @@ import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from '../income
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { computeNextUnitPriceBeforeVat, } from './work-engine-invoice-retainer.pure.js';
 import { todayIsoDate } from '../income/income-retainer-template-document-date.pure.js';
-import { formatScheduleProjectionKey, formatScheduleRowDateDisplay, formatScheduleYearDocumentsCountLabel, generateProjectedScheduleDates, groupScheduleDatesByYear, resolveScheduleEndDate, resolveScheduleStartDate, } from './work-engine-invoice-retainer-schedule-projection.pure.js';
+import { formatScheduleProjectionKey, formatScheduleRowDateDisplay, formatScheduleYearDocumentsCountLabel, generateProjectedScheduleDates, groupScheduleDatesByYear, mergeScheduleDates, resolveNextScheduleSummaryDocumentDate, resolveProjectedNextScheduleDate, resolveScheduleEndDate, resolveScheduleStartDate, } from './work-engine-invoice-retainer-schedule-projection.pure.js';
 const SKIP_PERSISTENCE_DISABLED_REASON = 'שמירת דילוג תתווסף בשלב הבא';
 const FUTURE_ACTION_DISABLED_REASON = 'יתווסף בשלב הבא';
 const DOCUMENT_TYPE_LABELS = {
@@ -138,9 +138,11 @@ function unitPriceForCycleIndex(profile, cycleIndex) {
     return unitPrice;
 }
 async function computeScheduleAmount(params) {
+    params.profiling && (params.profiling.computeAmountCalls += 1);
     if (params.nextDocumentPreview?.status === 'ready' &&
-        params.profile.next_document_date === params.documentDate &&
+        params.projectedNextDocumentDate === params.documentDate &&
         params.nextDocumentPreview.document_details_step?.totals_block?.grand_total_display) {
+        params.profiling && (params.profiling.previewShortcutCalls += 1);
         const display = params.nextDocumentPreview.document_details_step.totals_block.grand_total_display;
         const parsed = Number(String(display).replace(/[^\d.-]/g, ''));
         return {
@@ -167,19 +169,32 @@ async function computeScheduleAmount(params) {
                 currency: params.profile.currency,
             },
         ]);
+    const vatStartMs = Date.now();
     const vatResolution = await resolveIncomeDraftVatForOrg(params.orgId, 'IL', params.documentDate);
+    if (params.profiling) {
+        params.profiling.vatResolveCalls += 1;
+        params.profiling.vatResolveMs += Date.now() - vatStartMs;
+    }
+    const totalsStartMs = Date.now();
     const totalsPreview = await computeDraftTotalsPreview(lines, params.profile.currency, settings, vatResolution, params.documentDate);
+    if (params.profiling) {
+        params.profiling.totalsPreviewCalls += 1;
+        params.profiling.totalsPreviewMs += Date.now() - totalsStartMs;
+    }
     return {
         amount_display: totalsPreview.grand_total_display,
         grand_total_reference: totalsPreview.grand_total_reference ?? 0,
     };
 }
-function mergeScheduleDates(params) {
-    const merged = new Set(params.projectedDates);
-    for (const cycle of params.cycles) {
-        merged.add(cycle.scheduled_document_date);
-    }
-    return [...merged].sort();
+function mergeScheduleDatesFromCycles(params) {
+    return mergeScheduleDates({
+        projectedDates: params.projectedDates,
+        cycles: params.cycles.map((cycle) => ({
+            scheduled_document_date: cycle.scheduled_document_date,
+            status: cycle.status,
+            generated_document_id: cycle.generated_document_id,
+        })),
+    });
 }
 export function buildScheduleSetupTab(profileId) {
     const enabled = Boolean(profileId);
@@ -202,6 +217,7 @@ export async function buildRetainerScheduleProjection(params) {
         };
     }
     const today = params.todayIso ?? todayIsoDate();
+    const dateProjectionStartMs = Date.now();
     const scheduleStartDate = resolveScheduleStartDate({
         templateDocumentDate: params.profile.document_template_snapshot?.document_date ?? null,
         servicePeriodStart: params.profile.service_period_start,
@@ -231,18 +247,44 @@ export async function buildRetainerScheduleProjection(params) {
         frequency: params.profile.frequency,
         includeFutureProjections,
     });
-    const allDates = mergeScheduleDates({
+    const allDates = mergeScheduleDatesFromCycles({
         projectedDates,
         cycles: params.cycles,
-        includeFutureProjections,
     }).filter((iso) => iso >= scheduleStartDate && iso <= scheduleEndDate);
+    const projectedNextDocumentDate = params.projectedNextDocumentDate !== undefined
+        ? params.projectedNextDocumentDate
+        : resolveProjectedNextScheduleDate({
+            templateDocumentDate: params.profile.document_template_snapshot?.document_date ?? null,
+            servicePeriodStart: params.profile.service_period_start,
+            nextDocumentDate: params.profile.next_document_date,
+            servicePeriodEnd: params.profile.service_period_end,
+            frequency: params.profile.frequency,
+            profileStatus: params.profile.status,
+            cycles: params.cycles.map((cycle) => ({
+                scheduled_document_date: cycle.scheduled_document_date,
+                status: cycle.status,
+                generated_document_id: cycle.generated_document_id,
+            })),
+            todayIso: today,
+        });
     const cycleByDate = new Map(params.cycles.map((cycle) => [cycle.scheduled_document_date, cycle]));
     const dateCycleIndex = new Map();
     allDates.forEach((iso, index) => dateCycleIndex.set(iso, index));
     const documentTypeLabel = params.retainerSettings.document_type_label ??
         DOCUMENT_TYPE_LABELS[params.profile.document_type];
     const grouped = groupScheduleDatesByYear(allDates);
+    params.onTiming?.(`schedule_projection date_math_ms=${Date.now() - dateProjectionStartMs} projected_dates=${projectedDates.length} all_dates=${allDates.length} projection_years=${grouped.length}`);
     const years = [];
+    const amountProfiling = {
+        computeAmountCalls: 0,
+        previewShortcutCalls: 0,
+        vatResolveCalls: 0,
+        vatResolveMs: 0,
+        totalsPreviewCalls: 0,
+        totalsPreviewMs: 0,
+    };
+    const rowLoopStartMs = Date.now();
+    let projectionRows = 0;
     for (const group of grouped) {
         const rows = [];
         let yearTotalReference = 0;
@@ -255,7 +297,10 @@ export async function buildRetainerScheduleProjection(params) {
                 documentDate: scheduledDate,
                 cycleIndex: dateCycleIndex.get(scheduledDate) ?? 0,
                 nextDocumentPreview: params.nextDocumentPreview,
+                projectedNextDocumentDate,
+                profiling: amountProfiling,
             });
+            projectionRows += 1;
             yearTotalReference += amount.grand_total_reference;
             const actions = buildRowActions(status.status_key, scheduledDate, today);
             rows.push({
@@ -283,7 +328,24 @@ export async function buildRetainerScheduleProjection(params) {
             rows,
         });
     }
+    params.onTiming?.(`schedule_projection cycles_loaded=${params.cycles.length} rows_generated=${projectionRows} row_loop_ms=${Date.now() - rowLoopStartMs}`);
+    params.onTiming?.(`schedule_projection compute_amount_calls=${amountProfiling.computeAmountCalls} preview_shortcut=${amountProfiling.previewShortcutCalls} vat_db_queries=${amountProfiling.vatResolveCalls} vat_db_ms=${amountProfiling.vatResolveMs} totals_preview_calls=${amountProfiling.totalsPreviewCalls} totals_preview_ms=${amountProfiling.totalsPreviewMs}`);
     const documentsInHorizonCount = years.reduce((sum, year) => sum + year.total_count, 0);
+    const nextSummaryDocumentDate = projectedNextDocumentDate ??
+        resolveNextScheduleSummaryDocumentDate({
+            allDates,
+            today,
+            cyclesByDate: new Map(params.cycles.map((cycle) => [
+                cycle.scheduled_document_date,
+                {
+                    status: cycle.status,
+                    generated_document_id: cycle.generated_document_id,
+                },
+            ])),
+        });
+    const nextSummaryDocumentDateDisplay = nextSummaryDocumentDate
+        ? formatScheduleRowDateDisplay(nextSummaryDocumentDate)
+        : '—';
     return {
         status: 'ready',
         unavailable_message: null,
@@ -295,7 +357,8 @@ export async function buildRetainerScheduleProjection(params) {
             documents_in_horizon_label: 'מסמכים ב־5 השנים הקרובות',
             documents_in_horizon_count: documentsInHorizonCount,
             next_document_label: 'המסמך הבא',
-            next_document_date_display: params.retainerSettings.next_document_date_display,
+            next_document_date_display: nextSummaryDocumentDateDisplay,
+            next_document_date_source: 'schedule_projection',
         },
         recurrence_rule_display: recurrenceRuleDisplay,
         default_expanded_year: Number.isFinite(currentYear) ? currentYear : null,

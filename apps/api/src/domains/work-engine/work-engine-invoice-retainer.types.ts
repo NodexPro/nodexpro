@@ -200,6 +200,7 @@ export type WorkEngineInvoiceRetainerScheduleProjectionSummary = {
   documents_in_horizon_count: number;
   next_document_label: string;
   next_document_date_display: string;
+  next_document_date_source?: 'schedule_projection';
 };
 
 export type WorkEngineInvoiceRetainerScheduleProjection = {
