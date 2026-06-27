@@ -18,6 +18,7 @@ import { AppError } from '../../shared/errors.js';
 import { reprocessPendingWorkEventsForOrg } from './work-engine.event-intake.service.js';
 import { scanAndEmitIncomeInvoiceOverdueForOrg } from '../income/income-work-engine-bridge.js';
 import { runWorkEngineRecurringDocumentScheduler } from './work-engine-invoice-retainer.scheduler.service.js';
+import { scanRecurringDocumentSendFollowupsForOrg } from './work-engine-invoice-retainer-send-followup.scheduler.service.js';
 import type { RequestContext } from '../../shared/context.js';
 import { wakeExpiredSnoozedReminderCandidates } from './work-engine.reminder-review.service.js';
 import { recomputeWorkItemSlaStatus } from './work-engine.sla.service.js';
@@ -55,6 +56,7 @@ export type WorkEngineSchedulerRunSummary = {
   recurring_profiles_due: number;
   recurring_drafts_created: number;
   recurring_failures: number;
+  recurring_send_followups_emitted: number;
   errors: Array<{ org_id?: string; work_item_id?: string; work_event_id?: string; error: string }>;
 };
 
@@ -219,6 +221,7 @@ export async function runWorkEngineScheduler(
     recurring_profiles_due: 0,
     recurring_drafts_created: 0,
     recurring_failures: 0,
+    recurring_send_followups_emitted: 0,
     errors: [],
   };
 
@@ -289,6 +292,13 @@ export async function runWorkEngineScheduler(
             summary.recurring_profiles_due += recurring.recurring_profiles_due;
             summary.recurring_drafts_created += recurring.recurring_drafts_created;
             summary.recurring_failures += recurring.recurring_failures;
+
+            const sendFollowup = await scanRecurringDocumentSendFollowupsForOrg({
+              orgId,
+              dryRun: false,
+              schedulerCtx: bridgeCtx,
+            });
+            summary.recurring_send_followups_emitted += sendFollowup.followups_emitted;
           }
         }
       } catch (e) {
@@ -340,6 +350,7 @@ function emptySummary(opts: {
     recurring_profiles_due: 0,
     recurring_drafts_created: 0,
     recurring_failures: 0,
+    recurring_send_followups_emitted: 0,
     errors: [],
   };
 }

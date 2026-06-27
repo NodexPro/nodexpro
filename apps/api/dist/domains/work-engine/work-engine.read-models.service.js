@@ -973,6 +973,8 @@ export function workTypeLabel(key) {
             return 'בדיקת חשבונית ריטיינר';
         case 'recurring_generation_failed':
             return 'כשל ביצירת מסמך ריטיינר';
+        case 'recurring_document_send_followup':
+            return 'שליחת מסמך ריטיינר לאחר אישור';
         default:
             return humanizeKey(key);
     }

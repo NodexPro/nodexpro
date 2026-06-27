@@ -21,6 +21,7 @@ import {
   type WorkEngineInvoiceRetainerCommandResponse,
   type WorkEngineInvoiceRetainerCommandType,
 } from './work-engine-invoice-retainer.types.js';
+import { approveRecurringDocumentDraft } from './work-engine-invoice-retainer-lifecycle.service.js';
 
 const ALLOWED_RETAINER_COMMANDS = new Set<string>(Object.values(WORK_ENGINE_INVOICE_RETAINER_COMMANDS));
 
@@ -263,6 +264,26 @@ export async function executeWorkEngineInvoiceRetainerCommand(
       command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.preview,
       work_engine_invoice_retainer_setup_aggregate: aggregate,
     };
+  }
+
+  if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.approveDraft) {
+    const profileId = reqString(body, 'profile_id');
+    const existing = await loadProfile({ orgId, profileId, representedClientId });
+    await approveRecurringDocumentDraft({
+      ctx,
+      orgId,
+      representedClientId,
+      profileId,
+      draftId: optionalString(body, 'draft_id'),
+      scheduledDocumentDate: optionalString(body, 'scheduled_document_date'),
+      cycleId: optionalString(body, 'cycle_id'),
+    });
+    return commandResponse({
+      ctx,
+      command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.approveDraft,
+      representedClientId,
+      endCustomerId: existing.end_customer_id,
+    });
   }
 
   if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.create) {

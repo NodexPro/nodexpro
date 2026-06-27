@@ -157,6 +157,12 @@ export const RECURRING_WORK_TYPE = 'recurring_invoice_review' as const;
 export const RECURRING_FAILURE_EVENT_TYPE = 'recurring_generation_failed' as const;
 export const RECURRING_FAILURE_WORK_TYPE = 'recurring_generation_failed' as const;
 
+export const RECURRING_APPROVED_EVENT_TYPE = 'recurring_document_approved' as const;
+export const RECURRING_SEND_FOLLOWUP_EVENT_TYPE = 'recurring_document_send_followup_due' as const;
+export const RECURRING_SEND_FOLLOWUP_WORK_TYPE = 'recurring_document_send_followup' as const;
+
+export const RECURRING_SEND_FOLLOWUP_DELAY_DAYS = 2;
+
 export const RECURRING_WORK_ENGINE_SOURCE_MODULE = 'work_engine' as const;
 export const RECURRING_WORK_ENGINE_ENTITY_TYPE = 'income_recurring_document_profile' as const;
 export const RECURRING_WORK_ENGINE_SCHEMA_VERSION = 1;

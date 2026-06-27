@@ -103,6 +103,13 @@ const SAFE_EVENT_MAPPINGS = {
         initial_state: 'new',
         requires_period_key: true,
     },
+    /** Retainer — approved draft not sent via DocFlow after grace period. */
+    recurring_document_send_followup_due: {
+        module_key: 'income',
+        work_type: 'recurring_document_send_followup',
+        initial_state: 'waiting_human',
+        requires_period_key: true,
+    },
 };
 export const MAPPING_REASON = {
     UNKNOWN_EVENT_MAPPING: 'unknown_event_mapping',

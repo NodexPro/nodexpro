@@ -25,6 +25,7 @@ export const WORK_ENGINE_INVOICE_RETAINER_COMMANDS = {
   resume: 'resume_income_recurring_document_profile',
   cancel: 'cancel_income_recurring_document_profile',
   preview: 'preview_income_recurring_document_profile_settings',
+  approveDraft: 'approve_recurring_document_draft',
 } as const;
 
 export type WorkEngineInvoiceRetainerCommandType =

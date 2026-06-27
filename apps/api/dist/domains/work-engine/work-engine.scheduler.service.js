@@ -17,6 +17,7 @@ import { AppError } from '../../shared/errors.js';
 import { reprocessPendingWorkEventsForOrg } from './work-engine.event-intake.service.js';
 import { scanAndEmitIncomeInvoiceOverdueForOrg } from '../income/income-work-engine-bridge.js';
 import { runWorkEngineRecurringDocumentScheduler } from './work-engine-invoice-retainer.scheduler.service.js';
+import { scanRecurringDocumentSendFollowupsForOrg } from './work-engine-invoice-retainer-send-followup.scheduler.service.js';
 import { wakeExpiredSnoozedReminderCandidates } from './work-engine.reminder-review.service.js';
 import { recomputeWorkItemSlaStatus } from './work-engine.sla.service.js';
 const DEFAULT_BATCH_SIZE = 100;
@@ -154,6 +155,7 @@ export async function runWorkEngineScheduler(params) {
         recurring_profiles_due: 0,
         recurring_drafts_created: 0,
         recurring_failures: 0,
+        recurring_send_followups_emitted: 0,
         errors: [],
     };
     try {
@@ -220,6 +222,12 @@ export async function runWorkEngineScheduler(params) {
                         summary.recurring_profiles_due += recurring.recurring_profiles_due;
                         summary.recurring_drafts_created += recurring.recurring_drafts_created;
                         summary.recurring_failures += recurring.recurring_failures;
+                        const sendFollowup = await scanRecurringDocumentSendFollowupsForOrg({
+                            orgId,
+                            dryRun: false,
+                            schedulerCtx: bridgeCtx,
+                        });
+                        summary.recurring_send_followups_emitted += sendFollowup.followups_emitted;
                     }
                 }
             }
@@ -265,6 +273,7 @@ function emptySummary(opts) {
         recurring_profiles_due: 0,
         recurring_drafts_created: 0,
         recurring_failures: 0,
+        recurring_send_followups_emitted: 0,
         errors: [],
     };
 }
