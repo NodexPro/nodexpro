@@ -4,6 +4,7 @@ import {
   buildInvoiceAttentionCard,
   isInvoiceAttentionWorkType,
   resolveInvoiceAttentionCardTone,
+  resolveInvoiceAttentionWorkspaceTabBadge,
 } from '../../src/domains/work-engine/work-engine-queue-invoice-attention.pure.js';
 
 test('invoice attention work types include retainer review and generation failure only', () => {
@@ -26,4 +27,19 @@ test('invoice attention card tone is danger when failures exist', () => {
 
 test('invoice attention card tone is warning when only review tasks exist', () => {
   assert.equal(resolveInvoiceAttentionCardTone({ totalCount: 3, failureCount: 0 }), 'warning');
+});
+
+test('invoice attention workspace tab badge mirrors attention count and tone', () => {
+  assert.deepEqual(resolveInvoiceAttentionWorkspaceTabBadge({ totalCount: 0, failureCount: 0 }), {
+    badge_count: null,
+    badge_variant: null,
+  });
+  assert.deepEqual(resolveInvoiceAttentionWorkspaceTabBadge({ totalCount: 2, failureCount: 0 }), {
+    badge_count: 2,
+    badge_variant: 'warning',
+  });
+  assert.deepEqual(resolveInvoiceAttentionWorkspaceTabBadge({ totalCount: 2, failureCount: 1 }), {
+    badge_count: 2,
+    badge_variant: 'urgent',
+  });
 });

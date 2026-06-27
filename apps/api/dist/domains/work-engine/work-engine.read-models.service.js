@@ -18,7 +18,7 @@ import { buildDueQueueCellText, buildQueueSlaPresentation, loadActiveSlaObligati
 import { WORK_ENGINE_PERMISSIONS } from './work-engine.rbac.js';
 import { buildReminderReviewBanner, loadReminderReviewCounts, loadReminderReviewPage, REMINDER_SNOOZE_PRESETS, } from './work-engine.reminder-review.service.js';
 import { canAccessReminderDraftDevTool, GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE, } from './work-engine.queue-dev-tools.js';
-import { buildInvoiceAttentionCard, INVOICE_ATTENTION_MODULE_KEY, INVOICE_ATTENTION_WORK_TYPES, } from './work-engine-queue-invoice-attention.pure.js';
+import { buildInvoiceAttentionCard, INVOICE_ATTENTION_MODULE_KEY, INVOICE_ATTENTION_WORK_TYPES, resolveInvoiceAttentionWorkspaceTabBadge, } from './work-engine-queue-invoice-attention.pure.js';
 import { RECURRING_FAILURE_WORK_TYPE } from './work-engine-invoice-retainer.pure.js';
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
@@ -865,10 +865,11 @@ function embeddedWorkEngineTabRoute(tabKey) {
         ? '/work-engine/queue?tab=work'
         : `/work-engine/queue?tab=${tabKey}`;
 }
-export function buildAccountantWorkspaceTabs(activeKey) {
+export function buildAccountantWorkspaceTabs(activeKey, badgeOverrides) {
     const normalizedActive = activeKey === 'work_engine' ? 'work' : activeKey;
     return ACCOUNTANT_WORKSPACE_TAB_SEEDS.filter((seed) => !seed.hidden).map((seed) => {
         const enabled = !!seed.aggregate_route;
+        const override = badgeOverrides?.[seed.key];
         return {
             key: seed.key,
             label: seed.label,
@@ -876,8 +877,8 @@ export function buildAccountantWorkspaceTabs(activeKey) {
             icon_key: seed.icon_key,
             route: embeddedWorkEngineTabRoute(seed.key),
             active: seed.key === normalizedActive,
-            badge_count: seed.badge_count ?? null,
-            badge_variant: seed.badge_variant ?? null,
+            badge_count: override?.badge_count ?? seed.badge_count ?? null,
+            badge_variant: override?.badge_variant ?? seed.badge_variant ?? null,
             enabled,
             disabled_reason: enabled ? null : seed.disabled_reason ?? 'Coming soon',
             aggregate_route: seed.aggregate_route,
@@ -1423,7 +1424,7 @@ const REMINDER_REVIEW_QUEUE_TABLE = {
         { key: 'actions', label: 'Actions', empty_display: 'blank', kind: 'actions' },
     ],
 };
-async function loadInvoiceAttentionCounts(orgId) {
+export async function loadInvoiceAttentionCounts(orgId) {
     const baseQuery = () => supabaseAdmin
         .from('work_items')
         .select('id', { count: 'exact', head: true })
@@ -1928,7 +1929,9 @@ export async function buildWorkEngineQueueAggregate(params) {
         org_id: orgId,
         generated_at: new Date().toISOString(),
         queue_view_mode: 'work_items',
-        workspace_tabs: buildAccountantWorkspaceTabs('work'),
+        workspace_tabs: buildAccountantWorkspaceTabs('work', {
+            invoices: resolveInvoiceAttentionWorkspaceTabBadge(invoiceAttentionCounts),
+        }),
         reminder_review_summary: reminderReviewSummary,
         banner: reminderBanner,
         snooze_presets: REMINDER_SNOOZE_PRESETS.map((p) => ({

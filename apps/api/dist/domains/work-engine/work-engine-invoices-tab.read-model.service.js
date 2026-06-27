@@ -6,7 +6,8 @@
  */
 import { supabaseAdmin } from '../../db/client.js';
 import { forbidden } from '../../shared/errors.js';
-import { buildAccountantWorkspaceTabs } from './work-engine.read-models.service.js';
+import { buildAccountantWorkspaceTabs, loadInvoiceAttentionCounts } from './work-engine.read-models.service.js';
+import { resolveInvoiceAttentionWorkspaceTabBadge } from './work-engine-queue-invoice-attention.pure.js';
 import { buildWorkEngineInvoicesDocumentCreationEntrypoint } from './work-engine-invoices-document-creation.builders.js';
 import { amountReferenceFromTotalsSnapshot, customerDisplayFromSnapshot, isOverdueByDueDate, } from '../income/income-work-engine-bridge.pure.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
@@ -47,6 +48,10 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
     const orgId = params.ctx.organizationId;
     if (!orgId)
         throw forbidden('Organization context required');
+    const invoiceAttentionCounts = await loadInvoiceAttentionCounts(orgId);
+    const workspaceTabs = buildAccountantWorkspaceTabs('invoices', {
+        invoices: resolveInvoiceAttentionWorkspaceTabBadge(invoiceAttentionCounts),
+    });
     const incomePerms = incomeWorkspacePermissionsFromContext(params.ctx);
     const client_document_management_panel = await buildIncomeClientDocumentManagementPanel({
         ctx: params.ctx,
@@ -70,7 +75,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
         const response = {
             aggregate_key: 'work_engine_invoices_tab_aggregate',
             org_id: orgId,
-            workspace_tabs: buildAccountantWorkspaceTabs('invoices'),
+            workspace_tabs: workspaceTabs,
             title: 'חשבוניות',
             description: 'ניהול מסמכים לפי לקוח — הגדרות, לקוחות קצה ודוחות',
             table_model: {
@@ -219,7 +224,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params) {
     const response = {
         aggregate_key: 'work_engine_invoices_tab_aggregate',
         org_id: orgId,
-        workspace_tabs: buildAccountantWorkspaceTabs('invoices'),
+        workspace_tabs: workspaceTabs,
         title: 'חשבוניות',
         description: 'מעקב גבייה ותשלומים',
         table_model: {

@@ -60,6 +60,24 @@ export function resolveInvoiceAttentionCardTone(params: {
   return 'warning';
 }
 
+export type InvoiceAttentionWorkspaceTabBadgeVariant = 'neutral' | 'warning' | 'urgent';
+
+export function resolveInvoiceAttentionWorkspaceTabBadge(params: {
+  totalCount: number;
+  failureCount: number;
+}): {
+  badge_count: number | null;
+  badge_variant: InvoiceAttentionWorkspaceTabBadgeVariant | null;
+} {
+  if (params.totalCount <= 0) {
+    return { badge_count: null, badge_variant: null };
+  }
+  const tone = resolveInvoiceAttentionCardTone(params);
+  const badge_variant: InvoiceAttentionWorkspaceTabBadgeVariant =
+    tone === 'danger' ? 'urgent' : tone === 'warning' ? 'warning' : 'neutral';
+  return { badge_count: params.totalCount, badge_variant };
+}
+
 export function buildInvoiceAttentionCard(params: {
   totalCount: number;
   failureCount: number;

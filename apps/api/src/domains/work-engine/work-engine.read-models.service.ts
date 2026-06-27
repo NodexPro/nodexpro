@@ -70,6 +70,7 @@ import {
   buildInvoiceAttentionCard,
   INVOICE_ATTENTION_MODULE_KEY,
   INVOICE_ATTENTION_WORK_TYPES,
+  resolveInvoiceAttentionWorkspaceTabBadge,
 } from './work-engine-queue-invoice-attention.pure.js';
 import { RECURRING_FAILURE_WORK_TYPE } from './work-engine-invoice-retainer.pure.js';
 
@@ -1233,11 +1234,17 @@ function embeddedWorkEngineTabRoute(tabKey: string): string {
     : `/work-engine/queue?tab=${tabKey}`;
 }
 
-export function buildAccountantWorkspaceTabs(activeKey: string): AccountantWorkspaceTabModel[] {
+export function buildAccountantWorkspaceTabs(
+  activeKey: string,
+  badgeOverrides?: Partial<
+    Record<string, { badge_count: number | null; badge_variant: WorkspaceTabBadgeVariant }>
+  >,
+): AccountantWorkspaceTabModel[] {
   const normalizedActive =
     activeKey === 'work_engine' ? 'work' : activeKey;
   return ACCOUNTANT_WORKSPACE_TAB_SEEDS.filter((seed) => !seed.hidden).map((seed) => {
     const enabled = !!seed.aggregate_route;
+    const override = badgeOverrides?.[seed.key];
     return {
       key: seed.key,
       label: seed.label,
@@ -1245,8 +1252,8 @@ export function buildAccountantWorkspaceTabs(activeKey: string): AccountantWorks
       icon_key: seed.icon_key,
       route: embeddedWorkEngineTabRoute(seed.key),
       active: seed.key === normalizedActive,
-      badge_count: seed.badge_count ?? null,
-      badge_variant: seed.badge_variant ?? null,
+      badge_count: override?.badge_count ?? seed.badge_count ?? null,
+      badge_variant: override?.badge_variant ?? seed.badge_variant ?? null,
       enabled,
       disabled_reason: enabled ? null : seed.disabled_reason ?? 'Coming soon',
       aggregate_route: seed.aggregate_route,
@@ -2024,7 +2031,7 @@ const REMINDER_REVIEW_QUEUE_TABLE: { columns: QueueTableColumnModel[] } = {
   ],
 };
 
-async function loadInvoiceAttentionCounts(orgId: string): Promise<{
+export async function loadInvoiceAttentionCounts(orgId: string): Promise<{
   totalCount: number;
   failureCount: number;
 }> {
@@ -2594,7 +2601,9 @@ export async function buildWorkEngineQueueAggregate(params: {
     org_id: orgId,
     generated_at: new Date().toISOString(),
     queue_view_mode: 'work_items',
-    workspace_tabs: buildAccountantWorkspaceTabs('work'),
+    workspace_tabs: buildAccountantWorkspaceTabs('work', {
+      invoices: resolveInvoiceAttentionWorkspaceTabBadge(invoiceAttentionCounts),
+    }),
     reminder_review_summary: reminderReviewSummary,
     banner: reminderBanner,
     snooze_presets: REMINDER_SNOOZE_PRESETS.map((p) => ({

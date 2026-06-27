@@ -22,6 +22,14 @@ export function resolveInvoiceAttentionCardTone(params) {
         return 'danger';
     return 'warning';
 }
+export function resolveInvoiceAttentionWorkspaceTabBadge(params) {
+    if (params.totalCount <= 0) {
+        return { badge_count: null, badge_variant: null };
+    }
+    const tone = resolveInvoiceAttentionCardTone(params);
+    const badge_variant = tone === 'danger' ? 'urgent' : tone === 'warning' ? 'warning' : 'neutral';
+    return { badge_count: params.totalCount, badge_variant };
+}
 export function buildInvoiceAttentionCard(params) {
     return {
         key: 'invoice_attention',
