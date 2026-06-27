@@ -66,6 +66,12 @@ import {
   canAccessReminderDraftDevTool,
   GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE,
 } from './work-engine.queue-dev-tools.js';
+import {
+  buildInvoiceAttentionCard,
+  INVOICE_ATTENTION_MODULE_KEY,
+  INVOICE_ATTENTION_WORK_TYPES,
+} from './work-engine-queue-invoice-attention.pure.js';
+import { RECURRING_FAILURE_WORK_TYPE } from './work-engine-invoice-retainer.pure.js';
 
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
@@ -1350,6 +1356,10 @@ export function workTypeLabel(key: string): string {
       return 'Conversation';
     case 'invoice_collection_followup':
       return 'גבייה עבור חשבונית באיחור';
+    case 'recurring_invoice_review':
+      return 'בדיקת חשבונית ריטיינר';
+    case 'recurring_generation_failed':
+      return 'כשל ביצירת מסמך ריטיינר';
     default:
       return humanizeKey(key);
   }
@@ -1916,7 +1926,7 @@ export function parseWorkEngineQueueFilters(raw: WorkEngineQueueFilters): {
   reviewer_user_id: string | null;
   client_id: string | null;
   period_key: string | null;
-  queue_bucket: 'assigned_to_me' | 'unassigned' | 'claimed_by_me' | 'review_for_me' | null;
+  queue_bucket: 'assigned_to_me' | 'unassigned' | 'claimed_by_me' | 'review_for_me' | 'invoice_attention' | null;
   limit: number;
   offset: number;
 } {
@@ -1940,7 +1950,8 @@ export function parseWorkEngineQueueFilters(raw: WorkEngineQueueFilters): {
     bucketRaw === 'assigned_to_me' ||
     bucketRaw === 'unassigned' ||
     bucketRaw === 'claimed_by_me' ||
-    bucketRaw === 'review_for_me'
+    bucketRaw === 'review_for_me' ||
+    bucketRaw === 'invoice_attention'
       ? bucketRaw
       : null;
 
@@ -2013,6 +2024,32 @@ const REMINDER_REVIEW_QUEUE_TABLE: { columns: QueueTableColumnModel[] } = {
   ],
 };
 
+async function loadInvoiceAttentionCounts(orgId: string): Promise<{
+  totalCount: number;
+  failureCount: number;
+}> {
+  const baseQuery = () =>
+    supabaseAdmin
+      .from('work_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('module_key', INVOICE_ATTENTION_MODULE_KEY)
+      .in('work_type', [...INVOICE_ATTENTION_WORK_TYPES])
+      .not('work_state', 'eq', 'done')
+      .not('work_state', 'eq', 'archived');
+
+  const [totalResp, failureResp] = await Promise.all([
+    baseQuery(),
+    baseQuery().eq('work_type', RECURRING_FAILURE_WORK_TYPE),
+  ]);
+  if (totalResp.error) throw totalResp.error;
+  if (failureResp.error) throw failureResp.error;
+  return {
+    totalCount: totalResp.count ?? 0,
+    failureCount: failureResp.count ?? 0,
+  };
+}
+
 export async function buildWorkEngineQueueAggregate(params: {
   orgId: string;
   filters?: WorkEngineQueueFilters;
@@ -2051,6 +2088,9 @@ export async function buildWorkEngineQueueAggregate(params: {
     .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]);
   if (pendingCountResp.error) throw pendingCountResp.error;
   const pendingMappingCount = pendingCountResp.count ?? 0;
+
+  const invoiceAttentionCounts = await loadInvoiceAttentionCounts(orgId);
+  const invoiceAttentionCard = buildInvoiceAttentionCard(invoiceAttentionCounts);
 
   let bucketAssignedToMe = 0;
   let bucketUnassigned = 0;
@@ -2141,6 +2181,12 @@ export async function buildWorkEngineQueueAggregate(params: {
     q = q.eq('claimed_by_user_id', viewerId);
   } else if (f.queue_bucket === 'review_for_me' && viewerId) {
     q = q.eq('work_state', 'review_pending').eq('reviewer_user_id', viewerId);
+  } else if (f.queue_bucket === 'invoice_attention') {
+    q = q
+      .eq('module_key', INVOICE_ATTENTION_MODULE_KEY)
+      .in('work_type', [...INVOICE_ATTENTION_WORK_TYPES])
+      .not('work_state', 'eq', 'done')
+      .not('work_state', 'eq', 'archived');
   }
   if (f.state) q = q.eq('work_state', f.state);
   if (f.module_key) q = q.eq('module_key', f.module_key);
@@ -2148,6 +2194,7 @@ export async function buildWorkEngineQueueAggregate(params: {
     f.queue_bucket !== 'assigned_to_me' &&
     f.queue_bucket !== 'unassigned' &&
     f.queue_bucket !== 'review_for_me' &&
+    f.queue_bucket !== 'invoice_attention' &&
     f.assigned_user_id
   ) {
     q = q.eq('assigned_user_id', f.assigned_user_id);
@@ -2572,6 +2619,8 @@ export async function buildWorkEngineQueueAggregate(params: {
       pending_reminders: reminderReviewSummary.pending_count,
     },
 
+    attention_cards: [invoiceAttentionCard],
+
     filters: {
       states: WORK_STATES.map((s) => ({
         value: s,
@@ -2603,6 +2652,7 @@ export async function buildWorkEngineQueueAggregate(params: {
         { value: 'unassigned', label: 'Unassigned' },
         { value: 'claimed_by_me', label: 'Claimed by me' },
         { value: 'review_for_me', label: 'Review for me' },
+        { value: 'invoice_attention', label: invoiceAttentionCard.label },
       ],
       pending_mapping_reasons: [
         { value: MAPPING_REASON.UNKNOWN_EVENT_MAPPING, label: 'Unknown event type' },
