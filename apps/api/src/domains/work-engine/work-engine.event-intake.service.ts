@@ -57,6 +57,7 @@ import {
   PENDING_MAPPING_PROCESSING_OUTCOMES,
   resolveEventMapping,
 } from './work-engine.event-mapping.service.js';
+import { assertIncomeDocumentIntakeSourceEntity } from './work-engine-income-intake.guards.js';
 
 function validateEnvelope(env: WorkEventEnvelope): void {
   if (!env || typeof env !== 'object') throw badRequest('event envelope is required');
@@ -621,6 +622,14 @@ export async function intakeWorkEvent(
       ? validateIntakePayload(caller.ctx, raw)
       : validateIntakePayloadForTrustedOrg(caller.orgId, raw);
   await assertClientInOrg(v.org_id, v.client_id);
+  await assertIncomeDocumentIntakeSourceEntity({
+    org_id: v.org_id,
+    client_id: v.client_id,
+    source_module: v.source_module,
+    source_entity_type: v.source_entity_type,
+    source_entity_id: v.source_entity_id,
+    event_type: v.event_type,
+  });
 
   const actorUserId =
     caller.kind === 'office_request' ? caller.ctx.user.id : caller.auditActorUserId;
