@@ -16,7 +16,7 @@ test('invoice attention card tone is neutral when count is zero', () => {
   assert.equal(resolveInvoiceAttentionCardTone({ totalCount: 0, failureCount: 0 }), 'neutral');
   const card = buildInvoiceAttentionCard({ totalCount: 0, failureCount: 0 });
   assert.equal(card.count, 0);
-  assert.equal(card.label, 'חשבוניות לטיפול');
+  assert.equal(card.label, 'Recurring');
   assert.equal(card.filter.queue_bucket, 'invoice_attention');
 });
 

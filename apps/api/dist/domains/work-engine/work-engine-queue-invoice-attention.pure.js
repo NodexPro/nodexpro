@@ -25,7 +25,7 @@ export function resolveInvoiceAttentionCardTone(params) {
 export function buildInvoiceAttentionCard(params) {
     return {
         key: 'invoice_attention',
-        label: 'חשבוניות לטיפול',
+        label: 'Recurring',
         count: params.totalCount,
         tone: resolveInvoiceAttentionCardTone(params),
         description: 'משימות פעילות במכונה להפקת חשבוניות, ריטיינרים ובדיקת טיוטות',
