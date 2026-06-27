@@ -456,6 +456,7 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     const scheduleProjectionStartMs = Date.now();
     const retainerScheduleProjection = await buildRetainerScheduleProjection({
         orgId,
+        representedClientId,
         profile: selectedProfile,
         retainerSettings,
         cycles: profileCycles.map((cycle) => ({

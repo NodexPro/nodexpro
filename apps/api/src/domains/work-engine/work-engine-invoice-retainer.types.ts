@@ -26,6 +26,7 @@ export const WORK_ENGINE_INVOICE_RETAINER_COMMANDS = {
   cancel: 'cancel_income_recurring_document_profile',
   preview: 'preview_income_recurring_document_profile_settings',
   approveDraft: 'approve_recurring_document_draft',
+  openCycleDraftReview: 'open_recurring_cycle_draft_for_review',
 } as const;
 
 export type WorkEngineInvoiceRetainerCommandType =
@@ -179,6 +180,43 @@ export type WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction = {
   };
 };
 
+export type ScheduleRowInteractionKind = 'generated_draft_review';
+
+export type WorkEngineInvoiceRetainerScheduleRowPrimaryAction = {
+  command: 'open_recurring_cycle_draft_for_review';
+  payload: {
+    represented_client_id: string;
+    profile_id: string;
+    cycle_id: string;
+    generated_draft_id: string;
+    period_key: string;
+    linked_work_item_id: string | null;
+  };
+};
+
+export const WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY =
+  'work_engine_recurring_cycle_draft_review_aggregate' as const;
+
+export type WorkEngineRecurringCycleDraftReviewAggregate = {
+  aggregate_key: typeof WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY;
+  represented_client_id: string;
+  profile_id: string;
+  cycle_id: string;
+  generated_draft_id: string;
+  period_key: string;
+  linked_work_item_id: string | null;
+  scheduled_document_date_display: string;
+  title: string;
+  income_workspace_aggregate: IncomeWorkspaceAggregate;
+  income_commands: Record<string, string>;
+  preview_action: {
+    visible: boolean;
+    label: string;
+    disabled_reason: string | null;
+  };
+  allowed_actions: string[];
+};
+
 export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   projection_key: string;
   cycle_id: string | null;
@@ -205,7 +243,8 @@ export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   machine_task_id: string | null;
   machine_task_url: string | null;
   machine_task_title: string | null;
-  open_generated_draft_for_review: WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction | null;
+  row_interaction_kind: ScheduleRowInteractionKind | null;
+  primary_action: WorkEngineInvoiceRetainerScheduleRowPrimaryAction | null;
   allowed_actions: string[];
   actions: WorkEngineInvoiceRetainerScheduleProjectionAction[];
 };
@@ -308,7 +347,8 @@ export type WorkEngineInvoiceRetainerSetupAggregate = {
 
 export type WorkEngineInvoiceRetainerCommandResponse = {
   ok: true;
-  command: WorkEngineInvoiceRetainerCommandType;
-  work_engine_invoice_retainer_setup_aggregate: WorkEngineInvoiceRetainerSetupAggregate;
+  command: WorkEngineInvoiceRetainerCommandType | 'open_recurring_cycle_draft_for_review';
+  work_engine_invoice_retainer_setup_aggregate?: WorkEngineInvoiceRetainerSetupAggregate;
+  work_engine_recurring_cycle_draft_review_aggregate?: WorkEngineRecurringCycleDraftReviewAggregate;
   work_engine_invoices_tab_aggregate?: Record<string, unknown>;
 };

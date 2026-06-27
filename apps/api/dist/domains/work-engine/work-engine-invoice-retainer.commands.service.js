@@ -11,6 +11,7 @@ import { buildDocumentTemplateSnapshotForRetainer } from './work-engine-invoice-
 import { RECURRING_FREQUENCY_OPTIONS, } from './work-engine-invoice-retainer.pure.js';
 import { WORK_ENGINE_INVOICE_RETAINER_COMMANDS, } from './work-engine-invoice-retainer.types.js';
 import { approveRecurringDocumentDraft } from './work-engine-invoice-retainer-lifecycle.service.js';
+import { openRecurringCycleDraftForReview } from './work-engine-invoice-retainer-cycle-draft-review.service.js';
 const ALLOWED_RETAINER_COMMANDS = new Set(Object.values(WORK_ENGINE_INVOICE_RETAINER_COMMANDS));
 const RETAINER_FREQUENCIES = new Set(RECURRING_FREQUENCY_OPTIONS.map((o) => o.key));
 const RETAINER_INCREASE_TYPES = new Set(['percent', 'amount']);
@@ -199,6 +200,22 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
     const orgId = ctx.organizationId;
     const userId = ctx.user?.id ?? null;
     const representedClientId = reqString(body, 'represented_client_id');
+    if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.openCycleDraftReview) {
+        const reviewAggregate = await openRecurringCycleDraftForReview({
+            ctx,
+            representedClientId,
+            profileId: reqString(body, 'profile_id'),
+            cycleId: reqString(body, 'cycle_id'),
+            generatedDraftId: reqString(body, 'generated_draft_id'),
+            periodKey: optionalString(body, 'period_key'),
+            linkedWorkItemId: optionalString(body, 'linked_work_item_id'),
+        });
+        return {
+            ok: true,
+            command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.openCycleDraftReview,
+            work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
+        };
+    }
     if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.preview) {
         const endCustomerId = reqString(body, 'end_customer_id');
         await assertEndCustomerBelongs({ orgId, representedClientId, endCustomerId });

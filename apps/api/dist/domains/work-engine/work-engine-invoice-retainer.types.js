@@ -10,4 +10,6 @@ export const WORK_ENGINE_INVOICE_RETAINER_COMMANDS = {
     cancel: 'cancel_income_recurring_document_profile',
     preview: 'preview_income_recurring_document_profile_settings',
     approveDraft: 'approve_recurring_document_draft',
+    openCycleDraftReview: 'open_recurring_cycle_draft_for_review',
 };
+export const WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY = 'work_engine_recurring_cycle_draft_review_aggregate';

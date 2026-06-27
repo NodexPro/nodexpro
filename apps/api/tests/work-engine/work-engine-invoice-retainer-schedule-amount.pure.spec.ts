@@ -13,6 +13,10 @@ const projectionServiceSource = readFileSync(
   join(dir, '../../src/domains/work-engine/work-engine-invoice-retainer-schedule-projection.service.ts'),
   'utf8',
 );
+const primaryActionSource = readFileSync(
+  join(dir, '../../src/domains/work-engine/work-engine-invoice-retainer-schedule-row-primary-action.pure.ts'),
+  'utf8',
+);
 
 const increaseProfile = {
   price_increase_enabled: true,
@@ -79,12 +83,13 @@ test('schedule projection never uses next-document preview for cycle index 0', (
   );
 });
 
-test('waiting review row exposes open_generated_draft_for_review when draft exists', () => {
-  assert.match(projectionServiceSource, /open_generated_draft_for_review/);
-  assert.match(projectionServiceSource, /resume_income_document_draft/);
+test('waiting review row exposes generated_draft_review primary action when draft exists', () => {
+  assert.match(projectionServiceSource, /resolveScheduleRowPrimaryAction/);
+  assert.match(projectionServiceSource, /row_interaction_kind: rowInteraction\.row_interaction_kind/);
+  assert.match(projectionServiceSource, /primary_action: rowInteraction\.primary_action/);
   assert.match(projectionServiceSource, /show_status_text/);
 });
 
-test('no open_generated_draft_for_review when cycle has no generated draft', () => {
-  assert.match(projectionServiceSource, /if \(!params\.cycle\?\.generated_draft_id/);
+test('no primary action when cycle has no generated draft', () => {
+  assert.match(primaryActionSource, /!params\.generated_draft_id/);
 });

@@ -278,6 +278,7 @@ export const AUDIT_ACTIONS = {
   INCOME_RECURRING_PROFILE_CYCLE_CREATED: 'income_recurring_profile_cycle_created',
   INCOME_RECURRING_PROFILE_CYCLE_FAILED: 'income_recurring_profile_cycle_failed',
   INCOME_RECURRING_PROFILE_CYCLE_APPROVED: 'income_recurring_profile_cycle_approved',
+  INCOME_RECURRING_PROFILE_CYCLE_DRAFT_REVIEW_OPENED: 'income_recurring_profile_cycle_draft_review_opened',
 } as const;
 
 type AuditPayload = Record<string, unknown>;

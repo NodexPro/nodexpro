@@ -24,7 +24,6 @@ import {
 import { resolveScheduleRowMachineState } from './work-engine-invoice-retainer-schedule-row-machine.pure.js';
 import type {
   WorkEngineInvoiceRetainerNextDocumentPreview,
-  WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction,
   WorkEngineInvoiceRetainerScheduleProjection,
   WorkEngineInvoiceRetainerScheduleProjectionAction,
   WorkEngineInvoiceRetainerScheduleProjectionRow,
@@ -32,6 +31,7 @@ import type {
   WorkEngineInvoiceRetainerSettings,
   WorkEngineInvoiceRetainerSetupTab,
 } from './work-engine-invoice-retainer.types.js';
+import { resolveScheduleRowPrimaryAction } from './work-engine-invoice-retainer-schedule-row-primary-action.pure.js';
 import {
   countCompletedRecurringGenerations,
   formatScheduleProjectionKey,
@@ -84,27 +84,12 @@ type ScheduleProfile = {
   document_template_snapshot: RecurringDocumentTemplateSnapshot | null;
 };
 
-function buildOpenGeneratedDraftAction(params: {
-  profileId: string;
-  cycle: ScheduleCycleRow | null;
-}): WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction | null {
-  if (!params.cycle?.generated_draft_id || !params.cycle.id) return null;
-  return {
-    income_command: 'resume_income_document_draft',
-    income_command_payload: {
-      draft_id: params.cycle.generated_draft_id,
-      cycle_id: params.cycle.id,
-      profile_id: params.profileId,
-    },
-  };
-}
-
 function buildRowMenuActions(
   statusKey: string,
   scheduledDate: string,
   today: string,
   workItemHref: string | null,
-  openDraft: WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction | null,
+  hasPrimaryAction: boolean,
 ): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
   const actionBase = {
     disabled: false as const,
@@ -132,14 +117,12 @@ function buildRowMenuActions(
     income_command_payload: null,
   };
 
-  if (statusKey === 'waiting_review' && openDraft) {
+  if (statusKey === 'waiting_review' && hasPrimaryAction) {
     return [
       {
-        key: 'open_generated_draft_for_review',
+        key: 'open_recurring_cycle_draft_for_review',
         label: 'פתח טיוטה לבדיקה',
         ...actionBase,
-        income_command: openDraft.income_command,
-        income_command_payload: openDraft.income_command_payload,
       },
       openDocument,
       viewHistory,
@@ -212,9 +195,9 @@ function buildRowActions(
   scheduledDate: string,
   today: string,
   workItemHref: string | null,
-  openDraft: WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction | null,
+  hasPrimaryAction: boolean,
 ): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
-  return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, openDraft);
+  return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, hasPrimaryAction);
 }
 
 function buildRecurrenceRuleDisplay(
@@ -345,6 +328,7 @@ export function buildScheduleSetupTab(profileId: string | null): WorkEngineInvoi
 
 export async function buildRetainerScheduleProjection(params: {
   orgId: string;
+  representedClientId: string;
   profile: ScheduleProfile | null;
   retainerSettings: WorkEngineInvoiceRetainerSettings | null;
   cycles: ScheduleCycleRow[];
@@ -478,14 +462,20 @@ export async function buildRetainerScheduleProjection(params: {
           : null,
         workItem,
       });
-      const openDraftAction = buildOpenGeneratedDraftAction({
-        profileId: params.profile.id,
-        cycle,
+      const linkedWorkItemId = workItem?.work_item_id ?? null;
+      const rowInteraction = resolveScheduleRowPrimaryAction({
+        status_key: status.status_key,
+        represented_client_id: params.representedClientId,
+        profile_id: params.profile.id,
+        cycle_id: cycle?.id ?? null,
+        generated_draft_id: cycle?.generated_draft_id ?? null,
+        period_key: periodKey,
+        linked_work_item_id: linkedWorkItemId,
       });
       const machine = resolveScheduleRowMachineState({
         workItem,
         waitingReviewWithGeneratedDraft:
-          status.status_key === 'waiting_review' && openDraftAction != null,
+          status.status_key === 'waiting_review' && rowInteraction.primary_action != null,
       });
       const cycleIndex = dateCycleIndex.get(scheduledDate) ?? 0;
       const amount = await computeScheduleAmount({
@@ -505,12 +495,12 @@ export async function buildRetainerScheduleProjection(params: {
         scheduledDate,
         today,
         status.work_item_href,
-        openDraftAction,
+        rowInteraction.primary_action != null,
       );
       const showStatusText = !(
         status.status_key === 'waiting_review' &&
         machine.machine_has_task &&
-        openDraftAction != null
+        rowInteraction.primary_action != null
       );
       rows.push({
         projection_key: formatScheduleProjectionKey(params.profile.id, scheduledDate),
@@ -538,7 +528,8 @@ export async function buildRetainerScheduleProjection(params: {
         machine_task_id: machine.machine_task_id,
         machine_task_url: machine.machine_task_url,
         machine_task_title: machine.machine_task_title,
-        open_generated_draft_for_review: openDraftAction,
+        row_interaction_kind: rowInteraction.row_interaction_kind,
+        primary_action: rowInteraction.primary_action,
         allowed_actions: actions.map((action) => action.key),
         actions,
       });
