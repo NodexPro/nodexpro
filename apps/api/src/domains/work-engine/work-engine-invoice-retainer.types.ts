@@ -180,9 +180,12 @@ export type WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction = {
   };
 };
 
-export type ScheduleRowInteractionKind = 'generated_draft_review';
+export type ScheduleRowInteractionKind =
+  | 'generated_draft_review'
+  | 'next_document_projection'
+  | 'future_projection';
 
-export type WorkEngineInvoiceRetainerScheduleRowPrimaryAction = {
+export type WorkEngineInvoiceRetainerScheduleOpenCycleDraftPrimaryAction = {
   command: 'open_recurring_cycle_draft_for_review';
   payload: {
     represented_client_id: string;
@@ -193,6 +196,19 @@ export type WorkEngineInvoiceRetainerScheduleRowPrimaryAction = {
     linked_work_item_id: string | null;
   };
 };
+
+export type WorkEngineInvoiceRetainerScheduleOpenNextDocumentTabPrimaryAction = {
+  command: 'open_next_document_tab';
+  payload: {
+    target_tab: 'next_document';
+    scheduled_document_date: string;
+    period_key: string;
+  };
+};
+
+export type WorkEngineInvoiceRetainerScheduleRowPrimaryAction =
+  | WorkEngineInvoiceRetainerScheduleOpenCycleDraftPrimaryAction
+  | WorkEngineInvoiceRetainerScheduleOpenNextDocumentTabPrimaryAction;
 
 export const WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY =
   'work_engine_recurring_cycle_draft_review_aggregate' as const;

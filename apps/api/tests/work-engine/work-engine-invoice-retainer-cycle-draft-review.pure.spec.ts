@@ -70,13 +70,15 @@ test('open cycle draft review command returns dedicated aggregate not setup aggr
 });
 
 test('schedule icon click does not switch to retainer tab or refresh setup aggregate', () => {
-  assert.ok(setupModalSource.includes('handleOpenCycleDraftForReview'));
+  assert.ok(setupModalSource.includes('handleScheduleRowPrimaryAction'));
   assert.ok(setupModalSource.includes('work_engine_recurring_cycle_draft_review_aggregate'));
   assert.ok(!setupModalSource.includes('handleOpenGeneratedDraftForReview'));
   assert.ok(!setupModalSource.includes("setActiveSetupTab('retainer')"));
-  const handlerStart = setupModalSource.indexOf('const handleOpenCycleDraftForReview');
+  const handlerStart = setupModalSource.indexOf('const handleScheduleRowPrimaryAction');
   const handlerEnd = setupModalSource.indexOf('const handleGeneratePreview', handlerStart);
   const handlerBlock = setupModalSource.slice(handlerStart, handlerEnd);
   assert.ok(!handlerBlock.includes('refreshSetupAggregate'));
   assert.ok(!handlerBlock.includes("setActiveSetupTab('retainer')"));
+  assert.ok(handlerBlock.includes("action.command === 'open_next_document_tab'"));
+  assert.ok(handlerBlock.includes("setActiveSetupTab('next_document')"));
 });

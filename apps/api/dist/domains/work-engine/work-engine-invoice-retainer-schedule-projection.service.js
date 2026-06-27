@@ -54,6 +54,17 @@ function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, hasP
             viewHistory,
         ];
     }
+    if (statusKey === 'scheduled' && hasPrimaryAction) {
+        return [
+            {
+                key: 'open_next_document_tab',
+                label: 'פתח המסמך הבא',
+                ...actionBase,
+            },
+            openDocument,
+            viewHistory,
+        ];
+    }
     if (statusKey === 'waiting_review' && workItemHref) {
         return [
             {
@@ -321,6 +332,8 @@ export async function buildRetainerScheduleProjection(params) {
             const linkedWorkItemId = workItem?.work_item_id ?? null;
             const rowInteraction = resolveScheduleRowPrimaryAction({
                 status_key: status.status_key,
+                scheduled_document_date: scheduledDate,
+                projected_next_document_date: projectedNextDocumentDate,
                 represented_client_id: params.representedClientId,
                 profile_id: params.profile.id,
                 cycle_id: cycle?.id ?? null,
