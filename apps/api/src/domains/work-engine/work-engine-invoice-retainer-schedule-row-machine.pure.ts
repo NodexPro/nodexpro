@@ -103,19 +103,30 @@ export function isActiveMachineWorkItem(workItem: ScheduleRowWorkItemRef | null 
 
 export function resolveScheduleRowMachineState(params: {
   workItem: ScheduleRowWorkItemRef | null;
+  waitingReviewWithGeneratedDraft?: boolean;
 }): ScheduleRowMachineDescriptor {
   const workItem = params.workItem;
   if (!workItem || !isActiveMachineWorkItem(workItem)) {
     return EMPTY_MACHINE_DESCRIPTOR;
   }
 
+  const waitingReviewDraft =
+    params.waitingReviewWithGeneratedDraft === true &&
+    workItem.work_type === RECURRING_WORK_TYPE;
+
   return {
     machine_state: workItem.work_state,
-    machine_state_label: workStateLabelHe(workItem.work_state),
+    machine_state_label: waitingReviewDraft
+      ? null
+      : workStateLabelHe(workItem.work_state),
     machine_state_tone: resolveScheduleRowMachineTone(workItem.work_state),
     machine_has_task: true,
     machine_task_id: workItem.work_item_id,
-    machine_task_url: buildScheduleRowWorkItemHref(workItem.work_item_id),
-    machine_task_title: workTypeTitleHe(workItem.work_type),
+    machine_task_url: waitingReviewDraft
+      ? null
+      : buildScheduleRowWorkItemHref(workItem.work_item_id),
+    machine_task_title: waitingReviewDraft
+      ? 'ממתין לבדיקת משרד'
+      : workTypeTitleHe(workItem.work_type),
   };
 }

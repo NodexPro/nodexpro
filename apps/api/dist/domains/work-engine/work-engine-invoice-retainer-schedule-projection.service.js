@@ -4,11 +4,11 @@
 import { normalizeDraftLines, formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from '../income/income-document-draft-totals.pure.js';
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
-import { computeNextUnitPriceBeforeVat, recurringProfileWorkPeriodKey, } from './work-engine-invoice-retainer.pure.js';
+import { recurringProfileWorkPeriodKey, } from './work-engine-invoice-retainer.pure.js';
 import { todayIsoDate } from '../income/income-retainer-template-document-date.pure.js';
 import { resolveScheduleRowStatus, } from './work-engine-invoice-retainer-schedule-row-status.pure.js';
 import { resolveScheduleRowMachineState } from './work-engine-invoice-retainer-schedule-row-machine.pure.js';
-import { formatScheduleProjectionKey, formatScheduleRowDateDisplay, formatScheduleYearDocumentsCountLabel, generateProjectedScheduleDates, groupScheduleDatesByYear, mergeScheduleDates, resolveNextScheduleSummaryDocumentDate, resolveProjectedNextScheduleDate, resolveScheduleEndDate, resolveScheduleStartDate, } from './work-engine-invoice-retainer-schedule-projection.pure.js';
+import { countCompletedRecurringGenerations, formatScheduleProjectionKey, formatScheduleRowDateDisplay, formatScheduleYearDocumentsCountLabel, generateProjectedScheduleDates, groupScheduleDatesByYear, mergeScheduleDates, resolveNextScheduleSummaryDocumentDate, resolveProjectedNextScheduleDate, resolveScheduleEndDate, resolveScheduleProjectionBaseUnitPrice, resolveScheduleStartDate, unitPriceForScheduleCycleIndex, } from './work-engine-invoice-retainer-schedule-projection.pure.js';
 const SKIP_PERSISTENCE_DISABLED_REASON = 'שמירת דילוג תתווסף בשלב הבא';
 const FUTURE_ACTION_DISABLED_REASON = 'יתווסף בשלב הבא';
 const DOCUMENT_TYPE_LABELS = {
@@ -16,11 +16,25 @@ const DOCUMENT_TYPE_LABELS = {
     deal_invoice: 'חשבון עסקה',
     tax_invoice: 'חשבונית מס',
 };
-function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref) {
+function buildOpenGeneratedDraftAction(params) {
+    if (!params.cycle?.generated_draft_id || !params.cycle.id)
+        return null;
+    return {
+        income_command: 'resume_income_document_draft',
+        income_command_payload: {
+            draft_id: params.cycle.generated_draft_id,
+            cycle_id: params.cycle.id,
+            profile_id: params.profileId,
+        },
+    };
+}
+function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, openDraft) {
     const actionBase = {
         disabled: false,
         disabled_reason: null,
         href: null,
+        income_command: null,
+        income_command_payload: null,
     };
     const openDocument = {
         key: 'open_document',
@@ -28,6 +42,8 @@ function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref) {
         disabled: true,
         disabled_reason: FUTURE_ACTION_DISABLED_REASON,
         href: null,
+        income_command: null,
+        income_command_payload: null,
     };
     const viewHistory = {
         key: 'view_history',
@@ -35,7 +51,22 @@ function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref) {
         disabled: true,
         disabled_reason: FUTURE_ACTION_DISABLED_REASON,
         href: null,
+        income_command: null,
+        income_command_payload: null,
     };
+    if (statusKey === 'waiting_review' && openDraft) {
+        return [
+            {
+                key: 'open_generated_draft_for_review',
+                label: 'פתח טיוטה לבדיקה',
+                ...actionBase,
+                income_command: openDraft.income_command,
+                income_command_payload: openDraft.income_command_payload,
+            },
+            openDocument,
+            viewHistory,
+        ];
+    }
     if (statusKey === 'waiting_review' && workItemHref) {
         return [
             {
@@ -56,6 +87,8 @@ function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref) {
                 disabled: true,
                 disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
                 href: null,
+                income_command: null,
+                income_command_payload: null,
             },
             openDocument,
             viewHistory,
@@ -86,6 +119,8 @@ function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref) {
                 disabled: true,
                 disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
                 href: null,
+                income_command: null,
+                income_command_payload: null,
             },
             openDocument,
             viewHistory,
@@ -93,8 +128,8 @@ function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref) {
     }
     return [];
 }
-function buildRowActions(statusKey, scheduledDate, today, workItemHref) {
-    return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref);
+function buildRowActions(statusKey, scheduledDate, today, workItemHref, openDraft) {
+    return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, openDraft);
 }
 function buildRecurrenceRuleDisplay(frequency, startDisplay) {
     const from = `החל מ־${startDisplay}`;
@@ -116,23 +151,10 @@ function buildRecurrenceRuleDisplay(frequency, startDisplay) {
         return `אחת לשנתיים ${from}`;
     return from;
 }
-function unitPriceForCycleIndex(profile, cycleIndex) {
-    let unitPrice = profile.unit_price_before_vat_reference;
-    if (!profile.price_increase_enabled || cycleIndex <= 0)
-        return unitPrice;
-    for (let i = 0; i < cycleIndex; i += 1) {
-        unitPrice = computeNextUnitPriceBeforeVat({
-            current_unit_price_before_vat_reference: unitPrice,
-            price_increase_enabled: profile.price_increase_enabled,
-            price_increase_type: profile.price_increase_type,
-            price_increase_value: profile.price_increase_value,
-        });
-    }
-    return unitPrice;
-}
 async function computeScheduleAmount(params) {
     params.profiling && (params.profiling.computeAmountCalls += 1);
-    if (params.nextDocumentPreview?.status === 'ready' &&
+    if (params.cycleIndex > 0 &&
+        params.nextDocumentPreview?.status === 'ready' &&
         params.projectedNextDocumentDate === params.documentDate &&
         params.nextDocumentPreview.document_details_step?.totals_block?.grand_total_display) {
         params.profiling && (params.profiling.previewShortcutCalls += 1);
@@ -145,7 +167,13 @@ async function computeScheduleAmount(params) {
     }
     const snapshot = params.profile.document_template_snapshot;
     const settings = parseDocumentSettingsJson(snapshot?.document_settings_json ?? null);
-    const unitPrice = unitPriceForCycleIndex(params.profile, params.cycleIndex);
+    const unitPrice = unitPriceForScheduleCycleIndex({
+        base_unit_price_before_vat: params.baseUnitPriceBeforeVat,
+        cycle_index: params.cycleIndex,
+        price_increase_enabled: params.profile.price_increase_enabled,
+        price_increase_type: params.profile.price_increase_type,
+        price_increase_value: params.profile.price_increase_value,
+    });
     const baseLines = normalizeDraftLines(snapshot?.draft_lines_json ?? []);
     const lines = baseLines.length > 0
         ? baseLines.map((line, index) => ({
@@ -265,6 +293,14 @@ export async function buildRetainerScheduleProjection(params) {
     allDates.forEach((iso, index) => dateCycleIndex.set(iso, index));
     const documentTypeLabel = params.retainerSettings.document_type_label ??
         DOCUMENT_TYPE_LABELS[params.profile.document_type];
+    const baseUnitPriceBeforeVat = resolveScheduleProjectionBaseUnitPrice({
+        unit_price_before_vat_reference: params.profile.unit_price_before_vat_reference,
+        price_increase_enabled: params.profile.price_increase_enabled,
+        price_increase_type: params.profile.price_increase_type,
+        price_increase_value: params.profile.price_increase_value,
+        document_template_snapshot: params.profile.document_template_snapshot,
+        completed_generation_count: countCompletedRecurringGenerations(params.cycles),
+    });
     const grouped = groupScheduleDatesByYear(allDates);
     params.onTiming?.(`schedule_projection date_math_ms=${Date.now() - dateProjectionStartMs} projected_dates=${projectedDates.length} all_dates=${allDates.length} projection_years=${grouped.length}`);
     const years = [];
@@ -295,27 +331,44 @@ export async function buildRetainerScheduleProjection(params) {
                     : null,
                 workItem,
             });
-            const machine = resolveScheduleRowMachineState({ workItem });
+            const openDraftAction = buildOpenGeneratedDraftAction({
+                profileId: params.profile.id,
+                cycle,
+            });
+            const machine = resolveScheduleRowMachineState({
+                workItem,
+                waitingReviewWithGeneratedDraft: status.status_key === 'waiting_review' && openDraftAction != null,
+            });
+            const cycleIndex = dateCycleIndex.get(scheduledDate) ?? 0;
             const amount = await computeScheduleAmount({
                 orgId: params.orgId,
                 profile: params.profile,
                 documentDate: scheduledDate,
-                cycleIndex: dateCycleIndex.get(scheduledDate) ?? 0,
+                cycleIndex,
+                baseUnitPriceBeforeVat,
                 nextDocumentPreview: params.nextDocumentPreview,
                 projectedNextDocumentDate,
                 profiling: amountProfiling,
             });
             projectionRows += 1;
             yearTotalReference += amount.grand_total_reference;
-            const actions = buildRowActions(status.status_key, scheduledDate, today, status.work_item_href);
+            const actions = buildRowActions(status.status_key, scheduledDate, today, status.work_item_href, openDraftAction);
+            const showStatusText = !(status.status_key === 'waiting_review' &&
+                machine.machine_has_task &&
+                openDraftAction != null);
             rows.push({
                 projection_key: formatScheduleProjectionKey(params.profile.id, scheduledDate),
+                cycle_id: cycle?.id ?? null,
+                generated_draft_id: cycle?.generated_draft_id ?? null,
+                linked_work_item_id: machine.machine_task_id ?? workItem?.work_item_id ?? null,
+                period_key: periodKey,
                 scheduled_document_date: scheduledDate,
                 scheduled_document_date_display: formatScheduleRowDateDisplay(scheduledDate),
                 document_type_label: documentTypeLabel,
                 amount_display: amount.amount_display,
                 status_key: status.status_key,
                 status_label: status.status_label,
+                show_status_text: showStatusText,
                 status_tone: status.status_tone,
                 icon_key: status.icon_key,
                 icon_display: status.icon_display,
@@ -329,6 +382,7 @@ export async function buildRetainerScheduleProjection(params) {
                 machine_task_id: machine.machine_task_id,
                 machine_task_url: machine.machine_task_url,
                 machine_task_title: machine.machine_task_title,
+                open_generated_draft_for_review: openDraftAction,
                 allowed_actions: actions.map((action) => action.key),
                 actions,
             });

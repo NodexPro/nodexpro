@@ -26,6 +26,25 @@ test('done work item is not an active machine task', () => {
   assert.equal(machine.machine_task_id, null);
 });
 
+test('open review work item with generated draft exposes review tooltip without queue url', () => {
+  const machine = resolveScheduleRowMachineState({
+    workItem: {
+      work_item_id: 'wi-1',
+      work_type: RECURRING_WORK_TYPE,
+      work_state: 'waiting_human',
+      period_key: 'retainer:profile:p1:cycle:2026-07-23',
+    },
+    waitingReviewWithGeneratedDraft: true,
+  });
+  assert.equal(machine.machine_has_task, true);
+  assert.equal(machine.machine_state, 'waiting_human');
+  assert.equal(machine.machine_state_label, null);
+  assert.equal(machine.machine_state_tone, 'warning');
+  assert.equal(machine.machine_task_id, 'wi-1');
+  assert.equal(machine.machine_task_url, null);
+  assert.equal(machine.machine_task_title, 'ממתין לבדיקת משרד');
+});
+
 test('open review work item exposes machine task fields', () => {
   const machine = resolveScheduleRowMachineState({
     workItem: {

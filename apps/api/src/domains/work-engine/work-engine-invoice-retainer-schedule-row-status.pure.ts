@@ -154,7 +154,7 @@ export function resolveScheduleRowStatus(params: {
       status_tone: 'warning',
       icon_key: 'review',
       icon_display: scheduleRowIconDisplay('review'),
-      work_state_label: openTask && reviewWorkItem ? workStateLabelHe(reviewWorkItem.work_state) : null,
+      work_state_label: null,
       has_open_task: openTask,
       work_item_href:
         openTask && reviewWorkItem

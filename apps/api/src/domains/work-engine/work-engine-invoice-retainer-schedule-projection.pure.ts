@@ -2,12 +2,15 @@
  * Retainer schedule tab — projected future invoice dates (read-model only).
  */
 
+import { normalizeDraftLines } from '../income/income-document-draft-lines.pure.js';
 import { todayIsoDate } from '../income/income-retainer-template-document-date.pure.js';
 import {
   addDaysToDate,
   addMonthsToDate,
+  computeNextUnitPriceBeforeVat,
   formatHebrewDateDisplay,
   type RecurringDocumentFrequency,
+  type RecurringPriceIncreaseType,
   type RecurringProfileStatus,
 } from './work-engine-invoice-retainer.pure.js';
 
@@ -111,6 +114,83 @@ export function formatScheduleProjectionKey(profileId: string, scheduledDocument
 
 export function formatScheduleRowDateDisplay(iso: string): string {
   return formatHebrewDateDisplay(iso);
+}
+
+function reverseOneUnitPriceIncrease(params: {
+  increasedUnitPrice: number;
+  price_increase_type: RecurringPriceIncreaseType;
+  price_increase_value: number;
+}): number {
+  if (params.price_increase_type === 'percent') {
+    const factor = 1 + params.price_increase_value / 100;
+    if (!Number.isFinite(factor) || factor <= 0) return params.increasedUnitPrice;
+    return Math.round((params.increasedUnitPrice / factor) * 100) / 100;
+  }
+  return Math.round((params.increasedUnitPrice - params.price_increase_value) * 100) / 100;
+}
+
+/** Immutable template anchor — scheduler may advance profile.unit_price_before_vat_reference after generation. */
+export function resolveScheduleProjectionBaseUnitPrice(params: {
+  unit_price_before_vat_reference: number;
+  price_increase_enabled: boolean;
+  price_increase_type: RecurringPriceIncreaseType | null;
+  price_increase_value: number | null;
+  document_template_snapshot: { draft_lines_json?: unknown[] } | null;
+  completed_generation_count: number;
+}): number {
+  const lines = normalizeDraftLines(params.document_template_snapshot?.draft_lines_json ?? []);
+  if (lines.length > 0) {
+    const fromSnapshot = lines[0]!.unit_price_reference;
+    if (fromSnapshot != null && Number.isFinite(fromSnapshot) && fromSnapshot >= 0) {
+      return fromSnapshot;
+    }
+  }
+
+  let price = params.unit_price_before_vat_reference;
+  if (
+    !params.price_increase_enabled ||
+    !params.price_increase_type ||
+    params.price_increase_value == null ||
+    params.completed_generation_count <= 0
+  ) {
+    return price;
+  }
+
+  for (let i = 0; i < params.completed_generation_count; i += 1) {
+    price = reverseOneUnitPriceIncrease({
+      increasedUnitPrice: price,
+      price_increase_type: params.price_increase_type,
+      price_increase_value: params.price_increase_value,
+    });
+  }
+  return price;
+}
+
+/** cycleIndex 0 = first/generated cycle (no increase); 1 = first +2%, etc. */
+export function unitPriceForScheduleCycleIndex(params: {
+  base_unit_price_before_vat: number;
+  cycle_index: number;
+  price_increase_enabled: boolean;
+  price_increase_type: RecurringPriceIncreaseType | null;
+  price_increase_value: number | null;
+}): number {
+  let unitPrice = params.base_unit_price_before_vat;
+  if (!params.price_increase_enabled || params.cycle_index <= 0) return unitPrice;
+  for (let i = 0; i < params.cycle_index; i += 1) {
+    unitPrice = computeNextUnitPriceBeforeVat({
+      current_unit_price_before_vat_reference: unitPrice,
+      price_increase_enabled: params.price_increase_enabled,
+      price_increase_type: params.price_increase_type,
+      price_increase_value: params.price_increase_value,
+    });
+  }
+  return unitPrice;
+}
+
+export function countCompletedRecurringGenerations(
+  cycles: ReadonlyArray<{ status: ScheduleSummaryCycleRef['status'] }>,
+): number {
+  return cycles.filter((cycle) => cycle.status === 'draft_created' || cycle.status === 'issued').length;
 }
 
 export type ScheduleSummaryCycleRef = {

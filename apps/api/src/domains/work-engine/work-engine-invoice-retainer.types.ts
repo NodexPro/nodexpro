@@ -166,16 +166,32 @@ export type WorkEngineInvoiceRetainerScheduleProjectionAction = {
   disabled: boolean;
   disabled_reason: string | null;
   href: string | null;
+  income_command: string | null;
+  income_command_payload: Record<string, unknown> | null;
+};
+
+export type WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction = {
+  income_command: 'resume_income_document_draft';
+  income_command_payload: {
+    draft_id: string;
+    cycle_id: string;
+    profile_id: string;
+  };
 };
 
 export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   projection_key: string;
+  cycle_id: string | null;
+  generated_draft_id: string | null;
+  linked_work_item_id: string | null;
+  period_key: string;
   scheduled_document_date: string;
   scheduled_document_date_display: string;
   document_type_label: string;
   amount_display: string;
   status_key: 'issued' | 'waiting_review' | 'scheduled' | 'skipped' | 'failed';
   status_label: string;
+  show_status_text: boolean;
   status_tone: 'success' | 'neutral' | 'warning' | 'danger' | 'muted';
   icon_key: 'check' | 'calendar' | 'pause' | 'alert' | 'review';
   icon_display: string;
@@ -189,6 +205,7 @@ export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   machine_task_id: string | null;
   machine_task_url: string | null;
   machine_task_title: string | null;
+  open_generated_draft_for_review: WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction | null;
   allowed_actions: string[];
   actions: WorkEngineInvoiceRetainerScheduleProjectionAction[];
 };

@@ -10,7 +10,6 @@ import {
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import type { RecurringCycleStatus } from './work-engine-invoice-retainer-cycles.service.js';
 import {
-  computeNextUnitPriceBeforeVat,
   type RecurringDocumentFrequency,
   type RecurringPriceIncreaseType,
   type RecurringProfileStatus,
@@ -25,6 +24,7 @@ import {
 import { resolveScheduleRowMachineState } from './work-engine-invoice-retainer-schedule-row-machine.pure.js';
 import type {
   WorkEngineInvoiceRetainerNextDocumentPreview,
+  WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction,
   WorkEngineInvoiceRetainerScheduleProjection,
   WorkEngineInvoiceRetainerScheduleProjectionAction,
   WorkEngineInvoiceRetainerScheduleProjectionRow,
@@ -33,6 +33,7 @@ import type {
   WorkEngineInvoiceRetainerSetupTab,
 } from './work-engine-invoice-retainer.types.js';
 import {
+  countCompletedRecurringGenerations,
   formatScheduleProjectionKey,
   formatScheduleRowDateDisplay,
   formatScheduleYearDocumentsCountLabel,
@@ -42,7 +43,9 @@ import {
   resolveNextScheduleSummaryDocumentDate,
   resolveProjectedNextScheduleDate,
   resolveScheduleEndDate,
+  resolveScheduleProjectionBaseUnitPrice,
   resolveScheduleStartDate,
+  unitPriceForScheduleCycleIndex,
 } from './work-engine-invoice-retainer-schedule-projection.pure.js';
 
 const SKIP_PERSISTENCE_DISABLED_REASON = 'שמירת דילוג תתווסף בשלב הבא';
@@ -81,16 +84,34 @@ type ScheduleProfile = {
   document_template_snapshot: RecurringDocumentTemplateSnapshot | null;
 };
 
+function buildOpenGeneratedDraftAction(params: {
+  profileId: string;
+  cycle: ScheduleCycleRow | null;
+}): WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction | null {
+  if (!params.cycle?.generated_draft_id || !params.cycle.id) return null;
+  return {
+    income_command: 'resume_income_document_draft',
+    income_command_payload: {
+      draft_id: params.cycle.generated_draft_id,
+      cycle_id: params.cycle.id,
+      profile_id: params.profileId,
+    },
+  };
+}
+
 function buildRowMenuActions(
   statusKey: string,
   scheduledDate: string,
   today: string,
   workItemHref: string | null,
+  openDraft: WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction | null,
 ): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
   const actionBase = {
     disabled: false as const,
     disabled_reason: null as string | null,
     href: null as string | null,
+    income_command: null as string | null,
+    income_command_payload: null as Record<string, unknown> | null,
   };
   const openDocument: WorkEngineInvoiceRetainerScheduleProjectionAction = {
     key: 'open_document',
@@ -98,6 +119,8 @@ function buildRowMenuActions(
     disabled: true,
     disabled_reason: FUTURE_ACTION_DISABLED_REASON,
     href: null,
+    income_command: null,
+    income_command_payload: null,
   };
   const viewHistory: WorkEngineInvoiceRetainerScheduleProjectionAction = {
     key: 'view_history',
@@ -105,8 +128,23 @@ function buildRowMenuActions(
     disabled: true,
     disabled_reason: FUTURE_ACTION_DISABLED_REASON,
     href: null,
+    income_command: null,
+    income_command_payload: null,
   };
 
+  if (statusKey === 'waiting_review' && openDraft) {
+    return [
+      {
+        key: 'open_generated_draft_for_review',
+        label: 'פתח טיוטה לבדיקה',
+        ...actionBase,
+        income_command: openDraft.income_command,
+        income_command_payload: openDraft.income_command_payload,
+      },
+      openDocument,
+      viewHistory,
+    ];
+  }
   if (statusKey === 'waiting_review' && workItemHref) {
     return [
       {
@@ -127,6 +165,8 @@ function buildRowMenuActions(
         disabled: true,
         disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
         href: null,
+        income_command: null,
+        income_command_payload: null,
       },
       openDocument,
       viewHistory,
@@ -157,6 +197,8 @@ function buildRowMenuActions(
         disabled: true,
         disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
         href: null,
+        income_command: null,
+        income_command_payload: null,
       },
       openDocument,
       viewHistory,
@@ -170,8 +212,9 @@ function buildRowActions(
   scheduledDate: string,
   today: string,
   workItemHref: string | null,
+  openDraft: WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction | null,
 ): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
-  return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref);
+  return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, openDraft);
 }
 
 function buildRecurrenceRuleDisplay(
@@ -190,20 +233,6 @@ function buildRecurrenceRuleDisplay(
   return from;
 }
 
-function unitPriceForCycleIndex(profile: ScheduleProfile, cycleIndex: number): number {
-  let unitPrice = profile.unit_price_before_vat_reference;
-  if (!profile.price_increase_enabled || cycleIndex <= 0) return unitPrice;
-  for (let i = 0; i < cycleIndex; i += 1) {
-    unitPrice = computeNextUnitPriceBeforeVat({
-      current_unit_price_before_vat_reference: unitPrice,
-      price_increase_enabled: profile.price_increase_enabled,
-      price_increase_type: profile.price_increase_type,
-      price_increase_value: profile.price_increase_value,
-    });
-  }
-  return unitPrice;
-}
-
 type ScheduleAmountProfiling = {
   computeAmountCalls: number;
   previewShortcutCalls: number;
@@ -218,12 +247,14 @@ async function computeScheduleAmount(params: {
   profile: ScheduleProfile;
   documentDate: string;
   cycleIndex: number;
+  baseUnitPriceBeforeVat: number;
   nextDocumentPreview: WorkEngineInvoiceRetainerNextDocumentPreview | null;
   projectedNextDocumentDate: string | null;
   profiling?: ScheduleAmountProfiling;
 }): Promise<{ amount_display: string; grand_total_reference: number }> {
   params.profiling && (params.profiling.computeAmountCalls += 1);
   if (
+    params.cycleIndex > 0 &&
     params.nextDocumentPreview?.status === 'ready' &&
     params.projectedNextDocumentDate === params.documentDate &&
     params.nextDocumentPreview.document_details_step?.totals_block?.grand_total_display
@@ -239,7 +270,13 @@ async function computeScheduleAmount(params: {
 
   const snapshot = params.profile.document_template_snapshot;
   const settings = parseDocumentSettingsJson(snapshot?.document_settings_json ?? null);
-  const unitPrice = unitPriceForCycleIndex(params.profile, params.cycleIndex);
+  const unitPrice = unitPriceForScheduleCycleIndex({
+    base_unit_price_before_vat: params.baseUnitPriceBeforeVat,
+    cycle_index: params.cycleIndex,
+    price_increase_enabled: params.profile.price_increase_enabled,
+    price_increase_type: params.profile.price_increase_type,
+    price_increase_value: params.profile.price_increase_value,
+  });
   const baseLines = normalizeDraftLines(snapshot?.draft_lines_json ?? []);
   const lines =
     baseLines.length > 0
@@ -398,6 +435,15 @@ export async function buildRetainerScheduleProjection(params: {
     params.retainerSettings.document_type_label ??
     DOCUMENT_TYPE_LABELS[params.profile.document_type];
 
+  const baseUnitPriceBeforeVat = resolveScheduleProjectionBaseUnitPrice({
+    unit_price_before_vat_reference: params.profile.unit_price_before_vat_reference,
+    price_increase_enabled: params.profile.price_increase_enabled,
+    price_increase_type: params.profile.price_increase_type,
+    price_increase_value: params.profile.price_increase_value,
+    document_template_snapshot: params.profile.document_template_snapshot,
+    completed_generation_count: countCompletedRecurringGenerations(params.cycles),
+  });
+
   const grouped = groupScheduleDatesByYear(allDates);
   params.onTiming?.(
     `schedule_projection date_math_ms=${Date.now() - dateProjectionStartMs} projected_dates=${projectedDates.length} all_dates=${allDates.length} projection_years=${grouped.length}`,
@@ -432,12 +478,22 @@ export async function buildRetainerScheduleProjection(params: {
           : null,
         workItem,
       });
-      const machine = resolveScheduleRowMachineState({ workItem });
+      const openDraftAction = buildOpenGeneratedDraftAction({
+        profileId: params.profile.id,
+        cycle,
+      });
+      const machine = resolveScheduleRowMachineState({
+        workItem,
+        waitingReviewWithGeneratedDraft:
+          status.status_key === 'waiting_review' && openDraftAction != null,
+      });
+      const cycleIndex = dateCycleIndex.get(scheduledDate) ?? 0;
       const amount = await computeScheduleAmount({
         orgId: params.orgId,
         profile: params.profile,
         documentDate: scheduledDate,
-        cycleIndex: dateCycleIndex.get(scheduledDate) ?? 0,
+        cycleIndex,
+        baseUnitPriceBeforeVat,
         nextDocumentPreview: params.nextDocumentPreview,
         projectedNextDocumentDate,
         profiling: amountProfiling,
@@ -449,15 +505,26 @@ export async function buildRetainerScheduleProjection(params: {
         scheduledDate,
         today,
         status.work_item_href,
+        openDraftAction,
+      );
+      const showStatusText = !(
+        status.status_key === 'waiting_review' &&
+        machine.machine_has_task &&
+        openDraftAction != null
       );
       rows.push({
         projection_key: formatScheduleProjectionKey(params.profile.id, scheduledDate),
+        cycle_id: cycle?.id ?? null,
+        generated_draft_id: cycle?.generated_draft_id ?? null,
+        linked_work_item_id: machine.machine_task_id ?? workItem?.work_item_id ?? null,
+        period_key: periodKey,
         scheduled_document_date: scheduledDate,
         scheduled_document_date_display: formatScheduleRowDateDisplay(scheduledDate),
         document_type_label: documentTypeLabel,
         amount_display: amount.amount_display,
         status_key: status.status_key,
         status_label: status.status_label,
+        show_status_text: showStatusText,
         status_tone: status.status_tone,
         icon_key: status.icon_key,
         icon_display: status.icon_display,
@@ -471,6 +538,7 @@ export async function buildRetainerScheduleProjection(params: {
         machine_task_id: machine.machine_task_id,
         machine_task_url: machine.machine_task_url,
         machine_task_title: machine.machine_task_title,
+        open_generated_draft_for_review: openDraftAction,
         allowed_actions: actions.map((action) => action.key),
         actions,
       });

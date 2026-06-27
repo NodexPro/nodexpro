@@ -31,6 +31,7 @@ test('waiting_review when draft exists without issued document', () => {
   assert.equal(status.status_label, 'ממתין לבדיקה');
   assert.equal(status.icon_display, '📝');
   assert.equal(status.has_open_task, true);
+  assert.equal(status.work_state_label, null);
   assert.match(status.work_item_href ?? '', /work_item_id=wi-1/);
 });
 

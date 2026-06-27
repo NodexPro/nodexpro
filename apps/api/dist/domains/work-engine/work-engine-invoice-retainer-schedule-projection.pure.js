@@ -1,8 +1,9 @@
 /**
  * Retainer schedule tab — projected future invoice dates (read-model only).
  */
+import { normalizeDraftLines } from '../income/income-document-draft-lines.pure.js';
 import { todayIsoDate } from '../income/income-retainer-template-document-date.pure.js';
-import { addDaysToDate, addMonthsToDate, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
+import { addDaysToDate, addMonthsToDate, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
 export const SCHEDULE_PROJECTION_YEARS_FORWARD = 5;
 function frequencyAdvanceDays(frequency) {
     if (frequency === 'days_30')
@@ -87,6 +88,58 @@ export function formatScheduleProjectionKey(profileId, scheduledDocumentDate) {
 }
 export function formatScheduleRowDateDisplay(iso) {
     return formatHebrewDateDisplay(iso);
+}
+function reverseOneUnitPriceIncrease(params) {
+    if (params.price_increase_type === 'percent') {
+        const factor = 1 + params.price_increase_value / 100;
+        if (!Number.isFinite(factor) || factor <= 0)
+            return params.increasedUnitPrice;
+        return Math.round((params.increasedUnitPrice / factor) * 100) / 100;
+    }
+    return Math.round((params.increasedUnitPrice - params.price_increase_value) * 100) / 100;
+}
+/** Immutable template anchor — scheduler may advance profile.unit_price_before_vat_reference after generation. */
+export function resolveScheduleProjectionBaseUnitPrice(params) {
+    const lines = normalizeDraftLines(params.document_template_snapshot?.draft_lines_json ?? []);
+    if (lines.length > 0) {
+        const fromSnapshot = lines[0].unit_price_reference;
+        if (fromSnapshot != null && Number.isFinite(fromSnapshot) && fromSnapshot >= 0) {
+            return fromSnapshot;
+        }
+    }
+    let price = params.unit_price_before_vat_reference;
+    if (!params.price_increase_enabled ||
+        !params.price_increase_type ||
+        params.price_increase_value == null ||
+        params.completed_generation_count <= 0) {
+        return price;
+    }
+    for (let i = 0; i < params.completed_generation_count; i += 1) {
+        price = reverseOneUnitPriceIncrease({
+            increasedUnitPrice: price,
+            price_increase_type: params.price_increase_type,
+            price_increase_value: params.price_increase_value,
+        });
+    }
+    return price;
+}
+/** cycleIndex 0 = first/generated cycle (no increase); 1 = first +2%, etc. */
+export function unitPriceForScheduleCycleIndex(params) {
+    let unitPrice = params.base_unit_price_before_vat;
+    if (!params.price_increase_enabled || params.cycle_index <= 0)
+        return unitPrice;
+    for (let i = 0; i < params.cycle_index; i += 1) {
+        unitPrice = computeNextUnitPriceBeforeVat({
+            current_unit_price_before_vat_reference: unitPrice,
+            price_increase_enabled: params.price_increase_enabled,
+            price_increase_type: params.price_increase_type,
+            price_increase_value: params.price_increase_value,
+        });
+    }
+    return unitPrice;
+}
+export function countCompletedRecurringGenerations(cycles) {
+    return cycles.filter((cycle) => cycle.status === 'draft_created' || cycle.status === 'issued').length;
 }
 export function mergeScheduleDates(params) {
     const merged = new Set(params.projectedDates);
