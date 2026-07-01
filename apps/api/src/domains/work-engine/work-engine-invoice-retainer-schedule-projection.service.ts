@@ -31,6 +31,9 @@ import type {
   WorkEngineInvoiceRetainerSettings,
   WorkEngineInvoiceRetainerSetupTab,
 } from './work-engine-invoice-retainer.types.js';
+import type { IncomeDocumentDetailsStep } from '../income/income.types.js';
+import type { RecurringCycleOverrideRow } from './work-engine-invoice-retainer-cycle-override.pure.js';
+import { buildFutureCycleProjectionAmountDisplay } from './work-engine-invoice-retainer-cycle-override.service.js';
 import { resolveScheduleRowPrimaryAction } from './work-engine-invoice-retainer-schedule-row-primary-action.pure.js';
 import {
   countCompletedRecurringGenerations,
@@ -67,6 +70,7 @@ type ScheduleCycleRow = {
 
 type ScheduleProfile = {
   id: string;
+  end_customer_id: string;
   document_type: 'quote' | 'deal_invoice' | 'tax_invoice';
   frequency: RecurringDocumentFrequency;
   next_document_date: string;
@@ -89,8 +93,9 @@ function buildRowMenuActions(
   scheduledDate: string,
   today: string,
   workItemHref: string | null,
-  hasPrimaryAction: boolean,
+  primaryActionKey: string | null,
 ): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
+  const hasPrimaryAction = primaryActionKey != null;
   const actionBase = {
     disabled: false as const,
     disabled_reason: null as string | null,
@@ -117,7 +122,7 @@ function buildRowMenuActions(
     income_command_payload: null,
   };
 
-  if (statusKey === 'waiting_review' && hasPrimaryAction) {
+  if (primaryActionKey === 'open_recurring_cycle_draft_for_review') {
     return [
       {
         key: 'open_recurring_cycle_draft_for_review',
@@ -128,11 +133,22 @@ function buildRowMenuActions(
       viewHistory,
     ];
   }
-  if (statusKey === 'scheduled' && hasPrimaryAction) {
+  if (primaryActionKey === 'open_next_document_tab') {
     return [
       {
         key: 'open_next_document_tab',
         label: 'פתח המסמך הבא',
+        ...actionBase,
+      },
+      openDocument,
+      viewHistory,
+    ];
+  }
+  if (primaryActionKey === 'open_recurring_cycle_override_for_edit') {
+    return [
+      {
+        key: 'open_recurring_cycle_override_for_edit',
+        label: 'עריכת מסמך עתידי',
         ...actionBase,
       },
       openDocument,
@@ -206,9 +222,9 @@ function buildRowActions(
   scheduledDate: string,
   today: string,
   workItemHref: string | null,
-  hasPrimaryAction: boolean,
+  primaryActionKey: string | null,
 ): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
-  return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, hasPrimaryAction);
+  return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, primaryActionKey);
 }
 
 function buildRecurrenceRuleDisplay(
@@ -346,6 +362,8 @@ export async function buildRetainerScheduleProjection(params: {
   nextDocumentPreview: WorkEngineInvoiceRetainerNextDocumentPreview | null;
   projectedNextDocumentDate?: string | null;
   workItemsByPeriodKey?: ReadonlyMap<string, ScheduleRowWorkItemRef>;
+  cycleOverridesByDate?: ReadonlyMap<string, RecurringCycleOverrideRow>;
+  templateBaseStep?: IncomeDocumentDetailsStep | null;
   todayIso?: string;
   onTiming?: (detail: string) => void;
 }): Promise<WorkEngineInvoiceRetainerScheduleProjection> {
@@ -474,6 +492,8 @@ export async function buildRetainerScheduleProjection(params: {
         workItem,
       });
       const linkedWorkItemId = workItem?.work_item_id ?? null;
+      const cycleIndex = dateCycleIndex.get(scheduledDate) ?? 0;
+      const cycleOverride = params.cycleOverridesByDate?.get(scheduledDate) ?? null;
       const rowInteraction = resolveScheduleRowPrimaryAction({
         status_key: status.status_key,
         scheduled_document_date: scheduledDate,
@@ -484,14 +504,16 @@ export async function buildRetainerScheduleProjection(params: {
         generated_draft_id: cycle?.generated_draft_id ?? null,
         period_key: periodKey,
         linked_work_item_id: linkedWorkItemId,
+        cycle_index: cycleIndex,
+        override_exists: Boolean(cycleOverride),
+        override_scope: cycleOverride?.override_scope ?? null,
       });
       const machine = resolveScheduleRowMachineState({
         workItem,
         waitingReviewWithGeneratedDraft:
           status.status_key === 'waiting_review' && rowInteraction.primary_action != null,
       });
-      const cycleIndex = dateCycleIndex.get(scheduledDate) ?? 0;
-      const amount = await computeScheduleAmount({
+      let amount = await computeScheduleAmount({
         orgId: params.orgId,
         profile: params.profile,
         documentDate: scheduledDate,
@@ -501,6 +523,26 @@ export async function buildRetainerScheduleProjection(params: {
         projectedNextDocumentDate,
         profiling: amountProfiling,
       });
+      if (
+        rowInteraction.row_interaction_kind === 'future_projection' &&
+        params.templateBaseStep
+      ) {
+        const overrideAmount = await buildFutureCycleProjectionAmountDisplay({
+          orgId: params.orgId,
+          profile: params.profile,
+          baseStep: params.templateBaseStep,
+          cycleDate: scheduledDate,
+          cycleIndex,
+          overridePayload: cycleOverride?.override_payload ?? null,
+        });
+        if (overrideAmount) {
+          const parsed = Number(String(overrideAmount).replace(/[^\d.-]/g, ''));
+          amount = {
+            amount_display: overrideAmount,
+            grand_total_reference: Number.isFinite(parsed) ? parsed : amount.grand_total_reference,
+          };
+        }
+      }
       projectionRows += 1;
       yearTotalReference += amount.grand_total_reference;
       const actions = buildRowActions(
@@ -508,7 +550,7 @@ export async function buildRetainerScheduleProjection(params: {
         scheduledDate,
         today,
         status.work_item_href,
-        rowInteraction.primary_action != null,
+        rowInteraction.primary_action?.command ?? null,
       );
       const showStatusText = !(
         status.status_key === 'waiting_review' &&
@@ -543,6 +585,10 @@ export async function buildRetainerScheduleProjection(params: {
         machine_task_title: machine.machine_task_title,
         row_interaction_kind: rowInteraction.row_interaction_kind,
         primary_action: rowInteraction.primary_action,
+        preview_action: rowInteraction.preview_action,
+        override_exists: rowInteraction.override_exists,
+        override_scope: rowInteraction.override_scope,
+        cycle_date: rowInteraction.cycle_date,
         allowed_actions: actions.map((action) => action.key),
         actions,
       });

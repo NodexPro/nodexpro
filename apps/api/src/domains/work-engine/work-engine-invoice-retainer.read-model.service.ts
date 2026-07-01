@@ -47,6 +47,7 @@ import {
 } from './work-engine-invoice-retainer-schedule-projection.service.js';
 import { resolveProjectedNextScheduleDate } from './work-engine-invoice-retainer-schedule-projection.pure.js';
 import { loadScheduleProjectionWorkItemsByProfile } from './work-engine-invoice-retainer-schedule-work-items.read.js';
+import { loadRecurringCycleOverridesForProfile } from './work-engine-invoice-retainer-cycle-override.service.js';
 import type { ScheduleRowWorkItemRef } from './work-engine-invoice-retainer-schedule-row-status.pure.js';
 import {
   WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY,
@@ -736,6 +737,10 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
   );
 
   const scheduleProjectionStartMs = Date.now();
+  const cycleOverridesByDate =
+    selectedProfile?.id
+      ? await loadRecurringCycleOverridesForProfile({ orgId, profileId: selectedProfile.id })
+      : new Map();
   const retainerScheduleProjection = await buildRetainerScheduleProjection({
     orgId,
     representedClientId,
@@ -751,6 +756,8 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     nextDocumentPreview,
     projectedNextDocumentDate,
     workItemsByPeriodKey: scheduleWorkItemsByPeriodKey,
+    cycleOverridesByDate,
+    templateBaseStep: baseDocumentDetailsStep,
     onTiming: (detail) => {
       logRetainerSetupTimingDetail(representedClientId, selectedEndCustomerId, detail);
     },

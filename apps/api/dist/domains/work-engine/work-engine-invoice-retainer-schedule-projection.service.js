@@ -8,6 +8,7 @@ import { recurringProfileWorkPeriodKey, } from './work-engine-invoice-retainer.p
 import { todayIsoDate } from '../income/income-retainer-template-document-date.pure.js';
 import { resolveScheduleRowStatus, } from './work-engine-invoice-retainer-schedule-row-status.pure.js';
 import { resolveScheduleRowMachineState } from './work-engine-invoice-retainer-schedule-row-machine.pure.js';
+import { buildFutureCycleProjectionAmountDisplay } from './work-engine-invoice-retainer-cycle-override.service.js';
 import { resolveScheduleRowPrimaryAction } from './work-engine-invoice-retainer-schedule-row-primary-action.pure.js';
 import { countCompletedRecurringGenerations, formatScheduleProjectionKey, formatScheduleRowDateDisplay, formatScheduleYearDocumentsCountLabel, generateProjectedScheduleDates, groupScheduleDatesByYear, mergeScheduleDates, resolveNextScheduleSummaryDocumentDate, resolveProjectedNextScheduleDate, resolveScheduleEndDate, resolveScheduleProjectionBaseUnitPrice, resolveScheduleStartDate, unitPriceForScheduleCycleIndex, } from './work-engine-invoice-retainer-schedule-projection.pure.js';
 const SKIP_PERSISTENCE_DISABLED_REASON = 'שמירת דילוג תתווסף בשלב הבא';
@@ -17,7 +18,8 @@ const DOCUMENT_TYPE_LABELS = {
     deal_invoice: 'חשבון עסקה',
     tax_invoice: 'חשבונית מס',
 };
-function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, hasPrimaryAction) {
+function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, primaryActionKey) {
+    const hasPrimaryAction = primaryActionKey != null;
     const actionBase = {
         disabled: false,
         disabled_reason: null,
@@ -43,7 +45,7 @@ function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, hasP
         income_command: null,
         income_command_payload: null,
     };
-    if (statusKey === 'waiting_review' && hasPrimaryAction) {
+    if (primaryActionKey === 'open_recurring_cycle_draft_for_review') {
         return [
             {
                 key: 'open_recurring_cycle_draft_for_review',
@@ -54,11 +56,22 @@ function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, hasP
             viewHistory,
         ];
     }
-    if (statusKey === 'scheduled' && hasPrimaryAction) {
+    if (primaryActionKey === 'open_next_document_tab') {
         return [
             {
                 key: 'open_next_document_tab',
                 label: 'פתח המסמך הבא',
+                ...actionBase,
+            },
+            openDocument,
+            viewHistory,
+        ];
+    }
+    if (primaryActionKey === 'open_recurring_cycle_override_for_edit') {
+        return [
+            {
+                key: 'open_recurring_cycle_override_for_edit',
+                label: 'עריכת מסמך עתידי',
                 ...actionBase,
             },
             openDocument,
@@ -126,8 +139,8 @@ function buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, hasP
     }
     return [];
 }
-function buildRowActions(statusKey, scheduledDate, today, workItemHref, hasPrimaryAction) {
-    return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, hasPrimaryAction);
+function buildRowActions(statusKey, scheduledDate, today, workItemHref, primaryActionKey) {
+    return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, primaryActionKey);
 }
 function buildRecurrenceRuleDisplay(frequency, startDisplay) {
     const from = `החל מ־${startDisplay}`;
@@ -330,6 +343,8 @@ export async function buildRetainerScheduleProjection(params) {
                 workItem,
             });
             const linkedWorkItemId = workItem?.work_item_id ?? null;
+            const cycleIndex = dateCycleIndex.get(scheduledDate) ?? 0;
+            const cycleOverride = params.cycleOverridesByDate?.get(scheduledDate) ?? null;
             const rowInteraction = resolveScheduleRowPrimaryAction({
                 status_key: status.status_key,
                 scheduled_document_date: scheduledDate,
@@ -340,13 +355,15 @@ export async function buildRetainerScheduleProjection(params) {
                 generated_draft_id: cycle?.generated_draft_id ?? null,
                 period_key: periodKey,
                 linked_work_item_id: linkedWorkItemId,
+                cycle_index: cycleIndex,
+                override_exists: Boolean(cycleOverride),
+                override_scope: cycleOverride?.override_scope ?? null,
             });
             const machine = resolveScheduleRowMachineState({
                 workItem,
                 waitingReviewWithGeneratedDraft: status.status_key === 'waiting_review' && rowInteraction.primary_action != null,
             });
-            const cycleIndex = dateCycleIndex.get(scheduledDate) ?? 0;
-            const amount = await computeScheduleAmount({
+            let amount = await computeScheduleAmount({
                 orgId: params.orgId,
                 profile: params.profile,
                 documentDate: scheduledDate,
@@ -356,9 +373,27 @@ export async function buildRetainerScheduleProjection(params) {
                 projectedNextDocumentDate,
                 profiling: amountProfiling,
             });
+            if (rowInteraction.row_interaction_kind === 'future_projection' &&
+                params.templateBaseStep) {
+                const overrideAmount = await buildFutureCycleProjectionAmountDisplay({
+                    orgId: params.orgId,
+                    profile: params.profile,
+                    baseStep: params.templateBaseStep,
+                    cycleDate: scheduledDate,
+                    cycleIndex,
+                    overridePayload: cycleOverride?.override_payload ?? null,
+                });
+                if (overrideAmount) {
+                    const parsed = Number(String(overrideAmount).replace(/[^\d.-]/g, ''));
+                    amount = {
+                        amount_display: overrideAmount,
+                        grand_total_reference: Number.isFinite(parsed) ? parsed : amount.grand_total_reference,
+                    };
+                }
+            }
             projectionRows += 1;
             yearTotalReference += amount.grand_total_reference;
-            const actions = buildRowActions(status.status_key, scheduledDate, today, status.work_item_href, rowInteraction.primary_action != null);
+            const actions = buildRowActions(status.status_key, scheduledDate, today, status.work_item_href, rowInteraction.primary_action?.command ?? null);
             const showStatusText = !(status.status_key === 'waiting_review' &&
                 machine.machine_has_task &&
                 rowInteraction.primary_action != null);
@@ -390,6 +425,10 @@ export async function buildRetainerScheduleProjection(params) {
                 machine_task_title: machine.machine_task_title,
                 row_interaction_kind: rowInteraction.row_interaction_kind,
                 primary_action: rowInteraction.primary_action,
+                preview_action: rowInteraction.preview_action,
+                override_exists: rowInteraction.override_exists,
+                override_scope: rowInteraction.override_scope,
+                cycle_date: rowInteraction.cycle_date,
                 allowed_actions: actions.map((action) => action.key),
                 actions,
             });

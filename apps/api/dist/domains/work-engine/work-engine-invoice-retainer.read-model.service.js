@@ -15,6 +15,7 @@ import { buildNextDocumentPreview, buildSetupTabs, } from './work-engine-invoice
 import { buildRetainerScheduleProjection, buildScheduleSetupTab, } from './work-engine-invoice-retainer-schedule-projection.service.js';
 import { resolveProjectedNextScheduleDate } from './work-engine-invoice-retainer-schedule-projection.pure.js';
 import { loadScheduleProjectionWorkItemsByProfile } from './work-engine-invoice-retainer-schedule-work-items.read.js';
+import { loadRecurringCycleOverridesForProfile } from './work-engine-invoice-retainer-cycle-override.service.js';
 import { WORK_ENGINE_INVOICE_RETAINER_SETUP_AGGREGATE_KEY, } from './work-engine-invoice-retainer.types.js';
 const RETAINER_TEMPLATE_START_DATE_LABEL = 'תאריך התחלה';
 function relabelRetainerTemplateStartDate(step) {
@@ -454,6 +455,9 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     });
     stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'build_next_document_preview', nextDocumentPreviewStartMs);
     const scheduleProjectionStartMs = Date.now();
+    const cycleOverridesByDate = selectedProfile?.id
+        ? await loadRecurringCycleOverridesForProfile({ orgId, profileId: selectedProfile.id })
+        : new Map();
     const retainerScheduleProjection = await buildRetainerScheduleProjection({
         orgId,
         representedClientId,
@@ -469,6 +473,8 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         nextDocumentPreview,
         projectedNextDocumentDate,
         workItemsByPeriodKey: scheduleWorkItemsByPeriodKey,
+        cycleOverridesByDate,
+        templateBaseStep: baseDocumentDetailsStep,
         onTiming: (detail) => {
             logRetainerSetupTimingDetail(representedClientId, selectedEndCustomerId, detail);
         },

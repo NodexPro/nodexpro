@@ -7,6 +7,7 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import type { IncomeDocumentDetailsStep } from '../income/income.types.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
 import type { RetainerSettingsOverride } from './work-engine-invoice-retainer.read-model.service.js';
@@ -23,6 +24,13 @@ import {
 } from './work-engine-invoice-retainer.types.js';
 import { approveRecurringDocumentDraft } from './work-engine-invoice-retainer-lifecycle.service.js';
 import { openRecurringCycleDraftForReview } from './work-engine-invoice-retainer-cycle-draft-review.service.js';
+import {
+  deleteRecurringCycleOverride,
+  openRecurringCycleOverrideForEdit,
+  previewRecurringCycleOverride,
+  saveRecurringCycleOverride,
+} from './work-engine-invoice-retainer-cycle-override.service.js';
+import { isRecurringCycleOverrideApplyScope } from './work-engine-invoice-retainer-cycle-override.pure.js';
 
 const ALLOWED_RETAINER_COMMANDS = new Set<string>(Object.values(WORK_ENGINE_INVOICE_RETAINER_COMMANDS));
 
@@ -62,6 +70,12 @@ function reqNumber(body: Record<string, unknown>, key: string): number {
   const n = optionalNumber(body, key);
   if (n == null) throw badRequest(`${key} is required`);
   return n;
+}
+
+function parseDocumentDetailsStepFromBody(body: Record<string, unknown>): IncomeDocumentDetailsStep {
+  const step = body.document_details_step;
+  if (!step || typeof step !== 'object') throw badRequest('document_details_step is required');
+  return step as IncomeDocumentDetailsStep;
 }
 
 function reqBoolean(body: Record<string, unknown>, key: string): boolean {
@@ -265,6 +279,64 @@ export async function executeWorkEngineInvoiceRetainerCommand(
       command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.openCycleDraftReview,
       work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
     };
+  }
+
+  if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.openCycleOverride) {
+    const overrideAggregate = await openRecurringCycleOverrideForEdit({
+      ctx,
+      representedClientId,
+      profileId: reqString(body, 'profile_id'),
+      cycleDate: reqString(body, 'cycle_date'),
+      periodKey: reqString(body, 'period_key'),
+      cycleIndex: reqNumber(body, 'cycle_index'),
+    });
+    return {
+      ok: true,
+      command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.openCycleOverride,
+      work_engine_recurring_cycle_override_aggregate: overrideAggregate,
+    };
+  }
+
+  if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.previewCycleOverride) {
+    const overrideAggregate = await previewRecurringCycleOverride({
+      ctx,
+      representedClientId,
+      profileId: reqString(body, 'profile_id'),
+      cycleDate: reqString(body, 'cycle_date'),
+      periodKey: reqString(body, 'period_key'),
+      cycleIndex: reqNumber(body, 'cycle_index'),
+      documentDetailsStep: parseDocumentDetailsStepFromBody(body),
+    });
+    return {
+      ok: true,
+      command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.previewCycleOverride,
+      work_engine_recurring_cycle_override_aggregate: overrideAggregate,
+    };
+  }
+
+  if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.saveCycleOverride) {
+    const applyScope = reqString(body, 'apply_scope');
+    if (!isRecurringCycleOverrideApplyScope(applyScope)) {
+      throw badRequest('Invalid apply_scope');
+    }
+    return saveRecurringCycleOverride({
+      ctx,
+      representedClientId,
+      profileId: reqString(body, 'profile_id'),
+      cycleDate: reqString(body, 'cycle_date'),
+      periodKey: optionalString(body, 'period_key') ?? '',
+      applyScope,
+      documentDetailsStep: parseDocumentDetailsStepFromBody(body),
+    });
+  }
+
+  if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.deleteCycleOverride) {
+    return deleteRecurringCycleOverride({
+      ctx,
+      representedClientId,
+      profileId: reqString(body, 'profile_id'),
+      cycleDate: reqString(body, 'cycle_date'),
+    });
   }
 
   if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.preview) {

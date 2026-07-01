@@ -24,6 +24,9 @@ const base = {
   linked_work_item_id: 'work-1',
   scheduled_document_date: '2026-07-20',
   projected_next_document_date: '2026-07-20',
+  cycle_index: 1,
+  override_exists: false,
+  override_scope: null as const,
 };
 
 test('waiting_review row with generated draft exposes generated_draft_review primary action', () => {
@@ -67,7 +70,7 @@ test('next document row without generated draft exposes open_next_document_tab a
   });
 });
 
-test('future projection row after next document has no primary action', () => {
+test('future projection row after next document exposes cycle override primary action', () => {
   const result = resolveScheduleRowPrimaryAction({
     ...base,
     status_key: 'scheduled',
@@ -77,9 +80,20 @@ test('future projection row after next document has no primary action', () => {
     scheduled_document_date: '2026-08-20',
     projected_next_document_date: '2026-07-20',
     period_key: 'period-future',
+    cycle_index: 2,
   });
   assert.equal(result.row_interaction_kind, 'future_projection');
-  assert.equal(result.primary_action, null);
+  assert.ok(result.primary_action);
+  assert.equal(result.primary_action?.command, 'open_recurring_cycle_override_for_edit');
+  if (result.primary_action?.command !== 'open_recurring_cycle_override_for_edit') return;
+  assert.deepEqual(result.primary_action.payload, {
+    represented_client_id: 'client-1',
+    profile_id: 'profile-1',
+    cycle_date: '2026-08-20',
+    period_key: 'period-future',
+    cycle_index: 2,
+  });
+  assert.ok(result.preview_action?.visible);
 });
 
 test('row without generated_draft_id and without next-document match has no open action', () => {
@@ -110,10 +124,13 @@ test('frontend schedule handler switches tab only for open_next_document_tab', (
   assert.ok(setupModalSource.includes("action.command === 'open_next_document_tab'"));
   assert.ok(setupModalSource.includes("setActiveSetupTab('next_document')"));
   const handlerStart = setupModalSource.indexOf('const handleScheduleRowPrimaryAction');
-  const handlerEnd = setupModalSource.indexOf('const handleGeneratePreview', handlerStart);
+  const handlerEnd = setupModalSource.indexOf('const handleCycleOverrideSetupSaved', handlerStart);
   const handlerBlock = setupModalSource.slice(handlerStart, handlerEnd);
-  assert.ok(handlerBlock.includes('open_recurring_cycle_draft_for_review') || handlerBlock.includes('executeWorkEngineInvoiceRetainerCommand'));
+  assert.ok(handlerBlock.includes('open_recurring_cycle_draft_for_review'));
+  assert.ok(handlerBlock.includes('open_recurring_cycle_override_for_edit'));
+  assert.ok(handlerBlock.includes('WorkEngineRecurringCycleOverrideModal') || setupModalSource.includes('WorkEngineRecurringCycleOverrideModal'));
   assert.ok(!handlerBlock.includes('refreshSetupAggregate'));
+  assert.ok(!handlerBlock.includes("setActiveSetupTab('retainer')"));
 });
 
 test('frontend schedule panel does not infer next row by date', () => {
@@ -122,4 +139,5 @@ test('frontend schedule panel does not infer next row by date', () => {
   assert.ok(!schedulePanelSource.includes('resolveNext'));
   assert.ok(schedulePanelSource.includes('onScheduleRowPrimaryAction'));
   assert.ok(schedulePanelSource.includes('row.primary_action'));
+  assert.ok(schedulePanelSource.includes('open_recurring_cycle_override_for_edit'));
 });

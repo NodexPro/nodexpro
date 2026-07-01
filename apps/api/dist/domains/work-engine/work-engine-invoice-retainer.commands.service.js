@@ -12,6 +12,8 @@ import { RECURRING_FREQUENCY_OPTIONS, } from './work-engine-invoice-retainer.pur
 import { WORK_ENGINE_INVOICE_RETAINER_COMMANDS, } from './work-engine-invoice-retainer.types.js';
 import { approveRecurringDocumentDraft } from './work-engine-invoice-retainer-lifecycle.service.js';
 import { openRecurringCycleDraftForReview } from './work-engine-invoice-retainer-cycle-draft-review.service.js';
+import { deleteRecurringCycleOverride, openRecurringCycleOverrideForEdit, previewRecurringCycleOverride, saveRecurringCycleOverride, } from './work-engine-invoice-retainer-cycle-override.service.js';
+import { isRecurringCycleOverrideApplyScope } from './work-engine-invoice-retainer-cycle-override.pure.js';
 const ALLOWED_RETAINER_COMMANDS = new Set(Object.values(WORK_ENGINE_INVOICE_RETAINER_COMMANDS));
 const RETAINER_FREQUENCIES = new Set(RECURRING_FREQUENCY_OPTIONS.map((o) => o.key));
 const RETAINER_INCREASE_TYPES = new Set(['percent', 'amount']);
@@ -50,6 +52,12 @@ function reqNumber(body, key) {
     if (n == null)
         throw badRequest(`${key} is required`);
     return n;
+}
+function parseDocumentDetailsStepFromBody(body) {
+    const step = body.document_details_step;
+    if (!step || typeof step !== 'object')
+        throw badRequest('document_details_step is required');
+    return step;
 }
 function reqBoolean(body, key) {
     const raw = body[key];
@@ -215,6 +223,60 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
             command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.openCycleDraftReview,
             work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
         };
+    }
+    if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.openCycleOverride) {
+        const overrideAggregate = await openRecurringCycleOverrideForEdit({
+            ctx,
+            representedClientId,
+            profileId: reqString(body, 'profile_id'),
+            cycleDate: reqString(body, 'cycle_date'),
+            periodKey: reqString(body, 'period_key'),
+            cycleIndex: reqNumber(body, 'cycle_index'),
+        });
+        return {
+            ok: true,
+            command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.openCycleOverride,
+            work_engine_recurring_cycle_override_aggregate: overrideAggregate,
+        };
+    }
+    if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.previewCycleOverride) {
+        const overrideAggregate = await previewRecurringCycleOverride({
+            ctx,
+            representedClientId,
+            profileId: reqString(body, 'profile_id'),
+            cycleDate: reqString(body, 'cycle_date'),
+            periodKey: reqString(body, 'period_key'),
+            cycleIndex: reqNumber(body, 'cycle_index'),
+            documentDetailsStep: parseDocumentDetailsStepFromBody(body),
+        });
+        return {
+            ok: true,
+            command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.previewCycleOverride,
+            work_engine_recurring_cycle_override_aggregate: overrideAggregate,
+        };
+    }
+    if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.saveCycleOverride) {
+        const applyScope = reqString(body, 'apply_scope');
+        if (!isRecurringCycleOverrideApplyScope(applyScope)) {
+            throw badRequest('Invalid apply_scope');
+        }
+        return saveRecurringCycleOverride({
+            ctx,
+            representedClientId,
+            profileId: reqString(body, 'profile_id'),
+            cycleDate: reqString(body, 'cycle_date'),
+            periodKey: optionalString(body, 'period_key') ?? '',
+            applyScope,
+            documentDetailsStep: parseDocumentDetailsStepFromBody(body),
+        });
+    }
+    if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.deleteCycleOverride) {
+        return deleteRecurringCycleOverride({
+            ctx,
+            representedClientId,
+            profileId: reqString(body, 'profile_id'),
+            cycleDate: reqString(body, 'cycle_date'),
+        });
     }
     if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.preview) {
         const endCustomerId = reqString(body, 'end_customer_id');

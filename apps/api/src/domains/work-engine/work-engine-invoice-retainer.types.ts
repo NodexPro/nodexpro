@@ -27,6 +27,10 @@ export const WORK_ENGINE_INVOICE_RETAINER_COMMANDS = {
   preview: 'preview_income_recurring_document_profile_settings',
   approveDraft: 'approve_recurring_document_draft',
   openCycleDraftReview: 'open_recurring_cycle_draft_for_review',
+  openCycleOverride: 'open_recurring_cycle_override_for_edit',
+  previewCycleOverride: 'preview_recurring_cycle_override',
+  saveCycleOverride: 'save_recurring_cycle_override',
+  deleteCycleOverride: 'delete_recurring_cycle_override',
 } as const;
 
 export type WorkEngineInvoiceRetainerCommandType =
@@ -206,9 +210,76 @@ export type WorkEngineInvoiceRetainerScheduleOpenNextDocumentTabPrimaryAction = 
   };
 };
 
+export type WorkEngineInvoiceRetainerScheduleOpenCycleOverridePrimaryAction = {
+  command: 'open_recurring_cycle_override_for_edit';
+  payload: {
+    represented_client_id: string;
+    profile_id: string;
+    cycle_date: string;
+    period_key: string;
+    cycle_index: number;
+  };
+};
+
 export type WorkEngineInvoiceRetainerScheduleRowPrimaryAction =
   | WorkEngineInvoiceRetainerScheduleOpenCycleDraftPrimaryAction
-  | WorkEngineInvoiceRetainerScheduleOpenNextDocumentTabPrimaryAction;
+  | WorkEngineInvoiceRetainerScheduleOpenNextDocumentTabPrimaryAction
+  | WorkEngineInvoiceRetainerScheduleOpenCycleOverridePrimaryAction;
+
+export type WorkEngineInvoiceRetainerScheduleRowPreviewAction = {
+  visible: boolean;
+  label: string;
+  disabled_reason: string | null;
+};
+
+export const WORK_ENGINE_RECURRING_CYCLE_OVERRIDE_AGGREGATE_KEY =
+  'work_engine_recurring_cycle_override_aggregate' as const;
+
+export type RecurringCycleOverrideScope = 'single_cycle' | 'this_and_future';
+
+export type WorkEngineRecurringCycleOverrideApplyScopeDialog = {
+  title: string;
+  prompt: string;
+  option_single_cycle: {
+    key: 'single_cycle';
+    label: string;
+    description: string;
+  };
+  option_this_and_future: {
+    key: 'this_and_future';
+    label: string;
+    description: string;
+  };
+  confirm_label: string;
+  cancel_label: string;
+  persistence_note: string | null;
+};
+
+export type WorkEngineRecurringCycleOverrideAggregate = {
+  aggregate_key: typeof WORK_ENGINE_RECURRING_CYCLE_OVERRIDE_AGGREGATE_KEY;
+  represented_client_id: string;
+  profile_id: string;
+  cycle_date: string;
+  period_key: string;
+  cycle_date_display: string;
+  title: string;
+  override_exists: boolean;
+  override_scope: RecurringCycleOverrideScope | null;
+  document_details_step: IncomeDocumentDetailsStep;
+  preview_action: WorkEngineInvoiceRetainerScheduleRowPreviewAction;
+  save_action: {
+    visible: boolean;
+    label: string;
+    disabled_reason: string | null;
+    apply_scope_dialog: WorkEngineRecurringCycleOverrideApplyScopeDialog | null;
+  };
+  delete_action: {
+    visible: boolean;
+    label: string;
+    disabled_reason: string | null;
+  };
+  allowed_actions: string[];
+};
 
 export const WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY =
   'work_engine_recurring_cycle_draft_review_aggregate' as const;
@@ -261,6 +332,10 @@ export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   machine_task_title: string | null;
   row_interaction_kind: ScheduleRowInteractionKind | null;
   primary_action: WorkEngineInvoiceRetainerScheduleRowPrimaryAction | null;
+  preview_action: WorkEngineInvoiceRetainerScheduleRowPreviewAction | null;
+  override_exists: boolean;
+  override_scope: RecurringCycleOverrideScope | null;
+  cycle_date: string;
   allowed_actions: string[];
   actions: WorkEngineInvoiceRetainerScheduleProjectionAction[];
 };
@@ -363,8 +438,9 @@ export type WorkEngineInvoiceRetainerSetupAggregate = {
 
 export type WorkEngineInvoiceRetainerCommandResponse = {
   ok: true;
-  command: WorkEngineInvoiceRetainerCommandType | 'open_recurring_cycle_draft_for_review';
+  command: WorkEngineInvoiceRetainerCommandType | string;
   work_engine_invoice_retainer_setup_aggregate?: WorkEngineInvoiceRetainerSetupAggregate;
   work_engine_recurring_cycle_draft_review_aggregate?: WorkEngineRecurringCycleDraftReviewAggregate;
+  work_engine_recurring_cycle_override_aggregate?: WorkEngineRecurringCycleOverrideAggregate;
   work_engine_invoices_tab_aggregate?: Record<string, unknown>;
 };
