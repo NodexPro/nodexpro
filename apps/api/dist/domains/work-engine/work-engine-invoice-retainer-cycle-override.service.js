@@ -7,12 +7,58 @@ import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
+import { loadIncomeRecipientById } from '../income/income-recipient.service.js';
 import { denormalizedProfileFieldsFromSnapshot } from './work-engine-invoice-retainer-draft.service.js';
 import { ensureRetainerDocumentDraftWorkspace } from './work-engine-invoice-retainer-draft.service.js';
 import { attachFutureCycleProjectionPreview, buildFutureCycleProjectionStep, renderFutureCycleProjectionPreview, refreshFutureCycleProjectionStepTotals, } from './work-engine-invoice-retainer-future-cycle-projection.service.js';
-import { buildOverrideSaveScopeDialog, isRecurringCycleOverrideApplyScope, overridePayloadFromDocumentDetailsStep, resolveCycleOverrideForDate, } from './work-engine-invoice-retainer-cycle-override.pure.js';
+import { buildOverrideSaveScopeDialog, ensureProjectionEditableLineItems, isRecurringCycleOverrideApplyScope, overridePayloadFromDocumentDetailsStep, resolveCycleOverrideForDate, } from './work-engine-invoice-retainer-cycle-override.pure.js';
 import { formatHebrewDateDisplay } from './work-engine-invoice-retainer.pure.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
+const RETAINER_DOC_TYPE_LABELS = {
+    quote: 'הצעת מחיר',
+    deal_invoice: 'חשבון עסקה',
+    tax_invoice: 'חשבונית מס',
+};
+async function loadOfficeClientDisplayName(orgId, representedClientId) {
+    const { data, error } = await supabaseAdmin
+        .from('clients')
+        .select('display_name, is_archived')
+        .eq('organization_id', orgId)
+        .eq('id', representedClientId)
+        .maybeSingle();
+    throwIfSupabaseError(error, 'loadCycleOverrideOfficeClient');
+    const row = data;
+    if (!row || row.is_archived)
+        throw notFound('Office client not found');
+    return row.display_name;
+}
+function resolveDocumentTypeLabel(step) {
+    const key = step.document_type_key;
+    if (key === 'quote' || key === 'deal_invoice' || key === 'tax_invoice') {
+        return RETAINER_DOC_TYPE_LABELS[key];
+    }
+    return '—';
+}
+function resolvePaymentTermsDisplay(step) {
+    const field = step.settings_schema.find((item) => item.key === 'payment_terms');
+    if (!field?.value)
+        return null;
+    return field.options?.find((option) => option.value === field.value)?.label ?? null;
+}
+async function buildCycleOverrideContextPanel(params) {
+    const orgId = params.ctx.organizationId;
+    const officeClientName = await loadOfficeClientDisplayName(orgId, params.representedClientId);
+    const scope = await loadActiveIncomeIssuerScope(params.ctx);
+    const recipient = await loadIncomeRecipientById(scope, params.endCustomerId);
+    return {
+        office_client_label: `לקוח משרד: ${officeClientName}`,
+        end_customer_display_name: recipient?.display_name ?? '—',
+        document_type_label: resolveDocumentTypeLabel(params.step),
+        cycle_date_display: params.cycleDateDisplay,
+        payment_terms_display: resolvePaymentTermsDisplay(params.step),
+        projection_note: 'תצוגה והתאמה עתידית בלבד — ללא יצירת טיוטה או מסמך.',
+    };
+}
 function assertEditAccess(ctx) {
     const perms = incomeWorkspacePermissionsFromContext(ctx);
     if (!perms.view)
@@ -108,19 +154,31 @@ async function buildCycleOverrideAggregate(params) {
             snapshot: profile.document_template_snapshot,
         });
     }
+    else {
+        step = ensureProjectionEditableLineItems(step);
+    }
     if (params.includePreview) {
         const scope = await loadActiveIncomeIssuerScope(params.ctx);
         const preview = await renderFutureCycleProjectionPreview({ scope, profile, step });
         step = await attachFutureCycleProjectionPreview(step, preview);
     }
+    const cycleDateDisplay = formatHebrewDateDisplay(params.cycleDate);
+    const contextPanel = await buildCycleOverrideContextPanel({
+        ctx: params.ctx,
+        representedClientId: params.representedClientId,
+        endCustomerId: profile.end_customer_id,
+        cycleDateDisplay,
+        step,
+    });
     return {
         aggregate_key: 'work_engine_recurring_cycle_override_aggregate',
         represented_client_id: params.representedClientId,
         profile_id: params.profileId,
         cycle_date: params.cycleDate,
         period_key: params.periodKey,
-        cycle_date_display: formatHebrewDateDisplay(params.cycleDate),
+        cycle_date_display: cycleDateDisplay,
         title: 'עריכת מסמך עתידי',
+        context_panel: contextPanel,
         override_exists: Boolean(existingOverride),
         override_scope: existingOverride?.override_scope ?? null,
         document_details_step: step,
@@ -142,6 +200,7 @@ async function buildCycleOverrideAggregate(params) {
         },
         allowed_actions: [
             'open_recurring_cycle_override_for_edit',
+            'refresh_recurring_cycle_override_step',
             'preview_recurring_cycle_override',
             'save_recurring_cycle_override',
             ...(existingOverride ? ['delete_recurring_cycle_override'] : []),
@@ -181,6 +240,12 @@ export async function openRecurringCycleOverrideForEdit(params) {
     return aggregate;
 }
 export async function previewRecurringCycleOverride(params) {
+    return refreshRecurringCycleOverrideStep({
+        ...params,
+        includePreview: true,
+    });
+}
+export async function refreshRecurringCycleOverrideStep(params) {
     assertEditAccess(params.ctx);
     const orgId = params.ctx.organizationId;
     if (!orgId)
@@ -198,7 +263,7 @@ export async function previewRecurringCycleOverride(params) {
         cycleIndex: params.cycleIndex,
         overridesByDate,
         documentDetailsStep: params.documentDetailsStep,
-        includePreview: true,
+        includePreview: params.includePreview === true,
     });
 }
 export async function saveRecurringCycleOverride(params) {

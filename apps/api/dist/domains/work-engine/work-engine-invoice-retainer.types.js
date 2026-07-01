@@ -13,6 +13,7 @@ export const WORK_ENGINE_INVOICE_RETAINER_COMMANDS = {
     openCycleDraftReview: 'open_recurring_cycle_draft_for_review',
     openCycleOverride: 'open_recurring_cycle_override_for_edit',
     previewCycleOverride: 'preview_recurring_cycle_override',
+    refreshCycleOverride: 'refresh_recurring_cycle_override_step',
     saveCycleOverride: 'save_recurring_cycle_override',
     deleteCycleOverride: 'delete_recurring_cycle_override',
 };

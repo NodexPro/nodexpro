@@ -13,7 +13,7 @@ import { buildIncomeIssuerSnapshotForScope } from '../income/income-issuer-snaps
 import { loadIncomeRecipientById } from '../income/income-recipient.service.js';
 import { toPublicPreviewParty } from '../income/income-document-preview-party.pure.js';
 import { computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
-import { mergeOverridePayloadIntoTemplateSnapshot, } from './work-engine-invoice-retainer-cycle-override.pure.js';
+import { mergeOverridePayloadIntoTemplateSnapshot, ensureProjectionEditableLineItems, } from './work-engine-invoice-retainer-cycle-override.pure.js';
 function previewPartyAddressLine(addressJson) {
     if (!addressJson || typeof addressJson !== 'object' || Array.isArray(addressJson))
         return null;
@@ -286,7 +286,7 @@ export async function buildFutureCycleProjectionStep(params) {
     const settings = resolveProjectionSettings(step, effectiveSnapshot);
     const vatResolution = await resolveIncomeDraftVatForOrg(params.orgId, 'IL', params.cycleDate);
     step = await rebuildProjectedLineTotals(step, params.orgId, params.cycleDate, settings, vatResolution);
-    return step;
+    return ensureProjectionEditableLineItems(step);
 }
 export async function refreshFutureCycleProjectionStepTotals(params) {
     const documentDate = params.step.settings_schema.find((field) => field.key === 'document_date')?.value ?? null;
@@ -294,7 +294,8 @@ export async function refreshFutureCycleProjectionStepTotals(params) {
         return params.step;
     const settings = resolveProjectionSettings(params.step, params.snapshot);
     const vatResolution = await resolveIncomeDraftVatForOrg(params.orgId, 'IL', documentDate);
-    return rebuildProjectedLineTotals(params.step, params.orgId, documentDate, settings, vatResolution);
+    const refreshed = await rebuildProjectedLineTotals(params.step, params.orgId, documentDate, settings, vatResolution);
+    return ensureProjectionEditableLineItems(refreshed);
 }
 export async function renderFutureCycleProjectionPreview(params) {
     const documentType = params.step.document_type_key;

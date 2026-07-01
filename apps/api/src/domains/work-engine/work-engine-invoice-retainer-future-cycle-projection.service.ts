@@ -33,6 +33,7 @@ import type { RecurringDocumentTemplateSnapshot } from './work-engine-invoice-re
 import {
   mergeOverridePayloadIntoTemplateSnapshot,
   type RecurringCycleOverridePayload,
+  ensureProjectionEditableLineItems,
 } from './work-engine-invoice-retainer-cycle-override.pure.js';
 
 function previewPartyAddressLine(addressJson: unknown): string | null {
@@ -363,7 +364,7 @@ export async function buildFutureCycleProjectionStep(params: {
   const settings = resolveProjectionSettings(step, effectiveSnapshot);
   const vatResolution = await resolveIncomeDraftVatForOrg(params.orgId, 'IL', params.cycleDate);
   step = await rebuildProjectedLineTotals(step, params.orgId, params.cycleDate, settings, vatResolution);
-  return step;
+  return ensureProjectionEditableLineItems(step);
 }
 
 export async function refreshFutureCycleProjectionStepTotals(params: {
@@ -376,13 +377,14 @@ export async function refreshFutureCycleProjectionStepTotals(params: {
   if (!documentDate) return params.step;
   const settings = resolveProjectionSettings(params.step, params.snapshot);
   const vatResolution = await resolveIncomeDraftVatForOrg(params.orgId, 'IL', documentDate);
-  return rebuildProjectedLineTotals(
+  const refreshed = await rebuildProjectedLineTotals(
     params.step,
     params.orgId,
     documentDate,
     settings,
     vatResolution,
   );
+  return ensureProjectionEditableLineItems(refreshed);
 }
 
 export async function renderFutureCycleProjectionPreview(params: {

@@ -139,3 +139,46 @@ export function buildOverrideSaveScopeDialog(visible: boolean) {
       : null,
   };
 }
+
+const PROJECTION_LINE_ITEM_ACTIONS = [
+  'add_income_document_line',
+  'update_income_document_line',
+  'delete_income_document_line',
+  'reorder_income_document_lines',
+] as const;
+
+const PROJECTION_LINE_ROW_ACTIONS = [
+  'update_income_document_line',
+  'delete_income_document_line',
+] as const;
+
+export function ensureProjectionEditableLineItems(
+  step: IncomeDocumentDetailsStep,
+): IncomeDocumentDetailsStep {
+  return {
+    ...step,
+    line_items: {
+      ...step.line_items,
+      allowed_actions: [...PROJECTION_LINE_ITEM_ACTIONS],
+      rows: step.line_items.rows.map((row) => ({
+        ...row,
+        description: { ...row.description, editable: true },
+        quantity: { ...row.quantity, editable: true },
+        unit_price: { ...row.unit_price, editable: true },
+        currency: { ...row.currency, editable: true },
+        allowed_actions: row.allowed_actions.includes('update_income_document_line')
+          ? row.allowed_actions
+          : [...PROJECTION_LINE_ROW_ACTIONS],
+      })),
+    },
+    document_discount: {
+      ...step.document_discount,
+      editable: true,
+      allowed_actions: step.document_discount.allowed_actions.includes(
+        'update_income_document_discount',
+      )
+        ? step.document_discount.allowed_actions
+        : ['update_income_document_discount'],
+    },
+  };
+}

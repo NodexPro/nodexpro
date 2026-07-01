@@ -29,6 +29,7 @@ export const WORK_ENGINE_INVOICE_RETAINER_COMMANDS = {
   openCycleDraftReview: 'open_recurring_cycle_draft_for_review',
   openCycleOverride: 'open_recurring_cycle_override_for_edit',
   previewCycleOverride: 'preview_recurring_cycle_override',
+  refreshCycleOverride: 'refresh_recurring_cycle_override_step',
   saveCycleOverride: 'save_recurring_cycle_override',
   deleteCycleOverride: 'delete_recurring_cycle_override',
 } as const;
@@ -255,6 +256,15 @@ export type WorkEngineRecurringCycleOverrideApplyScopeDialog = {
   persistence_note: string | null;
 };
 
+export type WorkEngineRecurringCycleOverrideContextPanel = {
+  office_client_label: string;
+  end_customer_display_name: string;
+  document_type_label: string;
+  cycle_date_display: string;
+  payment_terms_display: string | null;
+  projection_note: string | null;
+};
+
 export type WorkEngineRecurringCycleOverrideAggregate = {
   aggregate_key: typeof WORK_ENGINE_RECURRING_CYCLE_OVERRIDE_AGGREGATE_KEY;
   represented_client_id: string;
@@ -263,6 +273,7 @@ export type WorkEngineRecurringCycleOverrideAggregate = {
   period_key: string;
   cycle_date_display: string;
   title: string;
+  context_panel: WorkEngineRecurringCycleOverrideContextPanel;
   override_exists: boolean;
   override_scope: RecurringCycleOverrideScope | null;
   document_details_step: IncomeDocumentDetailsStep;

@@ -28,6 +28,7 @@ import {
   deleteRecurringCycleOverride,
   openRecurringCycleOverrideForEdit,
   previewRecurringCycleOverride,
+  refreshRecurringCycleOverrideStep,
   saveRecurringCycleOverride,
 } from './work-engine-invoice-retainer-cycle-override.service.js';
 import { isRecurringCycleOverrideApplyScope } from './work-engine-invoice-retainer-cycle-override.pure.js';
@@ -310,6 +311,24 @@ export async function executeWorkEngineInvoiceRetainerCommand(
     return {
       ok: true,
       command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.previewCycleOverride,
+      work_engine_recurring_cycle_override_aggregate: overrideAggregate,
+    };
+  }
+
+  if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.refreshCycleOverride) {
+    const overrideAggregate = await refreshRecurringCycleOverrideStep({
+      ctx,
+      representedClientId,
+      profileId: reqString(body, 'profile_id'),
+      cycleDate: reqString(body, 'cycle_date'),
+      periodKey: reqString(body, 'period_key'),
+      cycleIndex: reqNumber(body, 'cycle_index'),
+      documentDetailsStep: parseDocumentDetailsStepFromBody(body),
+      includePreview: false,
+    });
+    return {
+      ok: true,
+      command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.refreshCycleOverride,
       work_engine_recurring_cycle_override_aggregate: overrideAggregate,
     };
   }

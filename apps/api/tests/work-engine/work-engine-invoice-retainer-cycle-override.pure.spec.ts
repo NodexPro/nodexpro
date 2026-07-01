@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildOverrideSaveScopeDialog,
+  ensureProjectionEditableLineItems,
   isRecurringCycleOverrideApplyScope,
   mergeOverridePayloadIntoTemplateSnapshot,
   overridePayloadFromTemplateSnapshot,
@@ -65,4 +66,75 @@ test('mergeOverridePayloadIntoTemplateSnapshot applies override fields only', ()
   const merged = mergeOverridePayloadIntoTemplateSnapshot(base, override);
   assert.equal(merged.notes, 'override');
   assert.deepEqual(merged.document_settings_json, { currency: 'USD' });
+});
+
+test('ensureProjectionEditableLineItems enables add/update line actions for projection rows', () => {
+  const step = ensureProjectionEditableLineItems({
+    draft_id: 'projection:test',
+    document_type_key: 'deal_invoice',
+    document_discount: {
+      enabled: false,
+      editable: false,
+      type: 'percent',
+      value: '',
+      currency: 'ILS',
+      amount_display: null,
+      percent_display: null,
+      calculated_discount_amount_display: null,
+      affects_vat: true,
+      field_errors: {},
+      allowed_actions: [],
+    },
+    totals_block: {
+      rows: [],
+      grand_total_display: '₪0.00',
+      currency: 'ILS',
+    },
+    line_items: {
+      columns: [],
+      rows: [
+        {
+          id: 'line-1',
+          line_id: 'line-1',
+          row_number: 1,
+          can_drag: false,
+          description: { value: 'שירות', editable: false, placeholder: '' },
+          quantity: { value: '1', editable: false },
+          unit_price: { value: '100', editable: false },
+          currency: { value: 'ILS', editable: false, options: [{ value: 'ILS', label: '₪' }] },
+          allowed_currencies: [{ value: 'ILS', label: '₪' }],
+          vat_rate_code: 'standard',
+          vat_rate_label: 'מע״מ',
+          allowed_vat_rates: [{ value: 'standard', label: 'מע״מ' }],
+          price_includes_vat: false,
+          price_mode_options: [],
+          exchange_rate_official: null,
+          exchange_rate_effective: null,
+          exchange_rate_override: null,
+          exchange_rate_date: null,
+          exchange_rate_source_label: null,
+          exchange_rate_editable: false,
+          line_total_display: '₪100.00',
+          line_total: { display: '₪100.00' },
+          field_errors: [],
+          allowed_actions: [],
+        },
+      ],
+      allowed_actions: [],
+      add_row_label: 'הוספת שורה',
+      empty_state: { visible: false, message: '' },
+      totals: null,
+      document_fields: null,
+    },
+    settings_schema: [],
+    notes: { value: '', editable: true },
+    delivery_contact: { email: null, editable: true },
+    header: { title: '', subtitle: null, document_number_preview: null },
+    document_preview: null,
+    document_branding_profile: null,
+  } as never);
+
+  assert.ok(step.line_items.allowed_actions.includes('add_income_document_line'));
+  assert.ok(step.line_items.rows[0]?.allowed_actions.includes('update_income_document_line'));
+  assert.equal(step.line_items.rows[0]?.description.editable, true);
 });

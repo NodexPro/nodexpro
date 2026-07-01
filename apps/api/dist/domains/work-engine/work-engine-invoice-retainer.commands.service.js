@@ -12,7 +12,7 @@ import { RECURRING_FREQUENCY_OPTIONS, } from './work-engine-invoice-retainer.pur
 import { WORK_ENGINE_INVOICE_RETAINER_COMMANDS, } from './work-engine-invoice-retainer.types.js';
 import { approveRecurringDocumentDraft } from './work-engine-invoice-retainer-lifecycle.service.js';
 import { openRecurringCycleDraftForReview } from './work-engine-invoice-retainer-cycle-draft-review.service.js';
-import { deleteRecurringCycleOverride, openRecurringCycleOverrideForEdit, previewRecurringCycleOverride, saveRecurringCycleOverride, } from './work-engine-invoice-retainer-cycle-override.service.js';
+import { deleteRecurringCycleOverride, openRecurringCycleOverrideForEdit, previewRecurringCycleOverride, refreshRecurringCycleOverrideStep, saveRecurringCycleOverride, } from './work-engine-invoice-retainer-cycle-override.service.js';
 import { isRecurringCycleOverrideApplyScope } from './work-engine-invoice-retainer-cycle-override.pure.js';
 const ALLOWED_RETAINER_COMMANDS = new Set(Object.values(WORK_ENGINE_INVOICE_RETAINER_COMMANDS));
 const RETAINER_FREQUENCIES = new Set(RECURRING_FREQUENCY_OPTIONS.map((o) => o.key));
@@ -252,6 +252,23 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
         return {
             ok: true,
             command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.previewCycleOverride,
+            work_engine_recurring_cycle_override_aggregate: overrideAggregate,
+        };
+    }
+    if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.refreshCycleOverride) {
+        const overrideAggregate = await refreshRecurringCycleOverrideStep({
+            ctx,
+            representedClientId,
+            profileId: reqString(body, 'profile_id'),
+            cycleDate: reqString(body, 'cycle_date'),
+            periodKey: reqString(body, 'period_key'),
+            cycleIndex: reqNumber(body, 'cycle_index'),
+            documentDetailsStep: parseDocumentDetailsStepFromBody(body),
+            includePreview: false,
+        });
+        return {
+            ok: true,
+            command: WORK_ENGINE_INVOICE_RETAINER_COMMANDS.refreshCycleOverride,
             work_engine_recurring_cycle_override_aggregate: overrideAggregate,
         };
     }
