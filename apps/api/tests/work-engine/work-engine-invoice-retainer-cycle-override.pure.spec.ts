@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildCycleOverrideRetainerSettingsSidebar,
   buildOverrideSaveScopeDialog,
   ensureProjectionEditableLineItems,
   isRecurringCycleOverrideApplyScope,
@@ -137,4 +138,43 @@ test('ensureProjectionEditableLineItems enables add/update line actions for proj
   assert.ok(step.line_items.allowed_actions.includes('add_income_document_line'));
   assert.ok(step.line_items.rows[0]?.allowed_actions.includes('update_income_document_line'));
   assert.equal(step.line_items.rows[0]?.description.editable, true);
+});
+
+test('buildCycleOverrideRetainerSettingsSidebar exposes retainer profile sections from backend', () => {
+  const sidebar = buildCycleOverrideRetainerSettingsSidebar({
+    profile: {
+      id: 'profile-1',
+      end_customer_id: 'customer-1',
+      document_type: 'tax_invoice',
+      frequency: 'days_30',
+      advance_days: 20,
+      service_period_start: '2026-01-01',
+      service_period_end: '2026-12-31',
+      auto_advance_period: true,
+      price_increase_enabled: true,
+      price_increase_type: 'percent',
+      price_increase_value: 5,
+      status: 'active',
+      next_document_date: '2026-08-20',
+      unit_price_before_vat_reference: 1000,
+      currency: 'ILS',
+      source_draft_template_id: 'draft-1',
+      document_template_snapshot: null,
+    },
+    endCustomerDisplayName: 'NYC',
+    cycleDate: '2026-06-23',
+    documentTypeOptions: [
+      { key: 'tax_invoice', label: 'חשבונית מס', enabled: true, disabled_reason: null },
+      { key: 'deal_invoice', label: 'חשבון עסקה', enabled: true, disabled_reason: null },
+      { key: 'quote', label: 'הצעת מחיר', enabled: true, disabled_reason: null },
+    ],
+  });
+
+  assert.equal(sidebar.retainer_settings.frequency_label, '30 ימים');
+  assert.equal(sidebar.retainer_settings.advance_days, 20);
+  assert.match(sidebar.retainer_settings.document_type_change_note, /טיוטות עתידיות בלבד/);
+  assert.equal(sidebar.retainer_settings.status_label, 'פעיל');
+  assert.equal(sidebar.document_type_options.length, 3);
+  assert.equal(sidebar.status_actions.can_pause, true);
+  assert.equal(sidebar.status_actions.can_cancel, true);
 });

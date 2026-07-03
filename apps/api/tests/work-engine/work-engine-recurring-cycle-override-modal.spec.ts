@@ -18,13 +18,40 @@ const schedulePanelSource = readFileSync(
 test('future override modal sidebar includes document settings sections and debounced totals refresh', () => {
   assert.ok(overrideModalSource.includes('WorkEngineRecurringCycleOverrideSidebar'));
   assert.ok(overrideModalSource.includes('aggregate.sidebar_sections'));
+  assert.ok(overrideModalSource.includes('retainer_settings_sidebar'));
   assert.ok(overrideModalSource.includes('linesOnly'));
   assert.ok(overrideModalSource.includes('TOTALS_REFRESH_DEBOUNCE_MS'));
   assert.ok(overrideModalSource.includes('scheduleTotalsRefresh'));
+  assert.ok(overrideModalSource.includes("options?.refreshTotals === 'immediate'"));
   assert.ok(!overrideModalSource.includes('busy={busy || projectionRefreshing}'));
   assert.ok(overrideModalSource.includes('setPreviewOpen(true)'));
   assert.ok(overrideModalSource.includes('setPreviewBusy(true)'));
   assert.ok(overrideModalSource.includes('WorkEngineRecurringCycleOverrideSaveDialog'));
+});
+
+test('override sidebar renders retainer settings sections from backend aggregate', () => {
+  const sidebarSource = readFileSync(
+    join(dir, '../../../web/src/components/work-engine/WorkEngineRecurringCycleOverrideSidebar.tsx'),
+    'utf8',
+  );
+  assert.ok(sidebarSource.includes('retainerSettingsSidebar'));
+  assert.ok(sidebarSource.includes('סוג מסמך'));
+  assert.ok(sidebarSource.includes('תדירות'));
+  assert.ok(sidebarSource.includes('יצירה מראש'));
+  assert.ok(sidebarSource.includes('תקופת שירות'));
+  assert.ok(sidebarSource.includes('העלאת מחיר'));
+  assert.ok(sidebarSource.includes('סטטוס'));
+  assert.ok(sidebarSource.includes('document_type_change_note'));
+});
+
+test('projection line commit triggers immediate backend totals refresh', () => {
+  const docStepSource = readFileSync(
+    join(dir, '../../../web/src/components/work-engine/WorkEngineDocumentDetailsStep.tsx'),
+    'utf8',
+  );
+  assert.ok(docStepSource.includes("refreshTotals: 'immediate'"));
+  assert.ok(docStepSource.includes("commandKey === 'update_line'"));
+  assert.ok(docStepSource.includes("commandKey === 'add_line'"));
 });
 
 test('preview opens before backend command completes', () => {

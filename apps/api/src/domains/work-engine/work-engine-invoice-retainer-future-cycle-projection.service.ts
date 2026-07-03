@@ -110,10 +110,21 @@ function resolveProjectionSettings(
   step: IncomeDocumentDetailsStep,
   snapshot: RecurringDocumentTemplateSnapshot | null,
 ): IncomeDocumentSettings {
-  const fromSnapshot = snapshot?.document_settings_json ?? null;
-  if (fromSnapshot) return parseDocumentSettingsJson(fromSnapshot);
-  const vatMode = step.line_items.document_fields?.vat_mode?.value ?? 'standard';
-  return parseDocumentSettingsJson({ vat_mode: vatMode, discount: { enabled: false, type: 'percent', value: 0 } });
+  const fromStep = parseDocumentSettingsJson({
+    ...(snapshot?.document_settings_json ?? {}),
+    vat_mode:
+      step.line_items.document_fields?.vat_mode?.value ??
+      (snapshot?.document_settings_json as Record<string, unknown> | undefined)?.vat_mode ??
+      'standard',
+    discount: step.document_discount.enabled
+      ? {
+          enabled: true,
+          type: step.document_discount.type,
+          value: Number(step.document_discount.value) || 0,
+        }
+      : { enabled: false, type: 'percent', value: 0 },
+  });
+  return fromStep;
 }
 
 function buildTotalsBlock(
@@ -180,19 +191,22 @@ async function rebuildProjectedLineTotals(
   vatResolution: IncomeDraftVatResolution,
 ): Promise<IncomeDocumentDetailsStep> {
   const lines = normalizeDraftLines(
-    step.line_items.rows.map((row) => ({
-      line_id: row.line_id,
-      sort_index: row.row_number,
-      description: row.description.value,
-      quantity: Number(row.quantity.value) || 1,
-      unit_price_reference: parseUnitPrice(row.unit_price.value) || null,
-      currency: row.currency.value,
-      exchange_rate_to_ils_override: row.exchange_rate_override?.value
-        ? Number(row.exchange_rate_override.value)
-        : null,
-      price_includes_vat: row.price_includes_vat,
-      vat_rate_code: row.vat_rate_code,
-    })),
+    step.line_items.rows.map((row) => {
+      const unitPrice = parseUnitPrice(row.unit_price.value);
+      return {
+        line_id: String(row.line_id || row.id || '').trim() || `projection-row-${row.row_number}`,
+        sort_index: row.row_number,
+        description: row.description.value,
+        quantity: Number(row.quantity.value) || 1,
+        unit_price_reference: Number.isFinite(unitPrice) ? unitPrice : null,
+        currency: row.currency.value,
+        exchange_rate_to_ils_override: row.exchange_rate_override?.value
+          ? Number(row.exchange_rate_override.value)
+          : null,
+        price_includes_vat: row.price_includes_vat,
+        vat_rate_code: row.vat_rate_code,
+      };
+    }),
   );
   const currency = step.line_items.document_fields?.currency?.value ?? step.totals_block.currency ?? 'ILS';
   const totalsPreview = await computeDraftTotalsPreview(
@@ -203,8 +217,10 @@ async function rebuildProjectedLineTotals(
     documentDate,
   );
   const officialByCurrency = await resolveFxMapForDraftLines(lines, documentDate);
-  const rows = step.line_items.rows.map((row) => {
-    const line = lines.find((item) => item.line_id === row.line_id);
+  const rows = step.line_items.rows.map((row, index) => {
+    const lineKey = String(row.line_id || row.id || '').trim();
+    const line =
+      (lineKey ? lines.find((item) => item.line_id === lineKey) : null) ?? lines[index] ?? null;
     if (!line) return row;
     const fx = resolveLineFx(line, documentDate, officialByCurrency);
     if (!fx) return row;

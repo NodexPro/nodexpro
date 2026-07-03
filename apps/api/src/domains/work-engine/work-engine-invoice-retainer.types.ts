@@ -284,6 +284,25 @@ export type WorkEngineRecurringCycleOverrideSidebarSection = {
   fields: WorkEngineRecurringCycleOverrideSidebarField[];
 };
 
+export type WorkEngineRecurringCycleOverrideRetainerSettingsSidebar = {
+  retainer_settings: WorkEngineInvoiceRetainerSettings;
+  document_type_options: Array<{
+    key: 'quote' | 'deal_invoice' | 'tax_invoice';
+    label: string;
+    enabled: boolean;
+    disabled_reason: string | null;
+  }>;
+  frequency_options: Array<{ key: RecurringDocumentFrequency; label: string }>;
+  status_actions: {
+    can_pause: boolean;
+    can_resume: boolean;
+    can_cancel: boolean;
+    pause_label: string;
+    resume_label: string;
+    cancel_label: string;
+  };
+};
+
 export type WorkEngineRecurringCycleOverrideAggregate = {
   aggregate_key: typeof WORK_ENGINE_RECURRING_CYCLE_OVERRIDE_AGGREGATE_KEY;
   represented_client_id: string;
@@ -293,6 +312,7 @@ export type WorkEngineRecurringCycleOverrideAggregate = {
   cycle_date_display: string;
   title: string;
   context_panel: WorkEngineRecurringCycleOverrideContextPanel;
+  retainer_settings_sidebar: WorkEngineRecurringCycleOverrideRetainerSettingsSidebar;
   sidebar_sections: WorkEngineRecurringCycleOverrideSidebarSection[];
   override_exists: boolean;
   override_scope: RecurringCycleOverrideScope | null;

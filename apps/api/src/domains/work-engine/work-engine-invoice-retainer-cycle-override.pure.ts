@@ -10,7 +10,20 @@ import type { RecurringDocumentTemplateSnapshot } from './work-engine-invoice-re
 import type {
   WorkEngineRecurringCycleOverrideSidebarField,
   WorkEngineRecurringCycleOverrideSidebarSection,
+  WorkEngineRecurringCycleOverrideRetainerSettingsSidebar,
+  WorkEngineInvoiceRetainerSettings,
 } from './work-engine-invoice-retainer.types.js';
+import {
+  RECURRING_FREQUENCY_LABELS,
+  RECURRING_FREQUENCY_OPTIONS,
+  computeDraftCreationDateIso,
+  computeNextUnitPriceBeforeVat,
+  formatHebrewDateDisplay,
+  type RecurringDocumentFrequency,
+  type RecurringPriceIncreaseType,
+  type RecurringProfileStatus,
+} from './work-engine-invoice-retainer.pure.js';
+import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 
 function retainerOverrideDocumentType(
   documentType: IncomeDocumentType,
@@ -43,6 +56,123 @@ export type RecurringCycleOverrideRow = {
 
 export function isRecurringCycleOverrideApplyScope(value: string): value is RecurringCycleOverrideApplyScope {
   return value === 'single_cycle' || value === 'this_and_future';
+}
+
+const RETAINER_DOC_TYPE_LABELS: Record<'quote' | 'deal_invoice' | 'tax_invoice', string> = {
+  quote: 'הצעת מחיר',
+  deal_invoice: 'חשבון עסקה',
+  tax_invoice: 'חשבונית מס',
+};
+
+const STATUS_LABELS: Record<RecurringProfileStatus, string> = {
+  active: 'פעיל',
+  paused: 'מושהה',
+  cancelled: 'מבוטל',
+};
+
+const STATUS_DESCRIPTIONS: Record<RecurringProfileStatus, string> = {
+  active: 'הריטיינר ייצור טיוטות לפי התזמון',
+  paused: 'לא ייווצרו טיוטות עד להפעלה מחדש',
+  cancelled: 'הריטיינר נסגר ולא יפעל',
+};
+
+const ADVANCE_CREATION_HELP_TEXT =
+  'כמה ימים לפני תאריך המסמך ליצור טיוטה לבדיקה';
+
+const DRAFT_CREATION_DATE_LABEL = 'תאריך יצירת טיוטה צפוי';
+
+const DOCUMENT_TYPE_CHANGE_NOTE =
+  'שינוי סוג מסמך יחול על טיוטות עתידיות בלבד. מסמכים שכבר הופקו לא ישתנו.';
+
+export function buildCycleOverrideRetainerSettingsSidebar(params: {
+  profile: {
+    id: string;
+    end_customer_id: string;
+    document_type: 'quote' | 'deal_invoice' | 'tax_invoice';
+    frequency: RecurringDocumentFrequency;
+    advance_days: number;
+    service_period_start: string;
+    service_period_end: string;
+    auto_advance_period: boolean;
+    price_increase_enabled: boolean;
+    price_increase_type: RecurringPriceIncreaseType | null;
+    price_increase_value: number | null;
+    status: RecurringProfileStatus;
+    next_document_date: string;
+    unit_price_before_vat_reference: number;
+    currency: string;
+    source_draft_template_id: string | null;
+    document_template_snapshot: RecurringDocumentTemplateSnapshot | null;
+  };
+  endCustomerDisplayName: string;
+  cycleDate: string;
+  documentTypeOptions: WorkEngineRecurringCycleOverrideRetainerSettingsSidebar['document_type_options'];
+}): WorkEngineRecurringCycleOverrideRetainerSettingsSidebar {
+  const profile = params.profile;
+  const frequency = profile.frequency;
+  const advanceDays = profile.advance_days;
+  const priceIncreaseEnabled = profile.price_increase_enabled;
+  const priceIncreaseType = priceIncreaseEnabled ? profile.price_increase_type : null;
+  const priceIncreaseValue = priceIncreaseEnabled ? profile.price_increase_value : null;
+  const nextCyclePrice = computeNextUnitPriceBeforeVat({
+    current_unit_price_before_vat_reference: profile.unit_price_before_vat_reference,
+    price_increase_enabled: priceIncreaseEnabled,
+    price_increase_type: priceIncreaseType,
+    price_increase_value: priceIncreaseValue,
+  });
+  const status = profile.status;
+
+  const retainer_settings: WorkEngineInvoiceRetainerSettings = {
+    profile_id: profile.id,
+    end_customer_id: profile.end_customer_id,
+    end_customer_display_name: params.endCustomerDisplayName,
+    source_draft_template_id: profile.source_draft_template_id,
+    document_template_snapshot: profile.document_template_snapshot,
+    document_type: profile.document_type,
+    document_type_label: RETAINER_DOC_TYPE_LABELS[profile.document_type],
+    document_type_change_note: DOCUMENT_TYPE_CHANGE_NOTE,
+    frequency,
+    frequency_label: RECURRING_FREQUENCY_LABELS[frequency],
+    advance_days: advanceDays,
+    advance_creation_help_text: ADVANCE_CREATION_HELP_TEXT,
+    draft_creation_date_label: DRAFT_CREATION_DATE_LABEL,
+    draft_creation_date_display: formatHebrewDateDisplay(
+      computeDraftCreationDateIso(params.cycleDate, advanceDays),
+    ),
+    service_period_start: profile.service_period_start,
+    service_period_start_display: formatHebrewDateDisplay(profile.service_period_start),
+    service_period_end: profile.service_period_end,
+    service_period_end_display: formatHebrewDateDisplay(profile.service_period_end),
+    auto_advance_period: profile.auto_advance_period,
+    price_increase_enabled: priceIncreaseEnabled,
+    price_increase_type: priceIncreaseType,
+    price_increase_value: priceIncreaseValue,
+    next_cycle_unit_price_before_vat_display: priceIncreaseEnabled
+      ? formatMoneyReference(nextCyclePrice, profile.currency)
+      : null,
+    status,
+    status_label: STATUS_LABELS[status],
+    status_description: STATUS_DESCRIPTIONS[status],
+    next_document_date: profile.next_document_date,
+    next_document_date_display: formatHebrewDateDisplay(profile.next_document_date),
+    last_generated_draft_id: null,
+    last_generated_at: null,
+    last_generated_at_display: null,
+  };
+
+  return {
+    retainer_settings,
+    document_type_options: params.documentTypeOptions,
+    frequency_options: [...RECURRING_FREQUENCY_OPTIONS],
+    status_actions: {
+      can_pause: status === 'active',
+      can_resume: status === 'paused',
+      can_cancel: status !== 'cancelled',
+      pause_label: 'השהה ריטיינר',
+      resume_label: 'חידוש ריטיינר',
+      cancel_label: 'ביטול ריטיינר',
+    },
+  };
 }
 
 export function overridePayloadFromTemplateSnapshot(

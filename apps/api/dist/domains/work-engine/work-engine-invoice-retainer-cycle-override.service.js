@@ -8,10 +8,11 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 import { loadIncomeRecipientById } from '../income/income-recipient.service.js';
+import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
 import { denormalizedProfileFieldsFromSnapshot } from './work-engine-invoice-retainer-draft.service.js';
 import { ensureRetainerDocumentDraftWorkspace } from './work-engine-invoice-retainer-draft.service.js';
 import { attachFutureCycleProjectionPreview, buildFutureCycleProjectionStep, renderFutureCycleProjectionPreview, refreshFutureCycleProjectionStepTotals, } from './work-engine-invoice-retainer-future-cycle-projection.service.js';
-import { buildOverrideSaveScopeDialog, buildCycleOverrideSidebarSections, ensureProjectionEditableLineItems, isRecurringCycleOverrideApplyScope, overridePayloadFromDocumentDetailsStep, resolveCycleOverrideForDate, } from './work-engine-invoice-retainer-cycle-override.pure.js';
+import { buildOverrideSaveScopeDialog, buildCycleOverrideSidebarSections, buildCycleOverrideRetainerSettingsSidebar, ensureProjectionEditableLineItems, isRecurringCycleOverrideApplyScope, overridePayloadFromDocumentDetailsStep, resolveCycleOverrideForDate, } from './work-engine-invoice-retainer-cycle-override.pure.js';
 import { formatHebrewDateDisplay } from './work-engine-invoice-retainer.pure.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
 const RETAINER_DOC_TYPE_LABELS = {
@@ -100,7 +101,7 @@ export async function loadRecurringCycleOverridesForProfile(params) {
 async function loadProfileForOverride(params) {
     const { data, error } = await supabaseAdmin
         .from('income_recurring_document_profiles')
-        .select('id, organization_id, represented_client_id, end_customer_id, document_type, source_draft_template_id, document_template_snapshot, price_increase_enabled, price_increase_type, price_increase_value')
+        .select('id, organization_id, represented_client_id, end_customer_id, document_type, source_draft_template_id, document_template_snapshot, price_increase_enabled, price_increase_type, price_increase_value, frequency, advance_days, service_period_start, service_period_end, auto_advance_period, status, next_document_date, unit_price_before_vat_reference, currency')
         .eq('organization_id', params.orgId)
         .eq('id', params.profileId)
         .eq('represented_client_id', params.representedClientId)
@@ -170,6 +171,23 @@ async function buildCycleOverrideAggregate(params) {
         cycleDateDisplay,
         step,
     });
+    const scope = await loadActiveIncomeIssuerScope(params.ctx);
+    const recipient = await loadIncomeRecipientById(scope, profile.end_customer_id);
+    const docTypesResult = await resolveAvailableDocumentTypes(orgId, scope);
+    const documentTypeOptions = docTypesResult.available_document_types
+        .filter((dt) => dt.key === 'quote' || dt.key === 'deal_invoice' || dt.key === 'tax_invoice')
+        .map((dt) => ({
+        key: dt.key,
+        label: dt.label,
+        enabled: dt.enabled,
+        disabled_reason: dt.disabled_reason,
+    }));
+    const retainerSettingsSidebar = buildCycleOverrideRetainerSettingsSidebar({
+        profile,
+        endCustomerDisplayName: recipient?.display_name ?? '—',
+        cycleDate: params.cycleDate,
+        documentTypeOptions,
+    });
     return {
         aggregate_key: 'work_engine_recurring_cycle_override_aggregate',
         represented_client_id: params.representedClientId,
@@ -179,6 +197,7 @@ async function buildCycleOverrideAggregate(params) {
         cycle_date_display: cycleDateDisplay,
         title: 'עריכת מסמך עתידי',
         context_panel: contextPanel,
+        retainer_settings_sidebar: retainerSettingsSidebar,
         sidebar_sections: buildCycleOverrideSidebarSections(step),
         override_exists: Boolean(existingOverride),
         override_scope: existingOverride?.override_scope ?? null,
