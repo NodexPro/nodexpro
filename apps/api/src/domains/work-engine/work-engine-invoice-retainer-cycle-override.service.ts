@@ -21,6 +21,7 @@ import {
 } from './work-engine-invoice-retainer-future-cycle-projection.service.js';
 import {
   buildOverrideSaveScopeDialog,
+  buildCycleOverrideSidebarSections,
   ensureProjectionEditableLineItems,
   isRecurringCycleOverrideApplyScope,
   overridePayloadFromDocumentDetailsStep,
@@ -245,6 +246,7 @@ async function buildCycleOverrideAggregate(params: {
     cycle_date_display: cycleDateDisplay,
     title: 'עריכת מסמך עתידי',
     context_panel: contextPanel,
+    sidebar_sections: buildCycleOverrideSidebarSections(step),
     override_exists: Boolean(existingOverride),
     override_scope: existingOverride?.override_scope ?? null,
     document_details_step: step,

@@ -11,7 +11,7 @@ import { loadIncomeRecipientById } from '../income/income-recipient.service.js';
 import { denormalizedProfileFieldsFromSnapshot } from './work-engine-invoice-retainer-draft.service.js';
 import { ensureRetainerDocumentDraftWorkspace } from './work-engine-invoice-retainer-draft.service.js';
 import { attachFutureCycleProjectionPreview, buildFutureCycleProjectionStep, renderFutureCycleProjectionPreview, refreshFutureCycleProjectionStepTotals, } from './work-engine-invoice-retainer-future-cycle-projection.service.js';
-import { buildOverrideSaveScopeDialog, ensureProjectionEditableLineItems, isRecurringCycleOverrideApplyScope, overridePayloadFromDocumentDetailsStep, resolveCycleOverrideForDate, } from './work-engine-invoice-retainer-cycle-override.pure.js';
+import { buildOverrideSaveScopeDialog, buildCycleOverrideSidebarSections, ensureProjectionEditableLineItems, isRecurringCycleOverrideApplyScope, overridePayloadFromDocumentDetailsStep, resolveCycleOverrideForDate, } from './work-engine-invoice-retainer-cycle-override.pure.js';
 import { formatHebrewDateDisplay } from './work-engine-invoice-retainer.pure.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
 const RETAINER_DOC_TYPE_LABELS = {
@@ -179,6 +179,7 @@ async function buildCycleOverrideAggregate(params) {
         cycle_date_display: cycleDateDisplay,
         title: 'עריכת מסמך עתידי',
         context_panel: contextPanel,
+        sidebar_sections: buildCycleOverrideSidebarSections(step),
         override_exists: Boolean(existingOverride),
         override_scope: existingOverride?.override_scope ?? null,
         document_details_step: step,

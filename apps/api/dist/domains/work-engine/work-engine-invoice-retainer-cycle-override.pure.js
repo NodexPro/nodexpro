@@ -73,6 +73,84 @@ export function mergeOverridePayloadIntoTemplateSnapshot(base, override) {
 export function resolveCycleOverrideForDate(cycleDate, overridesByDate) {
     return overridesByDate.get(cycleDate) ?? null;
 }
+function mapSidebarField(field) {
+    return {
+        key: field.key,
+        label: field.label,
+        input_type: field.input_type === 'select'
+            ? 'select'
+            : field.input_type === 'date'
+                ? 'date'
+                : 'text',
+        value: field.value,
+        editable: !field.disabled,
+        disabled_reason: field.disabled_reason,
+        hint: null,
+        options: field.options ?? [],
+        required: field.required,
+        min_value: field.min_value ?? null,
+    };
+}
+export function buildCycleOverrideSidebarSections(step) {
+    const sections = [];
+    const paymentTerms = step.settings_schema.find((field) => field.key === 'payment_terms');
+    if (paymentTerms?.visible) {
+        sections.push({
+            key: 'payment_terms',
+            title: 'תנאי תשלום',
+            fields: [mapSidebarField(paymentTerms)],
+        });
+    }
+    const documentSettings = step.settings_schema.filter((field) => field.visible && field.key !== 'payment_terms');
+    if (documentSettings.length > 0) {
+        sections.push({
+            key: 'document_settings',
+            title: 'הגדרות מסמך',
+            fields: documentSettings.map(mapSidebarField),
+        });
+    }
+    if (step.notes) {
+        sections.push({
+            key: 'notes',
+            title: step.notes.label,
+            fields: [
+                {
+                    key: 'notes',
+                    label: step.notes.label,
+                    input_type: 'textarea',
+                    value: step.notes.value,
+                    editable: step.notes.editable,
+                    disabled_reason: null,
+                    hint: null,
+                    options: [],
+                    required: false,
+                    min_value: null,
+                },
+            ],
+        });
+    }
+    if (step.delivery_contact) {
+        sections.push({
+            key: 'delivery_contact',
+            title: step.delivery_contact.label,
+            fields: [
+                {
+                    key: 'delivery_contact_email',
+                    label: step.delivery_contact.label,
+                    input_type: 'email',
+                    value: step.delivery_contact.email,
+                    editable: step.delivery_contact.editable,
+                    disabled_reason: null,
+                    hint: step.delivery_contact.hint,
+                    options: [],
+                    required: false,
+                    min_value: null,
+                },
+            ],
+        });
+    }
+    return sections;
+}
 export function buildOverrideSaveScopeDialog(visible) {
     return {
         title: 'להחיל על',

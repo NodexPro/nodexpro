@@ -265,6 +265,25 @@ export type WorkEngineRecurringCycleOverrideContextPanel = {
   projection_note: string | null;
 };
 
+export type WorkEngineRecurringCycleOverrideSidebarField = {
+  key: string;
+  label: string;
+  input_type: 'text' | 'date' | 'select' | 'textarea' | 'email';
+  value: string | null;
+  editable: boolean;
+  disabled_reason: string | null;
+  hint: string | null;
+  options: Array<{ value: string; label: string }>;
+  required: boolean;
+  min_value: string | null;
+};
+
+export type WorkEngineRecurringCycleOverrideSidebarSection = {
+  key: string;
+  title: string;
+  fields: WorkEngineRecurringCycleOverrideSidebarField[];
+};
+
 export type WorkEngineRecurringCycleOverrideAggregate = {
   aggregate_key: typeof WORK_ENGINE_RECURRING_CYCLE_OVERRIDE_AGGREGATE_KEY;
   represented_client_id: string;
@@ -274,6 +293,7 @@ export type WorkEngineRecurringCycleOverrideAggregate = {
   cycle_date_display: string;
   title: string;
   context_panel: WorkEngineRecurringCycleOverrideContextPanel;
+  sidebar_sections: WorkEngineRecurringCycleOverrideSidebarSection[];
   override_exists: boolean;
   override_scope: RecurringCycleOverrideScope | null;
   document_details_step: IncomeDocumentDetailsStep;
