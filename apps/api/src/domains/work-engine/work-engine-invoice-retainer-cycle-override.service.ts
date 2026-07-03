@@ -201,35 +201,34 @@ async function buildCycleOverrideAggregate(params: {
     throw badRequest('Recurring profile has no document template snapshot');
   }
 
-  const workspace = await ensureRetainerDocumentDraftWorkspace({
-    ctx: params.ctx,
-    representedClientId: params.representedClientId,
-    endCustomerId: profile.end_customer_id,
-    sourceDraftTemplateId: profile.source_draft_template_id,
-    fallbackDocumentType: profile.document_type,
-  });
-  const baseStep = workspace.income_workspace_aggregate.document_details_step;
-  if (!baseStep) throw badRequest('Template document step is unavailable');
-
   const existingOverride = resolveCycleOverrideForDate(params.cycleDate, params.overridesByDate);
-  let step =
-    params.documentDetailsStep ??
-    (await buildFutureCycleProjectionStep({
+
+  let step: IncomeDocumentDetailsStep;
+  if (params.documentDetailsStep) {
+    step = await refreshFutureCycleProjectionStepTotals({
+      orgId,
+      step: params.documentDetailsStep,
+      snapshot: profile.document_template_snapshot,
+    });
+  } else {
+    const workspace = await ensureRetainerDocumentDraftWorkspace({
+      ctx: params.ctx,
+      representedClientId: params.representedClientId,
+      endCustomerId: profile.end_customer_id,
+      sourceDraftTemplateId: profile.source_draft_template_id,
+      fallbackDocumentType: profile.document_type,
+    });
+    const baseStep = workspace.income_workspace_aggregate.document_details_step;
+    if (!baseStep) throw badRequest('Template document step is unavailable');
+
+    step = await buildFutureCycleProjectionStep({
       orgId,
       profile,
       baseStep,
       cycleDate: params.cycleDate,
       cycleIndex: params.cycleIndex,
       overridePayload: existingOverride?.override_payload ?? null,
-    }));
-
-  if (params.documentDetailsStep) {
-    step = await refreshFutureCycleProjectionStepTotals({
-      orgId,
-      step,
-      snapshot: profile.document_template_snapshot,
     });
-  } else {
     step = ensureProjectionEditableLineItems(step);
   }
 
