@@ -2,16 +2,27 @@
  * Retainer — future cycle projection (read-model only; not a draft / not issued).
  */
 
+import type { RequestContext } from '../../shared/context.js';
+import { forbidden } from '../../shared/errors.js';
 import type { IncomeDocumentDetailsStep } from '../income/income.types.js';
 import type { ActiveIncomeIssuerScope } from '../income/income.guards.js';
+import { findAvailableDocumentType } from '../income/income-document-types.fallback.js';
+import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
+import {
+  buildIncomeDocumentDetailsStep,
+  type IncomeWizardDraftRow,
+} from '../income/income-document-details-step.builders.js';
+import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 import { normalizeDraftLines } from '../income/income-document-draft-lines.pure.js';
 import {
   computeDraftTotalsPreview,
   parseDocumentSettingsJson,
   type IncomeDocumentSettings,
 } from '../income/income-document-draft-totals.pure.js';
-import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
-import type { IncomeDraftVatResolution } from '../income/income-draft-vat-fallback.pure.js';
+import {
+  incomeDraftVatFallbackResolution,
+  type IncomeDraftVatResolution,
+} from '../income/income-draft-vat-fallback.pure.js';
 import { computeDraftLineAmounts, resolveLineFx, resolveFxMapForDraftLines } from '../income/income-draft-line-compute.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import {
@@ -62,6 +73,73 @@ type RawProfile = {
 
 function cloneStep(step: IncomeDocumentDetailsStep): IncomeDocumentDetailsStep {
   return structuredClone(step);
+}
+
+/** Projection totals use IL fallback VAT — not financial truth; avoids Country Pack round-trip per keystroke. */
+function resolveProjectionDraftVat(): IncomeDraftVatResolution {
+  return incomeDraftVatFallbackResolution();
+}
+
+/** Drop heavy preview payloads from client refresh commands. */
+export function sanitizeProjectionStepForRefresh(
+  step: IncomeDocumentDetailsStep,
+): IncomeDocumentDetailsStep {
+  return {
+    ...step,
+    document_preview: null,
+    header: {
+      ...step.header,
+      document_number_preview: null,
+    },
+  };
+}
+
+function retainerTemplateDocumentType(
+  documentType: RecurringDocumentTemplateSnapshot['document_type'],
+): 'quote' | 'deal_invoice' | 'tax_invoice' {
+  if (documentType === 'quote' || documentType === 'deal_invoice' || documentType === 'tax_invoice') {
+    return documentType;
+  }
+  return 'deal_invoice';
+}
+
+/**
+ * Build editor base step from profile template snapshot only — no template draft workspace load.
+ */
+export async function buildProjectionBaseStepFromTemplateSnapshot(params: {
+  ctx: RequestContext;
+  representedClientId: string;
+  endCustomerId: string;
+  snapshot: RecurringDocumentTemplateSnapshot;
+}): Promise<IncomeDocumentDetailsStep> {
+  const scope = await loadActiveIncomeIssuerScope(params.ctx);
+  if (scope.represented_client_id !== params.representedClientId) {
+    throw forbidden('Office client issuer context required');
+  }
+  const documentType = retainerTemplateDocumentType(params.snapshot.document_type);
+  const row: IncomeWizardDraftRow = {
+    id: `projection-template:${params.endCustomerId}`,
+    document_type: documentType,
+    document_date: params.snapshot.document_date,
+    due_date: params.snapshot.due_date,
+    notes: params.snapshot.notes,
+    currency: params.snapshot.currency,
+    language: params.snapshot.language,
+    draft_lines_json: params.snapshot.draft_lines_json,
+    payment_received_json: null,
+    delivery_contact_json: params.snapshot.delivery_contact_json,
+    document_settings_json: params.snapshot.document_settings_json,
+    validation_warnings_json: [],
+    draft_totals_preview_json: {
+      discount_percent_reference: params.snapshot.discount_percent_reference,
+      discount_amount_reference: params.snapshot.discount_amount_reference,
+    },
+    income_customer_id: params.endCustomerId,
+    one_time_customer_snapshot_json: null,
+  };
+  const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
+  const docType = findAvailableDocumentType(available_document_types, documentType) ?? null;
+  return buildIncomeDocumentDetailsStep(scope, row, docType, true, { lean: true });
 }
 
 function parseUnitPrice(value: string): number {
@@ -378,7 +456,7 @@ export async function buildFutureCycleProjectionStep(params: {
   step = stripProjectionDocumentNumbers(step);
 
   const settings = resolveProjectionSettings(step, effectiveSnapshot);
-  const vatResolution = await resolveIncomeDraftVatForOrg(params.orgId, 'IL', params.cycleDate);
+  const vatResolution = resolveProjectionDraftVat();
   step = await rebuildProjectedLineTotals(step, params.orgId, params.cycleDate, settings, vatResolution);
   return ensureProjectionEditableLineItems(step);
 }
@@ -392,9 +470,10 @@ export async function refreshFutureCycleProjectionStepTotals(params: {
     params.step.settings_schema.find((field) => field.key === 'document_date')?.value ?? null;
   if (!documentDate) return params.step;
   const settings = resolveProjectionSettings(params.step, params.snapshot);
-  const vatResolution = await resolveIncomeDraftVatForOrg(params.orgId, 'IL', documentDate);
+  const vatResolution = resolveProjectionDraftVat();
+  const sanitized = sanitizeProjectionStepForRefresh(params.step);
   const refreshed = await rebuildProjectedLineTotals(
-    params.step,
+    sanitized,
     params.orgId,
     documentDate,
     settings,

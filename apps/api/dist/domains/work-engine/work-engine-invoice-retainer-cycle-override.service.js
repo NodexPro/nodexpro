@@ -10,8 +10,7 @@ import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.servi
 import { loadIncomeRecipientById } from '../income/income-recipient.service.js';
 import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
 import { denormalizedProfileFieldsFromSnapshot } from './work-engine-invoice-retainer-draft.service.js';
-import { ensureRetainerDocumentDraftWorkspace } from './work-engine-invoice-retainer-draft.service.js';
-import { attachFutureCycleProjectionPreview, buildFutureCycleProjectionStep, renderFutureCycleProjectionPreview, refreshFutureCycleProjectionStepTotals, } from './work-engine-invoice-retainer-future-cycle-projection.service.js';
+import { attachFutureCycleProjectionPreview, buildFutureCycleProjectionStep, buildProjectionBaseStepFromTemplateSnapshot, renderFutureCycleProjectionPreview, refreshFutureCycleProjectionStepTotals, } from './work-engine-invoice-retainer-future-cycle-projection.service.js';
 import { buildOverrideSaveScopeDialog, buildCycleOverrideSidebarSections, buildCycleOverrideRetainerSettingsSidebar, ensureProjectionEditableLineItems, isRecurringCycleOverrideApplyScope, overridePayloadFromDocumentDetailsStep, resolveCycleOverrideForDate, } from './work-engine-invoice-retainer-cycle-override.pure.js';
 import { formatHebrewDateDisplay } from './work-engine-invoice-retainer.pure.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
@@ -20,6 +19,14 @@ const RETAINER_DOC_TYPE_LABELS = {
     deal_invoice: 'חשבון עסקה',
     tax_invoice: 'חשבונית מס',
 };
+function buildRetainerDocumentTypeOptions(activeType) {
+    return ['quote', 'deal_invoice', 'tax_invoice'].map((key) => ({
+        key,
+        label: RETAINER_DOC_TYPE_LABELS[key],
+        enabled: key === activeType,
+        disabled_reason: key === activeType ? null : null,
+    }));
+}
 async function loadOfficeClientDisplayName(orgId, representedClientId) {
     const { data, error } = await supabaseAdmin
         .from('clients')
@@ -138,16 +145,12 @@ async function buildCycleOverrideAggregate(params) {
         });
     }
     else {
-        const workspace = await ensureRetainerDocumentDraftWorkspace({
+        const baseStep = await buildProjectionBaseStepFromTemplateSnapshot({
             ctx: params.ctx,
             representedClientId: params.representedClientId,
             endCustomerId: profile.end_customer_id,
-            sourceDraftTemplateId: profile.source_draft_template_id,
-            fallbackDocumentType: profile.document_type,
+            snapshot: profile.document_template_snapshot,
         });
-        const baseStep = workspace.income_workspace_aggregate.document_details_step;
-        if (!baseStep)
-            throw badRequest('Template document step is unavailable');
         step = await buildFutureCycleProjectionStep({
             orgId,
             profile,
@@ -164,30 +167,59 @@ async function buildCycleOverrideAggregate(params) {
         step = await attachFutureCycleProjectionPreview(step, preview);
     }
     const cycleDateDisplay = formatHebrewDateDisplay(params.cycleDate);
-    const contextPanel = await buildCycleOverrideContextPanel({
-        ctx: params.ctx,
-        representedClientId: params.representedClientId,
-        endCustomerId: profile.end_customer_id,
-        cycleDateDisplay,
-        step,
-    });
-    const scope = await loadActiveIncomeIssuerScope(params.ctx);
-    const recipient = await loadIncomeRecipientById(scope, profile.end_customer_id);
-    const docTypesResult = await resolveAvailableDocumentTypes(orgId, scope);
-    const documentTypeOptions = docTypesResult.available_document_types
-        .filter((dt) => dt.key === 'quote' || dt.key === 'deal_invoice' || dt.key === 'tax_invoice')
-        .map((dt) => ({
-        key: dt.key,
-        label: dt.label,
-        enabled: dt.enabled,
-        disabled_reason: dt.disabled_reason,
-    }));
-    const retainerSettingsSidebar = buildCycleOverrideRetainerSettingsSidebar({
-        profile,
-        endCustomerDisplayName: recipient?.display_name ?? '—',
-        cycleDate: params.cycleDate,
-        documentTypeOptions,
-    });
+    let contextPanel;
+    let retainerSettingsSidebar;
+    if (params.totalsOnly) {
+        const [scope, officeClientName] = await Promise.all([
+            loadActiveIncomeIssuerScope(params.ctx),
+            loadOfficeClientDisplayName(orgId, params.representedClientId),
+        ]);
+        const recipient = await loadIncomeRecipientById(scope, profile.end_customer_id);
+        contextPanel = {
+            office_client_label: `לקוח משרד: ${officeClientName}`,
+            end_customer_display_name: recipient?.display_name ?? '—',
+            document_type_label: resolveDocumentTypeLabel(step),
+            cycle_date_display: cycleDateDisplay,
+            payment_terms_display: resolvePaymentTermsDisplay(step),
+            projection_note: 'תצוגה והתאמה עתידית בלבד — ללא יצירת טיוטה או מסמך.',
+        };
+        retainerSettingsSidebar = buildCycleOverrideRetainerSettingsSidebar({
+            profile,
+            endCustomerDisplayName: recipient?.display_name ?? '—',
+            cycleDate: params.cycleDate,
+            documentTypeOptions: buildRetainerDocumentTypeOptions(profile.document_type),
+        });
+    }
+    else {
+        const scope = await loadActiveIncomeIssuerScope(params.ctx);
+        const [officeClientName, recipient, docTypesResult] = await Promise.all([
+            loadOfficeClientDisplayName(orgId, params.representedClientId),
+            loadIncomeRecipientById(scope, profile.end_customer_id),
+            resolveAvailableDocumentTypes(orgId, scope),
+        ]);
+        contextPanel = {
+            office_client_label: `לקוח משרד: ${officeClientName}`,
+            end_customer_display_name: recipient?.display_name ?? '—',
+            document_type_label: resolveDocumentTypeLabel(step),
+            cycle_date_display: cycleDateDisplay,
+            payment_terms_display: resolvePaymentTermsDisplay(step),
+            projection_note: 'תצוגה והתאמה עתידית בלבד — ללא יצירת טיוטה או מסמך.',
+        };
+        const documentTypeOptions = docTypesResult.available_document_types
+            .filter((dt) => dt.key === 'quote' || dt.key === 'deal_invoice' || dt.key === 'tax_invoice')
+            .map((dt) => ({
+            key: dt.key,
+            label: dt.label,
+            enabled: dt.enabled,
+            disabled_reason: dt.disabled_reason,
+        }));
+        retainerSettingsSidebar = buildCycleOverrideRetainerSettingsSidebar({
+            profile,
+            endCustomerDisplayName: recipient?.display_name ?? '—',
+            cycleDate: params.cycleDate,
+            documentTypeOptions,
+        });
+    }
     return {
         aggregate_key: 'work_engine_recurring_cycle_override_aggregate',
         represented_client_id: params.representedClientId,
@@ -284,6 +316,7 @@ export async function refreshRecurringCycleOverrideStep(params) {
         overridesByDate,
         documentDetailsStep: params.documentDetailsStep,
         includePreview: params.includePreview === true,
+        totalsOnly: true,
     });
 }
 export async function saveRecurringCycleOverride(params) {

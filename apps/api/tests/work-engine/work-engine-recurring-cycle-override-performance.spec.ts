@@ -18,7 +18,7 @@ const commandsServiceSource = readFileSync(
   'utf8',
 );
 
-test('cycle override refresh path skips ensureRetainerDocumentDraftWorkspace', () => {
+test('cycle override open path uses template snapshot not draft workspace', () => {
   const fnStart = overrideServiceSource.indexOf('async function buildCycleOverrideAggregate');
   const fnEnd = overrideServiceSource.indexOf('export async function openRecurringCycleOverrideForEdit', fnStart);
   const fnBlock = overrideServiceSource.slice(fnStart, fnEnd);
@@ -29,8 +29,14 @@ test('cycle override refresh path skips ensureRetainerDocumentDraftWorkspace', (
 
   assert.ok(!refreshBranch.includes('ensureRetainerDocumentDraftWorkspace'));
   assert.ok(refreshBranch.includes('refreshFutureCycleProjectionStepTotals'));
-  assert.ok(openBranch.includes('ensureRetainerDocumentDraftWorkspace'));
+  assert.ok(!openBranch.includes('ensureRetainerDocumentDraftWorkspace'));
+  assert.ok(openBranch.includes('buildProjectionBaseStepFromTemplateSnapshot'));
   assert.ok(openBranch.includes('buildFutureCycleProjectionStep'));
+});
+
+test('cycle override totals refresh skips document type resolver', () => {
+  assert.ok(overrideServiceSource.includes('totalsOnly'));
+  assert.ok(overrideServiceSource.includes('buildRetainerDocumentTypeOptions'));
 });
 
 test('refresh_recurring_cycle_override_step command does not rebuild setup aggregate', () => {
