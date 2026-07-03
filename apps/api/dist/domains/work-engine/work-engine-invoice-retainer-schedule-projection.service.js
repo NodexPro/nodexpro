@@ -363,6 +363,10 @@ export async function buildRetainerScheduleProjection(params) {
                 workItem,
                 waitingReviewWithGeneratedDraft: status.status_key === 'waiting_review' && rowInteraction.primary_action != null,
             });
+            const machineStateTone = rowInteraction.row_interaction_kind === 'future_projection' &&
+                rowInteraction.primary_action?.command === 'open_recurring_cycle_override_for_edit'
+                ? 'warning'
+                : machine.machine_state_tone;
             let amount = await computeScheduleAmount({
                 orgId: params.orgId,
                 profile: params.profile,
@@ -418,7 +422,7 @@ export async function buildRetainerScheduleProjection(params) {
                 work_item_href: status.work_item_href,
                 machine_state: machine.machine_state,
                 machine_state_label: machine.machine_state_label,
-                machine_state_tone: machine.machine_state_tone,
+                machine_state_tone: machineStateTone,
                 machine_has_task: machine.machine_has_task,
                 machine_task_id: machine.machine_task_id,
                 machine_task_url: machine.machine_task_url,

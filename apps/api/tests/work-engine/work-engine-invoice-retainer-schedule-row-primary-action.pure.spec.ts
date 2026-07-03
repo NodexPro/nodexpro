@@ -10,8 +10,22 @@ const schedulePanelSource = readFileSync(
   join(dir, '../../../web/src/components/work-engine/WorkEngineInvoiceRetainerSchedulePanel.tsx'),
   'utf8',
 );
+const scheduleMachineIndicatorSource = readFileSync(
+  join(
+    dir,
+    '../../../web/src/components/work-engine/WorkEngineInvoiceRetainerScheduleMachineIndicator.tsx',
+  ),
+  'utf8',
+);
 const setupModalSource = readFileSync(
   join(dir, '../../../web/src/components/work-engine/WorkEngineInvoiceRetainerSetupModal.tsx'),
+  'utf8',
+);
+const scheduleProjectionServiceSource = readFileSync(
+  join(
+    dir,
+    '../../src/domains/work-engine/work-engine-invoice-retainer-schedule-projection.service.ts',
+  ),
   'utf8',
 );
 
@@ -140,4 +154,22 @@ test('frontend schedule panel does not infer next row by date', () => {
   assert.ok(schedulePanelSource.includes('onScheduleRowPrimaryAction'));
   assert.ok(schedulePanelSource.includes('row.primary_action'));
   assert.ok(schedulePanelSource.includes('open_recurring_cycle_override_for_edit'));
+  assert.ok(schedulePanelSource.includes('WorkEngineInvoiceRetainerScheduleMachineIndicator'));
+});
+
+test('backend schedule projection marks future override rows with warning machine tone', () => {
+  assert.ok(
+    scheduleProjectionServiceSource.includes(
+      "rowInteraction.primary_action?.command === 'open_recurring_cycle_override_for_edit'",
+    ),
+  );
+  assert.ok(scheduleProjectionServiceSource.includes("? 'warning'"));
+  assert.ok(scheduleProjectionServiceSource.includes('machine_state_tone: machineStateTone'));
+});
+
+test('frontend future projection machine indicator uses warning tone and primary action click', () => {
+  assert.ok(scheduleMachineIndicatorSource.includes("rowInteractionKind === 'future_projection'"));
+  assert.ok(scheduleMachineIndicatorSource.includes("'warning'"));
+  assert.ok(scheduleMachineIndicatorSource.includes('onScheduleRowPrimaryAction(primaryAction)'));
+  assert.ok(scheduleMachineIndicatorSource.includes('primaryAction && onScheduleRowPrimaryAction'));
 });
