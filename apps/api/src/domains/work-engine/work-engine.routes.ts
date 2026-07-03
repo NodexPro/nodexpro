@@ -217,11 +217,18 @@ officeRouter.get(
       const ctx = req.context as RequestContext;
       const representedClientId = String(req.query.represented_client_id ?? '').trim();
       const endCustomerId = String(req.query.end_customer_id ?? '').trim() || null;
+      const requestStartedMs = Date.now();
+      console.info(
+        `[work-engine][invoice-retainer-setup][request] client=${representedClientId} end_customer=${endCustomerId ?? 'none'} started`,
+      );
       const aggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
         ctx,
         representedClientId,
         endCustomerId,
       });
+      console.info(
+        `[work-engine][invoice-retainer-setup][request] client=${representedClientId} end_customer=${endCustomerId ?? 'none'} completed ${Date.now() - requestStartedMs}ms`,
+      );
       return res.json(aggregate);
     } catch (e) {
       next(e);
