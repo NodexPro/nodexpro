@@ -333,7 +333,13 @@ export async function saveRecurringCycleOverride(params) {
         representedClientId: params.representedClientId,
         profileId: params.profileId,
     });
-    const overridePayload = overridePayloadFromDocumentDetailsStep(params.documentDetailsStep);
+    let overridePayload;
+    try {
+        overridePayload = overridePayloadFromDocumentDetailsStep(params.documentDetailsStep);
+    }
+    catch (e) {
+        throw badRequest(e instanceof Error ? e.message : 'Invalid document_details_step for override');
+    }
     if (params.applyScope === 'single_cycle') {
         const { error } = await supabaseAdmin.from('income_recurring_cycle_overrides').upsert({
             organization_id: orgId,
@@ -401,6 +407,7 @@ export async function saveRecurringCycleOverride(params) {
         ctx: params.ctx,
         representedClientId: params.representedClientId,
         endCustomerId: profile.end_customer_id,
+        buildMode: 'schedule_refresh',
     });
     return {
         ok: true,
@@ -439,6 +446,7 @@ export async function deleteRecurringCycleOverride(params) {
         ctx: params.ctx,
         representedClientId: params.representedClientId,
         endCustomerId: profile.end_customer_id,
+        buildMode: 'schedule_refresh',
     });
     return {
         ok: true,

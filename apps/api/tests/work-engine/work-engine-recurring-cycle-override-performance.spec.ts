@@ -17,6 +17,10 @@ const commandsServiceSource = readFileSync(
   join(dir, '../../src/domains/work-engine/work-engine-invoice-retainer.commands.service.ts'),
   'utf8',
 );
+const readModelSource = readFileSync(
+  join(dir, '../../src/domains/work-engine/work-engine-invoice-retainer.read-model.service.ts'),
+  'utf8',
+);
 
 test('cycle override open path uses template snapshot not draft workspace', () => {
   const fnStart = overrideServiceSource.indexOf('async function buildCycleOverrideAggregate');
@@ -73,8 +77,15 @@ test('parent setup modal pauses preview and setup refresh while cycle override i
   assert.ok(formChangeBlock.includes('cycleOverrideOpenRef.current'));
 });
 
-test('save and delete cycle override still return setup aggregate', () => {
-  assert.ok(overrideServiceSource.includes('buildWorkEngineInvoiceRetainerSetupAggregate'));
+test('schedule_refresh setup aggregate skips template draft workspace', () => {
+  assert.ok(readModelSource.includes("buildMode?: WorkEngineInvoiceRetainerSetupAggregateBuildMode"));
+  assert.ok(readModelSource.includes("const skipDocumentDraftWorkspace = buildMode === 'schedule_refresh'"));
+  assert.ok(readModelSource.includes('buildProjectionBaseStepFromTemplateSnapshot'));
+  assert.ok(readModelSource.includes('if (!skipDocumentDraftWorkspace)'));
+});
+
+test('save and delete cycle override return schedule-refreshed setup aggregate', () => {
+  assert.ok(overrideServiceSource.includes("buildMode: 'schedule_refresh'"));
   assert.ok(overrideServiceSource.includes("command: 'save_recurring_cycle_override'"));
   assert.ok(overrideServiceSource.includes("command: 'delete_recurring_cycle_override'"));
 });

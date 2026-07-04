@@ -9,6 +9,7 @@ import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-c
 import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
 import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import { ensureRetainerDocumentDraftWorkspace, } from './work-engine-invoice-retainer-draft.service.js';
+import { buildProjectionBaseStepFromTemplateSnapshot } from './work-engine-invoice-retainer-future-cycle-projection.service.js';
 import { loadDocumentNumbersById, loadRecurringProfileCycles, RECURRING_CYCLE_STATUS_LABELS, } from './work-engine-invoice-retainer-cycles.service.js';
 import { RECURRING_SCHEDULER_STATUS_ACTIVE, RECURRING_SCHEDULER_STATUS_FAILED, RECURRING_WORK_EVENT_TYPE, RECURRING_WORK_TYPE, RECURRING_FREQUENCY_LABELS, RECURRING_FREQUENCY_OPTIONS, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, formatHebrewDateDisplay, } from './work-engine-invoice-retainer.pure.js';
 import { buildNextDocumentPreview, buildSetupTabs, } from './work-engine-invoice-retainer-next-document-preview.service.js';
@@ -259,6 +260,8 @@ function buildIssueDocumentAction(workspace, canIssue) {
     };
 }
 export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
+    const buildMode = params.buildMode ?? 'full';
+    const skipDocumentDraftWorkspace = buildMode === 'schedule_refresh';
     const orgId = params.ctx.organizationId;
     if (!orgId)
         throw forbidden('Organization context required');
@@ -322,18 +325,20 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
         if (!customer)
             throw badRequest('end_customer_id is not eligible');
         const profile = profileByCustomerId.get(customer.id) ?? null;
-        documentDraftWorkspace = await ensureRetainerDocumentDraftWorkspace({
-            ctx: params.ctx,
-            representedClientId,
-            endCustomerId: customer.id,
-            sourceDraftTemplateId: profile?.source_draft_template_id,
-            fallbackDocumentType: (profile?.document_type ?? 'deal_invoice'),
-            onTiming: (label, elapsedMs) => {
-                const dots = '.'.repeat(Math.max(1, TIMING_LABEL_PAD - `load_draft.${label}`.length));
-                console.info(`[work-engine][invoice-retainer-setup][timing] client=${representedClientId} end_customer=${selectedEndCustomerId} load_draft.${label} ${dots} ${elapsedMs}ms`);
-            },
-        });
-        stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'load_draft', stepStartMs);
+        if (!skipDocumentDraftWorkspace) {
+            documentDraftWorkspace = await ensureRetainerDocumentDraftWorkspace({
+                ctx: params.ctx,
+                representedClientId,
+                endCustomerId: customer.id,
+                sourceDraftTemplateId: profile?.source_draft_template_id,
+                fallbackDocumentType: (profile?.document_type ?? 'deal_invoice'),
+                onTiming: (label, elapsedMs) => {
+                    const dots = '.'.repeat(Math.max(1, TIMING_LABEL_PAD - `load_draft.${label}`.length));
+                    console.info(`[work-engine][invoice-retainer-setup][timing] client=${representedClientId} end_customer=${selectedEndCustomerId} load_draft.${label} ${dots} ${elapsedMs}ms`);
+                },
+            });
+            stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'load_draft', stepStartMs);
+        }
         retainerSettings = buildRetainerSettings(profile, customer, defaultValues, documentDraftWorkspace, params.settingsOverride);
         stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'build_retainer_settings', stepStartMs);
         templateDraft = buildTemplateDraftState({
@@ -341,18 +346,20 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
             documentType: retainerSettings.document_type,
             endCustomerId: customer.id,
         });
-        saveProfileWithoutTemplatePrompt = buildSaveProfileWithoutTemplatePrompt(documentDraftWorkspace);
-        issueDocumentAction = buildIssueDocumentAction(documentDraftWorkspace, perms.issue);
-        const docTypesResult = await resolveAvailableDocumentTypes(orgId, issuerScope);
-        stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'resolve_document_type_options', stepStartMs);
-        documentTypeOptions = docTypesResult.available_document_types
-            .filter((dt) => dt.key === 'quote' || dt.key === 'deal_invoice' || dt.key === 'tax_invoice')
-            .map((dt) => ({
-            key: dt.key,
-            label: dt.label,
-            enabled: dt.enabled,
-            disabled_reason: dt.disabled_reason,
-        }));
+        if (!skipDocumentDraftWorkspace) {
+            saveProfileWithoutTemplatePrompt = buildSaveProfileWithoutTemplatePrompt(documentDraftWorkspace);
+            issueDocumentAction = buildIssueDocumentAction(documentDraftWorkspace, perms.issue);
+            const docTypesResult = await resolveAvailableDocumentTypes(orgId, issuerScope);
+            stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'resolve_document_type_options', stepStartMs);
+            documentTypeOptions = docTypesResult.available_document_types
+                .filter((dt) => dt.key === 'quote' || dt.key === 'deal_invoice' || dt.key === 'tax_invoice')
+                .map((dt) => ({
+                key: dt.key,
+                label: dt.label,
+                enabled: dt.enabled,
+                disabled_reason: dt.disabled_reason,
+            }));
+        }
     }
     const identity = selectedEndCustomerId && retainerSettings
         ? {
@@ -444,7 +451,20 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     const schedulerNote = schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
         ? `יצירת טיוטה אחרונה נכשלה (${selectedProfile?.last_generation_error_code ?? 'שגיאה'}). נדרשת בדיקה ידנית.`
         : 'יצירת טיוטות מתוזמנת פעילה. לא נשלח מסמך ללא אישור רואה חשבון.';
-    const baseDocumentDetailsStep = documentDraftWorkspace?.income_workspace_aggregate.document_details_step ?? null;
+    let baseDocumentDetailsStep = documentDraftWorkspace?.income_workspace_aggregate.document_details_step ?? null;
+    if (!baseDocumentDetailsStep &&
+        skipDocumentDraftWorkspace &&
+        selectedProfile?.document_template_snapshot &&
+        selectedEndCustomerId) {
+        const snapshotBaseStartMs = Date.now();
+        baseDocumentDetailsStep = await buildProjectionBaseStepFromTemplateSnapshot({
+            ctx: params.ctx,
+            representedClientId,
+            endCustomerId: selectedEndCustomerId,
+            snapshot: selectedProfile.document_template_snapshot,
+        });
+        stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerId, 'build_template_snapshot_base_step', snapshotBaseStartMs);
+    }
     const nextDocumentPreviewStartMs = Date.now();
     const nextDocumentPreview = await buildNextDocumentPreview({
         orgId,
