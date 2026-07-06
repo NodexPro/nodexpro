@@ -22,3 +22,14 @@ export type {
   ListDeliveryAttemptsFilter,
 } from './delivery.types.js';
 export { DELIVERY_ATTEMPT_RESULTS, DELIVERY_CHANNELS } from './delivery.types.js';
+export { sendEmail, type DeliveryEmailTransportDeps } from './delivery-email.transport.js';
+export {
+  normalizeDeliveryEmailFailureReason,
+  validateDeliveryEmailEnvelope,
+} from './delivery-email.pure.js';
+export type {
+  DeliveryEmailAttachment,
+  DeliveryEmailEnvelope,
+  DeliveryEmailSendResult,
+  DeliveryEmailSendStatus,
+} from './delivery-email.types.js';
