@@ -81,6 +81,12 @@ test('retry_income_document_pdf_render command is registered', () => {
   assert.match(commandsSource, /renderIncomeDocumentPdf/);
 });
 
+test('send_income_document_by_email command is registered', () => {
+  assert.match(commandsSource, /INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL/);
+  assert.match(commandsSource, /executeSendIncomeDocumentByEmail/);
+  assert.doesNotMatch(commandsSource, /from\s+['"].*\/delivery\//);
+});
+
 test('issued document rows expose pdf_render_status', () => {
   const typesSource = readFileSync(join(dir, '../../src/domains/income/income.types.ts'), 'utf8');
   assert.match(typesSource, /pdf_render_status/);

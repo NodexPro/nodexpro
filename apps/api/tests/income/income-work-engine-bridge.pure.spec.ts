@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL,
   INCOME_WORK_EVENT_DOCUMENT_ISSUED,
   INCOME_WORK_EVENT_DUE_DATE_SET,
   INCOME_WORK_EVENT_OVERDUE,
@@ -39,4 +40,5 @@ test('deferred payment events documented', () => {
   assert.equal(INCOME_WORK_EVENT_DOCUMENT_ISSUED, 'income.document_issued');
   assert.equal(INCOME_WORK_EVENT_DUE_DATE_SET, 'income.invoice_due_date_set');
   assert.equal(INCOME_WORK_EVENT_OVERDUE, 'income.invoice_overdue');
+  assert.equal(INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL, 'income.document_sent_by_email');
 });

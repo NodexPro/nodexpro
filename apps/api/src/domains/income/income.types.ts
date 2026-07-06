@@ -20,6 +20,7 @@ export const INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT = 'set_income_recipient_snaps
 export const INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE = 'save_income_recipient_for_future' as const;
 export const INCOME_COMMAND_RETRY_ACCOUNTING_POSTING = 'retry_income_document_accounting_posting' as const;
 export const INCOME_COMMAND_RETRY_PDF_RENDER = 'retry_income_document_pdf_render' as const;
+export const INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL = 'send_income_document_by_email' as const;
 export const INCOME_COMMAND_BEGIN_WIZARD_DRAFT = 'begin_income_wizard_document_draft' as const;
 export const INCOME_COMMAND_ADD_LINE = 'add_income_document_line' as const;
 export const INCOME_COMMAND_UPDATE_LINE = 'update_income_document_line' as const;
@@ -106,6 +107,7 @@ export type IncomeClientDocumentManagementActionIconKey =
   | 'reports'
   | 'ledger'
   | 'retainer'
+  | 'at'
   | 'more';
 
 export interface IncomeClientDocumentManagementRowAction {
@@ -136,6 +138,92 @@ export interface IncomeClientDocumentTypeCounter {
   action_key: 'open_documents_by_type';
 }
 
+export const INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY =
+  'income_document_email_history_aggregate' as const;
+export const INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY =
+  'income_represented_client_email_history_aggregate' as const;
+
+export interface IncomeDocumentEmailDeliveryAction {
+  key: 'open_email_history';
+  icon_key: 'at';
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  history_aggregate_key: typeof INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY;
+  history_aggregate_params: { income_document_id: string };
+}
+
+export interface IncomeDocumentEmailDeliveryBlock {
+  attempt_count: number;
+  status_label: string;
+  send_enabled: boolean;
+  send_disabled_reason: string | null;
+  action: IncomeDocumentEmailDeliveryAction;
+}
+
+export interface IncomeDocumentEmailHistoryAttemptRow {
+  attempt_id: string;
+  sent_at_display: string | null;
+  recipient_email: string | null;
+  result: 'pending' | 'sent' | 'failed';
+  result_label: string;
+  failure_reason: string | null;
+  provider_message_id: string | null;
+  subject_preview: string | null;
+}
+
+export interface IncomeDocumentEmailSendFormField {
+  key: string;
+  label: string;
+  required: boolean;
+  type: 'email';
+}
+
+export interface IncomeDocumentEmailSendForm {
+  visible: boolean;
+  command: typeof INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL;
+  income_document_id: string;
+  fields: IncomeDocumentEmailSendFormField[];
+  enabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface IncomeDocumentEmailHistoryAggregate {
+  aggregate_key: typeof INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY;
+  income_document_id: string;
+  document_number: string;
+  document_type_label: string;
+  represented_client_id: string | null;
+  table_columns: Array<{ key: string; label: string }>;
+  rows: IncomeDocumentEmailHistoryAttemptRow[];
+  send_form: IncomeDocumentEmailSendForm;
+  allowed_actions: string[];
+  empty_state: { visible: boolean; title: string; description: string | null };
+}
+
+export interface IncomeRepresentedClientEmailHistoryAttemptRow {
+  attempt_id: string;
+  income_document_id: string;
+  document_number: string | null;
+  document_type_label: string | null;
+  sent_at_display: string | null;
+  recipient_email: string | null;
+  result: 'pending' | 'sent' | 'failed';
+  result_label: string;
+  failure_reason: string | null;
+  subject_preview: string | null;
+}
+
+export interface IncomeRepresentedClientEmailHistoryAggregate {
+  aggregate_key: typeof INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY;
+  represented_client_id: string;
+  client_display_name: string;
+  table_columns: Array<{ key: string; label: string }>;
+  rows: IncomeRepresentedClientEmailHistoryAttemptRow[];
+  allowed_actions: string[];
+  empty_state: { visible: boolean; title: string; description: string | null };
+}
+
 export const WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY =
   'work_engine_invoices_client_documents_by_type_aggregate' as const;
 
@@ -153,6 +241,7 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   can_view_document: boolean;
   can_edit_draft: boolean;
   pdf_download_path: string | null;
+  email_delivery: IncomeDocumentEmailDeliveryBlock | null;
   allowed_actions: string[];
 }
 
@@ -398,6 +487,7 @@ export interface IncomeIssuedDocumentsTableRow {
   pdf_status_label: string;
   pdf_asset_id: string | null;
   pdf_download_path: string | null;
+  email_delivery: IncomeDocumentEmailDeliveryBlock;
   allowed_actions: string[];
 }
 
@@ -477,6 +567,7 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE
   | typeof INCOME_COMMAND_RETRY_ACCOUNTING_POSTING
   | typeof INCOME_COMMAND_RETRY_PDF_RENDER
+  | typeof INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL
   | typeof INCOME_COMMAND_BEGIN_WIZARD_DRAFT
   | typeof INCOME_COMMAND_ADD_LINE
   | typeof INCOME_COMMAND_UPDATE_LINE
@@ -497,6 +588,10 @@ export type IncomeCommandType =
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;
   income_document_id?: string;
+  delivery_attempt_id?: string;
+  delivery_result?: 'sent' | 'failed';
+  provider_message_id?: string | null;
+  failure_reason?: string | null;
   /** `wizard_patch` = lightweight aggregate for Work Engine wizard line/settings edits. */
   workspace_aggregate_mode?: 'full' | 'wizard_patch';
 }

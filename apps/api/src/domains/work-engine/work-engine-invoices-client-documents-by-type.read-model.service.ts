@@ -14,6 +14,8 @@ import {
 } from '../income/income-client-income-ledger-card.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
+import { buildIncomeDocumentEmailDeliveryBlock } from '../income/income-document-email-delivery.read-model.pure.js';
+import { loadEmailAttemptCountsByDocumentIds } from '../income/income-document-email-delivery.read-model.service.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import {
   belongsToOfficeClientRow,
@@ -25,6 +27,7 @@ import {
   WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY,
   type IncomeClientDocumentTypeCounterKey,
   type IncomeDocumentType,
+  type IncomeWorkspacePermissions,
   type WorkEngineInvoicesClientDocumentsByTypeAggregate,
   type WorkEngineInvoicesClientDocumentsByTypeRow,
 } from '../income/income.types.js';
@@ -63,6 +66,7 @@ const ISSUED_TABLE_COLUMNS = [
   { key: 'customer_display_name', label: 'לקוח' },
   { key: 'amount_display', label: 'סכום' },
   { key: 'status_label', label: 'סטטוס' },
+  { key: 'email_delivery', label: '@' },
   { key: 'view', label: 'צפייה' },
 ];
 
@@ -157,6 +161,7 @@ async function loadIssuedDocumentCandidates(params: {
   representedClientId: string;
   documentType: IncomeDocumentType;
   canView: boolean;
+  permissions: IncomeWorkspacePermissions;
 }): Promise<Array<WorkEngineInvoicesClientDocumentsByTypeRow & { year: number | null }>> {
   const { data, error } = await supabaseAdmin
     .from('income_documents')
@@ -173,18 +178,21 @@ async function loadIssuedDocumentCandidates(params: {
     .limit(5000);
   throwIfSupabaseError(error, 'loadDocumentsByTypeIssued');
 
-  return (data ?? [])
-    .filter((raw) =>
-      belongsToOfficeClientRow(
-        raw as {
-          represented_client_id: string | null;
-          issuer_business_id: string;
-          acting_mode: string;
-        },
-        params.representedClientId,
-      ),
-    )
-    .map((raw) => {
+  const filtered = (data ?? []).filter((raw) =>
+    belongsToOfficeClientRow(
+      raw as {
+        represented_client_id: string | null;
+        issuer_business_id: string;
+        acting_mode: string;
+      },
+      params.representedClientId,
+    ),
+  );
+
+  const documentIds = filtered.map((raw) => String((raw as { id: string }).id));
+  const emailAttemptCounts = await loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds);
+
+  return filtered.map((raw) => {
     const doc = raw as {
       id: string;
       document_number: string;
@@ -217,6 +225,15 @@ async function loadIssuedDocumentCandidates(params: {
       can_view_document: canViewDoc,
       can_edit_draft: false,
       pdf_download_path: pdfPath,
+      email_delivery: buildIncomeDocumentEmailDeliveryBlock({
+        incomeDocumentId: doc.id,
+        attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
+        permissions: params.permissions,
+        representedClientId: params.representedClientId,
+        documentStatus: 'issued',
+        pdfRenderStatus: doc.pdf_render_status,
+        pdfAssetId: doc.pdf_asset_id,
+      }),
       allowed_actions: canViewDoc ? ['view_document'] : [],
       year,
     };
@@ -295,6 +312,7 @@ async function loadDraftCandidates(params: {
       can_view_document: false,
       can_edit_draft: canEditDraft,
       pdf_download_path: null,
+      email_delivery: null,
       allowed_actions: canEditDraft ? ['edit_draft'] : [],
       year,
     };
@@ -364,6 +382,7 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
       representedClientId,
       documentType: issuedType,
       canView: perms.view,
+      permissions: perms,
     });
     availableYears = resolveAvailableYears(candidates);
     selectedYear = resolveSelectedYear(availableYears, params.year ?? null);

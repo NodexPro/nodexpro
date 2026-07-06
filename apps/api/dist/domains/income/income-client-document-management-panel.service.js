@@ -6,7 +6,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { amountReferenceFromTotalsSnapshot, isInvoiceCollectionDocumentType, } from './income-work-engine-bridge.pure.js';
 import { excludeSelfModeActingFilter, resolveOfficeClientGroupKey, } from './income-client-document-management-panel.pure.js';
-import { INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY, INCOME_COMMAND_SELECT_ISSUER, } from './income.types.js';
+import { INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY, INCOME_COMMAND_SELECT_ISSUER, INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY, } from './income.types.js';
 const PANEL_DOCUMENT_TYPES = [
     'quote',
     'deal_invoice',
@@ -75,6 +75,19 @@ function buildRowActions(clientId, perms, options) {
             },
             enabled: perms.view,
             disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
+        },
+        {
+            key: 'open_email_history',
+            label: '@',
+            icon_key: 'at',
+            command: null,
+            command_payload: {
+                open_email_history: true,
+                represented_client_id: clientId,
+                aggregate_key: INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY,
+            },
+            enabled: perms.view && perms.issue_on_behalf,
+            disabled_reason: perms.view && perms.issue_on_behalf ? null : 'זמין במצב ניהול לקוח בלבד',
         },
     ];
     if (options?.includeRetainerAction) {

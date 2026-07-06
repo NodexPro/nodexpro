@@ -229,6 +229,32 @@ export function incomeDocumentDownloadPath(incomeDocumentId: string): string {
   return `/api/v1/income/documents/${incomeDocumentId}/download`;
 }
 
+export async function loadIssuedDocumentPdfBytesForEmail(
+  orgId: string,
+  pdfAssetId: string,
+): Promise<{ buffer: Buffer; fileName: string; storageBucket: string; storageKey: string }> {
+  const { data: asset, error: assetErr } = await supabaseAdmin
+    .from('file_assets')
+    .select('storage_bucket, storage_key, file_name')
+    .eq('id', pdfAssetId)
+    .eq('organization_id', orgId)
+    .single();
+  if (assetErr || !asset) throw notFound('PDF file asset not found');
+
+  const bucket =
+    (asset as { storage_bucket?: string | null }).storage_bucket ?? BUCKET_INCOME_DOCUMENTS;
+  const key = (asset as { storage_key: string }).storage_key;
+  const { data: fileData, error: dlErr } = await supabaseAdmin.storage.from(bucket).download(key);
+  if (dlErr || !fileData) throw notFound('PDF file not found in storage');
+
+  return {
+    buffer: Buffer.from(await fileData.arrayBuffer()),
+    fileName: (asset as { file_name: string }).file_name || 'document.pdf',
+    storageBucket: bucket,
+    storageKey: key,
+  };
+}
+
 export async function downloadIncomeDocumentPdfBuffer(
   ctx: RequestContext,
   incomeDocumentId: string,

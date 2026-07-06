@@ -12,6 +12,7 @@ import { buildIncomeWorkspaceContextAggregate } from './income-issuer-context.se
 import { downloadIncomeDocumentPdfBuffer } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
 import { buildIncomeClientIncomeLedgerCardAggregate } from './income-client-income-ledger-card.service.js';
+import { buildIncomeDocumentEmailHistoryAggregate, buildIncomeRepresentedClientEmailHistoryAggregate, } from './income-document-email-history.service.js';
 import { INCOME_MODULE_CODE, INCOME_PERMISSIONS } from './income.types.js';
 const router = Router();
 router.get('/aggregates/workspace-context', requirePermission(INCOME_PERMISSIONS.view), async (req, res, next) => {
@@ -43,6 +44,32 @@ router.get('/aggregates/client-income-ledger-card', requirePermission(INCOME_PER
             representedClientId,
             endCustomerId: endCustomerIdRaw || null,
             year: year != null && Number.isFinite(year) ? year : null,
+        });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+router.get('/aggregates/document-email-history', requirePermission(INCOME_PERMISSIONS.view), async (req, res, next) => {
+    try {
+        const incomeDocumentId = String(req.query.income_document_id ?? '').trim();
+        const aggregate = await buildIncomeDocumentEmailHistoryAggregate({
+            ctx: req.context,
+            incomeDocumentId,
+        });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+router.get('/aggregates/represented-client-email-history', requirePermission(INCOME_PERMISSIONS.view), async (req, res, next) => {
+    try {
+        const representedClientId = String(req.query.represented_client_id ?? '').trim();
+        const aggregate = await buildIncomeRepresentedClientEmailHistoryAggregate({
+            ctx: req.context,
+            representedClientId,
         });
         return res.json(aggregate);
     }

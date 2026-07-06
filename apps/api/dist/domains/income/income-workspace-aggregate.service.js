@@ -9,6 +9,8 @@ import { buildDocumentCreationSchema } from './income-document-creation-schema.b
 import { resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
 import { accountingDisplayStatusLabel, resolveAccountingDisplayStatus, } from './income-accounting-posting.mapping.js';
 import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
+import { buildIncomeDocumentEmailDeliveryBlock } from './income-document-email-delivery.read-model.pure.js';
+import { loadEmailAttemptCountsByDocumentIds } from './income-document-email-delivery.read-model.service.js';
 import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './income-workspace-cards.builders.js';
 import { buildIncomeRecipientSearchModel, buildRecipientCreateFieldsSchema, recipientSearchAllowedActions, } from './income-recipient.service.js';
 import { buildDocumentBrandingProfileAggregate, buildDocumentBrandingSettingsEntrypoint, } from './income-document-branding.service.js';
@@ -149,6 +151,8 @@ async function loadIssuedDocuments(scope) {
     query = applyIssuerScopeToBuilder(query, scope);
     const { data, error } = await query;
     throwIfSupabaseError(error, 'loadIncomeWorkspaceIssuedDocuments');
+    const documentIds = (data ?? []).map((row) => String(row.id));
+    const emailAttemptCounts = await loadEmailAttemptCountsByDocumentIds(scope.org_id, documentIds);
     const canRetryPosting = scope.permissions.issue;
     const canView = scope.permissions.view;
     const pdfStatusLabel = (status) => {
@@ -204,6 +208,15 @@ async function loadIssuedDocuments(scope) {
             pdf_download_path: r.pdf_render_status === 'rendered' && r.pdf_asset_id
                 ? incomeDocumentDownloadPath(r.id)
                 : null,
+            email_delivery: buildIncomeDocumentEmailDeliveryBlock({
+                incomeDocumentId: r.id,
+                attemptCount: emailAttemptCounts.get(r.id) ?? 0,
+                permissions: scope.permissions,
+                representedClientId: scope.represented_client_id,
+                documentStatus: r.document_status,
+                pdfRenderStatus: r.pdf_render_status,
+                pdfAssetId: r.pdf_asset_id,
+            }),
             allowed_actions: rowActions,
         };
     });
@@ -268,6 +281,7 @@ function issuedDocumentsTableModel(rows) {
             { key: 'document_status_label', label: 'סטטוס' },
             { key: 'accounting_status_label', label: 'חשבונאות' },
             { key: 'pdf_status_label', label: 'PDF' },
+            { key: 'email_delivery', label: '@' },
         ],
         rows,
         empty_state: {

@@ -267,6 +267,9 @@ export const AUDIT_ACTIONS = {
   INCOME_PDF_RENDER_SUCCEEDED: 'income.pdf_render_succeeded',
   INCOME_PDF_RENDER_FAILED: 'income.pdf_render_failed',
   INCOME_PDF_DOWNLOADED: 'income.pdf_downloaded',
+  /** Income INV-1 — document email delivery lifecycle. */
+  INCOME_DOCUMENT_EMAIL_SENT: 'income.document_email_sent',
+  INCOME_DOCUMENT_EMAIL_SEND_FAILED: 'income.document_email_send_failed',
   /** Income INC-8 — Work Engine intake bridge failure (additive). */
   INCOME_WORK_ENGINE_BRIDGE_INTAKE_FAILED: 'income.work_engine_bridge.intake_failed',
   /** Income — recurring document profile (retainer template). */

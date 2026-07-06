@@ -8,6 +8,8 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { issueYearFromIso, ledgerAmountFromTotalsSnapshot, formatLedgerMoneyReference, } from '../income/income-client-income-ledger-card.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
+import { buildIncomeDocumentEmailDeliveryBlock } from '../income/income-document-email-delivery.read-model.pure.js';
+import { loadEmailAttemptCountsByDocumentIds } from '../income/income-document-email-delivery.read-model.service.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { belongsToOfficeClientRow, excludeSelfModeActingFilter, officeClientDocumentsOrFilter, } from '../income/income-client-document-management-panel.pure.js';
 import { customerDisplayFromSnapshot } from '../income/income-work-engine-bridge.pure.js';
@@ -43,6 +45,7 @@ const ISSUED_TABLE_COLUMNS = [
     { key: 'customer_display_name', label: 'לקוח' },
     { key: 'amount_display', label: 'סכום' },
     { key: 'status_label', label: 'סטטוס' },
+    { key: 'email_delivery', label: '@' },
     { key: 'view', label: 'צפייה' },
 ];
 const DRAFT_TABLE_COLUMNS = [
@@ -140,9 +143,10 @@ async function loadIssuedDocumentCandidates(params) {
         .order('created_at', { ascending: false })
         .limit(5000);
     throwIfSupabaseError(error, 'loadDocumentsByTypeIssued');
-    return (data ?? [])
-        .filter((raw) => belongsToOfficeClientRow(raw, params.representedClientId))
-        .map((raw) => {
+    const filtered = (data ?? []).filter((raw) => belongsToOfficeClientRow(raw, params.representedClientId));
+    const documentIds = filtered.map((raw) => String(raw.id));
+    const emailAttemptCounts = await loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds);
+    return filtered.map((raw) => {
         const doc = raw;
         const year = issueYearFromIso(doc.issue_date);
         const amountRef = ledgerAmountFromTotalsSnapshot(doc.totals_snapshot_json);
@@ -162,6 +166,15 @@ async function loadIssuedDocumentCandidates(params) {
             can_view_document: canViewDoc,
             can_edit_draft: false,
             pdf_download_path: pdfPath,
+            email_delivery: buildIncomeDocumentEmailDeliveryBlock({
+                incomeDocumentId: doc.id,
+                attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
+                permissions: params.permissions,
+                representedClientId: params.representedClientId,
+                documentStatus: 'issued',
+                pdfRenderStatus: doc.pdf_render_status,
+                pdfAssetId: doc.pdf_asset_id,
+            }),
             allowed_actions: canViewDoc ? ['view_document'] : [],
             year,
         };
@@ -207,6 +220,7 @@ async function loadDraftCandidates(params) {
             can_view_document: false,
             can_edit_draft: canEditDraft,
             pdf_download_path: null,
+            email_delivery: null,
             allowed_actions: canEditDraft ? ['edit_draft'] : [],
             year,
         };
@@ -262,6 +276,7 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
             representedClientId,
             documentType: issuedType,
             canView: perms.view,
+            permissions: perms,
         });
         availableYears = resolveAvailableYears(candidates);
         selectedYear = resolveSelectedYear(availableYears, params.year ?? null);

@@ -79,6 +79,7 @@ import {
   updateIncomeDocumentDeliveryContact,
   type WizardDraftOverlay,
 } from './income-document-draft-editor.service.js';
+import { executeSendIncomeDocumentByEmail } from './income-document-email-delivery.service.js';
 import {
   executeUpdateIncomeDocumentBrandingProfile,
   executeUpdateIncomeDocumentBrandingProfilePreviewDraft,
@@ -106,6 +107,7 @@ import {
   INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE,
   INCOME_COMMAND_RETRY_ACCOUNTING_POSTING,
   INCOME_COMMAND_RETRY_PDF_RENDER,
+  INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL,
   INCOME_COMMAND_CREATE_CUSTOMER,
   INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER,
   INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER,
@@ -141,6 +143,7 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE,
   INCOME_COMMAND_RETRY_ACCOUNTING_POSTING,
   INCOME_COMMAND_RETRY_PDF_RENDER,
+  INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL,
   INCOME_COMMAND_BEGIN_WIZARD_DRAFT,
   INCOME_COMMAND_ADD_LINE,
   INCOME_COMMAND_UPDATE_LINE,
@@ -755,6 +758,22 @@ export async function executeIncomeCommand(
     const income_document_id = reqUuid(body.income_document_id, 'income_document_id');
     await renderIncomeDocumentPdf(ctx, scope.org_id, income_document_id);
     return commandResponse(ctx, command);
+  }
+
+  if (command === INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL) {
+    const sendResult = await executeSendIncomeDocumentByEmail(ctx, body);
+    const response = await commandResponse(ctx, command);
+    return {
+      ...response,
+      meta: {
+        idempotent_replay: sendResult.idempotentReplay,
+        income_document_id: reqUuid(body.income_document_id, 'income_document_id'),
+        delivery_attempt_id: sendResult.deliveryAttemptId,
+        delivery_result: sendResult.deliveryResult,
+        provider_message_id: sendResult.providerMessageId,
+        failure_reason: sendResult.failureReason,
+      },
+    };
   }
 
   if (command === INCOME_COMMAND_BEGIN_WIZARD_DRAFT) {

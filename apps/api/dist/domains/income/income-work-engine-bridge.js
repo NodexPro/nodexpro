@@ -14,7 +14,7 @@
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service.js';
 import { supabaseAdmin } from '../../db/client.js';
-import { INCOME_WORK_ENGINE_ENTITY_TYPE, INCOME_WORK_ENGINE_SCHEMA_VERSION, INCOME_WORK_ENGINE_SOURCE_MODULE, INCOME_WORK_EVENT_CREDIT_ISSUED, INCOME_WORK_EVENT_DOCUMENT_ISSUED, INCOME_WORK_EVENT_DUE_DATE_SET, INCOME_WORK_EVENT_OVERDUE, amountReferenceFromTotalsSnapshot, customerDisplayFromSnapshot, incomeDocumentPeriodKey, isCreditIncomeDocumentType, isOverdueByDueDate, resolveIncomeWorkEngineClientId, } from './income-work-engine-bridge.pure.js';
+import { INCOME_WORK_ENGINE_ENTITY_TYPE, INCOME_WORK_ENGINE_SCHEMA_VERSION, INCOME_WORK_ENGINE_SOURCE_MODULE, INCOME_WORK_EVENT_CREDIT_ISSUED, INCOME_WORK_EVENT_DOCUMENT_ISSUED, INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL, INCOME_WORK_EVENT_DUE_DATE_SET, INCOME_WORK_EVENT_OVERDUE, amountReferenceFromTotalsSnapshot, customerDisplayFromSnapshot, incomeDocumentPeriodKey, isCreditIncomeDocumentType, isOverdueByDueDate, resolveIncomeWorkEngineClientId, } from './income-work-engine-bridge.pure.js';
 function buildIntakePayload(signal, eventType, clientId, extraPayload) {
     const periodSource = signal.dueDate ?? signal.issueDate;
     const amountReference = amountReferenceFromTotalsSnapshot(signal.totalsSnapshotJson);
@@ -95,6 +95,22 @@ export async function emitIncomeWorkEventsAfterDocumentIssued(signal) {
     if (isCreditIncomeDocumentType(signal.documentType)) {
         await emitIntake(signal, INCOME_WORK_EVENT_CREDIT_ISSUED);
     }
+}
+/**
+ * Emit fact after a successful email delivery attempt (fire-and-forget).
+ */
+export async function emitIncomeWorkEventAfterDocumentSentByEmail(signal) {
+    const clientId = resolveIncomeWorkEngineClientId(signal.representedClientId);
+    if (!clientId) {
+        await auditBridgeFailure(signal, INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL, 'represented_client_id required for Work Engine intake (self-mode skipped)');
+        return;
+    }
+    await emitIntake(signal, INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL, {
+        channel: 'email',
+        recipient_email: signal.recipientEmail,
+        delivery_attempt_id: signal.deliveryAttemptId,
+        provider_message_id: signal.providerMessageId,
+    });
 }
 /**
  * Scheduler hook: emit overdue events for issued documents with past due_date.

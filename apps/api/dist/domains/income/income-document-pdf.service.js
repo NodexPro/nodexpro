@@ -170,6 +170,27 @@ export async function loadIncomeDocumentForDownload(ctx, incomeDocumentId) {
 export function incomeDocumentDownloadPath(incomeDocumentId) {
     return `/api/v1/income/documents/${incomeDocumentId}/download`;
 }
+export async function loadIssuedDocumentPdfBytesForEmail(orgId, pdfAssetId) {
+    const { data: asset, error: assetErr } = await supabaseAdmin
+        .from('file_assets')
+        .select('storage_bucket, storage_key, file_name')
+        .eq('id', pdfAssetId)
+        .eq('organization_id', orgId)
+        .single();
+    if (assetErr || !asset)
+        throw notFound('PDF file asset not found');
+    const bucket = asset.storage_bucket ?? BUCKET_INCOME_DOCUMENTS;
+    const key = asset.storage_key;
+    const { data: fileData, error: dlErr } = await supabaseAdmin.storage.from(bucket).download(key);
+    if (dlErr || !fileData)
+        throw notFound('PDF file not found in storage');
+    return {
+        buffer: Buffer.from(await fileData.arrayBuffer()),
+        fileName: asset.file_name || 'document.pdf',
+        storageBucket: bucket,
+        storageKey: key,
+    };
+}
 export async function downloadIncomeDocumentPdfBuffer(ctx, incomeDocumentId) {
     const { doc } = await loadIncomeDocumentForDownload(ctx, incomeDocumentId);
     if (doc.pdf_render_status !== 'rendered' || !doc.pdf_asset_id) {

@@ -23,6 +23,7 @@ import {
   INCOME_WORK_ENGINE_SOURCE_MODULE,
   INCOME_WORK_EVENT_CREDIT_ISSUED,
   INCOME_WORK_EVENT_DOCUMENT_ISSUED,
+  INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL,
   INCOME_WORK_EVENT_DUE_DATE_SET,
   INCOME_WORK_EVENT_OVERDUE,
   amountReferenceFromTotalsSnapshot,
@@ -150,6 +151,36 @@ export async function emitIncomeWorkEventsAfterDocumentIssued(
   if (isCreditIncomeDocumentType(signal.documentType)) {
     await emitIntake(signal, INCOME_WORK_EVENT_CREDIT_ISSUED);
   }
+}
+
+export type IncomeDocumentEmailSentEmitContext = IncomeWorkEventEmitContext & {
+  recipientEmail: string;
+  deliveryAttemptId: string;
+  providerMessageId: string | null;
+};
+
+/**
+ * Emit fact after a successful email delivery attempt (fire-and-forget).
+ */
+export async function emitIncomeWorkEventAfterDocumentSentByEmail(
+  signal: IncomeDocumentEmailSentEmitContext,
+): Promise<void> {
+  const clientId = resolveIncomeWorkEngineClientId(signal.representedClientId);
+  if (!clientId) {
+    await auditBridgeFailure(
+      signal,
+      INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL,
+      'represented_client_id required for Work Engine intake (self-mode skipped)',
+    );
+    return;
+  }
+
+  await emitIntake(signal, INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL, {
+    channel: 'email',
+    recipient_email: signal.recipientEmail,
+    delivery_attempt_id: signal.deliveryAttemptId,
+    provider_message_id: signal.providerMessageId,
+  });
 }
 
 /**
