@@ -39,6 +39,8 @@ import { ACTOR_TYPES, } from './work-engine.types.js';
 import { PERIOD_KEY_REGEX, assertOrgScope, assertValidPeriodKey, isUuid, } from './work-engine.guards.js';
 import { PENDING_MAPPING_PROCESSING_OUTCOMES, resolveEventMapping, } from './work-engine.event-mapping.service.js';
 import { assertIncomeDocumentIntakeSourceEntity } from './work-engine-income-intake.guards.js';
+import { isIncomeDocumentSentFactEventType } from './work-engine-income-document-sent-fact.pure.js';
+import { consumeIncomeDocumentSentFact } from './work-engine-income-document-sent-fact.service.js';
 function validateEnvelope(env) {
     if (!env || typeof env !== 'object')
         throw badRequest('event envelope is required');
@@ -507,6 +509,34 @@ export async function intakeWorkEvent(caller, payloadInput) {
             work_item_id: existing.work_item_id,
             event_id: v.event_id,
             dedup_key: v.dedup_key,
+        };
+    }
+    // ---- Step 1b: Income document-sent facts (INV-1 P9) ----
+    // Audit-only mapping for these event types; Work Engine completes linked
+    // recurring_document_send_followup work items without creating new ones.
+    if (isIncomeDocumentSentFactEventType(v.event_type)) {
+        const consumption = await consumeIncomeDocumentSentFact({
+            orgId: v.org_id,
+            clientId: v.client_id,
+            incomeDocumentId: v.source_entity_id,
+            eventType: v.event_type,
+            eventId: v.event_id,
+            payload: v.payload,
+            actorUserId,
+        });
+        const workEventId = await insertIntakeEventRow(v, consumption.completedWorkItemId, consumption.processingOutcome);
+        await auditIntake(v, actorUserId, AUDIT_ACTIONS.WORK_EVENT_MAPPING_PENDING, consumption.completedWorkItemId, workEventId, {
+            pending_reason: 'income_document_sent_fact_consumed',
+            cycles_matched: consumption.cyclesMatched,
+            followup_completed: consumption.followupCompleted,
+        });
+        return {
+            intake_result: 'pending_mapping',
+            work_event_id: workEventId,
+            work_item_id: consumption.completedWorkItemId,
+            event_id: v.event_id,
+            dedup_key: v.dedup_key,
+            pending_reason: 'income_document_sent_fact_consumed',
         };
     }
     // ---- Step 2: explicit mapping (Stage 3B) ----

@@ -174,7 +174,11 @@ test('scheduler wires send-follow-up scan after recurring draft generation', () 
   assert.match(schedulerSource, /recurring_send_followups_emitted/);
 });
 
-test('delivery seam is explicit TODO until DocFlow link exists', () => {
-  assert.match(deliverySource, /TEMPORARY_DOCFLOW_DELIVERY_PENDING/);
-  assert.match(deliverySource, /return false/);
+test('delivery seam reads sent delivery_attempts for recurring cycles', () => {
+  assert.match(deliverySource, /hasSentIncomeDocumentDelivery/);
+  assert.match(deliverySource, /delivery_attempts/);
+  assert.match(deliverySource, /source_module/);
+  assert.match(deliverySource, /source_entity_type/);
+  assert.match(deliverySource, /source_entity_id/);
+  assert.match(deliverySource, /\.eq\('result', 'sent'\)/);
 });

@@ -1,27 +1,58 @@
 /**
- * Retainer document delivery truth seam (DocFlow integration pending).
+ * Retainer document delivery truth — read-only Delivery ledger queries.
  *
- * TEMPORARY_DOCFLOW_DELIVERY_PENDING: Income recurring drafts do not yet have a
- * stable cross-module delivery record keyed by draft_id. Until DocFlow exposes
- * that link, this returns false and send-follow-up eligibility uses approval age only.
+ * Work Engine reads delivery_attempts to decide send-follow-up eligibility.
+ * Delivery owns the ledger; Income emits facts; Work Engine owns work_items.
  */
 import { supabaseAdmin } from '../../db/client.js';
-export async function hasRecurringDocumentDeliveryRecord(params) {
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+const INCOME_DELIVERY_SOURCE_MODULE = 'income';
+const INCOME_DELIVERY_ENTITY_TYPE = 'income_document';
+const SENT_DELIVERY_CHANNELS = ['email', 'docflow'];
+export async function hasSentIncomeDocumentDelivery(params) {
+    const { data, error } = await supabaseAdmin
+        .from('delivery_attempts')
+        .select('id')
+        .eq('organization_id', params.organizationId)
+        .eq('source_module', INCOME_DELIVERY_SOURCE_MODULE)
+        .eq('source_entity_type', INCOME_DELIVERY_ENTITY_TYPE)
+        .eq('source_entity_id', params.incomeDocumentId)
+        .in('channel', [...SENT_DELIVERY_CHANNELS])
+        .eq('result', 'sent')
+        .limit(1);
+    if (error)
+        throw error;
+    return (data ?? []).length > 0;
+}
+async function resolveIssuedIncomeDocumentIdForCycle(params) {
     if (params.generatedDocumentId) {
-        const { data, error } = await supabaseAdmin
-            .from('income_documents')
-            .select('id, document_status')
-            .eq('id', params.generatedDocumentId)
-            .eq('organization_id', params.organizationId)
-            .maybeSingle();
-        if (error)
-            throw error;
-        // Issued document exists but does not prove DocFlow/email delivery.
-        void data;
+        return params.generatedDocumentId;
     }
-    if (!params.generatedDraftId)
-        return false;
-    // Future: join DocFlow delivery / communication tables by income draft reference.
+    if (!params.generatedDraftId) {
+        return null;
+    }
+    const { data, error } = await supabaseAdmin
+        .from('income_documents')
+        .select('id')
+        .eq('organization_id', params.organizationId)
+        .eq('source_draft_id', params.generatedDraftId)
+        .eq('document_status', 'issued')
+        .maybeSingle();
+    throwIfSupabaseError(error, 'resolveIssuedIncomeDocumentForCycle');
+    return data?.id ?? null;
+}
+export async function hasRecurringDocumentDeliveryRecord(params) {
     void params.representedClientId;
-    return false;
+    const incomeDocumentId = await resolveIssuedIncomeDocumentIdForCycle({
+        organizationId: params.organizationId,
+        generatedDraftId: params.generatedDraftId,
+        generatedDocumentId: params.generatedDocumentId,
+    });
+    if (!incomeDocumentId) {
+        return false;
+    }
+    return hasSentIncomeDocumentDelivery({
+        organizationId: params.organizationId,
+        incomeDocumentId,
+    });
 }
