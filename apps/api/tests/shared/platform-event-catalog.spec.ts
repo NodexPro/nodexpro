@@ -27,7 +27,7 @@ test('platform event catalog exposes required metadata fields', () => {
   for (const row of PLATFORM_EVENT_CATALOG) {
     assert.ok(row.event_type.length > 0);
     assert.ok(row.owner_module.length > 0);
-    assert.equal(typeof row.current_schema_version, 'number');
+    assert.equal(typeof row.schema_version, 'number');
     assert.ok(row.description.length > 0);
     assert.ok(Array.isArray(row.consumer_modules));
   }
@@ -53,7 +53,7 @@ test('income bridge constants resolve through the catalog', () => {
     'income',
   );
   assert.equal(
-    getPlatformEventCatalogEntry(INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL)?.current_schema_version,
+    getPlatformEventCatalogEntry(INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL)?.schema_version,
     1,
   );
   assert.equal(

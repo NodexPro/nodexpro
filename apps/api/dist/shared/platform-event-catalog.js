@@ -27,11 +27,11 @@ export const PLATFORM_EVENT_ANNUAL_REPORT_DOCUMENTS_MISSING = 'annual_report.doc
 const DOCFLOW_SCHEMA_VERSION = 1;
 const CLIENT_OPERATIONS_SCHEMA_VERSION = 1;
 const CLIENT_OBLIGATIONS_SCHEMA_VERSION = 1;
-function entry(event_type, owner_module, current_schema_version, description, consumer_modules = WORK_ENGINE_CONSUMER) {
+function entry(event_type, owner_module, schema_version, description, consumer_modules = WORK_ENGINE_CONSUMER) {
     return {
         event_type,
         owner_module,
-        current_schema_version,
+        schema_version,
         description,
         consumer_modules,
     };

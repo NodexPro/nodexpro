@@ -60,6 +60,7 @@ import {
 import { assertIncomeDocumentIntakeSourceEntity } from './work-engine-income-intake.guards.js';
 import { isIncomeDocumentSentFactEventType } from './work-engine-income-document-sent-fact.pure.js';
 import { consumeIncomeDocumentSentFact } from './work-engine-income-document-sent-fact.service.js';
+import { assertCatalogPlatformEventVersionIfKnown } from '../../shared/platform-event-catalog.version.js';
 
 function validateEnvelope(env: WorkEventEnvelope): void {
   if (!env || typeof env !== 'object') throw badRequest('event envelope is required');
@@ -354,6 +355,8 @@ function parseIntakeWorkEventEnvelope(orgId: string, raw: Record<string, unknown
   ) {
     throw badRequest('schema_version must be an integer >= 1');
   }
+
+  assertCatalogPlatformEventVersionIfKnown(eventType, schemaVersion);
 
   const eventIdRaw = raw.event_id;
   let eventId: string;

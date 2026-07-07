@@ -67,14 +67,14 @@ const CLIENT_OBLIGATIONS_SCHEMA_VERSION = 1;
 function entry(
   event_type: string,
   owner_module: PlatformEventOwnerModule,
-  current_schema_version: number,
+  schema_version: number,
   description: string,
   consumer_modules: readonly PlatformEventConsumerModule[] = WORK_ENGINE_CONSUMER,
 ): PlatformEventCatalogEntry {
   return {
     event_type,
     owner_module,
-    current_schema_version,
+    schema_version,
     description,
     consumer_modules,
   };

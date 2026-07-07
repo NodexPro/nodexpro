@@ -19,7 +19,7 @@ export type PlatformEventConsumerModule = 'work_engine';
 export type PlatformEventCatalogEntry = {
   event_type: string;
   owner_module: PlatformEventOwnerModule;
-  current_schema_version: number;
+  schema_version: number;
   description: string;
   consumer_modules: readonly PlatformEventConsumerModule[];
 };
