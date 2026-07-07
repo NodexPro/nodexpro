@@ -113,21 +113,9 @@ test('income email delivery service imports delivery but delivery domain has no 
   }
 });
 
-test('idempotent replay skips send and finalize when attempt is already terminal', async () => {
-  const calls: string[] = [];
-  const attempt = {
-    id: randomUUID(),
-    result: 'sent' as const,
-    providerMessageId: 'msg-old',
-  };
-
-  const idempotentReplay = attempt.result !== 'pending';
-  assert.equal(idempotentReplay, true);
-
-  if (!idempotentReplay) {
-    calls.push('send');
-    calls.push('finalize');
-  }
-
-  assert.deepEqual(calls, []);
+test('income email delivery idempotent replay skips send and finalize when attempt is terminal', () => {
+  assert.match(serviceSource, /const idempotentReplay = attempt\.result !== 'pending'/);
+  assert.match(serviceSource, /if \(!idempotentReplay\)/);
+  assert.match(serviceSource, /deps\.sendEmail/);
+  assert.match(serviceSource, /deps\.finalizeAttempt/);
 });

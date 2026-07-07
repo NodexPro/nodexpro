@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createDeliveryService } from '../../src/domains/delivery/delivery.service.js';
+import { DELIVERY_ATTEMPT_IMMUTABLE_FIELDS } from '../../src/domains/delivery/delivery.pure.js';
 import type { DeliveryAttemptRepository } from '../../src/domains/delivery/delivery.repository.js';
 import type {
   BeginDeliveryAttemptInput,
@@ -289,4 +290,16 @@ test('delivery migration defines immutable snapshot guard trigger', () => {
   assert.match(migration, /delivery_attempts_immutable_guard/);
   assert.match(migration, /sender_snapshot_json is distinct from NEW\.sender_snapshot_json/);
   assert.match(migration, /delivery_attempts_org_idempotency_key_unique/);
+  assert.match(migration, /result is terminal/);
+  assert.match(migration, /invalid result transition/);
+});
+
+test('delivery immutable fields constant matches migration guard columns', () => {
+  const migration = readFileSync(
+    join(dir, '../../../../supabase/migrations/145_delivery_attempts_foundation.sql'),
+    'utf8',
+  );
+  for (const field of DELIVERY_ATTEMPT_IMMUTABLE_FIELDS) {
+    assert.match(migration, new RegExp(`OLD\\.${field}`), `migration must guard ${field}`);
+  }
 });

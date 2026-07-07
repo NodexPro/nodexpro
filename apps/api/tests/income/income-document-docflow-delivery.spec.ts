@@ -154,6 +154,13 @@ test('docflow delivery service uses delivery ledger without delivery importing i
   }
 });
 
+test('docflow delivery idempotent replay skips post and finalize when attempt is terminal', () => {
+  assert.match(serviceSource, /const idempotentReplay = attempt\.result !== 'pending'/);
+  assert.match(serviceSource, /if \(!idempotentReplay\)/);
+  assert.match(serviceSource, /deps\.postToDocflow/);
+  assert.match(serviceSource, /deps\.finalizeAttempt/);
+});
+
 test('work engine bridge emits income.document_sent_by_docflow fact only', () => {
   assert.match(bridgeSource, /INCOME_WORK_EVENT_DOCUMENT_SENT_BY_DOCFLOW/);
   assert.match(bridgeSource, /emitIncomeWorkEventAfterDocumentSentByDocflow/);
