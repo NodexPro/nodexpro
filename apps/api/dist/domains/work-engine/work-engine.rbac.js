@@ -1,5 +1,6 @@
 import { forbidden } from '../../shared/errors.js';
 import { hasPermission } from '../rbac/rbac.service.js';
+export const WORK_ENGINE_MODULE_CODE = 'work_engine';
 export const WORK_ENGINE_PERMISSIONS = {
     view: 'work_engine.view',
     write: 'work_engine.write',

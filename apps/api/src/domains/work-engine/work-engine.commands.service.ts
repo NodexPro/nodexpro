@@ -397,6 +397,7 @@ export async function executeWorkEngineCommand(
   switch (command) {
     case 'create_work_item': {
       return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+      requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
       const clientId = reqString(payload, 'client_id');
       await assertClientBelongsToOrg(orgId, clientId);
       const moduleKey = reqString(payload, 'module_key');
@@ -622,6 +623,7 @@ export async function executeWorkEngineCommand(
 
     case 'change_work_state': {
       return executeWithCommandIdempotency(ctx, orgId, command, payload, async () => {
+      requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
       const workItemId = reqString(payload, 'work_item_id');
       const expectedVersion = reqInt(payload, 'expected_version');
       const toState = assertValidWorkState(reqString(payload, 'to_state'));
@@ -702,6 +704,11 @@ export async function executeWorkEngineCommand(
       const dueAt =
         payload.due_at === null ? null : asOptionalIso(payload.due_at);
       const isOverride = payload.override === true;
+      if (isOverride) {
+        requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.override);
+      } else {
+        requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
+      }
       const reasonText = asOptionalString(payload.reason_text);
       // docs/work-engine-override-precedence.md §3: reason_text required for deadline overrides.
       if (isOverride && !reasonText) {
@@ -767,6 +774,7 @@ export async function executeWorkEngineCommand(
     }
 
     case 'append_work_event': {
+      requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
       const workItemIdOpt = asOptionalString(payload.work_item_id);
       const sourceModule = reqString(payload, 'source_module');
       const sourceEntityType = reqString(payload, 'source_entity_type');

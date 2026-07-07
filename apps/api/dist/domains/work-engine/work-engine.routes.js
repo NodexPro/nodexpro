@@ -39,6 +39,7 @@
 import { Router } from 'express';
 import { config } from '../../config.js';
 import { authMiddleware } from '../../middleware/auth.js';
+import { requireModuleActive } from '../../middleware/requireModuleActive.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
@@ -51,6 +52,7 @@ import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from './work-en
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
 import { executeWorkEngineInvoiceRetainerCommand } from './work-engine-invoice-retainer.commands.service.js';
 import { buildWorkEngineClientsTabAggregate } from './work-engine-clients-tab.read-model.service.js';
+import { WORK_ENGINE_MODULE_CODE, WORK_ENGINE_PERMISSIONS, } from './work-engine.rbac.js';
 const router = Router();
 function requireInternalCronSecret(req) {
     const secret = String(req.headers['x-internal-cron-secret'] ?? '').trim();
@@ -91,8 +93,8 @@ router.post('/internal/scheduler/run', async (req, res, next) => {
     }
 });
 const officeRouter = Router();
-officeRouter.use(authMiddleware, requireOrg);
-officeRouter.get('/aggregates/foundation', async (req, res, next) => {
+officeRouter.use(authMiddleware, requireOrg, requireModuleActive(WORK_ENGINE_MODULE_CODE));
+officeRouter.get('/aggregates/foundation', requirePermission(WORK_ENGINE_PERMISSIONS.view), async (req, res, next) => {
     try {
         const ctx = req.context;
         const orgId = ctx.organizationId;
@@ -143,7 +145,7 @@ officeRouter.get('/aggregates/queue', async (req, res, next) => {
         next(e);
     }
 });
-officeRouter.get('/aggregates/invoices-tab', async (req, res, next) => {
+officeRouter.get('/aggregates/invoices-tab', requirePermission(WORK_ENGINE_PERMISSIONS.view), async (req, res, next) => {
     try {
         const ctx = req.context;
         const aggregate = await buildWorkEngineInvoicesTabAggregate({ ctx });
@@ -153,7 +155,7 @@ officeRouter.get('/aggregates/invoices-tab', async (req, res, next) => {
         next(e);
     }
 });
-officeRouter.get('/aggregates/invoices-client-documents-by-type', async (req, res, next) => {
+officeRouter.get('/aggregates/invoices-client-documents-by-type', requirePermission(WORK_ENGINE_PERMISSIONS.view), async (req, res, next) => {
     try {
         const ctx = req.context;
         const representedClientId = String(req.query.represented_client_id ?? '').trim();
@@ -175,7 +177,7 @@ officeRouter.get('/aggregates/invoices-client-documents-by-type', async (req, re
         next(e);
     }
 });
-officeRouter.get('/aggregates/invoice-retainer-setup', async (req, res, next) => {
+officeRouter.get('/aggregates/invoice-retainer-setup', requirePermission(WORK_ENGINE_PERMISSIONS.view), async (req, res, next) => {
     try {
         const ctx = req.context;
         const representedClientId = String(req.query.represented_client_id ?? '').trim();
@@ -206,7 +208,7 @@ officeRouter.post('/commands/invoice-retainer', async (req, res, next) => {
         next(e);
     }
 });
-officeRouter.get('/aggregates/clients-tab', requirePermission('client_operations.view'), async (req, res, next) => {
+officeRouter.get('/aggregates/clients-tab', requirePermission(WORK_ENGINE_PERMISSIONS.view), requirePermission('client_operations.view'), async (req, res, next) => {
     try {
         const ctx = req.context;
         const aggregate = await buildWorkEngineClientsTabAggregate({ ctx });
@@ -258,7 +260,7 @@ officeRouter.post('/commands', async (req, res, next) => {
         next(e);
     }
 });
-officeRouter.post('/events/intake', async (req, res, next) => {
+officeRouter.post('/events/intake', requirePermission(WORK_ENGINE_PERMISSIONS.write), async (req, res, next) => {
     try {
         const ctx = req.context;
         const env = (req.body ?? {});

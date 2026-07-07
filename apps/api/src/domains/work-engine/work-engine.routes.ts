@@ -40,6 +40,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { config } from '../../config.js';
 import { authMiddleware } from '../../middleware/auth.js';
+import { requireModuleActive } from '../../middleware/requireModuleActive.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
 import type { RequestContext } from '../../shared/context.js';
@@ -57,6 +58,10 @@ import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from './work-en
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
 import { executeWorkEngineInvoiceRetainerCommand } from './work-engine-invoice-retainer.commands.service.js';
 import { buildWorkEngineClientsTabAggregate } from './work-engine-clients-tab.read-model.service.js';
+import {
+  WORK_ENGINE_MODULE_CODE,
+  WORK_ENGINE_PERMISSIONS,
+} from './work-engine.rbac.js';
 import type {
   WorkEngineCommandType,
   WorkEventEnvelope,
@@ -107,10 +112,11 @@ router.post('/internal/scheduler/run', async (req: Request, res: Response, next:
 });
 
 const officeRouter = Router();
-officeRouter.use(authMiddleware, requireOrg);
+officeRouter.use(authMiddleware, requireOrg, requireModuleActive(WORK_ENGINE_MODULE_CODE));
 
 officeRouter.get(
   '/aggregates/foundation',
+  requirePermission(WORK_ENGINE_PERMISSIONS.view),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const ctx = req.context as RequestContext;
@@ -173,6 +179,7 @@ officeRouter.get(
 
 officeRouter.get(
   '/aggregates/invoices-tab',
+  requirePermission(WORK_ENGINE_PERMISSIONS.view),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const ctx = req.context as RequestContext;
@@ -186,6 +193,7 @@ officeRouter.get(
 
 officeRouter.get(
   '/aggregates/invoices-client-documents-by-type',
+  requirePermission(WORK_ENGINE_PERMISSIONS.view),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const ctx = req.context as RequestContext;
@@ -212,6 +220,7 @@ officeRouter.get(
 
 officeRouter.get(
   '/aggregates/invoice-retainer-setup',
+  requirePermission(WORK_ENGINE_PERMISSIONS.view),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const ctx = req.context as RequestContext;
@@ -253,6 +262,7 @@ officeRouter.post(
 
 officeRouter.get(
   '/aggregates/clients-tab',
+  requirePermission(WORK_ENGINE_PERMISSIONS.view),
   requirePermission('client_operations.view'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -312,6 +322,7 @@ officeRouter.post(
 
 officeRouter.post(
   '/events/intake',
+  requirePermission(WORK_ENGINE_PERMISSIONS.write),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const ctx = req.context as RequestContext;
