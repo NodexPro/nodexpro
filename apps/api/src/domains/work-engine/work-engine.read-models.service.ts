@@ -73,6 +73,7 @@ import {
   resolveInvoiceAttentionWorkspaceTabBadge,
 } from './work-engine-queue-invoice-attention.pure.js';
 import { RECURRING_FAILURE_WORK_TYPE } from './work-engine-invoice-retainer.pure.js';
+import { loadFailedOperationsSummary } from './work-engine-failed-operations.read.js';
 
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
@@ -2100,6 +2101,7 @@ export async function buildWorkEngineQueueAggregate(params: {
 
   const invoiceAttentionCounts = await loadInvoiceAttentionCounts(orgId);
   const invoiceAttentionCard = buildInvoiceAttentionCard(invoiceAttentionCounts);
+  const failedOperationsSummary = await loadFailedOperationsSummary(orgId);
 
   let bucketAssignedToMe = 0;
   let bucketUnassigned = 0;
@@ -2628,9 +2630,12 @@ export async function buildWorkEngineQueueAggregate(params: {
       escalated: counts.escalated ?? 0,
       pending_mapping: pendingMappingCount,
       pending_reminders: reminderReviewSummary.pending_count,
+      errors: failedOperationsSummary.total_count,
     },
 
-    attention_cards: [invoiceAttentionCard],
+    failed_operations_summary: failedOperationsSummary,
+
+    attention_cards: [invoiceAttentionCard, failedOperationsSummary.card],
 
     filters: {
       states: WORK_STATES.map((s) => ({

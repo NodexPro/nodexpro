@@ -20,6 +20,7 @@ import { buildReminderReviewBanner, loadReminderReviewCounts, loadReminderReview
 import { canAccessReminderDraftDevTool, GENERATE_REMINDER_DRAFT_WORKFLOW_TYPE, } from './work-engine.queue-dev-tools.js';
 import { buildInvoiceAttentionCard, INVOICE_ATTENTION_MODULE_KEY, INVOICE_ATTENTION_WORK_TYPES, resolveInvoiceAttentionWorkspaceTabBadge, } from './work-engine-queue-invoice-attention.pure.js';
 import { RECURRING_FAILURE_WORK_TYPE } from './work-engine-invoice-retainer.pure.js';
+import { loadFailedOperationsSummary } from './work-engine-failed-operations.read.js';
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
  * pending-mapping outcome (the event was persisted but no work_item was
@@ -1485,6 +1486,7 @@ export async function buildWorkEngineQueueAggregate(params) {
     const pendingMappingCount = pendingCountResp.count ?? 0;
     const invoiceAttentionCounts = await loadInvoiceAttentionCounts(orgId);
     const invoiceAttentionCard = buildInvoiceAttentionCard(invoiceAttentionCounts);
+    const failedOperationsSummary = await loadFailedOperationsSummary(orgId);
     let bucketAssignedToMe = 0;
     let bucketUnassigned = 0;
     let bucketClaimedByMe = 0;
@@ -1954,8 +1956,10 @@ export async function buildWorkEngineQueueAggregate(params) {
             escalated: counts.escalated ?? 0,
             pending_mapping: pendingMappingCount,
             pending_reminders: reminderReviewSummary.pending_count,
+            errors: failedOperationsSummary.total_count,
         },
-        attention_cards: [invoiceAttentionCard],
+        failed_operations_summary: failedOperationsSummary,
+        attention_cards: [invoiceAttentionCard, failedOperationsSummary.card],
         filters: {
             states: WORK_STATES.map((s) => ({
                 value: s,

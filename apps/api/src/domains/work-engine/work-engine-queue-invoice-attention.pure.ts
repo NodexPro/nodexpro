@@ -22,8 +22,8 @@ export type InvoiceAttentionWorkType = (typeof INVOICE_ATTENTION_WORK_TYPES)[num
 export type QueueAttentionCardTone = 'warning' | 'danger' | 'neutral';
 
 export type QueueAttentionCardFilter = {
-  queue_bucket: typeof INVOICE_ATTENTION_QUEUE_BUCKET;
-  module_key: typeof INVOICE_ATTENTION_MODULE_KEY;
+  queue_bucket: string;
+  module_key: string | null;
   state: string | null;
   assigned_user_id: string | null;
   reviewer_user_id: string | null;
@@ -32,7 +32,7 @@ export type QueueAttentionCardFilter = {
 };
 
 export type QueueAttentionCard = {
-  key: 'invoice_attention';
+  key: 'invoice_attention' | 'errors';
   label: string;
   count: number;
   tone: QueueAttentionCardTone;
