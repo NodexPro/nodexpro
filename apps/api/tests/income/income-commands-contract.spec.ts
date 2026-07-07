@@ -22,8 +22,8 @@ test('income commands do not import Work Engine', () => {
   assert.doesNotMatch(commandsSource, /work-engine|work_engine/i);
 });
 
-test('income commands do not import DocFlow', () => {
-  assert.doesNotMatch(commandsSource, /from\s+['"].*docflow/i);
+test('income commands do not import DocFlow domain', () => {
+  assert.doesNotMatch(commandsSource, /from\s+['"].*\/docflow\//i);
 });
 
 test('command response type includes income_workspace_aggregate', () => {
@@ -85,6 +85,11 @@ test('send_income_document_by_email command is registered', () => {
   assert.match(commandsSource, /INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL/);
   assert.match(commandsSource, /executeSendIncomeDocumentByEmail/);
   assert.doesNotMatch(commandsSource, /from\s+['"].*\/delivery\//);
+});
+
+test('send_income_document_by_docflow command is registered', () => {
+  assert.match(commandsSource, /INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW/);
+  assert.match(commandsSource, /executeSendIncomeDocumentByDocflow/);
 });
 
 test('issued document rows expose pdf_render_status', () => {

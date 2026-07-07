@@ -10,7 +10,8 @@ import { resolveAvailableDocumentTypes } from './income-document-types.resolver.
 import { accountingDisplayStatusLabel, resolveAccountingDisplayStatus, } from './income-accounting-posting.mapping.js';
 import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
 import { buildIncomeDocumentEmailDeliveryBlock } from './income-document-email-delivery.read-model.pure.js';
-import { loadEmailAttemptCountsByDocumentIds } from './income-document-email-delivery.read-model.service.js';
+import { buildIncomeDocumentDocflowDeliveryBlock } from './income-document-docflow-delivery.read-model.pure.js';
+import { loadEmailAttemptCountsByDocumentIds, loadDocflowAttemptCountsByDocumentIds, isDocflowEntitledForOrg, loadRepresentedClientDocflowPortalActive, } from './income-document-email-delivery.read-model.service.js';
 import { buildIncomeWorkspaceCards, buildWorkspaceAllowedActions } from './income-workspace-cards.builders.js';
 import { buildIncomeRecipientSearchModel, buildRecipientCreateFieldsSchema, recipientSearchAllowedActions, } from './income-recipient.service.js';
 import { buildDocumentBrandingProfileAggregate, buildDocumentBrandingSettingsEntrypoint, } from './income-document-branding.service.js';
@@ -152,7 +153,14 @@ async function loadIssuedDocuments(scope) {
     const { data, error } = await query;
     throwIfSupabaseError(error, 'loadIncomeWorkspaceIssuedDocuments');
     const documentIds = (data ?? []).map((row) => String(row.id));
-    const emailAttemptCounts = await loadEmailAttemptCountsByDocumentIds(scope.org_id, documentIds);
+    const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive] = await Promise.all([
+        loadEmailAttemptCountsByDocumentIds(scope.org_id, documentIds),
+        loadDocflowAttemptCountsByDocumentIds(scope.org_id, documentIds),
+        isDocflowEntitledForOrg(scope.org_id),
+        scope.represented_client_id
+            ? loadRepresentedClientDocflowPortalActive(scope.org_id, scope.represented_client_id)
+            : Promise.resolve(false),
+    ]);
     const canRetryPosting = scope.permissions.issue;
     const canView = scope.permissions.view;
     const pdfStatusLabel = (status) => {
@@ -216,6 +224,17 @@ async function loadIssuedDocuments(scope) {
                 documentStatus: r.document_status,
                 pdfRenderStatus: r.pdf_render_status,
                 pdfAssetId: r.pdf_asset_id,
+            }),
+            docflow_delivery: buildIncomeDocumentDocflowDeliveryBlock({
+                incomeDocumentId: r.id,
+                attemptCount: docflowAttemptCounts.get(r.id) ?? 0,
+                permissions: scope.permissions,
+                representedClientId: scope.represented_client_id,
+                documentStatus: r.document_status,
+                pdfRenderStatus: r.pdf_render_status,
+                pdfAssetId: r.pdf_asset_id,
+                docflowEntitled,
+                portalActive,
             }),
             allowed_actions: rowActions,
         };
@@ -282,6 +301,7 @@ function issuedDocumentsTableModel(rows) {
             { key: 'accounting_status_label', label: 'חשבונאות' },
             { key: 'pdf_status_label', label: 'PDF' },
             { key: 'email_delivery', label: '@' },
+            { key: 'docflow_delivery', label: 'דוקפלו' },
         ],
         rows,
         empty_state: {

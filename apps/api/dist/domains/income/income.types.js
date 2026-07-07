@@ -17,6 +17,7 @@ export const INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE = 'save_income_recipient_f
 export const INCOME_COMMAND_RETRY_ACCOUNTING_POSTING = 'retry_income_document_accounting_posting';
 export const INCOME_COMMAND_RETRY_PDF_RENDER = 'retry_income_document_pdf_render';
 export const INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL = 'send_income_document_by_email';
+export const INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW = 'send_income_document_by_docflow';
 export const INCOME_COMMAND_BEGIN_WIZARD_DRAFT = 'begin_income_wizard_document_draft';
 export const INCOME_COMMAND_ADD_LINE = 'add_income_document_line';
 export const INCOME_COMMAND_UPDATE_LINE = 'update_income_document_line';
@@ -39,6 +40,7 @@ export const INCOME_PERMISSIONS = {
 };
 export const INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY = 'income_document_email_history_aggregate';
 export const INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY = 'income_represented_client_email_history_aggregate';
+export const INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY = 'income_document_docflow_send_aggregate';
 export const WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY = 'work_engine_invoices_client_documents_by_type_aggregate';
 export const INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY = 'income_client_document_management_panel';
 export const INCOME_CLIENT_INCOME_LEDGER_CARD_AGGREGATE_KEY = 'income_client_income_ledger_card_aggregate';

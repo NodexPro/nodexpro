@@ -11,6 +11,7 @@ export const INCOME_WORK_EVENT_DUE_DATE_SET = 'income.invoice_due_date_set' as c
 export const INCOME_WORK_EVENT_OVERDUE = 'income.invoice_overdue' as const;
 export const INCOME_WORK_EVENT_CREDIT_ISSUED = 'income.credit_document_issued' as const;
 export const INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL = 'income.document_sent_by_email' as const;
+export const INCOME_WORK_EVENT_DOCUMENT_SENT_BY_DOCFLOW = 'income.document_sent_by_docflow' as const;
 
 /** Not emitted in INC-8 — payment/status pipeline pending. */
 export const INCOME_WORK_EVENTS_DEFERRED = [

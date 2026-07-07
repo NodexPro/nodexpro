@@ -13,6 +13,7 @@ import { downloadIncomeDocumentPdfBuffer } from './income-document-pdf.service.j
 import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
 import { buildIncomeClientIncomeLedgerCardAggregate } from './income-client-income-ledger-card.service.js';
 import { buildIncomeDocumentEmailHistoryAggregate, buildIncomeRepresentedClientEmailHistoryAggregate, } from './income-document-email-history.service.js';
+import { buildIncomeDocumentDocflowSendAggregate } from './income-document-docflow-send.service.js';
 import { INCOME_MODULE_CODE, INCOME_PERMISSIONS } from './income.types.js';
 const router = Router();
 router.get('/aggregates/workspace-context', requirePermission(INCOME_PERMISSIONS.view), async (req, res, next) => {
@@ -70,6 +71,19 @@ router.get('/aggregates/represented-client-email-history', requirePermission(INC
         const aggregate = await buildIncomeRepresentedClientEmailHistoryAggregate({
             ctx: req.context,
             representedClientId,
+        });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+router.get('/aggregates/document-docflow-send', requirePermission(INCOME_PERMISSIONS.view), async (req, res, next) => {
+    try {
+        const incomeDocumentId = String(req.query.income_document_id ?? '').trim();
+        const aggregate = await buildIncomeDocumentDocflowSendAggregate({
+            ctx: req.context,
+            incomeDocumentId,
         });
         return res.json(aggregate);
     }

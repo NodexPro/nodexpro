@@ -24,6 +24,7 @@ import {
   INCOME_WORK_EVENT_CREDIT_ISSUED,
   INCOME_WORK_EVENT_DOCUMENT_ISSUED,
   INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL,
+  INCOME_WORK_EVENT_DOCUMENT_SENT_BY_DOCFLOW,
   INCOME_WORK_EVENT_DUE_DATE_SET,
   INCOME_WORK_EVENT_OVERDUE,
   amountReferenceFromTotalsSnapshot,
@@ -180,6 +181,36 @@ export async function emitIncomeWorkEventAfterDocumentSentByEmail(
     recipient_email: signal.recipientEmail,
     delivery_attempt_id: signal.deliveryAttemptId,
     provider_message_id: signal.providerMessageId,
+  });
+}
+
+export type IncomeDocumentDocflowSentEmitContext = IncomeWorkEventEmitContext & {
+  deliveryAttemptId: string;
+  docflowThreadId: string;
+  docflowMessageId: string;
+};
+
+/**
+ * Emit fact after a successful DocFlow delivery attempt (fire-and-forget).
+ */
+export async function emitIncomeWorkEventAfterDocumentSentByDocflow(
+  signal: IncomeDocumentDocflowSentEmitContext,
+): Promise<void> {
+  const clientId = resolveIncomeWorkEngineClientId(signal.representedClientId);
+  if (!clientId) {
+    await auditBridgeFailure(
+      signal,
+      INCOME_WORK_EVENT_DOCUMENT_SENT_BY_DOCFLOW,
+      'represented_client_id required for Work Engine intake (self-mode skipped)',
+    );
+    return;
+  }
+
+  await emitIntake(signal, INCOME_WORK_EVENT_DOCUMENT_SENT_BY_DOCFLOW, {
+    channel: 'docflow',
+    delivery_attempt_id: signal.deliveryAttemptId,
+    docflow_thread_id: signal.docflowThreadId,
+    docflow_message_id: signal.docflowMessageId,
   });
 }
 

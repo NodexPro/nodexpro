@@ -18,6 +18,7 @@ import {
   buildIncomeDocumentEmailHistoryAggregate,
   buildIncomeRepresentedClientEmailHistoryAggregate,
 } from './income-document-email-history.service.js';
+import { buildIncomeDocumentDocflowSendAggregate } from './income-document-docflow-send.service.js';
 import { INCOME_MODULE_CODE, INCOME_PERMISSIONS } from './income.types.js';
 
 const router = Router();
@@ -96,6 +97,23 @@ router.get(
       const aggregate = await buildIncomeRepresentedClientEmailHistoryAggregate({
         ctx: req.context as RequestContext,
         representedClientId,
+      });
+      return res.json(aggregate);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get(
+  '/aggregates/document-docflow-send',
+  requirePermission(INCOME_PERMISSIONS.view),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const incomeDocumentId = String(req.query.income_document_id ?? '').trim();
+      const aggregate = await buildIncomeDocumentDocflowSendAggregate({
+        ctx: req.context as RequestContext,
+        incomeDocumentId,
       });
       return res.json(aggregate);
     } catch (e) {

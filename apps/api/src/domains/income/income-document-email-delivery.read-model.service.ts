@@ -4,6 +4,7 @@
 
 import { supabaseAdmin } from '../../db/client.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import { assertDocflowEntitled } from '../docflow/docflow.guards.js';
 import { mapDeliveryAttemptRow } from '../delivery/delivery.pure.js';
 import type { DeliveryAttemptRecord } from '../delivery/delivery.types.js';
 
@@ -125,4 +126,74 @@ export async function loadIncomeDocumentsMetaByIds(
     });
   }
   return meta;
+}
+
+const DOCFLOW_CHANNEL = 'docflow';
+
+export async function loadDocflowAttemptCountsByDocumentIds(
+  organizationId: string,
+  documentIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (documentIds.length === 0) return counts;
+
+  const { data, error } = await supabaseAdmin
+    .from('delivery_attempts')
+    .select('source_entity_id')
+    .eq('organization_id', organizationId)
+    .eq('source_module', INCOME_SOURCE_MODULE)
+    .eq('source_entity_type', INCOME_SOURCE_ENTITY_TYPE)
+    .eq('channel', DOCFLOW_CHANNEL)
+    .in('source_entity_id', documentIds);
+  throwIfSupabaseError(error, 'loadDocflowAttemptCountsByDocumentIds');
+
+  for (const raw of data ?? []) {
+    const id = String((raw as { source_entity_id: string }).source_entity_id);
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export async function listIncomeDocumentDocflowAttempts(
+  organizationId: string,
+  incomeDocumentId: string,
+  limit = 200,
+): Promise<DeliveryAttemptRecord[]> {
+  const { data, error } = await supabaseAdmin
+    .from('delivery_attempts')
+    .select('*')
+    .eq('organization_id', organizationId)
+    .eq('source_module', INCOME_SOURCE_MODULE)
+    .eq('source_entity_type', INCOME_SOURCE_ENTITY_TYPE)
+    .eq('source_entity_id', incomeDocumentId)
+    .eq('channel', DOCFLOW_CHANNEL)
+    .order('sent_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  throwIfSupabaseError(error, 'listIncomeDocumentDocflowAttempts');
+  return (data ?? []).map((row) => mapRow(row as DeliveryAttemptDbRow));
+}
+
+export async function loadRepresentedClientDocflowPortalActive(
+  organizationId: string,
+  representedClientId: string,
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from('client_portal_users')
+    .select('id')
+    .eq('org_id', organizationId)
+    .eq('client_id', representedClientId)
+    .eq('status', 'active')
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadRepresentedClientDocflowPortalActive');
+  return Boolean(data?.id);
+}
+
+export async function isDocflowEntitledForOrg(organizationId: string): Promise<boolean> {
+  try {
+    await assertDocflowEntitled(organizationId);
+    return true;
+  } catch {
+    return false;
+  }
 }

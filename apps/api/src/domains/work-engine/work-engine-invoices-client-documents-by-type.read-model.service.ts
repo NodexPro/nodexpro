@@ -15,7 +15,13 @@ import {
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
 import { buildIncomeDocumentEmailDeliveryBlock } from '../income/income-document-email-delivery.read-model.pure.js';
-import { loadEmailAttemptCountsByDocumentIds } from '../income/income-document-email-delivery.read-model.service.js';
+import { buildIncomeDocumentDocflowDeliveryBlock } from '../income/income-document-docflow-delivery.read-model.pure.js';
+import {
+  loadEmailAttemptCountsByDocumentIds,
+  loadDocflowAttemptCountsByDocumentIds,
+  isDocflowEntitledForOrg,
+  loadRepresentedClientDocflowPortalActive,
+} from '../income/income-document-email-delivery.read-model.service.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import {
   belongsToOfficeClientRow,
@@ -67,6 +73,7 @@ const ISSUED_TABLE_COLUMNS = [
   { key: 'amount_display', label: 'סכום' },
   { key: 'status_label', label: 'סטטוס' },
   { key: 'email_delivery', label: '@' },
+  { key: 'docflow_delivery', label: 'דוקפלו' },
   { key: 'view', label: 'צפייה' },
 ];
 
@@ -190,7 +197,12 @@ async function loadIssuedDocumentCandidates(params: {
   );
 
   const documentIds = filtered.map((raw) => String((raw as { id: string }).id));
-  const emailAttemptCounts = await loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds);
+  const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive] = await Promise.all([
+    loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds),
+    loadDocflowAttemptCountsByDocumentIds(params.orgId, documentIds),
+    isDocflowEntitledForOrg(params.orgId),
+    loadRepresentedClientDocflowPortalActive(params.orgId, params.representedClientId),
+  ]);
 
   return filtered.map((raw) => {
     const doc = raw as {
@@ -233,6 +245,17 @@ async function loadIssuedDocumentCandidates(params: {
         documentStatus: 'issued',
         pdfRenderStatus: doc.pdf_render_status,
         pdfAssetId: doc.pdf_asset_id,
+      }),
+      docflow_delivery: buildIncomeDocumentDocflowDeliveryBlock({
+        incomeDocumentId: doc.id,
+        attemptCount: docflowAttemptCounts.get(doc.id) ?? 0,
+        permissions: params.permissions,
+        representedClientId: params.representedClientId,
+        documentStatus: 'issued',
+        pdfRenderStatus: doc.pdf_render_status,
+        pdfAssetId: doc.pdf_asset_id,
+        docflowEntitled,
+        portalActive,
       }),
       allowed_actions: canViewDoc ? ['view_document'] : [],
       year,
@@ -313,6 +336,7 @@ async function loadDraftCandidates(params: {
       can_edit_draft: canEditDraft,
       pdf_download_path: null,
       email_delivery: null,
+      docflow_delivery: null,
       allowed_actions: canEditDraft ? ['edit_draft'] : [],
       year,
     };

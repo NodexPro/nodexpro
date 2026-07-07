@@ -21,6 +21,7 @@ export const INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE = 'save_income_recipient_f
 export const INCOME_COMMAND_RETRY_ACCOUNTING_POSTING = 'retry_income_document_accounting_posting' as const;
 export const INCOME_COMMAND_RETRY_PDF_RENDER = 'retry_income_document_pdf_render' as const;
 export const INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL = 'send_income_document_by_email' as const;
+export const INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW = 'send_income_document_by_docflow' as const;
 export const INCOME_COMMAND_BEGIN_WIZARD_DRAFT = 'begin_income_wizard_document_draft' as const;
 export const INCOME_COMMAND_ADD_LINE = 'add_income_document_line' as const;
 export const INCOME_COMMAND_UPDATE_LINE = 'update_income_document_line' as const;
@@ -142,6 +143,61 @@ export const INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY =
   'income_document_email_history_aggregate' as const;
 export const INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY =
   'income_represented_client_email_history_aggregate' as const;
+export const INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY =
+  'income_document_docflow_send_aggregate' as const;
+
+export interface IncomeDocumentDocflowDeliveryAction {
+  key: 'open_docflow_send';
+  icon_key: 'docflow';
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  send_aggregate_key: typeof INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY;
+  send_aggregate_params: { income_document_id: string };
+}
+
+export interface IncomeDocumentDocflowDeliveryBlock {
+  attempt_count: number;
+  status_label: string;
+  send_enabled: boolean;
+  send_disabled_reason: string | null;
+  action: IncomeDocumentDocflowDeliveryAction;
+}
+
+export interface IncomeDocumentDocflowHistoryAttemptRow {
+  attempt_id: string;
+  sent_at_display: string | null;
+  result: 'pending' | 'sent' | 'failed';
+  result_label: string;
+  failure_reason: string | null;
+  docflow_thread_id: string | null;
+  docflow_message_id: string | null;
+  body_preview: string | null;
+}
+
+export interface IncomeDocumentDocflowSendForm {
+  visible: boolean;
+  command: typeof INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW;
+  income_document_id: string;
+  confirm_label: string;
+  fields: [];
+  enabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface IncomeDocumentDocflowSendAggregate {
+  aggregate_key: typeof INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY;
+  income_document_id: string;
+  document_number: string;
+  document_type_label: string;
+  represented_client_id: string | null;
+  client_display_name: string | null;
+  table_columns: Array<{ key: string; label: string }>;
+  rows: IncomeDocumentDocflowHistoryAttemptRow[];
+  send_form: IncomeDocumentDocflowSendForm;
+  allowed_actions: string[];
+  empty_state: { visible: boolean; title: string; description: string | null };
+}
 
 export interface IncomeDocumentEmailDeliveryAction {
   key: 'open_email_history';
@@ -242,6 +298,7 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   can_edit_draft: boolean;
   pdf_download_path: string | null;
   email_delivery: IncomeDocumentEmailDeliveryBlock | null;
+  docflow_delivery: IncomeDocumentDocflowDeliveryBlock | null;
   allowed_actions: string[];
 }
 
@@ -488,6 +545,7 @@ export interface IncomeIssuedDocumentsTableRow {
   pdf_asset_id: string | null;
   pdf_download_path: string | null;
   email_delivery: IncomeDocumentEmailDeliveryBlock;
+  docflow_delivery: IncomeDocumentDocflowDeliveryBlock;
   allowed_actions: string[];
 }
 
@@ -568,6 +626,7 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_RETRY_ACCOUNTING_POSTING
   | typeof INCOME_COMMAND_RETRY_PDF_RENDER
   | typeof INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL
+  | typeof INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW
   | typeof INCOME_COMMAND_BEGIN_WIZARD_DRAFT
   | typeof INCOME_COMMAND_ADD_LINE
   | typeof INCOME_COMMAND_UPDATE_LINE
@@ -591,6 +650,8 @@ export interface IncomeCommandResponseMeta {
   delivery_attempt_id?: string;
   delivery_result?: 'sent' | 'failed';
   provider_message_id?: string | null;
+  docflow_thread_id?: string | null;
+  docflow_message_id?: string | null;
   failure_reason?: string | null;
   /** `wizard_patch` = lightweight aggregate for Work Engine wizard line/settings edits. */
   workspace_aggregate_mode?: 'full' | 'wizard_patch';
