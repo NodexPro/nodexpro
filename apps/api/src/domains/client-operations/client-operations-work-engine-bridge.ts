@@ -8,21 +8,24 @@
 import type { RequestContext } from '../../shared/context.js';
 import { businessYmd } from '../../shared/business-time.js';
 import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service.js';
+import {
+  PLATFORM_EVENT_CLIENT_OPERATIONS_ANNUAL_REPORT_DOCUMENTS_MISSING,
+  PLATFORM_EVENT_CLIENT_OPERATIONS_CAPITAL_DECLARATION_DOCUMENTS_MISSING,
+  PLATFORM_EVENT_CLIENT_OPERATIONS_PAYROLL_MATERIAL_MISSING,
+  PLATFORM_EVENT_CLIENT_OPERATIONS_VAT_MATERIAL_MISSING,
+  type PlatformEventClientOperationsType,
+} from '../../shared/platform-event-catalog.js';
 
 const SOURCE_MODULE = 'client_operations';
 const SCHEMA_VERSION = 1;
 
-export type ClientOperationsWorkEventType =
-  | 'client_operations.annual_report_documents_missing'
-  | 'client_operations.capital_declaration_documents_missing'
-  | 'client_operations.payroll_material_missing'
-  | 'client_operations.vat_material_missing';
+export type ClientOperationsWorkEventType = PlatformEventClientOperationsType;
 
 const EVENT_TO_WORK_TYPE: Readonly<Record<ClientOperationsWorkEventType, string>> = {
-  'client_operations.annual_report_documents_missing': 'annual_report_docs',
-  'client_operations.capital_declaration_documents_missing': 'capital_declaration_docs',
-  'client_operations.payroll_material_missing': 'payroll_material',
-  'client_operations.vat_material_missing': 'vat_material',
+  [PLATFORM_EVENT_CLIENT_OPERATIONS_ANNUAL_REPORT_DOCUMENTS_MISSING]: 'annual_report_docs',
+  [PLATFORM_EVENT_CLIENT_OPERATIONS_CAPITAL_DECLARATION_DOCUMENTS_MISSING]: 'capital_declaration_docs',
+  [PLATFORM_EVENT_CLIENT_OPERATIONS_PAYROLL_MATERIAL_MISSING]: 'payroll_material',
+  [PLATFORM_EVENT_CLIENT_OPERATIONS_VAT_MATERIAL_MISSING]: 'vat_material',
 };
 
 export type ClientOperationsMaterialMissingSignal = {
@@ -106,8 +109,8 @@ export async function syncAnnualScopeMaterialWorkEvent(
     scope === 'capital_declaration' ? capitalDeclarationPeriodKey() : annualReportPeriodKey();
   const eventType: ClientOperationsWorkEventType =
     scope === 'capital_declaration'
-      ? 'client_operations.capital_declaration_documents_missing'
-      : 'client_operations.annual_report_documents_missing';
+      ? PLATFORM_EVENT_CLIENT_OPERATIONS_CAPITAL_DECLARATION_DOCUMENTS_MISSING
+      : PLATFORM_EVENT_CLIENT_OPERATIONS_ANNUAL_REPORT_DOCUMENTS_MISSING;
 
   await emitClientOperationsMaterialMissing({
     ctx,
@@ -131,7 +134,7 @@ export async function syncPayrollMaterialWorkEvent(
     ctx,
     orgId,
     clientId,
-    eventType: 'client_operations.payroll_material_missing',
+    eventType: PLATFORM_EVENT_CLIENT_OPERATIONS_PAYROLL_MATERIAL_MISSING,
     periodKey: pk,
     sourceEntityId: `${clientId}::payroll::${pk}`,
     payloadJson: { payroll_period_key: payrollPeriodKey, missing_material: true },
@@ -149,7 +152,7 @@ export async function syncVatMaterialWorkEvent(
     ctx,
     orgId,
     clientId,
-    eventType: 'client_operations.vat_material_missing',
+    eventType: PLATFORM_EVENT_CLIENT_OPERATIONS_VAT_MATERIAL_MISSING,
     periodKey: pk,
     sourceEntityId: `${clientId}::vat::${pk}`,
     payloadJson: { vat_period_key: vatPeriodKey, missing_material: true },

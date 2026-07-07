@@ -23,6 +23,7 @@
  *     entry will result in `pending_mapping` (audited, no work_item).
  */
 import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service.js';
+import { PLATFORM_EVENT_ANNUAL_REPORT_DOCUMENTS_MISSING, PLATFORM_EVENT_PAYROLL_DOCUMENTS_MISSING, PLATFORM_EVENT_VAT_DOCUMENTS_MISSING, } from '../../shared/platform-event-catalog.js';
 const SOURCE_MODULE = 'client_obligations';
 const SOURCE_ENTITY_TYPE = 'client_obligation';
 const SCHEMA_VERSION = 1;
@@ -33,9 +34,9 @@ const SCHEMA_VERSION = 1;
  * `apps/api/src/domains/work-engine/work-engine.event-mapping.service.ts`.
  */
 const OBLIGATION_TYPE_TO_EVENT_TYPE = {
-    payroll_data: 'payroll.documents_missing',
-    vat_report: 'vat.documents_missing',
-    annual_report: 'annual_report.documents_missing',
+    payroll_data: PLATFORM_EVENT_PAYROLL_DOCUMENTS_MISSING,
+    vat_report: PLATFORM_EVENT_VAT_DOCUMENTS_MISSING,
+    annual_report: PLATFORM_EVENT_ANNUAL_REPORT_DOCUMENTS_MISSING,
 };
 export function mapObligationTypeToWorkEngineEvent(obligationType) {
     return OBLIGATION_TYPE_TO_EVENT_TYPE[obligationType] ?? null;

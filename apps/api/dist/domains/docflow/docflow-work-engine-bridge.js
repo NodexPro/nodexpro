@@ -15,9 +15,10 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service.js';
+import { PLATFORM_EVENT_DOCFLOW_THREAD_NEEDS_ATTENTION, } from '../../shared/platform-event-catalog.js';
 const SOURCE_MODULE = 'docflow';
 const SOURCE_ENTITY_TYPE = 'client_message_thread';
-const EVENT_TYPE = 'docflow.thread_needs_attention';
+const EVENT_TYPE = PLATFORM_EVENT_DOCFLOW_THREAD_NEEDS_ATTENTION;
 const SCHEMA_VERSION = 1;
 /** Synthetic period bucket per thread — satisfies work_items.period_key NOT NULL + regex. */
 export function docflowThreadWorkPeriodKey(threadId) {
