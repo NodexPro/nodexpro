@@ -1360,6 +1360,16 @@ export async function buildOwnerLegalControlPanelAggregate(
 
   return {
     aggregate_key: 'owner_legal_control_panel_aggregate',
+    owner_panel_sections: [
+      {
+        section_key: 'system',
+        label: 'System',
+        description: 'Platform diagnostics, failed operations, and configuration health.',
+        aggregate_key: 'owner_system_health_aggregate',
+        read_route: '/owner/system-health',
+        enabled: true,
+      },
+    ],
     country_packs_admin: countryPacksAdmin,
     legal_values: legalValues,
     platform_pricing: platformPricing,

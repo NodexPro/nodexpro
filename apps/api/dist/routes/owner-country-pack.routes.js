@@ -6,6 +6,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../shared/audit-events.js';
 import { executeCountryPackCommand } from '../domains/country-pack/country-pack-commands.service.js';
 import { buildActiveRulesetContextAggregate, buildCountryPackDiagnosticsAggregate, buildOrganizationCountrySettingsAggregate, buildOwnerCountryPackAdminAggregate, buildOwnerLegalControlPanelAggregate, buildOwnerLegalValuesAggregate, buildOwnerPlatformPricingAggregate, } from '../domains/country-pack/country-pack-read-models.service.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../shared/owner-email-provider-config.service.js';
+import { buildOwnerSystemHealthAggregate } from '../domains/owner-system-health/owner-system-health.service.js';
 const router = Router();
 async function assertOwnerOrAuditFailure(ctx, req) {
     try {
@@ -105,6 +106,17 @@ router.get('/email-provider-config', async (req, res, next) => {
             aggregate_key: 'owner_email_provider_config_aggregate',
             ...aggregate,
         });
+    }
+    catch (e) {
+        next(e);
+    }
+});
+router.get('/system-health', async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        await assertOwnerOrAuditFailure(ctx, req);
+        const aggregate = await buildOwnerSystemHealthAggregate(ctx);
+        return res.json(aggregate);
     }
     catch (e) {
         next(e);
