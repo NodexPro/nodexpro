@@ -14,7 +14,7 @@ async function loadOrgContacts(orgIds) {
         supabaseAdmin.from('organizations').select('id, name, updated_at').in('id', orgIds),
         supabaseAdmin
             .from('organization_users')
-            .select('organization_id, users(email, full_name), roles(code)')
+            .select('organization_id, users!organization_users_user_id_fkey(email, full_name), roles(code)')
             .in('organization_id', orgIds)
             .eq('membership_status', 'active'),
     ]);
