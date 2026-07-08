@@ -17,6 +17,10 @@ import {
 } from '../domains/country-pack/country-pack-read-models.service.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../shared/owner-email-provider-config.service.js';
 import { buildOwnerSystemHealthAggregate } from '../domains/owner-system-health/owner-system-health.service.js';
+import {
+  buildOwnerClientDetailAggregate,
+  buildOwnerClientsListAggregate,
+} from '../domains/owner-clients/owner-clients.service.js';
 
 const router = Router();
 
@@ -135,6 +139,37 @@ router.get('/system-health', async (req: Request, res: Response, next: NextFunct
       status: asStr(req.query.customer_status),
       problem_type: asStr(req.query.customer_problem_type),
     });
+    return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/clients', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const asStr = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
+    const aggregate = await buildOwnerClientsListAggregate(ctx, {
+      country: asStr(req.query.country),
+      plan: asStr(req.query.plan),
+      status: asStr(req.query.status),
+      module: asStr(req.query.module),
+      health: asStr(req.query.health),
+    });
+    return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/client-detail', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const organizationId = typeof req.query.organization_id === 'string' ? req.query.organization_id.trim() : '';
+    if (!organizationId) throw badRequest('organization_id is required');
+    const aggregate = await buildOwnerClientDetailAggregate(ctx, organizationId);
     return res.json(aggregate);
   } catch (e) {
     next(e);
