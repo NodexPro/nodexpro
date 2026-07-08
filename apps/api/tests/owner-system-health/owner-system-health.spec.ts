@@ -12,6 +12,7 @@ import {
   buildOwnerSystemHealthAggregate,
   buildOwnerPanelSystemSectionContext,
   buildCustomerHealthActions,
+  buildCustomerHealthNextStep,
   buildLastActivityLabel,
   buildMonthlyValueLabel,
   buildSeverityDisplay,
@@ -43,11 +44,27 @@ function makeCustomerRow(overrides: Partial<CustomerHealthRow> = {}): CustomerHe
     border_tone: 'warning',
     status: 'open',
     since: '2026-06-01T00:00:00.000Z',
+    row_tone: 'warning',
+    row_border_tone: 'warning',
     monthly_value: 99,
     monthly_value_currency: 'ILS',
     monthly_value_label: '99 ILS',
     last_activity_at: '2026-06-19T09:00:00.000Z',
     last_activity_label: '2026-06-19T09:00:00.000Z',
+    next_step_key: 'renew_subscription',
+    next_step_label: 'Renew subscription',
+    next_step_description: 'Renew the customer subscription to restore module entitlement.',
+    next_step_tone: 'warning',
+    organization_display: 'Acme',
+    contact_display: 'Owner',
+    plan_display: 'Standard',
+    module_display: 'client-operations',
+    problem_display: 'License expired',
+    reason_display: 'Subscription ended',
+    recommended_action_display: 'Renew subscription.',
+    mrr_display: '99 ILS',
+    last_activity_display: '2026-06-19T09:00:00.000Z',
+    since_display: '2026-06-01T00:00:00.000Z',
     available_actions: buildCustomerHealthActions({
       issueKey: 'license_expired',
       organizationId: 'org-1',
@@ -255,7 +272,7 @@ test('severity_label/tone/border_tone are backend-prepared', () => {
   assert.match(customerReadSource, /buildSeverityDisplay\(/);
 });
 
-test('customer health actions are descriptors only with kind (no command execution)', () => {
+test('customer health actions are descriptors only with kind + href (no command execution)', () => {
   const actions = buildCustomerHealthActions({
     issueKey: 'license_expired',
     organizationId: 'org-1',
@@ -266,8 +283,21 @@ test('customer health actions are descriptors only with kind (no command executi
   assert.deepEqual(keys, ['contact_customer', 'open_logs', 'open_organization', 'open_subscription']);
   for (const action of actions) {
     assert.equal(typeof action.enabled, 'boolean');
-    assert.ok(action.kind === 'contact' || action.kind === 'navigate');
+    assert.ok(action.kind === 'mailto' || action.kind === 'navigate' || action.kind === 'disabled');
     assert.ok('reason' in action);
+    assert.ok('href' in action);
+  }
+  const contact = actions.find((a) => a.action_key === 'contact_customer');
+  assert.equal(contact?.kind, 'mailto');
+  assert.equal(contact?.href, 'mailto:billing@test.local');
+  assert.equal(contact?.enabled, true);
+  // Owner detail routes are not invented: open_* are disabled with a reason and no href.
+  for (const key of ['open_organization', 'open_subscription', 'open_logs']) {
+    const action = actions.find((a) => a.action_key === key);
+    assert.equal(action?.kind, 'disabled');
+    assert.equal(action?.enabled, false);
+    assert.equal(action?.href, null);
+    assert.ok(action?.reason && /not implemented yet/.test(action.reason));
   }
   const disabledContact = buildCustomerHealthActions({
     issueKey: 'delivery_failed',
@@ -276,7 +306,41 @@ test('customer health actions are descriptors only with kind (no command executi
     contactEmail: null,
   }).find((a) => a.action_key === 'contact_customer');
   assert.equal(disabledContact?.enabled, false);
+  assert.equal(disabledContact?.kind, 'disabled');
+  assert.equal(disabledContact?.href, null);
   assert.equal(disabledContact?.reason, 'No contact email available.');
+});
+
+test('next_step is backend-prepared per problem type', () => {
+  assert.equal(buildCustomerHealthNextStep('license_expired', 'warning').next_step_key, 'renew_subscription');
+  assert.equal(buildCustomerHealthNextStep('entitlement_mismatch', 'warning').next_step_key, 'disable_unused_module');
+  assert.equal(buildCustomerHealthNextStep('delivery_failed', 'warning').next_step_key, 'check_delivery_provider');
+  assert.equal(buildCustomerHealthNextStep('pdf_render_failed', 'warning').next_step_key, 'retry_pdf');
+  assert.equal(buildCustomerHealthNextStep('work_event_failed', 'warning').next_step_key, 'review_logs');
+  const step = buildCustomerHealthNextStep('license_expired', 'critical');
+  assert.equal(step.next_step_label, 'Renew subscription');
+  assert.ok(step.next_step_description.length > 0);
+  assert.equal(step.next_step_tone, 'critical');
+  assert.match(customerReadSource, /buildCustomerHealthNextStep\(/);
+});
+
+test('compact display fields are backend-prepared', () => {
+  for (const field of [
+    'organization_display',
+    'contact_display',
+    'plan_display',
+    'module_display',
+    'problem_display',
+    'reason_display',
+    'recommended_action_display',
+    'mrr_display',
+    'last_activity_display',
+    'since_display',
+    'row_tone',
+    'row_border_tone',
+  ]) {
+    assert.match(customerReadSource, new RegExp(field));
+  }
 });
 
 test('filter_options are backend-prepared from unfiltered rows', () => {
@@ -337,18 +401,99 @@ test('backend filters customer rows when filters supplied; options remain from f
   assert.equal(filtered.customer_health.filter_options.severities.length, 2);
 });
 
-test('frontend Customer Health renders backend fields and filters (render-only)', () => {
+test('customer health summary_cards are backend-computed', () => {
+  const aggregate = buildOwnerSystemHealthAggregate({
+    lastCheckedAt: '2026-06-19T10:00:00.000Z',
+    sourceNotes: [],
+    legacyRows: [],
+    platformHealthRows: [],
+    customerHealthRows: [
+      makeCustomerRow(),
+      makeCustomerRow({
+        id: 'row-2',
+        organization_id: 'org-2',
+        module_key: 'income',
+        problem_type: 'pdf_render_failed',
+        severity: 'critical',
+        monthly_value: 150,
+        monthly_value_currency: 'ILS',
+      }),
+    ],
+  });
+  const cards = aggregate.customer_health.summary_cards;
+  const byKey = Object.fromEntries(cards.map((c) => [c.key, c.value]));
+  assert.equal(byKey.organizations_with_issues, '2');
+  assert.equal(byKey.critical, '1');
+  assert.equal(byKey.warnings, '1');
+  assert.equal(byKey.revenue_at_risk, '249 ILS');
+  assert.equal(byKey.missing_contacts, '0');
+});
+
+test('missing contact increments Missing contacts card', () => {
+  const aggregate = buildOwnerSystemHealthAggregate({
+    lastCheckedAt: '2026-06-19T10:00:00.000Z',
+    sourceNotes: [],
+    legacyRows: [],
+    platformHealthRows: [],
+    customerHealthRows: [
+      makeCustomerRow({ id: 'r1', organization_id: 'org-1', contact_email: null }),
+      makeCustomerRow({ id: 'r2', organization_id: 'org-2' }),
+    ],
+  });
+  const missing = aggregate.customer_health.summary_cards.find((c) => c.key === 'missing_contacts');
+  assert.equal(missing?.value, '1');
+});
+
+test('revenue at risk is unavailable with an aggregate note when values are missing or mixed currency', () => {
+  const noValue = buildOwnerSystemHealthAggregate({
+    lastCheckedAt: '2026-06-19T10:00:00.000Z',
+    sourceNotes: [],
+    legacyRows: [],
+    platformHealthRows: [],
+    customerHealthRows: [makeCustomerRow({ monthly_value: null, monthly_value_currency: null })],
+  });
+  assert.equal(
+    noValue.customer_health.summary_cards.find((c) => c.key === 'revenue_at_risk')?.value,
+    '—',
+  );
+  assert.ok(noValue.source_notes.some((n) => n.source_key === 'customer_revenue_at_risk'));
+
+  const mixed = buildOwnerSystemHealthAggregate({
+    lastCheckedAt: '2026-06-19T10:00:00.000Z',
+    sourceNotes: [],
+    legacyRows: [],
+    platformHealthRows: [],
+    customerHealthRows: [
+      makeCustomerRow({ id: 'r1', organization_id: 'o1', monthly_value: 99, monthly_value_currency: 'ILS' }),
+      makeCustomerRow({ id: 'r2', organization_id: 'o2', monthly_value: 50, monthly_value_currency: 'USD' }),
+    ],
+  });
+  assert.equal(mixed.customer_health.summary_cards.find((c) => c.key === 'revenue_at_risk')?.value, '—');
+  assert.ok(mixed.source_notes.some((n) => n.source_key === 'customer_revenue_at_risk'));
+});
+
+test('frontend Customer Health renders backend fields, summary cards, and filters (render-only)', () => {
+  assert.match(webSectionSource, /summary_cards/);
   assert.match(webSectionSource, /filter_options/);
   assert.match(webSectionSource, /customer_severity/);
   assert.match(webSectionSource, /customer_module/);
   assert.match(webSectionSource, /customer_status/);
   assert.match(webSectionSource, /customer_problem_type/);
-  assert.match(webSectionSource, /mailto:/);
+  assert.match(webSectionSource, /organization_display/);
+  assert.match(webSectionSource, /contact_display/);
+  assert.match(webSectionSource, /module_display/);
+  assert.match(webSectionSource, /plan_display/);
+  assert.match(webSectionSource, /problem_display/);
+  assert.match(webSectionSource, /next_step_label/);
+  assert.match(webSectionSource, /mrr_display/);
+  assert.match(webSectionSource, /last_activity_display/);
   assert.match(webSectionSource, /severity_label/);
-  assert.match(webSectionSource, /border_tone/);
-  assert.match(webSectionSource, /monthly_value_label/);
-  assert.match(webSectionSource, /last_activity_label/);
+  assert.match(webSectionSource, /row_border_tone/);
   assert.match(webSectionSource, /available_actions/);
+  // mailto is rendered only from the backend descriptor href, never constructed on the client.
+  assert.match(webSectionSource, /action\.href/);
+  assert.doesNotMatch(webSectionSource, /mailto:\$\{/);
+  // no local filtering / MRR / next-step computation
   assert.doesNotMatch(webSectionSource, /\.filter\(\(row\)/);
 });
 

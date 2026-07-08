@@ -176,38 +176,162 @@ export function buildSeverityDisplay(severity) {
         border_tone: severity,
     };
 }
+const NEXT_STEP_BY_ISSUE = {
+    license_expired: 'renew_subscription',
+    trial_expired: 'renew_subscription',
+    entitlement_mismatch: 'disable_unused_module',
+    delivery_failed: 'check_delivery_provider',
+    delivery_failures_high_volume: 'check_delivery_provider',
+    smtp_disconnected: 'check_delivery_provider',
+    smtp_timeout: 'check_delivery_provider',
+    pdf_render_failed: 'retry_pdf',
+    work_event_failed: 'review_logs',
+    event_schema_version_unsupported: 'review_logs',
+    unknown: 'review_logs',
+};
+const NEXT_STEP_DICTIONARY = {
+    renew_subscription: {
+        label: 'Renew subscription',
+        description: 'Renew the customer subscription to restore module entitlement.',
+    },
+    disable_unused_module: {
+        label: 'Disable unused module',
+        description: 'Disable the active module that has no valid subscription or trial.',
+    },
+    contact_customer: {
+        label: 'Contact customer',
+        description: 'Reach out to the customer about this issue.',
+    },
+    check_delivery_provider: {
+        label: 'Check delivery provider',
+        description: 'Review the delivery/email provider configuration and status.',
+    },
+    retry_pdf: {
+        label: 'Retry PDF render',
+        description: 'Open the income document and retry PDF generation.',
+    },
+    review_logs: {
+        label: 'Review logs',
+        description: 'Inspect audit and event logs for this failure.',
+    },
+};
+/** Backend-prepared next step. Frontend renders only. */
+export function buildCustomerHealthNextStep(issueKey, severity) {
+    const key = NEXT_STEP_BY_ISSUE[issueKey] ?? 'review_logs';
+    const entry = NEXT_STEP_DICTIONARY[key];
+    return {
+        next_step_key: key,
+        next_step_label: entry.label,
+        next_step_description: entry.description,
+        next_step_tone: severity,
+    };
+}
 export function buildCustomerHealthActions(params) {
-    const subscriptionRelated = SUBSCRIPTION_ISSUE_KEYS.has(params.issueKey);
-    return [
-        {
+    void params.organizationId;
+    void params.moduleKey;
+    void SUBSCRIPTION_ISSUE_KEYS;
+    const contact = params.contactEmail
+        ? {
             action_key: 'contact_customer',
             label: 'Contact customer',
-            enabled: !!params.contactEmail,
-            reason: params.contactEmail ? null : 'No contact email available.',
-            kind: 'contact',
-        },
+            enabled: true,
+            reason: null,
+            kind: 'mailto',
+            href: `mailto:${params.contactEmail}`,
+        }
+        : {
+            action_key: 'contact_customer',
+            label: 'Contact customer',
+            enabled: false,
+            reason: 'No contact email available.',
+            kind: 'disabled',
+            href: null,
+        };
+    // Owner detail routes do not exist yet; expose as disabled descriptors (no invented routes, no commands).
+    return [
+        contact,
         {
             action_key: 'open_organization',
             label: 'Open organization',
-            enabled: true,
-            reason: null,
-            kind: 'navigate',
+            enabled: false,
+            reason: 'Organization detail route is not implemented yet.',
+            kind: 'disabled',
+            href: null,
         },
         {
             action_key: 'open_subscription',
             label: 'Open subscription',
-            enabled: subscriptionRelated,
-            reason: subscriptionRelated ? null : 'Available for subscription-related issues only.',
-            kind: 'navigate',
+            enabled: false,
+            reason: 'Subscription detail route is not implemented yet.',
+            kind: 'disabled',
+            href: null,
         },
         {
             action_key: 'open_logs',
             label: 'Open logs',
-            enabled: true,
-            reason: null,
-            kind: 'navigate',
+            enabled: false,
+            reason: 'Logs route is not implemented yet.',
+            kind: 'disabled',
+            href: null,
         },
     ];
+}
+/** Backend-computed customer health summary cards + optional revenue-availability note. */
+export function buildCustomerHealthSummaryCards(rows) {
+    const orgIds = new Set(rows.map((row) => row.organization_id));
+    const criticalCount = rows.filter((row) => row.severity === 'critical').length;
+    const warningCount = rows.filter((row) => row.severity === 'warning').length;
+    const missingContactOrgs = new Set(rows.filter((row) => !row.contact_email).map((row) => row.organization_id));
+    const seen = new Set();
+    const currencies = new Set();
+    let revenueSum = 0;
+    let revenueCounted = 0;
+    for (const row of rows) {
+        if (row.monthly_value == null)
+            continue;
+        const key = `${row.organization_id}:${row.module_key}`;
+        if (seen.has(key))
+            continue;
+        seen.add(key);
+        revenueSum += row.monthly_value;
+        revenueCounted += 1;
+        if (row.monthly_value_currency)
+            currencies.add(row.monthly_value_currency);
+    }
+    let revenueValue;
+    let revenueNote = null;
+    if (revenueCounted === 0 || currencies.size > 1) {
+        revenueValue = '—';
+        revenueNote = {
+            source_key: 'customer_revenue_at_risk',
+            status: 'partial',
+            reason: revenueCounted === 0
+                ? 'Revenue at risk is unavailable because no monthly subscription values are recorded for affected modules.'
+                : 'Revenue at risk is unavailable because affected subscriptions use more than one currency.',
+        };
+    }
+    else {
+        const currency = [...currencies][0] ?? null;
+        revenueValue = currency ? `${revenueSum} ${currency}` : String(revenueSum);
+    }
+    const cards = [
+        {
+            key: 'organizations_with_issues',
+            label: 'Organizations with issues',
+            value: String(orgIds.size),
+            tone: 'info',
+        },
+        { key: 'critical', label: 'Critical', value: String(criticalCount), tone: criticalCount > 0 ? 'critical' : 'none' },
+        { key: 'warnings', label: 'Warnings', value: String(warningCount), tone: warningCount > 0 ? 'warning' : 'none' },
+        { key: 'revenue_at_risk', label: 'Revenue at risk', value: revenueValue, tone: 'none' },
+        {
+            key: 'missing_contacts',
+            label: 'Missing contacts',
+            value: String(missingContactOrgs.size),
+            tone: missingContactOrgs.size > 0 ? 'warning' : 'none',
+        },
+    ];
+    return { cards, revenueNote };
 }
 export function normalizeCustomerHealthFilters(filters) {
     const clean = (raw) => {
@@ -279,6 +403,8 @@ export function buildOwnerSystemHealthAggregate(params) {
     const filterOptions = buildCustomerHealthFilterOptions(allOpenCustomer);
     const appliedFilters = normalizeCustomerHealthFilters(params.customerFilters);
     const openCustomer = applyCustomerHealthFilters(allOpenCustomer, appliedFilters);
+    const { cards: customerSummaryCards, revenueNote } = buildCustomerHealthSummaryCards(openCustomer);
+    const sourceNotes = revenueNote ? [...params.sourceNotes, revenueNote] : params.sourceNotes;
     const severityRows = [
         ...degradedPlatform.filter((row) => row.severity !== 'none'),
         ...openCustomer,
@@ -319,11 +445,12 @@ export function buildOwnerSystemHealthAggregate(params) {
                 total_rows: openCustomer.length,
                 organizations_with_issues: new Set(openCustomer.map((row) => row.organization_id)).size,
             },
+            summary_cards: customerSummaryCards,
             filter_options: filterOptions,
             applied_filters: appliedFilters,
         },
         rows: params.legacyRows,
         sections: [...sectionMap.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
-        source_notes: params.sourceNotes,
+        source_notes: sourceNotes,
     };
 }

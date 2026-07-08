@@ -4,7 +4,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { filterSessionEnabledModuleCodes, isSessionEnabledModuleEntitlementStatus, resolveEntitlement, } from '../modules/entitlement.service.js';
-import { buildCustomerHealthActions, buildLastActivityLabel, buildMonthlyValueLabel, buildSeverityDisplay, buildSystemHealthRowId, resolveCustomerContact, resolveSystemHealthIssue, } from './owner-system-health.pure.js';
+import { buildCustomerHealthActions, buildCustomerHealthNextStep, buildLastActivityLabel, buildMonthlyValueLabel, buildSeverityDisplay, buildSystemHealthRowId, resolveCustomerContact, resolveSystemHealthIssue, } from './owner-system-health.pure.js';
 import { CUSTOMER_HEALTH_ORG_LIMIT, HIGH_VOLUME_EMAIL_FAILURE_THRESHOLD, loadDeliveryFailureGroups, loadEmailFailureCountByOrg, loadIncomePdfFailuresByOrg, loadUnsupportedEventVersionByOrg, loadWorkEventFailureGroups, } from './owner-system-health.shared-read.js';
 async function loadOrgContacts(orgIds) {
     const map = new Map();
@@ -162,11 +162,17 @@ function buildCustomerRow(params) {
     });
     const severityDisplay = buildSeverityDisplay(issue.severity);
     const lastActivityAt = params.pending.last_activity_at ?? params.contact?.last_activity_at ?? null;
+    const nextStep = buildCustomerHealthNextStep(issue.issue_key, issue.severity);
+    const organizationName = params.contact?.organization_name ?? organizationId;
+    const ownerName = params.contact?.owner_name ?? null;
+    const monthlyValueLabel = buildMonthlyValueLabel(plan.monthly_value, plan.currency);
+    const lastActivityLabel = buildLastActivityLabel(lastActivityAt);
+    const possibleReason = params.pending.sample_reason ?? issue.possible_reason;
     return {
         id: buildSystemHealthRowId(['customer_health', organizationId, moduleKey, issue.issue_key]),
         organization_id: organizationId,
-        organization_name: params.contact?.organization_name ?? organizationId,
-        owner_name: params.contact?.owner_name ?? null,
+        organization_name: organizationName,
+        owner_name: ownerName,
         primary_email: primaryEmail,
         billing_email: billingEmail,
         contact_email,
@@ -175,19 +181,35 @@ function buildCustomerRow(params) {
         module_key: moduleKey,
         problem: issue.issue_label,
         problem_type: issue.issue_key,
-        possible_reason: params.pending.sample_reason ?? issue.possible_reason,
+        possible_reason: possibleReason,
         recommended_action: issue.recommended_action,
         severity: issue.severity,
         severity_label: severityDisplay.severity_label,
         severity_tone: severityDisplay.severity_tone,
         border_tone: severityDisplay.border_tone,
+        row_tone: severityDisplay.border_tone,
+        row_border_tone: severityDisplay.border_tone,
         status: 'open',
         since: params.pending.since,
         monthly_value: plan.monthly_value,
         monthly_value_currency: plan.currency,
-        monthly_value_label: buildMonthlyValueLabel(plan.monthly_value, plan.currency),
+        monthly_value_label: monthlyValueLabel,
         last_activity_at: lastActivityAt,
-        last_activity_label: buildLastActivityLabel(lastActivityAt),
+        last_activity_label: lastActivityLabel,
+        next_step_key: nextStep.next_step_key,
+        next_step_label: nextStep.next_step_label,
+        next_step_description: nextStep.next_step_description,
+        next_step_tone: nextStep.next_step_tone,
+        organization_display: organizationName,
+        contact_display: ownerName ?? contact_email ?? contact_label,
+        plan_display: plan.plan_name ?? '—',
+        module_display: moduleKey,
+        problem_display: issue.issue_label,
+        reason_display: possibleReason,
+        recommended_action_display: issue.recommended_action,
+        mrr_display: monthlyValueLabel,
+        last_activity_display: lastActivityLabel,
+        since_display: params.pending.since ?? '—',
         available_actions: buildCustomerHealthActions({
             issueKey: issue.issue_key,
             organizationId,
