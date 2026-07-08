@@ -115,7 +115,13 @@ router.get('/system-health', async (req, res, next) => {
     try {
         const ctx = req.context;
         await assertOwnerOrAuditFailure(ctx, req);
-        const aggregate = await buildOwnerSystemHealthAggregate(ctx);
+        const asStr = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+        const aggregate = await buildOwnerSystemHealthAggregate(ctx, {
+            severity: asStr(req.query.customer_severity),
+            module: asStr(req.query.customer_module),
+            status: asStr(req.query.customer_status),
+            problem_type: asStr(req.query.customer_problem_type),
+        });
         return res.json(aggregate);
     }
     catch (e) {

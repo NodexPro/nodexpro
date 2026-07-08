@@ -11,9 +11,52 @@ import { dirname, join } from 'node:path';
 import {
   buildOwnerSystemHealthAggregate,
   buildOwnerPanelSystemSectionContext,
+  buildCustomerHealthActions,
+  buildLastActivityLabel,
+  buildMonthlyValueLabel,
+  buildSeverityDisplay,
+  resolveCustomerContact,
   resolveSystemHealthIssue,
   sanitizeFailureReason,
+  type CustomerHealthRow,
 } from '../../src/domains/owner-system-health/owner-system-health.pure.js';
+
+function makeCustomerRow(overrides: Partial<CustomerHealthRow> = {}): CustomerHealthRow {
+  return {
+    id: 'customer_health:org-1:client-operations:license_expired',
+    organization_id: 'org-1',
+    organization_name: 'Acme',
+    owner_name: 'Owner',
+    primary_email: 'primary@test.local',
+    billing_email: 'billing@test.local',
+    contact_email: 'billing@test.local',
+    contact_label: 'Billing email',
+    subscription_plan: 'Standard',
+    module_key: 'client-operations',
+    problem: 'License expired',
+    problem_type: 'license_expired',
+    possible_reason: 'Subscription ended',
+    recommended_action: 'Renew subscription.',
+    severity: 'warning',
+    severity_label: 'Warning',
+    severity_tone: 'warning',
+    border_tone: 'warning',
+    status: 'open',
+    since: '2026-06-01T00:00:00.000Z',
+    monthly_value: 99,
+    monthly_value_currency: 'ILS',
+    monthly_value_label: '99 ILS',
+    last_activity_at: '2026-06-19T09:00:00.000Z',
+    last_activity_label: '2026-06-19T09:00:00.000Z',
+    available_actions: buildCustomerHealthActions({
+      issueKey: 'license_expired',
+      organizationId: 'org-1',
+      moduleKey: 'client-operations',
+      contactEmail: 'billing@test.local',
+    }),
+    ...overrides,
+  };
+}
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const routesSource = readFileSync(join(dir, '../../src/routes/owner-country-pack.routes.ts'), 'utf8');
@@ -41,6 +84,10 @@ const pureSource = readFileSync(
   join(dir, '../../src/domains/owner-system-health/owner-system-health.pure.ts'),
   'utf8',
 );
+const webSectionSource = readFileSync(
+  join(dir, '../../../web/src/pages/OwnerSystemHealthSection.tsx'),
+  'utf8',
+);
 
 const legalControlSource = readFileSync(
   join(dir, '../../src/domains/country-pack/country-pack-read-models.service.ts'),
@@ -51,7 +98,14 @@ const platformOwnerSource = readFileSync(join(dir, '../../src/shared/platform-ow
 test('route GET /system-health requires platform owner guard', () => {
   assert.match(routesSource, /router\.get\('\/system-health'/);
   assert.match(routesSource, /assertOwnerOrAuditFailure\(ctx, req\)/);
-  assert.match(routesSource, /buildOwnerSystemHealthAggregate\(ctx\)/);
+  assert.match(routesSource, /buildOwnerSystemHealthAggregate\(ctx,/);
+});
+
+test('route applies backend customer health filters from query params', () => {
+  assert.match(routesSource, /customer_severity/);
+  assert.match(routesSource, /customer_module/);
+  assert.match(routesSource, /customer_status/);
+  assert.match(routesSource, /customer_problem_type/);
 });
 
 test('service rejects organization tenant context via assertPlatformOwner', () => {
@@ -144,30 +198,7 @@ test('aggregate shape is UI-ready with platform and customer health', () => {
         severity: 'warning',
       },
     ],
-    customerHealthRows: [
-      {
-        id: 'customer:org:mod:issue',
-        organization_id: 'org-1',
-        organization_name: 'Acme',
-        owner_name: 'Owner',
-        primary_email: 'owner@test.local',
-        billing_email: 'owner@test.local',
-        subscription_plan: 'Standard',
-        module_key: 'client-operations',
-        problem: 'License expired',
-        possible_reason: 'Subscription ended',
-        recommended_action: 'Renew subscription.',
-        severity: 'warning',
-        status: 'open',
-        since: '2026-06-01T00:00:00.000Z',
-        monthly_value: 99,
-        monthly_value_currency: 'ILS',
-        last_activity_at: '2026-06-19T09:00:00.000Z',
-        available_actions: [
-          { action_key: 'renew_subscription', label: 'Renew subscription', enabled: true, reason: null },
-        ],
-      },
-    ],
+    customerHealthRows: [makeCustomerRow()],
   });
   assert.equal(aggregate.aggregate_key, 'owner_system_health_aggregate');
   assert.equal(aggregate.owner_panel.section_key, 'system');
@@ -175,6 +206,150 @@ test('aggregate shape is UI-ready with platform and customer health', () => {
   assert.equal(aggregate.customer_health.future_health_score, null);
   assert.equal(aggregate.customer_health.rows.length, 1);
   assert.equal(typeof aggregate.summary.total_open_issues, 'number');
+});
+
+test('contact_email is backend-selected preferring billing then primary then owner', () => {
+  assert.deepEqual(
+    resolveCustomerContact({ billing_email: 'b@x', primary_email: 'p@x', owner_email: 'o@x' }),
+    { contact_email: 'b@x', contact_label: 'Billing email' },
+  );
+  assert.deepEqual(
+    resolveCustomerContact({ billing_email: null, primary_email: 'p@x', owner_email: 'o@x' }),
+    { contact_email: 'p@x', contact_label: 'Primary email' },
+  );
+  assert.deepEqual(
+    resolveCustomerContact({ billing_email: null, primary_email: null, owner_email: 'o@x' }),
+    { contact_email: 'o@x', contact_label: 'Owner email' },
+  );
+  assert.deepEqual(
+    resolveCustomerContact({ billing_email: null, primary_email: null, owner_email: null }),
+    { contact_email: null, contact_label: 'No contact email' },
+  );
+  assert.match(customerReadSource, /resolveCustomerContact\(/);
+});
+
+test('monthly_value_label is backend-prepared', () => {
+  assert.equal(buildMonthlyValueLabel(99, 'ILS'), '99 ILS');
+  assert.equal(buildMonthlyValueLabel(99, null), '99');
+  assert.equal(buildMonthlyValueLabel(null, 'ILS'), '—');
+  assert.match(customerReadSource, /buildMonthlyValueLabel\(/);
+});
+
+test('last_activity_label is backend-prepared with no-activity fallback', () => {
+  assert.equal(buildLastActivityLabel('2026-06-19T09:00:00.000Z'), '2026-06-19T09:00:00.000Z');
+  assert.equal(buildLastActivityLabel(null), 'No activity recorded');
+  assert.match(customerReadSource, /buildLastActivityLabel\(/);
+});
+
+test('severity_label/tone/border_tone are backend-prepared', () => {
+  assert.deepEqual(buildSeverityDisplay('critical'), {
+    severity_label: 'Critical',
+    severity_tone: 'critical',
+    border_tone: 'critical',
+  });
+  assert.deepEqual(buildSeverityDisplay('warning'), {
+    severity_label: 'Warning',
+    severity_tone: 'warning',
+    border_tone: 'warning',
+  });
+  assert.match(customerReadSource, /buildSeverityDisplay\(/);
+});
+
+test('customer health actions are descriptors only with kind (no command execution)', () => {
+  const actions = buildCustomerHealthActions({
+    issueKey: 'license_expired',
+    organizationId: 'org-1',
+    moduleKey: 'client-operations',
+    contactEmail: 'billing@test.local',
+  });
+  const keys = actions.map((a) => a.action_key).sort();
+  assert.deepEqual(keys, ['contact_customer', 'open_logs', 'open_organization', 'open_subscription']);
+  for (const action of actions) {
+    assert.equal(typeof action.enabled, 'boolean');
+    assert.ok(action.kind === 'contact' || action.kind === 'navigate');
+    assert.ok('reason' in action);
+  }
+  const disabledContact = buildCustomerHealthActions({
+    issueKey: 'delivery_failed',
+    organizationId: 'org-1',
+    moduleKey: 'delivery',
+    contactEmail: null,
+  }).find((a) => a.action_key === 'contact_customer');
+  assert.equal(disabledContact?.enabled, false);
+  assert.equal(disabledContact?.reason, 'No contact email available.');
+});
+
+test('filter_options are backend-prepared from unfiltered rows', () => {
+  const aggregate = buildOwnerSystemHealthAggregate({
+    lastCheckedAt: '2026-06-19T10:00:00.000Z',
+    sourceNotes: [],
+    legacyRows: [],
+    platformHealthRows: [],
+    customerHealthRows: [
+      makeCustomerRow(),
+      makeCustomerRow({
+        id: 'row-2',
+        organization_id: 'org-2',
+        module_key: 'income',
+        problem: 'PDF render failed',
+        problem_type: 'pdf_render_failed',
+        severity: 'critical',
+        severity_label: 'Critical',
+        severity_tone: 'critical',
+        border_tone: 'critical',
+      }),
+    ],
+  });
+  const options = aggregate.customer_health.filter_options;
+  assert.deepEqual(options.severities.map((o) => o.value), ['critical', 'warning']);
+  assert.deepEqual(options.modules.map((o) => o.value).sort(), ['client-operations', 'income']);
+  assert.deepEqual(options.statuses.map((o) => o.value), ['open']);
+  assert.deepEqual(options.problem_types.map((o) => o.value).sort(), ['license_expired', 'pdf_render_failed']);
+});
+
+test('backend filters customer rows when filters supplied; options remain from full set', () => {
+  const rows = [
+    makeCustomerRow(),
+    makeCustomerRow({
+      id: 'row-2',
+      organization_id: 'org-2',
+      module_key: 'income',
+      problem: 'PDF render failed',
+      problem_type: 'pdf_render_failed',
+      severity: 'critical',
+      severity_label: 'Critical',
+      severity_tone: 'critical',
+      border_tone: 'critical',
+    }),
+  ];
+  const filtered = buildOwnerSystemHealthAggregate({
+    lastCheckedAt: '2026-06-19T10:00:00.000Z',
+    sourceNotes: [],
+    legacyRows: [],
+    platformHealthRows: [],
+    customerHealthRows: rows,
+    customerFilters: { severity: 'critical', module: null, status: null, problem_type: null },
+  });
+  assert.equal(filtered.customer_health.rows.length, 1);
+  assert.equal(filtered.customer_health.rows[0]!.organization_id, 'org-2');
+  assert.equal(filtered.customer_health.applied_filters.severity, 'critical');
+  assert.equal(filtered.customer_health.summary.total_rows, 1);
+  assert.equal(filtered.customer_health.filter_options.severities.length, 2);
+});
+
+test('frontend Customer Health renders backend fields and filters (render-only)', () => {
+  assert.match(webSectionSource, /filter_options/);
+  assert.match(webSectionSource, /customer_severity/);
+  assert.match(webSectionSource, /customer_module/);
+  assert.match(webSectionSource, /customer_status/);
+  assert.match(webSectionSource, /customer_problem_type/);
+  assert.match(webSectionSource, /mailto:/);
+  assert.match(webSectionSource, /severity_label/);
+  assert.match(webSectionSource, /border_tone/);
+  assert.match(webSectionSource, /monthly_value_label/);
+  assert.match(webSectionSource, /last_activity_label/);
+  assert.match(webSectionSource, /available_actions/);
+  assert.doesNotMatch(webSectionSource, /\.filter\(\(row\)/);
 });
 
 test('scheduler persisted source is reported as not included', () => {

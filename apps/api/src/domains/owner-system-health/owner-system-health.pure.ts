@@ -39,18 +39,22 @@ export type PlatformHealthRow = {
 };
 
 export type CustomerHealthActionKey =
-  | 'open_organization'
-  | 'open_billing'
   | 'contact_customer'
-  | 'suspend_module'
-  | 'renew_subscription';
+  | 'open_organization'
+  | 'open_subscription'
+  | 'open_logs';
+
+export type CustomerHealthActionKind = 'contact' | 'navigate';
 
 export type CustomerHealthActionDescriptor = {
   action_key: CustomerHealthActionKey;
   label: string;
   enabled: boolean;
   reason: string | null;
+  kind: CustomerHealthActionKind;
 };
+
+export type CustomerHealthBorderTone = SystemHealthSeverity | 'none';
 
 export type CustomerHealthRow = {
   id: string;
@@ -59,18 +63,42 @@ export type CustomerHealthRow = {
   owner_name: string | null;
   primary_email: string | null;
   billing_email: string | null;
+  contact_email: string | null;
+  contact_label: string;
   subscription_plan: string | null;
   module_key: string;
   problem: string;
+  problem_type: string;
   possible_reason: string;
   recommended_action: string;
   severity: SystemHealthSeverity;
+  severity_label: string;
+  severity_tone: SystemHealthSeverity;
+  border_tone: CustomerHealthBorderTone;
   status: SystemHealthRowStatus;
   since: string | null;
   monthly_value: number | null;
   monthly_value_currency: string | null;
+  monthly_value_label: string;
   last_activity_at: string | null;
+  last_activity_label: string;
   available_actions: CustomerHealthActionDescriptor[];
+};
+
+export type CustomerHealthFilterOption = { value: string; label: string };
+
+export type CustomerHealthFilterOptions = {
+  severities: CustomerHealthFilterOption[];
+  modules: CustomerHealthFilterOption[];
+  statuses: CustomerHealthFilterOption[];
+  problem_types: CustomerHealthFilterOption[];
+};
+
+export type CustomerHealthFilters = {
+  severity: string | null;
+  module: string | null;
+  status: string | null;
+  problem_type: string | null;
 };
 
 export type SystemHealthSection = {
@@ -121,6 +149,8 @@ export type OwnerSystemHealthAggregate = {
       total_rows: number;
       organizations_with_issues: number;
     };
+    filter_options: CustomerHealthFilterOptions;
+    applied_filters: CustomerHealthFilters;
   };
   /** @deprecated P11.5A legacy flat rows — mirrors platform issue signals */
   rows: SystemHealthRow[];
@@ -273,48 +303,150 @@ export function buildSystemHealthRowId(parts: string[]): string {
   return parts.map((p) => p.replace(/[^a-zA-Z0-9._-]+/g, '_')).join(':');
 }
 
+const SUBSCRIPTION_ISSUE_KEYS = new Set(['license_expired', 'trial_expired', 'entitlement_mismatch']);
+
+const SEVERITY_LABELS: Record<SystemHealthSeverity, string> = {
+  critical: 'Critical',
+  warning: 'Warning',
+  info: 'Info',
+};
+
+const STATUS_LABELS: Record<SystemHealthRowStatus, string> = {
+  open: 'Open',
+  observed: 'Observed',
+  resolved_unknown: 'Resolved (unknown)',
+};
+
+/**
+ * Backend-owned contact selection. Frontend must not choose.
+ * Prefers billing_email, then primary_email, then owner email.
+ */
+export function resolveCustomerContact(params: {
+  billing_email: string | null;
+  primary_email: string | null;
+  owner_email: string | null;
+}): { contact_email: string | null; contact_label: string } {
+  if (params.billing_email) return { contact_email: params.billing_email, contact_label: 'Billing email' };
+  if (params.primary_email) return { contact_email: params.primary_email, contact_label: 'Primary email' };
+  if (params.owner_email) return { contact_email: params.owner_email, contact_label: 'Owner email' };
+  return { contact_email: null, contact_label: 'No contact email' };
+}
+
+/** Backend-prepared human-readable monthly value, e.g. "99 ILS" or "—". */
+export function buildMonthlyValueLabel(value: number | null, currency: string | null): string {
+  if (value == null) return '—';
+  return currency ? `${value} ${currency}` : String(value);
+}
+
+/** Backend-prepared last activity label using existing data only. */
+export function buildLastActivityLabel(lastActivityAt: string | null): string {
+  return lastActivityAt ?? 'No activity recorded';
+}
+
+/** Backend-prepared severity display fields. */
+export function buildSeverityDisplay(severity: SystemHealthSeverity): {
+  severity_label: string;
+  severity_tone: SystemHealthSeverity;
+  border_tone: CustomerHealthBorderTone;
+} {
+  return {
+    severity_label: SEVERITY_LABELS[severity],
+    severity_tone: severity,
+    border_tone: severity,
+  };
+}
+
 export function buildCustomerHealthActions(params: {
   issueKey: string;
   organizationId: string;
   moduleKey: string;
+  contactEmail: string | null;
 }): CustomerHealthActionDescriptor[] {
-  const subscriptionIssues = new Set([
-    'license_expired',
-    'trial_expired',
-    'entitlement_mismatch',
-  ]);
+  const subscriptionRelated = SUBSCRIPTION_ISSUE_KEYS.has(params.issueKey);
   return [
+    {
+      action_key: 'contact_customer',
+      label: 'Contact customer',
+      enabled: !!params.contactEmail,
+      reason: params.contactEmail ? null : 'No contact email available.',
+      kind: 'contact',
+    },
     {
       action_key: 'open_organization',
       label: 'Open organization',
       enabled: true,
       reason: null,
+      kind: 'navigate',
     },
     {
-      action_key: 'open_billing',
-      label: 'Open billing',
-      enabled: subscriptionIssues.has(params.issueKey),
-      reason: subscriptionIssues.has(params.issueKey) ? null : 'Available for subscription-related issues only.',
+      action_key: 'open_subscription',
+      label: 'Open subscription',
+      enabled: subscriptionRelated,
+      reason: subscriptionRelated ? null : 'Available for subscription-related issues only.',
+      kind: 'navigate',
     },
     {
-      action_key: 'contact_customer',
-      label: 'Contact customer',
+      action_key: 'open_logs',
+      label: 'Open logs',
       enabled: true,
       reason: null,
-    },
-    {
-      action_key: 'suspend_module',
-      label: 'Suspend module',
-      enabled: params.moduleKey !== 'platform',
-      reason: params.moduleKey === 'platform' ? 'Not applicable for platform-wide issues.' : null,
-    },
-    {
-      action_key: 'renew_subscription',
-      label: 'Renew subscription',
-      enabled: subscriptionIssues.has(params.issueKey),
-      reason: subscriptionIssues.has(params.issueKey) ? null : 'Available for subscription-related issues only.',
+      kind: 'navigate',
     },
   ];
+}
+
+export function normalizeCustomerHealthFilters(
+  filters: Partial<CustomerHealthFilters> | null | undefined,
+): CustomerHealthFilters {
+  const clean = (raw: string | null | undefined): string | null => {
+    const value = (raw ?? '').trim();
+    return value ? value : null;
+  };
+  return {
+    severity: clean(filters?.severity),
+    module: clean(filters?.module),
+    status: clean(filters?.status),
+    problem_type: clean(filters?.problem_type),
+  };
+}
+
+function buildCustomerHealthFilterOptions(rows: CustomerHealthRow[]): CustomerHealthFilterOptions {
+  const severityRank: Record<SystemHealthSeverity, number> = { critical: 0, warning: 1, info: 2 };
+  const severitySet = new Set<SystemHealthSeverity>();
+  const moduleSet = new Set<string>();
+  const statusSet = new Set<SystemHealthRowStatus>();
+  const problemLabelByType = new Map<string, string>();
+  for (const row of rows) {
+    severitySet.add(row.severity);
+    if (row.module_key) moduleSet.add(row.module_key);
+    statusSet.add(row.status);
+    if (row.problem_type && !problemLabelByType.has(row.problem_type)) {
+      problemLabelByType.set(row.problem_type, row.problem);
+    }
+  }
+  return {
+    severities: [...severitySet]
+      .sort((a, b) => severityRank[a] - severityRank[b])
+      .map((value) => ({ value, label: SEVERITY_LABELS[value] })),
+    modules: [...moduleSet].sort().map((value) => ({ value, label: value })),
+    statuses: [...statusSet].sort().map((value) => ({ value, label: STATUS_LABELS[value] })),
+    problem_types: [...problemLabelByType.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([value, label]) => ({ value, label })),
+  };
+}
+
+function applyCustomerHealthFilters(
+  rows: CustomerHealthRow[],
+  filters: CustomerHealthFilters,
+): CustomerHealthRow[] {
+  return rows.filter((row) => {
+    if (filters.severity && row.severity !== filters.severity) return false;
+    if (filters.module && row.module_key !== filters.module) return false;
+    if (filters.status && row.status !== filters.status) return false;
+    if (filters.problem_type && row.problem_type !== filters.problem_type) return false;
+    return true;
+  });
 }
 
 export function buildOwnerPanelSystemSectionContext(): OwnerPanelSectionContext {
@@ -338,11 +470,15 @@ export function buildOwnerSystemHealthAggregate(params: {
   platformHealthRows: PlatformHealthRow[];
   customerHealthRows: CustomerHealthRow[];
   legacyRows: SystemHealthRow[];
+  customerFilters?: Partial<CustomerHealthFilters> | null;
 }): OwnerSystemHealthAggregate {
   const degradedPlatform = params.platformHealthRows.filter(
     (row) => row.status === 'degraded' || row.status === 'critical',
   );
-  const openCustomer = params.customerHealthRows.filter((row) => row.status === 'open');
+  const allOpenCustomer = params.customerHealthRows.filter((row) => row.status === 'open');
+  const filterOptions = buildCustomerHealthFilterOptions(allOpenCustomer);
+  const appliedFilters = normalizeCustomerHealthFilters(params.customerFilters);
+  const openCustomer = applyCustomerHealthFilters(allOpenCustomer, appliedFilters);
   const severityRows = [
     ...degradedPlatform.filter((row) => row.severity !== 'none'),
     ...openCustomer,
@@ -378,11 +514,13 @@ export function buildOwnerSystemHealthAggregate(params: {
     },
     customer_health: {
       future_health_score: null,
-      rows: params.customerHealthRows,
+      rows: openCustomer,
       summary: {
         total_rows: openCustomer.length,
         organizations_with_issues: new Set(openCustomer.map((row) => row.organization_id)).size,
       },
+      filter_options: filterOptions,
+      applied_filters: appliedFilters,
     },
     rows: params.legacyRows,
     sections: [...sectionMap.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),

@@ -134,44 +134,131 @@ export function resolveSystemHealthIssue(issueKey, failureReason) {
 export function buildSystemHealthRowId(parts) {
     return parts.map((p) => p.replace(/[^a-zA-Z0-9._-]+/g, '_')).join(':');
 }
+const SUBSCRIPTION_ISSUE_KEYS = new Set(['license_expired', 'trial_expired', 'entitlement_mismatch']);
+const SEVERITY_LABELS = {
+    critical: 'Critical',
+    warning: 'Warning',
+    info: 'Info',
+};
+const STATUS_LABELS = {
+    open: 'Open',
+    observed: 'Observed',
+    resolved_unknown: 'Resolved (unknown)',
+};
+/**
+ * Backend-owned contact selection. Frontend must not choose.
+ * Prefers billing_email, then primary_email, then owner email.
+ */
+export function resolveCustomerContact(params) {
+    if (params.billing_email)
+        return { contact_email: params.billing_email, contact_label: 'Billing email' };
+    if (params.primary_email)
+        return { contact_email: params.primary_email, contact_label: 'Primary email' };
+    if (params.owner_email)
+        return { contact_email: params.owner_email, contact_label: 'Owner email' };
+    return { contact_email: null, contact_label: 'No contact email' };
+}
+/** Backend-prepared human-readable monthly value, e.g. "99 ILS" or "—". */
+export function buildMonthlyValueLabel(value, currency) {
+    if (value == null)
+        return '—';
+    return currency ? `${value} ${currency}` : String(value);
+}
+/** Backend-prepared last activity label using existing data only. */
+export function buildLastActivityLabel(lastActivityAt) {
+    return lastActivityAt ?? 'No activity recorded';
+}
+/** Backend-prepared severity display fields. */
+export function buildSeverityDisplay(severity) {
+    return {
+        severity_label: SEVERITY_LABELS[severity],
+        severity_tone: severity,
+        border_tone: severity,
+    };
+}
 export function buildCustomerHealthActions(params) {
-    const subscriptionIssues = new Set([
-        'license_expired',
-        'trial_expired',
-        'entitlement_mismatch',
-    ]);
+    const subscriptionRelated = SUBSCRIPTION_ISSUE_KEYS.has(params.issueKey);
     return [
+        {
+            action_key: 'contact_customer',
+            label: 'Contact customer',
+            enabled: !!params.contactEmail,
+            reason: params.contactEmail ? null : 'No contact email available.',
+            kind: 'contact',
+        },
         {
             action_key: 'open_organization',
             label: 'Open organization',
             enabled: true,
             reason: null,
+            kind: 'navigate',
         },
         {
-            action_key: 'open_billing',
-            label: 'Open billing',
-            enabled: subscriptionIssues.has(params.issueKey),
-            reason: subscriptionIssues.has(params.issueKey) ? null : 'Available for subscription-related issues only.',
+            action_key: 'open_subscription',
+            label: 'Open subscription',
+            enabled: subscriptionRelated,
+            reason: subscriptionRelated ? null : 'Available for subscription-related issues only.',
+            kind: 'navigate',
         },
         {
-            action_key: 'contact_customer',
-            label: 'Contact customer',
+            action_key: 'open_logs',
+            label: 'Open logs',
             enabled: true,
             reason: null,
-        },
-        {
-            action_key: 'suspend_module',
-            label: 'Suspend module',
-            enabled: params.moduleKey !== 'platform',
-            reason: params.moduleKey === 'platform' ? 'Not applicable for platform-wide issues.' : null,
-        },
-        {
-            action_key: 'renew_subscription',
-            label: 'Renew subscription',
-            enabled: subscriptionIssues.has(params.issueKey),
-            reason: subscriptionIssues.has(params.issueKey) ? null : 'Available for subscription-related issues only.',
+            kind: 'navigate',
         },
     ];
+}
+export function normalizeCustomerHealthFilters(filters) {
+    const clean = (raw) => {
+        const value = (raw ?? '').trim();
+        return value ? value : null;
+    };
+    return {
+        severity: clean(filters?.severity),
+        module: clean(filters?.module),
+        status: clean(filters?.status),
+        problem_type: clean(filters?.problem_type),
+    };
+}
+function buildCustomerHealthFilterOptions(rows) {
+    const severityRank = { critical: 0, warning: 1, info: 2 };
+    const severitySet = new Set();
+    const moduleSet = new Set();
+    const statusSet = new Set();
+    const problemLabelByType = new Map();
+    for (const row of rows) {
+        severitySet.add(row.severity);
+        if (row.module_key)
+            moduleSet.add(row.module_key);
+        statusSet.add(row.status);
+        if (row.problem_type && !problemLabelByType.has(row.problem_type)) {
+            problemLabelByType.set(row.problem_type, row.problem);
+        }
+    }
+    return {
+        severities: [...severitySet]
+            .sort((a, b) => severityRank[a] - severityRank[b])
+            .map((value) => ({ value, label: SEVERITY_LABELS[value] })),
+        modules: [...moduleSet].sort().map((value) => ({ value, label: value })),
+        statuses: [...statusSet].sort().map((value) => ({ value, label: STATUS_LABELS[value] })),
+        problem_types: [...problemLabelByType.entries()]
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([value, label]) => ({ value, label })),
+    };
+}
+function applyCustomerHealthFilters(rows, filters) {
+    return rows.filter((row) => {
+        if (filters.severity && row.severity !== filters.severity)
+            return false;
+        if (filters.module && row.module_key !== filters.module)
+            return false;
+        if (filters.status && row.status !== filters.status)
+            return false;
+        if (filters.problem_type && row.problem_type !== filters.problem_type)
+            return false;
+        return true;
+    });
 }
 export function buildOwnerPanelSystemSectionContext() {
     return {
@@ -188,7 +275,10 @@ function countSeverity(rows, severity) {
 }
 export function buildOwnerSystemHealthAggregate(params) {
     const degradedPlatform = params.platformHealthRows.filter((row) => row.status === 'degraded' || row.status === 'critical');
-    const openCustomer = params.customerHealthRows.filter((row) => row.status === 'open');
+    const allOpenCustomer = params.customerHealthRows.filter((row) => row.status === 'open');
+    const filterOptions = buildCustomerHealthFilterOptions(allOpenCustomer);
+    const appliedFilters = normalizeCustomerHealthFilters(params.customerFilters);
+    const openCustomer = applyCustomerHealthFilters(allOpenCustomer, appliedFilters);
     const severityRows = [
         ...degradedPlatform.filter((row) => row.severity !== 'none'),
         ...openCustomer,
@@ -224,11 +314,13 @@ export function buildOwnerSystemHealthAggregate(params) {
         },
         customer_health: {
             future_health_score: null,
-            rows: params.customerHealthRows,
+            rows: openCustomer,
             summary: {
                 total_rows: openCustomer.length,
                 organizations_with_issues: new Set(openCustomer.map((row) => row.organization_id)).size,
             },
+            filter_options: filterOptions,
+            applied_filters: appliedFilters,
         },
         rows: params.legacyRows,
         sections: [...sectionMap.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),

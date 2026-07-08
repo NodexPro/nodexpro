@@ -11,7 +11,11 @@ import {
 } from '../modules/entitlement.service.js';
 import {
   buildCustomerHealthActions,
+  buildLastActivityLabel,
+  buildMonthlyValueLabel,
+  buildSeverityDisplay,
   buildSystemHealthRowId,
+  resolveCustomerContact,
   resolveSystemHealthIssue,
   type CustomerHealthRow,
 } from './owner-system-health.pure.js';
@@ -29,6 +33,7 @@ type OrgContact = {
   organization_id: string;
   organization_name: string;
   owner_name: string | null;
+  owner_email: string | null;
   primary_email: string | null;
   billing_email: string | null;
   last_activity_at: string | null;
@@ -84,6 +89,7 @@ async function loadOrgContacts(orgIds: string[]): Promise<Map<string, OrgContact
       organization_id: org.id,
       organization_name: org.name,
       owner_name: owner?.full_name ?? null,
+      owner_email: owner?.email ?? null,
       primary_email: owner?.email ?? null,
       billing_email: owner?.email ?? null,
       last_activity_at: org.updated_at ?? null,
@@ -217,29 +223,47 @@ function buildCustomerRow(params: {
   };
   const organizationId = params.pending.organization_id;
   const moduleKey = params.pending.module_key;
+  const primaryEmail = params.contact?.primary_email ?? null;
+  const billingEmail = params.contact?.billing_email ?? null;
+  const { contact_email, contact_label } = resolveCustomerContact({
+    billing_email: billingEmail,
+    primary_email: primaryEmail,
+    owner_email: params.contact?.owner_email ?? null,
+  });
+  const severityDisplay = buildSeverityDisplay(issue.severity);
+  const lastActivityAt = params.pending.last_activity_at ?? params.contact?.last_activity_at ?? null;
 
   return {
     id: buildSystemHealthRowId(['customer_health', organizationId, moduleKey, issue.issue_key]),
     organization_id: organizationId,
     organization_name: params.contact?.organization_name ?? organizationId,
     owner_name: params.contact?.owner_name ?? null,
-    primary_email: params.contact?.primary_email ?? null,
-    billing_email: params.contact?.billing_email ?? null,
+    primary_email: primaryEmail,
+    billing_email: billingEmail,
+    contact_email,
+    contact_label,
     subscription_plan: plan.plan_name,
     module_key: moduleKey,
     problem: issue.issue_label,
+    problem_type: issue.issue_key,
     possible_reason: params.pending.sample_reason ?? issue.possible_reason,
     recommended_action: issue.recommended_action,
     severity: issue.severity,
+    severity_label: severityDisplay.severity_label,
+    severity_tone: severityDisplay.severity_tone,
+    border_tone: severityDisplay.border_tone,
     status: 'open',
     since: params.pending.since,
     monthly_value: plan.monthly_value,
     monthly_value_currency: plan.currency,
-    last_activity_at: params.pending.last_activity_at ?? params.contact?.last_activity_at ?? null,
+    monthly_value_label: buildMonthlyValueLabel(plan.monthly_value, plan.currency),
+    last_activity_at: lastActivityAt,
+    last_activity_label: buildLastActivityLabel(lastActivityAt),
     available_actions: buildCustomerHealthActions({
       issueKey: issue.issue_key,
       organizationId,
       moduleKey,
+      contactEmail: contact_email,
     }),
   };
 }

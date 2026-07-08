@@ -4,10 +4,16 @@
 
 import type { RequestContext } from '../../shared/context.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
-import { buildOwnerSystemHealthAggregate as shapeOwnerSystemHealthAggregate } from './owner-system-health.pure.js';
+import {
+  buildOwnerSystemHealthAggregate as shapeOwnerSystemHealthAggregate,
+  type CustomerHealthFilters,
+} from './owner-system-health.pure.js';
 import { loadOwnerSystemHealthData } from './owner-system-health.read.js';
 
-export async function buildOwnerSystemHealthAggregate(ctx: RequestContext) {
+export async function buildOwnerSystemHealthAggregate(
+  ctx: RequestContext,
+  customerFilters?: Partial<CustomerHealthFilters> | null,
+) {
   assertPlatformOwner(ctx);
   const lastCheckedAt = new Date().toISOString();
   const { platformHealthRows, customerHealthRows, legacyRows, sourceNotes } =
@@ -18,5 +24,6 @@ export async function buildOwnerSystemHealthAggregate(ctx: RequestContext) {
     sourceNotes,
     platformHealthRows,
     customerHealthRows,
+    customerFilters,
   });
 }
