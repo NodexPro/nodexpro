@@ -40,6 +40,24 @@ export async function resolveEntitlement(organizationId, moduleId) {
     }
     return { status: 'not_entitled', reason: 'No subscription or trial for this module' };
 }
+/** Matches requireModuleActive — modules exposed in session must pass this gate. */
+export function isSessionEnabledModuleEntitlementStatus(status) {
+    return status === 'entitled' || status === 'trial';
+}
+export async function filterSessionEnabledModuleCodes(params) {
+    const moduleIds = params.modules.map((m) => m.moduleId);
+    if (!moduleIds.length)
+        return new Set();
+    const entitlements = await resolveEntitlementsForOrganization(params.organizationId, moduleIds);
+    const allowed = new Set();
+    for (const mod of params.modules) {
+        const entitlement = entitlements.get(mod.moduleId);
+        if (entitlement && isSessionEnabledModuleEntitlementStatus(entitlement.status)) {
+            allowed.add(mod.code);
+        }
+    }
+    return allowed;
+}
 export async function resolveEntitlementsForOrganization(organizationId, moduleIds) {
     const map = new Map();
     await Promise.all(moduleIds.map(async (moduleId) => {

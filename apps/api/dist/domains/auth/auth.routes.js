@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import { config } from '../../config.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { resolveSessionShell } from './session-shell.service.js';
+import { filterSessionEnabledModuleCodes } from '../modules/entitlement.service.js';
 const router = Router();
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
 function resolveUiLanguage(ctx) {
@@ -108,13 +109,33 @@ async function buildMeResponse(ctx, opts) {
         navItems.push({ path: '/billing', label: 'Billing', order: 40 });
     const moduleAppNavItems = [];
     if (activeOrgId) {
-        const mods = await supabaseAdmin.from('organization_modules').select('modules(code, nav_path, nav_label, nav_order)').eq('organization_id', activeOrgId).eq('status', 'active');
+        const mods = await supabaseAdmin
+            .from('organization_modules')
+            .select('module_id, modules(code, nav_path, nav_label, nav_order)')
+            .eq('organization_id', activeOrgId)
+            .eq('status', 'active');
         const modList = (mods.data ?? []);
         const rowMod = (raw) => (Array.isArray(raw) ? raw[0] : raw);
-        enabledModules = modList.map((m) => rowMod(m.modules)?.code).filter((c) => !!c);
-        for (const m of modList) {
+        const sessionModules = modList
+            .map((m) => {
             const mo = rowMod(m.modules);
-            if (!mo?.nav_path?.startsWith('/m/'))
+            if (!mo?.code)
+                return null;
+            return { moduleId: m.module_id, code: mo.code, nav: mo };
+        })
+            .filter((m) => m != null);
+        const entitledCodes = await filterSessionEnabledModuleCodes({
+            organizationId: activeOrgId,
+            modules: sessionModules.map((m) => ({ moduleId: m.moduleId, code: m.code })),
+        });
+        enabledModules = sessionModules
+            .map((m) => m.code)
+            .filter((code) => entitledCodes.has(code));
+        for (const m of sessionModules) {
+            if (!entitledCodes.has(m.code))
+                continue;
+            const mo = m.nav;
+            if (!mo.nav_path?.startsWith('/m/'))
                 continue;
             const label = mo.code === 'client-operations' ? 'Nodex לקוחות' : (mo.nav_label ?? mo.code);
             moduleAppNavItems.push({ path: mo.nav_path, label, order: mo.nav_order ?? 100 });
