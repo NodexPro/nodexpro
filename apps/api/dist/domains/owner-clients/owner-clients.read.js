@@ -58,6 +58,8 @@ export async function loadOwnerClientsListData(filters) {
     const rows = organizations.map((org) => {
         const owner = ownersByOrg.get(org.id);
         const ownerEmail = owner?.owner_email ?? null;
+        const loginEmail = owner?.login_email ?? null;
+        const fallbackEmail = ownerEmail ?? loginEmail;
         const subscriptions = subscriptionsByOrg.get(org.id) ?? [];
         const mrr = buildOrgMrr(subscriptions);
         const active_modules = buildActiveModules(org.id, activationsByOrg, subscriptions, validTrials.has(org.id), commercialModules);
@@ -70,9 +72,10 @@ export async function loadOwnerClientsListData(filters) {
             country_code: org.country_code,
             country_label,
             owner_name: owner?.owner_name ?? null,
+            login_email: loginEmail,
             owner_email: ownerEmail,
-            billing_email: ownerEmail,
-            primary_email: ownerEmail,
+            billing_email: fallbackEmail,
+            primary_email: fallbackEmail,
             plan_label: mrr.plan_label,
             mrr_value: mrr.value,
             mrr_currency: mrr.currency,

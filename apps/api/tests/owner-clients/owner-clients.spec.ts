@@ -10,11 +10,13 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   buildCountLabel,
+  buildEmailDisplay,
   buildOwnerClientActions,
   buildOwnerClientListRow,
   buildOwnerClientsListAggregate,
   buildOwnerClientDetailAggregate,
   buildUsageLabel,
+  classifyOrganization,
   formatOwnerClientActivityLabel,
   NOT_MEASURED_LABEL,
   resolveHealthFromIssue,
@@ -37,6 +39,7 @@ function makeListRow(overrides: Record<string, unknown> = {}) {
     country_code: 'IL',
     country_label: 'Israel',
     owner_name: 'Owner',
+    login_email: 'login@test.local',
     owner_email: 'owner@test.local',
     billing_email: 'billing@test.local',
     primary_email: 'primary@test.local',
@@ -167,10 +170,14 @@ test('action descriptors are backend-prepared without commands', () => {
   assert.deepEqual(actions.map((a) => a.action_key), ['open_client_modal', 'contact_customer']);
   const modal = actions.find((a) => a.action_key === 'open_client_modal');
   assert.equal(modal?.kind, 'modal');
+  assert.equal(modal?.label, 'Open');
+  assert.equal(modal?.icon, 'folder');
   assert.equal(modal?.enabled, true);
   assert.equal(modal?.href, null);
   const contact = actions.find((a) => a.action_key === 'contact_customer');
   assert.equal(contact?.kind, 'mailto');
+  assert.equal(contact?.label, 'Contact');
+  assert.equal(contact?.icon, 'at');
   assert.equal(contact?.href, 'mailto:owner@test.local');
   assert.doesNotMatch(pureSource, /command/);
 });
@@ -274,6 +281,7 @@ test('P11.6B UI: filters reload aggregate with backend query params', () => {
   assert.match(clientsSectionSource, /params\.set\('status'/);
   assert.match(clientsSectionSource, /params\.set\('module'/);
   assert.match(clientsSectionSource, /params\.set\('health'/);
+  assert.match(clientsSectionSource, /params\.set\('include_hidden'/);
   assert.match(clientsSectionSource, /filter_options/);
 });
 
@@ -285,6 +293,7 @@ test('P11.6B UI: no client-side row filtering', () => {
 test('P11.6B UI: table renders backend-prepared labels only', () => {
   assert.match(clientsSectionSource, /organization_display/);
   assert.match(clientsSectionSource, /country_label/);
+  assert.match(clientsSectionSource, /email_display/);
   assert.match(clientsSectionSource, /mrr_label/);
   assert.match(clientsSectionSource, /modules_count_label/);
   assert.match(clientsSectionSource, /tenant_clients_count_label/);
@@ -321,6 +330,8 @@ test('P11.6B UI: actions render descriptor kinds modal, mailto, disabled', () =>
   assert.match(clientsSectionSource, /action\.kind === 'mailto'/);
   assert.match(clientsSectionSource, /action\.kind === 'modal'/);
   assert.match(clientsSectionSource, /action\.href/);
+  assert.match(clientsSectionSource, /action\.icon/);
+  assert.match(clientsSectionSource, /ActionIcon name=\{action\.icon\}/);
   assert.match(clientsSectionSource, /disabled=\{!action\.enabled\}/);
 });
 
@@ -438,4 +449,67 @@ test('P11.6 fix: detail modal still contains full module list', () => {
   assert.equal(detail.modules.length, 2);
   assert.match(clientsModalSource, /activeTab === 'modules'/);
   assert.match(clientsModalSource, /aggregate\.modules/);
+});
+
+test('P11.6 usability: junk cc-bad/cc-sync classified backend-side', () => {
+  assert.deepEqual(classifyOrganization('cc-sync-foo'), {
+    organization_kind: 'sync',
+    organization_kind_label: 'Sync',
+    is_system_generated: true,
+    is_hidden_by_default: true,
+  });
+  assert.equal(classifyOrganization('cc-bad-foo').organization_kind, 'test');
+  assert.equal(classifyOrganization('dbg-foo').is_system_generated, true);
+  assert.equal(classifyOrganization('Acme Ltd').is_hidden_by_default, false);
+  assert.equal(classifyOrganization('Acme Ltd').organization_kind, 'real');
+});
+
+test('P11.6 usability: default list excludes hidden/system-generated organizations', () => {
+  const aggregate = buildOwnerClientsListAggregate({
+    rows: [
+      makeListRow({ organization_name: 'Acme Ltd' }),
+      makeListRow({ organization_id: 'org-junk', organization_name: 'cc-sync-test-org' }),
+    ],
+  });
+  assert.equal(aggregate.rows.length, 1);
+  assert.equal(aggregate.rows[0]!.organization_display, 'Acme Ltd');
+  assert.equal(aggregate.applied_filters.include_hidden, false);
+  assert.ok(aggregate.filter_options.visibility.some((o) => o.value === 'include_hidden'));
+});
+
+test('P11.6 usability: include_hidden=true includes hidden organizations', () => {
+  const aggregate = buildOwnerClientsListAggregate({
+    rows: [
+      makeListRow({ organization_name: 'Acme Ltd' }),
+      makeListRow({ organization_id: 'org-junk', organization_name: 'cc-bad-test-org' }),
+    ],
+    filters: { include_hidden: true },
+  });
+  assert.equal(aggregate.rows.length, 2);
+  assert.equal(aggregate.applied_filters.include_hidden, true);
+});
+
+test('P11.6 usability: email_display prepared backend-side from owner/login email', () => {
+  assert.equal(
+    buildEmailDisplay({ owner_email: 'owner@test.local', login_email: 'login@test.local', primary_email: 'primary@test.local' }),
+    'owner@test.local',
+  );
+  assert.equal(
+    buildEmailDisplay({ owner_email: null, login_email: 'login@test.local', primary_email: 'primary@test.local' }),
+    'login@test.local',
+  );
+  const row = makeListRow();
+  assert.equal(row.email_display, 'owner@test.local');
+  assert.match(sharedReadSource, /login_email/);
+});
+
+test('P11.6 usability: route supports include_hidden query param', () => {
+  assert.match(routesSource, /include_hidden/);
+});
+
+test('P11.6 usability: frontend renders email_display and icon actions from descriptors', () => {
+  assert.match(clientsSectionSource, /row\.email_display/);
+  assert.doesNotMatch(clientsSectionSource, /mailto:\$\{/);
+  assert.match(clientsSectionSource, /filterOptions\.visibility/);
+  assert.match(clientsSectionSource, /ActionIcon name=\{action\.icon\}/);
 });

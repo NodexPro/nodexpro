@@ -140,6 +140,7 @@ router.get('/clients', async (req, res, next) => {
             status: asStr(req.query.status),
             module: asStr(req.query.module),
             health: asStr(req.query.health),
+            include_hidden: req.query.include_hidden === 'true' || req.query.include_hidden === '1',
         });
         return res.json(aggregate);
     }

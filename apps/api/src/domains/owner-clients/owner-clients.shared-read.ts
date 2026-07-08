@@ -23,6 +23,7 @@ export type OrgOwnerContact = {
   organization_id: string;
   owner_name: string | null;
   owner_email: string | null;
+  login_email: string | null;
 };
 
 export type CommercialModule = {
@@ -93,9 +94,10 @@ export async function loadOrgOwners(orgIds: string[]): Promise<Map<string, OrgOw
   if (!orgIds.length) return map;
   const { data, error } = await supabaseAdmin
     .from('organization_users')
-    .select('organization_id, users!organization_users_user_id_fkey(email, full_name), roles(code)')
+    .select('organization_id, joined_at, users!organization_users_user_id_fkey(email, full_name), roles(code)')
     .in('organization_id', orgIds)
-    .eq('membership_status', 'active');
+    .eq('membership_status', 'active')
+    .order('joined_at', { ascending: true });
   if (error) throw error;
   for (const raw of data ?? []) {
     const row = raw as {
@@ -104,14 +106,24 @@ export async function loadOrgOwners(orgIds: string[]): Promise<Map<string, OrgOw
       roles: { code: string } | { code: string }[] | null;
     };
     const role = supabaseEmbedOne(row.roles);
-    if (role?.code !== 'owner') continue;
-    if (map.has(row.organization_id)) continue;
     const user = supabaseEmbedOne(row.users);
-    map.set(row.organization_id, {
-      organization_id: row.organization_id,
-      owner_name: user?.full_name ?? null,
-      owner_email: user?.email ?? null,
-    });
+    const existing = map.get(row.organization_id);
+    // First active member establishes the login/primary email fallback.
+    if (!existing) {
+      map.set(row.organization_id, {
+        organization_id: row.organization_id,
+        owner_name: role?.code === 'owner' ? user?.full_name ?? null : null,
+        owner_email: role?.code === 'owner' ? user?.email ?? null : null,
+        login_email: user?.email ?? null,
+      });
+      continue;
+    }
+    // A later owner-role member fills in owner name/email if not yet set.
+    if (role?.code === 'owner' && !existing.owner_email) {
+      existing.owner_name = user?.full_name ?? existing.owner_name;
+      existing.owner_email = user?.email ?? existing.owner_email;
+    }
+    if (!existing.login_email) existing.login_email = user?.email ?? existing.login_email;
   }
   return map;
 }

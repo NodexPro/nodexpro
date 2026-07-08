@@ -12,6 +12,7 @@ import {
 export type OwnerClientHealthTone = SystemHealthSeverity | 'healthy' | 'none';
 export type OwnerClientBorderTone = SystemHealthSeverity | 'none';
 export type OwnerClientActionKind = 'modal' | 'mailto' | 'disabled';
+export type OwnerClientActionIcon = 'folder' | 'at';
 
 export type OwnerClientActionDescriptor = {
   action_key: 'open_client_modal' | 'contact_customer';
@@ -19,8 +20,11 @@ export type OwnerClientActionDescriptor = {
   enabled: boolean;
   reason: string | null;
   kind: OwnerClientActionKind;
+  icon: OwnerClientActionIcon;
   href: string | null;
 };
+
+export type OwnerClientKind = 'real' | 'test' | 'sync' | 'demo' | 'unknown';
 
 export type OwnerClientActiveModule = {
   module_key: string;
@@ -35,12 +39,18 @@ export type OwnerClientListRow = {
   organization_display: string;
   country_code: string | null;
   country_label: string;
+  organization_kind: OwnerClientKind;
+  organization_kind_label: string;
+  is_system_generated: boolean;
+  is_hidden_by_default: boolean;
   owner_name: string;
+  login_email: string | null;
   owner_email: string | null;
   billing_email: string | null;
   primary_email: string | null;
   contact_email: string | null;
   contact_label: string;
+  email_display: string;
   subscription_status: string;
   subscription_status_label: string;
   plan_label: string;
@@ -78,6 +88,7 @@ export type OwnerClientFilterOptions = {
   statuses: OwnerClientFilterOption[];
   modules: OwnerClientFilterOption[];
   health: OwnerClientFilterOption[];
+  visibility: OwnerClientFilterOption[];
 };
 
 export type OwnerClientFilters = {
@@ -86,6 +97,7 @@ export type OwnerClientFilters = {
   status: string | null;
   module: string | null;
   health: string | null;
+  include_hidden: boolean;
 };
 
 export type OwnerClientListSummary = {
@@ -183,34 +195,87 @@ export function normalizeOwnerClientFilters(
     status: clean(filters?.status),
     module: clean(filters?.module),
     health: clean(filters?.health),
+    include_hidden: filters?.include_hidden === true,
   };
+}
+
+const ORGANIZATION_KIND_LABELS: Record<OwnerClientKind, string> = {
+  real: 'Real',
+  test: 'Test',
+  sync: 'Sync',
+  demo: 'Demo',
+  unknown: 'Unknown',
+};
+
+/**
+ * Backend-owned organization classification. System-generated test/sync/debug orgs
+ * (matching the same prefixes excluded by the commercial-controls aggregate) are
+ * hidden by default. Nothing is deleted; visibility is a prepared field only.
+ */
+export function classifyOrganization(name: string): {
+  organization_kind: OwnerClientKind;
+  organization_kind_label: string;
+  is_system_generated: boolean;
+  is_hidden_by_default: boolean;
+} {
+  const normalized = (name ?? '').trim().toLowerCase();
+  let kind: OwnerClientKind = 'real';
+  let systemGenerated = false;
+  if (/^cc-sync-/.test(normalized)) {
+    kind = 'sync';
+    systemGenerated = true;
+  } else if (/^(cc-bad-|dbg-|test-)/.test(normalized) || /\btest\b/.test(normalized)) {
+    kind = 'test';
+    systemGenerated = true;
+  } else if (/^demo-/.test(normalized) || /\bdemo\b/.test(normalized)) {
+    kind = 'demo';
+    systemGenerated = true;
+  }
+  return {
+    organization_kind: kind,
+    organization_kind_label: ORGANIZATION_KIND_LABELS[kind],
+    is_system_generated: systemGenerated,
+    is_hidden_by_default: systemGenerated,
+  };
+}
+
+/** Email column value. Prefers owner/login email; frontend renders this only. */
+export function buildEmailDisplay(params: {
+  owner_email: string | null;
+  login_email: string | null;
+  primary_email: string | null;
+}): string {
+  return params.owner_email ?? params.login_email ?? params.primary_email ?? '—';
 }
 
 export function buildOwnerClientActions(contactEmail: string | null): OwnerClientActionDescriptor[] {
   const contact: OwnerClientActionDescriptor = contactEmail
     ? {
         action_key: 'contact_customer',
-        label: 'Contact customer',
+        label: 'Contact',
         enabled: true,
         reason: null,
         kind: 'mailto',
+        icon: 'at',
         href: `mailto:${contactEmail}`,
       }
     : {
         action_key: 'contact_customer',
-        label: 'Contact customer',
+        label: 'Contact',
         enabled: false,
         reason: 'No contact email available.',
         kind: 'disabled',
+        icon: 'at',
         href: null,
       };
   return [
     {
       action_key: 'open_client_modal',
-      label: 'Open client',
+      label: 'Open',
       enabled: true,
       reason: null,
       kind: 'modal',
+      icon: 'folder',
       href: null,
     },
     contact,
@@ -288,6 +353,7 @@ export function buildOwnerClientListRow(params: {
   country_code: string | null;
   country_label: string;
   owner_name: string | null;
+  login_email: string | null;
   owner_email: string | null;
   billing_email: string | null;
   primary_email: string | null;
@@ -317,18 +383,30 @@ export function buildOwnerClientListRow(params: {
     issue_label: params.health_issue?.issue_label ?? null,
     severity: params.health_issue?.severity ?? null,
   });
+  const classification = classifyOrganization(params.organization_name);
+  const email_display = buildEmailDisplay({
+    owner_email: params.owner_email,
+    login_email: params.login_email,
+    primary_email: params.primary_email,
+  });
 
   return {
     organization_id: params.organization_id,
     organization_display: params.organization_name,
     country_code: params.country_code,
     country_label: params.country_label,
+    organization_kind: classification.organization_kind,
+    organization_kind_label: classification.organization_kind_label,
+    is_system_generated: classification.is_system_generated,
+    is_hidden_by_default: classification.is_hidden_by_default,
     owner_name: params.owner_name ?? '—',
+    login_email: params.login_email,
     owner_email: params.owner_email,
     billing_email: params.billing_email,
     primary_email: params.primary_email,
     contact_email,
     contact_label,
+    email_display,
     subscription_status: subscription.status,
     subscription_status_label: subscription.label,
     plan_label: params.plan_label,
@@ -392,6 +470,7 @@ function buildFilterOptions(rows: OwnerClientListRow[]): OwnerClientFilterOption
     health: [...health.entries()]
       .sort((a, b) => (SEVERITY_RANK[a[0]] ?? 99) - (SEVERITY_RANK[b[0]] ?? 99))
       .map(([value, label]) => ({ value, label })),
+    visibility: [{ value: 'include_hidden', label: 'Show hidden/test organizations' }],
   };
 }
 
@@ -472,11 +551,15 @@ export function buildOwnerClientsListAggregate(params: {
 }): OwnerClientsListAggregate {
   const uniqueRows = dedupeRowsByOrganization(params.rows);
   const appliedFilters = normalizeOwnerClientFilters(params.filters);
-  const filterOptions = buildFilterOptions(uniqueRows);
-  const filteredRows = applyOwnerClientFilters(uniqueRows, appliedFilters);
+  // Visibility is backend-owned: hidden/system-generated orgs are excluded unless include_hidden.
+  const visibleRows = appliedFilters.include_hidden
+    ? uniqueRows
+    : uniqueRows.filter((row) => !row.is_hidden_by_default);
+  const filterOptions = buildFilterOptions(visibleRows);
+  const filteredRows = applyOwnerClientFilters(visibleRows, appliedFilters);
   return {
     aggregate_key: 'owner_clients_aggregate',
-    summary: buildListSummary(uniqueRows, filteredRows),
+    summary: buildListSummary(visibleRows, filteredRows),
     filter_options: filterOptions,
     applied_filters: appliedFilters,
     rows: filteredRows,
