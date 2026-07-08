@@ -1,5 +1,5 @@
 /**
- * P11.5B — Owner System UI contract (lazy load, render-only).
+ * P11.5C — Owner System Center UI contract.
  */
 
 import test from 'node:test';
@@ -17,64 +17,49 @@ function readWeb(relPath: string): string {
 
 const legalControlSource = readWeb('pages/PlatformOwnerLegalControl.tsx');
 const systemSectionSource = readWeb('pages/OwnerSystemHealthSection.tsx');
-const endpointsSource = readWeb('api/endpoints.ts');
 
-test('legal-control initial load does not fetch system-health', () => {
-  assert.match(legalControlSource, /OWNER\.legalControl/);
+test('lazy load unchanged — system-health only in OwnerSystemHealthSection', () => {
   assert.doesNotMatch(legalControlSource, /OWNER\.systemHealth/);
-});
-
-test('system-health fetch happens only inside OwnerSystemHealthSection', () => {
   assert.match(systemSectionSource, /OWNER\.systemHealth/);
-  assert.match(systemSectionSource, /useEffect\(/);
 });
 
-test('OwnerSystemHealthSection mounts only when System top tab is active', () => {
-  assert.match(legalControlSource, /ownerTopSection === 'system' \? <OwnerSystemHealthSection/);
+test('system subtabs include platform and customer health', () => {
+  assert.match(systemSectionSource, /platform_health/);
+  assert.match(systemSectionSource, /customer_health/);
+  assert.doesNotMatch(systemSectionSource, /'errors'/);
 });
 
-test('overview cards render backend summary fields only', () => {
-  assert.match(systemSectionSource, /aggregate\.summary\.total_open_issues/);
-  assert.match(systemSectionSource, /aggregate\.summary\.critical_count/);
-  assert.match(systemSectionSource, /aggregate\.summary\.warning_count/);
-  assert.match(systemSectionSource, /aggregate\.summary\.info_count/);
-  assert.match(systemSectionSource, /aggregate\.summary\.last_checked_at/);
+test('platform health table renders backend component fields', () => {
+  assert.match(systemSectionSource, /aggregate\?\.platform_health\.rows/);
+  assert.match(systemSectionSource, /row\.component_label/);
+  assert.match(systemSectionSource, /row\.status/);
+  assert.match(systemSectionSource, /row\.problem/);
+  assert.match(systemSectionSource, /row\.recommendation/);
+  assert.match(systemSectionSource, /row\.last_check_at/);
+  assert.match(systemSectionSource, /row\.severity/);
+});
+
+test('customer health table renders backend enriched org rows', () => {
+  assert.match(systemSectionSource, /aggregate\?\.customer_health\.rows/);
+  assert.match(systemSectionSource, /row\.organization_name/);
+  assert.match(systemSectionSource, /row\.owner_name/);
+  assert.match(systemSectionSource, /row\.primary_email/);
+  assert.match(systemSectionSource, /row\.subscription_plan/);
+  assert.match(systemSectionSource, /row\.monthly_value/);
+  assert.match(systemSectionSource, /row\.recommended_action/);
+  assert.doesNotMatch(systemSectionSource, /future_health_score/);
+});
+
+test('no frontend health scoring or issue calculation', () => {
+  assert.doesNotMatch(systemSectionSource, /\.reduce\(/);
+  assert.doesNotMatch(systemSectionSource, /health_score/);
   assert.doesNotMatch(systemSectionSource, /critical_count\s*\+/);
 });
 
-test('errors table renders backend row fields without client grouping', () => {
-  assert.match(systemSectionSource, /row\.module_key/);
-  assert.match(systemSectionSource, /row\.issue_label/);
-  assert.match(systemSectionSource, /row\.possible_reason/);
-  assert.match(systemSectionSource, /row\.recommended_action/);
-  assert.match(systemSectionSource, /row\.severity/);
-  assert.match(systemSectionSource, /row\.status/);
-  assert.match(systemSectionSource, /row\.count/);
-  assert.match(systemSectionSource, /row\.last_seen_at/);
-  assert.doesNotMatch(systemSectionSource, /\.filter\(\(row\).*severity/);
-  assert.doesNotMatch(systemSectionSource, /\.reduce\(/);
-});
-
-test('placeholder subtabs have no API calls', () => {
-  assert.match(systemSectionSource, /Coming in next phase/);
-  const healthBlock = systemSectionSource.slice(
-    systemSectionSource.indexOf("subTab === 'health'"),
+test('placeholder subtabs performance and audit have no API', () => {
+  const perfBlock = systemSectionSource.slice(
     systemSectionSource.indexOf("subTab === 'performance'"),
+    systemSectionSource.indexOf("subTab === 'audit'"),
   );
-  assert.doesNotMatch(healthBlock, /apiJson/);
-});
-
-test('empty state uses backend rows length', () => {
-  assert.match(systemSectionSource, /No platform issues detected/);
-  assert.match(systemSectionSource, /sortedRows\.length === 0/);
-});
-
-test('endpoints expose reused backend route', () => {
-  assert.match(endpointsSource, /systemHealth:\s*'\/owner\/system-health'/);
-});
-
-test('no new owner route or page created outside legal-control', () => {
-  const appSource = readWeb('App.tsx');
-  assert.doesNotMatch(appSource, /platform-owner\/system/);
-  assert.match(appSource, /platform-owner\/legal-control/);
+  assert.doesNotMatch(perfBlock, /apiJson/);
 });

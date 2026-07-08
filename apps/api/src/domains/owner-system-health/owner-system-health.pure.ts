@@ -1,9 +1,15 @@
 /**
- * Platform owner — system health aggregate (pure read-model shaping).
+ * Platform owner — system center aggregate (pure read-model shaping).
  */
 
 export type SystemHealthSeverity = 'critical' | 'warning' | 'info';
 export type SystemHealthRowStatus = 'open' | 'observed' | 'resolved_unknown';
+export type PlatformHealthComponentStatus =
+  | 'healthy'
+  | 'degraded'
+  | 'critical'
+  | 'unknown'
+  | 'not_monitored';
 
 export type SystemHealthRow = {
   id: string;
@@ -19,6 +25,52 @@ export type SystemHealthRow = {
   recommended_action: string;
   source_key: string;
   source_ref: string | null;
+};
+
+export type PlatformHealthRow = {
+  id: string;
+  component_key: string;
+  component_label: string;
+  status: PlatformHealthComponentStatus;
+  problem: string | null;
+  recommendation: string | null;
+  last_check_at: string;
+  severity: SystemHealthSeverity | 'none';
+};
+
+export type CustomerHealthActionKey =
+  | 'open_organization'
+  | 'open_billing'
+  | 'contact_customer'
+  | 'suspend_module'
+  | 'renew_subscription';
+
+export type CustomerHealthActionDescriptor = {
+  action_key: CustomerHealthActionKey;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+};
+
+export type CustomerHealthRow = {
+  id: string;
+  organization_id: string;
+  organization_name: string;
+  owner_name: string | null;
+  primary_email: string | null;
+  billing_email: string | null;
+  subscription_plan: string | null;
+  module_key: string;
+  problem: string;
+  possible_reason: string;
+  recommended_action: string;
+  severity: SystemHealthSeverity;
+  status: SystemHealthRowStatus;
+  since: string | null;
+  monthly_value: number | null;
+  monthly_value_currency: string | null;
+  last_activity_at: string | null;
+  available_actions: CustomerHealthActionDescriptor[];
 };
 
 export type SystemHealthSection = {
@@ -50,8 +102,27 @@ export type OwnerSystemHealthAggregate = {
     critical_count: number;
     warning_count: number;
     info_count: number;
+    platform_component_count: number;
+    customer_issue_count: number;
     last_checked_at: string;
   };
+  platform_health: {
+    rows: PlatformHealthRow[];
+    summary: {
+      total_components: number;
+      degraded_count: number;
+      critical_count: number;
+    };
+  };
+  customer_health: {
+    future_health_score: null;
+    rows: CustomerHealthRow[];
+    summary: {
+      total_rows: number;
+      organizations_with_issues: number;
+    };
+  };
+  /** @deprecated P11.5A legacy flat rows — mirrors platform issue signals */
   rows: SystemHealthRow[];
   sections: SystemHealthSection[];
   source_notes: SystemHealthSourceNote[];
@@ -64,6 +135,8 @@ export type SystemHealthIssueDictionaryEntry = {
   recommended_action: string;
   severity: SystemHealthSeverity;
 };
+
+export type CustomerHealthIssueDictionaryEntry = SystemHealthIssueDictionaryEntry;
 
 const ISSUE_DICTIONARY: Record<string, SystemHealthIssueDictionaryEntry> = {
   db_unreachable: {
@@ -112,7 +185,35 @@ const ISSUE_DICTIONARY: Record<string, SystemHealthIssueDictionaryEntry> = {
     issue_key: 'entitlement_mismatch',
     issue_label: 'Module active but not entitled',
     possible_reason: 'Organization module is active without a valid subscription or trial.',
-    recommended_action: 'Check subscription/trial or deactivate module for organization.',
+    recommended_action: 'Disable unused module or renew subscription/trial.',
+    severity: 'warning',
+  },
+  license_expired: {
+    issue_key: 'license_expired',
+    issue_label: 'License expired',
+    possible_reason: 'The module subscription is no longer active.',
+    recommended_action: 'Renew subscription.',
+    severity: 'warning',
+  },
+  trial_expired: {
+    issue_key: 'trial_expired',
+    issue_label: 'Trial expired',
+    possible_reason: 'The organization trial period has ended.',
+    recommended_action: 'Contact customer or renew subscription.',
+    severity: 'warning',
+  },
+  smtp_disconnected: {
+    issue_key: 'smtp_disconnected',
+    issue_label: 'SMTP disconnected',
+    possible_reason: 'Email provider is not configured for this organization.',
+    recommended_action: 'Reconnect SMTP or configure email provider.',
+    severity: 'warning',
+  },
+  delivery_failures_high_volume: {
+    issue_key: 'delivery_failures_high_volume',
+    issue_label: 'Large amount of failed email',
+    possible_reason: 'Many email delivery attempts failed for this organization.',
+    recommended_action: 'Review delivery configuration and contact customer.',
     severity: 'warning',
   },
   unknown: {
@@ -172,51 +273,119 @@ export function buildSystemHealthRowId(parts: string[]): string {
   return parts.map((p) => p.replace(/[^a-zA-Z0-9._-]+/g, '_')).join(':');
 }
 
+export function buildCustomerHealthActions(params: {
+  issueKey: string;
+  organizationId: string;
+  moduleKey: string;
+}): CustomerHealthActionDescriptor[] {
+  const subscriptionIssues = new Set([
+    'license_expired',
+    'trial_expired',
+    'entitlement_mismatch',
+  ]);
+  return [
+    {
+      action_key: 'open_organization',
+      label: 'Open organization',
+      enabled: true,
+      reason: null,
+    },
+    {
+      action_key: 'open_billing',
+      label: 'Open billing',
+      enabled: subscriptionIssues.has(params.issueKey),
+      reason: subscriptionIssues.has(params.issueKey) ? null : 'Available for subscription-related issues only.',
+    },
+    {
+      action_key: 'contact_customer',
+      label: 'Contact customer',
+      enabled: true,
+      reason: null,
+    },
+    {
+      action_key: 'suspend_module',
+      label: 'Suspend module',
+      enabled: params.moduleKey !== 'platform',
+      reason: params.moduleKey === 'platform' ? 'Not applicable for platform-wide issues.' : null,
+    },
+    {
+      action_key: 'renew_subscription',
+      label: 'Renew subscription',
+      enabled: subscriptionIssues.has(params.issueKey),
+      reason: subscriptionIssues.has(params.issueKey) ? null : 'Available for subscription-related issues only.',
+    },
+  ];
+}
+
 export function buildOwnerPanelSystemSectionContext(): OwnerPanelSectionContext {
   return {
     parent_panel_key: 'owner_legal_control_panel_aggregate',
     parent_panel_route: '/platform-owner/legal-control',
     section_key: 'system',
     section_label: 'System',
-    section_description: 'Platform diagnostics, failed operations, and configuration health.',
+    section_description: 'Platform diagnostics, customer health, and operations center.',
     read_route: '/owner/system-health',
   };
 }
 
+function countSeverity(rows: Array<{ severity: SystemHealthSeverity | 'none' }>, severity: SystemHealthSeverity): number {
+  return rows.filter((row) => row.severity === severity).length;
+}
+
 export function buildOwnerSystemHealthAggregate(params: {
-  rows: SystemHealthRow[];
   lastCheckedAt: string;
   sourceNotes: SystemHealthSourceNote[];
+  platformHealthRows: PlatformHealthRow[];
+  customerHealthRows: CustomerHealthRow[];
+  legacyRows: SystemHealthRow[];
 }): OwnerSystemHealthAggregate {
-  const openRows = params.rows.filter((row) => row.status === 'open' && row.count > 0);
-  const critical_count = openRows.filter((row) => row.severity === 'critical').length;
-  const warning_count = openRows.filter((row) => row.severity === 'warning').length;
-  const info_count = openRows.filter((row) => row.severity === 'info').length;
+  const degradedPlatform = params.platformHealthRows.filter(
+    (row) => row.status === 'degraded' || row.status === 'critical',
+  );
+  const openCustomer = params.customerHealthRows.filter((row) => row.status === 'open');
+  const severityRows = [
+    ...degradedPlatform.filter((row) => row.severity !== 'none'),
+    ...openCustomer,
+  ] as Array<{ severity: SystemHealthSeverity }>;
 
   const sectionMap = new Map<string, SystemHealthSection>();
-  for (const row of openRows) {
-    const existing = sectionMap.get(row.area);
-    if (existing) {
-      existing.count += row.count;
-    } else {
-      sectionMap.set(row.area, { section_key: row.area, label: row.area, count: row.count });
-    }
+  for (const row of openCustomer) {
+    const key = row.module_key;
+    const existing = sectionMap.get(key);
+    if (existing) existing.count += 1;
+    else sectionMap.set(key, { section_key: key, label: key, count: 1 });
   }
-
-  const sections = [...sectionMap.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
   return {
     aggregate_key: 'owner_system_health_aggregate',
     owner_panel: buildOwnerPanelSystemSectionContext(),
     summary: {
-      total_open_issues: openRows.reduce((sum, row) => sum + row.count, 0),
-      critical_count,
-      warning_count,
-      info_count,
+      total_open_issues: degradedPlatform.length + openCustomer.length,
+      critical_count: countSeverity(severityRows, 'critical'),
+      warning_count: countSeverity(severityRows, 'warning'),
+      info_count: countSeverity(severityRows, 'info'),
+      platform_component_count: params.platformHealthRows.length,
+      customer_issue_count: openCustomer.length,
       last_checked_at: params.lastCheckedAt,
     },
-    rows: params.rows,
-    sections,
+    platform_health: {
+      rows: params.platformHealthRows,
+      summary: {
+        total_components: params.platformHealthRows.length,
+        degraded_count: degradedPlatform.length,
+        critical_count: params.platformHealthRows.filter((row) => row.status === 'critical').length,
+      },
+    },
+    customer_health: {
+      future_health_score: null,
+      rows: params.customerHealthRows,
+      summary: {
+        total_rows: openCustomer.length,
+        organizations_with_issues: new Set(openCustomer.map((row) => row.organization_id)).size,
+      },
+    },
+    rows: params.legacyRows,
+    sections: [...sectionMap.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
     source_notes: params.sourceNotes,
   };
 }
