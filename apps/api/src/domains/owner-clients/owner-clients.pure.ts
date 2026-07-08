@@ -4,7 +4,6 @@
 
 import {
   buildCustomerHealthNextStep,
-  buildLastActivityLabel,
   buildMonthlyValueLabel,
   resolveCustomerContact,
   type SystemHealthSeverity,
@@ -50,6 +49,8 @@ export type OwnerClientListRow = {
   mrr_label: string;
   active_modules: OwnerClientActiveModule[];
   active_modules_label: string;
+  modules_count: number;
+  modules_count_label: string;
   used_modules_label: string;
   tenant_clients_count: number | null;
   tenant_clients_count_label: string;
@@ -155,6 +156,19 @@ export const OWNER_CLIENT_DETAIL_TABS: OwnerClientDetailTab[] = [
 
 export const NOT_MEASURED_LABEL = 'Not measured yet';
 export const NO_DATA_LABEL = 'No data recorded yet';
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Backend-prepared short date label, e.g. "08 Jul 2026". Frontend must render this only. */
+export function formatOwnerClientActivityLabel(iso: string | null): string {
+  if (!iso) return 'No activity recorded';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'No activity recorded';
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const month = SHORT_MONTHS[date.getUTCMonth()] ?? '';
+  const year = date.getUTCFullYear();
+  return `${day} ${month} ${year}`;
+}
 
 export function normalizeOwnerClientFilters(
   filters: Partial<OwnerClientFilters> | null | undefined,
@@ -326,6 +340,8 @@ export function buildOwnerClientListRow(params: {
       params.active_modules.length > 0
         ? params.active_modules.map((m) => m.label).join(', ')
         : 'No active modules',
+    modules_count: params.active_modules.length,
+    modules_count_label: buildCountLabel(params.active_modules.length, 'module', 'modules'),
     used_modules_label:
       usedModules.length > 0 ? usedModules.map((m) => m.label).join(', ') : 'No modules in use',
     tenant_clients_count: params.tenant_clients_count,
@@ -335,7 +351,7 @@ export function buildOwnerClientListRow(params: {
     documents_count: params.documents_count,
     documents_count_label: buildCountLabel(params.documents_count, 'document', 'documents'),
     last_activity_at: params.last_activity_at,
-    last_activity_label: buildLastActivityLabel(params.last_activity_at),
+    last_activity_label: formatOwnerClientActivityLabel(params.last_activity_at),
     time_spent_label: NOT_MEASURED_LABEL,
     health_status: health.health_status,
     health_status_label: health.health_status_label,
@@ -431,7 +447,7 @@ function buildListSummary(allRows: OwnerClientListRow[], filteredRows: OwnerClie
   }
 
   return {
-    total_organizations: allRows.length,
+    total_organizations: new Set(allRows.map((r) => r.organization_id)).size,
     active_organizations: filteredRows.filter((r) => r.subscription_status === 'active').length,
     trial_organizations: filteredRows.filter((r) => r.subscription_status === 'trial').length,
     expired_organizations: filteredRows.filter((r) => r.subscription_status === 'expired').length,
@@ -441,16 +457,26 @@ function buildListSummary(allRows: OwnerClientListRow[], filteredRows: OwnerClie
   };
 }
 
+/** Guarantees exactly one row per organization regardless of input ordering/duplication. */
+function dedupeRowsByOrganization(rows: OwnerClientListRow[]): OwnerClientListRow[] {
+  const byOrg = new Map<string, OwnerClientListRow>();
+  for (const row of rows) {
+    if (!byOrg.has(row.organization_id)) byOrg.set(row.organization_id, row);
+  }
+  return [...byOrg.values()];
+}
+
 export function buildOwnerClientsListAggregate(params: {
   rows: OwnerClientListRow[];
   filters?: Partial<OwnerClientFilters> | null;
 }): OwnerClientsListAggregate {
+  const uniqueRows = dedupeRowsByOrganization(params.rows);
   const appliedFilters = normalizeOwnerClientFilters(params.filters);
-  const filterOptions = buildFilterOptions(params.rows);
-  const filteredRows = applyOwnerClientFilters(params.rows, appliedFilters);
+  const filterOptions = buildFilterOptions(uniqueRows);
+  const filteredRows = applyOwnerClientFilters(uniqueRows, appliedFilters);
   return {
     aggregate_key: 'owner_clients_aggregate',
-    summary: buildListSummary(params.rows, filteredRows),
+    summary: buildListSummary(uniqueRows, filteredRows),
     filter_options: filterOptions,
     applied_filters: appliedFilters,
     rows: filteredRows,
