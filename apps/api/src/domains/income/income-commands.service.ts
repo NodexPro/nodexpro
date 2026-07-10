@@ -81,6 +81,8 @@ import {
 } from './income-document-draft-editor.service.js';
 import { executeSendIncomeDocumentByEmail } from './income-document-email-delivery.service.js';
 import { executeSendIncomeDocumentByDocflow } from './income-document-docflow-delivery.service.js';
+import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
+import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review.service.js';
 import {
   executeUpdateIncomeDocumentBrandingProfile,
   executeUpdateIncomeDocumentBrandingProfilePreviewDraft,
@@ -737,6 +739,29 @@ export async function executeIncomeCommand(
 
   if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
     const issueResult = await executeIssueIncomeDocument(ctx, body);
+    const reviewContext = parseRecurringCycleReviewCommandContext(body);
+    if (reviewContext) {
+      const reviewAggregate = await refreshRecurringCycleDraftReviewCase({
+        ctx,
+        representedClientId: reviewContext.represented_client_id,
+        profileId: reviewContext.profile_id,
+        cycleId: reviewContext.cycle_id,
+        generatedDraftId: reviewContext.generated_draft_id,
+        periodKey: reviewContext.period_key,
+        linkedWorkItemId: reviewContext.linked_work_item_id,
+        issuedDocumentId: issueResult.issuedDocumentId,
+      });
+      return {
+        ok: true,
+        command,
+        income_workspace_aggregate: reviewAggregate.income_workspace_aggregate,
+        work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
+        meta: {
+          idempotent_replay: issueResult.idempotentReplay,
+          income_document_id: issueResult.issuedDocumentId,
+        },
+      };
+    }
     const response = await commandResponse(ctx, command);
     return {
       ...response,

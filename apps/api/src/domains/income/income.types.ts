@@ -661,6 +661,7 @@ export interface IncomeCommandResponse {
   ok: true;
   command: IncomeCommandType;
   income_workspace_aggregate: IncomeWorkspaceAggregate;
+  work_engine_recurring_cycle_draft_review_aggregate?: import('../work-engine/work-engine-invoice-retainer.types.js').WorkEngineRecurringCycleDraftReviewAggregate;
   meta?: IncomeCommandResponseMeta;
 }
 

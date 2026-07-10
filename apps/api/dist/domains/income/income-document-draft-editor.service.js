@@ -415,6 +415,33 @@ export async function generateIncomeDocumentPreview(scope, body) {
     });
     return overlay;
 }
+/** Read-only preview overlay for issued drafts (no DB mutation). */
+export async function buildReadOnlyIncomeDocumentPreviewOverlay(scope, draftId, options) {
+    const row = await loadWizardDraftRow(scope, draftId);
+    if (!row.document_type) {
+        throw badRequest('document_type is required before preview', 'INCOME_PREVIEW_DOCUMENT_TYPE_REQUIRED');
+    }
+    const docType = await resolveDocType(scope, row.document_type);
+    const priorCache = row.draft_totals_preview_json &&
+        typeof row.draft_totals_preview_json === 'object' &&
+        !Array.isArray(row.draft_totals_preview_json)
+        ? row.draft_totals_preview_json
+        : {};
+    const issuedNumber = options?.issued_document_number?.trim() || null;
+    const rowOverride = issuedNumber != null
+        ? {
+            ...row,
+            draft_totals_preview_json: {
+                ...priorCache,
+                document_number_preview: issuedNumber,
+                preview_generated_at: typeof priorCache.preview_generated_at === 'string'
+                    ? priorCache.preview_generated_at
+                    : new Date().toISOString(),
+            },
+        }
+        : row;
+    return buildOverlayForDraft(scope, draftId, false, rowOverride, docType);
+}
 export async function addIncomeDocumentLine(scope, body) {
     const draft_id = reqUuid(body.draft_id, 'draft_id');
     const row = await loadWizardDraftRow(scope, draft_id);

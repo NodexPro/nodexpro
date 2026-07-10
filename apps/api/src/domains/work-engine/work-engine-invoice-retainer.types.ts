@@ -342,6 +342,30 @@ export type WorkEngineRecurringCycleDraftReviewEditAction = {
   disabled_reason: string | null;
 };
 
+export type WorkEngineRecurringCycleDraftReviewIssueAction = {
+  visible: boolean;
+  enabled: boolean;
+  disabled_reason: string | null;
+  icon: 'issue';
+  tooltip: string;
+  confirmation_required: boolean;
+  confirmation_title: string | null;
+  confirmation_message: string | null;
+  command_name: 'issue_income_document';
+};
+
+export type WorkEngineRecurringCycleDraftReviewIssueAndSendAction = {
+  visible: boolean;
+  enabled: boolean;
+  disabled_reason: string | null;
+  icon: 'send';
+  tooltip: string;
+  confirmation_required: boolean;
+  confirmation_title: string | null;
+  confirmation_message: string | null;
+  command_name: 'send_income_document_by_email';
+};
+
 export type WorkEngineRecurringCycleDraftReviewAggregate = {
   aggregate_key: typeof WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY;
   represented_client_id: string;
@@ -352,9 +376,13 @@ export type WorkEngineRecurringCycleDraftReviewAggregate = {
   linked_work_item_id: string | null;
   scheduled_document_date_display: string;
   title: string;
+  issued_document_id: string | null;
+  issued_document_number_display: string | null;
   /** Preview-first UX: open branded document preview before the technical editor. */
   initial_view: 'document_preview';
   edit_action: WorkEngineRecurringCycleDraftReviewEditAction;
+  issue_action: WorkEngineRecurringCycleDraftReviewIssueAction;
+  issue_and_send_action: WorkEngineRecurringCycleDraftReviewIssueAndSendAction;
   income_workspace_aggregate: IncomeWorkspaceAggregate;
   income_commands: Record<string, string>;
   preview_action: {

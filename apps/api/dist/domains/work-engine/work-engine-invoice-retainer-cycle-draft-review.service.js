@@ -5,12 +5,13 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
-import { generateIncomeDocumentPreview, resumeIncomeDocumentDraftFromContext, } from '../income/income-document-draft-editor.service.js';
+import { buildReadOnlyIncomeDocumentPreviewOverlay, generateIncomeDocumentPreview, resumeIncomeDocumentDraftFromContext, } from '../income/income-document-draft-editor.service.js';
 import { buildIncomeWorkspaceWizardPatchAggregate } from '../income/income-workspace-aggregate.service.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS } from './work-engine-invoices-document-creation.builders.js';
 import { formatHebrewDateDisplay } from './work-engine-invoice-retainer.pure.js';
 import { validateCycleDraftReviewRefs } from './work-engine-invoice-retainer-cycle-draft-review.pure.js';
+import { buildCycleDraftReviewIssueAction, buildCycleDraftReviewIssueAndSendAction, } from './work-engine-invoice-retainer-cycle-draft-review-actions.pure.js';
 import { RECURRING_WORK_ENGINE_ENTITY_TYPE, RECURRING_WORK_TYPE, } from './work-engine-invoice-retainer.pure.js';
 function assertEditAccess(ctx) {
     const perms = incomeWorkspacePermissionsFromContext(ctx);
@@ -21,8 +22,7 @@ function assertEditAccess(ctx) {
     if (!perms.edit)
         throw forbidden('income.edit required');
 }
-export async function openRecurringCycleDraftForReview(params) {
-    assertEditAccess(params.ctx);
+async function loadCycleDraftReviewContext(params) {
     const orgId = params.ctx.organizationId;
     if (!orgId)
         throw badRequest('Organization context required');
@@ -38,7 +38,7 @@ export async function openRecurringCycleDraftForReview(params) {
         throw notFound('Recurring profile not found');
     const { data: cycle, error: cycleErr } = await supabaseAdmin
         .from('income_recurring_document_cycles')
-        .select('id, recurring_profile_id, scheduled_document_date, generated_draft_id')
+        .select('id, recurring_profile_id, scheduled_document_date, generated_draft_id, generated_document_id')
         .eq('organization_id', orgId)
         .eq('id', params.cycleId)
         .eq('recurring_profile_id', params.profileId)
@@ -49,7 +49,7 @@ export async function openRecurringCycleDraftForReview(params) {
         throw notFound('Recurring cycle not found');
     const { data: draft, error: draftErr } = await supabaseAdmin
         .from('income_document_drafts')
-        .select('id, organization_id, represented_client_id, issuer_business_id, status')
+        .select('id, organization_id, represented_client_id, issuer_business_id, status, issued_document_id')
         .eq('organization_id', orgId)
         .eq('id', params.generatedDraftId)
         .maybeSingle();
@@ -57,8 +57,6 @@ export async function openRecurringCycleDraftForReview(params) {
     const draftRow = draft;
     if (!draftRow)
         throw notFound('Generated draft not found');
-    if (draftRow.status !== 'draft')
-        throw badRequest('Generated draft is not editable');
     let workItemPeriodKey = null;
     let workItemSourceEntityId = null;
     if (params.linkedWorkItemId) {
@@ -99,35 +97,82 @@ export async function openRecurringCycleDraftForReview(params) {
     });
     if (!validation.ok)
         throw badRequest(`Invalid cycle draft review request: ${validation.reason}`);
-    const resumed = await resumeIncomeDocumentDraftFromContext(params.ctx, {
-        draft_id: params.generatedDraftId,
+    return { orgId, cycleRow, draftRow, workItemPeriodKey, workItemSourceEntityId };
+}
+async function loadIssuedDocumentNumberDisplay(orgId, issuedDocumentId) {
+    const { data, error } = await supabaseAdmin
+        .from('income_documents')
+        .select('document_number')
+        .eq('organization_id', orgId)
+        .eq('id', issuedDocumentId)
+        .maybeSingle();
+    throwIfSupabaseError(error, 'loadIssuedDocumentNumberForCycleDraftReview');
+    const number = data?.document_number?.trim();
+    return number || null;
+}
+function resolveIssueBlockedReason(incomeWorkspaceAggregate) {
+    const allowed = incomeWorkspaceAggregate.allowed_actions ?? [];
+    if (!allowed.includes('issue_income_document'))
+        return 'אין הרשאת הפקה';
+    const blocking = incomeWorkspaceAggregate.document_details_step?.document_preview?.validation_messages?.filter((message) => message.blocking) ?? [];
+    if (blocking.length > 0) {
+        return blocking[0]?.label?.trim() || 'לא ניתן להפיק את המסמך';
+    }
+    return null;
+}
+async function assembleCycleDraftReviewAggregate(params) {
+    const perms = incomeWorkspacePermissionsFromContext(params.ctx);
+    const documentTypeKey = params.income_workspace_aggregate.document_details_step?.document_type_key ?? null;
+    const documentDate = params.income_workspace_aggregate.document_details_step?.document_preview?.dates
+        ?.document_date ?? null;
+    const alreadyIssued = params.draftStatus === 'issued' ||
+        params.issuedDocumentId != null ||
+        params.cycleRow.generated_document_id != null;
+    const issueBlockedReason = resolveIssueBlockedReason(params.income_workspace_aggregate);
+    const canIssue = perms.issue && issueBlockedReason == null;
+    const issueAction = buildCycleDraftReviewIssueAction({
+        document_type: documentTypeKey,
+        can_issue: canIssue,
+        issue_blocked_reason: issueBlockedReason,
+        document_date: documentDate,
+        already_issued: alreadyIssued,
+        issued_document_number_display: params.issuedDocumentNumberDisplay,
     });
-    const previewOverlay = await generateIncomeDocumentPreview(resumed.scope, {
-        draft_id: params.generatedDraftId,
+    const issueAndSendAction = buildCycleDraftReviewIssueAndSendAction({
+        document_type: documentTypeKey,
+        issue_action_visible: issueAction.visible,
     });
-    const income_workspace_aggregate = await buildIncomeWorkspaceWizardPatchAggregate(resumed.scope, previewOverlay, resumed.result.recipientOverlay, resumed.result.starting_step_key, { includeBrandingProfile: true });
-    const canSaveDraft = Boolean(WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS.save_draft);
-    const documentTypeLabel = income_workspace_aggregate.document_details_step?.document_preview?.document_type_label ??
-        income_workspace_aggregate.document_details_step?.header?.title ??
+    const documentTypeLabel = params.income_workspace_aggregate.document_details_step?.document_preview?.document_type_label ??
+        params.income_workspace_aggregate.document_details_step?.header?.title ??
         'מסמך';
-    const aggregate = {
+    const canSaveDraft = Boolean(WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS.save_draft);
+    const canEditDraft = params.draftStatus === 'draft' && !alreadyIssued;
+    return {
         aggregate_key: 'work_engine_recurring_cycle_draft_review_aggregate',
-        represented_client_id: params.representedClientId,
-        profile_id: params.profileId,
-        cycle_id: params.cycleId,
-        generated_draft_id: params.generatedDraftId,
-        period_key: params.periodKey ?? '',
-        linked_work_item_id: params.linkedWorkItemId ?? null,
-        scheduled_document_date_display: formatHebrewDateDisplay(cycleRow.scheduled_document_date),
-        title: documentTypeLabel,
+        represented_client_id: params.refs.representedClientId,
+        profile_id: params.refs.profileId,
+        cycle_id: params.refs.cycleId,
+        generated_draft_id: params.refs.generatedDraftId,
+        period_key: params.refs.periodKey ?? '',
+        linked_work_item_id: params.refs.linkedWorkItemId ?? null,
+        scheduled_document_date_display: formatHebrewDateDisplay(params.cycleRow.scheduled_document_date),
+        title: alreadyIssued
+            ? `${documentTypeLabel}${params.issuedDocumentNumberDisplay ? ` ${params.issuedDocumentNumberDisplay}` : ''}`
+            : documentTypeLabel,
+        issued_document_id: params.issuedDocumentId,
+        issued_document_number_display: params.issuedDocumentNumberDisplay,
         initial_view: 'document_preview',
         edit_action: {
             visible: true,
-            enabled: true,
+            enabled: canEditDraft,
             label: 'עריכה',
-            disabled_reason: null,
+            disabled_reason: alreadyIssued
+                ? `המסמך כבר הופק${params.issuedDocumentNumberDisplay ? ` (${params.issuedDocumentNumberDisplay})` : ''}`
+                : null,
         },
-        income_workspace_aggregate,
+        issue_action: issueAction,
+        issue_and_send_action: issueAndSendAction,
+        income_workspace_aggregate: params.income_workspace_aggregate,
         income_commands: { ...WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS },
         preview_action: {
             visible: false,
@@ -136,10 +181,90 @@ export async function openRecurringCycleDraftForReview(params) {
         },
         allowed_actions: [
             'open_recurring_cycle_draft_for_review',
-            'edit_recurring_cycle_draft',
-            ...(canSaveDraft ? ['save_income_document_draft'] : []),
+            ...(canEditDraft ? ['edit_recurring_cycle_draft'] : []),
+            ...(canSaveDraft && canEditDraft ? ['save_income_document_draft'] : []),
+            ...(issueAction.enabled ? ['issue_income_document'] : []),
         ],
     };
+}
+async function buildCycleDraftReviewIncomeWorkspace(params) {
+    const resumed = await resumeIncomeDocumentDraftFromContext(params.ctx, {
+        draft_id: params.generatedDraftId,
+    });
+    const previewOverlay = params.draftStatus === 'draft'
+        ? await generateIncomeDocumentPreview(resumed.scope, { draft_id: params.generatedDraftId })
+        : await buildReadOnlyIncomeDocumentPreviewOverlay(resumed.scope, params.generatedDraftId, {
+            issued_document_number: params.issuedDocumentNumberDisplay,
+        });
+    return buildIncomeWorkspaceWizardPatchAggregate(resumed.scope, previewOverlay, resumed.result.recipientOverlay, resumed.result.starting_step_key, { includeBrandingProfile: true });
+}
+export async function refreshRecurringCycleDraftReviewCase(params) {
+    assertEditAccess(params.ctx);
+    const refs = {
+        representedClientId: params.representedClientId,
+        profileId: params.profileId,
+        cycleId: params.cycleId,
+        generatedDraftId: params.generatedDraftId,
+        periodKey: params.periodKey,
+        linkedWorkItemId: params.linkedWorkItemId,
+    };
+    const { orgId, cycleRow, draftRow } = await loadCycleDraftReviewContext({ ctx: params.ctx, ...refs });
+    const resolvedIssuedDocumentId = params.issuedDocumentId ??
+        cycleRow.generated_document_id ??
+        draftRow.issued_document_id ??
+        null;
+    const issuedDocumentNumberDisplay = resolvedIssuedDocumentId != null
+        ? await loadIssuedDocumentNumberDisplay(orgId, resolvedIssuedDocumentId)
+        : null;
+    const income_workspace_aggregate = await buildCycleDraftReviewIncomeWorkspace({
+        ctx: params.ctx,
+        generatedDraftId: params.generatedDraftId,
+        draftStatus: draftRow.status,
+        issuedDocumentNumberDisplay,
+    });
+    return assembleCycleDraftReviewAggregate({
+        ctx: params.ctx,
+        refs,
+        cycleRow,
+        draftStatus: draftRow.status,
+        issuedDocumentId: resolvedIssuedDocumentId,
+        issuedDocumentNumberDisplay,
+        income_workspace_aggregate,
+    });
+}
+export async function openRecurringCycleDraftForReview(params) {
+    assertEditAccess(params.ctx);
+    const refs = {
+        representedClientId: params.representedClientId,
+        profileId: params.profileId,
+        cycleId: params.cycleId,
+        generatedDraftId: params.generatedDraftId,
+        periodKey: params.periodKey,
+        linkedWorkItemId: params.linkedWorkItemId,
+    };
+    const { orgId, cycleRow, draftRow } = await loadCycleDraftReviewContext({ ctx: params.ctx, ...refs });
+    if (draftRow.status !== 'draft') {
+        return refreshRecurringCycleDraftReviewCase({
+            ctx: params.ctx,
+            ...refs,
+            issuedDocumentId: draftRow.issued_document_id ?? cycleRow.generated_document_id,
+        });
+    }
+    const income_workspace_aggregate = await buildCycleDraftReviewIncomeWorkspace({
+        ctx: params.ctx,
+        generatedDraftId: params.generatedDraftId,
+        draftStatus: draftRow.status,
+        issuedDocumentNumberDisplay: null,
+    });
+    const aggregate = await assembleCycleDraftReviewAggregate({
+        ctx: params.ctx,
+        refs,
+        cycleRow,
+        draftStatus: draftRow.status,
+        issuedDocumentId: null,
+        issuedDocumentNumberDisplay: null,
+        income_workspace_aggregate,
+    });
     await writeAudit({
         organizationId: orgId,
         actorUserId: params.ctx.user?.id ?? null,
