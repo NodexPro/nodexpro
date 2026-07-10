@@ -102,14 +102,18 @@ test('editor cancel and save return to preview mode', () => {
   assert.ok(setupModalSource.includes('onSaveSuccess={handleCycleDraftEditorSaveSuccess}'));
   assert.ok(setupModalSource.includes('onClose={handleCancelCycleDraftEditor}'));
   const saveHandlerStart = setupModalSource.indexOf('const handleCycleDraftEditorSaveSuccess');
-  const saveHandlerEnd = setupModalSource.indexOf('const applyRetainerAggregate', saveHandlerStart);
+  const saveHandlerEnd = setupModalSource.indexOf('const handleGeneratePreview', saveHandlerStart);
   const saveHandlerBlock = setupModalSource.slice(saveHandlerStart, saveHandlerEnd);
   assert.ok(!saveHandlerBlock.includes('fetchWorkEngineInvoiceRetainerSetupAggregate'));
+  assert.ok(saveHandlerBlock.includes('handleCycleOverrideSetupSaved'));
 });
 
 test('editor save uses refresh_document_preview and returns refreshed case to parent', () => {
   assert.ok(editorModalSource.includes('refresh_document_preview: true'));
-  assert.ok(editorModalSource.includes('onSaveSuccess?.(nextAggregate)'));
+  assert.ok(editorModalSource.includes('recurring_cycle_review:'));
+  assert.ok(editorModalSource.includes('work_engine_recurring_cycle_draft_review_aggregate'));
+  assert.ok(editorModalSource.includes('work_engine_invoice_retainer_setup_aggregate'));
+  assert.ok(editorModalSource.includes('onSaveSuccess?.({'));
   assert.equal(editorModalSource.match(/function WorkEngineRecurringCycleDraftReviewModal/g)?.length, 1);
 });
 

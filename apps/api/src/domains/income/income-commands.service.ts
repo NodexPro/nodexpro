@@ -7,6 +7,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import {
   assertRowMatchesIssuerScope,
   optionalJsonObject,
@@ -84,6 +85,7 @@ import { executeSendIncomeDocumentByEmail } from './income-document-email-delive
 import { executeSendIncomeDocumentByDocflow } from './income-document-docflow-delivery.service.js';
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
 import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review.service.js';
+import { buildWorkEngineInvoiceRetainerSetupAggregate } from '../work-engine/work-engine-invoice-retainer.read-model.service.js';
 import {
   executeUpdateIncomeDocumentBrandingProfile,
   executeUpdateIncomeDocumentBrandingProfilePreviewDraft,
@@ -931,7 +933,46 @@ export async function executeIncomeCommand(
     return wizardDraftCmd(updateIncomeDocumentDeliveryContact);
   }
   if (command === INCOME_COMMAND_SAVE_DRAFT) {
-    return wizardDraftCmd(saveIncomeDocumentDraft);
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeEditPermission(scope);
+    const overlay = await saveIncomeDocumentDraft(scope, body);
+    const reviewContext = parseRecurringCycleReviewCommandContext(body);
+    if (!reviewContext) {
+      return wizardDraftCommandResponse(ctx, command, scope, {}, overlay);
+    }
+    const reviewAggregate = await refreshRecurringCycleDraftReviewCase({
+      ctx,
+      representedClientId: reviewContext.represented_client_id,
+      profileId: reviewContext.profile_id,
+      cycleId: reviewContext.cycle_id,
+      generatedDraftId: reviewContext.generated_draft_id,
+      periodKey: reviewContext.period_key,
+      linkedWorkItemId: reviewContext.linked_work_item_id,
+    });
+    const orgId = ctx.organizationId;
+    if (!orgId) throw badRequest('Organization context required');
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from('income_recurring_document_profiles')
+      .select('end_customer_id')
+      .eq('organization_id', orgId)
+      .eq('id', reviewContext.profile_id)
+      .eq('represented_client_id', reviewContext.represented_client_id)
+      .maybeSingle();
+    throwIfSupabaseError(profileErr, 'loadRecurringProfileForDraftSaveScheduleRefresh');
+    if (!profile) throw notFound('Recurring profile not found');
+    const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
+      ctx,
+      representedClientId: reviewContext.represented_client_id,
+      endCustomerId: String((profile as { end_customer_id: string }).end_customer_id),
+      buildMode: 'schedule_refresh',
+    });
+    return {
+      ok: true,
+      command,
+      income_workspace_aggregate: reviewAggregate.income_workspace_aggregate,
+      work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
+      work_engine_invoice_retainer_setup_aggregate: setupAggregate,
+    };
   }
   if (command === INCOME_COMMAND_GENERATE_PREVIEW) {
     const scope = await loadActiveIncomeIssuerScope(ctx);

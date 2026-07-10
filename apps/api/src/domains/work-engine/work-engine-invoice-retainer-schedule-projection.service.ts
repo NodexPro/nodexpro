@@ -2,6 +2,8 @@
  * Retainer — schedule tab projection (read-model only).
  */
 
+import { supabaseAdmin } from '../../db/client.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { normalizeDraftLines, formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import {
   computeDraftTotalsPreview,
@@ -50,6 +52,10 @@ import {
   resolveScheduleStartDate,
   unitPriceForScheduleCycleIndex,
 } from './work-engine-invoice-retainer-schedule-projection.pure.js';
+import {
+  scheduleAmountFromDraftTotalsPreview,
+  type ScheduleDraftAmount,
+} from './work-engine-invoice-retainer-schedule-draft-amount.pure.js';
 
 const SKIP_PERSISTENCE_DISABLED_REASON = 'שמירת דילוג תתווסף בשלב הבא';
 const FUTURE_ACTION_DISABLED_REASON = 'יתווסף בשלב הבא';
@@ -329,6 +335,32 @@ async function computeScheduleAmount(params: {
   };
 }
 
+async function loadGeneratedDraftScheduleAmountsById(
+  orgId: string,
+  draftIds: string[],
+): Promise<Map<string, ScheduleDraftAmount>> {
+  const uniqueIds = [...new Set(draftIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return new Map();
+  const { data, error } = await supabaseAdmin
+    .from('income_document_drafts')
+    .select('id, draft_totals_preview_json, status')
+    .eq('organization_id', orgId)
+    .in('id', uniqueIds);
+  throwIfSupabaseError(error, 'loadGeneratedDraftScheduleAmountsById');
+  const amounts = new Map<string, ScheduleDraftAmount>();
+  for (const row of data ?? []) {
+    const draftRow = row as {
+      id: string;
+      draft_totals_preview_json: unknown;
+      status: string;
+    };
+    if (draftRow.status !== 'draft') continue;
+    const amount = scheduleAmountFromDraftTotalsPreview(draftRow.draft_totals_preview_json);
+    if (amount) amounts.set(draftRow.id, amount);
+  }
+  return amounts;
+}
+
 function mergeScheduleDatesFromCycles(params: {
   projectedDates: string[];
   cycles: ScheduleCycleRow[];
@@ -443,6 +475,12 @@ export async function buildRetainerScheduleProjection(params: {
   const cycleByDate = new Map(params.cycles.map((cycle) => [cycle.scheduled_document_date, cycle]));
   const dateCycleIndex = new Map<string, number>();
   allDates.forEach((iso, index) => dateCycleIndex.set(iso, index));
+  const generatedDraftAmounts = await loadGeneratedDraftScheduleAmountsById(
+    params.orgId,
+    params.cycles
+      .filter((cycle) => cycle.generated_draft_id && !cycle.generated_document_id)
+      .map((cycle) => cycle.generated_draft_id as string),
+  );
 
   const documentTypeLabel =
     params.retainerSettings.document_type_label ??
@@ -528,6 +566,12 @@ export async function buildRetainerScheduleProjection(params: {
         projectedNextDocumentDate,
         profiling: amountProfiling,
       });
+      if (cycle?.generated_draft_id && !cycle.generated_document_id) {
+        const draftAmount = generatedDraftAmounts.get(cycle.generated_draft_id);
+        if (draftAmount) {
+          amount = draftAmount;
+        }
+      }
       if (
         rowInteraction.row_interaction_kind === 'future_projection' &&
         params.templateBaseStep
