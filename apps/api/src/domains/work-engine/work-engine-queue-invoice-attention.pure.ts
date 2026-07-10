@@ -38,6 +38,7 @@ export type QueueAttentionCard = {
   tone: QueueAttentionCardTone;
   description: string;
   clickable: boolean;
+  modal_key?: string | null;
   filter: QueueAttentionCardFilter;
 };
 
