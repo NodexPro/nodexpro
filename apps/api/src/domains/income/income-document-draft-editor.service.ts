@@ -830,7 +830,7 @@ export async function saveIncomeDocumentDraft(
   const row = await loadWizardDraftRow(scope, draft_id);
   const docType = await resolveDocType(scope, row.document_type!);
   // Re-run validation + totals + BOI FX resolution and persist refreshed preview JSON.
-  return wizardDraftMutationOverlay(
+  const overlay = await wizardDraftMutationOverlay(
     scope,
     draft_id,
     row,
@@ -839,6 +839,10 @@ export async function saveIncomeDocumentDraft(
     {},
     { action: 'save_draft' },
   );
+  if (body.refresh_document_preview === true) {
+    return generateIncomeDocumentPreview(scope, { draft_id });
+  }
+  return overlay;
 }
 
 function startingStepKeyForDraftRow(row: IncomeWizardDraftRow): string {

@@ -567,7 +567,11 @@ export async function saveIncomeDocumentDraft(scope, body) {
     const row = await loadWizardDraftRow(scope, draft_id);
     const docType = await resolveDocType(scope, row.document_type);
     // Re-run validation + totals + BOI FX resolution and persist refreshed preview JSON.
-    return wizardDraftMutationOverlay(scope, draft_id, row, row, docType, {}, { action: 'save_draft' });
+    const overlay = await wizardDraftMutationOverlay(scope, draft_id, row, row, docType, {}, { action: 'save_draft' });
+    if (body.refresh_document_preview === true) {
+        return generateIncomeDocumentPreview(scope, { draft_id });
+    }
+    return overlay;
 }
 function startingStepKeyForDraftRow(row) {
     if (!row.document_type)

@@ -335,6 +335,12 @@ export type WorkEngineRecurringCycleOverrideAggregate = {
 export const WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY =
   'work_engine_recurring_cycle_draft_review_aggregate' as const;
 
+export type WorkEngineRecurringCycleDraftReviewEditAction = {
+  visible: boolean;
+  label: string;
+  disabled_reason: string | null;
+};
+
 export type WorkEngineRecurringCycleDraftReviewAggregate = {
   aggregate_key: typeof WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY;
   represented_client_id: string;
@@ -345,6 +351,9 @@ export type WorkEngineRecurringCycleDraftReviewAggregate = {
   linked_work_item_id: string | null;
   scheduled_document_date_display: string;
   title: string;
+  /** Preview-first UX: open branded document preview before the technical editor. */
+  initial_view: 'document_preview';
+  edit_action: WorkEngineRecurringCycleDraftReviewEditAction;
   income_workspace_aggregate: IncomeWorkspaceAggregate;
   income_commands: Record<string, string>;
   preview_action: {

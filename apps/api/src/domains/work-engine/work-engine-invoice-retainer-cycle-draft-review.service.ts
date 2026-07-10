@@ -7,7 +7,10 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
-import { resumeIncomeDocumentDraftFromContext } from '../income/income-document-draft-editor.service.js';
+import {
+  generateIncomeDocumentPreview,
+  resumeIncomeDocumentDraftFromContext,
+} from '../income/income-document-draft-editor.service.js';
 import { buildIncomeWorkspaceWizardPatchAggregate } from '../income/income-workspace-aggregate.service.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS } from './work-engine-invoices-document-creation.builders.js';
@@ -132,15 +135,22 @@ export async function openRecurringCycleDraftForReview(params: {
   const resumed = await resumeIncomeDocumentDraftFromContext(params.ctx, {
     draft_id: params.generatedDraftId,
   });
+  const previewOverlay = await generateIncomeDocumentPreview(resumed.scope, {
+    draft_id: params.generatedDraftId,
+  });
   const income_workspace_aggregate = await buildIncomeWorkspaceWizardPatchAggregate(
     resumed.scope,
-    resumed.result.wizardOverlay,
+    previewOverlay,
     resumed.result.recipientOverlay,
     resumed.result.starting_step_key,
     { includeBrandingProfile: true },
   );
 
-  const previewVisible = Boolean(WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS.generate_preview);
+  const canSaveDraft = Boolean(WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS.save_draft);
+  const documentTypeLabel =
+    income_workspace_aggregate.document_details_step?.document_preview?.document_type_label ??
+    income_workspace_aggregate.document_details_step?.header?.title ??
+    'מסמך';
   const aggregate: WorkEngineRecurringCycleDraftReviewAggregate = {
     aggregate_key: 'work_engine_recurring_cycle_draft_review_aggregate',
     represented_client_id: params.representedClientId,
@@ -150,20 +160,24 @@ export async function openRecurringCycleDraftForReview(params: {
     period_key: params.periodKey ?? '',
     linked_work_item_id: params.linkedWorkItemId ?? null,
     scheduled_document_date_display: formatHebrewDateDisplay(cycleRow.scheduled_document_date),
-    title: `בדיקת טיוטה — ${formatHebrewDateDisplay(cycleRow.scheduled_document_date)}`,
+    title: documentTypeLabel,
+    initial_view: 'document_preview',
+    edit_action: {
+      visible: true,
+      label: 'עריכה',
+      disabled_reason: null,
+    },
     income_workspace_aggregate,
     income_commands: { ...WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS },
     preview_action: {
-      visible: previewVisible,
+      visible: false,
       label: 'תצוגה מקדימה',
-      disabled_reason: previewVisible ? null : 'תצוגה מקדימה אינה זמינה',
+      disabled_reason: null,
     },
     allowed_actions: [
       'open_recurring_cycle_draft_for_review',
-      ...(previewVisible ? ['generate_income_document_preview'] : []),
-      ...(WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS.save_draft
-        ? ['save_income_document_draft']
-        : []),
+      'edit_recurring_cycle_draft',
+      ...(canSaveDraft ? ['save_income_document_draft'] : []),
     ],
   };
 
