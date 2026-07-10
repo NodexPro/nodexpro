@@ -13,6 +13,7 @@ import { formatHebrewDateDisplay } from './work-engine-invoice-retainer.pure.js'
 import { validateCycleDraftReviewRefs } from './work-engine-invoice-retainer-cycle-draft-review.pure.js';
 import { buildCycleDraftReviewIssueAction, buildCycleDraftReviewIssueAndSendAction, } from './work-engine-invoice-retainer-cycle-draft-review-actions.pure.js';
 import { RECURRING_WORK_ENGINE_ENTITY_TYPE, RECURRING_WORK_TYPE, } from './work-engine-invoice-retainer.pure.js';
+import { resolveDraftDeliveryContactEmail } from '../income/income-document-issue-and-send.pure.js';
 function assertEditAccess(ctx) {
     const perms = incomeWorkspacePermissionsFromContext(ctx);
     if (!perms.view)
@@ -49,7 +50,7 @@ async function loadCycleDraftReviewContext(params) {
         throw notFound('Recurring cycle not found');
     const { data: draft, error: draftErr } = await supabaseAdmin
         .from('income_document_drafts')
-        .select('id, organization_id, represented_client_id, issuer_business_id, status, issued_document_id')
+        .select('id, organization_id, represented_client_id, issuer_business_id, status, issued_document_id, delivery_contact_json')
         .eq('organization_id', orgId)
         .eq('id', params.generatedDraftId)
         .maybeSingle();
@@ -120,6 +121,28 @@ function resolveIssueBlockedReason(incomeWorkspaceAggregate) {
     }
     return null;
 }
+function resolveIssueAndSendBlockedReason(params) {
+    if (!params.can_issue)
+        return params.issue_blocked_reason ?? 'אין הרשאת הפקה';
+    if (!params.represented_client_id) {
+        return 'שליחה במייל זמינה במצב ניהול לקוח בלבד';
+    }
+    if (!params.recipient_email) {
+        return 'נדרש אימייל למשלוח במסמך';
+    }
+    return null;
+}
+function buildCycleDraftStatusMessage(deliveryOutcome) {
+    if (!deliveryOutcome)
+        return null;
+    if (deliveryOutcome.status === 'sent')
+        return 'המסמך הופק ונשלח במייל';
+    if (deliveryOutcome.status === 'failed') {
+        const reason = deliveryOutcome.failure_reason?.trim();
+        return reason ? `המסמך הופק אך השליחה נכשלה: ${reason}` : 'המסמך הופק אך השליחה נכשלה';
+    }
+    return null;
+}
 async function assembleCycleDraftReviewAggregate(params) {
     const perms = incomeWorkspacePermissionsFromContext(params.ctx);
     const documentTypeKey = params.income_workspace_aggregate.document_details_step?.document_type_key ?? null;
@@ -130,6 +153,18 @@ async function assembleCycleDraftReviewAggregate(params) {
         params.cycleRow.generated_document_id != null;
     const issueBlockedReason = resolveIssueBlockedReason(params.income_workspace_aggregate);
     const canIssue = perms.issue && issueBlockedReason == null;
+    const deliveryContactFromStep = params.income_workspace_aggregate.document_details_step?.delivery_contact?.email ?? null;
+    const recipientEmail = resolveDraftDeliveryContactEmail(params.draftDeliveryContactJson ?? null) ??
+        (typeof deliveryContactFromStep === 'string' && deliveryContactFromStep.trim()
+            ? deliveryContactFromStep.trim()
+            : null);
+    const issueAndSendBlockedReason = resolveIssueAndSendBlockedReason({
+        can_issue: canIssue,
+        issue_blocked_reason: issueBlockedReason,
+        represented_client_id: params.refs.representedClientId,
+        recipient_email: recipientEmail,
+    });
+    const canIssueAndSend = issueAndSendBlockedReason == null;
     const issueAction = buildCycleDraftReviewIssueAction({
         document_type: documentTypeKey,
         can_issue: canIssue,
@@ -141,6 +176,12 @@ async function assembleCycleDraftReviewAggregate(params) {
     const issueAndSendAction = buildCycleDraftReviewIssueAndSendAction({
         document_type: documentTypeKey,
         issue_action_visible: issueAction.visible,
+        can_issue_and_send: canIssueAndSend,
+        issue_and_send_blocked_reason: issueAndSendBlockedReason,
+        document_date: documentDate,
+        already_issued: alreadyIssued,
+        issued_document_number_display: params.issuedDocumentNumberDisplay,
+        recipient_email: recipientEmail,
     });
     const documentTypeLabel = params.income_workspace_aggregate.document_details_step?.document_preview?.document_type_label ??
         params.income_workspace_aggregate.document_details_step?.header?.title ??
@@ -161,6 +202,8 @@ async function assembleCycleDraftReviewAggregate(params) {
             : documentTypeLabel,
         issued_document_id: params.issuedDocumentId,
         issued_document_number_display: params.issuedDocumentNumberDisplay,
+        delivery_outcome: params.deliveryOutcome,
+        status_message: buildCycleDraftStatusMessage(params.deliveryOutcome),
         initial_view: 'document_preview',
         edit_action: {
             visible: true,
@@ -184,6 +227,7 @@ async function assembleCycleDraftReviewAggregate(params) {
             ...(canEditDraft ? ['edit_recurring_cycle_draft'] : []),
             ...(canSaveDraft && canEditDraft ? ['save_income_document_draft'] : []),
             ...(issueAction.enabled ? ['issue_income_document'] : []),
+            ...(issueAndSendAction.enabled ? ['issue_and_send_income_document'] : []),
         ],
     };
 }
@@ -229,7 +273,9 @@ export async function refreshRecurringCycleDraftReviewCase(params) {
         draftStatus: draftRow.status,
         issuedDocumentId: resolvedIssuedDocumentId,
         issuedDocumentNumberDisplay,
+        deliveryOutcome: params.deliveryOutcome ?? null,
         income_workspace_aggregate,
+        draftDeliveryContactJson: draftRow.delivery_contact_json,
     });
 }
 export async function openRecurringCycleDraftForReview(params) {
@@ -263,7 +309,9 @@ export async function openRecurringCycleDraftForReview(params) {
         draftStatus: draftRow.status,
         issuedDocumentId: null,
         issuedDocumentNumberDisplay: null,
+        deliveryOutcome: null,
         income_workspace_aggregate,
+        draftDeliveryContactJson: draftRow.delivery_contact_json,
     });
     await writeAudit({
         organizationId: orgId,

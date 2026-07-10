@@ -41,6 +41,7 @@ import {
 } from './income-document-types.resolver.js';
 import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
+import { executeIssueAndSendIncomeDocument } from './income-document-issue-and-send.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import {
   buildIncomeWorkspaceAggregate,
@@ -95,6 +96,7 @@ import {
   INCOME_COMMAND_CANCEL_DRAFT,
   INCOME_COMMAND_DELETE_LINE,
   INCOME_COMMAND_ISSUE_DOCUMENT,
+  INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT,
   INCOME_COMMAND_REORDER_LINES,
   INCOME_COMMAND_SAVE_DRAFT,
   INCOME_COMMAND_RESUME_DRAFT,
@@ -141,6 +143,7 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_UPDATE_DRAFT,
   INCOME_COMMAND_CANCEL_DRAFT,
   INCOME_COMMAND_ISSUE_DOCUMENT,
+  INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT,
   INCOME_COMMAND_SEARCH_RECIPIENTS,
   INCOME_COMMAND_SELECT_RECIPIENT,
   INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT,
@@ -768,6 +771,64 @@ export async function executeIncomeCommand(
       meta: {
         idempotent_replay: issueResult.idempotentReplay,
         income_document_id: issueResult.issuedDocumentId,
+      },
+    };
+  }
+
+  if (command === INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT) {
+    const orchestrationResult = await executeIssueAndSendIncomeDocument(ctx, body);
+    const reviewContext = parseRecurringCycleReviewCommandContext(body);
+    const deliveryOutcome = {
+      status:
+        orchestrationResult.deliveryResult === 'sent'
+          ? ('sent' as const)
+          : orchestrationResult.deliveryResult === 'failed'
+            ? ('failed' as const)
+            : ('not_attempted' as const),
+      failure_reason: orchestrationResult.failureReason,
+      delivery_attempt_id: orchestrationResult.deliveryAttemptId,
+    };
+    if (reviewContext) {
+      const reviewAggregate = await refreshRecurringCycleDraftReviewCase({
+        ctx,
+        representedClientId: reviewContext.represented_client_id,
+        profileId: reviewContext.profile_id,
+        cycleId: reviewContext.cycle_id,
+        generatedDraftId: reviewContext.generated_draft_id,
+        periodKey: reviewContext.period_key,
+        linkedWorkItemId: reviewContext.linked_work_item_id,
+        issuedDocumentId: orchestrationResult.issuedDocumentId,
+        deliveryOutcome,
+      });
+      return {
+        ok: true,
+        command,
+        income_workspace_aggregate: reviewAggregate.income_workspace_aggregate,
+        work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
+        meta: {
+          idempotent_replay: orchestrationResult.idempotentReplay,
+          income_document_id: orchestrationResult.issuedDocumentId,
+          delivery_attempt_id: orchestrationResult.deliveryAttemptId ?? undefined,
+          delivery_result:
+            orchestrationResult.deliveryResult === 'not_attempted'
+              ? undefined
+              : orchestrationResult.deliveryResult,
+          failure_reason: orchestrationResult.failureReason ?? undefined,
+        },
+      };
+    }
+    const response = await commandResponse(ctx, command);
+    return {
+      ...response,
+      meta: {
+        idempotent_replay: orchestrationResult.idempotentReplay,
+        income_document_id: orchestrationResult.issuedDocumentId,
+        delivery_attempt_id: orchestrationResult.deliveryAttemptId ?? undefined,
+        delivery_result:
+          orchestrationResult.deliveryResult === 'not_attempted'
+            ? undefined
+            : orchestrationResult.deliveryResult,
+        failure_reason: orchestrationResult.failureReason ?? undefined,
       },
     };
   }

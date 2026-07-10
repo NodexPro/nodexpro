@@ -14,6 +14,7 @@ export const INCOME_COMMAND_CREATE_DRAFT = 'create_income_document_draft' as con
 export const INCOME_COMMAND_UPDATE_DRAFT = 'update_income_document_draft' as const;
 export const INCOME_COMMAND_CANCEL_DRAFT = 'cancel_income_document_draft' as const;
 export const INCOME_COMMAND_ISSUE_DOCUMENT = 'issue_income_document' as const;
+export const INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT = 'issue_and_send_income_document' as const;
 export const INCOME_COMMAND_SEARCH_RECIPIENTS = 'search_income_recipients' as const;
 export const INCOME_COMMAND_SELECT_RECIPIENT = 'select_income_recipient' as const;
 export const INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT = 'set_income_recipient_snapshot' as const;
@@ -619,6 +620,7 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_UPDATE_DRAFT
   | typeof INCOME_COMMAND_CANCEL_DRAFT
   | typeof INCOME_COMMAND_ISSUE_DOCUMENT
+  | typeof INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT
   | typeof INCOME_COMMAND_SEARCH_RECIPIENTS
   | typeof INCOME_COMMAND_SELECT_RECIPIENT
   | typeof INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT

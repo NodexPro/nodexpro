@@ -363,7 +363,13 @@ export type WorkEngineRecurringCycleDraftReviewIssueAndSendAction = {
   confirmation_required: boolean;
   confirmation_title: string | null;
   confirmation_message: string | null;
-  command_name: 'send_income_document_by_email';
+  command_name: 'issue_and_send_income_document';
+};
+
+export type WorkEngineRecurringCycleDraftReviewDeliveryOutcome = {
+  status: 'not_attempted' | 'sent' | 'failed';
+  failure_reason: string | null;
+  delivery_attempt_id: string | null;
 };
 
 export type WorkEngineRecurringCycleDraftReviewAggregate = {
@@ -378,6 +384,8 @@ export type WorkEngineRecurringCycleDraftReviewAggregate = {
   title: string;
   issued_document_id: string | null;
   issued_document_number_display: string | null;
+  delivery_outcome: WorkEngineRecurringCycleDraftReviewDeliveryOutcome | null;
+  status_message: string | null;
   /** Preview-first UX: open branded document preview before the technical editor. */
   initial_view: 'document_preview';
   edit_action: WorkEngineRecurringCycleDraftReviewEditAction;

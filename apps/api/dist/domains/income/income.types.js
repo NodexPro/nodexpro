@@ -10,6 +10,7 @@ export const INCOME_COMMAND_CREATE_DRAFT = 'create_income_document_draft';
 export const INCOME_COMMAND_UPDATE_DRAFT = 'update_income_document_draft';
 export const INCOME_COMMAND_CANCEL_DRAFT = 'cancel_income_document_draft';
 export const INCOME_COMMAND_ISSUE_DOCUMENT = 'issue_income_document';
+export const INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT = 'issue_and_send_income_document';
 export const INCOME_COMMAND_SEARCH_RECIPIENTS = 'search_income_recipients';
 export const INCOME_COMMAND_SELECT_RECIPIENT = 'select_income_recipient';
 export const INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT = 'set_income_recipient_snapshot';

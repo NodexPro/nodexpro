@@ -30,6 +30,7 @@ export const WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS = {
     upload_document_logo: 'upload_income_document_logo',
     upload_document_signature: 'upload_income_document_signature',
     issue_document: 'issue_income_document',
+    issue_and_send_document: 'issue_and_send_income_document',
 };
 async function loadOfficeClientIssuerOptions(orgId) {
     const coreClients = await loadClientOperationsCoreClientsForOrg(orgId);

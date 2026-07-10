@@ -12,6 +12,7 @@ import { parseDraftPayloadBody, validateDraftAgainstDocumentTypeRules, } from '.
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
+import { executeIssueAndSendIncomeDocument } from './income-document-issue-and-send.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceAggregate, buildIncomeWorkspaceWizardPatchAggregate, } from './income-workspace-aggregate.service.js';
 import { insertSavedIncomeRecipient, loadIncomeRecipientById, searchIncomeRecipients, selectedFromInputFields, selectedFromSavedRow, } from './income-recipient.service.js';
@@ -23,7 +24,7 @@ import { executeSendIncomeDocumentByDocflow } from './income-document-docflow-de
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
 import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review.service.js';
 import { executeUpdateIncomeDocumentBrandingProfile, executeUpdateIncomeDocumentBrandingProfilePreviewDraft, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
-import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, } from './income.types.js';
+import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, } from './income.types.js';
 const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_SELECT_ISSUER,
     INCOME_COMMAND_CREATE_CUSTOMER,
@@ -35,6 +36,7 @@ const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_UPDATE_DRAFT,
     INCOME_COMMAND_CANCEL_DRAFT,
     INCOME_COMMAND_ISSUE_DOCUMENT,
+    INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT,
     INCOME_COMMAND_SEARCH_RECIPIENTS,
     INCOME_COMMAND_SELECT_RECIPIENT,
     INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT,
@@ -534,6 +536,60 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
             meta: {
                 idempotent_replay: issueResult.idempotentReplay,
                 income_document_id: issueResult.issuedDocumentId,
+            },
+        };
+    }
+    if (command === INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT) {
+        const orchestrationResult = await executeIssueAndSendIncomeDocument(ctx, body);
+        const reviewContext = parseRecurringCycleReviewCommandContext(body);
+        const deliveryOutcome = {
+            status: orchestrationResult.deliveryResult === 'sent'
+                ? 'sent'
+                : orchestrationResult.deliveryResult === 'failed'
+                    ? 'failed'
+                    : 'not_attempted',
+            failure_reason: orchestrationResult.failureReason,
+            delivery_attempt_id: orchestrationResult.deliveryAttemptId,
+        };
+        if (reviewContext) {
+            const reviewAggregate = await refreshRecurringCycleDraftReviewCase({
+                ctx,
+                representedClientId: reviewContext.represented_client_id,
+                profileId: reviewContext.profile_id,
+                cycleId: reviewContext.cycle_id,
+                generatedDraftId: reviewContext.generated_draft_id,
+                periodKey: reviewContext.period_key,
+                linkedWorkItemId: reviewContext.linked_work_item_id,
+                issuedDocumentId: orchestrationResult.issuedDocumentId,
+                deliveryOutcome,
+            });
+            return {
+                ok: true,
+                command,
+                income_workspace_aggregate: reviewAggregate.income_workspace_aggregate,
+                work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
+                meta: {
+                    idempotent_replay: orchestrationResult.idempotentReplay,
+                    income_document_id: orchestrationResult.issuedDocumentId,
+                    delivery_attempt_id: orchestrationResult.deliveryAttemptId ?? undefined,
+                    delivery_result: orchestrationResult.deliveryResult === 'not_attempted'
+                        ? undefined
+                        : orchestrationResult.deliveryResult,
+                    failure_reason: orchestrationResult.failureReason ?? undefined,
+                },
+            };
+        }
+        const response = await commandResponse(ctx, command);
+        return {
+            ...response,
+            meta: {
+                idempotent_replay: orchestrationResult.idempotentReplay,
+                income_document_id: orchestrationResult.issuedDocumentId,
+                delivery_attempt_id: orchestrationResult.deliveryAttemptId ?? undefined,
+                delivery_result: orchestrationResult.deliveryResult === 'not_attempted'
+                    ? undefined
+                    : orchestrationResult.deliveryResult,
+                failure_reason: orchestrationResult.failureReason ?? undefined,
             },
         };
     }

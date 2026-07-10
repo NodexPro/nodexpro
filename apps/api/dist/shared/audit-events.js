@@ -255,6 +255,8 @@ export const AUDIT_ACTIONS = {
     INCOME_ISSUER_PROFILE_SYNCED: 'income.issuer_profile_synced',
     /** Income INC-4 — issued document + numbering allocation. */
     INCOME_DOCUMENT_ISSUED: 'income.document_issued',
+    /** Income INV-2.2C — issue + email delivery orchestration (retainer preview). */
+    INCOME_DOCUMENT_ISSUE_AND_SEND: 'income.document_issue_and_send',
     INCOME_DOCUMENT_NUMBER_ALLOCATED: 'income.document_number_allocated',
     /** Income INC-5 — Accounting Base posting lifecycle for issued documents. */
     INCOME_ACCOUNTING_POSTING_STARTED: 'income.accounting_posting_started',

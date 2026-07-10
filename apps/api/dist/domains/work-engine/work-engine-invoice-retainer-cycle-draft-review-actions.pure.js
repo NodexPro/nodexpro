@@ -105,11 +105,13 @@ export function buildCycleDraftReviewIssueAction(params) {
         command_name: 'issue_income_document',
     };
 }
+export function buildTaxInvoiceIssueAndSendConfirmationMessage(documentMonthLabel, recipientEmail) {
+    return `חשבונית מס זו תופק ותירשם כהכנסה לחודש ${documentMonthLabel} ותישלח ל-${recipientEmail}. להמשיך?`;
+}
 export function buildCycleDraftReviewIssueAndSendAction(params) {
-    const typeAllowed = isRetainerPreviewIssueDocumentType(params.document_type);
-    const typeLabel = typeAllowed && isRetainerPreviewIssueDocumentType(params.document_type)
-        ? DOCUMENT_TYPE_LABELS[params.document_type]
-        : 'מסמך';
+    const docType = params.document_type;
+    const typeAllowed = isRetainerPreviewIssueDocumentType(docType);
+    const typeLabel = typeAllowed ? DOCUMENT_TYPE_LABELS[docType] : 'מסמך';
     if (!typeAllowed || !params.issue_action_visible) {
         return {
             visible: false,
@@ -120,18 +122,54 @@ export function buildCycleDraftReviewIssueAndSendAction(params) {
             confirmation_required: false,
             confirmation_title: null,
             confirmation_message: null,
-            command_name: 'send_income_document_by_email',
+            command_name: 'issue_and_send_income_document',
         };
     }
+    if (params.already_issued) {
+        const numberSuffix = params.issued_document_number_display
+            ? ` (${params.issued_document_number_display})`
+            : '';
+        return {
+            visible: true,
+            enabled: false,
+            disabled_reason: `המסמך כבר הופק${numberSuffix}`,
+            icon: 'send',
+            tooltip: `המסמך כבר הופק${numberSuffix}`,
+            confirmation_required: false,
+            confirmation_title: null,
+            confirmation_message: null,
+            command_name: 'issue_and_send_income_document',
+        };
+    }
+    if (!params.can_issue_and_send) {
+        const reason = params.issue_and_send_blocked_reason ?? ISSUE_AND_SEND_DISABLED_REASON_HE;
+        return {
+            visible: true,
+            enabled: false,
+            disabled_reason: reason,
+            icon: 'send',
+            tooltip: reason,
+            confirmation_required: false,
+            confirmation_title: null,
+            confirmation_message: null,
+            command_name: 'issue_and_send_income_document',
+        };
+    }
+    const recipientEmail = params.recipient_email?.trim() || '—';
+    const confirmationRequired = docType === 'tax_invoice';
+    const documentMonthLabel = params.document_date != null ? formatHebrewDocumentMonthLabel(params.document_date) : '—';
+    const confirmationMessage = confirmationRequired
+        ? buildTaxInvoiceIssueAndSendConfirmationMessage(documentMonthLabel, recipientEmail)
+        : `להפיק ולשלוח ${typeLabel} ל-${recipientEmail}?`;
     return {
         visible: true,
-        enabled: false,
-        disabled_reason: ISSUE_AND_SEND_DISABLED_REASON_HE,
+        enabled: true,
+        disabled_reason: null,
         icon: 'send',
-        tooltip: ISSUE_AND_SEND_DISABLED_REASON_HE,
-        confirmation_required: false,
-        confirmation_title: null,
-        confirmation_message: null,
-        command_name: 'send_income_document_by_email',
+        tooltip: `הפקה ושליחה של ${typeLabel}`,
+        confirmation_required: true,
+        confirmation_title: confirmationRequired ? 'אישור הפקה ושליחה' : 'אישור הפקה ושליחה',
+        confirmation_message: confirmationMessage,
+        command_name: 'issue_and_send_income_document',
     };
 }

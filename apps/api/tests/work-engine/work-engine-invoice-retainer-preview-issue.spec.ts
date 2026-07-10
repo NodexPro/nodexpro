@@ -7,7 +7,6 @@ import {
   buildCycleDraftReviewIssueAction,
   buildCycleDraftReviewIssueAndSendAction,
   buildTaxInvoiceIssueConfirmationMessage,
-  ISSUE_AND_SEND_DISABLED_REASON_HE,
   RETAINER_PREVIEW_ISSUE_DOCUMENT_TYPES,
 } from '../../src/domains/work-engine/work-engine-invoice-retainer-cycle-draft-review-actions.pure.js';
 import { resolveCycleDraftPreviewIssueIcon } from '../../../web/src/components/work-engine/work-engine-invoice-retainer-preview-header-actions.pure.ts';
@@ -51,15 +50,20 @@ test('tax invoice confirmation text comes from backend builder', () => {
   assert.match(action.confirmation_message ?? '', /להמשיך\?/);
 });
 
-test('issue_and_send is disabled until delivery chaining exists', () => {
+test('issue_and_send disabled when prerequisites are missing', () => {
   const action = buildCycleDraftReviewIssueAndSendAction({
     document_type: 'tax_invoice',
     issue_action_visible: true,
+    can_issue_and_send: false,
+    issue_and_send_blocked_reason: 'נדרש אימייל למשלוח במסמך',
+    document_date: '2026-07-08',
+    already_issued: false,
+    issued_document_number_display: null,
+    recipient_email: null,
   });
   assert.equal(action.visible, true);
   assert.equal(action.enabled, false);
-  assert.equal(action.disabled_reason, ISSUE_AND_SEND_DISABLED_REASON_HE);
-  assert.equal(action.command_name, 'send_income_document_by_email');
+  assert.equal(action.command_name, 'issue_and_send_income_document');
 });
 
 test('frontend issue icon renders from backend descriptor only', () => {
