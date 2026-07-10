@@ -337,6 +337,7 @@ export const WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY =
 
 export type WorkEngineRecurringCycleDraftReviewEditAction = {
   visible: boolean;
+  enabled: boolean;
   label: string;
   disabled_reason: string | null;
 };

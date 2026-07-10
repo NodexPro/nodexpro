@@ -123,6 +123,7 @@ export async function openRecurringCycleDraftForReview(params) {
         initial_view: 'document_preview',
         edit_action: {
             visible: true,
+            enabled: true,
             label: 'עריכה',
             disabled_reason: null,
         },
