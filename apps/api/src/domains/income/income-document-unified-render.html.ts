@@ -30,7 +30,7 @@ export function wrapUnifiedIncomeDocumentHtmlForPrint(documentBodyHtml: string):
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="${HEBREW_FONT_LINK}" rel="stylesheet" />
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 portrait; margin: 8mm 10mm 10mm; }
     html, body {
       margin: 0;
       padding: 0;

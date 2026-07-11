@@ -74,18 +74,23 @@ function partyInfoRow(
   return `<div class="nx-doc__${classPrefix}-line"><span class="nx-doc__${classPrefix}-line-icon">${icon}</span><span class="nx-doc__${classPrefix}-line-value">${escapeHtml(value)}</span></div>`;
 }
 
-function issuerInfoRow(icon: string, value: string | null, visible: boolean): string {
+function issuerPlainRow(value: string | null, visible: boolean): string {
   if (!visible || !value?.trim()) return '';
-  return partyInfoRow('issuer', icon, value);
+  return `<div class="nx-doc__issuer-line nx-doc__issuer-line--plain"><span>${escapeHtml(value)}</span></div>`;
 }
 
 function customerInfoRow(icon: string, value: string | null): string {
   return partyInfoRow('customer', icon, value);
 }
 
-function customerPlainLine(value: string | null): string {
+function customerPlainRow(value: string | null): string {
   if (!value?.trim()) return '';
   return `<div class="nx-doc__customer-line nx-doc__customer-line--plain"><span>${escapeHtml(value)}</span></div>`;
+}
+
+function formatLineCurrency(currency: string): string {
+  const c = currency?.trim() || 'ILS';
+  return c;
 }
 
 function buildPaymentCards(params: {
@@ -116,10 +121,10 @@ function buildPaymentCards(params: {
   const cards: string[] = [];
 
   if (bankEnabled || bankLines.length) {
-    cards.push(`<article class="nx-doc__payment-card nx-doc__payment-card--bank">
-      <header class="nx-doc__payment-card-head">${docPreviewIcon('bank')}<strong>העברה בנקאית</strong></header>
-      <div class="nx-doc__payment-card-body">${bankLines.length ? bankLines.join('<br/>') : '—'}</div>
-    </article>`);
+    cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--bank">
+      <header class="nx-doc__payment-col-head"><strong>העברה בנקאית</strong></header>
+      <div class="nx-doc__payment-col-body">${bankLines.length ? bankLines.join('<br/>') : '—'}</div>
+    </div>`);
   }
 
   if (cardEnabled && params.payment_link_url?.trim()) {
@@ -128,25 +133,25 @@ function buildPaymentCards(params: {
     const qrBlock = params.payment_qr_data_url?.trim()
       ? `<img class="nx-doc__payment-qr" src="${escapeHtml(params.payment_qr_data_url.trim())}" alt="" />`
       : '';
-    cards.push(`<article class="nx-doc__payment-card nx-doc__payment-card--card">
-      <header class="nx-doc__payment-card-head">${docPreviewIcon('card')}<strong>${escapeHtml(cardMethod?.label ?? 'כרטיס אשראי')}</strong></header>
-      <div class="nx-doc__payment-card-body nx-doc__payment-card-body--card">
+    cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--card">
+      <header class="nx-doc__payment-col-head"><strong>${escapeHtml(cardMethod?.label ?? 'כרטיס אשראי')}</strong></header>
+      <div class="nx-doc__payment-col-body nx-doc__payment-col-body--card">
         ${qrBlock}
-        <div class="nx-doc__payment-card-text"><div><a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a></div></div>
+        <div class="nx-doc__payment-col-text"><div><a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a></div></div>
       </div>
-    </article>`);
+    </div>`);
   }
 
   if (otherMethods.length) {
-    cards.push(`<article class="nx-doc__payment-card nx-doc__payment-card--other">
-      <header class="nx-doc__payment-card-head">${docPreviewIcon('payment')}<strong>אמצעי תשלום נוספים</strong></header>
-      <div class="nx-doc__payment-card-body">${otherMethods.map((m) => `<div>${escapeHtml(m.label)}</div>`).join('')}</div>
-    </article>`);
+    cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--other">
+      <header class="nx-doc__payment-col-head"><strong>אמצעי תשלום נוספים</strong></header>
+      <div class="nx-doc__payment-col-body">${otherMethods.map((m) => `<div>${escapeHtml(m.label)}</div>`).join('')}</div>
+    </div>`);
   }
 
   if (!cards.length) return '';
   return `<section class="nx-doc__payments" aria-label="אמצעי תשלום">
-    <header class="nx-doc__payments-head">${docPreviewIcon('payment')}<span>אמצעי תשלום</span></header>
+    <header class="nx-doc__payments-head"><span>אמצעי תשלום</span></header>
     <div class="nx-doc__payments-grid">${cards.join('')}</div>
   </section>`;
 }
@@ -189,11 +194,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
       : '';
 
   const issuerContactLines = [
-    issuerInfoRow(docPreviewIcon('location'), params.issuer.address, d.show_business_address),
-    issuerInfoRow(docPreviewIcon('id'), params.issuer.tax_id, d.show_business_tax_id),
-    issuerInfoRow(docPreviewIcon('phone'), params.issuer.phone, d.show_business_phone),
-    issuerInfoRow(docPreviewIcon('mail'), params.issuer.email, d.show_business_email),
-    issuerInfoRow(docPreviewIcon('website'), params.issuer.website ?? null, Boolean(params.issuer.website?.trim())),
+    issuerPlainRow(params.issuer.address, d.show_business_address),
+    issuerPlainRow(params.issuer.tax_id, d.show_business_tax_id),
+    issuerPlainRow(params.issuer.phone, d.show_business_phone),
+    issuerPlainRow(params.issuer.email, d.show_business_email),
+    issuerPlainRow(params.issuer.website ?? null, Boolean(params.issuer.website?.trim())),
   ]
     .filter(Boolean)
     .join('');
@@ -208,61 +213,61 @@ export function renderIncomeBrandedPreviewHtml(params: {
   </div>`;
 
   const customerBlock = `
-    <header class="nx-doc__customer-head">${docPreviewIcon('user')}<span>לכבוד</span></header>
+    <header class="nx-doc__customer-head"><span>לכבוד</span></header>
     <div class="nx-doc__customer-name">${escapeHtml(params.recipient.display_name)}</div>
-    ${customerPlainLine(params.recipient.contact_name ?? null)}
-    ${customerInfoRow(docPreviewIcon('location'), params.recipient.address)}
-    ${customerInfoRow(docPreviewIcon('id'), params.recipient.tax_id)}
+    ${customerPlainRow(params.recipient.address)}
+    ${customerPlainRow(params.recipient.tax_id)}
     ${customerInfoRow(docPreviewIcon('phone'), params.recipient.phone)}
     ${customerInfoRow(docPreviewIcon('mail'), params.recipient.email)}
-    ${customerInfoRow(docPreviewIcon('website'), params.recipient.website ?? null)}
   `;
 
   const metaRows = [
-    `<div class="nx-doc__meta-row">${docPreviewIcon('calendar')}<span class="nx-doc__meta-label">תאריך המסמך</span><span class="nx-doc__meta-value">${escapeHtml(formatPreviewDate(params.document_date))}</span></div>`,
+    `<div class="nx-doc__meta-row"><span class="nx-doc__meta-label">תאריך המסמך</span><span class="nx-doc__meta-value">${escapeHtml(formatPreviewDate(params.document_date))}</span></div>`,
     d.show_due_date
-      ? `<div class="nx-doc__meta-row">${docPreviewIcon('calendar')}<span class="nx-doc__meta-label">תאריך לתשלום</span><span class="nx-doc__meta-value">${escapeHtml(formatPreviewDate(params.due_date))}</span></div>`
+      ? `<div class="nx-doc__meta-row"><span class="nx-doc__meta-label">תאריך לתשלום</span><span class="nx-doc__meta-value">${escapeHtml(formatPreviewDate(params.due_date))}</span></div>`
       : '',
     d.show_payment_terms && params.payment_terms_display?.trim()
-      ? `<div class="nx-doc__meta-row">${docPreviewIcon('clock')}<span class="nx-doc__meta-label">תנאי תשלום</span><span class="nx-doc__meta-value">${escapeHtml(params.payment_terms_display)}</span></div>`
+      ? `<div class="nx-doc__meta-row"><span class="nx-doc__meta-label">תנאי תשלום</span><span class="nx-doc__meta-value">${escapeHtml(params.payment_terms_display)}</span></div>`
       : '',
   ]
     .filter(Boolean)
     .join('');
 
+  const colCount = d.show_vat_row ? 7 : 6;
   const linesHtml =
     params.lineRows.length > 0
       ? params.lineRows
           .map((r) => {
-            const unit = r.unit?.trim() || '—';
-            const lineDiscount = formatDiscountDisplay(r.discount) ?? (r.discount?.trim() || '—');
+            const vatCell = d.show_vat_row
+              ? `<td class="nx-doc__cell-vat">${escapeHtml(r.vat_rate_label)}</td>`
+              : '';
             return `<tr>
+            <td class="nx-doc__cell-num">${escapeHtml(String(r.row_number))}</td>
             <td class="nx-doc__cell-desc">${escapeHtml(r.description || '—')}</td>
             <td class="nx-doc__cell-qty">${escapeHtml(r.quantity)}</td>
-            <td>${escapeHtml(unit)}</td>
             <td class="nx-doc__cell-money">${escapeHtml(r.unit_price)}</td>
-            <td class="nx-doc__cell-money nx-doc__cell-discount">${escapeHtml(lineDiscount)}</td>
-            ${d.show_vat_row ? `<td class="nx-doc__cell-money">${escapeHtml(r.vat_rate_label)}</td>` : ''}
+            <td class="nx-doc__cell-currency">${escapeHtml(formatLineCurrency(r.currency))}</td>
+            ${vatCell}
             <td class="nx-doc__cell-money nx-doc__cell-total">${escapeHtml(r.total)}</td>
           </tr>`;
           })
           .join('')
-      : `<tr><td colspan="7" class="nx-doc__empty-lines">אין שורות במסמך</td></tr>`;
+      : `<tr><td colspan="${colCount}" class="nx-doc__empty-lines">אין שורות במסמך</td></tr>`;
 
   const tableHead = `<tr>
-      <th>תיאור</th>
+      <th class="nx-doc__th-num">#</th>
+      <th>פירוט</th>
       <th>כמות</th>
-      <th>יחידת מידה</th>
-      <th>מחיר יחידה</th>
-      <th>הנחה</th>
-      ${d.show_vat_row ? '<th>סכום מע״מ</th>' : ''}
-      <th>סכום</th>
+      <th>מחיר ליח'</th>
+      <th>מטבע</th>
+      ${d.show_vat_row ? '<th>מע״מ</th>' : ''}
+      <th>סה״כ</th>
     </tr>`;
 
   const notesHtml =
     d.show_notes && params.notes?.trim()
       ? `<section class="nx-doc__comments" aria-label="הערות">
-      <header class="nx-doc__comments-head">${docPreviewIcon('comment')}<span>הערות</span></header>
+      <header class="nx-doc__comments-head"><span>הערות</span></header>
       <div class="nx-doc__comments-body">${escapeHtml(params.notes)}</div>
     </section>`
       : '';
@@ -274,7 +279,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 
   const totalsHtml = `
     <section class="nx-doc__summary" aria-label="סיכום כספי">
-      <header class="nx-doc__summary-head">${docPreviewIcon('calculator')}<span>סיכום כספי</span></header>
+      <header class="nx-doc__summary-head"><span>סיכום כספי</span></header>
       <div class="nx-doc__summary-body">
         <div class="nx-doc__total-row"><span>סכום ביניים</span><span>${escapeHtml(params.totals.subtotal_before_discount)}</span></div>
         ${
@@ -326,63 +331,54 @@ export function renderIncomeBrandedPreviewHtml(params: {
   --nx-doc-grand-total-bg: color-mix(in srgb, var(--nx-doc-primary) 6%, #ffffff);
   max-width: 840px;
   margin: 0 auto;
-  padding: 20px 24px 12px;
+  padding: 8px 20px 8px;
   box-sizing: border-box;
   font-family: ${INVOICE_FONT};
   color: var(--nx-doc-text);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.35;
   background: #fff;
 }
 .nx-doc * { box-sizing: border-box; }
 .nx-doc--unified .nx-doc__header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px 40px;
+  gap: 6px 24px;
   align-items: start;
-  margin-bottom: 24px;
-  padding-bottom: 0;
-  border-bottom: none;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--nx-doc-border);
 }
 .nx-doc--unified .nx-doc__header-doc { grid-column: 1; min-width: 0; }
 .nx-doc--unified .nx-doc__header-issuer { grid-column: 2; min-width: 0; }
 .nx-doc--unified .nx-doc__doc-title {
-  margin: 0 0 12px;
-  font-size: 32px;
+  margin: 0 0 4px;
+  font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--nx-doc-text);
-  line-height: 1.15;
+  line-height: 1.08;
 }
-.nx-doc--unified .nx-doc__doc-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 18px;
-  border-radius: 12px;
-  background: ${palette.gradient_css};
-  color: #fff;
-  font-size: 18px;
+.nx-doc--unified .nx-doc__doc-number {
+  margin: 0 0 6px;
+  font-size: 16px;
   font-weight: 700;
-  margin-bottom: 16px;
-  box-shadow: none;
+  color: var(--nx-doc-primary);
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
-.nx-doc--unified .nx-doc__meta-list {
-  width: 100%;
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-}
+.nx-doc--unified .nx-doc__meta-list { width: 100%; margin-top: 0; padding-top: 0; border-top: none; }
 .nx-doc--unified .nx-doc__meta-row {
   display: grid;
-  grid-template-columns: 16px auto 1fr;
+  grid-template-columns: auto 1fr;
   gap: 8px 12px;
-  align-items: center;
-  padding: 4px 0;
+  align-items: baseline;
+  padding: 0;
   color: var(--nx-doc-text-muted);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.25;
 }
-.nx-doc--unified .nx-doc__meta-row > .nx-doc__icon { color: var(--nx-doc-icon); }
 .nx-doc--unified .nx-doc__meta-label { color: var(--nx-doc-text-muted); white-space: nowrap; }
 .nx-doc--unified .nx-doc__meta-value { color: var(--nx-doc-text); font-weight: 600; justify-self: start; }
 .nx-doc--unified .nx-doc__issuer-identity {
@@ -394,129 +390,127 @@ export function renderIncomeBrandedPreviewHtml(params: {
   width: 100%;
 }
 .nx-doc--unified .nx-doc__issuer-details { width: 100%; }
-.nx-doc--unified .nx-doc__issuer-lines { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.nx-doc--unified .nx-doc__issuer-lines { display: flex; flex-direction: column; gap: 0; margin-top: 0; }
 .nx-doc--unified .nx-doc__logo-img {
-  max-width: ${Math.min(logoDims.maxWidthPx, 220)}px;
-  max-height: ${Math.min(logoDims.maxHeightPx, 72)}px;
+  max-width: ${Math.min(logoDims.maxWidthPx, 160)}px;
+  max-height: ${Math.min(logoDims.maxHeightPx, 40)}px;
   width: auto;
   height: auto;
   object-fit: contain;
   display: block;
-  margin: 0 0 8px 0;
+  margin: 0 0 4px 0;
   align-self: flex-end;
 }
 .nx-doc--unified .nx-doc__logo-placeholder {
-  width: ${Math.round(Math.min(logoDims.maxWidthPx, 220) * 0.65)}px;
-  height: ${Math.round(Math.min(logoDims.maxHeightPx, 72) * 0.72)}px;
+  width: ${Math.round(Math.min(logoDims.maxWidthPx, 160) * 0.65)}px;
+  height: ${Math.round(Math.min(logoDims.maxHeightPx, 40) * 0.72)}px;
   background: transparent;
   border: 1px dashed var(--nx-doc-border);
-  border-radius: 6px;
-  margin: 0 0 8px 0;
+  border-radius: 4px;
+  margin: 0 0 4px 0;
   align-self: flex-end;
 }
 .nx-doc--unified .nx-doc__issuer-name {
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 700;
-  margin-bottom: 4px;
-  line-height: 1.25;
+  margin-bottom: 0;
+  line-height: 1.15;
   color: var(--nx-doc-text);
 }
-.nx-doc--unified .nx-doc__issuer-subtitle { font-size: 13px; color: var(--nx-doc-text-muted); margin-bottom: 6px; }
+.nx-doc--unified .nx-doc__issuer-subtitle { font-size: 12px; color: var(--nx-doc-text-muted); margin-bottom: 2px; line-height: 1.25; }
 .nx-doc--unified .nx-doc__issuer-line,
 .nx-doc--unified .nx-doc__customer-line {
   display: grid;
-  grid-template-columns: 16px 1fr;
-  gap: 8px;
+  grid-template-columns: 14px 1fr;
+  gap: 6px;
   align-items: start;
-  padding: 3px 0;
-  font-size: 13px;
+  padding: 0;
+  font-size: 12px;
   color: var(--nx-doc-text);
-  line-height: 1.45;
+  line-height: 1.25;
 }
-.nx-doc--unified .nx-doc__issuer-line-icon,
-.nx-doc--unified .nx-doc__customer-line-icon { display: inline-flex; margin-top: 1px; color: var(--nx-doc-icon); }
-.nx-doc--unified .nx-doc__issuer-line-value,
+.nx-doc--unified .nx-doc__issuer-line--plain { grid-template-columns: 1fr; text-align: end; color: var(--nx-doc-text); font-size: 12px; line-height: 1.25; }
+.nx-doc--unified .nx-doc__customer-line-icon { display: inline-flex; margin-top: 0; color: var(--nx-doc-icon); width: 14px; height: 14px; }
 .nx-doc--unified .nx-doc__customer-line-value { text-align: end; }
-.nx-doc--unified .nx-doc__customer-line--plain { grid-template-columns: 1fr; color: var(--nx-doc-text-muted); }
+.nx-doc--unified .nx-doc__customer-line--plain { grid-template-columns: 1fr; color: var(--nx-doc-text); font-size: 12px; line-height: 1.25; }
 .nx-doc--unified .nx-doc__customer {
   width: 100%;
-  margin: 0 0 24px;
-  padding: 0 0 20px;
+  margin: 0;
+  padding: 0 0 4px;
   border-bottom: 1px solid var(--nx-doc-border);
   background: transparent;
   box-shadow: none;
   border-radius: 0;
 }
 .nx-doc--unified .nx-doc__customer-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   font-weight: 700;
-  font-size: 14px;
-  margin-bottom: 8px;
-  color: var(--nx-doc-primary);
+  font-size: 13px;
+  margin-bottom: 2px;
+  line-height: 1.2;
+  color: var(--nx-doc-text);
 }
-.nx-doc--unified .nx-doc__customer-head > .nx-doc__icon { color: var(--nx-doc-icon); }
 .nx-doc--unified .nx-doc__customer-name {
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 700;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
+  line-height: 1.15;
   color: var(--nx-doc-text);
 }
 .nx-doc--unified .nx-doc__table {
   width: 100%;
-  border-collapse: separate;
+  border-collapse: collapse;
   border-spacing: 0;
-  margin: 0 0 24px;
-  border: 1px solid var(--nx-doc-border);
-  border-radius: 12px 12px 0 0;
-  overflow: hidden;
+  margin: 0 0 16px;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
 }
 .nx-doc--unified .nx-doc__table thead th {
-  background: var(--nx-doc-header-gradient);
+  background: var(--nx-doc-primary);
   color: #fff;
-  padding: 12px 10px;
+  padding: 8px;
   font-size: 13px;
   font-weight: 700;
   text-align: right;
-  border-inline-end: 1px solid rgba(255,255,255,0.12);
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--nx-doc-primary) 80%, #000);
 }
-.nx-doc--unified .nx-doc__table thead th:first-child { border-start-start-radius: 12px; }
-.nx-doc--unified .nx-doc__table thead th:last-child { border-inline-end: none; border-start-end-radius: 12px; }
 .nx-doc--unified .nx-doc__table tbody td {
-  padding: 11px 10px;
+  padding: 7px 8px;
   font-size: 13px;
+  border: none;
   border-bottom: 1px solid var(--nx-doc-border);
   vertical-align: top;
   background: #fff;
 }
-.nx-doc--unified .nx-doc__cell-desc { font-weight: 600; color: var(--nx-doc-text); min-width: 140px; }
-.nx-doc--unified .nx-doc__cell-qty { text-align: center; white-space: nowrap; }
+.nx-doc--unified .nx-doc__table tbody tr:last-child td { border-bottom: 1px solid var(--nx-doc-border); }
+.nx-doc--unified .nx-doc__cell-num { text-align: center; white-space: nowrap; color: var(--nx-doc-text-muted); font-variant-numeric: tabular-nums; width: 32px; }
+.nx-doc--unified .nx-doc__th-num { width: 32px; text-align: center; }
+.nx-doc--unified .nx-doc__cell-desc { font-weight: 500; color: var(--nx-doc-text); min-width: 120px; }
+.nx-doc--unified .nx-doc__cell-qty { text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nx-doc--unified .nx-doc__cell-currency { text-align: center; white-space: nowrap; font-size: 13px; }
+.nx-doc--unified .nx-doc__cell-vat { text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .nx-doc--unified .nx-doc__cell-money { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.nx-doc--unified .nx-doc__cell-discount { color: var(--nx-doc-text) !important; }
 .nx-doc--unified .nx-doc__cell-total { font-weight: 700; color: var(--nx-doc-text); }
 .nx-doc--unified .nx-doc__bottom {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 32px;
+  gap: 24px;
   align-items: start;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 .nx-doc--unified .nx-doc__summary { grid-column: 2; }
 .nx-doc--unified .nx-doc__comments { grid-column: 1; }
 .nx-doc--unified .nx-doc__summary-head,
 .nx-doc--unified .nx-doc__comments-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   font-weight: 700;
-  font-size: 14px;
-  margin-bottom: 10px;
-  color: var(--nx-doc-primary);
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: var(--nx-doc-text);
+  text-transform: none;
+  letter-spacing: 0;
 }
-.nx-doc--unified .nx-doc__summary-head > .nx-doc__icon,
-.nx-doc--unified .nx-doc__comments-head > .nx-doc__icon { color: var(--nx-doc-icon); }
-.nx-doc--unified .nx-doc__summary-body { padding: 0; background: transparent; border: none; box-shadow: none; }
+.nx-doc--unified .nx-doc__summary-body { padding: 0; background: transparent; border: none; box-shadow: none; max-width: 100%; }
 .nx-doc--unified .nx-doc__comments {
   background: transparent;
   border: none;
@@ -525,13 +519,13 @@ export function renderIncomeBrandedPreviewHtml(params: {
   min-height: 0;
   box-shadow: none;
 }
-.nx-doc--unified .nx-doc__comments-body { white-space: pre-wrap; font-size: 13px; color: var(--nx-doc-text-muted); line-height: 1.55; }
+.nx-doc--unified .nx-doc__comments-body { white-space: pre-wrap; font-size: 14px; color: var(--nx-doc-text-muted); line-height: 1.5; }
 .nx-doc--unified .nx-doc__total-row {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 7px 0;
-  font-size: 14px;
+  padding: 4px 0;
+  font-size: 13px;
   border-bottom: 1px solid var(--nx-doc-border);
   color: var(--nx-doc-text);
 }
@@ -542,66 +536,66 @@ export function renderIncomeBrandedPreviewHtml(params: {
   justify-content: space-between;
   align-items: baseline;
   gap: 16px;
-  margin-top: 12px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  background: var(--nx-doc-header-gradient);
-  color: #fff;
-  border: none;
+  margin-top: 6px;
+  padding: 8px 0 0;
+  border-top: 2px solid var(--nx-doc-primary);
+  background: transparent;
+  color: var(--nx-doc-text);
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 700;
 }
 .nx-doc--unified .nx-doc__grand-total strong {
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 800;
   line-height: 1.1;
-  color: #fff;
-}
-.nx-doc--unified .nx-doc__payments { margin-bottom: 24px; }
-.nx-doc--unified .nx-doc__payments-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 12px;
   color: var(--nx-doc-primary);
 }
-.nx-doc--unified .nx-doc__payments-head > .nx-doc__icon { color: var(--nx-doc-icon); }
+.nx-doc--unified .nx-doc__payments { margin-bottom: 12px; }
+.nx-doc--unified .nx-doc__payments-head {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--nx-doc-text);
+}
+.nx-doc--unified .nx-doc__payments-head > .nx-doc__icon { display: none; }
 .nx-doc--unified .nx-doc__payments-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 0;
   align-items: stretch;
+  border-top: 1px solid var(--nx-doc-border);
+  border-bottom: 1px solid var(--nx-doc-border);
 }
-.nx-doc--unified .nx-doc__payment-card {
-  background: #fff;
-  border: 1px solid var(--nx-doc-border);
-  border-radius: 8px;
-  padding: 14px 16px;
-  min-height: 132px;
+.nx-doc--unified .nx-doc__payment-col {
+  background: transparent;
+  border: none;
+  border-inline-end: 1px solid var(--nx-doc-border);
+  border-radius: 0;
+  padding: 8px 12px;
+  min-height: 72px;
   height: 100%;
   box-shadow: none;
 }
-.nx-doc--unified .nx-doc__payment-card-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
+.nx-doc--unified .nx-doc__payment-col:last-child { border-inline-end: none; }
+.nx-doc--unified .nx-doc__payment-col-head {
+  font-size: 12px;
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   color: var(--nx-doc-text);
 }
-.nx-doc--unified .nx-doc__payment-card-head > .nx-doc__icon { color: var(--nx-doc-icon); }
-.nx-doc--unified .nx-doc__payment-card-body { font-size: 12px; color: var(--nx-doc-text-muted); line-height: 1.55; }
-.nx-doc--unified .nx-doc__payment-card-body--card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.nx-doc--unified .nx-doc__payment-card-text { flex: 1; min-width: 0; word-break: break-word; }
-.nx-doc--unified .nx-doc__payment-qr { display: block; width: 84px; height: 84px; flex-shrink: 0; object-fit: contain; }
+.nx-doc--unified .nx-doc__payment-col-head > .nx-doc__icon { display: none; }
+.nx-doc--unified .nx-doc__payment-col-body { font-size: 12px; color: var(--nx-doc-text-muted); line-height: 1.45; }
+.nx-doc--unified .nx-doc__payment-col-body--card { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.nx-doc--unified .nx-doc__payment-col-text { flex: 1; min-width: 0; word-break: break-word; }
+.nx-doc--unified .nx-doc__payment-qr { display: block; width: 72px; height: 72px; flex-shrink: 0; object-fit: contain; }
 .nx-doc--unified .nx-doc__platform-footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 0 8px;
+  padding: 12px 0 4px;
   border-top: 1px solid var(--nx-doc-border);
-  margin-top: 8px;
+  margin-top: 4px;
 }
 .nx-doc--unified .nx-doc__platform-link {
   display: inline-flex;
@@ -612,82 +606,81 @@ export function renderIncomeBrandedPreviewHtml(params: {
   text-decoration: none;
 }
 .nx-doc__icon { display: block; flex-shrink: 0; }
-.nx-doc__header { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; margin-bottom: 18px; }
+.nx-doc__header { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; align-items: start; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--nx-doc-border); }
 .nx-doc__header-doc { grid-column: 1; text-align: start; }
 .nx-doc__header-issuer { grid-column: 2; }
 .nx-doc__issuer-identity { display: flex; flex-direction: column; align-items: flex-end; text-align: end; gap: 0; }
-.nx-doc__doc-title { margin: 0 0 10px; font-size: 32px; font-weight: 700; color: var(--nx-doc-text); line-height: 1.15; }
-.nx-doc__doc-badge {
-  display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 12px;
-  background: var(--nx-doc-header-gradient); color: #fff; font-size: 17px; font-weight: 700; margin-bottom: 10px;
+.nx-doc__doc-title { margin: 0 0 4px; font-size: 26px; font-weight: 700; color: var(--nx-doc-text); line-height: 1.08; }
+.nx-doc__doc-number {
+  margin: 0 0 6px; font-size: 16px; font-weight: 700; color: var(--nx-doc-primary);
+  letter-spacing: 0.01em; font-variant-numeric: tabular-nums; line-height: 1.2;
 }
-.nx-doc__meta-row { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px 10px; align-items: center; padding: 4px 0; color: var(--nx-doc-text-muted); font-size: 13px; }
-.nx-doc__meta-row > .nx-doc__icon { color: var(--nx-doc-icon); }
+.nx-doc__meta-row { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: baseline; padding: 0; color: var(--nx-doc-text-muted); font-size: 12px; line-height: 1.25; }
+.nx-doc__meta-row > .nx-doc__icon { display: none; }
 .nx-doc__meta-label { color: var(--nx-doc-text-muted); }
-.nx-doc__meta-value { color: var(--nx-doc-text); font-weight: 600; justify-self: end; }
-.nx-doc__logo-img { max-width: ${logoDims.maxWidthPx}px; max-height: ${logoDims.maxHeightPx}px; width: auto; height: auto; object-fit: contain; display: block; margin: 0 0 8px 0; align-self: flex-end; }
-.nx-doc__logo-placeholder { width: ${Math.round(logoDims.maxWidthPx * 0.72)}px; height: ${Math.round(logoDims.maxHeightPx * 0.58)}px; background: transparent; border: 1px dashed var(--nx-doc-border); border-radius: 6px; margin: 0 0 8px 0; align-self: flex-end; }
-.nx-doc__issuer-name { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
-.nx-doc__issuer-subtitle { font-size: 13px; color: var(--nx-doc-text-muted); margin-bottom: 8px; }
-.nx-doc__issuer-line { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; padding: 3px 0; font-size: 13px; color: var(--nx-doc-text); }
-.nx-doc__issuer-line-icon { display: inline-flex; margin-top: 1px; color: var(--nx-doc-icon); }
-.nx-doc__issuer-line-value { text-align: end; line-height: 1.45; }
-.nx-doc__customer { width: 100%; margin: 0 0 24px; padding: 0 0 20px; border-bottom: 1px solid var(--nx-doc-border); background: transparent; box-shadow: none; }
-.nx-doc__customer-head { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 8px; color: var(--nx-doc-primary); }
-.nx-doc__customer-head > .nx-doc__icon { color: var(--nx-doc-icon); }
-.nx-doc__customer-name { font-size: 22px; font-weight: 700; margin-bottom: 6px; color: var(--nx-doc-text); }
-.nx-doc__customer-line { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; font-size: 13px; padding: 2px 0; color: var(--nx-doc-text); }
-.nx-doc__customer-line--plain { grid-template-columns: 1fr; color: var(--nx-doc-text-muted); }
-.nx-doc__customer-line-icon { display: inline-flex; margin-top: 1px; color: var(--nx-doc-icon); }
+.nx-doc__meta-value { color: var(--nx-doc-text); font-weight: 600; }
+.nx-doc__logo-img { max-width: ${Math.min(logoDims.maxWidthPx, 160)}px; max-height: ${Math.min(logoDims.maxHeightPx, 40)}px; width: auto; height: auto; object-fit: contain; display: block; margin: 0 0 4px 0; align-self: flex-end; }
+.nx-doc__logo-placeholder { width: ${Math.round(Math.min(logoDims.maxWidthPx, 160) * 0.72)}px; height: ${Math.round(Math.min(logoDims.maxHeightPx, 40) * 0.58)}px; background: transparent; border: 1px dashed var(--nx-doc-border); border-radius: 4px; margin: 0 0 4px 0; align-self: flex-end; }
+.nx-doc__issuer-name { font-size: 17px; font-weight: 700; margin-bottom: 0; line-height: 1.15; }
+.nx-doc__issuer-subtitle { font-size: 12px; color: var(--nx-doc-text-muted); margin-bottom: 2px; line-height: 1.25; }
+.nx-doc__issuer-line { display: grid; grid-template-columns: 1fr; gap: 0; align-items: start; padding: 0; font-size: 12px; color: var(--nx-doc-text); line-height: 1.25; text-align: end; }
+.nx-doc__issuer-line--plain { grid-template-columns: 1fr; text-align: end; }
+.nx-doc__issuer-line-icon { display: none; }
+.nx-doc__issuer-line-value { text-align: end; line-height: 1.25; }
+.nx-doc__customer { width: 100%; margin: 0; padding: 0 0 4px; border-bottom: 1px solid var(--nx-doc-border); background: transparent; box-shadow: none; }
+.nx-doc__customer-head { font-weight: 700; font-size: 13px; margin-bottom: 2px; line-height: 1.2; color: var(--nx-doc-text); }
+.nx-doc__customer-name { font-size: 17px; font-weight: 700; margin-bottom: 2px; line-height: 1.15; color: var(--nx-doc-text); }
+.nx-doc__customer-line { display: grid; grid-template-columns: 14px 1fr; gap: 6px; align-items: start; font-size: 12px; padding: 0; color: var(--nx-doc-text); line-height: 1.25; }
+.nx-doc__customer-line--plain { grid-template-columns: 1fr; color: var(--nx-doc-text); font-size: 12px; line-height: 1.25; }
+.nx-doc__customer-line-icon { display: inline-flex; margin-top: 0; color: var(--nx-doc-icon); width: 14px; height: 14px; }
 .nx-doc__customer-line-value { text-align: end; }
-.nx-doc__table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 0 0 24px; border-radius: 12px 12px 0 0; overflow: hidden; border: 1px solid var(--nx-doc-border); }
-.nx-doc__table thead th { background: var(--nx-doc-header-gradient); color: #fff; padding: 12px 10px; font-size: 13px; font-weight: 700; text-align: right; border-inline-end: 1px solid rgba(255,255,255,0.12); }
-.nx-doc__table thead th:last-child { border-inline-end: none; }
-.nx-doc__table tbody td { padding: 11px 10px; font-size: 13px; border-bottom: 1px solid var(--nx-doc-border); vertical-align: top; background: #fff; }
-.nx-doc__cell-desc { font-weight: 600; color: var(--nx-doc-text); }
-.nx-doc__empty-lines { text-align: center; color: var(--nx-doc-text-muted); padding: 20px !important; }
-.nx-doc__bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; margin-bottom: 24px; }
+.nx-doc__table { width: 100%; border-collapse: collapse; border-spacing: 0; margin: 0 0 16px; border: none; }
+.nx-doc__table thead th { background: var(--nx-doc-primary); color: #fff; padding: 8px; font-size: 13px; font-weight: 700; text-align: right; border: none; border-bottom: 1px solid color-mix(in srgb, var(--nx-doc-primary) 80%, #000); }
+.nx-doc__table tbody td { padding: 7px 8px; font-size: 13px; border: none; border-bottom: 1px solid var(--nx-doc-border); vertical-align: top; background: #fff; }
+.nx-doc__cell-desc { font-weight: 500; color: var(--nx-doc-text); }
+.nx-doc__empty-lines { text-align: center; color: var(--nx-doc-text-muted); padding: 16px !important; }
+.nx-doc__bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; margin-bottom: 20px; }
 .nx-doc__comments { grid-column: 1; background: transparent; border: none; padding: 0; min-height: 0; box-shadow: none; }
-.nx-doc__comments-head { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 8px; color: var(--nx-doc-primary); }
-.nx-doc__comments-head > .nx-doc__icon { color: var(--nx-doc-icon); }
-.nx-doc__comments-body { white-space: pre-wrap; font-size: 13px; color: var(--nx-doc-text-muted); line-height: 1.55; }
+.nx-doc__comments-head { font-weight: 700; font-size: 13px; margin-bottom: 6px; color: var(--nx-doc-text); }
+.nx-doc__comments-head > .nx-doc__icon { display: none; }
+.nx-doc__comments-body { white-space: pre-wrap; font-size: 13px; color: var(--nx-doc-text-muted); line-height: 1.45; }
 .nx-doc__summary { grid-column: 2; }
-.nx-doc__summary-head { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 10px; color: var(--nx-doc-primary); }
-.nx-doc__summary-head > .nx-doc__icon { color: var(--nx-doc-icon); }
-.nx-doc__total-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; font-size: 14px; border-bottom: 1px solid var(--nx-doc-border); color: var(--nx-doc-text); }
+.nx-doc__summary-head { font-weight: 700; font-size: 13px; margin-bottom: 6px; color: var(--nx-doc-text); }
+.nx-doc__summary-head > .nx-doc__icon { display: none; }
+.nx-doc__total-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; border-bottom: 1px solid var(--nx-doc-border); color: var(--nx-doc-text); }
 .nx-doc__total-row--discount span:first-child,
 .nx-doc__total-row--discount span:last-child { color: var(--nx-doc-text) !important; font-weight: 500; }
 .nx-doc__grand-total {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 12px; padding: 14px 16px;
-  border-radius: 10px; background: var(--nx-doc-header-gradient); color: #fff; border: none;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 6px; padding: 8px 0 0;
+  border-top: 2px solid var(--nx-doc-primary); background: transparent; color: var(--nx-doc-text); border-radius: 0; font-size: 13px; font-weight: 700;
 }
-.nx-doc__grand-total strong { font-size: 26px; font-weight: 800; line-height: 1.1; color: #fff; }
-.nx-doc__payments { margin-bottom: 24px; }
-.nx-doc__payments-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; margin-bottom: 12px; color: var(--nx-doc-primary); }
-.nx-doc__payments-head > .nx-doc__icon { color: var(--nx-doc-icon); }
-.nx-doc__payments-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: stretch; }
-.nx-doc__payment-card { background: #fff; border: 1px solid var(--nx-doc-border); border-radius: 8px; padding: 14px 16px; min-height: 132px; height: 100%; box-shadow: none; }
-.nx-doc__payment-card-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin-bottom: 8px; color: var(--nx-doc-text); }
-.nx-doc__payment-card-head > .nx-doc__icon { color: var(--nx-doc-icon); }
-.nx-doc__payment-card-body { font-size: 12px; color: var(--nx-doc-text-muted); line-height: 1.55; }
-.nx-doc__payment-card-body--card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.nx-doc__payment-card-text { flex: 1; min-width: 0; word-break: break-word; }
-.nx-doc__payment-qr { display: block; width: 84px; height: 84px; flex-shrink: 0; object-fit: contain; }
-.nx-doc__signature { margin: 0 0 12px; text-align: end; }
+.nx-doc__grand-total strong { font-size: 20px; font-weight: 800; line-height: 1.1; color: var(--nx-doc-primary); }
+.nx-doc__payments { margin-bottom: 12px; }
+.nx-doc__payments-head { font-size: 13px; font-weight: 700; margin-bottom: 6px; color: var(--nx-doc-text); }
+.nx-doc__payments-head > .nx-doc__icon { display: none; }
+.nx-doc__payments-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; align-items: stretch; border-top: 1px solid var(--nx-doc-border); border-bottom: 1px solid var(--nx-doc-border); }
+.nx-doc__payment-col { background: transparent; border: none; border-inline-end: 1px solid var(--nx-doc-border); padding: 8px 12px; min-height: 72px; height: 100%; box-shadow: none; }
+.nx-doc__payment-col-head { font-size: 12px; font-weight: 700; margin-bottom: 4px; color: var(--nx-doc-text); }
+.nx-doc__payment-col-head > .nx-doc__icon { display: none; }
+.nx-doc__payment-col-body { font-size: 12px; color: var(--nx-doc-text-muted); line-height: 1.45; }
+.nx-doc__payment-col-body--card { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.nx-doc__payment-col-text { flex: 1; min-width: 0; word-break: break-word; }
+.nx-doc__payment-qr { display: block; width: 72px; height: 72px; flex-shrink: 0; object-fit: contain; }
+.nx-doc__signature { margin: 0 0 8px; text-align: end; }
 .nx-doc__signature img { max-width: 180px; max-height: 72px; object-fit: contain; }
-.nx-doc__platform-footer { display: flex; align-items: center; justify-content: center; padding: 16px 0 8px; border-top: 1px solid var(--nx-doc-border); margin-top: 8px; }
+.nx-doc__platform-footer { display: flex; align-items: center; justify-content: center; padding: 12px 0 4px; border-top: 1px solid var(--nx-doc-border); margin-top: 4px; }
 .nx-doc__platform-link { display: inline-flex; align-items: center; gap: 8px; color: var(--nx-doc-text-muted); font-size: 11px; text-decoration: none; }
 .nx-doc__platform-link:hover { color: var(--nx-doc-primary); }
 @media print {
   .nx-doc { max-width: none; padding: 0; }
-  .nx-doc__payment-card, .nx-doc__comments, .nx-doc__customer { box-shadow: none; }
+  .nx-doc__payment-col, .nx-doc__comments, .nx-doc__customer { box-shadow: none; }
 }
 </style>
 <div class="nx-doc nx-doc--unified" dir="rtl">
   <section class="nx-doc__header">
     <div class="nx-doc__header-doc">
       <h1 class="nx-doc__doc-title">${escapeHtml(params.docTypeLabel)}</h1>
-      <div class="nx-doc__doc-badge" style="background:${palette.gradient_css}">${docPreviewIcon('id', '#ffffff')}<span>${escapeHtml(numberDisplay)}</span></div>
+      <div class="nx-doc__doc-number">${escapeHtml(numberDisplay)}</div>
       <div class="nx-doc__meta-list">${metaRows}</div>
     </div>
     <div class="nx-doc__header-issuer">${issuerBlock}</div>

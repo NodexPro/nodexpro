@@ -371,7 +371,7 @@ test('unified preview html applies color theme tokens across document styles', (
 
   for (const html of [classicHtml, modernHtml, elegantHtml]) {
     assert.match(html, /nx-doc nx-doc--unified/);
-    assert.match(html, /nx-doc__doc-badge/);
+    assert.match(html, /nx-doc__doc-number/);
     assert.match(html, /nx-doc__bottom/);
     assert.doesNotMatch(html, /nx-doc__header--classic/);
     assert.doesNotMatch(html, /nx-doc__header--modern/);
@@ -400,7 +400,7 @@ test('work engine preview css does not hardcode blue on branded grand total', as
   )?.[0];
   assert.ok(grandTotalStrongBlock, 'expected work engine grand total strong rule');
   assert.doesNotMatch(grandTotalStrongBlock!, /#1f4b99/i);
-  assert.match(grandTotalStrongBlock!, /color:\s*inherit/);
+  assert.match(grandTotalStrongBlock!, /color:\s*var\(--nx-doc-primary\)/);
   assert.doesNotMatch(previewPaperRules, /#1f4b99/i);
   assert.doesNotMatch(previewPaperRules, /\.nx-doc__grand-total\s*\{[^}]*color:/);
   assert.doesNotMatch(previewPaperRules, /\.nx-doc__table thead th/);

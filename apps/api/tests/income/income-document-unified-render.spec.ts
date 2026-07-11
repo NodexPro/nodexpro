@@ -184,14 +184,21 @@ test('unified tax invoice html markers — section order and labels', () => {
   assert.ok(tableIdx < summaryIdx);
   assert.ok(commentsIdx < summaryIdx);
   assert.ok(paymentsIdx < footerIdx);
-  assert.match(html, /class="nx-doc__doc-badge"/);
-  assert.doesNotMatch(html, /class="nx-doc__doc-number"/);
-  assert.match(html, />סכום מע״מ</);
+  assert.match(html, /class="nx-doc__doc-number"/);
+  assert.doesNotMatch(html, /class="nx-doc__doc-badge"/);
+  assert.match(html, />מע״מ</);
+  assert.match(html, />מחיר ליח'/);
+  assert.match(html, />פירוט</);
+  assert.match(html, />מטבע</);
+  assert.match(html, />סה״כ</);
+  assert.doesNotMatch(html, />סכום מע״מ</);
+  assert.doesNotMatch(html, />יחידת מידה</);
   assert.match(html, /nx-doc__summary-head[\s\S]*סיכום כספי/);
-  assert.match(html, /\.nx-doc--unified \.nx-doc__grand-total[\s\S]*color: #fff/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__grand-total[\s\S]*border-top: 2px solid var\(--nx-doc-primary\)/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__grand-total strong[\s\S]*color: var\(--nx-doc-primary\)/);
   assert.match(html, /\.nx-doc__comments \{[\s\S]*grid-column: 1/);
   assert.match(html, /\.nx-doc__summary \{[\s\S]*grid-column: 2/);
-  assert.match(html, /\.nx-doc__table thead th \{[\s\S]*background: var\(--nx-doc-header-gradient\)/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table thead th \{[\s\S]*background: var\(--nx-doc-primary\)/);
   assert.match(html, /nx-doc__payments-head/);
   assert.match(html, />אמצעי תשלום</);
   assert.match(html, /חשבונית מס/);
@@ -238,19 +245,18 @@ test('payment bank details never appear inside comments section', () => {
   assert.doesNotMatch(commentsBody, /העברה בנקאית/);
 });
 
-test('default premium theme uses purple gradient on badge and table header', () => {
+test('default premium theme uses brand primary on doc number and table header', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /--nx-doc-header-gradient: linear-gradient\(135deg, #5B4DFF 0%, #6A5BFF 100%\)/);
-  assert.match(html, /class="nx-doc__doc-badge" style="background:linear-gradient\(135deg, #5B4DFF 0%, #6A5BFF 100%\)"/);
+  assert.match(html, /--nx-doc-primary: #5B4DFF/);
+  assert.match(html, /class="nx-doc__doc-number">2026-000154/);
   assert.match(html, /--nx-doc-icon: var\(--nx-doc-primary\)/);
-  assert.match(html, /stroke="currentColor"/);
   assert.match(html, /nx-doc__issuer-details/);
   assert.match(html, /nx-doc__issuer-lines/);
 });
 
 test('credit card block hidden without backend payment link data', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.doesNotMatch(html, /nx-doc__payment-card--card/);
+  assert.doesNotMatch(html, /nx-doc__payment-col--card/);
   assert.doesNotMatch(html, /pay\.nodexpro\.com/);
   assert.doesNotMatch(html, /פרטי תשלום בכרטיס יוצגו/);
 });
@@ -259,7 +265,7 @@ test('credit card block renders only with real payment link', () => {
   const input = buildSampleUnifiedInput();
   input.payment_link_url = 'https://pay.example.com/inv/123';
   const html = renderUnifiedIncomeDocumentHtml(input);
-  assert.match(html, /nx-doc__payment-card--card/);
+  assert.match(html, /nx-doc__payment-col--card/);
   assert.match(html, /https:\/\/pay\.example\.com\/inv\/123/);
 });
 
