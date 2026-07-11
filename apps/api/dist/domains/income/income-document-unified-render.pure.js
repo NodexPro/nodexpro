@@ -58,12 +58,16 @@ function readOptionalString(raw) {
     return s || null;
 }
 export function lineRowsFromLinesSnapshot(linesSnapshot, currency, totalsSnapshot) {
-    const lines = normalizeDraftLines(linesSnapshot);
+    const rawArr = Array.isArray(linesSnapshot) ? linesSnapshot : [];
+    const lines = normalizeDraftLines(rawArr);
     const vatFallback = readOptionalString(totalsSnapshot?.vat_rate_label);
     return lines.map((line, index) => {
+        const rawObj = rawArr[index] && typeof rawArr[index] === 'object' && !Array.isArray(rawArr[index])
+            ? rawArr[index]
+            : {};
         const lineCurrency = line.currency || currency;
-        const unitLabel = readOptionalString(line.unit_label);
-        const lineDiscount = readOptionalString(line.discount_display);
+        const unitLabel = readOptionalString(rawObj.unit_label);
+        const lineDiscount = readOptionalString(rawObj.discount_display);
         const amountRef = line.amount_reference != null && Number.isFinite(line.amount_reference)
             ? line.amount_reference
             : line.unit_price_reference != null && Number.isFinite(line.unit_price_reference)

@@ -386,13 +386,16 @@ test('work engine preview css does not hardcode blue on branded grand total', as
     new URL('../../../web/src/styles/nx-work-engine-queue.css', import.meta.url),
     'utf8',
   );
-  const grandTotalStrongBlock = css.match(
+  const previewPaperRules = css.slice(css.indexOf('/* Backend-owned document HTML'));
+  const grandTotalStrongBlock = previewPaperRules.match(
     /\.nx-we-preview-paper__content \.nx-doc__grand-total strong\s*\{[^}]+\}/,
   )?.[0];
   assert.ok(grandTotalStrongBlock, 'expected work engine grand total strong rule');
   assert.doesNotMatch(grandTotalStrongBlock!, /#1f4b99/i);
   assert.match(grandTotalStrongBlock!, /color:\s*inherit/);
-  assert.match(css, /\.nx-we-preview-paper__content \.nx-doc__grand-total[\s\S]*?var\(--nx-doc-theme-accent\)/);
+  assert.doesNotMatch(previewPaperRules, /#1f4b99/i);
+  assert.doesNotMatch(previewPaperRules, /\.nx-doc__grand-total\s*\{[^}]*color:/);
+  assert.doesNotMatch(previewPaperRules, /\.nx-doc__table thead th/);
 });
 
 test('saved document style and theme are reflected in preview html output', () => {

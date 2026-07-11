@@ -144,6 +144,21 @@ test('canonical render model maps issued snapshots to unified preview fields', (
   assert.equal(input.totals.discount, '₪50.00');
 });
 
+test('issuer logo comes from branding studio data url in issuer block', () => {
+  const input = buildSampleUnifiedInput();
+  input.branding = {
+    ...input.branding,
+    logo_data_url: 'data:image/png;base64,logo-test',
+  };
+  const html = renderUnifiedIncomeDocumentHtml(input);
+  assert.match(html, /class="nx-doc__logo-img" src="data:image\/png;base64,logo-test"/);
+  const issuerStart = html.indexOf('<div class="nx-doc__issuer-identity">');
+  const issuerEnd = html.indexOf('</div>', issuerStart);
+  assert.ok(issuerStart >= 0);
+  const issuerBlock = html.slice(issuerStart, issuerEnd);
+  assert.match(issuerBlock, /nx-doc__logo-img/);
+});
+
 test('preview and PDF paths use the same unified HTML renderer', () => {
   const input = buildSampleUnifiedInput();
   const previewHtml = renderUnifiedIncomeDocumentHtml(input);
@@ -166,8 +181,14 @@ test('unified tax invoice html markers — section order and labels', () => {
   assert.ok(headerIdx < customerIdx);
   assert.ok(customerIdx < tableIdx);
   assert.ok(tableIdx < summaryIdx);
-  assert.ok(summaryIdx < commentsIdx);
+  assert.ok(commentsIdx < summaryIdx);
   assert.ok(paymentsIdx < footerIdx);
+  assert.match(html, /\.nx-doc__customer \{[\s\S]*margin-inline-start: auto/);
+  assert.match(html, /\.nx-doc__comments \{[\s\S]*grid-column: 2/);
+  assert.match(html, /\.nx-doc__summary \{[\s\S]*grid-column: 1/);
+  assert.match(html, /\.nx-doc__table thead th \{[\s\S]*background: var\(--nx-doc-header-gradient\)/);
+  assert.match(html, /nx-doc__payments-head/);
+  assert.match(html, />אמצעי תשלום</);
   assert.match(html, /חשבונית מס/);
   assert.match(html, />לכבוד</);
   assert.match(html, /הנחה לפני מע״מ/);
@@ -188,16 +209,34 @@ test('issuer is never hardcoded as NodexPro and footer branding appears once', (
 
 test('discount row uses standard text color in unified css', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /\.nx-doc__total-row--discount span:first-child \{ color: var\(--nx-doc-text\)/);
-  assert.match(html, /\.nx-doc__total-row--discount span:last-child \{ color: var\(--nx-doc-text\)/);
+  assert.match(html, /\.nx-doc__total-row--discount span:first-child,\s*\.nx-doc__total-row--discount span:last-child \{ color: var\(--nx-doc-text\) !important/);
+  assert.doesNotMatch(html, /total-row--discount[\s\S]*#dc2626/i);
+  assert.doesNotMatch(html, /total-row--discount[\s\S]*red/i);
 });
 
 test('comments section hidden when notes empty', () => {
   const input = buildSampleUnifiedInput();
   input.notes = null;
   const html = renderUnifiedIncomeDocumentHtml(input);
-  assert.match(html, /nx-doc__comments--empty/);
+  assert.doesNotMatch(html, /<section class="nx-doc__comments"/);
   assert.doesNotMatch(html, />הערות</);
+});
+
+test('payment bank details never appear inside comments section', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  const commentsStart = html.indexOf('<section class="nx-doc__comments"');
+  const commentsEnd = html.indexOf('</section>', commentsStart);
+  assert.ok(commentsStart >= 0);
+  const commentsBody = html.slice(commentsStart, commentsEnd);
+  assert.doesNotMatch(commentsBody, /IBAN:/);
+  assert.doesNotMatch(commentsBody, /SWIFT:/);
+  assert.doesNotMatch(commentsBody, /העברה בנקאית/);
+});
+
+test('default premium theme uses purple gradient on badge and table header', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(html, /--nx-doc-header-gradient: linear-gradient\(135deg, #5B4DFF 0%, #6A5BFF 100%\)/);
+  assert.match(html, /border-radius: 12px/);
 });
 
 test('credit card block hidden without backend payment link data', () => {

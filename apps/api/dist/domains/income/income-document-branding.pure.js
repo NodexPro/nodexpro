@@ -131,7 +131,7 @@ const COLOR_THEME_DEFS = [
     {
         key: 'nodexpro_premium',
         label: 'NodexPro Premium',
-        gradient: { from: '#5B4DFF', to: '#7A6DFF' },
+        gradient: { from: '#5B4DFF', to: '#6A5BFF' },
         table_header_color: '#5B4DFF',
         totals_accent_color: '#5B4DFF',
         recipient_accent_color: '#5B4DFF',
