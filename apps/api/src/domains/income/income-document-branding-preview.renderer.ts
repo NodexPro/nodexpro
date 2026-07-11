@@ -176,15 +176,23 @@ export function renderIncomeBrandedPreviewHtml(params: {
       ? `<div class="nx-doc__issuer-subtitle">${escapeHtml(params.company_subtitle ?? b.company_subtitle)}</div>`
       : '';
 
+  const issuerContactLines = [
+    issuerInfoRow(docPreviewIcon('location'), params.issuer.address, d.show_business_address),
+    issuerInfoRow(docPreviewIcon('id'), params.issuer.tax_id, d.show_business_tax_id),
+    issuerInfoRow(docPreviewIcon('phone'), params.issuer.phone, d.show_business_phone),
+    issuerInfoRow(docPreviewIcon('mail'), params.issuer.email, d.show_business_email),
+    issuerInfoRow(docPreviewIcon('website'), params.issuer.website ?? null, Boolean(params.issuer.website?.trim())),
+  ]
+    .filter(Boolean)
+    .join('');
+
   const issuerBlock = `<div class="nx-doc__issuer-identity">
     ${logoHtml}
-    <div class="nx-doc__issuer-name">${escapeHtml(params.issuer.display_name)}</div>
-    ${subtitle}
-    ${issuerInfoRow(docPreviewIcon('location'), params.issuer.address, d.show_business_address)}
-    ${issuerInfoRow(docPreviewIcon('id'), params.issuer.tax_id, d.show_business_tax_id)}
-    ${issuerInfoRow(docPreviewIcon('phone'), params.issuer.phone, d.show_business_phone)}
-    ${issuerInfoRow(docPreviewIcon('mail'), params.issuer.email, d.show_business_email)}
-    ${issuerInfoRow(docPreviewIcon('website'), params.issuer.website ?? null, Boolean(params.issuer.website?.trim()))}
+    <div class="nx-doc__issuer-details">
+      <div class="nx-doc__issuer-name">${escapeHtml(params.issuer.display_name)}</div>
+      ${subtitle}
+      ${issuerContactLines ? `<div class="nx-doc__issuer-lines">${issuerContactLines}</div>` : ''}
+    </div>
   </div>`;
 
   const customerBlock = `
@@ -316,6 +324,126 @@ export function renderIncomeBrandedPreviewHtml(params: {
   background: #fff;
 }
 .nx-doc * { box-sizing: border-box; }
+.nx-doc--unified .nx-doc__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px 28px;
+  align-items: start;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--nx-doc-primary) 14%, var(--nx-doc-border));
+}
+.nx-doc--unified .nx-doc__header-doc {
+  grid-column: 1;
+  min-width: 0;
+}
+.nx-doc--unified .nx-doc__header-issuer {
+  grid-column: 2;
+  min-width: 0;
+}
+.nx-doc--unified .nx-doc__issuer-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: end;
+  gap: 0;
+  width: 100%;
+}
+.nx-doc--unified .nx-doc__issuer-details {
+  width: 100%;
+}
+.nx-doc--unified .nx-doc__issuer-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 2px;
+}
+.nx-doc--unified .nx-doc__doc-title {
+  margin: 0 0 10px;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--nx-doc-text);
+  line-height: 1.12;
+}
+.nx-doc--unified .nx-doc__doc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border-radius: 10px;
+  background: ${palette.gradient_css};
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 0;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--nx-doc-primary) 26%, transparent);
+}
+.nx-doc--unified .nx-doc__meta-list {
+  width: 100%;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--nx-doc-border);
+}
+.nx-doc--unified .nx-doc__meta-row {
+  display: grid;
+  grid-template-columns: 16px auto 1fr;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 4px 0;
+  color: var(--nx-doc-text-muted);
+  font-size: 12.5px;
+}
+.nx-doc--unified .nx-doc__meta-row > .nx-doc__icon { color: var(--nx-doc-icon); }
+.nx-doc--unified .nx-doc__meta-label { color: var(--nx-doc-text-muted); white-space: nowrap; }
+.nx-doc--unified .nx-doc__meta-value {
+  color: var(--nx-doc-text);
+  font-weight: 600;
+  justify-self: start;
+  text-align: start;
+}
+.nx-doc--unified .nx-doc__logo-img {
+  max-width: ${Math.min(logoDims.maxWidthPx, 200)}px;
+  max-height: ${Math.min(logoDims.maxHeightPx, 64)}px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0 0 6px 0;
+  align-self: flex-end;
+}
+.nx-doc--unified .nx-doc__logo-placeholder {
+  width: ${Math.round(Math.min(logoDims.maxWidthPx, 200) * 0.65)}px;
+  height: ${Math.round(Math.min(logoDims.maxHeightPx, 64) * 0.72)}px;
+  background: var(--nx-doc-bg-card);
+  border: 1px dashed var(--nx-doc-border);
+  border-radius: 8px;
+  margin: 0 0 6px 0;
+  align-self: flex-end;
+}
+.nx-doc--unified .nx-doc__issuer-name {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 2px;
+  line-height: 1.25;
+}
+.nx-doc--unified .nx-doc__issuer-subtitle {
+  font-size: 12.5px;
+  color: var(--nx-doc-text-muted);
+  margin-bottom: 4px;
+}
+.nx-doc--unified .nx-doc__issuer-line {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 7px;
+  align-items: start;
+  padding: 2px 0;
+  font-size: 12.5px;
+  color: var(--nx-doc-text);
+  line-height: 1.4;
+}
+.nx-doc--unified .nx-doc__issuer-line-icon { display: inline-flex; margin-top: 1px; color: var(--nx-doc-icon); }
+.nx-doc--unified .nx-doc__issuer-line-value { text-align: end; }
 .nx-doc__header {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -477,7 +605,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   <section class="nx-doc__header">
     <div class="nx-doc__header-doc">
       <h1 class="nx-doc__doc-title">${escapeHtml(params.docTypeLabel)}</h1>
-      <div class="nx-doc__doc-badge">${docPreviewIcon('id', '#ffffff')}<span>${escapeHtml(numberDisplay)}</span></div>
+      <div class="nx-doc__doc-badge" style="background:${palette.gradient_css}">${docPreviewIcon('id', '#ffffff')}<span>${escapeHtml(numberDisplay)}</span></div>
       <div class="nx-doc__meta-list">${metaRows}</div>
     </div>
     <div class="nx-doc__header-issuer">${issuerBlock}</div>

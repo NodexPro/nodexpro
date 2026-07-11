@@ -9,6 +9,7 @@ import {
   getColorThemePresets,
   getDocumentStyleTemplates,
   getEmailTemplateTokens,
+  normalizeLegacyDocumentColorThemeKey,
   matchColorThemeKeyFromLegacyColors,
   normalizeStudioDocumentStyleKey,
   renderEmailTemplateFriendly,
@@ -246,6 +247,11 @@ test('formatDocumentNumberDisplay shows draft label when no number', () => {
   assert.equal(formatDocumentNumberDisplay(null), 'טיוטה');
   assert.equal(formatDocumentNumberDisplay(''), 'טיוטה');
   assert.equal(formatDocumentNumberDisplay('1001'), '1001');
+});
+
+test('legacy black_white theme resolves to nodexpro premium at document render', () => {
+  assert.equal(normalizeLegacyDocumentColorThemeKey('black_white'), 'nodexpro_premium');
+  assert.equal(normalizeLegacyDocumentColorThemeKey('dark_blue'), 'dark_blue');
 });
 
 test('matchColorThemeKeyFromLegacyColors maps known blue palette', () => {

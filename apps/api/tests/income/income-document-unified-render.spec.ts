@@ -237,10 +237,13 @@ test('payment bank details never appear inside comments section', () => {
 
 test('default premium theme uses purple gradient on badge and table header', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /--nx-doc-header-gradient: linear-gradient\(135deg, #5B4DFF 0%, #6A5BFF 100%\)/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__header \{[\s\S]*border-bottom:/);
+  assert.match(html, /class="nx-doc__doc-badge" style="background:linear-gradient\(135deg, #5B4DFF 0%, #6A5BFF 100%\)"/);
   assert.match(html, /--nx-doc-icon: var\(--nx-doc-primary\)/);
   assert.match(html, /stroke="currentColor"/);
-  assert.match(html, /border-radius: 12px/);
+  assert.match(html, /nx-doc__issuer-details/);
+  assert.match(html, /nx-doc__issuer-lines/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__doc-badge[\s\S]*border-radius: 10px/);
 });
 
 test('credit card block hidden without backend payment link data', () => {

@@ -390,6 +390,12 @@ export function normalizeColorThemeKey(key: string): string {
   return LEGACY_COLOR_KEY_TO_THEME[trimmed] ?? DEFAULT_COLOR_THEME_KEY;
 }
 
+/** Legacy system default before NodexPro Premium — treat as premium at render time. */
+export function normalizeLegacyDocumentColorThemeKey(key: string): string {
+  const normalized = normalizeColorThemeKey(key);
+  return normalized === 'black_white' ? DEFAULT_COLOR_THEME_KEY : normalized;
+}
+
 export function parseDocumentTypeStyleOverridesJson(
   raw: unknown,
 ): Partial<Record<IncomeDocumentTypeStyleGroupKey, IncomeDocumentTypeStyleOverride>> {
@@ -434,7 +440,7 @@ export function resolveEffectiveStyleForGroup(
   if (stored) {
     return {
       document_style_key: normalizeStudioDocumentStyleKey(stored.document_style_key),
-      color_theme_key: normalizeColorThemeKey(stored.color_theme_key),
+      color_theme_key: normalizeLegacyDocumentColorThemeKey(stored.color_theme_key),
     };
   }
   return {
@@ -753,7 +759,7 @@ export function resolveDocumentStyleKeyForRow(row: IncomeBrandingProfileRow): In
 export function resolveColorThemeKeyForRow(row: IncomeBrandingProfileRow): string {
   const explicit = String(row.color_theme_key ?? '').trim();
   if (explicit) {
-    return normalizeColorThemeKey(explicit);
+    return normalizeLegacyDocumentColorThemeKey(normalizeColorThemeKey(explicit));
   }
   const styleRaw = String(row.document_style_key ?? '').trim();
   if (LEGACY_COLOR_KEYS.has(styleRaw)) {
