@@ -19,12 +19,29 @@ test('issue month window editor descriptor exposes business fields only', () => 
     value_key: IL_INCOME_ISSUE_MONTH_WINDOW_VALUE_KEY,
     value_type: 'json',
     current_payload: { months_back: 1, months_ahead: 3 },
+    country_code: 'IL',
+    country_catalog: {
+      countries: [{ code: 'IL', name: 'Israel' }],
+      country_packs: [{ id: 'pack-1', country_code: 'IL', name: 'Israel Default Pack', status: 'enabled' }],
+      rulesets: [
+        {
+          id: 'ruleset-1',
+          country_pack_id: 'pack-1',
+          ruleset_code: 'default',
+          ruleset_version: '1.0',
+          status: 'active',
+          effective_from: '2020-01-01',
+          effective_to: null,
+        },
+      ],
+    },
   });
   assert.ok(editor);
   assert.equal(editor?.editor_key, 'issue_month_window');
   assert.equal(editor?.value_fields.length, 2);
   assert.equal(editor?.value_fields[0]?.key, 'months_back');
   assert.equal(editor?.value_fields[1]?.key, 'months_ahead');
+  assert.equal(editor?.version_fields.some((f) => f.key === 'country_pack_ruleset_id'), false);
 });
 
 test('backend assembles issue month window JSON from owner field input', () => {
@@ -49,6 +66,21 @@ test('human summary for issue month window is readable', () => {
 });
 
 test('table row includes editor on create version action', () => {
+  const catalog = {
+    countries: [{ code: 'IL', name: 'Israel' }],
+    country_packs: [{ id: 'pack-1', country_code: 'IL', name: 'Israel Default Pack', status: 'enabled' }],
+    rulesets: [
+      {
+        id: 'ruleset-1',
+        country_pack_id: 'pack-1',
+        ruleset_code: 'default',
+        ruleset_version: '1.0',
+        status: 'active',
+        effective_from: '2020-01-01',
+        effective_to: null,
+      },
+    ],
+  };
   const model = buildOwnerLegalValuesTableModel(
     [
       {
@@ -63,6 +95,7 @@ test('table row includes editor on create version action', () => {
       },
     ],
     [{ action_key: 'create_legal_value_version', enabled: true }],
+    catalog,
   );
   const createAction = model.rows[0]?.actions.find((a) => a.action_key === 'create_legal_value_version');
   assert.ok(createAction?.editor);

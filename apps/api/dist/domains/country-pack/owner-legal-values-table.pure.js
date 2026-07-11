@@ -101,7 +101,7 @@ function versionStatusDisplay(activeVersion, definitionStatusBadge) {
     }
     return textOrDash(definitionStatusBadge?.label ?? 'No active version');
 }
-function buildRowEditor(row, actionKey, version) {
+function buildRowEditor(row, actionKey, version, countryCatalog) {
     if (actionKey !== 'create_legal_value_version' &&
         actionKey !== 'update_legal_value_version') {
         return null;
@@ -109,6 +109,7 @@ function buildRowEditor(row, actionKey, version) {
     const valueKey = String(row.value_key ?? '').trim();
     if (!valueKey)
         return null;
+    const countryCode = String(row.country_code ?? '').trim().toUpperCase();
     const currentPayload = actionKey === 'update_legal_value_version'
         ? version?.value_payload_json ?? row.current_active_value
         : row.current_active_value;
@@ -116,17 +117,18 @@ function buildRowEditor(row, actionKey, version) {
         value_key: valueKey,
         value_type: row.value_type,
         current_payload: currentPayload,
+        country_code: countryCode,
+        country_catalog: countryCatalog,
         version_context: version
             ? {
                 effective_from: version.effective_from,
                 effective_to: version.effective_to,
-                country_pack_ruleset_id: version.country_pack_ruleset_id,
                 status: version.status,
             }
             : undefined,
     });
 }
-function buildRowActions(row, globalActions) {
+function buildRowActions(row, globalActions, countryCatalog) {
     const countryCode = textOrDash(row.country_code);
     const valueKey = textOrDash(row.value_key);
     const versions = Array.isArray(row.versions) ? row.versions : [];
@@ -182,17 +184,22 @@ function buildRowActions(row, globalActions) {
             : actionKey === 'create_legal_value_version'
                 ? activeVersion
                 : null;
+        const editor = buildRowEditor(row, actionKey, editorVersion, countryCatalog);
+        if (actionKey === 'create_legal_value_version' && editor?.ruleset_resolution_error) {
+            enabled = false;
+            disabledReason = editor.ruleset_resolution_error;
+        }
         return {
             action_key: actionKey,
             enabled,
             button_label: global?.button_label?.trim() || ROW_ACTION_LABELS[actionKey],
             disabled_reason: enabled ? null : disabledReason,
             prefill,
-            editor: buildRowEditor(row, actionKey, editorVersion),
+            editor,
         };
     });
 }
-export function buildOwnerLegalValuesTableModel(rows, globalActions = []) {
+export function buildOwnerLegalValuesTableModel(rows, globalActions = [], countryCatalog) {
     const today = new Date().toISOString().slice(0, 10);
     const tableRows = rows.map((row) => {
         const versions = Array.isArray(row.versions) ? row.versions : [];
@@ -214,6 +221,8 @@ export function buildOwnerLegalValuesTableModel(rows, globalActions = []) {
             value_key: valueKey === '—' ? '' : valueKey,
             value_type: row.value_type,
             current_payload: row.current_active_value,
+            country_code: countryCode === '—' ? '' : countryCode,
+            country_catalog: countryCatalog,
         });
         const cells = {
             value_key: valueKey,
@@ -234,7 +243,7 @@ export function buildOwnerLegalValuesTableModel(rows, globalActions = []) {
             version_status_display: versionStatus,
             effective_from_display: effectiveFrom,
             editor_key: editorDescriptor?.editor_key ?? null,
-            actions: buildRowActions(row, globalActions),
+            actions: buildRowActions(row, globalActions, countryCatalog),
         };
     });
     return {

@@ -433,7 +433,7 @@ export async function buildOwnerCountryPackAdminAggregate(ctx) {
 }
 export async function buildOwnerLegalValuesAggregate(ctx) {
     assertPlatformOwner(ctx);
-    const [values, versions] = await Promise.all([
+    const [values, versions, countries, packs, rulesets] = await Promise.all([
         supabaseAdmin
             .from('country_legal_values')
             .select('id, country_code, value_key, label, category, module_scope, usage_hint, owner_note, value_type, status, updated_at')
@@ -442,11 +442,31 @@ export async function buildOwnerLegalValuesAggregate(ctx) {
             .from('country_legal_value_versions')
             .select('id, legal_value_id, country_pack_ruleset_id, value_payload_json, effective_from, effective_to, status, updated_at')
             .order('updated_at', { ascending: false }),
+        supabaseAdmin.from('countries').select('code, name, status').order('code'),
+        supabaseAdmin
+            .from('country_packs')
+            .select('id, country_code, name, status')
+            .order('updated_at', { ascending: false }),
+        supabaseAdmin
+            .from('country_pack_rulesets')
+            .select('id, country_pack_id, ruleset_code, ruleset_version, effective_from, effective_to, status')
+            .order('updated_at', { ascending: false }),
     ]);
     if (values.error)
         throw values.error;
     if (versions.error)
         throw versions.error;
+    if (countries.error)
+        throw countries.error;
+    if (packs.error)
+        throw packs.error;
+    if (rulesets.error)
+        throw rulesets.error;
+    const countryCatalog = {
+        countries: countries.data ?? [],
+        country_packs: packs.data ?? [],
+        rulesets: rulesets.data ?? [],
+    };
     const byLegalValueId = new Map();
     for (const v of versions.data ?? []) {
         const list = byLegalValueId.get(v.legal_value_id) ?? [];
@@ -499,11 +519,12 @@ export async function buildOwnerLegalValuesAggregate(ctx) {
         { action_key: 'update_usage_hint', enabled: true },
         { action_key: 'update_module_scope', enabled: true },
     ];
-    const legalValuesTable = buildOwnerLegalValuesTableModel(rows, globalActions);
+    const legalValuesTable = buildOwnerLegalValuesTableModel(rows, globalActions, countryCatalog);
     return {
         aggregate_key: 'owner_legal_values_aggregate',
         table: rows,
         legal_values_table: legalValuesTable,
+        country_catalog: countryCatalog,
         /** Work Engine reminder policies/templates — excluded from `table` (tax/legal values UI only). */
         operational_communication_table: operationalCommunicationTable,
         validation_warnings: rows
@@ -1186,8 +1207,12 @@ export async function buildOwnerLegalControlPanelAggregate(ctx, opts) {
     ]);
     const tables = countryPacksAdmin.tables;
     const legalTable = legalValues.table;
-    const legalValuesTableModel = legalValues.legal_values_table ??
-        buildOwnerLegalValuesTableModel(legalTable ?? [], legalValues.actions ?? []);
+    const countryCatalog = legalValues.country_catalog ?? {
+        countries: tables?.countries ?? [],
+        country_packs: tables?.country_packs ?? [],
+        rulesets: tables?.rulesets ?? [],
+    };
+    const legalValuesTableModel = buildOwnerLegalValuesTableModel(legalTable ?? [], legalValues.actions ?? [], countryCatalog);
     const operationalCommunicationLegalTable = legalValues.operational_communication_table ?? [];
     const legalValueVersionsFlat = (legalTable ?? []).flatMap((r) => Array.isArray(r.versions) ? r.versions : []);
     const docflowCommunicationTemplates = buildDocflowCommunicationTemplatesFromLegalTable(legalTable ?? []);
@@ -1214,7 +1239,10 @@ export async function buildOwnerLegalControlPanelAggregate(ctx, opts) {
             },
         ],
         country_packs_admin: countryPacksAdmin,
-        legal_values: legalValues,
+        legal_values: {
+            ...legalValues,
+            legal_values_table: legalValuesTableModel,
+        },
         platform_pricing: platformPricing,
         owner_email_provider_config_aggregate: emailProviderConfig,
         countries: tables?.countries ?? [],

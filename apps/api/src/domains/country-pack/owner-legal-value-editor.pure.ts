@@ -3,6 +3,11 @@
  * JSON remains internal storage; Owner UI reads/writes field models only.
  */
 
+import {
+  ownerLegalValueRulesetMissingMessage,
+  resolveOwnerLegalValueRulesetContextFromTables,
+  type OwnerLegalValueRulesetContext,
+} from './owner-legal-value-ruleset.pure.js';
 import { badRequest } from '../../shared/errors.js';
 import {
   IL_ISSUE_MONTH_WINDOW_FALLBACK,
@@ -16,7 +21,7 @@ export const OWNER_LEGAL_VALUE_EDITOR_ISSUE_MONTH_WINDOW = 'issue_month_window';
 export type OwnerLegalValueEditorField = {
   key: string;
   label: string;
-  input_type: 'number' | 'text' | 'boolean' | 'date' | 'money' | 'percentage';
+  input_type: 'number' | 'text' | 'boolean' | 'date' | 'money' | 'percentage' | 'readonly_text';
   value: string;
   required: boolean;
   min?: number;
@@ -26,12 +31,21 @@ export type OwnerLegalValueEditorField = {
   help_text?: string | null;
 };
 
+export type OwnerLegalValueEditorContextDisplay = {
+  key: string;
+  label: string;
+  value: string;
+};
+
 export type OwnerLegalValueEditorDescriptor = {
   editor_key: string;
   title: string;
   subtitle: string | null;
   value_fields: OwnerLegalValueEditorField[];
   version_fields: OwnerLegalValueEditorField[];
+  context_display: OwnerLegalValueEditorContextDisplay[];
+  active_ruleset_id: string | null;
+  ruleset_resolution_error: string | null;
 };
 
 export type OwnerLegalValueHumanSummary = {
@@ -153,11 +167,34 @@ export function formatOwnerLegalValueHumanSummary(
 function buildIssueMonthWindowEditor(params: {
   currentPayload: unknown;
   versionContext?: Record<string, unknown>;
+  countryCode: string;
+  rulesetContext: OwnerLegalValueRulesetContext | null;
 }): OwnerLegalValueEditorDescriptor {
   const parsed =
     parseIssueMonthWindowFromLegalPayload(params.currentPayload) ?? IL_ISSUE_MONTH_WINDOW_FALLBACK;
   const ctx = params.versionContext ?? {};
   const today = new Date().toISOString().slice(0, 10);
+  const effectiveDate = String(ctx.effective_from ?? today);
+  const rulesetContext =
+    params.rulesetContext ??
+    resolveOwnerLegalValueRulesetContextFromTables({
+      countryCode: params.countryCode,
+      effectiveDate,
+    });
+  const contextDisplay: OwnerLegalValueEditorContextDisplay[] = [
+    {
+      key: 'country',
+      label: 'Country',
+      value: rulesetContext
+        ? `${rulesetContext.country_name} (${rulesetContext.country_code})`
+        : params.countryCode,
+    },
+    {
+      key: 'ruleset',
+      label: 'Ruleset',
+      value: rulesetContext?.ruleset_label ?? '—',
+    },
+  ];
   return {
     editor_key: OWNER_LEGAL_VALUE_EDITOR_ISSUE_MONTH_WINDOW,
     title: 'Allowed Issue Month Window',
@@ -171,27 +208,19 @@ function buildIssueMonthWindowEditor(params: {
       }),
     ],
     version_fields: [
-      dateField(
-        'effective_from',
-        'Effective from',
-        String(ctx.effective_from ?? today),
-        true,
-      ),
+      dateField('effective_from', 'Effective from', effectiveDate, true),
       dateField(
         'effective_to',
         'Effective to',
         ctx.effective_to == null ? '' : String(ctx.effective_to),
         false,
       ),
-      textField(
-        'country_pack_ruleset_id',
-        'Ruleset ID',
-        String(ctx.country_pack_ruleset_id ?? ''),
-        true,
-        'Active country pack ruleset UUID',
-      ),
-      textField('status', 'Status', String(ctx.status ?? 'draft'), true, 'draft | active | disabled'),
     ],
+    context_display: contextDisplay,
+    active_ruleset_id: rulesetContext?.active_ruleset_id ?? null,
+    ruleset_resolution_error: rulesetContext
+      ? null
+      : ownerLegalValueRulesetMissingMessage(params.countryCode),
   };
 }
 
@@ -200,12 +229,44 @@ export function buildOwnerLegalValueEditorDescriptor(params: {
   value_type: string | null | undefined;
   current_payload?: unknown;
   version_context?: Record<string, unknown>;
+  country_code?: string | null;
+  ruleset_context?: OwnerLegalValueRulesetContext | null;
+  country_catalog?: {
+    countries?: Array<{ code?: string; name?: string }>;
+    country_packs?: Array<{ id?: string; country_code?: string; name?: string; status?: string }>;
+    rulesets?: Array<{
+      id?: string;
+      country_pack_id?: string;
+      ruleset_code?: string;
+      ruleset_version?: string;
+      status?: string;
+      effective_from?: string;
+      effective_to?: string | null;
+    }>;
+  };
 }): OwnerLegalValueEditorDescriptor | null {
   const editorKey = resolveOwnerLegalValueEditorKey(params.value_key, params.value_type);
+  const countryCode = String(params.country_code ?? '').trim().toUpperCase();
+  const versionContext = params.version_context ?? {};
+  const effectiveDate =
+    String(versionContext.effective_from ?? '').trim() || new Date().toISOString().slice(0, 10);
+  const resolvedRulesetContext =
+    params.ruleset_context ??
+    (countryCode
+      ? resolveOwnerLegalValueRulesetContextFromTables({
+          countryCode,
+          effectiveDate,
+          countries: params.country_catalog?.countries,
+          countryPacks: params.country_catalog?.country_packs,
+          rulesets: params.country_catalog?.rulesets,
+        })
+      : null);
   if (editorKey === OWNER_LEGAL_VALUE_EDITOR_ISSUE_MONTH_WINDOW) {
     return buildIssueMonthWindowEditor({
       currentPayload: params.current_payload,
-      versionContext: params.version_context,
+      versionContext,
+      countryCode,
+      rulesetContext: resolvedRulesetContext,
     });
   }
   return null;

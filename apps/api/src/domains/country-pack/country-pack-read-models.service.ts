@@ -470,7 +470,7 @@ export async function buildOwnerCountryPackAdminAggregate(ctx: RequestContext): 
 export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promise<Record<string, unknown>> {
   assertPlatformOwner(ctx);
 
-  const [values, versions] = await Promise.all([
+  const [values, versions, countries, packs, rulesets] = await Promise.all([
     supabaseAdmin
       .from('country_legal_values')
       .select('id, country_code, value_key, label, category, module_scope, usage_hint, owner_note, value_type, status, updated_at')
@@ -479,9 +479,27 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
       .from('country_legal_value_versions')
       .select('id, legal_value_id, country_pack_ruleset_id, value_payload_json, effective_from, effective_to, status, updated_at')
       .order('updated_at', { ascending: false }),
+    supabaseAdmin.from('countries').select('code, name, status').order('code'),
+    supabaseAdmin
+      .from('country_packs')
+      .select('id, country_code, name, status')
+      .order('updated_at', { ascending: false }),
+    supabaseAdmin
+      .from('country_pack_rulesets')
+      .select('id, country_pack_id, ruleset_code, ruleset_version, effective_from, effective_to, status')
+      .order('updated_at', { ascending: false }),
   ]);
   if (values.error) throw values.error;
   if (versions.error) throw versions.error;
+  if (countries.error) throw countries.error;
+  if (packs.error) throw packs.error;
+  if (rulesets.error) throw rulesets.error;
+
+  const countryCatalog = {
+    countries: countries.data ?? [],
+    country_packs: packs.data ?? [],
+    rulesets: rulesets.data ?? [],
+  };
 
   const byLegalValueId = new Map<string, Array<Record<string, unknown>>>();
   for (const v of versions.data ?? []) {
@@ -545,12 +563,14 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
   const legalValuesTable = buildOwnerLegalValuesTableModel(
     rows as Array<Record<string, unknown>>,
     globalActions,
+    countryCatalog,
   );
 
   return {
     aggregate_key: 'owner_legal_values_aggregate',
     table: rows,
     legal_values_table: legalValuesTable,
+    country_catalog: countryCatalog,
     /** Work Engine reminder policies/templates — excluded from `table` (tax/legal values UI only). */
     operational_communication_table: operationalCommunicationTable,
     validation_warnings: rows
@@ -1347,9 +1367,31 @@ export async function buildOwnerLegalControlPanelAggregate(
     | undefined;
 
   const legalTable = legalValues.table as Array<Record<string, unknown>> | undefined;
-  const legalValuesTableModel =
-    (legalValues.legal_values_table as ReturnType<typeof buildOwnerLegalValuesTableModel> | undefined) ??
-    buildOwnerLegalValuesTableModel(legalTable ?? [], (legalValues.actions as Array<Record<string, unknown>>) ?? []);
+  const countryCatalog =
+    (legalValues.country_catalog as
+      | { countries?: unknown[]; country_packs?: unknown[]; rulesets?: unknown[] }
+      | undefined) ?? {
+      countries: tables?.countries ?? [],
+      country_packs: tables?.country_packs ?? [],
+      rulesets: tables?.rulesets ?? [],
+    };
+  const legalValuesTableModel = buildOwnerLegalValuesTableModel(
+    legalTable ?? [],
+    (legalValues.actions as Array<Record<string, unknown>>) ?? [],
+    countryCatalog as {
+      countries?: Array<{ code?: string; name?: string }>;
+      country_packs?: Array<{ id?: string; country_code?: string; name?: string; status?: string }>;
+      rulesets?: Array<{
+        id?: string;
+        country_pack_id?: string;
+        ruleset_code?: string;
+        ruleset_version?: string;
+        status?: string;
+        effective_from?: string;
+        effective_to?: string | null;
+      }>;
+    },
+  );
   const operationalCommunicationLegalTable =
     (legalValues.operational_communication_table as Array<Record<string, unknown>> | undefined) ?? [];
   const legalValueVersionsFlat = (legalTable ?? []).flatMap((r) =>
@@ -1381,7 +1423,10 @@ export async function buildOwnerLegalControlPanelAggregate(
       },
     ],
     country_packs_admin: countryPacksAdmin,
-    legal_values: legalValues,
+    legal_values: {
+      ...legalValues,
+      legal_values_table: legalValuesTableModel,
+    },
     platform_pricing: platformPricing,
     owner_email_provider_config_aggregate: emailProviderConfig,
     countries: tables?.countries ?? [],

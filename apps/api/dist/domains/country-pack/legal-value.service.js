@@ -1,5 +1,8 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
+import { listCountryPacksByCountry } from './country-pack.service.js';
+import { resolveActiveRulesetByDate } from './ruleset.service.js';
+import { buildOwnerLegalValueRulesetLabel, ownerLegalValueRulesetMissingMessage, } from './owner-legal-value-ruleset.pure.js';
 /**
  * Internal-only legal value resolvers.
  */
@@ -68,4 +71,34 @@ export async function assertLegalValueExists(countryCode, key) {
     if (!legalValue)
         throw notFound('Legal value not found');
     return legalValue;
+}
+export async function resolveOwnerLegalValueRulesetContextForCountry(params) {
+    const countryCode = params.countryCode.trim().toUpperCase();
+    const date = params.effectiveDate.trim() || new Date().toISOString().slice(0, 10);
+    const [{ data: countryRow }, packs] = await Promise.all([
+        supabaseAdmin.from('countries').select('code, name').eq('code', countryCode).maybeSingle(),
+        listCountryPacksByCountry(countryCode),
+    ]);
+    const enabledPacks = packs.filter((pack) => pack.status === 'enabled');
+    for (const pack of enabledPacks) {
+        const ruleset = await resolveActiveRulesetByDate(pack.id, date);
+        if (!ruleset)
+            continue;
+        return {
+            country_code: countryCode,
+            country_name: String(countryRow?.name ?? countryCode),
+            country_pack_id: pack.id,
+            country_pack_name: pack.name,
+            active_ruleset_id: ruleset.id,
+            ruleset_code: ruleset.ruleset_code,
+            ruleset_version: ruleset.ruleset_version,
+            ruleset_label: buildOwnerLegalValueRulesetLabel({
+                countryName: String(countryRow?.name ?? countryCode),
+                packName: pack.name,
+                rulesetCode: ruleset.ruleset_code,
+                rulesetVersion: ruleset.ruleset_version,
+            }),
+        };
+    }
+    throw badRequest(ownerLegalValueRulesetMissingMessage(countryCode));
 }

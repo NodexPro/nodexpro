@@ -8,6 +8,20 @@ import {
 } from './owner-legal-value-editor.pure.js';
 import type { OwnerLegalValueEditorDescriptor } from './owner-legal-value-editor.pure.js';
 
+export type OwnerLegalValuesCountryCatalog = {
+  countries?: Array<{ code?: string; name?: string }>;
+  country_packs?: Array<{ id?: string; country_code?: string; name?: string; status?: string }>;
+  rulesets?: Array<{
+    id?: string;
+    country_pack_id?: string;
+    ruleset_code?: string;
+    ruleset_version?: string;
+    status?: string;
+    effective_from?: string;
+    effective_to?: string | null;
+  }>;
+};
+
 export type OwnerLegalValuesTableColumn = {
   key: string;
   label: string;
@@ -176,6 +190,7 @@ function buildRowEditor(
   row: LegalValueRowInput,
   actionKey: string,
   version: Record<string, unknown> | null,
+  countryCatalog?: OwnerLegalValuesCountryCatalog,
 ): OwnerLegalValueEditorDescriptor | null {
   if (
     actionKey !== 'create_legal_value_version' &&
@@ -185,6 +200,7 @@ function buildRowEditor(
   }
   const valueKey = String(row.value_key ?? '').trim();
   if (!valueKey) return null;
+  const countryCode = String(row.country_code ?? '').trim().toUpperCase();
   const currentPayload =
     actionKey === 'update_legal_value_version'
       ? version?.value_payload_json ?? row.current_active_value
@@ -193,11 +209,12 @@ function buildRowEditor(
     value_key: valueKey,
     value_type: row.value_type,
     current_payload: currentPayload,
+    country_code: countryCode,
+    country_catalog: countryCatalog,
     version_context: version
       ? {
           effective_from: version.effective_from,
           effective_to: version.effective_to,
-          country_pack_ruleset_id: version.country_pack_ruleset_id,
           status: version.status,
         }
       : undefined,
@@ -207,6 +224,7 @@ function buildRowEditor(
 function buildRowActions(
   row: LegalValueRowInput,
   globalActions: GlobalActionMeta[],
+  countryCatalog?: OwnerLegalValuesCountryCatalog,
 ): OwnerLegalValuesTableRowAction[] {
   const countryCode = textOrDash(row.country_code);
   const valueKey = textOrDash(row.value_key);
@@ -265,13 +283,20 @@ function buildRowActions(
           ? activeVersion
           : null;
 
+    const editor = buildRowEditor(row, actionKey, editorVersion, countryCatalog);
+
+    if (actionKey === 'create_legal_value_version' && editor?.ruleset_resolution_error) {
+      enabled = false;
+      disabledReason = editor.ruleset_resolution_error;
+    }
+
     return {
       action_key: actionKey,
       enabled,
       button_label: global?.button_label?.trim() || ROW_ACTION_LABELS[actionKey],
       disabled_reason: enabled ? null : disabledReason,
       prefill,
-      editor: buildRowEditor(row, actionKey, editorVersion),
+      editor,
     };
   });
 }
@@ -279,6 +304,7 @@ function buildRowActions(
 export function buildOwnerLegalValuesTableModel(
   rows: LegalValueRowInput[],
   globalActions: GlobalActionMeta[] = [],
+  countryCatalog?: OwnerLegalValuesCountryCatalog,
 ): OwnerLegalValuesTableModel {
   const today = new Date().toISOString().slice(0, 10);
   const tableRows: OwnerLegalValuesTableRow[] = rows.map((row) => {
@@ -312,6 +338,8 @@ export function buildOwnerLegalValuesTableModel(
       value_key: valueKey === '—' ? '' : valueKey,
       value_type: row.value_type,
       current_payload: row.current_active_value,
+      country_code: countryCode === '—' ? '' : countryCode,
+      country_catalog: countryCatalog,
     });
 
     const cells: Record<string, string> = {
@@ -334,7 +362,7 @@ export function buildOwnerLegalValuesTableModel(
       version_status_display: versionStatus,
       effective_from_display: effectiveFrom,
       editor_key: editorDescriptor?.editor_key ?? null,
-      actions: buildRowActions(row, globalActions),
+      actions: buildRowActions(row, globalActions, countryCatalog),
     };
   });
 

@@ -6,7 +6,7 @@ import { badRequest, conflict, notFound } from '../../shared/errors.js';
 import { assertCountryExists } from './country.service.js';
 import { getCountryPack } from './country-pack.service.js';
 import { assertNoOverlapRuleset, assertRulesetExists, resolveActiveRulesetByDate } from './ruleset.service.js';
-import { assertLegalValueExists, assertNoOverlapLegalValueVersions } from './legal-value.service.js';
+import { assertLegalValueExists, assertNoOverlapLegalValueVersions, resolveOwnerLegalValueRulesetContextForCountry } from './legal-value.service.js';
 import {
   assembleLegalValuePayloadFromOwnerEditorInput,
   ownerEditorInputPresent,
@@ -848,7 +848,8 @@ async function handleUpdateLegalValueMetadata(
 
 async function resolveRulesetIdForCreateLegalValueVersion(
   payload: Record<string, unknown>,
-  countryCode: string
+  countryCode: string,
+  effectiveFrom: string,
 ): Promise<string> {
   const idRaw = payload.country_pack_ruleset_id;
   const hasRulesetId = typeof idRaw === 'string' && idRaw.trim() !== '';
@@ -857,22 +858,26 @@ async function resolveRulesetIdForCreateLegalValueVersion(
   }
 
   const codeRaw = payload.ruleset_code;
-  if (typeof codeRaw !== 'string' || !codeRaw.trim()) {
-    throw badRequest('country_pack_ruleset_id or ruleset_code is required');
+  if (typeof codeRaw === 'string' && codeRaw.trim()) {
+    const rulesetCode = codeRaw.trim();
+    const { data: rows, error } = await supabaseAdmin
+      .from('country_pack_rulesets')
+      .select('id, country_pack_id, country_packs!inner(country_code)')
+      .eq('ruleset_code', rulesetCode)
+      .eq('country_packs.country_code', countryCode);
+    if (error) throw error;
+    if (!rows?.length) throw notFound('Ruleset not found for country_code + ruleset_code');
+    if (rows.length > 1) {
+      throw badRequest('ruleset_code matches multiple rulesets for this country; specify country_pack_ruleset_id');
+    }
+    return rows[0].id as string;
   }
-  const rulesetCode = codeRaw.trim();
 
-  const { data: rows, error } = await supabaseAdmin
-    .from('country_pack_rulesets')
-    .select('id, country_pack_id, country_packs!inner(country_code)')
-    .eq('ruleset_code', rulesetCode)
-    .eq('country_packs.country_code', countryCode);
-  if (error) throw error;
-  if (!rows?.length) throw notFound('Ruleset not found for country_code + ruleset_code');
-  if (rows.length > 1) {
-    throw badRequest('ruleset_code matches multiple rulesets for this country; specify country_pack_ruleset_id');
-  }
-  return rows[0].id as string;
+  const context = await resolveOwnerLegalValueRulesetContextForCountry({
+    countryCode,
+    effectiveDate: effectiveFrom,
+  });
+  return context.active_ruleset_id;
 }
 
 async function resolveLegalValueVersionPayloadForCommand(
@@ -897,14 +902,14 @@ async function resolveLegalValueVersionPayloadForCommand(
 async function handleCreateLegalValueVersion(ctx: RequestContext, payload: Record<string, unknown>): Promise<CountryPackCommandResponse> {
   const countryCode = asString(payload.country_code, 'country_code').toUpperCase();
   const valueKey = asString(payload.value_key, 'value_key');
-  const rulesetId = await resolveRulesetIdForCreateLegalValueVersion(payload, countryCode);
+  const effectiveFrom = asDate(payload.effective_from, 'effective_from');
+  const rulesetId = await resolveRulesetIdForCreateLegalValueVersion(payload, countryCode, effectiveFrom);
   const legalValue = await assertLegalValueExists(countryCode, valueKey);
   const ruleset = await assertRulesetExists(rulesetId);
   const pack = await getCountryPack(ruleset.country_pack_id);
   if (!pack || pack.country_code !== countryCode) {
     throw conflict('legal_value_version must match country/ruleset scope');
   }
-  const effectiveFrom = asDate(payload.effective_from, 'effective_from');
   const effectiveTo = asOptionalString(payload.effective_to);
   await assertNoOverlapLegalValueVersions({ legalValueId: legalValue.id, effectiveFrom, effectiveTo });
   assertOperationalCommunicationLegalValueMetadata({

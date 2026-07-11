@@ -2,12 +2,13 @@
  * Owner Legal Value specialized editors — registry, read projection, command payload assembly.
  * JSON remains internal storage; Owner UI reads/writes field models only.
  */
+import { ownerLegalValueRulesetMissingMessage, resolveOwnerLegalValueRulesetContextFromTables, } from './owner-legal-value-ruleset.pure.js';
 import { badRequest } from '../../shared/errors.js';
 import { IL_ISSUE_MONTH_WINDOW_FALLBACK, parseIssueMonthWindowFromLegalPayload, } from '../income/income-issue-month-window-fallback.pure.js';
-import { IL_ISSUE_MONTH_WINDOW_LEGAL_VALUE_KEY } from '../income/income-issue-month-window-resolver.js';
+export const IL_INCOME_ISSUE_MONTH_WINDOW_VALUE_KEY = 'il_income_issue_month_window';
 export const OWNER_LEGAL_VALUE_EDITOR_ISSUE_MONTH_WINDOW = 'issue_month_window';
 const VALUE_KEY_EDITOR_MAP = {
-    [IL_ISSUE_MONTH_WINDOW_LEGAL_VALUE_KEY]: OWNER_LEGAL_VALUE_EDITOR_ISSUE_MONTH_WINDOW,
+    [IL_INCOME_ISSUE_MONTH_WINDOW_VALUE_KEY]: OWNER_LEGAL_VALUE_EDITOR_ISSUE_MONTH_WINDOW,
 };
 function monthLabel(count, direction) {
     const unit = count === 1 ? 'month' : 'months';
@@ -101,6 +102,26 @@ function buildIssueMonthWindowEditor(params) {
     const parsed = parseIssueMonthWindowFromLegalPayload(params.currentPayload) ?? IL_ISSUE_MONTH_WINDOW_FALLBACK;
     const ctx = params.versionContext ?? {};
     const today = new Date().toISOString().slice(0, 10);
+    const effectiveDate = String(ctx.effective_from ?? today);
+    const rulesetContext = params.rulesetContext ??
+        resolveOwnerLegalValueRulesetContextFromTables({
+            countryCode: params.countryCode,
+            effectiveDate,
+        });
+    const contextDisplay = [
+        {
+            key: 'country',
+            label: 'Country',
+            value: rulesetContext
+                ? `${rulesetContext.country_name} (${rulesetContext.country_code})`
+                : params.countryCode,
+        },
+        {
+            key: 'ruleset',
+            label: 'Ruleset',
+            value: rulesetContext?.ruleset_label ?? '—',
+        },
+    ];
     return {
         editor_key: OWNER_LEGAL_VALUE_EDITOR_ISSUE_MONTH_WINDOW,
         title: 'Allowed Issue Month Window',
@@ -114,19 +135,37 @@ function buildIssueMonthWindowEditor(params) {
             }),
         ],
         version_fields: [
-            dateField('effective_from', 'Effective from', String(ctx.effective_from ?? today), true),
+            dateField('effective_from', 'Effective from', effectiveDate, true),
             dateField('effective_to', 'Effective to', ctx.effective_to == null ? '' : String(ctx.effective_to), false),
-            textField('country_pack_ruleset_id', 'Ruleset ID', String(ctx.country_pack_ruleset_id ?? ''), true, 'Active country pack ruleset UUID'),
-            textField('status', 'Status', String(ctx.status ?? 'draft'), true, 'draft | active | disabled'),
         ],
+        context_display: contextDisplay,
+        active_ruleset_id: rulesetContext?.active_ruleset_id ?? null,
+        ruleset_resolution_error: rulesetContext
+            ? null
+            : ownerLegalValueRulesetMissingMessage(params.countryCode),
     };
 }
 export function buildOwnerLegalValueEditorDescriptor(params) {
     const editorKey = resolveOwnerLegalValueEditorKey(params.value_key, params.value_type);
+    const countryCode = String(params.country_code ?? '').trim().toUpperCase();
+    const versionContext = params.version_context ?? {};
+    const effectiveDate = String(versionContext.effective_from ?? '').trim() || new Date().toISOString().slice(0, 10);
+    const resolvedRulesetContext = params.ruleset_context ??
+        (countryCode
+            ? resolveOwnerLegalValueRulesetContextFromTables({
+                countryCode,
+                effectiveDate,
+                countries: params.country_catalog?.countries,
+                countryPacks: params.country_catalog?.country_packs,
+                rulesets: params.country_catalog?.rulesets,
+            })
+            : null);
     if (editorKey === OWNER_LEGAL_VALUE_EDITOR_ISSUE_MONTH_WINDOW) {
         return buildIssueMonthWindowEditor({
             currentPayload: params.current_payload,
-            versionContext: params.version_context,
+            versionContext,
+            countryCode,
+            rulesetContext: resolvedRulesetContext,
         });
     }
     return null;
