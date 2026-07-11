@@ -29,6 +29,10 @@ export function docPreviewIcon(name, color = 'currentColor') {
             return `<svg ${common}><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 11h2M8 15h6M14 11h2"/></svg>`;
         case 'shield':
             return `<svg ${common}><path d="M12 3 20 7v6c0 4.5-3.5 7.5-8 8-4.5-.5-8-3.5-8-8V7l8-4Z"/><path d="m9.5 12 1.8 1.8L15 10.1"/></svg>`;
+        case 'edit':
+            return `<svg ${common}><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>`;
+        case 'calculator':
+            return `<svg ${common}><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2"/></svg>`;
         default:
             return '';
     }

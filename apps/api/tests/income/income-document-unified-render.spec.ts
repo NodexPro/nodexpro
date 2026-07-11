@@ -178,14 +178,17 @@ test('unified tax invoice html markers — section order and labels', () => {
   const commentsIdx = html.indexOf('<section class="nx-doc__comments"');
   const paymentsIdx = html.indexOf('<section class="nx-doc__payments"');
   const footerIdx = html.indexOf('<footer class="nx-doc__platform-footer"');
+  assert.ok(headerIdx >= 0);
   assert.ok(headerIdx < customerIdx);
   assert.ok(customerIdx < tableIdx);
   assert.ok(tableIdx < summaryIdx);
   assert.ok(commentsIdx < summaryIdx);
   assert.ok(paymentsIdx < footerIdx);
-  assert.match(html, /\.nx-doc__customer \{[\s\S]*width: 100%/);
-  assert.match(html, /\.nx-doc__customer \{[\s\S]*border-bottom:/);
-  assert.match(html, /\.nx-doc__customer-inner \{[\s\S]*margin-inline-start: auto/);
+  assert.match(html, /class="nx-doc__doc-badge"/);
+  assert.doesNotMatch(html, /class="nx-doc__doc-number"/);
+  assert.match(html, />סכום מע״מ</);
+  assert.match(html, /nx-doc__summary-head[\s\S]*סיכום כספי/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__grand-total[\s\S]*color: #fff/);
   assert.match(html, /\.nx-doc__comments \{[\s\S]*grid-column: 1/);
   assert.match(html, /\.nx-doc__summary \{[\s\S]*grid-column: 2/);
   assert.match(html, /\.nx-doc__table thead th \{[\s\S]*background: var\(--nx-doc-header-gradient\)/);
@@ -237,13 +240,12 @@ test('payment bank details never appear inside comments section', () => {
 
 test('default premium theme uses purple gradient on badge and table header', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /\.nx-doc--unified \.nx-doc__header \{[\s\S]*border-bottom:/);
+  assert.match(html, /--nx-doc-header-gradient: linear-gradient\(135deg, #5B4DFF 0%, #6A5BFF 100%\)/);
   assert.match(html, /class="nx-doc__doc-badge" style="background:linear-gradient\(135deg, #5B4DFF 0%, #6A5BFF 100%\)"/);
   assert.match(html, /--nx-doc-icon: var\(--nx-doc-primary\)/);
   assert.match(html, /stroke="currentColor"/);
   assert.match(html, /nx-doc__issuer-details/);
   assert.match(html, /nx-doc__issuer-lines/);
-  assert.match(html, /\.nx-doc--unified \.nx-doc__doc-badge[\s\S]*border-radius: 10px/);
 });
 
 test('credit card block hidden without backend payment link data', () => {

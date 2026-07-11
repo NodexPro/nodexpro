@@ -73,6 +73,9 @@ export function lineRowsFromLinesSnapshot(linesSnapshot, currency, totalsSnapsho
             : line.unit_price_reference != null && Number.isFinite(line.unit_price_reference)
                 ? line.quantity * line.unit_price_reference
                 : null;
+        const lineVatAmount = readOptionalString(rawObj.vat_display) ??
+            readOptionalString(rawObj.line_vat_display) ??
+            readOptionalString(rawObj.vat_amount_display);
         return {
             row_number: index + 1,
             description: line.description || '—',
@@ -83,7 +86,7 @@ export function lineRowsFromLinesSnapshot(linesSnapshot, currency, totalsSnapsho
                 : '—',
             discount: lineDiscount,
             currency: lineCurrency,
-            vat_rate_label: lineVatLabelFromCode(line.vat_rate_code, vatFallback),
+            vat_rate_label: lineVatAmount ?? lineVatLabelFromCode(line.vat_rate_code, vatFallback),
             total: formatMoneyReference(amountRef, 'ILS'),
         };
     });
