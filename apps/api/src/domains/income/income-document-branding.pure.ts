@@ -31,10 +31,10 @@ import { STUDIO_DOCUMENT_STYLE_KEYS } from './income-document-branding.types.js'
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 export const DEFAULT_DOCUMENT_STYLE_KEY: IncomeDocumentStyleTemplateKey = 'classic';
-export const DEFAULT_COLOR_THEME_KEY = 'black_white';
+export const DEFAULT_COLOR_THEME_KEY = 'nodexpro_premium';
 export const DEFAULT_LOGO_SIZE_KEY: IncomeLogoSizeKey = 'medium';
-export const DEFAULT_PRIMARY_COLOR = '#111827';
-export const DEFAULT_SECONDARY_COLOR = '#ffffff';
+export const DEFAULT_PRIMARY_COLOR = '#5B4DFF';
+export const DEFAULT_SECONDARY_COLOR = '#FFFFFF';
 
 export const INCOME_DOCUMENT_TYPE_STYLE_GROUP_KEYS = [
   'quote_deal',
@@ -175,6 +175,19 @@ function buildAccentColorTheme(
 }
 
 const COLOR_THEME_DEFS: Omit<IncomeColorThemePreset, 'mini_preview_markup'>[] = [
+  {
+    key: 'nodexpro_premium',
+    label: 'NodexPro Premium',
+    gradient: { from: '#5B4DFF', to: '#7A6DFF' },
+    table_header_color: '#5B4DFF',
+    totals_accent_color: '#5B4DFF',
+    recipient_accent_color: '#5B4DFF',
+    recipient_block_background: '#F8F9FD',
+    recipient_block_border: '#E6E8F2',
+    text_on_dark: '#ffffff',
+    text_on_light: '#1C2333',
+    print_safe: true,
+  },
   {
     key: 'black_white',
     label: 'שחור לבן',

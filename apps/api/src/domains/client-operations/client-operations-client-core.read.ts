@@ -21,6 +21,7 @@ export type ClientOperationsCoreClientRow = {
   phone: string | null;
   address: string | null;
   city: string | null;
+  website: string | null;
   business_type: string | null;
 };
 
@@ -76,7 +77,7 @@ export async function loadClientOperationsCoreClient(
 ): Promise<ClientOperationsCoreClientRow | null> {
   const { data: client, error: cErr } = await supabaseAdmin
     .from('clients')
-    .select('id, display_name, tax_id, email, phone, address, city')
+    .select('id, display_name, tax_id, email, phone, address, city, website')
     .eq('organization_id', orgId)
     .eq('id', clientId)
     .maybeSingle();
@@ -98,6 +99,7 @@ export async function loadClientOperationsCoreClient(
     phone: string | null;
     address: string | null;
     city: string | null;
+    website: string | null;
   };
 
   return {
@@ -111,7 +113,7 @@ export async function loadClientOperationsCoreClientsForOrg(
 ): Promise<ClientOperationsCoreClientRow[]> {
   const { data: clients, error } = await supabaseAdmin
     .from('clients')
-    .select('id, display_name, tax_id, email, phone, address, city')
+    .select('id, display_name, tax_id, email, phone, address, city, website')
     .eq('organization_id', orgId)
     .eq('is_archived', false)
     .order('display_name', { ascending: true })
@@ -125,6 +127,7 @@ export async function loadClientOperationsCoreClientsForOrg(
     phone: string | null;
     address: string | null;
     city: string | null;
+    website: string | null;
   }>;
   if (safe.length === 0) return [];
 

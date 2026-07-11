@@ -8,10 +8,16 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { notFound } from '../../shared/errors.js';
 import { assertRowMatchesIssuerScope, type ActiveIncomeIssuerScope } from './income.guards.js';
 import { loadActiveIncomeIssuerScope } from './income-issuer-scope.service.js';
-import { buildIncomeDocumentRenderSnapshot } from './income-document-render-snapshot.builders.js';
-import { renderIncomeDocumentPdfBuffer } from './income-document-pdf.renderer.js';
+import { buildUnifiedIncomeDocumentPrintHtml } from './income-document-unified-render.html.js';
+import {
+  buildUnifiedIncomeDocumentRenderAuditSnapshot,
+} from './income-document-unified-render.pure.js';
+import {
+  buildUnifiedIncomeDocumentRenderModelForIssuedDocument,
+  type IssuedIncomeDocumentForRender,
+} from './income-document-unified-render.service.js';
+import { renderIncomeDocumentPdfBufferFromHtml } from './income-document-pdf.renderer.js';
 import { requiresPdfRender } from './income-pdf-template.resolver.js';
-import type { IncomeDocumentType } from './income.types.js';
 
 const BUCKET_INCOME_DOCUMENTS = 'income-documents';
 let bucketEnsured = false;
@@ -27,22 +33,7 @@ async function ensureIncomeDocumentsBucket(): Promise<void> {
   bucketEnsured = true;
 }
 
-interface IssuedDocForPdf {
-  id: string;
-  organization_id: string;
-  issuer_business_id: string;
-  represented_client_id: string | null;
-  document_type: IncomeDocumentType;
-  document_number: string;
-  issue_date: string;
-  currency: string;
-  language: string | null;
-  notes: string | null;
-  issuer_snapshot_json: Record<string, unknown>;
-  customer_snapshot_json: Record<string, unknown>;
-  lines_snapshot_json: unknown;
-  totals_snapshot_json: Record<string, unknown> | null;
-  legal_snapshot_json: Record<string, unknown> | null;
+interface IssuedDocForPdf extends IssuedIncomeDocumentForRender {
   pdf_render_status: string;
   pdf_asset_id: string | null;
 }
@@ -51,7 +42,7 @@ async function loadIssuedDocumentForPdf(orgId: string, documentId: string): Prom
   const { data, error } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, organization_id, issuer_business_id, represented_client_id, document_type, document_number, issue_date, currency, language, notes, issuer_snapshot_json, customer_snapshot_json, lines_snapshot_json, totals_snapshot_json, legal_snapshot_json, pdf_render_status, pdf_asset_id',
+      'id, organization_id, issuer_business_id, represented_client_id, document_type, document_number, issue_date, due_date, currency, language, notes, issuer_snapshot_json, customer_snapshot_json, lines_snapshot_json, totals_snapshot_json, legal_snapshot_json, source_draft_id, pdf_render_status, pdf_asset_id',
     )
     .eq('id', documentId)
     .eq('organization_id', orgId)
@@ -130,31 +121,13 @@ export async function renderIncomeDocumentPdf(
   });
 
   try {
-    const { data: settings } = await supabaseAdmin
-      .from('organization_settings')
-      .select('document_footer_note')
-      .eq('organization_id', orgId)
-      .maybeSingle();
-
-    const snapshot = buildIncomeDocumentRenderSnapshot({
-      document_type: doc.document_type,
-      document_number: doc.document_number,
-      issue_date: doc.issue_date,
-      currency: doc.currency,
-      language: doc.language,
-      notes: doc.notes,
-      issuer_snapshot_json: doc.issuer_snapshot_json ?? {},
-      customer_snapshot_json: doc.customer_snapshot_json ?? {},
-      lines_snapshot_json: Array.isArray(doc.lines_snapshot_json) ? doc.lines_snapshot_json : [],
-      totals_snapshot_json: doc.totals_snapshot_json,
-      legal_snapshot_json: doc.legal_snapshot_json,
-      organization_footer_note: (settings as { document_footer_note?: string | null } | null)
-        ?.document_footer_note,
-    });
-
-    const pdfBuffer = await renderIncomeDocumentPdfBuffer(snapshot);
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    const renderModel = await buildUnifiedIncomeDocumentRenderModelForIssuedDocument(scope, doc);
+    const printHtml = buildUnifiedIncomeDocumentPrintHtml(renderModel);
+    const pdfBuffer = await renderIncomeDocumentPdfBufferFromHtml(printHtml);
     const assetId = await storePdfAsset(ctx, orgId, doc.document_number, pdfBuffer);
     const renderedAt = new Date().toISOString();
+    const renderAuditSnapshot = buildUnifiedIncomeDocumentRenderAuditSnapshot(renderModel);
 
     await supabaseAdmin
       .from('income_documents')
@@ -163,8 +136,8 @@ export async function renderIncomeDocumentPdf(
         pdf_asset_id: assetId,
         pdf_rendered_at: renderedAt,
         pdf_render_error: null,
-        render_snapshot_json: snapshot,
-        pdf_template_key: snapshot.template.template_key,
+        render_snapshot_json: renderAuditSnapshot,
+        pdf_template_key: 'unified_income_document_v1',
       })
       .eq('id', incomeDocumentId)
       .eq('organization_id', orgId);
@@ -176,7 +149,7 @@ export async function renderIncomeDocumentPdf(
       entityType: 'income_document',
       entityId: incomeDocumentId,
       action: AUDIT_ACTIONS.INCOME_PDF_RENDER_SUCCEEDED,
-      payload: { pdf_asset_id: assetId, template_key: snapshot.template.template_key },
+      payload: { pdf_asset_id: assetId, template_key: 'unified_income_document_v1' },
     });
 
     return { pdf_asset_id: assetId, pdf_render_status: 'rendered' };

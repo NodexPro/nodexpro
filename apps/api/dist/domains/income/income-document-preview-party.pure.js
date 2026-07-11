@@ -82,5 +82,7 @@ export function toPublicPreviewParty(party, fallbackDisplayName = '—') {
         address: publicOptionalField(party.address),
         phone: publicOptionalField(party.phone),
         email: publicOptionalField(party.email),
+        website: publicOptionalField(party.website),
+        contact_name: publicOptionalField(party.contact_name),
     };
 }

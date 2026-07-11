@@ -9,6 +9,8 @@ export type IncomePreviewPublicParty = {
   address: string | null;
   phone: string | null;
   email: string | null;
+  website?: string | null;
+  contact_name?: string | null;
 };
 
 export function isLikelyInternalIdentifier(value: string): boolean {
@@ -80,5 +82,7 @@ export function toPublicPreviewParty(
     address: publicOptionalField(party.address),
     phone: publicOptionalField(party.phone),
     email: publicOptionalField(party.email),
+    website: publicOptionalField(party.website),
+    contact_name: publicOptionalField(party.contact_name),
   };
 }

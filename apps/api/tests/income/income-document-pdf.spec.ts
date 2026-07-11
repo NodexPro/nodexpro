@@ -5,12 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { assertRowMatchesIssuerScope } from '../../src/domains/income/income.guards.js';
 import {
-  buildIncomeDocumentRenderSnapshot,
-} from '../../src/domains/income/income-document-render-snapshot.builders.js';
-import {
   requiresPdfRender,
   resolveIncomePdfTemplate,
 } from '../../src/domains/income/income-pdf-template.resolver.js';
+import { buildUnifiedIncomeDocumentRenderAuditSnapshot } from '../../src/domains/income/income-document-unified-render.pure.js';
 function incomeDocumentDownloadPath(incomeDocumentId: string): string {
   return `/api/v1/income/documents/${incomeDocumentId}/download`;
 }
@@ -26,30 +24,31 @@ const pdfServiceSource = readFileSync(
 );
 const routesSource = readFileSync(join(dir, '../../src/domains/income/income.routes.ts'), 'utf8');
 
-test('issue builds immutable render snapshot from document snapshots', () => {
-  const snapshot = buildIncomeDocumentRenderSnapshot({
-    document_type: 'tax_invoice',
-    document_number: '2026-0001',
-    issue_date: '2026-05-15',
+test('unified render audit snapshot records renderer version', () => {
+  const snapshot = buildUnifiedIncomeDocumentRenderAuditSnapshot({
+    branding: {} as never,
+    docTypeLabel: 'חשבונית מס',
+    numberPreview: '2026-0001',
+    issuer: { display_name: 'Acme', tax_id: '1', address: null, phone: null, email: null },
+    recipient: { display_name: 'Client', tax_id: '2', address: null, phone: null, email: null },
+    document_date: '2026-05-15',
+    due_date: null,
     currency: 'ILS',
-    language: 'he',
-    notes: 'תודה',
-    issuer_snapshot_json: {
-      legal_name: 'Acme Ltd',
-      display_name: 'Acme',
-      tax_id: '123456789',
+    lineRows: [],
+    totals: {
+      subtotal_before_discount: '₪100.00',
+      discount: null,
+      subtotal_after_discount: '₪100.00',
+      vat_label: 'מע״מ',
+      vat: '₪18.00',
+      grand_total: '₪118.00',
     },
-    customer_snapshot_json: { display_name: 'Client A', tax_id: '987' },
-    lines_snapshot_json: [{ description: 'שירות', amount_reference: 100 }],
-    totals_snapshot_json: { subtotal_reference: 100, not_financial_truth: true },
-    legal_snapshot_json: { country_code: 'IL', document_type_source: 'fallback_il' },
+    notes: 'תודה',
+    company_subtitle: null,
   });
-  assert.equal(snapshot.issuer.legal_name, 'Acme Ltd');
-  assert.equal(snapshot.customer.display_name, 'Client A');
-  assert.equal(snapshot.lines.length, 1);
-  assert.equal(snapshot.totals.not_financial_truth, true);
-  assert.ok(snapshot.template.template_key.includes('fallback_il'));
-  assert.equal(snapshot.template.rtl, true);
+  assert.equal(snapshot.renderer, 'unified_income_document_v1');
+  assert.equal(snapshot.doc_type_label, 'חשבונית מס');
+  assert.equal(snapshot.not_financial_truth, true);
 });
 
 test('template resolver returns rtl for Hebrew', () => {

@@ -51,7 +51,7 @@ export function buildClientOperationsAddressJson(address, city) {
 export async function loadClientOperationsCoreClient(orgId, clientId) {
     const { data: client, error: cErr } = await supabaseAdmin
         .from('clients')
-        .select('id, display_name, tax_id, email, phone, address, city')
+        .select('id, display_name, tax_id, email, phone, address, city, website')
         .eq('organization_id', orgId)
         .eq('id', clientId)
         .maybeSingle();
@@ -74,7 +74,7 @@ export async function loadClientOperationsCoreClient(orgId, clientId) {
 export async function loadClientOperationsCoreClientsForOrg(orgId) {
     const { data: clients, error } = await supabaseAdmin
         .from('clients')
-        .select('id, display_name, tax_id, email, phone, address, city')
+        .select('id, display_name, tax_id, email, phone, address, city, website')
         .eq('organization_id', orgId)
         .eq('is_archived', false)
         .order('display_name', { ascending: true })

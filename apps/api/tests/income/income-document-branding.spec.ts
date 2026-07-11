@@ -26,22 +26,26 @@ import {
 import { renderIncomeBrandedPreviewHtml, renderStudioSamplePreviewHtml } from '../../src/domains/income/income-document-branding-preview.renderer.js';
 import type { IncomeBrandingProfileRow } from '../../src/domains/income/income-document-branding.types.js';
 
-test('color theme presets expose 13 studio themes including black and white default', () => {
+test('color theme presets expose 14 studio themes including NodexPro premium default', () => {
   const presets = getColorThemePresets();
-  assert.equal(presets.length, 13);
+  assert.equal(presets.length, 14);
   assert.ok(presets.every((p) => p.print_safe));
+  const premium = presets.find((p) => p.key === 'nodexpro_premium');
+  assert.ok(premium);
+  assert.equal(premium!.label, 'NodexPro Premium');
+  assert.equal(premium!.table_header_color, '#5B4DFF');
+  assert.equal(premium!.recipient_block_background, '#F8F9FD');
+  assert.equal(premium!.recipient_block_border, '#E6E8F2');
+  assert.equal(premium!.text_on_light, '#1C2333');
   const blackWhite = presets.find((p) => p.key === 'black_white');
   assert.ok(blackWhite);
   assert.equal(blackWhite!.label, 'שחור לבן');
-  assert.equal(blackWhite!.table_header_color, '#111827');
-  assert.equal(blackWhite!.recipient_block_background, '#ffffff');
-  assert.equal(blackWhite!.recipient_block_border, '#d1d5db');
-  assert.equal(blackWhite!.text_on_light, '#111827');
 });
 
 test('studio color catalog exposes full fixed palette', () => {
   const presets = getStudioColorThemePresets();
-  assert.equal(presets.length, 13);
+  assert.equal(presets.length, 14);
+  assert.ok(presets.some((p) => p.key === 'nodexpro_premium'));
   assert.ok(presets.some((p) => p.key === 'black_white' && p.studio_label === 'שחור לבן'));
   assert.ok(presets.some((p) => p.key === 'pastel_purple'));
   assert.ok(presets.some((p) => p.key === 'pale_peach'));
@@ -57,11 +61,12 @@ test('studio navigation exposes seven SaaS sections', () => {
   assert.ok(sections.every((s) => s.description.trim().length > 0));
 });
 
-test('document type style groups default to classic and black white', () => {
+test('document type style groups default to classic and nodexpro premium', () => {
   const groups = buildDocumentTypeStyleGroups({});
   assert.equal(groups.length, 4);
   assert.ok(groups.every((g) => g.effective_document_style_key === 'classic'));
-  assert.ok(groups.every((g) => g.effective_color_theme_key === 'black_white'));
+  assert.ok(groups.every((g) => g.effective_color_theme_key === DEFAULT_COLOR_THEME_KEY));
+  assert.equal(DEFAULT_COLOR_THEME_KEY, 'nodexpro_premium');
 });
 
 test('document type group overrides resolve effective style for preview', () => {
@@ -167,7 +172,7 @@ test('applyColorThemeToColorColumns syncs stored color columns from theme', () =
   assert.equal(cols.totals_color, theme.totals_accent_color);
 });
 
-test('preview uses theme tokens, elegant layout, and draft number label', () => {
+test('preview uses unified layout, theme tokens, and draft number label', () => {
   const row: IncomeBrandingProfileRow = {
     id: 'p1',
     organization_id: 'o1',
@@ -224,12 +229,17 @@ test('preview uses theme tokens, elegant layout, and draft number label', () => 
   const theme = branding.color_theme;
   assert.match(html, new RegExp(theme.recipient_accent_color.replace('#', '#')));
   assert.match(html, new RegExp(theme.table_header_color.replace('#', '#')));
-  assert.match(html, /nx-doc__header--elegant/);
+  assert.match(html, /nx-doc nx-doc--unified/);
+  assert.match(html, /nx-doc__header-doc/);
+  assert.match(html, /nx-doc__customer/);
+  assert.match(html, /nx-doc__summary/);
+  assert.match(html, /nx-doc__platform-footer/);
   assert.match(html, /Test4/);
   assert.match(html, /טיוטה/);
-  assert.match(html, /Arial, Helvetica, "Segoe UI", sans-serif/);
-  assert.match(html, /לכבוד:/);
+  assert.match(html, /Heebo, Arial, Helvetica, "Segoe UI", sans-serif/);
+  assert.match(html, />לכבוד</);
   assert.doesNotMatch(html, /type="color"/i);
+  assert.doesNotMatch(html, /nx-doc__header--elegant/);
 });
 
 test('formatDocumentNumberDisplay shows draft label when no number', () => {
@@ -286,7 +296,7 @@ test('legacy minimal saved profile resolves to modern without breaking read', ()
   assert.equal(resolved.document_style_key, 'modern');
 });
 
-test('preview html differs across classic modern and elegant styles', () => {
+test('unified preview html applies color theme tokens across document styles', () => {
   const baseRow: IncomeBrandingProfileRow = {
     id: 'p1',
     organization_id: 'o1',
@@ -351,38 +361,23 @@ test('preview html differs across classic modern and elegant styles', () => {
     ...previewParams,
   });
 
-  const previewBody = (html: string) => {
-    const idx = html.indexOf('</style>');
-    return idx >= 0 ? html.slice(idx + 8) : html;
-  };
-
-  const classicBody = previewBody(classicHtml);
-  const modernBody = previewBody(modernHtml);
-  const elegantBody = previewBody(elegantHtml);
-
-  assert.match(classicBody, /nx-doc__header--classic/);
-  assert.match(classicBody, /nx-doc__classic-columns/);
-  assert.match(classicBody, /<div class="nx-doc__doc-type-banner"><div class="nx-doc__doc-meta">/);
-  assert.doesNotMatch(classicBody, /class="nx-doc__doc-type-banner nx-doc__doc-type-banner--subtle"/);
-  assert.doesNotMatch(classicBody, /nx-doc__header--modern/);
+  for (const html of [classicHtml, modernHtml, elegantHtml]) {
+    assert.match(html, /nx-doc nx-doc--unified/);
+    assert.match(html, /nx-doc__doc-badge/);
+    assert.match(html, /nx-doc__bottom/);
+    assert.doesNotMatch(html, /nx-doc__header--classic/);
+    assert.doesNotMatch(html, /nx-doc__header--modern/);
+    assert.doesNotMatch(html, /nx-doc__header--elegant/);
+  }
 
   const yellowTheme = resolveColorThemePreset('yellow')!;
   const yellowPalette = resolveBrandingPreviewThemePalette(yellowTheme);
   assert.equal(yellowPalette.totals_accent_color, '#ffe384');
   assert.match(classicHtml, /--nx-doc-theme-accent:\s*#ffe384/);
-  assert.match(classicHtml, /\.nx-doc__grand-total strong \{ color: var\(--nx-doc-theme-accent\)/);
+  assert.match(classicHtml, /color: var\(--nx-doc-primary\)/);
   assert.doesNotMatch(classicHtml, /#1f4b99/);
-
-  assert.match(modernBody, /nx-doc__header--modern/);
-  assert.match(modernBody, /nx-doc__table--modern/);
-  assert.match(modernBody, /nx-doc__totals--modern/);
-  assert.doesNotMatch(modernBody, /<div class="nx-doc__doc-type-banner"/);
-
-  assert.match(elegantBody, /nx-doc__header--elegant/);
-  assert.match(elegantBody, /nx-doc__totals--elegant/);
-  assert.match(elegantBody, /nx-doc__recipient--elegant/);
-  assert.notEqual(classicBody, modernBody);
-  assert.notEqual(modernBody, elegantBody);
+  assert.equal(classicHtml, modernHtml);
+  assert.equal(modernHtml, elegantHtml);
 });
 
 test('work engine preview css does not hardcode blue on branded grand total', async () => {
@@ -455,10 +450,10 @@ test('saved document style and theme are reflected in preview html output', () =
     notes: null,
     company_subtitle: null,
   });
-  assert.match(html, /nx-doc nx-doc--elegant/);
-  assert.match(html, /nx-doc__header--elegant/);
+  assert.match(html, /nx-doc nx-doc--unified/);
   assert.match(html, /--nx-doc-theme-accent:\s*#ffe384/);
   assert.doesNotMatch(html, /#1f4b99/);
+  assert.match(html, /nodexpro\.com/);
 });
 
 test('frontend panel source uses studio aggregate only', async () => {

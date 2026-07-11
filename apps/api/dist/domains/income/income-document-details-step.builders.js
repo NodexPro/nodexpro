@@ -10,11 +10,13 @@ import { previewNextIncomeDocumentNumber } from './income-document-numbering.ser
 import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
-import { renderIncomeBrandedPreviewHtml } from './income-document-branding-preview.renderer.js';
+import { renderUnifiedIncomeDocumentHtml } from './income-document-unified-render.html.js';
+import { totalsFromTotalsSnapshot } from './income-document-unified-render.pure.js';
 import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById } from './income-recipient.service.js';
 import { incomeCustomerPaymentTermsLabel, INCOME_CUSTOMER_PAYMENT_TERMS_OPTIONS, resolveTaxInvoiceDueDate, } from './income-customer-payment-terms.pure.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import { loadClientOperationsCoreClient } from '../client-operations/client-operations-client-core.read.js';
 const DOCUMENT_TYPE_LABELS = {
     receipt: 'קבלה',
     tax_invoice: 'חשבונית מס',
@@ -43,12 +45,29 @@ function escapeHtml(value) {
 }
 async function loadIssuerPreviewBlock(scope) {
     const snap = await buildIncomeIssuerSnapshotForScope(scope);
+    let website = null;
+    if (scope.acting_mode === 'office_representative' && scope.represented_client_id) {
+        const core = await loadClientOperationsCoreClient(scope.org_id, scope.represented_client_id);
+        website = core?.website?.trim() ? core.website.trim() : null;
+    }
+    else {
+        const { data: settingsRow } = await supabaseAdmin
+            .from('organization_settings')
+            .select('website, display_website_on_documents')
+            .eq('organization_id', scope.org_id)
+            .maybeSingle();
+        const settings = settingsRow;
+        if (settings?.display_website_on_documents !== false && settings?.website?.trim()) {
+            website = settings.website.trim();
+        }
+    }
     return toPublicPreviewParty({
         display_name: snap.display_name?.trim() ? snap.display_name.trim() : scope.issuer_label,
         tax_id: snap.tax_id?.trim() ? snap.tax_id.trim() : null,
         address: previewPartyAddressLine(snap.address_json),
         phone: snap.phone?.trim() ? snap.phone.trim() : null,
         email: snap.email?.trim() ? snap.email.trim() : null,
+        website,
     }, scope.issuer_label);
 }
 async function loadRecipientPreviewBlock(scope, row, fallbackDisplayName) {
@@ -536,15 +555,28 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             email: null,
         };
     const previewLineRows = !lean && previewGeneratedAt != null
-        ? (await buildLineRows(lines, settings, vatResolution, documentDate, false)).map((r) => ({
-            row_number: r.row_number,
-            description: r.description.value,
-            quantity: r.quantity.value,
-            unit_price: r.unit_price.value,
-            currency: r.currency.value,
-            vat_rate_label: r.vat_rate_label,
-            total: r.line_total_display,
-        }))
+        ? (await buildLineRows(lines, settings, vatResolution, documentDate, false)).map((r) => {
+            const sourceLine = lines[r.row_number - 1];
+            const unitLabel = sourceLine &&
+                typeof sourceLine.unit_label === 'string'
+                ? String(sourceLine.unit_label).trim() || null
+                : null;
+            const lineDiscount = sourceLine &&
+                typeof sourceLine.discount_display === 'string'
+                ? String(sourceLine.discount_display).trim() || null
+                : null;
+            return {
+                row_number: r.row_number,
+                description: r.description.value,
+                quantity: r.quantity.value,
+                unit: unitLabel,
+                unit_price: r.unit_price.value,
+                discount: lineDiscount,
+                currency: r.currency.value,
+                vat_rate_label: r.vat_rate_label,
+                total: r.line_total_display,
+            };
+        })
         : [];
     const previewVatLabel = totals.vat_display != null
         ? settings.vat_mode === 'standard'
@@ -558,7 +590,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
         ? await loadResolvedBrandingProfileForDocumentType(scope, row.document_type)
         : null;
     const previewHtml = !lean && previewGeneratedAt != null && resolvedBranding
-        ? renderIncomeBrandedPreviewHtml({
+        ? renderUnifiedIncomeDocumentHtml({
             branding: resolvedBranding,
             docTypeLabel,
             numberPreview,
@@ -566,17 +598,20 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             recipient: recipientBlock,
             document_date: row.document_date ?? null,
             due_date: displayDueDate ?? null,
+            payment_terms_display: taxInvoicePayment?.paymentTermsLabel ?? null,
             currency: row.currency,
             lineRows: previewLineRows,
             totals: {
-                subtotal_before_discount: totals.subtotal_before_discount_display,
-                discount: totals.discount_enabled && totals.discount_amount_display
-                    ? `−${totals.discount_amount_display.replace(/^−/, '')}`
-                    : null,
-                subtotal_after_discount: totals.subtotal_after_discount_display,
+                ...totalsFromTotalsSnapshot({
+                    subtotal_before_discount_display: totals.subtotal_before_discount_display,
+                    subtotal_after_discount_display: totals.subtotal_after_discount_display,
+                    discount_amount_display: totals.discount_amount_display,
+                    discount_enabled: totals.discount_enabled,
+                    vat_display: totals.vat_display,
+                    grand_total_display: totals.grand_total_display,
+                    vat_rate_label: previewVatLabel,
+                }),
                 vat_label: previewVatLabel,
-                vat: totals.vat_display ?? null,
-                grand_total: totals.grand_total_display,
             },
             notes: row.notes ?? null,
             company_subtitle: resolvedBranding.company_subtitle,
