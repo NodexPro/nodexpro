@@ -5,7 +5,7 @@ export const DEFAULT_DOCUMENT_STYLE_KEY = 'classic';
 export const DEFAULT_COLOR_THEME_KEY = 'nodexpro_premium';
 export const DEFAULT_LOGO_SIZE_KEY = 'medium';
 export const DEFAULT_PRIMARY_COLOR = '#5B4DFF';
-export const DEFAULT_SECONDARY_COLOR = '#FFFFFF';
+export const DEFAULT_SECONDARY_COLOR = '#6A5BFF';
 export const INCOME_DOCUMENT_TYPE_STYLE_GROUP_KEYS = [
     'quote_deal',
     'tax_group',
@@ -289,10 +289,10 @@ export const INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS = [
     },
 ];
 export const INCOME_DOCUMENT_TYPE_STYLE_DEFAULTS = [
-    { document_type_key: 'quote', document_type_label: 'הצעת מחיר', default_document_style_key: 'classic', default_color_theme_key: 'black_white' },
-    { document_type_key: 'tax_invoice', document_type_label: 'חשבונית מס', default_document_style_key: 'classic', default_color_theme_key: 'black_white' },
-    { document_type_key: 'receipt', document_type_label: 'קבלה', default_document_style_key: 'classic', default_color_theme_key: 'black_white' },
-    { document_type_key: 'credit_note', document_type_label: 'זיכוי', default_document_style_key: 'classic', default_color_theme_key: 'black_white' },
+    { document_type_key: 'quote', document_type_label: 'הצעת מחיר', default_document_style_key: 'classic', default_color_theme_key: 'nodexpro_premium' },
+    { document_type_key: 'tax_invoice', document_type_label: 'חשבונית מס', default_document_style_key: 'classic', default_color_theme_key: 'nodexpro_premium' },
+    { document_type_key: 'receipt', document_type_label: 'קבלה', default_document_style_key: 'classic', default_color_theme_key: 'nodexpro_premium' },
+    { document_type_key: 'credit_note', document_type_label: 'זיכוי', default_document_style_key: 'classic', default_color_theme_key: 'nodexpro_premium' },
 ];
 export function getDocumentTypeStyleDefaults() {
     return INCOME_DOCUMENT_TYPE_STYLE_DEFAULTS.map((d) => ({ ...d }));
@@ -628,10 +628,16 @@ export function resolveEffectiveLayoutTemplateKey(row) {
     return template?.default_layout_template_key ?? 'logo_left_client_right';
 }
 export function matchColorThemeKeyFromLegacyColors(primaryColor, tableHeaderColor, totalsColor) {
-    const p = coerceHexColor(primaryColor, DEFAULT_PRIMARY_COLOR);
-    const t = coerceHexColor(tableHeaderColor, DEFAULT_PRIMARY_COLOR);
-    const tot = coerceHexColor(totalsColor, DEFAULT_PRIMARY_COLOR);
+    const p = coerceHexColor(primaryColor, DEFAULT_PRIMARY_COLOR).toLowerCase();
+    const t = coerceHexColor(tableHeaderColor, DEFAULT_PRIMARY_COLOR).toLowerCase();
+    const tot = coerceHexColor(totalsColor, DEFAULT_PRIMARY_COLOR).toLowerCase();
+    if (p === t && t === tot && p === '#1f4b99') {
+        return DEFAULT_COLOR_THEME_KEY;
+    }
     const legacyMap = {
+        '#5b4dff': 'nodexpro_premium',
+        '#6a5bff': 'nodexpro_premium',
+        '#7a6dff': 'nodexpro_premium',
         '#111827': 'black_white',
         '#1f559a': 'dark_blue',
         '#5b9bef': 'bright_blue',
@@ -645,7 +651,7 @@ export function matchColorThemeKeyFromLegacyColors(primaryColor, tableHeaderColo
         '#ddf5df': 'pale_green',
         '#d9f1ef': 'pale_mint',
         '#ddeaf7': 'pale_blue',
-        '#1f4b99': 'dark_blue',
+        '#1f4b99': 'nodexpro_premium',
         '#1e5c4a': 'teal',
         '#475569': 'gray',
         '#64748b': 'gray',

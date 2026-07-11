@@ -15,9 +15,10 @@ export function docPreviewIcon(
     | 'payment'
     | 'id'
     | 'shield',
-  color = '#5B4DFF',
+  color = 'currentColor',
 ): string {
-  const common = `class="nx-doc__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+  const stroke = color === 'currentColor' ? 'currentColor' : color;
+  const common = `class="nx-doc__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
   switch (name) {
     case 'location':
       return `<svg ${common}><path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>`;

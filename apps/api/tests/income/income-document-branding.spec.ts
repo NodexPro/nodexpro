@@ -249,7 +249,9 @@ test('formatDocumentNumberDisplay shows draft label when no number', () => {
 });
 
 test('matchColorThemeKeyFromLegacyColors maps known blue palette', () => {
-  assert.equal(matchColorThemeKeyFromLegacyColors('#1f4b99', '#1f4b99', '#1f4b99'), 'dark_blue');
+  assert.equal(matchColorThemeKeyFromLegacyColors('#1f4b99', '#1f4b99', '#1f4b99'), 'nodexpro_premium');
+  assert.equal(matchColorThemeKeyFromLegacyColors('#5B4DFF', '#5B4DFF', '#5B4DFF'), 'nodexpro_premium');
+  assert.equal(matchColorThemeKeyFromLegacyColors('#1f559a', '#1f559a', '#1f559a'), 'dark_blue');
 });
 
 test('resolveDocumentStyleTemplate accepts three studio archetypes', () => {

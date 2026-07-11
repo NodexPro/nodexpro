@@ -183,7 +183,9 @@ test('unified tax invoice html markers — section order and labels', () => {
   assert.ok(tableIdx < summaryIdx);
   assert.ok(commentsIdx < summaryIdx);
   assert.ok(paymentsIdx < footerIdx);
-  assert.match(html, /\.nx-doc__customer \{[\s\S]*margin-inline-end: auto/);
+  assert.match(html, /\.nx-doc__customer \{[\s\S]*width: 100%/);
+  assert.match(html, /\.nx-doc__customer \{[\s\S]*border-bottom:/);
+  assert.match(html, /\.nx-doc__customer-inner \{[\s\S]*margin-inline-start: auto/);
   assert.match(html, /\.nx-doc__comments \{[\s\S]*grid-column: 1/);
   assert.match(html, /\.nx-doc__summary \{[\s\S]*grid-column: 2/);
   assert.match(html, /\.nx-doc__table thead th \{[\s\S]*background: var\(--nx-doc-header-gradient\)/);
@@ -236,6 +238,8 @@ test('payment bank details never appear inside comments section', () => {
 test('default premium theme uses purple gradient on badge and table header', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
   assert.match(html, /--nx-doc-header-gradient: linear-gradient\(135deg, #5B4DFF 0%, #6A5BFF 100%\)/);
+  assert.match(html, /--nx-doc-icon: var\(--nx-doc-primary\)/);
+  assert.match(html, /stroke="currentColor"/);
   assert.match(html, /border-radius: 12px/);
 });
 
