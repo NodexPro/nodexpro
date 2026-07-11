@@ -27,6 +27,7 @@ export const INCOME_COMMAND_REORDER_LINES = 'reorder_income_document_lines';
 export const INCOME_COMMAND_UPDATE_DRAFT_SETTINGS = 'update_income_document_draft_settings';
 export const INCOME_COMMAND_UPDATE_NOTES = 'update_income_document_notes';
 export const INCOME_COMMAND_UPDATE_DELIVERY_CONTACT = 'update_income_document_delivery_contact';
+export const INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER = 'update_income_document_allocation_number';
 export const INCOME_COMMAND_SAVE_DRAFT = 'save_income_document_draft';
 export const INCOME_COMMAND_RESUME_DRAFT = 'resume_income_document_draft';
 export const INCOME_COMMAND_GENERATE_PREVIEW = 'generate_income_document_preview';

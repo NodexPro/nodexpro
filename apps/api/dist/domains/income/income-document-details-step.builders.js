@@ -11,6 +11,8 @@ import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
 import { renderUnifiedIncomeDocumentHtml } from './income-document-unified-render.html.js';
+import { buildIncomeDocumentAllocationNumberField, allocationNumberForDocumentRender, } from './income-document-allocation-number.pure.js';
+import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
 import { totalsFromTotalsSnapshot } from './income-document-unified-render.pure.js';
 import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById } from './income-recipient.service.js';
 import { incomeCustomerPaymentTermsLabel, INCOME_CUSTOMER_PAYMENT_TERMS_OPTIONS, resolveTaxInvoiceDueDate, } from './income-customer-payment-terms.pure.js';
@@ -589,6 +591,15 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
     const resolvedBranding = !lean && previewGeneratedAt != null && row.document_type
         ? await loadResolvedBrandingProfileForDocumentType(scope, row.document_type)
         : null;
+    const allocationPolicy = await resolveIncomeTaxAllocationNumberPolicyForOrg(scope.org_id, 'IL', documentDate);
+    const allocationNumberField = buildIncomeDocumentAllocationNumberField({
+        policy: allocationPolicy,
+        documentType: row.document_type,
+        value: row.tax_allocation_number ?? null,
+        canEdit,
+        isIssued: false,
+    });
+    const allocationRender = allocationNumberForDocumentRender(allocationNumberField);
     const previewHtml = !lean && previewGeneratedAt != null && resolvedBranding
         ? renderUnifiedIncomeDocumentHtml({
             branding: resolvedBranding,
@@ -599,6 +610,8 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             document_date: row.document_date ?? null,
             due_date: displayDueDate ?? null,
             payment_terms_display: taxInvoicePayment?.paymentTermsLabel ?? null,
+            allocation_number_display: allocationRender.display,
+            allocation_number_visible: allocationRender.visible,
             currency: row.currency,
             lineRows: previewLineRows,
             totals: {
@@ -650,6 +663,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             validation_messages: previewMessages,
             allowed_actions: canEdit ? ['generate_income_document_preview'] : [],
             toolbar_actions: buildPreviewToolbarActions(),
+            allocation_number_field: allocationNumberField,
         },
         draft_state_display: {
             status: 'draft',

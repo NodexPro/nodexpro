@@ -376,3 +376,34 @@ test('pdf failure handling remains explicit', () => {
   assert.match(pdfServiceSource, /INCOME_PDF_RENDER_FAILED/);
   assert.match(pdfServiceSource, /pdf_render_status: 'pending'/);
 });
+
+test('allocation number renders in metadata when backend provides value', () => {
+  const input = buildSampleUnifiedInput();
+  input.allocation_number_display = '123456789';
+  input.allocation_number_visible = true;
+  const html = renderUnifiedIncomeDocumentHtml(input);
+  assert.match(html, />מספר הקצאה</);
+  assert.match(html, />123456789</);
+  assert.doesNotMatch(html, /nx-we-preview-sidebar__edit-btn/);
+  assert.doesNotMatch(html, /pencil/i);
+});
+
+test('allocation number hidden in document html when not visible', () => {
+  const input = buildSampleUnifiedInput();
+  input.allocation_number_display = null;
+  input.allocation_number_visible = false;
+  const html = renderUnifiedIncomeDocumentHtml(input);
+  assert.doesNotMatch(html, />מספר הקצאה</);
+});
+
+test('issuer contact lines use inline icons not detached icon column', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(html, /nx-doc__issuer-line-icon/);
+  assert.match(html, /nx-doc__issuer-line-value/);
+  assert.doesNotMatch(html, /\.nx-doc__issuer-line-icon \{ display: none/);
+});
+
+test('document number accent rule present in unified header', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(html, /class="nx-doc__doc-number-rule"/);
+});

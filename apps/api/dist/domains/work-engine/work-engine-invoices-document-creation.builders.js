@@ -21,6 +21,7 @@ export const WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS = {
     reorder_lines: 'reorder_income_document_lines',
     update_draft_settings: 'update_income_document_draft_settings',
     update_notes: 'update_income_document_notes',
+    update_allocation_number: 'update_income_document_allocation_number',
     update_delivery_contact: 'update_income_document_delivery_contact',
     save_draft: 'save_income_document_draft',
     resume_draft: 'resume_income_document_draft',

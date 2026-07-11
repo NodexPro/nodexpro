@@ -2,6 +2,7 @@
  * Retainer — future cycle projection (read-model only; not a draft / not issued).
  */
 import { forbidden } from '../../shared/errors.js';
+import { buildIncomeDocumentAllocationNumberField, defaultIncomeTaxAllocationNumberPolicy, } from '../income/income-document-allocation-number.pure.js';
 import { findAvailableDocumentType } from '../income/income-document-types.fallback.js';
 import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
 import { buildIncomeDocumentDetailsStep, } from '../income/income-document-details-step.builders.js';
@@ -474,6 +475,14 @@ export async function attachFutureCycleProjectionPreview(step, preview) {
             validation_messages: [],
             allowed_actions: ['preview_recurring_cycle_override'],
             toolbar_actions: [],
+            allocation_number_field: step.document_preview?.allocation_number_field ??
+                buildIncomeDocumentAllocationNumberField({
+                    policy: defaultIncomeTaxAllocationNumberPolicy(),
+                    documentType: step.document_type_key ?? null,
+                    value: null,
+                    canEdit: false,
+                    isIssued: false,
+                }),
         },
     };
 }

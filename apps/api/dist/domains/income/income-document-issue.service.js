@@ -34,7 +34,7 @@ function isUniqueViolation(error) {
 async function loadFullDraftForIssue(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
-        .select('id, organization_id, issuer_business_id, represented_client_id, actor_user_id, acting_mode, document_type, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, draft_totals_preview_json, payment_terms_json, due_date, document_date, payment_received_json, notes, currency, language, status, issued_document_id')
+        .select('id, organization_id, issuer_business_id, represented_client_id, actor_user_id, acting_mode, document_type, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, draft_totals_preview_json, payment_terms_json, due_date, document_date, payment_received_json, notes, currency, language, status, issued_document_id, tax_allocation_number')
         .eq('id', draftId)
         .eq('organization_id', scope.org_id)
         .maybeSingle();
@@ -218,6 +218,9 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body) {
         issuer_snapshot_json,
         source_draft_id: draft.id,
         accounting_posting_status: 'pending',
+        tax_allocation_number: typeof draft.tax_allocation_number === 'string' && draft.tax_allocation_number.trim()
+            ? draft.tax_allocation_number.trim()
+            : null,
     })
         .select('id')
         .single();

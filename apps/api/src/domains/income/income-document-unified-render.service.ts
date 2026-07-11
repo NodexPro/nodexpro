@@ -30,6 +30,7 @@ export type IssuedIncomeDocumentForRender = {
   lines_snapshot_json: unknown[];
   totals_snapshot_json: Record<string, unknown> | null;
   source_draft_id: string | null;
+  tax_allocation_number: string | null;
 };
 
 async function loadIssuerWebsiteForRender(
@@ -94,6 +95,9 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
     currency: doc.currency,
     notes: doc.notes,
     payment_terms_display: paymentTermsDisplay,
+    payment_link_url: null,
+    payment_qr_data_url: null,
+    allocation_number: doc.tax_allocation_number,
     issuer_snapshot_json: doc.issuer_snapshot_json ?? {},
     customer_snapshot_json: doc.customer_snapshot_json ?? {},
     lines_snapshot_json: Array.isArray(doc.lines_snapshot_json) ? doc.lines_snapshot_json : [],

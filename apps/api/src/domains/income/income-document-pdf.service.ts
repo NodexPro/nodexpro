@@ -42,7 +42,7 @@ async function loadIssuedDocumentForPdf(orgId: string, documentId: string): Prom
   const { data, error } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, organization_id, issuer_business_id, represented_client_id, document_type, document_number, issue_date, due_date, currency, language, notes, issuer_snapshot_json, customer_snapshot_json, lines_snapshot_json, totals_snapshot_json, legal_snapshot_json, source_draft_id, pdf_render_status, pdf_asset_id',
+      'id, organization_id, issuer_business_id, represented_client_id, document_type, document_number, issue_date, due_date, currency, language, notes, issuer_snapshot_json, customer_snapshot_json, lines_snapshot_json, totals_snapshot_json, legal_snapshot_json, source_draft_id, tax_allocation_number, pdf_render_status, pdf_asset_id',
     )
     .eq('id', documentId)
     .eq('organization_id', orgId)

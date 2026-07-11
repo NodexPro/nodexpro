@@ -84,7 +84,7 @@ export async function resumeIncomeDocumentDraftFromContext(ctx, body) {
     const result = await resumeIncomeDocumentDraft(scope, { draft_id });
     return { scope, result };
 }
-const DRAFT_SELECT = 'id, organization_id, issuer_business_id, represented_client_id, document_type, document_date, due_date, notes, currency, language, draft_lines_json, payment_received_json, delivery_contact_json, document_settings_json, validation_warnings_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json, status, updated_at';
+const DRAFT_SELECT = 'id, organization_id, issuer_business_id, represented_client_id, document_type, document_date, due_date, notes, currency, language, draft_lines_json, payment_received_json, delivery_contact_json, document_settings_json, validation_warnings_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json, tax_allocation_number, status, updated_at';
 export async function loadWizardDraftRow(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
@@ -577,6 +577,69 @@ export async function updateIncomeDocumentNotes(scope, body) {
     return wizardDraftMutationOverlay(scope, draft_id, row, merged, docType, { notes: notes ?? null }, {
         action: 'update_notes',
     });
+}
+export async function updateIncomeDocumentAllocationNumber(scope, body) {
+    const draft_id = reqUuid(body.draft_id, 'draft_id');
+    const row = await loadWizardDraftRow(scope, draft_id);
+    if (!row.document_type)
+        throw badRequest('document_type is required');
+    const docType = await resolveDocType(scope, row.document_type);
+    const { resolveIncomeTaxAllocationNumberPolicyForOrg } = await import('./income-document-allocation-number-resolver.js');
+    const { buildIncomeDocumentAllocationNumberField, normalizeAllocationNumberInput, validateAllocationNumberFormat, } = await import('./income-document-allocation-number.pure.js');
+    const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
+    const policyResolution = await resolveIncomeTaxAllocationNumberPolicyForOrg(scope.org_id, 'IL', documentDate);
+    const field = buildIncomeDocumentAllocationNumberField({
+        policy: policyResolution,
+        documentType: row.document_type,
+        value: row.tax_allocation_number ?? null,
+        canEdit: true,
+        isIssued: false,
+    });
+    if (!field.visible)
+        throw badRequest('מספר הקצאה אינו רלוונטי למסמך זה');
+    if (!field.editable) {
+        throw badRequest(field.disabled_reason ?? 'לא ניתן לערוך מספר הקצאה');
+    }
+    const nextValue = normalizeAllocationNumberInput(body.allocation_number);
+    const formatError = validateAllocationNumberFormat(nextValue);
+    if (formatError)
+        throw badRequest(formatError);
+    if (field.required && !nextValue) {
+        throw badRequest('מספר הקצאה נדרש');
+    }
+    const priorCache = row.draft_totals_preview_json &&
+        typeof row.draft_totals_preview_json === 'object' &&
+        !Array.isArray(row.draft_totals_preview_json)
+        ? row.draft_totals_preview_json
+        : {};
+    const totalsPreviewPatch = typeof priorCache.preview_generated_at === 'string'
+        ? { preview_generated_at: new Date().toISOString() }
+        : {};
+    const patch = { tax_allocation_number: nextValue };
+    const merged = { ...row, ...patch };
+    const overlay = await wizardDraftMutationOverlay(scope, draft_id, row, merged, docType, patch, {
+        action: 'update_allocation_number',
+        previous_allocation_number: row.tax_allocation_number ?? null,
+        allocation_number: nextValue,
+    }, { totals_preview_patch: totalsPreviewPatch });
+    void writeAudit({
+        organizationId: scope.org_id,
+        actorUserId: scope.actor_user_id,
+        moduleCode: 'income',
+        entityType: 'income_document_draft',
+        entityId: draft_id,
+        action: AUDIT_ACTIONS.INCOME_DOCUMENT_ALLOCATION_NUMBER_UPDATED,
+        payload: {
+            draft_id,
+            represented_client_id: scope.represented_client_id,
+            previous_allocation_number: row.tax_allocation_number ?? null,
+            allocation_number: nextValue,
+            command: 'update_income_document_allocation_number',
+        },
+    }).catch(() => {
+        /* audit must not block wizard UX */
+    });
+    return overlay;
 }
 export async function updateIncomeDocumentDeliveryContact(scope, body) {
     const draft_id = reqUuid(body.draft_id, 'draft_id');

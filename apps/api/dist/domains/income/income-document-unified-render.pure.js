@@ -109,6 +109,7 @@ export function totalsFromTotalsSnapshot(totalsSnapshot) {
 export function buildUnifiedIncomeDocumentRenderInput(params) {
     const language = params.language === 'en' ? 'en' : 'he';
     const issuerFallback = params.issuer_fallback_label?.trim() || '—';
+    const allocationVisible = params.allocation_number != null && params.allocation_number.trim() !== '';
     return {
         branding: params.branding,
         docTypeLabel: documentTypeLabel(params.document_type, language),
@@ -118,6 +119,8 @@ export function buildUnifiedIncomeDocumentRenderInput(params) {
         document_date: params.document_date,
         due_date: params.due_date,
         payment_terms_display: params.payment_terms_display ?? null,
+        allocation_number_display: allocationVisible ? params.allocation_number.trim() : null,
+        allocation_number_visible: allocationVisible,
         payment_link_url: params.payment_link_url ?? null,
         payment_qr_data_url: params.payment_qr_data_url ?? null,
         currency: params.currency,

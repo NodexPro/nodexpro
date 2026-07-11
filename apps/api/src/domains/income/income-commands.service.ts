@@ -78,6 +78,7 @@ import {
   updateIncomeDocumentDiscount,
   updateIncomeDocumentDraftSettings,
   updateIncomeDocumentNotes,
+  updateIncomeDocumentAllocationNumber,
   updateIncomeDocumentDeliveryContact,
   type WizardDraftOverlay,
 } from './income-document-draft-editor.service.js';
@@ -126,6 +127,7 @@ import {
   INCOME_COMMAND_UPDATE_DRAFT,
   INCOME_COMMAND_UPDATE_DRAFT_SETTINGS,
   INCOME_COMMAND_UPDATE_DELIVERY_CONTACT,
+  INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER,
   INCOME_COMMAND_UPDATE_LINE,
   INCOME_COMMAND_UPDATE_NOTES,
   type IncomeCommandResponse,
@@ -161,6 +163,7 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_REORDER_LINES,
   INCOME_COMMAND_UPDATE_DRAFT_SETTINGS,
   INCOME_COMMAND_UPDATE_NOTES,
+  INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER,
   INCOME_COMMAND_UPDATE_DELIVERY_CONTACT,
   INCOME_COMMAND_SAVE_DRAFT,
   INCOME_COMMAND_RESUME_DRAFT,
@@ -928,6 +931,9 @@ export async function executeIncomeCommand(
   }
   if (command === INCOME_COMMAND_UPDATE_NOTES) {
     return wizardDraftCmd(updateIncomeDocumentNotes);
+  }
+  if (command === INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER) {
+    return wizardDraftCmd(updateIncomeDocumentAllocationNumber);
   }
   if (command === INCOME_COMMAND_UPDATE_DELIVERY_CONTACT) {
     return wizardDraftCmd(updateIncomeDocumentDeliveryContact);
