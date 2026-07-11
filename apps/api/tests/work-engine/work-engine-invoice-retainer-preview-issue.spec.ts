@@ -44,9 +44,12 @@ test('tax invoice confirmation text comes from backend builder', () => {
     document_date: '2026-07-08',
     already_issued: false,
     issued_document_number_display: null,
+    today_iso: '2026-07-08',
   });
   assert.equal(action.confirmation_required, true);
   assert.equal(action.command_name, 'issue_income_document');
+  assert.ok(action.issue_month_selector);
+  assert.equal(action.issue_month_selector?.allowed_months.length, 5);
   assert.match(action.confirmation_message ?? '', /להמשיך\?/);
 });
 
@@ -77,6 +80,7 @@ test('frontend issue icon renders from backend descriptor only', () => {
       confirmation_required: true,
       confirmation_title: 'אישור',
       confirmation_message: 'להמשיך?',
+      issue_month_selector: null,
       command_name: 'issue_income_document',
     },
     has_on_issue_handler: true,

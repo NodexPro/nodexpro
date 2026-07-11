@@ -342,6 +342,20 @@ export type WorkEngineRecurringCycleDraftReviewEditAction = {
   disabled_reason: string | null;
 };
 
+export type WorkEngineRecurringCycleDraftReviewIssueMonthOption = {
+  month_key: string;
+  label: string;
+  confirmation_message: string;
+};
+
+export type WorkEngineRecurringCycleDraftReviewIssueMonthSelector = {
+  visible: boolean;
+  current_month: string;
+  default_month: string;
+  selected_month: string;
+  allowed_months: WorkEngineRecurringCycleDraftReviewIssueMonthOption[];
+};
+
 export type WorkEngineRecurringCycleDraftReviewIssueAction = {
   visible: boolean;
   enabled: boolean;
@@ -351,6 +365,7 @@ export type WorkEngineRecurringCycleDraftReviewIssueAction = {
   confirmation_required: boolean;
   confirmation_title: string | null;
   confirmation_message: string | null;
+  issue_month_selector: WorkEngineRecurringCycleDraftReviewIssueMonthSelector | null;
   command_name: 'issue_income_document';
 };
 
@@ -363,6 +378,7 @@ export type WorkEngineRecurringCycleDraftReviewIssueAndSendAction = {
   confirmation_required: boolean;
   confirmation_title: string | null;
   confirmation_message: string | null;
+  issue_month_selector: WorkEngineRecurringCycleDraftReviewIssueMonthSelector | null;
   command_name: 'issue_and_send_income_document';
 };
 

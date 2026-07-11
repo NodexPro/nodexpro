@@ -9,6 +9,9 @@ import { assertRowMatchesIssuerScope, reqUuid, } from './income.guards.js';
 import { assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { assertIncomeDocumentIssueDateAllowed, resolveIssueDateFromDraft, } from './income-document-issue-date.validation.js';
+import { assertIssueMonthAllowed, parseIssueMonthFromCommandBody, resolveIssueDateForIssueMonth, } from '../work-engine/work-engine-invoice-retainer-issue-month-selector.pure.js';
+import { todayIsoDate } from './income-retainer-template-document-date.pure.js';
+import { resolveIncomeIssueMonthWindowForOrg } from './income-issue-month-window-resolver.js';
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { allocateIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { assertDraftReadyToIssue, buildLegalSnapshotForIssue, buildTotalsSnapshotForIssue, } from './income-document-issue.pure.js';
@@ -137,7 +140,27 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body) {
     const docType = findAvailableDocumentType(docTypesResult.available_document_types, draft.document_type);
     if (!docType)
         throw badRequest('document_type is invalid');
-    const issue_date = resolveIssueDateFromDraft(draft.document_date, optionalIssueDateFromBody(body));
+    const issueMonth = parseIssueMonthFromCommandBody(body);
+    let issue_date;
+    if (issueMonth) {
+        const todayIso = todayIsoDate();
+        const issueMonthWindow = await resolveIncomeIssueMonthWindowForOrg(scope.org_id, 'IL', todayIso);
+        try {
+            assertIssueMonthAllowed({
+                todayIso,
+                issueMonth,
+                monthsBack: issueMonthWindow.months_back,
+                monthsAhead: issueMonthWindow.months_ahead,
+            });
+        }
+        catch (e) {
+            throw badRequest(e instanceof Error ? e.message : 'issue_month is invalid');
+        }
+        issue_date = resolveIssueDateForIssueMonth(issueMonth, draft.document_date);
+    }
+    else {
+        issue_date = resolveIssueDateFromDraft(draft.document_date, optionalIssueDateFromBody(body));
+    }
     await assertIncomeDocumentIssueDateAllowed({
         scope,
         documentType: draft.document_type,

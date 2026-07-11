@@ -5,6 +5,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
+import { parseIssueMonthFromCommandBody } from '../work-engine/work-engine-invoice-retainer-issue-month-selector.pure.js';
 import { reqUuid } from './income.guards.js';
 import { assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
@@ -149,7 +150,11 @@ export async function executeIssueAndSendIncomeDocument(ctx, body) {
         });
     }
     try {
-        const issueResult = await executeIssueIncomeDocument(ctx, { draft_id: draftId });
+        const issueMonth = parseIssueMonthFromCommandBody(body);
+        const issueResult = await executeIssueIncomeDocument(ctx, {
+            draft_id: draftId,
+            ...(issueMonth ? { issue_month: issueMonth } : {}),
+        });
         return finishIssueAndSend(ctx, {
             draftId,
             issuedDocumentId: issueResult.issuedDocumentId,

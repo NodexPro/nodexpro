@@ -1,6 +1,4 @@
-/**
- * Retainer cycle draft review — preview header issue actions (read-model only).
- */
+import { buildIssueMonthSelector } from './work-engine-invoice-retainer-issue-month-selector.pure.js';
 export const RETAINER_PREVIEW_ISSUE_DOCUMENT_TYPES = new Set([
     'tax_invoice',
     'deal_invoice',
@@ -56,6 +54,7 @@ export function buildCycleDraftReviewIssueAction(params) {
             confirmation_required: false,
             confirmation_title: null,
             confirmation_message: null,
+            issue_month_selector: null,
             command_name: 'issue_income_document',
         };
     }
@@ -72,6 +71,7 @@ export function buildCycleDraftReviewIssueAction(params) {
             confirmation_required: false,
             confirmation_title: null,
             confirmation_message: null,
+            issue_month_selector: null,
             command_name: 'issue_income_document',
         };
     }
@@ -85,13 +85,25 @@ export function buildCycleDraftReviewIssueAction(params) {
             confirmation_required: false,
             confirmation_title: null,
             confirmation_message: null,
+            issue_month_selector: null,
             command_name: 'issue_income_document',
         };
     }
     const confirmationRequired = docType === 'tax_invoice';
-    const documentMonthLabel = params.document_date != null ? formatHebrewDocumentMonthLabel(params.document_date) : '—';
+    const todayIso = params.today_iso ?? new Date().toISOString().slice(0, 10);
+    const issueMonthSelector = confirmationRequired
+        ? buildIssueMonthSelector({
+            todayIso,
+            documentDate: params.document_date,
+            mode: 'issue',
+            monthsBack: params.issue_month_window?.months_back,
+            monthsAhead: params.issue_month_window?.months_ahead,
+        })
+        : null;
+    const documentMonthLabel = issueMonthSelector?.allowed_months.find((month) => month.month_key === issueMonthSelector.default_month)?.label ??
+        (params.document_date != null ? formatHebrewDocumentMonthLabel(params.document_date) : '—');
     const confirmationMessage = confirmationRequired
-        ? buildTaxInvoiceIssueConfirmationMessage(documentMonthLabel)
+        ? (issueMonthSelector?.allowed_months.find((month) => month.month_key === issueMonthSelector.default_month)?.confirmation_message ?? buildTaxInvoiceIssueConfirmationMessage(documentMonthLabel))
         : `להפיק ${typeLabel} זה?`;
     return {
         visible: true,
@@ -102,6 +114,7 @@ export function buildCycleDraftReviewIssueAction(params) {
         confirmation_required: confirmationRequired,
         confirmation_title: confirmationRequired ? 'אישור הפקת חשבונית מס' : 'אישור הפקה',
         confirmation_message: confirmationMessage,
+        issue_month_selector: issueMonthSelector,
         command_name: 'issue_income_document',
     };
 }
@@ -122,6 +135,7 @@ export function buildCycleDraftReviewIssueAndSendAction(params) {
             confirmation_required: false,
             confirmation_title: null,
             confirmation_message: null,
+            issue_month_selector: null,
             command_name: 'issue_and_send_income_document',
         };
     }
@@ -138,6 +152,7 @@ export function buildCycleDraftReviewIssueAndSendAction(params) {
             confirmation_required: false,
             confirmation_title: null,
             confirmation_message: null,
+            issue_month_selector: null,
             command_name: 'issue_and_send_income_document',
         };
     }
@@ -152,14 +167,26 @@ export function buildCycleDraftReviewIssueAndSendAction(params) {
             confirmation_required: false,
             confirmation_title: null,
             confirmation_message: null,
+            issue_month_selector: null,
             command_name: 'issue_and_send_income_document',
         };
     }
     const recipientEmail = params.recipient_email?.trim() || '—';
     const confirmationRequired = docType === 'tax_invoice';
-    const documentMonthLabel = params.document_date != null ? formatHebrewDocumentMonthLabel(params.document_date) : '—';
+    const todayIso = params.today_iso ?? new Date().toISOString().slice(0, 10);
+    const issueMonthSelector = confirmationRequired
+        ? buildIssueMonthSelector({
+            todayIso,
+            documentDate: params.document_date,
+            recipientEmail,
+            mode: 'issue_and_send',
+            monthsBack: params.issue_month_window?.months_back,
+            monthsAhead: params.issue_month_window?.months_ahead,
+        })
+        : null;
     const confirmationMessage = confirmationRequired
-        ? buildTaxInvoiceIssueAndSendConfirmationMessage(documentMonthLabel, recipientEmail)
+        ? (issueMonthSelector?.allowed_months.find((month) => month.month_key === issueMonthSelector.default_month)?.confirmation_message ??
+            buildTaxInvoiceIssueAndSendConfirmationMessage(params.document_date != null ? formatHebrewDocumentMonthLabel(params.document_date) : '—', recipientEmail))
         : `להפיק ולשלוח ${typeLabel} ל-${recipientEmail}?`;
     return {
         visible: true,
@@ -170,6 +197,7 @@ export function buildCycleDraftReviewIssueAndSendAction(params) {
         confirmation_required: true,
         confirmation_title: confirmationRequired ? 'אישור הפקה ושליחה' : 'אישור הפקה ושליחה',
         confirmation_message: confirmationMessage,
+        issue_month_selector: issueMonthSelector,
         command_name: 'issue_and_send_income_document',
     };
 }

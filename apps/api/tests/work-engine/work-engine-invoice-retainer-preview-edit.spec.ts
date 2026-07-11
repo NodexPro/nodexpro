@@ -117,6 +117,14 @@ test('editor save uses refresh_document_preview and returns refreshed case to pa
   assert.equal(editorModalSource.match(/function WorkEngineRecurringCycleDraftReviewModal/g)?.length, 1);
 });
 
+test('generated draft editor uses split layout with reused document settings panel', () => {
+  assert.ok(editorModalSource.includes('nx-we-retainer-setup__sidebar'));
+  assert.ok(editorModalSource.includes('settingsOnly'));
+  assert.ok(editorModalSource.includes('linesOnly'));
+  const detailsStepCount = editorModalSource.match(/WorkEngineDocumentDetailsStep/g)?.length ?? 0;
+  assert.equal(detailsStepCount, 2);
+});
+
 test('cycle draft review service exposes edit_action and issue_action', () => {
   const cycleReviewServiceSource = readFileSync(
     join(dir, '../../src/domains/work-engine/work-engine-invoice-retainer-cycle-draft-review.service.ts'),

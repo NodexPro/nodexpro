@@ -17,6 +17,8 @@ import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-c
 import type { IncomeWorkspaceAggregate } from '../income/income.types.js';
 import { WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS } from './work-engine-invoices-document-creation.builders.js';
 import { formatHebrewDateDisplay } from './work-engine-invoice-retainer.pure.js';
+import { todayIsoDate } from '../income/income-retainer-template-document-date.pure.js';
+import { resolveIncomeIssueMonthWindowForOrg } from '../income/income-issue-month-window-resolver.js';
 import { validateCycleDraftReviewRefs } from './work-engine-invoice-retainer-cycle-draft-review.pure.js';
 import {
   buildCycleDraftReviewIssueAction,
@@ -266,6 +268,12 @@ async function assembleCycleDraftReviewAggregate(params: {
   });
   const canIssueAndSend = issueAndSendBlockedReason == null;
 
+  const todayIso = todayIsoDate();
+  const issueMonthWindow = await resolveIncomeIssueMonthWindowForOrg(
+    params.ctx.organizationId ?? '',
+    'IL',
+    todayIso,
+  );
   const issueAction = buildCycleDraftReviewIssueAction({
     document_type: documentTypeKey,
     can_issue: canIssue,
@@ -273,6 +281,11 @@ async function assembleCycleDraftReviewAggregate(params: {
     document_date: documentDate,
     already_issued: alreadyIssued,
     issued_document_number_display: params.issuedDocumentNumberDisplay,
+    today_iso: todayIso,
+    issue_month_window: {
+      months_back: issueMonthWindow.months_back,
+      months_ahead: issueMonthWindow.months_ahead,
+    },
   });
   const issueAndSendAction = buildCycleDraftReviewIssueAndSendAction({
     document_type: documentTypeKey,
@@ -283,6 +296,11 @@ async function assembleCycleDraftReviewAggregate(params: {
     already_issued: alreadyIssued,
     issued_document_number_display: params.issuedDocumentNumberDisplay,
     recipient_email: recipientEmail,
+    today_iso: todayIso,
+    issue_month_window: {
+      months_back: issueMonthWindow.months_back,
+      months_ahead: issueMonthWindow.months_ahead,
+    },
   });
 
   const documentTypeLabel =
