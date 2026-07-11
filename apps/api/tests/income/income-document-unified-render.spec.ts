@@ -183,9 +183,9 @@ test('unified tax invoice html markers — section order and labels', () => {
   assert.ok(tableIdx < summaryIdx);
   assert.ok(commentsIdx < summaryIdx);
   assert.ok(paymentsIdx < footerIdx);
-  assert.match(html, /\.nx-doc__customer \{[\s\S]*margin-inline-start: auto/);
-  assert.match(html, /\.nx-doc__comments \{[\s\S]*grid-column: 2/);
-  assert.match(html, /\.nx-doc__summary \{[\s\S]*grid-column: 1/);
+  assert.match(html, /\.nx-doc__customer \{[\s\S]*margin-inline-end: auto/);
+  assert.match(html, /\.nx-doc__comments \{[\s\S]*grid-column: 1/);
+  assert.match(html, /\.nx-doc__summary \{[\s\S]*grid-column: 2/);
   assert.match(html, /\.nx-doc__table thead th \{[\s\S]*background: var\(--nx-doc-header-gradient\)/);
   assert.match(html, /nx-doc__payments-head/);
   assert.match(html, />אמצעי תשלום</);
