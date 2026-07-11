@@ -23,6 +23,7 @@ import {
 } from './operational-communication-owner-payload.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
+import { buildOwnerLegalValuesTableModel } from './owner-legal-values-table.pure.js';
 type CommercialControlsQuery = {
   page: number;
   page_size: number;
@@ -513,43 +514,49 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
   const operationalCommunicationTable = allRows.filter((r) =>
     isOperationalCommunicationLegalValueRow(r as Record<string, unknown>),
   );
+  const globalActions = [
+    {
+      action_key: 'create_legal_value',
+      enabled: true,
+      note:
+        'country_code: IL, US, … (must exist in countries). category: VAT | Income Tax | National Insurance | Credit Points | Pricing | Reports | Calendar | Modules | Operational Communication Policies (use Communication policies section for reminders). value_type: number | percentage | boolean | string | json | money | date.',
+      payload: {
+        country_code: 'ISO 3166-1 alpha-2',
+        value_key: 'string',
+        label: 'string',
+        category:
+          'VAT|Income Tax|National Insurance|Credit Points|Pricing|Reports|Calendar|Modules|Operational Communication Policies (exact label)',
+        module_scope: 'string',
+        value_type: 'number|percentage|boolean|string|json|money|date',
+        status: 'optional draft|active|disabled',
+        usage_hint: 'optional string',
+        owner_note: 'optional string',
+      },
+    },
+    { action_key: 'update_legal_value_metadata', enabled: true },
+    { action_key: 'create_legal_value_version', enabled: true },
+    { action_key: 'update_legal_value_version', enabled: true },
+    { action_key: 'activate_legal_value_version', enabled: true },
+    { action_key: 'deactivate_legal_value_version', enabled: true },
+    { action_key: 'update_owner_note', enabled: true },
+    { action_key: 'update_usage_hint', enabled: true },
+    { action_key: 'update_module_scope', enabled: true },
+  ];
+  const legalValuesTable = buildOwnerLegalValuesTableModel(
+    rows as Array<Record<string, unknown>>,
+    globalActions,
+  );
 
   return {
     aggregate_key: 'owner_legal_values_aggregate',
     table: rows,
+    legal_values_table: legalValuesTable,
     /** Work Engine reminder policies/templates — excluded from `table` (tax/legal values UI only). */
     operational_communication_table: operationalCommunicationTable,
     validation_warnings: rows
       .filter((r) => !(r as { versions: unknown[] }).versions.length)
       .map((r) => `missing_versions_for_${(r as { value_key: string }).value_key}`),
-    actions: [
-      {
-        action_key: 'create_legal_value',
-        enabled: true,
-        note:
-          'country_code: IL, US, … (must exist in countries). category: VAT | Income Tax | National Insurance | Credit Points | Pricing | Reports | Calendar | Modules | Operational Communication Policies (use Communication policies section for reminders). value_type: number | percentage | boolean | string | json | money | date.',
-        payload: {
-          country_code: 'ISO 3166-1 alpha-2',
-          value_key: 'string',
-          label: 'string',
-          category:
-            'VAT|Income Tax|National Insurance|Credit Points|Pricing|Reports|Calendar|Modules|Operational Communication Policies (exact label)',
-          module_scope: 'string',
-          value_type: 'number|percentage|boolean|string|json|money|date',
-          status: 'optional draft|active|disabled',
-          usage_hint: 'optional string',
-          owner_note: 'optional string',
-        },
-      },
-      { action_key: 'update_legal_value_metadata', enabled: true },
-      { action_key: 'create_legal_value_version', enabled: true },
-      { action_key: 'update_legal_value_version', enabled: true },
-      { action_key: 'activate_legal_value_version', enabled: true },
-      { action_key: 'deactivate_legal_value_version', enabled: true },
-      { action_key: 'update_owner_note', enabled: true },
-      { action_key: 'update_usage_hint', enabled: true },
-      { action_key: 'update_module_scope', enabled: true },
-    ],
+    actions: globalActions,
   };
 }
 
@@ -1340,6 +1347,9 @@ export async function buildOwnerLegalControlPanelAggregate(
     | undefined;
 
   const legalTable = legalValues.table as Array<Record<string, unknown>> | undefined;
+  const legalValuesTableModel =
+    (legalValues.legal_values_table as ReturnType<typeof buildOwnerLegalValuesTableModel> | undefined) ??
+    buildOwnerLegalValuesTableModel(legalTable ?? [], (legalValues.actions as Array<Record<string, unknown>>) ?? []);
   const operationalCommunicationLegalTable =
     (legalValues.operational_communication_table as Array<Record<string, unknown>> | undefined) ?? [];
   const legalValueVersionsFlat = (legalTable ?? []).flatMap((r) =>
@@ -1377,8 +1387,8 @@ export async function buildOwnerLegalControlPanelAggregate(
     countries: tables?.countries ?? [],
     country_packs: tables?.country_packs ?? [],
     rulesets: tables?.rulesets ?? [],
-    legal_values_table: legalTaxValuesTable,
-    legal_tax_values: { table: legalTaxValuesTable },
+    legal_values_table: legalValuesTableModel,
+    legal_tax_values: { table: legalTaxValuesTable, legal_values_table: legalValuesTableModel },
     legal_value_versions: legalValueVersionsFlat.filter((v) => {
       const parent = (legalTable ?? []).find((lv) => lv.id === (v as { legal_value_id?: string }).legal_value_id);
       return parent ? !isOperationalCommunicationLegalValueRow(parent) : true;

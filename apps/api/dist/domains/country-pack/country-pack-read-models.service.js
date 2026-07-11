@@ -7,6 +7,7 @@ import { buildCommunicationPolicyEditorOptions, buildReminderWorkflowEditableFor
 import { OPERATIONAL_COMMUNICATION_POLICIES_CATEGORY, assertValidOperationalReminderPolicyPayload, assertValidOperationalReminderTemplatePayload, isOperationalReminderPolicyPayload, isOperationalReminderTemplatePayload, } from './operational-communication-owner-payload.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
+import { buildOwnerLegalValuesTableModel } from './owner-legal-values-table.pure.js';
 function normalizeCommercialControlsQuery(input) {
     const page = Math.max(1, Math.floor(Number(input?.page ?? 1) || 1));
     const pageSize = Math.max(1, Math.min(100, Math.floor(Number(input?.page_size ?? 20) || 20)));
@@ -472,40 +473,43 @@ export async function buildOwnerLegalValuesAggregate(ctx) {
     });
     const rows = allRows.filter((r) => !isOperationalCommunicationLegalValueRow(r));
     const operationalCommunicationTable = allRows.filter((r) => isOperationalCommunicationLegalValueRow(r));
+    const globalActions = [
+        {
+            action_key: 'create_legal_value',
+            enabled: true,
+            note: 'country_code: IL, US, … (must exist in countries). category: VAT | Income Tax | National Insurance | Credit Points | Pricing | Reports | Calendar | Modules | Operational Communication Policies (use Communication policies section for reminders). value_type: number | percentage | boolean | string | json | money | date.',
+            payload: {
+                country_code: 'ISO 3166-1 alpha-2',
+                value_key: 'string',
+                label: 'string',
+                category: 'VAT|Income Tax|National Insurance|Credit Points|Pricing|Reports|Calendar|Modules|Operational Communication Policies (exact label)',
+                module_scope: 'string',
+                value_type: 'number|percentage|boolean|string|json|money|date',
+                status: 'optional draft|active|disabled',
+                usage_hint: 'optional string',
+                owner_note: 'optional string',
+            },
+        },
+        { action_key: 'update_legal_value_metadata', enabled: true },
+        { action_key: 'create_legal_value_version', enabled: true },
+        { action_key: 'update_legal_value_version', enabled: true },
+        { action_key: 'activate_legal_value_version', enabled: true },
+        { action_key: 'deactivate_legal_value_version', enabled: true },
+        { action_key: 'update_owner_note', enabled: true },
+        { action_key: 'update_usage_hint', enabled: true },
+        { action_key: 'update_module_scope', enabled: true },
+    ];
+    const legalValuesTable = buildOwnerLegalValuesTableModel(rows, globalActions);
     return {
         aggregate_key: 'owner_legal_values_aggregate',
         table: rows,
+        legal_values_table: legalValuesTable,
         /** Work Engine reminder policies/templates — excluded from `table` (tax/legal values UI only). */
         operational_communication_table: operationalCommunicationTable,
         validation_warnings: rows
             .filter((r) => !r.versions.length)
             .map((r) => `missing_versions_for_${r.value_key}`),
-        actions: [
-            {
-                action_key: 'create_legal_value',
-                enabled: true,
-                note: 'country_code: IL, US, … (must exist in countries). category: VAT | Income Tax | National Insurance | Credit Points | Pricing | Reports | Calendar | Modules | Operational Communication Policies (use Communication policies section for reminders). value_type: number | percentage | boolean | string | json | money | date.',
-                payload: {
-                    country_code: 'ISO 3166-1 alpha-2',
-                    value_key: 'string',
-                    label: 'string',
-                    category: 'VAT|Income Tax|National Insurance|Credit Points|Pricing|Reports|Calendar|Modules|Operational Communication Policies (exact label)',
-                    module_scope: 'string',
-                    value_type: 'number|percentage|boolean|string|json|money|date',
-                    status: 'optional draft|active|disabled',
-                    usage_hint: 'optional string',
-                    owner_note: 'optional string',
-                },
-            },
-            { action_key: 'update_legal_value_metadata', enabled: true },
-            { action_key: 'create_legal_value_version', enabled: true },
-            { action_key: 'update_legal_value_version', enabled: true },
-            { action_key: 'activate_legal_value_version', enabled: true },
-            { action_key: 'deactivate_legal_value_version', enabled: true },
-            { action_key: 'update_owner_note', enabled: true },
-            { action_key: 'update_usage_hint', enabled: true },
-            { action_key: 'update_module_scope', enabled: true },
-        ],
+        actions: globalActions,
     };
 }
 export async function buildOwnerPlatformPricingAggregate(ctx) {
@@ -1182,6 +1186,8 @@ export async function buildOwnerLegalControlPanelAggregate(ctx, opts) {
     ]);
     const tables = countryPacksAdmin.tables;
     const legalTable = legalValues.table;
+    const legalValuesTableModel = legalValues.legal_values_table ??
+        buildOwnerLegalValuesTableModel(legalTable ?? [], legalValues.actions ?? []);
     const operationalCommunicationLegalTable = legalValues.operational_communication_table ?? [];
     const legalValueVersionsFlat = (legalTable ?? []).flatMap((r) => Array.isArray(r.versions) ? r.versions : []);
     const docflowCommunicationTemplates = buildDocflowCommunicationTemplatesFromLegalTable(legalTable ?? []);
@@ -1214,8 +1220,8 @@ export async function buildOwnerLegalControlPanelAggregate(ctx, opts) {
         countries: tables?.countries ?? [],
         country_packs: tables?.country_packs ?? [],
         rulesets: tables?.rulesets ?? [],
-        legal_values_table: legalTaxValuesTable,
-        legal_tax_values: { table: legalTaxValuesTable },
+        legal_values_table: legalValuesTableModel,
+        legal_tax_values: { table: legalTaxValuesTable, legal_values_table: legalValuesTableModel },
         legal_value_versions: legalValueVersionsFlat.filter((v) => {
             const parent = (legalTable ?? []).find((lv) => lv.id === v.legal_value_id);
             return parent ? !isOperationalCommunicationLegalValueRow(parent) : true;

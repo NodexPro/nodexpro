@@ -7,7 +7,10 @@ import { assertCountryExists } from './country.service.js';
 import { getCountryPack } from './country-pack.service.js';
 import { assertNoOverlapRuleset, assertRulesetExists, resolveActiveRulesetByDate } from './ruleset.service.js';
 import { assertLegalValueExists, assertNoOverlapLegalValueVersions } from './legal-value.service.js';
-import { normalizeLegalValuePayloadJsonInput } from './docflow-communication-owner-payload.js';
+import {
+  assembleLegalValuePayloadFromOwnerEditorInput,
+  ownerEditorInputPresent,
+} from './owner-legal-value-editor.pure.js';
 import {
   assertOperationalCommunicationLegalValueMetadata,
   validateLegalValueVersionPayload,
@@ -872,6 +875,25 @@ async function resolveRulesetIdForCreateLegalValueVersion(
   return rows[0].id as string;
 }
 
+async function resolveLegalValueVersionPayloadForCommand(
+  valueKey: string,
+  valueType: string,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  if (ownerEditorInputPresent(valueKey, valueType, payload)) {
+    const assembled = assembleLegalValuePayloadFromOwnerEditorInput(valueKey, valueType, payload);
+    if (assembled === undefined) {
+      throw badRequest('Owner editor fields could not be assembled into a legal value payload');
+    }
+    return assembled;
+  }
+  const validated = validateLegalValueVersionPayload(payload.value_payload_json);
+  if (validated === null || validated === undefined) {
+    throw badRequest('value_payload_json is required');
+  }
+  return validated;
+}
+
 async function handleCreateLegalValueVersion(ctx: RequestContext, payload: Record<string, unknown>): Promise<CountryPackCommandResponse> {
   const countryCode = asString(payload.country_code, 'country_code').toUpperCase();
   const valueKey = asString(payload.value_key, 'value_key');
@@ -892,10 +914,11 @@ async function handleCreateLegalValueVersion(ctx: RequestContext, payload: Recor
     value_key: legalValue.value_key,
     value_payload_json: payload.value_payload_json,
   });
-  const valuePayloadJson = validateLegalValueVersionPayload(payload.value_payload_json);
-  if (valuePayloadJson === null || valuePayloadJson === undefined) {
-    throw badRequest('value_payload_json is required');
-  }
+  const valuePayloadJson = await resolveLegalValueVersionPayloadForCommand(
+    legalValue.value_key,
+    legalValue.value_type,
+    payload,
+  );
   const { data, error } = await supabaseAdmin
     .from('country_legal_value_versions')
     .insert({
@@ -938,22 +961,28 @@ async function handleUpdateLegalValueVersion(ctx: RequestContext, payload: Recor
     effectiveTo,
     excludeVersionId: versionId,
   });
-  if (payload.value_payload_json !== undefined) {
-    const { data: lvRow } = await supabaseAdmin
-      .from('country_legal_values')
-      .select('category, module_scope, value_type, value_key')
-      .eq('id', current.legal_value_id)
-      .maybeSingle();
-    if (lvRow) {
-      assertOperationalCommunicationLegalValueMetadata({
-        category: String(lvRow.category),
-        module_scope: String(lvRow.module_scope),
-        value_type: String(lvRow.value_type),
-        value_key: String(lvRow.value_key),
-        value_payload_json: payload.value_payload_json,
-      });
-    }
-    patch.value_payload_json = validateLegalValueVersionPayload(payload.value_payload_json);
+  const { data: lvRow } = await supabaseAdmin
+    .from('country_legal_values')
+    .select('category, module_scope, value_type, value_key')
+    .eq('id', current.legal_value_id)
+    .maybeSingle();
+  if (
+    lvRow &&
+    (payload.value_payload_json !== undefined ||
+      ownerEditorInputPresent(String(lvRow.value_key), String(lvRow.value_type), payload))
+  ) {
+    assertOperationalCommunicationLegalValueMetadata({
+      category: String(lvRow.category),
+      module_scope: String(lvRow.module_scope),
+      value_type: String(lvRow.value_type),
+      value_key: String(lvRow.value_key),
+      value_payload_json: payload.value_payload_json,
+    });
+    patch.value_payload_json = await resolveLegalValueVersionPayloadForCommand(
+      String(lvRow.value_key),
+      String(lvRow.value_type),
+      payload,
+    );
   }
   if (payload.effective_from !== undefined) patch.effective_from = effectiveFrom;
   if (payload.effective_to !== undefined) patch.effective_to = effectiveTo;
