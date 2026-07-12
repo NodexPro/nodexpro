@@ -437,18 +437,70 @@ test('vat column renders backend vat amount not percentage rate', () => {
 
 test('issuer letterhead restores thin-outline contact icons', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /nx-doc__issuer-line-icon/);
+  const issuerStart = html.indexOf('<div class="nx-doc__issuer-identity">');
+  const issuerEnd = html.indexOf('</section>', issuerStart);
+  const issuerBlock = html.slice(issuerStart, issuerEnd);
+  assert.match(issuerBlock, /nx-doc__issuer-line-icon/);
+  assert.match(issuerBlock, /514789632/);
   assert.match(html, /nx-doc__meta-icon/);
+  const issuerIconCount = (issuerBlock.match(/nx-doc__issuer-line-icon(?!-)/g) ?? []).length;
+  assert.equal(issuerIconCount, 5);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__issuer-line,\s*\.nx-doc--unified \.nx-doc__customer-line[\s\S]*grid-template-columns: 16px minmax\(0, 1fr\)/);
 });
 
-test('customer block uses inline icons only for phone and email', () => {
+test('issuer business number row includes ID icon', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  const issuerStart = html.indexOf('<div class="nx-doc__issuer-lines">');
+  const issuerEnd = html.indexOf('</div>', issuerStart);
+  const issuerLines = html.slice(issuerStart, issuerEnd);
+  assert.match(issuerLines, /nx-doc__issuer-line-icon[\s\S]*514789632/);
+});
+
+test('issuer address row includes location icon', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  const issuerStart = html.indexOf('<div class="nx-doc__issuer-identity">');
+  const issuerEnd = html.indexOf('</section>', issuerStart);
+  const issuerBlock = html.slice(issuerStart, issuerEnd);
+  assert.match(issuerBlock, /nx-doc__issuer-line-icon[\s\S]*רחוב העסק 1/);
+});
+
+test('customer block uses aligned icons for address tax id phone email and website', () => {
+  const input = buildSampleUnifiedInput();
+  input.recipient = {
+    ...input.recipient,
+    website: 'www.client.example.com',
+  };
+  const html = renderUnifiedIncomeDocumentHtml(input);
   const customerStart = html.indexOf('<section class="nx-doc__customer"');
   const customerEnd = html.indexOf('</section>', customerStart);
   const customerBlock = html.slice(customerStart, customerEnd);
-  assert.match(customerBlock, /nx-doc__customer-line-icon/);
-  const iconCount = (customerBlock.match(/nx-doc__customer-line-icon/g) ?? []).length;
-  assert.equal(iconCount, 2);
+  assert.match(customerBlock, /nx-doc__customer-lines/);
+  assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*רחוב הלקוח 5/);
+  assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*998877665/);
+  assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*050-7654321/);
+  assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*client@example\.com/);
+  assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*www\.client\.example\.com/);
+  const lineCount = (customerBlock.match(/class="nx-doc__customer-line(?:\s|")/g) ?? []).length;
+  assert.equal(lineCount, 5);
+});
+
+test('customer contact person row aligns with icon column spacer', () => {
+  const input = buildSampleUnifiedInput();
+  input.recipient = {
+    ...input.recipient,
+    contact_name: 'איש קשר לדוגמה',
+  };
+  const html = renderUnifiedIncomeDocumentHtml(input);
+  assert.match(html, /nx-doc__customer-line--plain[\s\S]*איש קשר לדוגמה/);
+  assert.match(html, /nx-doc__customer-line-icon--spacer/);
+});
+
+test('customer phone and email rows share aligned icon column', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(
+    html,
+    /\.nx-doc--unified \.nx-doc__customer-line[\s\S]*grid-template-columns: 16px minmax\(0, 1fr\)/,
+  );
 });
 
 test('document number accent rule present in unified header', () => {

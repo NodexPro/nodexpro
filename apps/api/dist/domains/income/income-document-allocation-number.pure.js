@@ -63,8 +63,8 @@ export function isAllocationNumberApplicable(policy, documentType) {
 export function buildIncomeDocumentAllocationNumberField(params) {
     const visible = isAllocationNumberApplicable(params.policy, params.documentType);
     const normalized = normalizeAllocationNumberInput(params.value);
-    const display = normalized ??
-        (visible && params.policy.empty_display ? params.policy.empty_display : '—');
+    const emptyDisplay = (params.policy.empty_display?.trim() || 'הזינו מספר הקצאה');
+    const display = normalized ?? (visible ? emptyDisplay : '—');
     let editable = params.canEdit && visible;
     let disabled_reason = null;
     if (!params.canEdit) {
@@ -98,8 +98,9 @@ export function buildIncomeDocumentAllocationNumberField(params) {
 export function allocationNumberForDocumentRender(field) {
     if (!field.visible)
         return { visible: false, display: null };
+    const saved = field.value?.trim();
     return {
         visible: true,
-        display: field.value?.trim() ? field.value.trim() : field.display_value,
+        display: saved ?? '—',
     };
 }

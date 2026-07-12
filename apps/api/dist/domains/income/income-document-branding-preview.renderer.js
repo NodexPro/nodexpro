@@ -25,15 +25,17 @@ function formatDiscountDisplay(value) {
         return null;
     return trimmed.replace(/^[\s−\-–—]+/, '').trim();
 }
+const PARTY_LINE_ICON_PX = 16;
+const PARTY_LINE_GAP_PX = 5;
 function partyInfoRow(classPrefix, icon, value) {
     if (!value?.trim())
         return '';
-    return `<div class="nx-doc__${classPrefix}-line"><span class="nx-doc__${classPrefix}-line-icon">${icon}</span><span class="nx-doc__${classPrefix}-line-value">${escapeHtml(value)}</span></div>`;
+    return `<div class="nx-doc__${classPrefix}-line"><span class="nx-doc__${classPrefix}-line-icon" aria-hidden="true">${icon}</span><span class="nx-doc__${classPrefix}-line-value">${escapeHtml(value)}</span></div>`;
 }
-function issuerPlainRow(value, visible) {
-    if (!visible || !value?.trim())
+function partyPlainRow(classPrefix, value) {
+    if (!value?.trim())
         return '';
-    return `<div class="nx-doc__issuer-line nx-doc__issuer-line--plain"><span>${escapeHtml(value)}</span></div>`;
+    return `<div class="nx-doc__${classPrefix}-line nx-doc__${classPrefix}-line--plain"><span class="nx-doc__${classPrefix}-line-icon nx-doc__${classPrefix}-line-icon--spacer" aria-hidden="true"></span><span class="nx-doc__${classPrefix}-line-value">${escapeHtml(value)}</span></div>`;
 }
 function issuerInfoRow(icon, value) {
     return partyInfoRow('issuer', icon, value);
@@ -44,11 +46,6 @@ function metaRow(label, value, icon) {
 }
 function customerInfoRow(icon, value) {
     return partyInfoRow('customer', icon, value);
-}
-function customerPlainRow(value) {
-    if (!value?.trim())
-        return '';
-    return `<div class="nx-doc__customer-line nx-doc__customer-line--plain"><span>${escapeHtml(value)}</span></div>`;
 }
 function formatLineCurrency(currency) {
     const c = currency?.trim() || 'ILS';
@@ -128,7 +125,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
         ? `<div class="nx-doc__issuer-subtitle">${escapeHtml(params.company_subtitle ?? b.company_subtitle)}</div>`
         : '';
     const issuerContactLines = [
-        issuerPlainRow(params.issuer.tax_id, d.show_business_tax_id),
+        issuerInfoRow(docPreviewIcon('id'), d.show_business_tax_id ? params.issuer.tax_id : null),
         issuerInfoRow(docPreviewIcon('location'), d.show_business_address ? params.issuer.address : null),
         issuerInfoRow(docPreviewIcon('phone'), d.show_business_phone ? params.issuer.phone : null),
         issuerInfoRow(docPreviewIcon('mail'), d.show_business_email ? params.issuer.email : null),
@@ -144,14 +141,20 @@ export function renderIncomeBrandedPreviewHtml(params) {
       ${issuerContactLines ? `<div class="nx-doc__issuer-lines">${issuerContactLines}</div>` : ''}
     </div>
   </div>`;
+    const customerLines = [
+        partyPlainRow('customer', params.recipient.contact_name ?? null),
+        customerInfoRow(docPreviewIcon('location'), params.recipient.address),
+        customerInfoRow(docPreviewIcon('id'), params.recipient.tax_id),
+        customerInfoRow(docPreviewIcon('phone'), params.recipient.phone),
+        customerInfoRow(docPreviewIcon('mail'), params.recipient.email),
+        customerInfoRow(docPreviewIcon('website'), params.recipient.website ?? null),
+    ]
+        .filter(Boolean)
+        .join('');
     const customerBlock = `
     <header class="nx-doc__customer-head"><span>לכבוד</span></header>
     <div class="nx-doc__customer-name">${escapeHtml(params.recipient.display_name)}</div>
-    ${customerPlainRow(params.recipient.address)}
-    ${customerPlainRow(params.recipient.tax_id)}
-    ${customerInfoRow(docPreviewIcon('phone'), params.recipient.phone)}
-    ${customerInfoRow(docPreviewIcon('mail'), params.recipient.email)}
-    ${customerPlainRow(params.recipient.website ?? null)}
+    ${customerLines ? `<div class="nx-doc__customer-lines">${customerLines}</div>` : ''}
   `;
     const metaRows = [
         metaRow('תאריך המסמך', formatPreviewDate(params.document_date), docPreviewIcon('calendar')),
@@ -354,8 +357,54 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--unified .nx-doc__issuer-lines {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 4px;
+  margin-top: 4px;
+  width: 100%;
+}
+.nx-doc--unified .nx-doc__issuer-line,
+.nx-doc--unified .nx-doc__customer-line {
+  display: grid;
+  grid-template-columns: ${PARTY_LINE_ICON_PX}px minmax(0, 1fr);
+  gap: ${PARTY_LINE_GAP_PX}px;
+  align-items: start;
+  padding: 0;
+  font-size: 12px;
+  color: var(--nx-doc-text);
+  line-height: 1.35;
+}
+.nx-doc--unified .nx-doc__issuer-line-icon,
+.nx-doc--unified .nx-doc__customer-line-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: ${PARTY_LINE_ICON_PX}px;
+  height: ${PARTY_LINE_ICON_PX}px;
+  margin-top: 1px;
+  color: var(--nx-doc-icon);
+  opacity: 0.92;
+}
+.nx-doc--unified .nx-doc__issuer-line-icon .nx-doc__icon,
+.nx-doc--unified .nx-doc__customer-line-icon .nx-doc__icon {
+  width: ${PARTY_LINE_ICON_PX}px;
+  height: ${PARTY_LINE_ICON_PX}px;
+}
+.nx-doc--unified .nx-doc__issuer-line-icon--spacer,
+.nx-doc--unified .nx-doc__customer-line-icon--spacer {
+  visibility: hidden;
+}
+.nx-doc--unified .nx-doc__issuer-line-value,
+.nx-doc--unified .nx-doc__customer-line-value {
+  text-align: start;
+  min-width: 0;
+  word-break: break-word;
+}
+.nx-doc--unified .nx-doc__customer-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin-top: 2px;
+  width: 100%;
 }
 .nx-doc--unified .nx-doc__logo-img {
   max-width: ${Math.min(logoDims.maxWidthPx, 240)}px;
@@ -389,60 +438,6 @@ export function renderIncomeBrandedPreviewHtml(params) {
   margin-bottom: 1px;
   line-height: 1.25;
 }
-.nx-doc--unified .nx-doc__issuer-line {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 6px;
-  padding: 0;
-  font-size: 12px;
-  color: var(--nx-doc-text);
-  line-height: 1.35;
-}
-.nx-doc--unified .nx-doc__issuer-line--plain {
-  display: block;
-  text-align: end;
-  color: var(--nx-doc-text);
-  font-size: 12px;
-  line-height: 1.35;
-}
-.nx-doc--unified .nx-doc__issuer-line-icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  margin-top: 1px;
-  color: var(--nx-doc-icon);
-  width: 16px;
-  height: 16px;
-  opacity: 0.9;
-}
-.nx-doc--unified .nx-doc__issuer-line-value { text-align: end; }
-.nx-doc--unified .nx-doc__customer-line {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: 6px;
-  padding: 0;
-  font-size: 13px;
-  color: var(--nx-doc-text);
-  line-height: 1.35;
-}
-.nx-doc--unified .nx-doc__customer-line--plain {
-  display: block;
-  text-align: start;
-  color: var(--nx-doc-text);
-  font-size: 13px;
-  line-height: 1.35;
-}
-.nx-doc--unified .nx-doc__customer-line-icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  margin-top: 1px;
-  color: var(--nx-doc-icon);
-  width: 13px;
-  height: 13px;
-  opacity: 0.85;
-}
-.nx-doc--unified .nx-doc__customer-line-value { text-align: start; }
 .nx-doc--unified .nx-doc__customer {
   width: 100%;
   margin: 0 0 4px;
@@ -453,14 +448,14 @@ export function renderIncomeBrandedPreviewHtml(params) {
   border-radius: 0;
 }
 .nx-doc--unified .nx-doc__customer-head {
-  font-weight: 700;
-  font-size: 16px;
+  font-weight: 600;
+  font-size: 14px;
   margin-bottom: 2px;
   line-height: 1.2;
   color: var(--nx-doc-text);
 }
 .nx-doc--unified .nx-doc__customer-name {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
   margin-bottom: 3px;
   line-height: 1.12;
@@ -660,17 +655,18 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc__logo-placeholder { width: ${Math.round(Math.min(logoDims.maxWidthPx, 160) * 0.72)}px; height: ${Math.round(Math.min(logoDims.maxHeightPx, 40) * 0.58)}px; background: transparent; border: 1px dashed var(--nx-doc-border); border-radius: 4px; margin: 0 0 4px 0; align-self: flex-end; }
 .nx-doc__issuer-name { font-size: 17px; font-weight: 700; margin-bottom: 0; line-height: 1.15; }
 .nx-doc__issuer-subtitle { font-size: 12px; color: var(--nx-doc-text-muted); margin-bottom: 2px; line-height: 1.25; }
-.nx-doc__issuer-line { display: grid; grid-template-columns: 1fr; gap: 0; align-items: start; padding: 0; font-size: 12px; color: var(--nx-doc-text); line-height: 1.25; text-align: end; }
-.nx-doc__issuer-line--plain { grid-template-columns: 1fr; text-align: end; }
-.nx-doc__issuer-line-icon { display: inline-flex; flex-shrink: 0; color: var(--nx-doc-icon); width: 14px; height: 14px; }
-.nx-doc__issuer-line-value { text-align: end; line-height: 1.25; }
-.nx-doc__customer { width: 100%; margin: 0; padding: 0 0 4px; border-bottom: 1px solid var(--nx-doc-border); background: transparent; box-shadow: none; }
-.nx-doc__customer-head { font-weight: 700; font-size: 13px; margin-bottom: 2px; line-height: 1.2; color: var(--nx-doc-text); }
-.nx-doc__customer-name { font-size: 17px; font-weight: 700; margin-bottom: 2px; line-height: 1.15; color: var(--nx-doc-text); }
-.nx-doc__customer-line { display: grid; grid-template-columns: 14px 1fr; gap: 6px; align-items: start; font-size: 12px; padding: 0; color: var(--nx-doc-text); line-height: 1.25; }
-.nx-doc__customer-line--plain { grid-template-columns: 1fr; color: var(--nx-doc-text); font-size: 12px; line-height: 1.25; }
-.nx-doc__customer-line-icon { display: inline-flex; margin-top: 0; color: var(--nx-doc-icon); width: 14px; height: 14px; }
-.nx-doc__customer-line-value { text-align: end; }
+.nx-doc__issuer-line { display: grid; grid-template-columns: ${PARTY_LINE_ICON_PX}px minmax(0, 1fr); gap: ${PARTY_LINE_GAP_PX}px; align-items: start; padding: 0; font-size: 12px; color: var(--nx-doc-text); line-height: 1.35; }
+.nx-doc__issuer-line-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; color: var(--nx-doc-icon); width: ${PARTY_LINE_ICON_PX}px; height: ${PARTY_LINE_ICON_PX}px; }
+.nx-doc__issuer-line-icon--spacer { visibility: hidden; }
+.nx-doc__issuer-line-value { text-align: start; line-height: 1.35; min-width: 0; word-break: break-word; }
+.nx-doc__customer { width: 100%; margin: 0; padding: 0 0 6px; border-bottom: 1px solid var(--nx-doc-border); background: transparent; box-shadow: none; }
+.nx-doc__customer-head { font-weight: 600; font-size: 14px; margin-bottom: 2px; line-height: 1.2; color: var(--nx-doc-text); }
+.nx-doc__customer-name { font-size: 19px; font-weight: 700; margin-bottom: 2px; line-height: 1.15; color: var(--nx-doc-text); }
+.nx-doc__customer-lines { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; width: 100%; }
+.nx-doc__customer-line { display: grid; grid-template-columns: ${PARTY_LINE_ICON_PX}px minmax(0, 1fr); gap: ${PARTY_LINE_GAP_PX}px; align-items: start; font-size: 12px; padding: 0; color: var(--nx-doc-text); line-height: 1.35; }
+.nx-doc__customer-line-icon { display: inline-flex; margin-top: 0; align-items: center; justify-content: center; color: var(--nx-doc-icon); width: ${PARTY_LINE_ICON_PX}px; height: ${PARTY_LINE_ICON_PX}px; }
+.nx-doc__customer-line-icon--spacer { visibility: hidden; }
+.nx-doc__customer-line-value { text-align: start; min-width: 0; word-break: break-word; }
 .nx-doc__table { width: 100%; border-collapse: collapse; border-spacing: 0; margin: 0 0 16px; border: none; }
 .nx-doc__table thead th { background: var(--nx-doc-primary); color: #fff; padding: 8px; font-size: 13px; font-weight: 700; text-align: right; border: none; border-bottom: 1px solid color-mix(in srgb, var(--nx-doc-primary) 80%, #000); }
 .nx-doc__table tbody td { padding: 7px 8px; font-size: 13px; border: none; border-bottom: 1px solid var(--nx-doc-border); vertical-align: top; background: #fff; }
