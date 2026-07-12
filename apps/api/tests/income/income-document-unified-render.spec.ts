@@ -195,7 +195,10 @@ test('unified tax invoice html markers — section order and labels', () => {
   assert.doesNotMatch(html, />יחידת מידה</);
   assert.match(html, /nx-doc__summary-head[\s\S]*סיכום כספי/);
   assert.match(html, /\.nx-doc--unified \.nx-doc__grand-total[\s\S]*border-top: 2px solid var\(--nx-doc-primary\)/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__grand-total strong[\s\S]*font-size: 26px/);
   assert.match(html, /\.nx-doc--unified \.nx-doc__grand-total strong[\s\S]*color: var\(--nx-doc-primary\)/);
+  assert.match(html, /table-layout: fixed/);
+  assert.match(html, /<colgroup>/);
   assert.match(html, /\.nx-doc__comments \{[\s\S]*grid-column: 1/);
   assert.match(html, /\.nx-doc__summary \{[\s\S]*grid-column: 2/);
   assert.match(html, /\.nx-doc--unified \.nx-doc__table thead th \{[\s\S]*background: var\(--nx-doc-primary\)/);
@@ -213,7 +216,7 @@ test('issuer is never hardcoded as NodexPro and footer branding appears once', (
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
   assert.match(html, /מכון טכנולוגי לדוגמה בע/);
   assert.doesNotMatch(html, /NODEXPRO/);
-  assert.match(html, /מסמך זה הופק באמצעות מערכת NodexPro/);
+  assert.match(html, /המסמך הופק באמצעות NodexPro/);
   assert.match(html, /https:\/\/www\.nodexpro\.com/);
   const footerMatches = html.match(/<footer class="nx-doc__platform-footer"/g) ?? [];
   assert.equal(footerMatches.length, 1);
@@ -396,11 +399,21 @@ test('allocation number hidden in document html when not visible', () => {
   assert.doesNotMatch(html, />מספר הקצאה</);
 });
 
-test('issuer contact lines use inline icons not detached icon column', () => {
+test('issuer letterhead uses plain typography rows for company details', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /nx-doc__issuer-line-icon/);
-  assert.match(html, /nx-doc__issuer-line-value/);
-  assert.doesNotMatch(html, /\.nx-doc__issuer-line-icon \{ display: none/);
+  assert.match(html, /nx-doc__issuer-line--plain/);
+  assert.match(html, /nx-doc__issuer-lines/);
+  assert.match(html, /03-1234567/);
+});
+
+test('customer block uses inline icons only for phone and email', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  const customerStart = html.indexOf('<section class="nx-doc__customer"');
+  const customerEnd = html.indexOf('</section>', customerStart);
+  const customerBlock = html.slice(customerStart, customerEnd);
+  assert.match(customerBlock, /nx-doc__customer-line-icon/);
+  const iconCount = (customerBlock.match(/nx-doc__customer-line-icon/g) ?? []).length;
+  assert.equal(iconCount, 2);
 });
 
 test('document number accent rule present in unified header', () => {
