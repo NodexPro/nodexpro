@@ -98,7 +98,8 @@ export function buildIncomeDocumentAllocationNumberField(params) {
 export function allocationNumberForDocumentRender(field) {
     if (!field.visible)
         return { visible: false, display: null };
-    if (field.value)
-        return { visible: true, display: field.value };
-    return { visible: false, display: null };
+    return {
+        visible: true,
+        display: field.value?.trim() ? field.value.trim() : field.display_value,
+    };
 }

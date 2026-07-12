@@ -547,6 +547,7 @@ export async function renderFutureCycleProjectionPreview(params: {
     quantity: row.quantity.value,
     unit_price: row.unit_price.value,
     currency: row.currency.value,
+    vat_display: '—',
     vat_rate_label: row.vat_rate_label,
     total: row.line_total_display,
   }));

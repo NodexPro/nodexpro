@@ -4,6 +4,7 @@
 import { documentTypeLabel } from './income-pdf-template.resolver.js';
 import { formatMoneyReference, normalizeDraftLines } from './income-document-draft-lines.pure.js';
 import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
+import { computeDraftLineAmounts, resolveLineFx, resolveFxMapForDraftLines, } from './income-draft-line-compute.pure.js';
 export function previewPartyAddressLine(addressJson) {
     if (!addressJson || typeof addressJson !== 'object' || Array.isArray(addressJson))
         return null;
@@ -57,7 +58,25 @@ function readOptionalString(raw) {
     const s = String(raw).trim();
     return s || null;
 }
-export function lineRowsFromLinesSnapshot(linesSnapshot, currency, totalsSnapshot) {
+export function formatLineVatAmountDisplay(line, amounts) {
+    if (line.vat_rate_code === 'exempt')
+        return '—';
+    if (amounts?.line_vat_ils != null && Number.isFinite(amounts.line_vat_ils)) {
+        return formatMoneyReference(amounts.line_vat_ils, 'ILS');
+    }
+    return '—';
+}
+export async function lineRowsFromLinesSnapshotForRender(params) {
+    const lines = normalizeDraftLines(params.linesSnapshot);
+    const officialByCurrency = await resolveFxMapForDraftLines(lines, params.documentDate);
+    return lineRowsFromLinesSnapshot(params.linesSnapshot, params.currency, params.totalsSnapshot, {
+        settings: params.settings,
+        vatResolution: params.vatResolution,
+        documentDate: params.documentDate,
+        officialByCurrency,
+    });
+}
+export function lineRowsFromLinesSnapshot(linesSnapshot, currency, totalsSnapshot, computeContext) {
     const rawArr = Array.isArray(linesSnapshot) ? linesSnapshot : [];
     const lines = normalizeDraftLines(rawArr);
     const vatFallback = readOptionalString(totalsSnapshot?.vat_rate_label);
@@ -73,9 +92,18 @@ export function lineRowsFromLinesSnapshot(linesSnapshot, currency, totalsSnapsho
             : line.unit_price_reference != null && Number.isFinite(line.unit_price_reference)
                 ? line.quantity * line.unit_price_reference
                 : null;
-        const lineVatAmount = readOptionalString(rawObj.vat_display) ??
+        const precomputedVat = readOptionalString(rawObj.vat_display) ??
             readOptionalString(rawObj.line_vat_display) ??
             readOptionalString(rawObj.vat_amount_display);
+        let amounts = null;
+        if (computeContext) {
+            const fx = resolveLineFx(line, computeContext.documentDate, computeContext.officialByCurrency);
+            if (fx) {
+                amounts = computeDraftLineAmounts(line, computeContext.settings, computeContext.vatResolution, fx);
+            }
+        }
+        const vatDisplay = precomputedVat ?? formatLineVatAmountDisplay(line, amounts);
+        const vatRateLabel = lineVatLabelFromCode(line.vat_rate_code, vatFallback);
         return {
             row_number: index + 1,
             description: line.description || '—',
@@ -86,7 +114,8 @@ export function lineRowsFromLinesSnapshot(linesSnapshot, currency, totalsSnapsho
                 : '—',
             discount: lineDiscount,
             currency: lineCurrency,
-            vat_rate_label: lineVatAmount ?? lineVatLabelFromCode(line.vat_rate_code, vatFallback),
+            vat_display: vatDisplay,
+            vat_rate_label: vatRateLabel,
             total: formatMoneyReference(amountRef, 'ILS'),
         };
     });
@@ -109,7 +138,10 @@ export function totalsFromTotalsSnapshot(totalsSnapshot) {
 export function buildUnifiedIncomeDocumentRenderInput(params) {
     const language = params.language === 'en' ? 'en' : 'he';
     const issuerFallback = params.issuer_fallback_label?.trim() || '—';
-    const allocationVisible = params.allocation_number != null && params.allocation_number.trim() !== '';
+    const allocationVisible = params.allocation_number_visible === true;
+    const allocationDisplay = allocationVisible
+        ? params.allocation_number?.trim() || '—'
+        : null;
     return {
         branding: params.branding,
         docTypeLabel: documentTypeLabel(params.document_type, language),
@@ -119,12 +151,13 @@ export function buildUnifiedIncomeDocumentRenderInput(params) {
         document_date: params.document_date,
         due_date: params.due_date,
         payment_terms_display: params.payment_terms_display ?? null,
-        allocation_number_display: allocationVisible ? params.allocation_number.trim() : null,
+        allocation_number_display: allocationDisplay,
         allocation_number_visible: allocationVisible,
         payment_link_url: params.payment_link_url ?? null,
         payment_qr_data_url: params.payment_qr_data_url ?? null,
         currency: params.currency,
-        lineRows: lineRowsFromLinesSnapshot(params.lines_snapshot_json, params.currency, params.totals_snapshot_json),
+        lineRows: params.lineRows ??
+            lineRowsFromLinesSnapshot(params.lines_snapshot_json, params.currency, params.totals_snapshot_json),
         totals: totalsFromTotalsSnapshot(params.totals_snapshot_json),
         notes: params.notes?.trim() || null,
         company_subtitle: params.branding.company_subtitle,

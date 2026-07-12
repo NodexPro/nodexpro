@@ -93,6 +93,22 @@ function buildSampleUnifiedInput() {
     currency: 'ILS',
     notes: 'תודה על העסקתכם',
     payment_terms_display: 'שוטף + 30',
+    allocation_number_visible: true,
+    allocation_number: '123456789',
+    lineRows: [
+      {
+        row_number: 1,
+        description: 'רישיון תוכנה',
+        quantity: '1',
+        unit: 'יחידה',
+        unit_price: '₪1,000.00',
+        discount: '₪50.00',
+        currency: 'ILS',
+        vat_display: '₪171.00',
+        vat_rate_label: '18%',
+        total: '₪950.00',
+      },
+    ],
     issuer_snapshot_json: {
       display_name: 'מכון טכנולוגי לדוגמה בע״מ',
       tax_id: '514789632',
@@ -399,11 +415,30 @@ test('allocation number hidden in document html when not visible', () => {
   assert.doesNotMatch(html, />מספר הקצאה</);
 });
 
-test('issuer letterhead uses plain typography rows for company details', () => {
+test('allocation number row visible in metadata when applicable even before value saved', () => {
+  const input = buildSampleUnifiedInput();
+  input.allocation_number_visible = true;
+  input.allocation_number_display = '—';
+  const html = renderUnifiedIncomeDocumentHtml(input);
+  assert.match(html, />מספר הקצאה</);
+});
+
+test('payment terms appear in document metadata from backend display value', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /nx-doc__issuer-line--plain/);
-  assert.match(html, /nx-doc__issuer-lines/);
-  assert.match(html, /03-1234567/);
+  assert.match(html, />תנאי תשלום</);
+  assert.match(html, />שוטף \+ 30</);
+});
+
+test('vat column renders backend vat amount not percentage rate', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(html, /₪171\.00/);
+  assert.doesNotMatch(html, /<td class="nx-doc__cell-vat">18%/);
+});
+
+test('issuer letterhead restores thin-outline contact icons', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(html, /nx-doc__issuer-line-icon/);
+  assert.match(html, /nx-doc__meta-icon/);
 });
 
 test('customer block uses inline icons only for phone and email', () => {

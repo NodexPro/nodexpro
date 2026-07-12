@@ -52,6 +52,9 @@ export type IncomeBrandingPreviewLineRow = {
   unit_price: string;
   discount?: string | null;
   currency: string;
+  /** Line VAT amount display for print (e.g. ₪180.00) — backend-prepared only. */
+  vat_display: string;
+  /** @deprecated retained for legacy readers — print uses vat_display */
   vat_rate_label: string;
   total: string;
 };
@@ -77,6 +80,15 @@ function partyInfoRow(
 function issuerPlainRow(value: string | null, visible: boolean): string {
   if (!visible || !value?.trim()) return '';
   return `<div class="nx-doc__issuer-line nx-doc__issuer-line--plain"><span>${escapeHtml(value)}</span></div>`;
+}
+
+function issuerInfoRow(icon: string, value: string | null): string {
+  return partyInfoRow('issuer', icon, value);
+}
+
+function metaRow(label: string, value: string, icon?: string): string {
+  const iconHtml = icon ? `<span class="nx-doc__meta-icon">${icon}</span>` : '';
+  return `<div class="nx-doc__meta-row">${iconHtml}<span class="nx-doc__meta-label">${escapeHtml(label)}</span><span class="nx-doc__meta-value">${escapeHtml(value)}</span></div>`;
 }
 
 function customerInfoRow(icon: string, value: string | null): string {
@@ -197,10 +209,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
 
   const issuerContactLines = [
     issuerPlainRow(params.issuer.tax_id, d.show_business_tax_id),
-    issuerPlainRow(params.issuer.address, d.show_business_address),
-    issuerPlainRow(params.issuer.phone, d.show_business_phone),
-    issuerPlainRow(params.issuer.email, d.show_business_email),
-    issuerPlainRow(params.issuer.website ?? null, Boolean(params.issuer.website?.trim())),
+    issuerInfoRow(docPreviewIcon('location'), d.show_business_address ? params.issuer.address : null),
+    issuerInfoRow(docPreviewIcon('phone'), d.show_business_phone ? params.issuer.phone : null),
+    issuerInfoRow(docPreviewIcon('mail'), d.show_business_email ? params.issuer.email : null),
+    issuerInfoRow(docPreviewIcon('website'), params.issuer.website?.trim() ? params.issuer.website : null),
   ]
     .filter(Boolean)
     .join('');
@@ -225,15 +237,19 @@ export function renderIncomeBrandedPreviewHtml(params: {
   `;
 
   const metaRows = [
-    `<div class="nx-doc__meta-row"><span class="nx-doc__meta-label">תאריך המסמך</span><span class="nx-doc__meta-value">${escapeHtml(formatPreviewDate(params.document_date))}</span></div>`,
-    d.show_due_date
-      ? `<div class="nx-doc__meta-row"><span class="nx-doc__meta-label">תאריך לתשלום</span><span class="nx-doc__meta-value">${escapeHtml(formatPreviewDate(params.due_date))}</span></div>`
+    metaRow('תאריך המסמך', formatPreviewDate(params.document_date), docPreviewIcon('calendar')),
+    params.due_date
+      ? metaRow('תאריך לתשלום', formatPreviewDate(params.due_date), docPreviewIcon('clock'))
       : '',
-    d.show_payment_terms && params.payment_terms_display?.trim()
-      ? `<div class="nx-doc__meta-row"><span class="nx-doc__meta-label">תנאי תשלום</span><span class="nx-doc__meta-value">${escapeHtml(params.payment_terms_display)}</span></div>`
+    params.payment_terms_display?.trim()
+      ? metaRow('תנאי תשלום', params.payment_terms_display, docPreviewIcon('payment'))
       : '',
-    params.allocation_number_visible && params.allocation_number_display?.trim()
-      ? `<div class="nx-doc__meta-row"><span class="nx-doc__meta-label">מספר הקצאה</span><span class="nx-doc__meta-value">${escapeHtml(params.allocation_number_display)}</span></div>`
+    params.allocation_number_visible
+      ? metaRow(
+          'מספר הקצאה',
+          params.allocation_number_display?.trim() || '—',
+          docPreviewIcon('id'),
+        )
       : '',
   ]
     .filter(Boolean)
@@ -245,7 +261,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
       ? params.lineRows
           .map((r) => {
             const vatCell = d.show_vat_row
-              ? `<td class="nx-doc__cell-vat">${escapeHtml(r.vat_rate_label)}</td>`
+              ? `<td class="nx-doc__cell-vat">${escapeHtml(r.vat_display)}</td>`
               : '';
             return `<tr>
             <td class="nx-doc__cell-num">${escapeHtml(String(r.row_number))}</td>
@@ -409,14 +425,24 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }
 .nx-doc--unified .nx-doc__meta-row {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: 8px;
-  align-items: baseline;
+  grid-template-columns: 16px 112px minmax(0, 1fr);
+  gap: 6px 8px;
+  align-items: center;
   padding: 0;
   color: var(--nx-doc-text-muted);
   font-size: 13px;
   line-height: 1.3;
 }
+.nx-doc--unified .nx-doc__meta-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--nx-doc-icon);
+  opacity: 0.9;
+}
+.nx-doc--unified .nx-doc__meta-icon .nx-doc__icon { width: 16px; height: 16px; }
 .nx-doc--unified .nx-doc__meta-label { color: var(--nx-doc-text-muted); white-space: nowrap; font-weight: 500; }
 .nx-doc--unified .nx-doc__meta-value { color: var(--nx-doc-text); font-weight: 600; justify-self: start; }
 .nx-doc--unified .nx-doc__issuer-identity {
@@ -466,6 +492,16 @@ export function renderIncomeBrandedPreviewHtml(params: {
   margin-bottom: 1px;
   line-height: 1.25;
 }
+.nx-doc--unified .nx-doc__issuer-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0;
+  font-size: 12px;
+  color: var(--nx-doc-text);
+  line-height: 1.35;
+}
 .nx-doc--unified .nx-doc__issuer-line--plain {
   display: block;
   text-align: end;
@@ -473,6 +509,16 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-size: 12px;
   line-height: 1.35;
 }
+.nx-doc--unified .nx-doc__issuer-line-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--nx-doc-icon);
+  width: 16px;
+  height: 16px;
+  opacity: 0.9;
+}
+.nx-doc--unified .nx-doc__issuer-line-value { text-align: end; }
 .nx-doc--unified .nx-doc__customer-line {
   display: flex;
   align-items: flex-start;
@@ -838,6 +884,7 @@ export function renderStudioSamplePreviewHtml(
         unit_price: '₪1,000.00',
         discount: '—',
         currency: '₪',
+        vat_display: '₪171.00',
         vat_rate_label: '18%',
         total: '₪1,000.00',
       },
@@ -849,6 +896,7 @@ export function renderStudioSamplePreviewHtml(
         unit_price: '₪298.00',
         discount: '—',
         currency: '₪',
+        vat_display: '₪53.64',
         vat_rate_label: '18%',
         total: '₪298.00',
       },

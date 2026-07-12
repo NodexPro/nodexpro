@@ -69,28 +69,39 @@ test('allocation number format validation accepts digits only', () => {
   assert.match(validateAllocationNumberFormat('12A34') ?? '', /ספרות בלבד/);
 });
 
-test('document render shows allocation only when value exists', () => {
+test('document render shows allocation row when field is applicable', () => {
   const visibleField = buildIncomeDocumentAllocationNumberField({
-    policy: defaultIncomeTaxAllocationNumberPolicy(),
-    documentType: 'tax_invoice',
-    value: '998877665',
-    canEdit: true,
-    isIssued: false,
-  });
-  const render = allocationNumberForDocumentRender(visibleField);
-  assert.equal(render.visible, true);
-  assert.equal(render.display, '998877665');
-
-  const emptyField = buildIncomeDocumentAllocationNumberField({
     policy: defaultIncomeTaxAllocationNumberPolicy(),
     documentType: 'tax_invoice',
     value: null,
     canEdit: true,
     isIssued: false,
   });
-  const emptyRender = allocationNumberForDocumentRender(emptyField);
-  assert.equal(emptyRender.visible, false);
-  assert.equal(emptyRender.display, null);
+  const render = allocationNumberForDocumentRender(visibleField);
+  assert.equal(render.visible, true);
+  assert.equal(render.display, '—');
+
+  const savedField = buildIncomeDocumentAllocationNumberField({
+    policy: defaultIncomeTaxAllocationNumberPolicy(),
+    documentType: 'tax_invoice',
+    value: '998877665',
+    canEdit: true,
+    isIssued: false,
+  });
+  const savedRender = allocationNumberForDocumentRender(savedField);
+  assert.equal(savedRender.visible, true);
+  assert.equal(savedRender.display, '998877665');
+
+  const hiddenField = buildIncomeDocumentAllocationNumberField({
+    policy: defaultIncomeTaxAllocationNumberPolicy(),
+    documentType: 'receipt',
+    value: '123',
+    canEdit: true,
+    isIssued: false,
+  });
+  const hiddenRender = allocationNumberForDocumentRender(hiddenField);
+  assert.equal(hiddenRender.visible, false);
+  assert.equal(hiddenRender.display, null);
 });
 
 test('named command wired for allocation number update', () => {

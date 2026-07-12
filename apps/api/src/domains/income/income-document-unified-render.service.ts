@@ -8,10 +8,18 @@ import { loadClientOperationsCoreClient } from '../client-operations/client-oper
 import { loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
 import {
   buildUnifiedIncomeDocumentRenderInput,
+  lineRowsFromLinesSnapshotForRender,
   type UnifiedIncomeDocumentRenderInput,
 } from './income-document-unified-render.pure.js';
 import { incomeCustomerPaymentTermsLabel, isIncomeCustomerPaymentTermsKey } from './income-customer-payment-terms.pure.js';
 import type { IncomeDocumentType } from './income.types.js';
+import { parseDocumentSettingsJson } from './income-document-draft-totals.pure.js';
+import { readVatResolutionFromDraftPreview } from './income-draft-vat-fallback.pure.js';
+import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
+import {
+  isAllocationNumberApplicable,
+} from './income-document-allocation-number.pure.js';
+import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
 
 export type IssuedIncomeDocumentForRender = {
   id: string;
@@ -75,15 +83,50 @@ async function loadPaymentTermsDisplayFromSourceDraft(
   return incomeCustomerPaymentTermsLabel(normalized);
 }
 
+async function loadDraftRenderContextFromSource(
+  orgId: string,
+  sourceDraftId: string | null,
+): Promise<{
+  document_settings_json: unknown;
+  document_date: string | null;
+} | null> {
+  if (!sourceDraftId) return null;
+  const { data, error } = await supabaseAdmin
+    .from('income_document_drafts')
+    .select('document_settings_json, document_date')
+    .eq('organization_id', orgId)
+    .eq('id', sourceDraftId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as { document_settings_json: unknown; document_date: string | null };
+}
+
 export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
   scope: ActiveIncomeIssuerScope,
   doc: IssuedIncomeDocumentForRender,
 ): Promise<UnifiedIncomeDocumentRenderInput> {
   const branding = await loadResolvedBrandingProfileForDocumentType(scope, doc.document_type);
-  const [issuerWebsite, paymentTermsDisplay] = await Promise.all([
+  const [issuerWebsite, paymentTermsDisplay, draftContext, allocationPolicy] = await Promise.all([
     loadIssuerWebsiteForRender(scope),
     loadPaymentTermsDisplayFromSourceDraft(scope.org_id, doc.source_draft_id),
+    loadDraftRenderContextFromSource(scope.org_id, doc.source_draft_id),
+    resolveIncomeTaxAllocationNumberPolicyForOrg(scope.org_id, 'IL', doc.issue_date),
   ]);
+
+  const documentDate = draftContext?.document_date ?? doc.issue_date;
+  const settings = parseDocumentSettingsJson(draftContext?.document_settings_json);
+  const vatResolution =
+    readVatResolutionFromDraftPreview(doc.totals_snapshot_json, documentDate) ??
+    (await resolveIncomeDraftVatForOrg(scope.org_id, 'IL', documentDate));
+  const lineRows = await lineRowsFromLinesSnapshotForRender({
+    linesSnapshot: Array.isArray(doc.lines_snapshot_json) ? doc.lines_snapshot_json : [],
+    currency: doc.currency,
+    totalsSnapshot: doc.totals_snapshot_json,
+    documentDate,
+    settings,
+    vatResolution,
+  });
+  const allocationApplicable = isAllocationNumberApplicable(allocationPolicy, doc.document_type);
 
   return buildUnifiedIncomeDocumentRenderInput({
     branding,
@@ -98,11 +141,13 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
     payment_link_url: null,
     payment_qr_data_url: null,
     allocation_number: doc.tax_allocation_number,
+    allocation_number_visible: allocationApplicable,
     issuer_snapshot_json: doc.issuer_snapshot_json ?? {},
     customer_snapshot_json: doc.customer_snapshot_json ?? {},
     lines_snapshot_json: Array.isArray(doc.lines_snapshot_json) ? doc.lines_snapshot_json : [],
     totals_snapshot_json: doc.totals_snapshot_json,
     issuer_website: issuerWebsite,
     issuer_fallback_label: scope.issuer_label,
+    lineRows,
   });
 }

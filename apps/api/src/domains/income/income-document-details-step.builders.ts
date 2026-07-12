@@ -35,9 +35,9 @@ import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
 import { renderUnifiedIncomeDocumentHtml } from './income-document-unified-render.html.js';
+import { formatLineVatAmountDisplay } from './income-document-unified-render.pure.js';
 import {
   buildIncomeDocumentAllocationNumberField,
-  allocationNumberForDocumentRender,
 } from './income-document-allocation-number.pure.js';
 import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
 import { totalsFromTotalsSnapshot } from './income-document-unified-render.pure.js';
@@ -925,30 +925,41 @@ export async function buildIncomeDocumentDetailsStep(
         };
   const previewLineRows =
     !lean && previewGeneratedAt != null
-      ? (await buildLineRows(lines, settings, vatResolution, documentDate, false)).map((r) => {
-          const sourceLine = lines[r.row_number - 1];
-          const unitLabel =
-            sourceLine &&
-            typeof (sourceLine as unknown as Record<string, unknown>).unit_label === 'string'
-              ? String((sourceLine as unknown as Record<string, unknown>).unit_label).trim() || null
-              : null;
-          const lineDiscount =
-            sourceLine &&
-            typeof (sourceLine as unknown as Record<string, unknown>).discount_display === 'string'
-              ? String((sourceLine as unknown as Record<string, unknown>).discount_display).trim() || null
-              : null;
-          return {
-            row_number: r.row_number,
-            description: r.description.value,
-            quantity: r.quantity.value,
-            unit: unitLabel,
-            unit_price: r.unit_price.value,
-            discount: lineDiscount,
-            currency: r.currency.value,
-            vat_rate_label: r.vat_rate_label,
-            total: r.line_total_display,
-          };
-        })
+      ? await (async () => {
+          const builtRows = await buildLineRows(lines, settings, vatResolution, documentDate, false);
+          const officialByCurrency = await resolveFxMapForDraftLines(lines, documentDate);
+          return builtRows.map((r) => {
+            const sourceLine = lines[r.row_number - 1];
+            const unitLabel =
+              sourceLine &&
+              typeof (sourceLine as unknown as Record<string, unknown>).unit_label === 'string'
+                ? String((sourceLine as unknown as Record<string, unknown>).unit_label).trim() || null
+                : null;
+            const lineDiscount =
+              sourceLine &&
+              typeof (sourceLine as unknown as Record<string, unknown>).discount_display === 'string'
+                ? String((sourceLine as unknown as Record<string, unknown>).discount_display).trim() ||
+                  null
+                : null;
+            const fx = sourceLine ? resolveLineFx(sourceLine, documentDate, officialByCurrency) : null;
+            const amounts =
+              sourceLine && fx
+                ? computeDraftLineAmounts(sourceLine, settings, vatResolution, fx)
+                : null;
+            return {
+              row_number: r.row_number,
+              description: r.description.value,
+              quantity: r.quantity.value,
+              unit: unitLabel,
+              unit_price: r.unit_price.value,
+              discount: lineDiscount,
+              currency: r.currency.value,
+              vat_display: sourceLine ? formatLineVatAmountDisplay(sourceLine, amounts) : '—',
+              vat_rate_label: r.vat_rate_label,
+              total: r.line_total_display,
+            };
+          });
+        })()
       : [];
   const previewVatLabel =
     totals.vat_display != null
@@ -975,7 +986,10 @@ export async function buildIncomeDocumentDetailsStep(
     canEdit,
     isIssued: false,
   });
-  const allocationRender = allocationNumberForDocumentRender(allocationNumberField);
+  const allocationRender = {
+    visible: allocationNumberField.visible,
+    display: allocationNumberField.display_value,
+  };
 
   const previewHtml =
     !lean && previewGeneratedAt != null && resolvedBranding
