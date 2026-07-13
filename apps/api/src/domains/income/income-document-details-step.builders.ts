@@ -989,6 +989,7 @@ export async function buildIncomeDocumentDetailsStep(
   const allocationRender = {
     visible: allocationNumberField.visible,
     display: allocationNumberField.display_value,
+    value_empty: !allocationNumberField.value?.trim(),
   };
 
   const previewHtml =
@@ -1004,6 +1005,7 @@ export async function buildIncomeDocumentDetailsStep(
           payment_terms_display: taxInvoicePayment?.paymentTermsLabel ?? null,
           allocation_number_display: allocationRender.display,
           allocation_number_visible: allocationRender.visible,
+          allocation_number_value_empty: allocationRender.value_empty,
           currency: row.currency,
           lineRows: previewLineRows,
           totals: {

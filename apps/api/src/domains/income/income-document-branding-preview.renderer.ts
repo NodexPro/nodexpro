@@ -97,6 +97,17 @@ function metaRow(label: string, value: string, icon?: string): string {
   return `<div class="nx-doc__meta-row">${iconHtml}<span class="nx-doc__meta-label">${escapeHtml(label)}</span><span class="nx-doc__meta-value">${escapeHtml(value)}</span></div>`;
 }
 
+function allocationDocumentMetaRow(
+  label: string,
+  value: string,
+  icon: string,
+  valueEmpty: boolean,
+): string {
+  const iconHtml = `<span class="nx-doc__meta-icon">${icon}</span>`;
+  const valueClass = valueEmpty ? ' nx-doc__meta-value--empty' : '';
+  return `<div class="nx-doc__meta-row nx-doc__meta-row--allocation">${iconHtml}<span class="nx-doc__meta-label">${escapeHtml(label)}</span><span class="nx-doc__meta-value${valueClass}">${escapeHtml(value)}</span></div>`;
+}
+
 function customerInfoRow(icon: string, value: string | null): string {
   return partyInfoRow('customer', icon, value);
 }
@@ -180,6 +191,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   payment_terms_display?: string | null;
   allocation_number_display?: string | null;
   allocation_number_visible?: boolean;
+  allocation_number_value_empty?: boolean;
   payment_link_url?: string | null;
   payment_qr_data_url?: string | null;
   currency: string;
@@ -253,12 +265,13 @@ export function renderIncomeBrandedPreviewHtml(params: {
       ? metaRow('תנאי תשלום', params.payment_terms_display, docPreviewIcon('payment'))
       : '',
     params.allocation_number_visible
-      ? metaRow(
+      ? allocationDocumentMetaRow(
           'מספר הקצאה',
           params.allocation_number_display != null
             ? String(params.allocation_number_display)
             : '',
           docPreviewIcon('id'),
+          params.allocation_number_value_empty === true,
         )
       : '',
   ]
@@ -455,6 +468,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--unified .nx-doc__meta-icon .nx-doc__icon { width: 16px; height: 16px; }
 .nx-doc--unified .nx-doc__meta-label { color: var(--nx-doc-text-muted); white-space: nowrap; font-weight: 500; }
 .nx-doc--unified .nx-doc__meta-value { color: var(--nx-doc-text); font-weight: 600; justify-self: start; }
+.nx-doc--unified .nx-doc__meta-value--empty {
+  color: var(--nx-doc-text-muted);
+  font-weight: 500;
+}
 .nx-doc--unified .nx-doc__issuer-identity {
   display: flex;
   flex-direction: column;

@@ -44,6 +44,11 @@ function metaRow(label, value, icon) {
     const iconHtml = icon ? `<span class="nx-doc__meta-icon">${icon}</span>` : '';
     return `<div class="nx-doc__meta-row">${iconHtml}<span class="nx-doc__meta-label">${escapeHtml(label)}</span><span class="nx-doc__meta-value">${escapeHtml(value)}</span></div>`;
 }
+function allocationDocumentMetaRow(label, value, icon, valueEmpty) {
+    const iconHtml = `<span class="nx-doc__meta-icon">${icon}</span>`;
+    const valueClass = valueEmpty ? ' nx-doc__meta-value--empty' : '';
+    return `<div class="nx-doc__meta-row nx-doc__meta-row--allocation">${iconHtml}<span class="nx-doc__meta-label">${escapeHtml(label)}</span><span class="nx-doc__meta-value${valueClass}">${escapeHtml(value)}</span></div>`;
+}
 function customerInfoRow(icon, value) {
     return partyInfoRow('customer', icon, value);
 }
@@ -165,9 +170,9 @@ export function renderIncomeBrandedPreviewHtml(params) {
             ? metaRow('תנאי תשלום', params.payment_terms_display, docPreviewIcon('payment'))
             : '',
         params.allocation_number_visible
-            ? metaRow('מספר הקצאה', params.allocation_number_display != null
+            ? allocationDocumentMetaRow('מספר הקצאה', params.allocation_number_display != null
                 ? String(params.allocation_number_display)
-                : '', docPreviewIcon('id'))
+                : '', docPreviewIcon('id'), params.allocation_number_value_empty === true)
             : '',
     ]
         .filter(Boolean)
@@ -347,6 +352,10 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--unified .nx-doc__meta-icon .nx-doc__icon { width: 16px; height: 16px; }
 .nx-doc--unified .nx-doc__meta-label { color: var(--nx-doc-text-muted); white-space: nowrap; font-weight: 500; }
 .nx-doc--unified .nx-doc__meta-value { color: var(--nx-doc-text); font-weight: 600; justify-self: start; }
+.nx-doc--unified .nx-doc__meta-value--empty {
+  color: var(--nx-doc-text-muted);
+  font-weight: 500;
+}
 .nx-doc--unified .nx-doc__issuer-identity {
   display: flex;
   flex-direction: column;

@@ -34,6 +34,7 @@ export type UnifiedIncomeDocumentRenderInput = {
   payment_terms_display?: string | null;
   allocation_number_display?: string | null;
   allocation_number_visible?: boolean;
+  allocation_number_value_empty?: boolean;
   payment_link_url?: string | null;
   payment_qr_data_url?: string | null;
   currency: string;

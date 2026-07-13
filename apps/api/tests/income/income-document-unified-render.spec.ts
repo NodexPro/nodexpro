@@ -419,9 +419,27 @@ test('allocation number row visible in metadata when applicable even before valu
   const input = buildSampleUnifiedInput();
   input.allocation_number_visible = true;
   input.allocation_number_display = 'הזינו מספר הקצאה';
+  input.allocation_number_value_empty = true;
   const html = renderUnifiedIncomeDocumentHtml(input);
   assert.match(html, />מספר הקצאה</);
   assert.match(html, />הזינו מספר הקצאה</);
+  assert.match(html, /nx-doc__meta-row--allocation/);
+  assert.doesNotMatch(html, /data-income-allocation-edit/);
+  assert.doesNotMatch(html, /<button[^>]*nx-doc__meta/);
+});
+
+test('preview and pdf share identical allocation metadata document content', () => {
+  const input = buildSampleUnifiedInput();
+  input.allocation_number_visible = true;
+  input.allocation_number_display = '123456789';
+  input.allocation_number_value_empty = false;
+  const previewHtml = renderUnifiedIncomeDocumentHtml(input);
+  const printHtml = buildUnifiedIncomeDocumentPrintHtml(input);
+  assert.match(previewHtml, /nx-doc__meta-row--allocation[\s\S]*123456789/);
+  assert.match(printHtml, /nx-doc__meta-row--allocation[\s\S]*123456789/);
+  assert.doesNotMatch(previewHtml, /data-income-allocation-edit/);
+  assert.doesNotMatch(printHtml, /data-income-allocation-edit/);
+  assert.doesNotMatch(printHtml, /nx-we-preview-allocation-edit-btn/);
 });
 
 test('payment terms appear in document metadata from backend display value', () => {

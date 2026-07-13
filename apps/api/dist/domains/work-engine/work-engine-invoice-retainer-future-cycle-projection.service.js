@@ -425,6 +425,7 @@ export async function renderFutureCycleProjectionPreview(params) {
     const discountRow = totals.rows.find((row) => row.key === 'discount');
     const subtotalBefore = totals.rows.find((row) => row.key === 'subtotal_before_discount');
     const subtotalAfter = totals.rows.find((row) => row.key === 'subtotal_after_discount');
+    const allocationField = params.step.document_preview?.allocation_number_field;
     const previewHtml = renderIncomeBrandedPreviewHtml({
         branding,
         docTypeLabel: RETAINER_DOC_TYPE_LABELS[documentType],
@@ -433,6 +434,9 @@ export async function renderFutureCycleProjectionPreview(params) {
         recipient,
         document_date: documentDate,
         due_date: dueDate,
+        allocation_number_visible: allocationField?.visible ?? false,
+        allocation_number_display: allocationField?.display_value ?? null,
+        allocation_number_value_empty: !allocationField?.value?.trim(),
         currency: totals.currency,
         lineRows,
         totals: {

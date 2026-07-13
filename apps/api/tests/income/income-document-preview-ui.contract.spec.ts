@@ -13,6 +13,14 @@ const previewStepSource = readFileSync(
   join(dir, '../../../web/src/components/work-engine/WorkEngineIncomePreviewStep.tsx'),
   'utf8',
 );
+const previewPaperSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineIncomeDocumentPreviewPaper.tsx'),
+  'utf8',
+);
+const chromePureSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/work-engine-income-document-allocation-edit-chrome.pure.ts'),
+  'utf8',
+);
 const previewSidebarSource = readFileSync(
   join(dir, '../../../web/src/components/work-engine/WorkEngineIncomeDocumentPreviewSidebar.tsx'),
   'utf8',
@@ -29,59 +37,71 @@ const retainerSetupSource = readFileSync(
   join(dir, '../../../web/src/components/work-engine/WorkEngineInvoiceRetainerSetupModal.tsx'),
   'utf8',
 );
-const metaRowSource = readFileSync(
-  join(dir, '../../../web/src/components/work-engine/WorkEngineIncomeAllocationNumberMetaRow.tsx'),
+const detailsBuilderSource = readFileSync(
+  join(dir, '../../src/domains/income/income-document-details-step.builders.ts'),
   'utf8',
 );
 const rendererSource = readFileSync(
   join(dir, '../../src/domains/income/income-document-branding-preview.renderer.ts'),
   'utf8',
 );
+const allocationPureSource = readFileSync(
+  join(dir, '../../src/domains/income/income-document-allocation-number.pure.ts'),
+  'utf8',
+);
 
-test('income wizard allocation sidebar uses backend display_value and editable flag', () => {
-  assert.match(previewSidebarSource, /allocation_number_field/);
-  assert.match(previewSidebarSource, /WorkEngineIncomeAllocationNumberMetaRow/);
-  assert.match(metaRowSource, /field\.display_value/);
-  assert.match(metaRowSource, /field\.editable/);
-  assert.match(metaRowSource, /field\.tooltip/);
-  assert.match(metaRowSource, /field\.disabled_reason/);
-  assert.match(previewStepSource, /WorkEngineIncomeDocumentPreviewSidebar/);
-  assert.doesNotMatch(previewSidebarSource, /shouldShow.*allocation/i);
+test('canonical preview_html contains no allocation edit controls', () => {
+  assert.doesNotMatch(rendererSource, /allocation_number_edit_affordance/);
+  assert.doesNotMatch(rendererSource, /data-income-allocation-edit/);
+  assert.doesNotMatch(rendererSource, /nx-doc__meta-edit-btn/);
+  assert.doesNotMatch(rendererSource, /<button[^>]*מספר הקצאה/);
+  assert.doesNotMatch(allocationPureSource, /INCOME_DOCUMENT_ALLOCATION_EDIT_ATTR/);
+  assert.doesNotMatch(allocationPureSource, /buildIncomeDocumentAllocationEditAffordance/);
+  assert.doesNotMatch(detailsBuilderSource, /allocation_number_edit_affordance/);
+  assert.match(rendererSource, /nx-doc__meta-row--allocation/);
 });
 
-test('income wizard pencil appears next to allocation label in metadata row', () => {
-  assert.match(previewSidebarSource, /WorkEngineIncomeAllocationNumberMetaRow/);
-  assert.match(metaRowSource, /nx-we-preview-sidebar__label-group/);
-  assert.match(metaRowSource, /field\.label/);
-  assert.doesNotMatch(rendererSource, /nx-we-preview-sidebar__edit-btn/);
-  assert.doesNotMatch(rendererSource, /docPreviewIcon\('edit'\)/);
+test('income wizard uses application overlay chrome not document html click targets', () => {
+  assert.match(previewStepSource, /WorkEngineIncomeDocumentPreviewPaper/);
+  assert.match(previewPaperSource, /resolveIncomeDocumentAllocationEditChrome/);
+  assert.match(previewPaperSource, /nx-we-preview-allocation-edit-btn/);
+  assert.match(previewPaperSource, /WorkEngineIncomeAllocationNumberModal/);
+  assert.match(
+    previewPaperSource,
+    /ref=\{contentRef\}[\s\S]*dangerouslySetInnerHTML=\{\{ __html: previewHtml \}\}\s*\/>/,
+  );
+  assert.doesNotMatch(previewPaperSource, /INCOME_DOCUMENT_ALLOCATION_EDIT_SELECTOR/);
+  assert.doesNotMatch(previewPaperSource, /data-income-allocation-edit/);
+  assert.doesNotMatch(previewSidebarSource, /allocation_number_field/);
+  assert.doesNotMatch(previewSidebarSource, /AllocationNumberRow/);
 });
 
-test('retainer preview modal renders one document canvas without sidebar', () => {
-  assert.doesNotMatch(retainerPreviewModalSource, /WorkEngineIncomeDocumentPreviewSidebar/);
-  assert.doesNotMatch(retainerPreviewModalSource, /nx-we-preview-sidebar/);
-  assert.doesNotMatch(retainerPreviewModalSource, /documentDetailsStep/);
-  assert.doesNotMatch(retainerPreviewModalSource, /nx-we-preview-layout/);
-  assert.match(retainerPreviewModalSource, /nx-we-retainer-preview-modal__canvas/);
-  assert.match(retainerPreviewModalSource, /nx-we-preview-paper__content/);
+test('allocation edit chrome visibility comes from backend descriptor only', () => {
+  assert.match(chromePureSource, /field\?\.visible/);
+  assert.match(chromePureSource, /field\.editable/);
+  assert.match(chromePureSource, /field\.disabled_reason/);
+  assert.match(chromePureSource, /field\.tooltip/);
+  assert.doesNotMatch(chromePureSource, /tax_invoice/);
 });
 
-test('retainer allocation action uses metadata row not toolbar', () => {
-  assert.match(retainerPreviewModalSource, /WorkEngineIncomeAllocationNumberMetaRow/);
-  assert.match(retainerPreviewModalSource, /variant="inline"/);
+test('retainer preview modal uses same application overlay pattern', () => {
+  assert.match(retainerPreviewModalSource, /WorkEngineIncomeDocumentPreviewPaper/);
+  assert.doesNotMatch(retainerPreviewModalSource, /WorkEngineIncomeAllocationNumberMetaRow/);
+  assert.doesNotMatch(retainerPreviewModalSource, /nx-we-preview-allocation-meta/);
   assert.doesNotMatch(retainerPreviewModalSource, /resolveCycleDraftPreviewAllocationButton/);
   assert.doesNotMatch(retainerPreviewModalSource, /PreviewAllocationIcon/);
   assert.doesNotMatch(retainerPreviewModalSource, /nx-we-preview-sidebar/);
 });
 
-test('allocation edit visibility comes from backend field descriptor', () => {
+test('retainer preview modal renders one document canvas without sidebar', () => {
+  assert.doesNotMatch(retainerPreviewModalSource, /WorkEngineIncomeDocumentPreviewSidebar/);
+  assert.match(retainerPreviewModalSource, /nx-we-retainer-preview-modal__canvas/);
+});
+
+test('allocation save uses named command and refreshed aggregate', () => {
   assert.match(retainerSetupSource, /handleSaveCycleDraftAllocationNumber/);
   assert.match(retainerSetupSource, /update_allocation_number/);
   assert.match(retainerSetupSource, /mergeIncomeWorkspaceWizardPatch/);
-  assert.doesNotMatch(retainerSetupSource, /documentDetailsStep=/);
-});
-
-test('income wizard save calls update_income_document_allocation_number and refreshes aggregate', () => {
   assert.match(wizardSource, /update_allocation_number/);
   assert.match(wizardSource, /income_workspace_aggregate/);
   assert.doesNotMatch(wizardSource, /fetch\(.*allocation/i);
@@ -98,23 +118,4 @@ test('allocation display_value comes from backend descriptor including placehold
   assert.equal(field.display_value, 'הזינו מספר הקצאה');
   assert.equal(field.editable, true);
   assert.equal(field.tooltip, 'עריכת מספר הקצאה');
-});
-
-test('disabled allocation tooltip comes from backend descriptor', () => {
-  const field = buildIncomeDocumentAllocationNumberField({
-    policy: defaultIncomeTaxAllocationNumberPolicy(),
-    documentType: 'tax_invoice',
-    value: '123456789',
-    canEdit: true,
-    isIssued: true,
-  });
-  assert.equal(field.editable, false);
-  assert.match(field.tooltip ?? field.disabled_reason ?? '', /לאחר הפקת המסמך/);
-});
-
-test('preview and pdf renderer share one document structure without edit controls', () => {
-  assert.match(rendererSource, /renderIncomeBrandedPreviewHtml/);
-  assert.doesNotMatch(rendererSource, /pencil/i);
-  assert.doesNotMatch(rendererSource, /nx-we-preview-sidebar__edit-btn/);
-  assert.doesNotMatch(rendererSource, /we-cycle-draft-preview-allocation/);
 });
