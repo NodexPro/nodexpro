@@ -80,7 +80,7 @@ test('document render shows allocation row when field is applicable', () => {
   assert.equal(visibleField.display_value, 'הזינו מספר הקצאה');
   const render = allocationNumberForDocumentRender(visibleField);
   assert.equal(render.visible, true);
-  assert.equal(render.display, '—');
+  assert.equal(render.display, 'הזינו מספר הקצאה');
 
   const savedField = buildIncomeDocumentAllocationNumberField({
     policy: defaultIncomeTaxAllocationNumberPolicy(),

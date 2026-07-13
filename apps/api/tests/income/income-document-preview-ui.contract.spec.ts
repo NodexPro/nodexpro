@@ -29,36 +29,59 @@ const retainerSetupSource = readFileSync(
   join(dir, '../../../web/src/components/work-engine/WorkEngineInvoiceRetainerSetupModal.tsx'),
   'utf8',
 );
+const metaRowSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineIncomeAllocationNumberMetaRow.tsx'),
+  'utf8',
+);
 const rendererSource = readFileSync(
   join(dir, '../../src/domains/income/income-document-branding-preview.renderer.ts'),
   'utf8',
 );
 
-test('allocation sidebar uses backend display_value and editable flag for pencil', () => {
+test('income wizard allocation sidebar uses backend display_value and editable flag', () => {
   assert.match(previewSidebarSource, /allocation_number_field/);
-  assert.match(previewSidebarSource, /field\.display_value/);
-  assert.match(previewSidebarSource, /field\.editable/);
-  assert.match(previewSidebarSource, /field\.tooltip/);
-  assert.match(previewSidebarSource, /field\.disabled_reason/);
+  assert.match(previewSidebarSource, /WorkEngineIncomeAllocationNumberMetaRow/);
+  assert.match(metaRowSource, /field\.display_value/);
+  assert.match(metaRowSource, /field\.editable/);
+  assert.match(metaRowSource, /field\.tooltip/);
+  assert.match(metaRowSource, /field\.disabled_reason/);
   assert.match(previewStepSource, /WorkEngineIncomeDocumentPreviewSidebar/);
   assert.doesNotMatch(previewSidebarSource, /shouldShow.*allocation/i);
 });
 
-test('pencil appears only when editable=true in preview sidebar', () => {
-  assert.match(previewSidebarSource, /\{field\.editable \? \(/);
+test('income wizard pencil appears next to allocation label in metadata row', () => {
+  assert.match(previewSidebarSource, /WorkEngineIncomeAllocationNumberMetaRow/);
+  assert.match(metaRowSource, /nx-we-preview-sidebar__label-group/);
+  assert.match(metaRowSource, /field\.label/);
   assert.doesNotMatch(rendererSource, /nx-we-preview-sidebar__edit-btn/);
   assert.doesNotMatch(rendererSource, /docPreviewIcon\('edit'\)/);
 });
 
-test('retainer cycle draft review reuses allocation sidebar and command', () => {
-  assert.match(retainerPreviewModalSource, /WorkEngineIncomeDocumentPreviewSidebar/);
-  assert.match(retainerPreviewModalSource, /onSaveAllocationNumber/);
+test('retainer preview modal renders one document canvas without sidebar', () => {
+  assert.doesNotMatch(retainerPreviewModalSource, /WorkEngineIncomeDocumentPreviewSidebar/);
+  assert.doesNotMatch(retainerPreviewModalSource, /nx-we-preview-sidebar/);
+  assert.doesNotMatch(retainerPreviewModalSource, /documentDetailsStep/);
+  assert.doesNotMatch(retainerPreviewModalSource, /nx-we-preview-layout/);
+  assert.match(retainerPreviewModalSource, /nx-we-retainer-preview-modal__canvas/);
+  assert.match(retainerPreviewModalSource, /nx-we-preview-paper__content/);
+});
+
+test('retainer allocation action uses metadata row not toolbar', () => {
+  assert.match(retainerPreviewModalSource, /WorkEngineIncomeAllocationNumberMetaRow/);
+  assert.match(retainerPreviewModalSource, /variant="inline"/);
+  assert.doesNotMatch(retainerPreviewModalSource, /resolveCycleDraftPreviewAllocationButton/);
+  assert.doesNotMatch(retainerPreviewModalSource, /PreviewAllocationIcon/);
+  assert.doesNotMatch(retainerPreviewModalSource, /nx-we-preview-sidebar/);
+});
+
+test('allocation edit visibility comes from backend field descriptor', () => {
   assert.match(retainerSetupSource, /handleSaveCycleDraftAllocationNumber/);
   assert.match(retainerSetupSource, /update_allocation_number/);
   assert.match(retainerSetupSource, /mergeIncomeWorkspaceWizardPatch/);
+  assert.doesNotMatch(retainerSetupSource, /documentDetailsStep=/);
 });
 
-test('save calls update_income_document_allocation_number and refreshes aggregate', () => {
+test('income wizard save calls update_income_document_allocation_number and refreshes aggregate', () => {
   assert.match(wizardSource, /update_allocation_number/);
   assert.match(wizardSource, /income_workspace_aggregate/);
   assert.doesNotMatch(wizardSource, /fetch\(.*allocation/i);
@@ -93,4 +116,5 @@ test('preview and pdf renderer share one document structure without edit control
   assert.match(rendererSource, /renderIncomeBrandedPreviewHtml/);
   assert.doesNotMatch(rendererSource, /pencil/i);
   assert.doesNotMatch(rendererSource, /nx-we-preview-sidebar__edit-btn/);
+  assert.doesNotMatch(rendererSource, /we-cycle-draft-preview-allocation/);
 });

@@ -148,6 +148,6 @@ export function allocationNumberForDocumentRender(
   const saved = field.value?.trim();
   return {
     visible: true,
-    display: saved ?? '—',
+    display: saved ?? field.display_value,
   };
 }

@@ -418,9 +418,10 @@ test('allocation number hidden in document html when not visible', () => {
 test('allocation number row visible in metadata when applicable even before value saved', () => {
   const input = buildSampleUnifiedInput();
   input.allocation_number_visible = true;
-  input.allocation_number_display = '—';
+  input.allocation_number_display = 'הזינו מספר הקצאה';
   const html = renderUnifiedIncomeDocumentHtml(input);
   assert.match(html, />מספר הקצאה</);
+  assert.match(html, />הזינו מספר הקצאה</);
 });
 
 test('payment terms appear in document metadata from backend display value', () => {
@@ -510,6 +511,18 @@ test('document number accent rule present in unified header', () => {
 
 test('issuer logo uses enlarged unified max height without stretching', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /\.nx-doc--unified \.nx-doc__logo-img[\s\S]*max-height: [\s\S]*76px/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__logo-img[\s\S]*max-height: [\s\S]*78px/);
   assert.match(html, /object-fit: contain/);
+});
+
+test('table uses flat accounting grid with cell borders', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table[\s\S]*border: 1px solid #c5cad4/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table tbody td[\s\S]*border: 1px solid #d5dae3/);
+});
+
+test('table starts immediately after customer divider', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(html, /\.nx-doc--unified \.nx-doc__customer[\s\S]*margin: 0/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table[\s\S]*margin: 0 0 14px/);
 });

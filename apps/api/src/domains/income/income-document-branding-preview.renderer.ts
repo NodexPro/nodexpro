@@ -255,7 +255,9 @@ export function renderIncomeBrandedPreviewHtml(params: {
     params.allocation_number_visible
       ? metaRow(
           'מספר הקצאה',
-          params.allocation_number_display?.trim() || '—',
+          params.allocation_number_display != null
+            ? String(params.allocation_number_display)
+            : '',
           docPreviewIcon('id'),
         )
       : '',
@@ -515,22 +517,22 @@ export function renderIncomeBrandedPreviewHtml(params: {
   width: 100%;
 }
 .nx-doc--unified .nx-doc__logo-img {
-  max-width: ${Math.min(logoDims.maxWidthPx, 240)}px;
-  max-height: ${Math.min(logoDims.maxHeightPx, 76)}px;
+  max-width: ${Math.min(logoDims.maxWidthPx, 260)}px;
+  max-height: ${Math.min(logoDims.maxHeightPx, 78)}px;
   width: auto;
   height: auto;
   object-fit: contain;
   display: block;
-  margin: 0 0 2px 0;
+  margin: 0;
   align-self: flex-end;
 }
 .nx-doc--unified .nx-doc__logo-placeholder {
   width: ${Math.round(Math.min(logoDims.maxWidthPx, 200) * 0.75)}px;
-  height: ${Math.round(Math.min(logoDims.maxHeightPx, 76) * 0.85)}px;
+  height: ${Math.round(Math.min(logoDims.maxHeightPx, 78) * 0.85)}px;
   background: transparent;
   border: 1px dashed var(--nx-doc-border);
   border-radius: 2px;
-  margin: 0 0 2px 0;
+  margin: 0;
   align-self: flex-end;
 }
 .nx-doc--unified .nx-doc__issuer-name {
@@ -548,8 +550,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }
 .nx-doc--unified .nx-doc__customer {
   width: 100%;
-  margin: 0 0 4px;
-  padding: 0 0 6px;
+  margin: 0;
+  padding: 0 0 4px;
   border-bottom: 1px solid var(--nx-doc-border);
   background: transparent;
   box-shadow: none;
@@ -573,11 +575,12 @@ export function renderIncomeBrandedPreviewHtml(params: {
   width: 100%;
   border-collapse: collapse;
   border-spacing: 0;
-  margin: 4px 0 14px;
-  border: none;
+  margin: 0 0 14px;
+  border: 1px solid #c5cad4;
   border-radius: 0;
   overflow: visible;
   table-layout: fixed;
+  background: #fff;
 }
 .nx-doc--unified .nx-doc__col-num { width: 4%; }
 .nx-doc--unified .nx-doc__col-desc { width: 36%; }
@@ -590,23 +593,23 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--unified .nx-doc__table thead th {
   background: var(--nx-doc-primary);
   color: #fff;
-  padding: 10px 8px;
+  padding: 8px 8px;
   font-size: 14px;
   font-weight: 700;
   text-align: right;
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 70%, #000);
   border-bottom: 1px solid color-mix(in srgb, var(--nx-doc-primary) 82%, #000);
 }
 .nx-doc--unified .nx-doc__table tbody td {
-  padding: 10px 8px;
+  padding: 8px 8px;
   font-size: 14px;
-  border: none;
-  border-bottom: 1px solid #eef0f6;
+  border: 1px solid #d5dae3;
   vertical-align: middle;
   background: #fff;
-  line-height: 1.35;
+  line-height: 1.3;
+  min-height: 34px;
 }
-.nx-doc--unified .nx-doc__table tbody tr:last-child td { border-bottom: 1px solid var(--nx-doc-border); }
+.nx-doc--unified .nx-doc__table tbody tr:last-child td { border-bottom: 1px solid #d5dae3; }
 .nx-doc--unified .nx-doc__cell-num { text-align: center; white-space: nowrap; color: var(--nx-doc-text-muted); font-variant-numeric: tabular-nums; }
 .nx-doc--unified .nx-doc__th-num { text-align: center; }
 .nx-doc--unified .nx-doc__cell-desc { font-weight: 500; color: var(--nx-doc-text); word-wrap: break-word; overflow-wrap: anywhere; }
