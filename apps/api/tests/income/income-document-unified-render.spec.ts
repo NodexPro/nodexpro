@@ -217,7 +217,7 @@ test('unified tax invoice html markers — section order and labels', () => {
   assert.match(html, /<colgroup>/);
   assert.match(html, /\.nx-doc__comments \{[\s\S]*grid-column: 1/);
   assert.match(html, /\.nx-doc__summary \{[\s\S]*grid-column: 2/);
-  assert.match(html, /\.nx-doc--unified \.nx-doc__table thead th \{[\s\S]*background: var\(--nx-doc-primary\)/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table thead th \{[\s\S]*background: #f8fafc/);
   assert.match(html, /nx-doc__payments-head/);
   assert.match(html, />אמצעי תשלום</);
   assert.match(html, /חשבונית מס/);
@@ -529,14 +529,15 @@ test('document number accent rule present in unified header', () => {
 
 test('issuer logo uses enlarged unified max height without stretching', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /\.nx-doc--unified \.nx-doc__logo-img[\s\S]*max-height: [\s\S]*78px/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__logo-img[\s\S]*max-height: 80px/);
   assert.match(html, /object-fit: contain/);
 });
 
-test('table uses flat accounting grid with cell borders', () => {
+test('table matches invoice editor grid styling', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /\.nx-doc--unified \.nx-doc__table[\s\S]*border: 1px solid #c5cad4/);
-  assert.match(html, /\.nx-doc--unified \.nx-doc__table tbody td[\s\S]*border: 1px solid #d5dae3/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table[\s\S]*border: 1px solid #e2e8f0/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table thead th[\s\S]*background: #f8fafc/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table tbody td[\s\S]*border-bottom: 1px solid #f1f5f9/);
 });
 
 test('table starts immediately after customer divider', () => {

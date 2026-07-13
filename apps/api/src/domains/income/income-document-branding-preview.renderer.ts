@@ -407,10 +407,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--unified .nx-doc__header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 4px 20px;
+  gap: 2px 20px;
   align-items: start;
-  margin-bottom: 6px;
-  padding-bottom: 6px;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--nx-doc-border);
 }
 .nx-doc--unified .nx-doc__header-doc { grid-column: 1; min-width: 0; text-align: start; }
@@ -467,6 +467,9 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }
 .nx-doc--unified .nx-doc__meta-icon .nx-doc__icon { width: 16px; height: 16px; }
 .nx-doc--unified .nx-doc__meta-label { color: var(--nx-doc-text-muted); white-space: nowrap; font-weight: 500; }
+.nx-doc--unified .nx-doc__meta-row--allocation {
+  grid-template-columns: 16px auto minmax(0, 1fr);
+}
 .nx-doc--unified .nx-doc__meta-value { color: var(--nx-doc-text); font-weight: 600; justify-self: start; }
 .nx-doc--unified .nx-doc__meta-value--empty {
   color: var(--nx-doc-text-muted);
@@ -534,8 +537,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   width: 100%;
 }
 .nx-doc--unified .nx-doc__logo-img {
-  max-width: ${Math.min(logoDims.maxWidthPx, 260)}px;
-  max-height: ${Math.min(logoDims.maxHeightPx, 78)}px;
+  max-width: ${Math.min(logoDims.maxWidthPx, 280)}px;
+  max-height: 80px;
   width: auto;
   height: auto;
   object-fit: contain;
@@ -545,7 +548,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }
 .nx-doc--unified .nx-doc__logo-placeholder {
   width: ${Math.round(Math.min(logoDims.maxWidthPx, 200) * 0.75)}px;
-  height: ${Math.round(Math.min(logoDims.maxHeightPx, 78) * 0.85)}px;
+  height: ${Math.round(Math.min(logoDims.maxHeightPx, 80) * 0.85)}px;
   background: transparent;
   border: 1px dashed var(--nx-doc-border);
   border-radius: 2px;
@@ -593,7 +596,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   border-collapse: collapse;
   border-spacing: 0;
   margin: 0 0 14px;
-  border: 1px solid #c5cad4;
+  border: 1px solid #e2e8f0;
   border-radius: 0;
   overflow: visible;
   table-layout: fixed;
@@ -608,25 +611,26 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--unified .nx-doc__col-total { width: 20%; }
 .nx-doc--unified .nx-doc__table thead { display: table-header-group; }
 .nx-doc--unified .nx-doc__table thead th {
-  background: var(--nx-doc-primary);
-  color: #fff;
-  padding: 8px 8px;
-  font-size: 14px;
-  font-weight: 700;
+  background: #f8fafc;
+  color: #475569;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 600;
   text-align: right;
-  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 70%, #000);
-  border-bottom: 1px solid color-mix(in srgb, var(--nx-doc-primary) 82%, #000);
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
 }
 .nx-doc--unified .nx-doc__table tbody td {
-  padding: 8px 8px;
+  padding: 7px 8px;
   font-size: 14px;
-  border: 1px solid #d5dae3;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
   background: #fff;
   line-height: 1.3;
-  min-height: 34px;
 }
-.nx-doc--unified .nx-doc__table tbody tr:last-child td { border-bottom: 1px solid #d5dae3; }
+.nx-doc--unified .nx-doc__table tbody tr:last-child td { border-bottom: none; }
 .nx-doc--unified .nx-doc__cell-num { text-align: center; white-space: nowrap; color: var(--nx-doc-text-muted); font-variant-numeric: tabular-nums; }
 .nx-doc--unified .nx-doc__th-num { text-align: center; }
 .nx-doc--unified .nx-doc__cell-desc { font-weight: 500; color: var(--nx-doc-text); word-wrap: break-word; overflow-wrap: anywhere; }
