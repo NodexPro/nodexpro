@@ -13,8 +13,20 @@ const previewStepSource = readFileSync(
   join(dir, '../../../web/src/components/work-engine/WorkEngineIncomePreviewStep.tsx'),
   'utf8',
 );
+const previewSidebarSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineIncomeDocumentPreviewSidebar.tsx'),
+  'utf8',
+);
+const retainerPreviewModalSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineInvoiceRetainerPreviewModal.tsx'),
+  'utf8',
+);
 const wizardSource = readFileSync(
   join(dir, '../../../web/src/components/work-engine/WorkEngineIncomeDocumentWizardModal.tsx'),
+  'utf8',
+);
+const retainerSetupSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineInvoiceRetainerSetupModal.tsx'),
   'utf8',
 );
 const rendererSource = readFileSync(
@@ -23,18 +35,27 @@ const rendererSource = readFileSync(
 );
 
 test('allocation sidebar uses backend display_value and editable flag for pencil', () => {
-  assert.match(previewStepSource, /allocation_number_field/);
-  assert.match(previewStepSource, /field\.display_value/);
-  assert.match(previewStepSource, /field\.editable/);
-  assert.match(previewStepSource, /field\.tooltip/);
-  assert.match(previewStepSource, /field\.disabled_reason/);
-  assert.doesNotMatch(previewStepSource, /shouldShow.*allocation/i);
+  assert.match(previewSidebarSource, /allocation_number_field/);
+  assert.match(previewSidebarSource, /field\.display_value/);
+  assert.match(previewSidebarSource, /field\.editable/);
+  assert.match(previewSidebarSource, /field\.tooltip/);
+  assert.match(previewSidebarSource, /field\.disabled_reason/);
+  assert.match(previewStepSource, /WorkEngineIncomeDocumentPreviewSidebar/);
+  assert.doesNotMatch(previewSidebarSource, /shouldShow.*allocation/i);
 });
 
 test('pencil appears only when editable=true in preview sidebar', () => {
-  assert.match(previewStepSource, /\{field\.editable \? \(/);
+  assert.match(previewSidebarSource, /\{field\.editable \? \(/);
   assert.doesNotMatch(rendererSource, /nx-we-preview-sidebar__edit-btn/);
   assert.doesNotMatch(rendererSource, /docPreviewIcon\('edit'\)/);
+});
+
+test('retainer cycle draft review reuses allocation sidebar and command', () => {
+  assert.match(retainerPreviewModalSource, /WorkEngineIncomeDocumentPreviewSidebar/);
+  assert.match(retainerPreviewModalSource, /onSaveAllocationNumber/);
+  assert.match(retainerSetupSource, /handleSaveCycleDraftAllocationNumber/);
+  assert.match(retainerSetupSource, /update_allocation_number/);
+  assert.match(retainerSetupSource, /mergeIncomeWorkspaceWizardPatch/);
 });
 
 test('save calls update_income_document_allocation_number and refreshes aggregate', () => {

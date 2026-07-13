@@ -408,21 +408,21 @@ export function renderIncomeBrandedPreviewHtml(params) {
 }
 .nx-doc--unified .nx-doc__logo-img {
   max-width: ${Math.min(logoDims.maxWidthPx, 240)}px;
-  max-height: ${Math.min(logoDims.maxHeightPx, 60)}px;
+  max-height: ${Math.min(logoDims.maxHeightPx, 76)}px;
   width: auto;
   height: auto;
   object-fit: contain;
   display: block;
-  margin: 0 0 6px 0;
+  margin: 0 0 2px 0;
   align-self: flex-end;
 }
 .nx-doc--unified .nx-doc__logo-placeholder {
   width: ${Math.round(Math.min(logoDims.maxWidthPx, 200) * 0.75)}px;
-  height: ${Math.round(Math.min(logoDims.maxHeightPx, 60) * 0.85)}px;
+  height: ${Math.round(Math.min(logoDims.maxHeightPx, 76) * 0.85)}px;
   background: transparent;
   border: 1px dashed var(--nx-doc-border);
   border-radius: 2px;
-  margin: 0 0 6px 0;
+  margin: 0 0 2px 0;
   align-self: flex-end;
 }
 .nx-doc--unified .nx-doc__issuer-name {

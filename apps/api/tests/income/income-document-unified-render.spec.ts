@@ -507,3 +507,9 @@ test('document number accent rule present in unified header', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
   assert.match(html, /class="nx-doc__doc-number-rule"/);
 });
+
+test('issuer logo uses enlarged unified max height without stretching', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(html, /\.nx-doc--unified \.nx-doc__logo-img[\s\S]*max-height: [\s\S]*76px/);
+  assert.match(html, /object-fit: contain/);
+});
