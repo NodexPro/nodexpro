@@ -6,4 +6,5 @@ export const STUDIO_DOCUMENT_STYLE_KEYS = [
     'classic',
     'modern',
     'elegant',
+    'sectioned',
 ];

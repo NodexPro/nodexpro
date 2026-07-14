@@ -112,17 +112,18 @@ test('document type group overrides resolve effective style for preview', () => 
   assert.doesNotMatch(html, /Test4/);
 });
 
-test('document style templates expose 3 studio archetypes', () => {
+test('document style templates expose studio archetypes including sectioned', () => {
   const templates = getDocumentStyleTemplates();
-  assert.equal(templates.length, 3);
+  assert.equal(templates.length, 4);
   assert.deepEqual(
     templates.map((t) => t.key),
-    ['classic', 'modern', 'elegant'],
+    ['classic', 'modern', 'elegant', 'sectioned'],
   );
   assert.ok(templates.every((t) => t.mini_preview_markup.includes('nx-studio-style-mini')));
   assert.ok(templates.some((t) => t.mini_preview_markup.includes('nx-studio-style-mini__banner')));
   assert.ok(templates.some((t) => t.mini_preview_markup.includes('nx-studio-style-mini--modern')));
   assert.ok(templates.some((t) => t.mini_preview_markup.includes('nx-studio-style-mini--elegant')));
+  assert.ok(templates.some((t) => t.mini_preview_markup.includes('nx-studio-style-mini--sectioned')));
 });
 
 test('invalid color theme key is rejected by resolver', () => {
@@ -370,13 +371,24 @@ test('unified preview html applies color theme tokens across document styles', (
   });
 
   for (const html of [classicHtml, modernHtml, elegantHtml]) {
-    assert.match(html, /nx-doc nx-doc--unified/);
+    assert.match(html, /class="nx-doc nx-doc--unified"/);
     assert.match(html, /nx-doc__doc-number/);
     assert.match(html, /nx-doc__bottom/);
+    assert.doesNotMatch(html, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
     assert.doesNotMatch(html, /nx-doc__header--classic/);
     assert.doesNotMatch(html, /nx-doc__header--modern/);
     assert.doesNotMatch(html, /nx-doc__header--elegant/);
   }
+
+  const sectionedHtml = renderIncomeBrandedPreviewHtml({
+    branding: resolveBrandingProfile({ ...baseRow, document_style_key: 'sectioned' }, { logo_data_url: null, signature_data_url: null }),
+    ...previewParams,
+  });
+  assert.match(sectionedHtml, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
+  assert.match(sectionedHtml, /nx-doc__doc-number-pill/);
+  assert.match(sectionedHtml, /nx-doc__lines/);
+  assert.doesNotMatch(sectionedHtml, /<button/);
+  assert.notEqual(sectionedHtml, classicHtml);
 
   const yellowTheme = resolveColorThemePreset('yellow')!;
   const yellowPalette = resolveBrandingPreviewThemePalette(yellowTheme);

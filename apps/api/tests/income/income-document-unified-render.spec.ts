@@ -545,3 +545,42 @@ test('table starts immediately after customer divider', () => {
   assert.match(html, /\.nx-doc--unified \.nx-doc__customer[\s\S]*margin: 0/);
   assert.match(html, /\.nx-doc--unified \.nx-doc__table[\s\S]*margin: 0 0 14px/);
 });
+
+test('classic default render has no sectioned class or pill number', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(html, /class="nx-doc nx-doc--unified"/);
+  assert.doesNotMatch(html, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
+  assert.doesNotMatch(html, /class="nx-doc__doc-number-pill"/);
+  assert.doesNotMatch(html, /aria-label="שורות מסמך"/);
+  assert.match(html, />פירוט</);
+  assert.match(html, />מטבע</);
+  assert.doesNotMatch(html, />יחידת מידה</);
+  assert.doesNotMatch(html, />הנחה</);
+  assert.doesNotMatch(html, /data-income-allocation-edit/);
+  assert.doesNotMatch(html, /<button/);
+});
+
+test('sectioned style renders section wrappers excel header and same columns', () => {
+  const input = buildSampleUnifiedInput();
+  input.branding = {
+    ...input.branding,
+    document_style_key: 'sectioned',
+  };
+  const previewHtml = renderUnifiedIncomeDocumentHtml(input);
+  const printHtml = buildUnifiedIncomeDocumentPrintHtml(input);
+  assert.match(previewHtml, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
+  assert.match(previewHtml, /nx-doc__doc-number-pill/);
+  assert.match(previewHtml, /aria-label="שורות מסמך"/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__table thead th[\s\S]*background: var\(--nx-doc-primary\)/);
+  assert.match(previewHtml, />פירוט</);
+  assert.match(previewHtml, />כמות</);
+  assert.match(previewHtml, />מחיר ליח'/);
+  assert.match(previewHtml, />מטבע</);
+  assert.match(previewHtml, />מע״מ</);
+  assert.match(previewHtml, />סה״כ</);
+  assert.doesNotMatch(previewHtml, />יחידת מידה</);
+  assert.doesNotMatch(previewHtml, />הנחה</);
+  assert.doesNotMatch(previewHtml, /data-income-allocation-edit/);
+  assert.doesNotMatch(previewHtml, /<button/);
+  assert.equal(printHtml.includes(previewHtml), true);
+});

@@ -116,11 +116,17 @@ function buildPaymentCards(params) {
 export function renderIncomeBrandedPreviewHtml(params) {
     const b = params.branding;
     const d = b.display_options;
+    const isSectioned = b.document_style_key === 'sectioned';
     const palette = resolveBrandingPreviewThemePalette(b.color_theme);
     const accent = palette.totals_accent_color;
     const numberDisplay = formatDocumentNumberDisplay(params.numberPreview);
     const logoDims = resolveLogoSizeDimensions(b.logo_size_key);
     const discountDisplay = formatDiscountDisplay(params.totals.discount);
+    const rootClass = isSectioned ? 'nx-doc nx-doc--unified nx-doc--sectioned' : 'nx-doc nx-doc--unified';
+    const numberBlock = isSectioned
+        ? `<div class="nx-doc__doc-number"><span class="nx-doc__doc-number-pill">${escapeHtml(numberDisplay)}</span></div>`
+        : `<div class="nx-doc__doc-number">${escapeHtml(numberDisplay)}</div>
+      <div class="nx-doc__doc-number-rule" aria-hidden="true"></div>`;
     const logoHtml = d.show_logo && b.logo_data_url
         ? `<img class="nx-doc__logo-img" src="${b.logo_data_url}" alt="" />`
         : d.show_logo
@@ -223,6 +229,19 @@ export function renderIncomeBrandedPreviewHtml(params) {
       ${d.show_vat_row ? '<th>מע״מ</th>' : ''}
       <th>סה״כ</th>
     </tr>`;
+    const tableBlock = isSectioned
+        ? `<section class="nx-doc__lines" aria-label="שורות מסמך">
+  <table class="nx-doc__table">
+    ${tableColgroup}
+    <thead>${tableHead}</thead>
+    <tbody>${linesHtml}</tbody>
+  </table>
+</section>`
+        : `<table class="nx-doc__table">
+    ${tableColgroup}
+    <thead>${tableHead}</thead>
+    <tbody>${linesHtml}</tbody>
+  </table>`;
     const notesHtml = d.show_notes && params.notes?.trim()
         ? `<section class="nx-doc__comments" aria-label="הערות">
       <header class="nx-doc__comments-head"><span>הערות</span></header>
@@ -724,13 +743,138 @@ export function renderIncomeBrandedPreviewHtml(params) {
   .nx-doc { max-width: none; padding: 0; }
   .nx-doc__payment-col, .nx-doc__comments, .nx-doc__customer { box-shadow: none; }
 }
+
+/* Sectioned style — reference enterprise sections + Excel grid; classic path above stays unchanged */
+.nx-doc--sectioned {
+  padding: 4px 0 0;
+}
+.nx-doc--sectioned .nx-doc__header {
+  gap: 8px 24px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.nx-doc--sectioned .nx-doc__doc-title {
+  font-size: 28px;
+  margin: 0 0 8px;
+}
+.nx-doc--sectioned .nx-doc__doc-number {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--nx-doc-text);
+}
+.nx-doc--sectioned .nx-doc__doc-number-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--nx-doc-primary) 14%, #ffffff);
+  color: var(--nx-doc-primary);
+  font-weight: 700;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.nx-doc--sectioned .nx-doc__doc-number-rule { display: none; }
+.nx-doc--sectioned .nx-doc__logo-img {
+  max-width: ${Math.min(logoDims.maxWidthPx, 280)}px;
+  max-height: 80px;
+  margin: 0 0 2px;
+}
+.nx-doc--sectioned .nx-doc__issuer-identity { gap: 0; }
+.nx-doc--sectioned .nx-doc__issuer-name { font-size: 18px; margin-bottom: 2px; }
+.nx-doc--sectioned .nx-doc__issuer-lines { margin-top: 2px; gap: 3px; }
+.nx-doc--sectioned .nx-doc__customer {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 22%, #e5e7eb);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--nx-doc-primary) 7%, #ffffff);
+  border-bottom: 1px solid color-mix(in srgb, var(--nx-doc-primary) 22%, #e5e7eb);
+}
+.nx-doc--sectioned .nx-doc__customer-head { margin-bottom: 4px; }
+.nx-doc--sectioned .nx-doc__customer-name { margin-bottom: 6px; }
+.nx-doc--sectioned .nx-doc__lines { margin: 0 0 14px; }
+.nx-doc--sectioned .nx-doc__table {
+  border: 1px solid #c5cad4;
+  margin: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+.nx-doc--sectioned .nx-doc__table thead th {
+  background: var(--nx-doc-primary);
+  color: #fff;
+  padding: 9px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 78%, #000);
+  border-bottom: 1px solid color-mix(in srgb, var(--nx-doc-primary) 70%, #000);
+  white-space: nowrap;
+}
+.nx-doc--sectioned .nx-doc__table tbody td {
+  padding: 8px;
+  font-size: 13px;
+  border: 1px solid #d5dae3;
+  background: #fff;
+  vertical-align: middle;
+}
+.nx-doc--sectioned .nx-doc__table tbody tr:last-child td {
+  border-bottom: 1px solid #d5dae3;
+}
+.nx-doc--sectioned .nx-doc__bottom {
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.nx-doc--sectioned .nx-doc__comments {
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fafbfd;
+  min-height: 72px;
+}
+.nx-doc--sectioned .nx-doc__summary-body {
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 18%, #e5e7eb);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--nx-doc-primary) 5%, #ffffff);
+  max-width: 100%;
+}
+.nx-doc--sectioned .nx-doc__grand-total {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 2px solid var(--nx-doc-primary);
+}
+.nx-doc--sectioned .nx-doc__payments-grid {
+  gap: 10px;
+  border: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.nx-doc--sectioned .nx-doc__payment-col {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border-inline-end: 1px solid #e5e7eb;
+  min-height: 88px;
+}
+.nx-doc--sectioned .nx-doc__payment-col:last-child {
+  border-inline-end: 1px solid #e5e7eb;
+}
+.nx-doc--sectioned .nx-doc__payment-col-head > .nx-doc__icon {
+  display: inline-flex;
+}
+.nx-doc--sectioned .nx-doc__platform-footer {
+  margin-top: 10px;
+  padding-top: 10px;
+}
 </style>
-<div class="nx-doc nx-doc--unified" dir="rtl">
+<div class="${rootClass}" dir="rtl">
   <section class="nx-doc__header">
     <div class="nx-doc__header-doc">
       <h1 class="nx-doc__doc-title">${escapeHtml(params.docTypeLabel)}</h1>
-      <div class="nx-doc__doc-number">${escapeHtml(numberDisplay)}</div>
-      <div class="nx-doc__doc-number-rule" aria-hidden="true"></div>
+      ${numberBlock}
       <div class="nx-doc__meta-list">${metaRows}</div>
     </div>
     <div class="nx-doc__header-issuer">${issuerBlock}</div>
@@ -738,11 +882,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
 
   <section class="nx-doc__customer" aria-label="לכבוד">${customerBlock}</section>
 
-  <table class="nx-doc__table">
-    ${tableColgroup}
-    <thead>${tableHead}</thead>
-    <tbody>${linesHtml}</tbody>
-  </table>
+  ${tableBlock}
 
   <div class="nx-doc__bottom">
     ${notesHtml}

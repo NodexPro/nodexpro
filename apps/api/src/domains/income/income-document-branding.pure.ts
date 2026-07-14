@@ -140,6 +140,14 @@ function buildStyleMiniPreview(
 <div class="nx-studio-style-mini__totals nx-studio-style-mini__totals--open" style="border-top-color:${totals}"></div>
 </div>`;
   }
+  if (styleKey === 'sectioned') {
+    return `<div class="nx-studio-style-mini nx-studio-style-mini--sectioned" dir="rtl">
+<div class="nx-studio-style-mini__row"><span class="nx-studio-style-mini__logo"></span><span class="nx-studio-style-mini__company"></span></div>
+<div class="nx-studio-style-mini__recipient" style="background:color-mix(in srgb, ${accent} 12%, #fff); border:1px solid color-mix(in srgb, ${accent} 28%, #e5e7eb)"></div>
+<div class="nx-studio-style-mini__table" style="background:${header}; border:1px solid #c5cad4"></div>
+<div class="nx-studio-style-mini__totals" style="border-top-color:${totals}; background:color-mix(in srgb, ${accent} 8%, #fff)"></div>
+</div>`;
+  }
   return `<div class="nx-studio-style-mini nx-studio-style-mini--classic" dir="rtl">
 <div class="nx-studio-style-mini__classic-columns"><span class="nx-studio-style-mini__logo"></span><span class="nx-studio-style-mini__recipient" style="border-inline-start-color:${accent}"></span></div>
 <div class="nx-studio-style-mini__banner" style="background:${grad}"></div>
@@ -238,6 +246,12 @@ const STYLE_TEMPLATE_DEFS: Omit<IncomeDocumentStyleTemplate, 'mini_preview_marku
     key: 'elegant',
     label: 'אלגנטי',
     description: 'לוגו גדול · עסק מימין · לקוח משמאל · חתימה בכותרת',
+    default_layout_template_key: 'logo_left_client_right',
+  },
+  {
+    key: 'sectioned',
+    label: 'סקציות',
+    description: 'מקטעים מופרדים · טבלת Excel · כרטיס לקוח · תצוגת ארגון כספים',
     default_layout_template_key: 'logo_left_client_right',
   },
 ];
