@@ -181,7 +181,7 @@ function buildPaymentCards(params: {
 }
 
 function buildSheetSection(sectionNumber: number, bodyHtml: string): string {
-  return `<section class="nx-doc__sheet-section nx-doc__sheet-section--${sectionNumber}" aria-label="אזור ${sectionNumber}"><span class="nx-doc__sheet-section-badge" aria-hidden="true">${sectionNumber}</span><div class="nx-doc__sheet-section-body">${bodyHtml}</div></section>`;
+  return `<section class="nx-doc__sheet-section nx-doc__sheet-section--${sectionNumber}" data-sheet-section="${sectionNumber}" aria-label="אזור ${sectionNumber}"><span class="nx-doc__sheet-section-badge" aria-hidden="true">${sectionNumber}</span><span class="nx-doc__sheet-section-label">אזור ${sectionNumber}</span><div class="nx-doc__sheet-section-body">${bodyHtml}</div></section>`;
 }
 
 export function renderIncomeBrandedPreviewHtml(params: {
@@ -445,38 +445,56 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--unified .nx-doc__upper-sheet {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(100px, 1fr));
+  grid-template-rows: repeat(2, minmax(130px, 1fr));
   gap: 0;
   width: 100%;
-  margin: 0 0 4px;
-  border: 1px solid var(--nx-doc-border);
+  margin: 0 0 8px;
+  border: 2px solid #64748b;
+  background: #fff;
 }
 .nx-doc--unified .nx-doc__sheet-section {
   position: relative;
-  min-height: 100px;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--nx-doc-border) 85%, #000);
+  min-height: 130px;
+  padding: 30px 10px 8px;
+  border: 2px solid #94a3b8;
   box-sizing: border-box;
+  background: #fff;
+}
+.nx-doc--unified .nx-doc__sheet-section:nth-child(odd) {
+  background: #f8fafc;
 }
 .nx-doc--unified .nx-doc__sheet-section-body {
   height: 100%;
 }
 .nx-doc--unified .nx-doc__sheet-section-badge {
   position: absolute;
-  top: 6px;
-  left: 6px;
-  z-index: 1;
-  width: 22px;
-  height: 22px;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: var(--nx-doc-primary);
+  background: #4f46e5;
   color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(15, 23, 42, 0.28);
+}
+.nx-doc--unified .nx-doc__sheet-section-label {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  text-transform: uppercase;
   pointer-events: none;
 }
 .nx-doc--unified .nx-doc__header {

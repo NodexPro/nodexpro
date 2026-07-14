@@ -551,7 +551,7 @@ test('table matches invoice editor grid styling', () => {
 
 test('table starts immediately after upper sheet grid', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /\.nx-doc--unified \.nx-doc__upper-sheet[\s\S]*margin: 0 0 4px/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__upper-sheet[\s\S]*margin: 0 0 8px/);
   assert.match(html, /\.nx-doc--unified \.nx-doc__table[\s\S]*margin: 0 0 14px/);
 });
 
