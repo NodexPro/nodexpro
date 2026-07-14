@@ -113,6 +113,9 @@ function buildPaymentCards(params) {
     <div class="nx-doc__payments-grid">${cards.join('')}</div>
   </section>`;
 }
+function buildSheetSection(sectionNumber, bodyHtml) {
+    return `<section class="nx-doc__sheet-section nx-doc__sheet-section--${sectionNumber}" aria-label="אזור ${sectionNumber}"><span class="nx-doc__sheet-section-badge" aria-hidden="true">${sectionNumber}</span><div class="nx-doc__sheet-section-body">${bodyHtml}</div></section>`;
+}
 export function renderIncomeBrandedPreviewHtml(params) {
     const b = params.branding;
     const d = b.display_options;
@@ -144,14 +147,6 @@ export function renderIncomeBrandedPreviewHtml(params) {
     ]
         .filter(Boolean)
         .join('');
-    const issuerBlock = `<div class="nx-doc__issuer-identity">
-    ${logoHtml}
-    <div class="nx-doc__issuer-details">
-      <div class="nx-doc__issuer-name">${escapeHtml(params.issuer.display_name)}</div>
-      ${subtitle}
-      ${issuerContactLines ? `<div class="nx-doc__issuer-lines">${issuerContactLines}</div>` : ''}
-    </div>
-  </div>`;
     const customerLines = [
         partyPlainRow('customer', params.recipient.contact_name ?? null),
         customerInfoRow(docPreviewIcon('location'), params.recipient.address),
@@ -162,11 +157,6 @@ export function renderIncomeBrandedPreviewHtml(params) {
     ]
         .filter(Boolean)
         .join('');
-    const customerBlock = `
-    <header class="nx-doc__customer-head"><span>לכבוד</span></header>
-    <div class="nx-doc__customer-name">${escapeHtml(params.recipient.display_name)}</div>
-    ${customerLines ? `<div class="nx-doc__customer-lines">${customerLines}</div>` : ''}
-  `;
     const metaRows = [
         metaRow('תאריך המסמך', formatPreviewDate(params.document_date), docPreviewIcon('calendar')),
         params.due_date
@@ -183,6 +173,28 @@ export function renderIncomeBrandedPreviewHtml(params) {
     ]
         .filter(Boolean)
         .join('');
+    const issuerIdentityBlock = `<div class="nx-doc__issuer-identity">
+    ${logoHtml}
+    <div class="nx-doc__issuer-details">
+      <div class="nx-doc__issuer-name">${escapeHtml(params.issuer.display_name)}</div>
+      ${subtitle}
+    </div>
+  </div>`;
+    const issuerContactsBlock = issuerContactLines
+        ? `<div class="nx-doc__issuer-lines">${issuerContactLines}</div>`
+        : '';
+    const docTitleBlock = `<h1 class="nx-doc__doc-title">${escapeHtml(params.docTypeLabel)}</h1>${numberBlock}`;
+    const docMetaBlock = metaRows ? `<div class="nx-doc__meta-list">${metaRows}</div>` : '';
+    const customerHeadBlock = `<header class="nx-doc__customer-head"><span>לכבוד</span></header><div class="nx-doc__customer-name">${escapeHtml(params.recipient.display_name)}</div>`;
+    const customerLinesBlock = customerLines ? `<div class="nx-doc__customer-lines">${customerLines}</div>` : '';
+    const upperSheetBlock = `<div class="nx-doc__upper-sheet" aria-label="כותרת מסמך">
+    ${buildSheetSection(1, issuerIdentityBlock)}
+    ${buildSheetSection(2, issuerContactsBlock)}
+    ${buildSheetSection(3, docTitleBlock)}
+    ${buildSheetSection(4, docMetaBlock)}
+    ${buildSheetSection(5, customerHeadBlock)}
+    ${buildSheetSection(6, customerLinesBlock)}
+  </div>`;
     const colCount = d.show_vat_row ? 7 : 6;
     const linesHtml = params.lineRows.length > 0
         ? params.lineRows
@@ -307,6 +319,43 @@ export function renderIncomeBrandedPreviewHtml(params) {
   background: #fff;
 }
 .nx-doc * { box-sizing: border-box; }
+.nx-doc--unified .nx-doc__upper-sheet {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(100px, 1fr));
+  gap: 0;
+  width: 100%;
+  margin: 0 0 4px;
+  border: 1px solid var(--nx-doc-border);
+}
+.nx-doc--unified .nx-doc__sheet-section {
+  position: relative;
+  min-height: 100px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--nx-doc-border) 85%, #000);
+  box-sizing: border-box;
+}
+.nx-doc--unified .nx-doc__sheet-section-body {
+  height: 100%;
+}
+.nx-doc--unified .nx-doc__sheet-section-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--nx-doc-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+}
 .nx-doc--unified .nx-doc__header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -748,11 +797,18 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--sectioned {
   padding: 4px 0 0;
 }
-.nx-doc--sectioned .nx-doc__header {
-  gap: 8px 24px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #e5e7eb;
+.nx-doc--sectioned .nx-doc__upper-sheet {
+  margin-bottom: 14px;
+  border-color: #e5e7eb;
+}
+.nx-doc--sectioned .nx-doc__sheet-section {
+  min-height: 110px;
+  padding: 10px 12px;
+  border-color: #d5dae3;
+}
+.nx-doc--sectioned .nx-doc__sheet-section--5,
+.nx-doc--sectioned .nx-doc__sheet-section--6 {
+  background: color-mix(in srgb, var(--nx-doc-primary) 7%, #ffffff);
 }
 .nx-doc--sectioned .nx-doc__doc-title {
   font-size: 28px;
@@ -786,14 +842,6 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--sectioned .nx-doc__issuer-identity { gap: 0; }
 .nx-doc--sectioned .nx-doc__issuer-name { font-size: 18px; margin-bottom: 2px; }
 .nx-doc--sectioned .nx-doc__issuer-lines { margin-top: 2px; gap: 3px; }
-.nx-doc--sectioned .nx-doc__customer {
-  margin: 0 0 14px;
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 22%, #e5e7eb);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--nx-doc-primary) 7%, #ffffff);
-  border-bottom: 1px solid color-mix(in srgb, var(--nx-doc-primary) 22%, #e5e7eb);
-}
 .nx-doc--sectioned .nx-doc__customer-head { margin-bottom: 4px; }
 .nx-doc--sectioned .nx-doc__customer-name { margin-bottom: 6px; }
 .nx-doc--sectioned .nx-doc__lines { margin: 0 0 14px; }
@@ -871,16 +919,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
 }
 </style>
 <div class="${rootClass}" dir="rtl">
-  <section class="nx-doc__header">
-    <div class="nx-doc__header-doc">
-      <h1 class="nx-doc__doc-title">${escapeHtml(params.docTypeLabel)}</h1>
-      ${numberBlock}
-      <div class="nx-doc__meta-list">${metaRows}</div>
-    </div>
-    <div class="nx-doc__header-issuer">${issuerBlock}</div>
-  </section>
-
-  <section class="nx-doc__customer" aria-label="לכבוד">${customerBlock}</section>
+  ${upperSheetBlock}
 
   ${tableBlock}
 

@@ -232,8 +232,10 @@ test('preview uses unified layout, theme tokens, and draft number label', () => 
   assert.match(html, new RegExp(theme.recipient_accent_color.replace('#', '#')));
   assert.match(html, new RegExp(theme.table_header_color.replace('#', '#')));
   assert.match(html, /nx-doc nx-doc--unified/);
-  assert.match(html, /nx-doc__header-doc/);
-  assert.match(html, /nx-doc__customer/);
+  assert.match(html, /nx-doc__upper-sheet/);
+  assert.match(html, /nx-doc__sheet-section--1/);
+  assert.match(html, /nx-doc__sheet-section--6/);
+  assert.match(html, /nx-doc__customer-name/);
   assert.match(html, /nx-doc__summary/);
   assert.match(html, /nx-doc__platform-footer/);
   assert.match(html, /Test4/);

@@ -187,16 +187,23 @@ test('preview and PDF paths use the same unified HTML renderer', () => {
 
 test('unified tax invoice html markers — section order and labels', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  const headerIdx = html.indexOf('<section class="nx-doc__header"');
-  const customerIdx = html.indexOf('<section class="nx-doc__customer"');
-  const tableIdx = html.indexOf('<table class="nx-doc__table"');
-  const summaryIdx = html.indexOf('<section class="nx-doc__summary"');
-  const commentsIdx = html.indexOf('<section class="nx-doc__comments"');
-  const paymentsIdx = html.indexOf('<section class="nx-doc__payments"');
-  const footerIdx = html.indexOf('<footer class="nx-doc__platform-footer"');
-  assert.ok(headerIdx >= 0);
-  assert.ok(headerIdx < customerIdx);
-  assert.ok(customerIdx < tableIdx);
+  const bodyStart = html.indexOf('<div class="nx-doc nx-doc--unified"');
+  assert.ok(bodyStart >= 0);
+  const body = html.slice(bodyStart);
+  const upperSheetIdx = body.indexOf('<div class="nx-doc__upper-sheet"');
+  const sheet1Idx = body.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--1"');
+  const sheet6Idx = body.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--6"');
+  const tableIdx = body.indexOf('<table class="nx-doc__table"');
+  const summaryIdx = body.indexOf('<section class="nx-doc__summary"');
+  const commentsIdx = body.indexOf('<section class="nx-doc__comments"');
+  const paymentsIdx = body.indexOf('<section class="nx-doc__payments"');
+  const footerIdx = body.indexOf('<footer class="nx-doc__platform-footer"');
+  assert.ok(upperSheetIdx >= 0);
+  assert.ok(sheet1Idx >= 0);
+  assert.ok(sheet6Idx >= 0);
+  assert.ok(upperSheetIdx < tableIdx);
+  assert.ok(sheet1Idx < sheet6Idx);
+  assert.ok(sheet6Idx < tableIdx);
   assert.ok(tableIdx < summaryIdx);
   assert.ok(commentsIdx < summaryIdx);
   assert.ok(paymentsIdx < footerIdx);
@@ -456,7 +463,7 @@ test('vat column renders backend vat amount not percentage rate', () => {
 
 test('issuer letterhead restores thin-outline contact icons', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  const issuerStart = html.indexOf('<div class="nx-doc__issuer-identity">');
+  const issuerStart = html.indexOf('<div class="nx-doc__issuer-lines">');
   const issuerEnd = html.indexOf('</section>', issuerStart);
   const issuerBlock = html.slice(issuerStart, issuerEnd);
   assert.match(issuerBlock, /nx-doc__issuer-line-icon/);
@@ -477,7 +484,7 @@ test('issuer business number row includes ID icon', () => {
 
 test('issuer address row includes location icon', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  const issuerStart = html.indexOf('<div class="nx-doc__issuer-identity">');
+  const issuerStart = html.indexOf('<div class="nx-doc__issuer-lines">');
   const issuerEnd = html.indexOf('</section>', issuerStart);
   const issuerBlock = html.slice(issuerStart, issuerEnd);
   assert.match(issuerBlock, /nx-doc__issuer-line-icon[\s\S]*רחוב העסק 1/);
@@ -490,9 +497,11 @@ test('customer block uses aligned icons for address tax id phone email and websi
     website: 'www.client.example.com',
   };
   const html = renderUnifiedIncomeDocumentHtml(input);
-  const customerStart = html.indexOf('<section class="nx-doc__customer"');
-  const customerEnd = html.indexOf('</section>', customerStart);
-  const customerBlock = html.slice(customerStart, customerEnd);
+  const bodyStart = html.indexOf('<div class="nx-doc nx-doc--unified"');
+  const body = html.slice(bodyStart);
+  const customerStart = body.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--6"');
+  const customerEnd = body.indexOf('</section>', customerStart);
+  const customerBlock = body.slice(customerStart, customerEnd);
   assert.match(customerBlock, /nx-doc__customer-lines/);
   assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*רחוב הלקוח 5/);
   assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*998877665/);
@@ -540,9 +549,9 @@ test('table matches invoice editor grid styling', () => {
   assert.match(html, /\.nx-doc--unified \.nx-doc__table tbody td[\s\S]*border-bottom: 1px solid #f1f5f9/);
 });
 
-test('table starts immediately after customer divider', () => {
+test('table starts immediately after upper sheet grid', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /\.nx-doc--unified \.nx-doc__customer[\s\S]*margin: 0/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__upper-sheet[\s\S]*margin: 0 0 4px/);
   assert.match(html, /\.nx-doc--unified \.nx-doc__table[\s\S]*margin: 0 0 14px/);
 });
 
