@@ -581,6 +581,12 @@ test('sectioned style renders section wrappers excel header and same columns', (
   assert.match(previewHtml, /nx-doc__doc-number-pill/);
   assert.match(previewHtml, /aria-label="שורות מסמך"/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__table thead th[\s\S]*background: var\(--nx-doc-primary\)/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__upper-sheet[\s\S]*grid-template-areas:/);
+  assert.match(previewHtml, /issuerIdentity documentIdentity/);
+  assert.match(previewHtml, /issuerContacts customerContacts/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__upper-sheet[\s\S]*grid-template-columns: minmax\(0, 0\.47fr\) minmax\(0, 0\.53fr\)/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1[\s\S]*grid-area: issuerIdentity/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--6[\s\S]*grid-area: customerContacts/);
   assert.match(previewHtml, />פירוט</);
   assert.match(previewHtml, />כמות</);
   assert.match(previewHtml, />מחיר ליח'/);

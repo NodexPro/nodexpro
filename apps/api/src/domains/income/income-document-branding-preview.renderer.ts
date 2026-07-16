@@ -938,14 +938,54 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned {
   padding: 4px 0 0;
 }
+/* Physical LEFT = issuer (1–2); physical RIGHT = document/customer (3–6). direction:ltr makes column 1 = LEFT. */
 .nx-doc--sectioned .nx-doc__upper-sheet {
+  direction: ltr;
+  display: grid;
+  grid-template-columns: minmax(0, 0.47fr) minmax(0, 0.53fr);
+  grid-template-rows: auto auto auto auto;
+  grid-template-areas:
+    "issuerIdentity documentIdentity"
+    "issuerContacts documentMeta"
+    "issuerContacts customerIdentity"
+    "issuerContacts customerContacts";
+  column-gap: 10px;
+  row-gap: 0;
+  align-items: start;
+  width: 100%;
   margin-bottom: 14px;
   border-color: #e5e7eb;
 }
 .nx-doc--sectioned .nx-doc__sheet-section {
-  min-height: 110px;
+  min-height: 0;
   padding: 10px 12px;
   border-color: #d5dae3;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.nx-doc--sectioned .nx-doc__sheet-section--1 {
+  grid-area: issuerIdentity;
+  direction: rtl;
+}
+.nx-doc--sectioned .nx-doc__sheet-section--2 {
+  grid-area: issuerContacts;
+  direction: rtl;
+}
+.nx-doc--sectioned .nx-doc__sheet-section--3 {
+  grid-area: documentIdentity;
+  direction: rtl;
+}
+.nx-doc--sectioned .nx-doc__sheet-section--4 {
+  grid-area: documentMeta;
+  direction: rtl;
+}
+.nx-doc--sectioned .nx-doc__sheet-section--5 {
+  grid-area: customerIdentity;
+  direction: rtl;
+}
+.nx-doc--sectioned .nx-doc__sheet-section--6 {
+  grid-area: customerContacts;
+  direction: rtl;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--5,
 .nx-doc--sectioned .nx-doc__sheet-section--6 {
