@@ -811,15 +811,14 @@ export function renderIncomeBrandedPreviewHtml(params) {
   .nx-doc__payment-col, .nx-doc__comments, .nx-doc__customer { box-shadow: none; }
 }
 
-/* Sectioned style — premium visual presentation; 6-section architecture unchanged */
+/* Sectioned style — keep section scaffold + badges; LEFT issuer (1–2), RIGHT doc/customer (3–6). */
 .nx-doc--sectioned {
   padding: 8px 2px 4px;
 }
-/* Physical LEFT = issuer (1–2); physical RIGHT = document/customer (3–6). */
 .nx-doc--sectioned .nx-doc__upper-sheet {
   direction: ltr;
   display: grid;
-  /* First row (1 | 3): equal outer blocks; Section 3 is the size reference. */
+  /* First row (1 | 3): equal outer width; Section 3 is the height reference. */
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: auto auto auto auto;
   grid-template-areas:
@@ -827,78 +826,55 @@ export function renderIncomeBrandedPreviewHtml(params) {
     "issuerContacts documentMeta"
     "issuerContacts customerIdentity"
     "issuerContacts customerContacts";
-  column-gap: 28px;
-  row-gap: 0;
+  gap: 0;
   align-items: start;
   width: 100%;
-  margin: 0 0 22px;
-  border: none;
-  background: transparent;
+  margin: 0 0 8px;
+  border: 2px solid #64748b;
+  background: #fff;
 }
 .nx-doc--sectioned .nx-doc__sheet-section {
   position: relative;
-  min-height: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
+  min-height: 130px;
+  padding: 30px 10px 8px;
+  border: 2px solid #94a3b8;
+  box-sizing: border-box;
+  background: #fff;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 .nx-doc--sectioned .nx-doc__sheet-section:nth-child(odd) {
-  background: transparent;
-}
-.nx-doc--sectioned .nx-doc__sheet-section-badge,
-.nx-doc--sectioned .nx-doc__sheet-section-label {
-  display: none !important;
+  background: #f8fafc;
 }
 .nx-doc--sectioned .nx-doc__sheet-section-body {
-  height: auto;
+  height: 100%;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--1 {
   grid-area: issuerIdentity;
   direction: rtl;
-  /* Match Section 3 outer box (padding + stretch); content scale unchanged. */
-  box-sizing: border-box;
+  /* Match Section 3 outer height; content scale unchanged. */
   align-self: stretch;
-  padding: 0 0 8px;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--2 {
   grid-area: issuerContacts;
   direction: rtl;
-  padding: 0;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--3 {
   grid-area: documentIdentity;
   direction: rtl;
-  box-sizing: border-box;
   align-self: stretch;
-  padding: 0 0 8px;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--4 {
   grid-area: documentMeta;
   direction: rtl;
-  padding: 0 0 14px;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--5 {
   grid-area: customerIdentity;
   direction: rtl;
-  margin-top: 4px;
-  padding: 14px 16px 6px;
-  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 16%, #e5e7eb);
-  border-bottom: none;
-  border-radius: 12px 12px 0 0;
-  background: color-mix(in srgb, var(--nx-doc-primary) 6%, #ffffff);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .nx-doc--sectioned .nx-doc__sheet-section--6 {
   grid-area: customerContacts;
   direction: rtl;
-  padding: 0 16px 14px;
-  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 16%, #e5e7eb);
-  border-top: none;
-  border-radius: 0 0 12px 12px;
-  background: color-mix(in srgb, var(--nx-doc-primary) 6%, #ffffff);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .nx-doc--sectioned .nx-doc__doc-title {
   font-size: 30px;
