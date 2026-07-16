@@ -934,69 +934,105 @@ export function renderIncomeBrandedPreviewHtml(params: {
   .nx-doc__payment-col, .nx-doc__comments, .nx-doc__customer { box-shadow: none; }
 }
 
-/* Sectioned style — reference enterprise sections + Excel grid; classic path above stays unchanged */
+/* Sectioned style — premium visual presentation; 6-section architecture unchanged */
 .nx-doc--sectioned {
-  padding: 4px 0 0;
+  padding: 8px 2px 4px;
 }
-/* Physical LEFT = issuer (1–2); physical RIGHT = document/customer (3–6). direction:ltr makes column 1 = LEFT. */
+/* Physical LEFT = issuer (1–2); physical RIGHT = document/customer (3–6). */
 .nx-doc--sectioned .nx-doc__upper-sheet {
   direction: ltr;
   display: grid;
-  grid-template-columns: minmax(0, 0.47fr) minmax(0, 0.53fr);
+  /* First row (1 | 3): equal outer blocks; Section 3 is the size reference. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: auto auto auto auto;
   grid-template-areas:
     "issuerIdentity documentIdentity"
     "issuerContacts documentMeta"
     "issuerContacts customerIdentity"
     "issuerContacts customerContacts";
-  column-gap: 10px;
+  column-gap: 28px;
   row-gap: 0;
   align-items: start;
   width: 100%;
-  margin-bottom: 14px;
-  border-color: #e5e7eb;
+  margin: 0 0 22px;
+  border: none;
+  background: transparent;
 }
 .nx-doc--sectioned .nx-doc__sheet-section {
+  position: relative;
   min-height: 0;
-  padding: 10px 12px;
-  border-color: #d5dae3;
+  padding: 0;
+  border: none;
+  background: transparent;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+.nx-doc--sectioned .nx-doc__sheet-section:nth-child(odd) {
+  background: transparent;
+}
+.nx-doc--sectioned .nx-doc__sheet-section-badge,
+.nx-doc--sectioned .nx-doc__sheet-section-label {
+  display: none !important;
+}
+.nx-doc--sectioned .nx-doc__sheet-section-body {
+  height: auto;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--1 {
   grid-area: issuerIdentity;
   direction: rtl;
+  /* Match Section 3 outer box (padding + stretch); content scale unchanged. */
+  box-sizing: border-box;
+  align-self: stretch;
+  padding: 0 0 8px;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--2 {
   grid-area: issuerContacts;
   direction: rtl;
+  padding: 0;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--3 {
   grid-area: documentIdentity;
   direction: rtl;
+  box-sizing: border-box;
+  align-self: stretch;
+  padding: 0 0 8px;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--4 {
   grid-area: documentMeta;
   direction: rtl;
+  padding: 0 0 14px;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--5 {
   grid-area: customerIdentity;
   direction: rtl;
+  margin-top: 4px;
+  padding: 14px 16px 6px;
+  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 16%, #e5e7eb);
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  background: color-mix(in srgb, var(--nx-doc-primary) 6%, #ffffff);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .nx-doc--sectioned .nx-doc__sheet-section--6 {
   grid-area: customerContacts;
   direction: rtl;
-}
-.nx-doc--sectioned .nx-doc__sheet-section--5,
-.nx-doc--sectioned .nx-doc__sheet-section--6 {
-  background: color-mix(in srgb, var(--nx-doc-primary) 7%, #ffffff);
+  padding: 0 16px 14px;
+  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 16%, #e5e7eb);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  background: color-mix(in srgb, var(--nx-doc-primary) 6%, #ffffff);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .nx-doc--sectioned .nx-doc__doc-title {
-  font-size: 28px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
   margin: 0 0 8px;
+  line-height: 1.05;
+  color: var(--nx-doc-text);
 }
 .nx-doc--sectioned .nx-doc__doc-number {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   font-size: 14px;
   font-weight: 600;
   color: var(--nx-doc-text);
@@ -1005,98 +1041,222 @@ export function renderIncomeBrandedPreviewHtml(params: {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 7px 14px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--nx-doc-primary) 14%, #ffffff);
+  background: color-mix(in srgb, var(--nx-doc-primary) 12%, #ffffff);
   color: var(--nx-doc-primary);
   font-weight: 700;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 .nx-doc--sectioned .nx-doc__doc-number-rule { display: none; }
+.nx-doc--sectioned .nx-doc__meta-list {
+  gap: 6px;
+}
+.nx-doc--sectioned .nx-doc__meta-row {
+  font-size: 13px;
+  line-height: 1.35;
+  gap: 8px 10px;
+}
+.nx-doc--sectioned .nx-doc__meta-label {
+  font-weight: 500;
+}
+.nx-doc--sectioned .nx-doc__meta-value {
+  font-weight: 650;
+}
 .nx-doc--sectioned .nx-doc__logo-img {
   max-width: ${Math.min(logoDims.maxWidthPx, 280)}px;
   max-height: 80px;
-  margin: 0 0 2px;
+  margin: 0 0 8px;
 }
-.nx-doc--sectioned .nx-doc__issuer-identity { gap: 0; }
-.nx-doc--sectioned .nx-doc__issuer-name { font-size: 18px; margin-bottom: 2px; }
-.nx-doc--sectioned .nx-doc__issuer-lines { margin-top: 2px; gap: 3px; }
-.nx-doc--sectioned .nx-doc__customer-head { margin-bottom: 4px; }
-.nx-doc--sectioned .nx-doc__customer-name { margin-bottom: 6px; }
-.nx-doc--sectioned .nx-doc__lines { margin: 0 0 14px; }
+.nx-doc--sectioned .nx-doc__issuer-identity {
+  gap: 0;
+  align-items: flex-start;
+  text-align: start;
+}
+.nx-doc--sectioned .nx-doc__issuer-name {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 4px;
+  line-height: 1.15;
+}
+.nx-doc--sectioned .nx-doc__issuer-subtitle {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.nx-doc--sectioned .nx-doc__issuer-lines {
+  margin-top: 6px;
+  gap: 6px;
+}
+.nx-doc--sectioned .nx-doc__issuer-line,
+.nx-doc--sectioned .nx-doc__customer-line {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.nx-doc--sectioned .nx-doc__customer-head {
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nx-doc-text-muted);
+}
+.nx-doc--sectioned .nx-doc__customer-name {
+  margin-bottom: 2px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.nx-doc--sectioned .nx-doc__customer-lines {
+  margin-top: 6px;
+  gap: 6px;
+}
+.nx-doc--sectioned .nx-doc__lines {
+  margin: 0 0 20px;
+}
 .nx-doc--sectioned .nx-doc__table {
-  border: 1px solid #c5cad4;
+  border: none;
   margin: 0;
-  border-radius: 0;
+  border-radius: 10px;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 .nx-doc--sectioned .nx-doc__table thead th {
   background: var(--nx-doc-primary);
   color: #fff;
-  padding: 9px 8px;
+  padding: 11px 10px;
   font-size: 13px;
   font-weight: 700;
-  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 78%, #000);
-  border-bottom: 1px solid color-mix(in srgb, var(--nx-doc-primary) 70%, #000);
+  border: none;
+  border-bottom: none;
   white-space: nowrap;
+  letter-spacing: 0.01em;
 }
 .nx-doc--sectioned .nx-doc__table tbody td {
-  padding: 8px;
+  padding: 11px 10px;
   font-size: 13px;
-  border: 1px solid #d5dae3;
+  border: none;
+  border-bottom: 1px solid #eef1f6;
   background: #fff;
   vertical-align: middle;
+  line-height: 1.4;
 }
 .nx-doc--sectioned .nx-doc__table tbody tr:last-child td {
-  border-bottom: 1px solid #d5dae3;
+  border-bottom: none;
+}
+.nx-doc--sectioned .nx-doc__table tbody tr:nth-child(even) td {
+  background: #fbfcfe;
+}
+.nx-doc--sectioned .nx-doc__cell-desc {
+  font-weight: 560;
 }
 .nx-doc--sectioned .nx-doc__bottom {
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 20px;
+  margin-bottom: 20px;
+  align-items: stretch;
 }
 .nx-doc--sectioned .nx-doc__comments {
-  padding: 12px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid #e8ecf2;
+  border-radius: 12px;
   background: #fafbfd;
-  min-height: 72px;
+  min-height: 88px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+.nx-doc--sectioned .nx-doc__comments-head,
+.nx-doc--sectioned .nx-doc__summary-head {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.nx-doc--sectioned .nx-doc__comments-body {
+  font-size: 13px;
+  line-height: 1.5;
 }
 .nx-doc--sectioned .nx-doc__summary-body {
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 18%, #e5e7eb);
-  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 16%, #e5e7eb);
+  border-radius: 12px;
   background: color-mix(in srgb, var(--nx-doc-primary) 5%, #ffffff);
   max-width: 100%;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.nx-doc--sectioned .nx-doc__total-row {
+  padding: 7px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #edf0f5;
 }
 .nx-doc--sectioned .nx-doc__grand-total {
   margin-top: 10px;
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 2px solid var(--nx-doc-primary);
+  align-items: center;
+}
+.nx-doc--sectioned .nx-doc__grand-total strong {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--nx-doc-primary);
+}
+.nx-doc--sectioned .nx-doc__payments {
+  margin-bottom: 16px;
+}
+.nx-doc--sectioned .nx-doc__payments-head {
+  font-size: 14px;
+  margin-bottom: 10px;
 }
 .nx-doc--sectioned .nx-doc__payments-grid {
-  gap: 10px;
+  gap: 12px;
   border: none;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .nx-doc--sectioned .nx-doc__payment-col {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 10px 12px;
+  border: 1px solid #e8ecf2;
+  border-radius: 12px;
+  padding: 12px 14px;
   background: #fff;
-  border-inline-end: 1px solid #e5e7eb;
-  min-height: 88px;
+  border-inline-end: 1px solid #e8ecf2;
+  min-height: 96px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .nx-doc--sectioned .nx-doc__payment-col:last-child {
-  border-inline-end: 1px solid #e5e7eb;
+  border-inline-end: 1px solid #e8ecf2;
+}
+.nx-doc--sectioned .nx-doc__payment-col-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin-bottom: 8px;
 }
 .nx-doc--sectioned .nx-doc__payment-col-head > .nx-doc__icon {
   display: inline-flex;
+  color: var(--nx-doc-primary);
+  opacity: 0.9;
+}
+.nx-doc--sectioned .nx-doc__payment-col-body {
+  font-size: 12px;
+  line-height: 1.5;
 }
 .nx-doc--sectioned .nx-doc__platform-footer {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #eef1f6;
+}
+.nx-doc--sectioned .nx-doc__platform-link {
+  gap: 8px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+@media print {
+  .nx-doc--sectioned .nx-doc__table,
+  .nx-doc--sectioned .nx-doc__comments,
+  .nx-doc--sectioned .nx-doc__summary-body,
+  .nx-doc--sectioned .nx-doc__payment-col,
+  .nx-doc--sectioned .nx-doc__sheet-section--5,
+  .nx-doc--sectioned .nx-doc__sheet-section--6,
+  .nx-doc--sectioned .nx-doc__doc-number-pill {
+    box-shadow: none;
+  }
 }
 </style>
 <div class="${rootClass}" dir="rtl">
