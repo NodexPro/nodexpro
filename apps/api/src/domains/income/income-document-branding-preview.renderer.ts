@@ -218,12 +218,14 @@ export function renderIncomeBrandedPreviewHtml(params: {
     : `<div class="nx-doc__doc-number">${escapeHtml(numberDisplay)}</div>
       <div class="nx-doc__doc-number-rule" aria-hidden="true"></div>`;
 
-  const logoHtml =
+  const logoInner =
     d.show_logo && b.logo_data_url
       ? `<img class="nx-doc__logo-img" src="${b.logo_data_url}" alt="" />`
       : d.show_logo
         ? `<div class="nx-doc__logo-placeholder" aria-hidden="true"></div>`
         : '';
+  /* Frame lets sectioned Section 1 crop transparent padding via overflow + scale. */
+  const logoHtml = logoInner ? `<div class="nx-doc__logo-frame">${logoInner}</div>` : '';
 
   const subtitle =
     params.company_subtitle?.trim() || b.company_subtitle?.trim()
@@ -662,6 +664,13 @@ export function renderIncomeBrandedPreviewHtml(params: {
   align-self: stretch;
   box-sizing: border-box;
 }
+.nx-doc--unified .nx-doc__logo-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 0;
+}
 .nx-doc--unified .nx-doc__issuer-name {
   font-size: 20px;
   font-weight: 700;
@@ -1067,15 +1076,28 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__meta-value {
   font-weight: 650;
 }
+.nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-img,
 .nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-placeholder {
+  /* Box ~48px; scale compensates transparent padding in uploaded logo assets. */
   width: auto;
-  height: auto;
+  height: 48px;
   max-width: 100%;
-  max-height: 52px;
+  max-height: 48px;
   margin: 0;
   object-fit: contain;
   object-position: center;
+  transform: scale(1.45);
+  transform-origin: center center;
+  display: block;
 }
 .nx-doc--sectioned .nx-doc__issuer-identity {
   gap: 0;

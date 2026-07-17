@@ -602,7 +602,9 @@ test('sectioned style renders section wrappers excel header and same columns', (
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1[\s\S]*max-height: 65px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--3[\s\S]*height: 65px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--3[\s\S]*max-height: 65px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*max-height: 52px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*max-height: 48px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*transform: scale\(1\.45\)/);
+  assert.match(previewHtml, /nx-doc__logo-frame/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--6[\s\S]*grid-area: customerContacts/);
   assert.match(previewHtml, />פירוט</);
   assert.match(previewHtml, />כמות</);
