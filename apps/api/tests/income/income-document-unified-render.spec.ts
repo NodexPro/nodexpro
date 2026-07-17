@@ -596,11 +596,13 @@ test('sectioned style renders section wrappers excel header and same columns', (
   assert.match(previewHtml, /issuerIdentity documentIdentity/);
   assert.match(previewHtml, /issuerContacts customerContacts/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__upper-sheet[\s\S]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__upper-sheet[\s\S]*grid-template-rows: 65px auto auto auto/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1[\s\S]*grid-area: issuerIdentity/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1[\s\S]*align-self: stretch/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1[\s\S]*min-height: 65px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--3[\s\S]*align-self: stretch/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--3[\s\S]*min-height: 65px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1[\s\S]*height: 65px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1[\s\S]*max-height: 65px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--3[\s\S]*height: 65px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--3[\s\S]*max-height: 65px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*max-height: 52px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--6[\s\S]*grid-area: customerContacts/);
   assert.match(previewHtml, />פירוט</);
   assert.match(previewHtml, />כמות</);
