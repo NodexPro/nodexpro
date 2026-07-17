@@ -991,6 +991,9 @@ export function renderIncomeBrandedPreviewHtml(params: {
   direction: rtl;
   /* Match Section 3 outer height; content scale unchanged. */
   align-self: stretch;
+  /* −40% vs section min-height (130 → 78). */
+  min-height: 78px;
+  padding: 22px 8px 4px;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--2 {
   grid-area: issuerContacts;
@@ -1000,6 +1003,9 @@ export function renderIncomeBrandedPreviewHtml(params: {
   grid-area: documentIdentity;
   direction: rtl;
   align-self: stretch;
+  /* −40% vs section min-height (130 → 78). */
+  min-height: 78px;
+  padding: 22px 8px 4px;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--4 {
   grid-area: documentMeta;
@@ -1017,12 +1023,12 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.025em;
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   line-height: 1.05;
   color: var(--nx-doc-text);
 }
 .nx-doc--sectioned .nx-doc__doc-number {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--nx-doc-text);
