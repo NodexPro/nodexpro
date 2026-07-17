@@ -168,11 +168,16 @@ test('issuer logo comes from branding studio data url in issuer block', () => {
   };
   const html = renderUnifiedIncomeDocumentHtml(input);
   assert.match(html, /class="nx-doc__logo-img" src="data:image\/png;base64,logo-test"/);
-  const issuerStart = html.indexOf('<div class="nx-doc__issuer-identity">');
-  const issuerEnd = html.indexOf('</div>', issuerStart);
-  assert.ok(issuerStart >= 0);
-  const issuerBlock = html.slice(issuerStart, issuerEnd);
-  assert.match(issuerBlock, /nx-doc__logo-img/);
+  const sheet1Start = html.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--1"');
+  const sheet2Start = html.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--2"');
+  assert.ok(sheet1Start >= 0 && sheet2Start > sheet1Start);
+  const section1 = html.slice(sheet1Start, sheet2Start);
+  const section2 = html.slice(sheet2Start, html.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--3"'));
+  assert.match(section1, /nx-doc__logo-img/);
+  assert.match(section1, /nx-doc__issuer-identity/);
+  assert.doesNotMatch(section1, /nx-doc__issuer-name/);
+  assert.match(section2, /nx-doc__issuer-name/);
+  assert.match(section2, /nx-doc__issuer-details/);
 });
 
 test('preview and PDF paths use the same unified HTML renderer', () => {
@@ -536,10 +541,16 @@ test('document number accent rule present in unified header', () => {
   assert.match(html, /class="nx-doc__doc-number-rule"/);
 });
 
-test('issuer logo uses enlarged unified max height without stretching', () => {
+test('issuer logo fills section 1 without stretching aspect ratio', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /\.nx-doc--unified \.nx-doc__logo-img[\s\S]*max-height: 80px/);
-  assert.match(html, /object-fit: contain/);
+  assert.match(
+    html,
+    /\.nx-doc--unified \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*max-height: 100%/,
+  );
+  assert.match(
+    html,
+    /\.nx-doc--unified \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*object-fit: contain/,
+  );
 });
 
 test('table matches invoice editor grid styling', () => {
