@@ -9,6 +9,10 @@ import {
 import { docPreviewIcon, nodexproFooterLogoMarkup } from './income-document-preview-icons.pure.js';
 import { resolveSectionedDocumentIdentityPresentation } from './income-document-sectioned-identity.pure.js';
 import { getSectionedLogoFrameMeta } from './income-document-sectioned-logo-frame.pure.js';
+import {
+  logoCssFitPercent,
+  prepareLogoDataUrlForDocumentRender,
+} from './income-document-logo-visible-fit.pure.js';
 import type { IncomeDocumentType } from './income.types.js';
 
 const INVOICE_FONT = 'Heebo, Arial, Helvetica, "Segoe UI", sans-serif';
@@ -216,6 +220,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   const numberDisplay = formatDocumentNumberDisplay(params.numberPreview);
   const logoDims = resolveLogoSizeDimensions(b.logo_size_key);
   const logoFrame = getSectionedLogoFrameMeta();
+  const logoFitPercent = logoCssFitPercent();
+  const logoDataUrl = prepareLogoDataUrlForDocumentRender(b.logo_data_url);
   const discountDisplay = formatDiscountDisplay(params.totals.discount);
   const rootClass = isSectioned ? 'nx-doc nx-doc--unified nx-doc--sectioned' : 'nx-doc nx-doc--unified';
   const documentIdentity = resolveSectionedDocumentIdentityPresentation({
@@ -229,8 +235,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
       <div class="nx-doc__doc-number-rule" aria-hidden="true"></div>`;
 
   const logoInner =
-    d.show_logo && b.logo_data_url
-      ? `<img class="nx-doc__logo-img" src="${b.logo_data_url}" alt="" />`
+    d.show_logo && logoDataUrl
+      ? `<img class="nx-doc__logo-img" src="${logoDataUrl}" alt="" />`
       : !isSectioned && d.show_logo
         ? `<div class="nx-doc__logo-placeholder" aria-hidden="true"></div>`
         : '';
@@ -454,6 +460,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   --nx-doc-grand-total-bg: color-mix(in srgb, var(--nx-doc-primary) 6%, #ffffff);
   --nx-doc-logo-frame-width: ${logoFrame.css_frame_width};
   --nx-doc-logo-frame-height: ${logoFrame.css_frame_height};
+  --nx-doc-logo-fit: ${logoFitPercent};
   max-width: 840px;
   margin: 0 auto;
   padding: 0;
@@ -1157,11 +1164,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
   background: #ffffff;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-img {
-  /* Maximum safe fill of the fixed Section 1 frame; contain preserves aspect ratio. */
-  width: 100%;
-  height: 100%;
-  max-width: 100%;
-  max-height: 100%;
+  /* Visible content is pre-cropped; fit with ~4% edge inset via --nx-doc-logo-fit. */
+  width: var(--nx-doc-logo-fit);
+  height: var(--nx-doc-logo-fit);
+  max-width: var(--nx-doc-logo-fit);
+  max-height: var(--nx-doc-logo-fit);
   margin: 0;
   object-fit: contain;
   object-position: center;

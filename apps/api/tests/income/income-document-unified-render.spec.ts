@@ -607,11 +607,11 @@ test('sectioned style renders section wrappers excel header and same columns', (
   assert.match(previewHtml, /--nx-doc-logo-frame-height:\s*61px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*background: #ffffff/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*object-fit: contain/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*width: 100%/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*height: 100%/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*max-height: 100%/);
+  assert.match(previewHtml, /--nx-doc-logo-fit:\s*92%/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*width: var\(--nx-doc-logo-fit\)/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*transform: none/);
-  assert.doesNotMatch(previewHtml, /transform: scale\(1\.45\)/);
+  assert.doesNotMatch(previewHtml, /transform: scale\(/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*overflow: hidden/);
   assert.match(previewHtml, /nx-doc__logo-frame/);
   assert.match(previewHtml, /nx-doc__doc-identity/);
   assert.match(previewHtml, /--nx-doc-identity-stack-width:152px/);

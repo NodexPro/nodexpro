@@ -100,13 +100,13 @@ describe('sectioned logo frame contract', () => {
     assert.doesNotMatch(html, /<img class="nx-doc__logo-img"/);
   });
 
-  test('large landscape logo uses contain without distortion or scale hack', () => {
+  test('large landscape logo uses contain fit without stretch or fixed scale', () => {
     const html = sectionedHtml('data:image/png;base64,landscape');
     assert.match(html, /nx-doc__logo-img/);
     assert.match(html, /object-fit: contain/);
     assert.match(html, /object-position: center/);
-    assert.match(html, /transform: none/);
-    assert.doesNotMatch(html, /scale\(1\.45\)/);
+    assert.match(html, /--nx-doc-logo-fit:\s*92%/);
+    assert.doesNotMatch(html, /transform: scale\(/);
     assert.doesNotMatch(html, /object-fit:\s*fill/);
   });
 
@@ -114,17 +114,15 @@ describe('sectioned logo frame contract', () => {
     const html = sectionedHtml('data:image/png;base64,portrait');
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*width: 100%/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*height: 100%/);
-    assert.match(html, /max-width: 100%/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*width: 100%/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*height: 100%/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*max-height: 100%/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*overflow: hidden/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*transform: none/);
   });
 
-  test('small logo stays contain-centered on white paper', () => {
+  test('logo stays contain-centered on white paper inside clipped frame', () => {
     const html = sectionedHtml('data:image/png;base64,small');
     assert.match(html, /object-fit: contain/);
     assert.match(html, /background: #ffffff/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*height: 100%/);
+    assert.match(html, /transform: none/);
   });
 
   test('transparent logo still renders over white frame background', () => {
