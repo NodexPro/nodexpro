@@ -1,6 +1,6 @@
 /**
- * Minimal PNG decode/encode for logo visible-bounds trim (8-bit gray/RGB/RGBA).
- * No native image dependency — works in any API runtime.
+ * Minimal PNG decode/encode for logo visible-bounds trim.
+ * Supports 8-bit gray/RGB/RGBA and indexed (PLTE + optional tRNS).
  */
 
 import { deflateSync, inflateSync } from 'node:zlib';
@@ -11,7 +11,26 @@ export type DecodedPngRgba = {
   width: number;
   height: number;
   data: Buffer;
+  color_type: number;
+  bit_depth: number;
 };
+
+export type PngDecodeFailure = {
+  ok: false;
+  reason: string;
+  color_type: number | null;
+  bit_depth: number | null;
+  interlaced: boolean | null;
+  width: number | null;
+  height: number | null;
+};
+
+export type PngDecodeSuccess = {
+  ok: true;
+  image: DecodedPngRgba;
+};
+
+export type PngDecodeResult = PngDecodeSuccess | PngDecodeFailure;
 
 function readChunk(buf: Buffer, offset: number): { type: string; data: Buffer; next: number } | null {
   if (offset + 8 > buf.length) return null;
@@ -39,20 +58,21 @@ function unfilterScanlines(
   height: number,
   bytesPerPixel: number,
 ): Buffer {
-  const stride = width * bytesPerPixel;
-  const out = Buffer.alloc(height * stride);
+  const rowBytes = width * bytesPerPixel;
+  const out = Buffer.alloc(height * rowBytes);
   let src = 0;
+  const bpp = Math.max(1, bytesPerPixel);
   for (let y = 0; y < height; y += 1) {
     const filter = inflated[src++];
-    const row = inflated.subarray(src, src + stride);
-    src += stride;
-    const dst = y * stride;
-    const prev = y === 0 ? null : out.subarray(dst - stride, dst);
-    for (let i = 0; i < stride; i += 1) {
+    const row = inflated.subarray(src, src + rowBytes);
+    src += rowBytes;
+    const dst = y * rowBytes;
+    const prev = y === 0 ? null : out.subarray(dst - rowBytes, dst);
+    for (let i = 0; i < rowBytes; i += 1) {
       const x = row[i];
-      const left = i >= bytesPerPixel ? out[dst + i - bytesPerPixel] : 0;
+      const left = i >= bpp ? out[dst + i - bpp] : 0;
       const up = prev ? prev[i] : 0;
-      const upLeft = prev && i >= bytesPerPixel ? prev[i - bytesPerPixel] : 0;
+      const upLeft = prev && i >= bpp ? prev[i - bpp] : 0;
       let val = 0;
       switch (filter) {
         case 0:
@@ -75,6 +95,43 @@ function unfilterScanlines(
       }
       out[dst + i] = val;
     }
+  }
+  return out;
+}
+
+function channelsForColorType(colorType: number): number {
+  switch (colorType) {
+    case 0:
+      return 1;
+    case 2:
+      return 3;
+    case 3:
+      return 1;
+    case 4:
+      return 2;
+    case 6:
+      return 4;
+    default:
+      return 0;
+  }
+}
+
+function expandIndexedToRgba(
+  raw: Buffer,
+  width: number,
+  height: number,
+  palette: Buffer,
+  trns: Buffer | null,
+): Buffer {
+  const out = Buffer.alloc(width * height * 4);
+  const n = Math.floor(palette.length / 3);
+  for (let i = 0; i < width * height; i += 1) {
+    const idx = raw[i] ?? 0;
+    const p = Math.min(idx, n - 1) * 3;
+    out[i * 4] = palette[p] ?? 0;
+    out[i * 4 + 1] = palette[p + 1] ?? 0;
+    out[i * 4 + 2] = palette[p + 2] ?? 0;
+    out[i * 4 + 3] = trns && idx < trns.length ? trns[idx] : 255;
   }
   return out;
 }
@@ -117,13 +174,26 @@ function toRgba(raw: Buffer, width: number, height: number, colorType: number): 
   throw new Error(`Unsupported PNG color type ${colorType}`);
 }
 
-export function decodePngToRgba(buffer: Buffer): DecodedPngRgba | null {
-  if (buffer.length < 8 || !buffer.subarray(0, 8).equals(PNG_SIG)) return null;
+export function decodePngToRgbaDetailed(buffer: Buffer): PngDecodeResult {
+  if (buffer.length < 8 || !buffer.subarray(0, 8).equals(PNG_SIG)) {
+    return {
+      ok: false,
+      reason: 'not_png_signature',
+      color_type: null,
+      bit_depth: null,
+      interlaced: null,
+      width: null,
+      height: null,
+    };
+  }
   let offset = 8;
   let width = 0;
   let height = 0;
   let bitDepth = 0;
   let colorType = -1;
+  let interlaced = 0;
+  let palette: Buffer | null = null;
+  let trns: Buffer | null = null;
   const idat: Buffer[] = [];
   while (offset < buffer.length) {
     const chunk = readChunk(buffer, offset);
@@ -134,26 +204,113 @@ export function decodePngToRgba(buffer: Buffer): DecodedPngRgba | null {
       height = chunk.data.readUInt32BE(4);
       bitDepth = chunk.data[8];
       colorType = chunk.data[9];
-      if (chunk.data[10] !== 0 || chunk.data[11] !== 0 || chunk.data[12] !== 0) return null;
+      if (chunk.data[10] !== 0 || chunk.data[11] !== 0) {
+        return {
+          ok: false,
+          reason: 'unsupported_compression_or_filter_method',
+          color_type: colorType,
+          bit_depth: bitDepth,
+          interlaced: chunk.data[12] === 1,
+          width,
+          height,
+        };
+      }
+      interlaced = chunk.data[12];
+    } else if (chunk.type === 'PLTE') {
+      palette = chunk.data;
+    } else if (chunk.type === 'tRNS') {
+      trns = chunk.data;
     } else if (chunk.type === 'IDAT') {
       idat.push(chunk.data);
     } else if (chunk.type === 'IEND') {
       break;
     }
   }
-  if (!(width > 0) || !(height > 0) || bitDepth !== 8) return null;
-  if (![0, 2, 4, 6].includes(colorType)) return null;
-  const bytesPerPixel = colorType === 6 ? 4 : colorType === 2 ? 3 : colorType === 4 ? 2 : 1;
+  if (!(width > 0) || !(height > 0)) {
+    return {
+      ok: false,
+      reason: 'invalid_dimensions',
+      color_type: colorType,
+      bit_depth: bitDepth,
+      interlaced: interlaced === 1,
+      width,
+      height,
+    };
+  }
+  if (interlaced !== 0) {
+    return {
+      ok: false,
+      reason: 'interlaced_not_supported',
+      color_type: colorType,
+      bit_depth: bitDepth,
+      interlaced: true,
+      width,
+      height,
+    };
+  }
+  if (bitDepth !== 8) {
+    return {
+      ok: false,
+      reason: `bit_depth_${bitDepth}_not_supported`,
+      color_type: colorType,
+      bit_depth: bitDepth,
+      interlaced: false,
+      width,
+      height,
+    };
+  }
+  if (![0, 2, 3, 4, 6].includes(colorType)) {
+    return {
+      ok: false,
+      reason: `color_type_${colorType}_not_supported`,
+      color_type: colorType,
+      bit_depth: bitDepth,
+      interlaced: false,
+      width,
+      height,
+    };
+  }
+  if (colorType === 3 && (!palette || palette.length < 3)) {
+    return {
+      ok: false,
+      reason: 'indexed_missing_plte',
+      color_type: colorType,
+      bit_depth: bitDepth,
+      interlaced: false,
+      width,
+      height,
+    };
+  }
+  const channels = channelsForColorType(colorType);
   try {
     const inflated = inflateSync(Buffer.concat(idat));
-    const raw = unfilterScanlines(inflated, width, height, bytesPerPixel);
-    return { width, height, data: toRgba(raw, width, height, colorType) };
-  } catch {
-    return null;
+    const raw = unfilterScanlines(inflated, width, height, channels);
+    const data =
+      colorType === 3
+        ? expandIndexedToRgba(raw, width, height, palette!, trns)
+        : toRgba(raw, width, height, colorType);
+    return {
+      ok: true,
+      image: { width, height, data, color_type: colorType, bit_depth: bitDepth },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `decode_exception:${err instanceof Error ? err.message : 'unknown'}`,
+      color_type: colorType,
+      bit_depth: bitDepth,
+      interlaced: false,
+      width,
+      height,
+    };
   }
 }
 
-/** CRC32 for PNG chunks (ISO 3309). */
+export function decodePngToRgba(buffer: Buffer): DecodedPngRgba | null {
+  const result = decodePngToRgbaDetailed(buffer);
+  return result.ok ? result.image : null;
+}
+
 function pngCrc32(buf: Buffer): number {
   let c = 0xffffffff;
   for (let i = 0; i < buf.length; i += 1) {

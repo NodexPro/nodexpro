@@ -4,6 +4,7 @@ import {
   buildSectionedLogoFrameRecommendedSizeHint,
   getSectionedLogoFrameMeta,
   SECTIONED_LOGO_FRAME,
+  SECTIONED_LOGO_RECOMMENDED_UPLOAD,
 } from '../../src/domains/income/income-document-sectioned-logo-frame.pure.js';
 import { renderIncomeBrandedPreviewHtml } from '../../src/domains/income/income-document-branding-preview.renderer.js';
 import { resolveBrandingProfile } from '../../src/domains/income/income-document-branding.pure.js';
@@ -66,68 +67,56 @@ function sectionedHtml(logo_data_url: string | null): string {
   });
 }
 
-describe('sectioned logo frame contract', () => {
-  test('logo frame metadata returns exact width and height', () => {
+describe('sectioned logo frame contract (golden master)', () => {
+  test('upload guidance is wide horizontal lockup', () => {
     const meta = getSectionedLogoFrameMeta();
-    assert.equal(meta.width_px, 322);
-    assert.equal(meta.height_px, 61);
-    assert.equal(meta.aspect_ratio, '322:61');
-    assert.equal(meta.css_frame_width, '322px');
-    assert.equal(meta.css_frame_height, '61px');
+    assert.equal(meta.width_px, SECTIONED_LOGO_RECOMMENDED_UPLOAD.width_px);
+    assert.equal(meta.height_px, SECTIONED_LOGO_RECOMMENDED_UPLOAD.height_px);
+    assert.equal(meta.aspect_ratio, '1288:244');
+    assert.equal(meta.aspect_ratio_label, '≈ 5.3∶1');
     assert.equal(meta.css_frame_class, 'nx-doc__logo-frame');
-    assert.equal(SECTIONED_LOGO_FRAME.section_outer_height_px, 65);
-    assert.equal(SECTIONED_LOGO_FRAME.height_px, 65 - 2 * SECTIONED_LOGO_FRAME.section_border_px);
+    assert.equal(SECTIONED_LOGO_FRAME.width_px, 340);
+    assert.equal(SECTIONED_LOGO_FRAME.height_px, 56);
+    assert.equal(SECTIONED_LOGO_FRAME.section_outer_height_px, 0);
   });
 
   test('recommended size hint comes from the same logo-frame metadata', () => {
     const meta = getSectionedLogoFrameMeta();
     const hint = buildSectionedLogoFrameRecommendedSizeHint();
     assert.equal(hint, meta.recommended_size_hint);
-    assert.match(hint, /322 × 61/);
+    assert.match(hint, /1288 × 244/);
     assert.match(hint, /≈ 5\.3∶1/);
-    assert.match(hint, /יותאמו למסגרת/);
-    assert.match(hint, /רקע לבן/);
+    assert.match(hint, /אופקי/);
   });
 
-  test('missing logo keeps fixed white frame and does not collapse', () => {
+  test('missing logo keeps branding logo frame without sheet chrome', () => {
     const html = sectionedHtml(null);
     assert.match(html, /nx-doc__logo-frame/);
     assert.match(html, /nx-doc__logo-frame--empty/);
-    assert.match(html, /--nx-doc-logo-frame-width:\s*322px/);
-    assert.match(html, /--nx-doc-logo-frame-height:\s*61px/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*background: #ffffff/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1[\s\S]*height: 65px/);
+    assert.match(html, /nx-doc__branding/);
+    assert.match(html, /nx-doc__upper/);
+    assert.doesNotMatch(html, /class="nx-doc__sheet-section-badge"/);
+    assert.doesNotMatch(html, /data-sheet-section=/);
+    assert.doesNotMatch(html, /aria-label="אזור \d"/);
+    assert.doesNotMatch(html, /\.nx-doc--sectioned[\s\S]*height: 65px/);
     assert.doesNotMatch(html, /<img class="nx-doc__logo-img"/);
   });
 
-  test('large landscape logo uses contain fit without stretch or fixed scale', () => {
+  test('logo uses contain fit without stretch or fixed scale', () => {
     const html = sectionedHtml('data:image/png;base64,landscape');
     assert.match(html, /nx-doc__logo-img/);
     assert.match(html, /object-fit: contain/);
-    assert.match(html, /object-position: center/);
     assert.match(html, /--nx-doc-logo-fit:\s*92%/);
+    assert.match(html, /data-logo-processing="/);
     assert.doesNotMatch(html, /transform: scale\(/);
     assert.doesNotMatch(html, /object-fit:\s*fill/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*transform: none/);
   });
 
-  test('large portrait logo uses same fixed frame contract', () => {
+  test('branding column logo frame fills width with max height', () => {
     const html = sectionedHtml('data:image/png;base64,portrait');
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*width: 100%/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*height: 100%/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*overflow: hidden/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*transform: none/);
-  });
-
-  test('logo stays contain-centered on white paper inside clipped frame', () => {
-    const html = sectionedHtml('data:image/png;base64,small');
-    assert.match(html, /object-fit: contain/);
-    assert.match(html, /background: #ffffff/);
-    assert.match(html, /transform: none/);
-  });
-
-  test('transparent logo still renders over white frame background', () => {
-    const html = sectionedHtml('data:image/png;base64,transparent');
-    assert.match(html, /src="data:image\/png;base64,transparent"/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*background: #ffffff/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*width: 100%/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: 56px/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*overflow: hidden/);
   });
 });

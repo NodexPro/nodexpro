@@ -263,6 +263,19 @@ export type IncomeDocumentBrandingAssetSlot = {
   hint: string | null;
   recommended_size_hint: string | null;
   can_remove: boolean;
+  /** Measured upload width when preview bytes are available. */
+  measured_width_px: number | null;
+  /** Measured upload height when preview bytes are available. */
+  measured_height_px: number | null;
+  /** width/height when measured. */
+  aspect_ratio: number | null;
+  /** Human label e.g. "1.0∶1". */
+  aspect_ratio_label: string | null;
+  /**
+   * Warn-only copy when the logo is too narrow for the wide document frame (below 3∶1).
+   * Null when no warning. Never blocks upload.
+   */
+  aspect_ratio_warning: string | null;
 };
 
 export type IncomeDocumentBrandingStudioLivePreview = {

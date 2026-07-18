@@ -62,6 +62,7 @@ import {
   normalizeDocumentTypeStyleGroupKey,
   INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS,
 } from './income-document-branding.pure.js';
+import { assessLogoAspectForWideFrame } from './income-document-logo-aspect-guidance.pure.js';
 import { buildSectionedLogoFrameRecommendedSizeHint } from './income-document-sectioned-logo-frame.pure.js';
 import type {
   IncomeBrandingDisplayOptions,
@@ -448,6 +449,7 @@ export async function buildDocumentBrandingProfileAggregate(
   const resolved = await loadResolvedBrandingProfile(scope, { includeAssetDataUrls: !lean });
   const uploadLogoActions = canEdit ? [INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO] : [];
   const uploadSigActions = canEdit ? [INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE] : [];
+  const logoAspect = assessLogoAspectForWideFrame(resolved.logo_data_url);
 
   return {
     profile_id: row.id,
@@ -464,6 +466,11 @@ export async function buildDocumentBrandingProfileAggregate(
       hint: 'PNG, JPEG או WebP — עד 5MB',
       recommended_size_hint: buildSectionedLogoFrameRecommendedSizeHint(),
       can_remove: canEdit && Boolean(row.logo_file_asset_id),
+      measured_width_px: logoAspect.width_px,
+      measured_height_px: logoAspect.height_px,
+      aspect_ratio: logoAspect.aspect_ratio,
+      aspect_ratio_label: logoAspect.aspect_ratio_label,
+      aspect_ratio_warning: logoAspect.aspect_ratio_warning,
     },
     signature: {
       label: 'חתימה',
@@ -474,6 +481,11 @@ export async function buildDocumentBrandingProfileAggregate(
       hint: 'PNG, JPEG או WebP — עד 5MB',
       recommended_size_hint: null,
       can_remove: canEdit && Boolean(row.signature_file_asset_id),
+      measured_width_px: null,
+      measured_height_px: null,
+      aspect_ratio: null,
+      aspect_ratio_label: null,
+      aspect_ratio_warning: null,
     },
     allowed_actions: canEdit
       ? [

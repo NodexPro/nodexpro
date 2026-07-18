@@ -30,7 +30,7 @@ export function wrapUnifiedIncomeDocumentHtmlForPrint(documentBodyHtml: string):
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="${HEBREW_FONT_LINK}" rel="stylesheet" />
   <style>
-    @page { size: A4 portrait; margin: 12mm 14mm 14mm; }
+    @page { size: A4 portrait; margin: 10mm 12mm 12mm; }
     html, body {
       margin: 0;
       padding: 0;
@@ -40,11 +40,14 @@ export function wrapUnifiedIncomeDocumentHtmlForPrint(documentBodyHtml: string):
     }
     body {
       font-family: Heebo, Arial, Helvetica, "Segoe UI", sans-serif;
+      width: 210mm;
+      min-height: 297mm;
     }
     a { color: inherit; }
     .nx-doc { max-width: 100%; box-sizing: border-box; }
     .nx-doc * { box-sizing: border-box; }
     @media print {
+      html, body { width: auto; min-height: 0; }
       .nx-doc__platform-link { text-decoration: none; }
     }
   </style>

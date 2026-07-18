@@ -1,20 +1,16 @@
 /**
  * Logo visible-content fit — no per-logo magic scale.
  *
- * Algorithm:
- * 1. Decode image pixels (PNG with alpha; opaque formats pass through).
- * 2. Find the axis-aligned bounding box of pixels with alpha > threshold
- *    (ignores near-transparent fringe).
- * 3. Crop the bitmap to that box so the data URL contains only visible content.
- * 4. CSS fits the cropped image with object-fit:contain inside the fixed frame,
- *    leaving LOGO_FRAME_PADDING_RATIO inset on each side (~4%).
- *
- * Equivalent scale (for docs/tests) after crop:
- *   scale = min(frameW / contentW, frameH / contentH) * (1 - 2 * paddingRatio)
- * After crop, contentW/H == image size, so CSS max ~92% realizes that fit.
+ * Pipeline:
+ * 1. prepareLogoDataUrlForDocumentRenderDetailed() is called from the HTML renderer.
+ * 2. PNG → decode → alpha bbox → crop → new data URL.
+ * 3. Renderer sets <img src> to that cropped data URL (never the raw padded canvas when trim applies).
  */
 
-import { decodePngToRgba, encodeRgbaPng } from './income-document-logo-png.pure.js';
+import {
+  decodePngToRgbaDetailed,
+  encodeRgbaPng,
+} from './income-document-logo-png.pure.js';
 import { SECTIONED_LOGO_FRAME } from './income-document-sectioned-logo-frame.pure.js';
 
 /** Alpha below this is treated as empty margin (0–255). */
@@ -40,9 +36,39 @@ export type LogoFitScaleInput = {
   padding_ratio?: number;
 };
 
-/**
- * Scan RGBA buffer (4 bytes/pixel) for non-transparent content bounds.
- */
+export type LogoPrepareDiagnostics = {
+  prepare_called: true;
+  mime: string | null;
+  source_kind: 'png' | 'jpeg' | 'webp' | 'other' | 'missing' | 'invalid_data_url';
+  trim_status:
+    | 'applied'
+    | 'skipped_no_margin'
+    | 'skipped_opaque_format'
+    | 'failed_decode'
+    | 'missing'
+    | 'invalid_data_url';
+  decode_reason: string | null;
+  color_type: number | null;
+  bit_depth: number | null;
+  interlaced: boolean | null;
+  original_width: number | null;
+  original_height: number | null;
+  bounds: VisibleLogoBounds | null;
+  cropped_width: number | null;
+  cropped_height: number | null;
+  src_changed: boolean;
+  final_src_is_cropped: boolean;
+  final_src_byte_length: number | null;
+  final_src_prefix: string | null;
+  frame_width_px: number;
+  frame_height_px: number;
+  fit_padding_ratio: number;
+  /** Bitmap size after contain into padded frame (document layout px). */
+  final_rendered_width_px: number | null;
+  final_rendered_height_px: number | null;
+  data_url: string | null;
+};
+
 export function findVisibleLogoBounds(
   rgba: Uint8Array | Buffer,
   width: number,
@@ -76,10 +102,6 @@ export function findVisibleLogoBounds(
   };
 }
 
-/**
- * Largest uniform scale that fits content into the frame with edge padding.
- * Documents the fit math; CSS uses cropped image + fit fraction instead of a fixed scale.
- */
 export function computeLargestSafeLogoFitScale(input: LogoFitScaleInput): number {
   const frameW = input.frame_width_px ?? SECTIONED_LOGO_FRAME.width_px;
   const frameH = input.frame_height_px ?? SECTIONED_LOGO_FRAME.height_px;
@@ -116,6 +138,46 @@ function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } | null 
   }
 }
 
+function sourceKind(mime: string | null): LogoPrepareDiagnostics['source_kind'] {
+  if (!mime) return 'other';
+  if (mime === 'image/png' || mime === 'image/x-png') return 'png';
+  if (mime === 'image/jpeg' || mime === 'image/jpg') return 'jpeg';
+  if (mime === 'image/webp') return 'webp';
+  return 'other';
+}
+
+function renderedSizeForContent(contentW: number, contentH: number): {
+  width: number;
+  height: number;
+} {
+  const scale = computeLargestSafeLogoFitScale({
+    content_width_px: contentW,
+    content_height_px: contentH,
+  });
+  return {
+    width: Math.round(contentW * scale),
+    height: Math.round(contentH * scale),
+  };
+}
+
+function baseDiagnostics(
+  partial: Omit<
+    LogoPrepareDiagnostics,
+    | 'prepare_called'
+    | 'frame_width_px'
+    | 'frame_height_px'
+    | 'fit_padding_ratio'
+  >,
+): LogoPrepareDiagnostics {
+  return {
+    prepare_called: true,
+    frame_width_px: SECTIONED_LOGO_FRAME.width_px,
+    frame_height_px: SECTIONED_LOGO_FRAME.height_px,
+    fit_padding_ratio: LOGO_FRAME_PADDING_RATIO,
+    ...partial,
+  };
+}
+
 /**
  * Crop transparent margins from a PNG buffer. Returns null if unchanged / not applicable.
  */
@@ -125,46 +187,200 @@ export function trimTransparentMarginsFromPngBuffer(buffer: Buffer): {
   source_width: number;
   source_height: number;
 } | null {
-  const decoded = decodePngToRgba(buffer);
-  if (!decoded) return null;
-  const bounds = findVisibleLogoBounds(decoded.data, decoded.width, decoded.height);
+  const decoded = decodePngToRgbaDetailed(buffer);
+  if (!decoded.ok) return null;
+  const { image } = decoded;
+  const bounds = findVisibleLogoBounds(image.data, image.width, image.height);
   if (!bounds) return null;
   if (
-    bounds.width === decoded.width &&
-    bounds.height === decoded.height &&
+    bounds.width === image.width &&
+    bounds.height === image.height &&
     bounds.minX === 0 &&
     bounds.minY === 0
   ) {
     return null;
   }
-  const croppedRgba = cropRgbaToBounds(decoded.data, decoded.width, bounds);
+  const croppedRgba = cropRgbaToBounds(image.data, image.width, bounds);
   return {
     buffer: encodeRgbaPng(croppedRgba, bounds.width, bounds.height),
     bounds,
-    source_width: decoded.width,
-    source_height: decoded.height,
+    source_width: image.width,
+    source_height: image.height,
   };
 }
 
-/**
- * Prepare a logo data URL so rendering uses visible content, not canvas padding.
- * Opaque JPEG/WebP and already-tight PNGs are returned unchanged.
- */
-export function prepareLogoDataUrlForDocumentRender(dataUrl: string | null | undefined): string | null {
-  if (dataUrl == null) return null;
-  const trimmed = String(dataUrl).trim();
-  if (!trimmed) return null;
-  const parsed = parseDataUrl(trimmed);
-  if (!parsed) return trimmed;
-  if (parsed.mime !== 'image/png' && parsed.mime !== 'image/x-png') {
-    return trimmed;
+export function prepareLogoDataUrlForDocumentRenderDetailed(
+  dataUrl: string | null | undefined,
+): LogoPrepareDiagnostics {
+  if (dataUrl == null || !String(dataUrl).trim()) {
+    return baseDiagnostics({
+      mime: null,
+      source_kind: 'missing',
+      trim_status: 'missing',
+      decode_reason: null,
+      color_type: null,
+      bit_depth: null,
+      interlaced: null,
+      original_width: null,
+      original_height: null,
+      bounds: null,
+      cropped_width: null,
+      cropped_height: null,
+      src_changed: false,
+      final_src_is_cropped: false,
+      final_src_byte_length: null,
+      final_src_prefix: null,
+      final_rendered_width_px: null,
+      final_rendered_height_px: null,
+      data_url: null,
+    });
   }
-  const result = trimTransparentMarginsFromPngBuffer(parsed.buffer);
-  if (!result) return trimmed;
-  return `data:image/png;base64,${result.buffer.toString('base64')}`;
+  const trimmed = String(dataUrl).trim();
+  const parsed = parseDataUrl(trimmed);
+  if (!parsed) {
+    return baseDiagnostics({
+      mime: null,
+      source_kind: 'invalid_data_url',
+      trim_status: 'invalid_data_url',
+      decode_reason: 'data_url_parse_failed',
+      color_type: null,
+      bit_depth: null,
+      interlaced: null,
+      original_width: null,
+      original_height: null,
+      bounds: null,
+      cropped_width: null,
+      cropped_height: null,
+      src_changed: false,
+      final_src_is_cropped: false,
+      final_src_byte_length: trimmed.length,
+      final_src_prefix: trimmed.slice(0, 48),
+      final_rendered_width_px: null,
+      final_rendered_height_px: null,
+      data_url: trimmed,
+    });
+  }
+  const kind = sourceKind(parsed.mime);
+  if (kind !== 'png') {
+    return baseDiagnostics({
+      mime: parsed.mime,
+      source_kind: kind,
+      trim_status: 'skipped_opaque_format',
+      decode_reason: null,
+      color_type: null,
+      bit_depth: null,
+      interlaced: null,
+      original_width: null,
+      original_height: null,
+      bounds: null,
+      cropped_width: null,
+      cropped_height: null,
+      src_changed: false,
+      final_src_is_cropped: false,
+      final_src_byte_length: trimmed.length,
+      final_src_prefix: trimmed.slice(0, 48),
+      final_rendered_width_px: null,
+      final_rendered_height_px: null,
+      data_url: trimmed,
+    });
+  }
+
+  const decoded = decodePngToRgbaDetailed(parsed.buffer);
+  if (!decoded.ok) {
+    return baseDiagnostics({
+      mime: parsed.mime,
+      source_kind: 'png',
+      trim_status: 'failed_decode',
+      decode_reason: decoded.reason,
+      color_type: decoded.color_type,
+      bit_depth: decoded.bit_depth,
+      interlaced: decoded.interlaced,
+      original_width: decoded.width,
+      original_height: decoded.height,
+      bounds: null,
+      cropped_width: null,
+      cropped_height: null,
+      src_changed: false,
+      final_src_is_cropped: false,
+      final_src_byte_length: trimmed.length,
+      final_src_prefix: trimmed.slice(0, 48),
+      final_rendered_width_px: null,
+      final_rendered_height_px: null,
+      data_url: trimmed,
+    });
+  }
+
+  const { image } = decoded;
+  const bounds = findVisibleLogoBounds(image.data, image.width, image.height);
+  if (
+    !bounds ||
+    (bounds.width === image.width &&
+      bounds.height === image.height &&
+      bounds.minX === 0 &&
+      bounds.minY === 0)
+  ) {
+    const rendered = renderedSizeForContent(image.width, image.height);
+    return baseDiagnostics({
+      mime: parsed.mime,
+      source_kind: 'png',
+      trim_status: 'skipped_no_margin',
+      decode_reason: null,
+      color_type: image.color_type,
+      bit_depth: image.bit_depth,
+      interlaced: false,
+      original_width: image.width,
+      original_height: image.height,
+      bounds: bounds ?? {
+        minX: 0,
+        minY: 0,
+        maxX: image.width - 1,
+        maxY: image.height - 1,
+        width: image.width,
+        height: image.height,
+      },
+      cropped_width: image.width,
+      cropped_height: image.height,
+      src_changed: false,
+      final_src_is_cropped: false,
+      final_src_byte_length: trimmed.length,
+      final_src_prefix: trimmed.slice(0, 48),
+      final_rendered_width_px: rendered.width,
+      final_rendered_height_px: rendered.height,
+      data_url: trimmed,
+    });
+  }
+
+  const croppedRgba = cropRgbaToBounds(image.data, image.width, bounds);
+  const croppedPng = encodeRgbaPng(croppedRgba, bounds.width, bounds.height);
+  const croppedUrl = `data:image/png;base64,${croppedPng.toString('base64')}`;
+  const rendered = renderedSizeForContent(bounds.width, bounds.height);
+  return baseDiagnostics({
+    mime: parsed.mime,
+    source_kind: 'png',
+    trim_status: 'applied',
+    decode_reason: null,
+    color_type: image.color_type,
+    bit_depth: image.bit_depth,
+    interlaced: false,
+    original_width: image.width,
+    original_height: image.height,
+    bounds,
+    cropped_width: bounds.width,
+    cropped_height: bounds.height,
+    src_changed: true,
+    final_src_is_cropped: true,
+    final_src_byte_length: croppedUrl.length,
+    final_src_prefix: croppedUrl.slice(0, 48),
+    final_rendered_width_px: rendered.width,
+    final_rendered_height_px: rendered.height,
+    data_url: croppedUrl,
+  });
 }
 
-/** CSS fraction of the frame used for the logo after padding (e.g. 0.92). */
+export function prepareLogoDataUrlForDocumentRender(dataUrl: string | null | undefined): string | null {
+  return prepareLogoDataUrlForDocumentRenderDetailed(dataUrl).data_url;
+}
+
 export function logoCssFitFraction(paddingRatio: number = LOGO_FRAME_PADDING_RATIO): number {
   return Math.max(0.5, Math.min(1, 1 - 2 * paddingRatio));
 }
