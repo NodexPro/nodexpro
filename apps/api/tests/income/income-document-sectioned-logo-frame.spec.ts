@@ -115,15 +115,16 @@ describe('sectioned logo frame contract', () => {
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*width: 100%/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-frame[\s\S]*height: 100%/);
     assert.match(html, /max-width: 100%/);
-    assert.match(html, /max-height: 100%/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*width: 100%/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*height: 100%/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*max-height: 100%/);
   });
 
-  test('small logo stays contain-centered on white paper (no forced upscale)', () => {
+  test('small logo stays contain-centered on white paper', () => {
     const html = sectionedHtml('data:image/png;base64,small');
-    assert.match(html, /width: auto/);
-    assert.match(html, /height: auto/);
     assert.match(html, /object-fit: contain/);
     assert.match(html, /background: #ffffff/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*height: 100%/);
   });
 
   test('transparent logo still renders over white frame background', () => {

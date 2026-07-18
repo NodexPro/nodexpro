@@ -1039,18 +1039,21 @@ export function renderIncomeBrandedPreviewHtml(params: {
   height: 65px;
   min-height: 65px;
   max-height: 65px;
-  padding: 0 8px;
+  /* Match Section 4 horizontal inset (10px). */
+  padding: 0 10px;
   overflow: hidden;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--3 .nx-doc__sheet-section-body {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* RTL: flex-start = physical right — same content guide as Section 4 meta. */
+  align-items: flex-start;
   justify-content: center;
   gap: 0;
   width: 100%;
   height: 100%;
   min-height: 0;
+  box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--4 {
   grid-area: documentMeta;
@@ -1069,20 +1072,23 @@ export function renderIncomeBrandedPreviewHtml(params: {
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
-  gap: 4px;
-  width: var(--nx-doc-identity-stack-width);
+  gap: 5px;
+  /* Presentation scale with larger title; mapping values unchanged. */
+  width: calc(var(--nx-doc-identity-stack-width) * 1.22);
   max-width: 100%;
-  margin: 0 auto;
+  margin: 0;
+  margin-inline-start: 0;
+  margin-inline-end: 0;
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__doc-title {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.025em;
   margin: 0;
   line-height: 1;
   color: var(--nx-doc-text);
-  text-align: center;
+  text-align: start;
   width: 100%;
   white-space: nowrap;
   overflow: hidden;
@@ -1098,12 +1104,13 @@ export function renderIncomeBrandedPreviewHtml(params: {
   justify-content: center;
   box-sizing: border-box;
   width: 100%;
-  padding: 4px 10px;
+  min-height: 28px;
+  padding: 6px 14px;
   border-radius: 8px;
   background: var(--nx-doc-primary);
   color: #ffffff;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
@@ -1115,11 +1122,15 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__doc-number-rule { display: none; }
 .nx-doc--sectioned .nx-doc__meta-list {
   gap: 6px;
+  width: 100%;
+  margin: 0;
+  text-align: start;
 }
 .nx-doc--sectioned .nx-doc__meta-row {
   font-size: 13px;
   line-height: 1.35;
   gap: 8px 10px;
+  justify-content: flex-start;
 }
 .nx-doc--sectioned .nx-doc__meta-label {
   font-weight: 500;
@@ -1146,10 +1157,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
   background: #ffffff;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-img {
+  /* Maximum safe fill of the fixed Section 1 frame; contain preserves aspect ratio. */
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
-  width: auto;
-  height: auto;
   margin: 0;
   object-fit: contain;
   object-position: center;
