@@ -62,6 +62,7 @@ import {
   normalizeDocumentTypeStyleGroupKey,
   INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS,
 } from './income-document-branding.pure.js';
+import { buildSectionedLogoFrameRecommendedSizeHint } from './income-document-sectioned-logo-frame.pure.js';
 import type {
   IncomeBrandingDisplayOptions,
   IncomeBrandingPaymentMethod,
@@ -461,7 +462,7 @@ export async function buildDocumentBrandingProfileAggregate(
       upload_command: INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
       allowed_actions: uploadLogoActions,
       hint: 'PNG, JPEG או WebP — עד 5MB',
-      recommended_size_hint: 'מומלץ להעלות לוגו בגודל מינימלי 300×200 פיקסלים',
+      recommended_size_hint: buildSectionedLogoFrameRecommendedSizeHint(),
       can_remove: canEdit && Boolean(row.logo_file_asset_id),
     },
     signature: {

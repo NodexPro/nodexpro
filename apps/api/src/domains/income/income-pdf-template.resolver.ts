@@ -12,7 +12,7 @@ export interface IncomePdfTemplateResolution {
   country_code: string;
 }
 
-const DOCUMENT_TYPE_LABELS_HE: Record<IncomeDocumentType, string> = {
+export const DOCUMENT_TYPE_LABELS_HE: Record<IncomeDocumentType, string> = {
   receipt: 'קבלה',
   tax_invoice: 'חשבונית מס',
   tax_invoice_receipt: 'חשבונית מס/קבלה',

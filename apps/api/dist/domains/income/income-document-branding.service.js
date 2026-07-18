@@ -5,6 +5,7 @@ import { isSupabaseMissingColumnError, isSupabaseMissingTableError, throwIfSupab
 import { assertFileAllowedForSettingsImage, validateOrgFileOwnership, } from '../file-access/file-access.service.js';
 import { renderStudioSamplePreviewHtml } from './income-document-branding-preview.renderer.js';
 import { DEFAULT_DISPLAY_OPTIONS, DEFAULT_PAYMENT_METHODS, DEFAULT_PRIMARY_COLOR, DEFAULT_SECONDARY_COLOR, DEFAULT_COLOR_THEME_KEY, DEFAULT_DOCUMENT_STYLE_KEY, DEFAULT_LOGO_SIZE_KEY, normalizeClientBlockPosition, optionalTrimmedString, parseDisplayOptionsJson, parsePaymentMethodsJson, applyColorThemeToColorColumns, applyDocumentStyleTemplateKey, getColorThemePresets, getDocumentStyleTemplates, getLogoSizeOptions, resolveBrandingProfile, resolveColorThemePreset, resolveDocumentStyleTemplate, resolveLogoSizeKey, serializeDisplayOptionsJson, serializePaymentMethodsJson, getEmailTemplateTokens, buildEmailTemplateEditor, buildEmailTemplatePreview, buildDisplayOptionControls, buildStudioSampleIssuerIdentityPreview, buildStudioSampleLivePreview, buildPaymentSettingsPanel, getDocumentTypeStyleDefaults, getStudioColorThemePresets, getStudioNavigationSections, mergeDisplayOptionsFromStudioBody, mergePaymentMethodsFromStudioBody, encodeEmailTemplateFromFriendly, buildDocumentTypeStyleGroups, parseDocumentTypeStyleOverridesJson, serializeDocumentTypeStyleOverridesJson, applyDocumentTypeStyleOverridesFromBody, resolveBrandingProfileForDocumentTypeGroup, resolveDocumentTypeStyleGroupKey, normalizeDocumentTypeStyleGroupKey, INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS, } from './income-document-branding.pure.js';
+import { buildSectionedLogoFrameRecommendedSizeHint } from './income-document-sectioned-logo-frame.pure.js';
 import { INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, } from './income-document-branding.types.js';
 const BUCKET_ORG_ASSETS = 'organization-assets';
 const BRANDING_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -305,7 +306,7 @@ export async function buildDocumentBrandingProfileAggregate(scope, canEdit, opti
             upload_command: INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
             allowed_actions: uploadLogoActions,
             hint: 'PNG, JPEG או WebP — עד 5MB',
-            recommended_size_hint: 'מומלץ להעלות לוגו בגודל מינימלי 300×200 פיקסלים',
+            recommended_size_hint: buildSectionedLogoFrameRecommendedSizeHint(),
             can_remove: canEdit && Boolean(row.logo_file_asset_id),
         },
         signature: {

@@ -7,6 +7,9 @@ import {
   STUDIO_SAMPLE_RECIPIENT,
 } from './income-document-branding.pure.js';
 import { docPreviewIcon, nodexproFooterLogoMarkup } from './income-document-preview-icons.pure.js';
+import { resolveSectionedDocumentIdentityPresentation } from './income-document-sectioned-identity.pure.js';
+import { getSectionedLogoFrameMeta } from './income-document-sectioned-logo-frame.pure.js';
+import type { IncomeDocumentType } from './income.types.js';
 
 const INVOICE_FONT = 'Heebo, Arial, Helvetica, "Segoe UI", sans-serif';
 const NODEXPRO_FOOTER_URL = 'https://www.nodexpro.com';
@@ -188,6 +191,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   branding: IncomeBrandingResolvedProfile;
   docTypeLabel: string;
   numberPreview: string | null;
+  document_type?: IncomeDocumentType | null;
   issuer: IncomeBrandingPreviewParty;
   recipient: IncomeBrandingPreviewParty;
   document_date: string | null;
@@ -211,21 +215,31 @@ export function renderIncomeBrandedPreviewHtml(params: {
   const accent = palette.totals_accent_color;
   const numberDisplay = formatDocumentNumberDisplay(params.numberPreview);
   const logoDims = resolveLogoSizeDimensions(b.logo_size_key);
+  const logoFrame = getSectionedLogoFrameMeta();
   const discountDisplay = formatDiscountDisplay(params.totals.discount);
   const rootClass = isSectioned ? 'nx-doc nx-doc--unified nx-doc--sectioned' : 'nx-doc nx-doc--unified';
+  const documentIdentity = resolveSectionedDocumentIdentityPresentation({
+    doc_type_label: params.docTypeLabel,
+    document_number: params.numberPreview,
+    document_type: params.document_type,
+  });
   const numberBlock = isSectioned
-    ? `<div class="nx-doc__doc-number"><span class="nx-doc__doc-number-pill">${escapeHtml(numberDisplay)}</span></div>`
+    ? `<div class="nx-doc__doc-number"><span class="nx-doc__doc-number-bar">${escapeHtml(documentIdentity.document_number)}</span></div>`
     : `<div class="nx-doc__doc-number">${escapeHtml(numberDisplay)}</div>
       <div class="nx-doc__doc-number-rule" aria-hidden="true"></div>`;
 
   const logoInner =
     d.show_logo && b.logo_data_url
       ? `<img class="nx-doc__logo-img" src="${b.logo_data_url}" alt="" />`
-      : d.show_logo
+      : !isSectioned && d.show_logo
         ? `<div class="nx-doc__logo-placeholder" aria-hidden="true"></div>`
         : '';
-  /* Frame lets sectioned Section 1 crop transparent padding via overflow + scale. */
-  const logoHtml = logoInner ? `<div class="nx-doc__logo-frame">${logoInner}</div>` : '';
+  /* Sectioned: always keep fixed white logo frame (empty = paper only). */
+  const logoHtml = isSectioned
+    ? `<div class="nx-doc__logo-frame${logoInner ? '' : ' nx-doc__logo-frame--empty'}">${logoInner}</div>`
+    : logoInner
+      ? `<div class="nx-doc__logo-frame">${logoInner}</div>`
+      : '';
 
   const subtitle =
     params.company_subtitle?.trim() || b.company_subtitle?.trim()
@@ -287,7 +301,12 @@ export function renderIncomeBrandedPreviewHtml(params: {
     issuerContactLines ? `<div class="nx-doc__issuer-lines">${issuerContactLines}</div>` : ''
   }`;
 
-  const docTitleBlock = `<h1 class="nx-doc__doc-title">${escapeHtml(params.docTypeLabel)}</h1>${numberBlock}`;
+  const docTitleBlock = isSectioned
+    ? `<div class="nx-doc__doc-identity" data-title-width-key="${escapeHtml(documentIdentity.title_width_key)}" style="--nx-doc-identity-stack-width:${escapeHtml(documentIdentity.number_bar_width)}">
+      <h1 class="nx-doc__doc-title">${escapeHtml(documentIdentity.title)}</h1>
+      ${numberBlock}
+    </div>`
+    : `<h1 class="nx-doc__doc-title">${escapeHtml(params.docTypeLabel)}</h1>${numberBlock}`;
 
   const docMetaBlock = metaRows ? `<div class="nx-doc__meta-list">${metaRows}</div>` : '';
 
@@ -433,6 +452,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   --nx-doc-table-header: ${palette.table_header_color};
   --nx-doc-header-gradient: ${palette.gradient_css};
   --nx-doc-grand-total-bg: color-mix(in srgb, var(--nx-doc-primary) 6%, #ffffff);
+  --nx-doc-logo-frame-width: ${logoFrame.css_frame_width};
+  --nx-doc-logo-frame-height: ${logoFrame.css_frame_height};
   max-width: 840px;
   margin: 0 auto;
   padding: 0;
@@ -1021,6 +1042,16 @@ export function renderIncomeBrandedPreviewHtml(params: {
   padding: 0 8px;
   overflow: hidden;
 }
+.nx-doc--sectioned .nx-doc__sheet-section--3 .nx-doc__sheet-section-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
 .nx-doc--sectioned .nx-doc__sheet-section--4 {
   grid-area: documentMeta;
   direction: rtl;
@@ -1033,33 +1064,53 @@ export function renderIncomeBrandedPreviewHtml(params: {
   grid-area: customerContacts;
   direction: rtl;
 }
+.nx-doc--sectioned .nx-doc__doc-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 4px;
+  width: var(--nx-doc-identity-stack-width);
+  max-width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
 .nx-doc--sectioned .nx-doc__doc-title {
-  font-size: 30px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.025em;
   margin: 0;
   line-height: 1;
   color: var(--nx-doc-text);
+  text-align: center;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .nx-doc--sectioned .nx-doc__doc-number {
+  width: 100%;
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--nx-doc-text);
 }
-.nx-doc--sectioned .nx-doc__doc-number-pill {
-  display: inline-flex;
+.nx-doc--sectioned .nx-doc__doc-number-bar {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
   padding: 4px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--nx-doc-primary) 12%, #ffffff);
-  color: var(--nx-doc-primary);
+  border-radius: 8px;
+  background: var(--nx-doc-primary);
+  color: #ffffff;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  text-align: center;
+  unicode-bidi: isolate;
+  direction: ltr;
+  box-shadow: none;
 }
 .nx-doc--sectioned .nx-doc__doc-number-rule { display: none; }
 .nx-doc--sectioned .nx-doc__meta-list {
@@ -1077,27 +1128,36 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-weight: 650;
 }
 .nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-frame {
+  /* Fills section-1 content box; --nx-doc-logo-frame-* document the A4/PDF reference size. */
   width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #ffffff;
+  border: none;
+  box-sizing: border-box;
 }
-.nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-img,
-.nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-placeholder {
-  /* Box ~48px; scale compensates transparent padding in uploaded logo assets. */
-  width: auto;
-  height: 48px;
+.nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-frame--empty {
+  background: #ffffff;
+}
+.nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-img {
   max-width: 100%;
-  max-height: 48px;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   margin: 0;
   object-fit: contain;
   object-position: center;
-  transform: scale(1.45);
-  transform-origin: center center;
   display: block;
+  transform: none;
+}
+.nx-doc--sectioned .nx-doc__sheet-section--1 .nx-doc__logo-placeholder {
+  display: none;
 }
 .nx-doc--sectioned .nx-doc__issuer-identity {
   gap: 0;
@@ -1106,6 +1166,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   text-align: center;
   height: 100%;
   min-height: 0;
+  width: 100%;
 }
 .nx-doc--sectioned .nx-doc__issuer-name {
   font-size: 20px;
@@ -1285,7 +1346,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   .nx-doc--sectioned .nx-doc__payment-col,
   .nx-doc--sectioned .nx-doc__sheet-section--5,
   .nx-doc--sectioned .nx-doc__sheet-section--6,
-  .nx-doc--sectioned .nx-doc__doc-number-pill {
+  .nx-doc--sectioned .nx-doc__doc-number-bar {
     box-shadow: none;
   }
 }
@@ -1314,6 +1375,7 @@ export function renderStudioSamplePreviewHtml(
   return renderIncomeBrandedPreviewHtml({
     branding,
     docTypeLabel,
+    document_type: 'quote',
     numberPreview: '2026-000154',
     issuer: {
       display_name: STUDIO_SAMPLE_ISSUER.display_name,

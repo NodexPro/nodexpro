@@ -387,7 +387,8 @@ test('unified preview html applies color theme tokens across document styles', (
     ...previewParams,
   });
   assert.match(sectionedHtml, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
-  assert.match(sectionedHtml, /nx-doc__doc-number-pill/);
+  assert.match(sectionedHtml, /nx-doc__doc-number-bar/);
+  assert.doesNotMatch(sectionedHtml, /nx-doc__doc-number-pill/);
   assert.match(sectionedHtml, /nx-doc__lines/);
   assert.doesNotMatch(sectionedHtml, /<button/);
   assert.notEqual(sectionedHtml, classicHtml);

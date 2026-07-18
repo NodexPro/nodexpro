@@ -1,7 +1,7 @@
 /**
  * INC-6 — Backend PDF template resolver (Country-Pack-ready; IL fallback).
  */
-const DOCUMENT_TYPE_LABELS_HE = {
+export const DOCUMENT_TYPE_LABELS_HE = {
     receipt: 'קבלה',
     tax_invoice: 'חשבונית מס',
     tax_invoice_receipt: 'חשבונית מס/קבלה',

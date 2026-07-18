@@ -27,6 +27,8 @@ export type UnifiedIncomeDocumentRenderInput = {
   branding: IncomeBrandingResolvedProfile;
   docTypeLabel: string;
   numberPreview: string | null;
+  /** Used for sectioned identity number-bar width presentation. */
+  document_type?: IncomeDocumentType | null;
   issuer: IncomeBrandingPreviewParty;
   recipient: IncomeBrandingPreviewParty;
   document_date: string | null;
@@ -268,6 +270,7 @@ export function buildUnifiedIncomeDocumentRenderInput(params: {
     branding: params.branding,
     docTypeLabel: documentTypeLabel(params.document_type, language),
     numberPreview: params.document_number,
+    document_type: params.document_type,
     issuer: partyFromIssuerSnapshot(params.issuer_snapshot_json, issuerFallback, params.issuer_website),
     recipient: partyFromCustomerSnapshot(params.customer_snapshot_json),
     document_date: params.document_date,

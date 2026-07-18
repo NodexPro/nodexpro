@@ -998,6 +998,7 @@ export async function buildIncomeDocumentDetailsStep(
           branding: resolvedBranding,
           docTypeLabel,
           numberPreview,
+          document_type: row.document_type,
           issuer: issuerBlock,
           recipient: recipientBlock,
           document_date: row.document_date ?? null,

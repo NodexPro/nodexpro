@@ -146,6 +146,7 @@ export function buildUnifiedIncomeDocumentRenderInput(params) {
         branding: params.branding,
         docTypeLabel: documentTypeLabel(params.document_type, language),
         numberPreview: params.document_number,
+        document_type: params.document_type,
         issuer: partyFromIssuerSnapshot(params.issuer_snapshot_json, issuerFallback, params.issuer_website),
         recipient: partyFromCustomerSnapshot(params.customer_snapshot_json),
         document_date: params.document_date,

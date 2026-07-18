@@ -429,6 +429,7 @@ export async function renderFutureCycleProjectionPreview(params) {
     const previewHtml = renderIncomeBrandedPreviewHtml({
         branding,
         docTypeLabel: RETAINER_DOC_TYPE_LABELS[documentType],
+        document_type: documentType,
         numberPreview: null,
         issuer,
         recipient,
