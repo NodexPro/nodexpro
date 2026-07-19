@@ -6,6 +6,9 @@ import {
   SECTIONED_LOGO_FRAME,
   SECTIONED_LOGO_RECOMMENDED_UPLOAD,
 } from '../../src/domains/income/income-document-sectioned-logo-frame.pure.js';
+import {
+  resolveSectionedBrandingLayout,
+} from '../../src/domains/income/income-document-sectioned-golden-master.pure.js';
 import { renderIncomeBrandedPreviewHtml } from '../../src/domains/income/income-document-branding-preview.renderer.js';
 import { resolveBrandingProfile } from '../../src/domains/income/income-document-branding.pure.js';
 import type { IncomeBrandingProfileRow } from '../../src/domains/income/income-document-branding.types.js';
@@ -120,5 +123,48 @@ describe('sectioned logo frame contract (golden master)', () => {
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*overflow: hidden/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: 100%/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: 100%/);
+  });
+
+  test('studio logo size large scales branding zone and logo by 40%', () => {
+    const medium = resolveSectionedBrandingLayout('medium');
+    const large = resolveSectionedBrandingLayout('large');
+    assert.equal(medium.scale, 1);
+    assert.equal(large.scale, 1.4);
+    assert.equal(large.logo_block_height_px, Math.round(medium.logo_block_height_px * 1.4));
+    assert.ok(large.branding_col_width_px > medium.branding_col_width_px);
+    assert.ok(large.logo_block_width_px > medium.logo_block_width_px);
+
+    const html = renderIncomeBrandedPreviewHtml({
+      branding: resolveBrandingProfile(
+        { ...baseRow, logo_size_key: 'large' },
+        { logo_data_url: 'data:image/png;base64,landscape', signature_data_url: null },
+      ),
+      docTypeLabel: 'חשבונית מס',
+      document_type: 'tax_invoice',
+      numberPreview: '4000',
+      issuer: { display_name: 'Biz', tax_id: '1', address: 'A', phone: '2', email: 'a@b.c' },
+      recipient: { display_name: 'Client', tax_id: '9', address: 'B', phone: '3', email: 'c@d.e' },
+      document_date: '2026-05-01',
+      due_date: null,
+      currency: 'ILS',
+      lineRows: [],
+      totals: {
+        subtotal_before_discount: '100',
+        discount: null,
+        subtotal_after_discount: '100',
+        vat_label: 'מע״מ',
+        vat: '17',
+        grand_total: '117',
+      },
+      notes: null,
+      company_subtitle: null,
+    });
+    assert.match(html, new RegExp(`--nx-doc-logo-w:\\s*${large.logo_block_width_px}px`));
+    assert.match(html, new RegExp(`--nx-doc-logo-h:\\s*${large.logo_block_height_px}px`));
+    assert.match(html, /--nx-doc-logo-scale:\s*1\.4/);
+    assert.match(
+      html,
+      new RegExp(`--nx-doc-branding-col:\\s*${large.branding_col_width_px}px`),
+    );
   });
 });

@@ -9,6 +9,52 @@
  * These values drive sectioned printable CSS. Do not “improve” them.
  */
 
+import type { IncomeLogoSizeKey } from './income-document-branding.types.js';
+
+/** Studio logo size → sectioned branding-zone scale (medium = GM baseline). */
+export function resolveSectionedBrandingLayoutScale(logoSizeKey: IncomeLogoSizeKey): number {
+  if (logoSizeKey === 'large') return 1.4;
+  if (logoSizeKey === 'small') return 0.85;
+  return 1;
+}
+
+/** Minimum doc column so title / customer card remain usable on A4. */
+const SECTIONED_DOC_COL_MIN_PX = 260;
+
+export function resolveSectionedBrandingLayout(logoSizeKey: IncomeLogoSizeKey): {
+  scale: number;
+  logo_block_width_px: number;
+  logo_block_height_px: number;
+  branding_col_width_px: number;
+  doc_col_width_px: number;
+  customer_card_width_px: number;
+  company_name_font_size_px: number;
+  company_line_font_size_px: number;
+} {
+  const scale = resolveSectionedBrandingLayoutScale(logoSizeKey);
+  const contentW = SECTIONED_GOLDEN_MASTER.page.content_width_px;
+  const logoW = Math.round(SECTIONED_GOLDEN_MASTER.upper.logo_block_width_px * scale);
+  const logoH = Math.round(SECTIONED_GOLDEN_MASTER.upper.logo_block_height_px * scale);
+  const brandingRaw = Math.round(SECTIONED_GOLDEN_MASTER.upper.branding_col_width_px * scale);
+  const brandingCol = Math.min(brandingRaw, contentW - SECTIONED_DOC_COL_MIN_PX);
+  const docCol = contentW - brandingCol;
+  const customerCard = Math.min(SECTIONED_GOLDEN_MASTER.upper.customer_card_width_px, docCol);
+  return {
+    scale,
+    logo_block_width_px: Math.min(logoW, brandingCol),
+    logo_block_height_px: logoH,
+    branding_col_width_px: brandingCol,
+    doc_col_width_px: docCol,
+    customer_card_width_px: customerCard,
+    company_name_font_size_px: Math.round(
+      SECTIONED_GOLDEN_MASTER.upper.company_name_font_size_px * scale,
+    ),
+    company_line_font_size_px: Math.round(
+      SECTIONED_GOLDEN_MASTER.upper.company_line_font_size_px * scale,
+    ),
+  };
+}
+
 export const SECTIONED_GOLDEN_MASTER = {
   source_image: {
     width_px: 1055,

@@ -603,7 +603,12 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.doesNotMatch(previewHtml, /issuerIdentity documentIdentity/);
   assert.match(previewHtml, /aria-label="שורות מסמך"/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__table thead th[\s\S]*background: var\(--nx-doc-primary\)/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: 339px 363px/);
+  assert.match(
+    previewHtml,
+    /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: var\(--nx-doc-branding-col\) var\(--nx-doc-doc-col\)/,
+  );
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-branding-col:\s*339px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-doc-col:\s*364px/);
   assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-w:\s*300px/);
   assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-h:\s*70px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: contain/);

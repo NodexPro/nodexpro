@@ -8,7 +8,10 @@ import {
 } from './income-document-branding.pure.js';
 import { docPreviewIcon, nodexproFooterLogoMarkup } from './income-document-preview-icons.pure.js';
 import { resolveSectionedDocumentIdentityPresentation } from './income-document-sectioned-identity.pure.js';
-import { SECTIONED_GOLDEN_MASTER as GM } from './income-document-sectioned-golden-master.pure.js';
+import {
+  resolveSectionedBrandingLayout,
+  SECTIONED_GOLDEN_MASTER as GM,
+} from './income-document-sectioned-golden-master.pure.js';
 import { getSectionedLogoFrameMeta } from './income-document-sectioned-logo-frame.pure.js';
 import {
   logoCssFitPercent,
@@ -230,6 +233,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   const accent = palette.totals_accent_color;
   const numberDisplay = formatDocumentNumberDisplay(params.numberPreview);
   const logoDims = resolveLogoSizeDimensions(b.logo_size_key);
+  const sectionedLayout = resolveSectionedBrandingLayout(b.logo_size_key);
   const logoFrame = getSectionedLogoFrameMeta();
   const logoFitPercent = logoCssFitPercent();
   /* Sync processor — return value is the only img src (never overwritten). */
@@ -1129,26 +1133,29 @@ export function renderIncomeBrandedPreviewHtml(params: {
   .nx-doc__payment-col, .nx-doc__comments, .nx-doc__customer { box-shadow: none; }
 }
 
-/* Sectioned — pixel contract from Jul 11 golden master. */
+/* Sectioned — pixel contract from Jul 11 golden master (+ studio logo size scale). */
 .nx-doc--sectioned {
   --nx-doc-primary: ${GM.colors.primary};
   --nx-doc-text: ${GM.colors.text};
   --nx-doc-text-muted: ${GM.colors.muted};
   --nx-doc-panel: ${GM.colors.panel};
   --nx-doc-radius: ${GM.upper.customer_card_radius_px}px;
-  --nx-doc-logo-w: ${GM.upper.logo_block_width_px}px;
-  --nx-doc-logo-h: ${GM.upper.logo_block_height_px}px;
+  --nx-doc-logo-w: ${sectionedLayout.logo_block_width_px}px;
+  --nx-doc-logo-h: ${sectionedLayout.logo_block_height_px}px;
+  --nx-doc-branding-col: ${sectionedLayout.branding_col_width_px}px;
+  --nx-doc-doc-col: ${sectionedLayout.doc_col_width_px}px;
+  --nx-doc-logo-scale: ${sectionedLayout.scale};
   width: ${GM.page.content_width_px}px;
   max-width: ${GM.page.content_width_px}px;
   padding: 0;
   color: var(--nx-doc-text);
-  font-size: ${GM.upper.company_line_font_size_px}px;
+  font-size: ${sectionedLayout.company_line_font_size_px}px;
   line-height: 1.35;
   background: ${GM.colors.white};
 }
 .nx-doc--sectioned .nx-doc__upper {
   display: grid;
-  grid-template-columns: ${GM.upper.branding_col_width_px}px ${GM.upper.doc_col_width_px}px;
+  grid-template-columns: var(--nx-doc-branding-col) var(--nx-doc-doc-col);
   gap: 0;
   align-items: start;
   width: 100%;
@@ -1157,14 +1164,14 @@ export function renderIncomeBrandedPreviewHtml(params: {
   background: transparent;
 }
 .nx-doc--sectioned .nx-doc__branding {
-  width: ${GM.upper.branding_col_width_px}px;
+  width: var(--nx-doc-branding-col);
   min-width: 0;
   padding-inline-end: 16px;
   border-inline-end: 1px solid ${GM.colors.divider};
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__doc-column {
-  width: ${GM.upper.doc_col_width_px}px;
+  width: var(--nx-doc-doc-col);
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1203,7 +1210,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   align-self: stretch;
 }
 .nx-doc--sectioned .nx-doc__issuer-name {
-  font-size: ${GM.upper.company_name_font_size_px}px;
+  font-size: ${sectionedLayout.company_name_font_size_px}px;
   font-weight: 800;
   margin: 0 0 8px;
   line-height: 1.25;
@@ -1211,7 +1218,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   text-align: start;
 }
 .nx-doc--sectioned .nx-doc__issuer-subtitle {
-  font-size: ${GM.upper.company_line_font_size_px}px;
+  font-size: ${sectionedLayout.company_line_font_size_px}px;
   color: var(--nx-doc-text-muted);
   margin: -4px 0 8px;
 }
@@ -1223,7 +1230,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }
 .nx-doc--sectioned .nx-doc__issuer-line,
 .nx-doc--sectioned .nx-doc__customer-line {
-  font-size: ${GM.upper.company_line_font_size_px}px;
+  font-size: ${sectionedLayout.company_line_font_size_px}px;
   line-height: 1.35;
   color: ${GM.colors.text};
 }
@@ -1318,7 +1325,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   justify-self: start;
 }
 .nx-doc--sectioned .nx-doc__customer-card {
-  width: ${GM.upper.customer_card_width_px}px;
+  width: ${sectionedLayout.customer_card_width_px}px;
   max-width: 100%;
   min-height: 0;
   height: auto;
