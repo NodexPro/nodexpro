@@ -131,7 +131,8 @@ describe('sectioned logo frame contract (golden master)', () => {
     assert.equal(medium.scale, 1);
     assert.equal(large.scale, 1.4);
     assert.equal(large.logo_block_height_px, Math.round(medium.logo_block_height_px * 1.4));
-    assert.ok(large.branding_col_width_px > medium.branding_col_width_px);
+    assert.equal(large.branding_col_width_px, medium.branding_col_width_px);
+    assert.equal(large.doc_col_width_px, medium.doc_col_width_px);
     assert.ok(large.logo_block_width_px > medium.logo_block_width_px);
 
     const html = renderIncomeBrandedPreviewHtml({

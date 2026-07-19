@@ -1149,30 +1149,35 @@ export function renderIncomeBrandedPreviewHtml(params: {
   max-width: ${GM.page.content_width_px}px;
   padding: 0;
   color: var(--nx-doc-text);
-  font-size: ${sectionedLayout.company_line_font_size_px}px;
+  font-size: 14px;
   line-height: 1.35;
   background: ${GM.colors.white};
 }
 .nx-doc--sectioned .nx-doc__upper {
   display: grid;
-  /* DOM order: doc-column then branding. In RTL: title/customer on the right, logo zone on the left. */
-  grid-template-columns: var(--nx-doc-doc-col) var(--nx-doc-branding-col);
+  /* DOM order: doc-column then branding. In RTL: title/customer on the right, logo zone on the left. Equal widths. */
+  grid-template-columns: 1fr 1fr;
   gap: 0;
   align-items: start;
   width: 100%;
   margin: 0 0 ${GM.upper.upper_to_table_gap_px}px;
   border: none;
   background: transparent;
+  /* Party/meta copy in both upper columns — fixed; logo size may scale independently. */
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
 }
 .nx-doc--sectioned .nx-doc__branding {
-  width: var(--nx-doc-branding-col);
+  width: 100%;
   min-width: 0;
   padding-inline-start: 16px;
   border-inline-start: 1px solid ${GM.colors.divider};
   box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
 }
 .nx-doc--sectioned .nx-doc__doc-column {
-  width: var(--nx-doc-doc-col);
+  width: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1180,6 +1185,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   align-items: stretch;
   padding-inline-end: 16px;
   box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
 }
 /* Logo frame — GM artwork target; must beat classic logo max-height:40px. */
 .nx-doc--sectioned .nx-doc__logo-frame {
@@ -1211,7 +1218,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   align-self: stretch;
 }
 .nx-doc--sectioned .nx-doc__issuer-name {
-  font-size: ${sectionedLayout.company_name_font_size_px}px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
   font-weight: 800;
   margin: 0 0 8px;
   line-height: 1.25;
@@ -1219,7 +1227,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   text-align: start;
 }
 .nx-doc--sectioned .nx-doc__issuer-subtitle {
-  font-size: ${sectionedLayout.company_line_font_size_px}px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
   color: var(--nx-doc-text-muted);
   margin: -4px 0 8px;
 }
@@ -1231,7 +1240,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }
 .nx-doc--sectioned .nx-doc__issuer-line,
 .nx-doc--sectioned .nx-doc__customer-line {
-  font-size: ${sectionedLayout.company_line_font_size_px}px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
   line-height: 1.35;
   color: ${GM.colors.text};
 }
@@ -1250,6 +1260,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__doc-title {
+  font-family: ${INVOICE_FONT};
   font-size: ${GM.upper.title_font_size_px}px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -1281,6 +1292,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   border-radius: ${GM.upper.number_bar_radius_px}px;
   background: var(--nx-doc-primary);
   color: #ffffff;
+  font-family: ${INVOICE_FONT};
   font-weight: 700;
   font-size: ${GM.upper.number_bar_font_size_px}px;
   line-height: 1.2;
@@ -1312,7 +1324,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   grid-template-columns: 16px auto minmax(0, 1fr);
   gap: 8px 10px;
   align-items: center;
-  font-size: ${GM.upper.meta_font_size_px}px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
   line-height: 1.35;
   color: var(--nx-doc-text-muted);
 }
@@ -1342,14 +1355,16 @@ export function renderIncomeBrandedPreviewHtml(params: {
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
-  font-size: ${GM.upper.meta_font_size_px}px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
   font-weight: 700;
   color: var(--nx-doc-primary);
 }
 .nx-doc--sectioned .nx-doc__customer-head .nx-doc__icon { color: var(--nx-doc-primary); }
 .nx-doc--sectioned .nx-doc__customer-name {
   margin: 0 0 8px;
-  font-size: ${GM.upper.company_name_font_size_px}px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.25;
   color: ${GM.colors.text};

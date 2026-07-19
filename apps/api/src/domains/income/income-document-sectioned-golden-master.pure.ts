@@ -18,9 +18,6 @@ export function resolveSectionedBrandingLayoutScale(logoSizeKey: IncomeLogoSizeK
   return 1;
 }
 
-/** Minimum doc column so title / customer card remain usable on A4. */
-const SECTIONED_DOC_COL_MIN_PX = 260;
-
 export function resolveSectionedBrandingLayout(logoSizeKey: IncomeLogoSizeKey): {
   scale: number;
   logo_block_width_px: number;
@@ -28,16 +25,14 @@ export function resolveSectionedBrandingLayout(logoSizeKey: IncomeLogoSizeKey): 
   branding_col_width_px: number;
   doc_col_width_px: number;
   customer_card_width_px: number;
-  company_name_font_size_px: number;
-  company_line_font_size_px: number;
 } {
   const scale = resolveSectionedBrandingLayoutScale(logoSizeKey);
   const contentW = SECTIONED_GOLDEN_MASTER.page.content_width_px;
+  /* Equal upper columns (logo zone | document zone). */
+  const brandingCol = Math.floor(contentW / 2);
+  const docCol = contentW - brandingCol;
   const logoW = Math.round(SECTIONED_GOLDEN_MASTER.upper.logo_block_width_px * scale);
   const logoH = Math.round(SECTIONED_GOLDEN_MASTER.upper.logo_block_height_px * scale);
-  const brandingRaw = Math.round(SECTIONED_GOLDEN_MASTER.upper.branding_col_width_px * scale);
-  const brandingCol = Math.min(brandingRaw, contentW - SECTIONED_DOC_COL_MIN_PX);
-  const docCol = contentW - brandingCol;
   const customerCard = Math.min(SECTIONED_GOLDEN_MASTER.upper.customer_card_width_px, docCol);
   return {
     scale,
@@ -46,12 +41,6 @@ export function resolveSectionedBrandingLayout(logoSizeKey: IncomeLogoSizeKey): 
     branding_col_width_px: brandingCol,
     doc_col_width_px: docCol,
     customer_card_width_px: customerCard,
-    company_name_font_size_px: Math.round(
-      SECTIONED_GOLDEN_MASTER.upper.company_name_font_size_px * scale,
-    ),
-    company_line_font_size_px: Math.round(
-      SECTIONED_GOLDEN_MASTER.upper.company_line_font_size_px * scale,
-    ),
   };
 }
 
