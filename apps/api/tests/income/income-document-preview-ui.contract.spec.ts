@@ -49,6 +49,58 @@ const allocationPureSource = readFileSync(
   join(dir, '../../src/domains/income/income-document-allocation-number.pure.ts'),
   'utf8',
 );
+const workEngineQueueCss = readFileSync(
+  join(dir, '../../../web/src/styles/nx-work-engine-queue.css'),
+  'utf8',
+);
+
+/** Preview-paper document rules only — excludes modal/sidebar chrome elsewhere in the file. */
+function workEnginePreviewDocumentCssRules(css: string): string {
+  const marker = 'Work Engine Preview — document HTML chrome only';
+  const start = css.indexOf(marker);
+  assert.ok(start >= 0, 'expected work engine preview chrome marker');
+  const after = css.slice(start);
+  const end = after.search(/\n@media\b/);
+  return end >= 0 ? after.slice(0, end) : after;
+}
+
+test('work engine preview css does not override backend sectioned document layout', () => {
+  const previewDocCss = workEnginePreviewDocumentCssRules(workEngineQueueCss);
+
+  assert.doesNotMatch(previewDocCss, /\.nx-we-preview-paper__content\s+\.nx-doc\s*\{/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc--sectioned/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc__upper-sheet/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc__sheet-section/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc__branding/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc__doc-identity/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc__doc-title/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc__doc-number-bar/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc__logo-frame/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc__logo-img/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc__issuer/);
+  assert.doesNotMatch(previewDocCss, /\.nx-doc__customer-card/);
+  assert.doesNotMatch(previewDocCss, /65px/);
+  assert.doesNotMatch(previewDocCss, /grid-template-areas/);
+  assert.doesNotMatch(previewDocCss, /--nx-doc-logo-fit/);
+  assert.doesNotMatch(previewDocCss, /width:\s*100%\s*!important/);
+  assert.doesNotMatch(previewDocCss, /max-width:\s*100%\s*!important/);
+
+  // Chrome-only presentation helpers may remain.
+  assert.match(previewDocCss, /\.nx-doc__total-row--discount/);
+  assert.match(previewDocCss, /\.nx-doc__grand-total strong/);
+});
+
+test('work engine queue css never reintroduces sectioned 65px upper-sheet overrides', () => {
+  assert.doesNotMatch(workEngineQueueCss, /\.nx-we-preview-paper__content[^{]*\.nx-doc--sectioned/);
+  assert.doesNotMatch(
+    workEngineQueueCss,
+    /\.nx-we-preview-paper__content[\s\S]{0,200}grid-template-rows:\s*65px/,
+  );
+  assert.doesNotMatch(
+    workEngineQueueCss,
+    /\.nx-we-preview-paper__content[\s\S]{0,200}\.nx-doc__sheet-section--1/,
+  );
+});
 
 test('canonical preview_html contains no allocation edit controls', () => {
   assert.doesNotMatch(rendererSource, /allocation_number_edit_affordance/);

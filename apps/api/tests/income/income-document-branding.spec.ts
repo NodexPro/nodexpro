@@ -409,7 +409,10 @@ test('work engine preview css does not hardcode blue on branded grand total', as
     new URL('../../../web/src/styles/nx-work-engine-queue.css', import.meta.url),
     'utf8',
   );
-  const previewPaperRules = css.slice(css.indexOf('/* Backend-owned document HTML'));
+  const marker = 'Work Engine Preview — document HTML chrome only';
+  const markerAt = css.indexOf(marker);
+  assert.ok(markerAt >= 0, 'expected work engine preview chrome marker comment');
+  const previewPaperRules = css.slice(markerAt);
   const grandTotalStrongBlock = previewPaperRules.match(
     /\.nx-we-preview-paper__content \.nx-doc__grand-total strong\s*\{[^}]+\}/,
   )?.[0];
