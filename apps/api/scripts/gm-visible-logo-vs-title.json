@@ -1,0 +1,44 @@
+{
+  "image": {
+    "W": 1055,
+    "H": 1491,
+    "contentW": 997
+  },
+  "scale_to_a4_content": 0.7051153460381143,
+  "logo_visible_artwork_image_px": {
+    "x0": 30,
+    "y0": 39,
+    "x1": 385,
+    "y1": 120,
+    "width": 356,
+    "height": 82,
+    "painted_pixels": 9554
+  },
+  "title_visible_artwork_image_px": {
+    "x0": 706,
+    "y0": 61,
+    "x1": 998,
+    "y1": 93,
+    "width": 293,
+    "height": 33,
+    "painted_pixels": 4357
+  },
+  "logo_visible_artwork_css_px": {
+    "width": 251,
+    "height": 58,
+    "area": 14558
+  },
+  "title_visible_artwork_css_px": {
+    "width": 207,
+    "height": 23,
+    "area": 4761
+  },
+  "comparison": {
+    "logo_vs_title_width_ratio": 1.215,
+    "logo_vs_title_height_ratio": 2.485,
+    "logo_vs_title_bbox_area_ratio": 3.019,
+    "logo_taller_than_title": true,
+    "logo_wider_than_title": true
+  },
+  "branding_col_width_css": 339
+}

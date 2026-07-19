@@ -15,8 +15,9 @@ export const SECTIONED_LOGO_RECOMMENDED_UPLOAD = {
  * Not a hard CSS lock for a logo-only row.
  */
 export const SECTIONED_LOGO_FRAME = {
-    width_px: 340,
-    height_px: 56,
+    /** Visible logo artwork bbox on golden master (scaled to A4 content). */
+    width_px: 251,
+    height_px: 58,
     /** @deprecated — old 65px logo-only row removed */
     section_outer_height_px: 0,
     section_border_px: 0,

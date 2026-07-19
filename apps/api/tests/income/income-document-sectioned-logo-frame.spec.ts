@@ -75,8 +75,8 @@ describe('sectioned logo frame contract (golden master)', () => {
     assert.equal(meta.aspect_ratio, '1288:244');
     assert.equal(meta.aspect_ratio_label, '≈ 5.3∶1');
     assert.equal(meta.css_frame_class, 'nx-doc__logo-frame');
-    assert.equal(SECTIONED_LOGO_FRAME.width_px, 340);
-    assert.equal(SECTIONED_LOGO_FRAME.height_px, 56);
+    assert.equal(SECTIONED_LOGO_FRAME.width_px, 251);
+    assert.equal(SECTIONED_LOGO_FRAME.height_px, 58);
     assert.equal(SECTIONED_LOGO_FRAME.section_outer_height_px, 0);
   });
 
@@ -106,17 +106,19 @@ describe('sectioned logo frame contract (golden master)', () => {
     const html = sectionedHtml('data:image/png;base64,landscape');
     assert.match(html, /nx-doc__logo-img/);
     assert.match(html, /object-fit: contain/);
-    assert.match(html, /--nx-doc-logo-fit:\s*92%/);
     assert.match(html, /data-logo-processing="/);
     assert.doesNotMatch(html, /transform: scale\(/);
     assert.doesNotMatch(html, /object-fit:\s*fill/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*transform: none/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: 100%/);
   });
 
   test('branding column logo frame fills width with max height', () => {
     const html = sectionedHtml('data:image/png;base64,portrait');
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*width: 100%/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: 56px/);
+    assert.match(html, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-w:\s*251px/);
+    assert.match(html, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-h:\s*58px/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*overflow: hidden/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: 100%/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: 100%/);
   });
 });
