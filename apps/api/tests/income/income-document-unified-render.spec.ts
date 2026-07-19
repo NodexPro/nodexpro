@@ -604,12 +604,16 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /aria-label="שורות מסמך"/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__table thead th[\s\S]*background: var\(--nx-doc-primary\)/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: 339px 363px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-w:\s*251px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-h:\s*58px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-w:\s*300px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-h:\s*70px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: contain/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: 100%/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: 100%/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*transform: none/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*max-height:\s*none/);
+  assert.match(previewHtml, /\.nx-doc--unified:not\(\.nx-doc--sectioned\) \.nx-doc__logo-img/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-card[\s\S]*min-height:\s*0/);
+  assert.doesNotMatch(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-card[\s\S]*min-height:\s*200px/);
   assert.doesNotMatch(previewHtml, /transform: scale\(/);
   assert.match(previewHtml, /nx-doc__logo-frame/);
   assert.match(previewHtml, /nx-doc__doc-identity/);

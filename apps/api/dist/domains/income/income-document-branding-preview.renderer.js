@@ -912,8 +912,26 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc__meta-row > .nx-doc__icon { display: none; }
 .nx-doc__meta-label { color: var(--nx-doc-text-muted); }
 .nx-doc__meta-value { color: var(--nx-doc-text); font-weight: 600; }
-.nx-doc__logo-img { max-width: ${Math.min(logoDims.maxWidthPx, 160)}px; max-height: ${Math.min(logoDims.maxHeightPx, 40)}px; width: auto; height: auto; object-fit: contain; display: block; margin: 0 0 4px 0; align-self: flex-end; }
-.nx-doc__logo-placeholder { width: ${Math.round(Math.min(logoDims.maxWidthPx, 160) * 0.72)}px; height: ${Math.round(Math.min(logoDims.maxHeightPx, 40) * 0.58)}px; background: transparent; border: 1px dashed var(--nx-doc-border); border-radius: 4px; margin: 0 0 4px 0; align-self: flex-end; }
+/* Classic / non-sectioned only — never cap sectioned GM logo (was max-height:40px). */
+.nx-doc--unified:not(.nx-doc--sectioned) .nx-doc__logo-img {
+  max-width: ${Math.min(logoDims.maxWidthPx, 160)}px;
+  max-height: ${Math.min(logoDims.maxHeightPx, 40)}px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0 0 4px 0;
+  align-self: flex-end;
+}
+.nx-doc--unified:not(.nx-doc--sectioned) .nx-doc__logo-placeholder {
+  width: ${Math.round(Math.min(logoDims.maxWidthPx, 160) * 0.72)}px;
+  height: ${Math.round(Math.min(logoDims.maxHeightPx, 40) * 0.58)}px;
+  background: transparent;
+  border: 1px dashed var(--nx-doc-border);
+  border-radius: 4px;
+  margin: 0 0 4px 0;
+  align-self: flex-end;
+}
 .nx-doc__issuer-name { font-size: 17px; font-weight: 700; margin-bottom: 0; line-height: 1.15; }
 .nx-doc__issuer-subtitle { font-size: 12px; color: var(--nx-doc-text-muted); margin-bottom: 2px; line-height: 1.25; }
 .nx-doc__issuer-line { display: grid; grid-template-columns: ${PARTY_LINE_ICON_PX}px minmax(0, 1fr); gap: ${PARTY_LINE_GAP_PX}px; align-items: start; padding: 0; font-size: 12px; color: var(--nx-doc-text); line-height: 1.35; }
@@ -1009,12 +1027,12 @@ export function renderIncomeBrandedPreviewHtml(params) {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: ${GM.upper.customer_top_gap_px}px;
+  gap: 0;
   align-items: stretch;
   padding-inline-start: 16px;
   box-sizing: border-box;
 }
-/* Logo frame sized to GM VISIBLE artwork bbox (251×58), not a smaller chrome box. */
+/* Logo frame — GM artwork target; must beat classic logo max-height:40px. */
 .nx-doc--sectioned .nx-doc__logo-frame {
   width: var(--nx-doc-logo-w);
   height: var(--nx-doc-logo-h);
@@ -1026,21 +1044,22 @@ export function renderIncomeBrandedPreviewHtml(params) {
   justify-content: flex-start;
   background: transparent;
   border: none;
+  flex-shrink: 0;
 }
 .nx-doc--sectioned .nx-doc__logo-frame--empty {
   background: transparent;
 }
 .nx-doc--sectioned .nx-doc__logo-img {
-  /* Fill the artwork target; contain keeps aspect — no stretch/crop. */
   width: 100%;
   height: 100%;
-  max-width: 100%;
-  max-height: 100%;
+  max-width: none;
+  max-height: none;
   margin: 0;
   object-fit: contain;
   object-position: right center;
   display: block;
   transform: none;
+  align-self: stretch;
 }
 .nx-doc--sectioned .nx-doc__issuer-name {
   font-size: ${GM.upper.company_name_font_size_px}px;
@@ -1078,7 +1097,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
   gap: ${GM.upper.title_to_number_gap_px}px;
   width: ${GM.upper.number_bar_width_px}px;
   max-width: 100%;
-  margin: 0;
+  margin: 0 0 12px;
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__doc-title {
@@ -1136,7 +1155,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
   flex-direction: column;
   gap: ${GM.upper.meta_row_gap_px}px;
   width: 100%;
-  margin: 0;
+  margin: 0 0 ${GM.upper.customer_top_gap_px}px;
   text-align: start;
 }
 .nx-doc--sectioned .nx-doc__meta-row {
@@ -1160,7 +1179,8 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--sectioned .nx-doc__customer-card {
   width: ${GM.upper.customer_card_width_px}px;
   max-width: 100%;
-  min-height: ${GM.upper.customer_card_height_px}px;
+  min-height: 0;
+  height: auto;
   margin: 0;
   padding: ${GM.upper.customer_card_padding_px}px;
   border-radius: ${GM.upper.customer_card_radius_px}px;

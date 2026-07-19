@@ -2,7 +2,7 @@
  * Sectioned logo guidance — Branding Studio upload target + render-area reference.
  *
  * Golden-master layout no longer freezes a 65px logo-only row or Excel sheet cells.
- * The printable branding column sizes the logo with object-fit: contain (max height 56px).
+ * The printable branding column sizes the logo with object-fit: contain.
  * Upload guidance remains a wide horizontal lockup (~5.3∶1).
  */
 
@@ -17,9 +17,9 @@ export const SECTIONED_LOGO_RECOMMENDED_UPLOAD = {
  * Not a hard CSS lock for a logo-only row.
  */
 export const SECTIONED_LOGO_FRAME = {
-  /** Visible logo artwork bbox on golden master (scaled to A4 content). */
-  width_px: 251,
-  height_px: 58,
+  /** Visible logo artwork target in sectioned branding column. */
+  width_px: 300,
+  height_px: 70,
   /** @deprecated — old 65px logo-only row removed */
   section_outer_height_px: 0,
   section_border_px: 0,

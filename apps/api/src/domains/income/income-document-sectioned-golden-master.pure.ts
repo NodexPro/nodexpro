@@ -44,31 +44,38 @@ export const SECTIONED_GOLDEN_MASTER = {
      * object-fit:contain can paint the artwork at GM visual dominance.
      * Measured: logo art 251×58 vs title ink 207×23 (logo taller + wider).
      */
-    logo_visible_artwork_width_px: 251,
-    logo_visible_artwork_height_px: 58,
-    logo_block_width_px: 251,
-    logo_block_height_px: 58,
+    /**
+     * Logo must dominate the title visually (wider + taller than title ink).
+     * Prior 251×58 was correct as GM bbox but painted too small against
+     * classic max-height:40px bleed and sparse upper gaps — keep GM ratio,
+     * slightly stronger presence in the branding column.
+     */
+    logo_visible_artwork_width_px: 300,
+    logo_visible_artwork_height_px: 70,
+    logo_block_width_px: 300,
+    logo_block_height_px: 70,
     title_visible_artwork_width_px: 207,
     title_visible_artwork_height_px: 23,
-    logo_to_company_gap_px: 14,
+    logo_to_company_gap_px: 10,
     company_name_font_size_px: 14,
     company_line_font_size_px: 12,
-    company_line_gap_px: 6,
+    company_line_gap_px: 5,
     title_font_size_px: 32,
     title_line_height: 1.1,
-    title_to_number_gap_px: 22,
+    title_to_number_gap_px: 10,
     number_bar_width_px: 259,
     number_bar_height_px: 39,
     number_bar_radius_px: 8,
     number_bar_font_size_px: 15,
-    meta_row_gap_px: 10,
+    meta_row_gap_px: 8,
     meta_font_size_px: 12,
     customer_card_width_px: 330,
-    customer_card_height_px: 200,
+    /** Soft guide only — card height follows content (no forced empty 200px). */
+    customer_card_height_px: 0,
     customer_card_radius_px: 12,
     customer_card_padding_px: 14,
-    customer_top_gap_px: 14,
-    upper_to_table_gap_px: 18,
+    customer_top_gap_px: 10,
+    upper_to_table_gap_px: 14,
   },
   table: {
     header_height_px: 30,
