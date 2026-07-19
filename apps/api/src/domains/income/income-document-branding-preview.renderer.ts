@@ -359,11 +359,6 @@ export function renderIncomeBrandedPreviewHtml(params: {
 
   const upperSheetBlock = isSectioned
     ? `<div class="nx-doc__upper" aria-label="כותרת מסמך">
-    <aside class="nx-doc__branding">
-      ${logoHtml}
-      ${issuerNameBlock}
-      ${issuerContactLines ? `<div class="nx-doc__issuer-lines">${issuerContactLines}</div>` : ''}
-    </aside>
     <div class="nx-doc__doc-column">
       ${docTitleBlock}
       ${docMetaBlock}
@@ -372,6 +367,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
         ${customerLinesBlock}
       </section>
     </div>
+    <aside class="nx-doc__branding">
+      ${logoHtml}
+      ${issuerNameBlock}
+      ${issuerContactLines ? `<div class="nx-doc__issuer-lines">${issuerContactLines}</div>` : ''}
+    </aside>
   </div>`
     : `<div class="nx-doc__upper-sheet" aria-label="כותרת מסמך">
     ${buildSheetSection(1, issuerIdentityBlock)}
@@ -1155,7 +1155,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }
 .nx-doc--sectioned .nx-doc__upper {
   display: grid;
-  grid-template-columns: var(--nx-doc-branding-col) var(--nx-doc-doc-col);
+  /* DOM order: doc-column then branding. In RTL: title/customer on the right, logo zone on the left. */
+  grid-template-columns: var(--nx-doc-doc-col) var(--nx-doc-branding-col);
   gap: 0;
   align-items: start;
   width: 100%;
@@ -1166,8 +1167,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__branding {
   width: var(--nx-doc-branding-col);
   min-width: 0;
-  padding-inline-end: 16px;
-  border-inline-end: 1px solid ${GM.colors.divider};
+  padding-inline-start: 16px;
+  border-inline-start: 1px solid ${GM.colors.divider};
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__doc-column {
@@ -1177,7 +1178,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   flex-direction: column;
   gap: 0;
   align-items: stretch;
-  padding-inline-start: 16px;
+  padding-inline-end: 16px;
   box-sizing: border-box;
 }
 /* Logo frame — GM artwork target; must beat classic logo max-height:40px. */
@@ -1204,7 +1205,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   max-height: none;
   margin: 0;
   object-fit: contain;
-  object-position: right center;
+  object-position: left center;
   display: block;
   transform: none;
   align-self: stretch;
