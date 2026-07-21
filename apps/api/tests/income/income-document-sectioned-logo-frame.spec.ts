@@ -176,7 +176,8 @@ describe('sectioned logo frame contract (golden master)', () => {
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: fill/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: var\(--nx-doc-logo-h\)/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__branding[\s\S]*text-align: left/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-column[\s\S]*text-align: right/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-column[\s\S]*align-items: flex-start/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-column[\s\S]*padding-inline-start: 19px/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*font-size:\s*32px/);
   });
 });

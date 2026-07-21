@@ -1187,14 +1187,19 @@ export function renderIncomeBrandedPreviewHtml(params: {
   display: flex;
   flex-direction: column;
   gap: 0;
-  align-items: flex-end;
-  /* Outer right edge flush; thin gap from the center divider only. */
+  /*
+   * Document is dir=rtl: flex-start = outer RIGHT edge (nearest page edge).
+   * flex-end was wrong — it packed the title toward the page center.
+   */
+  align-items: flex-start;
+  /* 0.5cm (~19px) from the outer right edge; thin gap from the center divider. */
   padding: 0;
+  padding-inline-start: 19px;
   padding-inline-end: 8px;
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
-  text-align: right;
+  text-align: start;
 }
 /*
  * Exact 319×120 paint box (× size). Small files stretch up — no empty margin in the box.
@@ -1272,7 +1277,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
   gap: ${GM.upper.title_to_number_gap_px}px;
   width: ${GM.upper.number_bar_width_px}px;
   max-width: 100%;
+  /* Pin title + number bar to the outer edge (inline-start = right in RTL). */
   margin: 0 0 12px;
+  margin-inline-end: auto;
+  margin-inline-start: 0;
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__doc-title {
