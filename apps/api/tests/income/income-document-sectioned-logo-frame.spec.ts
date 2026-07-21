@@ -172,14 +172,14 @@ describe('sectioned logo frame contract (golden master)', () => {
     assert.match(html, /--nx-doc-logo-h:\s*120px/);
     assert.match(html, /--nx-doc-logo-w:\s*319px/);
     assert.match(html, /--nx-doc-logo-scale:\s*1(?:\.0)?/);
-    assert.match(html, /grid-template-columns:\s*var\(--nx-doc-doc-col\)\s*var\(--nx-doc-branding-col\)/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: fill/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: var\(--nx-doc-logo-h\)/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__branding[\s\S]*text-align: left/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-column[\s\S]*align-items: flex-start/);
-    assert.match(html, /\.nx-doc--sectioned[\s\S]*padding-inline:\s*19px/);
+    assert.match(html, /\.nx-doc--sectioned[\s\S]*padding-inline:\s*19px 0/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: 1fr 0\.8fr/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__table[\s\S]*width:\s*100%/);
     assert.match(html, /\.nx-doc--sectioned[\s\S]*max-width:\s*794px/);
-    assert.doesNotMatch(html, /\.nx-doc--sectioned \.nx-doc__doc-column[\s\S]*padding-inline-start: 10px/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*font-size:\s*32px/);
   });
 });

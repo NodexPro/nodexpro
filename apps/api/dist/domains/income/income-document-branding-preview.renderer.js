@@ -1002,12 +1002,13 @@ export function renderIncomeBrandedPreviewHtml(params) {
   --nx-doc-branding-col: ${sectionedLayout.branding_col_width_px}px;
   --nx-doc-doc-col: ${sectionedLayout.doc_col_width_px}px;
   --nx-doc-logo-scale: ${sectionedLayout.scale};
-  /* Full paper width; sole side inset = 0.5cm (do not also pad the preview chrome). */
+  /* Full paper width. Right (invoice) keeps 0.5cm; left (scrollbar/logo) is flush. */
   width: 100%;
   max-width: ${GM.page.a4_width_px}px;
-  margin: 0;
-  padding: 0;
-  padding-inline: ${GM.page.margin_left_px}px;
+  margin: 0 !important;
+  padding-block: 0;
+  /* RTL: inline-start = right edge, inline-end = left/scrollbar edge. */
+  padding-inline: ${GM.page.margin_right_px}px 0;
   box-sizing: border-box;
   color: var(--nx-doc-text);
   font-size: 14px;
@@ -1016,8 +1017,11 @@ export function renderIncomeBrandedPreviewHtml(params) {
 }
 .nx-doc--sectioned .nx-doc__upper {
   display: grid;
-  /* DOM order: doc-column then branding. Branding is 20% narrower than doc (vars). */
-  grid-template-columns: var(--nx-doc-doc-col) var(--nx-doc-branding-col);
+  /*
+   * DOM: doc-column | branding. Fill full width (no leftover gutter by the scrollbar).
+   * Branding is 20% narrower than doc → 1fr : 0.8fr.
+   */
+  grid-template-columns: 1fr 0.8fr;
   gap: 0;
   align-items: start;
   width: 100%;
@@ -1031,9 +1035,8 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--sectioned .nx-doc__branding {
   width: 100%;
   min-width: 0;
-  /* Outer edge = page padding only; thin gap before the center divider. */
-  padding: 0;
-  padding-inline-start: 8px;
+  /* Physical left flush to scrollbar; only inset toward the center divider. */
+  padding: 0 8px 0 0;
   border-inline-start: 1px solid ${GM.colors.divider};
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
@@ -1047,10 +1050,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
   display: flex;
   flex-direction: column;
   gap: 0;
-  /*
-   * Document is dir=rtl: flex-start = outer RIGHT edge (nearest page edge).
-   * Page already has 0.5cm padding-inline — no extra inset here.
-   */
+  /* dir=rtl: flex-start = outer RIGHT edge. */
   align-items: flex-start;
   padding: 0;
   padding-inline-end: 8px;
@@ -1061,15 +1061,13 @@ export function renderIncomeBrandedPreviewHtml(params) {
 }
 /*
  * Exact 319×120 paint box (× size). Small files stretch up — no empty margin in the box.
- * Company block follows immediately (logo_to_company gap only).
+ * Pin to the physical left (scrollbar side); do not use inline-end:auto (RTL pushes to center).
  */
 .nx-doc--sectioned .nx-doc__logo-frame {
   width: var(--nx-doc-logo-w);
   height: var(--nx-doc-logo-h);
-  max-width: none;
-  margin: 0 0 ${GM.upper.logo_to_company_gap_px}px;
-  margin-inline-end: auto;
-  margin-inline-start: 0;
+  max-width: 100%;
+  margin: 0 0 ${GM.upper.logo_to_company_gap_px}px 0;
   overflow: hidden;
   display: block;
   background: transparent;
@@ -1258,10 +1256,14 @@ export function renderIncomeBrandedPreviewHtml(params) {
   margin: 0;
 }
 .nx-doc--sectioned .nx-doc__lines {
+  width: 100%;
   margin: 0 0 ${GM.lower.notes_totals_gap_px}px;
+  padding: 0;
+  box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__table {
   width: 100%;
+  max-width: none;
   border: none;
   margin: 0;
   border-radius: ${GM.table.radius_px}px;
