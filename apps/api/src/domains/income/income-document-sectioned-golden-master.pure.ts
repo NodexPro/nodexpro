@@ -11,14 +11,20 @@
 
 import type { IncomeLogoSizeKey } from './income-document-branding.types.js';
 
+/** Design target for גדול — logo paints to this box (scaled to fit branding column). */
+export const SECTIONED_LOGO_LARGE_TARGET = {
+  width_px: 527,
+  height_px: 123,
+} as const;
+
 /**
- * Studio logo size → max lockup scale of golden-master (300×70).
- * Logo never expands the branding column (equal upper sections stay equal).
- * Frame hugs the image — no empty box around the logo.
+ * Studio logo size → scale of the large target lockup (527×123).
+ * Small logo files are still stretched up to the box (no empty frame).
+ * Branding column is 20% narrower than the document column.
  * Title font size is never reduced.
  */
 export function resolveSectionedBrandingLayoutScale(logoSizeKey: IncomeLogoSizeKey): number {
-  if (logoSizeKey === 'large') return 1.35 * 1.5;
+  if (logoSizeKey === 'large') return 1;
   if (logoSizeKey === 'small') return 0.7;
   return 0.85;
 }
@@ -33,15 +39,21 @@ export function resolveSectionedBrandingLayout(logoSizeKey: IncomeLogoSizeKey): 
 } {
   const scale = resolveSectionedBrandingLayoutScale(logoSizeKey);
   const contentW = SECTIONED_GOLDEN_MASTER.page.content_width_px;
-  /* Equal upper columns — never steal width from the document section for logo size. */
-  const brandingCol = Math.floor(contentW / 2);
+  /*
+   * Branding (logo + company) is 20% narrower than the document section:
+   * branding : doc = 0.8 : 1 → branding = content × 0.8/1.8
+   */
+  const brandingCol = Math.floor((contentW * 0.8) / 1.8);
   const docCol = contentW - brandingCol;
-  const gmW = SECTIONED_GOLDEN_MASTER.upper.logo_block_width_px;
-  const gmH = SECTIONED_GOLDEN_MASTER.upper.logo_block_height_px;
-  const aspect = gmW / gmH;
-  /* Max paint size inside the branding column; CSS frame hugs the img (no empty padding box). */
-  const logoW = Math.min(Math.max(1, Math.round(gmW * scale)), brandingCol);
-  const logoH = Math.max(1, Math.round(logoW / aspect));
+  const targetW = Math.max(1, Math.round(SECTIONED_LOGO_LARGE_TARGET.width_px * scale));
+  const targetH = Math.max(1, Math.round(SECTIONED_LOGO_LARGE_TARGET.height_px * scale));
+  /*
+   * Paint box is exactly the 527×123 target (× size scale).
+   * Branding column stays 20% narrower than doc; logo may extend past the column
+   * edge (overflow visible) so company lines below are not pushed down by a fat column.
+   */
+  const logoW = targetW;
+  const logoH = targetH;
   const customerCard = Math.min(SECTIONED_GOLDEN_MASTER.upper.customer_card_width_px, docCol);
   return {
     scale,

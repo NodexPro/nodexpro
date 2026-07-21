@@ -105,41 +105,44 @@ describe('sectioned logo frame contract (golden master)', () => {
     assert.doesNotMatch(html, /<img class="nx-doc__logo-img"/);
   });
 
-  test('logo uses contain fit without stretch or fixed scale', () => {
+  test('logo stretches to exact paint box even when file is small', () => {
     const html = sectionedHtml('data:image/png;base64,landscape');
     assert.match(html, /nx-doc__logo-img/);
-    assert.match(html, /object-fit: contain/);
+    assert.match(html, /object-fit: fill/);
     assert.match(html, /data-logo-processing="/);
     assert.doesNotMatch(html, /transform: scale\(/);
-    assert.doesNotMatch(html, /object-fit:\s*fill/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*transform: none/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: auto/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*width: fit-content/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: 100%/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: 100%/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*width: var\(--nx-doc-logo-w\)/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: var\(--nx-doc-logo-h\)/);
   });
 
-  test('branding column logo frame hugs image with max size caps', () => {
-    const html = sectionedHtml('data:image/png;base64,portrait');
+  test('branding column is 20% narrower than document column', () => {
     const medium = resolveSectionedBrandingLayout('medium');
-    assert.match(html, new RegExp(`\\.nx-doc--sectioned[\\s\\S]*--nx-doc-logo-w:\\s*${medium.logo_block_width_px}px`));
-    assert.match(html, new RegExp(`\\.nx-doc--sectioned[\\s\\S]*--nx-doc-logo-h:\\s*${medium.logo_block_height_px}px`));
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*width: fit-content/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: auto/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: auto/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: auto/);
+    assert.equal(medium.branding_col_width_px, 312);
+    assert.equal(medium.doc_col_width_px, 391);
+    assert.ok(medium.branding_col_width_px < medium.doc_col_width_px);
+    assert.ok(
+      Math.abs(medium.branding_col_width_px / medium.doc_col_width_px - 0.8) < 0.01,
+    );
+    const html = sectionedHtml('data:image/png;base64,portrait');
+    assert.match(html, /--nx-doc-logo-w:\s*448px/);
+    assert.match(html, /--nx-doc-logo-h:\s*105px/);
+    assert.match(html, /--nx-doc-branding-col:\s*312px/);
+    assert.match(html, /--nx-doc-doc-col:\s*391px/);
   });
 
-  test('studio logo size large stays inside equal columns without empty frame', () => {
+  test('studio logo size large paints exact 527×123 without empty frame padding', () => {
     const medium = resolveSectionedBrandingLayout('medium');
     const large = resolveSectionedBrandingLayout('large');
-    assert.equal(large.scale, 1.35 * 1.5);
-    /* Capped to equal branding column — sections are not compressed. */
-    assert.equal(large.logo_block_width_px, 351);
-    assert.equal(large.logo_block_height_px, 82);
+    assert.equal(large.scale, 1);
+    assert.equal(large.logo_block_width_px, 527);
+    assert.equal(large.logo_block_height_px, 123);
     assert.equal(large.branding_col_width_px, medium.branding_col_width_px);
     assert.equal(large.doc_col_width_px, medium.doc_col_width_px);
     assert.ok(large.logo_block_height_px > medium.logo_block_height_px);
     assert.ok(large.logo_block_width_px > medium.logo_block_width_px);
-    assert.ok(large.logo_block_width_px >= Math.round(794 * 0.2));
 
     const html = renderIncomeBrandedPreviewHtml({
       branding: resolveBrandingProfile(
@@ -166,13 +169,12 @@ describe('sectioned logo frame contract (golden master)', () => {
       notes: null,
       company_subtitle: null,
     });
-    assert.match(html, /--nx-doc-logo-h:\s*82px/);
-    assert.match(html, /--nx-doc-logo-w:\s*351px/);
-    assert.match(html, /--nx-doc-logo-scale:\s*2\.025/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: 1fr 1fr/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*width: fit-content/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: auto/);
-    /* Title stays 32px — logo enlarged, title is not reduced. */
+    assert.match(html, /--nx-doc-logo-h:\s*123px/);
+    assert.match(html, /--nx-doc-logo-w:\s*527px/);
+    assert.match(html, /--nx-doc-logo-scale:\s*1(?:\.0)?/);
+    assert.match(html, /grid-template-columns:\s*var\(--nx-doc-doc-col\)\s*var\(--nx-doc-branding-col\)/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: fill/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: var\(--nx-doc-logo-h\)/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*font-size:\s*32px/);
   });
 });

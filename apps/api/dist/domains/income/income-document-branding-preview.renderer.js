@@ -1011,26 +1011,27 @@ export function renderIncomeBrandedPreviewHtml(params) {
 }
 .nx-doc--sectioned .nx-doc__upper {
   display: grid;
-  /* DOM order: doc-column then branding. In RTL: title/customer on the right, logo zone on the left. Equal widths. */
-  grid-template-columns: 1fr 1fr;
+  /* DOM order: doc-column then branding. Branding is 20% narrower than doc (vars). */
+  grid-template-columns: var(--nx-doc-doc-col) var(--nx-doc-branding-col);
   gap: 0;
   align-items: start;
   width: 100%;
   margin: 0 0 ${GM.upper.upper_to_table_gap_px}px;
   border: none;
   background: transparent;
-  /* Party/meta copy in both upper columns — fixed; logo size may scale independently. */
+  overflow: visible;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
 }
 .nx-doc--sectioned .nx-doc__branding {
   width: 100%;
   min-width: 0;
-  padding-inline-start: 16px;
+  padding-inline-start: 8px;
   border-inline-start: 1px solid ${GM.colors.divider};
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
+  overflow: visible;
 }
 .nx-doc--sectioned .nx-doc__doc-column {
   width: 100%;
@@ -1044,35 +1045,37 @@ export function renderIncomeBrandedPreviewHtml(params) {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
 }
-/* Logo frame hugs the image — max size only; no empty box around the logo. */
+/*
+ * Exact 527×123 paint box (× size). Small files stretch up — no empty margin in the box.
+ * Company block follows immediately (logo_to_company gap only).
+ */
 .nx-doc--sectioned .nx-doc__logo-frame {
-  width: fit-content;
-  height: auto;
-  max-width: min(100%, var(--nx-doc-logo-w));
-  max-height: var(--nx-doc-logo-h);
+  width: var(--nx-doc-logo-w);
+  height: var(--nx-doc-logo-h);
+  max-width: none;
   margin: 0 0 ${GM.upper.logo_to_company_gap_px}px;
-  overflow: visible;
+  overflow: hidden;
   display: block;
   background: transparent;
   border: none;
   flex-shrink: 0;
   line-height: 0;
+  box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__logo-frame--empty {
   background: transparent;
-  width: var(--nx-doc-logo-w);
   height: 0;
   max-height: 0;
   margin: 0;
   overflow: hidden;
 }
 .nx-doc--sectioned .nx-doc__logo-img {
-  width: auto;
-  height: auto;
-  max-width: min(100%, var(--nx-doc-logo-w));
-  max-height: var(--nx-doc-logo-h);
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
   margin: 0;
-  object-fit: contain;
+  object-fit: fill;
   object-position: left top;
   display: block;
   transform: none;

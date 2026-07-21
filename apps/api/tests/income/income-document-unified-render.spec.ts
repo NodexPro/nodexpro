@@ -605,21 +605,21 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__table thead th[\s\S]*background: var\(--nx-doc-primary\)/);
   assert.match(
     previewHtml,
-    /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: 1fr 1fr/,
+    /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns:\s*var\(--nx-doc-doc-col\)\s*var\(--nx-doc-branding-col\)/,
   );
   assert.match(
     previewHtml,
     /nx-doc__upper[\s\S]*nx-doc__doc-column[\s\S]*nx-doc__branding/,
   );
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-branding-col:\s*351px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-doc-col:\s*352px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-h:\s*60px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-w:\s*255px/); /* medium: 0.85×GM */
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: contain/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: auto/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: auto/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-branding-col:\s*312px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-doc-col:\s*391px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-h:\s*105px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-w:\s*448px/); /* medium: 0.85×527×123 */
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: fill/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: 100%/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: 100%/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*transform: none/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*max-height: var\(--nx-doc-logo-h\)/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*max-height: none/);
   assert.match(previewHtml, /\.nx-doc--unified:not\(\.nx-doc--sectioned\) \.nx-doc__logo-img/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-card[\s\S]*min-height:\s*0/);
   assert.doesNotMatch(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-card[\s\S]*min-height:\s*200px/);
@@ -633,8 +633,8 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-bar[\s\S]*width: 259px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*font-size: 32px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*text-align: start/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*width: fit-content/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: auto/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*width: var\(--nx-doc-logo-w\)/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: var\(--nx-doc-logo-h\)/);
   assert.match(previewHtml, /nx-doc__payment-col--bank/);
   assert.match(previewHtml, /nx-doc__payment-col--card/);
   assert.match(previewHtml, /nx-doc__payment-col--other/);
