@@ -13,11 +13,11 @@ import type { IncomeLogoSizeKey } from './income-document-branding.types.js';
 
 /**
  * Studio logo size → scale of golden-master logo lockup (300×70).
- * `large` targets ~20% of A4 page width (and not less than GM artwork).
+ * `large` is GM × 1.35 (≥20% of A4 width, capped by branding column).
  * Title font size is never reduced.
  */
 export function resolveSectionedBrandingLayoutScale(logoSizeKey: IncomeLogoSizeKey): number {
-  if (logoSizeKey === 'large') return 1;
+  if (logoSizeKey === 'large') return 1.35;
   if (logoSizeKey === 'small') return 0.7;
   return 0.85;
 }
@@ -32,17 +32,14 @@ export function resolveSectionedBrandingLayout(logoSizeKey: IncomeLogoSizeKey): 
 } {
   const scale = resolveSectionedBrandingLayoutScale(logoSizeKey);
   const contentW = SECTIONED_GOLDEN_MASTER.page.content_width_px;
-  const a4W = SECTIONED_GOLDEN_MASTER.page.a4_width_px;
   /* Equal upper columns (logo zone | document zone). */
   const brandingCol = Math.floor(contentW / 2);
   const docCol = contentW - brandingCol;
   const gmW = SECTIONED_GOLDEN_MASTER.upper.logo_block_width_px;
   const gmH = SECTIONED_GOLDEN_MASTER.upper.logo_block_height_px;
   const aspect = gmW / gmH;
-  /* גדול: at least 20% of A4 width, never below GM lockup so the logo stays visible. */
-  const largeTargetW = Math.max(gmW, Math.round(a4W * 0.2));
-  const baseW = logoSizeKey === 'large' ? largeTargetW : gmW;
-  const logoW = Math.min(Math.max(1, Math.round(baseW * scale)), brandingCol);
+  /* Scale GM lockup; large (+35%) fills branding column when needed. */
+  const logoW = Math.min(Math.max(1, Math.round(gmW * scale)), brandingCol);
   const logoH = Math.max(1, Math.round(logoW / aspect));
   const customerCard = Math.min(SECTIONED_GOLDEN_MASTER.upper.customer_card_width_px, docCol);
   return {

@@ -107,3 +107,14 @@ test('schedule projection resolves VAT once and skips future rebuild without ove
     /await resolveIncomeDraftVatForOrg\(params\.orgId, 'IL', params\.documentDate\)/,
   );
 });
+
+test('retainer setup omits template snapshots from client and parallelizes schedule loads', () => {
+  const readModelSource = readFileSync(
+    join(dir, '../../src/domains/work-engine/work-engine-invoice-retainer.read-model.service.ts'),
+    'utf8',
+  );
+  assert.match(readModelSource, /document_template_snapshot: null, \/\* Server-only/);
+  assert.match(readModelSource, /loadProfileTemplateSnapshot/);
+  assert.match(readModelSource, /load_cycles_work_items_overrides/);
+  assert.match(readModelSource, /Promise\.all\(\[\s*loadRecurringProfileCycles/);
+});

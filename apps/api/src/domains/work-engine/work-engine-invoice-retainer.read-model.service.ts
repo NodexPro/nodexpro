@@ -215,10 +215,11 @@ async function loadEndCustomers(scope: ActiveIncomeIssuerScope) {
 }
 
 async function loadProfiles(orgId: string, representedClientId: string): Promise<RawProfile[]> {
+  /* Omit document_template_snapshot from the all-profiles list — hydrate only the selected profile. */
   const { data, error } = await supabaseAdmin
     .from('income_recurring_document_profiles')
     .select(
-      'id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, quantity, unit_price_before_vat_reference, discount_percent_reference, discount_amount_reference, currency, price_increase_enabled, price_increase_type, price_increase_value, status, source_draft_template_id, document_template_snapshot, last_generated_draft_id, last_generated_at, last_generation_failed_at, last_generation_error_code, last_generation_error_message',
+      'id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, quantity, unit_price_before_vat_reference, discount_percent_reference, discount_amount_reference, currency, price_increase_enabled, price_increase_type, price_increase_value, status, source_draft_template_id, last_generated_draft_id, last_generated_at, last_generation_failed_at, last_generation_error_code, last_generation_error_message',
     )
     .eq('organization_id', orgId)
     .eq('represented_client_id', representedClientId)
@@ -228,7 +229,26 @@ async function loadProfiles(orgId: string, representedClientId: string): Promise
     .order('updated_at', { ascending: false })
     .limit(5000);
   throwIfSupabaseError(error, 'loadRetainerProfiles');
-  return (data ?? []) as RawProfile[];
+  return ((data ?? []) as Array<Omit<RawProfile, 'document_template_snapshot'>>).map((row) => ({
+    ...row,
+    document_template_snapshot: null,
+  }));
+}
+
+async function loadProfileTemplateSnapshot(
+  orgId: string,
+  profileId: string,
+): Promise<RecurringDocumentTemplateSnapshot | null> {
+  const { data, error } = await supabaseAdmin
+    .from('income_recurring_document_profiles')
+    .select('document_template_snapshot')
+    .eq('organization_id', orgId)
+    .eq('id', profileId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadRetainerProfileTemplateSnapshot');
+  const snapshot = (data as { document_template_snapshot: RecurringDocumentTemplateSnapshot | null } | null)
+    ?.document_template_snapshot;
+  return snapshot ?? null;
 }
 
 function buildProfileSummary(profile: RawProfile): string {
@@ -335,7 +355,7 @@ function buildRetainerSettings(
       workspace?.income_workspace_aggregate.active_wizard_draft_id ??
       profile?.source_draft_template_id ??
       null,
-    document_template_snapshot: profile?.document_template_snapshot ?? null,
+    document_template_snapshot: null, /* Server-only; omit from client payload (MB-scale). */
     document_type,
     document_type_label,
     document_type_change_note: DOCUMENT_TYPE_CHANGE_NOTE,
@@ -605,26 +625,61 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
       ? (profileByCustomerId.get(selectedEndCustomerId) ?? null)
       : null;
 
-  let profileCycles: RawCycleRow[] = [];
-  let childHistoryDocumentIdsLoaded = 0;
-  let childDocumentsHistory: WorkEngineInvoiceRetainerChildDocumentHistoryRow[] = [];
   if (selectedProfile?.id) {
-    const loadCyclesStartMs = Date.now();
+    const snapshotLoadStartMs = Date.now();
     try {
-      profileCycles = await loadRecurringProfileCycles(orgId, selectedProfile.id);
+      selectedProfile.document_template_snapshot = await loadProfileTemplateSnapshot(
+        orgId,
+        selectedProfile.id,
+      );
     } catch (e) {
-      console.warn('[work-engine] loadRecurringProfileCycles failed', selectedProfile.id, e);
+      console.warn('[work-engine] loadRetainerProfileTemplateSnapshot failed', selectedProfile.id, e);
     }
     stepStartMs = logRetainerSetupTiming(
       representedClientId,
       selectedEndCustomerId,
-      'load_cycles',
-      loadCyclesStartMs,
+      'load_selected_profile_snapshot',
+      snapshotLoadStartMs,
+    );
+  }
+
+  let profileCycles: RawCycleRow[] = [];
+  let childHistoryDocumentIdsLoaded = 0;
+  let childDocumentsHistory: WorkEngineInvoiceRetainerChildDocumentHistoryRow[] = [];
+  let scheduleWorkItemsByPeriodKey = new Map<string, ScheduleRowWorkItemRef>();
+  let cycleOverridesByDate = new Map();
+  if (selectedProfile?.id) {
+    const parallelScheduleStartMs = Date.now();
+    const [cyclesResult, workItemsResult, overridesResult] = await Promise.all([
+      loadRecurringProfileCycles(orgId, selectedProfile.id).catch((e) => {
+        console.warn('[work-engine] loadRecurringProfileCycles failed', selectedProfile.id, e);
+        return [] as RawCycleRow[];
+      }),
+      loadScheduleProjectionWorkItemsByProfile({
+        orgId,
+        profileId: selectedProfile.id,
+      }).catch((e) => {
+        console.warn('[work-engine] loadScheduleProjectionWorkItemsByProfile failed', selectedProfile.id, e);
+        return new Map<string, ScheduleRowWorkItemRef>();
+      }),
+      loadRecurringCycleOverridesForProfile({ orgId, profileId: selectedProfile.id }).catch((e) => {
+        console.warn('[work-engine] loadRecurringCycleOverridesForProfile failed', selectedProfile.id, e);
+        return new Map();
+      }),
+    ]);
+    profileCycles = cyclesResult;
+    scheduleWorkItemsByPeriodKey = workItemsResult;
+    cycleOverridesByDate = overridesResult;
+    stepStartMs = logRetainerSetupTiming(
+      representedClientId,
+      selectedEndCustomerId,
+      'load_cycles_work_items_overrides',
+      parallelScheduleStartMs,
     );
     logRetainerSetupTimingDetail(
       representedClientId,
       selectedEndCustomerId,
-      `cycles_loaded=${profileCycles.length}`,
+      `cycles_loaded=${profileCycles.length} schedule_work_items_loaded=${scheduleWorkItemsByPeriodKey.size} overrides_loaded=${cycleOverridesByDate.size}`,
     );
 
     const documentIds = profileCycles
@@ -695,30 +750,6 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
         })
       : null;
 
-  let scheduleWorkItemsByPeriodKey = new Map<string, ScheduleRowWorkItemRef>();
-  if (selectedProfile?.id) {
-    const loadWorkItemsStartMs = Date.now();
-    try {
-      scheduleWorkItemsByPeriodKey = await loadScheduleProjectionWorkItemsByProfile({
-        orgId,
-        profileId: selectedProfile.id,
-      });
-    } catch (e) {
-      console.warn('[work-engine] loadScheduleProjectionWorkItemsByProfile failed', selectedProfile.id, e);
-    }
-    stepStartMs = logRetainerSetupTiming(
-      representedClientId,
-      selectedEndCustomerId,
-      'load_schedule_work_items',
-      loadWorkItemsStartMs,
-    );
-    logRetainerSetupTimingDetail(
-      representedClientId,
-      selectedEndCustomerId,
-      `schedule_work_items_loaded=${scheduleWorkItemsByPeriodKey.size}`,
-    );
-  }
-
   const schedulerStatus = resolveSchedulerStatus(selectedProfile);
   const schedulerNote =
     schedulerStatus === RECURRING_SCHEDULER_STATUS_FAILED
@@ -763,10 +794,6 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
   );
 
   const scheduleProjectionStartMs = Date.now();
-  const cycleOverridesByDate =
-    selectedProfile?.id
-      ? await loadRecurringCycleOverridesForProfile({ orgId, profileId: selectedProfile.id })
-      : new Map();
   const retainerScheduleProjection = await buildRetainerScheduleProjection({
     orgId,
     representedClientId,

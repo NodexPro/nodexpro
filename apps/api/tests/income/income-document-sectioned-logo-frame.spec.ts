@@ -126,12 +126,12 @@ describe('sectioned logo frame contract (golden master)', () => {
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: 100%/);
   });
 
-  test('studio logo size large uses GM lockup (~20%+ A4, visible opposite title)', () => {
+  test('studio logo size large is GM +35% (capped by branding column)', () => {
     const medium = resolveSectionedBrandingLayout('medium');
     const large = resolveSectionedBrandingLayout('large');
-    assert.equal(large.scale, 1);
-    assert.equal(large.logo_block_width_px, 300);
-    assert.equal(large.logo_block_height_px, 70);
+    assert.equal(large.scale, 1.35);
+    assert.equal(large.logo_block_width_px, 351);
+    assert.equal(large.logo_block_height_px, 82);
     assert.ok(large.logo_block_height_px > medium.logo_block_height_px);
     assert.ok(large.logo_block_width_px > medium.logo_block_width_px);
     assert.equal(large.branding_col_width_px, medium.branding_col_width_px);
@@ -163,9 +163,9 @@ describe('sectioned logo frame contract (golden master)', () => {
       notes: null,
       company_subtitle: null,
     });
-    assert.match(html, /--nx-doc-logo-h:\s*70px/);
-    assert.match(html, /--nx-doc-logo-w:\s*300px/);
-    assert.match(html, /--nx-doc-logo-scale:\s*1(?:\.0)?/);
+    assert.match(html, /--nx-doc-logo-h:\s*82px/);
+    assert.match(html, /--nx-doc-logo-w:\s*351px/);
+    assert.match(html, /--nx-doc-logo-scale:\s*1\.35/);
     /* Title stays 32px — logo enlarged, title is not reduced. */
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*font-size:\s*32px/);
   });
