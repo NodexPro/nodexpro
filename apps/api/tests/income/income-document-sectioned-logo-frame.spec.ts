@@ -127,17 +127,17 @@ describe('sectioned logo frame contract (golden master)', () => {
       Math.abs(medium.branding_col_width_px / medium.doc_col_width_px - 0.8) < 0.01,
     );
     const html = sectionedHtml('data:image/png;base64,portrait');
-    assert.match(html, /--nx-doc-logo-w:\s*363px/);
+    assert.match(html, /--nx-doc-logo-w:\s*278px/);
     assert.match(html, /--nx-doc-logo-h:\s*105px/);
     assert.match(html, /--nx-doc-branding-col:\s*312px/);
     assert.match(html, /--nx-doc-doc-col:\s*391px/);
   });
 
-  test('studio logo size large paints exact 427×123 without empty frame padding', () => {
+  test('studio logo size large paints exact 327×123 without empty frame padding', () => {
     const medium = resolveSectionedBrandingLayout('medium');
     const large = resolveSectionedBrandingLayout('large');
     assert.equal(large.scale, 1);
-    assert.equal(large.logo_block_width_px, 427);
+    assert.equal(large.logo_block_width_px, 327);
     assert.equal(large.logo_block_height_px, 123);
     assert.equal(large.branding_col_width_px, medium.branding_col_width_px);
     assert.equal(large.doc_col_width_px, medium.doc_col_width_px);
@@ -170,7 +170,7 @@ describe('sectioned logo frame contract (golden master)', () => {
       company_subtitle: null,
     });
     assert.match(html, /--nx-doc-logo-h:\s*123px/);
-    assert.match(html, /--nx-doc-logo-w:\s*427px/);
+    assert.match(html, /--nx-doc-logo-w:\s*327px/);
     assert.match(html, /--nx-doc-logo-scale:\s*1(?:\.0)?/);
     assert.match(html, /grid-template-columns:\s*var\(--nx-doc-doc-col\)\s*var\(--nx-doc-branding-col\)/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: fill/);
