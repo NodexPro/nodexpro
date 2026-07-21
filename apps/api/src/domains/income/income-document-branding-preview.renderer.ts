@@ -1155,8 +1155,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }
 .nx-doc--sectioned .nx-doc__upper {
   display: grid;
-  /* DOM order: doc-column then branding. In RTL: title/customer on the right, logo zone on the left. */
-  grid-template-columns: var(--nx-doc-doc-col) var(--nx-doc-branding-col);
+  /* DOM order: doc-column then branding. In RTL: title/customer on the right, logo zone on the left. Equal widths. */
+  grid-template-columns: 1fr 1fr;
   gap: 0;
   align-items: start;
   width: 100%;
@@ -1188,34 +1188,38 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
 }
-/* Logo frame — GM artwork target; must beat classic logo max-height:40px. */
+/* Logo frame hugs the image — max size only; no empty box around the logo. */
 .nx-doc--sectioned .nx-doc__logo-frame {
-  width: var(--nx-doc-logo-w);
-  height: var(--nx-doc-logo-h);
-  max-width: 100%;
+  width: fit-content;
+  height: auto;
+  max-width: min(100%, var(--nx-doc-logo-w));
+  max-height: var(--nx-doc-logo-h);
   margin: 0 0 ${GM.upper.logo_to_company_gap_px}px;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
+  overflow: visible;
+  display: block;
   background: transparent;
   border: none;
   flex-shrink: 0;
+  line-height: 0;
 }
 .nx-doc--sectioned .nx-doc__logo-frame--empty {
   background: transparent;
+  width: var(--nx-doc-logo-w);
+  height: 0;
+  max-height: 0;
+  margin: 0;
+  overflow: hidden;
 }
 .nx-doc--sectioned .nx-doc__logo-img {
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  max-height: none;
+  width: auto;
+  height: auto;
+  max-width: min(100%, var(--nx-doc-logo-w));
+  max-height: var(--nx-doc-logo-h);
   margin: 0;
   object-fit: contain;
-  object-position: left center;
+  object-position: left top;
   display: block;
   transform: none;
-  align-self: stretch;
 }
 .nx-doc--sectioned .nx-doc__issuer-name {
   font-family: Arial, Helvetica, sans-serif;
