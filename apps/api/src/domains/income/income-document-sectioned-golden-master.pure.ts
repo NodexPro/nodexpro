@@ -11,11 +11,15 @@
 
 import type { IncomeLogoSizeKey } from './income-document-branding.types.js';
 
-/** Studio logo size → sectioned branding-zone scale (medium = GM baseline). */
+/**
+ * Studio logo size → height relative to document title (32px).
+ * `large` matches the title line exactly; medium/small stay smaller.
+ * Title size is never reduced.
+ */
 export function resolveSectionedBrandingLayoutScale(logoSizeKey: IncomeLogoSizeKey): number {
-  if (logoSizeKey === 'large') return 1.4;
-  if (logoSizeKey === 'small') return 0.85;
-  return 1;
+  if (logoSizeKey === 'large') return 1;
+  if (logoSizeKey === 'small') return 0.7;
+  return 0.85;
 }
 
 export function resolveSectionedBrandingLayout(logoSizeKey: IncomeLogoSizeKey): {
@@ -31,8 +35,13 @@ export function resolveSectionedBrandingLayout(logoSizeKey: IncomeLogoSizeKey): 
   /* Equal upper columns (logo zone | document zone). */
   const brandingCol = Math.floor(contentW / 2);
   const docCol = contentW - brandingCol;
-  const logoW = Math.round(SECTIONED_GOLDEN_MASTER.upper.logo_block_width_px * scale);
-  const logoH = Math.round(SECTIONED_GOLDEN_MASTER.upper.logo_block_height_px * scale);
+  const titleH = SECTIONED_GOLDEN_MASTER.upper.title_font_size_px;
+  const aspect =
+    SECTIONED_GOLDEN_MASTER.upper.logo_block_width_px /
+    SECTIONED_GOLDEN_MASTER.upper.logo_block_height_px;
+  /* גדול: logo height = document title font size (one shared visual line). */
+  const logoH = Math.max(1, Math.round(titleH * scale));
+  const logoW = Math.round(logoH * aspect);
   const customerCard = Math.min(SECTIONED_GOLDEN_MASTER.upper.customer_card_width_px, docCol);
   return {
     scale,

@@ -118,22 +118,22 @@ describe('sectioned logo frame contract (golden master)', () => {
 
   test('branding column logo frame fills width with max height', () => {
     const html = sectionedHtml('data:image/png;base64,portrait');
-    assert.match(html, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-w:\s*300px/);
-    assert.match(html, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-h:\s*70px/);
+    const medium = resolveSectionedBrandingLayout('medium');
+    assert.match(html, new RegExp(`\\.nx-doc--sectioned[\\s\\S]*--nx-doc-logo-w:\\s*${medium.logo_block_width_px}px`));
+    assert.match(html, new RegExp(`\\.nx-doc--sectioned[\\s\\S]*--nx-doc-logo-h:\\s*${medium.logo_block_height_px}px`));
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*overflow: hidden/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: 100%/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: 100%/);
   });
 
-  test('studio logo size large scales branding zone and logo by 40%', () => {
+  test('studio logo size large matches document title height (32px)', () => {
     const medium = resolveSectionedBrandingLayout('medium');
     const large = resolveSectionedBrandingLayout('large');
-    assert.equal(medium.scale, 1);
-    assert.equal(large.scale, 1.4);
-    assert.equal(large.logo_block_height_px, Math.round(medium.logo_block_height_px * 1.4));
-    assert.equal(large.branding_col_width_px, medium.branding_col_width_px);
-    assert.equal(large.doc_col_width_px, medium.doc_col_width_px);
+    assert.equal(large.scale, 1);
+    assert.equal(large.logo_block_height_px, 32);
+    assert.ok(large.logo_block_height_px > medium.logo_block_height_px);
     assert.ok(large.logo_block_width_px > medium.logo_block_width_px);
+    assert.equal(large.branding_col_width_px, medium.branding_col_width_px);
 
     const html = renderIncomeBrandedPreviewHtml({
       branding: resolveBrandingProfile(
@@ -160,12 +160,10 @@ describe('sectioned logo frame contract (golden master)', () => {
       notes: null,
       company_subtitle: null,
     });
+    assert.match(html, /--nx-doc-logo-h:\s*32px/);
     assert.match(html, new RegExp(`--nx-doc-logo-w:\\s*${large.logo_block_width_px}px`));
-    assert.match(html, new RegExp(`--nx-doc-logo-h:\\s*${large.logo_block_height_px}px`));
-    assert.match(html, /--nx-doc-logo-scale:\s*1\.4/);
-    assert.match(
-      html,
-      new RegExp(`--nx-doc-branding-col:\\s*${large.branding_col_width_px}px`),
-    );
+    assert.match(html, /--nx-doc-logo-scale:\s*1(?:\.0)?/);
+    /* Title stays 32px — logo matches, title is not reduced. */
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*font-size:\s*32px/);
   });
 });
