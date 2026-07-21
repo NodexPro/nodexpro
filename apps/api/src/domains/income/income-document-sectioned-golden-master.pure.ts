@@ -75,7 +75,7 @@ export const SECTIONED_GOLDEN_MASTER = {
   page: {
     a4_width_px: 794,
     a4_height_px: 1123,
-    /* Side inset ≤ 0.5cm (~19px @96dpi): content = 794 − 2×19. */
+    /* Side inset 0.5cm (~19px @96dpi). Content lives inside that inset. */
     content_width_px: 756,
     margin_left_px: 19,
     margin_right_px: 19,

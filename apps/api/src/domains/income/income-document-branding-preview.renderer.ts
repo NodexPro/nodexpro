@@ -594,6 +594,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   max-width: 840px;
   margin: 0 auto;
   padding: 0;
+  padding-inline: 19px;
   box-sizing: border-box;
   font-family: ${INVOICE_FONT};
   color: var(--nx-doc-text);
@@ -1145,9 +1146,13 @@ export function renderIncomeBrandedPreviewHtml(params: {
   --nx-doc-branding-col: ${sectionedLayout.branding_col_width_px}px;
   --nx-doc-doc-col: ${sectionedLayout.doc_col_width_px}px;
   --nx-doc-logo-scale: ${sectionedLayout.scale};
-  width: ${GM.page.content_width_px}px;
-  max-width: ${GM.page.content_width_px}px;
+  /* Full paper width; sole side inset = 0.5cm (do not also pad the preview chrome). */
+  width: 100%;
+  max-width: ${GM.page.a4_width_px}px;
+  margin: 0;
   padding: 0;
+  padding-inline: ${GM.page.margin_left_px}px;
+  box-sizing: border-box;
   color: var(--nx-doc-text);
   font-size: 14px;
   line-height: 1.35;
@@ -1170,7 +1175,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__branding {
   width: 100%;
   min-width: 0;
-  /* Outer left edge flush; only a thin gap before the center divider. */
+  /* Outer edge = page padding only; thin gap before the center divider. */
   padding: 0;
   padding-inline-start: 8px;
   border-inline-start: 1px solid ${GM.colors.divider};
@@ -1178,7 +1183,6 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
   overflow: visible;
-  /* Physical left — next to the preview scrollbar / page edge. */
   text-align: left;
 }
 .nx-doc--sectioned .nx-doc__doc-column {
@@ -1189,12 +1193,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
   gap: 0;
   /*
    * Document is dir=rtl: flex-start = outer RIGHT edge (nearest page edge).
-   * flex-end was wrong — it packed the title toward the page center.
+   * Page already has 0.5cm padding-inline — no extra inset here.
    */
   align-items: flex-start;
-  /* ~0.25cm (~10px) from the outer right edge — 50% closer than the prior 19px inset. */
   padding: 0;
-  padding-inline-start: 10px;
   padding-inline-end: 8px;
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
