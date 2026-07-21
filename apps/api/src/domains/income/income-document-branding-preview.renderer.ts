@@ -1192,9 +1192,9 @@ export function renderIncomeBrandedPreviewHtml(params: {
    * flex-end was wrong — it packed the title toward the page center.
    */
   align-items: flex-start;
-  /* 0.5cm (~19px) from the outer right edge; thin gap from the center divider. */
+  /* ~0.25cm (~10px) from the outer right edge — 50% closer than the prior 19px inset. */
   padding: 0;
-  padding-inline-start: 19px;
+  padding-inline-start: 10px;
   padding-inline-end: 8px;
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
