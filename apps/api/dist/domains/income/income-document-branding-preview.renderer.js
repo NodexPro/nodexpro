@@ -1011,8 +1011,8 @@ export function renderIncomeBrandedPreviewHtml(params) {
 }
 .nx-doc--sectioned .nx-doc__upper {
   display: grid;
-  /* DOM order: doc-column then branding. In RTL: title/customer on the right, logo zone on the left. Equal widths. */
-  grid-template-columns: 1fr 1fr;
+  /* DOM order: doc-column then branding. In RTL: title/customer on the right, logo zone on the left. */
+  grid-template-columns: var(--nx-doc-doc-col) var(--nx-doc-branding-col);
   gap: 0;
   align-items: start;
   width: 100%;

@@ -10,12 +10,12 @@
  */
 /**
  * Studio logo size → scale of golden-master logo lockup (300×70).
- * `large` is GM × 1.35 (≥20% of A4 width, capped by branding column).
+ * `large` = prior large (GM×1.35, column-capped) × 1.5 on width and height.
  * Title font size is never reduced.
  */
 export function resolveSectionedBrandingLayoutScale(logoSizeKey) {
     if (logoSizeKey === 'large')
-        return 1.35;
+        return 1.35 * 1.5;
     if (logoSizeKey === 'small')
         return 0.7;
     return 0.85;
@@ -23,15 +23,34 @@ export function resolveSectionedBrandingLayoutScale(logoSizeKey) {
 export function resolveSectionedBrandingLayout(logoSizeKey) {
     const scale = resolveSectionedBrandingLayoutScale(logoSizeKey);
     const contentW = SECTIONED_GOLDEN_MASTER.page.content_width_px;
-    /* Equal upper columns (logo zone | document zone). */
-    const brandingCol = Math.floor(contentW / 2);
-    const docCol = contentW - brandingCol;
+    const equalHalf = Math.floor(contentW / 2);
     const gmW = SECTIONED_GOLDEN_MASTER.upper.logo_block_width_px;
     const gmH = SECTIONED_GOLDEN_MASTER.upper.logo_block_height_px;
     const aspect = gmW / gmH;
-    /* Scale GM lockup; large (+35%) fills branding column when needed. */
-    const logoW = Math.min(Math.max(1, Math.round(gmW * scale)), brandingCol);
-    const logoH = Math.max(1, Math.round(logoW / aspect));
+    let logoW;
+    let logoH;
+    if (logoSizeKey === 'large') {
+        /* Prior large was min(GM×1.35, equalHalf)=351×82 — enlarge that lockup +50% both axes. */
+        const priorLargeW = Math.min(Math.round(gmW * 1.35), equalHalf);
+        const priorLargeH = Math.max(1, Math.round(priorLargeW / aspect));
+        logoW = Math.max(1, Math.round(priorLargeW * 1.5));
+        logoH = Math.max(1, Math.round(priorLargeH * 1.5));
+        /* Keep on the sheet: never wider than content. */
+        if (logoW > contentW) {
+            logoW = contentW;
+            logoH = Math.max(1, Math.round(logoW / aspect));
+        }
+    }
+    else {
+        logoW = Math.min(Math.max(1, Math.round(gmW * scale)), equalHalf);
+        logoH = Math.max(1, Math.round(logoW / aspect));
+    }
+    const brandingCol = logoSizeKey === 'large' ? Math.max(equalHalf, Math.min(logoW, contentW - 160)) : equalHalf;
+    const docCol = contentW - brandingCol;
+    if (logoW > brandingCol) {
+        logoW = brandingCol;
+        logoH = Math.max(1, Math.round(logoW / aspect));
+    }
     const customerCard = Math.min(SECTIONED_GOLDEN_MASTER.upper.customer_card_width_px, docCol);
     return {
         scale,

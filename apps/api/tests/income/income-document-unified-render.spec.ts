@@ -605,7 +605,7 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__table thead th[\s\S]*background: var\(--nx-doc-primary\)/);
   assert.match(
     previewHtml,
-    /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: 1fr 1fr/,
+    /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns:\s*var\(--nx-doc-doc-col\)\s*var\(--nx-doc-branding-col\)/,
   );
   assert.match(
     previewHtml,
