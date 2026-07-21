@@ -10,11 +10,11 @@
  */
 /** Design target for גדול — logo paints to this box (no empty margin in the frame). */
 export const SECTIONED_LOGO_LARGE_TARGET = {
-    width_px: 327,
-    height_px: 123,
+    width_px: 319,
+    height_px: 120,
 };
 /**
- * Studio logo size → scale of the large target lockup (327×123).
+ * Studio logo size → scale of the large target lockup (319×120).
  * Small logo files are still stretched up to the box (no empty frame).
  * Branding column is 20% narrower than the document column.
  * Title font size is never reduced.
@@ -38,7 +38,7 @@ export function resolveSectionedBrandingLayout(logoSizeKey) {
     const targetW = Math.max(1, Math.round(SECTIONED_LOGO_LARGE_TARGET.width_px * scale));
     const targetH = Math.max(1, Math.round(SECTIONED_LOGO_LARGE_TARGET.height_px * scale));
     /*
-     * Paint box is exactly the 327×123 target (× size scale).
+     * Paint box is exactly the 319×120 target (× size scale).
      * Branding column stays 20% narrower than doc; logo may extend past the column
      * edge (overflow visible) so company lines below are not pushed down by a fat column.
      */
@@ -64,9 +64,10 @@ export const SECTIONED_GOLDEN_MASTER = {
     page: {
         a4_width_px: 794,
         a4_height_px: 1123,
-        content_width_px: 703,
-        margin_left_px: 45,
-        margin_right_px: 45,
+        /* Side inset ≤ 0.5cm (~19px @96dpi): content = 794 − 2×19. */
+        content_width_px: 756,
+        margin_left_px: 19,
+        margin_right_px: 19,
         margin_top_px: 38,
         margin_bottom_px: 45,
     },

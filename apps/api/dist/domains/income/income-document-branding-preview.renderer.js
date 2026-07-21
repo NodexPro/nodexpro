@@ -1026,12 +1026,16 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--sectioned .nx-doc__branding {
   width: 100%;
   min-width: 0;
+  /* Outer left edge flush; only a thin gap before the center divider. */
+  padding: 0;
   padding-inline-start: 8px;
   border-inline-start: 1px solid ${GM.colors.divider};
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
   overflow: visible;
+  /* Physical left — next to the preview scrollbar / page edge. */
+  text-align: left;
 }
 .nx-doc--sectioned .nx-doc__doc-column {
   width: 100%;
@@ -1039,14 +1043,17 @@ export function renderIncomeBrandedPreviewHtml(params) {
   display: flex;
   flex-direction: column;
   gap: 0;
-  align-items: stretch;
-  padding-inline-end: 16px;
+  align-items: flex-end;
+  /* Outer right edge flush; thin gap from the center divider only. */
+  padding: 0;
+  padding-inline-end: 8px;
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
+  text-align: right;
 }
 /*
- * Exact 327×123 paint box (× size). Small files stretch up — no empty margin in the box.
+ * Exact 319×120 paint box (× size). Small files stretch up — no empty margin in the box.
  * Company block follows immediately (logo_to_company gap only).
  */
 .nx-doc--sectioned .nx-doc__logo-frame {
@@ -1054,6 +1061,8 @@ export function renderIncomeBrandedPreviewHtml(params) {
   height: var(--nx-doc-logo-h);
   max-width: none;
   margin: 0 0 ${GM.upper.logo_to_company_gap_px}px;
+  margin-inline-end: auto;
+  margin-inline-start: 0;
   overflow: hidden;
   display: block;
   background: transparent;
@@ -1087,7 +1096,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
   margin: 0 0 8px;
   line-height: 1.25;
   color: ${GM.colors.text};
-  text-align: start;
+  text-align: left;
 }
 .nx-doc--sectioned .nx-doc__issuer-subtitle {
   font-family: Arial, Helvetica, sans-serif;

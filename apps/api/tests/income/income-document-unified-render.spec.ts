@@ -611,10 +611,10 @@ test('sectioned style matches golden-master printable layout', () => {
     previewHtml,
     /nx-doc__upper[\s\S]*nx-doc__doc-column[\s\S]*nx-doc__branding/,
   );
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-branding-col:\s*312px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-doc-col:\s*391px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-h:\s*105px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-w:\s*278px/); /* medium: 0.85×327×123 */
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-branding-col:\s*336px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-doc-col:\s*420px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-h:\s*102px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*--nx-doc-logo-w:\s*271px/); /* medium: 0.85×319×120 */
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: fill/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*width: 100%/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: 100%/);
