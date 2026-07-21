@@ -1002,13 +1002,16 @@ export function renderIncomeBrandedPreviewHtml(params) {
   --nx-doc-branding-col: ${sectionedLayout.branding_col_width_px}px;
   --nx-doc-doc-col: ${sectionedLayout.doc_col_width_px}px;
   --nx-doc-logo-scale: ${sectionedLayout.scale};
-  /* Full paper width. Right (invoice) keeps 0.5cm; left (scrollbar/logo) is flush. */
+  /*
+   * Fill the preview paper edge-to-edge. Equal 0.5cm side insets.
+   * Do not cap below the paper width — a narrower max-width leaves an RTL gutter
+   * by the scrollbar (logo side).
+   */
   width: 100%;
-  max-width: ${GM.page.a4_width_px}px;
-  margin: 0 !important;
+  max-width: 100%;
+  margin: 0;
   padding-block: 0;
-  /* RTL: inline-start = right edge, inline-end = left/scrollbar edge. */
-  padding-inline: ${GM.page.margin_right_px}px 0;
+  padding-inline: ${GM.page.margin_left_px}px;
   box-sizing: border-box;
   color: var(--nx-doc-text);
   font-size: 14px;
@@ -1035,8 +1038,8 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--sectioned .nx-doc__branding {
   width: 100%;
   min-width: 0;
-  /* Physical left flush to scrollbar; only inset toward the center divider. */
-  padding: 0 8px 0 0;
+  padding: 0;
+  padding-inline-start: 8px;
   border-inline-start: 1px solid ${GM.colors.divider};
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
