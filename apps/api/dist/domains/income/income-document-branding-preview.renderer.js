@@ -1046,7 +1046,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
   font-size: 14px;
 }
 /*
- * Exact 527×123 paint box (× size). Small files stretch up — no empty margin in the box.
+ * Exact 427×123 paint box (× size). Small files stretch up — no empty margin in the box.
  * Company block follows immediately (logo_to_company gap only).
  */
 .nx-doc--sectioned .nx-doc__logo-frame {
