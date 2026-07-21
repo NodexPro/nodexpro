@@ -467,25 +467,20 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
     representedClientId,
     perms,
   );
-  const customers = await loadEndCustomers(issuerScope);
+  const [customers, profilesResult] = await Promise.all([
+    loadEndCustomers(issuerScope),
+    loadProfiles(orgId, representedClientId).catch((e) => {
+      console.warn('[work-engine] loadRetainerProfiles failed; customer picker still available', e);
+      return [] as RawProfile[];
+    }),
+  ]);
   stepStartMs = logRetainerSetupTiming(
     representedClientId,
     selectedEndCustomerIdEarly,
-    'load_end_customers',
+    'load_end_customers_and_profiles',
     stepStartMs,
   );
-  let profiles: RawProfile[] = [];
-  try {
-    profiles = await loadProfiles(orgId, representedClientId);
-  } catch (e) {
-    console.warn('[work-engine] loadRetainerProfiles failed; customer picker still available', e);
-  }
-  stepStartMs = logRetainerSetupTiming(
-    representedClientId,
-    selectedEndCustomerIdEarly,
-    'load_profile',
-    stepStartMs,
-  );
+  const profiles: RawProfile[] = profilesResult;
 
   const profileByCustomerId = new Map<string, RawProfile>();
   for (const profile of profiles) {

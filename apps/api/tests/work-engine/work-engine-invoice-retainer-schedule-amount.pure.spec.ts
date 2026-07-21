@@ -93,3 +93,17 @@ test('waiting review row exposes generated_draft_review primary action when draf
 test('no primary action when cycle has no generated draft', () => {
   assert.match(primaryActionSource, /!params\.generated_draft_id/);
 });
+
+test('schedule projection resolves VAT once and skips future rebuild without override', () => {
+  assert.match(projectionServiceSource, /scheduleVatResolution = await resolveIncomeDraftVatForOrg/);
+  assert.match(projectionServiceSource, /amountByCycleIndex/);
+  assert.match(projectionServiceSource, /vatResolution: scheduleVatResolution/);
+  assert.match(
+    projectionServiceSource,
+    /row_interaction_kind === 'future_projection'[\s\S]*params\.templateBaseStep[\s\S]*cycleOverride/,
+  );
+  assert.doesNotMatch(
+    projectionServiceSource,
+    /await resolveIncomeDraftVatForOrg\(params\.orgId, 'IL', params\.documentDate\)/,
+  );
+});

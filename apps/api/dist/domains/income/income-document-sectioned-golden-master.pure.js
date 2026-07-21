@@ -8,6 +8,43 @@
  *
  * These values drive sectioned printable CSS. Do not “improve” them.
  */
+/**
+ * Studio logo size → scale of golden-master logo lockup (300×70).
+ * `large` targets ~20% of A4 page width (and not less than GM artwork).
+ * Title font size is never reduced.
+ */
+export function resolveSectionedBrandingLayoutScale(logoSizeKey) {
+    if (logoSizeKey === 'large')
+        return 1;
+    if (logoSizeKey === 'small')
+        return 0.7;
+    return 0.85;
+}
+export function resolveSectionedBrandingLayout(logoSizeKey) {
+    const scale = resolveSectionedBrandingLayoutScale(logoSizeKey);
+    const contentW = SECTIONED_GOLDEN_MASTER.page.content_width_px;
+    const a4W = SECTIONED_GOLDEN_MASTER.page.a4_width_px;
+    /* Equal upper columns (logo zone | document zone). */
+    const brandingCol = Math.floor(contentW / 2);
+    const docCol = contentW - brandingCol;
+    const gmW = SECTIONED_GOLDEN_MASTER.upper.logo_block_width_px;
+    const gmH = SECTIONED_GOLDEN_MASTER.upper.logo_block_height_px;
+    const aspect = gmW / gmH;
+    /* גדול: at least 20% of A4 width, never below GM lockup so the logo stays visible. */
+    const largeTargetW = Math.max(gmW, Math.round(a4W * 0.2));
+    const baseW = logoSizeKey === 'large' ? largeTargetW : gmW;
+    const logoW = Math.min(Math.max(1, Math.round(baseW * scale)), brandingCol);
+    const logoH = Math.max(1, Math.round(logoW / aspect));
+    const customerCard = Math.min(SECTIONED_GOLDEN_MASTER.upper.customer_card_width_px, docCol);
+    return {
+        scale,
+        logo_block_width_px: logoW,
+        logo_block_height_px: logoH,
+        branding_col_width_px: brandingCol,
+        doc_col_width_px: docCol,
+        customer_card_width_px: customerCard,
+    };
+}
 export const SECTIONED_GOLDEN_MASTER = {
     source_image: {
         width_px: 1055,

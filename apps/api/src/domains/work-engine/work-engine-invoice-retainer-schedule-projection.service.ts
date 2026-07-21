@@ -9,7 +9,10 @@ import {
   computeDraftTotalsPreview,
   parseDocumentSettingsJson,
 } from '../income/income-document-draft-totals.pure.js';
-import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
+import {
+  resolveIncomeDraftVatForOrg,
+  type IncomeDraftVatResolution,
+} from '../income/income-draft-vat-resolver.js';
 import type { RecurringCycleStatus } from './work-engine-invoice-retainer-cycles.service.js';
 import {
   type RecurringDocumentFrequency,
@@ -266,9 +269,17 @@ async function computeScheduleAmount(params: {
   baseUnitPriceBeforeVat: number;
   nextDocumentPreview: WorkEngineInvoiceRetainerNextDocumentPreview | null;
   projectedNextDocumentDate: string | null;
+  /** Resolved once per schedule build — avoids Country Pack N+1 per row. */
+  vatResolution: IncomeDraftVatResolution;
+  amountByCycleIndex: Map<number, { amount_display: string; grand_total_reference: number }>;
   profiling?: ScheduleAmountProfiling;
 }): Promise<{ amount_display: string; grand_total_reference: number }> {
   params.profiling && (params.profiling.computeAmountCalls += 1);
+  const cached = params.amountByCycleIndex.get(params.cycleIndex);
+  if (cached) {
+    params.profiling && (params.profiling.previewShortcutCalls += 1);
+    return cached;
+  }
   if (
     params.cycleIndex > 0 &&
     params.nextDocumentPreview?.status === 'ready' &&
@@ -278,10 +289,12 @@ async function computeScheduleAmount(params: {
     params.profiling && (params.profiling.previewShortcutCalls += 1);
     const display = params.nextDocumentPreview.document_details_step.totals_block.grand_total_display;
     const parsed = Number(String(display).replace(/[^\d.-]/g, ''));
-    return {
+    const fromPreview = {
       amount_display: display,
       grand_total_reference: Number.isFinite(parsed) ? parsed : 0,
     };
+    params.amountByCycleIndex.set(params.cycleIndex, fromPreview);
+    return fromPreview;
   }
 
   const snapshot = params.profile.document_template_snapshot;
@@ -311,28 +324,24 @@ async function computeScheduleAmount(params: {
           },
         ]);
 
-  const vatStartMs = Date.now();
-  const vatResolution = await resolveIncomeDraftVatForOrg(params.orgId, 'IL', params.documentDate);
-  if (params.profiling) {
-    params.profiling.vatResolveCalls += 1;
-    params.profiling.vatResolveMs += Date.now() - vatStartMs;
-  }
   const totalsStartMs = Date.now();
   const totalsPreview = await computeDraftTotalsPreview(
     lines,
     params.profile.currency,
     settings,
-    vatResolution,
+    params.vatResolution,
     params.documentDate,
   );
   if (params.profiling) {
     params.profiling.totalsPreviewCalls += 1;
     params.profiling.totalsPreviewMs += Date.now() - totalsStartMs;
   }
-  return {
+  const result = {
     amount_display: totalsPreview.grand_total_display,
     grand_total_reference: totalsPreview.grand_total_reference ?? 0,
   };
+  params.amountByCycleIndex.set(params.cycleIndex, result);
+  return result;
 }
 
 async function loadGeneratedDraftScheduleAmountsById(
@@ -511,6 +520,11 @@ export async function buildRetainerScheduleProjection(params: {
   };
   const rowLoopStartMs = Date.now();
   let projectionRows = 0;
+  const amountByCycleIndex = new Map<number, { amount_display: string; grand_total_reference: number }>();
+  const vatStartMs = Date.now();
+  const scheduleVatResolution = await resolveIncomeDraftVatForOrg(params.orgId, 'IL', today);
+  amountProfiling.vatResolveCalls = 1;
+  amountProfiling.vatResolveMs = Date.now() - vatStartMs;
 
   for (const group of grouped) {
     const rows: WorkEngineInvoiceRetainerScheduleProjectionRow[] = [];
@@ -564,6 +578,8 @@ export async function buildRetainerScheduleProjection(params: {
         baseUnitPriceBeforeVat,
         nextDocumentPreview: params.nextDocumentPreview,
         projectedNextDocumentDate,
+        vatResolution: scheduleVatResolution,
+        amountByCycleIndex,
         profiling: amountProfiling,
       });
       if (cycle?.generated_draft_id && !cycle.generated_document_id) {
@@ -572,9 +588,11 @@ export async function buildRetainerScheduleProjection(params: {
           amount = draftAmount;
         }
       }
+      /* Only rebuild future-cycle step when an override exists — not for every projected row. */
       if (
         rowInteraction.row_interaction_kind === 'future_projection' &&
-        params.templateBaseStep
+        params.templateBaseStep &&
+        cycleOverride
       ) {
         const overrideAmount = await buildFutureCycleProjectionAmountDisplay({
           orgId: params.orgId,
@@ -582,7 +600,7 @@ export async function buildRetainerScheduleProjection(params: {
           baseStep: params.templateBaseStep,
           cycleDate: scheduledDate,
           cycleIndex,
-          overridePayload: cycleOverride?.override_payload ?? null,
+          overridePayload: cycleOverride.override_payload ?? null,
         });
         if (overrideAmount) {
           const parsed = Number(String(overrideAmount).replace(/[^\d.-]/g, ''));

@@ -126,14 +126,17 @@ describe('sectioned logo frame contract (golden master)', () => {
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*height: 100%/);
   });
 
-  test('studio logo size large matches document title height (32px)', () => {
+  test('studio logo size large uses GM lockup (~20%+ A4, visible opposite title)', () => {
     const medium = resolveSectionedBrandingLayout('medium');
     const large = resolveSectionedBrandingLayout('large');
     assert.equal(large.scale, 1);
-    assert.equal(large.logo_block_height_px, 32);
+    assert.equal(large.logo_block_width_px, 300);
+    assert.equal(large.logo_block_height_px, 70);
     assert.ok(large.logo_block_height_px > medium.logo_block_height_px);
     assert.ok(large.logo_block_width_px > medium.logo_block_width_px);
     assert.equal(large.branding_col_width_px, medium.branding_col_width_px);
+    /* At least 20% of A4 width. */
+    assert.ok(large.logo_block_width_px >= Math.round(794 * 0.2));
 
     const html = renderIncomeBrandedPreviewHtml({
       branding: resolveBrandingProfile(
@@ -160,10 +163,10 @@ describe('sectioned logo frame contract (golden master)', () => {
       notes: null,
       company_subtitle: null,
     });
-    assert.match(html, /--nx-doc-logo-h:\s*32px/);
-    assert.match(html, new RegExp(`--nx-doc-logo-w:\\s*${large.logo_block_width_px}px`));
+    assert.match(html, /--nx-doc-logo-h:\s*70px/);
+    assert.match(html, /--nx-doc-logo-w:\s*300px/);
     assert.match(html, /--nx-doc-logo-scale:\s*1(?:\.0)?/);
-    /* Title stays 32px — logo matches, title is not reduced. */
+    /* Title stays 32px — logo enlarged, title is not reduced. */
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*font-size:\s*32px/);
   });
 });

@@ -277,16 +277,15 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params) {
     const client = await loadOfficeClient(orgId, representedClientId);
     stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerIdEarly, 'load_office_client', stepStartMs);
     const issuerScope = buildOfficeRepresentativeIssuerScope(orgId, params.ctx.user.id, representedClientId, perms);
-    const customers = await loadEndCustomers(issuerScope);
-    stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerIdEarly, 'load_end_customers', stepStartMs);
-    let profiles = [];
-    try {
-        profiles = await loadProfiles(orgId, representedClientId);
-    }
-    catch (e) {
-        console.warn('[work-engine] loadRetainerProfiles failed; customer picker still available', e);
-    }
-    stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerIdEarly, 'load_profile', stepStartMs);
+    const [customers, profilesResult] = await Promise.all([
+        loadEndCustomers(issuerScope),
+        loadProfiles(orgId, representedClientId).catch((e) => {
+            console.warn('[work-engine] loadRetainerProfiles failed; customer picker still available', e);
+            return [];
+        }),
+    ]);
+    stepStartMs = logRetainerSetupTiming(representedClientId, selectedEndCustomerIdEarly, 'load_end_customers_and_profiles', stepStartMs);
+    const profiles = profilesResult;
     const profileByCustomerId = new Map();
     for (const profile of profiles) {
         if (!profileByCustomerId.has(profile.end_customer_id)) {
