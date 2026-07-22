@@ -411,9 +411,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
       ? params.lineRows
           .map((r) => {
             const vatCell = d.show_vat_row
-              ? `<td class="nx-doc__cell-vat">${escapeHtml(
-                  isSectioned ? r.vat_rate_label || r.vat_display || '—' : r.vat_display,
-                )}</td>`
+              ? `<td class="nx-doc__cell-vat">${escapeHtml(r.vat_display || '—')}</td>`
               : '';
             const descCell = isSectioned
               ? formatLineDescriptionCell(r.description || '—')
@@ -1484,7 +1482,6 @@ export function renderIncomeBrandedPreviewHtml(params: {
   text-align: center;
   vertical-align: middle;
 }
-.nx-doc--sectioned .nx-doc__table thead th:nth-child(2) { text-align: start; }
 .nx-doc--sectioned .nx-doc__table tbody td {
   height: ${GM.table.row_height_px}px;
   padding: 4px 8px;
@@ -1499,17 +1496,32 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__table tbody td.nx-doc__cell-desc {
   text-align: start;
   white-space: normal;
-  font-weight: 600;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: ${GM.colors.text};
+  line-height: 1.35;
 }
 .nx-doc--sectioned .nx-doc__table tbody td.nx-doc__cell-currency {
   font-variant-numeric: tabular-nums;
+}
+.nx-doc--sectioned .nx-doc__table tbody td.nx-doc__cell-vat {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.nx-doc--sectioned .nx-doc__table thead th:nth-child(2) {
+  text-align: start;
+  font-size: 14px;
 }
 .nx-doc--sectioned .nx-doc__table tbody tr:nth-child(even) td { background: #fafafa; }
 .nx-doc--sectioned .nx-doc__table tbody tr:last-child td { border-bottom: 1px solid #d8d8e4; }
 .nx-doc--sectioned .nx-doc__desc-title {
   display: block;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
   font-weight: 700;
   color: ${GM.colors.text};
+  line-height: 1.35;
 }
 .nx-doc--sectioned .nx-doc__desc-sub {
   display: block;

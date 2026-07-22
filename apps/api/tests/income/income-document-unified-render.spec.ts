@@ -666,6 +666,9 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, />סה״כ</);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__table[\s\S]*border-collapse: collapse/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__table tbody td[\s\S]*border: 1px solid #d8d8e4/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__table tbody td\.nx-doc__cell-desc[\s\S]*font-size: 14px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__table tbody td\.nx-doc__cell-desc[\s\S]*font-weight: 700/);
+  assert.doesNotMatch(previewHtml, /isSectioned \? r\.vat_rate_label/);
   assert.doesNotMatch(previewHtml, />תיאור</);
   assert.doesNotMatch(previewHtml, />יחידת מידה</);
   assert.doesNotMatch(previewHtml, />הנחה</);
