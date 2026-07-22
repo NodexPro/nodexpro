@@ -630,9 +630,11 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-bar[\s\S]*background: var\(--nx-doc-primary\)/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-bar[\s\S]*color: #ffffff/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-bar[\s\S]*height: 39px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-bar[\s\S]*width: 259px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-bar[\s\S]*width: 100%/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-identity[\s\S]*width: max-content/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*font-size: 32px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*text-align: start/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*margin: -38px 0/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*width: var\(--nx-doc-logo-w\)/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: var\(--nx-doc-logo-h\)/);
   assert.match(previewHtml, /nx-doc__payment-col--bank/);

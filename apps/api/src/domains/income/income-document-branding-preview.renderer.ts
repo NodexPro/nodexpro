@@ -1214,7 +1214,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   width: var(--nx-doc-logo-w);
   height: var(--nx-doc-logo-h);
   max-width: 100%;
-  margin: 0 0 ${GM.upper.logo_to_company_gap_px}px 0;
+  /* Lift logo 1cm to align with document title top. */
+  margin: -38px 0 ${GM.upper.logo_to_company_gap_px}px 0;
   overflow: hidden;
   display: block;
   background: transparent;
@@ -1278,7 +1279,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   flex-direction: column;
   align-items: flex-start;
   gap: ${GM.upper.title_to_number_gap_px}px;
-  width: ${GM.upper.number_bar_width_px}px;
+  /* Stack width = title ink; number bar stretches to the same length. */
+  width: max-content;
   max-width: 100%;
   /* Pin title + number bar to the outer edge (inline-start = right in RTL). */
   margin: 0 0 12px;
@@ -1295,13 +1297,12 @@ export function renderIncomeBrandedPreviewHtml(params: {
   line-height: ${GM.upper.title_line_height};
   color: ${GM.colors.text};
   text-align: start;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .nx-doc--sectioned .nx-doc__doc-number {
-  width: ${GM.upper.number_bar_width_px}px;
+  width: 100%;
   max-width: 100%;
   margin: 0;
 }
@@ -1311,7 +1312,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   justify-content: center;
   gap: 10px;
   box-sizing: border-box;
-  width: ${GM.upper.number_bar_width_px}px;
+  width: 100%;
   max-width: 100%;
   height: ${GM.upper.number_bar_height_px}px;
   min-height: ${GM.upper.number_bar_height_px}px;
