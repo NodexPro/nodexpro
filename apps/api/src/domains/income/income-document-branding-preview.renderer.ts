@@ -1391,7 +1391,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
    * Drop invoice meta to align with issuer contact rows (under the issuer name),
    * not with the issuer display name. Vertical only.
    */
-  margin: 28px 0 ${GM.upper.customer_top_gap_px}px;
+  margin: 26px 0 ${GM.upper.customer_top_gap_px}px;
   text-align: start;
 }
 .nx-doc--sectioned .nx-doc__meta-row {
@@ -1403,8 +1403,6 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-size: 14px;
   line-height: 1.35;
   color: var(--nx-doc-text-muted);
-}
-.nx-doc--sectioned .nx-doc__meta-row:first-child {
   padding-bottom: 4px;
   border-bottom: 1px solid #e8e8f2;
   box-sizing: border-box;
