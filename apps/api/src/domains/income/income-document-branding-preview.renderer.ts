@@ -368,8 +368,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
       </section>
     </div>
     <aside class="nx-doc__branding">
-      ${logoHtml}
-      ${issuerNameBlock}
+      <div class="nx-doc__branding-head">
+        ${logoHtml}
+        ${issuerNameBlock}
+      </div>
       ${issuerContactLines ? `<div class="nx-doc__issuer-lines">${issuerContactLines}</div>` : ''}
     </aside>
   </div>`
@@ -1165,10 +1167,13 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__upper {
   display: grid;
   /*
-   * DOM: doc-column | branding. Fill full width (no leftover gutter by the scrollbar).
-   * Branding is 20% narrower than doc → 1fr : 0.8fr.
+   * DOM: doc | branding (RTL → branding left, doc right).
+   * Row1: title/number | logo+issuer name
+   * Row2: invoice meta | issuer contact lines  ← same top edge (no pixel fighting)
+   * Row3: customer card
    */
   grid-template-columns: 1fr 0.8fr;
+  grid-template-rows: auto auto auto;
   gap: 0;
   align-items: start;
   width: 100%;
@@ -1179,7 +1184,13 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
 }
+.nx-doc--sectioned .nx-doc__doc-column,
 .nx-doc--sectioned .nx-doc__branding {
+  display: contents;
+}
+.nx-doc--sectioned .nx-doc__branding-head {
+  grid-column: 2;
+  grid-row: 1;
   width: 100%;
   min-width: 0;
   padding: 0;
@@ -1190,21 +1201,6 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-size: 14px;
   overflow: visible;
   text-align: left;
-}
-.nx-doc--sectioned .nx-doc__doc-column {
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  /* dir=rtl: flex-start = outer RIGHT edge. */
-  align-items: flex-start;
-  padding: 0;
-  padding-inline-end: 8px;
-  box-sizing: border-box;
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 14px;
-  text-align: start;
 }
 /*
  * Exact 319×120 paint box (× size). Small files stretch up — no empty margin in the box.
@@ -1265,12 +1261,20 @@ export function renderIncomeBrandedPreviewHtml(params: {
   text-align: start;
 }
 .nx-doc--sectioned .nx-doc__issuer-lines {
+  grid-column: 2;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   gap: ${GM.upper.meta_row_gap_px}px;
-  margin: 5px 0 0;
+  margin: 0;
   width: 100%;
+  min-width: 0;
+  padding: 0;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid ${GM.colors.divider};
+  box-sizing: border-box;
   text-align: start;
+  align-self: start;
 }
 .nx-doc--sectioned .nx-doc__issuer-line {
   display: grid;
@@ -1310,6 +1314,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   color: var(--nx-doc-primary);
 }
 .nx-doc--sectioned .nx-doc__doc-identity {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1321,6 +1327,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   margin: 0 0 12px;
   margin-inline-end: auto;
   margin-inline-start: 0;
+  padding-inline-end: 8px;
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__doc-title {
@@ -1383,16 +1390,17 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }
 .nx-doc--sectioned .nx-doc__doc-number-rule { display: none; }
 .nx-doc--sectioned .nx-doc__meta-list {
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   gap: ${GM.upper.meta_row_gap_px}px;
   width: 100%;
-  /*
-   * Drop invoice meta to align with issuer contact rows (under the issuer name),
-   * not with the issuer display name. Vertical only.
-   */
-  margin: 26px 0 ${GM.upper.customer_top_gap_px}px;
+  margin: 0 0 ${GM.upper.customer_top_gap_px}px;
+  padding-inline-end: 8px;
+  box-sizing: border-box;
   text-align: start;
+  align-self: start;
 }
 .nx-doc--sectioned .nx-doc__meta-row {
   display: grid;
@@ -1417,11 +1425,14 @@ export function renderIncomeBrandedPreviewHtml(params: {
   justify-self: start;
 }
 .nx-doc--sectioned .nx-doc__customer-card {
+  grid-column: 1;
+  grid-row: 3;
   width: ${sectionedLayout.customer_card_width_px}px;
   max-width: 100%;
   min-height: 0;
   height: auto;
   margin: 0;
+  margin-inline-end: 8px;
   padding: ${GM.upper.customer_card_padding_px}px;
   border-radius: ${GM.upper.customer_card_radius_px}px;
   background: var(--nx-doc-panel);
