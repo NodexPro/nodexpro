@@ -1268,7 +1268,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   display: flex;
   flex-direction: column;
   gap: ${GM.upper.meta_row_gap_px}px;
-  margin: 0;
+  margin: 0.5px 0 0;
   width: 100%;
   text-align: start;
 }
