@@ -1268,8 +1268,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   display: flex;
   flex-direction: column;
   gap: ${GM.upper.meta_row_gap_px}px;
-  /* Drop below document-date row — vertical only, no sideways shift. */
-  margin: 20px 0 0;
+  margin: 0;
   width: 100%;
   text-align: start;
 }
@@ -1388,7 +1387,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
   flex-direction: column;
   gap: ${GM.upper.meta_row_gap_px}px;
   width: 100%;
-  margin: 0 0 ${GM.upper.customer_top_gap_px}px;
+  /*
+   * Drop invoice meta to align with issuer contact rows (under the issuer name),
+   * not with the issuer display name. Vertical only.
+   */
+  margin: 28px 0 ${GM.upper.customer_top_gap_px}px;
   text-align: start;
 }
 .nx-doc--sectioned .nx-doc__meta-row {
