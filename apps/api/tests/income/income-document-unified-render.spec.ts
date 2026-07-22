@@ -633,7 +633,8 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-bar[\s\S]*width: 100%/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-text[\s\S]*font-size: 22px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__issuer-name[\s\S]*font-size: 14px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__issuer-name[\s\S]*font-weight: 700/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__issuer-name[\s\S]*font-weight: 800/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-name[\s\S]*font-weight: 800/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__issuer-name[\s\S]*text-align: start/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__issuer-line[\s\S]*border-bottom: 1px solid #e8e8f2/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__issuer-line-value[\s\S]*font-weight: 700/);

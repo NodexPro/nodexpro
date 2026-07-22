@@ -1241,9 +1241,9 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__issuer-name {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 800;
   margin: 0 0 ${GM.upper.meta_row_gap_px}px;
-  line-height: 1.35;
+  line-height: 1.25;
   color: ${GM.colors.text};
   text-align: start;
   width: 100%;
