@@ -1,10 +1,11 @@
 /**
  * Sectioned logo guidance — Branding Studio upload target + render-area reference.
  *
- * Golden-master layout no longer freezes a 65px logo-only row or Excel sheet cells.
- * The printable branding column sizes the logo with object-fit: contain.
- * Upload guidance remains a wide horizontal lockup (~5.3∶1).
+ * Upload: wide horizontal lockup (~5.3∶1).
+ * Document paint box for גדול: SECTIONED_LOGO_LARGE_TARGET (319×120), object-fit: fill.
  */
+
+import { SECTIONED_LOGO_LARGE_TARGET } from './income-document-sectioned-golden-master.pure.js';
 
 /** Preferred source/upload resolution (~5.3∶1 horizontal lockup). */
 export const SECTIONED_LOGO_RECOMMENDED_UPLOAD = {
@@ -44,16 +45,20 @@ export type SectionedLogoFrameMeta = {
 export function getSectionedLogoFrameMeta(): SectionedLogoFrameMeta {
   const uploadW = SECTIONED_LOGO_RECOMMENDED_UPLOAD.width_px;
   const uploadH = SECTIONED_LOGO_RECOMMENDED_UPLOAD.height_px;
+  const paintW = SECTIONED_LOGO_LARGE_TARGET.width_px;
+  const paintH = SECTIONED_LOGO_LARGE_TARGET.height_px;
   return {
     width_px: uploadW,
     height_px: uploadH,
     aspect_ratio: SECTIONED_LOGO_FRAME.aspect_ratio,
     aspect_ratio_label: SECTIONED_LOGO_FRAME.aspect_ratio_label,
     recommended_size_hint: [
-      `גודל לוגו מומלץ: ${uploadW} × ${uploadH} פיקסלים`,
-      `יחס גובה-רוחב מומלץ: ${SECTIONED_LOGO_FRAME.aspect_ratio_label}`,
-      'העלו לוגו אופקי מלא (אייקון + מילה + סלוגן אם קיים) ללא שוליים גדולים.',
-      'הלוגו מותאם לעמודת המיתוג במסמך ללא מתיחה או חיתוך.',
+      `גודל קובץ מומלץ להעלאה: ${uploadW} × ${uploadH} פיקסלים`,
+      `מסגרת הלוגו במסמך (גודל «גדול»): ${paintW} × ${paintH} פיקסלים`,
+      `יחס מומלץ: ${SECTIONED_LOGO_FRAME.aspect_ratio_label} (אופקי)`,
+      'העלו לוגו אופקי מלא (אייקון + שם + סלוגן אם קיים).',
+      'מומלץ PNG עם רקע שקוף וללא שוליים לבנים — שוליים שקופים נחתכים אוטומטית.',
+      `בבחירת גודל «גדול» הלוגו ממלא את מסגרת ${paintW}×${paintH} במסמך.`,
     ].join('\n'),
     css_frame_width: `${SECTIONED_LOGO_FRAME.width_px}px`,
     css_frame_height: `${SECTIONED_LOGO_FRAME.height_px}px`,

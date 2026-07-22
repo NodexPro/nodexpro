@@ -1245,32 +1245,67 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__issuer-name {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
-  font-weight: 800;
-  margin: 0 0 8px;
-  line-height: 1.25;
+  font-weight: 700;
+  margin: 0 0 ${GM.upper.meta_row_gap_px}px;
+  line-height: 1.35;
   color: ${GM.colors.text};
-  text-align: left;
+  text-align: start;
+  width: 100%;
 }
 .nx-doc--sectioned .nx-doc__issuer-subtitle {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
+  font-weight: 500;
   color: var(--nx-doc-text-muted);
-  margin: -4px 0 8px;
+  margin: 0 0 ${GM.upper.meta_row_gap_px}px;
+  text-align: start;
+}
+.nx-doc--sectioned .nx-doc__issuer-details {
+  width: 100%;
+  text-align: start;
 }
 .nx-doc--sectioned .nx-doc__issuer-lines {
   display: flex;
   flex-direction: column;
-  gap: ${GM.upper.company_line_gap_px}px;
+  gap: ${GM.upper.meta_row_gap_px}px;
   margin: 0;
+  width: 100%;
+  text-align: start;
 }
-.nx-doc--sectioned .nx-doc__issuer-line,
+.nx-doc--sectioned .nx-doc__issuer-line {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  line-height: 1.35;
+  color: ${GM.colors.text};
+  padding: 0 0 4px;
+  border-bottom: 1px solid #e8e8f2;
+  box-sizing: border-box;
+}
+.nx-doc--sectioned .nx-doc__issuer-line-value {
+  font-weight: 700;
+  color: ${GM.colors.text};
+  text-align: start;
+  min-width: 0;
+  word-break: break-word;
+}
+.nx-doc--sectioned .nx-doc__issuer-line-icon {
+  color: var(--nx-doc-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
 .nx-doc--sectioned .nx-doc__customer-line {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
   line-height: 1.35;
   color: ${GM.colors.text};
 }
-.nx-doc--sectioned .nx-doc__issuer-line-icon,
 .nx-doc--sectioned .nx-doc__customer-line-icon {
   color: var(--nx-doc-primary);
 }
@@ -1321,15 +1356,23 @@ export function renderIncomeBrandedPreviewHtml(params: {
   background: var(--nx-doc-primary);
   color: #ffffff;
   font-family: ${INVOICE_FONT};
-  font-weight: 700;
+  font-weight: 800;
   font-size: ${GM.upper.number_bar_font_size_px}px;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.06em;
   text-align: center;
   unicode-bidi: isolate;
   direction: ltr;
   box-shadow: none;
+}
+.nx-doc--sectioned .nx-doc__doc-number-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
 }
 .nx-doc--sectioned .nx-doc__doc-number-bar .nx-doc__icon {
   width: 16px;

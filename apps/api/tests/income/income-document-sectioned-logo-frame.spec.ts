@@ -88,6 +88,7 @@ describe('sectioned logo frame contract (golden master)', () => {
     const hint = buildSectionedLogoFrameRecommendedSizeHint();
     assert.equal(hint, meta.recommended_size_hint);
     assert.match(hint, /1288 × 244/);
+    assert.match(hint, /319 × 120/);
     assert.match(hint, /≈ 5\.3∶1/);
     assert.match(hint, /אופקי/);
   });
