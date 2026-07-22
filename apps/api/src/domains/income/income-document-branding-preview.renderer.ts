@@ -296,16 +296,25 @@ export function renderIncomeBrandedPreviewHtml(params: {
   const customerContactLabel = params.recipient.contact_name?.trim()
     ? `איש קשר: ${params.recipient.contact_name.trim()}`
     : null;
-  const customerLines = [
-    partyPlainRow('customer', customerContactLabel),
-    customerInfoRow(docPreviewIcon('location'), params.recipient.address),
-    customerInfoRow(docPreviewIcon('id'), params.recipient.tax_id),
-    customerInfoRow(docPreviewIcon('mail'), params.recipient.email),
-    customerInfoRow(docPreviewIcon('phone'), params.recipient.phone),
-    customerInfoRow(docPreviewIcon('website'), params.recipient.website ?? null),
-  ]
-    .filter(Boolean)
-    .join('');
+  const customerLines = isSectioned
+    ? [
+        customerInfoRow(docPreviewIcon('location'), params.recipient.address),
+        customerInfoRow(docPreviewIcon('id'), params.recipient.tax_id),
+        customerInfoRow(docPreviewIcon('phone'), params.recipient.phone),
+        customerInfoRow(docPreviewIcon('mail'), params.recipient.email),
+      ]
+        .filter(Boolean)
+        .join('')
+    : [
+        partyPlainRow('customer', customerContactLabel),
+        customerInfoRow(docPreviewIcon('location'), params.recipient.address),
+        customerInfoRow(docPreviewIcon('id'), params.recipient.tax_id),
+        customerInfoRow(docPreviewIcon('mail'), params.recipient.email),
+        customerInfoRow(docPreviewIcon('phone'), params.recipient.phone),
+        customerInfoRow(docPreviewIcon('website'), params.recipient.website ?? null),
+      ]
+        .filter(Boolean)
+        .join('');
 
   const metaRows = [
     metaRow('תאריך המסמך', formatPreviewDate(params.document_date), docPreviewIcon('calendar')),
@@ -1304,14 +1313,41 @@ export function renderIncomeBrandedPreviewHtml(params: {
   width: 16px;
   height: 16px;
 }
+.nx-doc--sectioned .nx-doc__customer-lines {
+  display: flex;
+  flex-direction: column;
+  gap: ${GM.upper.meta_row_gap_px}px;
+  margin: 0;
+  width: 100%;
+  text-align: start;
+}
 .nx-doc--sectioned .nx-doc__customer-line {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
   line-height: 1.35;
   color: ${GM.colors.text};
+  padding: 0 0 4px;
+  border-bottom: 1px solid #e8e8f2;
+  box-sizing: border-box;
+}
+.nx-doc--sectioned .nx-doc__customer-line-value {
+  font-weight: 700;
+  color: ${GM.colors.text};
+  text-align: start;
+  min-width: 0;
+  word-break: break-word;
 }
 .nx-doc--sectioned .nx-doc__customer-line-icon {
   color: var(--nx-doc-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
 }
 .nx-doc--sectioned .nx-doc__doc-identity {
   grid-column: 1;
@@ -1457,12 +1493,6 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-weight: 800;
   line-height: 1.25;
   color: ${GM.colors.text};
-}
-.nx-doc--sectioned .nx-doc__customer-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin: 0;
 }
 .nx-doc--sectioned .nx-doc__lines {
   width: 100%;
