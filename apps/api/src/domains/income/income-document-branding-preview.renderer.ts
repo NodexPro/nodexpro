@@ -1268,7 +1268,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   display: flex;
   flex-direction: column;
   gap: ${GM.upper.meta_row_gap_px}px;
-  margin: 0;
+  /* Drop below document-date row — vertical only, no sideways shift. */
+  margin: 20px 0 0;
   width: 100%;
   text-align: start;
 }
@@ -1399,6 +1400,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-size: 14px;
   line-height: 1.35;
   color: var(--nx-doc-text-muted);
+}
+.nx-doc--sectioned .nx-doc__meta-row:first-child {
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e8e8f2;
+  box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__meta-label {
   font-weight: 500;

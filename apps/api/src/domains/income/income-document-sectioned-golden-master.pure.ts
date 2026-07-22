@@ -131,7 +131,7 @@ export const SECTIONED_GOLDEN_MASTER = {
     customer_card_height_px: 0,
     customer_card_radius_px: 12,
     customer_card_padding_px: 14,
-    customer_top_gap_px: 10,
+    customer_top_gap_px: 20,
     upper_to_table_gap_px: 14,
   },
   table: {
