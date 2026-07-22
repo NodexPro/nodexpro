@@ -405,32 +405,22 @@ export function renderIncomeBrandedPreviewHtml(params: {
     return `<span class="nx-doc__desc-title">${escapeHtml(title)}</span><span class="nx-doc__desc-sub">${escapeHtml(sub)}</span>`;
   }
 
-  const colCount = isSectioned ? (d.show_vat_row ? 8 : 7) : d.show_vat_row ? 7 : 6;
+  const colCount = d.show_vat_row ? 7 : 6;
   const linesHtml =
     params.lineRows.length > 0
       ? params.lineRows
           .map((r) => {
-            if (isSectioned) {
-              const vatCell = d.show_vat_row
-                ? `<td class="nx-doc__cell-vat">${escapeHtml(r.vat_rate_label || r.vat_display || '—')}</td>`
-                : '';
-              return `<tr>
-            <td class="nx-doc__cell-num">${escapeHtml(String(r.row_number))}</td>
-            <td class="nx-doc__cell-desc">${formatLineDescriptionCell(r.description || '—')}</td>
-            <td class="nx-doc__cell-qty">${escapeHtml(r.quantity)}</td>
-            <td class="nx-doc__cell-unit">${escapeHtml(r.unit?.trim() || '—')}</td>
-            <td class="nx-doc__cell-money">${escapeHtml(r.unit_price)}</td>
-            <td class="nx-doc__cell-discount">${escapeHtml(r.discount?.trim() || '—')}</td>
-            ${vatCell}
-            <td class="nx-doc__cell-money nx-doc__cell-total">${escapeHtml(r.total)}</td>
-          </tr>`;
-            }
             const vatCell = d.show_vat_row
-              ? `<td class="nx-doc__cell-vat">${escapeHtml(r.vat_display)}</td>`
+              ? `<td class="nx-doc__cell-vat">${escapeHtml(
+                  isSectioned ? r.vat_rate_label || r.vat_display || '—' : r.vat_display,
+                )}</td>`
               : '';
+            const descCell = isSectioned
+              ? formatLineDescriptionCell(r.description || '—')
+              : escapeHtml(r.description || '—');
             return `<tr>
             <td class="nx-doc__cell-num">${escapeHtml(String(r.row_number))}</td>
-            <td class="nx-doc__cell-desc">${escapeHtml(r.description || '—')}</td>
+            <td class="nx-doc__cell-desc">${descCell}</td>
             <td class="nx-doc__cell-qty">${escapeHtml(r.quantity)}</td>
             <td class="nx-doc__cell-money">${escapeHtml(r.unit_price)}</td>
             <td class="nx-doc__cell-currency">${escapeHtml(formatLineCurrency(r.currency))}</td>
@@ -441,29 +431,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
           .join('')
       : `<tr><td colspan="${colCount}" class="nx-doc__empty-lines">אין שורות במסמך</td></tr>`;
 
-  const tableColgroup = isSectioned
-    ? d.show_vat_row
-      ? `<colgroup>
-      <col class="nx-doc__col-num" />
-      <col class="nx-doc__col-desc" />
-      <col class="nx-doc__col-qty" />
-      <col class="nx-doc__col-unit" />
-      <col class="nx-doc__col-price" />
-      <col class="nx-doc__col-discount" />
-      <col class="nx-doc__col-vat" />
-      <col class="nx-doc__col-total" />
-    </colgroup>`
-      : `<colgroup>
-      <col class="nx-doc__col-num" />
-      <col class="nx-doc__col-desc" />
-      <col class="nx-doc__col-qty" />
-      <col class="nx-doc__col-unit" />
-      <col class="nx-doc__col-price" />
-      <col class="nx-doc__col-discount" />
-      <col class="nx-doc__col-total" />
-    </colgroup>`
-    : d.show_vat_row
-      ? `<colgroup>
+  const tableColgroup = d.show_vat_row
+    ? `<colgroup>
       <col class="nx-doc__col-num" />
       <col class="nx-doc__col-desc" />
       <col class="nx-doc__col-qty" />
@@ -472,7 +441,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
       <col class="nx-doc__col-vat" />
       <col class="nx-doc__col-total" />
     </colgroup>`
-      : `<colgroup>
+    : `<colgroup>
       <col class="nx-doc__col-num" />
       <col class="nx-doc__col-desc" />
       <col class="nx-doc__col-qty" />
@@ -481,21 +450,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
       <col class="nx-doc__col-total" />
     </colgroup>`;
 
-  const tableHead = isSectioned
-    ? `<tr>
+  const tableHead = `<tr>
       <th class="nx-doc__th-num">#</th>
-      <th>תיאור</th>
-      <th>כמות</th>
-      <th>יחידת מידה</th>
-      <th>מחיר יחידה</th>
-      <th>הנחה</th>
-      ${d.show_vat_row ? '<th>מע״מ</th>' : ''}
-      <th>סכום</th>
-    </tr>`
-    : `<tr>
-      <th class="nx-doc__th-num">#</th>
-      <th>פירוט</th>
-      <th>כמות</th>
+      <th>פירוט *</th>
+      <th>כמות *</th>
       <th>מחיר ליח'</th>
       <th>מטבע</th>
       ${d.show_vat_row ? '<th>מע״מ</th>' : ''}
@@ -1503,13 +1461,16 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__table {
   width: 100%;
   max-width: none;
-  border: none;
   margin: 0;
-  border-radius: ${GM.table.radius_px}px;
+  /* Excel-like grid inside the printable sheet. */
+  border: 1px solid #c5c5d6;
+  border-radius: 0;
   overflow: hidden;
-  border-collapse: separate;
+  border-collapse: collapse;
   border-spacing: 0;
+  table-layout: fixed;
   box-shadow: none;
+  background: #ffffff;
 }
 .nx-doc--sectioned .nx-doc__table thead th {
   background: var(--nx-doc-primary);
@@ -1518,7 +1479,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   padding: 0 8px;
   font-size: ${GM.table.header_font_size_px}px;
   font-weight: 700;
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 72%, #000000);
   white-space: nowrap;
   text-align: center;
   vertical-align: middle;
@@ -1526,10 +1487,9 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__table thead th:nth-child(2) { text-align: start; }
 .nx-doc--sectioned .nx-doc__table tbody td {
   height: ${GM.table.row_height_px}px;
-  padding: 0 8px;
+  padding: 4px 8px;
   font-size: ${GM.table.cell_font_size_px}px;
-  border: none;
-  border-bottom: 1px solid ${GM.colors.row_border};
+  border: 1px solid #d8d8e4;
   background: #ffffff;
   vertical-align: middle;
   line-height: 1.35;
@@ -1541,8 +1501,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
   white-space: normal;
   font-weight: 600;
 }
-.nx-doc--sectioned .nx-doc__table tbody tr:nth-child(even) td { background: #ffffff; }
-.nx-doc--sectioned .nx-doc__table tbody tr:last-child td { border-bottom: none; }
+.nx-doc--sectioned .nx-doc__table tbody td.nx-doc__cell-currency {
+  font-variant-numeric: tabular-nums;
+}
+.nx-doc--sectioned .nx-doc__table tbody tr:nth-child(even) td { background: #fafafa; }
+.nx-doc--sectioned .nx-doc__table tbody tr:last-child td { border-bottom: 1px solid #d8d8e4; }
 .nx-doc--sectioned .nx-doc__desc-title {
   display: block;
   font-weight: 700;
@@ -1556,12 +1519,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
   color: var(--nx-doc-text-muted);
 }
 .nx-doc--sectioned .nx-doc__col-num { width: 36px; }
-.nx-doc--sectioned .nx-doc__col-qty { width: 56px; }
-.nx-doc--sectioned .nx-doc__col-unit { width: 72px; }
-.nx-doc--sectioned .nx-doc__col-price { width: 88px; }
-.nx-doc--sectioned .nx-doc__col-discount { width: 64px; }
-.nx-doc--sectioned .nx-doc__col-vat { width: 56px; }
-.nx-doc--sectioned .nx-doc__col-total { width: 88px; }
+.nx-doc--sectioned .nx-doc__col-qty { width: 64px; }
+.nx-doc--sectioned .nx-doc__col-price { width: 96px; }
+.nx-doc--sectioned .nx-doc__col-currency { width: 64px; }
+.nx-doc--sectioned .nx-doc__col-vat { width: 64px; }
+.nx-doc--sectioned .nx-doc__col-total { width: 104px; }
 .nx-doc--sectioned .nx-doc__bottom {
   display: grid;
   grid-template-columns: 1fr 1fr;
