@@ -658,6 +658,17 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /nx-doc__payment-col--bank/);
   assert.match(previewHtml, /nx-doc__payment-col--card/);
   assert.match(previewHtml, /nx-doc__payment-col--other/);
+  assert.match(previewHtml, /nx-doc__sheet-tail/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-tail[\s\S]*margin-top: auto/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*min-height: 100%/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*display: flex/);
+  const sectionedPaymentsIdx = previewHtml.indexOf('<section class="nx-doc__payments"');
+  const sectionedTailIdx = previewHtml.indexOf('class="nx-doc__sheet-tail"');
+  const sectionedFooterIdx = previewHtml.indexOf('<footer class="nx-doc__platform-footer"');
+  assert.ok(sectionedTailIdx >= 0);
+  assert.ok(sectionedTailIdx < sectionedPaymentsIdx);
+  assert.ok(sectionedPaymentsIdx < sectionedFooterIdx);
+  assert.match(previewHtml, /nx-doc__platform-link[\s\S]*href="https:\/\/www\.nodexpro\.com"/);
   assert.match(previewHtml, />פירוט \*</);
   assert.match(previewHtml, />כמות \*</);
   assert.match(previewHtml, />מחיר ליח'/);

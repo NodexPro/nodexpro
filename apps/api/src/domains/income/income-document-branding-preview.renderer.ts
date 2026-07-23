@@ -1113,17 +1113,17 @@ export function renderIncomeBrandedPreviewHtml(params: {
   --nx-doc-branding-col: ${sectionedLayout.branding_col_width_px}px;
   --nx-doc-doc-col: ${sectionedLayout.doc_col_width_px}px;
   --nx-doc-logo-scale: ${sectionedLayout.scale};
-  /*
-   * Fill the preview paper edge-to-edge. Equal 0.5cm side insets.
-   * Do not cap below the paper width — a narrower max-width leaves an RTL gutter
-   * by the scrollbar (logo side).
-   */
+  /* Full paper width. Equal 0.5cm side insets. Fill preview paper height (A4 sheet). */
   width: 100%;
   max-width: 100%;
+  flex: 1 1 auto;
+  min-height: 100%;
   margin: 0;
   padding-block: 0;
   padding-inline: ${GM.page.margin_left_px}px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   color: var(--nx-doc-text);
   font-size: 14px;
   line-height: 1.35;
@@ -1612,6 +1612,12 @@ export function renderIncomeBrandedPreviewHtml(params: {
   color: var(--nx-doc-primary);
 }
 .nx-doc--sectioned .nx-doc__payments { margin-bottom: 12px; }
+.nx-doc--sectioned .nx-doc__sheet-tail {
+  margin-top: auto;
+  width: 100%;
+  padding-top: 16px;
+  box-sizing: border-box;
+}
 .nx-doc--sectioned .nx-doc__payments-head {
   display: flex;
   align-items: center;
@@ -1634,11 +1640,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
   padding: 14px;
   background: #ffffff;
   border-inline-end: 1px solid #ececf6;
-  height: ${GM.lower.payment_card_height_px}px;
   min-height: ${GM.lower.payment_card_height_px}px;
+  height: auto;
   box-shadow: none;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
 }
 .nx-doc--sectioned .nx-doc__payment-col-head {
   display: flex;
@@ -1705,9 +1711,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
     ${totalsHtml}
   </div>
 
-  ${paymentHtml}
   ${signatureHtml}
-  ${platformFooter}
+  <div class="nx-doc__sheet-tail">
+    ${paymentHtml}
+    ${platformFooter}
+  </div>
 </div>
   `.trim();
 }
