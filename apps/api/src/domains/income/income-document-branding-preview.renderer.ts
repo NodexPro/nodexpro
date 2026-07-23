@@ -1553,7 +1553,12 @@ export function renderIncomeBrandedPreviewHtml(params: {
   border-radius: ${GM.lower.notes_totals_radius_px}px;
   background: var(--nx-doc-panel);
   min-height: ${GM.lower.notes_totals_height_px}px;
-  height: ${GM.lower.notes_totals_height_px}px;
+  /* height:auto — fixed height let long הערות paint over אמצעי תשלום below. */
+  height: auto;
+  max-height: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   box-shadow: none;
   box-sizing: border-box;
 }
@@ -1565,12 +1570,17 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-weight: 700;
   margin-bottom: 10px;
   color: var(--nx-doc-primary);
+  flex-shrink: 0;
 }
 .nx-doc--sectioned .nx-doc__comments-head .nx-doc__icon { color: var(--nx-doc-primary); }
 .nx-doc--sectioned .nx-doc__comments-body {
   font-size: ${GM.upper.company_line_font_size_px}px;
   line-height: 1.55;
   color: ${GM.colors.text};
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-height: 0;
 }
 .nx-doc--sectioned .nx-doc__summary-head { display: none; }
 .nx-doc--sectioned .nx-doc__summary,
@@ -1615,13 +1625,15 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-weight: 800;
   color: var(--nx-doc-primary);
 }
-.nx-doc--sectioned .nx-doc__payments { margin-bottom: 12px; }
+.nx-doc--sectioned .nx-doc__payments { margin-bottom: 12px; width: 100%; }
 .nx-doc--sectioned .nx-doc__sheet-tail {
   margin-top: auto;
   width: 100%;
   padding-top: 16px;
   flex-shrink: 0;
   box-sizing: border-box;
+  /* Keep payments + NodexPro as the last painted block on the sheet. */
+  order: 99;
 }
 .nx-doc--sectioned .nx-doc__payments-head {
   display: flex;
@@ -1649,7 +1661,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
   height: auto;
   box-shadow: none;
   box-sizing: border-box;
-  overflow: visible;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 .nx-doc--sectioned .nx-doc__payment-col-head {
   display: flex;
@@ -1658,6 +1673,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-size: ${GM.upper.company_line_font_size_px}px;
   margin-bottom: 8px;
   color: ${GM.colors.text};
+  flex-shrink: 0;
 }
 .nx-doc--sectioned .nx-doc__payment-col-head > .nx-doc__icon {
   display: inline-flex;
@@ -1670,6 +1686,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   color: var(--nx-doc-text-muted);
   overflow-wrap: anywhere;
   word-break: break-word;
+  min-width: 0;
 }
 .nx-doc--sectioned .nx-doc__platform-footer {
   display: flex;

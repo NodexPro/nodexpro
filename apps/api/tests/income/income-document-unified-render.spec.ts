@@ -659,13 +659,17 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /nx-doc__payment-col--card/);
   assert.match(previewHtml, /nx-doc__payment-col--other/);
   assert.match(previewHtml, /nx-doc__sheet-tail/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__comments[\s\S]*overflow: hidden/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__comments-body[\s\S]*white-space: pre-wrap/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-tail[\s\S]*margin-top: auto/);
   assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*min-height: calc\(100vh - 11rem\)/);
   assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*display: flex/);
   const sectionedPaymentsIdx = previewHtml.indexOf('<section class="nx-doc__payments"');
   const sectionedTailIdx = previewHtml.indexOf('class="nx-doc__sheet-tail"');
   const sectionedFooterIdx = previewHtml.indexOf('<footer class="nx-doc__platform-footer"');
+  const sectionedBottomIdx = previewHtml.indexOf('class="nx-doc__bottom"');
   assert.ok(sectionedTailIdx >= 0);
+  assert.ok(sectionedBottomIdx >= 0 && sectionedBottomIdx < sectionedTailIdx);
   assert.ok(sectionedTailIdx < sectionedPaymentsIdx);
   assert.ok(sectionedPaymentsIdx < sectionedFooterIdx);
   assert.match(previewHtml, /nx-doc__platform-link[\s\S]*href="https:\/\/www\.nodexpro\.com"/);
