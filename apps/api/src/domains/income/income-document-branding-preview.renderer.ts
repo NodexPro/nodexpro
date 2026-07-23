@@ -153,7 +153,9 @@ function buildPaymentCards(params: {
     if (b.bank_account) bankLines.push(`חשבון: ${escapeHtml(b.bank_account)}`);
     if (b.iban) bankLines.push(`IBAN: ${escapeHtml(b.iban)}`);
     if (b.swift) bankLines.push(`SWIFT: ${escapeHtml(b.swift)}`);
-    if (b.payment_instructions) bankLines.push(escapeHtml(b.payment_instructions));
+    if (b.payment_instructions) {
+      bankLines.push(escapeHtml(b.payment_instructions).replace(/\r\n|\r|\n/g, '<br/>'));
+    }
   }
 
   const cards: string[] = [];
@@ -1663,6 +1665,8 @@ export function renderIncomeBrandedPreviewHtml(params: {
   font-size: 11px;
   line-height: 1.45;
   color: var(--nx-doc-text-muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .nx-doc--sectioned .nx-doc__platform-footer {
   display: flex;
