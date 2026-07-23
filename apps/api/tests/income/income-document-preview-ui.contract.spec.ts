@@ -115,6 +115,8 @@ test('canonical preview_html contains no allocation edit controls', () => {
 
 test('income wizard uses application overlay chrome not document html click targets', () => {
   assert.match(previewStepSource, /WorkEngineIncomeDocumentPreviewPaper/);
+  assert.match(previewPaperSource, /pinIncomePreviewPaymentsToSheetBottom/);
+  assert.match(previewPaperSource, /resolvePreviewPaperFillMinHeightPx/);
   assert.match(previewPaperSource, /resolveIncomeDocumentAllocationEditChrome/);
   assert.match(previewPaperSource, /nx-we-preview-allocation-edit-btn--inline/);
   assert.match(previewPaperSource, /nx-doc__meta-label-group--injected/);

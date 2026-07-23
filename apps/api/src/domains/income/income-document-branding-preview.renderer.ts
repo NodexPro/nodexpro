@@ -1618,6 +1618,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   margin-top: auto;
   width: 100%;
   padding-top: 16px;
+  flex-shrink: 0;
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__payments-head {
