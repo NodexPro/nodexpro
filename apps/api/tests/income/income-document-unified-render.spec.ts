@@ -660,7 +660,7 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /nx-doc__payment-col--other/);
   assert.match(previewHtml, /nx-doc__sheet-tail/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__sheet-tail[\s\S]*margin-top: auto/);
-  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*min-height: 100%/);
+  assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*min-height: calc\(100vh - 11rem\)/);
   assert.match(previewHtml, /\.nx-doc--sectioned[\s\S]*display: flex/);
   const sectionedPaymentsIdx = previewHtml.indexOf('<section class="nx-doc__payments"');
   const sectionedTailIdx = previewHtml.indexOf('class="nx-doc__sheet-tail"');

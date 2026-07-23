@@ -1115,11 +1115,13 @@ export function renderIncomeBrandedPreviewHtml(params: {
   --nx-doc-branding-col: ${sectionedLayout.branding_col_width_px}px;
   --nx-doc-doc-col: ${sectionedLayout.doc_col_width_px}px;
   --nx-doc-logo-scale: ${sectionedLayout.scale};
-  /* Full paper width. Equal 0.5cm side insets. Fill preview paper height (A4 sheet). */
+  /* Full paper width. Equal 0.5cm side insets.
+   * Viewport min-height so preview sheet fills the modal even when parent % height is indefinite.
+   * Print/PDF resets below — do not leave empty pages. */
   width: 100%;
   max-width: 100%;
   flex: 1 1 auto;
-  min-height: 100%;
+  min-height: calc(100vh - 11rem);
   margin: 0;
   padding-block: 0;
   padding-inline: ${GM.page.margin_left_px}px;
@@ -1702,6 +1704,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   .nx-doc--sectioned {
     width: 100%;
     max-width: none;
+    min-height: 0;
     padding: 0;
   }
 }
