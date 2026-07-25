@@ -125,8 +125,9 @@ test('income wizard uses application overlay chrome not document html click targ
   assert.match(previewPaperSource, /we-income-preview-fit-iframe/);
   assert.match(previewPaperSource, /resolveScreenPreviewPlan/);
   assert.match(previewPaperSource, /ResizeObserver/);
-  /* Exactly one scale layer via --preview-scale; iframe attrs stay natural 794×1123. */
+  /* Scale on wrapper only; iframe stays natural 794×1123 with transform:none. */
   assert.match(previewPaperSource, /--preview-scale/);
+  assert.match(previewPaperSource, /nx-we-preview-fit-scaler/);
   assert.match(previewPaperSource, /width=\{PREVIEW_A4_WIDTH_PX\}/);
   assert.match(previewPaperSource, /height=\{PREVIEW_A4_HEIGHT_PX\}/);
   assert.doesNotMatch(previewPaperSource, /paper\.style\.setProperty\(['"]transform['"]/);
@@ -134,11 +135,10 @@ test('income wizard uses application overlay chrome not document html click targ
   assert.match(workEngineQueueCss, /\.nx-we-preview-canvas\s*\{[\s\S]*?overflow:\s*auto/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-paper\s*\{[\s\S]*?width:\s*794px/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-paper\s*\{[\s\S]*?min-height:\s*1123px/);
-  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[\s\S]*?width:\s*794px/);
-  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[\s\S]*?height:\s*1123px/);
-  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[\s\S]*?transform:\s*scale\(var\(--preview-scale\)\)/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-scaler\s*\{[\s\S]*?transform:\s*scale\(var\(--preview-scale\)\)/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[\s\S]*?transform:\s*none\s*!important/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe-shell\s*\{[\s\S]*?--preview-scale/);
-  assert.doesNotMatch(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[^}]*max-width:\s*100%/);
+  assert.doesNotMatch(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[^}]*transform:\s*scale/);
   assert.match(workEngineQueueCss, /@media print/);
   assert.match(workEngineQueueCss, /nx-we-preview-paper--source-parked/);
   assert.doesNotMatch(workEngineQueueCss, /nx-we-preview-paper-fit-shell/);
