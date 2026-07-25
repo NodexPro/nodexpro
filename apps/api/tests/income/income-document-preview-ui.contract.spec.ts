@@ -115,12 +115,13 @@ test('canonical preview_html contains no allocation edit controls', () => {
 
 test('income wizard uses application overlay chrome not document html click targets', () => {
   assert.match(previewStepSource, /WorkEngineIncomeDocumentPreviewPaper/);
-  /* Hotfix: no fit-to-canvas scale chrome — natural A4 + scroll. */
+  /* Safe fit-shell: natural A4 + scroll fallback; no payment DOM pinning. */
   assert.doesNotMatch(previewPaperSource, /pinIncomePreviewPaymentsToSheetBottom/);
-  assert.doesNotMatch(previewPaperSource, /resolvePreviewPaperFitScale/);
-  assert.doesNotMatch(previewPaperSource, /nx-we-preview-paper-scale/);
-  assert.doesNotMatch(previewPaperSource, /ResizeObserver/);
-  assert.doesNotMatch(previewPaperSource, /transform.*scale|scale\(/);
+  assert.match(previewPaperSource, /resolvePreviewPaperFitPlan/);
+  assert.match(previewPaperSource, /nx-we-preview-paper-fit-shell/);
+  assert.match(previewPaperSource, /applyScrollFallback/);
+  assert.match(previewPaperSource, /ResizeObserver/);
+  assert.match(previewPaperSource, /dangerouslySetInnerHTML=\{\{ __html: previewHtml \}\}/);
   assert.match(previewPaperSource, /resolveIncomeDocumentAllocationEditChrome/);
   assert.match(previewPaperSource, /nx-we-preview-allocation-edit-btn--inline/);
   assert.match(previewPaperSource, /nx-doc__meta-label-group--injected/);
