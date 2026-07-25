@@ -125,14 +125,20 @@ test('income wizard uses application overlay chrome not document html click targ
   assert.match(previewPaperSource, /we-income-preview-fit-iframe/);
   assert.match(previewPaperSource, /resolveScreenPreviewPlan/);
   assert.match(previewPaperSource, /ResizeObserver/);
-  /* Scale only on the fitted iframe element — not the live paper. */
-  assert.match(previewPaperSource, /iframeStyle[\s\S]*scale\(/);
+  /* Exactly one scale layer via --preview-scale; iframe attrs stay natural 794×1123. */
+  assert.match(previewPaperSource, /--preview-scale/);
+  assert.match(previewPaperSource, /width=\{PREVIEW_A4_WIDTH_PX\}/);
+  assert.match(previewPaperSource, /height=\{PREVIEW_A4_HEIGHT_PX\}/);
   assert.doesNotMatch(previewPaperSource, /paper\.style\.setProperty\(['"]transform['"]/);
   assert.doesNotMatch(previewPaperSource, /pinIncomePreviewPaymentsToSheetBottom/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-canvas\s*\{[\s\S]*?overflow:\s*auto/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-paper\s*\{[\s\S]*?width:\s*794px/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-paper\s*\{[\s\S]*?min-height:\s*1123px/);
-  assert.match(workEngineQueueCss, /object-fit:\s*contain/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[\s\S]*?width:\s*794px/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[\s\S]*?height:\s*1123px/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[\s\S]*?transform:\s*scale\(var\(--preview-scale\)\)/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe-shell\s*\{[\s\S]*?--preview-scale/);
+  assert.doesNotMatch(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[^}]*max-width:\s*100%/);
   assert.match(workEngineQueueCss, /@media print/);
   assert.match(workEngineQueueCss, /nx-we-preview-paper--source-parked/);
   assert.doesNotMatch(workEngineQueueCss, /nx-we-preview-paper-fit-shell/);
