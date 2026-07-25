@@ -39,6 +39,10 @@ import { formatLineVatAmountDisplay } from './income-document-unified-render.pur
 import {
   buildIncomeDocumentAllocationNumberField,
 } from './income-document-allocation-number.pure.js';
+import {
+  INCOME_DOCUMENT_NOTES_HINT_HE,
+  INCOME_DOCUMENT_NOTES_MAX_LENGTH,
+} from './income-document-notes.pure.js';
 import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
 import { totalsFromTotalsSnapshot } from './income-document-unified-render.pure.js';
 import type { IncomeDocumentBrandingProfileAggregate } from './income-document-branding.types.js';
@@ -308,7 +312,13 @@ export type IncomeDocumentDetailsStep = {
       not_financial_truth: boolean;
     };
   };
-  notes: { value: string; label: string; editable: boolean };
+  notes: {
+    value: string;
+    label: string;
+    editable: boolean;
+    max_length: number;
+    hint: string | null;
+  };
   delivery_contact: {
     email: string | null;
     label: string;
@@ -1128,6 +1138,8 @@ export async function buildIncomeDocumentDetailsStep(
       value: row.notes ?? '',
       label: 'הערות שיופיעו במסמך',
       editable: canEdit,
+      max_length: INCOME_DOCUMENT_NOTES_MAX_LENGTH,
+      hint: INCOME_DOCUMENT_NOTES_HINT_HE,
     },
     delivery_contact: {
       email: deliveryEmail,

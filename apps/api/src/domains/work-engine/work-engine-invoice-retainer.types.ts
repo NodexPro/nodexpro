@@ -276,6 +276,7 @@ export type WorkEngineRecurringCycleOverrideSidebarField = {
   options: Array<{ value: string; label: string }>;
   required: boolean;
   min_value: string | null;
+  max_length: number | null;
 };
 
 export type WorkEngineRecurringCycleOverrideSidebarSection = {

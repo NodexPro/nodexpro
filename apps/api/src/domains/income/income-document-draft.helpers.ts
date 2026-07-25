@@ -6,6 +6,7 @@ import {
   parseDocumentSettingsJson,
 } from './income-document-draft-totals.pure.js';
 import { incomeDraftVatFallbackResolution } from './income-draft-vat-fallback.pure.js';
+import { incomeDocumentNotesLengthError } from './income-document-notes.pure.js';
 import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.types.js';
 
 export interface ParsedDraftPayload {
@@ -53,6 +54,10 @@ export function parseDraftPayloadBody(
     throw badRequest('one_time_customer_snapshot_json is only allowed when income_customer_id is null');
   }
 
+  const notes = optionalString(body.notes);
+  const notesError = incomeDocumentNotesLengthError(notes);
+  if (notesError) throw badRequest(notesError);
+
   return {
     document_type: parseDocumentType(body.document_type),
     income_customer_id,
@@ -62,7 +67,7 @@ export function parseDraftPayloadBody(
     due_date: parseOptionalDate(body.due_date, 'due_date'),
     document_date: parseOptionalDate(body.document_date ?? body.issue_date, 'document_date'),
     payment_received_json: optionalJsonObject(body.payment_received_json, 'payment_received_json'),
-    notes: optionalString(body.notes),
+    notes,
     currency: optionalString(body.currency) ?? 'ILS',
     language: parseLanguage(body.language),
   };

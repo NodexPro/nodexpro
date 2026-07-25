@@ -9,6 +9,7 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import type { ActiveIncomeIssuerScope } from './income.guards.js';
 import { assertRowMatchesIssuerScope } from './income.guards.js';
 import { validateDraftAgainstDocumentTypeRules } from './income-document-draft.helpers.js';
+import { incomeDocumentNotesLengthError } from './income-document-notes.pure.js';
 import {
   buildIncomeDocumentDetailsStep,
   type BuildIncomeDocumentDetailsStepOptions,
@@ -828,6 +829,8 @@ export async function updateIncomeDocumentNotes(
 ): Promise<WizardDraftOverlay> {
   const draft_id = reqUuid(body.draft_id, 'draft_id');
   const notes = optionalString(body.notes);
+  const notesError = incomeDocumentNotesLengthError(notes);
+  if (notesError) throw badRequest(notesError);
   const row = await loadWizardDraftRow(scope, draft_id);
   const docType = await resolveDocType(scope, row.document_type!);
   const merged = { ...row, notes: notes ?? null };

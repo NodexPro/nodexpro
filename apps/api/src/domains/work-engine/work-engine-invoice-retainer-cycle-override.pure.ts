@@ -271,6 +271,7 @@ function mapSidebarField(
     options: field.options ?? [],
     required: field.required,
     min_value: field.min_value ?? null,
+    max_length: null,
   };
 }
 
@@ -311,10 +312,11 @@ export function buildCycleOverrideSidebarSections(
           value: step.notes.value,
           editable: step.notes.editable,
           disabled_reason: null,
-          hint: null,
+          hint: step.notes.hint ?? null,
           options: [],
           required: false,
           min_value: null,
+          max_length: step.notes.max_length ?? null,
         },
       ],
     });
@@ -336,6 +338,7 @@ export function buildCycleOverrideSidebarSections(
           options: [],
           required: false,
           min_value: null,
+          max_length: null,
         },
       ],
     });
