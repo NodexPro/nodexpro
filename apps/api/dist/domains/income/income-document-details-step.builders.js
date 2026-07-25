@@ -13,6 +13,7 @@ import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfileForDo
 import { renderUnifiedIncomeDocumentHtml } from './income-document-unified-render.html.js';
 import { formatLineVatAmountDisplay } from './income-document-unified-render.pure.js';
 import { buildIncomeDocumentAllocationNumberField, } from './income-document-allocation-number.pure.js';
+import { INCOME_DOCUMENT_NOTES_HINT_HE, INCOME_DOCUMENT_NOTES_MAX_LENGTH, } from './income-document-notes.pure.js';
 import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
 import { totalsFromTotalsSnapshot } from './income-document-unified-render.pure.js';
 import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById } from './income-recipient.service.js';
@@ -736,6 +737,8 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             value: row.notes ?? '',
             label: 'הערות שיופיעו במסמך',
             editable: canEdit,
+            max_length: INCOME_DOCUMENT_NOTES_MAX_LENGTH,
+            hint: INCOME_DOCUMENT_NOTES_HINT_HE,
         },
         delivery_contact: {
             email: deliveryEmail,

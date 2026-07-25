@@ -7,6 +7,7 @@ import { badRequest, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertRowMatchesIssuerScope } from './income.guards.js';
 import { validateDraftAgainstDocumentTypeRules } from './income-document-draft.helpers.js';
+import { incomeDocumentNotesLengthError } from './income-document-notes.pure.js';
 import { buildIncomeDocumentDetailsStep, } from './income-document-details-step.builders.js';
 import { applyLineFieldUpdate, createEmptyDraftLine, deleteDraftLine, normalizeDraftLines, reorderDraftLines, serializeDraftLines, } from './income-document-draft-lines.pure.js';
 import { recomputeDraftLineAmounts } from './income-draft-line-compute.pure.js';
@@ -571,6 +572,9 @@ export async function updateIncomeDocumentDraftSettings(scope, body) {
 export async function updateIncomeDocumentNotes(scope, body) {
     const draft_id = reqUuid(body.draft_id, 'draft_id');
     const notes = optionalString(body.notes);
+    const notesError = incomeDocumentNotesLengthError(notes);
+    if (notesError)
+        throw badRequest(notesError);
     const row = await loadWizardDraftRow(scope, draft_id);
     const docType = await resolveDocType(scope, row.document_type);
     const merged = { ...row, notes: notes ?? null };

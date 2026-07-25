@@ -81,8 +81,9 @@ function buildPaymentCards(params) {
             bankLines.push(`IBAN: ${escapeHtml(b.iban)}`);
         if (b.swift)
             bankLines.push(`SWIFT: ${escapeHtml(b.swift)}`);
-        if (b.payment_instructions)
-            bankLines.push(escapeHtml(b.payment_instructions));
+        if (b.payment_instructions) {
+            bankLines.push(escapeHtml(b.payment_instructions).replace(/\r\n|\r|\n/g, '<br/>'));
+        }
     }
     const cards = [];
     if (preserve || bankEnabled || bankLines.length) {
@@ -189,16 +190,25 @@ export function renderIncomeBrandedPreviewHtml(params) {
     const customerContactLabel = params.recipient.contact_name?.trim()
         ? `איש קשר: ${params.recipient.contact_name.trim()}`
         : null;
-    const customerLines = [
-        partyPlainRow('customer', customerContactLabel),
-        customerInfoRow(docPreviewIcon('location'), params.recipient.address),
-        customerInfoRow(docPreviewIcon('id'), params.recipient.tax_id),
-        customerInfoRow(docPreviewIcon('mail'), params.recipient.email),
-        customerInfoRow(docPreviewIcon('phone'), params.recipient.phone),
-        customerInfoRow(docPreviewIcon('website'), params.recipient.website ?? null),
-    ]
-        .filter(Boolean)
-        .join('');
+    const customerLines = isSectioned
+        ? [
+            customerInfoRow(docPreviewIcon('location'), params.recipient.address),
+            customerInfoRow(docPreviewIcon('id'), params.recipient.tax_id),
+            customerInfoRow(docPreviewIcon('phone'), params.recipient.phone),
+            customerInfoRow(docPreviewIcon('mail'), params.recipient.email),
+        ]
+            .filter(Boolean)
+            .join('')
+        : [
+            partyPlainRow('customer', customerContactLabel),
+            customerInfoRow(docPreviewIcon('location'), params.recipient.address),
+            customerInfoRow(docPreviewIcon('id'), params.recipient.tax_id),
+            customerInfoRow(docPreviewIcon('mail'), params.recipient.email),
+            customerInfoRow(docPreviewIcon('phone'), params.recipient.phone),
+            customerInfoRow(docPreviewIcon('website'), params.recipient.website ?? null),
+        ]
+            .filter(Boolean)
+            .join('');
     const metaRows = [
         metaRow('תאריך המסמך', formatPreviewDate(params.document_date), docPreviewIcon('calendar')),
         params.due_date
@@ -241,8 +251,10 @@ export function renderIncomeBrandedPreviewHtml(params) {
       </section>
     </div>
     <aside class="nx-doc__branding">
-      ${logoHtml}
-      ${issuerNameBlock}
+      <div class="nx-doc__branding-head">
+        ${logoHtml}
+        ${issuerNameBlock}
+      </div>
       ${issuerContactLines ? `<div class="nx-doc__issuer-lines">${issuerContactLines}</div>` : ''}
     </aside>
   </div>`
@@ -267,31 +279,19 @@ export function renderIncomeBrandedPreviewHtml(params) {
             return `<span class="nx-doc__desc-title">${escapeHtml(title)}</span>`;
         return `<span class="nx-doc__desc-title">${escapeHtml(title)}</span><span class="nx-doc__desc-sub">${escapeHtml(sub)}</span>`;
     }
-    const colCount = isSectioned ? (d.show_vat_row ? 8 : 7) : d.show_vat_row ? 7 : 6;
+    const colCount = d.show_vat_row ? 7 : 6;
     const linesHtml = params.lineRows.length > 0
         ? params.lineRows
             .map((r) => {
-            if (isSectioned) {
-                const vatCell = d.show_vat_row
-                    ? `<td class="nx-doc__cell-vat">${escapeHtml(r.vat_rate_label || r.vat_display || '—')}</td>`
-                    : '';
-                return `<tr>
-            <td class="nx-doc__cell-num">${escapeHtml(String(r.row_number))}</td>
-            <td class="nx-doc__cell-desc">${formatLineDescriptionCell(r.description || '—')}</td>
-            <td class="nx-doc__cell-qty">${escapeHtml(r.quantity)}</td>
-            <td class="nx-doc__cell-unit">${escapeHtml(r.unit?.trim() || '—')}</td>
-            <td class="nx-doc__cell-money">${escapeHtml(r.unit_price)}</td>
-            <td class="nx-doc__cell-discount">${escapeHtml(r.discount?.trim() || '—')}</td>
-            ${vatCell}
-            <td class="nx-doc__cell-money nx-doc__cell-total">${escapeHtml(r.total)}</td>
-          </tr>`;
-            }
             const vatCell = d.show_vat_row
-                ? `<td class="nx-doc__cell-vat">${escapeHtml(r.vat_display)}</td>`
+                ? `<td class="nx-doc__cell-vat">${escapeHtml(r.vat_display || '—')}</td>`
                 : '';
+            const descCell = isSectioned
+                ? formatLineDescriptionCell(r.description || '—')
+                : escapeHtml(r.description || '—');
             return `<tr>
             <td class="nx-doc__cell-num">${escapeHtml(String(r.row_number))}</td>
-            <td class="nx-doc__cell-desc">${escapeHtml(r.description || '—')}</td>
+            <td class="nx-doc__cell-desc">${descCell}</td>
             <td class="nx-doc__cell-qty">${escapeHtml(r.quantity)}</td>
             <td class="nx-doc__cell-money">${escapeHtml(r.unit_price)}</td>
             <td class="nx-doc__cell-currency">${escapeHtml(formatLineCurrency(r.currency))}</td>
@@ -301,29 +301,8 @@ export function renderIncomeBrandedPreviewHtml(params) {
         })
             .join('')
         : `<tr><td colspan="${colCount}" class="nx-doc__empty-lines">אין שורות במסמך</td></tr>`;
-    const tableColgroup = isSectioned
-        ? d.show_vat_row
-            ? `<colgroup>
-      <col class="nx-doc__col-num" />
-      <col class="nx-doc__col-desc" />
-      <col class="nx-doc__col-qty" />
-      <col class="nx-doc__col-unit" />
-      <col class="nx-doc__col-price" />
-      <col class="nx-doc__col-discount" />
-      <col class="nx-doc__col-vat" />
-      <col class="nx-doc__col-total" />
-    </colgroup>`
-            : `<colgroup>
-      <col class="nx-doc__col-num" />
-      <col class="nx-doc__col-desc" />
-      <col class="nx-doc__col-qty" />
-      <col class="nx-doc__col-unit" />
-      <col class="nx-doc__col-price" />
-      <col class="nx-doc__col-discount" />
-      <col class="nx-doc__col-total" />
-    </colgroup>`
-        : d.show_vat_row
-            ? `<colgroup>
+    const tableColgroup = d.show_vat_row
+        ? `<colgroup>
       <col class="nx-doc__col-num" />
       <col class="nx-doc__col-desc" />
       <col class="nx-doc__col-qty" />
@@ -332,7 +311,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
       <col class="nx-doc__col-vat" />
       <col class="nx-doc__col-total" />
     </colgroup>`
-            : `<colgroup>
+        : `<colgroup>
       <col class="nx-doc__col-num" />
       <col class="nx-doc__col-desc" />
       <col class="nx-doc__col-qty" />
@@ -340,21 +319,10 @@ export function renderIncomeBrandedPreviewHtml(params) {
       <col class="nx-doc__col-currency" />
       <col class="nx-doc__col-total" />
     </colgroup>`;
-    const tableHead = isSectioned
-        ? `<tr>
+    const tableHead = `<tr>
       <th class="nx-doc__th-num">#</th>
-      <th>תיאור</th>
-      <th>כמות</th>
-      <th>יחידת מידה</th>
-      <th>מחיר יחידה</th>
-      <th>הנחה</th>
-      ${d.show_vat_row ? '<th>מע״מ</th>' : ''}
-      <th>סכום</th>
-    </tr>`
-        : `<tr>
-      <th class="nx-doc__th-num">#</th>
-      <th>פירוט</th>
-      <th>כמות</th>
+      <th>פירוט *</th>
+      <th>כמות *</th>
       <th>מחיר ליח'</th>
       <th>מטבע</th>
       ${d.show_vat_row ? '<th>מע״מ</th>' : ''}
@@ -1002,17 +970,19 @@ export function renderIncomeBrandedPreviewHtml(params) {
   --nx-doc-branding-col: ${sectionedLayout.branding_col_width_px}px;
   --nx-doc-doc-col: ${sectionedLayout.doc_col_width_px}px;
   --nx-doc-logo-scale: ${sectionedLayout.scale};
-  /*
-   * Fill the preview paper edge-to-edge. Equal 0.5cm side insets.
-   * Do not cap below the paper width — a narrower max-width leaves an RTL gutter
-   * by the scrollbar (logo side).
-   */
+  /* Full paper width. Equal 0.5cm side insets.
+   * Viewport min-height so preview sheet fills the modal even when parent % height is indefinite.
+   * Print/PDF resets below — do not leave empty pages. */
   width: 100%;
   max-width: 100%;
+  flex: 1 1 auto;
+  min-height: calc(100vh - 11rem);
   margin: 0;
   padding-block: 0;
   padding-inline: ${GM.page.margin_left_px}px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   color: var(--nx-doc-text);
   font-size: 14px;
   line-height: 1.35;
@@ -1021,10 +991,13 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--sectioned .nx-doc__upper {
   display: grid;
   /*
-   * DOM: doc-column | branding. Fill full width (no leftover gutter by the scrollbar).
-   * Branding is 20% narrower than doc → 1fr : 0.8fr.
+   * DOM: doc | branding (RTL → branding left, doc right).
+   * Row1: title/number | logo+issuer name
+   * Row2: invoice meta | issuer contact lines  ← same top edge (no pixel fighting)
+   * Row3: customer card
    */
   grid-template-columns: 1fr 0.8fr;
+  grid-template-rows: auto auto auto;
   gap: 0;
   align-items: start;
   width: 100%;
@@ -1035,7 +1008,13 @@ export function renderIncomeBrandedPreviewHtml(params) {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
 }
+.nx-doc--sectioned .nx-doc__doc-column,
 .nx-doc--sectioned .nx-doc__branding {
+  display: contents;
+}
+.nx-doc--sectioned .nx-doc__branding-head {
+  grid-column: 2;
+  grid-row: 1;
   width: 100%;
   min-width: 0;
   padding: 0;
@@ -1047,21 +1026,6 @@ export function renderIncomeBrandedPreviewHtml(params) {
   overflow: visible;
   text-align: left;
 }
-.nx-doc--sectioned .nx-doc__doc-column {
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  /* dir=rtl: flex-start = outer RIGHT edge. */
-  align-items: flex-start;
-  padding: 0;
-  padding-inline-end: 8px;
-  box-sizing: border-box;
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 14px;
-  text-align: start;
-}
 /*
  * Exact 319×120 paint box (× size). Small files stretch up — no empty margin in the box.
  * Pin to the physical left (scrollbar side); do not use inline-end:auto (RTL pushes to center).
@@ -1070,7 +1034,8 @@ export function renderIncomeBrandedPreviewHtml(params) {
   width: var(--nx-doc-logo-w);
   height: var(--nx-doc-logo-h);
   max-width: 100%;
-  margin: 0 0 ${GM.upper.logo_to_company_gap_px}px 0;
+  /* Lift logo 1cm to align with document title top. */
+  margin: -38px 0 ${GM.upper.logo_to_company_gap_px}px 0;
   overflow: hidden;
   display: block;
   background: transparent;
@@ -1101,45 +1066,119 @@ export function renderIncomeBrandedPreviewHtml(params) {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
   font-weight: 800;
-  margin: 0 0 8px;
+  margin: 0 0 ${GM.upper.meta_row_gap_px}px;
   line-height: 1.25;
   color: ${GM.colors.text};
-  text-align: left;
+  text-align: start;
+  width: 100%;
 }
 .nx-doc--sectioned .nx-doc__issuer-subtitle {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
+  font-weight: 500;
   color: var(--nx-doc-text-muted);
-  margin: -4px 0 8px;
+  margin: 0 0 ${GM.upper.meta_row_gap_px}px;
+  text-align: start;
+}
+.nx-doc--sectioned .nx-doc__issuer-details {
+  width: 100%;
+  text-align: start;
 }
 .nx-doc--sectioned .nx-doc__issuer-lines {
+  grid-column: 2;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
-  gap: ${GM.upper.company_line_gap_px}px;
+  gap: ${GM.upper.meta_row_gap_px}px;
   margin: 0;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid ${GM.colors.divider};
+  box-sizing: border-box;
+  text-align: start;
+  align-self: start;
 }
-.nx-doc--sectioned .nx-doc__issuer-line,
-.nx-doc--sectioned .nx-doc__customer-line {
+.nx-doc--sectioned .nx-doc__issuer-line {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 14px;
   line-height: 1.35;
   color: ${GM.colors.text};
+  padding: 0 0 4px;
+  border-bottom: 1px solid #e8e8f2;
+  box-sizing: border-box;
 }
-.nx-doc--sectioned .nx-doc__issuer-line-icon,
+.nx-doc--sectioned .nx-doc__issuer-line-value {
+  font-weight: 700;
+  color: ${GM.colors.text};
+  text-align: start;
+  min-width: 0;
+  word-break: break-word;
+}
+.nx-doc--sectioned .nx-doc__issuer-line-icon {
+  color: var(--nx-doc-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+.nx-doc--sectioned .nx-doc__customer-lines {
+  display: flex;
+  flex-direction: column;
+  gap: ${GM.upper.meta_row_gap_px}px;
+  margin: 0;
+  width: 100%;
+  text-align: start;
+}
+.nx-doc--sectioned .nx-doc__customer-line {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  line-height: 1.35;
+  color: ${GM.colors.text};
+  padding: 0 0 4px;
+  border-bottom: 1px solid #e8e8f2;
+  box-sizing: border-box;
+}
+.nx-doc--sectioned .nx-doc__customer-line-value {
+  font-weight: 700;
+  color: ${GM.colors.text};
+  text-align: start;
+  min-width: 0;
+  word-break: break-word;
+}
 .nx-doc--sectioned .nx-doc__customer-line-icon {
   color: var(--nx-doc-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
 }
 .nx-doc--sectioned .nx-doc__doc-identity {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: ${GM.upper.title_to_number_gap_px}px;
-  width: ${GM.upper.number_bar_width_px}px;
+  /* Stack width = title ink; number bar stretches to the same length. */
+  width: max-content;
   max-width: 100%;
   /* Pin title + number bar to the outer edge (inline-start = right in RTL). */
   margin: 0 0 12px;
   margin-inline-end: auto;
   margin-inline-start: 0;
+  padding-inline-end: 8px;
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__doc-title {
@@ -1151,13 +1190,12 @@ export function renderIncomeBrandedPreviewHtml(params) {
   line-height: ${GM.upper.title_line_height};
   color: ${GM.colors.text};
   text-align: start;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .nx-doc--sectioned .nx-doc__doc-number {
-  width: ${GM.upper.number_bar_width_px}px;
+  width: 100%;
   max-width: 100%;
   margin: 0;
 }
@@ -1167,7 +1205,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
   justify-content: center;
   gap: 10px;
   box-sizing: border-box;
-  width: ${GM.upper.number_bar_width_px}px;
+  width: 100%;
   max-width: 100%;
   height: ${GM.upper.number_bar_height_px}px;
   min-height: ${GM.upper.number_bar_height_px}px;
@@ -1176,15 +1214,23 @@ export function renderIncomeBrandedPreviewHtml(params) {
   background: var(--nx-doc-primary);
   color: #ffffff;
   font-family: ${INVOICE_FONT};
-  font-weight: 700;
+  font-weight: 800;
   font-size: ${GM.upper.number_bar_font_size_px}px;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.06em;
   text-align: center;
   unicode-bidi: isolate;
   direction: ltr;
   box-shadow: none;
+}
+.nx-doc--sectioned .nx-doc__doc-number-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
 }
 .nx-doc--sectioned .nx-doc__doc-number-bar .nx-doc__icon {
   width: 16px;
@@ -1195,12 +1241,17 @@ export function renderIncomeBrandedPreviewHtml(params) {
 }
 .nx-doc--sectioned .nx-doc__doc-number-rule { display: none; }
 .nx-doc--sectioned .nx-doc__meta-list {
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   gap: ${GM.upper.meta_row_gap_px}px;
   width: 100%;
   margin: 0 0 ${GM.upper.customer_top_gap_px}px;
+  padding-inline-end: 8px;
+  box-sizing: border-box;
   text-align: start;
+  align-self: start;
 }
 .nx-doc--sectioned .nx-doc__meta-row {
   display: grid;
@@ -1211,6 +1262,9 @@ export function renderIncomeBrandedPreviewHtml(params) {
   font-size: 14px;
   line-height: 1.35;
   color: var(--nx-doc-text-muted);
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e8e8f2;
+  box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__meta-label {
   font-weight: 500;
@@ -1222,11 +1276,14 @@ export function renderIncomeBrandedPreviewHtml(params) {
   justify-self: start;
 }
 .nx-doc--sectioned .nx-doc__customer-card {
+  grid-column: 1;
+  grid-row: 3;
   width: ${sectionedLayout.customer_card_width_px}px;
   max-width: 100%;
   min-height: 0;
   height: auto;
   margin: 0;
+  margin-inline-end: 8px;
   padding: ${GM.upper.customer_card_padding_px}px;
   border-radius: ${GM.upper.customer_card_radius_px}px;
   background: var(--nx-doc-panel);
@@ -1252,12 +1309,6 @@ export function renderIncomeBrandedPreviewHtml(params) {
   line-height: 1.25;
   color: ${GM.colors.text};
 }
-.nx-doc--sectioned .nx-doc__customer-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin: 0;
-}
 .nx-doc--sectioned .nx-doc__lines {
   width: 100%;
   margin: 0 0 ${GM.lower.notes_totals_gap_px}px;
@@ -1267,13 +1318,16 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--sectioned .nx-doc__table {
   width: 100%;
   max-width: none;
-  border: none;
   margin: 0;
-  border-radius: ${GM.table.radius_px}px;
+  /* Excel-like grid inside the printable sheet. */
+  border: 1px solid #c5c5d6;
+  border-radius: 0;
   overflow: hidden;
-  border-collapse: separate;
+  border-collapse: collapse;
   border-spacing: 0;
+  table-layout: fixed;
   box-shadow: none;
+  background: #ffffff;
 }
 .nx-doc--sectioned .nx-doc__table thead th {
   background: var(--nx-doc-primary);
@@ -1282,18 +1336,16 @@ export function renderIncomeBrandedPreviewHtml(params) {
   padding: 0 8px;
   font-size: ${GM.table.header_font_size_px}px;
   font-weight: 700;
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--nx-doc-primary) 72%, #000000);
   white-space: nowrap;
   text-align: center;
   vertical-align: middle;
 }
-.nx-doc--sectioned .nx-doc__table thead th:nth-child(2) { text-align: start; }
 .nx-doc--sectioned .nx-doc__table tbody td {
   height: ${GM.table.row_height_px}px;
-  padding: 0 8px;
+  padding: 4px 8px;
   font-size: ${GM.table.cell_font_size_px}px;
-  border: none;
-  border-bottom: 1px solid ${GM.colors.row_border};
+  border: 1px solid #d8d8e4;
   background: #ffffff;
   vertical-align: middle;
   line-height: 1.35;
@@ -1303,14 +1355,32 @@ export function renderIncomeBrandedPreviewHtml(params) {
 .nx-doc--sectioned .nx-doc__table tbody td.nx-doc__cell-desc {
   text-align: start;
   white-space: normal;
-  font-weight: 600;
-}
-.nx-doc--sectioned .nx-doc__table tbody tr:nth-child(even) td { background: #ffffff; }
-.nx-doc--sectioned .nx-doc__table tbody tr:last-child td { border-bottom: none; }
-.nx-doc--sectioned .nx-doc__desc-title {
-  display: block;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
   font-weight: 700;
   color: ${GM.colors.text};
+  line-height: 1.35;
+}
+.nx-doc--sectioned .nx-doc__table tbody td.nx-doc__cell-currency {
+  font-variant-numeric: tabular-nums;
+}
+.nx-doc--sectioned .nx-doc__table tbody td.nx-doc__cell-vat {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.nx-doc--sectioned .nx-doc__table thead th:nth-child(2) {
+  text-align: start;
+  font-size: 14px;
+}
+.nx-doc--sectioned .nx-doc__table tbody tr:nth-child(even) td { background: #fafafa; }
+.nx-doc--sectioned .nx-doc__table tbody tr:last-child td { border-bottom: 1px solid #d8d8e4; }
+.nx-doc--sectioned .nx-doc__desc-title {
+  display: block;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: ${GM.colors.text};
+  line-height: 1.35;
 }
 .nx-doc--sectioned .nx-doc__desc-sub {
   display: block;
@@ -1320,12 +1390,11 @@ export function renderIncomeBrandedPreviewHtml(params) {
   color: var(--nx-doc-text-muted);
 }
 .nx-doc--sectioned .nx-doc__col-num { width: 36px; }
-.nx-doc--sectioned .nx-doc__col-qty { width: 56px; }
-.nx-doc--sectioned .nx-doc__col-unit { width: 72px; }
-.nx-doc--sectioned .nx-doc__col-price { width: 88px; }
-.nx-doc--sectioned .nx-doc__col-discount { width: 64px; }
-.nx-doc--sectioned .nx-doc__col-vat { width: 56px; }
-.nx-doc--sectioned .nx-doc__col-total { width: 88px; }
+.nx-doc--sectioned .nx-doc__col-qty { width: 64px; }
+.nx-doc--sectioned .nx-doc__col-price { width: 96px; }
+.nx-doc--sectioned .nx-doc__col-currency { width: 64px; }
+.nx-doc--sectioned .nx-doc__col-vat { width: 64px; }
+.nx-doc--sectioned .nx-doc__col-total { width: 104px; }
 .nx-doc--sectioned .nx-doc__bottom {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1339,7 +1408,12 @@ export function renderIncomeBrandedPreviewHtml(params) {
   border-radius: ${GM.lower.notes_totals_radius_px}px;
   background: var(--nx-doc-panel);
   min-height: ${GM.lower.notes_totals_height_px}px;
-  height: ${GM.lower.notes_totals_height_px}px;
+  /* height:auto — fixed height let long הערות paint over אמצעי תשלום below. */
+  height: auto;
+  max-height: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   box-shadow: none;
   box-sizing: border-box;
 }
@@ -1351,12 +1425,17 @@ export function renderIncomeBrandedPreviewHtml(params) {
   font-weight: 700;
   margin-bottom: 10px;
   color: var(--nx-doc-primary);
+  flex-shrink: 0;
 }
 .nx-doc--sectioned .nx-doc__comments-head .nx-doc__icon { color: var(--nx-doc-primary); }
 .nx-doc--sectioned .nx-doc__comments-body {
   font-size: ${GM.upper.company_line_font_size_px}px;
   line-height: 1.55;
   color: ${GM.colors.text};
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-height: 0;
 }
 .nx-doc--sectioned .nx-doc__summary-head { display: none; }
 .nx-doc--sectioned .nx-doc__summary,
@@ -1401,7 +1480,16 @@ export function renderIncomeBrandedPreviewHtml(params) {
   font-weight: 800;
   color: var(--nx-doc-primary);
 }
-.nx-doc--sectioned .nx-doc__payments { margin-bottom: 12px; }
+.nx-doc--sectioned .nx-doc__payments { margin-bottom: 12px; width: 100%; }
+.nx-doc--sectioned .nx-doc__sheet-tail {
+  margin-top: auto;
+  width: 100%;
+  padding-top: 16px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  /* Keep payments + NodexPro as the last painted block on the sheet. */
+  order: 99;
+}
 .nx-doc--sectioned .nx-doc__payments-head {
   display: flex;
   align-items: center;
@@ -1424,11 +1512,14 @@ export function renderIncomeBrandedPreviewHtml(params) {
   padding: 14px;
   background: #ffffff;
   border-inline-end: 1px solid #ececf6;
-  height: ${GM.lower.payment_card_height_px}px;
   min-height: ${GM.lower.payment_card_height_px}px;
+  height: auto;
   box-shadow: none;
   box-sizing: border-box;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 .nx-doc--sectioned .nx-doc__payment-col-head {
   display: flex;
@@ -1437,6 +1528,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
   font-size: ${GM.upper.company_line_font_size_px}px;
   margin-bottom: 8px;
   color: ${GM.colors.text};
+  flex-shrink: 0;
 }
 .nx-doc--sectioned .nx-doc__payment-col-head > .nx-doc__icon {
   display: inline-flex;
@@ -1447,6 +1539,9 @@ export function renderIncomeBrandedPreviewHtml(params) {
   font-size: 11px;
   line-height: 1.45;
   color: var(--nx-doc-text-muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 .nx-doc--sectioned .nx-doc__platform-footer {
   display: flex;
@@ -1481,6 +1576,7 @@ export function renderIncomeBrandedPreviewHtml(params) {
   .nx-doc--sectioned {
     width: 100%;
     max-width: none;
+    min-height: 0;
     padding: 0;
   }
 }
@@ -1495,9 +1591,11 @@ export function renderIncomeBrandedPreviewHtml(params) {
     ${totalsHtml}
   </div>
 
-  ${paymentHtml}
   ${signatureHtml}
-  ${platformFooter}
+  <div class="nx-doc__sheet-tail">
+    ${paymentHtml}
+    ${platformFooter}
+  </div>
 </div>
   `.trim();
 }
