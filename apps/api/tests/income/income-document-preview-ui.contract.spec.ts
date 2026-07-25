@@ -115,22 +115,26 @@ test('canonical preview_html contains no allocation edit controls', () => {
 
 test('income wizard uses application overlay chrome not document html click targets', () => {
   assert.match(previewStepSource, /WorkEngineIncomeDocumentPreviewPaper/);
-  /* Safe fit-shell: natural A4 + scroll fallback; no payment DOM pinning. */
+  /* Hotfix: direct mount + natural scrollable A4. No fit-shell / scale. */
+  assert.match(
+    previewPaperSource,
+    /ref=\{contentRef\}[\s\S]*dangerouslySetInnerHTML=\{\{ __html: previewHtml \}\}\s*\/>/,
+  );
+  assert.doesNotMatch(previewPaperSource, /transform:\s*scale|scale\(/);
+  assert.doesNotMatch(previewPaperSource, /ResizeObserver/);
+  assert.doesNotMatch(previewPaperSource, /resolvePreviewPaperFitPlan/);
+  assert.doesNotMatch(previewPaperSource, /nx-we-preview-paper-fit-shell/);
   assert.doesNotMatch(previewPaperSource, /pinIncomePreviewPaymentsToSheetBottom/);
-  assert.match(previewPaperSource, /resolvePreviewPaperFitPlan/);
-  assert.match(previewPaperSource, /nx-we-preview-paper-fit-shell/);
-  assert.match(previewPaperSource, /applyScrollFallback/);
-  assert.match(previewPaperSource, /ResizeObserver/);
-  assert.match(previewPaperSource, /dangerouslySetInnerHTML=\{\{ __html: previewHtml \}\}/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-canvas\s*\{[\s\S]*?overflow:\s*auto/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-paper\s*\{[\s\S]*?width:\s*794px/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-paper\s*\{[\s\S]*?min-height:\s*1123px/);
+  assert.doesNotMatch(workEngineQueueCss, /nx-we-preview-paper-fit-shell/);
+  assert.doesNotMatch(workEngineQueueCss, /\.nx-we-preview-canvas--fit\b/);
   assert.match(previewPaperSource, /resolveIncomeDocumentAllocationEditChrome/);
   assert.match(previewPaperSource, /nx-we-preview-allocation-edit-btn--inline/);
   assert.match(previewPaperSource, /nx-doc__meta-label-group--injected/);
   assert.doesNotMatch(previewPaperSource, /measureIncomeDocumentAllocationEditAnchor/);
   assert.match(previewPaperSource, /WorkEngineIncomeAllocationNumberModal/);
-  assert.match(
-    previewPaperSource,
-    /ref=\{contentRef\}[\s\S]*dangerouslySetInnerHTML=\{\{ __html: previewHtml \}\}\s*\/>/,
-  );
   assert.doesNotMatch(previewPaperSource, /INCOME_DOCUMENT_ALLOCATION_EDIT_SELECTOR/);
   assert.doesNotMatch(previewPaperSource, /data-income-allocation-edit/);
   assert.doesNotMatch(previewSidebarSource, /allocation_number_field/);
