@@ -47,6 +47,7 @@ export type IncomeClientDocumentManagementActionIconKey =
   | 'reports'
   | 'ledger'
   | 'retainer'
+  | 'at'
   | 'more';
 
 export interface IncomeClientDocumentManagementRowAction {
@@ -116,6 +117,8 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   can_edit_draft: boolean;
   pdf_download_path: string | null;
   allowed_actions: string[];
+  email_delivery: IncomeDocumentEmailDeliveryBlock | null;
+  docflow_delivery: IncomeDocumentDocflowDeliveryBlock | null;
 }
 
 export interface WorkEngineInvoicesClientDocumentsByTypeAggregate {
@@ -272,19 +275,270 @@ export type WorkEngineInvoiceRetainerScheduleProjectionAction = {
   label: string;
   disabled: boolean;
   disabled_reason: string | null;
+  href: string | null;
+  income_command: string | null;
+  income_command_payload: Record<string, unknown> | null;
+};
+
+export type WorkEngineInvoiceRetainerScheduleOpenCycleDraftPrimaryAction = {
+  command: 'open_recurring_cycle_draft_for_review';
+  payload: {
+    represented_client_id: string;
+    profile_id: string;
+    cycle_id: string;
+    generated_draft_id: string;
+    period_key: string;
+    linked_work_item_id: string | null;
+  };
+};
+
+export type WorkEngineInvoiceRetainerScheduleOpenNextDocumentTabPrimaryAction = {
+  command: 'open_next_document_tab';
+  payload: {
+    target_tab: 'next_document';
+    scheduled_document_date: string;
+    period_key: string;
+  };
+};
+
+export type WorkEngineInvoiceRetainerScheduleOpenCycleOverridePrimaryAction = {
+  command: 'open_recurring_cycle_override_for_edit';
+  payload: {
+    represented_client_id: string;
+    profile_id: string;
+    cycle_date: string;
+    period_key: string;
+    cycle_index: number;
+  };
+};
+
+export type WorkEngineInvoiceRetainerScheduleRowPrimaryAction =
+  | WorkEngineInvoiceRetainerScheduleOpenCycleDraftPrimaryAction
+  | WorkEngineInvoiceRetainerScheduleOpenNextDocumentTabPrimaryAction
+  | WorkEngineInvoiceRetainerScheduleOpenCycleOverridePrimaryAction;
+
+export type RecurringCycleOverrideScope = 'single_cycle' | 'this_and_future';
+
+export type WorkEngineRecurringCycleOverrideApplyScopeDialog = {
+  title: string;
+  prompt: string;
+  option_single_cycle: {
+    key: 'single_cycle';
+    label: string;
+    description: string;
+  };
+  option_this_and_future: {
+    key: 'this_and_future';
+    label: string;
+    description: string;
+  };
+  confirm_label: string;
+  cancel_label: string;
+  persistence_note: string | null;
+};
+
+export type WorkEngineRecurringCycleOverrideContextPanel = {
+  office_client_label: string;
+  end_customer_display_name: string;
+  document_type_label: string;
+  cycle_date_display: string;
+  payment_terms_display: string | null;
+  projection_note: string | null;
+};
+
+export type WorkEngineRecurringCycleOverrideSidebarField = {
+  key: string;
+  label: string;
+  input_type: 'text' | 'date' | 'select' | 'textarea' | 'email';
+  value: string | null;
+  editable: boolean;
+  disabled_reason: string | null;
+  hint: string | null;
+  options: Array<{ value: string; label: string }>;
+  required: boolean;
+  min_value: string | null;
+  max_length: number | null;
+};
+
+export type WorkEngineRecurringCycleOverrideSidebarSection = {
+  key: string;
+  title: string;
+  fields: WorkEngineRecurringCycleOverrideSidebarField[];
+};
+
+export type WorkEngineRecurringCycleOverrideRetainerSettingsSidebar = {
+  retainer_settings: WorkEngineInvoiceRetainerSettings;
+  document_type_options: Array<{
+    key: 'quote' | 'deal_invoice' | 'tax_invoice';
+    label: string;
+    enabled: boolean;
+    disabled_reason: string | null;
+  }>;
+  frequency_options: Array<{ key: RecurringDocumentFrequency; label: string }>;
+  status_actions: {
+    can_pause: boolean;
+    can_resume: boolean;
+    can_cancel: boolean;
+    pause_label: string;
+    resume_label: string;
+    cancel_label: string;
+  };
+};
+
+export type WorkEngineRecurringCycleOverrideAggregate = {
+  aggregate_key: 'work_engine_recurring_cycle_override_aggregate';
+  represented_client_id: string;
+  profile_id: string;
+  cycle_date: string;
+  period_key: string;
+  cycle_date_display: string;
+  title: string;
+  context_panel: WorkEngineRecurringCycleOverrideContextPanel;
+  retainer_settings_sidebar: WorkEngineRecurringCycleOverrideRetainerSettingsSidebar;
+  sidebar_sections: WorkEngineRecurringCycleOverrideSidebarSection[];
+  override_exists: boolean;
+  override_scope: RecurringCycleOverrideScope | null;
+  document_details_step: import('./income-document-details-types').IncomeDocumentDetailsStep;
+  preview_action: {
+    visible: boolean;
+    label: string;
+    disabled_reason: string | null;
+  };
+  save_action: {
+    visible: boolean;
+    label: string;
+    disabled_reason: string | null;
+    apply_scope_dialog: WorkEngineRecurringCycleOverrideApplyScopeDialog | null;
+  };
+  delete_action: {
+    visible: boolean;
+    label: string;
+    disabled_reason: string | null;
+  };
+  allowed_actions: string[];
+};
+
+export type WorkEngineRecurringCycleDraftReviewEditAction = {
+  visible: boolean;
+  enabled: boolean;
+  label: string;
+  disabled_reason: string | null;
+};
+
+export type WorkEngineRecurringCycleDraftReviewIssueMonthOption = {
+  month_key: string;
+  label: string;
+  confirmation_message: string;
+};
+
+export type WorkEngineRecurringCycleDraftReviewIssueMonthSelector = {
+  visible: boolean;
+  current_month: string;
+  default_month: string;
+  selected_month: string;
+  allowed_months: WorkEngineRecurringCycleDraftReviewIssueMonthOption[];
+};
+
+export type WorkEngineRecurringCycleDraftReviewIssueAction = {
+  visible: boolean;
+  enabled: boolean;
+  disabled_reason: string | null;
+  icon: 'issue';
+  tooltip: string;
+  confirmation_required: boolean;
+  confirmation_title: string | null;
+  confirmation_message: string | null;
+  issue_month_selector: WorkEngineRecurringCycleDraftReviewIssueMonthSelector | null;
+  command_name: 'issue_income_document';
+};
+
+export type WorkEngineRecurringCycleDraftReviewIssueAndSendAction = {
+  visible: boolean;
+  enabled: boolean;
+  disabled_reason: string | null;
+  icon: 'send';
+  tooltip: string;
+  confirmation_required: boolean;
+  confirmation_title: string | null;
+  confirmation_message: string | null;
+  issue_month_selector: WorkEngineRecurringCycleDraftReviewIssueMonthSelector | null;
+  command_name: 'issue_and_send_income_document';
+};
+
+export type WorkEngineRecurringCycleDraftReviewDeliveryOutcome = {
+  status: 'not_attempted' | 'sent' | 'failed';
+  failure_reason: string | null;
+  delivery_attempt_id: string | null;
+};
+
+export type WorkEngineRecurringCycleDraftReviewAggregate = {
+  aggregate_key: 'work_engine_recurring_cycle_draft_review_aggregate';
+  represented_client_id: string;
+  profile_id: string;
+  cycle_id: string;
+  generated_draft_id: string;
+  period_key: string;
+  linked_work_item_id: string | null;
+  scheduled_document_date_display: string;
+  title: string;
+  issued_document_id: string | null;
+  issued_document_number_display: string | null;
+  delivery_outcome: WorkEngineRecurringCycleDraftReviewDeliveryOutcome | null;
+  status_message: string | null;
+  initial_view: 'document_preview';
+  edit_action: WorkEngineRecurringCycleDraftReviewEditAction;
+  issue_action: WorkEngineRecurringCycleDraftReviewIssueAction;
+  issue_and_send_action: WorkEngineRecurringCycleDraftReviewIssueAndSendAction;
+  income_workspace_aggregate: IncomeWorkspaceAggregate;
+  income_commands: Record<string, string>;
+  preview_action: {
+    visible: boolean;
+    label: string;
+    disabled_reason: string | null;
+  };
+  allowed_actions: string[];
 };
 
 export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   projection_key: string;
+  cycle_id: string | null;
+  generated_draft_id: string | null;
+  linked_work_item_id: string | null;
+  period_key: string;
   scheduled_document_date: string;
   scheduled_document_date_display: string;
   document_type_label: string;
   amount_display: string;
-  status_key: 'issued' | 'scheduled' | 'skipped' | 'failed';
+  status_key: 'issued' | 'waiting_review' | 'scheduled' | 'skipped' | 'failed';
   status_label: string;
-  status_tone: 'success' | 'neutral' | 'warning' | 'danger';
-  icon_key: 'check' | 'clock' | 'pause' | 'alert';
+  show_status_text: boolean;
+  status_tone: 'success' | 'neutral' | 'warning' | 'danger' | 'muted';
+  icon_key: 'check' | 'calendar' | 'pause' | 'alert' | 'review';
   icon_display: string;
+  work_state_label: string | null;
+  has_open_task: boolean;
+  work_item_href: string | null;
+  machine_state: string | null;
+  machine_state_label: string | null;
+  machine_state_tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral' | 'muted' | null;
+  machine_has_task: boolean;
+  machine_task_id: string | null;
+  machine_task_url: string | null;
+  machine_task_title: string | null;
+  row_interaction_kind:
+    | 'generated_draft_review'
+    | 'next_document_projection'
+    | 'future_projection'
+    | null;
+  primary_action: WorkEngineInvoiceRetainerScheduleRowPrimaryAction | null;
+  preview_action: {
+    visible: boolean;
+    label: string;
+    disabled_reason: string | null;
+  } | null;
+  override_exists: boolean;
+  override_scope: RecurringCycleOverrideScope | null;
+  cycle_date: string;
   allowed_actions: string[];
   actions: WorkEngineInvoiceRetainerScheduleProjectionAction[];
 };
@@ -397,12 +651,20 @@ export type WorkEngineInvoiceRetainerCommandType =
   | 'pause_income_recurring_document_profile'
   | 'resume_income_recurring_document_profile'
   | 'cancel_income_recurring_document_profile'
-  | 'preview_income_recurring_document_profile_settings';
+  | 'preview_income_recurring_document_profile_settings'
+  | 'open_recurring_cycle_draft_for_review'
+  | 'open_recurring_cycle_override_for_edit'
+  | 'preview_recurring_cycle_override'
+  | 'refresh_recurring_cycle_override_step'
+  | 'save_recurring_cycle_override'
+  | 'delete_recurring_cycle_override';
 
 export interface WorkEngineInvoiceRetainerCommandResponse {
   ok: true;
-  command: WorkEngineInvoiceRetainerCommandType;
-  work_engine_invoice_retainer_setup_aggregate: WorkEngineInvoiceRetainerSetupAggregate;
+  command: WorkEngineInvoiceRetainerCommandType | string;
+  work_engine_invoice_retainer_setup_aggregate?: WorkEngineInvoiceRetainerSetupAggregate;
+  work_engine_recurring_cycle_draft_review_aggregate?: WorkEngineRecurringCycleDraftReviewAggregate;
+  work_engine_recurring_cycle_override_aggregate?: WorkEngineRecurringCycleOverrideAggregate;
   work_engine_invoices_tab_aggregate?: Record<string, unknown>;
 }
 
@@ -620,6 +882,147 @@ export interface IncomeDraftsTableRow {
   allowed_actions: string[];
 }
 
+export const INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY =
+  'income_document_email_history_aggregate' as const;
+export const INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY =
+  'income_represented_client_email_history_aggregate' as const;
+export const INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY =
+  'income_document_docflow_send_aggregate' as const;
+
+export interface IncomeDocumentDocflowDeliveryAction {
+  key: 'open_docflow_send';
+  icon_key: 'docflow';
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  send_aggregate_key: typeof INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY;
+  send_aggregate_params: { income_document_id: string };
+}
+
+export interface IncomeDocumentDocflowDeliveryBlock {
+  attempt_count: number;
+  status_label: string;
+  send_enabled: boolean;
+  send_disabled_reason: string | null;
+  action: IncomeDocumentDocflowDeliveryAction;
+}
+
+export interface IncomeDocumentDocflowHistoryAttemptRow {
+  attempt_id: string;
+  sent_at_display: string | null;
+  result: 'pending' | 'sent' | 'failed';
+  result_label: string;
+  failure_reason: string | null;
+  docflow_thread_id: string | null;
+  docflow_message_id: string | null;
+  body_preview: string | null;
+}
+
+export interface IncomeDocumentDocflowSendForm {
+  visible: boolean;
+  command: 'send_income_document_by_docflow';
+  income_document_id: string;
+  confirm_label: string;
+  fields: [];
+  enabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface IncomeDocumentDocflowSendAggregate {
+  aggregate_key: typeof INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY;
+  income_document_id: string;
+  document_number: string;
+  document_type_label: string;
+  represented_client_id: string | null;
+  client_display_name: string | null;
+  table_columns: Array<{ key: string; label: string }>;
+  rows: IncomeDocumentDocflowHistoryAttemptRow[];
+  send_form: IncomeDocumentDocflowSendForm;
+  allowed_actions: string[];
+  empty_state: { visible: boolean; title: string; description: string | null };
+}
+
+export interface IncomeDocumentEmailDeliveryAction {
+  key: 'open_email_history';
+  icon_key: 'at';
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  history_aggregate_key: typeof INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY;
+  history_aggregate_params: { income_document_id: string };
+}
+
+export interface IncomeDocumentEmailDeliveryBlock {
+  attempt_count: number;
+  status_label: string;
+  send_enabled: boolean;
+  send_disabled_reason: string | null;
+  action: IncomeDocumentEmailDeliveryAction;
+}
+
+export interface IncomeDocumentEmailHistoryAttemptRow {
+  attempt_id: string;
+  sent_at_display: string | null;
+  recipient_email: string | null;
+  result: 'pending' | 'sent' | 'failed';
+  result_label: string;
+  failure_reason: string | null;
+  provider_message_id: string | null;
+  subject_preview: string | null;
+}
+
+export interface IncomeDocumentEmailSendFormField {
+  key: string;
+  label: string;
+  required: boolean;
+  type: 'email';
+}
+
+export interface IncomeDocumentEmailSendForm {
+  visible: boolean;
+  command: 'send_income_document_by_email';
+  income_document_id: string;
+  fields: IncomeDocumentEmailSendFormField[];
+  enabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface IncomeDocumentEmailHistoryAggregate {
+  aggregate_key: typeof INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY;
+  income_document_id: string;
+  document_number: string;
+  document_type_label: string;
+  represented_client_id: string | null;
+  table_columns: Array<{ key: string; label: string }>;
+  rows: IncomeDocumentEmailHistoryAttemptRow[];
+  send_form: IncomeDocumentEmailSendForm;
+  allowed_actions: string[];
+  empty_state: { visible: boolean; title: string; description: string | null };
+}
+
+export interface IncomeRepresentedClientEmailHistoryAttemptRow {
+  attempt_id: string;
+  income_document_id: string;
+  document_number: string | null;
+  document_type_label: string | null;
+  sent_at_display: string | null;
+  recipient_email: string | null;
+  result: 'pending' | 'sent' | 'failed';
+  result_label: string;
+  failure_reason: string | null;
+  subject_preview: string | null;
+}
+
+export interface IncomeRepresentedClientEmailHistoryAggregate {
+  aggregate_key: typeof INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY;
+  represented_client_id: string;
+  client_display_name: string;
+  table_columns: Array<{ key: string; label: string }>;
+  rows: IncomeRepresentedClientEmailHistoryAttemptRow[];
+  allowed_actions: string[];
+  empty_state: { visible: boolean; title: string; description: string | null };
+}
+
 export interface IncomeIssuedDocumentsTableRow {
   document_id: string;
   document_number: string;
@@ -642,6 +1045,8 @@ export interface IncomeIssuedDocumentsTableRow {
   pdf_status_label: string;
   pdf_asset_id: string | null;
   pdf_download_path: string | null;
+  email_delivery: IncomeDocumentEmailDeliveryBlock;
+  docflow_delivery: IncomeDocumentDocflowDeliveryBlock;
   allowed_actions: string[];
 }
 
@@ -773,6 +1178,8 @@ export type IncomeCommandType =
   | 'save_income_recipient_for_future'
   | 'retry_income_document_accounting_posting'
   | 'retry_income_document_pdf_render'
+  | 'send_income_document_by_email'
+  | 'send_income_document_by_docflow'
   | 'begin_income_wizard_document_draft'
   | 'add_income_document_line'
   | 'update_income_document_line'
@@ -788,12 +1195,22 @@ export type IncomeCommandType =
 
 export interface IncomeCommandResponseMeta {
   workspace_aggregate_mode?: 'full' | 'wizard_patch';
+  idempotent_replay?: boolean;
+  income_document_id?: string;
+  delivery_attempt_id?: string;
+  delivery_result?: 'sent' | 'failed';
+  provider_message_id?: string | null;
+  docflow_thread_id?: string | null;
+  docflow_message_id?: string | null;
+  failure_reason?: string | null;
 }
 
 export interface IncomeCommandResponse {
   ok: true;
   command: IncomeCommandType;
   income_workspace_aggregate: IncomeWorkspaceAggregate;
+  work_engine_recurring_cycle_draft_review_aggregate?: WorkEngineRecurringCycleDraftReviewAggregate;
+  work_engine_invoice_retainer_setup_aggregate?: WorkEngineInvoiceRetainerSetupAggregate;
   meta?: IncomeCommandResponseMeta;
 }
 

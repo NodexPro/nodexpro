@@ -53,6 +53,10 @@ const workEngineQueueCss = readFileSync(
   join(dir, '../../../web/src/styles/nx-work-engine-queue.css'),
   'utf8',
 );
+const previewScreenPureSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/work-engine-income-document-preview-screen.pure.ts'),
+  'utf8',
+);
 
 /** Preview-paper document rules only — excludes modal/sidebar chrome elsewhere in the file. */
 function workEnginePreviewDocumentCssRules(css: string): string {
@@ -125,23 +129,45 @@ test('income wizard uses application overlay chrome not document html click targ
   assert.match(previewPaperSource, /we-income-preview-fit-iframe/);
   assert.match(previewPaperSource, /resolveScreenPreviewPlan/);
   assert.match(previewPaperSource, /ResizeObserver/);
-  /* Scale on wrapper only; iframe stays natural 794×1123 with transform:none. */
+  /* Scale on wrapper only; measure full canvas; iframe stays natural 794×1123. */
   assert.match(previewPaperSource, /--preview-scale/);
   assert.match(previewPaperSource, /nx-we-preview-fit-scaler/);
+  assert.match(previewPaperSource, /canvas\.getBoundingClientRect\(\)/);
+  assert.match(previewPaperSource, /resolveCanvasAvailableBox/);
+  assert.match(previewPaperSource, /resolveScreenPreviewFitDiagnostics/);
+  assert.match(previewPaperSource, /resetIframeScroll/);
+  assert.match(previewPaperSource, /scrollTo\(0, 0\)/);
+  assert.match(previewPaperSource, /waitForIframeAssets/);
+  assert.match(previewPaperSource, /\[we-preview-inner\]/);
+  assert.match(previewPaperSource, /PREVIEW_PAPER_ROOT_SELECTOR/);
+  assert.match(previewPaperSource, /lockIframeViewportToA4/);
   assert.match(previewPaperSource, /width=\{PREVIEW_A4_WIDTH_PX\}/);
   assert.match(previewPaperSource, /height=\{PREVIEW_A4_HEIGHT_PX\}/);
+  assert.doesNotMatch(previewPaperSource, /viewport\.getBoundingClientRect/);
+  assert.doesNotMatch(previewPaperSource, /measureIframePaperHeight/);
   assert.doesNotMatch(previewPaperSource, /paper\.style\.setProperty\(['"]transform['"]/);
   assert.doesNotMatch(previewPaperSource, /pinIncomePreviewPaymentsToSheetBottom/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-canvas\s*\{[\s\S]*?width:\s*100%/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-canvas\s*\{[\s\S]*?overflow:\s*auto/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-paper\s*\{[\s\S]*?width:\s*794px/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-paper\s*\{[\s\S]*?min-height:\s*1123px/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-scaler\s*\{[\s\S]*?width:\s*794px/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-scaler\s*\{[\s\S]*?height:\s*1123px/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-fit-scaler\s*\{[\s\S]*?transform:\s*scale\(var\(--preview-scale\)\)/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[\s\S]*?transform:\s*none\s*!important/);
-  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe-shell\s*\{[\s\S]*?--preview-scale/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe-shell\s*\{[\s\S]*?width:\s*calc\(794px \* var\(--preview-scale\)\)/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe-shell\s*\{[\s\S]*?height:\s*calc\(1123px \* var\(--preview-scale\)\)/);
   assert.doesNotMatch(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[^}]*transform:\s*scale/);
   assert.match(workEngineQueueCss, /@media print/);
   assert.match(workEngineQueueCss, /nx-we-preview-paper--source-parked/);
   assert.doesNotMatch(workEngineQueueCss, /nx-we-preview-paper-fit-shell/);
+  /* srcDoc must not prematurely clip html/body; paper root is locked to A4. */
+  assert.match(previewScreenPureSource, /Does NOT force html\/body to 1123 \+ overflow:hidden/);
+  assert.match(previewScreenPureSource, /overflow:visible !important/);
+  assert.match(previewScreenPureSource, /height:auto !important/);
+  assert.match(previewScreenPureSource, /height:\$\{PREVIEW_A4_HEIGHT_PX\}px !important/);
+  assert.doesNotMatch(previewScreenPureSource, /min-height: calc\(100vh/);
+
   assert.match(previewPaperSource, /resolveIncomeDocumentAllocationEditChrome/);
   assert.match(previewPaperSource, /nx-we-preview-allocation-edit-btn--inline/);
   assert.match(previewPaperSource, /nx-doc__meta-label-group--injected/);

@@ -944,14 +944,52 @@
 }
 
 .nx-we-preview-canvas {
-  flex: 1 1 auto;
+  /* Full modal-body measure target for fit scale — never shrink-wrap to A4. */
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
   min-height: 0;
+  flex: 1 1 auto;
   overflow: auto;
   background: #f5f7fb;
-  padding: 24px;
+  padding: 8px;
+  box-sizing: border-box;
   display: flex;
+  align-items: center;
   justify-content: center;
-  align-items: flex-start;
+}
+
+.nx-we-preview-canvas.nx-we-preview-canvas--screen-fit {
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.nx-we-preview-screen {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  flex: 1 1 auto;
+  box-sizing: border-box;
+}
+
+.nx-we-preview-canvas--screen-fit .nx-we-preview-screen,
+.nx-we-retainer-preview-modal__canvas.nx-we-preview-canvas--screen-fit .nx-we-preview-screen {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .nx-we-preview-paper {
@@ -968,8 +1006,104 @@
   box-sizing: border-box;
 }
 
-.nx-we-preview-empty {
+/* Live source parked while fitted iframe is shown — still in DOM for print/fallback. */
+.nx-we-preview-paper--source-parked {
+  position: absolute !important;
+  left: -10000px !important;
+  top: 0 !important;
+  margin: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden;
+}
+
+.nx-we-preview-fit-viewport {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.nx-we-preview-fit-viewport--pending {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.nx-we-preview-fit-viewport--ready {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.nx-we-preview-fit-iframe-shell {
+  /* Shell alone reserves the scaled A4 box from --preview-scale. */
+  --preview-scale: 1;
+  flex: 0 0 auto;
+  position: relative;
+  overflow: hidden;
+  width: calc(794px * var(--preview-scale));
+  height: calc(1123px * var(--preview-scale));
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.nx-we-preview-fit-scaler {
+  /*
+   * Exactly one scale layer — on a WRAPPER, never on the iframe element.
+   * Natural A4 size always; transform only.
+   */
   width: 794px;
+  height: 1123px;
+  transform: scale(var(--preview-scale));
+  transform-origin: top left;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.nx-we-preview-fit-iframe {
+  display: block;
+  border: 0;
+  background: #ffffff;
+  width: 794px !important;
+  min-width: 794px !important;
+  height: 1123px !important;
+  min-height: 1123px !important;
+  max-width: none !important;
+  max-height: none !important;
+  transform: none !important;
+  zoom: normal !important;
+}
+
+/* Print / PDF path: always the original natural A4 source, never the fitted iframe. */
+@media print {
+  .nx-we-preview-fit-viewport {
+    display: none !important;
+  }
+
+  .nx-we-preview-paper--source-parked {
+    position: static !important;
+    left: auto !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+
+  .nx-we-preview-canvas,
+  .nx-we-retainer-preview-modal__canvas {
+    overflow: visible !important;
+    height: auto !important;
+  }
+}
+
+.nx-we-preview-empty {
+  width: 100%;
+  max-width: 100%;
   min-height: 400px;
   background: #fff;
   border-radius: 8px;
@@ -1067,6 +1201,104 @@
   color: #0f172a;
   font-weight: 600;
   text-align: left;
+}
+
+.nx-we-preview-sidebar__row--editable .nx-we-preview-sidebar__value-group,
+.nx-we-preview-sidebar__row--allocation .nx-we-preview-sidebar__value-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.nx-we-preview-sidebar__row--allocation {
+  align-items: center;
+}
+
+.nx-we-preview-sidebar__label-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+}
+
+.nx-we-preview-paper__content .nx-doc__meta-label-group--injected {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nx-we-preview-allocation-edit-btn--inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #5b4dff;
+  cursor: pointer;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.nx-we-preview-allocation-edit-btn--inline:hover:not(:disabled) {
+  background: rgba(91, 77, 255, 0.08);
+}
+
+.nx-we-preview-allocation-edit-btn--inline.nx-we-preview-allocation-edit-btn--disabled,
+.nx-we-preview-allocation-edit-btn--inline:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-we-preview-sidebar__allocation-value {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.nx-we-preview-sidebar__allocation-value--empty {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.nx-we-preview-sidebar__edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #5b4dff;
+  cursor: pointer;
+}
+
+.nx-we-preview-sidebar__edit-btn:hover:not(:disabled) {
+  background: #f8f9fd;
+}
+
+.nx-we-preview-sidebar__edit-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-we-preview-sidebar__edit-btn--disabled {
+  opacity: 0.35;
+}
+
+.nx-we-preview-canvas--blocked .nx-we-preview-paper {
+  pointer-events: none;
+  filter: saturate(0.92);
+  opacity: 0.72;
 }
 
 .nx-we-preview-sidebar__totals {
@@ -1174,186 +1406,19 @@
   cursor: pointer;
 }
 
-/* Backend-owned document HTML inside A4 paper — typography/chrome only; layout + theme from preview_html */
-.nx-we-preview-paper__content .nx-doc {
-  color: #0f172a;
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.nx-we-preview-paper__content .nx-doc__header {
-  margin-bottom: 28px;
-}
-
-.nx-we-preview-paper__content .nx-doc__logo-img {
-  max-width: 260px;
-  max-height: 120px;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  display: block;
-  margin-bottom: 10px;
-}
-
-.nx-we-preview-paper__content .nx-doc__issuer-name {
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 6px;
-  color: #172033;
-}
-
-.nx-we-preview-paper__content .nx-doc__issuer-line {
-  font-size: 13px;
-  color: #475569;
-  margin-bottom: 3px;
-}
-
-.nx-we-preview-paper__content .nx-doc__issuer-line span {
-  color: #64748b;
-}
-
-.nx-we-preview-paper__content .nx-doc__recipient {
-  font-size: 13px;
-  line-height: 1.5;
-  margin-bottom: 12px;
-}
-
-.nx-we-preview-paper__content .nx-doc__recipient-name {
-  font-weight: 700;
-}
-
-.nx-we-preview-paper__content .nx-doc__doc-type-banner {
-  margin-bottom: 10px;
-}
-
-.nx-we-preview-paper__content .nx-doc__title {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0;
-}
-
-.nx-we-preview-paper__content .nx-doc__dates {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-}
-
-.nx-we-preview-paper__content .nx-doc__doc-type-banner--subtle .nx-doc__dates,
-.nx-we-preview-paper__content .nx-doc__header--modern .nx-doc__dates,
-.nx-we-preview-paper__content .nx-doc__header--minimal .nx-doc__dates {
-  color: #475569;
-}
-
-.nx-we-preview-paper__content .nx-doc__table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 24px;
-}
-
-.nx-we-preview-paper__content .nx-doc__table thead th {
-  font-weight: 600;
-  height: 48px;
-  padding: 10px 8px;
-  font-size: 13px;
-  text-align: right;
-}
-
-.nx-we-preview-paper__content .nx-doc__table tbody td {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 10px 8px;
-  font-size: 13px;
-  vertical-align: top;
-}
-
-.nx-we-preview-paper__content .nx-doc__totals-wrap {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 28px;
-}
-
-.nx-we-preview-paper__content .nx-doc__totals {
-  width: 320px;
-}
-
-.nx-we-preview-paper__content .nx-doc__total-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 0;
-  font-size: 14px;
-  border-bottom: 1px dashed #e2e8f0;
-}
-
+/*
+ * Work Engine Preview — document HTML chrome only.
+ * Printable layout + branding come entirely from backend preview_html.
+ * Do not add .nx-doc width, upper-sheet, logo, title, identity, or customer layout here.
+ */
+.nx-we-preview-paper__content .nx-doc__total-row--discount span:first-child,
 .nx-we-preview-paper__content .nx-doc__total-row--discount span:last-child {
-  color: #dc2626;
-  font-weight: 600;
-}
-
-.nx-we-preview-paper__content .nx-doc__grand-total {
-  margin-top: 12px;
-  padding: 12px 14px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-top: 3px solid var(--nx-doc-theme-accent);
-  border-radius: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  color: var(--nx-doc-theme-accent);
+  color: #1c2333 !important;
+  font-weight: 500;
 }
 
 .nx-we-preview-paper__content .nx-doc__grand-total strong {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.1;
-  color: inherit;
-}
-
-.nx-we-preview-paper__content .nx-doc__totals--modern,
-.nx-we-preview-paper__content .nx-doc__totals--elegant {
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--nx-doc-theme-accent);
-  border-radius: 0;
-  padding: 14px 0 0;
-  box-shadow: none;
-}
-
-.nx-we-preview-paper__content .nx-doc__totals--modern .nx-doc__grand-total,
-.nx-we-preview-paper__content .nx-doc__totals--elegant .nx-doc__grand-total {
-  background: transparent;
-  border: none;
-  border-top: 2px solid var(--nx-doc-theme-accent);
-  border-radius: 0;
-  padding: 12px 0 0;
-}
-
-.nx-we-preview-paper__content .nx-doc__footer {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
-  font-size: 13px;
-  color: #475569;
-}
-
-.nx-we-preview-paper__content .nx-doc__footer-title {
-  font-weight: 700;
-  color: #0f172a;
-  margin-bottom: 4px;
-}
-
-.nx-we-preview-paper__content .nx-doc__footer-block {
-  margin-bottom: 12px;
-}
-
-.nx-we-preview-paper__content .nx-doc__signature {
-  margin-top: 28px;
-  padding-top: 40px;
-  border-top: 1px dashed #cbd5e1;
-  text-align: left;
-  color: #64748b;
+  color: var(--nx-doc-primary);
 }
 
 @media (max-width: 1200px) {
@@ -1372,7 +1437,7 @@
   .nx-we-preview-paper,
   .nx-we-preview-empty {
     width: 100%;
-    max-width: 794px;
+    max-width: 100%;
   }
 }
 
@@ -2735,4 +2800,30 @@
   text-align: center;
   color: #64748b;
   font-size: 13.5px;
+}
+
+/* ---- Failed operations errors inbox modal ---- */
+.nx-we-modal--failed-operations {
+  max-width: min(1200px, calc(100vw - 32px));
+  width: min(1200px, calc(100vw - 32px));
+}
+
+.nx-we-failed-ops-table-wrap .nx-we-table--failed-ops {
+  table-layout: fixed;
+  font-size: 12.5px;
+}
+
+.nx-we-failed-ops-table-wrap .nx-we-th,
+.nx-we-failed-ops-table-wrap .nx-we-td {
+  padding: 5px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nx-we-failed-ops-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
 }

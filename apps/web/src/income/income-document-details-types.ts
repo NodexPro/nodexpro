@@ -72,6 +72,22 @@ export type IncomeDocumentDetailsTotalsBlock = {
   currency: string;
 };
 
+export type IncomeDocumentAllocationNumberField = {
+  visible: boolean;
+  value: string | null;
+  display_value: string;
+  editable: boolean;
+  disabled_reason: string | null;
+  required: boolean;
+  label: string;
+  placeholder: string;
+  command_name: string;
+  tooltip: string | null;
+  confirmation_required: boolean;
+  confirmation_title: string | null;
+  confirmation_message: string | null;
+};
+
 export type {
   IncomeDocumentBrandingProfileAggregate,
   IncomeDocumentBrandingAssetSlot,
@@ -122,6 +138,7 @@ export type IncomeDocumentDetailsStep = {
       enabled: boolean;
       reason: string | null;
     }>;
+    allocation_number_field: IncomeDocumentAllocationNumberField;
   } | null;
   draft_state_display?: {
     status: 'draft';
@@ -155,7 +172,13 @@ export type IncomeDocumentDetailsStep = {
       not_financial_truth: boolean;
     };
   };
-  notes: { value: string; label: string; editable: boolean };
+  notes: {
+    value: string;
+    label: string;
+    editable: boolean;
+    max_length: number;
+    hint: string | null;
+  };
   delivery_contact: {
     email: string | null;
     label: string;
