@@ -588,13 +588,16 @@ export function renderIncomeBrandedPreviewHtml(params: {
   padding: 0;
   padding-inline: 19px;
   box-sizing: border-box;
-  font-family: ${INVOICE_FONT};
+  font-family: ${INVOICE_FONT} !important;
   color: var(--nx-doc-text);
   font-size: 14px;
   line-height: 1.35;
   background: #fff;
 }
-.nx-doc * { box-sizing: border-box; }
+.nx-doc * {
+  box-sizing: border-box;
+  font-family: inherit !important;
+}
 .nx-doc--unified .nx-doc__upper-sheet {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1160,11 +1163,12 @@ export function renderIncomeBrandedPreviewHtml(params: {
   display: grid;
   /*
    * DOM: doc | branding (RTL → branding left, doc right).
-   * Row1: title/number | logo+issuer name
-   * Row2: invoice meta | issuer contact lines  ← same top edge (no pixel fighting)
+   * Equal 50/50 columns — issuer block = invoice block (design reference).
+   * Row1: title/number | logo+issuer name  (tops aligned)
+   * Row2: invoice meta | issuer contact lines
    * Row3: customer card
    */
-  grid-template-columns: 1fr 0.8fr;
+  grid-template-columns: 1fr 1fr;
   grid-template-rows: auto auto auto;
   gap: 0;
   align-items: start;
@@ -1195,14 +1199,13 @@ export function renderIncomeBrandedPreviewHtml(params: {
   text-align: left;
 }
 /*
- * Compact logo box — same anchor (start/top), no layout shift of siblings.
- * Mild lift kept small so the artwork stays inside the sheet (not clipped).
+ * Logo lockup in the issuer half — top aligns with document title (no upward clip lift).
  */
 .nx-doc--sectioned .nx-doc__logo-frame {
   width: var(--nx-doc-logo-w);
   height: var(--nx-doc-logo-h);
   max-width: 100%;
-  margin: -8px 0 ${GM.upper.logo_to_company_gap_px}px 0;
+  margin: 0 0 ${GM.upper.logo_to_company_gap_px}px 0;
   overflow: hidden;
   display: block;
   background: transparent;

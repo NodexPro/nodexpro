@@ -11,16 +11,15 @@
 
 import type { IncomeLogoSizeKey } from './income-document-branding.types.js';
 
-/** Design target for גדול — compact lockup so the logo fits without clipping. */
+/** Design target for גדול — lockup size matching equal-column header reference. */
 export const SECTIONED_LOGO_LARGE_TARGET = {
-  width_px: 220,
+  width_px: 300,
   height_px: 70,
 } as const;
 
 /**
- * Studio logo size → scale of the large target lockup (220×70).
- * Small logo files are still stretched up to the box (no empty frame).
- * Branding column is 20% narrower than the document column.
+ * Studio logo size → scale of the large target lockup (300×70).
+ * Header columns are equal 50/50 (issuer | invoice), matching the design reference.
  * Title font size is never reduced.
  */
 export function resolveSectionedBrandingLayoutScale(logoSizeKey: IncomeLogoSizeKey): number {
@@ -39,19 +38,11 @@ export function resolveSectionedBrandingLayout(logoSizeKey: IncomeLogoSizeKey): 
 } {
   const scale = resolveSectionedBrandingLayoutScale(logoSizeKey);
   const contentW = SECTIONED_GOLDEN_MASTER.page.content_width_px;
-  /*
-   * Branding (logo + company) is 20% narrower than the document section:
-   * branding : doc = 0.8 : 1 → branding = content × 0.8/1.8
-   */
-  const brandingCol = Math.floor((contentW * 0.8) / 1.8);
+  /* Equal halves: issuer (logo+company) | document (title+meta+customer). */
+  const brandingCol = Math.floor(contentW / 2);
   const docCol = contentW - brandingCol;
   const targetW = Math.max(1, Math.round(SECTIONED_LOGO_LARGE_TARGET.width_px * scale));
   const targetH = Math.max(1, Math.round(SECTIONED_LOGO_LARGE_TARGET.height_px * scale));
-  /*
-   * Paint box is exactly the 220×70 target (× size scale).
-   * Branding column stays 20% narrower than doc; logo may extend past the column
-   * edge (overflow visible) so company lines below are not pushed down by a fat column.
-   */
   const logoW = targetW;
   const logoH = targetH;
   const customerCard = Math.min(SECTIONED_GOLDEN_MASTER.upper.customer_card_width_px, docCol);

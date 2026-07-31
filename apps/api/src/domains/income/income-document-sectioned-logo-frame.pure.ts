@@ -2,7 +2,7 @@
  * Sectioned logo guidance — Branding Studio upload target + render-area reference.
  *
  * Upload: wide horizontal lockup (~5.3∶1).
- * Document paint box for גדול: SECTIONED_LOGO_LARGE_TARGET (220×70), object-fit: contain.
+ * Document paint box for גדול: SECTIONED_LOGO_LARGE_TARGET (300×70), object-fit: contain.
  */
 
 import { SECTIONED_LOGO_LARGE_TARGET } from './income-document-sectioned-golden-master.pure.js';

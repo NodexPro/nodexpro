@@ -88,7 +88,7 @@ describe('sectioned logo frame contract (golden master)', () => {
     const hint = buildSectionedLogoFrameRecommendedSizeHint();
     assert.equal(hint, meta.recommended_size_hint);
     assert.match(hint, /1288 × 244/);
-    assert.match(hint, /220 × 70/);
+    assert.match(hint, /300 × 70/);
     assert.match(hint, /≈ 5\.3∶1/);
     assert.match(hint, /אופקי/);
   });
@@ -119,26 +119,24 @@ describe('sectioned logo frame contract (golden master)', () => {
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: var\(--nx-doc-logo-h\)/);
   });
 
-  test('branding column is 20% narrower than document column', () => {
+  test('header columns are equal 50/50 issuer | invoice', () => {
     const medium = resolveSectionedBrandingLayout('medium');
-    assert.equal(medium.branding_col_width_px, 336);
-    assert.equal(medium.doc_col_width_px, 420);
-    assert.ok(medium.branding_col_width_px < medium.doc_col_width_px);
-    assert.ok(
-      Math.abs(medium.branding_col_width_px / medium.doc_col_width_px - 0.8) < 0.01,
-    );
+    assert.equal(medium.branding_col_width_px, 378);
+    assert.equal(medium.doc_col_width_px, 378);
+    assert.equal(medium.branding_col_width_px, medium.doc_col_width_px);
     const html = sectionedHtml('data:image/png;base64,portrait');
-    assert.match(html, /--nx-doc-logo-w:\s*187px/);
+    assert.match(html, /--nx-doc-logo-w:\s*255px/);
     assert.match(html, /--nx-doc-logo-h:\s*60px/);
-    assert.match(html, /--nx-doc-branding-col:\s*336px/);
-    assert.match(html, /--nx-doc-doc-col:\s*420px/);
+    assert.match(html, /--nx-doc-branding-col:\s*378px/);
+    assert.match(html, /--nx-doc-doc-col:\s*378px/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: 1fr 1fr/);
   });
 
-  test('studio logo size large paints exact 220×70 without empty frame padding', () => {
+  test('studio logo size large paints exact 300×70 without empty frame padding', () => {
     const medium = resolveSectionedBrandingLayout('medium');
     const large = resolveSectionedBrandingLayout('large');
     assert.equal(large.scale, 1);
-    assert.equal(large.logo_block_width_px, 220);
+    assert.equal(large.logo_block_width_px, 300);
     assert.equal(large.logo_block_height_px, 70);
     assert.equal(large.branding_col_width_px, medium.branding_col_width_px);
     assert.equal(large.doc_col_width_px, medium.doc_col_width_px);
@@ -171,7 +169,7 @@ describe('sectioned logo frame contract (golden master)', () => {
       company_subtitle: null,
     });
     assert.match(html, /--nx-doc-logo-h:\s*70px/);
-    assert.match(html, /--nx-doc-logo-w:\s*220px/);
+    assert.match(html, /--nx-doc-logo-w:\s*300px/);
     assert.match(html, /--nx-doc-logo-scale:\s*1(?:\.0)?/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: contain/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: var\(--nx-doc-logo-h\)/);
@@ -179,7 +177,7 @@ describe('sectioned logo frame contract (golden master)', () => {
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-column[\s\S]*align-items: flex-start/);
     assert.match(html, /\.nx-doc--sectioned[\s\S]*padding-inline:\s*19px/);
     assert.match(html, /\.nx-doc--sectioned[\s\S]*max-width:\s*100%/);
-    assert.match(html, /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: 1fr 0\.8fr/);
+    assert.match(html, /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: 1fr 1fr/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__table[\s\S]*width:\s*100%/);
     assert.match(html, /\.nx-doc--sectioned \.nx-doc__doc-title[\s\S]*font-size:\s*32px/);
   });
