@@ -830,7 +830,7 @@ ${INVOICE_FONT_FACE}
   min-height: 0;
 }
 .nx-doc--unified .nx-doc__issuer-name {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
   margin-bottom: 0;
   line-height: 1.12;
@@ -1077,7 +1077,7 @@ ${INVOICE_FONT_FACE}
   margin: 0 0 4px 0;
   align-self: flex-end;
 }
-.nx-doc__issuer-name { font-size: 17px; font-weight: 700; margin-bottom: 0; line-height: 1.15; }
+.nx-doc__issuer-name { font-size: 19px; font-weight: 700; margin-bottom: 0; line-height: 1.15; color: var(--nx-doc-text); }
 .nx-doc__issuer-subtitle { font-size: 12px; color: var(--nx-doc-text-muted); margin-bottom: 2px; line-height: 1.25; }
 .nx-doc__issuer-line { display: grid; grid-template-columns: ${PARTY_LINE_ICON_PX}px minmax(0, 1fr); gap: ${PARTY_LINE_GAP_PX}px; align-items: start; padding: 0; font-size: 12px; color: var(--nx-doc-text); line-height: 1.35; }
 .nx-doc__issuer-line-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; color: var(--nx-doc-icon); width: ${PARTY_LINE_ICON_PX}px; height: ${PARTY_LINE_ICON_PX}px; }
@@ -1237,10 +1237,11 @@ ${INVOICE_FONT_FACE}
   transform: none;
 }
 .nx-doc--sectioned .nx-doc__issuer-name {
+  /* Match recipient party name (.nx-doc__customer-name) size + weight. */
+  margin: 0 0 8px;
   font-family: ${INVOICE_FONT};
-  font-size: 14px;
-  font-weight: 800;
-  margin: 0 0 ${GM.upper.meta_row_gap_px}px;
+  font-size: ${GM.upper.company_name_font_size_px}px;
+  font-weight: ${GM.upper.company_name_font_weight};
   line-height: 1.25;
   color: ${GM.colors.text};
   text-align: start;
@@ -1478,8 +1479,8 @@ ${INVOICE_FONT_FACE}
 .nx-doc--sectioned .nx-doc__customer-name {
   margin: 0 0 8px;
   font-family: ${INVOICE_FONT};
-  font-size: 14px;
-  font-weight: 800;
+  font-size: ${GM.upper.company_name_font_size_px}px;
+  font-weight: ${GM.upper.company_name_font_weight};
   line-height: 1.25;
   color: ${GM.colors.text};
 }

@@ -94,7 +94,9 @@ export const SECTIONED_GOLDEN_MASTER = {
         title_visible_artwork_width_px: 207,
         title_visible_artwork_height_px: 23,
         logo_to_company_gap_px: 10,
-        company_name_font_size_px: 14,
+        /** Party display names (issuer + recipient) — same size/weight. */
+        company_name_font_size_px: 18,
+        company_name_font_weight: 800,
         company_line_font_size_px: 12,
         company_line_gap_px: 5,
         title_font_size_px: 32,

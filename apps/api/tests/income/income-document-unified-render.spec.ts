@@ -636,8 +636,9 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-bar[\s\S]*height: 39px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-bar[\s\S]*width: 100%/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__doc-number-text[\s\S]*font-size: 22px/);
-  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__issuer-name[\s\S]*font-size: 14px/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__issuer-name[\s\S]*font-size: 18px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__issuer-name[\s\S]*font-weight: 800/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-name[\s\S]*font-size: 18px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-name[\s\S]*font-weight: 800/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-lines[\s\S]*gap: 8px/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-line[\s\S]*border-bottom: 1px solid #e8e8f2/);
