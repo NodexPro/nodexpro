@@ -11,14 +11,14 @@
 
 import type { IncomeLogoSizeKey } from './income-document-branding.types.js';
 
-/** Design target for גדול — logo paints to this box (no empty margin in the frame). */
+/** Design target for גדול — compact lockup so the logo fits without clipping. */
 export const SECTIONED_LOGO_LARGE_TARGET = {
-  width_px: 319,
-  height_px: 120,
+  width_px: 220,
+  height_px: 70,
 } as const;
 
 /**
- * Studio logo size → scale of the large target lockup (319×120).
+ * Studio logo size → scale of the large target lockup (220×70).
  * Small logo files are still stretched up to the box (no empty frame).
  * Branding column is 20% narrower than the document column.
  * Title font size is never reduced.
@@ -48,7 +48,7 @@ export function resolveSectionedBrandingLayout(logoSizeKey: IncomeLogoSizeKey): 
   const targetW = Math.max(1, Math.round(SECTIONED_LOGO_LARGE_TARGET.width_px * scale));
   const targetH = Math.max(1, Math.round(SECTIONED_LOGO_LARGE_TARGET.height_px * scale));
   /*
-   * Paint box is exactly the 319×120 target (× size scale).
+   * Paint box is exactly the 220×70 target (× size scale).
    * Branding column stays 20% narrower than doc; logo may extend past the column
    * edge (overflow visible) so company lines below are not pushed down by a fat column.
    */

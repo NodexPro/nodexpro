@@ -19,7 +19,7 @@ import {
 } from './income-document-logo-visible-fit.pure.js';
 import type { IncomeDocumentType } from './income.types.js';
 
-const INVOICE_FONT = 'Heebo, Arial, Helvetica, "Segoe UI", sans-serif';
+const INVOICE_FONT = 'Arial, Helvetica, sans-serif';
 const NODEXPRO_FOOTER_URL = 'https://www.nodexpro.com';
 
 function escapeHtml(value: unknown): string {
@@ -1195,15 +1195,14 @@ export function renderIncomeBrandedPreviewHtml(params: {
   text-align: left;
 }
 /*
- * Exact 319×120 paint box (× size). Small files stretch up — no empty margin in the box.
- * Pin to the physical left (scrollbar side); do not use inline-end:auto (RTL pushes to center).
+ * Compact logo box — same anchor (start/top), no layout shift of siblings.
+ * Mild lift kept small so the artwork stays inside the sheet (not clipped).
  */
 .nx-doc--sectioned .nx-doc__logo-frame {
   width: var(--nx-doc-logo-w);
   height: var(--nx-doc-logo-h);
   max-width: 100%;
-  /* Lift logo 1cm to align with document title top. */
-  margin: -38px 0 ${GM.upper.logo_to_company_gap_px}px 0;
+  margin: -8px 0 ${GM.upper.logo_to_company_gap_px}px 0;
   overflow: hidden;
   display: block;
   background: transparent;
@@ -1225,7 +1224,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   max-width: none;
   max-height: none;
   margin: 0;
-  object-fit: fill;
+  object-fit: contain;
   object-position: left top;
   display: block;
   transform: none;

@@ -240,7 +240,8 @@ test('preview uses unified layout, theme tokens, and draft number label', () => 
   assert.match(html, /nx-doc__platform-footer/);
   assert.match(html, /Test4/);
   assert.match(html, /טיוטה/);
-  assert.match(html, /Heebo, Arial, Helvetica, "Segoe UI", sans-serif/);
+  assert.match(html, /Arial, Helvetica, sans-serif/);
+  assert.doesNotMatch(html, /Heebo/);
   assert.match(html, />לכבוד</);
   assert.doesNotMatch(html, /type="color"/i);
   assert.doesNotMatch(html, /nx-doc__header--elegant/);
