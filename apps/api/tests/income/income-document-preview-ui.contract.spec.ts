@@ -53,6 +53,10 @@ const workEngineQueueCss = readFileSync(
   join(dir, '../../../web/src/styles/nx-work-engine-queue.css'),
   'utf8',
 );
+const retainerCss = readFileSync(
+  join(dir, '../../../web/src/styles/nx-work-engine-invoice-retainer.css'),
+  'utf8',
+);
 const previewScreenPureSource = readFileSync(
   join(dir, '../../../web/src/components/work-engine/work-engine-income-document-preview-screen.pure.ts'),
   'utf8',
@@ -140,9 +144,9 @@ test('income wizard uses application overlay chrome not document html click targ
   assert.match(previewPaperSource, /waitForIframeAssets/);
   assert.match(previewPaperSource, /\[we-preview-inner\]/);
   assert.match(previewPaperSource, /PREVIEW_PAPER_ROOT_SELECTOR/);
-  assert.match(previewPaperSource, /lockIframeViewportToA4/);
+  assert.match(previewPaperSource, /lockIframeViewportToContent/);
   assert.match(previewPaperSource, /width=\{PREVIEW_A4_WIDTH_PX\}/);
-  assert.match(previewPaperSource, /height=\{PREVIEW_A4_HEIGHT_PX\}/);
+  assert.match(previewPaperSource, /height=\{plan\.paper_height\}/);
   assert.doesNotMatch(previewPaperSource, /viewport\.getBoundingClientRect/);
   assert.doesNotMatch(previewPaperSource, /measureIframePaperHeight/);
   assert.doesNotMatch(previewPaperSource, /paper\.style\.setProperty\(['"]transform['"]/);
@@ -152,21 +156,27 @@ test('income wizard uses application overlay chrome not document html click targ
   assert.match(workEngineQueueCss, /\.nx-we-preview-paper\s*\{[\s\S]*?width:\s*794px/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-paper\s*\{[\s\S]*?min-height:\s*1123px/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-fit-scaler\s*\{[\s\S]*?width:\s*794px/);
-  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-scaler\s*\{[\s\S]*?height:\s*1123px/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-scaler\s*\{[\s\S]*?height:\s*var\(--preview-paper-height\)/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-fit-scaler\s*\{[\s\S]*?transform:\s*scale\(var\(--preview-scale\)\)/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[\s\S]*?transform:\s*none\s*!important/);
   assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe-shell\s*\{[\s\S]*?width:\s*calc\(794px \* var\(--preview-scale\)\)/);
-  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe-shell\s*\{[\s\S]*?height:\s*calc\(1123px \* var\(--preview-scale\)\)/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-fit-iframe-shell\s*\{[\s\S]*?height:\s*calc\(var\(--preview-paper-height\) \* var\(--preview-scale\)\)/);
   assert.doesNotMatch(workEngineQueueCss, /\.nx-we-preview-fit-iframe\s*\{[^}]*transform:\s*scale/);
   assert.match(workEngineQueueCss, /@media print/);
   assert.match(workEngineQueueCss, /nx-we-preview-paper--source-parked/);
   assert.doesNotMatch(workEngineQueueCss, /nx-we-preview-paper-fit-shell/);
-  /* srcDoc must not prematurely clip html/body; paper root is locked to A4. */
-  assert.match(previewScreenPureSource, /Does NOT force html\/body to 1123 \+ overflow:hidden/);
+  /* srcDoc: A4 width, content height — payments/footer not clipped in screen preview. */
+  assert.match(previewScreenPureSource, /height grows with content so payment\/footer tail is never clipped/);
   assert.match(previewScreenPureSource, /overflow:visible !important/);
   assert.match(previewScreenPureSource, /height:auto !important/);
-  assert.match(previewScreenPureSource, /height:\$\{PREVIEW_A4_HEIGHT_PX\}px !important/);
+  assert.match(previewScreenPureSource, /min-height:\$\{PREVIEW_A4_HEIGHT_PX\}px !important/);
   assert.doesNotMatch(previewScreenPureSource, /min-height: calc\(100vh/);
+  assert.doesNotMatch(previewScreenPureSource, /transform:translateY\(calc\(38px/);
+  assert.match(previewPaperSource, /pdf-fit-width-payments-v1/);
+  assert.match(retainerCss, /\.nx-we-retainer-preview-overlay\s*\{[\s\S]*?rgba\(8, 12, 22, 0\.78\)/);
+  assert.match(retainerCss, /\.nx-we-retainer-preview-modal\s*\{[\s\S]*?background:\s*transparent/);
+  assert.match(retainerCss, /\.nx-we-retainer-preview-modal__canvas\.nx-we-preview-canvas--screen-fit\s*\{[\s\S]*?overflow:\s*auto/);
+  assert.match(workEngineQueueCss, /\.nx-we-preview-canvas--screen-fit \.nx-we-preview-fit-viewport[\s\S]*?position:\s*relative/);
 
   assert.match(previewPaperSource, /resolveIncomeDocumentAllocationEditChrome/);
   assert.match(previewPaperSource, /nx-we-preview-allocation-edit-btn--inline/);

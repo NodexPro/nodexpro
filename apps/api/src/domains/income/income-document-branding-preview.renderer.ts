@@ -134,7 +134,7 @@ function buildPaymentCards(params: {
   accent: string;
   payment_link_url?: string | null;
   payment_qr_data_url?: string | null;
-  /** Golden-master: always keep 3 payment blocks. */
+  /** Sectioned docs: always keep 3 payment blocks — bank / check / credit. */
   preserve_three_cards?: boolean;
 }): string {
   const b = params.branding;
@@ -142,9 +142,12 @@ function buildPaymentCards(params: {
   const preserve = params.preserve_three_cards === true;
   if (!preserve && !enabled.length && !params.showBankDetails) return '';
 
-  const bankEnabled = enabled.some((m) => m.key === 'bank_transfer');
-  const cardEnabled = enabled.some((m) => m.key === 'credit_card');
-  const otherMethods = enabled.filter((m) => m.key !== 'bank_transfer' && m.key !== 'credit_card');
+  const bankMethod = b.payment_methods.find((m) => m.key === 'bank_transfer');
+  const checkMethod = b.payment_methods.find((m) => m.key === 'check');
+  const cardMethod = b.payment_methods.find((m) => m.key === 'credit_card');
+  const bankEnabled = bankMethod?.enabled === true;
+  const checkEnabled = checkMethod?.enabled === true;
+  const cardEnabled = cardMethod?.enabled === true;
 
   const bankLines: string[] = [];
   if (params.showBankDetails) {
@@ -162,38 +165,49 @@ function buildPaymentCards(params: {
 
   if (preserve || bankEnabled || bankLines.length) {
     cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--bank">
-      <header class="nx-doc__payment-col-head">${docPreviewIcon('bank')}<strong>העברה בנקאית</strong></header>
-      <div class="nx-doc__payment-col-body">${bankLines.length ? bankLines.join('<br/>') : '—'}</div>
+      <header class="nx-doc__payment-col-head">${docPreviewIcon('bank')}<strong>${escapeHtml(bankMethod?.label ?? 'העברה בנקאית')}</strong></header>
+      <div class="nx-doc__payment-col-body">${bankLines.length ? bankLines.join('<br/>') : ''}</div>
     </div>`);
   }
 
-  if (preserve || (cardEnabled && params.payment_link_url?.trim())) {
-    const cardMethod = enabled.find((m) => m.key === 'credit_card');
-    const linkRaw = params.payment_link_url?.trim() || '';
-    const link = linkRaw ? escapeHtml(linkRaw) : '';
-    const qrBlock = params.payment_qr_data_url?.trim()
-      ? `<img class="nx-doc__payment-qr" src="${escapeHtml(params.payment_qr_data_url.trim())}" alt="" />`
-      : '';
+  if (preserve || checkEnabled) {
+    cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--check">
+      <header class="nx-doc__payment-col-head">${docPreviewIcon('payment')}<strong>${escapeHtml(checkMethod?.label ?? "צ'ק")}</strong></header>
+      <div class="nx-doc__payment-col-body"></div>
+    </div>`);
+  }
+
+  const linkRaw = params.payment_link_url?.trim() || '';
+  const link = linkRaw ? escapeHtml(linkRaw) : '';
+  const qrBlock = params.payment_qr_data_url?.trim()
+    ? `<img class="nx-doc__payment-qr" src="${escapeHtml(params.payment_qr_data_url.trim())}" alt="" />`
+    : '';
+  const hasCardPayload = Boolean(link || qrBlock);
+  if (preserve || (cardEnabled && hasCardPayload)) {
+    const cardBodyParts: string[] = [];
+    if (qrBlock) cardBodyParts.push(qrBlock);
+    if (link) {
+      cardBodyParts.push(
+        `<div class="nx-doc__payment-col-text"><div><a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a></div></div>`,
+      );
+    }
     cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--card">
       <header class="nx-doc__payment-col-head">${docPreviewIcon('card')}<strong>${escapeHtml(cardMethod?.label ?? 'כרטיס אשראי')}</strong></header>
-      <div class="nx-doc__payment-col-body nx-doc__payment-col-body--card">
-        ${qrBlock}
-        <div class="nx-doc__payment-col-text">${
-          link
-            ? `<div><a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a></div>`
-            : '<div>—</div>'
-        }</div>
-      </div>
+      <div class="nx-doc__payment-col-body nx-doc__payment-col-body--card">${cardBodyParts.join('')}</div>
     </div>`);
   }
 
-  if (preserve || otherMethods.length) {
-    cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--other">
+  /* Non-sectioned legacy: remaining enabled methods (bit, etc.) keep a third "other" column. */
+  if (!preserve) {
+    const otherMethods = enabled.filter(
+      (m) => m.key !== 'bank_transfer' && m.key !== 'credit_card' && m.key !== 'check',
+    );
+    if (otherMethods.length) {
+      cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--other">
       <header class="nx-doc__payment-col-head">${docPreviewIcon('payment')}<strong>אמצעי תשלום נוספים</strong></header>
-      <div class="nx-doc__payment-col-body">${
-        otherMethods.length ? otherMethods.map((m) => `<div>${escapeHtml(m.label)}</div>`).join('') : '—'
-      }</div>
+      <div class="nx-doc__payment-col-body">${otherMethods.map((m) => `<div>${escapeHtml(m.label)}</div>`).join('')}</div>
     </div>`);
+    }
   }
 
   if (!cards.length) return '';

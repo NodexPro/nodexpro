@@ -657,7 +657,8 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: var\(--nx-doc-logo-h\)/);
   assert.match(previewHtml, /nx-doc__payment-col--bank/);
   assert.match(previewHtml, /nx-doc__payment-col--card/);
-  assert.match(previewHtml, /nx-doc__payment-col--other/);
+  assert.match(previewHtml, /nx-doc__payment-col--check/);
+  assert.doesNotMatch(previewHtml, /nx-doc__payment-col--other/);
   assert.match(previewHtml, /nx-doc__sheet-tail/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__comments[\s\S]*overflow: hidden/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__comments-body[\s\S]*white-space: pre-wrap/);
