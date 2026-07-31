@@ -288,7 +288,7 @@ test('default premium theme uses brand primary on doc number and table header', 
 
 test('credit card block hidden without backend payment link data', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.doesNotMatch(html, /nx-doc__payment-col--card/);
+  assert.doesNotMatch(html, /class="nx-doc__payment-col nx-doc__payment-col--card"/);
   assert.doesNotMatch(html, /pay\.nodexpro\.com/);
   assert.doesNotMatch(html, /פרטי תשלום בכרטיס יוצגו/);
 });
@@ -297,7 +297,7 @@ test('credit card block renders only with real payment link', () => {
   const input = buildSampleUnifiedInput();
   input.payment_link_url = 'https://pay.example.com/inv/123';
   const html = renderUnifiedIncomeDocumentHtml(input);
-  assert.match(html, /nx-doc__payment-col--card/);
+  assert.match(html, /class="nx-doc__payment-col nx-doc__payment-col--card"/);
   assert.match(html, /https:\/\/pay\.example\.com\/inv\/123/);
 });
 
@@ -657,8 +657,11 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-frame[\s\S]*height: var\(--nx-doc-logo-h\)/);
   assert.match(previewHtml, /nx-doc__payment-col--bank/);
   assert.match(previewHtml, /nx-doc__payment-col--card/);
-  assert.match(previewHtml, /nx-doc__payment-col--check/);
-  assert.doesNotMatch(previewHtml, /nx-doc__payment-col--other/);
+  assert.match(previewHtml, /nx-doc__payment-col--other/);
+  assert.doesNotMatch(previewHtml, /nx-doc__payment-col--check/);
+  assert.match(previewHtml, /nx-doc__payment-col-icon/);
+  assert.match(previewHtml, /nx-doc__platform-social/);
+  assert.match(previewHtml, /nx-doc__platform-footer[\s\S]*#f5f3ff/);
   assert.match(previewHtml, /nx-doc__sheet-tail/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__comments[\s\S]*overflow: hidden/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__comments-body[\s\S]*white-space: pre-wrap/);
@@ -673,7 +676,10 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.ok(sectionedBottomIdx >= 0 && sectionedBottomIdx < sectionedTailIdx);
   assert.ok(sectionedTailIdx < sectionedPaymentsIdx);
   assert.ok(sectionedPaymentsIdx < sectionedFooterIdx);
-  assert.match(previewHtml, /nx-doc__platform-link[\s\S]*href="https:\/\/www\.nodexpro\.com"/);
+  assert.match(previewHtml, /nx-doc__platform-social-btn[\s\S]*href="https:\/\/www\.nodexpro\.com"/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__payment-col--bank \.nx-doc__payment-col-icon[\s\S]*#e8f8ef/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__payment-col--card \.nx-doc__payment-col-head > strong[\s\S]*#2563eb/);
+  assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__payment-col--other \.nx-doc__payment-col-head > strong[\s\S]*#7c3aed/);
   assert.match(previewHtml, />פירוט \*</);
   assert.match(previewHtml, />כמות \*</);
   assert.match(previewHtml, />מחיר ליח'/);

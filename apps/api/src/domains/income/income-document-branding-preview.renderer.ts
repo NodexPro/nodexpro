@@ -128,13 +128,23 @@ function formatLineCurrency(currency: string): string {
   return c;
 }
 
+function paymentDetailLine(label: string, value: string): string {
+  return `<div class="nx-doc__payment-line"><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</div>`;
+}
+
+function paymentColIcon(kind: 'bank' | 'card' | 'other'): string {
+  const icon =
+    kind === 'bank' ? docPreviewIcon('bank') : kind === 'card' ? docPreviewIcon('card') : docPreviewIcon('exchange');
+  return `<span class="nx-doc__payment-col-icon" aria-hidden="true">${icon}</span>`;
+}
+
 function buildPaymentCards(params: {
   branding: IncomeBrandingResolvedProfile;
   showBankDetails: boolean;
   accent: string;
   payment_link_url?: string | null;
   payment_qr_data_url?: string | null;
-  /** Sectioned docs: always keep 3 payment blocks — bank / check / credit. */
+  /** Sectioned docs: always keep 3 payment blocks — bank / credit / other. */
   preserve_three_cards?: boolean;
 }): string {
   const b = params.branding;
@@ -143,21 +153,22 @@ function buildPaymentCards(params: {
   if (!preserve && !enabled.length && !params.showBankDetails) return '';
 
   const bankMethod = b.payment_methods.find((m) => m.key === 'bank_transfer');
-  const checkMethod = b.payment_methods.find((m) => m.key === 'check');
   const cardMethod = b.payment_methods.find((m) => m.key === 'credit_card');
   const bankEnabled = bankMethod?.enabled === true;
-  const checkEnabled = checkMethod?.enabled === true;
   const cardEnabled = cardMethod?.enabled === true;
+  const otherMethods = enabled.filter((m) => m.key !== 'bank_transfer' && m.key !== 'credit_card');
 
   const bankLines: string[] = [];
   if (params.showBankDetails) {
-    if (b.bank_name) bankLines.push(`בנק: ${escapeHtml(b.bank_name)}`);
-    if (b.bank_branch) bankLines.push(`סניף: ${escapeHtml(b.bank_branch)}`);
-    if (b.bank_account) bankLines.push(`חשבון: ${escapeHtml(b.bank_account)}`);
-    if (b.iban) bankLines.push(`IBAN: ${escapeHtml(b.iban)}`);
-    if (b.swift) bankLines.push(`SWIFT: ${escapeHtml(b.swift)}`);
+    if (b.bank_name) bankLines.push(paymentDetailLine('בנק:', b.bank_name));
+    if (b.bank_branch) bankLines.push(paymentDetailLine('סניף:', b.bank_branch));
+    if (b.bank_account) bankLines.push(paymentDetailLine('חשבון:', b.bank_account));
+    if (b.iban) bankLines.push(paymentDetailLine('IBAN:', b.iban));
+    if (b.swift) bankLines.push(paymentDetailLine('SWIFT:', b.swift));
     if (b.payment_instructions) {
-      bankLines.push(escapeHtml(b.payment_instructions).replace(/\r\n|\r|\n/g, '<br/>'));
+      bankLines.push(
+        `<div class="nx-doc__payment-line nx-doc__payment-line--note">${escapeHtml(b.payment_instructions).replace(/\r\n|\r|\n/g, '<br/>')}</div>`,
+      );
     }
   }
 
@@ -165,15 +176,8 @@ function buildPaymentCards(params: {
 
   if (preserve || bankEnabled || bankLines.length) {
     cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--bank">
-      <header class="nx-doc__payment-col-head">${docPreviewIcon('bank')}<strong>${escapeHtml(bankMethod?.label ?? 'העברה בנקאית')}</strong></header>
-      <div class="nx-doc__payment-col-body">${bankLines.length ? bankLines.join('<br/>') : ''}</div>
-    </div>`);
-  }
-
-  if (preserve || checkEnabled) {
-    cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--check">
-      <header class="nx-doc__payment-col-head">${docPreviewIcon('payment')}<strong>${escapeHtml(checkMethod?.label ?? "צ'ק")}</strong></header>
-      <div class="nx-doc__payment-col-body"></div>
+      <header class="nx-doc__payment-col-head">${paymentColIcon('bank')}<strong>${escapeHtml(bankMethod?.label ?? 'העברה בנקאית')}</strong></header>
+      <div class="nx-doc__payment-col-body">${bankLines.join('')}</div>
     </div>`);
   }
 
@@ -184,30 +188,34 @@ function buildPaymentCards(params: {
     : '';
   const hasCardPayload = Boolean(link || qrBlock);
   if (preserve || (cardEnabled && hasCardPayload)) {
-    const cardBodyParts: string[] = [];
-    if (qrBlock) cardBodyParts.push(qrBlock);
+    const textParts: string[] = [];
+    if (hasCardPayload) {
+      textParts.push(
+        `<div class="nx-doc__payment-card-hint">ניתן לשלם באופן מאובטח אונליין / סרקו את הקוד או לחצו על הקישור</div>`,
+      );
+    }
     if (link) {
-      cardBodyParts.push(
-        `<div class="nx-doc__payment-col-text"><div><a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a></div></div>`,
+      textParts.push(
+        `<div class="nx-doc__payment-col-text"><a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a></div>`,
       );
     }
     cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--card">
-      <header class="nx-doc__payment-col-head">${docPreviewIcon('card')}<strong>${escapeHtml(cardMethod?.label ?? 'כרטיס אשראי')}</strong></header>
-      <div class="nx-doc__payment-col-body nx-doc__payment-col-body--card">${cardBodyParts.join('')}</div>
+      <header class="nx-doc__payment-col-head">${paymentColIcon('card')}<strong>${escapeHtml(cardMethod?.label ?? 'כרטיס אשראי')}</strong></header>
+      <div class="nx-doc__payment-col-body nx-doc__payment-col-body--card">
+        <div class="nx-doc__payment-card-copy">${textParts.join('')}</div>
+        ${qrBlock}
+      </div>
     </div>`);
   }
 
-  /* Non-sectioned legacy: remaining enabled methods (bit, etc.) keep a third "other" column. */
-  if (!preserve) {
-    const otherMethods = enabled.filter(
-      (m) => m.key !== 'bank_transfer' && m.key !== 'credit_card' && m.key !== 'check',
-    );
-    if (otherMethods.length) {
-      cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--other">
-      <header class="nx-doc__payment-col-head">${docPreviewIcon('payment')}<strong>אמצעי תשלום נוספים</strong></header>
-      <div class="nx-doc__payment-col-body">${otherMethods.map((m) => `<div>${escapeHtml(m.label)}</div>`).join('')}</div>
+  if (preserve || otherMethods.length) {
+    const otherBody = otherMethods.length
+      ? otherMethods.map((m) => `<div class="nx-doc__payment-line">${escapeHtml(m.label)}</div>`).join('')
+      : '';
+    cards.push(`<div class="nx-doc__payment-col nx-doc__payment-col--other">
+      <header class="nx-doc__payment-col-head">${paymentColIcon('other')}<strong>אמצעי תשלום נוספים</strong></header>
+      <div class="nx-doc__payment-col-body">${otherBody}</div>
     </div>`);
-    }
   }
 
   if (!cards.length) return '';
@@ -545,10 +553,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
   const platformFooter = isSectioned
     ? `<footer class="nx-doc__platform-footer">
     <div class="nx-doc__platform-legal">${docPreviewIcon('shield')}<span>${escapeHtml(sectionedLegalText)}</span></div>
-    <a class="nx-doc__platform-link" href="${NODEXPRO_FOOTER_URL}" target="_blank" rel="noopener noreferrer">
-      ${nodexproFooterLogoMarkup()}
-      <span>NodexPro</span>
-    </a>
+    <div class="nx-doc__platform-social" aria-label="NodexPro">
+      <a class="nx-doc__platform-social-btn" href="${NODEXPRO_FOOTER_URL}" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">${docPreviewIcon('linkedin')}</a>
+      <a class="nx-doc__platform-social-btn" href="${NODEXPRO_FOOTER_URL}" target="_blank" rel="noopener noreferrer" aria-label="אתר">${docPreviewIcon('website')}</a>
+      <a class="nx-doc__platform-social-btn" href="${NODEXPRO_FOOTER_URL}" target="_blank" rel="noopener noreferrer" aria-label="דוא״ל">${docPreviewIcon('mail')}</a>
+    </div>
   </footer>`
     : `<footer class="nx-doc__platform-footer">
     <a class="nx-doc__platform-link" href="${NODEXPRO_FOOTER_URL}" target="_blank" rel="noopener noreferrer">
@@ -1646,19 +1655,23 @@ export function renderIncomeBrandedPreviewHtml(params: {
   padding-top: 16px;
   flex-shrink: 0;
   box-sizing: border-box;
-  /* Keep payments + NodexPro as the last painted block on the sheet. */
+  /* Keep payments + platform footer as the last painted block on the sheet. */
   order: 99;
 }
 .nx-doc--sectioned .nx-doc__payments-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 14px;
   font-weight: 700;
   margin-bottom: 12px;
-  color: ${GM.colors.text};
+  color: #3f3d56;
 }
-.nx-doc--sectioned .nx-doc__payments-head .nx-doc__icon { color: var(--nx-doc-primary); }
+.nx-doc--sectioned .nx-doc__payments-head .nx-doc__icon {
+  color: var(--nx-doc-primary);
+  width: 18px;
+  height: 18px;
+}
 .nx-doc--sectioned .nx-doc__payments-grid {
   display: grid;
   gap: ${GM.lower.payment_card_gap_px}px;
@@ -1666,11 +1679,11 @@ export function renderIncomeBrandedPreviewHtml(params: {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .nx-doc--sectioned .nx-doc__payment-col {
-  border: 1px solid #ececf6;
+  border: 1px solid #e4e4ef;
   border-radius: ${GM.lower.payment_card_radius_px}px;
   padding: 14px;
   background: #ffffff;
-  border-inline-end: 1px solid #ececf6;
+  border-inline-end: 1px solid #e4e4ef;
   min-height: ${GM.lower.payment_card_height_px}px;
   height: auto;
   box-shadow: none;
@@ -1682,49 +1695,144 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }
 .nx-doc--sectioned .nx-doc__payment-col-head {
   display: flex;
+  flex-direction: row-reverse;
   align-items: center;
-  gap: 6px;
-  font-size: ${GM.upper.company_line_font_size_px}px;
-  margin-bottom: 8px;
-  color: ${GM.colors.text};
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 10px;
   flex-shrink: 0;
 }
-.nx-doc--sectioned .nx-doc__payment-col-head > .nx-doc__icon {
+.nx-doc--sectioned .nx-doc__payment-col-head > strong {
+  font-weight: 700;
+  line-height: 1.2;
+}
+.nx-doc--sectioned .nx-doc__payment-col-icon {
   display: inline-flex;
-  color: var(--nx-doc-primary);
-  opacity: 1;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.nx-doc--sectioned .nx-doc__payment-col-icon .nx-doc__icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+.nx-doc--sectioned .nx-doc__payment-col--bank .nx-doc__payment-col-icon {
+  background: #e8f8ef;
+  color: #16a34a;
+}
+.nx-doc--sectioned .nx-doc__payment-col--bank .nx-doc__payment-col-head > strong {
+  color: #16a34a;
+}
+.nx-doc--sectioned .nx-doc__payment-col--card .nx-doc__payment-col-icon {
+  background: #e8f1ff;
+  color: #2563eb;
+}
+.nx-doc--sectioned .nx-doc__payment-col--card .nx-doc__payment-col-head > strong {
+  color: #2563eb;
+}
+.nx-doc--sectioned .nx-doc__payment-col--other .nx-doc__payment-col-icon {
+  background: #f1eaff;
+  color: #7c3aed;
+}
+.nx-doc--sectioned .nx-doc__payment-col--other .nx-doc__payment-col-head > strong {
+  color: #7c3aed;
 }
 .nx-doc--sectioned .nx-doc__payment-col-body {
   font-size: 11px;
-  line-height: 1.45;
-  color: var(--nx-doc-text-muted);
+  line-height: 1.55;
+  color: #64748b;
   overflow-wrap: anywhere;
   word-break: break-word;
   min-width: 0;
+}
+.nx-doc--sectioned .nx-doc__payment-line {
+  margin: 0 0 4px;
+}
+.nx-doc--sectioned .nx-doc__payment-line strong {
+  color: #334155;
+  font-weight: 700;
+}
+.nx-doc--sectioned .nx-doc__payment-col-body--card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.nx-doc--sectioned .nx-doc__payment-card-copy {
+  flex: 1;
+  min-width: 0;
+}
+.nx-doc--sectioned .nx-doc__payment-card-hint {
+  margin: 0 0 6px;
+  color: #64748b;
+  line-height: 1.45;
+}
+.nx-doc--sectioned .nx-doc__payment-col-text a {
+  color: #2563eb;
+  font-weight: 600;
+  text-decoration: none;
+  word-break: break-all;
+}
+.nx-doc--sectioned .nx-doc__payment-qr {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 4px;
 }
 .nx-doc--sectioned .nx-doc__platform-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  height: ${GM.lower.footer_height_px}px;
   min-height: ${GM.lower.footer_height_px}px;
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 1px solid ${GM.colors.row_border};
+  margin-top: 14px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 12px;
+  background: #f5f3ff;
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__platform-legal {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   font-size: ${GM.lower.footer_font_size_px}px;
-  color: var(--nx-doc-text-muted);
-  max-width: 70%;
+  line-height: 1.45;
+  color: #64748b;
+  max-width: 72%;
 }
 .nx-doc--sectioned .nx-doc__platform-legal .nx-doc__icon {
-  color: var(--nx-doc-primary);
+  color: #7c3aed;
   flex-shrink: 0;
+  margin-top: 1px;
+}
+.nx-doc--sectioned .nx-doc__platform-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.nx-doc--sectioned .nx-doc__platform-social-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #e9e4ff;
+  color: #7c3aed;
+  text-decoration: none;
+}
+.nx-doc--sectioned .nx-doc__platform-social-btn .nx-doc__icon {
+  width: 13px;
+  height: 13px;
 }
 .nx-doc--sectioned .nx-doc__platform-link {
   gap: 8px;
