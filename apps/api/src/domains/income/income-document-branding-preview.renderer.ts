@@ -19,7 +19,9 @@ import {
 } from './income-document-logo-visible-fit.pure.js';
 import type { IncomeDocumentType } from './income.types.js';
 
-const INVOICE_FONT = 'Arial, Helvetica, sans-serif';
+const INVOICE_FONT = 'Heebo, Arial, Helvetica, sans-serif';
+const INVOICE_FONT_FACE =
+  "@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap');";
 const NODEXPRO_FOOTER_URL = 'https://www.nodexpro.com';
 
 function escapeHtml(value: unknown): string {
@@ -379,10 +381,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
 
   const docTitleBlock = isSectioned
     ? `<div class="nx-doc__doc-identity" data-title-width-key="${escapeHtml(documentIdentity.title_width_key)}" style="--nx-doc-identity-stack-width:${escapeHtml(documentIdentity.number_bar_width)}">
-      <h1 class="nx-doc__doc-title">${escapeHtml(documentIdentity.title)}</h1>
+      <div class="nx-doc__doc-title" role="heading" aria-level="1">${escapeHtml(documentIdentity.title)}</div>
       ${numberBlock}
     </div>`
-    : `<h1 class="nx-doc__doc-title">${escapeHtml(params.docTypeLabel)}</h1>${numberBlock}`;
+    : `<div class="nx-doc__doc-title" role="heading" aria-level="1">${escapeHtml(params.docTypeLabel)}</div>${numberBlock}`;
 
   const docMetaBlock = metaRows ? `<div class="nx-doc__meta-list">${metaRows}</div>` : '';
 
@@ -568,6 +570,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 
   return `
 <style>
+${INVOICE_FONT_FACE}
 .nx-doc {
   --nx-doc-primary: ${accent};
   --nx-doc-secondary: ${b.secondary_color};
@@ -666,9 +669,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--unified .nx-doc__header-issuer { grid-column: 2; min-width: 0; }
 .nx-doc--unified .nx-doc__doc-title {
   margin: 0 0 2px;
+  font-family: ${INVOICE_FONT} !important;
   font-size: 32px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
   color: var(--nx-doc-text);
   line-height: 1.06;
 }
@@ -1044,7 +1048,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc__header-doc { grid-column: 1; text-align: start; }
 .nx-doc__header-issuer { grid-column: 2; }
 .nx-doc__issuer-identity { display: flex; flex-direction: column; align-items: flex-end; text-align: end; gap: 0; }
-.nx-doc__doc-title { margin: 0 0 4px; font-size: 26px; font-weight: 700; color: var(--nx-doc-text); line-height: 1.08; }
+.nx-doc__doc-title { margin: 0 0 4px; font-family: ${INVOICE_FONT} !important; font-size: 26px; font-weight: 700; letter-spacing: normal; color: var(--nx-doc-text); line-height: 1.08; }
 .nx-doc__doc-number {
   margin: 0 0 6px; font-size: 16px; font-weight: 700; color: var(--nx-doc-primary);
   letter-spacing: 0.01em; font-variant-numeric: tabular-nums; line-height: 1.2;
@@ -1177,7 +1181,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   border: none;
   background: transparent;
   overflow: visible;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
 }
 .nx-doc--sectioned .nx-doc__doc-column,
@@ -1193,7 +1197,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   padding-inline-start: 8px;
   border-inline-start: 1px solid ${GM.colors.divider};
   box-sizing: border-box;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
   overflow: visible;
   text-align: left;
@@ -1233,7 +1237,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   transform: none;
 }
 .nx-doc--sectioned .nx-doc__issuer-name {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
   font-weight: 800;
   margin: 0 0 ${GM.upper.meta_row_gap_px}px;
@@ -1243,7 +1247,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   width: 100%;
 }
 .nx-doc--sectioned .nx-doc__issuer-subtitle {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
   font-weight: 500;
   color: var(--nx-doc-text-muted);
@@ -1275,7 +1279,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   grid-template-columns: 16px minmax(0, 1fr);
   gap: 8px 10px;
   align-items: center;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
   line-height: 1.35;
   color: ${GM.colors.text};
@@ -1311,7 +1315,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   grid-template-columns: 16px minmax(0, 1fr);
   gap: 8px 10px;
   align-items: center;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
   line-height: 1.35;
   color: ${GM.colors.text};
@@ -1352,10 +1356,10 @@ export function renderIncomeBrandedPreviewHtml(params: {
   box-sizing: border-box;
 }
 .nx-doc--sectioned .nx-doc__doc-title {
-  font-family: ${INVOICE_FONT};
+  font-family: ${INVOICE_FONT} !important;
   font-size: ${GM.upper.title_font_size_px}px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: normal;
   margin: 0;
   line-height: ${GM.upper.title_line_height};
   color: ${GM.colors.text};
@@ -1428,7 +1432,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   grid-template-columns: 16px auto minmax(0, 1fr);
   gap: 8px 10px;
   align-items: center;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
   line-height: 1.35;
   color: var(--nx-doc-text-muted);
@@ -1465,7 +1469,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
   font-weight: 700;
   color: var(--nx-doc-primary);
@@ -1473,7 +1477,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__customer-head .nx-doc__icon { color: var(--nx-doc-primary); }
 .nx-doc--sectioned .nx-doc__customer-name {
   margin: 0 0 8px;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
   font-weight: 800;
   line-height: 1.25;
@@ -1525,7 +1529,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__table tbody td.nx-doc__cell-desc {
   text-align: start;
   white-space: normal;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
   font-weight: 700;
   color: ${GM.colors.text};
@@ -1546,7 +1550,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 .nx-doc--sectioned .nx-doc__table tbody tr:last-child td { border-bottom: 1px solid #d8d8e4; }
 .nx-doc--sectioned .nx-doc__desc-title {
   display: block;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ${INVOICE_FONT};
   font-size: 14px;
   font-weight: 700;
   color: ${GM.colors.text};

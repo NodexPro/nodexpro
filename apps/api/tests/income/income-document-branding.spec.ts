@@ -240,10 +240,10 @@ test('preview uses unified layout, theme tokens, and draft number label', () => 
   assert.match(html, /nx-doc__platform-footer/);
   assert.match(html, /Test4/);
   assert.match(html, /טיוטה/);
-  assert.match(html, /Arial, Helvetica, sans-serif/);
+  assert.match(html, /Heebo, Arial, Helvetica, sans-serif/);
   assert.match(html, /font-family: inherit !important/);
-  assert.doesNotMatch(html, /Heebo/);
-  assert.doesNotMatch(html, /fonts\.googleapis/);
+  assert.match(html, /fonts\.googleapis/);
+  assert.match(html, /family=Heebo/);
   assert.match(html, />לכבוד</);
   assert.doesNotMatch(html, /type="color"/i);
   assert.doesNotMatch(html, /nx-doc__header--elegant/);

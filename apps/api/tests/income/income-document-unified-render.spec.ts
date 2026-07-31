@@ -622,9 +622,9 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*transform: none/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*max-height: none/);
   assert.match(previewHtml, /\.nx-doc--unified:not\(\.nx-doc--sectioned\) \.nx-doc__logo-img/);
-  assert.match(previewHtml, /font-family: Arial, Helvetica, sans-serif !important/);
+  assert.match(previewHtml, /font-family: Heebo, Arial, Helvetica, sans-serif !important/);
   assert.match(previewHtml, /\.nx-doc \* \{[\s\S]*font-family: inherit !important/);
-  assert.doesNotMatch(previewHtml, /Heebo/);
+  assert.match(previewHtml, /family=Heebo/);
   assert.match(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-card[\s\S]*min-height:\s*0/);
   assert.doesNotMatch(previewHtml, /\.nx-doc--sectioned \.nx-doc__customer-card[\s\S]*min-height:\s*200px/);
   assert.doesNotMatch(previewHtml, /transform: scale\(/);

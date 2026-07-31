@@ -2,7 +2,7 @@
  * Unified Income document HTML output — shared by preview and PDF.
  */
 import { renderIncomeBrandedPreviewHtml, } from './income-document-branding-preview.renderer.js';
-const HEBREW_FONT_LINK = 'https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap';
+const DOCUMENT_FONT = 'Heebo, Arial, Helvetica, sans-serif';
 export function renderUnifiedIncomeDocumentHtml(input) {
     return renderIncomeBrandedPreviewHtml(input);
 }
@@ -13,10 +13,8 @@ export function wrapUnifiedIncomeDocumentHtmlForPrint(documentBodyHtml) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Income Document</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="${HEBREW_FONT_LINK}" rel="stylesheet" />
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap');
     /* 10mm top / 12mm sides+bottom → 38/45px @96dpi (golden-master page contract) */
     @page { size: A4 portrait; margin: 10mm 12mm 12mm; }
     html, body {
@@ -25,11 +23,14 @@ export function wrapUnifiedIncomeDocumentHtmlForPrint(documentBodyHtml) {
       background: #ffffff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+      font-family: ${DOCUMENT_FONT} !important;
     }
     body {
-      font-family: Heebo, Arial, Helvetica, "Segoe UI", sans-serif;
       width: 210mm;
       min-height: 297mm;
+    }
+    body, body * {
+      font-family: ${DOCUMENT_FONT} !important;
     }
     a { color: inherit; }
     .nx-doc { max-width: 100%; box-sizing: border-box; }

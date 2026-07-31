@@ -25,6 +25,10 @@ export function docPreviewIcon(name, color = 'currentColor') {
             return `<svg ${common}><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>`;
         case 'payment':
             return `<svg ${common}><path d="M7 7h10v10H7z"/><path d="M9 12h6M12 9v6"/></svg>`;
+        case 'exchange':
+            return `<svg ${common}><path d="M16 3h5v5"/><path d="M21 3 13 11"/><path d="M8 21H3v-5"/><path d="M3 21l8-8"/></svg>`;
+        case 'linkedin':
+            return `<svg ${common}><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 11v5M8 8h.01M12 16v-5a2 2 0 0 1 4 0v5"/></svg>`;
         case 'id':
             return `<svg ${common}><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 11h2M8 15h6M14 11h2"/></svg>`;
         case 'shield':
