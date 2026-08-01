@@ -396,6 +396,13 @@ export type WorkEngineRecurringCycleDraftReviewViewDocumentAction = {
   document_id: string;
 };
 
+export type WorkEngineRecurringCycleDraftReviewIssuerContext = {
+  represented_client_id: string;
+  issuer_business_id: string;
+  acting_mode: 'office_representative';
+  label: string;
+};
+
 export type WorkEngineRecurringCycleDraftReviewAggregate = {
   aggregate_key: typeof WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY;
   represented_client_id: string;
@@ -406,6 +413,8 @@ export type WorkEngineRecurringCycleDraftReviewAggregate = {
   linked_work_item_id: string | null;
   scheduled_document_date_display: string;
   title: string;
+  /** Ready-to-render issuer truth for the review case (office client). */
+  issuer_context: WorkEngineRecurringCycleDraftReviewIssuerContext;
   issued_document_id: string | null;
   issued_document_number_display: string | null;
   delivery_outcome: WorkEngineRecurringCycleDraftReviewDeliveryOutcome | null;

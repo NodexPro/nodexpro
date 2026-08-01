@@ -64,6 +64,8 @@ import {
   withIncomeIssueStage,
   type IncomeIssueDiagnostic,
 } from './income-issue-diagnostic.js';
+import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
+import { resolveAndApplyRecurringCycleIssueIssuerScope } from './income-recurring-cycle-issue-issuer-scope.service.js';
 import {
   buildAlreadyIssuedIssueResult,
   buildFreshIssuedIssueResult,
@@ -623,6 +625,35 @@ export async function executeIssueIncomeDocument(
   });
   logIncomeIssueStage(diag, 'issue_command_received', { duration_ms: 0 });
 
+  let draft_id: string;
+  try {
+    logIncomeIssueStage(diag, 'draft_id_validation_started', { duration_ms: 0 });
+    draft_id = reqUuid(body.draft_id, 'draft_id');
+    diag.draft_id = draft_id;
+    logIncomeIssueStage(diag, 'draft_id_validation_completed');
+  } catch (error) {
+    logIncomeIssueFailed(diag, 'draft_id_validation', error);
+    throw error;
+  }
+
+  const reviewContext = parseRecurringCycleReviewCommandContext(body);
+  if (reviewContext) {
+    diag.recurring_cycle_id = diag.recurring_cycle_id ?? reviewContext.cycle_id;
+    await withIncomeIssueStage(
+      diag,
+      {
+        started: 'recurring_issuer_scope_resolve_started',
+        completed: 'recurring_issuer_scope_resolve_completed',
+        failing_stage: 'recurring_issuer_scope_resolve',
+      },
+      () =>
+        resolveAndApplyRecurringCycleIssueIssuerScope(ctx, {
+          draftId: draft_id,
+          review: reviewContext,
+        }),
+    );
+  }
+
   const scope = await withIncomeIssueStage(
     diag,
     {
@@ -640,17 +671,6 @@ export async function executeIssueIncomeDocument(
     logIncomeIssueStage(diag, 'permission_check_completed');
   } catch (error) {
     logIncomeIssueFailed(diag, 'permission_check', error);
-    throw error;
-  }
-
-  let draft_id: string;
-  try {
-    logIncomeIssueStage(diag, 'draft_id_validation_started', { duration_ms: 0 });
-    draft_id = reqUuid(body.draft_id, 'draft_id');
-    diag.draft_id = draft_id;
-    logIncomeIssueStage(diag, 'draft_id_validation_completed');
-  } catch (error) {
-    logIncomeIssueFailed(diag, 'draft_id_validation', error);
     throw error;
   }
 

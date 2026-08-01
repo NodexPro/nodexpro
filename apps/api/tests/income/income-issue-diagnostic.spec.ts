@@ -49,9 +49,10 @@ function captureDiag() {
 }
 
 function failingStageForStarted(stage: IncomeIssueStage): IncomeIssueFailingStage {
+  if (stage === 'draft_id_validation_started') return 'draft_id_validation';
+  if (stage === 'recurring_issuer_scope_resolve_started') return 'recurring_issuer_scope_resolve';
   if (stage === 'issuer_scope_load_started') return 'issuer_scope_load';
   if (stage === 'permission_check_started') return 'permission_check';
-  if (stage === 'draft_id_validation_started') return 'draft_id_validation';
   if (stage === 'numbering_started') return 'numbering';
   if (stage === 'issued_document_insert_started') return 'issued_document_insert';
   if (stage === 'accounting_posting_started') return 'accounting_posting';
@@ -64,12 +65,14 @@ function failingStageForStarted(stage: IncomeIssueStage): IncomeIssueFailingStag
 test('success stage order constant includes early prefix stages', () => {
   assert.deepEqual([...INCOME_ISSUE_SUCCESS_STAGE_ORDER], [
     'issue_command_received',
+    'draft_id_validation_started',
+    'draft_id_validation_completed',
+    'recurring_issuer_scope_resolve_started',
+    'recurring_issuer_scope_resolve_completed',
     'issuer_scope_load_started',
     'issuer_scope_load_completed',
     'permission_check_started',
     'permission_check_completed',
-    'draft_id_validation_started',
-    'draft_id_validation_completed',
     'draft_loaded',
     'existing_issued_document_checked',
     'numbering_started',
@@ -89,20 +92,25 @@ test('success stage order constant includes early prefix stages', () => {
 
 test('issue_command_received is logged before loadActiveIncomeIssuerScope in source', () => {
   const fnStart = issueServiceSource.indexOf('export async function executeIssueIncomeDocument');
+  assert.ok(fnStart >= 0, 'executeIssueIncomeDocument export missing from issue service source');
   const fnBody = issueServiceSource.slice(fnStart);
   const receivedIdx = fnBody.indexOf("logIncomeIssueStage(diag, 'issue_command_received'");
   const scopeIdx = fnBody.indexOf('loadActiveIncomeIssuerScope(ctx)');
   const reqUuidIdx = fnBody.indexOf("reqUuid(body.draft_id, 'draft_id')");
+  const resolveIdx = fnBody.indexOf('resolveAndApplyRecurringCycleIssueIssuerScope');
   assert.ok(receivedIdx >= 0);
   assert.ok(scopeIdx > receivedIdx);
   assert.ok(reqUuidIdx > receivedIdx);
-  assert.ok(reqUuidIdx > scopeIdx);
+  // Recurring-cycle issue validates draft_id, then resolves trusted issuer, then loads active scope.
+  assert.ok(reqUuidIdx < scopeIdx);
+  assert.ok(resolveIdx > reqUuidIdx && resolveIdx < scopeIdx);
   assert.match(fnBody, /issuer_scope_load_started/);
   assert.match(fnBody, /permission_check_started/);
   assert.match(fnBody, /draft_id_validation_started/);
   assert.match(fnBody, /failing_stage: 'issuer_scope_load'/);
   assert.match(fnBody, /'permission_check'/);
   assert.match(fnBody, /'draft_id_validation'/);
+  assert.match(fnBody, /'recurring_issuer_scope_resolve'/);
 });
 
 test('stage order on successful mocked issue', async () => {

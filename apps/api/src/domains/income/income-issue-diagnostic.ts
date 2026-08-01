@@ -15,12 +15,14 @@ const UUID_RE =
 /** Success / progress stage names (exact contract). */
 export type IncomeIssueStage =
   | 'issue_command_received'
+  | 'draft_id_validation_started'
+  | 'draft_id_validation_completed'
+  | 'recurring_issuer_scope_resolve_started'
+  | 'recurring_issuer_scope_resolve_completed'
   | 'issuer_scope_load_started'
   | 'issuer_scope_load_completed'
   | 'permission_check_started'
   | 'permission_check_completed'
-  | 'draft_id_validation_started'
-  | 'draft_id_validation_completed'
   | 'draft_loaded'
   | 'existing_issued_document_checked'
   | 'numbering_started'
@@ -43,9 +45,10 @@ export type IncomeIssueStage =
 /** Coarse failing_stage values for the final failed line. */
 export type IncomeIssueFailingStage =
   | 'issue_command'
+  | 'draft_id_validation'
+  | 'recurring_issuer_scope_resolve'
   | 'issuer_scope_load'
   | 'permission_check'
-  | 'draft_id_validation'
   | 'draft_load'
   | 'existing_issued_document_check'
   | 'numbering'
@@ -58,12 +61,14 @@ export type IncomeIssueFailingStage =
 
 export const INCOME_ISSUE_SUCCESS_STAGE_ORDER: readonly IncomeIssueStage[] = [
   'issue_command_received',
+  'draft_id_validation_started',
+  'draft_id_validation_completed',
+  'recurring_issuer_scope_resolve_started',
+  'recurring_issuer_scope_resolve_completed',
   'issuer_scope_load_started',
   'issuer_scope_load_completed',
   'permission_check_started',
   'permission_check_completed',
-  'draft_id_validation_started',
-  'draft_id_validation_completed',
   'draft_loaded',
   'existing_issued_document_checked',
   'numbering_started',
