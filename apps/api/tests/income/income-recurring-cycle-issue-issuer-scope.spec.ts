@@ -123,17 +123,34 @@ test('issue resolves recurring issuer scope before active-scope draft load', () 
   assert.ok(fnBody.includes('assertRowMatchesIssuerScope') || issue.includes('assertRowMatchesIssuerScope'));
 });
 
-test('ordinary issue without recurring_cycle_review still uses active issuer scope only', () => {
+test('ordinary self issue leaves active scope; office draft resolves trusted issuer without FE select', () => {
   const issue = readFileSync(
     join(apiSrcRoot, 'domains/income/income-document-issue.service.ts'),
     'utf8',
   );
   const fnStart = issue.indexOf('export async function executeIssueIncomeDocument');
   assert.ok(fnStart >= 0);
-  const block = issue.slice(fnStart, fnStart + 3500);
+  const block = issue.slice(fnStart, fnStart + 4500);
   assert.match(block, /if \(reviewContext\)/);
+  assert.match(block, /resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded/);
   assert.match(block, /loadActiveIncomeIssuerScope\(ctx\)/);
   assert.match(block, /assertIncomeIssuePermission\(scope\)/);
+  assert.ok(issue.includes('assertRowMatchesIssuerScope'));
+
+  const scopeService = readApi('domains/income/income-recurring-cycle-issue-issuer-scope.service.ts');
+  assert.match(scopeService, /resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded/);
+  assert.match(scopeService, /trusted_office_draft_issue_issuer_resolve/);
+  assert.match(scopeService, /isOfficeDraft/);
+});
+
+test('frontend wizard issue sends only issue_income_document + draft_id (no FE issuer select chain)', () => {
+  const wizard = readWeb('components/work-engine/WorkEngineIncomeDocumentWizardModal.tsx');
+  const start = wizard.indexOf('const handleSaveAndIssue = async');
+  const block = wizard.slice(start, start + 900);
+  assert.ok(block.includes('issue_document'));
+  assert.ok(block.includes('draft_id'));
+  assert.ok(!block.includes('select_income_issuer_context'));
+  assert.ok(!block.includes('select_issuer'));
 });
 
 test('official issuer-context apply is reused (no duplicated select logic)', () => {

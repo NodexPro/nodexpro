@@ -206,6 +206,129 @@ export async function resolveAndApplyRecurringCycleIssueIssuerScope(
   return loadActiveIncomeIssuerScope(ctx);
 }
 
+async function loadTrustedDraftForIssuerResolve(params: {
+  orgId: string;
+  draftId: string;
+}): Promise<{
+  id: string;
+  represented_client_id: string | null;
+  issuer_business_id: string;
+} | null> {
+  const { data, error } = await supabaseAdmin
+    .from('income_document_drafts')
+    .select('id, represented_client_id, issuer_business_id')
+    .eq('organization_id', params.orgId)
+    .eq('id', params.draftId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadTrustedDraftForIssuerResolve');
+  if (!data) return null;
+  return data as {
+    id: string;
+    represented_client_id: string | null;
+    issuer_business_id: string;
+  };
+}
+
+/**
+ * Resolve authoritative represented-client identity for an office draft.
+ * Prefer linked recurring cycle/profile when the draft is cycle-generated;
+ * otherwise use the draft's own org-scoped identity.
+ */
+async function resolveAuthoritativeOfficeClientIdForDraft(params: {
+  orgId: string;
+  draft: {
+    id: string;
+    represented_client_id: string | null;
+    issuer_business_id: string;
+  };
+}): Promise<string> {
+  const { data: cycle, error: cycleErr } = await supabaseAdmin
+    .from('income_recurring_document_cycles')
+    .select('id, recurring_profile_id, generated_draft_id')
+    .eq('organization_id', params.orgId)
+    .eq('generated_draft_id', params.draft.id)
+    .maybeSingle();
+  throwIfSupabaseError(cycleErr, 'loadCycleByGeneratedDraftForIssuerResolve');
+
+  if (cycle) {
+    const profileId = String((cycle as { recurring_profile_id: string }).recurring_profile_id);
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from('income_recurring_document_profiles')
+      .select('id, represented_client_id')
+      .eq('organization_id', params.orgId)
+      .eq('id', profileId)
+      .maybeSingle();
+    throwIfSupabaseError(profileErr, 'loadProfileForGeneratedDraftIssuerResolve');
+    if (!profile) throw notFound('Recurring profile not found');
+    return String((profile as { represented_client_id: string }).represented_client_id);
+  }
+
+  const draftRep = params.draft.represented_client_id;
+  if (draftRep) return draftRep;
+  // Office-shaped issuer without represented: only accept when issuer is a client id that we can authorize.
+  if (params.draft.issuer_business_id) return params.draft.issuer_business_id;
+  throw issuerMismatchError();
+}
+
+/**
+ * Wizard / ordinary issue path: when the trusted draft is office-scoped, apply official
+ * office issuer context from draft (+ cycle/profile if linked) so a stale workspace
+ * self/other-client mode cannot block authorized issue.
+ *
+ * Self drafts (no represented client and no linked cycle) are left unchanged —
+ * they continue to use the active Income issuer scope.
+ */
+export async function resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded(
+  ctx: RequestContext,
+  params: { draftId: string },
+): Promise<ActiveIncomeIssuerScope | null> {
+  const orgId = ctx.organizationId;
+  if (!orgId) throw forbidden('Organization context required');
+  if (!ctx.user?.id) throw forbidden('Actor required');
+
+  const draft = await loadTrustedDraftForIssuerResolve({
+    orgId,
+    draftId: params.draftId,
+  });
+  if (!draft) throw notFound('Income document draft not found');
+
+  const { data: linkedCycle } = await supabaseAdmin
+    .from('income_recurring_document_cycles')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('generated_draft_id', draft.id)
+    .maybeSingle();
+
+  const isOfficeDraft = draft.represented_client_id != null || linkedCycle != null;
+  if (!isOfficeDraft) {
+    return null;
+  }
+
+  const profileClientId = await resolveAuthoritativeOfficeClientIdForDraft({
+    orgId,
+    draft,
+  });
+
+  const identity = await repairDraftIssuerIdentityIfNeeded({
+    orgId,
+    actorUserId: ctx.user.id,
+    draft,
+    profileClientId,
+  });
+
+  await applyOfficialIncomeIssuerContext(
+    ctx,
+    {
+      acting_mode: 'office_representative',
+      issuer_business_id: identity.issuer_business_id,
+      represented_client_id: identity.represented_client_id,
+    },
+    { source: 'trusted_office_draft_issue_issuer_resolve' },
+  );
+
+  return loadActiveIncomeIssuerScope(ctx);
+}
+
 /**
  * Prepare official office issuer context for cycle draft review open/refresh
  * (same official Income write path; issue remains independently secure).

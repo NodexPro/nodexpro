@@ -65,7 +65,10 @@ import {
   type IncomeIssueDiagnostic,
 } from './income-issue-diagnostic.js';
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
-import { resolveAndApplyRecurringCycleIssueIssuerScope } from './income-recurring-cycle-issue-issuer-scope.service.js';
+import {
+  resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded,
+  resolveAndApplyRecurringCycleIssueIssuerScope,
+} from './income-recurring-cycle-issue-issuer-scope.service.js';
 import {
   buildAlreadyIssuedIssueResult,
   buildFreshIssuedIssueResult,
@@ -650,6 +653,21 @@ export async function executeIssueIncomeDocument(
         resolveAndApplyRecurringCycleIssueIssuerScope(ctx, {
           draftId: draft_id,
           review: reviewContext,
+        }),
+    );
+  } else {
+    // Wizard / non-retainer office issue: FE may send only draft_id while workspace
+    // issuer context is stale. Resolve from trusted draft (+ linked cycle/profile).
+    await withIncomeIssueStage(
+      diag,
+      {
+        started: 'recurring_issuer_scope_resolve_started',
+        completed: 'recurring_issuer_scope_resolve_completed',
+        failing_stage: 'recurring_issuer_scope_resolve',
+      },
+      () =>
+        resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded(ctx, {
+          draftId: draft_id,
         }),
     );
   }
