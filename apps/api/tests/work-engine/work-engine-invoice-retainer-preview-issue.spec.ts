@@ -91,7 +91,7 @@ test('frontend issue icon renders from backend descriptor only', () => {
   assert.equal(model.command_name, 'issue_income_document');
 });
 
-test('cycle draft issue command returns refreshed review aggregate without setup reload', () => {
+test('cycle draft issue command returns refreshed review and setup case from command response', () => {
   const incomeCommandsSource = readFileSync(
     join(dir, '../../src/domains/income/income-commands.service.ts'),
     'utf8',
@@ -99,6 +99,8 @@ test('cycle draft issue command returns refreshed review aggregate without setup
   assert.ok(incomeCommandsSource.includes('parseRecurringCycleReviewCommandContext'));
   assert.ok(incomeCommandsSource.includes('refreshRecurringCycleDraftReviewCase'));
   assert.ok(incomeCommandsSource.includes('work_engine_recurring_cycle_draft_review_aggregate'));
+  assert.ok(incomeCommandsSource.includes('work_engine_invoice_retainer_setup_aggregate'));
+  assert.ok(incomeCommandsSource.includes('issue_result'));
 
   const setupModalSource = readWebSource('components/work-engine/WorkEngineInvoiceRetainerSetupModal.tsx');
   const issueHandlerStart = setupModalSource.indexOf('const runCycleDraftIssue');
@@ -106,6 +108,8 @@ test('cycle draft issue command returns refreshed review aggregate without setup
   const issueHandlerBlock = setupModalSource.slice(issueHandlerStart, issueHandlerEnd);
   assert.ok(issueHandlerBlock.includes('recurring_cycle_review'));
   assert.ok(issueHandlerBlock.includes('work_engine_recurring_cycle_draft_review_aggregate'));
+  assert.ok(issueHandlerBlock.includes('work_engine_invoice_retainer_setup_aggregate'));
+  assert.ok(issueHandlerBlock.includes('issue_result'));
   assert.ok(!issueHandlerBlock.includes('fetchWorkEngineInvoiceRetainerSetupAggregate'));
 });
 

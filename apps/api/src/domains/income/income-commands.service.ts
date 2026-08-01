@@ -88,6 +88,8 @@ import { executeSendIncomeDocumentByDocflow } from './income-document-docflow-de
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
 import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review.service.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from '../work-engine/work-engine-invoice-retainer.read-model.service.js';
+import { buildWorkEngineInvoicesTabAggregate } from '../work-engine/work-engine-invoices-tab.read-model.service.js';
+import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-engine/work-engine-invoices-client-documents-by-type.read-model.service.js';
 import {
   executeUpdateIncomeDocumentBrandingProfile,
   executeUpdateIncomeDocumentBrandingProfilePreviewDraft,
@@ -767,8 +769,8 @@ export async function executeIncomeCommand(
           completed: 'refreshed_case_completed',
           failing_stage: 'refreshed_case',
         },
-        () =>
-          refreshRecurringCycleDraftReviewCase({
+        async () => {
+          const refreshed = await refreshRecurringCycleDraftReviewCase({
             ctx,
             representedClientId: reviewContext.represented_client_id,
             profileId: reviewContext.profile_id,
@@ -777,13 +779,51 @@ export async function executeIncomeCommand(
             periodKey: reviewContext.period_key,
             linkedWorkItemId: reviewContext.linked_work_item_id,
             issuedDocumentId: issueResult.issuedDocumentId,
-          }),
+          });
+          const orgId = ctx.organizationId;
+          if (!orgId) throw badRequest('Organization context required');
+          const { data: profile, error: profileErr } = await supabaseAdmin
+            .from('income_recurring_document_profiles')
+            .select('end_customer_id')
+            .eq('organization_id', orgId)
+            .eq('id', reviewContext.profile_id)
+            .eq('represented_client_id', reviewContext.represented_client_id)
+            .maybeSingle();
+          throwIfSupabaseError(profileErr, 'loadRecurringProfileForIssueRefresh');
+          if (!profile) throw notFound('Recurring profile not found');
+          const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
+            ctx,
+            representedClientId: reviewContext.represented_client_id,
+            endCustomerId: String((profile as { end_customer_id: string }).end_customer_id),
+            buildMode: 'schedule_refresh',
+          });
+          const documentTypeKey = issueResult.issue_result.document_type_key || 'tax_invoice';
+          const [invoicesTabAggregate, clientDocumentsByTypeAggregate] = await Promise.all([
+            buildWorkEngineInvoicesTabAggregate({ ctx }),
+            buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+              ctx,
+              representedClientId: reviewContext.represented_client_id,
+              documentTypeKey,
+            }),
+          ]);
+          return {
+            reviewAggregate: refreshed,
+            setupAggregate,
+            invoicesTabAggregate,
+            clientDocumentsByTypeAggregate,
+          };
+        },
       );
       return {
         ok: true,
         command,
-        income_workspace_aggregate: reviewAggregate.income_workspace_aggregate,
-        work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
+        income_workspace_aggregate: reviewAggregate.reviewAggregate.income_workspace_aggregate,
+        work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate.reviewAggregate,
+        work_engine_invoice_retainer_setup_aggregate: reviewAggregate.setupAggregate,
+        work_engine_invoices_tab_aggregate: reviewAggregate.invoicesTabAggregate,
+        work_engine_invoices_client_documents_by_type_aggregate:
+          reviewAggregate.clientDocumentsByTypeAggregate,
+        issue_result: issueResult.issue_result,
         meta: {
           idempotent_replay: issueResult.idempotentReplay,
           income_document_id: issueResult.issuedDocumentId,
@@ -793,6 +833,7 @@ export async function executeIncomeCommand(
     const response = await commandResponse(ctx, command);
     return {
       ...response,
+      issue_result: issueResult.issue_result,
       meta: {
         idempotent_replay: issueResult.idempotentReplay,
         income_document_id: issueResult.issuedDocumentId,

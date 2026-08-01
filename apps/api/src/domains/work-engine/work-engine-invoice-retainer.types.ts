@@ -389,6 +389,13 @@ export type WorkEngineRecurringCycleDraftReviewDeliveryOutcome = {
   delivery_attempt_id: string | null;
 };
 
+export type WorkEngineRecurringCycleDraftReviewViewDocumentAction = {
+  action_key: 'view_document';
+  label: string;
+  enabled: boolean;
+  document_id: string;
+};
+
 export type WorkEngineRecurringCycleDraftReviewAggregate = {
   aggregate_key: typeof WORK_ENGINE_RECURRING_CYCLE_DRAFT_REVIEW_AGGREGATE_KEY;
   represented_client_id: string;
@@ -408,6 +415,7 @@ export type WorkEngineRecurringCycleDraftReviewAggregate = {
   edit_action: WorkEngineRecurringCycleDraftReviewEditAction;
   issue_action: WorkEngineRecurringCycleDraftReviewIssueAction;
   issue_and_send_action: WorkEngineRecurringCycleDraftReviewIssueAndSendAction;
+  view_document_action: WorkEngineRecurringCycleDraftReviewViewDocumentAction | null;
   income_workspace_aggregate: IncomeWorkspaceAggregate;
   income_commands: Record<string, string>;
   preview_action: {

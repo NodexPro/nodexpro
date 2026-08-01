@@ -309,6 +309,15 @@ async function assembleCycleDraftReviewAggregate(params: {
     'מסמך';
   const canSaveDraft = Boolean(WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS.save_draft);
   const canEditDraft = params.draftStatus === 'draft' && !alreadyIssued;
+  const viewDocumentAction =
+    alreadyIssued && params.issuedDocumentId
+      ? {
+          action_key: 'view_document' as const,
+          label: 'צפייה בחשבונית',
+          enabled: true,
+          document_id: params.issuedDocumentId,
+        }
+      : null;
 
   return {
     aggregate_key: 'work_engine_recurring_cycle_draft_review_aggregate',
@@ -337,6 +346,7 @@ async function assembleCycleDraftReviewAggregate(params: {
     },
     issue_action: issueAction,
     issue_and_send_action: issueAndSendAction,
+    view_document_action: viewDocumentAction,
     income_workspace_aggregate: params.income_workspace_aggregate,
     income_commands: { ...WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS },
     preview_action: {
@@ -350,6 +360,7 @@ async function assembleCycleDraftReviewAggregate(params: {
       ...(canSaveDraft && canEditDraft ? ['save_income_document_draft'] : []),
       ...(issueAction.enabled ? ['issue_income_document'] : []),
       ...(issueAndSendAction.enabled ? ['issue_and_send_income_document'] : []),
+      ...(viewDocumentAction?.enabled ? ['view_document'] : []),
     ],
   };
 }

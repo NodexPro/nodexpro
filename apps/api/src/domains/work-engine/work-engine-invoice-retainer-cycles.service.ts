@@ -275,37 +275,95 @@ export async function loadDocumentNumbersById(
   return map;
 }
 
+export async function findRecurringCycleIssuedDocumentId(params: {
+  organizationId: string;
+  cycleId: string;
+  expectedDraftId?: string | null;
+}): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('income_recurring_document_cycles')
+    .select('id, generated_draft_id, generated_document_id')
+    .eq('organization_id', params.organizationId)
+    .eq('id', params.cycleId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'findRecurringCycleIssuedDocumentId');
+  const row = data as {
+    id: string;
+    generated_draft_id: string | null;
+    generated_document_id: string | null;
+  } | null;
+  if (!row?.generated_document_id) return null;
+  if (
+    params.expectedDraftId &&
+    row.generated_draft_id &&
+    row.generated_draft_id !== params.expectedDraftId
+  ) {
+    return null;
+  }
+  return String(row.generated_document_id);
+}
+
+/**
+ * Links an already-issued income document onto the recurring cycle row for the
+ * generated draft (and optionally by cycle id). Safe to call repeatedly.
+ */
 export async function linkRecurringCycleIssuedDocument(params: {
   organizationId: string;
   draftId: string;
   issuedDocumentId: string;
-}): Promise<void> {
-  const { data, error } = await supabaseAdmin
+  cycleId?: string | null;
+}): Promise<{ linked: boolean; cycle_id: string | null }> {
+  let row: { id: string; recurring_profile_id: string } | null = null;
+
+  const byDraft = await supabaseAdmin
     .from('income_recurring_document_cycles')
     .select('id, recurring_profile_id')
     .eq('organization_id', params.organizationId)
     .eq('generated_draft_id', params.draftId)
     .maybeSingle();
-  throwIfSupabaseError(error, 'loadRecurringCycleForIssueLink');
-  const row = data as { id: string; recurring_profile_id: string } | null;
-  if (!row) return;
+  throwIfSupabaseError(byDraft.error, 'loadRecurringCycleForIssueLink');
+  row = byDraft.data as { id: string; recurring_profile_id: string } | null;
+
+  if (!row && params.cycleId) {
+    const byCycle = await supabaseAdmin
+      .from('income_recurring_document_cycles')
+      .select('id, recurring_profile_id, generated_draft_id')
+      .eq('organization_id', params.organizationId)
+      .eq('id', params.cycleId)
+      .maybeSingle();
+    throwIfSupabaseError(byCycle.error, 'loadRecurringCycleForIssueLinkById');
+    const cycleRow = byCycle.data as {
+      id: string;
+      recurring_profile_id: string;
+      generated_draft_id: string | null;
+    } | null;
+    if (cycleRow && (!cycleRow.generated_draft_id || cycleRow.generated_draft_id === params.draftId)) {
+      row = { id: cycleRow.id, recurring_profile_id: cycleRow.recurring_profile_id };
+    }
+  }
+
+  if (!row) return { linked: false, cycle_id: null };
 
   const { error: cycleErr } = await supabaseAdmin
     .from('income_recurring_document_cycles')
     .update({
       status: 'issued',
       generated_document_id: params.issuedDocumentId,
+      generated_draft_id: params.draftId,
       failure_reason: null,
     })
     .eq('id', row.id)
     .eq('organization_id', params.organizationId);
   throwIfSupabaseError(cycleErr, 'linkRecurringCycleIssuedDocument');
 
-  await supabaseAdmin
+  const { error: profileErr } = await supabaseAdmin
     .from('income_recurring_document_profiles')
     .update({ last_generated_document_id: params.issuedDocumentId })
     .eq('id', row.recurring_profile_id)
     .eq('organization_id', params.organizationId);
+  throwIfSupabaseError(profileErr, 'linkRecurringCycleIssuedDocumentProfile');
+
+  return { linked: true, cycle_id: row.id };
 }
 
 export type { RawCycleRow };

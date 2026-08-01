@@ -698,6 +698,9 @@ export interface IncomeCommandResponse {
   income_document_payment_case?: import('./income-document-payment-case.read.js').IncomeDocumentPaymentCaseAggregate;
   work_engine_recurring_cycle_draft_review_aggregate?: import('../work-engine/work-engine-invoice-retainer.types.js').WorkEngineRecurringCycleDraftReviewAggregate;
   work_engine_invoice_retainer_setup_aggregate?: import('../work-engine/work-engine-invoice-retainer.types.js').WorkEngineInvoiceRetainerSetupAggregate;
+  work_engine_invoices_tab_aggregate?: import('../work-engine/work-engine-invoices-tab.read-model.service.js').WorkEngineInvoicesTabAggregate;
+  work_engine_invoices_client_documents_by_type_aggregate?: WorkEngineInvoicesClientDocumentsByTypeAggregate;
+  issue_result?: import('./income-document-issue-result.pure.js').IncomeIssueResult;
   meta?: IncomeCommandResponseMeta & {
     payment_id?: string;
     allocation_id?: string;

@@ -18,9 +18,10 @@ import { assertDraftReadyToIssue, buildLegalSnapshotForIssue, buildTotalsSnapsho
 import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { emitIncomeWorkEventsAfterDocumentIssued } from './income-work-engine-bridge.js';
-import { linkRecurringCycleIssuedDocument } from '../work-engine/work-engine-invoice-retainer-cycles.service.js';
+import { findRecurringCycleIssuedDocumentId, linkRecurringCycleIssuedDocument, } from '../work-engine/work-engine-invoice-retainer-cycles.service.js';
 import { abortIncomeIssueIdempotency, beginIncomeIssueIdempotency, completeIncomeIssueIdempotency, parseIssueIdempotencyKey, } from './income-issue-idempotency.js';
 import { createIncomeIssueDiagnostic, extractIncomeIssueSafeError, logIncomeIssueFailed, logIncomeIssueStage, optionalRecurringCycleIdFromBody, withIncomeIssueStage, } from './income-issue-diagnostic.js';
+import { buildAlreadyIssuedIssueResult, buildFreshIssuedIssueResult, } from './income-document-issue-result.pure.js';
 const PG_UNIQUE_VIOLATION = '23505';
 function optionalIssueDateFromBody(body) {
     const raw = body.document_date ?? body.issue_date;
@@ -59,6 +60,48 @@ async function findIssuedDocumentBySourceDraft(orgId, sourceDraftId) {
     if (!data)
         return null;
     return { id: String(data.id) };
+}
+async function loadIssuedDocumentSummary(scope, issuedDocumentId) {
+    const { data, error } = await supabaseAdmin
+        .from('income_documents')
+        .select('id, organization_id, issuer_business_id, document_number, document_type, issue_date, represented_client_id, accounting_posting_status, accounting_entry_id')
+        .eq('id', issuedDocumentId)
+        .eq('organization_id', scope.org_id)
+        .maybeSingle();
+    if (error)
+        throw error;
+    if (!data)
+        throw notFound('Issued income document not found');
+    const row = data;
+    assertRowMatchesIssuerScope(scope, row);
+    return {
+        id: String(row.id),
+        organization_id: String(row.organization_id),
+        issuer_business_id: String(row.issuer_business_id),
+        document_number: String(row.document_number ?? ''),
+        document_type: String(row.document_type ?? ''),
+        issue_date: String(row.issue_date ?? ''),
+        represented_client_id: row.represented_client_id,
+        accounting_posting_status: row.accounting_posting_status,
+        accounting_entry_id: row.accounting_entry_id,
+    };
+}
+async function ensureRecurringCycleLinked(params) {
+    await withIncomeIssueStage(params.diag, {
+        started: 'recurring_cycle_link_started',
+        completed: 'recurring_cycle_link_completed',
+        failing_stage: 'recurring_cycle_link',
+    }, async () => {
+        const link = await linkRecurringCycleIssuedDocument({
+            organizationId: params.scope.org_id,
+            draftId: params.draftId,
+            issuedDocumentId: params.issuedDocumentId,
+            cycleId: params.cycleId,
+        });
+        if (params.cycleId && !link.linked) {
+            throw badRequest('Recurring cycle not found for issued document link', 'INCOME_RECURRING_CYCLE_LINK_MISSING');
+        }
+    });
 }
 async function syncDraftMarkedIssued(scope, draftId, issuedDocumentId) {
     const { error } = await supabaseAdmin
@@ -200,7 +243,7 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
             source_draft_id: draft.id,
         },
     });
-    const issuedId = await withIncomeIssueStage(diag, {
+    const issuedInsert = await withIncomeIssueStage(diag, {
         started: 'issued_document_insert_started',
         completed: 'issued_document_insert_completed',
         failing_stage: 'issued_document_insert',
@@ -240,15 +283,19 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
                 const existing = await findIssuedDocumentBySourceDraft(scope.org_id, draft.id);
                 if (existing) {
                     await syncDraftMarkedIssued(scope, draft.id, existing.id);
-                    return existing.id;
+                    return { issuedId: existing.id, created: false };
                 }
             }
             throw insertErr;
         }
         if (!issued)
             throw new Error('Failed to create issued income document');
-        return issued.id;
+        return { issuedId: issued.id, created: true };
     });
+    if (!issuedInsert.created) {
+        return issuedInsert;
+    }
+    const issuedId = issuedInsert.issuedId;
     diag.issued_document_id = issuedId;
     const postingStartedAt = Date.now();
     logIncomeIssueStage(diag, 'accounting_posting_started', { duration_ms: 0 });
@@ -347,11 +394,18 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
     }).catch(() => {
         /* fire-and-forget — Income issue must not fail on Work Engine intake */
     });
-    return issuedId;
+    return { issuedId, created: true };
 }
-async function finishIdempotentIssue(scope, draftId, issuedDocumentId, lease, diag) {
+async function finishIdempotentIssue(scope, draftId, issuedDocumentId, lease, diag, cycleId) {
     diag.issued_document_id = issuedDocumentId;
     await syncDraftMarkedIssued(scope, draftId, issuedDocumentId);
+    await ensureRecurringCycleLinked({
+        scope,
+        draftId,
+        issuedDocumentId,
+        cycleId,
+        diag,
+    });
     if (lease?.kind === 'fresh') {
         await completeIncomeIssueIdempotency({
             leaseRowId: lease.leaseRowId,
@@ -359,18 +413,31 @@ async function finishIdempotentIssue(scope, draftId, issuedDocumentId, lease, di
             sourceDraftId: draftId,
         });
     }
-    return { issuedDocumentId, idempotentReplay: true, diagnostic: diag };
+    const summary = await loadIssuedDocumentSummary(scope, issuedDocumentId);
+    return {
+        issuedDocumentId,
+        idempotentReplay: true,
+        diagnostic: diag,
+        issue_result: buildAlreadyIssuedIssueResult({
+            document_id: summary.id,
+            document_number: summary.document_number,
+            document_type_key: summary.document_type,
+            issued_date: summary.issue_date,
+        }),
+    };
 }
 export async function executeIssueIncomeDocument(ctx, body) {
-    const scope = await loadActiveIncomeIssuerScope(ctx);
-    assertIncomeIssuePermission(scope);
     const draft_id = reqUuid(body.draft_id, 'draft_id');
+    const recurringCycleId = optionalRecurringCycleIdFromBody(body);
     const diag = createIncomeIssueDiagnostic({
-        org_id: scope.org_id,
+        org_id: ctx.organizationId ?? 'unknown',
         draft_id,
-        recurring_cycle_id: optionalRecurringCycleIdFromBody(body),
+        recurring_cycle_id: recurringCycleId,
     });
     logIncomeIssueStage(diag, 'issue_command_received', { duration_ms: 0 });
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    diag.org_id = scope.org_id;
+    assertIncomeIssuePermission(scope);
     const idempotencyKey = parseIssueIdempotencyKey(body);
     let lease = null;
     if (idempotencyKey) {
@@ -380,30 +447,25 @@ export async function executeIssueIncomeDocument(ctx, body) {
             sourceDraftId: draft_id,
         });
         if (lease.kind === 'replay') {
-            await linkRecurringCycleIssuedDocument({
-                organizationId: scope.org_id,
-                draftId: draft_id,
-                issuedDocumentId: lease.incomeDocumentId,
-            }).catch(() => undefined);
-            return finishIdempotentIssue(scope, draft_id, lease.incomeDocumentId, null, diag);
+            return finishIdempotentIssue(scope, draft_id, lease.incomeDocumentId, null, diag, recurringCycleId);
         }
     }
     try {
         const existingEarly = await findIssuedDocumentBySourceDraft(scope.org_id, draft_id);
         if (existingEarly) {
             logIncomeIssueStage(diag, 'existing_issued_document_checked');
-            await withIncomeIssueStage(diag, {
-                started: 'recurring_cycle_link_started',
-                completed: 'recurring_cycle_link_completed',
-                failing_stage: 'recurring_cycle_link',
-            }, async () => {
-                await linkRecurringCycleIssuedDocument({
-                    organizationId: scope.org_id,
-                    draftId: draft_id,
-                    issuedDocumentId: existingEarly.id,
-                }).catch(() => undefined);
+            return finishIdempotentIssue(scope, draft_id, existingEarly.id, lease, diag, recurringCycleId);
+        }
+        if (recurringCycleId) {
+            const fromCycle = await findRecurringCycleIssuedDocumentId({
+                organizationId: scope.org_id,
+                cycleId: recurringCycleId,
+                expectedDraftId: draft_id,
             });
-            return finishIdempotentIssue(scope, draft_id, existingEarly.id, lease, diag);
+            if (fromCycle) {
+                logIncomeIssueStage(diag, 'existing_issued_document_checked');
+                return finishIdempotentIssue(scope, draft_id, fromCycle, lease, diag, recurringCycleId);
+            }
         }
         let draft;
         try {
@@ -424,36 +486,23 @@ export async function executeIssueIncomeDocument(ctx, body) {
             throw error;
         }
         if (alreadyIssuedId) {
-            await withIncomeIssueStage(diag, {
-                started: 'recurring_cycle_link_started',
-                completed: 'recurring_cycle_link_completed',
-                failing_stage: 'recurring_cycle_link',
-            }, async () => {
-                await linkRecurringCycleIssuedDocument({
-                    organizationId: scope.org_id,
-                    draftId: draft_id,
-                    issuedDocumentId: alreadyIssuedId,
-                }).catch(() => undefined);
-            });
-            return finishIdempotentIssue(scope, draft_id, alreadyIssuedId, lease, diag);
+            return finishIdempotentIssue(scope, draft_id, alreadyIssuedId, lease, diag, recurringCycleId);
         }
         if (draft.status !== 'draft') {
             throw conflict('Draft cannot be issued', 'INCOME_DRAFT_ALREADY_ISSUED');
         }
-        const issuedDocumentId = await issueNewDocumentFromDraft(ctx, scope, draft, body, diag);
+        const issued = await issueNewDocumentFromDraft(ctx, scope, draft, body, diag);
+        if (!issued.created) {
+            return finishIdempotentIssue(scope, draft_id, issued.issuedId, lease, diag, recurringCycleId);
+        }
+        const issuedDocumentId = issued.issuedId;
         diag.issued_document_id = issuedDocumentId;
-        await withIncomeIssueStage(diag, {
-            started: 'recurring_cycle_link_started',
-            completed: 'recurring_cycle_link_completed',
-            failing_stage: 'recurring_cycle_link',
-        }, async () => {
-            await linkRecurringCycleIssuedDocument({
-                organizationId: scope.org_id,
-                draftId: draft_id,
-                issuedDocumentId,
-            }).catch((linkErr) => {
-                console.warn('[income-issue] retainer cycle link failed', draft_id, linkErr);
-            });
+        await ensureRecurringCycleLinked({
+            scope,
+            draftId: draft_id,
+            issuedDocumentId,
+            cycleId: recurringCycleId,
+            diag,
         });
         if (lease?.kind === 'fresh') {
             await completeIncomeIssueIdempotency({
@@ -462,7 +511,18 @@ export async function executeIssueIncomeDocument(ctx, body) {
                 sourceDraftId: draft_id,
             });
         }
-        return { issuedDocumentId, idempotentReplay: false, diagnostic: diag };
+        const summary = await loadIssuedDocumentSummary(scope, issuedDocumentId);
+        return {
+            issuedDocumentId,
+            idempotentReplay: false,
+            diagnostic: diag,
+            issue_result: buildFreshIssuedIssueResult({
+                document_id: summary.id,
+                document_number: summary.document_number,
+                document_type_key: summary.document_type,
+                issued_date: summary.issue_date,
+            }),
+        };
     }
     catch (e) {
         if (lease?.kind === 'fresh') {
