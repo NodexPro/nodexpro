@@ -45,9 +45,9 @@ export const PLATFORM_EVENT_CATALOG = [
     entry(INCOME_WORK_EVENT_CREDIT_ISSUED, 'income', INCOME_WORK_ENGINE_SCHEMA_VERSION, 'Income credit document issued (audit/context intake).'),
     entry(INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL, 'income', INCOME_WORK_ENGINE_SCHEMA_VERSION, 'Successful email delivery fact; Work Engine may complete recurring send-followup.'),
     entry(INCOME_WORK_EVENT_DOCUMENT_SENT_BY_DOCFLOW, 'income', INCOME_WORK_ENGINE_SCHEMA_VERSION, 'Successful DocFlow delivery fact; Work Engine may complete recurring send-followup.'),
-    entry(INCOME_WORK_EVENTS_DEFERRED[0], 'income', INCOME_WORK_ENGINE_SCHEMA_VERSION, 'Deferred — payment pipeline not implemented.', []),
-    entry(INCOME_WORK_EVENTS_DEFERRED[1], 'income', INCOME_WORK_ENGINE_SCHEMA_VERSION, 'Deferred — payment pipeline not implemented.', []),
-    entry(INCOME_WORK_EVENTS_DEFERRED[2], 'income', INCOME_WORK_ENGINE_SCHEMA_VERSION, 'Deferred — payment pipeline not implemented.', []),
+    entry(INCOME_WORK_EVENTS_DEFERRED[0], 'income', INCOME_WORK_ENGINE_SCHEMA_VERSION, 'INV-5A — invoice fully allocated in Accounting Base (reference amounts only; no work_item mapping yet).', []),
+    entry(INCOME_WORK_EVENTS_DEFERRED[1], 'income', INCOME_WORK_ENGINE_SCHEMA_VERSION, 'INV-5A — invoice partially allocated in Accounting Base (reference amounts only; no work_item mapping yet).', []),
+    entry(INCOME_WORK_EVENTS_DEFERRED[2], 'income', INCOME_WORK_ENGINE_SCHEMA_VERSION, 'Reserved — payment failure pipeline not implemented.', []),
     // —— Retainers (Work Engine scheduler emits on behalf of income recurring profiles) ——
     entry(RECURRING_WORK_EVENT_TYPE, 'work_engine', RECURRING_WORK_ENGINE_SCHEMA_VERSION, 'Recurring retainer draft generated; maps to recurring_invoice_review work_item.'),
     entry(RECURRING_FAILURE_EVENT_TYPE, 'work_engine', RECURRING_WORK_ENGINE_SCHEMA_VERSION, 'Recurring retainer draft generation failed for a cycle.'),

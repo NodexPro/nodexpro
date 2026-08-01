@@ -10,7 +10,11 @@ export const INCOME_WORK_EVENT_OVERDUE = 'income.invoice_overdue';
 export const INCOME_WORK_EVENT_CREDIT_ISSUED = 'income.credit_document_issued';
 export const INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL = 'income.document_sent_by_email';
 export const INCOME_WORK_EVENT_DOCUMENT_SENT_BY_DOCFLOW = 'income.document_sent_by_docflow';
-/** Not emitted in INC-8 — payment/status pipeline pending. */
+/**
+ * Paid/partial events are emitted by Accounting Base INV-5A after allocation.
+ * `income.payment_failed` remains reserved (not emitted).
+ * Catalog maps these without work_item creation for now.
+ */
 export const INCOME_WORK_EVENTS_DEFERRED = [
     'income.invoice_paid',
     'income.invoice_partially_paid',

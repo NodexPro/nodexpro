@@ -42,6 +42,7 @@ import {
 } from './income-document-types.resolver.js';
 import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
+import { withIncomeIssueStage } from './income-issue-diagnostic.js';
 import { executeIssueAndSendIncomeDocument } from './income-document-issue-and-send.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import {
@@ -756,16 +757,28 @@ export async function executeIncomeCommand(
     const issueResult = await executeIssueIncomeDocument(ctx, body);
     const reviewContext = parseRecurringCycleReviewCommandContext(body);
     if (reviewContext) {
-      const reviewAggregate = await refreshRecurringCycleDraftReviewCase({
-        ctx,
-        representedClientId: reviewContext.represented_client_id,
-        profileId: reviewContext.profile_id,
-        cycleId: reviewContext.cycle_id,
-        generatedDraftId: reviewContext.generated_draft_id,
-        periodKey: reviewContext.period_key,
-        linkedWorkItemId: reviewContext.linked_work_item_id,
-        issuedDocumentId: issueResult.issuedDocumentId,
-      });
+      issueResult.diagnostic.recurring_cycle_id =
+        issueResult.diagnostic.recurring_cycle_id ?? reviewContext.cycle_id;
+      issueResult.diagnostic.issued_document_id = issueResult.issuedDocumentId;
+      const reviewAggregate = await withIncomeIssueStage(
+        issueResult.diagnostic,
+        {
+          started: 'refreshed_case_started',
+          completed: 'refreshed_case_completed',
+          failing_stage: 'refreshed_case',
+        },
+        () =>
+          refreshRecurringCycleDraftReviewCase({
+            ctx,
+            representedClientId: reviewContext.represented_client_id,
+            profileId: reviewContext.profile_id,
+            cycleId: reviewContext.cycle_id,
+            generatedDraftId: reviewContext.generated_draft_id,
+            periodKey: reviewContext.period_key,
+            linkedWorkItemId: reviewContext.linked_work_item_id,
+            issuedDocumentId: issueResult.issuedDocumentId,
+          }),
+      );
       return {
         ok: true,
         command,

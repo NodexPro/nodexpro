@@ -8,6 +8,8 @@ import { forCommandCreateEntry, forCommandGetEntry, forCommandUpdateEntry } from
 import { forCommandCreateLink, forCommandDeleteLink } from './link.service.js';
 import { forCommandCreatePeriod, forCommandGetPeriod, forCommandUpdatePeriod } from './period.service.js';
 import { forSystemRecomputeDerivedSummaries } from './summary.service.js';
+import { ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT, } from './accounting-base-income-payment.pure.js';
+import { executeRecordAndAllocateIncomePayment } from './accounting-base-income-payment.service.js';
 const PERMISSIONS = {
     PERIOD_MANAGE: 'accounting_base.period.manage',
     ENTRY_WRITE: 'accounting_base.entry.write',
@@ -305,6 +307,16 @@ export async function executeAccountingBaseCommand(ctx, organizationId, body) {
     const payload = parsePayload(body.payload);
     if (!type)
         throw badRequest('type required');
+    if (type === ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT) {
+        const out = await executeRecordAndAllocateIncomePayment(ctx, organizationId, payload);
+        return {
+            ok: true,
+            command: out.command,
+            payment_id: out.payment_id,
+            allocation_id: out.allocation_id,
+            refreshed: out.refreshed,
+        };
+    }
     let refreshTarget;
     if (type === 'create_period')
         refreshTarget = await handleCreatePeriod(ctx, organizationId, payload);

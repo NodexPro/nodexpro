@@ -27,6 +27,7 @@ import { ownerPasswordRecoveryRoutes } from './routes/owner-password-recovery.ro
 import { docflowRoutes } from './routes/docflow.routes.js';
 import { workEngineRoutes } from './domains/work-engine/work-engine.routes.js';
 import { incomeRoutes } from './domains/income/income.routes.js';
+import { accountingBaseRoutes } from './domains/accounting-base/accounting-base.routes.js';
 registerExampleModuleHook();
 async function logModuleLoaded() {
     try {
@@ -127,6 +128,7 @@ app.use('/api/v1/owner', ownerCountryPackRoutes);
 app.use('/api/v1/docflow', docflowRoutes);
 app.use('/api/v1/work-engine', workEngineRoutes);
 app.use('/api/v1/income', incomeRoutes);
+app.use('/api/v1/accounting-base', accountingBaseRoutes);
 app.use((err, _req, res, _next) => {
     if (err instanceof AppError) {
         if (err.code === ENCRYPTION_NOT_CONFIGURED_CODE) {

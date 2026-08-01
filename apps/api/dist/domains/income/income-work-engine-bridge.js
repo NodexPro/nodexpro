@@ -9,7 +9,10 @@
  *
  * Client contract:
  *   - `represented_client_id` (office_representative mode) is used as Work Engine client_id.
- *   - Self-mode documents without represented_client_id are skipped (logged); intake requires client_id.
+ *   - Self-mode / office-owned invoices (represented_client_id null) are skipped (audited).
+ *     Work Engine intake requires a clients.id; office issuer_business_id is an
+ *     income_issuer_profiles.id, not a clients row. Closing this gap is a product/Core
+ *     decision (recommended owner: Work Engine + Core client identity) — not INV-5A.
  */
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service.js';
@@ -129,9 +132,23 @@ export async function emitIncomeWorkEventAfterDocumentSentByDocflow(signal) {
     });
 }
 /**
- * Scheduler hook: emit overdue events for issued documents with past due_date.
- * Does not compute debt totals — compares due_date only (display/reference workflow).
+ * INV-5A — emit paid / partially_paid facts after Accounting Base allocation.
+ * amount fields are reference-only (Work Engine must not become financial truth).
  */
+export async function emitIncomeWorkEventAfterInvoicePaidOrPartial(signal) {
+    const clientId = resolveIncomeWorkEngineClientId(signal.representedClientId);
+    if (!clientId) {
+        await auditBridgeFailure(signal, signal.eventType, 'represented_client_id required for Work Engine intake (self-mode skipped)');
+        return null;
+    }
+    return emitIntake(signal, signal.eventType, {
+        allocated_amount_reference: signal.allocatedAmount,
+        allocated_total_reference: signal.allocatedTotal,
+        remaining_balance_reference: signal.remainingBalance,
+        payment_id: signal.paymentId,
+        allocation_id: signal.allocationId,
+    });
+}
 export async function scanAndEmitIncomeInvoiceOverdueForOrg(orgId, ctx, todayIso = new Date().toISOString().slice(0, 10)) {
     const { data, error } = await supabaseAdmin
         .from('income_documents')

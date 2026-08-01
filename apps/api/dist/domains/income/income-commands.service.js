@@ -13,6 +13,7 @@ import { parseDraftPayloadBody, validateDraftAgainstDocumentTypeRules, } from '.
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
+import { withIncomeIssueStage } from './income-issue-diagnostic.js';
 import { executeIssueAndSendIncomeDocument } from './income-document-issue-and-send.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceAggregate, buildIncomeWorkspaceWizardPatchAggregate, } from './income-workspace-aggregate.service.js';
@@ -26,7 +27,8 @@ import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-eng
 import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review.service.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from '../work-engine/work-engine-invoice-retainer.read-model.service.js';
 import { executeUpdateIncomeDocumentBrandingProfile, executeUpdateIncomeDocumentBrandingProfilePreviewDraft, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
-import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, } from './income.types.js';
+import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT, } from './income.types.js';
+import { executeRecordIncomeDocumentPayment } from './income-document-payment.service.js';
 const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_SELECT_ISSUER,
     INCOME_COMMAND_CREATE_CUSTOMER,
@@ -64,6 +66,7 @@ const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT,
     INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
     INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
+    INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT,
 ]);
 async function commandResponse(ctx, command, recipientOverlay = {}, wizardDraftOverlay = {}) {
     return {
@@ -508,11 +511,21 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
             field_errors: {},
         });
     }
+    if (command === INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT) {
+        return executeRecordIncomeDocumentPayment(ctx, body);
+    }
     if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
         const issueResult = await executeIssueIncomeDocument(ctx, body);
         const reviewContext = parseRecurringCycleReviewCommandContext(body);
         if (reviewContext) {
-            const reviewAggregate = await refreshRecurringCycleDraftReviewCase({
+            issueResult.diagnostic.recurring_cycle_id =
+                issueResult.diagnostic.recurring_cycle_id ?? reviewContext.cycle_id;
+            issueResult.diagnostic.issued_document_id = issueResult.issuedDocumentId;
+            const reviewAggregate = await withIncomeIssueStage(issueResult.diagnostic, {
+                started: 'refreshed_case_started',
+                completed: 'refreshed_case_completed',
+                failing_stage: 'refreshed_case',
+            }, () => refreshRecurringCycleDraftReviewCase({
                 ctx,
                 representedClientId: reviewContext.represented_client_id,
                 profileId: reviewContext.profile_id,
@@ -521,7 +534,7 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
                 periodKey: reviewContext.period_key,
                 linkedWorkItemId: reviewContext.linked_work_item_id,
                 issuedDocumentId: issueResult.issuedDocumentId,
-            });
+            }));
             return {
                 ok: true,
                 command,

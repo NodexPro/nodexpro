@@ -51,12 +51,23 @@ import {
   type IncomeIssueIdempotencyLease,
 } from './income-issue-idempotency.js';
 import type { IncomeDocumentType } from './income.types.js';
+import {
+  createIncomeIssueDiagnostic,
+  extractIncomeIssueSafeError,
+  logIncomeIssueFailed,
+  logIncomeIssueStage,
+  optionalRecurringCycleIdFromBody,
+  withIncomeIssueStage,
+  type IncomeIssueDiagnostic,
+} from './income-issue-diagnostic.js';
 
 const PG_UNIQUE_VIOLATION = '23505';
 
 export interface IssueIncomeDocumentResult {
   issuedDocumentId: string;
   idempotentReplay: boolean;
+  /** Observability only — used by command layer for refreshed_case stage logs. */
+  diagnostic: IncomeIssueDiagnostic;
 }
 
 function optionalIssueDateFromBody(body: Record<string, unknown>): string | null {
@@ -223,6 +234,7 @@ async function issueNewDocumentFromDraft(
   scope: ActiveIncomeIssuerScope,
   draft: FullDraftRow,
   body: Record<string, unknown>,
+  diag: IncomeIssueDiagnostic,
 ): Promise<string> {
   try {
     assertDraftReadyToIssue(draft);
@@ -281,7 +293,15 @@ async function issueNewDocumentFromDraft(
     lines.length,
   );
 
-  const allocated = await allocateIncomeDocumentNumber(scope, draft.document_type!, issue_date);
+  const allocated = await withIncomeIssueStage(
+    diag,
+    {
+      started: 'numbering_started',
+      completed: 'numbering_completed',
+      failing_stage: 'numbering',
+    },
+    () => allocateIncomeDocumentNumber(scope, draft.document_type!, issue_date),
+  );
 
   await writeAudit({
     organizationId: scope.org_id,
@@ -299,52 +319,65 @@ async function issueNewDocumentFromDraft(
     },
   });
 
-  const { data: issued, error: insertErr } = await supabaseAdmin
-    .from('income_documents')
-    .insert({
-      organization_id: scope.org_id,
-      represented_client_id: scope.represented_client_id,
-      issuer_business_id: scope.issuer_business_id,
-      actor_user_id: scope.actor_user_id,
-      acting_mode: scope.acting_mode,
-      income_customer_id: draft.income_customer_id,
-      customer_snapshot_json,
-      document_type: draft.document_type,
-      document_number: allocated.document_number,
-      document_status: 'issued',
-      issue_date,
-      due_date: draft.due_date,
-      currency: draft.currency ?? 'ILS',
-      language: draft.language ?? 'he',
-      lines_snapshot_json: lines,
-      totals_snapshot_json,
-      legal_snapshot_json,
-      issuer_snapshot_json,
-      notes: draft.notes,
-      source_draft_id: draft.id,
-      accounting_posting_status: 'pending',
-      tax_allocation_number:
-        typeof draft.tax_allocation_number === 'string' && draft.tax_allocation_number.trim()
-          ? draft.tax_allocation_number.trim()
-          : null,
-    })
-    .select('id')
-    .single();
+  const issuedId = await withIncomeIssueStage(
+    diag,
+    {
+      started: 'issued_document_insert_started',
+      completed: 'issued_document_insert_completed',
+      failing_stage: 'issued_document_insert',
+    },
+    async () => {
+      const { data: issued, error: insertErr } = await supabaseAdmin
+        .from('income_documents')
+        .insert({
+          organization_id: scope.org_id,
+          represented_client_id: scope.represented_client_id,
+          issuer_business_id: scope.issuer_business_id,
+          actor_user_id: scope.actor_user_id,
+          acting_mode: scope.acting_mode,
+          income_customer_id: draft.income_customer_id,
+          customer_snapshot_json,
+          document_type: draft.document_type,
+          document_number: allocated.document_number,
+          document_status: 'issued',
+          issue_date,
+          due_date: draft.due_date,
+          currency: draft.currency ?? 'ILS',
+          language: draft.language ?? 'he',
+          lines_snapshot_json: lines,
+          totals_snapshot_json,
+          legal_snapshot_json,
+          issuer_snapshot_json,
+          notes: draft.notes,
+          source_draft_id: draft.id,
+          accounting_posting_status: 'pending',
+          tax_allocation_number:
+            typeof draft.tax_allocation_number === 'string' && draft.tax_allocation_number.trim()
+              ? draft.tax_allocation_number.trim()
+              : null,
+        })
+        .select('id')
+        .single();
 
-  if (insertErr) {
-    if (isUniqueViolation(insertErr)) {
-      const existing = await findIssuedDocumentBySourceDraft(scope.org_id, draft.id);
-      if (existing) {
-        await syncDraftMarkedIssued(scope, draft.id, existing.id);
-        return existing.id;
+      if (insertErr) {
+        if (isUniqueViolation(insertErr)) {
+          const existing = await findIssuedDocumentBySourceDraft(scope.org_id, draft.id);
+          if (existing) {
+            await syncDraftMarkedIssued(scope, draft.id, existing.id);
+            return existing.id;
+          }
+        }
+        throw insertErr;
       }
-    }
-    throw insertErr;
-  }
-  if (!issued) throw new Error('Failed to create issued income document');
+      if (!issued) throw new Error('Failed to create issued income document');
+      return (issued as { id: string }).id;
+    },
+  );
 
-  const issuedId = (issued as { id: string }).id;
+  diag.issued_document_id = issuedId;
 
+  const postingStartedAt = Date.now();
+  logIncomeIssueStage(diag, 'accounting_posting_started', { duration_ms: 0 });
   try {
     await applyAccountingPostingForIssuedDocument(ctx, {
       id: issuedId,
@@ -360,38 +393,61 @@ async function issueNewDocumentFromDraft(
       accounting_entry_id: null,
       notes: draft.notes,
     });
+    logIncomeIssueStage(diag, 'accounting_posting_completed', {
+      duration_ms: Date.now() - postingStartedAt,
+    });
   } catch (postingErr) {
+    logIncomeIssueStage(diag, 'accounting_posting_failed', {
+      ...extractIncomeIssueSafeError(postingErr),
+      duration_ms: Date.now() - postingStartedAt,
+    });
+    const cleanupStartedAt = Date.now();
+    logIncomeIssueStage(diag, 'issued_document_cleanup_started', { duration_ms: 0 });
     await supabaseAdmin
       .from('income_documents')
       .delete()
       .eq('id', issuedId)
       .eq('organization_id', scope.org_id);
+    logIncomeIssueStage(diag, 'issued_document_cleanup_completed', {
+      duration_ms: Date.now() - cleanupStartedAt,
+    });
+    logIncomeIssueFailed(diag, 'accounting_posting', postingErr);
     throw postingErr;
   }
 
-  const { data: draftUpdated, error: draftUpdateErr } = await supabaseAdmin
-    .from('income_document_drafts')
-    .update({
-      status: 'issued',
-      issued_document_id: issuedId,
-      issued_at: new Date().toISOString(),
-    })
-    .eq('id', draft.id)
-    .eq('organization_id', scope.org_id)
-    .eq('status', 'draft')
-    .select('id')
-    .maybeSingle();
+  await withIncomeIssueStage(
+    diag,
+    {
+      started: 'draft_mark_issued_started',
+      completed: 'draft_mark_issued_completed',
+      failing_stage: 'draft_mark_issued',
+    },
+    async () => {
+      const { data: draftUpdated, error: draftUpdateErr } = await supabaseAdmin
+        .from('income_document_drafts')
+        .update({
+          status: 'issued',
+          issued_document_id: issuedId,
+          issued_at: new Date().toISOString(),
+        })
+        .eq('id', draft.id)
+        .eq('organization_id', scope.org_id)
+        .eq('status', 'draft')
+        .select('id')
+        .maybeSingle();
 
-  if (draftUpdateErr) throw draftUpdateErr;
+      if (draftUpdateErr) throw draftUpdateErr;
 
-  if (!draftUpdated) {
-    const raced = await findIssuedDocumentBySourceDraft(scope.org_id, draft.id);
-    if (raced?.id === issuedId || raced) {
-      await syncDraftMarkedIssued(scope, draft.id, raced?.id ?? issuedId);
-      return raced?.id ?? issuedId;
-    }
-    throw conflict('Draft was modified during issue', 'INCOME_DRAFT_ISSUE_CONFLICT');
-  }
+      if (!draftUpdated) {
+        const raced = await findIssuedDocumentBySourceDraft(scope.org_id, draft.id);
+        if (raced?.id === issuedId || raced) {
+          await syncDraftMarkedIssued(scope, draft.id, raced?.id ?? issuedId);
+          return;
+        }
+        throw conflict('Draft was modified during issue', 'INCOME_DRAFT_ISSUE_CONFLICT');
+      }
+    },
+  );
 
   await writeAudit({
     organizationId: scope.org_id,
@@ -434,7 +490,9 @@ async function finishIdempotentIssue(
   draftId: string,
   issuedDocumentId: string,
   lease: IncomeIssueIdempotencyLease | null,
+  diag: IncomeIssueDiagnostic,
 ): Promise<IssueIncomeDocumentResult> {
+  diag.issued_document_id = issuedDocumentId;
   await syncDraftMarkedIssued(scope, draftId, issuedDocumentId);
   if (lease?.kind === 'fresh') {
     await completeIncomeIssueIdempotency({
@@ -443,7 +501,7 @@ async function finishIdempotentIssue(
       sourceDraftId: draftId,
     });
   }
-  return { issuedDocumentId, idempotentReplay: true };
+  return { issuedDocumentId, idempotentReplay: true, diagnostic: diag };
 }
 
 export async function executeIssueIncomeDocument(
@@ -454,6 +512,13 @@ export async function executeIssueIncomeDocument(
   assertIncomeIssuePermission(scope);
 
   const draft_id = reqUuid(body.draft_id, 'draft_id');
+  const diag = createIncomeIssueDiagnostic({
+    org_id: scope.org_id,
+    draft_id,
+    recurring_cycle_id: optionalRecurringCycleIdFromBody(body),
+  });
+  logIncomeIssueStage(diag, 'issue_command_received', { duration_ms: 0 });
+
   const idempotencyKey = parseIssueIdempotencyKey(body);
 
   let lease: IncomeIssueIdempotencyLease | null = null;
@@ -469,46 +534,93 @@ export async function executeIssueIncomeDocument(
         draftId: draft_id,
         issuedDocumentId: lease.incomeDocumentId,
       }).catch(() => undefined);
-      return finishIdempotentIssue(scope, draft_id, lease.incomeDocumentId, null);
+      return finishIdempotentIssue(scope, draft_id, lease.incomeDocumentId, null, diag);
     }
   }
 
   try {
     const existingEarly = await findIssuedDocumentBySourceDraft(scope.org_id, draft_id);
     if (existingEarly) {
-      await linkRecurringCycleIssuedDocument({
-        organizationId: scope.org_id,
-        draftId: draft_id,
-        issuedDocumentId: existingEarly.id,
-      }).catch(() => undefined);
-      return finishIdempotentIssue(scope, draft_id, existingEarly.id, lease);
+      logIncomeIssueStage(diag, 'existing_issued_document_checked');
+      await withIncomeIssueStage(
+        diag,
+        {
+          started: 'recurring_cycle_link_started',
+          completed: 'recurring_cycle_link_completed',
+          failing_stage: 'recurring_cycle_link',
+        },
+        async () => {
+          await linkRecurringCycleIssuedDocument({
+            organizationId: scope.org_id,
+            draftId: draft_id,
+            issuedDocumentId: existingEarly.id,
+          }).catch(() => undefined);
+        },
+      );
+      return finishIdempotentIssue(scope, draft_id, existingEarly.id, lease, diag);
     }
 
-    const draft = await loadFullDraftForIssue(scope, draft_id);
+    let draft: FullDraftRow;
+    try {
+      draft = await loadFullDraftForIssue(scope, draft_id);
+      logIncomeIssueStage(diag, 'draft_loaded');
+    } catch (error) {
+      logIncomeIssueFailed(diag, 'draft_load', error);
+      throw error;
+    }
 
-    const alreadyIssuedId = await resolveAlreadyIssuedDocumentId(scope, draft);
+    let alreadyIssuedId: string | null;
+    try {
+      alreadyIssuedId = await resolveAlreadyIssuedDocumentId(scope, draft);
+      logIncomeIssueStage(diag, 'existing_issued_document_checked');
+    } catch (error) {
+      logIncomeIssueFailed(diag, 'existing_issued_document_check', error);
+      throw error;
+    }
+
     if (alreadyIssuedId) {
-      await linkRecurringCycleIssuedDocument({
-        organizationId: scope.org_id,
-        draftId: draft_id,
-        issuedDocumentId: alreadyIssuedId,
-      }).catch(() => undefined);
-      return finishIdempotentIssue(scope, draft_id, alreadyIssuedId, lease);
+      await withIncomeIssueStage(
+        diag,
+        {
+          started: 'recurring_cycle_link_started',
+          completed: 'recurring_cycle_link_completed',
+          failing_stage: 'recurring_cycle_link',
+        },
+        async () => {
+          await linkRecurringCycleIssuedDocument({
+            organizationId: scope.org_id,
+            draftId: draft_id,
+            issuedDocumentId: alreadyIssuedId,
+          }).catch(() => undefined);
+        },
+      );
+      return finishIdempotentIssue(scope, draft_id, alreadyIssuedId, lease, diag);
     }
 
     if (draft.status !== 'draft') {
       throw conflict('Draft cannot be issued', 'INCOME_DRAFT_ALREADY_ISSUED');
     }
 
-    const issuedDocumentId = await issueNewDocumentFromDraft(ctx, scope, draft, body);
+    const issuedDocumentId = await issueNewDocumentFromDraft(ctx, scope, draft, body, diag);
+    diag.issued_document_id = issuedDocumentId;
 
-    await linkRecurringCycleIssuedDocument({
-      organizationId: scope.org_id,
-      draftId: draft_id,
-      issuedDocumentId,
-    }).catch((linkErr) => {
-      console.warn('[income-issue] retainer cycle link failed', draft_id, linkErr);
-    });
+    await withIncomeIssueStage(
+      diag,
+      {
+        started: 'recurring_cycle_link_started',
+        completed: 'recurring_cycle_link_completed',
+        failing_stage: 'recurring_cycle_link',
+      },
+      async () => {
+        await linkRecurringCycleIssuedDocument({
+          organizationId: scope.org_id,
+          draftId: draft_id,
+          issuedDocumentId,
+        }).catch((linkErr) => {
+          console.warn('[income-issue] retainer cycle link failed', draft_id, linkErr);
+        });
+      },
+    );
 
     if (lease?.kind === 'fresh') {
       await completeIncomeIssueIdempotency({
@@ -518,11 +630,12 @@ export async function executeIssueIncomeDocument(
       });
     }
 
-    return { issuedDocumentId, idempotentReplay: false };
+    return { issuedDocumentId, idempotentReplay: false, diagnostic: diag };
   } catch (e) {
     if (lease?.kind === 'fresh') {
       await abortIncomeIssueIdempotency(lease.leaseRowId);
     }
+    logIncomeIssueFailed(diag, 'issue_command', e);
     throw e;
   }
 }
