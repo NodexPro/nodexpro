@@ -1,6 +1,8 @@
 /**
- * INV-5B — income_document_payment_case aggregate (Income orchestration read model).
+ * INV-5B/5C — income_document_payment_case aggregate (Income orchestration read model).
  * Financial amounts come from Accounting Base; lineage from income_document_links.
+ * After payment command: includes full refreshed documents-list + invoices-tab truth
+ * so the UI replaces state with zero post-command GETs.
  */
 
 import { supabaseAdmin } from '../../db/client.js';
@@ -8,12 +10,23 @@ import type { RequestContext } from '../../shared/context.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { buildIncomeInvoicePaymentCaseAggregate } from '../accounting-base/accounting-base-income-payment-case.read.js';
+import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-engine/work-engine-invoices-client-documents-by-type.read-model.service.js';
+import {
+  buildWorkEngineInvoicesTabAggregate,
+  type WorkEngineInvoicesTabAggregate,
+} from '../work-engine/work-engine-invoices-tab.read-model.service.js';
+import { issueYearFromIso } from './income-client-income-ledger-card.pure.js';
 import {
   INCOME_DOCUMENT_LINK_PAYMENT_RECEIPT_FOR_INVOICE,
   INCOME_DOCUMENT_PAYMENT_CASE_KEY,
   INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT,
   resolvePaymentStateIcon,
+  type IncomeDocumentRecordPaymentForm,
 } from './income-document-payment.pure.js';
+import type {
+  WorkEngineInvoicesClientDocumentsByTypeAggregate,
+  WorkEngineInvoicesClientDocumentsByTypeRow,
+} from './income.types.js';
 
 export type IncomeDocumentPaymentCaseLinkedReceipt = {
   document_id: string;
@@ -69,6 +82,14 @@ export type IncomeDocumentPaymentCaseAggregate = {
     command: string;
     reason: string | null;
   }>;
+  /** Source tax-invoice row from refreshed documents-by-type list (INV-5C). */
+  source_invoice_row: WorkEngineInvoicesClientDocumentsByTypeRow | null;
+  /** Form state after payment (null when record_payment no longer allowed). */
+  record_payment_form: IncomeDocumentRecordPaymentForm | null;
+  /** Full refreshed documents list for the open modal (INV-5C — replace FE state). */
+  work_engine_invoices_client_documents_by_type_aggregate: WorkEngineInvoicesClientDocumentsByTypeAggregate | null;
+  /** Full refreshed invoices tab (counters / panel) — replace FE state, no follow-up GET. */
+  work_engine_invoices_tab_aggregate: WorkEngineInvoicesTabAggregate;
 };
 
 export async function listPaymentReceiptLinksForInvoice(
@@ -163,7 +184,10 @@ export async function buildIncomeDocumentPaymentCaseAggregate(
   ctx: RequestContext,
   organizationId: string,
   incomeDocumentId: string,
-  opts?: { newlyIssuedReceiptId?: string | null },
+  opts?: {
+    newlyIssuedReceiptId?: string | null;
+    documentsListYear?: number | null;
+  },
 ): Promise<IncomeDocumentPaymentCaseAggregate> {
   const docId = String(incomeDocumentId ?? '').trim();
   if (!docId) throw badRequest('income_document_id required');
@@ -186,6 +210,39 @@ export async function buildIncomeDocumentPaymentCaseAggregate(
   );
   const recordReason =
     abCase.allowed_actions.find((a) => a.action_key === 'record_payment')?.reason ?? null;
+
+  const { data: issueDateRow, error: issueDateErr } = await supabaseAdmin
+    .from('income_documents')
+    .select('issue_date')
+    .eq('organization_id', organizationId)
+    .eq('id', docId)
+    .maybeSingle();
+  throwIfSupabaseError(issueDateErr, 'Failed to load income document issue date');
+  const issueYear = issueYearFromIso(
+    String((issueDateRow as { issue_date?: string } | null)?.issue_date ?? ''),
+  );
+  const documentsListYear =
+    opts?.documentsListYear != null && Number.isFinite(opts.documentsListYear)
+      ? Number(opts.documentsListYear)
+      : issueYear;
+
+  let documentsByType: WorkEngineInvoicesClientDocumentsByTypeAggregate | null = null;
+  let sourceInvoiceRow: WorkEngineInvoicesClientDocumentsByTypeRow | null = null;
+  let recordPaymentForm: IncomeDocumentRecordPaymentForm | null = null;
+
+  if (abCase.represented_client_id) {
+    documentsByType = await buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+      ctx,
+      representedClientId: abCase.represented_client_id,
+      documentTypeKey: 'tax_invoice',
+      year: documentsListYear,
+    });
+    sourceInvoiceRow =
+      documentsByType.rows.find((row) => row.document_id === docId) ?? null;
+    recordPaymentForm = sourceInvoiceRow?.record_payment_form ?? null;
+  }
+
+  const invoicesTab = await buildWorkEngineInvoicesTabAggregate({ ctx });
 
   return {
     aggregate_key: INCOME_DOCUMENT_PAYMENT_CASE_KEY,
@@ -227,9 +284,12 @@ export async function buildIncomeDocumentPaymentCaseAggregate(
         reason: recordReason,
       },
     ],
+    source_invoice_row: sourceInvoiceRow,
+    record_payment_form: recordPaymentForm,
+    work_engine_invoices_client_documents_by_type_aggregate: documentsByType,
+    work_engine_invoices_tab_aggregate: invoicesTab,
   };
 }
-
 export async function assertIncomeDocumentExistsInOrg(
   organizationId: string,
   incomeDocumentId: string,

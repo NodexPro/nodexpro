@@ -62,21 +62,36 @@ export async function sumPostedAllocationsForIncomeDocument(
   organizationId: string,
   incomeDocumentId: string,
 ): Promise<number> {
+  const map = await sumPostedAllocationsForIncomeDocuments(organizationId, [incomeDocumentId]);
+  return map.get(incomeDocumentId) ?? 0;
+}
+
+/** Batch posted allocation totals by income document id (Accounting Base truth). */
+export async function sumPostedAllocationsForIncomeDocuments(
+  organizationId: string,
+  incomeDocumentIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const ids = Array.from(new Set(incomeDocumentIds.map((id) => String(id ?? '').trim()).filter(Boolean)));
+  for (const id of ids) out.set(id, 0);
+  if (ids.length === 0) return out;
+
   const { data, error } = await supabaseAdmin
     .from('accounting_payment_allocations')
-    .select('allocated_amount')
+    .select('source_entity_id, allocated_amount')
     .eq('organization_id', organizationId)
     .eq('source_module', 'income')
-    .eq('source_entity_id', incomeDocumentId)
+    .in('source_entity_id', ids)
     .eq('status', 'posted')
     .is('reversal_of_allocation_id', null);
   throwIfSupabaseError(error, 'Failed to load payment allocations');
-  let sum = 0;
   for (const row of data ?? []) {
+    const entityId = String((row as { source_entity_id: string }).source_entity_id);
     const n = Number((row as { allocated_amount: number }).allocated_amount);
-    if (Number.isFinite(n) && n > 0) sum += n;
+    if (!Number.isFinite(n) || n <= 0) continue;
+    out.set(entityId, Math.round(((out.get(entityId) ?? 0) + n) * 100) / 100);
   }
-  return Math.round(sum * 100) / 100;
+  return out;
 }
 
 export async function buildIncomeInvoicePaymentCaseAggregate(

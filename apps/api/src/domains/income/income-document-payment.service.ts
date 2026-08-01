@@ -17,6 +17,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, conflict, forbidden } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { executeRecordAndAllocateIncomePayment } from '../accounting-base/accounting-base-income-payment.service.js';
+import { sumPostedAllocationsForIncomeDocument } from '../accounting-base/accounting-base-income-payment-case.read.js';
 import {
   parseIncomePaymentMethodKey,
   resolveIncomeInvoiceOriginalAmount,
@@ -302,12 +303,14 @@ async function buildFullResponse(
   allocationId: string,
   receiptId: string,
   replay: boolean,
+  documentsListYear: number | null,
 ): Promise<RecordIncomeDocumentPaymentResponse> {
   const [workspace, context, paymentCase] = await Promise.all([
     buildIncomeWorkspaceAggregate(ctx),
     buildIncomeWorkspaceContextAggregate(ctx),
     buildIncomeDocumentPaymentCaseAggregate(ctx, ctx.organizationId!, invoiceId, {
       newlyIssuedReceiptId: receiptId,
+      documentsListYear,
     }),
   ]);
   return {
@@ -338,6 +341,15 @@ export async function executeRecordIncomeDocumentPayment(
   const idempotencyKey = String(body.idempotency_key ?? '').trim();
   if (!idempotencyKey) throw badRequest('idempotency_key required');
   if (idempotencyKey.length > 256) throw badRequest('idempotency_key too long');
+
+  const documentsListYearRaw = body.documents_list_year;
+  const documentsListYear =
+    documentsListYearRaw == null || documentsListYearRaw === ''
+      ? null
+      : Number(documentsListYearRaw);
+  if (documentsListYear != null && (!Number.isFinite(documentsListYear) || documentsListYear < 1900)) {
+    throw badRequest('documents_list_year must be a valid year');
+  }
 
   const paymentDate = String(body.payment_date ?? '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) {
@@ -394,6 +406,7 @@ export async function executeRecordIncomeDocumentPayment(
         operation.allocation_id,
         operation.receipt_document_id,
         true,
+        documentsListYear,
       );
     }
 
@@ -498,10 +511,7 @@ export async function executeRecordIncomeDocumentPayment(
 
     // --- Step B: Automatic receipt ---
     const original = resolveIncomeInvoiceOriginalAmount(invoice.totals_snapshot_json);
-    const allocatedAfter = Number(
-      (await buildIncomeDocumentPaymentCaseAggregate(ctx, scope.org_id, invoice.id)).financial_summary
-        .allocated_amount,
-    );
+    const allocatedAfter = await sumPostedAllocationsForIncomeDocument(scope.org_id, invoice.id);
     const stateAfter = resolveIncomeInvoicePaymentState(original, allocatedAfter);
     const detailsText = buildIncomePaymentReceiptDetailsText({
       invoiceNumber: invoice.document_number,
@@ -634,6 +644,7 @@ export async function executeRecordIncomeDocumentPayment(
       allocationId!,
       receiptDocumentId!,
       false,
+      documentsListYear,
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

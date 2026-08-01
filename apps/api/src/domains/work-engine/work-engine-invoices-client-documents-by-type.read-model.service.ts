@@ -30,6 +30,15 @@ import {
 } from '../income/income-client-document-management-panel.pure.js';
 import { customerDisplayFromSnapshot } from '../income/income-work-engine-bridge.pure.js';
 import {
+  resolveIncomeInvoiceOriginalAmount,
+  resolveIncomeInvoicePaymentState,
+} from '../accounting-base/accounting-base-income-payment.pure.js';
+import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
+import {
+  buildIncomeDocumentRecordPaymentForm,
+  resolvePaymentStateIcon,
+} from '../income/income-document-payment.pure.js';
+import {
   WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY,
   type IncomeClientDocumentTypeCounterKey,
   type IncomeDocumentType,
@@ -75,6 +84,19 @@ const ISSUED_TABLE_COLUMNS = [
   { key: 'email_delivery', label: '@' },
   { key: 'docflow_delivery', label: 'דוקפלו' },
   { key: 'view', label: 'צפייה' },
+];
+
+const TAX_INVOICE_TABLE_COLUMNS = [
+  { key: 'document_number', label: 'מספר מסמך' },
+  { key: 'issue_date_display', label: 'תאריך' },
+  { key: 'customer_display_name', label: 'לקוח' },
+  { key: 'amount_display', label: 'סכום' },
+  { key: 'due_date_display', label: 'תאריך לתשלום' },
+  { key: 'payment_state', label: 'סטטוס תשלום' },
+  { key: 'email_delivery', label: '@' },
+  { key: 'docflow_delivery', label: 'דוקפלו' },
+  { key: 'view', label: 'צפייה' },
+  { key: 'actions', label: 'פעולות' },
 ];
 
 const DRAFT_TABLE_COLUMNS = [
@@ -164,6 +186,7 @@ async function loadCustomerNames(orgId: string, representedClientId: string): Pr
 }
 
 async function loadIssuedDocumentCandidates(params: {
+  ctx: RequestContext;
   orgId: string;
   representedClientId: string;
   documentType: IncomeDocumentType;
@@ -173,7 +196,7 @@ async function loadIssuedDocumentCandidates(params: {
   const { data, error } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, issue_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, created_at',
+      'id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, created_at',
     )
     .eq('organization_id', params.orgId)
     .or(excludeSelfModeActingFilter())
@@ -197,12 +220,21 @@ async function loadIssuedDocumentCandidates(params: {
   );
 
   const documentIds = filtered.map((raw) => String((raw as { id: string }).id));
-  const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive] = await Promise.all([
-    loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds),
-    loadDocflowAttemptCountsByDocumentIds(params.orgId, documentIds),
-    isDocflowEntitledForOrg(params.orgId),
-    loadRepresentedClientDocflowPortalActive(params.orgId, params.representedClientId),
-  ]);
+  const includePayment = params.documentType === 'tax_invoice';
+  const perms = params.ctx.membership?.permissions ?? [];
+  const canPaymentWrite = perms.includes('accounting_base.payment.write');
+  const canIncomeIssue = perms.includes('income.issue');
+
+  const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive, allocatedByDoc] =
+    await Promise.all([
+      loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds),
+      loadDocflowAttemptCountsByDocumentIds(params.orgId, documentIds),
+      isDocflowEntitledForOrg(params.orgId),
+      loadRepresentedClientDocflowPortalActive(params.orgId, params.representedClientId),
+      includePayment
+        ? sumPostedAllocationsForIncomeDocuments(params.orgId, documentIds)
+        : Promise.resolve(new Map<string, number>()),
+    ]);
 
   return filtered.map((raw) => {
     const doc = raw as {
@@ -210,6 +242,7 @@ async function loadIssuedDocumentCandidates(params: {
       document_number: string;
       document_type: IncomeDocumentType;
       issue_date: string;
+      due_date: string | null;
       currency: string;
       totals_snapshot_json: Record<string, unknown> | null;
       customer_snapshot_json: Record<string, unknown> | null;
@@ -222,6 +255,44 @@ async function loadIssuedDocumentCandidates(params: {
       params.canView && doc.pdf_render_status === 'rendered' && Boolean(doc.pdf_asset_id);
     const pdfPath = canViewDoc ? incomeDocumentDownloadPath(doc.id) : null;
 
+    const allowedActions: string[] = [];
+    if (canViewDoc) allowedActions.push('view_document');
+
+    let payment_state_key: WorkEngineInvoicesClientDocumentsByTypeRow['payment_state_key'] = null;
+    let payment_state_label: string | null = null;
+    let payment_state_tone: WorkEngineInvoicesClientDocumentsByTypeRow['payment_state_tone'] = null;
+    let payment_state_icon: WorkEngineInvoicesClientDocumentsByTypeRow['payment_state_icon'] = null;
+    let record_payment_form: WorkEngineInvoicesClientDocumentsByTypeRow['record_payment_form'] = null;
+    let due_date_display: string | null = null;
+
+    if (includePayment) {
+      const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
+      const allocated = allocatedByDoc.get(doc.id) ?? 0;
+      const state = resolveIncomeInvoicePaymentState(original, allocated);
+      payment_state_key = state.payment_state_key;
+      payment_state_label = state.payment_state_label;
+      payment_state_tone = state.payment_state_tone;
+      payment_state_icon = resolvePaymentStateIcon(state.payment_state_key);
+      due_date_display = formatDateDisplay(doc.due_date);
+
+      let disabledReason: string | null = null;
+      if (!canPaymentWrite) disabledReason = 'חסרה הרשאה לרישום תשלום';
+      else if (!canIncomeIssue) disabledReason = 'חסרה הרשאה להפקת מסמך הכנסה';
+      else if (state.remaining_balance <= 0) disabledReason = 'החשבונית כבר שולמה במלואה';
+
+      const canRecord =
+        canPaymentWrite && canIncomeIssue && state.remaining_balance > 0;
+      if (canRecord) allowedActions.push('record_payment');
+
+      record_payment_form = buildIncomeDocumentRecordPaymentForm({
+        incomeDocumentId: doc.id,
+        currency: doc.currency || 'ILS',
+        remainingBalance: state.remaining_balance,
+        enabled: canRecord,
+        disabledReason,
+      });
+    }
+
     return {
       row_id: doc.id,
       document_number: doc.document_number,
@@ -231,7 +302,12 @@ async function loadIssuedDocumentCandidates(params: {
       customer_display_name: customerDisplayFromSnapshot(doc.customer_snapshot_json),
       amount_display:
         amountRef > 0 ? formatLedgerMoneyReference(amountRef, doc.currency || 'ILS') : '—',
+      due_date_display,
       status_label: 'הונפק',
+      payment_state_key,
+      payment_state_label,
+      payment_state_tone,
+      payment_state_icon,
       document_id: doc.id,
       draft_id: null,
       can_view_document: canViewDoc,
@@ -257,7 +333,8 @@ async function loadIssuedDocumentCandidates(params: {
         docflowEntitled,
         portalActive,
       }),
-      allowed_actions: canViewDoc ? ['view_document'] : [],
+      record_payment_form,
+      allowed_actions: allowedActions,
       year,
     };
   });
@@ -329,7 +406,12 @@ async function loadDraftCandidates(params: {
         draft.draft_totals_preview_json,
         draft.currency || 'ILS',
       ),
+      due_date_display: null,
       status_label: 'טיוטה',
+      payment_state_key: null,
+      payment_state_label: null,
+      payment_state_tone: null,
+      payment_state_icon: null,
       document_id: null,
       draft_id: draft.id,
       can_view_document: false,
@@ -337,6 +419,7 @@ async function loadDraftCandidates(params: {
       pdf_download_path: null,
       email_delivery: null,
       docflow_delivery: null,
+      record_payment_form: null,
       allowed_actions: canEditDraft ? ['edit_draft'] : [],
       year,
     };
@@ -402,6 +485,7 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
       throw badRequest('document_type_key is invalid for issued documents');
     }
     const candidates = await loadIssuedDocumentCandidates({
+      ctx: params.ctx,
       orgId,
       representedClientId,
       documentType: issuedType,
@@ -416,6 +500,12 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
   if (isDraftMode && perms.edit) allowedActions.push('edit_income_document_draft');
   if (!isDraftMode && perms.view) allowedActions.push('view_income_document');
 
+  const tableColumns = isDraftMode
+    ? DRAFT_TABLE_COLUMNS
+    : documentTypeKey === 'tax_invoice'
+      ? TAX_INVOICE_TABLE_COLUMNS
+      : ISSUED_TABLE_COLUMNS;
+
   return {
     aggregate_key: WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY,
     represented_client_id: representedClientId,
@@ -425,7 +515,7 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
     selected_year: selectedYear,
     available_years: availableYears.length > 0 ? availableYears : [selectedYear],
     is_draft_mode: isDraftMode,
-    table_columns: isDraftMode ? DRAFT_TABLE_COLUMNS : ISSUED_TABLE_COLUMNS,
+    table_columns: tableColumns,
     rows,
     allowed_actions: allowedActions,
     empty_state: {

@@ -288,6 +288,25 @@ export interface IncomeRepresentedClientEmailHistoryAggregate {
 export const WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY =
   'work_engine_invoices_client_documents_by_type_aggregate' as const;
 
+export interface IncomeDocumentRecordPaymentFormField {
+  key: string;
+  label: string;
+  type: 'number' | 'date' | 'text' | 'select' | 'textarea' | 'hidden';
+  required: boolean;
+  options?: Array<{ value: string; label: string }>;
+  default_value?: string | null;
+}
+
+export interface IncomeDocumentRecordPaymentForm {
+  visible: boolean;
+  enabled: boolean;
+  disabled_reason: string | null;
+  command: 'record_income_document_payment';
+  income_document_id: string;
+  title: 'רישום תשלום';
+  fields: IncomeDocumentRecordPaymentFormField[];
+}
+
 export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   row_id: string;
   document_number: string | null;
@@ -296,7 +315,12 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   created_at_display: string | null;
   customer_display_name: string | null;
   amount_display: string;
+  due_date_display: string | null;
   status_label: string;
+  payment_state_key: 'unpaid' | 'partial' | 'paid' | null;
+  payment_state_label: string | null;
+  payment_state_tone: 'danger' | 'warning' | 'success' | null;
+  payment_state_icon: 'check' | null;
   document_id: string | null;
   draft_id: string | null;
   can_view_document: boolean;
@@ -304,6 +328,7 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   pdf_download_path: string | null;
   email_delivery: IncomeDocumentEmailDeliveryBlock | null;
   docflow_delivery: IncomeDocumentDocflowDeliveryBlock | null;
+  record_payment_form: IncomeDocumentRecordPaymentForm | null;
   allowed_actions: string[];
 }
 
