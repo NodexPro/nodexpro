@@ -20,7 +20,7 @@ import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { emitIncomeWorkEventsAfterDocumentIssued } from './income-work-engine-bridge.js';
 import { findRecurringCycleIssuedDocumentId, linkRecurringCycleIssuedDocument, } from '../work-engine/work-engine-invoice-retainer-cycles.service.js';
 import { abortIncomeIssueIdempotency, beginIncomeIssueIdempotency, completeIncomeIssueIdempotency, parseIssueIdempotencyKey, } from './income-issue-idempotency.js';
-import { createIncomeIssueDiagnostic, extractIncomeIssueSafeError, logIncomeIssueFailed, logIncomeIssueStage, optionalRecurringCycleIdFromBody, withIncomeIssueStage, } from './income-issue-diagnostic.js';
+import { createIncomeIssueDiagnostic, extractIncomeIssueSafeError, logIncomeIssueFailed, logIncomeIssueStage, optionalRecurringCycleIdFromBody, safeUuidForLog, withIncomeIssueStage, } from './income-issue-diagnostic.js';
 import { buildAlreadyIssuedIssueResult, buildFreshIssuedIssueResult, } from './income-document-issue-result.pure.js';
 const PG_UNIQUE_VIOLATION = '23505';
 function optionalIssueDateFromBody(body) {
@@ -427,17 +427,40 @@ async function finishIdempotentIssue(scope, draftId, issuedDocumentId, lease, di
     };
 }
 export async function executeIssueIncomeDocument(ctx, body) {
-    const draft_id = reqUuid(body.draft_id, 'draft_id');
+    // Observability-first: emit before any await / DB / permission / draft_id throw.
     const recurringCycleId = optionalRecurringCycleIdFromBody(body);
     const diag = createIncomeIssueDiagnostic({
-        org_id: ctx.organizationId ?? 'unknown',
-        draft_id,
+        org_id: typeof ctx.organizationId === 'string' && ctx.organizationId ? ctx.organizationId : 'unknown',
+        draft_id: safeUuidForLog(body.draft_id) ?? 'unvalidated',
         recurring_cycle_id: recurringCycleId,
     });
     logIncomeIssueStage(diag, 'issue_command_received', { duration_ms: 0 });
-    const scope = await loadActiveIncomeIssuerScope(ctx);
+    const scope = await withIncomeIssueStage(diag, {
+        started: 'issuer_scope_load_started',
+        completed: 'issuer_scope_load_completed',
+        failing_stage: 'issuer_scope_load',
+    }, () => loadActiveIncomeIssuerScope(ctx));
     diag.org_id = scope.org_id;
-    assertIncomeIssuePermission(scope);
+    try {
+        logIncomeIssueStage(diag, 'permission_check_started', { duration_ms: 0 });
+        assertIncomeIssuePermission(scope);
+        logIncomeIssueStage(diag, 'permission_check_completed');
+    }
+    catch (error) {
+        logIncomeIssueFailed(diag, 'permission_check', error);
+        throw error;
+    }
+    let draft_id;
+    try {
+        logIncomeIssueStage(diag, 'draft_id_validation_started', { duration_ms: 0 });
+        draft_id = reqUuid(body.draft_id, 'draft_id');
+        diag.draft_id = draft_id;
+        logIncomeIssueStage(diag, 'draft_id_validation_completed');
+    }
+    catch (error) {
+        logIncomeIssueFailed(diag, 'draft_id_validation', error);
+        throw error;
+    }
     const idempotencyKey = parseIssueIdempotencyKey(body);
     let lease = null;
     if (idempotencyKey) {

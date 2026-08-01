@@ -5,8 +5,16 @@
 import { randomUUID } from 'node:crypto';
 export const INCOME_ISSUE_LOG_PREFIX = '[income-issue]';
 export const INCOME_ISSUE_FAILED_LOG_PREFIX = '[income-issue][failed]';
+export const NODEXPRO_API_BOOT_LOG_PREFIX = '[nodexpro-api][boot]';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const INCOME_ISSUE_SUCCESS_STAGE_ORDER = [
     'issue_command_received',
+    'issuer_scope_load_started',
+    'issuer_scope_load_completed',
+    'permission_check_started',
+    'permission_check_completed',
+    'draft_id_validation_started',
+    'draft_id_validation_completed',
     'draft_loaded',
     'existing_issued_document_checked',
     'numbering_started',
@@ -28,6 +36,7 @@ const SAFE_LOG_KEYS = new Set([
     'draft_id',
     'issued_document_id',
     'recurring_cycle_id',
+    'deploy_marker',
     'stage',
     'failing_stage',
     'last_completed_stage',
@@ -38,6 +47,8 @@ const SAFE_LOG_KEYS = new Set([
     'hint',
     'name',
     'stack',
+    'NODE_ENV',
+    'income_issue_diagnostics',
 ]);
 function shouldAdvanceLastCompleted(stage) {
     if (stage === 'issue_command_failed' || stage === 'accounting_posting_failed')
@@ -56,6 +67,29 @@ function defaultEmit(level, prefix, payload) {
     }
     console.info(prefix, payload);
 }
+/** Safe UUID for logs — never echo arbitrary/unsafe request strings. */
+export function safeUuidForLog(value) {
+    if (typeof value !== 'string' && typeof value !== 'number')
+        return null;
+    const s = String(value).trim();
+    return UUID_RE.test(s) ? s : null;
+}
+export function resolveApiDeployMarker() {
+    const candidates = [
+        process.env.RENDER_GIT_COMMIT,
+        process.env.RENDER_GIT_COMMIT_SHA,
+        process.env.SOURCE_VERSION,
+        process.env.GIT_COMMIT,
+        process.env.COMMIT_SHA,
+        process.env.VERCEL_GIT_COMMIT_SHA,
+    ];
+    for (const raw of candidates) {
+        const v = String(raw ?? '').trim();
+        if (v)
+            return v.slice(0, 64);
+    }
+    return 'unknown';
+}
 export function createIncomeIssueDiagnostic(params) {
     return {
         correlation_id: params.correlation_id ?? randomUUID(),
@@ -63,6 +97,7 @@ export function createIncomeIssueDiagnostic(params) {
         draft_id: params.draft_id,
         issued_document_id: null,
         recurring_cycle_id: params.recurring_cycle_id ?? null,
+        deploy_marker: params.deploy_marker ?? resolveApiDeployMarker(),
         last_completed_stage: null,
         command_started_ms: Date.now(),
         stage_started_ms: {},
@@ -106,6 +141,18 @@ export function sanitizeIncomeIssueLogPayload(payload) {
     }
     return out;
 }
+export function buildNodexproApiBootPayload(params) {
+    return sanitizeIncomeIssueLogPayload({
+        NODE_ENV: params?.NODE_ENV ?? process.env.NODE_ENV ?? 'undefined',
+        deploy_marker: params?.deploy_marker ?? resolveApiDeployMarker(),
+        income_issue_diagnostics: true,
+    });
+}
+export function logNodexproApiBoot(emit) {
+    const payload = buildNodexproApiBootPayload();
+    const write = emit ?? defaultEmit;
+    write('info', NODEXPRO_API_BOOT_LOG_PREFIX, payload);
+}
 function baseIds(diag) {
     return {
         correlation_id: diag.correlation_id,
@@ -113,6 +160,7 @@ function baseIds(diag) {
         draft_id: diag.draft_id,
         issued_document_id: diag.issued_document_id,
         recurring_cycle_id: diag.recurring_cycle_id,
+        deploy_marker: diag.deploy_marker,
         last_completed_stage: diag.last_completed_stage,
     };
 }
@@ -182,6 +230,5 @@ export function optionalRecurringCycleIdFromBody(body) {
     const raw = body.recurring_cycle_review;
     if (!raw || typeof raw !== 'object')
         return null;
-    const cycle_id = String(raw.cycle_id ?? '').trim();
-    return cycle_id || null;
+    return safeUuidForLog(raw.cycle_id);
 }

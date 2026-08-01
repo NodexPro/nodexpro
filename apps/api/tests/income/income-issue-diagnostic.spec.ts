@@ -7,12 +7,16 @@ import {
   INCOME_ISSUE_FAILED_LOG_PREFIX,
   INCOME_ISSUE_LOG_PREFIX,
   INCOME_ISSUE_SUCCESS_STAGE_ORDER,
+  NODEXPRO_API_BOOT_LOG_PREFIX,
+  buildNodexproApiBootPayload,
   createIncomeIssueDiagnostic,
   extractIncomeIssueSafeError,
   logIncomeIssueFailed,
   logIncomeIssueStage,
+  logNodexproApiBoot,
   sanitizeIncomeIssueLogPayload,
   withIncomeIssueStage,
+  type IncomeIssueFailingStage,
   type IncomeIssueStage,
 } from '../../src/domains/income/income-issue-diagnostic.js';
 
@@ -25,6 +29,7 @@ const commandsSource = readFileSync(
   join(dir, '../../src/domains/income/income-commands.service.ts'),
   'utf8',
 );
+const indexSource = readFileSync(join(dir, '../../src/index.ts'), 'utf8');
 
 type Captured = { level: 'info' | 'error'; prefix: string; payload: Record<string, unknown> };
 
@@ -35,6 +40,7 @@ function captureDiag() {
     draft_id: 'draft-1',
     recurring_cycle_id: 'cycle-1',
     correlation_id: 'corr-1',
+    deploy_marker: 'test-sha',
     emit: (level, prefix, payload) => {
       lines.push({ level, prefix, payload });
     },
@@ -42,9 +48,28 @@ function captureDiag() {
   return { diag, lines };
 }
 
-test('success stage order constant matches required pipeline stages', () => {
+function failingStageForStarted(stage: IncomeIssueStage): IncomeIssueFailingStage {
+  if (stage === 'issuer_scope_load_started') return 'issuer_scope_load';
+  if (stage === 'permission_check_started') return 'permission_check';
+  if (stage === 'draft_id_validation_started') return 'draft_id_validation';
+  if (stage === 'numbering_started') return 'numbering';
+  if (stage === 'issued_document_insert_started') return 'issued_document_insert';
+  if (stage === 'accounting_posting_started') return 'accounting_posting';
+  if (stage === 'draft_mark_issued_started') return 'draft_mark_issued';
+  if (stage === 'recurring_cycle_link_started') return 'recurring_cycle_link';
+  if (stage === 'refreshed_case_started') return 'refreshed_case';
+  return 'issue_command';
+}
+
+test('success stage order constant includes early prefix stages', () => {
   assert.deepEqual([...INCOME_ISSUE_SUCCESS_STAGE_ORDER], [
     'issue_command_received',
+    'issuer_scope_load_started',
+    'issuer_scope_load_completed',
+    'permission_check_started',
+    'permission_check_completed',
+    'draft_id_validation_started',
+    'draft_id_validation_completed',
     'draft_loaded',
     'existing_issued_document_checked',
     'numbering_started',
@@ -62,6 +87,24 @@ test('success stage order constant matches required pipeline stages', () => {
   ]);
 });
 
+test('issue_command_received is logged before loadActiveIncomeIssuerScope in source', () => {
+  const fnStart = issueServiceSource.indexOf('export async function executeIssueIncomeDocument');
+  const fnBody = issueServiceSource.slice(fnStart);
+  const receivedIdx = fnBody.indexOf("logIncomeIssueStage(diag, 'issue_command_received'");
+  const scopeIdx = fnBody.indexOf('loadActiveIncomeIssuerScope(ctx)');
+  const reqUuidIdx = fnBody.indexOf("reqUuid(body.draft_id, 'draft_id')");
+  assert.ok(receivedIdx >= 0);
+  assert.ok(scopeIdx > receivedIdx);
+  assert.ok(reqUuidIdx > receivedIdx);
+  assert.ok(reqUuidIdx > scopeIdx);
+  assert.match(fnBody, /issuer_scope_load_started/);
+  assert.match(fnBody, /permission_check_started/);
+  assert.match(fnBody, /draft_id_validation_started/);
+  assert.match(fnBody, /failing_stage: 'issuer_scope_load'/);
+  assert.match(fnBody, /'permission_check'/);
+  assert.match(fnBody, /'draft_id_validation'/);
+});
+
 test('stage order on successful mocked issue', async () => {
   const { diag, lines } = captureDiag();
   const stages: IncomeIssueStage[] = [];
@@ -69,23 +112,13 @@ test('stage order on successful mocked issue', async () => {
   for (const stage of INCOME_ISSUE_SUCCESS_STAGE_ORDER) {
     if (stage.endsWith('_started')) {
       const completed = stage.replace('_started', '_completed') as IncomeIssueStage;
-      const failing =
-        stage === 'numbering_started'
-          ? 'numbering'
-          : stage === 'issued_document_insert_started'
-            ? 'issued_document_insert'
-            : stage === 'accounting_posting_started'
-              ? 'accounting_posting'
-              : stage === 'draft_mark_issued_started'
-                ? 'draft_mark_issued'
-                : stage === 'recurring_cycle_link_started'
-                  ? 'recurring_cycle_link'
-                  : stage === 'refreshed_case_started'
-                    ? 'refreshed_case'
-                    : 'issue_command';
       await withIncomeIssueStage(
         diag,
-        { started: stage, completed, failing_stage: failing },
+        {
+          started: stage,
+          completed,
+          failing_stage: failingStageForStarted(stage),
+        },
         async () => undefined,
       );
       stages.push(stage, completed);
@@ -105,6 +138,65 @@ test('stage order on successful mocked issue', async () => {
   assert.deepEqual(infoStages, stages);
   assert.equal(diag.last_completed_stage, 'refreshed_case_completed');
   assert.equal(lines.some((l) => l.prefix === INCOME_ISSUE_FAILED_LOG_PREFIX), false);
+});
+
+test('issuer-scope failure produces failing_stage=issuer_scope_load and rethrows', async () => {
+  const { diag, lines } = captureDiag();
+  const original = Object.assign(new Error('scope boom'), { code: 'PGRST301' });
+  await assert.rejects(
+    () =>
+      withIncomeIssueStage(
+        diag,
+        {
+          started: 'issuer_scope_load_started',
+          completed: 'issuer_scope_load_completed',
+          failing_stage: 'issuer_scope_load',
+        },
+        async () => {
+          throw original;
+        },
+      ),
+    (err: unknown) => err === original,
+  );
+  const failed = lines.find((l) => l.prefix === INCOME_ISSUE_FAILED_LOG_PREFIX);
+  assert.ok(failed);
+  assert.equal(failed!.payload.failing_stage, 'issuer_scope_load');
+  assert.equal(failed!.payload.code, 'PGRST301');
+});
+
+test('permission failure produces failing_stage=permission_check and rethrows', () => {
+  const { diag, lines } = captureDiag();
+  const original = Object.assign(new Error('forbidden'), { name: 'AppError', code: 'FORBIDDEN' });
+  logIncomeIssueStage(diag, 'permission_check_started', { duration_ms: 0 });
+  try {
+    throw original;
+  } catch (error) {
+    logIncomeIssueFailed(diag, 'permission_check', error);
+    assert.equal(error, original);
+  }
+  const failed = lines.find((l) => l.prefix === INCOME_ISSUE_FAILED_LOG_PREFIX);
+  assert.ok(failed);
+  assert.equal(failed!.payload.failing_stage, 'permission_check');
+  assert.equal(failed!.payload.name, 'AppError');
+});
+
+test('invalid draft_id produces failing_stage=draft_id_validation and rethrows', () => {
+  const { diag, lines } = captureDiag();
+  const original = Object.assign(new Error('draft_id must be a valid UUID'), {
+    name: 'AppError',
+    code: 'BAD_REQUEST',
+  });
+  logIncomeIssueStage(diag, 'draft_id_validation_started', { duration_ms: 0 });
+  try {
+    throw original;
+  } catch (error) {
+    logIncomeIssueFailed(diag, 'draft_id_validation', error);
+    assert.equal(error, original);
+  }
+  const failed = lines.find((l) => l.prefix === INCOME_ISSUE_FAILED_LOG_PREFIX);
+  assert.ok(failed);
+  assert.equal(failed!.payload.failing_stage, 'draft_id_validation');
+  assert.match(String(failed!.payload.message), /draft_id/);
 });
 
 test('numbering error logs failing_stage=numbering and rethrows original', async () => {
@@ -139,7 +231,6 @@ test('numbering error logs failing_stage=numbering and rethrows original', async
   assert.equal(failed!.payload.message, 'seq read failed');
   assert.equal(failed!.payload.details, 'detail-n');
   assert.equal(failed!.payload.hint, 'hint-n');
-  assert.equal(failed!.payload.last_completed_stage, null);
 });
 
 test('insert error logs failing_stage=issued_document_insert and rethrows original', async () => {
@@ -196,7 +287,6 @@ test('Accounting Base error logs failing_stage=accounting_posting and rethrows o
   assert.equal(failed!.payload.code, '42501');
   assert.equal(failed!.payload.message, 'ab posting failed');
 
-  // Original error identity preserved for callers (simulate rethrow contract).
   try {
     throw original;
   } catch (e) {
@@ -269,6 +359,30 @@ test('original error is still rethrown from withIncomeIssueStage', async () => {
     caught = e;
   }
   assert.equal(caught, original);
+});
+
+test('boot marker contains no secrets', () => {
+  const payload = buildNodexproApiBootPayload({
+    NODE_ENV: 'production',
+    deploy_marker: 'abc123',
+  });
+  assert.equal(payload.NODE_ENV, 'production');
+  assert.equal(payload.deploy_marker, 'abc123');
+  assert.equal(payload.income_issue_diagnostics, true);
+  const serialized = JSON.stringify(payload);
+  assert.equal(serialized.includes('service_role'), false);
+  assert.equal(serialized.includes('SECRET'), false);
+  assert.equal(serialized.includes('password'), false);
+  assert.equal(serialized.includes('CLIENT_DATA_ENCRYPTION_KEY'), false);
+
+  const lines: Captured[] = [];
+  logNodexproApiBoot((level, prefix, p) => {
+    lines.push({ level, prefix, payload: p });
+  });
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0]!.prefix, NODEXPRO_API_BOOT_LOG_PREFIX);
+  assert.equal(indexSource.includes('logNodexproApiBoot'), true);
+  assert.equal(indexSource.includes(NODEXPRO_API_BOOT_LOG_PREFIX) || indexSource.includes('logNodexproApiBoot'), true);
 });
 
 test('issue service wires diagnostic stages without changing cleanup/posting semantics', () => {

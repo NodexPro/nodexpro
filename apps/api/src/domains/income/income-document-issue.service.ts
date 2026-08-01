@@ -60,6 +60,7 @@ import {
   logIncomeIssueFailed,
   logIncomeIssueStage,
   optionalRecurringCycleIdFromBody,
+  safeUuidForLog,
   withIncomeIssueStage,
   type IncomeIssueDiagnostic,
 } from './income-issue-diagnostic.js';
@@ -613,18 +614,45 @@ export async function executeIssueIncomeDocument(
   ctx: RequestContext,
   body: Record<string, unknown>,
 ): Promise<IssueIncomeDocumentResult> {
-  const draft_id = reqUuid(body.draft_id, 'draft_id');
+  // Observability-first: emit before any await / DB / permission / draft_id throw.
   const recurringCycleId = optionalRecurringCycleIdFromBody(body);
   const diag = createIncomeIssueDiagnostic({
-    org_id: ctx.organizationId ?? 'unknown',
-    draft_id,
+    org_id: typeof ctx.organizationId === 'string' && ctx.organizationId ? ctx.organizationId : 'unknown',
+    draft_id: safeUuidForLog(body.draft_id) ?? 'unvalidated',
     recurring_cycle_id: recurringCycleId,
   });
   logIncomeIssueStage(diag, 'issue_command_received', { duration_ms: 0 });
 
-  const scope = await loadActiveIncomeIssuerScope(ctx);
+  const scope = await withIncomeIssueStage(
+    diag,
+    {
+      started: 'issuer_scope_load_started',
+      completed: 'issuer_scope_load_completed',
+      failing_stage: 'issuer_scope_load',
+    },
+    () => loadActiveIncomeIssuerScope(ctx),
+  );
   diag.org_id = scope.org_id;
-  assertIncomeIssuePermission(scope);
+
+  try {
+    logIncomeIssueStage(diag, 'permission_check_started', { duration_ms: 0 });
+    assertIncomeIssuePermission(scope);
+    logIncomeIssueStage(diag, 'permission_check_completed');
+  } catch (error) {
+    logIncomeIssueFailed(diag, 'permission_check', error);
+    throw error;
+  }
+
+  let draft_id: string;
+  try {
+    logIncomeIssueStage(diag, 'draft_id_validation_started', { duration_ms: 0 });
+    draft_id = reqUuid(body.draft_id, 'draft_id');
+    diag.draft_id = draft_id;
+    logIncomeIssueStage(diag, 'draft_id_validation_completed');
+  } catch (error) {
+    logIncomeIssueFailed(diag, 'draft_id_validation', error);
+    throw error;
+  }
 
   const idempotencyKey = parseIssueIdempotencyKey(body);
 

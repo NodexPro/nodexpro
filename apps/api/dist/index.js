@@ -28,6 +28,7 @@ import { docflowRoutes } from './routes/docflow.routes.js';
 import { workEngineRoutes } from './domains/work-engine/work-engine.routes.js';
 import { incomeRoutes } from './domains/income/income.routes.js';
 import { accountingBaseRoutes } from './domains/accounting-base/accounting-base.routes.js';
+import { logNodexproApiBoot } from './domains/income/income-issue-diagnostic.js';
 registerExampleModuleHook();
 async function logModuleLoaded() {
     try {
@@ -148,6 +149,7 @@ app.use((err, _req, res, _next) => {
 });
 app.listen(config.port, () => {
     console.log(`API listening on port ${config.port}`);
+    logNodexproApiBoot();
     const enc = getClientDataEncryptionEnvDiagnostic();
     const len = enc.decoded_length_bytes === null ? 'n/a' : String(enc.decoded_length_bytes);
     console.log(`[api] CLIENT_DATA_ENCRYPTION_KEY: env_set=${enc.env_set ? 'yes' : 'no'}, decoded_bytes=${len}, aes256_ok=${enc.valid_for_aes256 ? 'yes' : 'no'}`);

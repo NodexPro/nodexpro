@@ -7,10 +7,20 @@ import { randomUUID } from 'node:crypto';
 
 export const INCOME_ISSUE_LOG_PREFIX = '[income-issue]';
 export const INCOME_ISSUE_FAILED_LOG_PREFIX = '[income-issue][failed]';
+export const NODEXPRO_API_BOOT_LOG_PREFIX = '[nodexpro-api][boot]';
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Success / progress stage names (exact contract). */
 export type IncomeIssueStage =
   | 'issue_command_received'
+  | 'issuer_scope_load_started'
+  | 'issuer_scope_load_completed'
+  | 'permission_check_started'
+  | 'permission_check_completed'
+  | 'draft_id_validation_started'
+  | 'draft_id_validation_completed'
   | 'draft_loaded'
   | 'existing_issued_document_checked'
   | 'numbering_started'
@@ -33,6 +43,9 @@ export type IncomeIssueStage =
 /** Coarse failing_stage values for the final failed line. */
 export type IncomeIssueFailingStage =
   | 'issue_command'
+  | 'issuer_scope_load'
+  | 'permission_check'
+  | 'draft_id_validation'
   | 'draft_load'
   | 'existing_issued_document_check'
   | 'numbering'
@@ -45,6 +58,12 @@ export type IncomeIssueFailingStage =
 
 export const INCOME_ISSUE_SUCCESS_STAGE_ORDER: readonly IncomeIssueStage[] = [
   'issue_command_received',
+  'issuer_scope_load_started',
+  'issuer_scope_load_completed',
+  'permission_check_started',
+  'permission_check_completed',
+  'draft_id_validation_started',
+  'draft_id_validation_completed',
   'draft_loaded',
   'existing_issued_document_checked',
   'numbering_started',
@@ -67,6 +86,7 @@ const SAFE_LOG_KEYS = new Set([
   'draft_id',
   'issued_document_id',
   'recurring_cycle_id',
+  'deploy_marker',
   'stage',
   'failing_stage',
   'last_completed_stage',
@@ -77,6 +97,8 @@ const SAFE_LOG_KEYS = new Set([
   'hint',
   'name',
   'stack',
+  'NODE_ENV',
+  'income_issue_diagnostics',
 ]);
 
 export type IncomeIssueSafeErrorFields = {
@@ -94,6 +116,7 @@ export type IncomeIssueDiagnostic = {
   draft_id: string;
   issued_document_id: string | null;
   recurring_cycle_id: string | null;
+  deploy_marker: string;
   last_completed_stage: IncomeIssueStage | null;
   command_started_ms: number;
   stage_started_ms: Partial<Record<IncomeIssueStage, number>>;
@@ -126,11 +149,35 @@ function defaultEmit(
   console.info(prefix, payload);
 }
 
+/** Safe UUID for logs — never echo arbitrary/unsafe request strings. */
+export function safeUuidForLog(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const s = String(value).trim();
+  return UUID_RE.test(s) ? s : null;
+}
+
+export function resolveApiDeployMarker(): string {
+  const candidates = [
+    process.env.RENDER_GIT_COMMIT,
+    process.env.RENDER_GIT_COMMIT_SHA,
+    process.env.SOURCE_VERSION,
+    process.env.GIT_COMMIT,
+    process.env.COMMIT_SHA,
+    process.env.VERCEL_GIT_COMMIT_SHA,
+  ];
+  for (const raw of candidates) {
+    const v = String(raw ?? '').trim();
+    if (v) return v.slice(0, 64);
+  }
+  return 'unknown';
+}
+
 export function createIncomeIssueDiagnostic(params: {
   org_id: string;
   draft_id: string;
   recurring_cycle_id?: string | null;
   correlation_id?: string;
+  deploy_marker?: string;
   emit?: IncomeIssueDiagnostic['emit'];
 }): IncomeIssueDiagnostic {
   return {
@@ -139,6 +186,7 @@ export function createIncomeIssueDiagnostic(params: {
     draft_id: params.draft_id,
     issued_document_id: null,
     recurring_cycle_id: params.recurring_cycle_id ?? null,
+    deploy_marker: params.deploy_marker ?? resolveApiDeployMarker(),
     last_completed_stage: null,
     command_started_ms: Date.now(),
     stage_started_ms: {},
@@ -182,6 +230,23 @@ export function sanitizeIncomeIssueLogPayload(
   return out;
 }
 
+export function buildNodexproApiBootPayload(params?: {
+  NODE_ENV?: string;
+  deploy_marker?: string;
+}): Record<string, unknown> {
+  return sanitizeIncomeIssueLogPayload({
+    NODE_ENV: params?.NODE_ENV ?? process.env.NODE_ENV ?? 'undefined',
+    deploy_marker: params?.deploy_marker ?? resolveApiDeployMarker(),
+    income_issue_diagnostics: true,
+  });
+}
+
+export function logNodexproApiBoot(emit?: IncomeIssueDiagnostic['emit']): void {
+  const payload = buildNodexproApiBootPayload();
+  const write = emit ?? defaultEmit;
+  write('info', NODEXPRO_API_BOOT_LOG_PREFIX, payload);
+}
+
 function baseIds(diag: IncomeIssueDiagnostic): Record<string, unknown> {
   return {
     correlation_id: diag.correlation_id,
@@ -189,6 +254,7 @@ function baseIds(diag: IncomeIssueDiagnostic): Record<string, unknown> {
     draft_id: diag.draft_id,
     issued_document_id: diag.issued_document_id,
     recurring_cycle_id: diag.recurring_cycle_id,
+    deploy_marker: diag.deploy_marker,
     last_completed_stage: diag.last_completed_stage,
   };
 }
@@ -283,6 +349,5 @@ export function logIncomeIssueFailed(
 export function optionalRecurringCycleIdFromBody(body: Record<string, unknown>): string | null {
   const raw = body.recurring_cycle_review;
   if (!raw || typeof raw !== 'object') return null;
-  const cycle_id = String((raw as Record<string, unknown>).cycle_id ?? '').trim();
-  return cycle_id || null;
+  return safeUuidForLog((raw as Record<string, unknown>).cycle_id);
 }
