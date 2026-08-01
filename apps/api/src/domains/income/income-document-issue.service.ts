@@ -320,6 +320,7 @@ async function issueNewDocumentFromDraft(
       totals_snapshot_json,
       legal_snapshot_json,
       issuer_snapshot_json,
+      notes: draft.notes,
       source_draft_id: draft.id,
       accounting_posting_status: 'pending',
       tax_allocation_number:

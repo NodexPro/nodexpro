@@ -135,6 +135,12 @@ export const AUDIT_ACTIONS = {
   ACCOUNTING_BASE_INCOME_INVOICE_PAID_EVENT_EMITTED:
     'accounting_base.income_invoice_paid_event_emitted',
   ACCOUNTING_BASE_PAYMENT_ALLOCATION_FAILED: 'accounting_base.payment_allocation_failed',
+  INCOME_DOCUMENT_PAYMENT_ORCHESTRATION_STARTED: 'income.document_payment_orchestration_started',
+  INCOME_DOCUMENT_PAYMENT_AB_LINKED: 'income.document_payment_ab_linked',
+  INCOME_DOCUMENT_PAYMENT_RECEIPT_DRAFT_CREATED: 'income.document_payment_receipt_draft_created',
+  INCOME_DOCUMENT_PAYMENT_RECEIPT_ISSUED: 'income.document_payment_receipt_issued',
+  INCOME_DOCUMENT_PAYMENT_RECEIPT_LINKED: 'income.document_payment_receipt_linked',
+  INCOME_DOCUMENT_PAYMENT_ORCHESTRATION_FAILED: 'income.document_payment_orchestration_failed',
   // Phase 7 Country Pack - platform owner access/security base
   OWNER_LOGIN_SUCCESS: 'owner_login_success',
   OWNER_LOGIN_FAILED: 'owner_login_failed',

@@ -113,6 +113,8 @@ export async function cleanupTestEnv(env: TestEnv): Promise<void> {
   const orgIds = [env.orgA, env.orgB];
 
   await supabaseAdmin.from('accounting_activity_timeline').delete().in('organization_id', orgIds);
+  await supabaseAdmin.from('income_document_links').delete().in('organization_id', orgIds);
+  await supabaseAdmin.from('income_document_payment_operations').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('accounting_payment_allocations').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('accounting_payments').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('accounting_entry_links').delete().in('organization_id', orgIds);
@@ -122,6 +124,8 @@ export async function cleanupTestEnv(env: TestEnv): Promise<void> {
   await supabaseAdmin.from('accounting_periods').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('work_events').delete().in('org_id', orgIds);
   await supabaseAdmin.from('income_documents').delete().in('organization_id', orgIds);
+  await supabaseAdmin.from('income_document_drafts').delete().in('organization_id', orgIds);
+  await supabaseAdmin.from('income_command_idempotency').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('income_user_workspace_contexts').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('income_issuer_profiles').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('clients').delete().in('organization_id', orgIds);

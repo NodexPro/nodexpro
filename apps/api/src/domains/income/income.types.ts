@@ -49,6 +49,8 @@ import {
   INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
   INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
 } from './income-document-branding.types.js';
+import { INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT } from './income-document-payment.pure.js';
+export { INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT };
 
 export type { IncomeDocumentDetailsStep } from './income-document-details-step.builders.js';
 export type {
@@ -647,7 +649,8 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_UPDATE_BRANDING_PROFILE
   | typeof INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT
   | typeof INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO
-  | typeof INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE;
+  | typeof INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE
+  | typeof INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT;
 
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;
@@ -666,9 +669,15 @@ export interface IncomeCommandResponse {
   ok: true;
   command: IncomeCommandType;
   income_workspace_aggregate: IncomeWorkspaceAggregate;
+  income_workspace_context_aggregate?: IncomeWorkspaceContextAggregate;
+  income_document_payment_case?: import('./income-document-payment-case.read.js').IncomeDocumentPaymentCaseAggregate;
   work_engine_recurring_cycle_draft_review_aggregate?: import('../work-engine/work-engine-invoice-retainer.types.js').WorkEngineRecurringCycleDraftReviewAggregate;
   work_engine_invoice_retainer_setup_aggregate?: import('../work-engine/work-engine-invoice-retainer.types.js').WorkEngineInvoiceRetainerSetupAggregate;
-  meta?: IncomeCommandResponseMeta;
+  meta?: IncomeCommandResponseMeta & {
+    payment_id?: string;
+    allocation_id?: string;
+    receipt_document_id?: string;
+  };
 }
 
 /** INC-1b + INC-2: select issuer returns both refreshed aggregates. */
