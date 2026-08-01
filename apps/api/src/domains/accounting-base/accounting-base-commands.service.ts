@@ -21,6 +21,13 @@ import { forCommandCreateLink, forCommandDeleteLink } from './link.service.js';
 import { forCommandCreatePeriod, forCommandGetPeriod, forCommandUpdatePeriod } from './period.service.js';
 import { forSystemRecomputeDerivedSummaries } from './summary.service.js';
 
+import {
+  ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT,
+  ACCOUNTING_BASE_INCOME_PAYMENT_CASE_KEY,
+} from './accounting-base-income-payment.pure.js';
+import { executeRecordAndAllocateIncomePayment } from './accounting-base-income-payment.service.js';
+import type { IncomeInvoicePaymentCaseAggregate } from './accounting-base-income-payment-case.read.js';
+
 export type AccountingBaseCommandType =
   | 'create_period'
   | 'lock_period'
@@ -34,7 +41,8 @@ export type AccountingBaseCommandType =
   | 'deactivate_category'
   | 'link_entry_to_entity'
   | 'unlink_entry_from_entity'
-  | 'recompute_summary';
+  | 'recompute_summary'
+  | typeof ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT;
 
 type CommandPayload = Record<string, unknown>;
 type LinkTargetType = 'document' | 'client' | 'module_entity' | 'other' | 'accounting_entry';
@@ -67,6 +75,10 @@ type RefreshedAggregateEnvelope =
   | {
       aggregate_key: 'accounting_summary_workspace_aggregate';
       aggregate: AccountingSummaryWorkspaceAggregate;
+    }
+  | {
+      aggregate_key: typeof ACCOUNTING_BASE_INCOME_PAYMENT_CASE_KEY;
+      aggregate: IncomeInvoicePaymentCaseAggregate;
     };
 
 export type AccountingBaseCommandResponse = {
@@ -74,6 +86,8 @@ export type AccountingBaseCommandResponse = {
   command: AccountingBaseCommandType;
   refreshed: RefreshedAggregateEnvelope;
   additional_refreshed?: RefreshedAggregateEnvelope[];
+  payment_id?: string;
+  allocation_id?: string;
 };
 
 type CommandRefreshTarget = {
@@ -419,6 +433,17 @@ export async function executeAccountingBaseCommand(
   const payload = parsePayload(body.payload);
 
   if (!type) throw badRequest('type required');
+
+  if (type === ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT) {
+    const out = await executeRecordAndAllocateIncomePayment(ctx, organizationId, payload);
+    return {
+      ok: true,
+      command: out.command,
+      payment_id: out.payment_id,
+      allocation_id: out.allocation_id,
+      refreshed: out.refreshed,
+    };
+  }
 
   let refreshTarget: CommandRefreshTarget;
   if (type === 'create_period') refreshTarget = await handleCreatePeriod(ctx, organizationId, payload);

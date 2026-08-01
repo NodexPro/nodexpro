@@ -9,3 +9,7 @@ export * from './entry.service.js';
 export * from './link.service.js';
 export * from './summary.service.js';
 export * from './income-document-posting.service.js';
+export * from './accounting-base-income-payment.pure.js';
+export * from './accounting-base-income-payment-case.read.js';
+export * from './accounting-base-income-payment.service.js';
+export * from './accounting-base.routes.js';
