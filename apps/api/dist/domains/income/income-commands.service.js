@@ -28,6 +28,7 @@ import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from '../work-engine/work-engine-invoice-retainer.read-model.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from '../work-engine/work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-engine/work-engine-invoices-client-documents-by-type.read-model.service.js';
+import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
 import { executeUpdateIncomeDocumentBrandingProfile, executeUpdateIncomeDocumentBrandingProfilePreviewDraft, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
 import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT, } from './income.types.js';
 import { executeRecordIncomeDocumentPayment } from './income-document-payment.service.js';
@@ -267,6 +268,9 @@ async function executeCreateIncomeItem(ctx, body) {
     });
 }
 async function executeCreateDraft(ctx, body) {
+    if (clientSuppliedUserSavedAt(body)) {
+        throw badRequest('user_saved_at cannot be set by client', 'VALIDATION_ERROR');
+    }
     const scope = await loadActiveIncomeIssuerScope(ctx);
     assertIncomeEditPermission(scope);
     const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
@@ -299,6 +303,8 @@ async function executeCreateDraft(ctx, body) {
         draft_totals_preview_json,
         validation_warnings_json,
         status: 'draft',
+        // Explicit create_income_document_draft is a user-saved draft (listable as טיוטה).
+        user_saved_at: new Date().toISOString(),
     });
     if (error)
         throw error;
@@ -698,6 +704,9 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         };
     }
     if (command === INCOME_COMMAND_BEGIN_WIZARD_DRAFT) {
+        if (clientSuppliedUserSavedAt(body)) {
+            throw badRequest('user_saved_at cannot be set by client', 'VALIDATION_ERROR');
+        }
         const scope = await loadActiveIncomeIssuerScope(ctx);
         assertIncomeEditPermission(scope);
         const { wizardOverlay, recipientOverlay } = await beginIncomeWizardDocumentDraft(scope, body, {});
@@ -767,18 +776,28 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         throwIfSupabaseError(profileErr, 'loadRecurringProfileForDraftSaveScheduleRefresh');
         if (!profile)
             throw notFound('Recurring profile not found');
-        const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
-            ctx,
-            representedClientId: reviewContext.represented_client_id,
-            endCustomerId: String(profile.end_customer_id),
-            buildMode: 'schedule_refresh',
-        });
+        const [setupAggregate, invoicesTabAggregate, clientDocumentsByTypeAggregate] = await Promise.all([
+            buildWorkEngineInvoiceRetainerSetupAggregate({
+                ctx,
+                representedClientId: reviewContext.represented_client_id,
+                endCustomerId: String(profile.end_customer_id),
+                buildMode: 'schedule_refresh',
+            }),
+            buildWorkEngineInvoicesTabAggregate({ ctx }),
+            buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+                ctx,
+                representedClientId: reviewContext.represented_client_id,
+                documentTypeKey: 'draft',
+            }),
+        ]);
         return {
             ok: true,
             command,
             income_workspace_aggregate: reviewAggregate.income_workspace_aggregate,
             work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
             work_engine_invoice_retainer_setup_aggregate: setupAggregate,
+            work_engine_invoices_tab_aggregate: invoicesTabAggregate,
+            work_engine_invoices_client_documents_by_type_aggregate: clientDocumentsByTypeAggregate,
         };
     }
     if (command === INCOME_COMMAND_GENERATE_PREVIEW) {

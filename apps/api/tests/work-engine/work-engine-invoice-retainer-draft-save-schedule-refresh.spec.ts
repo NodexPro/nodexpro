@@ -24,6 +24,8 @@ test('save_income_document_draft with recurring_cycle_review refreshes review an
   assert.ok(saveBlock.includes("buildMode: 'schedule_refresh'"));
   assert.ok(saveBlock.includes('work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate'));
   assert.ok(saveBlock.includes('work_engine_invoice_retainer_setup_aggregate: setupAggregate'));
+  assert.ok(saveBlock.includes('work_engine_invoices_tab_aggregate: invoicesTabAggregate'));
+  assert.ok(saveBlock.includes('work_engine_invoices_client_documents_by_type_aggregate: clientDocumentsByTypeAggregate'));
 });
 
 test('schedule projection uses generated draft totals for waiting-review cycles', () => {

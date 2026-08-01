@@ -90,6 +90,7 @@ import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from '../work-engine/work-engine-invoice-retainer.read-model.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from '../work-engine/work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-engine/work-engine-invoices-client-documents-by-type.read-model.service.js';
+import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
 import {
   executeUpdateIncomeDocumentBrandingProfile,
   executeUpdateIncomeDocumentBrandingProfilePreviewDraft,
@@ -464,6 +465,9 @@ async function executeCreateIncomeItem(
 }
 
 async function executeCreateDraft(ctx: RequestContext, body: Record<string, unknown>): Promise<void> {
+  if (clientSuppliedUserSavedAt(body)) {
+    throw badRequest('user_saved_at cannot be set by client', 'VALIDATION_ERROR');
+  }
   const scope = await loadActiveIncomeIssuerScope(ctx);
   assertIncomeEditPermission(scope);
   const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
@@ -504,6 +508,8 @@ async function executeCreateDraft(ctx: RequestContext, body: Record<string, unkn
     draft_totals_preview_json,
     validation_warnings_json,
     status: 'draft',
+    // Explicit create_income_document_draft is a user-saved draft (listable as טיוטה).
+    user_saved_at: new Date().toISOString(),
   });
   if (error) throw error;
   await writeAudit({
@@ -949,6 +955,9 @@ export async function executeIncomeCommand(
   }
 
   if (command === INCOME_COMMAND_BEGIN_WIZARD_DRAFT) {
+    if (clientSuppliedUserSavedAt(body)) {
+      throw badRequest('user_saved_at cannot be set by client', 'VALIDATION_ERROR');
+    }
     const scope = await loadActiveIncomeIssuerScope(ctx);
     assertIncomeEditPermission(scope);
     const { wizardOverlay, recipientOverlay } = await beginIncomeWizardDocumentDraft(scope, body, {});
@@ -1027,18 +1036,28 @@ export async function executeIncomeCommand(
       .maybeSingle();
     throwIfSupabaseError(profileErr, 'loadRecurringProfileForDraftSaveScheduleRefresh');
     if (!profile) throw notFound('Recurring profile not found');
-    const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
-      ctx,
-      representedClientId: reviewContext.represented_client_id,
-      endCustomerId: String((profile as { end_customer_id: string }).end_customer_id),
-      buildMode: 'schedule_refresh',
-    });
+    const [setupAggregate, invoicesTabAggregate, clientDocumentsByTypeAggregate] = await Promise.all([
+      buildWorkEngineInvoiceRetainerSetupAggregate({
+        ctx,
+        representedClientId: reviewContext.represented_client_id,
+        endCustomerId: String((profile as { end_customer_id: string }).end_customer_id),
+        buildMode: 'schedule_refresh',
+      }),
+      buildWorkEngineInvoicesTabAggregate({ ctx }),
+      buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+        ctx,
+        representedClientId: reviewContext.represented_client_id,
+        documentTypeKey: 'draft',
+      }),
+    ]);
     return {
       ok: true,
       command,
       income_workspace_aggregate: reviewAggregate.income_workspace_aggregate,
       work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
       work_engine_invoice_retainer_setup_aggregate: setupAggregate,
+      work_engine_invoices_tab_aggregate: invoicesTabAggregate,
+      work_engine_invoices_client_documents_by_type_aggregate: clientDocumentsByTypeAggregate,
     };
   }
   if (command === INCOME_COMMAND_GENERATE_PREVIEW) {

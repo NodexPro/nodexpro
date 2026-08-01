@@ -190,10 +190,11 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
   const { data: drafts, error: dErr } = await supabaseAdmin
     .from('income_document_drafts')
     .select(
-      'id, represented_client_id, document_type, status, updated_at, draft_lines_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json',
+      'id, represented_client_id, document_type, status, user_saved_at, updated_at, draft_lines_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json',
     )
     .eq('organization_id', orgId)
     .eq('status', 'draft')
+    .not('user_saved_at', 'is', null)
     .not('represented_client_id', 'is', null)
     .order('updated_at', { ascending: false })
     .limit(20);

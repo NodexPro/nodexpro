@@ -13,6 +13,7 @@ import { applyLineFieldUpdate, createEmptyDraftLine, deleteDraftLine, normalizeD
 import { recomputeDraftLineAmounts } from './income-draft-line-compute.pure.js';
 import { computeDraftTotalsPreview, DEFAULT_DOCUMENT_SETTINGS, parseDocumentSettingsJson, serializeDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
 import { isIncomeRetainerTemplateDraft } from './income-retainer-template-draft.service.js';
+import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
 import { normalizeDocumentDiscountInput, validateDocumentDiscount, } from './income-document-discount.pure.js';
 import { readVatResolutionFromDraftPreview, vatResolutionCachePayload, } from './income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
@@ -85,7 +86,7 @@ export async function resumeIncomeDocumentDraftFromContext(ctx, body) {
     const result = await resumeIncomeDocumentDraft(scope, { draft_id });
     return { scope, result };
 }
-const DRAFT_SELECT = 'id, organization_id, issuer_business_id, represented_client_id, document_type, document_date, due_date, notes, currency, language, draft_lines_json, payment_received_json, delivery_contact_json, document_settings_json, validation_warnings_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json, tax_allocation_number, status, updated_at';
+const DRAFT_SELECT = 'id, organization_id, issuer_business_id, represented_client_id, document_type, document_date, due_date, notes, currency, language, draft_lines_json, payment_received_json, delivery_contact_json, document_settings_json, validation_warnings_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json, tax_allocation_number, status, user_saved_at, updated_at';
 export async function loadWizardDraftRow(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
@@ -657,11 +658,20 @@ export async function updateIncomeDocumentDeliveryContact(scope, body) {
     return buildOverlayForDraft(scope, draft_id, true, saved, docType);
 }
 export async function saveIncomeDocumentDraft(scope, body) {
+    if (clientSuppliedUserSavedAt(body)) {
+        throw badRequest('user_saved_at cannot be set by client', 'VALIDATION_ERROR');
+    }
     const draft_id = reqUuid(body.draft_id, 'draft_id');
     const row = await loadWizardDraftRow(scope, draft_id);
     const docType = await resolveDocType(scope, row.document_type);
     // Re-run validation + totals + BOI FX resolution and persist refreshed preview JSON.
-    const overlay = await wizardDraftMutationOverlay(scope, draft_id, row, row, docType, {}, { action: 'save_draft' });
+    // First explicit save stamps user_saved_at (listable as טיוטה); repeats preserve original.
+    const savePatch = {};
+    const existingUserSavedAt = row.user_saved_at;
+    if (existingUserSavedAt == null || String(existingUserSavedAt).trim() === '') {
+        savePatch.user_saved_at = new Date().toISOString();
+    }
+    const overlay = await wizardDraftMutationOverlay(scope, draft_id, row, row, docType, savePatch, { action: 'save_draft', user_saved_at_set: Object.keys(savePatch).length > 0 });
     if (body.refresh_document_preview === true) {
         return generateIncomeDocumentPreview(scope, { draft_id });
     }

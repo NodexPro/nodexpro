@@ -354,6 +354,7 @@ async function loadDraftCandidates(params: {
     .eq('organization_id', params.orgId)
     .or(excludeSelfModeActingFilter())
     .eq('status', 'draft')
+    .not('user_saved_at', 'is', null)
     .or(officeClientDocumentsOrFilter(params.representedClientId))
     .order('updated_at', { ascending: false })
     .limit(5000);

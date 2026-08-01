@@ -271,10 +271,11 @@ export async function buildIncomeClientDocumentManagementPanel(params) {
     throwIfSupabaseError(docsErr, 'loadClientDocumentManagementDocs');
     const { data: draftRows, error: draftsErr } = await supabaseAdmin
         .from('income_document_drafts')
-        .select('id, represented_client_id, issuer_business_id, acting_mode, document_type, status, updated_at')
+        .select('id, represented_client_id, issuer_business_id, acting_mode, document_type, status, user_saved_at, updated_at')
         .eq('organization_id', orgId)
         .or(excludeSelfModeActingFilter())
         .eq('status', 'draft')
+        .not('user_saved_at', 'is', null)
         .order('updated_at', { ascending: false })
         .limit(5000);
     throwIfSupabaseError(draftsErr, 'loadClientDocumentManagementDrafts');

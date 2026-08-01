@@ -89,6 +89,19 @@ async function countScoped(
   return count ?? 0;
 }
 
+/** טיוטות count — status=draft AND user_saved_at IS NOT NULL (same truth as loadDrafts). */
+async function countUserSavedDrafts(scope: ActiveIncomeIssuerScope): Promise<number> {
+  let query = supabaseAdmin
+    .from('income_document_drafts')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'draft')
+    .not('user_saved_at', 'is', null);
+  query = applyIssuerScopeToBuilder(query, scope);
+  const { count, error } = await query;
+  throwIfSupabaseError(error, 'countUserSavedDrafts');
+  return count ?? 0;
+}
+
 async function loadCustomers(scope: ActiveIncomeIssuerScope): Promise<IncomeCustomersTableRow[]> {
   let query = supabaseAdmin
     .from('income_customers')
@@ -176,9 +189,10 @@ async function loadDrafts(
   let query = supabaseAdmin
     .from('income_document_drafts')
     .select(
-      'id, document_type, status, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, updated_at',
+      'id, document_type, status, user_saved_at, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, updated_at',
     )
     .eq('status', 'draft')
+    .not('user_saved_at', 'is', null)
     .order('updated_at', { ascending: false })
     .limit(500);
   query = applyIssuerScopeToBuilder(query, scope);
@@ -531,7 +545,7 @@ export async function buildIncomeWorkspaceAggregate(
     await Promise.all([
       countScoped('income_customers', scope, { column: 'status', value: 'active' }),
       countScoped('income_items', scope, { column: 'active', value: true }),
-      countScoped('income_document_drafts', scope, { column: 'status', value: 'draft' }),
+      countUserSavedDrafts(scope),
       countScoped('income_documents', scope, { column: 'document_status', value: 'issued' }),
       countScoped('income_documents', scope, {
         column: 'accounting_posting_status',
