@@ -141,6 +141,8 @@ test('ordinary self issue leaves active scope; office draft resolves trusted iss
   assert.match(scopeService, /resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded/);
   assert.match(scopeService, /trusted_office_draft_issue_issuer_resolve/);
   assert.match(scopeService, /isOfficeDraft/);
+  assert.match(scopeService, /issuer_business_id !== orgIssuer\.id/);
+  assert.match(scopeService, /loadRecurringCycleReviewRefsByGeneratedDraft/);
 });
 
 test('frontend wizard issue sends only issue_income_document + draft_id (no FE issuer select chain)', () => {

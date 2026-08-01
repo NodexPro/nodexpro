@@ -90,6 +90,7 @@ import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from '../work-engine/work-engine-invoice-retainer.read-model.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from '../work-engine/work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-engine/work-engine-invoices-client-documents-by-type.read-model.service.js';
+import { loadRecurringCycleReviewRefsByGeneratedDraft } from './income-recurring-cycle-issue-issuer-scope.service.js';
 import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
 import {
   executeUpdateIncomeDocumentBrandingProfile,
@@ -763,7 +764,15 @@ export async function executeIncomeCommand(
 
   if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
     const issueResult = await executeIssueIncomeDocument(ctx, body);
-    const reviewContext = parseRecurringCycleReviewCommandContext(body);
+    const orgId = ctx.organizationId;
+    if (!orgId) throw badRequest('Organization context required');
+    const draftId = reqUuid(body.draft_id, 'draft_id');
+    const reviewContext =
+      parseRecurringCycleReviewCommandContext(body) ??
+      (await loadRecurringCycleReviewRefsByGeneratedDraft({
+        orgId,
+        draftId,
+      }));
     if (reviewContext) {
       issueResult.diagnostic.recurring_cycle_id =
         issueResult.diagnostic.recurring_cycle_id ?? reviewContext.cycle_id;
@@ -786,8 +795,6 @@ export async function executeIncomeCommand(
             linkedWorkItemId: reviewContext.linked_work_item_id,
             issuedDocumentId: issueResult.issuedDocumentId,
           });
-          const orgId = ctx.organizationId;
-          if (!orgId) throw badRequest('Organization context required');
           const { data: profile, error: profileErr } = await supabaseAdmin
             .from('income_recurring_document_profiles')
             .select('end_customer_id')
@@ -836,7 +843,29 @@ export async function executeIncomeCommand(
         },
       };
     }
+
+    // Non-retainer / non-cycle office or self issue: workspace aggregate + by-type when office.
     const response = await commandResponse(ctx, command);
+    const representedClientId =
+      response.income_workspace_aggregate?.issuer_context?.represented_client_id ?? null;
+    const documentTypeKey = issueResult.issue_result.document_type_key || 'tax_invoice';
+    if (representedClientId) {
+      const clientDocumentsByTypeAggregate =
+        await buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+          ctx,
+          representedClientId,
+          documentTypeKey,
+        });
+      return {
+        ...response,
+        work_engine_invoices_client_documents_by_type_aggregate: clientDocumentsByTypeAggregate,
+        issue_result: issueResult.issue_result,
+        meta: {
+          idempotent_replay: issueResult.idempotentReplay,
+          income_document_id: issueResult.issuedDocumentId,
+        },
+      };
+    }
     return {
       ...response,
       issue_result: issueResult.issue_result,

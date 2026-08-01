@@ -299,7 +299,13 @@ export async function resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded(
     .eq('generated_draft_id', draft.id)
     .maybeSingle();
 
-  const isOfficeDraft = draft.represented_client_id != null || linkedCycle != null;
+  // Self drafts use the org issuer profile id. Anything else (client id / cycle draft)
+  // is office-shaped even when represented_client_id was left null by a legacy generator.
+  const orgIssuer = await ensureOrgIncomeIssuerProfile(orgId);
+  const isOfficeDraft =
+    draft.represented_client_id != null ||
+    linkedCycle != null ||
+    draft.issuer_business_id !== orgIssuer.id;
   if (!isOfficeDraft) {
     return null;
   }
@@ -327,6 +333,36 @@ export async function resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded(
   );
 
   return loadActiveIncomeIssuerScope(ctx);
+}
+
+/** Trusted cycle+profile refs for a generated draft (wizard issue without FE review payload). */
+export async function loadRecurringCycleReviewRefsByGeneratedDraft(params: {
+  orgId: string;
+  draftId: string;
+}): Promise<RecurringCycleReviewCommandContext | null> {
+  const { data: cycle, error: cycleErr } = await supabaseAdmin
+    .from('income_recurring_document_cycles')
+    .select('id, recurring_profile_id, generated_draft_id')
+    .eq('organization_id', params.orgId)
+    .eq('generated_draft_id', params.draftId)
+    .maybeSingle();
+  throwIfSupabaseError(cycleErr, 'loadCycleByGeneratedDraftForIssueCase');
+  if (!cycle) return null;
+  const profileId = String((cycle as { recurring_profile_id: string }).recurring_profile_id);
+  const { data: profile, error: profileErr } = await supabaseAdmin
+    .from('income_recurring_document_profiles')
+    .select('id, represented_client_id')
+    .eq('organization_id', params.orgId)
+    .eq('id', profileId)
+    .maybeSingle();
+  throwIfSupabaseError(profileErr, 'loadProfileByGeneratedDraftForIssueCase');
+  if (!profile) return null;
+  return {
+    represented_client_id: String((profile as { represented_client_id: string }).represented_client_id),
+    profile_id: profileId,
+    cycle_id: String((cycle as { id: string }).id),
+    generated_draft_id: params.draftId,
+  };
 }
 
 /**

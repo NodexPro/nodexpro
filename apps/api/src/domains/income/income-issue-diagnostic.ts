@@ -123,6 +123,8 @@ export type IncomeIssueDiagnostic = {
   recurring_cycle_id: string | null;
   deploy_marker: string;
   last_completed_stage: IncomeIssueStage | null;
+  /** Set once on first failure — preserved for client diagnostic payload. */
+  failing_stage: IncomeIssueFailingStage | null;
   command_started_ms: number;
   stage_started_ms: Partial<Record<IncomeIssueStage, number>>;
   /** Prevents duplicate [failed] lines when nested catches rethrow. */
@@ -193,6 +195,7 @@ export function createIncomeIssueDiagnostic(params: {
     recurring_cycle_id: params.recurring_cycle_id ?? null,
     deploy_marker: params.deploy_marker ?? resolveApiDeployMarker(),
     last_completed_stage: null,
+    failing_stage: null,
     command_started_ms: Date.now(),
     stage_started_ms: {},
     failed_logged: false,
@@ -331,6 +334,7 @@ export function logIncomeIssueFailed(
 ): void {
   if (diag.failed_logged) return;
   diag.failed_logged = true;
+  diag.failing_stage = failing_stage;
 
   const safe = extractIncomeIssueSafeError(error);
   logIncomeIssueStage(diag, 'issue_command_failed', {
