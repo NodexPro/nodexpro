@@ -4,6 +4,7 @@
 
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import type { IncomeDocumentType } from './income.types.js';
 import type { ActiveIncomeIssuerScope } from './income.guards.js';
 
@@ -37,7 +38,7 @@ export async function assertIncomeDocumentIssueDateAllowed(params: {
   }
 
   const { data, error } = await q;
-  if (error) throw error;
+  throwIfSupabaseError(error, 'assertIncomeDocumentIssueDateAllowed');
   if ((data ?? []).length > 0) {
     throw badRequest(INCOME_ISSUE_DATE_BACKDATED_ERROR, 'income_issue_date_backdated');
   }

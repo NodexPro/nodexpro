@@ -4,6 +4,7 @@
 
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import type { IncomeDocumentType } from './income.types.js';
 import type { ActiveIncomeIssuerScope } from './income.guards.js';
 import {
@@ -47,7 +48,7 @@ export async function allocateIncomeDocumentNumber(
     }
 
     const { data: existing, error: readErr } = await q.maybeSingle();
-    if (readErr) throw readErr;
+    throwIfSupabaseError(readErr, 'allocateIncomeDocumentNumber.read');
 
     if (!existing) {
       const first = policy.first_number;
@@ -66,7 +67,7 @@ export async function allocateIncomeDocumentNumber(
       });
       if (insErr) {
         if (String(insErr.code) === '23505') continue;
-        throw insErr;
+        throwIfSupabaseError(insErr, 'allocateIncomeDocumentNumber.insert');
       }
       return {
         document_number: formatIlSeriesDocumentNumber(first),
@@ -92,7 +93,7 @@ export async function allocateIncomeDocumentNumber(
       .select('current_number')
       .maybeSingle();
 
-    if (updErr) throw updErr;
+    throwIfSupabaseError(updErr, 'allocateIncomeDocumentNumber.update');
     if (updated) {
       return {
         document_number: formatIlSeriesDocumentNumber(next_number),

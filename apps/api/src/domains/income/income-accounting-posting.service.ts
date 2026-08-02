@@ -5,6 +5,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { postIncomeDocumentToAccountingBase } from '../accounting-base/income-document-posting.service.js';
 import {
   accountingDisplayStatusLabel,
@@ -113,7 +114,7 @@ export async function applyAccountingPostingForIssuedDocument(
       })
       .eq('id', doc.id)
       .eq('organization_id', doc.organization_id);
-    if (updateErr) throw updateErr;
+    throwIfSupabaseError(updateErr, 'applyAccountingPostingForIssuedDocument.updatePosted');
 
     await writeAudit({
       organizationId: doc.organization_id,
