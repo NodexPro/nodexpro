@@ -23,9 +23,11 @@ import { forSystemRecomputeDerivedSummaries } from './summary.service.js';
 
 import {
   ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT,
+  ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION,
   ACCOUNTING_BASE_INCOME_PAYMENT_CASE_KEY,
 } from './accounting-base-income-payment.pure.js';
 import { executeRecordAndAllocateIncomePayment } from './accounting-base-income-payment.service.js';
+import { executeReverseIncomePaymentAllocation } from './accounting-base-income-payment-reversal.service.js';
 import type { IncomeInvoicePaymentCaseAggregate } from './accounting-base-income-payment-case.read.js';
 
 export type AccountingBaseCommandType =
@@ -42,7 +44,8 @@ export type AccountingBaseCommandType =
   | 'link_entry_to_entity'
   | 'unlink_entry_from_entity'
   | 'recompute_summary'
-  | typeof ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT;
+  | typeof ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT
+  | typeof ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION;
 
 type CommandPayload = Record<string, unknown>;
 type LinkTargetType = 'document' | 'client' | 'module_entity' | 'other' | 'accounting_entry';
@@ -81,13 +84,23 @@ type RefreshedAggregateEnvelope =
       aggregate: IncomeInvoicePaymentCaseAggregate;
     };
 
+/** INV-3E may attach lifecycle + affected A/R slices beyond classic AB workspace envelopes. */
+export type AccountingBaseAdditionalRefreshed = RefreshedAggregateEnvelope | {
+  aggregate_key: string;
+  aggregate: unknown;
+};
+
 export type AccountingBaseCommandResponse = {
   ok: true;
   command: AccountingBaseCommandType;
   refreshed: RefreshedAggregateEnvelope;
-  additional_refreshed?: RefreshedAggregateEnvelope[];
+  additional_refreshed?: AccountingBaseAdditionalRefreshed[];
   payment_id?: string;
   allocation_id?: string;
+  original_allocation_id?: string;
+  reversal_allocation_id?: string;
+  income_document_id?: string;
+  replay?: boolean;
 };
 
 type CommandRefreshTarget = {
@@ -442,6 +455,22 @@ export async function executeAccountingBaseCommand(
       payment_id: out.payment_id,
       allocation_id: out.allocation_id,
       refreshed: out.refreshed,
+    };
+  }
+
+  if (type === ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION) {
+    const out = await executeReverseIncomePaymentAllocation(ctx, organizationId, payload);
+    return {
+      ok: true,
+      command: out.command,
+      payment_id: out.payment_id,
+      allocation_id: out.original_allocation_id,
+      original_allocation_id: out.original_allocation_id,
+      reversal_allocation_id: out.reversal_allocation_id,
+      income_document_id: out.income_document_id,
+      replay: out.replay,
+      refreshed: out.refreshed,
+      additional_refreshed: out.additional_refreshed,
     };
   }
 

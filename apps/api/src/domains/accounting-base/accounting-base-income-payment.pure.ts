@@ -5,6 +5,8 @@
 export const ACCOUNTING_BASE_INCOME_PAYMENT_CASE_KEY = 'income_invoice_payment_case' as const;
 export const ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT =
   'record_and_allocate_income_payment' as const;
+export const ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION =
+  'reverse_income_payment_allocation' as const;
 
 export const ACCOUNTING_BASE_PAYMENT_WRITE_PERMISSION = 'accounting_base.payment.write' as const;
 export const ACCOUNTING_BASE_VIEW_PERMISSION = 'accounting_base.view' as const;

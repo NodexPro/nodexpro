@@ -1,5 +1,5 @@
 /**
- * INV-5A — income_invoice_payment_case aggregate (Accounting Base financial truth).
+ * INV-5A / INV-3E — income_invoice_payment_case aggregate (Accounting Base financial truth).
  */
 
 import { supabaseAdmin } from '../../db/client.js';
@@ -8,6 +8,8 @@ import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 import {
+  ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT,
+  ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION,
   ACCOUNTING_BASE_INCOME_PAYMENT_CASE_KEY,
   ACCOUNTING_BASE_VIEW_PERMISSION,
   incomePaymentMethodLabel,
@@ -27,6 +29,19 @@ export type IncomeInvoicePaymentCasePaymentRow = {
   amount: number;
   currency: string;
   reference_number: string | null;
+  /** posted = active; reversed = original fully reversed (excluded from paid). */
+  allocation_status: 'posted' | 'reversed';
+  /** True when this row is the reversal fact pointing at an original allocation. */
+  is_reversal: boolean;
+  reversal_of_allocation_id: string | null;
+  reverse_action: {
+    action_key: 'reverse_payment_allocation';
+    label: string;
+    enabled: boolean;
+    command: typeof ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION;
+    allocation_id: string;
+    reason: string | null;
+  };
 };
 
 export type IncomeInvoicePaymentCaseAggregate = {
@@ -44,7 +59,10 @@ export type IncomeInvoicePaymentCaseAggregate = {
   payment_state_key: 'unpaid' | 'partial' | 'paid';
   payment_state_label: string;
   payment_state_tone: 'danger' | 'warning' | 'success';
+  /** Active allocations only (effective paid). */
   payments: IncomeInvoicePaymentCasePaymentRow[];
+  /** Full allocation history including reversed originals and reversal facts. */
+  allocation_history: IncomeInvoicePaymentCasePaymentRow[];
   allowed_actions: Array<{
     action_key: string;
     label: string;
@@ -66,7 +84,11 @@ export async function sumPostedAllocationsForIncomeDocument(
   return map.get(incomeDocumentId) ?? 0;
 }
 
-/** Batch posted allocation totals by income document id (Accounting Base truth). */
+/**
+ * Effective posted allocations for paid amount.
+ * Canonical rule (INV-5A / INV-3E): status='posted' AND reversal_of_allocation_id IS NULL.
+ * Feeds payment_case, lifecycle, A/R, portfolio SQL.
+ */
 export async function sumPostedAllocationsForIncomeDocuments(
   organizationId: string,
   incomeDocumentIds: string[],
@@ -92,6 +114,33 @@ export async function sumPostedAllocationsForIncomeDocuments(
     out.set(entityId, Math.round(((out.get(entityId) ?? 0) + n) * 100) / 100);
   }
   return out;
+}
+
+function buildReverseAction(params: {
+  canWrite: boolean;
+  allocationId: string;
+  allocationStatus: 'posted' | 'reversed';
+  isReversal: boolean;
+}): IncomeInvoicePaymentCasePaymentRow['reverse_action'] {
+  let enabled = false;
+  let reason: string | null = null;
+  if (!params.canWrite) {
+    reason = 'חסרה הרשאה לביטול שיוך תשלום';
+  } else if (params.isReversal) {
+    reason = 'לא ניתן לבטל שורת ביטול';
+  } else if (params.allocationStatus === 'reversed') {
+    reason = 'השיוך כבר בוטל';
+  } else {
+    enabled = true;
+  }
+  return {
+    action_key: 'reverse_payment_allocation',
+    label: 'בטל שיוך תשלום',
+    enabled,
+    command: ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION,
+    allocation_id: params.allocationId,
+    reason,
+  };
 }
 
 export async function buildIncomeInvoicePaymentCaseAggregate(
@@ -133,15 +182,16 @@ export async function buildIncomeInvoicePaymentCaseAggregate(
   const original = resolveIncomeInvoiceOriginalAmount(row.totals_snapshot_json);
   const allocated = await sumPostedAllocationsForIncomeDocument(organizationId, row.id);
   const state = resolveIncomeInvoicePaymentState(original, allocated);
+  const canWrite = hasPerm(ctx, 'accounting_base.payment.write');
 
   const { data: allocRows, error: allocErr } = await supabaseAdmin
     .from('accounting_payment_allocations')
-    .select('id, payment_id, allocated_amount, currency, created_at')
+    .select(
+      'id, payment_id, allocated_amount, currency, created_at, status, reversal_of_allocation_id',
+    )
     .eq('organization_id', organizationId)
     .eq('source_module', 'income')
     .eq('source_entity_id', row.id)
-    .eq('status', 'posted')
-    .is('reversal_of_allocation_id', null)
     .order('created_at', { ascending: true });
   throwIfSupabaseError(allocErr, 'Failed to load allocations');
 
@@ -157,12 +207,13 @@ export async function buildIncomeInvoicePaymentCaseAggregate(
       amount: number;
       currency: string;
       reference_number: string | null;
+      status: string;
     }
   >();
   if (paymentIds.length > 0) {
     const { data: payRows, error: payErr } = await supabaseAdmin
       .from('accounting_payments')
-      .select('id, payment_date, payment_method_key, amount, currency, reference_number')
+      .select('id, payment_date, payment_method_key, amount, currency, reference_number, status')
       .eq('organization_id', organizationId)
       .in('id', paymentIds);
     throwIfSupabaseError(payErr, 'Failed to load payments');
@@ -174,18 +225,21 @@ export async function buildIncomeInvoicePaymentCaseAggregate(
         amount: number;
         currency: string;
         reference_number: string | null;
+        status: string;
       };
       paymentsById.set(pr.id, pr);
     }
   }
 
-  const payments: IncomeInvoicePaymentCasePaymentRow[] = [];
+  const history: IncomeInvoicePaymentCasePaymentRow[] = [];
   for (const a of allocRows ?? []) {
     const ar = a as {
       id: string;
       payment_id: string;
       allocated_amount: number;
       currency: string;
+      status: string;
+      reversal_of_allocation_id: string | null;
     };
     const pay = paymentsById.get(ar.payment_id);
     if (!pay) continue;
@@ -195,7 +249,10 @@ export async function buildIncomeInvoicePaymentCaseAggregate(
     } catch {
       methodKey = 'other';
     }
-    payments.push({
+    const allocation_status: 'posted' | 'reversed' =
+      ar.status === 'reversed' ? 'reversed' : 'posted';
+    const is_reversal = ar.reversal_of_allocation_id != null;
+    history.push({
       payment_id: pay.id,
       allocation_id: ar.id,
       payment_date: pay.payment_date,
@@ -204,17 +261,30 @@ export async function buildIncomeInvoicePaymentCaseAggregate(
       amount: Number(ar.allocated_amount),
       currency: ar.currency,
       reference_number: pay.reference_number,
+      allocation_status,
+      is_reversal,
+      reversal_of_allocation_id: ar.reversal_of_allocation_id,
+      reverse_action: buildReverseAction({
+        canWrite,
+        allocationId: ar.id,
+        allocationStatus: allocation_status,
+        isReversal: is_reversal,
+      }),
     });
   }
 
+  const payments = history.filter(
+    (p) => p.allocation_status === 'posted' && !p.is_reversal,
+  );
+
   const canRecord =
-    hasPerm(ctx, 'accounting_base.payment.write') &&
+    canWrite &&
     row.document_status === 'issued' &&
     isSupportedIncomePaymentDocumentType(row.document_type) &&
     state.remaining_balance > 0;
 
   let recordReason: string | null = null;
-  if (!hasPerm(ctx, 'accounting_base.payment.write')) {
+  if (!canWrite) {
     recordReason = 'חסרה הרשאה לרישום תשלום';
   } else if (row.document_status !== 'issued') {
     recordReason = 'ניתן לרשום תשלום רק למסמך שהופק';
@@ -240,12 +310,13 @@ export async function buildIncomeInvoicePaymentCaseAggregate(
     payment_state_label: state.payment_state_label,
     payment_state_tone: state.payment_state_tone,
     payments,
+    allocation_history: history,
     allowed_actions: [
       {
         action_key: 'record_payment',
         label: 'רישום תשלום',
         enabled: canRecord,
-        command: 'record_and_allocate_income_payment',
+        command: ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT,
         reason: recordReason,
       },
     ],
