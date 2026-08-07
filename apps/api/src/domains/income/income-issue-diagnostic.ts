@@ -38,8 +38,11 @@ export type IncomeIssueStage =
   | 'draft_mark_issued_completed'
   | 'recurring_cycle_link_started'
   | 'recurring_cycle_link_completed'
+  | 'pdf_scheduling_started'
+  | 'pdf_scheduling_completed'
   | 'refreshed_case_started'
   | 'refreshed_case_completed'
+  | 'issue_command_completed'
   | 'issue_command_failed';
 
 /** Coarse failing_stage values for the final failed line. */
@@ -57,6 +60,7 @@ export type IncomeIssueFailingStage =
   | 'issued_document_cleanup'
   | 'draft_mark_issued'
   | 'recurring_cycle_link'
+  | 'pdf_scheduling'
   | 'refreshed_case';
 
 export const INCOME_ISSUE_SUCCESS_STAGE_ORDER: readonly IncomeIssueStage[] = [
@@ -81,8 +85,11 @@ export const INCOME_ISSUE_SUCCESS_STAGE_ORDER: readonly IncomeIssueStage[] = [
   'draft_mark_issued_completed',
   'recurring_cycle_link_started',
   'recurring_cycle_link_completed',
+  'pdf_scheduling_started',
+  'pdf_scheduling_completed',
   'refreshed_case_started',
   'refreshed_case_completed',
+  'issue_command_completed',
 ] as const;
 
 const SAFE_LOG_KEYS = new Set([

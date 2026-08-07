@@ -83,4 +83,21 @@ describe('belongsToOfficeClientRow', () => {
     assert.equal(belongsToOfficeClientRow(row, 'test4'), true);
     assert.equal(belongsToOfficeClientRow(row, 'other-client'), false);
   });
+
+  it('keeps Test3 and Test4 clients isolated', () => {
+    const test3 = {
+      represented_client_id: 'test3',
+      issuer_business_id: 'test3',
+      acting_mode: 'office_representative',
+    };
+    const test4 = {
+      represented_client_id: 'test4',
+      issuer_business_id: 'test4',
+      acting_mode: 'office_representative',
+    };
+    assert.equal(belongsToOfficeClientRow(test3, 'test3'), true);
+    assert.equal(belongsToOfficeClientRow(test3, 'test4'), false);
+    assert.equal(belongsToOfficeClientRow(test4, 'test4'), true);
+    assert.equal(belongsToOfficeClientRow(test4, 'test3'), false);
+  });
 });

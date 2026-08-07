@@ -50,7 +50,7 @@ import {
   buildTotalsSnapshotForIssue,
 } from './income-document-issue.pure.js';
 import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
-import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
+import { scheduleIncomeDocumentPdfRender } from './income-document-pdf.service.js';
 import { emitIncomeWorkEventsAfterDocumentIssued } from './income-work-engine-bridge.js';
 import {
   findRecurringCycleIssuedDocumentId,
@@ -143,6 +143,7 @@ type IssuedDocumentSummary = {
   represented_client_id: string | null;
   accounting_posting_status: string | null;
   accounting_entry_id: string | null;
+  pdf_render_status: string;
 };
 
 function optionalIssueDateFromBody(body: Record<string, unknown>): string | null {
@@ -223,7 +224,7 @@ async function loadIssuedDocumentSummary(
   const { data, error } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, organization_id, issuer_business_id, document_number, document_type, issue_date, represented_client_id, accounting_posting_status, accounting_entry_id',
+      'id, organization_id, issuer_business_id, document_number, document_type, issue_date, represented_client_id, accounting_posting_status, accounting_entry_id, pdf_render_status',
     )
     .eq('id', issuedDocumentId)
     .eq('organization_id', scope.org_id)
@@ -242,6 +243,7 @@ async function loadIssuedDocumentSummary(
     represented_client_id: row.represented_client_id,
     accounting_posting_status: row.accounting_posting_status,
     accounting_entry_id: row.accounting_entry_id,
+    pdf_render_status: String(row.pdf_render_status ?? 'pending'),
   };
 }
 
@@ -659,8 +661,6 @@ async function issueNewDocumentFromDraft(
     },
   });
 
-  await renderIncomeDocumentPdf(ctx, scope.org_id, issuedId);
-
   void emitIncomeWorkEventsAfterDocumentIssued({
     ctx,
     orgId: scope.org_id,
@@ -714,6 +714,7 @@ async function finishIdempotentIssue(
       document_number: summary.document_number,
       document_type_key: summary.document_type,
       issued_date: summary.issue_date,
+      pdf_render_status: summary.pdf_render_status,
     }),
   };
 }
@@ -892,6 +893,16 @@ export async function executeIssueIncomeDocument(
       diag,
     });
 
+    await withIncomeIssueStage(
+      diag,
+      {
+        started: 'pdf_scheduling_started',
+        completed: 'pdf_scheduling_completed',
+        failing_stage: 'pdf_scheduling',
+      },
+      () => scheduleIncomeDocumentPdfRender(ctx, scope.org_id, issuedDocumentId),
+    );
+
     if (lease?.kind === 'fresh') {
       await completeIncomeIssueIdempotency({
         leaseRowId: lease.leaseRowId,
@@ -910,6 +921,7 @@ export async function executeIssueIncomeDocument(
         document_number: summary.document_number,
         document_type_key: summary.document_type,
         issued_date: summary.issue_date,
+        pdf_render_status: summary.pdf_render_status,
       }),
     };
   } catch (e) {

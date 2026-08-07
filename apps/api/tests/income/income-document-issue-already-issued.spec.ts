@@ -38,6 +38,7 @@ test('already_issued Hebrew message and view_action are backend-prepared', () =>
     document_number: '4000',
     document_type_key: 'tax_invoice',
     issued_date: '2026-06-23',
+    pdf_render_status: 'rendered',
   });
   assert.equal(result.result_key, 'already_issued');
   assert.equal(result.document_type_label, 'חשבונית מס');
@@ -45,6 +46,7 @@ test('already_issued Hebrew message and view_action are backend-prepared', () =>
   assert.match(result.message, /החשבונית כבר הופקה בתאריך 23\/06\/2026/);
   assert.match(result.message, /מספר החשבונית: 4000/);
   assert.match(result.message, /ניתן לצפות בה ברשימת החשבוניות/);
+  assert.equal(result.pdf_render_status, 'rendered');
   assert.equal(result.view_action.action_key, 'view_document');
   assert.equal(result.view_action.enabled, true);
   assert.equal(result.view_action.label, 'צפייה בחשבונית');
@@ -57,9 +59,12 @@ test('fresh issued result uses issued key and preserves number', () => {
     document_number: '4001',
     document_type_key: 'tax_invoice',
     issued_date: '2026-07-01',
+    pdf_render_status: 'pending',
   });
   assert.equal(result.result_key, 'issued');
   assert.equal(result.document_number, '4001');
+  assert.equal(result.pdf_render_status, 'pending');
+  assert.equal(result.view_action.enabled, false);
   assert.match(result.message, /4001/);
 });
 
@@ -107,13 +112,21 @@ test('cycle link recovery uses draft and cycle id and does not swallow profile e
   assert.match(cyclesSource, /linked: boolean/);
 });
 
-test('issue command returns already_issued contract and full refreshed retainer case', () => {
+test('issue command returns already_issued contract and slim refreshed retainer case', () => {
   assert.match(commandsSource, /issue_result: issueResult\.issue_result/);
   assert.match(commandsSource, /work_engine_invoice_retainer_setup_aggregate/);
-  assert.match(commandsSource, /work_engine_invoices_tab_aggregate/);
-  assert.match(commandsSource, /work_engine_invoices_client_documents_by_type_aggregate/);
   assert.match(commandsSource, /buildWorkEngineInvoiceRetainerSetupAggregate/);
   assert.match(commandsSource, /idempotent_replay: issueResult\.idempotentReplay/);
+  assert.match(commandsSource, /buildMode: 'schedule_refresh'/);
+  // P4.1 — post-issue case must not rebuild invoices-tab / by-type for open review UI.
+  const issueBlockStart = commandsSource.indexOf('if (command === INCOME_COMMAND_ISSUE_DOCUMENT)');
+  const issueBlockEnd = commandsSource.indexOf(
+    'if (command === INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT)',
+  );
+  assert.ok(issueBlockStart >= 0 && issueBlockEnd > issueBlockStart);
+  const issueBlock = commandsSource.slice(issueBlockStart, issueBlockEnd);
+  assert.doesNotMatch(issueBlock, /buildWorkEngineInvoicesTabAggregate/);
+  assert.doesNotMatch(issueBlock, /buildWorkEngineInvoicesClientDocumentsByTypeAggregate/);
 });
 
 test('unique source_draft constraint remains the DB idempotency guarantee', () => {

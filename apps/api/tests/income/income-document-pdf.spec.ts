@@ -68,17 +68,22 @@ test('all issued document types require PDF render', () => {
   assert.equal(requiresPdfRender('tax_invoice'), true);
 });
 
-test('failed PDF render does not rollback issue (render after draft issued, no throw)', () => {
+test('failed PDF render does not rollback issue (schedule after draft marked issued, no throw)', () => {
   const draftIssuedIdx = issueSource.indexOf("status: 'issued'");
-  const renderIdx = issueSource.indexOf('await renderIncomeDocumentPdf');
+  const scheduleCallIdx = issueSource.indexOf(
+    '() => scheduleIncomeDocumentPdfRender(ctx, scope.org_id, issuedDocumentId)',
+  );
   assert.ok(draftIssuedIdx >= 0);
-  assert.ok(renderIdx > draftIssuedIdx, 'PDF render runs after draft marked issued');
-  assert.doesNotMatch(issueSource.slice(renderIdx), /throw postingErr/);
+  assert.ok(scheduleCallIdx > draftIssuedIdx, 'PDF scheduling runs after draft marked issued');
+  assert.doesNotMatch(issueSource, /await renderIncomeDocumentPdf/);
+  assert.doesNotMatch(issueSource.slice(scheduleCallIdx), /throw postingErr/);
 });
 
 test('retry render command and idempotent rendered check', () => {
   assert.match(pdfServiceSource, /pdf_render_status === 'rendered' && doc.pdf_asset_id/);
   assert.match(pdfServiceSource, /INCOME_PDF_RENDER_STARTED/);
+  assert.match(pdfServiceSource, /scheduleIncomeDocumentPdfRender/);
+  assert.match(pdfServiceSource, /void renderIncomeDocumentPdf/);
 });
 
 test('download path and route validate scope', () => {

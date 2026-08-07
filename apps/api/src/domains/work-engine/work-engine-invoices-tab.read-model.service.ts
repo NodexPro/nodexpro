@@ -113,42 +113,72 @@ function collectionStatusLabel(dueDate: string | null, todayIso: string): string
   return 'פתוח';
 }
 
+async function loadInvoicesTabBranding(params: {
+  ctx: RequestContext;
+}): Promise<{
+  document_branding_profile: IncomeDocumentBrandingProfileAggregate | null;
+  document_branding_settings_entrypoint: IncomeDocumentBrandingSettingsEntrypoint | null;
+}> {
+  try {
+    const issuerScope = await loadActiveIncomeIssuerScope(params.ctx);
+    if (!issuerScope.permissions.view) {
+      return {
+        document_branding_profile: null,
+        document_branding_settings_entrypoint: null,
+      };
+    }
+    return {
+      document_branding_profile: await buildDocumentBrandingProfileAggregate(
+        issuerScope,
+        issuerScope.permissions.edit,
+        { lean: true },
+      ),
+      document_branding_settings_entrypoint: buildDocumentBrandingSettingsEntrypoint(
+        issuerScope.permissions,
+      ),
+    };
+  } catch {
+    return {
+      document_branding_profile: null,
+      document_branding_settings_entrypoint: null,
+    };
+  }
+}
+
 export async function buildWorkEngineInvoicesTabAggregate(params: {
   ctx: RequestContext;
 }): Promise<WorkEngineInvoicesTabAggregate> {
   const orgId = params.ctx.organizationId!;
   if (!orgId) throw forbidden('Organization context required');
+  const aggregateStartMs = Date.now();
 
-  const invoiceAttentionCounts = await loadInvoiceAttentionCounts(orgId);
+  const incomePerms = incomeWorkspacePermissionsFromContext(params.ctx);
+
+  // Independent read models — parallel (no write / no dependent business chain).
+  const [
+    invoiceAttentionCounts,
+    client_document_management_panel,
+    branding,
+    document_creation_entrypoint,
+  ] = await Promise.all([
+    loadInvoiceAttentionCounts(orgId),
+    buildIncomeClientDocumentManagementPanel({
+      ctx: params.ctx,
+      perms: incomePerms,
+      includeRetainerAction: true,
+    }),
+    loadInvoicesTabBranding({ ctx: params.ctx }),
+    buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx),
+  ]);
+  console.info(
+    `[work-engine][invoices-tab][timing] parallel_reads ${Date.now() - aggregateStartMs}ms panel_clients=${client_document_management_panel.rows.length}`,
+  );
+
   const workspaceTabs = buildAccountantWorkspaceTabs('invoices', {
     invoices: resolveInvoiceAttentionWorkspaceTabBadge(invoiceAttentionCounts),
   });
-
-  const incomePerms = incomeWorkspacePermissionsFromContext(params.ctx);
-  const client_document_management_panel = await buildIncomeClientDocumentManagementPanel({
-    ctx: params.ctx,
-    perms: incomePerms,
-    includeRetainerAction: true,
-  });
-
-  let document_branding_profile: IncomeDocumentBrandingProfileAggregate | null = null;
-  let document_branding_settings_entrypoint: IncomeDocumentBrandingSettingsEntrypoint | null = null;
-  try {
-    const issuerScope = await loadActiveIncomeIssuerScope(params.ctx);
-    if (issuerScope.permissions.view) {
-      document_branding_profile = await buildDocumentBrandingProfileAggregate(
-        issuerScope,
-        issuerScope.permissions.edit,
-        { lean: true },
-      );
-      document_branding_settings_entrypoint = buildDocumentBrandingSettingsEntrypoint(
-        issuerScope.permissions,
-      );
-    }
-  } catch {
-    document_branding_profile = null;
-    document_branding_settings_entrypoint = null;
-  }
+  const document_branding_profile = branding.document_branding_profile;
+  const document_branding_settings_entrypoint = branding.document_branding_settings_entrypoint;
 
   if (client_document_management_panel.visible) {
     const response: WorkEngineInvoicesTabAggregate = {
@@ -174,7 +204,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       },
       filters: [],
       allowed_actions: ['view_invoices_tab', 'open_income_document_wizard'],
-      document_creation_entrypoint: await buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx),
+      document_creation_entrypoint,
       draft_entrypoints: [],
       gaps: [],
       document_branding_profile,
@@ -182,35 +212,41 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       client_document_management_panel,
     };
     logAggregatePayloadBreakdown('work_engine_invoices_tab_aggregate', response);
+    console.info(
+      `[work-engine][invoices-tab][timing] TOTAL ${Date.now() - aggregateStartMs}ms`,
+    );
     return response;
   }
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  const { data: drafts, error: dErr } = await supabaseAdmin
-    .from('income_document_drafts')
-    .select(
-      'id, represented_client_id, document_type, status, user_saved_at, updated_at, draft_lines_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json',
-    )
-    .eq('organization_id', orgId)
-    .eq('status', 'draft')
-    .not('user_saved_at', 'is', null)
-    .not('represented_client_id', 'is', null)
-    .order('updated_at', { ascending: false })
-    .limit(20);
-  if (dErr) throw dErr;
-
-  const { data: docs, error } = await supabaseAdmin
-    .from('income_documents')
-    .select(
-      'id, represented_client_id, document_number, document_type, issue_date, due_date, currency, customer_snapshot_json, totals_snapshot_json',
-    )
-    .eq('organization_id', orgId)
-    .eq('document_status', 'issued')
-    .not('represented_client_id', 'is', null)
-    .order('issue_date', { ascending: false })
-    .limit(500);
-  if (error) throw error;
+  const [draftsRes, docsRes] = await Promise.all([
+    supabaseAdmin
+      .from('income_document_drafts')
+      .select(
+        'id, represented_client_id, document_type, status, user_saved_at, updated_at, draft_lines_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json',
+      )
+      .eq('organization_id', orgId)
+      .eq('status', 'draft')
+      .not('user_saved_at', 'is', null)
+      .not('represented_client_id', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(20),
+    supabaseAdmin
+      .from('income_documents')
+      .select(
+        'id, represented_client_id, document_number, document_type, issue_date, due_date, currency, customer_snapshot_json, totals_snapshot_json',
+      )
+      .eq('organization_id', orgId)
+      .eq('document_status', 'issued')
+      .not('represented_client_id', 'is', null)
+      .order('issue_date', { ascending: false })
+      .limit(500),
+  ]);
+  if (draftsRes.error) throw draftsRes.error;
+  if (docsRes.error) throw docsRes.error;
+  const drafts = draftsRes.data;
+  const docs = docsRes.data;
 
   const clientIds = [
     ...new Set(
@@ -339,11 +375,6 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       };
     }) ?? [];
 
-  let document_branding_profile_legacy: IncomeDocumentBrandingProfileAggregate | null =
-    document_branding_profile;
-  let document_branding_settings_entrypoint_legacy: IncomeDocumentBrandingSettingsEntrypoint | null =
-    document_branding_settings_entrypoint;
-
   const response: WorkEngineInvoicesTabAggregate = {
     aggregate_key: 'work_engine_invoices_tab_aggregate',
     org_id: orgId,
@@ -367,7 +398,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
     },
     filters: [],
     allowed_actions: ['view_invoices_tab', 'open_income_document_wizard'],
-    document_creation_entrypoint: await buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx),
+    document_creation_entrypoint,
     draft_entrypoints,
     gaps: [
       'income.invoice_paid — payment status not implemented (INC-8)',
@@ -376,10 +407,13 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       'amount_paid_reference — awaiting payment pipeline',
       'self_mode_documents_excluded — requires represented_client_id',
     ],
-    document_branding_profile: document_branding_profile_legacy,
-    document_branding_settings_entrypoint: document_branding_settings_entrypoint_legacy,
+    document_branding_profile,
+    document_branding_settings_entrypoint,
     client_document_management_panel,
   };
   logAggregatePayloadBreakdown('work_engine_invoices_tab_aggregate', response);
+  console.info(
+    `[work-engine][invoices-tab][timing] TOTAL ${Date.now() - aggregateStartMs}ms`,
+  );
   return response;
 }

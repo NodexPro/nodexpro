@@ -1,19 +1,11 @@
 /**
  * Income — Client Document Management panel (CRM-style client list).
- * Single aggregate read model; issuer-scoped branding via existing studio.
+ * Single aggregate read model; counters from SQL aggregation (P4.2).
  */
 
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
-import {
-  amountReferenceFromTotalsSnapshot,
-  isInvoiceCollectionDocumentType,
-} from './income-work-engine-bridge.pure.js';
-import {
-  excludeSelfModeActingFilter,
-  resolveOfficeClientGroupKey,
-} from './income-client-document-management-panel.pure.js';
 import {
   INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
   INCOME_COMMAND_SELECT_ISSUER,
@@ -25,18 +17,8 @@ import type {
   IncomeClientDocumentManagementRow,
   IncomeClientDocumentManagementRowAction,
   IncomeClientDocumentTypeCounter,
-  IncomeDocumentType,
   IncomeWorkspacePermissions,
 } from './income.types.js';
-
-const PANEL_DOCUMENT_TYPES: IncomeDocumentType[] = [
-  'quote',
-  'deal_invoice',
-  'tax_invoice',
-  'tax_invoice_receipt',
-  'receipt',
-  'credit_tax_invoice',
-];
 
 const REPORT_CATALOG: IncomeClientDocumentManagementReportItem[] = [
   { key: 'income_summary', label: 'דוח הכנסות', enabled: false, disabled_reason: 'בקרוב' },
@@ -45,6 +27,27 @@ const REPORT_CATALOG: IncomeClientDocumentManagementReportItem[] = [
   { key: 'payments', label: 'דוח תשלומים', enabled: false, disabled_reason: 'בקרוב' },
   { key: 'csv_export', label: 'CSV Export', enabled: false, disabled_reason: 'בקרוב' },
 ];
+
+type PanelStatRow = {
+  represented_client_id: string;
+  total_documents_count: number;
+  draft_documents_count: number;
+  quote_count: number;
+  deal_count: number;
+  tax_invoice_count: number;
+  receipt_count: number;
+  credit_count: number;
+  quote_issued_count: number;
+  deal_issued_count: number;
+  tax_invoice_issued_count: number;
+  tax_invoice_receipt_issued_count: number;
+  receipt_issued_count: number;
+  credit_issued_count: number;
+  last_document_date: string | null;
+  last_activity_at: string | null;
+  unpaid_reference: number | string | null;
+  currency: string | null;
+};
 
 function buildRowActions(
   clientId: string,
@@ -136,14 +139,14 @@ function buildRowActions(
   }
 
   actions.push({
-      key: 'more',
-      label: 'פעולות נוספות',
-      icon_key: 'more',
-      command: null,
-      command_payload: { open_more_menu: true, client_id: clientId },
-      enabled: true,
-      disabled_reason: null,
-    });
+    key: 'more',
+    label: 'פעולות נוספות',
+    icon_key: 'more',
+    command: null,
+    command_payload: { open_more_menu: true, client_id: clientId },
+    enabled: true,
+    disabled_reason: null,
+  });
 
   return actions;
 }
@@ -175,29 +178,12 @@ function emptyPanel(visible: boolean): IncomeClientDocumentManagementPanel {
   };
 }
 
-function incrementTypeCount(acc: Acc, documentType: IncomeDocumentType): void {
-  if (documentType === 'quote') acc.quote_count += 1;
-  else if (documentType === 'deal_invoice') acc.deal_count += 1;
-  else if (documentType === 'tax_invoice' || documentType === 'tax_invoice_receipt') acc.tax_invoice_count += 1;
-  else if (documentType === 'receipt') acc.receipt_count += 1;
-  else if (documentType === 'credit_tax_invoice') acc.credit_count += 1;
-}
-
-function incrementIssuedTypeCount(acc: Acc, documentType: IncomeDocumentType): void {
-  if (documentType === 'quote') acc.quote_issued_count += 1;
-  else if (documentType === 'deal_invoice') acc.deal_issued_count += 1;
-  else if (documentType === 'tax_invoice') acc.tax_invoice_issued_count += 1;
-  else if (documentType === 'tax_invoice_receipt') acc.tax_invoice_receipt_issued_count += 1;
-  else if (documentType === 'receipt') acc.receipt_issued_count += 1;
-  else if (documentType === 'credit_tax_invoice') acc.credit_issued_count += 1;
-}
-
-function buildDocumentTypeCounters(acc: Acc): IncomeClientDocumentTypeCounter[] {
+function buildDocumentTypeCounters(stat: PanelStatRow): IncomeClientDocumentTypeCounter[] {
   return [
     {
       key: 'quote',
       label: 'הצעת מחיר',
-      count: acc.quote_issued_count,
+      count: Number(stat.quote_issued_count) || 0,
       tone: 'blue',
       tooltip_label: 'הצעות מחיר',
       action_key: 'open_documents_by_type',
@@ -205,7 +191,7 @@ function buildDocumentTypeCounters(acc: Acc): IncomeClientDocumentTypeCounter[] 
     {
       key: 'deal_invoice',
       label: 'חשבון עסקה',
-      count: acc.deal_issued_count,
+      count: Number(stat.deal_issued_count) || 0,
       tone: 'purple',
       tooltip_label: 'חשבונות עסקה',
       action_key: 'open_documents_by_type',
@@ -213,7 +199,7 @@ function buildDocumentTypeCounters(acc: Acc): IncomeClientDocumentTypeCounter[] 
     {
       key: 'tax_invoice',
       label: 'חשבונית מס',
-      count: acc.tax_invoice_issued_count,
+      count: Number(stat.tax_invoice_issued_count) || 0,
       tone: 'cyan',
       tooltip_label: 'חשבוניות מס',
       action_key: 'open_documents_by_type',
@@ -221,7 +207,7 @@ function buildDocumentTypeCounters(acc: Acc): IncomeClientDocumentTypeCounter[] 
     {
       key: 'tax_invoice_receipt',
       label: 'חשבונית מס/קבלה',
-      count: acc.tax_invoice_receipt_issued_count,
+      count: Number(stat.tax_invoice_receipt_issued_count) || 0,
       tone: 'teal',
       tooltip_label: 'חשבוניות מס/קבלה',
       action_key: 'open_documents_by_type',
@@ -229,7 +215,7 @@ function buildDocumentTypeCounters(acc: Acc): IncomeClientDocumentTypeCounter[] 
     {
       key: 'receipt',
       label: 'קבלה',
-      count: acc.receipt_issued_count,
+      count: Number(stat.receipt_issued_count) || 0,
       tone: 'green',
       tooltip_label: 'קבלות',
       action_key: 'open_documents_by_type',
@@ -237,7 +223,7 @@ function buildDocumentTypeCounters(acc: Acc): IncomeClientDocumentTypeCounter[] 
     {
       key: 'credit_tax_invoice',
       label: 'זיכוי',
-      count: acc.credit_issued_count,
+      count: Number(stat.credit_issued_count) || 0,
       tone: 'red',
       tooltip_label: 'זיכויים',
       action_key: 'open_documents_by_type',
@@ -245,7 +231,7 @@ function buildDocumentTypeCounters(acc: Acc): IncomeClientDocumentTypeCounter[] 
     {
       key: 'draft',
       label: 'טיוטות',
-      count: acc.draft_documents_count,
+      count: Number(stat.draft_documents_count) || 0,
       tone: 'slate',
       tooltip_label: 'טיוטות',
       action_key: 'open_documents_by_type',
@@ -253,53 +239,34 @@ function buildDocumentTypeCounters(acc: Acc): IncomeClientDocumentTypeCounter[] 
   ];
 }
 
-type Acc = {
-  represented_client_id: string;
-  total_documents_count: number;
-  draft_documents_count: number;
-  quote_count: number;
-  deal_count: number;
-  tax_invoice_count: number;
-  receipt_count: number;
-  credit_count: number;
-  quote_issued_count: number;
-  deal_issued_count: number;
-  tax_invoice_issued_count: number;
-  tax_invoice_receipt_issued_count: number;
-  receipt_issued_count: number;
-  credit_issued_count: number;
-  last_document_date: string | null;
-  last_activity_at: string | null;
-  unpaid_reference: number;
-  currency: string;
-};
+async function countSelfModeRows(orgId: string): Promise<{ issued: number; drafts: number }> {
+  const [issuedRes, draftRes] = await Promise.all([
+    supabaseAdmin
+      .from('income_documents')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('acting_mode', 'self')
+      .eq('document_status', 'issued'),
+    supabaseAdmin
+      .from('income_document_drafts')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('acting_mode', 'self')
+      .eq('status', 'draft')
+      .not('user_saved_at', 'is', null),
+  ]);
+  throwIfSupabaseError(issuedRes.error, 'countSelfModeIssuedDocuments');
+  throwIfSupabaseError(draftRes.error, 'countSelfModeUserSavedDrafts');
+  return {
+    issued: issuedRes.count ?? 0,
+    drafts: draftRes.count ?? 0,
+  };
+}
 
-function ensureAcc(byClient: Map<string, Acc>, clientId: string, currency = 'ILS'): Acc {
-  let acc = byClient.get(clientId);
-  if (!acc) {
-    acc = {
-      represented_client_id: clientId,
-      total_documents_count: 0,
-      draft_documents_count: 0,
-      quote_count: 0,
-      deal_count: 0,
-      tax_invoice_count: 0,
-      receipt_count: 0,
-      credit_count: 0,
-      quote_issued_count: 0,
-      deal_issued_count: 0,
-      tax_invoice_issued_count: 0,
-      tax_invoice_receipt_issued_count: 0,
-      receipt_issued_count: 0,
-      credit_issued_count: 0,
-      last_document_date: null,
-      last_activity_at: null,
-      unpaid_reference: 0,
-      currency,
-    };
-    byClient.set(clientId, acc);
-  }
-  return acc;
+function logPanelTiming(label: string, startedAt: number): number {
+  const elapsedMs = Date.now() - startedAt;
+  console.info(`[income][client-document-panel][timing] ${label} ${elapsedMs}ms`);
+  return Date.now();
 }
 
 export async function buildIncomeClientDocumentManagementPanel(params: {
@@ -309,99 +276,29 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
 }): Promise<IncomeClientDocumentManagementPanel> {
   const orgId = params.ctx.organizationId!;
   const visible = params.perms.issue_on_behalf;
+  const aggregateStartMs = Date.now();
 
   if (!visible) {
     return emptyPanel(false);
   }
 
-  const { data: docs, error: docsErr } = await supabaseAdmin
-    .from('income_documents')
-    .select(
-      'id, represented_client_id, issuer_business_id, acting_mode, document_type, document_status, issue_date, updated_at, currency, totals_snapshot_json, due_date',
-    )
-    .eq('organization_id', orgId)
-    .or(excludeSelfModeActingFilter())
-    .eq('document_status', 'issued')
-    .in('document_type', PANEL_DOCUMENT_TYPES)
-    .order('issue_date', { ascending: false })
-    .limit(5000);
-  throwIfSupabaseError(docsErr, 'loadClientDocumentManagementDocs');
+  let stepStart = aggregateStartMs;
+  const [statsRes, selfCounts] = await Promise.all([
+    supabaseAdmin.rpc('income_client_document_management_panel_stats', {
+      p_org_id: orgId,
+    }),
+    countSelfModeRows(orgId),
+  ]);
+  throwIfSupabaseError(statsRes.error, 'incomeClientDocumentManagementPanelStats', {
+    migrationHint: '152_income_client_document_management_panel_stats.sql',
+  });
+  stepStart = logPanelTiming('rpc_stats_and_self_counts', stepStart);
 
-  const { data: draftRows, error: draftsErr } = await supabaseAdmin
-    .from('income_document_drafts')
-    .select(
-      'id, represented_client_id, issuer_business_id, acting_mode, document_type, status, user_saved_at, updated_at',
-    )
-    .eq('organization_id', orgId)
-    .or(excludeSelfModeActingFilter())
-    .eq('status', 'draft')
-    .not('user_saved_at', 'is', null)
-    .order('updated_at', { ascending: false })
-    .limit(5000);
-  throwIfSupabaseError(draftsErr, 'loadClientDocumentManagementDrafts');
+  const stats = (statsRes.data ?? []) as PanelStatRow[];
+  const clientIds = stats
+    .map((s) => String(s.represented_client_id ?? '').trim())
+    .filter(Boolean);
 
-  const byClient = new Map<string, Acc>();
-  let selfModeIssuedCount = 0;
-  let selfModeDraftCount = 0;
-
-  for (const raw of docs ?? []) {
-    const row = raw as {
-      represented_client_id: string | null;
-      issuer_business_id: string;
-      acting_mode: string;
-      document_type: IncomeDocumentType;
-      issue_date: string | null;
-      updated_at: string;
-      currency: string;
-      totals_snapshot_json: Record<string, unknown> | null;
-    };
-    const clientId = resolveOfficeClientGroupKey(row);
-    if (!clientId) {
-      if (row.acting_mode === 'self') selfModeIssuedCount += 1;
-      continue;
-    }
-    const acc = ensureAcc(byClient, clientId, row.currency || 'ILS');
-    acc.total_documents_count += 1;
-    incrementTypeCount(acc, row.document_type);
-    incrementIssuedTypeCount(acc, row.document_type);
-    const activityAt = row.updated_at || row.issue_date;
-    if (!acc.last_activity_at || (activityAt && activityAt > acc.last_activity_at)) {
-      acc.last_activity_at = activityAt;
-    }
-    if (!acc.last_document_date || (row.issue_date && row.issue_date > acc.last_document_date)) {
-      acc.last_document_date = row.issue_date;
-    }
-    if (isInvoiceCollectionDocumentType(row.document_type)) {
-      const amount = amountReferenceFromTotalsSnapshot(row.totals_snapshot_json);
-      if (amount != null && amount > 0) {
-        acc.unpaid_reference += amount;
-      }
-    }
-  }
-
-  for (const raw of draftRows ?? []) {
-    const row = raw as {
-      represented_client_id: string | null;
-      issuer_business_id: string;
-      acting_mode: string;
-      document_type: IncomeDocumentType | null;
-      updated_at: string;
-    };
-    const clientId = resolveOfficeClientGroupKey(row);
-    if (!clientId) {
-      if (row.acting_mode === 'self') selfModeDraftCount += 1;
-      continue;
-    }
-    const acc = ensureAcc(byClient, clientId);
-    acc.draft_documents_count += 1;
-    if (row.document_type) incrementTypeCount(acc, row.document_type);
-    const activityAt = row.updated_at;
-    if (!acc.last_activity_at || (activityAt && activityAt > acc.last_activity_at)) {
-      acc.last_activity_at = activityAt;
-    }
-  }
-
-  const clientIds = [...byClient.keys()];
   const clientMetaById = new Map<
     string,
     { display_name: string; tax_id: string | null; email: string | null }
@@ -427,13 +324,22 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       });
     }
   }
+  stepStart = logPanelTiming('load_client_meta', stepStart);
 
-  const rows: IncomeClientDocumentManagementRow[] = clientIds
-    .map((clientId) => {
-      const acc = byClient.get(clientId)!;
+  const rows: IncomeClientDocumentManagementRow[] = stats
+    .map((stat) => {
+      const clientId = String(stat.represented_client_id);
       const meta = clientMetaById.get(clientId);
       const clientName = meta?.display_name ?? clientId;
-      const unpaidRef = acc.unpaid_reference > 0 ? acc.unpaid_reference : null;
+      const unpaidRaw = Number(stat.unpaid_reference ?? 0);
+      const unpaidRef = Number.isFinite(unpaidRaw) && unpaidRaw > 0 ? unpaidRaw : null;
+      const currency = String(stat.currency || 'ILS');
+      const totalDocuments = Number(stat.total_documents_count) || 0;
+      const draftDocuments = Number(stat.draft_documents_count) || 0;
+      const lastDocumentDate =
+        typeof stat.last_document_date === 'string' ? stat.last_document_date : null;
+      const lastActivityAt =
+        typeof stat.last_activity_at === 'string' ? stat.last_activity_at : null;
       return {
         represented_client_id: clientId,
         client_display_name: clientName,
@@ -441,26 +347,26 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
         client_initials: clientName.trim().slice(0, 2) || '—',
         tax_id: meta?.tax_id ?? null,
         email: meta?.email ?? null,
-        total_documents_count: acc.total_documents_count,
-        quote_count: acc.quote_count,
-        deal_count: acc.deal_count,
-        tax_invoice_count: acc.tax_invoice_count,
-        receipt_count: acc.receipt_count,
-        credit_count: acc.credit_count,
-        document_type_counters: buildDocumentTypeCounters(acc),
+        total_documents_count: totalDocuments,
+        quote_count: Number(stat.quote_count) || 0,
+        deal_count: Number(stat.deal_count) || 0,
+        tax_invoice_count: Number(stat.tax_invoice_count) || 0,
+        receipt_count: Number(stat.receipt_count) || 0,
+        credit_count: Number(stat.credit_count) || 0,
+        document_type_counters: buildDocumentTypeCounters(stat),
         unpaid_amount_reference: unpaidRef,
         unpaid_amount_display:
-          unpaidRef != null ? formatMoneyReference(unpaidRef, acc.currency) : '—',
-        last_document_date: acc.last_document_date,
-        last_document_date_display: formatDateDisplay(acc.last_document_date),
-        last_activity_at: acc.last_activity_at,
-        last_activity_display: formatDateDisplay(acc.last_activity_at),
+          unpaidRef != null ? formatMoneyReference(unpaidRef, currency) : '—',
+        last_document_date: lastDocumentDate,
+        last_document_date_display: formatDateDisplay(lastDocumentDate),
+        last_activity_at: lastActivityAt,
+        last_activity_display: formatDateDisplay(lastActivityAt),
         status_label:
-          acc.total_documents_count > 0
+          totalDocuments > 0
             ? unpaidRef != null
               ? 'פתוח לגבייה'
               : 'פעיל'
-            : acc.draft_documents_count > 0
+            : draftDocuments > 0
               ? 'טיוטות פעילות'
               : 'פעיל',
         actions: buildRowActions(clientId, params.perms, {
@@ -469,6 +375,11 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       };
     })
     .sort((a, b) => a.client_display_name.localeCompare(b.client_display_name, 'he'));
+
+  logPanelTiming('TOTAL', aggregateStartMs);
+  console.info(
+    `[income][client-document-panel][payload] clients=${rows.length} stats_rows=${stats.length}`,
+  );
 
   return {
     aggregate_key: INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
@@ -490,7 +401,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       visible: rows.length === 0,
       title: 'אין עדיין לקוחות עם מסמכים',
       description:
-        rows.length === 0 && (selfModeIssuedCount > 0 || selfModeDraftCount > 0)
+        rows.length === 0 && (selfCounts.issued > 0 || selfCounts.drafts > 0)
           ? 'מסמכים במצב עצמי (self) אינם מוצגים כאן. בחר לקוח במצב נציג משרד, צור טיוטה או הפק מסמך — והלקוח יופיע בשורה אחת.'
           : 'לאחר הפקת מסמך או שמירת טיוטה עבור לקוח במצב נציג משרד — הוא יופיע כאן.',
     },

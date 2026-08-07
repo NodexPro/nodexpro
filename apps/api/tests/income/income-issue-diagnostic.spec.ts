@@ -58,6 +58,7 @@ function failingStageForStarted(stage: IncomeIssueStage): IncomeIssueFailingStag
   if (stage === 'accounting_posting_started') return 'accounting_posting';
   if (stage === 'draft_mark_issued_started') return 'draft_mark_issued';
   if (stage === 'recurring_cycle_link_started') return 'recurring_cycle_link';
+  if (stage === 'pdf_scheduling_started') return 'pdf_scheduling';
   if (stage === 'refreshed_case_started') return 'refreshed_case';
   return 'issue_command';
 }
@@ -85,8 +86,11 @@ test('success stage order constant includes early prefix stages', () => {
     'draft_mark_issued_completed',
     'recurring_cycle_link_started',
     'recurring_cycle_link_completed',
+    'pdf_scheduling_started',
+    'pdf_scheduling_completed',
     'refreshed_case_started',
     'refreshed_case_completed',
+    'issue_command_completed',
   ]);
 });
 
@@ -133,7 +137,8 @@ test('stage order on successful mocked issue', async () => {
     } else if (
       stage === 'issue_command_received' ||
       stage === 'draft_loaded' ||
-      stage === 'existing_issued_document_checked'
+      stage === 'existing_issued_document_checked' ||
+      stage === 'issue_command_completed'
     ) {
       logIncomeIssueStage(diag, stage);
       stages.push(stage);
@@ -144,7 +149,7 @@ test('stage order on successful mocked issue', async () => {
     .filter((l) => l.level === 'info' && l.prefix === INCOME_ISSUE_LOG_PREFIX)
     .map((l) => l.payload.stage);
   assert.deepEqual(infoStages, stages);
-  assert.equal(diag.last_completed_stage, 'refreshed_case_completed');
+  assert.equal(diag.last_completed_stage, 'issue_command_completed');
   assert.equal(lines.some((l) => l.prefix === INCOME_ISSUE_FAILED_LOG_PREFIX), false);
 });
 

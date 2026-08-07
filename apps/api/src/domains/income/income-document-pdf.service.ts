@@ -84,6 +84,51 @@ async function storePdfAsset(
   return (asset as { id: string }).id;
 }
 
+/**
+ * Mark issued document PDF as pending and kick render off the caller critical path.
+ * Reuses renderIncomeDocumentPdf (pending → rendered | failed). Does not create a second PDF system.
+ * Delivery paths must still await ensure/render before send (see issue-and-send).
+ */
+export async function scheduleIncomeDocumentPdfRender(
+  ctx: RequestContext,
+  orgId: string,
+  incomeDocumentId: string,
+): Promise<{ pdf_asset_id: string | null; pdf_render_status: string; scheduled: boolean }> {
+  const doc = await loadIssuedDocumentForPdf(orgId, incomeDocumentId);
+
+  if (!requiresPdfRender(doc.document_type)) {
+    await supabaseAdmin
+      .from('income_documents')
+      .update({ pdf_render_status: 'rendered', pdf_render_error: null })
+      .eq('id', incomeDocumentId)
+      .eq('organization_id', orgId);
+    return { pdf_asset_id: null, pdf_render_status: 'rendered', scheduled: false };
+  }
+
+  if (doc.pdf_render_status === 'rendered' && doc.pdf_asset_id) {
+    return { pdf_asset_id: doc.pdf_asset_id, pdf_render_status: 'rendered', scheduled: false };
+  }
+
+  if (doc.pdf_render_status !== 'pending') {
+    await supabaseAdmin
+      .from('income_documents')
+      .update({ pdf_render_status: 'pending', pdf_render_error: null })
+      .eq('id', incomeDocumentId)
+      .eq('organization_id', orgId);
+  }
+
+  void renderIncomeDocumentPdf(ctx, orgId, incomeDocumentId).catch((err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[income-pdf] background render failed', {
+      income_document_id: incomeDocumentId,
+      organization_id: orgId,
+      message,
+    });
+  });
+
+  return { pdf_asset_id: doc.pdf_asset_id, pdf_render_status: 'pending', scheduled: true };
+}
+
 export async function renderIncomeDocumentPdf(
   ctx: RequestContext,
   orgId: string,

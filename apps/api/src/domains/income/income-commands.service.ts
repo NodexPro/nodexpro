@@ -42,7 +42,7 @@ import {
 } from './income-document-types.resolver.js';
 import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
-import { withIncomeIssueStage } from './income-issue-diagnostic.js';
+import { logIncomeIssueStage, withIncomeIssueStage } from './income-issue-diagnostic.js';
 import { executeIssueAndSendIncomeDocument } from './income-document-issue-and-send.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import {
@@ -901,74 +901,77 @@ export async function executeIncomeCommand(
             .maybeSingle();
           throwIfSupabaseError(profileErr, 'loadRecurringProfileForIssueRefresh');
           if (!profile) throw notFound('Recurring profile not found');
+          // Affected open UI after retainer review issue: review + schedule (setup).
+          // Do NOT rebuild invoices-tab / by-type lists (not open; counters refresh on next read).
           const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
             ctx,
             representedClientId: reviewContext.represented_client_id,
             endCustomerId: String((profile as { end_customer_id: string }).end_customer_id),
             buildMode: 'schedule_refresh',
           });
-          const documentTypeKey = issueResult.issue_result.document_type_key || 'tax_invoice';
-          const [invoicesTabAggregate, clientDocumentsByTypeAggregate] = await Promise.all([
-            buildWorkEngineInvoicesTabAggregate({ ctx }),
-            buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
-              ctx,
-              representedClientId: reviewContext.represented_client_id,
-              documentTypeKey,
-            }),
-          ]);
           return {
             reviewAggregate: refreshed,
             setupAggregate,
-            invoicesTabAggregate,
-            clientDocumentsByTypeAggregate,
           };
         },
       );
+      logIncomeIssueStage(issueResult.diagnostic, 'issue_command_completed', {
+        duration_ms: Date.now() - issueResult.diagnostic.command_started_ms,
+      });
       return {
         ok: true,
         command,
         income_workspace_aggregate: reviewAggregate.reviewAggregate.income_workspace_aggregate,
         work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate.reviewAggregate,
         work_engine_invoice_retainer_setup_aggregate: reviewAggregate.setupAggregate,
-        work_engine_invoices_tab_aggregate: reviewAggregate.invoicesTabAggregate,
-        work_engine_invoices_client_documents_by_type_aggregate:
-          reviewAggregate.clientDocumentsByTypeAggregate,
         issue_result: issueResult.issue_result,
         meta: {
           idempotent_replay: issueResult.idempotentReplay,
           income_document_id: issueResult.issuedDocumentId,
+          pdf_render_status: issueResult.issue_result.pdf_render_status,
         },
       };
     }
 
-    // Non-retainer / non-cycle office or self issue: workspace aggregate + by-type when office.
-    const response = await commandResponse(ctx, command);
-    const representedClientId =
-      response.income_workspace_aggregate?.issuer_context?.represented_client_id ?? null;
-    const documentTypeKey = issueResult.issue_result.document_type_key || 'tax_invoice';
-    if (representedClientId) {
-      const clientDocumentsByTypeAggregate =
-        await buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
-          ctx,
-          representedClientId,
-          documentTypeKey,
-        });
-      return {
-        ...response,
-        work_engine_invoices_client_documents_by_type_aggregate: clientDocumentsByTypeAggregate,
-        issue_result: issueResult.issue_result,
-        meta: {
-          idempotent_replay: issueResult.idempotentReplay,
-          income_document_id: issueResult.issuedDocumentId,
-        },
-      };
-    }
+    // Non-cycle issue: workspace truth only. Optional retainer setup refresh when open Setup UI
+    // sends end_customer_id (no invoices-tab / by-type rebuild).
+    const response = await withIncomeIssueStage(
+      issueResult.diagnostic,
+      {
+        started: 'refreshed_case_started',
+        completed: 'refreshed_case_completed',
+        failing_stage: 'refreshed_case',
+      },
+      async () => {
+        const base = await commandResponse(ctx, command);
+        const endCustomerId = optionalUuid(body.end_customer_id, 'end_customer_id');
+        const representedClientId =
+          base.income_workspace_aggregate?.issuer_context?.represented_client_id ?? null;
+        if (endCustomerId && representedClientId) {
+          const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
+            ctx,
+            representedClientId,
+            endCustomerId,
+            buildMode: 'schedule_refresh',
+          });
+          return {
+            ...base,
+            work_engine_invoice_retainer_setup_aggregate: setupAggregate,
+          };
+        }
+        return base;
+      },
+    );
+    logIncomeIssueStage(issueResult.diagnostic, 'issue_command_completed', {
+      duration_ms: Date.now() - issueResult.diagnostic.command_started_ms,
+    });
     return {
       ...response,
       issue_result: issueResult.issue_result,
       meta: {
         idempotent_replay: issueResult.idempotentReplay,
         income_document_id: issueResult.issuedDocumentId,
+        pdf_render_status: issueResult.issue_result.pdf_render_status,
       },
     };
   }

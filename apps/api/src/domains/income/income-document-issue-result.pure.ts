@@ -12,6 +12,8 @@ export type IncomeIssueViewAction = {
   document_id: string;
 };
 
+export type IncomeIssuePdfRenderStatus = 'pending' | 'rendered' | 'failed';
+
 export type IncomeIssueResult = {
   result_key: IncomeIssueResultKey;
   message: string;
@@ -20,8 +22,27 @@ export type IncomeIssueResult = {
   document_type_key: string;
   document_type_label: string;
   issued_date: string;
+  /** Backend PDF lifecycle truth — FE must not invent eligibility. */
+  pdf_render_status: IncomeIssuePdfRenderStatus;
   view_action: IncomeIssueViewAction;
 };
+
+function normalizePdfRenderStatus(status: string | null | undefined): IncomeIssuePdfRenderStatus {
+  if (status === 'rendered' || status === 'failed' || status === 'pending') return status;
+  return 'pending';
+}
+
+function buildViewAction(params: {
+  document_id: string;
+  pdf_render_status: IncomeIssuePdfRenderStatus;
+}): IncomeIssueViewAction {
+  return {
+    action_key: 'view_document',
+    label: 'צפייה בחשבונית',
+    enabled: params.pdf_render_status === 'rendered',
+    document_id: params.document_id,
+  };
+}
 
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   tax_invoice: 'חשבונית מס',
@@ -47,9 +68,11 @@ export function buildAlreadyIssuedIssueResult(params: {
   document_number: string;
   document_type_key: string;
   issued_date: string;
+  pdf_render_status?: string | null;
 }): IncomeIssueResult {
   const typeLabel = incomeDocumentTypeLabelHe(params.document_type_key);
   const issuedDisplay = formatIssuedDateDisplayHe(params.issued_date);
+  const pdf_render_status = normalizePdfRenderStatus(params.pdf_render_status);
   const message = [
     `החשבונית כבר הופקה בתאריך ${issuedDisplay}.`,
     `מספר החשבונית: ${params.document_number}.`,
@@ -64,12 +87,11 @@ export function buildAlreadyIssuedIssueResult(params: {
     document_type_key: params.document_type_key,
     document_type_label: typeLabel,
     issued_date: params.issued_date,
-    view_action: {
-      action_key: 'view_document',
-      label: 'צפייה בחשבונית',
-      enabled: true,
+    pdf_render_status,
+    view_action: buildViewAction({
       document_id: params.document_id,
-    },
+      pdf_render_status,
+    }),
   };
 }
 
@@ -78,9 +100,11 @@ export function buildFreshIssuedIssueResult(params: {
   document_number: string;
   document_type_key: string;
   issued_date: string;
+  pdf_render_status?: string | null;
 }): IncomeIssueResult {
   const typeLabel = incomeDocumentTypeLabelHe(params.document_type_key);
   const issuedDisplay = formatIssuedDateDisplayHe(params.issued_date);
+  const pdf_render_status = normalizePdfRenderStatus(params.pdf_render_status);
   return {
     result_key: 'issued',
     message: `${typeLabel} מספר ${params.document_number} הופקה בתאריך ${issuedDisplay}.`,
@@ -89,11 +113,10 @@ export function buildFreshIssuedIssueResult(params: {
     document_type_key: params.document_type_key,
     document_type_label: typeLabel,
     issued_date: params.issued_date,
-    view_action: {
-      action_key: 'view_document',
-      label: 'צפייה בחשבונית',
-      enabled: true,
+    pdf_render_status,
+    view_action: buildViewAction({
       document_id: params.document_id,
-    },
+      pdf_render_status,
+    }),
   };
 }

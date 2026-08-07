@@ -680,6 +680,7 @@ export type IncomeCommandType =
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;
   income_document_id?: string;
+  pdf_render_status?: 'pending' | 'rendered' | 'failed';
   delivery_attempt_id?: string;
   delivery_result?: 'sent' | 'failed';
   provider_message_id?: string | null;
