@@ -1,4 +1,8 @@
 import { buildIssueMonthSelector } from './work-engine-invoice-retainer-issue-month-selector.pure.js';
+import {
+  buildOverdueUnissuedIssueDateBounds,
+  isRecurringScheduleDateOverdue,
+} from './work-engine-invoice-retainer-overdue-issue-date.pure.js';
 
 export const RETAINER_PREVIEW_ISSUE_DOCUMENT_TYPES = new Set([
   'tax_invoice',
@@ -21,6 +25,9 @@ export type WorkEngineRecurringCycleDraftReviewIssueActionDescriptor = {
   confirmation_title: string | null;
   confirmation_message: string | null;
   issue_month_selector: import('./work-engine-invoice-retainer-issue-month-selector.pure.js').WorkEngineRecurringCycleDraftReviewIssueMonthSelector | null;
+  issue_default_date: string | null;
+  issue_min_date: string | null;
+  issue_max_date: string | null;
   command_name: 'issue_income_document';
 };
 
@@ -34,6 +41,9 @@ export type WorkEngineRecurringCycleDraftReviewIssueAndSendActionDescriptor = {
   confirmation_title: string | null;
   confirmation_message: string | null;
   issue_month_selector: import('./work-engine-invoice-retainer-issue-month-selector.pure.js').WorkEngineRecurringCycleDraftReviewIssueMonthSelector | null;
+  issue_default_date: string | null;
+  issue_min_date: string | null;
+  issue_max_date: string | null;
   command_name: 'issue_and_send_income_document';
 };
 
@@ -41,6 +51,12 @@ const DOCUMENT_TYPE_LABELS: Record<RetainerPreviewIssueDocumentType, string> = {
   tax_invoice: 'חשבונית מס',
   deal_invoice: 'חשבון עסקה',
   quote: 'הצעת מחיר',
+};
+
+const EMPTY_ISSUE_DATE_BOUNDS = {
+  issue_default_date: null as string | null,
+  issue_min_date: null as string | null,
+  issue_max_date: null as string | null,
 };
 
 function isRetainerPreviewIssueDocumentType(
@@ -91,10 +107,19 @@ export function buildCycleDraftReviewIssueAction(params: {
   issued_document_number_display: string | null;
   today_iso?: string;
   issue_month_window?: CycleDraftReviewIssueMonthWindow;
+  /** Planned cycle date — when before today, overdue issue-date rules apply. */
+  scheduled_document_date?: string | null;
 }): WorkEngineRecurringCycleDraftReviewIssueActionDescriptor {
   const docType = params.document_type;
   const typeAllowed = isRetainerPreviewIssueDocumentType(docType);
   const typeLabel = typeAllowed ? DOCUMENT_TYPE_LABELS[docType] : 'מסמך';
+  const todayIso = params.today_iso ?? new Date().toISOString().slice(0, 10);
+  const overdueUnissued =
+    !params.already_issued &&
+    isRecurringScheduleDateOverdue(params.scheduled_document_date, todayIso);
+  const overdueBounds = overdueUnissued
+    ? buildOverdueUnissuedIssueDateBounds(todayIso)
+    : EMPTY_ISSUE_DATE_BOUNDS;
 
   if (!typeAllowed) {
     return {
@@ -107,6 +132,7 @@ export function buildCycleDraftReviewIssueAction(params: {
       confirmation_title: null,
       confirmation_message: null,
       issue_month_selector: null,
+      ...EMPTY_ISSUE_DATE_BOUNDS,
       command_name: 'issue_income_document',
     };
   }
@@ -125,6 +151,7 @@ export function buildCycleDraftReviewIssueAction(params: {
       confirmation_title: null,
       confirmation_message: null,
       issue_month_selector: null,
+      ...EMPTY_ISSUE_DATE_BOUNDS,
       command_name: 'issue_income_document',
     };
   }
@@ -140,19 +167,20 @@ export function buildCycleDraftReviewIssueAction(params: {
       confirmation_title: null,
       confirmation_message: null,
       issue_month_selector: null,
+      ...EMPTY_ISSUE_DATE_BOUNDS,
       command_name: 'issue_income_document',
     };
   }
 
   const confirmationRequired = docType === 'tax_invoice';
-  const todayIso = params.today_iso ?? new Date().toISOString().slice(0, 10);
   const issueMonthSelector = confirmationRequired
     ? buildIssueMonthSelector({
         todayIso,
-        documentDate: params.document_date,
+        documentDate: overdueUnissued ? todayIso : params.document_date,
         mode: 'issue',
-        monthsBack: params.issue_month_window?.months_back,
+        monthsBack: overdueUnissued ? 0 : params.issue_month_window?.months_back,
         monthsAhead: params.issue_month_window?.months_ahead,
+        overdueUnissued,
       })
     : null;
   const documentMonthLabel =
@@ -176,6 +204,7 @@ export function buildCycleDraftReviewIssueAction(params: {
     confirmation_title: confirmationRequired ? 'אישור הפקת חשבונית מס' : 'אישור הפקה',
     confirmation_message: confirmationMessage,
     issue_month_selector: issueMonthSelector,
+    ...overdueBounds,
     command_name: 'issue_income_document',
   };
 }
@@ -198,10 +227,18 @@ export function buildCycleDraftReviewIssueAndSendAction(params: {
   recipient_email: string | null;
   today_iso?: string;
   issue_month_window?: CycleDraftReviewIssueMonthWindow;
+  scheduled_document_date?: string | null;
 }): WorkEngineRecurringCycleDraftReviewIssueAndSendActionDescriptor {
   const docType = params.document_type;
   const typeAllowed = isRetainerPreviewIssueDocumentType(docType);
   const typeLabel = typeAllowed ? DOCUMENT_TYPE_LABELS[docType] : 'מסמך';
+  const todayIso = params.today_iso ?? new Date().toISOString().slice(0, 10);
+  const overdueUnissued =
+    !params.already_issued &&
+    isRecurringScheduleDateOverdue(params.scheduled_document_date, todayIso);
+  const overdueBounds = overdueUnissued
+    ? buildOverdueUnissuedIssueDateBounds(todayIso)
+    : EMPTY_ISSUE_DATE_BOUNDS;
 
   if (!typeAllowed || !params.issue_action_visible) {
     return {
@@ -214,6 +251,7 @@ export function buildCycleDraftReviewIssueAndSendAction(params: {
       confirmation_title: null,
       confirmation_message: null,
       issue_month_selector: null,
+      ...EMPTY_ISSUE_DATE_BOUNDS,
       command_name: 'issue_and_send_income_document',
     };
   }
@@ -232,6 +270,7 @@ export function buildCycleDraftReviewIssueAndSendAction(params: {
       confirmation_title: null,
       confirmation_message: null,
       issue_month_selector: null,
+      ...EMPTY_ISSUE_DATE_BOUNDS,
       command_name: 'issue_and_send_income_document',
     };
   }
@@ -248,21 +287,22 @@ export function buildCycleDraftReviewIssueAndSendAction(params: {
       confirmation_title: null,
       confirmation_message: null,
       issue_month_selector: null,
+      ...EMPTY_ISSUE_DATE_BOUNDS,
       command_name: 'issue_and_send_income_document',
     };
   }
 
   const recipientEmail = params.recipient_email?.trim() || '—';
   const confirmationRequired = docType === 'tax_invoice';
-  const todayIso = params.today_iso ?? new Date().toISOString().slice(0, 10);
   const issueMonthSelector = confirmationRequired
     ? buildIssueMonthSelector({
         todayIso,
-        documentDate: params.document_date,
+        documentDate: overdueUnissued ? todayIso : params.document_date,
         recipientEmail,
         mode: 'issue_and_send',
-        monthsBack: params.issue_month_window?.months_back,
+        monthsBack: overdueUnissued ? 0 : params.issue_month_window?.months_back,
         monthsAhead: params.issue_month_window?.months_ahead,
+        overdueUnissued,
       })
     : null;
   const confirmationMessage = confirmationRequired
@@ -285,6 +325,7 @@ export function buildCycleDraftReviewIssueAndSendAction(params: {
     confirmation_title: confirmationRequired ? 'אישור הפקה ושליחה' : 'אישור הפקה ושליחה',
     confirmation_message: confirmationMessage,
     issue_month_selector: issueMonthSelector,
+    ...overdueBounds,
     command_name: 'issue_and_send_income_document',
   };
 }

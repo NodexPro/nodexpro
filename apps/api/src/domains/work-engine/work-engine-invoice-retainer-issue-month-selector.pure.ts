@@ -28,6 +28,10 @@ export type WorkEngineRecurringCycleDraftReviewIssueMonthSelector = {
   default_month: string;
   selected_month: string;
   allowed_months: WorkEngineRecurringCycleDraftReviewIssueMonthOption[];
+  /** Present when overdue unissued cycle — FE must not invent dates. */
+  issue_default_date: string | null;
+  issue_min_date: string | null;
+  issue_max_date: string | null;
 };
 
 const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
@@ -93,18 +97,28 @@ export function buildIssueMonthSelector(params: {
   mode: 'issue' | 'issue_and_send';
   monthsBack?: number;
   monthsAhead?: number;
+  /** When set, past months are forbidden and default is today. */
+  overdueUnissued?: boolean;
 }): WorkEngineRecurringCycleDraftReviewIssueMonthSelector {
+  const overdue = params.overdueUnissued === true;
+  const monthsBack = overdue ? 0 : (params.monthsBack ?? ISSUE_MONTH_SELECTOR_MONTHS_BACK);
+  const monthsAhead = params.monthsAhead ?? ISSUE_MONTH_SELECTOR_MONTHS_AHEAD;
   const allowedMonthKeys = buildAllowedIssueMonthKeys({
     todayIso: params.todayIso,
-    monthsBack: params.monthsBack,
-    monthsAhead: params.monthsAhead,
+    monthsBack,
+    monthsAhead,
   });
   const currentMonth = currentMonthKeyFromTodayIso(params.todayIso);
-  const defaultMonth = resolveDefaultIssueMonth({
-    todayIso: params.todayIso,
-    documentDate: params.documentDate,
-    allowedMonthKeys,
-  });
+  const defaultMonth = overdue
+    ? currentMonth
+    : resolveDefaultIssueMonth({
+        todayIso: params.todayIso,
+        documentDate: params.documentDate,
+        allowedMonthKeys,
+      });
+  const selectedDefault = allowedMonthKeys.includes(defaultMonth)
+    ? defaultMonth
+    : (allowedMonthKeys[0] ?? currentMonth);
   const allowed_months = allowedMonthKeys.map((month_key) => {
     const label = formatHebrewMonthLabelFromKey(month_key);
     const confirmation_message =
@@ -116,12 +130,24 @@ export function buildIssueMonthSelector(params: {
         : buildTaxInvoiceIssueConfirmationMessage(label);
     return { month_key, label, confirmation_message };
   });
+  const overdueBounds = overdue
+    ? {
+        issue_default_date: params.todayIso.slice(0, 10),
+        issue_min_date: params.todayIso.slice(0, 10),
+        issue_max_date: null as string | null,
+      }
+    : {
+        issue_default_date: null as string | null,
+        issue_min_date: null as string | null,
+        issue_max_date: null as string | null,
+      };
   return {
     visible: true,
     current_month: currentMonth,
-    default_month: defaultMonth,
-    selected_month: defaultMonth,
+    default_month: selectedDefault,
+    selected_month: selectedDefault,
     allowed_months,
+    ...overdueBounds,
   };
 }
 

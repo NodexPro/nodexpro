@@ -31,6 +31,11 @@ import {
   parseIssueMonthFromCommandBody,
   resolveIssueDateForIssueMonth,
 } from '../work-engine/work-engine-invoice-retainer-issue-month-selector.pure.js';
+import {
+  assertIssueDateNotBeforeMin,
+  clampIssueDateNotBeforeMin,
+  isRecurringScheduleDateOverdue,
+} from '../work-engine/work-engine-invoice-retainer-overdue-issue-date.pure.js';
 import { todayIsoDate } from './income-retainer-template-document-date.pure.js';
 import { resolveIncomeIssueMonthWindowForOrg } from './income-issue-month-window-resolver.js';
 import {
@@ -382,16 +387,40 @@ async function issueNewDocumentFromDraft(
   );
   if (!docType) throw badRequest('document_type is invalid');
 
+  const todayIso = todayIsoDate();
+  const reviewContext = parseRecurringCycleReviewCommandContext(body);
+  let overdueMinIssueDate: string | null = null;
+  if (reviewContext) {
+    const { data: cycleRow, error: cycleErr } = await supabaseAdmin
+      .from('income_recurring_document_cycles')
+      .select('scheduled_document_date, generated_document_id')
+      .eq('organization_id', scope.org_id)
+      .eq('id', reviewContext.cycle_id)
+      .eq('recurring_profile_id', reviewContext.profile_id)
+      .maybeSingle();
+    throwIfSupabaseError(cycleErr, 'loadRecurringCycleForOverdueIssueDate');
+    const cycle = cycleRow as {
+      scheduled_document_date: string;
+      generated_document_id: string | null;
+    } | null;
+    if (
+      cycle &&
+      !cycle.generated_document_id &&
+      isRecurringScheduleDateOverdue(cycle.scheduled_document_date, todayIso)
+    ) {
+      overdueMinIssueDate = todayIso;
+    }
+  }
+
   const issueMonth = parseIssueMonthFromCommandBody(body);
   let issue_date: string;
   if (issueMonth) {
-    const todayIso = todayIsoDate();
     const issueMonthWindow = await resolveIncomeIssueMonthWindowForOrg(scope.org_id, 'IL', todayIso);
     try {
       assertIssueMonthAllowed({
         todayIso,
         issueMonth,
-        monthsBack: issueMonthWindow.months_back,
+        monthsBack: overdueMinIssueDate ? 0 : issueMonthWindow.months_back,
         monthsAhead: issueMonthWindow.months_ahead,
       });
     } catch (e) {
@@ -400,6 +429,14 @@ async function issueNewDocumentFromDraft(
     issue_date = resolveIssueDateForIssueMonth(issueMonth, draft.document_date);
   } else {
     issue_date = resolveIssueDateFromDraft(draft.document_date, optionalIssueDateFromBody(body));
+  }
+  if (overdueMinIssueDate) {
+    issue_date = clampIssueDateNotBeforeMin(issue_date, overdueMinIssueDate);
+    try {
+      assertIssueDateNotBeforeMin(issue_date, overdueMinIssueDate);
+    } catch (e) {
+      throw badRequest(e instanceof Error ? e.message : 'issue_date is invalid');
+    }
   }
   await assertIncomeDocumentIssueDateAllowed({
     scope,

@@ -27,6 +27,7 @@ import {
   type ScheduleRowWorkItemRef,
 } from './work-engine-invoice-retainer-schedule-row-status.pure.js';
 import { resolveScheduleRowMachineState } from './work-engine-invoice-retainer-schedule-row-machine.pure.js';
+import { buildOverdueUnissuedIssueDateBounds } from './work-engine-invoice-retainer-overdue-issue-date.pure.js';
 import type {
   WorkEngineInvoiceRetainerNextDocumentPreview,
   WorkEngineInvoiceRetainerScheduleProjection,
@@ -209,6 +210,22 @@ function buildRowMenuActions(
     return [viewHistory];
   }
   if (statusKey === 'scheduled' && scheduledDate > today) {
+    return [
+      {
+        key: 'skip_cycle',
+        label: 'דלג',
+        disabled: true,
+        disabled_reason: SKIP_PERSISTENCE_DISABLED_REASON,
+        href: null,
+        income_command: null,
+        income_command_payload: null,
+      },
+      openDocument,
+      viewHistory,
+    ];
+  }
+  if (statusKey === 'not_issued') {
+    // Past planned date, never issued — keep menu + lifecycle actions (primary handled above).
     return [
       {
         key: 'skip_cycle',
@@ -542,6 +559,8 @@ export async function buildRetainerScheduleProjection(params: {
             }
           : null,
         workItem,
+        scheduled_document_date: scheduledDate,
+        today_iso: today,
       });
       const linkedWorkItemId = workItem?.work_item_id ?? null;
       const cycleIndex = dateCycleIndex.get(scheduledDate) ?? 0;
@@ -566,8 +585,9 @@ export async function buildRetainerScheduleProjection(params: {
           status.status_key === 'waiting_review' && rowInteraction.primary_action != null,
       });
       const machineStateTone =
-        rowInteraction.row_interaction_kind === 'future_projection' &&
-        rowInteraction.primary_action?.command === 'open_recurring_cycle_override_for_edit'
+        status.status_key === 'not_issued' ||
+        (rowInteraction.row_interaction_kind === 'future_projection' &&
+          rowInteraction.primary_action?.command === 'open_recurring_cycle_override_for_edit')
           ? 'warning'
           : machine.machine_state_tone;
       let amount = await computeScheduleAmount({
@@ -624,6 +644,10 @@ export async function buildRetainerScheduleProjection(params: {
         machine.machine_has_task &&
         rowInteraction.primary_action != null
       );
+      const overdueIssueBounds =
+        status.status_key === 'not_issued'
+          ? buildOverdueUnissuedIssueDateBounds(today)
+          : null;
       rows.push({
         projection_key: formatScheduleProjectionKey(params.profile.id, scheduledDate),
         cycle_id: cycle?.id ?? null,
@@ -656,6 +680,9 @@ export async function buildRetainerScheduleProjection(params: {
         override_exists: rowInteraction.override_exists,
         override_scope: rowInteraction.override_scope,
         cycle_date: rowInteraction.cycle_date,
+        issue_default_date: overdueIssueBounds?.issue_default_date ?? null,
+        issue_min_date: overdueIssueBounds?.issue_min_date ?? null,
+        issue_max_date: overdueIssueBounds?.issue_max_date ?? null,
         allowed_actions: actions.map((action) => action.key),
         actions,
       });

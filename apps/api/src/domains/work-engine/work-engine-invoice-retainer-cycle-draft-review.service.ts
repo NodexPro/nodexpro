@@ -291,6 +291,7 @@ async function assembleCycleDraftReviewAggregate(params: {
       months_back: issueMonthWindow.months_back,
       months_ahead: issueMonthWindow.months_ahead,
     },
+    scheduled_document_date: params.cycleRow.scheduled_document_date,
   });
   const issueAndSendAction = buildCycleDraftReviewIssueAndSendAction({
     document_type: documentTypeKey,
@@ -306,6 +307,7 @@ async function assembleCycleDraftReviewAggregate(params: {
       months_back: issueMonthWindow.months_back,
       months_ahead: issueMonthWindow.months_ahead,
     },
+    scheduled_document_date: params.cycleRow.scheduled_document_date,
   });
 
   const documentTypeLabel =

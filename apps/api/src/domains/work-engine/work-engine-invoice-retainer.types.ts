@@ -188,7 +188,8 @@ export type WorkEngineInvoiceRetainerScheduleOpenGeneratedDraftAction = {
 export type ScheduleRowInteractionKind =
   | 'generated_draft_review'
   | 'next_document_projection'
-  | 'future_projection';
+  | 'future_projection'
+  | 'overdue_unissued';
 
 export type WorkEngineInvoiceRetainerScheduleOpenCycleDraftPrimaryAction = {
   command: 'open_recurring_cycle_draft_for_review';
@@ -355,6 +356,9 @@ export type WorkEngineRecurringCycleDraftReviewIssueMonthSelector = {
   default_month: string;
   selected_month: string;
   allowed_months: WorkEngineRecurringCycleDraftReviewIssueMonthOption[];
+  issue_default_date: string | null;
+  issue_min_date: string | null;
+  issue_max_date: string | null;
 };
 
 export type WorkEngineRecurringCycleDraftReviewIssueAction = {
@@ -367,6 +371,9 @@ export type WorkEngineRecurringCycleDraftReviewIssueAction = {
   confirmation_title: string | null;
   confirmation_message: string | null;
   issue_month_selector: WorkEngineRecurringCycleDraftReviewIssueMonthSelector | null;
+  issue_default_date: string | null;
+  issue_min_date: string | null;
+  issue_max_date: string | null;
   command_name: 'issue_income_document';
 };
 
@@ -380,6 +387,9 @@ export type WorkEngineRecurringCycleDraftReviewIssueAndSendAction = {
   confirmation_title: string | null;
   confirmation_message: string | null;
   issue_month_selector: WorkEngineRecurringCycleDraftReviewIssueMonthSelector | null;
+  issue_default_date: string | null;
+  issue_min_date: string | null;
+  issue_max_date: string | null;
   command_name: 'issue_and_send_income_document';
 };
 
@@ -445,7 +455,7 @@ export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   scheduled_document_date_display: string;
   document_type_label: string;
   amount_display: string;
-  status_key: 'issued' | 'waiting_review' | 'scheduled' | 'skipped' | 'failed';
+  status_key: 'issued' | 'waiting_review' | 'scheduled' | 'skipped' | 'failed' | 'not_issued';
   status_label: string;
   show_status_text: boolean;
   status_tone: 'success' | 'neutral' | 'warning' | 'danger' | 'muted';
@@ -467,6 +477,10 @@ export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   override_exists: boolean;
   override_scope: RecurringCycleOverrideScope | null;
   cycle_date: string;
+  /** Overdue unissued only — backend-owned issue date bounds for FE render. */
+  issue_default_date: string | null;
+  issue_min_date: string | null;
+  issue_max_date: string | null;
   allowed_actions: string[];
   actions: WorkEngineInvoiceRetainerScheduleProjectionAction[];
 };

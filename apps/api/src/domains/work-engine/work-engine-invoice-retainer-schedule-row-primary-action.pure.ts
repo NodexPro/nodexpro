@@ -5,7 +5,8 @@
 export type ScheduleRowInteractionKind =
   | 'generated_draft_review'
   | 'next_document_projection'
-  | 'future_projection';
+  | 'future_projection'
+  | 'overdue_unissued';
 
 export type RecurringCycleOverrideScope = 'single_cycle' | 'this_and_future';
 
@@ -90,6 +91,25 @@ export function resolveScheduleRowPrimaryAction(params: {
           generated_draft_id: params.generated_draft_id,
           period_key: params.period_key,
           linked_work_item_id: params.linked_work_item_id,
+        },
+      },
+      preview_action: null,
+      override_exists: params.override_exists,
+      override_scope: params.override_scope,
+      cycle_date: cycleDate,
+    };
+  }
+
+  // Overdue unissued: still actionable — open next-document workspace for this period.
+  if (params.status_key === 'not_issued' && !params.generated_draft_id) {
+    return {
+      row_interaction_kind: 'overdue_unissued',
+      primary_action: {
+        command: 'open_next_document_tab',
+        payload: {
+          target_tab: 'next_document',
+          scheduled_document_date: params.scheduled_document_date,
+          period_key: params.period_key,
         },
       },
       preview_action: null,

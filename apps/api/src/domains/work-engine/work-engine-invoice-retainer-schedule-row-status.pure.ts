@@ -6,6 +6,11 @@ import {
   RECURRING_FAILURE_WORK_TYPE,
   RECURRING_WORK_TYPE,
 } from './work-engine-invoice-retainer.pure.js';
+import {
+  OVERDUE_UNISSUED_STATUS_KEY,
+  OVERDUE_UNISSUED_STATUS_LABEL,
+  isRecurringScheduleDateOverdue,
+} from './work-engine-invoice-retainer-overdue-issue-date.pure.js';
 
 export type ScheduleRowCycleRef = {
   status: 'pending' | 'draft_created' | 'issued' | 'cancelled' | 'failed';
@@ -25,7 +30,8 @@ export type ScheduleRowStatusKey =
   | 'waiting_review'
   | 'failed'
   | 'skipped'
-  | 'scheduled';
+  | 'scheduled'
+  | 'not_issued';
 
 export type ScheduleRowStatusTone = 'success' | 'neutral' | 'warning' | 'danger' | 'muted';
 
@@ -99,6 +105,10 @@ function isWaitingReviewCycle(cycle: ScheduleRowCycleRef): boolean {
 export function resolveScheduleRowStatus(params: {
   cycle: ScheduleRowCycleRef | null;
   workItem: ScheduleRowWorkItemRef | null;
+  /** Planned cycle date (YYYY-MM-DD). Required to distinguish overdue unissued vs scheduled. */
+  scheduled_document_date?: string | null;
+  /** Server today (YYYY-MM-DD). */
+  today_iso?: string | null;
 }): ScheduleRowStatusDescriptor {
   const cycle = params.cycle;
   const workItem = params.workItem;
@@ -160,6 +170,21 @@ export function resolveScheduleRowStatus(params: {
         openTask && reviewWorkItem
           ? buildScheduleRowWorkItemHref(reviewWorkItem.work_item_id)
           : null,
+    };
+  }
+
+  if (
+    isRecurringScheduleDateOverdue(params.scheduled_document_date, params.today_iso ?? '')
+  ) {
+    return {
+      status_key: OVERDUE_UNISSUED_STATUS_KEY,
+      status_label: OVERDUE_UNISSUED_STATUS_LABEL,
+      status_tone: 'warning',
+      icon_key: 'alert',
+      icon_display: scheduleRowIconDisplay('alert'),
+      work_state_label: null,
+      has_open_task: false,
+      work_item_href: null,
     };
   }
 
