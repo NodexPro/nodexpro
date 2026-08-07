@@ -1,5 +1,5 @@
 /**
- * INC-8 — pure helpers for Income → Work Engine event envelopes.
+ * INC-8 / INV-4A — pure helpers for Income → Work Engine event envelopes.
  */
 
 export const INCOME_WORK_ENGINE_SOURCE_MODULE = 'income' as const;
@@ -24,10 +24,24 @@ export const INCOME_WORK_EVENTS_DEFERRED = [
   'income.payment_failed',
 ] as const;
 
+/** Calendar month period — Work Engine PERIOD_KEY_REGEX (`month:YYYY-MM`). */
 export function incomeDocumentPeriodKey(isoDate: string): string {
   const m = /^(\d{4})-(\d{2})/.exec(String(isoDate).trim());
-  if (!m) return isoDate.slice(0, 7);
-  return `${m[1]}-${m[2]}`;
+  if (!m) {
+    const fallback = String(isoDate).trim().slice(0, 7);
+    return `month:${fallback}`;
+  }
+  return `month:${m[1]}-${m[2]}`;
+}
+
+/**
+ * INV-4A — per-invoice collection period key.
+ * Makes work_item dedup tuple (org, client, module, work_type, period_key)
+ * unique per invoice without changing the global Work Engine unique index.
+ */
+export function incomeInvoiceCollectionPeriodKey(incomeDocumentId: string): string {
+  const id = String(incomeDocumentId ?? '').trim().toLowerCase();
+  return `invoice:${id}`;
 }
 
 export function resolveIncomeWorkEngineClientId(representedClientId: string | null): string | null {
@@ -57,6 +71,7 @@ export function isCreditIncomeDocumentType(documentType: string): boolean {
   return documentType === 'credit_tax_invoice';
 }
 
+/** Broad collectible catalog (INV-2 due dimension). Not all have AB payment truth. */
 export function isInvoiceCollectionDocumentType(documentType: string): boolean {
   return (
     documentType === 'tax_invoice' ||
@@ -68,3 +83,7 @@ export function isInvoiceCollectionDocumentType(documentType: string): boolean {
 export function isOverdueByDueDate(dueDate: string, todayIso: string): boolean {
   return dueDate < todayIso;
 }
+
+/** Scan page size / max pages — catch-up via ordered pagination (not a hard 200 forever). */
+export const INCOME_OVERDUE_SCAN_PAGE_SIZE = 200;
+export const INCOME_OVERDUE_SCAN_MAX_PAGES = 25;

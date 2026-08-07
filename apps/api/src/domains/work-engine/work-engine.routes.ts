@@ -10,6 +10,8 @@
  *   - GET  /aggregates/invoices-client-documents-by-type
  *            -> work_engine_invoices_client_documents_by_type_aggregate;
  *   - GET  /aggregates/clients-tab  -> work_engine_clients_tab_aggregate (embedded CO registry);
+ *   - GET  /aggregates/collection-reminder-review -> collection_reminder_review_aggregate (INV-4C);
+ *   - GET  /aggregates/invoice-collection-control -> invoice_collection_control_aggregate (INV-4 ICC);
  *                                      backend-ready queue table with rows,
  *                                      summary_cards, filters, pagination,
  *                                      pending_mapping_section. Supports
@@ -64,6 +66,8 @@ import {
 } from '../../shared/observability.js';
 import { getRequestCorrelationId } from '../../middleware/correlation.js';
 import { buildWorkEngineClientsTabAggregate } from './work-engine-clients-tab.read-model.service.js';
+import { buildCollectionReminderReviewAggregate } from './work-engine-collection-reminder-review.read-model.service.js';
+import { buildInvoiceCollectionControlAggregate } from './work-engine-invoice-collection-control.read-model.service.js';
 import {
   WORK_ENGINE_MODULE_CODE,
   WORK_ENGINE_PERMISSIONS,
@@ -72,6 +76,7 @@ import type {
   WorkEngineCommandType,
   WorkEventEnvelope,
 } from './work-engine.types.js';
+import { isUuid } from './work-engine.guards.js';
 
 const router = Router();
 
@@ -314,6 +319,58 @@ officeRouter.get(
   },
 );
 
+/** INV-4C — collection reminder accountant review (approve ≠ send). */
+officeRouter.get(
+  '/aggregates/collection-reminder-review',
+  requirePermission(WORK_ENGINE_PERMISSIONS.view),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const ctx = req.context as RequestContext;
+      const candidateId = String(req.query.reminder_candidate_id ?? '').trim();
+      if (!candidateId || !isUuid(candidateId)) {
+        throw badRequest('reminder_candidate_id query param is required');
+      }
+      const aggregate = await buildCollectionReminderReviewAggregate({
+        orgId: ctx.organizationId!,
+        reminderCandidateId: candidateId,
+        viewer: ctx.membership
+          ? {
+              userId: ctx.user.id,
+              permissions: ctx.membership.permissions ?? [],
+              roleCode: ctx.membership.roleCode ?? 'staff',
+            }
+          : null,
+      });
+      return res.json(aggregate);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** INV-4 — future Invoice Control Center backend contract (no UI). */
+officeRouter.get(
+  '/aggregates/invoice-collection-control',
+  requirePermission(WORK_ENGINE_PERMISSIONS.view),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const ctx = req.context as RequestContext;
+      const incomeDocumentId = String(req.query.income_document_id ?? '').trim();
+      if (!incomeDocumentId || !isUuid(incomeDocumentId)) {
+        throw badRequest('income_document_id query param is required');
+      }
+      const aggregate = await buildInvoiceCollectionControlAggregate({
+        orgId: ctx.organizationId!,
+        incomeDocumentId,
+        ctx,
+      });
+      return res.json(aggregate);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
 const ALLOWED_COMMANDS: ReadonlySet<WorkEngineCommandType> = new Set<WorkEngineCommandType>([
   'create_work_item',
   'assign_work_item',
@@ -326,6 +383,8 @@ const ALLOWED_COMMANDS: ReadonlySet<WorkEngineCommandType> = new Set<WorkEngineC
   'reject_work_item',
   'generate_reminder_candidate',
   'edit_reminder_candidate',
+  'approve_reminder_candidate',
+  'send_collection_reminder',
   'approve_send_reminder_candidate',
   'cancel_reminder_candidate',
   'snooze_reminder_candidate',

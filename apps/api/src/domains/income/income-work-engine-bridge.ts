@@ -1,18 +1,21 @@
 /**
- * INC-8 — Income → Work Engine bridge (work_events intake only).
+ * INC-8 / INV-4A — Income → Work Engine bridge (work_events intake only).
  *
  * STRICT:
  *   - No direct work_items / work_events writes.
  *   - Only `intakeWorkEvent` from work-engine.event-intake.service.
  *   - Fire-and-forget; never throws into Income command handlers.
- *   - amount_reference in payload is display-only (not Work Engine financial truth).
+ *   - amount / remaining references are display-only (not Work Engine financial truth).
  *
  * Client contract:
  *   - `represented_client_id` (office_representative mode) is used as Work Engine client_id.
  *   - Self-mode / office-owned invoices (represented_client_id null) are skipped (audited).
- *     Work Engine intake requires a clients.id; office issuer_business_id is an
- *     income_issuer_profiles.id, not a clients row. Closing this gap is a product/Core
- *     decision (recommended owner: Work Engine + Core client identity) — not INV-5A.
+ *
+ * INV-4A overdue intake:
+ *   - AB remaining + INV-2 overdue (not due_date-only)
+ *   - tax_invoice only (isSupportedIncomePaymentDocumentType)
+ *   - period_key = invoice:<id> (per-invoice collection work item)
+ *   - ordered paginated catch-up (not hard-stuck on first 200)
  */
 
 import type { RequestContext } from '../../shared/context.js';
@@ -20,7 +23,15 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service.js';
 import type { IntakeWorkEventMeta } from '../work-engine/work-engine.types.js';
 import { supabaseAdmin } from '../../db/client.js';
+import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
 import {
+  isSupportedIncomePaymentDocumentType,
+  resolveIncomeInvoiceOriginalAmount,
+} from '../accounting-base/accounting-base-income-payment.pure.js';
+import { resolveIncomeOverdueCollectionIntake } from './invoice-lifecycle.pure.js';
+import {
+  INCOME_OVERDUE_SCAN_MAX_PAGES,
+  INCOME_OVERDUE_SCAN_PAGE_SIZE,
   INCOME_WORK_ENGINE_ENTITY_TYPE,
   INCOME_WORK_ENGINE_SCHEMA_VERSION,
   INCOME_WORK_ENGINE_SOURCE_MODULE,
@@ -34,8 +45,8 @@ import {
   amountReferenceFromTotalsSnapshot,
   customerDisplayFromSnapshot,
   incomeDocumentPeriodKey,
+  incomeInvoiceCollectionPeriodKey,
   isCreditIncomeDocumentType,
-  isOverdueByDueDate,
   resolveIncomeWorkEngineClientId,
 } from './income-work-engine-bridge.pure.js';
 
@@ -58,6 +69,7 @@ function buildIntakePayload(
   eventType: string,
   clientId: string,
   extraPayload: Record<string, unknown>,
+  periodKey?: string,
 ): Record<string, unknown> {
   const periodSource = signal.dueDate ?? signal.issueDate;
   const amountReference = amountReferenceFromTotalsSnapshot(signal.totalsSnapshotJson);
@@ -68,7 +80,7 @@ function buildIntakePayload(
     source_entity_type: INCOME_WORK_ENGINE_ENTITY_TYPE,
     source_entity_id: signal.incomeDocumentId,
     event_type: eventType,
-    period_key: incomeDocumentPeriodKey(periodSource),
+    period_key: periodKey ?? incomeDocumentPeriodKey(periodSource),
     occurred_at: new Date().toISOString(),
     schema_version: INCOME_WORK_ENGINE_SCHEMA_VERSION,
     emitted_by_type: 'system',
@@ -110,11 +122,12 @@ async function emitIntake(
   signal: IncomeWorkEventEmitContext,
   eventType: string,
   extraPayload: Record<string, unknown> = {},
+  periodKey?: string,
 ): Promise<IntakeWorkEventMeta | null> {
   const clientId = resolveIncomeWorkEngineClientId(signal.representedClientId);
   if (!clientId) return null;
 
-  const body = buildIntakePayload(signal, eventType, clientId, extraPayload);
+  const body = buildIntakePayload(signal, eventType, clientId, extraPayload, periodKey);
   try {
     return await intakeWorkEvent({ kind: 'office_request', ctx: signal.ctx }, body);
   } catch (err) {
@@ -124,9 +137,39 @@ async function emitIntake(
   }
 }
 
+async function emitOverdueIntakeIfEligible(
+  signal: IncomeWorkEventEmitContext,
+  todayIso: string,
+  paidAmount: number,
+): Promise<IntakeWorkEventMeta | null> {
+  const original = resolveIncomeInvoiceOriginalAmount(signal.totalsSnapshotJson);
+  const intake = resolveIncomeOverdueCollectionIntake({
+    documentStatus: 'issued',
+    documentType: signal.documentType,
+    dueDate: signal.dueDate,
+    originalAmount: original,
+    paidAmount,
+    todayIso,
+  });
+  if (!intake.eligible) return null;
+
+  return emitIntake(
+    signal,
+    INCOME_WORK_EVENT_OVERDUE,
+    {
+      overdue_since: intake.overdue_since,
+      days_overdue: intake.days_overdue,
+      remaining_balance_reference: intake.remaining_balance,
+      payment_state_key: intake.payment_state_key,
+      original_amount_reference: original,
+    },
+    incomeInvoiceCollectionPeriodKey(signal.incomeDocumentId),
+  );
+}
+
 /**
  * Emit safe Income work events after a document is issued.
- * Maps to work_items only via Work Engine allowlist (currently: overdue scan path + overdue event).
+ * Overdue intake uses AB remaining + INV-2 (INV-4A).
  */
 export async function emitIncomeWorkEventsAfterDocumentIssued(
   signal: IncomeWorkEventEmitContext,
@@ -146,11 +189,14 @@ export async function emitIncomeWorkEventsAfterDocumentIssued(
   if (signal.dueDate) {
     await emitIntake(signal, INCOME_WORK_EVENT_DUE_DATE_SET);
     const today = new Date().toISOString().slice(0, 10);
-    if (isOverdueByDueDate(signal.dueDate, today)) {
-      await emitIntake(signal, INCOME_WORK_EVENT_OVERDUE, {
-        overdue_since: today,
-      });
-    }
+    const paidMap = await sumPostedAllocationsForIncomeDocuments(signal.orgId, [
+      signal.incomeDocumentId,
+    ]);
+    await emitOverdueIntakeIfEligible(
+      signal,
+      today,
+      paidMap.get(signal.incomeDocumentId) ?? 0,
+    );
   }
 
   if (isCreditIncomeDocumentType(signal.documentType)) {
@@ -218,10 +264,6 @@ export async function emitIncomeWorkEventAfterDocumentSentByDocflow(
   });
 }
 
-/**
- * Scheduler hook: emit overdue events for issued documents with past due_date.
- * Does not compute debt totals — compares due_date only (display/reference workflow).
- */
 export type IncomePaidEventType =
   | (typeof INCOME_WORK_EVENTS_DEFERRED)[0]
   | (typeof INCOME_WORK_EVENTS_DEFERRED)[1];
@@ -261,54 +303,114 @@ export async function emitIncomeWorkEventAfterInvoicePaidOrPartial(
   });
 }
 
+type OverdueScanDoc = {
+  id: string;
+  represented_client_id: string;
+  document_type: string;
+  document_number: string;
+  document_status: string;
+  issue_date: string;
+  due_date: string;
+  currency: string;
+  customer_snapshot_json: Record<string, unknown> | null;
+  totals_snapshot_json: Record<string, unknown> | null;
+};
+
+/**
+ * INV-4E — after allocation reversal, re-emit overdue when AB remaining > 0 and still overdue.
+ * Creates/reuses invoice_collection_followup via existing INV-4A intake (reopen path).
+ */
+export async function emitIncomeInvoiceOverdueAfterPaymentReversal(
+  signal: IncomeWorkEventEmitContext,
+  paidAmount: number,
+  todayIso: string = new Date().toISOString().slice(0, 10),
+): Promise<IntakeWorkEventMeta | null> {
+  const clientId = resolveIncomeWorkEngineClientId(signal.representedClientId);
+  if (!clientId) {
+    await auditBridgeFailure(
+      signal,
+      INCOME_WORK_EVENT_OVERDUE,
+      'represented_client_id required for Work Engine intake after reversal (self-mode skipped)',
+    );
+    return null;
+  }
+  return emitOverdueIntakeIfEligible(signal, todayIso, paidAmount);
+}
+
+/**
+ * INV-4A — scan overdue open tax invoices and intake collection work items.
+ * Catch-up: ordered pages (due_date, id); AB remaining batched; idempotent emit/retry.
+ */
 export async function scanAndEmitIncomeInvoiceOverdueForOrg(
   orgId: string,
   ctx: RequestContext,
   todayIso: string = new Date().toISOString().slice(0, 10),
-): Promise<{ scanned: number; emitted: number }> {
-  const { data, error } = await supabaseAdmin
-    .from('income_documents')
-    .select(
-      'id, represented_client_id, document_type, document_number, issue_date, due_date, currency, customer_snapshot_json, totals_snapshot_json',
-    )
-    .eq('organization_id', orgId)
-    .eq('document_status', 'issued')
-    .not('represented_client_id', 'is', null)
-    .not('due_date', 'is', null)
-    .lt('due_date', todayIso)
-    .limit(200);
-  if (error) throw error;
-
+): Promise<{ scanned: number; emitted: number; pages: number; eligible: number }> {
+  let scanned = 0;
   let emitted = 0;
-  for (const row of data ?? []) {
-    const r = row as {
-      id: string;
-      represented_client_id: string;
-      document_type: string;
-      document_number: string;
-      issue_date: string;
-      due_date: string;
-      currency: string;
-      customer_snapshot_json: Record<string, unknown>;
-      totals_snapshot_json: Record<string, unknown> | null;
-    };
-    const signal: IncomeWorkEventEmitContext = {
-      ctx,
-      orgId,
-      incomeDocumentId: r.id,
-      representedClientId: r.represented_client_id,
-      documentType: r.document_type,
-      documentNumber: r.document_number,
-      issueDate: r.issue_date,
-      dueDate: r.due_date,
-      currency: r.currency ?? 'ILS',
-      customerSnapshotJson: r.customer_snapshot_json ?? {},
-      totalsSnapshotJson: r.totals_snapshot_json,
-    };
-    const out = await emitIntake(signal, INCOME_WORK_EVENT_OVERDUE, {
-      overdue_since: todayIso,
-    });
-    if (out) emitted += 1;
+  let eligible = 0;
+  let pages = 0;
+
+  for (let page = 0; page < INCOME_OVERDUE_SCAN_MAX_PAGES; page += 1) {
+    const from = page * INCOME_OVERDUE_SCAN_PAGE_SIZE;
+    const to = from + INCOME_OVERDUE_SCAN_PAGE_SIZE - 1;
+    const { data, error } = await supabaseAdmin
+      .from('income_documents')
+      .select(
+        'id, represented_client_id, document_type, document_number, document_status, issue_date, due_date, currency, customer_snapshot_json, totals_snapshot_json',
+      )
+      .eq('organization_id', orgId)
+      .eq('document_status', 'issued')
+      .eq('document_type', 'tax_invoice')
+      .not('represented_client_id', 'is', null)
+      .not('due_date', 'is', null)
+      .lt('due_date', todayIso)
+      .order('due_date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    const rows = (data ?? []) as OverdueScanDoc[];
+    if (rows.length === 0) break;
+
+    pages += 1;
+    scanned += rows.length;
+
+    const ids = rows.map((r) => r.id);
+    const paidMap = await sumPostedAllocationsForIncomeDocuments(orgId, ids);
+
+    for (const r of rows) {
+      if (!isSupportedIncomePaymentDocumentType(r.document_type)) continue;
+      const signal: IncomeWorkEventEmitContext = {
+        ctx,
+        orgId,
+        incomeDocumentId: r.id,
+        representedClientId: r.represented_client_id,
+        documentType: r.document_type,
+        documentNumber: r.document_number,
+        issueDate: r.issue_date,
+        dueDate: r.due_date,
+        currency: r.currency ?? 'ILS',
+        customerSnapshotJson: r.customer_snapshot_json ?? {},
+        totalsSnapshotJson: r.totals_snapshot_json,
+      };
+      const paid = paidMap.get(r.id) ?? 0;
+      const original = resolveIncomeInvoiceOriginalAmount(r.totals_snapshot_json);
+      const decision = resolveIncomeOverdueCollectionIntake({
+        documentStatus: r.document_status,
+        documentType: r.document_type,
+        dueDate: r.due_date,
+        originalAmount: original,
+        paidAmount: paid,
+        todayIso,
+      });
+      if (!decision.eligible) continue;
+      eligible += 1;
+      const out = await emitOverdueIntakeIfEligible(signal, todayIso, paid);
+      if (out) emitted += 1;
+    }
+
+    if (rows.length < INCOME_OVERDUE_SCAN_PAGE_SIZE) break;
   }
-  return { scanned: (data ?? []).length, emitted };
+
+  return { scanned, emitted, pages, eligible };
 }

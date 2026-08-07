@@ -12,8 +12,8 @@ import {
   resolveIncomeWorkEngineClientId,
 } from '../../src/domains/income/income-work-engine-bridge.pure.js';
 
-test('income document period key from ISO date', () => {
-  assert.equal(incomeDocumentPeriodKey('2026-05-10'), '2026-05');
+test('income document period key from ISO date (WE regex prefix)', () => {
+  assert.equal(incomeDocumentPeriodKey('2026-05-10'), 'month:2026-05');
 });
 
 test('office mode uses represented_client_id as Work Engine client_id', () => {
@@ -22,7 +22,7 @@ test('office mode uses represented_client_id as Work Engine client_id', () => {
   assert.equal(resolveIncomeWorkEngineClientId(null), null);
 });
 
-test('overdue compares due_date only (no amount/debt math)', () => {
+test('due_date compare helper (date-only; AB remaining applied in INV-4A intake)', () => {
   assert.equal(isOverdueByDueDate('2026-05-10', '2026-05-11'), true);
   assert.equal(isOverdueByDueDate('2026-05-11', '2026-05-11'), false);
 });

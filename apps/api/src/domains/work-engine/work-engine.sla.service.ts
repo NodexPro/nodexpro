@@ -174,6 +174,33 @@ export async function startResponseObligationIfAbsent(args: {
   return true;
 }
 
+/**
+ * INV-4B — start waiting_client SLA when intake creates items in waiting_client
+ * (e.g. invoice_collection_followup). Idempotent; does not create reminder candidates.
+ */
+export async function startWaitingClientObligationIfAbsent(args: {
+  orgId: string;
+  workItemId: string;
+  sourceTransitionId: string | null;
+  actorUserId: string | null;
+  workType: string;
+}): Promise<boolean> {
+  if (await hasActiveObligation(args.orgId, args.workItemId, 'waiting_client')) {
+    return false;
+  }
+  const policy = await resolveWorkTypeSlaPolicy(args.orgId, args.workType);
+  await startObligation({
+    orgId: args.orgId,
+    workItemId: args.workItemId,
+    kind: 'waiting_client',
+    durationMinutes: policy.waiting_client_timeout_minutes,
+    sourceTransitionId: args.sourceTransitionId,
+    actorUserId: args.actorUserId,
+    policy,
+  });
+  return true;
+}
+
 async function startObligation(args: {
   orgId: string;
   workItemId: string;
@@ -362,7 +389,12 @@ export type RecomputeWorkItemSlaStatusResult = {
 export async function recomputeWorkItemSlaStatus(
   orgId: string,
   workItemId: string,
-  opts?: { actorUserId?: string | null; auditOnStatusChange?: boolean },
+  opts?: {
+    actorUserId?: string | null;
+    auditOnStatusChange?: boolean;
+    /** INV-4B — only collection reminder scan may auto-create collection candidates. */
+    collectionDebtPrechecked?: boolean;
+  },
 ): Promise<RecomputeWorkItemSlaStatusResult> {
   const { data: item, error: itemErr } = await supabaseAdmin
     .from('work_items')
@@ -427,6 +459,7 @@ export async function recomputeWorkItemSlaStatus(
     orgId,
     workItemId,
     actorUserId: opts?.actorUserId ?? null,
+    collectionDebtPrechecked: opts?.collectionDebtPrechecked === true,
   });
 
   const escalation = await evaluateEscalationsForWorkItem({

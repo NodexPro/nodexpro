@@ -17,6 +17,7 @@ import { assertRowMatchesIssuerScope } from '../income/income.guards.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 import { buildInvoiceLifecycleAggregate } from '../income/invoice-lifecycle.read-model.service.js';
 import type { InvoiceLifecycleAggregate } from '../income/invoice-lifecycle.types.js';
+import { emitIncomeInvoiceOverdueAfterPaymentReversal } from '../income/income-work-engine-bridge.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 import {
   ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION,
@@ -291,7 +292,7 @@ export async function executeReverseIncomePaymentAllocation(
   const { data: docRaw, error: docErr } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, organization_id, issuer_business_id, represented_client_id, document_type, document_status',
+      'id, organization_id, issuer_business_id, represented_client_id, document_type, document_status, document_number, issue_date, due_date, currency, customer_snapshot_json, totals_snapshot_json',
     )
     .eq('organization_id', organizationId)
     .eq('id', alloc.source_entity_id)
@@ -306,6 +307,12 @@ export async function executeReverseIncomePaymentAllocation(
     represented_client_id: string | null;
     document_type: string;
     document_status: string;
+    document_number: string;
+    issue_date: string;
+    due_date: string | null;
+    currency: string | null;
+    customer_snapshot_json: Record<string, unknown> | null;
+    totals_snapshot_json: Record<string, unknown> | null;
   };
 
   if (!isSupportedIncomePaymentDocumentType(doc.document_type)) {
@@ -361,6 +368,26 @@ export async function executeReverseIncomePaymentAllocation(
       organizationId,
       incomeDocumentId: rpc.income_document_id,
     });
+
+    // INV-4E — reopen collection via existing overdue intake when debt + overdue return.
+    if (!rpc.replay && arAffected.overdue && arAffected.remaining_balance > 0) {
+      await emitIncomeInvoiceOverdueAfterPaymentReversal(
+        {
+          ctx,
+          orgId: organizationId,
+          incomeDocumentId: doc.id,
+          representedClientId: doc.represented_client_id,
+          documentType: doc.document_type,
+          documentNumber: doc.document_number,
+          issueDate: doc.issue_date,
+          dueDate: doc.due_date,
+          currency: doc.currency || 'ILS',
+          customerSnapshotJson: doc.customer_snapshot_json ?? {},
+          totalsSnapshotJson: doc.totals_snapshot_json,
+        },
+        arAffected.paid_amount,
+      );
+    }
 
     const additional_refreshed: ReverseIncomePaymentAllocationResponse['additional_refreshed'] = [
       { aggregate_key: 'accounts_receivable_affected', aggregate: arAffected },

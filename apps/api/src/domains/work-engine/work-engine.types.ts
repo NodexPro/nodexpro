@@ -71,6 +71,10 @@ export type WorkEngineCommandType =
   | 'generate_reminder_candidate'
   /** Stage 10 Phase 3B-3 — reminder review queue commands */
   | 'edit_reminder_candidate'
+  /** INV-4C — approve ready for delivery (no send). */
+  | 'approve_reminder_candidate'
+  /** INV-4D — send approved collection reminder via Delivery. */
+  | 'send_collection_reminder'
   | 'approve_send_reminder_candidate'
   | 'cancel_reminder_candidate'
   | 'snooze_reminder_candidate'
@@ -90,7 +94,9 @@ export type AllowedAction = {
 
 export type WorkEngineRefreshedAggregateKey =
   | 'work_engine_foundation_aggregate'
-  | 'work_engine_queue_aggregate';
+  | 'work_engine_queue_aggregate'
+  | 'collection_reminder_review_aggregate'
+  | 'invoice_collection_control_aggregate';
 
 export type WorkEngineCommandResponse = {
   ok: true;

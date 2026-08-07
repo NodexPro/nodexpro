@@ -35,6 +35,7 @@ import {
   type ReminderObligationSnapshot,
 } from './work-engine.reminder.logic.js';
 import type { WorkItemRow } from './work-engine.types.js';
+import { INVOICE_COLLECTION_FOLLOWUP_WORK_TYPE } from './work-engine-collection-reminder.pure.js';
 
 export type {
   ReminderCandidateTargetType,
@@ -110,6 +111,8 @@ function workTypeLabel(key: string): string {
       return 'Annual Report Documents';
     case 'docflow_thread_followup':
       return 'Conversation';
+    case 'invoice_collection_followup':
+      return 'Invoice collection';
     default:
       return humanizeKey(key);
   }
@@ -428,6 +431,12 @@ export async function evaluateRemindersForWorkItem(params: {
   workItemId: string;
   actorUserId?: string | null;
   asOf?: Date;
+  /**
+   * INV-4B — invoice_collection_followup auto-candidates only after batched AB
+   * open-overdue precheck (dedicated collection reminder scan). Prevents N× payment
+   * case reads and stale paid invoices from creating candidates.
+   */
+  collectionDebtPrechecked?: boolean;
 }): Promise<EvaluateRemindersForWorkItemResult> {
   const result: EvaluateRemindersForWorkItemResult = {
     evaluated_steps: 0,
@@ -437,6 +446,13 @@ export async function evaluateRemindersForWorkItem(params: {
 
   const workItem = await loadWorkItemForReminderEvaluation(params.orgId, params.workItemId);
   if (!isWorkItemEligibleForAutoReminders(workItem.work_state)) {
+    return result;
+  }
+
+  if (
+    workItem.work_type === INVOICE_COLLECTION_FOLLOWUP_WORK_TYPE &&
+    params.collectionDebtPrechecked !== true
+  ) {
     return result;
   }
 

@@ -33,7 +33,7 @@ const schedulerSource = readFileSync(
 test('income.invoice_overdue maps to invoice_collection_followup', () => {
   const mapped = resolveEventMapping({
     event_type: 'income.invoice_overdue',
-    period_key: '2026-05',
+    period_key: 'invoice:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
   });
   assert.equal(mapped.resolved, true);
   if (!mapped.resolved) return;
@@ -45,7 +45,7 @@ test('income.invoice_overdue maps to invoice_collection_followup', () => {
 test('income.document_issued is not in allowlist (audit/context only)', () => {
   const mapped = resolveEventMapping({
     event_type: 'income.document_issued',
-    period_key: '2026-05',
+    period_key: 'month:2026-05',
   });
   assert.equal(mapped.resolved, false);
 });

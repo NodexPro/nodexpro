@@ -5,6 +5,7 @@
  */
 
 import {
+  isSupportedIncomePaymentDocumentType,
   resolveIncomeInvoicePaymentState,
   type IncomeInvoicePaymentStateKey,
 } from '../accounting-base/accounting-base-income-payment.pure.js';
@@ -161,6 +162,51 @@ export function composeInvoiceLifecyclePaymentState(
   paidAmount: number,
 ): ReturnType<typeof resolveIncomeInvoicePaymentState> {
   return resolveIncomeInvoicePaymentState(originalAmount, paidAmount);
+}
+
+/**
+ * INV-4A — overdue collection intake eligibility.
+ * AB-supported payment types only + INV-2 overdue (due past AND remaining > 0).
+ */
+export function resolveIncomeOverdueCollectionIntake(params: {
+  documentStatus: string;
+  documentType: string;
+  dueDate: string | null;
+  originalAmount: number;
+  paidAmount: number;
+  todayIso: string;
+}): {
+  eligible: boolean;
+  payment_state_key: IncomeInvoicePaymentStateKey;
+  remaining_balance: number;
+  overdue_since: string | null;
+  days_overdue: number | null;
+} {
+  const payment = resolveIncomeInvoicePaymentState(params.originalAmount, params.paidAmount);
+  if (!isSupportedIncomePaymentDocumentType(params.documentType)) {
+    return {
+      eligible: false,
+      payment_state_key: payment.payment_state_key,
+      remaining_balance: payment.remaining_balance,
+      overdue_since: null,
+      days_overdue: null,
+    };
+  }
+  const due = composeInvoiceLifecycleDueDimension({
+    documentStatus: params.documentStatus,
+    documentType: params.documentType,
+    dueDate: params.dueDate,
+    remainingBalance: payment.remaining_balance,
+    paymentStateKey: payment.payment_state_key,
+    todayIso: params.todayIso,
+  });
+  return {
+    eligible: due.overdue === true,
+    payment_state_key: payment.payment_state_key,
+    remaining_balance: payment.remaining_balance,
+    overdue_since: due.overdue_since,
+    days_overdue: due.days_overdue,
+  };
 }
 
 /** Matches Income overdue scan / invoices-tab calendar day (UTC ISO date). */
