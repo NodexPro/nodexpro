@@ -120,7 +120,36 @@ test('save with recurring_cycle_review returns full refreshed case including dra
   assert.ok(block.includes('work_engine_invoice_retainer_setup_aggregate'));
   assert.ok(block.includes('work_engine_invoices_tab_aggregate'));
   assert.ok(block.includes('work_engine_invoices_client_documents_by_type_aggregate'));
-  assert.ok(block.includes("documentTypeKey: 'draft'"));
+  assert.ok(block.includes('includeDraftListAggregates: true'));
+});
+
+test('normal review Save (generate_preview + review) does not stamp user_saved_at path', () => {
+  const commands = readApi('domains/income/income-commands.service.ts');
+  const start = commands.indexOf('if (command === INCOME_COMMAND_GENERATE_PREVIEW)');
+  assert.ok(start >= 0, 'GENERATE_PREVIEW handler missing');
+  const end = commands.indexOf('if (command === INCOME_COMMAND_UPDATE_DISCOUNT)', start);
+  assert.ok(end > start);
+  const block = commands.slice(start, end);
+  assert.ok(block.includes('generateIncomeDocumentPreview'));
+  assert.ok(block.includes('includeDraftListAggregates: false'));
+  assert.ok(!block.includes('saveIncomeDocumentDraft'));
+  assert.ok(!block.includes('savePatch.user_saved_at'));
+
+  const editor = readApi('domains/income/income-document-draft-editor.service.ts');
+  const previewStart = editor.indexOf('export async function generateIncomeDocumentPreview');
+  const previewBlock = editor.slice(previewStart, previewStart + 1200);
+  assert.ok(!previewBlock.includes('user_saved_at'));
+});
+
+test('wizard draft mutations resolve trusted office/recurring issuer before active scope assert', () => {
+  const commands = readApi('domains/income/income-commands.service.ts');
+  assert.ok(commands.includes('resolveIncomeWizardMutationIssuerScope'));
+  assert.ok(commands.includes('resolveAndApplyRecurringCycleIssueIssuerScope'));
+  assert.ok(commands.includes('resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded'));
+  const wizardCmdStart = commands.indexOf('const wizardDraftCmd = async');
+  const wizardCmdBlock = commands.slice(wizardCmdStart, wizardCmdStart + 500);
+  assert.ok(wizardCmdBlock.includes('resolveIncomeWizardMutationIssuerScope'));
+  assert.ok(!wizardCmdBlock.includes('loadActiveIncomeIssuerScope(ctx)'));
 });
 
 test('request-loop fix: by-type modal stable deps, abort, close not blocked by busy', () => {

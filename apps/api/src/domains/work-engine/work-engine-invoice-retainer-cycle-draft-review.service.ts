@@ -315,6 +315,7 @@ async function assembleCycleDraftReviewAggregate(params: {
     params.income_workspace_aggregate.document_details_step?.header?.title ??
     'מסמך';
   const canSaveDraft = Boolean(WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS.save_draft);
+  const canGeneratePreview = Boolean(WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS.generate_preview);
   const canEditDraft = params.draftStatus === 'draft' && !alreadyIssued;
   const viewDocumentAction =
     alreadyIssued && params.issuedDocumentId
@@ -330,6 +331,12 @@ async function assembleCycleDraftReviewAggregate(params: {
     orgId: params.orgId,
     representedClientId: params.refs.representedClientId,
   });
+
+  const editDisabledReason = alreadyIssued
+    ? `המסמך כבר הופק${params.issuedDocumentNumberDisplay ? ` (${params.issuedDocumentNumberDisplay})` : ''}`
+    : params.draftStatus !== 'draft'
+      ? 'הטיוטה אינה ניתנת לעריכה'
+      : null;
 
   return {
     aggregate_key: 'work_engine_recurring_cycle_draft_review_aggregate',
@@ -353,9 +360,21 @@ async function assembleCycleDraftReviewAggregate(params: {
       visible: true,
       enabled: canEditDraft,
       label: 'עריכה',
-      disabled_reason: alreadyIssued
-        ? `המסמך כבר הופק${params.issuedDocumentNumberDisplay ? ` (${params.issuedDocumentNumberDisplay})` : ''}`
-        : null,
+      disabled_reason: editDisabledReason,
+    },
+    save_action: {
+      visible: canEditDraft && canGeneratePreview,
+      enabled: canEditDraft && canGeneratePreview,
+      label: 'שמירה',
+      disabled_reason: editDisabledReason,
+      command: 'generate_income_document_preview',
+    },
+    save_as_user_draft_action: {
+      visible: canEditDraft && canSaveDraft,
+      enabled: canEditDraft && canSaveDraft,
+      label: 'שמור טיוטה',
+      disabled_reason: editDisabledReason,
+      command: 'save_income_document_draft',
     },
     issue_action: issueAction,
     issue_and_send_action: issueAndSendAction,
@@ -370,7 +389,8 @@ async function assembleCycleDraftReviewAggregate(params: {
     allowed_actions: [
       'open_recurring_cycle_draft_for_review',
       ...(canEditDraft ? ['edit_recurring_cycle_draft'] : []),
-      ...(canSaveDraft && canEditDraft ? ['save_income_document_draft'] : []),
+      ...(canEditDraft && canGeneratePreview ? ['generate_income_document_preview'] : []),
+      ...(canEditDraft && canSaveDraft ? ['save_income_document_draft'] : []),
       ...(issueAction.enabled ? ['issue_income_document'] : []),
       ...(issueAndSendAction.enabled ? ['issue_and_send_income_document'] : []),
       ...(viewDocumentAction?.enabled ? ['view_document'] : []),

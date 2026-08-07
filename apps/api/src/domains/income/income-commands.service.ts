@@ -90,8 +90,15 @@ import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from '../work-engine/work-engine-invoice-retainer.read-model.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from '../work-engine/work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-engine/work-engine-invoices-client-documents-by-type.read-model.service.js';
-import { loadRecurringCycleReviewRefsByGeneratedDraft } from './income-recurring-cycle-issue-issuer-scope.service.js';
+import {
+  loadRecurringCycleReviewRefsByGeneratedDraft,
+  resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded,
+  resolveAndApplyRecurringCycleIssueIssuerScope,
+} from './income-recurring-cycle-issue-issuer-scope.service.js';
 import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
+import type { RecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
+import type { WorkEngineRecurringCycleDraftReviewAggregate } from '../work-engine/work-engine-invoice-retainer.types.js';
+import type { WorkEngineInvoiceRetainerSetupAggregate } from '../work-engine/work-engine-invoice-retainer.types.js';
 import {
   executeUpdateIncomeDocumentBrandingProfile,
   executeUpdateIncomeDocumentBrandingProfilePreviewDraft,
@@ -204,6 +211,96 @@ async function commandResponse(
 function hasDraftIdInBody(body: Record<string, unknown>): boolean {
   const raw = body.draft_id;
   return raw !== null && raw !== undefined && String(raw).trim() !== '';
+}
+
+/**
+ * Resolve authoritative issuer for wizard draft mutations.
+ * Recurring cycle review / office generated drafts: trusted draft→cycle→profile.
+ * Ordinary self drafts: leave active workspace scope unchanged.
+ */
+async function resolveIncomeWizardMutationIssuerScope(
+  ctx: RequestContext,
+  body: Record<string, unknown>,
+): Promise<ActiveIncomeIssuerScope> {
+  const review = parseRecurringCycleReviewCommandContext(body);
+  if (review && hasDraftIdInBody(body)) {
+    return resolveAndApplyRecurringCycleIssueIssuerScope(ctx, {
+      draftId: reqUuid(body.draft_id, 'draft_id'),
+      review,
+    });
+  }
+  if (hasDraftIdInBody(body)) {
+    const resolved = await resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded(ctx, {
+      draftId: reqUuid(body.draft_id, 'draft_id'),
+    });
+    if (resolved) return resolved;
+  }
+  return loadActiveIncomeIssuerScope(ctx);
+}
+
+async function refreshRecurringCycleDraftReviewMutationCase(params: {
+  ctx: RequestContext;
+  review: RecurringCycleReviewCommandContext;
+  includeDraftListAggregates: boolean;
+}): Promise<{
+  reviewAggregate: WorkEngineRecurringCycleDraftReviewAggregate;
+  setupAggregate: WorkEngineInvoiceRetainerSetupAggregate;
+  invoicesTabAggregate: Awaited<ReturnType<typeof buildWorkEngineInvoicesTabAggregate>> | null;
+  clientDocumentsByTypeAggregate: Awaited<
+    ReturnType<typeof buildWorkEngineInvoicesClientDocumentsByTypeAggregate>
+  > | null;
+}> {
+  const reviewAggregate = await refreshRecurringCycleDraftReviewCase({
+    ctx: params.ctx,
+    representedClientId: params.review.represented_client_id,
+    profileId: params.review.profile_id,
+    cycleId: params.review.cycle_id,
+    generatedDraftId: params.review.generated_draft_id,
+    periodKey: params.review.period_key,
+    linkedWorkItemId: params.review.linked_work_item_id,
+  });
+  const orgId = params.ctx.organizationId;
+  if (!orgId) throw badRequest('Organization context required');
+  const { data: profile, error: profileErr } = await supabaseAdmin
+    .from('income_recurring_document_profiles')
+    .select('end_customer_id')
+    .eq('organization_id', orgId)
+    .eq('id', params.review.profile_id)
+    .eq('represented_client_id', params.review.represented_client_id)
+    .maybeSingle();
+  throwIfSupabaseError(profileErr, 'loadRecurringProfileForDraftMutationRefresh');
+  if (!profile) throw notFound('Recurring profile not found');
+
+  const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
+    ctx: params.ctx,
+    representedClientId: params.review.represented_client_id,
+    endCustomerId: String((profile as { end_customer_id: string }).end_customer_id),
+    buildMode: 'schedule_refresh',
+  });
+
+  if (!params.includeDraftListAggregates) {
+    return {
+      reviewAggregate,
+      setupAggregate,
+      invoicesTabAggregate: null,
+      clientDocumentsByTypeAggregate: null,
+    };
+  }
+
+  const [invoicesTabAggregate, clientDocumentsByTypeAggregate] = await Promise.all([
+    buildWorkEngineInvoicesTabAggregate({ ctx: params.ctx }),
+    buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+      ctx: params.ctx,
+      representedClientId: params.review.represented_client_id,
+      documentTypeKey: 'draft',
+    }),
+  ]);
+  return {
+    reviewAggregate,
+    setupAggregate,
+    invoicesTabAggregate,
+    clientDocumentsByTypeAggregate,
+  };
 }
 
 async function brandingCommandResponse(
@@ -1007,7 +1104,7 @@ export async function executeIncomeCommand(
   const wizardDraftCmd = async (
     runner: (scope: ActiveIncomeIssuerScope, body: Record<string, unknown>) => Promise<WizardDraftOverlay>,
   ): Promise<IncomeCommandResponse> => {
-    const scope = await loadActiveIncomeIssuerScope(ctx);
+    const scope = await resolveIncomeWizardMutationIssuerScope(ctx, body);
     assertIncomeEditPermission(scope);
     const overlay = await runner(scope, body);
     return wizardDraftCommandResponse(ctx, command, scope, {}, overlay);
@@ -1038,62 +1135,51 @@ export async function executeIncomeCommand(
     return wizardDraftCmd(updateIncomeDocumentDeliveryContact);
   }
   if (command === INCOME_COMMAND_SAVE_DRAFT) {
-    const scope = await loadActiveIncomeIssuerScope(ctx);
+    // Explicit שמור טיוטה — stamps user_saved_at (migration 151).
+    const scope = await resolveIncomeWizardMutationIssuerScope(ctx, body);
     assertIncomeEditPermission(scope);
     const overlay = await saveIncomeDocumentDraft(scope, body);
     const reviewContext = parseRecurringCycleReviewCommandContext(body);
     if (!reviewContext) {
       return wizardDraftCommandResponse(ctx, command, scope, {}, overlay);
     }
-    const reviewAggregate = await refreshRecurringCycleDraftReviewCase({
+    const refreshed = await refreshRecurringCycleDraftReviewMutationCase({
       ctx,
-      representedClientId: reviewContext.represented_client_id,
-      profileId: reviewContext.profile_id,
-      cycleId: reviewContext.cycle_id,
-      generatedDraftId: reviewContext.generated_draft_id,
-      periodKey: reviewContext.period_key,
-      linkedWorkItemId: reviewContext.linked_work_item_id,
+      review: reviewContext,
+      includeDraftListAggregates: true,
     });
-    const orgId = ctx.organizationId;
-    if (!orgId) throw badRequest('Organization context required');
-    const { data: profile, error: profileErr } = await supabaseAdmin
-      .from('income_recurring_document_profiles')
-      .select('end_customer_id')
-      .eq('organization_id', orgId)
-      .eq('id', reviewContext.profile_id)
-      .eq('represented_client_id', reviewContext.represented_client_id)
-      .maybeSingle();
-    throwIfSupabaseError(profileErr, 'loadRecurringProfileForDraftSaveScheduleRefresh');
-    if (!profile) throw notFound('Recurring profile not found');
-    const [setupAggregate, invoicesTabAggregate, clientDocumentsByTypeAggregate] = await Promise.all([
-      buildWorkEngineInvoiceRetainerSetupAggregate({
-        ctx,
-        representedClientId: reviewContext.represented_client_id,
-        endCustomerId: String((profile as { end_customer_id: string }).end_customer_id),
-        buildMode: 'schedule_refresh',
-      }),
-      buildWorkEngineInvoicesTabAggregate({ ctx }),
-      buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
-        ctx,
-        representedClientId: reviewContext.represented_client_id,
-        documentTypeKey: 'draft',
-      }),
-    ]);
     return {
       ok: true,
       command,
-      income_workspace_aggregate: reviewAggregate.income_workspace_aggregate,
-      work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
-      work_engine_invoice_retainer_setup_aggregate: setupAggregate,
-      work_engine_invoices_tab_aggregate: invoicesTabAggregate,
-      work_engine_invoices_client_documents_by_type_aggregate: clientDocumentsByTypeAggregate,
+      income_workspace_aggregate: refreshed.reviewAggregate.income_workspace_aggregate,
+      work_engine_recurring_cycle_draft_review_aggregate: refreshed.reviewAggregate,
+      work_engine_invoice_retainer_setup_aggregate: refreshed.setupAggregate,
+      work_engine_invoices_tab_aggregate: refreshed.invoicesTabAggregate ?? undefined,
+      work_engine_invoices_client_documents_by_type_aggregate:
+        refreshed.clientDocumentsByTypeAggregate ?? undefined,
     };
   }
   if (command === INCOME_COMMAND_GENERATE_PREVIEW) {
-    const scope = await loadActiveIncomeIssuerScope(ctx);
+    // Normal recurring review Save: rebuild preview + refreshed case; does not stamp user draft list visibility.
+    const scope = await resolveIncomeWizardMutationIssuerScope(ctx, body);
     assertIncomeEditPermission(scope);
     const overlay = await generateIncomeDocumentPreview(scope, body);
-    return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+    const reviewContext = parseRecurringCycleReviewCommandContext(body);
+    if (!reviewContext) {
+      return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+    }
+    const refreshed = await refreshRecurringCycleDraftReviewMutationCase({
+      ctx,
+      review: reviewContext,
+      includeDraftListAggregates: false,
+    });
+    return {
+      ok: true,
+      command,
+      income_workspace_aggregate: refreshed.reviewAggregate.income_workspace_aggregate,
+      work_engine_recurring_cycle_draft_review_aggregate: refreshed.reviewAggregate,
+      work_engine_invoice_retainer_setup_aggregate: refreshed.setupAggregate,
+    };
   }
   if (command === INCOME_COMMAND_UPDATE_DISCOUNT) {
     return wizardDraftCmd(updateIncomeDocumentDiscount);

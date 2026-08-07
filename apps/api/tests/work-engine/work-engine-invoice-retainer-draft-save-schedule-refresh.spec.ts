@@ -20,12 +20,28 @@ test('save_income_document_draft with recurring_cycle_review refreshes review an
   const saveBlockEnd = incomeCommandsSource.indexOf('if (command === INCOME_COMMAND_GENERATE_PREVIEW)', saveBlockStart);
   const saveBlock = incomeCommandsSource.slice(saveBlockStart, saveBlockEnd);
   assert.ok(saveBlock.includes('parseRecurringCycleReviewCommandContext(body)'));
-  assert.ok(saveBlock.includes('refreshRecurringCycleDraftReviewCase'));
-  assert.ok(saveBlock.includes("buildMode: 'schedule_refresh'"));
-  assert.ok(saveBlock.includes('work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate'));
-  assert.ok(saveBlock.includes('work_engine_invoice_retainer_setup_aggregate: setupAggregate'));
-  assert.ok(saveBlock.includes('work_engine_invoices_tab_aggregate: invoicesTabAggregate'));
-  assert.ok(saveBlock.includes('work_engine_invoices_client_documents_by_type_aggregate: clientDocumentsByTypeAggregate'));
+  assert.ok(saveBlock.includes('refreshRecurringCycleDraftReviewMutationCase'));
+  assert.ok(saveBlock.includes('includeDraftListAggregates: true'));
+  assert.ok(saveBlock.includes('work_engine_recurring_cycle_draft_review_aggregate'));
+  assert.ok(saveBlock.includes('work_engine_invoice_retainer_setup_aggregate'));
+  assert.ok(saveBlock.includes('work_engine_invoices_tab_aggregate'));
+  assert.ok(saveBlock.includes('work_engine_invoices_client_documents_by_type_aggregate'));
+});
+
+test('generate_income_document_preview with recurring_cycle_review refreshes review without draft-list aggregates', () => {
+  const incomeCommandsSource = readSource('domains/income/income-commands.service.ts');
+  const previewBlockStart = incomeCommandsSource.indexOf('if (command === INCOME_COMMAND_GENERATE_PREVIEW)');
+  const previewBlockEnd = incomeCommandsSource.indexOf(
+    'if (command === INCOME_COMMAND_UPDATE_DISCOUNT)',
+    previewBlockStart,
+  );
+  const previewBlock = incomeCommandsSource.slice(previewBlockStart, previewBlockEnd);
+  assert.ok(previewBlock.includes('resolveIncomeWizardMutationIssuerScope'));
+  assert.ok(previewBlock.includes('refreshRecurringCycleDraftReviewMutationCase'));
+  assert.ok(previewBlock.includes('includeDraftListAggregates: false'));
+  assert.ok(previewBlock.includes('work_engine_recurring_cycle_draft_review_aggregate'));
+  assert.ok(previewBlock.includes('work_engine_invoice_retainer_setup_aggregate'));
+  assert.ok(!previewBlock.includes('work_engine_invoices_client_documents_by_type_aggregate'));
 });
 
 test('schedule projection uses generated draft totals for waiting-review cycles', () => {
@@ -39,11 +55,13 @@ test('schedule projection uses generated draft totals for waiting-review cycles'
   );
 });
 
-test('editor save passes recurring_cycle_review and consumes setup aggregate without hidden GET', () => {
+test('editor review Save uses generate_preview; שמור טיוטה uses save_draft; zero hidden GET', () => {
   const editorModalSource = readWebSource(
     'components/work-engine/WorkEngineRecurringCycleDraftReviewModal.tsx',
   );
   const setupModalSource = readWebSource('components/work-engine/WorkEngineInvoiceRetainerSetupModal.tsx');
+  assert.ok(editorModalSource.includes('handleReviewSave'));
+  assert.ok(editorModalSource.includes('handleSaveAsUserDraft'));
   assert.ok(editorModalSource.includes('recurring_cycle_review:'));
   assert.ok(editorModalSource.includes('work_engine_recurring_cycle_draft_review_aggregate'));
   assert.ok(editorModalSource.includes('work_engine_invoice_retainer_setup_aggregate'));

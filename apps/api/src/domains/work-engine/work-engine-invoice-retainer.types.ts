@@ -344,6 +344,24 @@ export type WorkEngineRecurringCycleDraftReviewEditAction = {
   disabled_reason: string | null;
 };
 
+/** Normal review Save — rebuild preview / return to preview; does not stamp user_saved_at. */
+export type WorkEngineRecurringCycleDraftReviewSaveAction = {
+  visible: boolean;
+  enabled: boolean;
+  label: string;
+  disabled_reason: string | null;
+  command: 'generate_income_document_preview';
+};
+
+/** Explicit שמור טיוטה — stamps user_saved_at once (migration 151). */
+export type WorkEngineRecurringCycleDraftReviewSaveAsUserDraftAction = {
+  visible: boolean;
+  enabled: boolean;
+  label: string;
+  disabled_reason: string | null;
+  command: 'save_income_document_draft';
+};
+
 export type WorkEngineRecurringCycleDraftReviewIssueMonthOption = {
   month_key: string;
   label: string;
@@ -432,6 +450,8 @@ export type WorkEngineRecurringCycleDraftReviewAggregate = {
   /** Preview-first UX: open branded document preview before the technical editor. */
   initial_view: 'document_preview';
   edit_action: WorkEngineRecurringCycleDraftReviewEditAction;
+  save_action: WorkEngineRecurringCycleDraftReviewSaveAction;
+  save_as_user_draft_action: WorkEngineRecurringCycleDraftReviewSaveAsUserDraftAction;
   issue_action: WorkEngineRecurringCycleDraftReviewIssueAction;
   issue_and_send_action: WorkEngineRecurringCycleDraftReviewIssueAndSendAction;
   view_document_action: WorkEngineRecurringCycleDraftReviewViewDocumentAction | null;

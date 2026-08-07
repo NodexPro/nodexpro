@@ -174,6 +174,18 @@ test('issue_and_send passes recurring_cycle_review into issue and resolves scope
   assert.ok(resolveIdx > 0 && loadScopeIdx > resolveIdx);
 });
 
+test('wizard draft mutations resolve trusted office issuer before loadActiveIncomeIssuerScope assert path', () => {
+  const commands = readApi('domains/income/income-commands.service.ts');
+  assert.match(commands, /resolveIncomeWizardMutationIssuerScope/);
+  assert.match(commands, /resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded/);
+  assert.match(commands, /resolveAndApplyRecurringCycleIssueIssuerScope/);
+  const wizardStart = commands.indexOf('const wizardDraftCmd = async');
+  assert.ok(wizardStart > 0);
+  const wizardBlock = commands.slice(wizardStart, wizardStart + 450);
+  assert.match(wizardBlock, /resolveIncomeWizardMutationIssuerScope\(ctx, body\)/);
+  assert.doesNotMatch(wizardBlock, /loadActiveIncomeIssuerScope\(ctx\)/);
+});
+
 test('review aggregate returns issuer_context and prepares official office context on open', () => {
   const review = readApi(
     'domains/work-engine/work-engine-invoice-retainer-cycle-draft-review.service.ts',

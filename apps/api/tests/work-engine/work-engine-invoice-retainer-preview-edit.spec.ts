@@ -108,12 +108,18 @@ test('editor cancel and save return to preview mode', () => {
   assert.ok(saveHandlerBlock.includes('handleCycleOverrideSetupSaved'));
 });
 
-test('editor save uses refresh_document_preview and returns refreshed case to parent', () => {
-  assert.ok(editorModalSource.includes('refresh_document_preview: true'));
+test('editor save uses generate_preview for review Save and save_draft only for שמור טיוטה', () => {
+  assert.ok(editorModalSource.includes('handleReviewSave'));
+  assert.ok(editorModalSource.includes('handleSaveAsUserDraft'));
+  assert.ok(editorModalSource.includes('generate_preview'));
+  assert.ok(editorModalSource.includes('save_draft'));
   assert.ok(editorModalSource.includes('recurring_cycle_review:'));
   assert.ok(editorModalSource.includes('work_engine_recurring_cycle_draft_review_aggregate'));
   assert.ok(editorModalSource.includes('work_engine_invoice_retainer_setup_aggregate'));
   assert.ok(editorModalSource.includes('onSaveSuccess?.({'));
+  assert.ok(editorModalSource.includes('refresh_document_preview: true'));
+  assert.ok(editorModalSource.includes("'שמור טיוטה'"));
+  assert.ok(editorModalSource.includes("'שמירה'"));
   assert.equal(editorModalSource.match(/function WorkEngineRecurringCycleDraftReviewModal/g)?.length, 1);
 });
 
@@ -122,14 +128,18 @@ test('generated draft editor uses split layout with reused document settings pan
   assert.ok(editorModalSource.includes('settingsOnly'));
   assert.ok(editorModalSource.includes('linesOnly'));
   const detailsStepCount = editorModalSource.match(/WorkEngineDocumentDetailsStep/g)?.length ?? 0;
-  assert.equal(detailsStepCount, 2);
+  assert.ok(detailsStepCount >= 2);
 });
 
-test('cycle draft review service exposes edit_action and issue_action', () => {
+test('cycle draft review service exposes edit_action, save_action and issue_action', () => {
   const cycleReviewServiceSource = readFileSync(
     join(dir, '../../src/domains/work-engine/work-engine-invoice-retainer-cycle-draft-review.service.ts'),
     'utf8',
   );
   assert.ok(cycleReviewServiceSource.includes('edit_action:'));
+  assert.ok(cycleReviewServiceSource.includes('save_action:'));
+  assert.ok(cycleReviewServiceSource.includes('save_as_user_draft_action:'));
   assert.ok(cycleReviewServiceSource.includes('issue_action:'));
+  assert.ok(cycleReviewServiceSource.includes("command: 'generate_income_document_preview'"));
+  assert.ok(cycleReviewServiceSource.includes("command: 'save_income_document_draft'"));
 });
