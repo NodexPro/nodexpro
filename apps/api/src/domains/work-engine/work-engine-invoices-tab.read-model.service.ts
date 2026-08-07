@@ -211,7 +211,11 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       document_branding_settings_entrypoint,
       client_document_management_panel,
     };
-    logAggregatePayloadBreakdown('work_engine_invoices_tab_aggregate', response);
+    logAggregatePayloadBreakdown('work_engine_invoices_tab_aggregate', response, {
+      correlation_id: params.ctx.correlationId ?? null,
+      organization_id: orgId,
+      duration_ms: Date.now() - aggregateStartMs,
+    });
     console.info(
       `[work-engine][invoices-tab][timing] TOTAL ${Date.now() - aggregateStartMs}ms`,
     );
@@ -411,7 +415,11 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
     document_branding_settings_entrypoint,
     client_document_management_panel,
   };
-  logAggregatePayloadBreakdown('work_engine_invoices_tab_aggregate', response);
+  logAggregatePayloadBreakdown('work_engine_invoices_tab_aggregate', response, {
+    correlation_id: params.ctx.correlationId ?? null,
+    organization_id: orgId,
+    duration_ms: Date.now() - aggregateStartMs,
+  });
   console.info(
     `[work-engine][invoices-tab][timing] TOTAL ${Date.now() - aggregateStartMs}ms`,
   );

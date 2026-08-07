@@ -5,6 +5,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { forbidden } from '../../shared/errors.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import type { ActiveIncomeIssuerScope } from './income.guards.js';
 import { loadActiveIncomeIssuerScope, toIssuerContextSummary } from './income-issuer-scope.service.js';
@@ -538,6 +539,7 @@ export async function buildIncomeWorkspaceAggregate(
   recipientOverlay: RecipientSearchOverlay = {},
   wizardDraftOverlay: WizardDraftOverlay = {},
 ): Promise<IncomeWorkspaceAggregate> {
+  const aggregateStartMs = Date.now();
   const scope = scopeOverride ?? (await loadActiveIncomeIssuerScope(ctx));
   if (!scope.permissions.view) throw forbidden('income.view required');
 
@@ -575,7 +577,7 @@ export async function buildIncomeWorkspaceAggregate(
   const canEdit = scope.permissions.edit;
   const brandingProfile = await buildDocumentBrandingProfileAggregate(scope, canEdit);
 
-  return {
+  const response: IncomeWorkspaceAggregate = {
     aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
     org_id: scope.org_id,
     actor_user_id: scope.actor_user_id,
@@ -607,4 +609,10 @@ export async function buildIncomeWorkspaceAggregate(
     allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
     warnings: docTypesResult.warnings,
   };
+  logAggregatePayloadBreakdown(INCOME_WORKSPACE_AGGREGATE_KEY, response as unknown as Record<string, unknown>, {
+    correlation_id: ctx.correlationId ?? null,
+    organization_id: scope.org_id,
+    duration_ms: Date.now() - aggregateStartMs,
+  });
+  return response;
 }

@@ -729,6 +729,7 @@ export async function executeIssueIncomeDocument(
     org_id: typeof ctx.organizationId === 'string' && ctx.organizationId ? ctx.organizationId : 'unknown',
     draft_id: safeUuidForLog(body.draft_id) ?? 'unvalidated',
     recurring_cycle_id: recurringCycleId,
+    correlation_id: ctx.correlationId,
   });
   logIncomeIssueStage(diag, 'issue_command_received', { duration_ms: 0 });
 

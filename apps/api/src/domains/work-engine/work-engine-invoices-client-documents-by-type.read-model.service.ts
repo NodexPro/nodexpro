@@ -6,6 +6,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import {
   issueYearFromIso,
@@ -452,6 +453,7 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
   documentTypeKey: string;
   year?: number | null;
 }): Promise<WorkEngineInvoicesClientDocumentsByTypeAggregate> {
+  const aggregateStartMs = Date.now();
   const orgId = params.ctx.organizationId;
   if (!orgId) throw forbidden('Organization context required');
 
@@ -507,7 +509,7 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
       ? TAX_INVOICE_TABLE_COLUMNS
       : ISSUED_TABLE_COLUMNS;
 
-  return {
+  const response: WorkEngineInvoicesClientDocumentsByTypeAggregate = {
     aggregate_key: WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY,
     represented_client_id: representedClientId,
     client_display_name: client.display_name,
@@ -525,4 +527,14 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
       description: null,
     },
   };
+  logAggregatePayloadBreakdown(
+    WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY,
+    response as unknown as Record<string, unknown>,
+    {
+      correlation_id: params.ctx.correlationId ?? null,
+      organization_id: orgId,
+      duration_ms: Date.now() - aggregateStartMs,
+    },
+  );
+  return response;
 }

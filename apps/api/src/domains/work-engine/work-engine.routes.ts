@@ -57,6 +57,12 @@ import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from './work-engine-invoices-client-documents-by-type.read-model.service.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
 import { executeWorkEngineInvoiceRetainerCommand } from './work-engine-invoice-retainer.commands.service.js';
+import {
+  CRITICAL_WORK_ENGINE_COMMANDS,
+  resolveCorrelationId,
+  withCriticalCommandObs,
+} from '../../shared/observability.js';
+import { getRequestCorrelationId } from '../../middleware/correlation.js';
 import { buildWorkEngineClientsTabAggregate } from './work-engine-clients-tab.read-model.service.js';
 import {
   WORK_ENGINE_MODULE_CODE,
@@ -81,19 +87,31 @@ router.post('/internal/scheduler/run', async (req: Request, res: Response, next:
   try {
     requireInternalCronSecret(req);
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const summary = await runWorkEngineScheduler({
-      org_id: typeof body.org_id === 'string' ? body.org_id.trim() : undefined,
-      batch_size: typeof body.batch_size === 'number' ? body.batch_size : undefined,
-      max_work_items_per_run:
-        typeof body.max_work_items_per_run === 'number' ? body.max_work_items_per_run : undefined,
-      max_pending_events_per_org:
-        typeof body.max_pending_events_per_org === 'number'
-          ? body.max_pending_events_per_org
-          : undefined,
-      run_context_key:
-        typeof body.run_context_key === 'string' ? body.run_context_key.trim() : undefined,
-      dry_run: body.dry_run === true,
-    });
+    const correlation_id = getRequestCorrelationId(req);
+    const summary = await withCriticalCommandObs(
+      {
+        enabled: true,
+        correlation_id,
+        module: 'scheduler',
+        command: 'scheduler_run',
+        organization_id: typeof body.org_id === 'string' ? body.org_id.trim() : null,
+      },
+      () =>
+        runWorkEngineScheduler({
+          org_id: typeof body.org_id === 'string' ? body.org_id.trim() : undefined,
+          batch_size: typeof body.batch_size === 'number' ? body.batch_size : undefined,
+          max_work_items_per_run:
+            typeof body.max_work_items_per_run === 'number' ? body.max_work_items_per_run : undefined,
+          max_pending_events_per_org:
+            typeof body.max_pending_events_per_org === 'number'
+              ? body.max_pending_events_per_org
+              : undefined,
+          run_context_key:
+            typeof body.run_context_key === 'string' ? body.run_context_key.trim() : undefined,
+          dry_run: body.dry_run === true,
+          correlation_id,
+        }),
+    );
     return res.json({
       ok: summary.ok,
       skipped: summary.skipped,
@@ -103,10 +121,17 @@ router.post('/internal/scheduler/run', async (req: Request, res: Response, next:
       escalations_created: summary.escalations_created,
       snoozed_woken: summary.snoozed_woken,
       errors: summary.errors,
+      correlation_id: summary.correlation_id,
+      run_id: summary.run_id,
+      started_at: summary.started_at,
+      completed_at: summary.completed_at,
       result: summary,
     });
   } catch (e) {
-    console.error('[work-engine] POST /internal/scheduler/run failed', e);
+    console.error('[work-engine] POST /internal/scheduler/run failed', {
+      correlation_id: getRequestCorrelationId(req),
+      error: e,
+    });
     next(e);
   }
 });
@@ -252,7 +277,21 @@ officeRouter.post(
       const ctx = req.context as RequestContext;
       const command = String(req.body?.command ?? '').trim();
       const payload = (req.body?.payload ?? req.body ?? {}) as Record<string, unknown>;
-      const out = await executeWorkEngineInvoiceRetainerCommand(ctx, command, payload);
+      const correlation_id = ctx.correlationId ?? resolveCorrelationId(req.correlationId);
+      const out = await withCriticalCommandObs(
+        {
+          enabled: CRITICAL_WORK_ENGINE_COMMANDS.has(command),
+          correlation_id,
+          module: 'work-engine',
+          command: command || 'unknown',
+          organization_id: ctx.organizationId,
+          entity_id:
+            typeof payload.represented_client_id === 'string'
+              ? payload.represented_client_id
+              : null,
+        },
+        () => executeWorkEngineInvoiceRetainerCommand(ctx, command, payload),
+      );
       return res.json(out);
     } catch (e) {
       next(e);
@@ -312,7 +351,17 @@ officeRouter.post(
         throw badRequest(`Unknown work engine command: ${command}`);
       }
       const payload = req.body?.payload ?? req.body ?? {};
-      const out = await executeWorkEngineCommand(ctx, command, payload);
+      const correlation_id = ctx.correlationId ?? resolveCorrelationId(req.correlationId);
+      const out = await withCriticalCommandObs(
+        {
+          enabled: CRITICAL_WORK_ENGINE_COMMANDS.has(command),
+          correlation_id,
+          module: 'work-engine',
+          command,
+          organization_id: ctx.organizationId,
+        },
+        () => executeWorkEngineCommand(ctx, command, payload),
+      );
       return res.json(out);
     } catch (e) {
       next(e);

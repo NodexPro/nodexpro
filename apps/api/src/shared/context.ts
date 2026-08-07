@@ -23,6 +23,8 @@ export interface RequestContext {
   user: AppUser;
   membership: OrgMembership | null;
   organizationId: string | null;
+  /** P11.5 — request-scoped correlation (set by correlation middleware + auth). */
+  correlationId?: string;
 }
 
 declare global {

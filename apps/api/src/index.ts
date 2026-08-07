@@ -35,6 +35,8 @@ import {
   logNodexproApiBoot,
   resolveApiDeployMarker,
 } from './domains/income/income-issue-diagnostic.js';
+import { correlationMiddleware, getRequestCorrelationId } from './middleware/correlation.js';
+import { supabaseAdmin } from './db/client.js';
 
 registerExampleModuleHook();
 
@@ -55,6 +57,7 @@ async function logModuleLoaded(): Promise<void> {
 
 const app = express();
 app.use(helmet());
+app.use(correlationMiddleware);
 const corsAllowedOriginsRaw = process.env.CORS_ALLOWED_ORIGINS ?? '';
 /** Each configured origin plus its www ↔ apex twin (same scheme/port) to avoid prod footguns. */
 function expandCorsOriginsWithWwwVariants(origins: string[]): string[] {
@@ -118,9 +121,24 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '15mb' }));
 
-app.get('/api/v1/health', (_req, res) => {
-  // Safe deploy proof for production triage (no secrets).
-  res.status(200).json({ ok: true, deploy_marker: resolveApiDeployMarker() });
+app.get('/api/v1/health', async (_req, res) => {
+  // Safe deploy + minimal DB connectivity probe (no secrets, no aggregate work).
+  let db: 'ok' | 'unavailable' = 'ok';
+  try {
+    const { error } = await supabaseAdmin
+      .from('organizations')
+      .select('id', { head: true, count: 'exact' })
+      .limit(1);
+    if (error) db = 'unavailable';
+  } catch {
+    db = 'unavailable';
+  }
+  const ok = db === 'ok';
+  res.status(ok ? 200 : 503).json({
+    ok,
+    deploy_marker: resolveApiDeployMarker(),
+    db,
+  });
 });
 
 app.use('/api/v1/auth', authRoutes);
@@ -144,25 +162,28 @@ app.use('/api/v1/work-engine', workEngineRoutes);
 app.use('/api/v1/income', incomeRoutes);
 app.use('/api/v1/accounting-base', accountingBaseRoutes);
 
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const correlation_id = getRequestCorrelationId(req);
   if (err instanceof AppError) {
     if (err.code === ENCRYPTION_NOT_CONFIGURED_CODE) {
       console.error(
-        '[api] CLIENT_DATA_ENCRYPTION_KEY missing or invalid — set 32-byte key as base64 in apps/api/.env'
+        '[api] CLIENT_DATA_ENCRYPTION_KEY missing or invalid — set 32-byte key as base64 in apps/api/.env',
+        { correlation_id },
       );
     }
     return res.status(err.statusCode).json({
       code: err.code ?? 'ERROR',
       message: err.message,
+      correlation_id,
       ...(err.details ?? {}),
     });
   }
-  console.error(err);
+  console.error('[api][INTERNAL_ERROR]', { correlation_id, error: err });
   // In development, surface Error.message so local debugging is not blind to non-AppError throws.
   const exposeDetails = config.nodeEnv !== 'production';
   const message =
     exposeDetails && err instanceof Error && err.message ? err.message : 'Internal server error';
-  return res.status(500).json({ code: 'INTERNAL_ERROR', message });
+  return res.status(500).json({ code: 'INTERNAL_ERROR', message, correlation_id });
 });
 
 app.listen(config.port, () => {

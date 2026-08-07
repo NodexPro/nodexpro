@@ -7,6 +7,7 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import {
   buildReadOnlyIncomeDocumentPreviewOverlay,
   generateIncomeDocumentPreview,
@@ -433,6 +434,7 @@ export async function refreshRecurringCycleDraftReviewCase(params: {
   issuedDocumentId?: string | null;
   deliveryOutcome?: WorkEngineRecurringCycleDraftReviewDeliveryOutcome | null;
 }): Promise<WorkEngineRecurringCycleDraftReviewAggregate> {
+  const reviewStartMs = Date.now();
   assertEditAccess(params.ctx);
   const refs: CycleDraftReviewRefs = {
     representedClientId: params.representedClientId,
@@ -467,7 +469,7 @@ export async function refreshRecurringCycleDraftReviewCase(params: {
     issuedDocumentNumberDisplay,
   });
 
-  return assembleCycleDraftReviewAggregate({
+  const aggregate = await assembleCycleDraftReviewAggregate({
     ctx: params.ctx,
     orgId,
     refs,
@@ -479,6 +481,16 @@ export async function refreshRecurringCycleDraftReviewCase(params: {
     income_workspace_aggregate,
     draftDeliveryContactJson: draftRow.delivery_contact_json,
   });
+  logAggregatePayloadBreakdown(
+    'work_engine_recurring_cycle_draft_review_aggregate',
+    aggregate as unknown as Record<string, unknown>,
+    {
+      correlation_id: params.ctx.correlationId ?? null,
+      organization_id: orgId,
+      duration_ms: Date.now() - reviewStartMs,
+    },
+  );
+  return aggregate;
 }
 
 export async function openRecurringCycleDraftForReview(params: {
@@ -490,6 +502,7 @@ export async function openRecurringCycleDraftForReview(params: {
   periodKey?: string | null;
   linkedWorkItemId?: string | null;
 }): Promise<WorkEngineRecurringCycleDraftReviewAggregate> {
+  const reviewStartMs = Date.now();
   assertEditAccess(params.ctx);
   const refs: CycleDraftReviewRefs = {
     representedClientId: params.representedClientId,
@@ -552,5 +565,14 @@ export async function openRecurringCycleDraftForReview(params: {
     },
   });
 
+  logAggregatePayloadBreakdown(
+    'work_engine_recurring_cycle_draft_review_aggregate',
+    aggregate as unknown as Record<string, unknown>,
+    {
+      correlation_id: params.ctx.correlationId ?? null,
+      organization_id: orgId,
+      duration_ms: Date.now() - reviewStartMs,
+    },
+  );
   return aggregate;
 }

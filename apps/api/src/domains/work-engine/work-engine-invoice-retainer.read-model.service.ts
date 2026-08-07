@@ -917,6 +917,11 @@ export async function buildWorkEngineInvoiceRetainerSetupAggregate(params: {
   logAggregatePayloadBreakdown(
     'work_engine_invoice_retainer_setup_aggregate',
     response as unknown as Record<string, unknown>,
+    {
+      correlation_id: params.ctx.correlationId ?? null,
+      organization_id: orgId,
+      duration_ms: Date.now() - aggregateStartMs,
+    },
   );
   return response;
 }

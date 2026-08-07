@@ -20,6 +20,11 @@ import {
 } from './income-document-email-history.service.js';
 import { buildIncomeDocumentDocflowSendAggregate } from './income-document-docflow-send.service.js';
 import { INCOME_MODULE_CODE, INCOME_PERMISSIONS } from './income.types.js';
+import {
+  CRITICAL_INCOME_COMMANDS,
+  resolveCorrelationId,
+  withCriticalCommandObs,
+} from '../../shared/observability.js';
 
 const router = Router();
 
@@ -127,13 +132,33 @@ router.post(
   requirePermission(INCOME_PERMISSIONS.edit),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const out = await executeIncomeCommand(
-        req.context as RequestContext,
-        req.body as Record<string, unknown>,
+      const ctx = req.context as RequestContext;
+      const body = req.body as Record<string, unknown>;
+      const command = String(body.command ?? '').trim();
+      const correlation_id = ctx.correlationId ?? resolveCorrelationId(req.correlationId);
+      const out = await withCriticalCommandObs(
         {
-          ipAddress: typeof req.ip === 'string' && req.ip ? req.ip : null,
-          userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+          enabled: CRITICAL_INCOME_COMMANDS.has(command),
+          correlation_id,
+          module: 'income',
+          command: command || 'unknown',
+          organization_id: ctx.organizationId,
+          draft_id: typeof body.draft_id === 'string' ? body.draft_id : null,
+          income_document_id:
+            typeof body.income_document_id === 'string' ? body.income_document_id : null,
         },
+        () =>
+          executeIncomeCommand(ctx, body, {
+            ipAddress: typeof req.ip === 'string' && req.ip ? req.ip : null,
+            userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+          }),
+        (result) => ({
+          income_document_id:
+            result && typeof result === 'object' && 'meta' in result
+              ? ((result as { meta?: { income_document_id?: string } }).meta?.income_document_id ??
+                null)
+              : null,
+        }),
       );
       return res.json(out);
     } catch (e) {

@@ -22,6 +22,8 @@ import { scanRecurringDocumentSendFollowupsForOrg } from './work-engine-invoice-
 import type { RequestContext } from '../../shared/context.js';
 import { wakeExpiredSnoozedReminderCandidates } from './work-engine.reminder-review.service.js';
 import { recomputeWorkItemSlaStatus } from './work-engine.sla.service.js';
+import { resolveApiDeployMarker } from '../income/income-issue-diagnostic.js';
+import { resolveCorrelationId } from '../../shared/observability.js';
 
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MAX_WORK_ITEMS_PER_RUN = 500;
@@ -35,11 +37,16 @@ export type WorkEngineSchedulerRunParams = {
   max_pending_events_per_org?: number;
   run_context_key?: string;
   dry_run?: boolean;
+  /** P11.5 — request correlation from HTTP layer. */
+  correlation_id?: string;
 };
 
 export type WorkEngineSchedulerRunSummary = {
   ok: boolean;
   run_id: string;
+  correlation_id: string;
+  started_at: string;
+  completed_at: string | null;
   run_context_key: string;
   dry_run: boolean;
   skipped: boolean;
@@ -173,10 +180,13 @@ export async function runWorkEngineScheduler(
       skipped_reason: 'run_in_progress',
       run_context_key: params?.run_context_key ?? 'scheduler:work_engine',
       dry_run: params?.dry_run === true,
+      correlation_id: params?.correlation_id,
     });
   }
 
   const runId = randomUUID();
+  const correlationId = resolveCorrelationId(params?.correlation_id ?? null);
+  const startedAtIso = new Date().toISOString();
   const runContextKey = String(params?.run_context_key ?? 'scheduler:work_engine').trim();
   const dryRun = params?.dry_run === true;
   const batchSize = Math.min(
@@ -205,6 +215,9 @@ export async function runWorkEngineScheduler(
   const summary: WorkEngineSchedulerRunSummary = {
     ok: true,
     run_id: runId,
+    correlation_id: correlationId,
+    started_at: startedAtIso,
+    completed_at: null,
     run_context_key: runContextKey,
     dry_run: dryRun,
     skipped: false,
@@ -319,6 +332,20 @@ export async function runWorkEngineScheduler(
       });
     }
 
+    summary.completed_at = new Date().toISOString();
+    summary.ok = summary.errors.length === 0;
+    console.info('[scheduler][result]', {
+      correlation_id: summary.correlation_id,
+      run_id: summary.run_id,
+      started_at: summary.started_at,
+      completed_at: summary.completed_at,
+      processed: summary.scanned_work_items + summary.recurring_profiles_scanned,
+      succeeded: summary.recurring_drafts_created,
+      failed: summary.recurring_failures + summary.errors.length,
+      skipped: summary.skipped,
+      deploy_marker: resolveApiDeployMarker(),
+    });
+
     return summary;
   } finally {
     activeSchedulerRun = null;
@@ -330,10 +357,15 @@ function emptySummary(opts: {
   skipped_reason: string;
   run_context_key: string;
   dry_run: boolean;
+  correlation_id?: string;
 }): WorkEngineSchedulerRunSummary {
+  const now = new Date().toISOString();
   return {
     ok: true,
     run_id: randomUUID(),
+    correlation_id: resolveCorrelationId(opts.correlation_id ?? null),
+    started_at: now,
+    completed_at: now,
     run_context_key: opts.run_context_key,
     dry_run: opts.dry_run,
     skipped: opts.skipped,

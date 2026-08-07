@@ -84,6 +84,7 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     user,
     membership,
     organizationId,
+    correlationId: req.correlationId,
   } as RequestContext;
   next();
 }
