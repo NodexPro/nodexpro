@@ -3,6 +3,7 @@
  */
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { postIncomeDocumentToAccountingBase } from '../accounting-base/income-document-posting.service.js';
 import { resolveIncomeAccountingPostingPlan, } from './income-accounting-posting.mapping.js';
 export { accountingDisplayStatusLabel, resolveAccountingDisplayStatus } from './income-accounting-posting.mapping.js';
@@ -58,6 +59,9 @@ export async function applyAccountingPostingForIssuedDocument(ctx, doc) {
             description_note: doc.notes ?? null,
         });
         const postedAt = new Date().toISOString();
+        // Do NOT mutate totals_snapshot_json here: income_documents_immutable_after_issue
+        // forbids changing business snapshot fields (incl. totals). Accounting truth links
+        // live on accounting_* columns + Accounting Base entries/links only.
         const { error: updateErr } = await supabaseAdmin
             .from('income_documents')
             .update({
@@ -67,16 +71,10 @@ export async function applyAccountingPostingForIssuedDocument(ctx, doc) {
             accounting_posted_at: postedAt,
             accounting_posting_error: null,
             accounting_posting_signature: result.accounting_posting_signature,
-            totals_snapshot_json: {
-                ...doc.totals_snapshot_json,
-                accounting_entry_ids: result.accounting_entry_ids,
-                authoritative_financial_truth: 'accounting_base',
-            },
         })
             .eq('id', doc.id)
             .eq('organization_id', doc.organization_id);
-        if (updateErr)
-            throw updateErr;
+        throwIfSupabaseError(updateErr, 'applyAccountingPostingForIssuedDocument.updatePosted');
         await writeAudit({
             organizationId: doc.organization_id,
             actorUserId: ctx.user.id,

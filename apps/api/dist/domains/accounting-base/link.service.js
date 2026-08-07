@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 /**
  * Internal-only service for future command handlers.
@@ -19,8 +20,7 @@ export async function forCommandCreateLink(ctx, organizationId, input) {
     })
         .select('*')
         .single();
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'forCommandCreateLink');
     return data;
 }
 export async function forCommandDeleteLink(ctx, organizationId, linkId) {

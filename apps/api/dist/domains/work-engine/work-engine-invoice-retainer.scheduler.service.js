@@ -15,8 +15,9 @@ import { AppError } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { createRecurringCycleDraftFromSnapshot, } from './work-engine-invoice-retainer-draft.service.js';
 import { emitRecurringDocumentDraftCreatedWorkEvent, emitRecurringGenerationFailedWorkEvent, } from './work-engine-invoice-retainer-bridge.js';
-import { recordRecurringCycleDraftCreated, recordRecurringCycleFailed, } from './work-engine-invoice-retainer-cycles.service.js';
+import { findReusableGeneratedDraftIdForScheduledCycle, recordRecurringCycleDraftCreated, recordRecurringCycleFailed, } from './work-engine-invoice-retainer-cycles.service.js';
 import { RECURRING_SCHEDULER_STATUS_ACTIVE, advanceServicePeriod, buildRecurringSchedulerCycleKey, computeDraftCreationDateIso, computeNextUnitPriceBeforeVat, isRecurringProfileDueForDraftGeneration, } from './work-engine-invoice-retainer.pure.js';
+import { buildRecurringGenerationFailedProfileUpdate, buildRecurringGenerationSuccessProfileUpdate, isRecurringSchedulerPeriodProcessed, } from './work-engine-invoice-retainer.scheduler.pure.js';
 const DEFAULT_BATCH_SIZE = 25;
 const PROFILE_SELECT = 'id, organization_id, represented_client_id, end_customer_id, document_type, frequency, next_document_date, advance_days, service_period_start, service_period_end, auto_advance_period, quantity, unit_price_before_vat_reference, currency, discount_percent_reference, discount_amount_reference, price_increase_enabled, price_increase_type, price_increase_value, document_template_snapshot, last_scheduler_cycle_key';
 function buildSchedulerIssuerScope(orgId, actorUserId, representedClientId) {
@@ -84,14 +85,15 @@ async function markProfileGenerationFailed(params) {
         draftCreationDate,
         failureReason: `${params.errorCode}: ${params.errorMessage}`,
     });
+    // Do NOT stamp last_scheduler_cycle_key on failure — that key means
+    // "period successfully generated" and would permanently skip retries.
     const { error } = await supabaseAdmin
         .from('income_recurring_document_profiles')
-        .update({
-        last_scheduler_cycle_key: params.cycleKey,
-        last_generation_failed_at: new Date().toISOString(),
-        last_generation_error_code: params.errorCode,
-        last_generation_error_message: params.errorMessage.slice(0, 2000),
-    })
+        .update(buildRecurringGenerationFailedProfileUpdate({
+        failedAtIso: new Date().toISOString(),
+        errorCode: params.errorCode,
+        errorMessage: params.errorMessage,
+    }))
         .eq('id', params.profile.id)
         .eq('organization_id', params.profile.organization_id);
     if (error)
@@ -134,18 +136,15 @@ async function advanceProfileAfterSuccess(params) {
     const nowIso = new Date().toISOString();
     const { error } = await supabaseAdmin
         .from('income_recurring_document_profiles')
-        .update({
-        last_generated_draft_id: params.draftId,
-        last_generated_at: nowIso,
-        last_scheduler_cycle_key: params.cycleKey,
-        last_generation_failed_at: null,
-        last_generation_error_code: null,
-        last_generation_error_message: null,
-        next_document_date: nextDocumentDate,
-        service_period_start: servicePeriodStart,
-        service_period_end: servicePeriodEnd,
-        unit_price_before_vat_reference: nextUnitPrice,
-    })
+        .update(buildRecurringGenerationSuccessProfileUpdate({
+        draftId: params.draftId,
+        generatedAtIso: nowIso,
+        cycleKey: params.cycleKey,
+        nextDocumentDate,
+        servicePeriodStart,
+        servicePeriodEnd,
+        unitPriceBeforeVatReference: nextUnitPrice,
+    }))
         .eq('id', params.profile.id)
         .eq('organization_id', params.profile.organization_id);
     if (error)
@@ -184,7 +183,7 @@ async function processDueProfile(params) {
     const profile = params.profile;
     const scheduledDocumentDate = profile.next_document_date;
     const cycleKey = buildRecurringSchedulerCycleKey(profile.id, scheduledDocumentDate);
-    if (profile.last_scheduler_cycle_key === cycleKey) {
+    if (isRecurringSchedulerPeriodProcessed(profile.last_scheduler_cycle_key, cycleKey)) {
         return 'skipped';
     }
     if (!isRecurringProfileDueForDraftGeneration({
@@ -223,18 +222,24 @@ async function processDueProfile(params) {
     const servicePeriodEnd = profile.service_period_end;
     try {
         const scope = buildSchedulerIssuerScope(profile.organization_id, params.ctx.user.id, profile.represented_client_id);
-        const draftId = await createRecurringCycleDraftFromSnapshot({
-            scope,
-            representedClientId: profile.represented_client_id,
-            endCustomerId: profile.end_customer_id,
-            snapshot,
+        const reusableDraftId = await findReusableGeneratedDraftIdForScheduledCycle({
+            organizationId: profile.organization_id,
+            recurringProfileId: profile.id,
             scheduledDocumentDate,
-            quantity: Number(profile.quantity),
-            unitPriceBeforeVatReference: profile.unit_price_before_vat_reference,
-            currency: profile.currency,
-            discountPercentReference: profile.discount_percent_reference,
-            discountAmountReference: profile.discount_amount_reference,
         });
+        const draftId = reusableDraftId ??
+            (await createRecurringCycleDraftFromSnapshot({
+                scope,
+                representedClientId: profile.represented_client_id,
+                endCustomerId: profile.end_customer_id,
+                snapshot,
+                scheduledDocumentDate,
+                quantity: Number(profile.quantity),
+                unitPriceBeforeVatReference: profile.unit_price_before_vat_reference,
+                currency: profile.currency,
+                discountPercentReference: profile.discount_percent_reference,
+                discountAmountReference: profile.discount_amount_reference,
+            }));
         const draftCreationDate = computeDraftCreationDateIso(scheduledDocumentDate, profile.advance_days);
         await recordRecurringCycleDraftCreated({
             organizationId: profile.organization_id,
@@ -333,7 +338,7 @@ export async function runWorkEngineRecurringDocumentScheduler(params) {
                     advance_days: profile.advance_days,
                 });
                 const cycleKey = buildRecurringSchedulerCycleKey(profile.id, scheduledDocumentDate);
-                const alreadyProcessed = profile.last_scheduler_cycle_key === cycleKey;
+                const alreadyProcessed = isRecurringSchedulerPeriodProcessed(profile.last_scheduler_cycle_key, cycleKey);
                 if (!due || alreadyProcessed)
                     continue;
                 summary.recurring_profiles_due += 1;

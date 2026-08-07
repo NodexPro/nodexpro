@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertOrgInContext, assertPositiveAmount } from './accounting-base.guards.js';
 const ALLOWED_ENTRY_TYPES = new Set(['income', 'expense', 'refund']);
 function assertEntryTypeDirectionConsistency(entryType, direction) {
@@ -44,8 +45,7 @@ export async function forCommandCreateEntry(ctx, organizationId, input) {
     })
         .select('*')
         .single();
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'forCommandCreateEntry');
     return data;
 }
 export async function forCommandUpdateEntry(ctx, organizationId, entryId, patch) {
@@ -58,8 +58,7 @@ export async function forCommandUpdateEntry(ctx, organizationId, entryId, patch)
         .eq('id', entryId)
         .eq('organization_id', organizationId)
         .single();
-    if (currentError)
-        throw currentError;
+    throwIfSupabaseError(currentError, 'forCommandUpdateEntry.load');
     if (!current)
         throw notFound('Accounting entry not found');
     const nextEntryType = (patch.entry_type ?? current.entry_type);
@@ -72,8 +71,7 @@ export async function forCommandUpdateEntry(ctx, organizationId, entryId, patch)
         .eq('organization_id', organizationId)
         .select('*')
         .single();
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'forCommandUpdateEntry');
     if (!data)
         throw notFound('Accounting entry not found');
     return data;

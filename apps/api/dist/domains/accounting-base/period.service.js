@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 /**
  * Internal-only service for future command handlers.
@@ -16,8 +17,7 @@ export async function forCommandCreatePeriod(ctx, organizationId, input) {
         status: input.status ?? 'open',
     };
     const { data, error } = await supabaseAdmin.from('accounting_periods').insert(payload).select('*').single();
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'forCommandCreatePeriod');
     return data;
 }
 export async function forCommandUpdatePeriod(ctx, organizationId, periodId, patch) {

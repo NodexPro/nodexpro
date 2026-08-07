@@ -41,6 +41,8 @@ const scheduledDate = '2026-08-01';
 const cycleKey = buildRecurringSchedulerCycleKey(profileId, scheduledDate);
 
 test('1) success stamps last_scheduler_cycle_key and advances next_document_date', () => {
+  const currentNextDocumentDate = '2026-07-01';
+  const successCycleKey = buildRecurringSchedulerCycleKey(profileId, currentNextDocumentDate);
   const advanced = advanceServicePeriod({
     service_period_start: '2026-07-01',
     service_period_end: '2026-07-31',
@@ -49,16 +51,16 @@ test('1) success stamps last_scheduler_cycle_key and advances next_document_date
   const patch = buildRecurringGenerationSuccessProfileUpdate({
     draftId: 'draft-1',
     generatedAtIso: '2026-07-25T10:00:00.000Z',
-    cycleKey,
+    cycleKey: successCycleKey,
     nextDocumentDate: advanced.next_document_date,
     servicePeriodStart: advanced.service_period_start,
     servicePeriodEnd: advanced.service_period_end,
     unitPriceBeforeVatReference: 100,
   });
 
-  assert.equal(patch.last_scheduler_cycle_key, cycleKey);
-  assert.equal(patch.next_document_date, advanced.next_document_date);
-  assert.notEqual(patch.next_document_date, scheduledDate);
+  assert.equal(patch.last_scheduler_cycle_key, successCycleKey);
+  assert.equal(patch.next_document_date, '2026-08-01');
+  assert.notEqual(patch.next_document_date, currentNextDocumentDate);
   assert.equal(patch.last_generation_failed_at, null);
   assert.match(schedulerSource, /buildRecurringGenerationSuccessProfileUpdate/);
   assert.match(schedulerSource, /advanceProfileAfterSuccess/);

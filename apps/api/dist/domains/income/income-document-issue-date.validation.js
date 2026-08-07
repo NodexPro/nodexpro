@@ -3,6 +3,7 @@
  */
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 export const INCOME_ISSUE_DATE_BACKDATED_ERROR = 'לא ניתן להפיק מסמך בתאריך מוקדם ממסמך שכבר הונפק בסדרה זו.';
 export async function assertIncomeDocumentIssueDateAllowed(params) {
     const { scope, documentType, issueDate } = params;
@@ -25,8 +26,7 @@ export async function assertIncomeDocumentIssueDateAllowed(params) {
         q = q.is('represented_client_id', null);
     }
     const { data, error } = await q;
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'assertIncomeDocumentIssueDateAllowed');
     if ((data ?? []).length > 0) {
         throw badRequest(INCOME_ISSUE_DATE_BACKDATED_ERROR, 'income_issue_date_backdated');
     }

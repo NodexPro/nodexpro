@@ -3,6 +3,7 @@
  */
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { computeNextIlSeriesNumber, formatIlSeriesDocumentNumber, IL_NUMBERING_POLICY_KEY, IL_NUMBERING_SERIES_YEAR, resolveIlSeriesPolicy, } from './income-document-numbering-policy.js';
 const MAX_ALLOC_RETRIES = 8;
 export async function allocateIncomeDocumentNumber(scope, documentType, _issueDateIso, _prefix) {
@@ -23,8 +24,7 @@ export async function allocateIncomeDocumentNumber(scope, documentType, _issueDa
             q = q.is('represented_client_id', null);
         }
         const { data: existing, error: readErr } = await q.maybeSingle();
-        if (readErr)
-            throw readErr;
+        throwIfSupabaseError(readErr, 'allocateIncomeDocumentNumber.read');
         if (!existing) {
             const first = policy.first_number;
             const { error: insErr } = await supabaseAdmin.from('income_document_numbering_sequences').insert({
@@ -43,7 +43,7 @@ export async function allocateIncomeDocumentNumber(scope, documentType, _issueDa
             if (insErr) {
                 if (String(insErr.code) === '23505')
                     continue;
-                throw insErr;
+                throwIfSupabaseError(insErr, 'allocateIncomeDocumentNumber.insert');
             }
             return {
                 document_number: formatIlSeriesDocumentNumber(first),
@@ -66,8 +66,7 @@ export async function allocateIncomeDocumentNumber(scope, documentType, _issueDa
             .eq('current_number', row.current_number)
             .select('current_number')
             .maybeSingle();
-        if (updErr)
-            throw updErr;
+        throwIfSupabaseError(updErr, 'allocateIncomeDocumentNumber.update');
         if (updated) {
             return {
                 document_number: formatIlSeriesDocumentNumber(next_number),

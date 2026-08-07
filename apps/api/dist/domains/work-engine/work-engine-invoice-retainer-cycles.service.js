@@ -4,6 +4,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import { shouldReuseExistingCycleDraft } from './work-engine-invoice-retainer.scheduler.pure.js';
 export const RECURRING_CYCLE_STATUS_LABELS = {
     pending: 'ממתין',
     draft_created: 'טיוטה נוצרה',
@@ -34,6 +35,32 @@ async function findCycleByScheduledDate(orgId, profileId, scheduledDocumentDate)
         .maybeSingle();
     throwIfSupabaseError(error, 'loadRecurringCycleByDate');
     return data ?? null;
+}
+/**
+ * If a prior failed attempt already linked an active draft to this scheduled date,
+ * reuse that draft on retry (avoids orphan duplicates). Unique cycle row is per
+ * (organization_id, recurring_profile_id, scheduled_document_date).
+ */
+export async function findReusableGeneratedDraftIdForScheduledCycle(params) {
+    const existing = await findCycleByScheduledDate(params.organizationId, params.recurringProfileId, params.scheduledDocumentDate);
+    const draftId = String(existing?.generated_draft_id ?? '').trim();
+    if (!draftId)
+        return null;
+    const { data, error } = await supabaseAdmin
+        .from('income_document_drafts')
+        .select('id, status')
+        .eq('organization_id', params.organizationId)
+        .eq('id', draftId)
+        .maybeSingle();
+    throwIfSupabaseError(error, 'loadReusableRecurringCycleDraft');
+    const row = data;
+    if (!shouldReuseExistingCycleDraft({
+        cycleGeneratedDraftId: draftId,
+        draftStatus: row?.status,
+    })) {
+        return null;
+    }
+    return String(row.id);
 }
 export async function recordRecurringCycleDraftCreated(params) {
     const existing = await findCycleByScheduledDate(params.organizationId, params.recurringProfileId, params.scheduledDocumentDate);

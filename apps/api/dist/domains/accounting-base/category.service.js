@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 /**
  * Internal-only service for future command handlers.
@@ -20,8 +21,7 @@ export async function forCommandCreateCategory(ctx, organizationId, input) {
     })
         .select('*')
         .single();
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'forCommandCreateCategory');
     return data;
 }
 export async function forCommandUpdateCategory(ctx, organizationId, categoryId, patch) {

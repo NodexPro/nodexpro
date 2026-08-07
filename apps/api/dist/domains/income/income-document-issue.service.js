@@ -5,7 +5,8 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, conflict, notFound } from '../../shared/errors.js';
-import { mapIncomeIssueUserFacingMessage } from './income-issue-error.pure.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import { extractIncomeIssueThrownMessage, resolveIncomeIssueUserFacingMessage, } from './income-issue-error.pure.js';
 import { assertRowMatchesIssuerScope, reqUuid, } from './income.guards.js';
 import { assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
@@ -29,6 +30,7 @@ const PG_UNIQUE_VIOLATION = '23505';
 function rethrowIncomeIssueError(diag, failingStage, error) {
     logIncomeIssueFailed(diag, failingStage, error);
     const resolvedFailingStage = diag.failing_stage ?? failingStage;
+    const safe = extractIncomeIssueSafeError(error);
     const diagnosticDetails = {
         income_issue_diagnostic: {
             correlation_id: diag.correlation_id,
@@ -36,17 +38,25 @@ function rethrowIncomeIssueError(diag, failingStage, error) {
             last_completed_stage: diag.last_completed_stage,
             failing_stage: resolvedFailingStage,
         },
+        safe_error: {
+            ...(safe.code != null ? { code: safe.code } : {}),
+            ...(safe.message != null ? { message: safe.message } : {}),
+            ...(safe.details != null ? { details: safe.details } : {}),
+            ...(safe.hint != null ? { hint: safe.hint } : {}),
+            ...(safe.name != null ? { name: safe.name } : {}),
+        },
     };
+    const userMessage = resolveIncomeIssueUserFacingMessage({
+        message: error instanceof AppError ? error.message : extractIncomeIssueThrownMessage(error),
+        failingStage: resolvedFailingStage,
+    });
     if (error instanceof AppError) {
-        const hebrew = mapIncomeIssueUserFacingMessage(error.message);
-        throw new AppError(error.statusCode, hebrew ?? error.message, error.code, {
+        throw new AppError(error.statusCode, userMessage, error.code, {
             ...(error.details ?? {}),
             ...diagnosticDetails,
         });
     }
-    const message = error instanceof Error ? error.message : typeof error === 'string' ? error : 'Issue failed';
-    const hebrew = mapIncomeIssueUserFacingMessage(message);
-    throw new AppError(400, hebrew ?? 'לא ניתן להפיק את המסמך כעת. נסו שוב.', 'INCOME_ISSUE_FAILED', {
+    throw new AppError(400, userMessage, 'INCOME_ISSUE_FAILED', {
         ...diagnosticDetails,
     });
 }
@@ -67,8 +77,9 @@ async function loadFullDraftForIssue(scope, draftId) {
         .eq('id', draftId)
         .eq('organization_id', scope.org_id)
         .maybeSingle();
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'loadFullDraftForIssue', {
+        migrationHint: '147_income_document_tax_allocation_number.sql',
+    });
     if (!data)
         throw notFound('Income document draft not found');
     const row = data;
@@ -82,8 +93,7 @@ async function findIssuedDocumentBySourceDraft(orgId, sourceDraftId) {
         .eq('organization_id', orgId)
         .eq('source_draft_id', sourceDraftId)
         .maybeSingle();
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'findIssuedDocumentBySourceDraft');
     if (!data)
         return null;
     return { id: String(data.id) };
@@ -95,8 +105,7 @@ async function loadIssuedDocumentSummary(scope, issuedDocumentId) {
         .eq('id', issuedDocumentId)
         .eq('organization_id', scope.org_id)
         .maybeSingle();
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'loadIssuedDocumentSummary');
     if (!data)
         throw notFound('Issued income document not found');
     const row = data;
@@ -141,8 +150,7 @@ async function syncDraftMarkedIssued(scope, draftId, issuedDocumentId) {
         .eq('id', draftId)
         .eq('organization_id', scope.org_id)
         .in('status', ['draft', 'issued']);
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'syncDraftMarkedIssued');
 }
 async function resolveAlreadyIssuedDocumentId(scope, draft) {
     if (draft.issued_document_id) {
@@ -152,8 +160,7 @@ async function resolveAlreadyIssuedDocumentId(scope, draft) {
             .eq('id', draft.issued_document_id)
             .eq('organization_id', scope.org_id)
             .maybeSingle();
-        if (error)
-            throw error;
+        throwIfSupabaseError(error, 'resolveAlreadyIssuedDocumentId');
         if (data)
             return String(data.id);
     }
@@ -175,8 +182,7 @@ async function buildCustomerSnapshot(scope, draft) {
             .eq('id', draft.income_customer_id)
             .eq('organization_id', scope.org_id)
             .maybeSingle();
-        if (error)
-            throw error;
+        throwIfSupabaseError(error, 'buildCustomerSnapshot');
         if (!data)
             throw badRequest('Income customer not found');
         const customer = data;
@@ -313,10 +319,12 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
                     return { issuedId: existing.id, created: false };
                 }
             }
-            throw insertErr;
+            throwIfSupabaseError(insertErr, 'issueIncomeDocumentInsert', {
+                migrationHint: '147_income_document_tax_allocation_number.sql',
+            });
         }
         if (!issued)
-            throw new Error('Failed to create issued income document');
+            throw badRequest('Failed to create issued income document');
         return { issuedId: issued.id, created: true };
     });
     if (!issuedInsert.created) {
@@ -380,8 +388,7 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
             .eq('status', 'draft')
             .select('id')
             .maybeSingle();
-        if (draftUpdateErr)
-            throw draftUpdateErr;
+        throwIfSupabaseError(draftUpdateErr, 'markDraftIssuedAfterIssue');
         if (!draftUpdated) {
             const raced = await findIssuedDocumentBySourceDraft(scope.org_id, draft.id);
             if (raced?.id === issuedId || raced) {
