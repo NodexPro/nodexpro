@@ -413,14 +413,41 @@ async function issueNewDocumentFromDraft(
   }
 
   const issueMonth = parseIssueMonthFromCommandBody(body);
+  const explicitIssueDate = optionalIssueDateFromBody(body);
   let issue_date: string;
-  if (issueMonth) {
+  if (overdueMinIssueDate) {
+    // Overdue unissued: explicit calendar date wins; never earlier than today.
+    if (explicitIssueDate) {
+      issue_date = explicitIssueDate;
+    } else if (issueMonth) {
+      const issueMonthWindow = await resolveIncomeIssueMonthWindowForOrg(scope.org_id, 'IL', todayIso);
+      try {
+        assertIssueMonthAllowed({
+          todayIso,
+          issueMonth,
+          monthsBack: 0,
+          monthsAhead: issueMonthWindow.months_ahead,
+        });
+      } catch (e) {
+        throw badRequest(e instanceof Error ? e.message : 'issue_month is invalid');
+      }
+      issue_date = resolveIssueDateForIssueMonth(issueMonth, overdueMinIssueDate);
+    } else {
+      issue_date = overdueMinIssueDate;
+    }
+    issue_date = clampIssueDateNotBeforeMin(issue_date, overdueMinIssueDate);
+    try {
+      assertIssueDateNotBeforeMin(issue_date, overdueMinIssueDate);
+    } catch (e) {
+      throw badRequest(e instanceof Error ? e.message : 'issue_date is invalid');
+    }
+  } else if (issueMonth) {
     const issueMonthWindow = await resolveIncomeIssueMonthWindowForOrg(scope.org_id, 'IL', todayIso);
     try {
       assertIssueMonthAllowed({
         todayIso,
         issueMonth,
-        monthsBack: overdueMinIssueDate ? 0 : issueMonthWindow.months_back,
+        monthsBack: issueMonthWindow.months_back,
         monthsAhead: issueMonthWindow.months_ahead,
       });
     } catch (e) {
@@ -428,15 +455,7 @@ async function issueNewDocumentFromDraft(
     }
     issue_date = resolveIssueDateForIssueMonth(issueMonth, draft.document_date);
   } else {
-    issue_date = resolveIssueDateFromDraft(draft.document_date, optionalIssueDateFromBody(body));
-  }
-  if (overdueMinIssueDate) {
-    issue_date = clampIssueDateNotBeforeMin(issue_date, overdueMinIssueDate);
-    try {
-      assertIssueDateNotBeforeMin(issue_date, overdueMinIssueDate);
-    } catch (e) {
-      throw badRequest(e instanceof Error ? e.message : 'issue_date is invalid');
-    }
+    issue_date = resolveIssueDateFromDraft(draft.document_date, explicitIssueDate);
   }
   await assertIncomeDocumentIssueDateAllowed({
     scope,

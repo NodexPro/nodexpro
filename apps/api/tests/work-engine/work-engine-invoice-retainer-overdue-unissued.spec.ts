@@ -158,3 +158,35 @@ test('projection wires not_issued menu path; FE still hides only empty actions',
   assert.match(projectionSource, /buildOverdueUnissuedIssueDateBounds/);
   assert.match(panelSource, /actions\.length === 0\) return null/);
 });
+
+test('schedule status layout uses fixed indicator column and stacked squares', () => {
+  const indicatorSource = readFileSync(
+    join(
+      dir,
+      '../../../web/src/components/work-engine/WorkEngineInvoiceRetainerScheduleMachineIndicator.tsx',
+    ),
+    'utf8',
+  );
+  const cssSource = readFileSync(
+    join(dir, '../../../web/src/styles/nx-work-engine-invoice-retainer.css'),
+    'utf8',
+  );
+  assert.match(indicatorSource, /nx-we-retainer-schedule__lifecycle-stack/);
+  assert.match(indicatorSource, /lifecycle-square/);
+  assert.match(cssSource, /status-indicator-col/);
+  assert.match(cssSource, /flex-direction:\s*column/);
+  assert.match(cssSource, /gap:\s*16px/);
+  assert.match(cssSource, /flex:\s*0 0 40px/);
+});
+
+test('overdue confirm modal uses backend min/default date calendar bounds', () => {
+  const confirmSource = readFileSync(
+    join(dir, '../../../web/src/components/work-engine/WorkEngineCycleDraftReviewConfirmModal.tsx'),
+    'utf8',
+  );
+  assert.match(confirmSource, /type="date"/);
+  assert.match(confirmSource, /issue_min_date/);
+  assert.match(confirmSource, /issue_default_date/);
+  assert.match(confirmSource, /document_date/);
+  assert.doesNotMatch(confirmSource, /new Date\(\)/);
+});
