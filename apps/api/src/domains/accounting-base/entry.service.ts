@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { badRequest, notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertOrgInContext, assertPositiveAmount } from './accounting-base.guards.js';
 import type { AccountingEntryRow, AccountingDirection, AccountingEntryPostingState, AccountingEntryStatus } from './accounting-base.types.js';
 
@@ -91,7 +92,7 @@ export async function forCommandCreateEntry(
     })
     .select('*')
     .single();
-  if (error) throw error;
+  throwIfSupabaseError(error, 'forCommandCreateEntry');
   return data as AccountingEntryRow;
 }
 
@@ -110,7 +111,7 @@ export async function forCommandUpdateEntry(
     .eq('id', entryId)
     .eq('organization_id', organizationId)
     .single();
-  if (currentError) throw currentError;
+  throwIfSupabaseError(currentError, 'forCommandUpdateEntry.load');
   if (!current) throw notFound('Accounting entry not found');
 
   const nextEntryType = (patch.entry_type ?? current.entry_type) as string;
@@ -124,7 +125,7 @@ export async function forCommandUpdateEntry(
     .eq('organization_id', organizationId)
     .select('*')
     .single();
-  if (error) throw error;
+  throwIfSupabaseError(error, 'forCommandUpdateEntry');
   if (!data) throw notFound('Accounting entry not found');
   return data as AccountingEntryRow;
 }

@@ -8,6 +8,7 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { buildReadOnlyIncomeDocumentPreviewOverlay, generateIncomeDocumentPreview, resumeIncomeDocumentDraftFromContext, } from '../income/income-document-draft-editor.service.js';
 import { buildIncomeWorkspaceWizardPatchAggregate } from '../income/income-workspace-aggregate.service.js';
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
+import { buildRecurringCycleIssuerContextTruth, prepareRecurringCycleReviewIssuerScope, } from '../income/income-recurring-cycle-issue-issuer-scope.service.js';
 import { WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS } from './work-engine-invoices-document-creation.builders.js';
 import { formatHebrewDateDisplay } from './work-engine-invoice-retainer.pure.js';
 import { todayIsoDate } from '../income/income-retainer-template-document-date.pure.js';
@@ -210,6 +211,10 @@ async function assembleCycleDraftReviewAggregate(params) {
             document_id: params.issuedDocumentId,
         }
         : null;
+    const issuer_context = await buildRecurringCycleIssuerContextTruth({
+        orgId: params.orgId,
+        representedClientId: params.refs.representedClientId,
+    });
     return {
         aggregate_key: 'work_engine_recurring_cycle_draft_review_aggregate',
         represented_client_id: params.refs.representedClientId,
@@ -222,6 +227,7 @@ async function assembleCycleDraftReviewAggregate(params) {
         title: alreadyIssued
             ? `${documentTypeLabel}${params.issuedDocumentNumberDisplay ? ` ${params.issuedDocumentNumberDisplay}` : ''}`
             : documentTypeLabel,
+        issuer_context,
         issued_document_id: params.issuedDocumentId,
         issued_document_number_display: params.issuedDocumentNumberDisplay,
         delivery_outcome: params.deliveryOutcome,
@@ -277,6 +283,11 @@ export async function refreshRecurringCycleDraftReviewCase(params) {
         linkedWorkItemId: params.linkedWorkItemId,
     };
     const { orgId, cycleRow, draftRow } = await loadCycleDraftReviewContext({ ctx: params.ctx, ...refs });
+    await prepareRecurringCycleReviewIssuerScope(params.ctx, {
+        representedClientId: params.representedClientId,
+        draft: draftRow,
+        source: 'refresh_recurring_cycle_draft_review',
+    });
     const resolvedIssuedDocumentId = params.issuedDocumentId ??
         cycleRow.generated_document_id ??
         draftRow.issued_document_id ??
@@ -292,6 +303,7 @@ export async function refreshRecurringCycleDraftReviewCase(params) {
     });
     return assembleCycleDraftReviewAggregate({
         ctx: params.ctx,
+        orgId,
         refs,
         cycleRow,
         draftStatus: draftRow.status,
@@ -313,6 +325,13 @@ export async function openRecurringCycleDraftForReview(params) {
         linkedWorkItemId: params.linkedWorkItemId,
     };
     const { orgId, cycleRow, draftRow } = await loadCycleDraftReviewContext({ ctx: params.ctx, ...refs });
+    // Official Income convention: prepare workspace issuer context for the review client
+    // before resume/preview (issue still resolves independently from trusted cycle truth).
+    await prepareRecurringCycleReviewIssuerScope(params.ctx, {
+        representedClientId: params.representedClientId,
+        draft: draftRow,
+        source: 'open_recurring_cycle_draft_for_review',
+    });
     if (draftRow.status !== 'draft') {
         return refreshRecurringCycleDraftReviewCase({
             ctx: params.ctx,
@@ -328,6 +347,7 @@ export async function openRecurringCycleDraftForReview(params) {
     });
     const aggregate = await assembleCycleDraftReviewAggregate({
         ctx: params.ctx,
+        orgId,
         refs,
         cycleRow,
         draftStatus: draftRow.status,

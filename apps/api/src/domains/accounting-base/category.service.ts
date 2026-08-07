@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 import type { AccountingCategoryRow } from './accounting-base.types.js';
 
@@ -38,7 +39,7 @@ export async function forCommandCreateCategory(
     })
     .select('*')
     .single();
-  if (error) throw error;
+  throwIfSupabaseError(error, 'forCommandCreateCategory');
   return data as AccountingCategoryRow;
 }
 

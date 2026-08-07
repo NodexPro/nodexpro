@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 import type { AccountingEntryLinkRow } from './accounting-base.types.js';
 
@@ -34,7 +35,7 @@ export async function forCommandCreateLink(
     })
     .select('*')
     .single();
-  if (error) throw error;
+  throwIfSupabaseError(error, 'forCommandCreateLink');
   return data as AccountingEntryLinkRow;
 }
 

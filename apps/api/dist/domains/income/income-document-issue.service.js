@@ -4,7 +4,8 @@
  */
 import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { badRequest, conflict, notFound } from '../../shared/errors.js';
+import { AppError, badRequest, conflict, notFound } from '../../shared/errors.js';
+import { mapIncomeIssueUserFacingMessage } from './income-issue-error.pure.js';
 import { assertRowMatchesIssuerScope, reqUuid, } from './income.guards.js';
 import { assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
@@ -21,8 +22,34 @@ import { emitIncomeWorkEventsAfterDocumentIssued } from './income-work-engine-br
 import { findRecurringCycleIssuedDocumentId, linkRecurringCycleIssuedDocument, } from '../work-engine/work-engine-invoice-retainer-cycles.service.js';
 import { abortIncomeIssueIdempotency, beginIncomeIssueIdempotency, completeIncomeIssueIdempotency, parseIssueIdempotencyKey, } from './income-issue-idempotency.js';
 import { createIncomeIssueDiagnostic, extractIncomeIssueSafeError, logIncomeIssueFailed, logIncomeIssueStage, optionalRecurringCycleIdFromBody, safeUuidForLog, withIncomeIssueStage, } from './income-issue-diagnostic.js';
+import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
+import { resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded, resolveAndApplyRecurringCycleIssueIssuerScope, } from './income-recurring-cycle-issue-issuer-scope.service.js';
 import { buildAlreadyIssuedIssueResult, buildFreshIssuedIssueResult, } from './income-document-issue-result.pure.js';
 const PG_UNIQUE_VIOLATION = '23505';
+function rethrowIncomeIssueError(diag, failingStage, error) {
+    logIncomeIssueFailed(diag, failingStage, error);
+    const resolvedFailingStage = diag.failing_stage ?? failingStage;
+    const diagnosticDetails = {
+        income_issue_diagnostic: {
+            correlation_id: diag.correlation_id,
+            deploy_marker: diag.deploy_marker,
+            last_completed_stage: diag.last_completed_stage,
+            failing_stage: resolvedFailingStage,
+        },
+    };
+    if (error instanceof AppError) {
+        const hebrew = mapIncomeIssueUserFacingMessage(error.message);
+        throw new AppError(error.statusCode, hebrew ?? error.message, error.code, {
+            ...(error.details ?? {}),
+            ...diagnosticDetails,
+        });
+    }
+    const message = error instanceof Error ? error.message : typeof error === 'string' ? error : 'Issue failed';
+    const hebrew = mapIncomeIssueUserFacingMessage(message);
+    throw new AppError(400, hebrew ?? 'לא ניתן להפיק את המסמך כעת. נסו שוב.', 'INCOME_ISSUE_FAILED', {
+        ...diagnosticDetails,
+    });
+}
 function optionalIssueDateFromBody(body) {
     const raw = body.document_date ?? body.issue_date;
     if (raw == null || raw === '')
@@ -435,21 +462,6 @@ export async function executeIssueIncomeDocument(ctx, body) {
         recurring_cycle_id: recurringCycleId,
     });
     logIncomeIssueStage(diag, 'issue_command_received', { duration_ms: 0 });
-    const scope = await withIncomeIssueStage(diag, {
-        started: 'issuer_scope_load_started',
-        completed: 'issuer_scope_load_completed',
-        failing_stage: 'issuer_scope_load',
-    }, () => loadActiveIncomeIssuerScope(ctx));
-    diag.org_id = scope.org_id;
-    try {
-        logIncomeIssueStage(diag, 'permission_check_started', { duration_ms: 0 });
-        assertIncomeIssuePermission(scope);
-        logIncomeIssueStage(diag, 'permission_check_completed');
-    }
-    catch (error) {
-        logIncomeIssueFailed(diag, 'permission_check', error);
-        throw error;
-    }
     let draft_id;
     try {
         logIncomeIssueStage(diag, 'draft_id_validation_started', { duration_ms: 0 });
@@ -458,8 +470,60 @@ export async function executeIssueIncomeDocument(ctx, body) {
         logIncomeIssueStage(diag, 'draft_id_validation_completed');
     }
     catch (error) {
-        logIncomeIssueFailed(diag, 'draft_id_validation', error);
-        throw error;
+        rethrowIncomeIssueError(diag, 'draft_id_validation', error);
+    }
+    const reviewContext = parseRecurringCycleReviewCommandContext(body);
+    try {
+        if (reviewContext) {
+            diag.recurring_cycle_id = diag.recurring_cycle_id ?? reviewContext.cycle_id;
+            await withIncomeIssueStage(diag, {
+                started: 'recurring_issuer_scope_resolve_started',
+                completed: 'recurring_issuer_scope_resolve_completed',
+                failing_stage: 'recurring_issuer_scope_resolve',
+            }, () => resolveAndApplyRecurringCycleIssueIssuerScope(ctx, {
+                draftId: draft_id,
+                review: reviewContext,
+            }));
+        }
+        else {
+            // Wizard / non-retainer office issue: FE may send only draft_id while workspace
+            // issuer context is stale. Resolve from trusted draft (+ linked cycle/profile).
+            await withIncomeIssueStage(diag, {
+                started: 'recurring_issuer_scope_resolve_started',
+                completed: 'recurring_issuer_scope_resolve_completed',
+                failing_stage: 'recurring_issuer_scope_resolve',
+            }, () => resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded(ctx, {
+                draftId: draft_id,
+            }));
+        }
+    }
+    catch (error) {
+        // withIncomeIssueStage already logged; attach Hebrew + diagnostic for the client.
+        if (error instanceof AppError && error.details?.income_issue_diagnostic)
+            throw error;
+        rethrowIncomeIssueError(diag, 'recurring_issuer_scope_resolve', error);
+    }
+    let scope;
+    try {
+        scope = await withIncomeIssueStage(diag, {
+            started: 'issuer_scope_load_started',
+            completed: 'issuer_scope_load_completed',
+            failing_stage: 'issuer_scope_load',
+        }, () => loadActiveIncomeIssuerScope(ctx));
+    }
+    catch (error) {
+        if (error instanceof AppError && error.details?.income_issue_diagnostic)
+            throw error;
+        rethrowIncomeIssueError(diag, 'issuer_scope_load', error);
+    }
+    diag.org_id = scope.org_id;
+    try {
+        logIncomeIssueStage(diag, 'permission_check_started', { duration_ms: 0 });
+        assertIncomeIssuePermission(scope);
+        logIncomeIssueStage(diag, 'permission_check_completed');
+    }
+    catch (error) {
+        rethrowIncomeIssueError(diag, 'permission_check', error);
     }
     const idempotencyKey = parseIssueIdempotencyKey(body);
     let lease = null;
@@ -496,8 +560,7 @@ export async function executeIssueIncomeDocument(ctx, body) {
             logIncomeIssueStage(diag, 'draft_loaded');
         }
         catch (error) {
-            logIncomeIssueFailed(diag, 'draft_load', error);
-            throw error;
+            rethrowIncomeIssueError(diag, 'draft_load', error);
         }
         let alreadyIssuedId;
         try {
@@ -505,8 +568,7 @@ export async function executeIssueIncomeDocument(ctx, body) {
             logIncomeIssueStage(diag, 'existing_issued_document_checked');
         }
         catch (error) {
-            logIncomeIssueFailed(diag, 'existing_issued_document_check', error);
-            throw error;
+            rethrowIncomeIssueError(diag, 'existing_issued_document_check', error);
         }
         if (alreadyIssuedId) {
             return finishIdempotentIssue(scope, draft_id, alreadyIssuedId, lease, diag, recurringCycleId);
@@ -551,7 +613,8 @@ export async function executeIssueIncomeDocument(ctx, body) {
         if (lease?.kind === 'fresh') {
             await abortIncomeIssueIdempotency(lease.leaseRowId);
         }
-        logIncomeIssueFailed(diag, 'issue_command', e);
-        throw e;
+        if (e instanceof AppError && e.details?.income_issue_diagnostic)
+            throw e;
+        rethrowIncomeIssueError(diag, 'issue_command', e);
     }
 }

@@ -9,12 +9,14 @@ export const NODEXPRO_API_BOOT_LOG_PREFIX = '[nodexpro-api][boot]';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const INCOME_ISSUE_SUCCESS_STAGE_ORDER = [
     'issue_command_received',
+    'draft_id_validation_started',
+    'draft_id_validation_completed',
+    'recurring_issuer_scope_resolve_started',
+    'recurring_issuer_scope_resolve_completed',
     'issuer_scope_load_started',
     'issuer_scope_load_completed',
     'permission_check_started',
     'permission_check_completed',
-    'draft_id_validation_started',
-    'draft_id_validation_completed',
     'draft_loaded',
     'existing_issued_document_checked',
     'numbering_started',
@@ -99,6 +101,7 @@ export function createIncomeIssueDiagnostic(params) {
         recurring_cycle_id: params.recurring_cycle_id ?? null,
         deploy_marker: params.deploy_marker ?? resolveApiDeployMarker(),
         last_completed_stage: null,
+        failing_stage: null,
         command_started_ms: Date.now(),
         stage_started_ms: {},
         failed_logged: false,
@@ -210,6 +213,7 @@ export function logIncomeIssueFailed(diag, failing_stage, error) {
     if (diag.failed_logged)
         return;
     diag.failed_logged = true;
+    diag.failing_stage = failing_stage;
     const safe = extractIncomeIssueSafeError(error);
     logIncomeIssueStage(diag, 'issue_command_failed', {
         ...safe,

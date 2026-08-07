@@ -28,7 +28,7 @@ import { docflowRoutes } from './routes/docflow.routes.js';
 import { workEngineRoutes } from './domains/work-engine/work-engine.routes.js';
 import { incomeRoutes } from './domains/income/income.routes.js';
 import { accountingBaseRoutes } from './domains/accounting-base/accounting-base.routes.js';
-import { logNodexproApiBoot } from './domains/income/income-issue-diagnostic.js';
+import { logNodexproApiBoot, resolveApiDeployMarker, } from './domains/income/income-issue-diagnostic.js';
 registerExampleModuleHook();
 async function logModuleLoaded() {
     try {
@@ -108,7 +108,8 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '15mb' }));
 app.get('/api/v1/health', (_req, res) => {
-    res.status(200).json({ ok: true });
+    // Safe deploy proof for production triage (no secrets).
+    res.status(200).json({ ok: true, deploy_marker: resolveApiDeployMarker() });
 });
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/organizations', organizationsRoutes);

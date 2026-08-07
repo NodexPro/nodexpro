@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 import type { AccountingPeriodRow, AccountingPeriodStatus } from './accounting-base.types.js';
 
@@ -31,7 +32,7 @@ export async function forCommandCreatePeriod(ctx: RequestContext, organizationId
   };
 
   const { data, error } = await supabaseAdmin.from('accounting_periods').insert(payload).select('*').single();
-  if (error) throw error;
+  throwIfSupabaseError(error, 'forCommandCreatePeriod');
   return data as AccountingPeriodRow;
 }
 

@@ -226,6 +226,52 @@ export async function buildIncomeWorkspaceContextAggregate(ctx) {
         }),
     };
 }
+/**
+ * Official Income issuer-context write — shared by select_income_issuer_context
+ * and backend orchestration (e.g. recurring-cycle issue under office client).
+ */
+export async function applyOfficialIncomeIssuerContext(ctx, input, auditMeta) {
+    const orgId = ctx.organizationId;
+    if (!orgId)
+        throw forbidden('Organization context required');
+    if (!ctx.user?.id)
+        throw forbidden('Actor required');
+    const perms = incomePermissionsFromContext(ctx);
+    if (!perms.edit && !perms.issue) {
+        throw forbidden('income.edit or income.issue required');
+    }
+    const orgIssuer = await ensureOrgIncomeIssuerProfile(orgId);
+    const representedClient = input.represented_client_id != null
+        ? await loadClientForIssuer(orgId, input.represented_client_id)
+        : null;
+    assertIncomeIssuerContextForCommand(ctx, orgId, {
+        acting_mode: input.acting_mode,
+        issuer_business_id: input.issuer_business_id,
+        represented_client_id: input.represented_client_id,
+    }, { orgIssuerProfileId: orgIssuer.id, representedClient });
+    await upsertPersistedWorkspace(orgId, ctx.user.id, {
+        acting_mode: input.acting_mode,
+        issuer_business_id: input.issuer_business_id,
+        represented_client_id: input.represented_client_id,
+    });
+    await writeAudit({
+        organizationId: orgId,
+        actorUserId: ctx.user.id,
+        moduleCode: 'income',
+        entityType: 'income_user_workspace_context',
+        entityId: ctx.user.id,
+        action: AUDIT_ACTIONS.INCOME_ISSUER_CONTEXT_SELECTED,
+        payload: {
+            acting_mode: input.acting_mode,
+            issuer_business_id: input.issuer_business_id,
+            represented_client_id: input.represented_client_id,
+            actor_user_id: ctx.user.id,
+            source: auditMeta?.source ?? 'select_income_issuer_context',
+        },
+        ipAddress: auditMeta?.ipAddress ?? null,
+        userAgent: auditMeta?.userAgent ?? null,
+    });
+}
 export async function applySelectIncomeIssuerContext(ctx, body, auditMeta) {
     const orgId = ctx.organizationId;
     if (!orgId)
@@ -243,30 +289,5 @@ export async function applySelectIncomeIssuerContext(ctx, body, auditMeta) {
     const represented_client_id = representedRaw === null || representedRaw === undefined || representedRaw === ''
         ? null
         : reqUuid(representedRaw, 'represented_client_id');
-    const orgIssuer = await ensureOrgIncomeIssuerProfile(orgId);
-    const representedClient = represented_client_id != null
-        ? await loadClientForIssuer(orgId, represented_client_id)
-        : null;
-    assertIncomeIssuerContextForCommand(ctx, orgId, { acting_mode, issuer_business_id, represented_client_id }, { orgIssuerProfileId: orgIssuer.id, representedClient });
-    await upsertPersistedWorkspace(orgId, ctx.user.id, {
-        acting_mode,
-        issuer_business_id,
-        represented_client_id,
-    });
-    await writeAudit({
-        organizationId: orgId,
-        actorUserId: ctx.user.id,
-        moduleCode: 'income',
-        entityType: 'income_user_workspace_context',
-        entityId: ctx.user.id,
-        action: AUDIT_ACTIONS.INCOME_ISSUER_CONTEXT_SELECTED,
-        payload: {
-            acting_mode,
-            issuer_business_id,
-            represented_client_id,
-            actor_user_id: ctx.user.id,
-        },
-        ipAddress: auditMeta?.ipAddress ?? null,
-        userAgent: auditMeta?.userAgent ?? null,
-    });
+    await applyOfficialIncomeIssuerContext(ctx, { acting_mode, issuer_business_id, represented_client_id }, { ipAddress: auditMeta?.ipAddress, userAgent: auditMeta?.userAgent });
 }

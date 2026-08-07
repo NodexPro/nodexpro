@@ -28,6 +28,7 @@ import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from '../work-engine/work-engine-invoice-retainer.read-model.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from '../work-engine/work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-engine/work-engine-invoices-client-documents-by-type.read-model.service.js';
+import { loadRecurringCycleReviewRefsByGeneratedDraft } from './income-recurring-cycle-issue-issuer-scope.service.js';
 import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
 import { executeUpdateIncomeDocumentBrandingProfile, executeUpdateIncomeDocumentBrandingProfilePreviewDraft, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
 import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT, } from './income.types.js';
@@ -524,7 +525,15 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
     }
     if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
         const issueResult = await executeIssueIncomeDocument(ctx, body);
-        const reviewContext = parseRecurringCycleReviewCommandContext(body);
+        const orgId = ctx.organizationId;
+        if (!orgId)
+            throw badRequest('Organization context required');
+        const draftId = reqUuid(body.draft_id, 'draft_id');
+        const reviewContext = parseRecurringCycleReviewCommandContext(body) ??
+            (await loadRecurringCycleReviewRefsByGeneratedDraft({
+                orgId,
+                draftId,
+            }));
         if (reviewContext) {
             issueResult.diagnostic.recurring_cycle_id =
                 issueResult.diagnostic.recurring_cycle_id ?? reviewContext.cycle_id;
@@ -544,9 +553,6 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
                     linkedWorkItemId: reviewContext.linked_work_item_id,
                     issuedDocumentId: issueResult.issuedDocumentId,
                 });
-                const orgId = ctx.organizationId;
-                if (!orgId)
-                    throw badRequest('Organization context required');
                 const { data: profile, error: profileErr } = await supabaseAdmin
                     .from('income_recurring_document_profiles')
                     .select('end_customer_id')
@@ -594,7 +600,26 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
                 },
             };
         }
+        // Non-retainer / non-cycle office or self issue: workspace aggregate + by-type when office.
         const response = await commandResponse(ctx, command);
+        const representedClientId = response.income_workspace_aggregate?.issuer_context?.represented_client_id ?? null;
+        const documentTypeKey = issueResult.issue_result.document_type_key || 'tax_invoice';
+        if (representedClientId) {
+            const clientDocumentsByTypeAggregate = await buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+                ctx,
+                representedClientId,
+                documentTypeKey,
+            });
+            return {
+                ...response,
+                work_engine_invoices_client_documents_by_type_aggregate: clientDocumentsByTypeAggregate,
+                issue_result: issueResult.issue_result,
+                meta: {
+                    idempotent_replay: issueResult.idempotentReplay,
+                    income_document_id: issueResult.issuedDocumentId,
+                },
+            };
+        }
         return {
             ...response,
             issue_result: issueResult.issue_result,

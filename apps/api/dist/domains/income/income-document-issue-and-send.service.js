@@ -12,6 +12,7 @@ import { executeIssueIncomeDocument } from './income-document-issue.service.js';
 import { executeSendIncomeDocumentByEmail, } from './income-document-email-delivery.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { resolveIssueAndSendRecipientEmail } from './income-document-issue-and-send.pure.js';
+import { resolveAndApplyRecurringCycleIssueIssuerScope } from './income-recurring-cycle-issue-issuer-scope.service.js';
 import { abortIncomeIssueAndSendIdempotency, beginIncomeIssueAndSendIdempotency, completeIncomeIssueAndSendIdempotency, parseIssueAndSendIdempotencyKey, } from './income-issue-and-send-idempotency.js';
 async function loadDraftDeliveryContactJson(orgId, draftId) {
     const { data, error } = await supabaseAdmin
@@ -123,11 +124,17 @@ async function finishIssueAndSend(ctx, params) {
     };
 }
 export async function executeIssueAndSendIncomeDocument(ctx, body) {
-    const scope = await loadActiveIncomeIssuerScope(ctx);
-    assertIncomeIssuePermission(scope);
     const draftId = reqUuid(body.draft_id, 'draft_id');
     const idempotencyKey = parseIssueAndSendIdempotencyKey(body);
     const reviewContext = parseRecurringCycleReviewCommandContext(body);
+    if (reviewContext) {
+        await resolveAndApplyRecurringCycleIssueIssuerScope(ctx, {
+            draftId,
+            review: reviewContext,
+        });
+    }
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    assertIncomeIssuePermission(scope);
     const deliveryContactJson = await loadDraftDeliveryContactJson(scope.org_id, draftId);
     const recipientEmail = resolveIssueAndSendRecipientEmail({
         body_recipient_email: body.recipient_email,
@@ -154,6 +161,9 @@ export async function executeIssueAndSendIncomeDocument(ctx, body) {
         const issueResult = await executeIssueIncomeDocument(ctx, {
             draft_id: draftId,
             ...(issueMonth ? { issue_month: issueMonth } : {}),
+            ...(reviewContext
+                ? { recurring_cycle_review: body.recurring_cycle_review }
+                : {}),
         });
         return finishIssueAndSend(ctx, {
             draftId,

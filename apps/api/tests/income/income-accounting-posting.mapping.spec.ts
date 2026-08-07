@@ -83,3 +83,14 @@ test('idempotency via findExistingPosting in accounting posting service', () => 
   assert.match(postingServiceSource, /findExistingPosting/);
   assert.match(postingServiceSource, /buildAccountingPostingSignature/);
 });
+
+test('posted income document update must not mutate immutable totals_snapshot_json', () => {
+  // Regression: updating totals after issue hits income_documents_immutable_after_issue
+  // and aborts issue after Accounting Base entries were already created.
+  assert.doesNotMatch(
+    incomePostingSource,
+    /totals_snapshot_json:\s*\{[\s\S]*accounting_entry_ids/,
+  );
+  assert.match(incomePostingSource, /accounting_posting_status:\s*'posted'/);
+  assert.match(incomePostingSource, /Do NOT mutate totals_snapshot_json/);
+});

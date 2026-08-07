@@ -97,6 +97,9 @@ export async function applyAccountingPostingForIssuedDocument(
     });
 
     const postedAt = new Date().toISOString();
+    // Do NOT mutate totals_snapshot_json here: income_documents_immutable_after_issue
+    // forbids changing business snapshot fields (incl. totals). Accounting truth links
+    // live on accounting_* columns + Accounting Base entries/links only.
     const { error: updateErr } = await supabaseAdmin
       .from('income_documents')
       .update({
@@ -106,11 +109,6 @@ export async function applyAccountingPostingForIssuedDocument(
         accounting_posted_at: postedAt,
         accounting_posting_error: null,
         accounting_posting_signature: result.accounting_posting_signature,
-        totals_snapshot_json: {
-          ...doc.totals_snapshot_json,
-          accounting_entry_ids: result.accounting_entry_ids,
-          authoritative_financial_truth: 'accounting_base',
-        },
       })
       .eq('id', doc.id)
       .eq('organization_id', doc.organization_id);
