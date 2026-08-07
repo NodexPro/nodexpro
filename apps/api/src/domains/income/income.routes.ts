@@ -19,6 +19,7 @@ import {
   buildIncomeRepresentedClientEmailHistoryAggregate,
 } from './income-document-email-history.service.js';
 import { buildIncomeDocumentDocflowSendAggregate } from './income-document-docflow-send.service.js';
+import { buildInvoiceLifecycleAggregate } from './invoice-lifecycle.read-model.service.js';
 import { INCOME_MODULE_CODE, INCOME_PERMISSIONS } from './income.types.js';
 import {
   CRITICAL_INCOME_COMMANDS,
@@ -117,6 +118,24 @@ router.get(
     try {
       const incomeDocumentId = String(req.query.income_document_id ?? '').trim();
       const aggregate = await buildIncomeDocumentDocflowSendAggregate({
+        ctx: req.context as RequestContext,
+        incomeDocumentId,
+      });
+      return res.json(aggregate);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** INV-2A — composed invoice lifecycle dimensions (Income owns the composer route; modules keep field ownership). */
+router.get(
+  '/aggregates/invoice-lifecycle',
+  requirePermission(INCOME_PERMISSIONS.view),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const incomeDocumentId = String(req.query.income_document_id ?? '').trim();
+      const aggregate = await buildInvoiceLifecycleAggregate({
         ctx: req.context as RequestContext,
         incomeDocumentId,
       });
