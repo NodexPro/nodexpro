@@ -449,6 +449,7 @@ export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
   projection_key: string;
   cycle_id: string | null;
   generated_draft_id: string | null;
+  generated_document_id: string | null;
   linked_work_item_id: string | null;
   period_key: string;
   scheduled_document_date: string;

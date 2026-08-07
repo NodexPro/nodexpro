@@ -45,6 +45,7 @@ test('issued only when generated_document_id exists', () => {
     workItem: null,
   });
   assert.equal(status.status_key, 'issued');
+  assert.equal(status.status_label, 'הופק');
   assert.equal(status.icon_display, '✓');
 });
 

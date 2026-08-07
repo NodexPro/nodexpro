@@ -116,7 +116,7 @@ export function resolveScheduleRowStatus(params: {
   if (cycle?.generated_document_id || cycle?.status === 'issued') {
     return {
       status_key: 'issued',
-      status_label: 'אושר',
+      status_label: 'הופק',
       status_tone: 'success',
       icon_key: 'check',
       icon_display: scheduleRowIconDisplay('check'),

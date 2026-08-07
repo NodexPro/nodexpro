@@ -110,6 +110,18 @@ test('future projection row after next document exposes cycle override primary a
   assert.ok(result.preview_action?.visible);
 });
 
+test('issued row never exposes edit/issue/override primary action', () => {
+  const result = resolveScheduleRowPrimaryAction({
+    ...base,
+    status_key: 'issued',
+    generated_draft_id: 'draft-1',
+    scheduled_document_date: '2026-08-01',
+    projected_next_document_date: '2026-08-01',
+  });
+  assert.equal(result.row_interaction_kind, null);
+  assert.equal(result.primary_action, null);
+});
+
 test('row without generated_draft_id and without next-document match has no open action', () => {
   const result = resolveScheduleRowPrimaryAction({
     ...base,

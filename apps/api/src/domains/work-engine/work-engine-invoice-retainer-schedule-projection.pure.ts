@@ -199,15 +199,65 @@ export type ScheduleSummaryCycleRef = {
   generated_document_id: string | null;
 };
 
+/**
+ * Recurring period identity for schedule rows.
+ * Calendar frequencies: one period per calendar month (YYYY-MM).
+ * Day-interval frequencies: exact scheduled date.
+ * Identity is the scheduled period — never the final document issue_date.
+ */
+export function recurringSchedulePeriodIdentity(
+  frequency: RecurringDocumentFrequency,
+  scheduledDocumentDate: string,
+): string {
+  if (
+    frequency === 'monthly' ||
+    frequency === 'semi_annual' ||
+    frequency === 'yearly' ||
+    frequency === 'biennial'
+  ) {
+    return scheduledDocumentDate.slice(0, 7);
+  }
+  return scheduledDocumentDate;
+}
+
+function scheduleCyclePeriodPriority(
+  cycle: Pick<ScheduleSummaryCycleRef, 'status' | 'generated_document_id'>,
+): number {
+  if (cycle.status === 'issued' || cycle.generated_document_id) return 3;
+  if (cycle.status === 'draft_created') return 2;
+  if (cycle.status === 'pending') return 1;
+  return 0;
+}
+
+/**
+ * Merge projected + cycle dates with at most one row per recurring period.
+ * Existing cycles win over projections for the same period (issued preferred).
+ */
 export function mergeScheduleDates(params: {
   projectedDates: string[];
   cycles: ScheduleSummaryCycleRef[];
+  frequency: RecurringDocumentFrequency;
 }): string[] {
-  const merged = new Set<string>(params.projectedDates);
-  for (const cycle of params.cycles) {
-    merged.add(cycle.scheduled_document_date);
+  const byPeriod = new Map<string, string>();
+  const cyclePriorityByPeriod = new Map<string, number>();
+
+  for (const date of params.projectedDates) {
+    const period = recurringSchedulePeriodIdentity(params.frequency, date);
+    if (!byPeriod.has(period)) byPeriod.set(period, date);
   }
-  return [...merged].sort();
+
+  for (const cycle of params.cycles) {
+    const date = cycle.scheduled_document_date;
+    const period = recurringSchedulePeriodIdentity(params.frequency, date);
+    const priority = scheduleCyclePeriodPriority(cycle);
+    const existingPriority = cyclePriorityByPeriod.get(period) ?? -1;
+    if (!byPeriod.has(period) || priority >= existingPriority) {
+      byPeriod.set(period, date);
+      cyclePriorityByPeriod.set(period, priority);
+    }
+  }
+
+  return [...byPeriod.values()].sort();
 }
 
 function isFutureScheduledScheduleRow(
@@ -269,6 +319,7 @@ export function resolveProjectedNextScheduleDate(params: {
   const allDates = mergeScheduleDates({
     projectedDates,
     cycles: params.cycles,
+    frequency: params.frequency,
   }).filter((iso) => iso >= scheduleStartDate && iso <= scheduleEndDate);
 
   const cyclesByDate = new Map(

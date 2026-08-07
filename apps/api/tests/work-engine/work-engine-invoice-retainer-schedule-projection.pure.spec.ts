@@ -5,10 +5,12 @@ import {
   formatScheduleRowDateDisplay,
   generateProjectedScheduleDates,
   groupScheduleDatesByYear,
+  mergeScheduleDates,
   resolveNextScheduleSummaryDocumentDate,
   resolveProjectedNextScheduleDate,
   resolveScheduleEndDate,
   resolveScheduleStartDate,
+  recurringSchedulePeriodIdentity,
 } from '../../src/domains/work-engine/work-engine-invoice-retainer-schedule-projection.pure.js';
 
 test('monthly schedule from 20.06.2026 through Dec 2026', () => {
@@ -172,4 +174,113 @@ test('summary next document is null when no future scheduled rows remain', () =>
     ]),
   });
   assert.equal(nextIso, null);
+});
+
+test('monthly period identity is YYYY-MM not issue date', () => {
+  assert.equal(recurringSchedulePeriodIdentity('monthly', '2026-08-01'), '2026-08');
+  assert.equal(recurringSchedulePeriodIdentity('monthly', '2026-08-23'), '2026-08');
+  assert.equal(recurringSchedulePeriodIdentity('days_30', '2026-08-23'), '2026-08-23');
+});
+
+test('monthly profile produces one period per calendar month', () => {
+  const projected = generateProjectedScheduleDates({
+    scheduleStartDate: '2026-07-23',
+    scheduleEndDate: '2026-10-23',
+    frequency: 'monthly',
+    includeFutureProjections: true,
+  });
+  assert.deepEqual(projected, [
+    '2026-07-23',
+    '2026-08-23',
+    '2026-09-23',
+    '2026-10-23',
+  ]);
+  const months = projected.map((d) => recurringSchedulePeriodIdentity('monthly', d));
+  assert.deepEqual(months, ['2026-07', '2026-08', '2026-09', '2026-10']);
+  assert.equal(new Set(months).size, months.length);
+});
+
+test('issued August cycle suppresses second August projection with different day', () => {
+  const projected = [
+    '2026-07-23',
+    '2026-08-23',
+    '2026-09-23',
+    '2026-10-23',
+  ];
+  const merged = mergeScheduleDates({
+    projectedDates: projected,
+    frequency: 'monthly',
+    cycles: [
+      {
+        scheduled_document_date: '2026-08-01',
+        status: 'issued',
+        generated_document_id: 'doc-aug',
+      },
+    ],
+  });
+  const august = merged.filter((d) => d.startsWith('2026-08'));
+  assert.deepEqual(august, ['2026-08-01']);
+  assert.ok(!merged.includes('2026-08-23'));
+  assert.ok(merged.includes('2026-09-23'));
+});
+
+test('changed actual issue date does not create another August period', () => {
+  // Cycle scheduled period remains August; document may have been issued on 07.08.
+  const merged = mergeScheduleDates({
+    projectedDates: ['2026-07-23', '2026-08-23', '2026-09-23'],
+    frequency: 'monthly',
+    cycles: [
+      {
+        scheduled_document_date: '2026-08-01',
+        status: 'issued',
+        generated_document_id: 'doc-aug',
+      },
+    ],
+  });
+  assert.equal(
+    merged.filter((d) => recurringSchedulePeriodIdentity('monthly', d) === '2026-08').length,
+    1,
+  );
+});
+
+test('next period after issued August is September', () => {
+  const allDates = mergeScheduleDates({
+    projectedDates: ['2026-07-23', '2026-08-23', '2026-09-23', '2026-10-23'],
+    frequency: 'monthly',
+    cycles: [
+      {
+        scheduled_document_date: '2026-08-01',
+        status: 'issued',
+        generated_document_id: 'doc-aug',
+      },
+    ],
+  });
+  const nextIso = resolveNextScheduleSummaryDocumentDate({
+    allDates,
+    today: '2026-08-07',
+    cyclesByDate: new Map([
+      ['2026-08-01', { status: 'issued', generated_document_id: 'doc-aug' }],
+    ]),
+  });
+  assert.equal(nextIso, '2026-09-23');
+});
+
+test('resolveProjectedNextScheduleDate after issued August returns September', () => {
+  const nextIso = resolveProjectedNextScheduleDate({
+    templateDocumentDate: '2026-07-23',
+    servicePeriodStart: '2026-07-01',
+    nextDocumentDate: '2026-09-01',
+    servicePeriodEnd: null,
+    frequency: 'monthly',
+    profileStatus: 'active',
+    cycles: [
+      {
+        scheduled_document_date: '2026-08-01',
+        status: 'issued',
+        generated_document_id: 'doc-aug',
+      },
+    ],
+    todayIso: '2026-08-07',
+  });
+  assert.equal(nextIso, '2026-09-23');
 });

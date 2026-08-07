@@ -2,6 +2,8 @@
  * Retainer — schedule tab projection (read-model only).
  */
 
+import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
+import { buildIssuedScheduleRowMenuActions } from './work-engine-invoice-retainer-schedule-issued-actions.pure.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { normalizeDraftLines, formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
@@ -98,14 +100,23 @@ type ScheduleProfile = {
   document_template_snapshot: RecurringDocumentTemplateSnapshot | null;
 };
 
+function buildIssuedRowMenuActions(
+  generatedDocumentId: string | null,
+): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
+  return buildIssuedScheduleRowMenuActions({
+    generatedDocumentId,
+    documentDownloadPath: incomeDocumentDownloadPath,
+  });
+}
+
 function buildRowMenuActions(
   statusKey: string,
   scheduledDate: string,
   today: string,
   workItemHref: string | null,
   primaryActionKey: string | null,
+  generatedDocumentId: string | null,
 ): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
-  const hasPrimaryAction = primaryActionKey != null;
   const actionBase = {
     disabled: false as const,
     disabled_reason: null as string | null,
@@ -131,6 +142,10 @@ function buildRowMenuActions(
     income_command: null,
     income_command_payload: null,
   };
+
+  if (statusKey === 'issued') {
+    return buildIssuedRowMenuActions(generatedDocumentId);
+  }
 
   if (primaryActionKey === 'open_recurring_cycle_draft_for_review') {
     return [
@@ -192,9 +207,6 @@ function buildRowMenuActions(
       viewHistory,
     ];
   }
-  if (statusKey === 'issued') {
-    return [openDocument, viewHistory];
-  }
   if (statusKey === 'failed') {
     if (workItemHref) {
       return [
@@ -249,8 +261,16 @@ function buildRowActions(
   today: string,
   workItemHref: string | null,
   primaryActionKey: string | null,
+  generatedDocumentId: string | null,
 ): WorkEngineInvoiceRetainerScheduleProjectionAction[] {
-  return buildRowMenuActions(statusKey, scheduledDate, today, workItemHref, primaryActionKey);
+  return buildRowMenuActions(
+    statusKey,
+    scheduledDate,
+    today,
+    workItemHref,
+    primaryActionKey,
+    generatedDocumentId,
+  );
 }
 
 function buildRecurrenceRuleDisplay(
@@ -390,6 +410,7 @@ async function loadGeneratedDraftScheduleAmountsById(
 function mergeScheduleDatesFromCycles(params: {
   projectedDates: string[];
   cycles: ScheduleCycleRow[];
+  frequency: RecurringDocumentFrequency;
 }): string[] {
   return mergeScheduleDates({
     projectedDates: params.projectedDates,
@@ -398,6 +419,7 @@ function mergeScheduleDatesFromCycles(params: {
       status: cycle.status,
       generated_document_id: cycle.generated_document_id,
     })),
+    frequency: params.frequency,
   });
 }
 
@@ -478,6 +500,7 @@ export async function buildRetainerScheduleProjection(params: {
   const allDates = mergeScheduleDatesFromCycles({
     projectedDates,
     cycles: params.cycles,
+    frequency: params.profile.frequency,
   }).filter((iso) => iso >= scheduleStartDate && iso <= scheduleEndDate);
 
   const projectedNextDocumentDate =
@@ -638,6 +661,7 @@ export async function buildRetainerScheduleProjection(params: {
         today,
         status.work_item_href,
         rowInteraction.primary_action?.command ?? null,
+        cycle?.generated_document_id ?? null,
       );
       const showStatusText = !(
         status.status_key === 'waiting_review' &&
@@ -648,10 +672,13 @@ export async function buildRetainerScheduleProjection(params: {
         status.status_key === 'not_issued'
           ? buildOverdueUnissuedIssueDateBounds(today)
           : null;
+      const machineStateToneIssued =
+        status.status_key === 'issued' ? ('muted' as const) : machineStateTone;
       rows.push({
         projection_key: formatScheduleProjectionKey(params.profile.id, scheduledDate),
         cycle_id: cycle?.id ?? null,
         generated_draft_id: cycle?.generated_draft_id ?? null,
+        generated_document_id: cycle?.generated_document_id ?? null,
         linked_work_item_id: machine.machine_task_id ?? workItem?.work_item_id ?? null,
         period_key: periodKey,
         scheduled_document_date: scheduledDate,
@@ -667,9 +694,9 @@ export async function buildRetainerScheduleProjection(params: {
         work_state_label: status.work_state_label,
         has_open_task: status.has_open_task,
         work_item_href: status.work_item_href,
-        machine_state: machine.machine_state,
+        machine_state: status.status_key === 'issued' ? 'issued' : machine.machine_state,
         machine_state_label: machine.machine_state_label,
-        machine_state_tone: machineStateTone,
+        machine_state_tone: machineStateToneIssued,
         machine_has_task: machine.machine_has_task,
         machine_task_id: machine.machine_task_id,
         machine_task_url: machine.machine_task_url,
@@ -683,7 +710,7 @@ export async function buildRetainerScheduleProjection(params: {
         issue_default_date: overdueIssueBounds?.issue_default_date ?? null,
         issue_min_date: overdueIssueBounds?.issue_min_date ?? null,
         issue_max_date: overdueIssueBounds?.issue_max_date ?? null,
-        allowed_actions: actions.map((action) => action.key),
+        allowed_actions: actions.filter((action) => !action.disabled).map((action) => action.key),
         actions,
       });
     }

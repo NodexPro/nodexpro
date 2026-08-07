@@ -75,6 +75,23 @@ export function resolveScheduleRowPrimaryAction(params: {
   cycle_date: string;
 } {
   const cycleDate = params.scheduled_document_date;
+
+  // Issued / terminal rows are immutable — no edit, save, issue, or override primary.
+  if (
+    params.status_key === 'issued' ||
+    params.status_key === 'skipped' ||
+    params.status_key === 'failed'
+  ) {
+    return {
+      row_interaction_kind: null,
+      primary_action: null,
+      preview_action: null,
+      override_exists: params.override_exists,
+      override_scope: params.override_scope,
+      cycle_date: cycleDate,
+    };
+  }
+
   if (
     params.status_key === 'waiting_review' &&
     params.cycle_id &&
