@@ -172,9 +172,10 @@ test('INV-2A J: no collection item path leaves active=false', () => {
   assert.match(serviceSource, /work_item_id: collectionItem\?\.work_item_id \?\? null/);
 });
 
-test('INV-2A finalization is open only; no ribbon/warnings', () => {
+test('INV-2A finalization is open only; ribbon composed in INV-2B', () => {
   assert.match(serviceSource, /state_key: 'open'/);
-  assert.doesNotMatch(serviceSource, /ribbon_stages/);
+  assert.match(serviceSource, /lifecycle_ribbon/);
+  assert.match(serviceSource, /composeInvoiceLifecycleRibbon/);
   assert.doesNotMatch(serviceSource, /warnings:/);
   assert.equal(INVOICE_LIFECYCLE_AGGREGATE_KEY, 'invoice_lifecycle_aggregate');
 });

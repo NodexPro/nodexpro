@@ -1,5 +1,6 @@
 /**
- * INV-2A — invoice_lifecycle_aggregate contract (composed dimensions only; no ribbon).
+ * INV-2A/2B/2C — invoice_lifecycle_aggregate contract.
+ * Dimensions own truth; ribbon + health are presentation/consistency projections.
  */
 
 export const INVOICE_LIFECYCLE_AGGREGATE_KEY = 'invoice_lifecycle_aggregate' as const;
@@ -9,6 +10,59 @@ export type InvoiceLifecycleDeliveryStateKey = 'not_sent' | 'sent' | 'failed';
 export type InvoiceLifecyclePaymentStateKey = 'unpaid' | 'partial' | 'paid';
 export type InvoiceLifecycleDueStateKey = 'not_applicable' | 'not_due' | 'overdue';
 export type InvoiceLifecycleFinalizationStateKey = 'open';
+
+export type InvoiceLifecycleRibbonStageKey =
+  | 'draft'
+  | 'issued'
+  | 'sent'
+  | 'delivered'
+  | 'payment'
+  | 'overdue'
+  | 'credited'
+  | 'voided'
+  | 'closed';
+
+/** Presentation state for ribbon stages — not stored lifecycle truth. */
+export type InvoiceLifecycleRibbonStageState =
+  | 'reached'
+  | 'current'
+  | 'pending'
+  | 'failed'
+  | 'not_tracked'
+  | 'unavailable';
+
+export type InvoiceLifecycleRibbonStage = {
+  key: InvoiceLifecycleRibbonStageKey;
+  label: string;
+  state: InvoiceLifecycleRibbonStageState;
+  completed: boolean;
+  current: boolean;
+};
+
+export type InvoiceLifecycleHealthStateKey = 'ok' | 'warning' | 'attention_required';
+export type InvoiceLifecycleWarningSeverity = 'info' | 'warning' | 'action_required';
+export type InvoiceLifecycleWarningCode =
+  | 'collection_stale_after_paid'
+  | 'delivery_later_attempt_failed';
+
+export type InvoiceLifecycleWarning = {
+  code: InvoiceLifecycleWarningCode;
+  severity: InvoiceLifecycleWarningSeverity;
+  label: string;
+  label_he: string;
+  message: string;
+  repair_owner: 'income' | 'delivery' | 'accounting_base' | 'work_engine';
+  action_required: boolean;
+  related_entity_id: string | null;
+  /** Existing owner action only — never synthesized. INV-2C leaves null. */
+  repair_action: null;
+};
+
+export type InvoiceLifecycleHealth = {
+  state_key: InvoiceLifecycleHealthStateKey;
+  warning_count: number;
+  warnings: InvoiceLifecycleWarning[];
+};
 
 export type InvoiceLifecycleAllowedAction = {
   action_key: string;
@@ -84,6 +138,12 @@ export type InvoiceLifecycleAggregate = {
   finalization: {
     state_key: InvoiceLifecycleFinalizationStateKey;
   };
+
+  /** INV-2B — presentation-only; derived from dimensions; never stored. */
+  lifecycle_ribbon: InvoiceLifecycleRibbonStage[];
+
+  /** INV-2C — cross-module consistency; pure over dimensions; never stored. */
+  health: InvoiceLifecycleHealth;
 
   allowed_actions: InvoiceLifecycleAllowedAction[];
 

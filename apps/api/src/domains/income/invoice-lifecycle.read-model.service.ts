@@ -35,6 +35,8 @@ import {
   type InvoiceLifecycleAggregate,
   type InvoiceLifecycleAllowedAction,
 } from './invoice-lifecycle.types.js';
+import { composeInvoiceLifecycleRibbon } from './invoice-lifecycle-ribbon.pure.js';
+import { composeInvoiceLifecycleHealth } from './invoice-lifecycle-health.pure.js';
 
 const ACTIVE_COLLECTION_WORK_TYPE = 'invoice_collection_followup';
 
@@ -241,37 +243,57 @@ export async function buildInvoiceLifecycleAggregate(params: {
 
   const collectionActive = collectionItem != null;
 
+  const documentDim = {
+    document_type: document.document_type,
+    document_number: document.document_number,
+    document_state_key: 'issued' as const,
+    issue_date: document.issue_date,
+    due_date: document.due_date,
+    source_draft_id: document.source_draft_id,
+  };
+  const paymentDim = {
+    original_amount: originalAmount,
+    paid_amount: paidAmount,
+    remaining_balance: paymentState.remaining_balance,
+    state_key: paymentState.payment_state_key,
+    last_payment_at: lastPaymentAt,
+    financial_source: 'accounting_base' as const,
+  };
+  const finalizationDim = { state_key: 'open' as const };
+
+  const collectionDim = {
+    active: collectionActive,
+    work_item_id: collectionItem?.work_item_id ?? null,
+    work_state: collectionItem?.work_state ?? null,
+    // INV-2A: expose identity/state only; WE queue aggregate owns full action eligibility.
+    next_actions: [] as InvoiceLifecycleAggregate['collection']['next_actions'],
+  };
+
   return {
     aggregate_key: INVOICE_LIFECYCLE_AGGREGATE_KEY,
     income_document_id: document.id,
     organization_id: document.organization_id,
     represented_client_id: document.represented_client_id,
-    document: {
-      document_type: document.document_type,
-      document_number: document.document_number,
-      document_state_key: 'issued',
-      issue_date: document.issue_date,
-      due_date: document.due_date,
-      source_draft_id: document.source_draft_id,
-    },
+    document: documentDim,
     delivery,
-    payment: {
-      original_amount: originalAmount,
-      paid_amount: paidAmount,
-      remaining_balance: paymentState.remaining_balance,
-      state_key: paymentState.payment_state_key,
-      last_payment_at: lastPaymentAt,
-      financial_source: 'accounting_base',
-    },
+    payment: paymentDim,
     due,
-    collection: {
-      active: collectionActive,
-      work_item_id: collectionItem?.work_item_id ?? null,
-      work_state: collectionItem?.work_state ?? null,
-      // INV-2A: expose identity/state only; WE queue aggregate owns full action eligibility.
-      next_actions: [],
-    },
-    finalization: { state_key: 'open' },
+    collection: collectionDim,
+    finalization: finalizationDim,
+    lifecycle_ribbon: composeInvoiceLifecycleRibbon({
+      document: documentDim,
+      delivery,
+      payment: paymentDim,
+      due,
+      finalization: finalizationDim,
+    }),
+    health: composeInvoiceLifecycleHealth({
+      income_document_id: document.id,
+      payment: paymentDim,
+      delivery,
+      due,
+      collection: collectionDim,
+    }),
     allowed_actions: buildAllowedActions({
       permissions,
       document,
