@@ -26,6 +26,11 @@ import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import {
+  adaptOwnerLayoutDefinitionForCanonicalRenderer,
+  resolveIssuedDocumentLayoutSource,
+} from '../owner-invoice-document-layout/owner-invoice-document-layout-resolver.pure.js';
+import type { IncomeBrandingResolvedProfile } from './income-document-branding.types.js';
 
 export type IssuedIncomeDocumentForRender = {
   id: string;
@@ -45,7 +50,42 @@ export type IssuedIncomeDocumentForRender = {
   totals_snapshot_json: Record<string, unknown> | null;
   source_draft_id: string | null;
   tax_allocation_number: string | null;
+  /** INV-13A — null on legacy issued docs (exact legacy render path). */
+  owner_layout_version_id?: string | null;
+  owner_layout_snapshot_json?: unknown | null;
 };
+
+function applyOwnerLayoutAdapterToIssuedBranding(
+  branding: IncomeBrandingResolvedProfile,
+  definition: Parameters<typeof adaptOwnerLayoutDefinitionForCanonicalRenderer>[0],
+): IncomeBrandingResolvedProfile {
+  const adapted = adaptOwnerLayoutDefinitionForCanonicalRenderer(definition);
+  return {
+    ...branding,
+    document_style_key: adapted.document_style_key,
+    display_options: {
+      ...branding.display_options,
+      show_logo: adapted.field_visibility.logo !== false && branding.display_options.show_logo,
+      show_signature:
+        adapted.field_visibility.signature_block !== false && branding.display_options.show_signature,
+      show_footer:
+        adapted.field_visibility.platform_footer !== false && branding.display_options.show_footer,
+      show_notes: adapted.field_visibility.notes !== false && branding.display_options.show_notes,
+      show_vat_row:
+        adapted.field_visibility.vat_total !== false && branding.display_options.show_vat_row,
+      show_due_date:
+        adapted.field_visibility.due_date !== false && branding.display_options.show_due_date,
+      show_payment_terms:
+        adapted.field_visibility.payment_terms !== false &&
+        branding.display_options.show_payment_terms,
+      show_item_index:
+        adapted.table_column_visibility.index !== false && branding.display_options.show_item_index,
+      show_currency:
+        adapted.table_column_visibility.line_currency !== false &&
+        branding.display_options.show_currency,
+    },
+  };
+}
 
 async function loadIssuerWebsiteForRender(
   scope: ActiveIncomeIssuerScope,
@@ -134,11 +174,24 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
   });
   const allocationApplicable = isAllocationNumberApplicable(allocationPolicy, doc.document_type);
 
-  // Issued view/PDF only — do not mutate branding defaults used by retainer/wizard.
-  const issuedBranding =
+  // INV-13A: legacy issued docs (no freeze) → exact existing sectioned force path.
+  // Layout-aware only when snapshot present on the issued row (no Owner DB lookup).
+  const layoutSource = resolveIssuedDocumentLayoutSource({
+    owner_layout_version_id: doc.owner_layout_version_id,
+    owner_layout_snapshot_json: doc.owner_layout_snapshot_json,
+  });
+
+  let issuedBranding: IncomeBrandingResolvedProfile =
     branding.document_style_key === 'sectioned'
       ? branding
       : { ...branding, document_style_key: 'sectioned' as const };
+
+  if (layoutSource.mode === 'owner_layout') {
+    issuedBranding = applyOwnerLayoutAdapterToIssuedBranding(
+      issuedBranding,
+      layoutSource.definition,
+    );
+  }
 
   const renderInput = buildUnifiedIncomeDocumentRenderInput({
     branding: issuedBranding,

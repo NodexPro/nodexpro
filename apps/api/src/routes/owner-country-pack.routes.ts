@@ -21,6 +21,11 @@ import {
   buildOwnerClientDetailAggregate,
   buildOwnerClientsListAggregate,
 } from '../domains/owner-clients/owner-clients.service.js';
+import {
+  buildOwnerInvoiceDocumentBuilderAggregate,
+  executeOwnerInvoiceLayoutCommand,
+  isOwnerInvoiceLayoutCommand,
+} from '../domains/owner-invoice-document-layout/owner-invoice-document-layout.service.js';
 
 const router = Router();
 
@@ -219,6 +224,23 @@ router.get('/active-ruleset-context/:organizationId', async (req: Request, res: 
   }
 });
 
+router.get('/invoice-document-builder', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const asStr = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
+    const aggregate = await buildOwnerInvoiceDocumentBuilderAggregate(ctx, {
+      layout_key: asStr(req.query.layout_key) ?? undefined,
+      document_type_group: asStr(req.query.document_type_group) ?? undefined,
+      country_code: req.query.country_code === undefined ? 'IL' : asStr(req.query.country_code),
+      version_id: asStr(req.query.version_id),
+    });
+    return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.post('/command', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctx = req.context as RequestContext;
@@ -229,6 +251,15 @@ router.post('/command', async (req: Request, res: Response, next: NextFunction) 
     if (!commandName) throw badRequest('command is required');
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw badRequest('payload must be an object');
+    }
+
+    if (isOwnerInvoiceLayoutCommand(commandName)) {
+      const out = await executeOwnerInvoiceLayoutCommand(
+        ctx,
+        commandName,
+        payload as Record<string, unknown>,
+      );
+      return res.json(out);
     }
 
     const out = await executeCountryPackCommand(ctx, {

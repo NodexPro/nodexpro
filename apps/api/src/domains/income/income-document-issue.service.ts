@@ -38,6 +38,7 @@ import {
 } from '../work-engine/work-engine-invoice-retainer-overdue-issue-date.pure.js';
 import { todayIsoDate } from './income-retainer-template-document-date.pure.js';
 import { resolveIncomeIssueMonthWindowForOrg } from './income-issue-month-window-resolver.js';
+import { resolveActivePublishedOwnerInvoiceLayoutFreeze } from '../owner-invoice-document-layout/owner-invoice-document-layout.service.js';
 import {
   assertDocumentTypeEnabled,
   findAvailableDocumentType,
@@ -509,6 +510,13 @@ async function issueNewDocumentFromDraft(
     },
   });
 
+  // INV-13A: freeze active published Owner layout on NEW issues only.
+  // No published layout / migration missing → null columns → legacy render path.
+  // Historical rows are never backfilled.
+  const ownerLayoutFreeze = await resolveActivePublishedOwnerInvoiceLayoutFreeze({
+    country_code: 'IL',
+  });
+
   const issuedInsert = await withIncomeIssueStage(
     diag,
     {
@@ -545,6 +553,12 @@ async function issueNewDocumentFromDraft(
             typeof draft.tax_allocation_number === 'string' && draft.tax_allocation_number.trim()
               ? draft.tax_allocation_number.trim()
               : null,
+          ...(ownerLayoutFreeze
+            ? {
+                owner_layout_version_id: ownerLayoutFreeze.owner_layout_version_id,
+                owner_layout_snapshot_json: ownerLayoutFreeze.owner_layout_snapshot_json,
+              }
+            : {}),
         })
         .select('id')
         .single();
