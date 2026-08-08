@@ -4,18 +4,26 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {
+  isPdfBrowserResolutionUsable,
+  type PdfBrowserResolution,
+} from './income-document-pdf-browser.pure.js';
+import { resolvePdfBrowserForLaunch } from './income-document-pdf-browser.service.js';
 
-async function renderWithPuppeteer(fullHtml: string): Promise<Buffer | null> {
+async function renderWithPuppeteer(
+  fullHtml: string,
+  executablePath: string,
+): Promise<Buffer | null> {
   try {
     const puppeteer = await import('puppeteer');
     const browser = await puppeteer.launch({
       headless: true,
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -54,35 +62,12 @@ async function renderWithPuppeteer(fullHtml: string): Promise<Buffer | null> {
       return null;
     }
     // Browser missing / launch failure on host → try Chromium CLI fallback.
-    console.error('[income-pdf] puppeteer render failed; trying CLI fallback', { message });
+    console.error('[income-pdf] puppeteer render failed; trying CLI fallback', {
+      message,
+      executablePath,
+    });
     return null;
   }
-}
-
-function candidateChromiumExecutables(): string[] {
-  const fromEnv = [process.env.PUPPETEER_EXECUTABLE_PATH, process.env.CHROMIUM_PATH].filter(
-    (v): v is string => Boolean(v?.trim()),
-  );
-  const win = [
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-  ];
-  const linux = [
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-  ];
-  return [...fromEnv, ...(process.platform === 'win32' ? win : linux)];
-}
-
-function resolveChromiumExecutable(): string | null {
-  for (const candidate of candidateChromiumExecutables()) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return null;
 }
 
 async function renderWithChromiumCli(fullHtml: string, executablePath: string): Promise<Buffer> {
@@ -122,14 +107,27 @@ async function renderWithChromiumCli(fullHtml: string, executablePath: string): 
   }
 }
 
+function unavailablePdfEngineError(resolution: PdfBrowserResolution): Error {
+  return new Error(
+    `Unified PDF render unavailable: install puppeteer (npm install) or set CHROMIUM_PATH to a headless Chromium/Chrome binary (source=${resolution.source}, path_exists=${resolution.path_exists})`,
+  );
+}
+
 export async function renderIncomeDocumentPdfBufferFromHtml(fullHtml: string): Promise<Buffer> {
-  const puppeteerBuffer = await renderWithPuppeteer(fullHtml);
+  const resolution = await resolvePdfBrowserForLaunch();
+  console.info('[income-pdf] browser resolution', {
+    browser_source: resolution.source,
+    browser_path_exists: resolution.path_exists,
+    browser_path: resolution.path,
+  });
+
+  if (!isPdfBrowserResolutionUsable(resolution) || !resolution.path) {
+    throw unavailablePdfEngineError(resolution);
+  }
+
+  const executablePath = resolution.path;
+  const puppeteerBuffer = await renderWithPuppeteer(fullHtml, executablePath);
   if (puppeteerBuffer) return puppeteerBuffer;
 
-  const chromium = resolveChromiumExecutable();
-  if (chromium) return renderWithChromiumCli(fullHtml, chromium);
-
-  throw new Error(
-    'Unified PDF render unavailable: install puppeteer (npm install) or set CHROMIUM_PATH to a headless Chromium/Chrome binary',
-  );
+  return renderWithChromiumCli(fullHtml, executablePath);
 }

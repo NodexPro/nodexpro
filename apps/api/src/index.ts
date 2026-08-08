@@ -35,9 +35,17 @@ import {
   logNodexproApiBoot,
   resolveApiDeployMarker,
 } from './domains/income/income-issue-diagnostic.js';
+import {
+  ensureDefaultPuppeteerCacheDir,
+  getCachedPdfEngineCapability,
+  hasCachedPdfEngineCapability,
+  logPdfEngineStartupProbe,
+  refreshPdfEngineCapability,
+} from './domains/income/income-document-pdf-browser.service.js';
 import { correlationMiddleware, getRequestCorrelationId } from './middleware/correlation.js';
 import { supabaseAdmin } from './db/client.js';
 
+ensureDefaultPuppeteerCacheDir();
 registerExampleModuleHook();
 
 async function logModuleLoaded(): Promise<void> {
@@ -123,6 +131,7 @@ app.use(express.json({ limit: '15mb' }));
 
 app.get('/api/v1/health', async (_req, res) => {
   // Safe deploy + minimal DB connectivity probe (no secrets, no aggregate work).
+  // pdf_engine uses cached path existence only — never launches Chrome here.
   let db: 'ok' | 'unavailable' = 'ok';
   try {
     const { error } = await supabaseAdmin
@@ -133,11 +142,16 @@ app.get('/api/v1/health', async (_req, res) => {
   } catch {
     db = 'unavailable';
   }
+  // Path probe only (existsSync / puppeteer.executablePath) — never launches Chrome.
+  const pdfCapability = hasCachedPdfEngineCapability()
+    ? getCachedPdfEngineCapability()
+    : await refreshPdfEngineCapability();
   const ok = db === 'ok';
   res.status(ok ? 200 : 503).json({
     ok,
     deploy_marker: resolveApiDeployMarker(),
     db,
+    pdf_engine: pdfCapability.pdf_engine,
   });
 });
 
@@ -195,5 +209,6 @@ app.listen(config.port, () => {
   console.log(
     `[api] CLIENT_DATA_ENCRYPTION_KEY: env_set=${enc.env_set ? 'yes' : 'no'}, decoded_bytes=${len}, aes256_ok=${enc.valid_for_aes256 ? 'yes' : 'no'}`
   );
+  void logPdfEngineStartupProbe();
   logModuleLoaded();
 });
