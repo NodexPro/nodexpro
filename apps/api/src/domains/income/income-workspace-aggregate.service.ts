@@ -16,7 +16,10 @@ import {
   resolveAccountingDisplayStatus,
 } from './income-accounting-posting.mapping.js';
 import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
-import { buildIncomeIssuedDocumentViewAction } from './income-document-view-action.pure.js';
+import {
+  buildIncomeIssuedDocumentPdfAction,
+  buildIncomeIssuedDocumentViewAction,
+} from './income-document-view-action.pure.js';
 import { buildIncomeDocumentEmailDeliveryBlock } from './income-document-email-delivery.read-model.pure.js';
 import { buildIncomeDocumentDocflowDeliveryBlock } from './income-document-docflow-delivery.read-model.pure.js';
 import {
@@ -304,10 +307,6 @@ async function loadIssuedDocuments(
     if (canRetryPosting && r.accounting_posting_status === 'failed') {
       rowActions.push('retry_income_document_accounting_posting');
     }
-    if (canView && r.pdf_render_status === 'rendered' && r.pdf_asset_id) {
-      rowActions.push('download_pdf');
-      rowActions.push('open_document');
-    }
     const pdfDownloadPath =
       r.pdf_render_status === 'rendered' && r.pdf_asset_id
         ? incomeDocumentDownloadPath(r.id)
@@ -315,14 +314,23 @@ async function loadIssuedDocuments(
     const view_action = buildIncomeIssuedDocumentViewAction({
       incomeDocumentId: r.id,
       canView,
+    });
+    const pdf_action = buildIncomeIssuedDocumentPdfAction({
+      incomeDocumentId: r.id,
       canRetryPdf: canRetryPosting,
       pdfRenderStatus: r.pdf_render_status,
       pdfAssetId: r.pdf_asset_id,
       pdfDownloadPath,
       pdfRenderError: r.pdf_render_error,
     });
-    if (view_action.retry_command) {
-      rowActions.push(view_action.retry_command);
+    if (view_action.enabled) {
+      rowActions.push('open_document');
+    }
+    if (pdf_action.enabled) {
+      rowActions.push('download_pdf');
+    }
+    if (pdf_action.retry_command) {
+      rowActions.push(pdf_action.retry_command);
     }
     return {
       document_id: r.id,
@@ -347,8 +355,9 @@ async function loadIssuedDocuments(
       pdf_render_status: r.pdf_render_status,
       pdf_status_label: pdfStatusLabel(r.pdf_render_status),
       pdf_asset_id: r.pdf_asset_id,
-      pdf_download_path: pdfDownloadPath,
+      pdf_download_path: pdf_action.pdf_download_path,
       view_action,
+      pdf_action,
       email_delivery: buildIncomeDocumentEmailDeliveryBlock({
         incomeDocumentId: r.id,
         attemptCount: emailAttemptCounts.get(r.id) ?? 0,

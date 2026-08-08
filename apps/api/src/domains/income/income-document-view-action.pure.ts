@@ -1,27 +1,49 @@
 /**
- * Issued-document view action for dumb UI (click document number → final PDF).
+ * Issued-document VIEW vs PDF action contracts (separate capabilities).
+ * VIEW = immutable issued HTML via unified render.
+ * PDF  = binary asset for download / email attachment.
  */
 
 import { resolveIncomeDocumentPdfSendReadiness } from './income-document-pdf-send-readiness.pure.js';
-import { INCOME_COMMAND_RETRY_PDF_RENDER, type IncomeIssuedDocumentViewAction } from './income.types.js';
+import {
+  INCOME_COMMAND_RETRY_PDF_RENDER,
+  INCOME_ISSUED_DOCUMENT_VIEW_AGGREGATE_KEY,
+  type IncomeIssuedDocumentPdfAction,
+  type IncomeIssuedDocumentViewAction,
+} from './income.types.js';
 
 export function buildIncomeIssuedDocumentViewAction(params: {
   incomeDocumentId: string;
   canView: boolean;
+}): IncomeIssuedDocumentViewAction {
+  const enabled = params.canView;
+  return {
+    action_key: 'open_document',
+    label: 'צפייה במסמך',
+    enabled,
+    view_mode: 'issued_html',
+    income_document_id: params.incomeDocumentId,
+    view_aggregate_key: INCOME_ISSUED_DOCUMENT_VIEW_AGGREGATE_KEY,
+    view_aggregate_params: { income_document_id: params.incomeDocumentId },
+    disabled_reason: enabled ? null : 'אין הרשאת צפייה',
+  };
+}
+
+export function buildIncomeIssuedDocumentPdfAction(params: {
+  incomeDocumentId: string;
   canRetryPdf: boolean;
   pdfRenderStatus: string;
   pdfAssetId: string | null;
   pdfDownloadPath: string | null;
   pdfRenderError?: string | null;
-}): IncomeIssuedDocumentViewAction {
+}): IncomeIssuedDocumentPdfAction {
   const readiness = resolveIncomeDocumentPdfSendReadiness({
     pdfRenderStatus: params.pdfRenderStatus,
     pdfAssetId: params.pdfAssetId,
   });
-  const enabled =
-    params.canView && readiness.ready && Boolean(params.pdfDownloadPath);
+  const enabled = readiness.ready && Boolean(params.pdfDownloadPath);
   const retryAllowed = params.canRetryPdf && readiness.retry_eligible;
-  const baseReason = readiness.disabled_reason ?? 'המסמך אינו זמין לצפייה';
+  const baseReason = readiness.disabled_reason ?? 'קובץ PDF אינו זמין';
   const renderError =
     params.pdfRenderError != null ? String(params.pdfRenderError).trim() : '';
   const disabledReason =
@@ -30,12 +52,15 @@ export function buildIncomeIssuedDocumentViewAction(params: {
       : enabled
         ? null
         : baseReason;
+
   return {
-    action_key: 'open_document',
-    label: 'צפייה במסמך',
+    action_key: 'download_pdf',
+    label: 'הורדת PDF',
     enabled,
     income_document_id: params.incomeDocumentId,
     pdf_download_path: enabled ? params.pdfDownloadPath : null,
+    pdf_status_key: readiness.status_key,
+    pdf_status_label: readiness.status_label,
     disabled_reason: disabledReason,
     retry_command: retryAllowed ? INCOME_COMMAND_RETRY_PDF_RENDER : null,
   };

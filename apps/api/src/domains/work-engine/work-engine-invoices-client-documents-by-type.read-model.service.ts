@@ -15,7 +15,10 @@ import {
 } from '../income/income-client-income-ledger-card.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
-import { buildIncomeIssuedDocumentViewAction } from '../income/income-document-view-action.pure.js';
+import {
+  buildIncomeIssuedDocumentPdfAction,
+  buildIncomeIssuedDocumentViewAction,
+} from '../income/income-document-view-action.pure.js';
 import { buildIncomeDocumentEmailDeliveryBlock } from '../income/income-document-email-delivery.read-model.pure.js';
 import { buildIncomeDocumentDocflowDeliveryBlock } from '../income/income-document-docflow-delivery.read-model.pure.js';
 import {
@@ -261,6 +264,9 @@ async function loadIssuedDocumentCandidates(params: {
     const view_action = buildIncomeIssuedDocumentViewAction({
       incomeDocumentId: doc.id,
       canView: params.canView,
+    });
+    const pdf_action = buildIncomeIssuedDocumentPdfAction({
+      incomeDocumentId: doc.id,
       canRetryPdf: params.permissions.issue,
       pdfRenderStatus: doc.pdf_render_status,
       pdfAssetId: doc.pdf_asset_id,
@@ -274,8 +280,11 @@ async function loadIssuedDocumentCandidates(params: {
       allowedActions.push('view_document');
       allowedActions.push('open_document');
     }
-    if (view_action.retry_command) {
-      allowedActions.push(view_action.retry_command);
+    if (pdf_action.enabled) {
+      allowedActions.push('download_pdf');
+    }
+    if (pdf_action.retry_command) {
+      allowedActions.push(pdf_action.retry_command);
     }
 
     let payment_state_key: WorkEngineInvoicesClientDocumentsByTypeRow['payment_state_key'] = null;
@@ -332,8 +341,9 @@ async function loadIssuedDocumentCandidates(params: {
       draft_id: null,
       can_view_document: canViewDoc,
       can_edit_draft: false,
-      pdf_download_path: view_action.pdf_download_path,
+      pdf_download_path: pdf_action.pdf_download_path,
       view_action,
+      pdf_action,
       email_delivery: buildIncomeDocumentEmailDeliveryBlock({
         incomeDocumentId: doc.id,
         attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
@@ -440,6 +450,7 @@ async function loadDraftCandidates(params: {
       can_edit_draft: canEditDraft,
       pdf_download_path: null,
       view_action: null,
+      pdf_action: null,
       email_delivery: null,
       docflow_delivery: null,
       record_payment_form: null,

@@ -172,14 +172,14 @@ test('H DocFlow policy unchanged', () => {
   assert.doesNotMatch(docflowServiceSource, /resolveIssuedDocumentEmailRecipientPrefill/);
 });
 
-test('VIEW retry-then-open uses command workspace row — no documents-by-type GET', () => {
-  assert.match(weDocsSource, /issued_documents_table_model/);
-  assert.match(weDocsSource, /applyIssuedViewFromWorkspaceRow/);
-  assert.match(weDocsSource, /openIncomeDocumentPdf/);
+test('VIEW opens issued HTML viewer aggregate (independent of PDF binary)', () => {
+  assert.match(weDocsSource, /IncomeIssuedDocumentViewModal/);
+  assert.match(weDocsSource, /setIssuedViewDocId/);
   const viewFnStart = weDocsSource.indexOf('const handleViewDocument');
   const viewFnEnd = weDocsSource.indexOf('const handleEditDraft');
   assert.ok(viewFnStart >= 0 && viewFnEnd > viewFnStart);
   const viewFn = weDocsSource.slice(viewFnStart, viewFnEnd);
-  assert.match(viewFn, /executeIncomeCommand/);
+  assert.match(viewFn, /setIssuedViewDocId/);
+  assert.doesNotMatch(viewFn, /openIncomeDocumentPdf/);
   assert.doesNotMatch(viewFn, /fetchWorkEngineInvoicesClientDocumentsByTypeAggregate/);
 });

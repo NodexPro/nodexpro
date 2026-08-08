@@ -327,16 +327,47 @@ export interface IncomeDocumentRecordPaymentForm {
   fields: IncomeDocumentRecordPaymentFormField[];
 }
 
+export const INCOME_ISSUED_DOCUMENT_VIEW_AGGREGATE_KEY =
+  'income_issued_document_view_aggregate' as const;
+
+/** Visual issued document view — independent of PDF binary readiness. */
 export type IncomeIssuedDocumentViewAction = {
   action_key: 'open_document';
   label: string;
   enabled: boolean;
+  view_mode: 'issued_html';
+  income_document_id: string;
+  view_aggregate_key: typeof INCOME_ISSUED_DOCUMENT_VIEW_AGGREGATE_KEY;
+  view_aggregate_params: { income_document_id: string };
+  disabled_reason: string | null;
+};
+
+/** Binary PDF download / print / email attachment capability. */
+export type IncomeIssuedDocumentPdfAction = {
+  action_key: 'download_pdf';
+  label: string;
+  enabled: boolean;
   income_document_id: string;
   pdf_download_path: string | null;
+  pdf_status_key: 'pdf_pending' | 'pdf_failed' | 'pdf_ready' | 'pdf_unavailable';
+  pdf_status_label: string;
   disabled_reason: string | null;
-  /** When PDF failed — FE may run this command then re-open view from refreshed aggregate. */
   retry_command: typeof INCOME_COMMAND_RETRY_PDF_RENDER | null;
 };
+
+export interface IncomeIssuedDocumentViewAggregate {
+  aggregate_key: typeof INCOME_ISSUED_DOCUMENT_VIEW_AGGREGATE_KEY;
+  income_document_id: string;
+  document_number: string;
+  document_type_label: string;
+  title: string;
+  read_only: true;
+  view_mode: 'issued_html';
+  /** Unified issued HTML body — same contract as PDF print HTML body. */
+  document_html: string;
+  pdf_action: IncomeIssuedDocumentPdfAction;
+  allowed_actions: string[];
+}
 
 export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   row_id: string;
@@ -358,6 +389,7 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   can_edit_draft: boolean;
   pdf_download_path: string | null;
   view_action: IncomeIssuedDocumentViewAction | null;
+  pdf_action: IncomeIssuedDocumentPdfAction | null;
   email_delivery: IncomeDocumentEmailDeliveryBlock | null;
   docflow_delivery: IncomeDocumentDocflowDeliveryBlock | null;
   record_payment_form: IncomeDocumentRecordPaymentForm | null;
@@ -606,8 +638,10 @@ export interface IncomeIssuedDocumentsTableRow {
   pdf_status_label: string;
   pdf_asset_id: string | null;
   pdf_download_path: string | null;
-  /** Backend view contract for clickable document number (immutable PDF artifact). */
+  /** Backend view contract for clickable document number (issued HTML viewer). */
   view_action: IncomeIssuedDocumentViewAction;
+  /** Binary PDF download / retry — independent of visual view. */
+  pdf_action: IncomeIssuedDocumentPdfAction;
   email_delivery: IncomeDocumentEmailDeliveryBlock;
   docflow_delivery: IncomeDocumentDocflowDeliveryBlock;
   allowed_actions: string[];
