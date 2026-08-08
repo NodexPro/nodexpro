@@ -334,6 +334,8 @@ export type IncomeIssuedDocumentViewAction = {
   income_document_id: string;
   pdf_download_path: string | null;
   disabled_reason: string | null;
+  /** When PDF failed — FE may run this command then re-open view from refreshed aggregate. */
+  retry_command: typeof INCOME_COMMAND_RETRY_PDF_RENDER | null;
 };
 
 export interface WorkEngineInvoicesClientDocumentsByTypeRow {

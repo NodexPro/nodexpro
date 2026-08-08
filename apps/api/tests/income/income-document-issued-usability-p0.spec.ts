@@ -93,22 +93,26 @@ test('view_action enabled only for rendered + asset', () => {
   const ready = buildIncomeIssuedDocumentViewAction({
     incomeDocumentId: docId,
     canView: true,
+    canRetryPdf: true,
     pdfRenderStatus: 'rendered',
     pdfAssetId: randomUUID(),
     pdfDownloadPath: `/api/v1/income/documents/${docId}/download`,
   });
   assert.equal(ready.enabled, true);
   assert.equal(ready.action_key, 'open_document');
+  assert.equal(ready.retry_command, null);
   assert.ok(ready.pdf_download_path);
 
   const failed = buildIncomeIssuedDocumentViewAction({
     incomeDocumentId: docId,
     canView: true,
+    canRetryPdf: true,
     pdfRenderStatus: 'failed',
     pdfAssetId: null,
     pdfDownloadPath: null,
   });
   assert.equal(failed.enabled, false);
+  assert.equal(failed.retry_command, 'retry_income_document_pdf_render');
   assert.match(String(failed.disabled_reason), /PDF|pdf|הפקה|זמין/i);
 });
 
@@ -117,6 +121,7 @@ test('issued lists wire document_number click to view_action / openIncomeDocumen
   assert.match(incomeTableSource, /nx-income-doc-number-link/);
   assert.match(weDocsSource, /view_action/);
   assert.match(weDocsSource, /openIncomeDocumentPdf/);
+  assert.match(weDocsSource, /retry_command/);
   assert.doesNotMatch(weDocsSource, /resume_income_document_draft.*document_number/);
 });
 

@@ -260,6 +260,7 @@ async function loadIssuedDocumentCandidates(params: {
     const view_action = buildIncomeIssuedDocumentViewAction({
       incomeDocumentId: doc.id,
       canView: params.canView,
+      canRetryPdf: params.permissions.issue,
       pdfRenderStatus: doc.pdf_render_status,
       pdfAssetId: doc.pdf_asset_id,
       pdfDownloadPath: pdfPath,
@@ -270,6 +271,9 @@ async function loadIssuedDocumentCandidates(params: {
     if (canViewDoc) {
       allowedActions.push('view_document');
       allowedActions.push('open_document');
+    }
+    if (view_action.retry_command) {
+      allowedActions.push(view_action.retry_command);
     }
 
     let payment_state_key: WorkEngineInvoicesClientDocumentsByTypeRow['payment_state_key'] = null;

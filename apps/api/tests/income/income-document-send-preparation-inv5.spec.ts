@@ -134,7 +134,8 @@ test('rendered without asset is unavailable and not sendable', () => {
   assert.equal(email.enabled, false);
   assert.equal(email.disabled_reason_key, 'pdf_unavailable');
   assert.equal(email.pdf_readiness.status_key, 'pdf_unavailable');
-  assert.equal(email.retry_pdf_render_allowed, false);
+  // Missing asset is regenerable — same path as failed PDF retry.
+  assert.equal(email.retry_pdf_render_allowed, true);
 });
 
 test('Email and DocFlow share identical PDF readiness mapping', () => {

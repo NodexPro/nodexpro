@@ -77,6 +77,7 @@ export function resolveIncomeDocumentPdfSendReadiness(params: {
     status_label: 'PDF אינו זמין',
     disabled_reason: PDF_UNAVAILABLE_REASON,
     disabled_reason_key: 'pdf_unavailable',
-    retry_eligible: false,
+    // Missing/invalid asset on an issued doc — allow regenerate via retry command.
+    retry_eligible: true,
   };
 }

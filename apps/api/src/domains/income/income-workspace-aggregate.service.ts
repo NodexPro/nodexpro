@@ -303,9 +303,6 @@ async function loadIssuedDocuments(
     if (canRetryPosting && r.accounting_posting_status === 'failed') {
       rowActions.push('retry_income_document_accounting_posting');
     }
-    if (canRetryPosting && r.pdf_render_status === 'failed') {
-      rowActions.push('retry_income_document_pdf_render');
-    }
     if (canView && r.pdf_render_status === 'rendered' && r.pdf_asset_id) {
       rowActions.push('download_pdf');
       rowActions.push('open_document');
@@ -317,10 +314,14 @@ async function loadIssuedDocuments(
     const view_action = buildIncomeIssuedDocumentViewAction({
       incomeDocumentId: r.id,
       canView,
+      canRetryPdf: canRetryPosting,
       pdfRenderStatus: r.pdf_render_status,
       pdfAssetId: r.pdf_asset_id,
       pdfDownloadPath,
     });
+    if (view_action.retry_command) {
+      rowActions.push(view_action.retry_command);
+    }
     return {
       document_id: r.id,
       document_number: r.document_number,
