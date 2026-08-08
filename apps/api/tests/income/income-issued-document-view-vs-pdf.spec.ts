@@ -95,7 +95,7 @@ test('D/E/F issued view aggregate uses unified issued renderer; no draft/edit', 
   assert.match(viewServiceSource, /buildUnifiedIncomeDocumentRenderModelForIssuedDocument/);
   assert.match(viewServiceSource, /renderUnifiedIncomeDocumentHtml/);
   assert.match(viewServiceSource, /document_status !== 'issued'/);
-  assert.match(viewServiceSource, /resolveIssuerScopeForIssuedDocumentView/);
+  assert.match(viewServiceSource, /resolveIssuerScopeForIssuedDocument/);
   assert.doesNotMatch(viewServiceSource, /resume_income_document_draft/);
   assert.doesNotMatch(viewServiceSource, /buildIncomeDocumentDetailsStep/);
   assert.match(pdfServiceSource, /buildUnifiedIncomeDocumentRenderModelForIssuedDocument/);

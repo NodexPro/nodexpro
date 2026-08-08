@@ -71,6 +71,14 @@ test('income routes expose email history aggregates', () => {
   assert.match(routesSource, /buildIncomeRepresentedClientEmailHistoryAggregate/);
 });
 
+test('document email history resolves office issuer scope for WE mismatch', () => {
+  const historyServiceSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-email-history.service.ts'),
+    'utf8',
+  );
+  assert.match(historyServiceSource, /resolveIssuerScopeForIssuedDocument/);
+});
+
 test('workspace issued rows include email_delivery block', () => {
   assert.match(workspaceSource, /email_delivery/);
   assert.match(workspaceSource, /loadEmailAttemptCountsByDocumentIds/);

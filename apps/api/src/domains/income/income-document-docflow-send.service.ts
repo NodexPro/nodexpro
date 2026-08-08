@@ -7,8 +7,8 @@ import type { RequestContext } from '../../shared/context.js';
 import { forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertRowMatchesIssuerScope, reqUuid } from './income.guards.js';
-import { loadActiveIncomeIssuerScope } from './income-issuer-scope.service.js';
 import { incomeWorkspacePermissionsFromContext } from './income-issuer-context.service.js';
+import { resolveIssuerScopeForIssuedDocument } from './income-issued-document-issuer-scope.service.js';
 import {
   buildIncomeDocumentDocflowSendForm,
   mapDeliveryAttemptToDocflowHistoryRow,
@@ -104,8 +104,10 @@ export async function buildIncomeDocumentDocflowSendAggregate(params: {
 }): Promise<IncomeDocumentDocflowSendAggregate> {
   assertDocflowSendViewAccess(params.ctx);
   const incomeDocumentId = reqUuid(params.incomeDocumentId, 'income_document_id');
-  const scope = await loadActiveIncomeIssuerScope(params.ctx);
-  const doc = await loadIssuedDocumentForDocflowSend(scope.org_id, incomeDocumentId);
+  const orgId = params.ctx.organizationId;
+  if (!orgId) throw forbidden('Organization context required');
+  const doc = await loadIssuedDocumentForDocflowSend(orgId, incomeDocumentId);
+  const scope = await resolveIssuerScopeForIssuedDocument(params.ctx, doc);
   assertRowMatchesIssuerScope(scope, doc);
 
   const [attempts, docflowEntitled, portalActive] = await Promise.all([

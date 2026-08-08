@@ -9,9 +9,13 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
-import { assertRowMatchesIssuerScope, reqUuid } from './income.guards.js';
+import {
+  assertRowMatchesIssuerScope,
+  reqUuid,
+  type ActiveIncomeIssuerScope,
+} from './income.guards.js';
 import { incomeWorkspacePermissionsFromContext } from './income-issuer-context.service.js';
-import { loadActiveIncomeIssuerScope, type ActiveIncomeIssuerScope } from './income-issuer-scope.service.js';
+import { resolveIssuerScopeForIssuedDocument } from './income-issued-document-issuer-scope.service.js';
 import {
   buildIncomeDocumentEmailSendForm,
   mapDeliveryAttemptToDocumentHistoryRow,
@@ -190,8 +194,10 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params: {
 }): Promise<IncomeDocumentEmailHistoryAggregate> {
   assertEmailHistoryViewAccess(params.ctx);
   const incomeDocumentId = reqUuid(params.incomeDocumentId, 'income_document_id');
-  const scope = await loadActiveIncomeIssuerScope(params.ctx);
-  const doc = await loadIssuedDocumentForHistory(scope.org_id, incomeDocumentId);
+  const orgId = params.ctx.organizationId;
+  if (!orgId) throw forbidden('Organization context required');
+  const doc = await loadIssuedDocumentForHistory(orgId, incomeDocumentId);
+  const scope = await resolveIssuerScopeForIssuedDocument(params.ctx, doc);
   assertRowMatchesIssuerScope(scope, doc);
 
   const attempts = await listIncomeDocumentEmailAttempts(scope.org_id, incomeDocumentId);
