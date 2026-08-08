@@ -7,8 +7,16 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
-import { assertRowMatchesIssuerScope, reqUuid } from './income.guards.js';
-import { incomeWorkspacePermissionsFromContext } from './income-issuer-context.service.js';
+import {
+  assertRowMatchesIssuerScope,
+  reqUuid,
+  type ActiveIncomeIssuerScope,
+} from './income.guards.js';
+import {
+  assertIncomeIssuerContextForCommand,
+  ensureOrgIncomeIssuerProfile,
+  incomeWorkspacePermissionsFromContext,
+} from './income-issuer-context.service.js';
 import { loadActiveIncomeIssuerScope } from './income-issuer-scope.service.js';
 import {
   buildIncomeIssuedDocumentPdfAction,
@@ -59,6 +67,88 @@ async function loadIssuedDocumentForView(
   return data as IssuedDocForView;
 }
 
+function scopeMatchesIssuedDocument(
+  scope: ActiveIncomeIssuerScope,
+  doc: Pick<IssuedDocForView, 'organization_id' | 'issuer_business_id' | 'represented_client_id'>,
+): boolean {
+  return (
+    doc.organization_id === scope.org_id &&
+    doc.issuer_business_id === scope.issuer_business_id &&
+    (doc.represented_client_id ?? null) === (scope.represented_client_id ?? null)
+  );
+}
+
+/**
+ * Work Engine opens office-client documents without first selecting Income issuer context.
+ * When the active workspace issuer is stale/wrong, authorize a read-only office scope from
+ * the issued document itself (same permission gates as select_income_issuer_context).
+ * Self-mode documents still require the active self issuer scope.
+ */
+async function resolveIssuerScopeForIssuedDocumentView(
+  ctx: RequestContext,
+  doc: IssuedDocForView,
+): Promise<ActiveIncomeIssuerScope> {
+  const active = await loadActiveIncomeIssuerScope(ctx);
+  if (scopeMatchesIssuedDocument(active, doc)) return active;
+
+  const orgId = ctx.organizationId;
+  if (!orgId || !ctx.user?.id) {
+    assertRowMatchesIssuerScope(active, doc);
+    return active;
+  }
+
+  const orgIssuer = await ensureOrgIncomeIssuerProfile(orgId);
+  const isOfficeDocument =
+    doc.represented_client_id != null || doc.issuer_business_id !== orgIssuer.id;
+  if (!isOfficeDocument) {
+    assertRowMatchesIssuerScope(active, doc);
+    return active;
+  }
+
+  const representedClientId = doc.represented_client_id ?? doc.issuer_business_id;
+  const { data: clientRow, error: clientErr } = await supabaseAdmin
+    .from('clients')
+    .select('id, display_name, legal_name, is_archived')
+    .eq('organization_id', orgId)
+    .eq('id', representedClientId)
+    .maybeSingle();
+  throwIfSupabaseError(clientErr, 'loadClientForIssuedDocumentViewScope');
+  const representedClient =
+    (clientRow as {
+      id: string;
+      display_name: string;
+      legal_name: string | null;
+      is_archived: boolean;
+    } | null) ?? null;
+
+  assertIncomeIssuerContextForCommand(
+    ctx,
+    orgId,
+    {
+      acting_mode: 'office_representative',
+      issuer_business_id: representedClientId,
+      represented_client_id: representedClientId,
+    },
+    { orgIssuerProfileId: orgIssuer.id, representedClient },
+  );
+
+  // Scope must match the document row fields for assertRowMatchesIssuerScope.
+  const label =
+    representedClient?.display_name?.trim() ||
+    representedClient?.legal_name?.trim() ||
+    '—';
+  return {
+    org_id: orgId,
+    actor_user_id: ctx.user.id,
+    acting_mode: 'office_representative',
+    issuer_business_id: doc.issuer_business_id,
+    represented_client_id: doc.represented_client_id,
+    issuer_label: label,
+    represented_client_label: label,
+    permissions: incomeWorkspacePermissionsFromContext(ctx),
+  };
+}
+
 export async function buildIncomeIssuedDocumentViewAggregate(params: {
   ctx: RequestContext;
   incomeDocumentId: string;
@@ -66,9 +156,12 @@ export async function buildIncomeIssuedDocumentViewAggregate(params: {
   const perms = incomeWorkspacePermissionsFromContext(params.ctx);
   if (!perms.view) throw forbidden('income.view required');
 
+  const orgId = params.ctx.organizationId;
+  if (!orgId) throw forbidden('Organization context required');
+
   const incomeDocumentId = reqUuid(params.incomeDocumentId, 'income_document_id');
-  const scope = await loadActiveIncomeIssuerScope(params.ctx);
-  const doc = await loadIssuedDocumentForView(scope.org_id, incomeDocumentId);
+  const doc = await loadIssuedDocumentForView(orgId, incomeDocumentId);
+  const scope = await resolveIssuerScopeForIssuedDocumentView(params.ctx, doc);
   assertRowMatchesIssuerScope(scope, doc);
 
   if (doc.document_status !== 'issued') {

@@ -95,6 +95,7 @@ test('D/E/F issued view aggregate uses unified issued renderer; no draft/edit', 
   assert.match(viewServiceSource, /buildUnifiedIncomeDocumentRenderModelForIssuedDocument/);
   assert.match(viewServiceSource, /renderUnifiedIncomeDocumentHtml/);
   assert.match(viewServiceSource, /document_status !== 'issued'/);
+  assert.match(viewServiceSource, /resolveIssuerScopeForIssuedDocumentView/);
   assert.doesNotMatch(viewServiceSource, /resume_income_document_draft/);
   assert.doesNotMatch(viewServiceSource, /buildIncomeDocumentDetailsStep/);
   assert.match(pdfServiceSource, /buildUnifiedIncomeDocumentRenderModelForIssuedDocument/);
@@ -127,9 +128,14 @@ test('G email remains blocked when PDF failed', () => {
 test('H/I FE opens issued HTML viewer; no draft fallback; no PDF required for number click', () => {
   assert.match(weModalSource, /IncomeIssuedDocumentViewModal/);
   assert.match(weModalSource, /setIssuedViewDocId/);
+  assert.match(weModalSource, /representedClientId=\{params\.representedClientId\}/);
   assert.doesNotMatch(weModalSource, /openIncomeDocumentPdf/);
   assert.doesNotMatch(issuedModalSource, /resume_income_document_draft/);
   assert.doesNotMatch(issuedModalSource, /IncomeDocumentWizardModal/);
+  assert.doesNotMatch(issuedModalSource, /nx-accounting-editor-modal/);
+  assert.doesNotMatch(issuedModalSource, /nx-income-wizard/);
+  assert.match(issuedModalSource, /nx-we-retainer-preview-overlay/);
+  assert.match(issuedModalSource, /createPortal/);
   assert.match(issuedModalSource, /document_html/);
   assert.match(issuedModalSource, /pdf_action/);
   assert.match(issuedModalSource, /retry_command/);
