@@ -139,6 +139,11 @@ test('H/I FE opens issued HTML viewer; no draft fallback; no PDF required for nu
   assert.match(issuedModalSource, /document_html/);
   assert.match(issuedModalSource, /pdf_action/);
   assert.match(issuedModalSource, /retry_command/);
+  assert.match(issuedModalSource, /allocationField/);
+  assert.match(issuedModalSource, /onSaveAllocationNumber/);
+  assert.match(issuedModalSource, /update_income_document_allocation_number/);
+  assert.match(viewServiceSource, /allocation_number_field/);
+  assert.match(viewServiceSource, /updateIssuedIncomeDocumentAllocationNumber/);
 });
 
 test('J no duplicate renderer — reuses unified HTML path', () => {

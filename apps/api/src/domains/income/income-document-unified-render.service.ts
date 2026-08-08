@@ -9,6 +9,9 @@ import { loadResolvedBrandingProfileForDocumentType } from './income-document-br
 import {
   buildUnifiedIncomeDocumentRenderInput,
   lineRowsFromLinesSnapshotForRender,
+  mergePreviewPartyPreferringSnapshot,
+  partyFromCustomerSnapshot,
+  previewPartyAddressLine,
   type UnifiedIncomeDocumentRenderInput,
 } from './income-document-unified-render.pure.js';
 import { incomeCustomerPaymentTermsLabel, isIncomeCustomerPaymentTermsKey } from './income-customer-payment-terms.pure.js';
@@ -20,6 +23,9 @@ import {
   isAllocationNumberApplicable,
 } from './income-document-allocation-number.pure.js';
 import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
+import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
+import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
+import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 
 export type IssuedIncomeDocumentForRender = {
   id: string;
@@ -128,7 +134,7 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
   });
   const allocationApplicable = isAllocationNumberApplicable(allocationPolicy, doc.document_type);
 
-  return buildUnifiedIncomeDocumentRenderInput({
+  const renderInput = buildUnifiedIncomeDocumentRenderInput({
     branding,
     document_type: doc.document_type,
     language: doc.language,
@@ -150,4 +156,76 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
     issuer_fallback_label: scope.issuer_label,
     lineRows,
   });
+
+  // Retainer-parity: fill only missing party fields from live Core/customer
+  // (issued snapshot remains preferred when present).
+  const [liveIssuer, liveRecipient] = await Promise.all([
+    loadLiveIssuerPartyForIssuedRender(scope, issuerWebsite),
+    loadLiveRecipientPartyForIssuedRender(scope, doc.customer_snapshot_json ?? {}),
+  ]);
+  return {
+    ...renderInput,
+    issuer: mergePreviewPartyPreferringSnapshot(renderInput.issuer, liveIssuer),
+    recipient: mergePreviewPartyPreferringSnapshot(renderInput.recipient, liveRecipient),
+  };
+}
+
+async function loadLiveIssuerPartyForIssuedRender(
+  scope: ActiveIncomeIssuerScope,
+  issuerWebsite: string | null,
+) {
+  try {
+    const snap = await buildIncomeIssuerSnapshotForScope(scope);
+    return toPublicPreviewParty(
+      {
+        display_name: snap.display_name?.trim() ? snap.display_name.trim() : scope.issuer_label,
+        tax_id: snap.tax_id?.trim() ? snap.tax_id.trim() : null,
+        address: previewPartyAddressLine(snap.address_json),
+        phone: snap.phone?.trim() ? snap.phone.trim() : null,
+        email: snap.email?.trim() ? snap.email.trim() : null,
+        website: issuerWebsite,
+      },
+      scope.issuer_label,
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function loadLiveRecipientPartyForIssuedRender(
+  scope: ActiveIncomeIssuerScope,
+  customerSnapshot: Record<string, unknown>,
+) {
+  const customerIdRaw = customerSnapshot.income_customer_id;
+  const customerId =
+    typeof customerIdRaw === 'string' && customerIdRaw.trim() ? customerIdRaw.trim() : null;
+  if (!customerId) {
+    return partyFromCustomerSnapshot(customerSnapshot);
+  }
+  const { data, error } = await supabaseAdmin
+    .from('income_customers')
+    .select('display_name, tax_id, phone, email, address_json')
+    .eq('organization_id', scope.org_id)
+    .eq('issuer_business_id', scope.issuer_business_id)
+    .eq('id', customerId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadLiveRecipientPartyForIssuedRender');
+  if (!data) return partyFromCustomerSnapshot(customerSnapshot);
+  const saved = data as {
+    display_name?: string | null;
+    tax_id?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    address_json?: unknown;
+  };
+  return toPublicPreviewParty(
+    {
+      display_name: saved.display_name?.trim() ? String(saved.display_name).trim() : '—',
+      tax_id: saved.tax_id?.trim() ? String(saved.tax_id).trim() : null,
+      address: previewPartyAddressLine(saved.address_json),
+      phone: saved.phone?.trim() ? String(saved.phone).trim() : null,
+      email: saved.email?.trim() ? String(saved.email).trim() : null,
+    },
+    '—',
+  );
 }

@@ -47,9 +47,13 @@ export type UnifiedIncomeDocumentRenderInput = {
 };
 
 export function previewPartyAddressLine(addressJson: unknown): string | null {
+  if (typeof addressJson === 'string') {
+    const s = addressJson.trim();
+    return s || null;
+  }
   if (!addressJson || typeof addressJson !== 'object' || Array.isArray(addressJson)) return null;
   const o = addressJson as Record<string, unknown>;
-  const parts = [o.line1, o.line2, o.city, o.zip]
+  const parts = [o.line1, o.line2, o.city, o.zip, o.postal_code, o.address]
     .map((v) => (typeof v === 'string' ? v.trim() : ''))
     .filter(Boolean);
   return parts.length ? parts.join(', ') : null;
@@ -91,6 +95,11 @@ export function partyFromCustomerSnapshot(
     typeof customer.contact_name === 'string' && customer.contact_name.trim()
       ? customer.contact_name.trim()
       : null;
+  const address =
+    previewPartyAddressLine(customer.address_json) ??
+    (typeof customer.address === 'string' && customer.address.trim()
+      ? customer.address.trim()
+      : null);
   return toPublicPreviewParty(
     {
       display_name:
@@ -98,13 +107,30 @@ export function partyFromCustomerSnapshot(
           ? customer.display_name.trim()
           : fallbackDisplayName,
       tax_id: customer.tax_id != null ? String(customer.tax_id).trim() || null : null,
-      address: previewPartyAddressLine(customer.address_json),
+      address,
       phone: customer.phone != null ? String(customer.phone).trim() || null : null,
       email: customer.email != null ? String(customer.email).trim() || null : null,
       contact_name: contactName,
     },
     fallbackDisplayName,
   );
+}
+
+/** Prefer snapshot values; fill only null/empty fields from a live party (retainer-parity view). */
+export function mergePreviewPartyPreferringSnapshot(
+  snapshot: IncomeBrandingPreviewParty,
+  live: IncomeBrandingPreviewParty | null | undefined,
+): IncomeBrandingPreviewParty {
+  if (!live) return snapshot;
+  return {
+    display_name: snapshot.display_name?.trim() || live.display_name,
+    tax_id: snapshot.tax_id?.trim() || live.tax_id,
+    address: snapshot.address?.trim() || live.address,
+    phone: snapshot.phone?.trim() || live.phone,
+    email: snapshot.email?.trim() || live.email,
+    website: snapshot.website?.trim() || live.website,
+    contact_name: snapshot.contact_name?.trim() || live.contact_name,
+  };
 }
 
 function lineVatLabelFromCode(
@@ -263,8 +289,10 @@ export function buildUnifiedIncomeDocumentRenderInput(params: {
   const language = params.language === 'en' ? 'en' : 'he';
   const issuerFallback = params.issuer_fallback_label?.trim() || '—';
   const allocationVisible = params.allocation_number_visible === true;
+  const allocationSaved = params.allocation_number?.trim() || null;
+  const allocationEmpty = allocationVisible && !allocationSaved;
   const allocationDisplay = allocationVisible
-    ? params.allocation_number?.trim() || '—'
+    ? allocationSaved ?? 'הזינו מספר הקצאה'
     : null;
   return {
     branding: params.branding,
@@ -278,6 +306,7 @@ export function buildUnifiedIncomeDocumentRenderInput(params: {
     payment_terms_display: params.payment_terms_display ?? null,
     allocation_number_display: allocationDisplay,
     allocation_number_visible: allocationVisible,
+    allocation_number_value_empty: allocationEmpty,
     payment_link_url: params.payment_link_url ?? null,
     payment_qr_data_url: params.payment_qr_data_url ?? null,
     currency: params.currency,

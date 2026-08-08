@@ -5,10 +5,12 @@
 
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
-import { forbidden, notFound } from '../../shared/errors.js';
+import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
+import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import {
   assertRowMatchesIssuerScope,
+  optionalUuid,
   reqUuid,
   type ActiveIncomeIssuerScope,
 } from './income.guards.js';
@@ -17,7 +19,10 @@ import {
   ensureOrgIncomeIssuerProfile,
   incomeWorkspacePermissionsFromContext,
 } from './income-issuer-context.service.js';
-import { loadActiveIncomeIssuerScope } from './income-issuer-scope.service.js';
+import {
+  assertIncomeEditPermission,
+  loadActiveIncomeIssuerScope,
+} from './income-issuer-scope.service.js';
 import {
   buildIncomeIssuedDocumentPdfAction,
 } from './income-document-view-action.pure.js';
@@ -28,7 +33,14 @@ import {
   type IssuedIncomeDocumentForRender,
 } from './income-document-unified-render.service.js';
 import {
+  buildIncomeDocumentAllocationNumberField,
+  normalizeAllocationNumberInput,
+  validateAllocationNumberFormat,
+} from './income-document-allocation-number.pure.js';
+import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
+import {
   INCOME_COMMAND_RETRY_PDF_RENDER,
+  INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER,
   INCOME_ISSUED_DOCUMENT_VIEW_AGGREGATE_KEY,
   type IncomeDocumentType,
   type IncomeIssuedDocumentViewAggregate,
@@ -171,6 +183,19 @@ export async function buildIncomeIssuedDocumentViewAggregate(params: {
   const renderModel = await buildUnifiedIncomeDocumentRenderModelForIssuedDocument(scope, doc);
   const document_html = renderUnifiedIncomeDocumentHtml(renderModel);
 
+  const allocationPolicy = await resolveIncomeTaxAllocationNumberPolicyForOrg(
+    scope.org_id,
+    'IL',
+    doc.issue_date,
+  );
+  const allocation_number_field = buildIncomeDocumentAllocationNumberField({
+    policy: allocationPolicy,
+    documentType: doc.document_type,
+    value: doc.tax_allocation_number ?? null,
+    canEdit: perms.edit,
+    isIssued: true,
+  });
+
   const pdfPath =
     doc.pdf_render_status === 'rendered' && doc.pdf_asset_id
       ? incomeDocumentDownloadPath(doc.id)
@@ -186,6 +211,9 @@ export async function buildIncomeIssuedDocumentViewAggregate(params: {
 
   const typeLabel = DOCUMENT_TYPE_LABELS[doc.document_type];
   const allowedActions = ['view_issued_document'];
+  if (allocation_number_field.editable) {
+    allowedActions.push(INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER);
+  }
   if (pdf_action.retry_command) {
     allowedActions.push(INCOME_COMMAND_RETRY_PDF_RENDER);
   }
@@ -202,7 +230,87 @@ export async function buildIncomeIssuedDocumentViewAggregate(params: {
     read_only: true,
     view_mode: 'issued_html',
     document_html,
+    allocation_number_field,
     pdf_action,
     allowed_actions: allowedActions,
   };
+}
+
+/**
+ * Update מספר הקצאה on an issued document (when Country Pack policy allows
+ * editable_after_issue). Returns refreshed issued-document-view aggregate.
+ */
+export async function updateIssuedIncomeDocumentAllocationNumber(
+  ctx: RequestContext,
+  body: Record<string, unknown>,
+): Promise<IncomeIssuedDocumentViewAggregate> {
+  const incomeDocumentId = reqUuid(body.income_document_id, 'income_document_id');
+  const orgId = ctx.organizationId;
+  if (!orgId) throw forbidden('Organization context required');
+
+  const doc = await loadIssuedDocumentForView(orgId, incomeDocumentId);
+  const scope = await resolveIssuerScopeForIssuedDocumentView(ctx, doc);
+  assertRowMatchesIssuerScope(scope, doc);
+  assertIncomeEditPermission(scope);
+
+  if (doc.document_status !== 'issued') {
+    throw badRequest('allocation number update on income_document_id requires an issued document');
+  }
+
+  const allocationPolicy = await resolveIncomeTaxAllocationNumberPolicyForOrg(
+    scope.org_id,
+    'IL',
+    doc.issue_date,
+  );
+  const field = buildIncomeDocumentAllocationNumberField({
+    policy: allocationPolicy,
+    documentType: doc.document_type,
+    value: doc.tax_allocation_number ?? null,
+    canEdit: true,
+    isIssued: true,
+  });
+  if (!field.visible) throw badRequest('מספר הקצאה אינו רלוונטי למסמך זה');
+  if (!field.editable) {
+    throw badRequest(field.disabled_reason ?? 'לא ניתן לערוך מספר הקצאה');
+  }
+
+  const nextValue = normalizeAllocationNumberInput(body.allocation_number);
+  const formatError = validateAllocationNumberFormat(nextValue);
+  if (formatError) throw badRequest(formatError);
+  if (field.required && !nextValue) {
+    throw badRequest('מספר הקצאה נדרש');
+  }
+
+  const previous = doc.tax_allocation_number ?? null;
+  const { error: updateErr } = await supabaseAdmin
+    .from('income_documents')
+    .update({ tax_allocation_number: nextValue })
+    .eq('id', doc.id)
+    .eq('organization_id', scope.org_id);
+  throwIfSupabaseError(updateErr, 'updateIssuedIncomeDocumentAllocationNumber');
+
+  void writeAudit({
+    organizationId: scope.org_id,
+    actorUserId: scope.actor_user_id,
+    moduleCode: 'income',
+    entityType: 'income_document',
+    entityId: doc.id,
+    action: AUDIT_ACTIONS.INCOME_DOCUMENT_ALLOCATION_NUMBER_UPDATED,
+    payload: {
+      income_document_id: doc.id,
+      represented_client_id: scope.represented_client_id,
+      previous_allocation_number: previous,
+      allocation_number: nextValue,
+      command: INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER,
+    },
+  }).catch(() => {
+    /* audit must not block UX */
+  });
+
+  return buildIncomeIssuedDocumentViewAggregate({ ctx, incomeDocumentId: doc.id });
+}
+
+/** True when the allocation command targets an issued document (not a draft). */
+export function isIssuedAllocationNumberCommandBody(body: Record<string, unknown>): boolean {
+  return optionalUuid(body.income_document_id, 'income_document_id') != null;
 }

@@ -1144,6 +1144,21 @@ export async function executeIncomeCommand(
     return wizardDraftCmd(updateIncomeDocumentNotes);
   }
   if (command === INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER) {
+    const { isIssuedAllocationNumberCommandBody, updateIssuedIncomeDocumentAllocationNumber } =
+      await import('./income-issued-document-view.service.js');
+    if (isIssuedAllocationNumberCommandBody(body)) {
+      const income_issued_document_view_aggregate =
+        await updateIssuedIncomeDocumentAllocationNumber(ctx, body);
+      return {
+        ok: true,
+        command,
+        income_workspace_aggregate: await buildIncomeWorkspaceAggregate(ctx),
+        income_issued_document_view_aggregate,
+        meta: {
+          income_document_id: income_issued_document_view_aggregate.income_document_id,
+        },
+      };
+    }
     return wizardDraftCmd(updateIncomeDocumentAllocationNumber);
   }
   if (command === INCOME_COMMAND_UPDATE_DELIVERY_CONTACT) {

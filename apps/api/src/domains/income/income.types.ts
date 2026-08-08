@@ -365,6 +365,8 @@ export interface IncomeIssuedDocumentViewAggregate {
   view_mode: 'issued_html';
   /** Unified issued HTML body — same contract as PDF print HTML body. */
   document_html: string;
+  /** Same descriptor as retainer/wizard preview — edit when policy.editable_after_issue. */
+  allocation_number_field: import('./income-document-allocation-number.pure.js').IncomeDocumentAllocationNumberField;
   pdf_action: IncomeIssuedDocumentPdfAction;
   allowed_actions: string[];
 }
@@ -765,6 +767,7 @@ export interface IncomeCommandResponse {
   income_workspace_aggregate: IncomeWorkspaceAggregate;
   income_workspace_context_aggregate?: IncomeWorkspaceContextAggregate;
   income_document_payment_case?: import('./income-document-payment-case.read.js').IncomeDocumentPaymentCaseAggregate;
+  income_issued_document_view_aggregate?: IncomeIssuedDocumentViewAggregate;
   work_engine_recurring_cycle_draft_review_aggregate?: import('../work-engine/work-engine-invoice-retainer.types.js').WorkEngineRecurringCycleDraftReviewAggregate;
   work_engine_invoice_retainer_setup_aggregate?: import('../work-engine/work-engine-invoice-retainer.types.js').WorkEngineInvoiceRetainerSetupAggregate;
   work_engine_invoices_tab_aggregate?: import('../work-engine/work-engine-invoices-tab.read-model.service.js').WorkEngineInvoicesTabAggregate;

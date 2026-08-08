@@ -52,7 +52,7 @@ test('allocation number not applicable for receipt document type', () => {
   assert.equal(field.editable, false);
 });
 
-test('allocation number disabled after issue by default policy', () => {
+test('allocation number editable after issue by default policy', () => {
   const field = buildIncomeDocumentAllocationNumberField({
     policy: defaultIncomeTaxAllocationNumberPolicy(),
     documentType: 'tax_invoice',
@@ -60,8 +60,18 @@ test('allocation number disabled after issue by default policy', () => {
     canEdit: true,
     isIssued: true,
   });
-  assert.equal(field.editable, false);
-  assert.match(field.disabled_reason ?? '', /לאחר הפקת המסמך/);
+  assert.equal(field.editable, true);
+  assert.equal(field.disabled_reason, null);
+
+  const locked = buildIncomeDocumentAllocationNumberField({
+    policy: { ...defaultIncomeTaxAllocationNumberPolicy(), editable_after_issue: false },
+    documentType: 'tax_invoice',
+    value: '123456789',
+    canEdit: true,
+    isIssued: true,
+  });
+  assert.equal(locked.editable, false);
+  assert.match(locked.disabled_reason ?? '', /לאחר הפקת המסמך/);
 });
 
 test('allocation number format validation accepts digits only', () => {
