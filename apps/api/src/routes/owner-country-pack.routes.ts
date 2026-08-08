@@ -234,6 +234,7 @@ router.get('/invoice-document-builder', async (req: Request, res: Response, next
       document_type_group: asStr(req.query.document_type_group) ?? undefined,
       country_code: req.query.country_code === undefined ? 'IL' : asStr(req.query.country_code),
       version_id: asStr(req.query.version_id),
+      template_family: asStr(req.query.template_family),
       preview_logo_size_key: asStr(req.query.preview_logo_size_key),
       preview_color_theme_key: asStr(req.query.preview_color_theme_key),
     });

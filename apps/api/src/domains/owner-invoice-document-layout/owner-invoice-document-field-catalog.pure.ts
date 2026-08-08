@@ -1,5 +1,5 @@
 /**
- * INV-13A — Backend-owned field catalog for Owner Invoice Document Builder.
+ * INV-13A/B — Backend-owned field catalog for Owner Invoice Document Builder.
  * No VAT percentage values — rates live in Country Pack / Owner Legal Control.
  */
 
@@ -26,10 +26,11 @@ function entry(
 }
 
 export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry[] = [
+  // Issuer
   entry({
     field_key: 'logo',
     group: 'issuer',
-    label: 'לוגו',
+    label: 'Logo',
     requiredness: 'optional',
     allowed_sections: [SECTION.issuer],
     display_variants: ['default'],
@@ -39,7 +40,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'issuer_name',
     group: 'issuer',
-    label: 'שם מנפיק',
+    label: 'Company Name',
     requiredness: 'required',
     allowed_sections: [SECTION.issuer],
     display_variants: ['default'],
@@ -49,7 +50,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'tax_id',
     group: 'issuer',
-    label: 'ח.פ. / עוסק מורשה',
+    label: 'Tax ID',
     requiredness: 'legal_required',
     allowed_sections: [SECTION.issuer],
     display_variants: ['default'],
@@ -57,9 +58,19 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
     hide_allowed: false,
   }),
   entry({
+    field_key: 'registration_number',
+    group: 'issuer',
+    label: 'Registration Number',
+    requiredness: 'optional',
+    allowed_sections: [SECTION.issuer],
+    display_variants: ['default'],
+    move_allowed: true,
+    hide_allowed: true,
+  }),
+  entry({
     field_key: 'address',
     group: 'issuer',
-    label: 'כתובת',
+    label: 'Address',
     requiredness: 'optional',
     allowed_sections: [SECTION.issuer],
     display_variants: ['default'],
@@ -69,7 +80,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'city',
     group: 'issuer',
-    label: 'עיר',
+    label: 'City',
     requiredness: 'optional',
     allowed_sections: [SECTION.issuer],
     display_variants: ['default'],
@@ -79,7 +90,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'phone',
     group: 'issuer',
-    label: 'טלפון',
+    label: 'Phone',
     requiredness: 'optional',
     allowed_sections: [SECTION.issuer],
     display_variants: ['default'],
@@ -89,7 +100,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'email',
     group: 'issuer',
-    label: 'דוא״ל',
+    label: 'Email',
     requiredness: 'optional',
     allowed_sections: [SECTION.issuer],
     display_variants: ['default'],
@@ -99,17 +110,18 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'website',
     group: 'issuer',
-    label: 'אתר',
+    label: 'Website',
     requiredness: 'optional',
     allowed_sections: [SECTION.issuer],
     display_variants: ['default'],
     move_allowed: true,
     hide_allowed: true,
   }),
+  // Document
   entry({
     field_key: 'document_type',
     group: 'document',
-    label: 'סוג מסמך',
+    label: 'Document Type',
     requiredness: 'required',
     allowed_sections: [SECTION.doc],
     display_variants: ['default'],
@@ -119,7 +131,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'document_number',
     group: 'document',
-    label: 'מספר מסמך',
+    label: 'Document Number',
     requiredness: 'legal_required',
     allowed_sections: [SECTION.doc],
     display_variants: ['number_bar'],
@@ -127,9 +139,19 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
     hide_allowed: false,
   }),
   entry({
+    field_key: 'tax_allocation_number',
+    group: 'document',
+    label: 'Allocation Number',
+    requiredness: 'country_required',
+    allowed_sections: [SECTION.doc],
+    display_variants: ['default'],
+    move_allowed: false,
+    hide_allowed: false,
+  }),
+  entry({
     field_key: 'issue_date',
     group: 'document',
-    label: 'תאריך הפקה',
+    label: 'Issue Date',
     requiredness: 'legal_required',
     allowed_sections: [SECTION.doc],
     display_variants: ['default'],
@@ -139,27 +161,17 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'due_date',
     group: 'document',
-    label: 'תאריך לתשלום',
+    label: 'Due Date',
     requiredness: 'optional',
     allowed_sections: [SECTION.doc],
     display_variants: ['default'],
     move_allowed: true,
     hide_allowed: true,
-  }),
-  entry({
-    field_key: 'tax_allocation_number',
-    group: 'document',
-    label: 'מספר הקצאה',
-    requiredness: 'country_required',
-    allowed_sections: [SECTION.doc],
-    display_variants: ['default'],
-    move_allowed: false,
-    hide_allowed: false,
   }),
   entry({
     field_key: 'payment_terms',
     group: 'document',
-    label: 'תנאי תשלום',
+    label: 'Payment Terms',
     requiredness: 'optional',
     allowed_sections: [SECTION.doc],
     display_variants: ['default'],
@@ -167,9 +179,20 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
     hide_allowed: true,
   }),
   entry({
+    field_key: 'currency',
+    group: 'document',
+    label: 'Currency',
+    requiredness: 'optional',
+    allowed_sections: [SECTION.doc],
+    display_variants: ['default'],
+    move_allowed: true,
+    hide_allowed: true,
+  }),
+  // Customer
+  entry({
     field_key: 'customer_name',
     group: 'customer',
-    label: 'שם לקוח',
+    label: 'Name',
     requiredness: 'required',
     allowed_sections: [SECTION.customer],
     display_variants: ['default'],
@@ -177,9 +200,9 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
     hide_allowed: false,
   }),
   entry({
-    field_key: 'customer_tax_id',
+    field_key: 'customer_contact',
     group: 'customer',
-    label: 'מס׳ עוסק לקוח',
+    label: 'Contact',
     requiredness: 'optional',
     allowed_sections: [SECTION.customer],
     display_variants: ['default'],
@@ -189,7 +212,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'customer_address',
     group: 'customer',
-    label: 'כתובת לקוח',
+    label: 'Address',
     requiredness: 'optional',
     allowed_sections: [SECTION.customer],
     display_variants: ['default'],
@@ -199,7 +222,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'customer_email',
     group: 'customer',
-    label: 'דוא״ל לקוח',
+    label: 'Email',
     requiredness: 'optional',
     allowed_sections: [SECTION.customer],
     display_variants: ['default'],
@@ -209,7 +232,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'customer_phone',
     group: 'customer',
-    label: 'טלפון לקוח',
+    label: 'Phone',
     requiredness: 'optional',
     allowed_sections: [SECTION.customer],
     display_variants: ['default'],
@@ -217,9 +240,20 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
     hide_allowed: true,
   }),
   entry({
+    field_key: 'customer_tax_id',
+    group: 'customer',
+    label: 'VAT Number',
+    requiredness: 'optional',
+    allowed_sections: [SECTION.customer],
+    display_variants: ['default'],
+    move_allowed: true,
+    hide_allowed: true,
+  }),
+  // Lines (table-backed)
+  entry({
     field_key: 'line_description',
     group: 'lines',
-    label: 'פירוט',
+    label: 'Description',
     requiredness: 'required',
     allowed_sections: [SECTION.lines],
     display_variants: ['table_column'],
@@ -229,7 +263,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'line_quantity',
     group: 'lines',
-    label: 'כמות',
+    label: 'Quantity',
     requiredness: 'required',
     allowed_sections: [SECTION.lines],
     display_variants: ['table_column'],
@@ -239,7 +273,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'line_unit_price',
     group: 'lines',
-    label: 'מחיר ליח׳',
+    label: 'Unit Price',
     requiredness: 'required',
     allowed_sections: [SECTION.lines],
     display_variants: ['table_column'],
@@ -249,7 +283,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'line_currency',
     group: 'lines',
-    label: 'מטבע',
+    label: 'Line Currency',
     requiredness: 'optional',
     allowed_sections: [SECTION.lines],
     display_variants: ['table_column'],
@@ -259,7 +293,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'line_vat',
     group: 'lines',
-    label: 'מע״מ (שדה תצוגה)',
+    label: 'VAT',
     requiredness: 'legal_required',
     allowed_sections: [SECTION.lines],
     display_variants: ['table_column'],
@@ -269,17 +303,28 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'line_total',
     group: 'lines',
-    label: 'סה״כ שורה',
+    label: 'Line Total',
     requiredness: 'required',
     allowed_sections: [SECTION.lines],
     display_variants: ['table_column'],
     move_allowed: false,
     hide_allowed: false,
   }),
+  // Totals — placement/visibility only; values remain Income truth
+  entry({
+    field_key: 'discount',
+    group: 'totals',
+    label: 'Discount',
+    requiredness: 'optional',
+    allowed_sections: [SECTION.totals],
+    display_variants: ['default'],
+    move_allowed: true,
+    hide_allowed: true,
+  }),
   entry({
     field_key: 'subtotal',
     group: 'totals',
-    label: 'סכום ביניים',
+    label: 'Total Before VAT',
     requiredness: 'required',
     allowed_sections: [SECTION.totals],
     display_variants: ['default'],
@@ -289,7 +334,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'vat_total',
     group: 'totals',
-    label: 'מע״מ כולל (שדה תצוגה)',
+    label: 'VAT Amount',
     requiredness: 'legal_required',
     allowed_sections: [SECTION.totals],
     display_variants: ['default'],
@@ -299,7 +344,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'grand_total',
     group: 'totals',
-    label: 'סה״כ לתשלום',
+    label: 'Grand Total',
     requiredness: 'required',
     allowed_sections: [SECTION.totals],
     display_variants: ['default'],
@@ -307,19 +352,20 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
     hide_allowed: false,
   }),
   entry({
-    field_key: 'notes',
-    group: 'legal',
-    label: 'הערות',
+    field_key: 'balance',
+    group: 'totals',
+    label: 'Balance',
     requiredness: 'optional',
-    allowed_sections: [SECTION.notes, SECTION.legal],
+    allowed_sections: [SECTION.totals],
     display_variants: ['default'],
     move_allowed: true,
     hide_allowed: true,
   }),
+  // Legal
   entry({
     field_key: 'signature_block',
     group: 'legal',
-    label: 'חתימה',
+    label: 'Signature',
     requiredness: 'optional',
     allowed_sections: [SECTION.legal, SECTION.payments],
     display_variants: ['default'],
@@ -327,9 +373,29 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
     hide_allowed: true,
   }),
   entry({
+    field_key: 'stamp',
+    group: 'legal',
+    label: 'Stamp',
+    requiredness: 'optional',
+    allowed_sections: [SECTION.legal, SECTION.payments],
+    display_variants: ['default'],
+    move_allowed: true,
+    hide_allowed: true,
+  }),
+  entry({
+    field_key: 'notes',
+    group: 'legal',
+    label: 'Notes',
+    requiredness: 'optional',
+    allowed_sections: [SECTION.notes, SECTION.legal],
+    display_variants: ['default'],
+    move_allowed: true,
+    hide_allowed: true,
+  }),
+  entry({
     field_key: 'legal_wording',
     group: 'legal',
-    label: 'נוסח משפטי',
+    label: 'Legal Text',
     requiredness: 'legal_required',
     allowed_sections: [SECTION.legal],
     display_variants: ['default'],
@@ -339,7 +405,7 @@ export const OWNER_INVOICE_DOCUMENT_FIELD_CATALOG: OwnerInvoiceFieldCatalogEntry
   entry({
     field_key: 'platform_footer',
     group: 'legal',
-    label: 'כותרת תחתית פלטפורמה',
+    label: 'Platform Footer',
     requiredness: 'optional',
     allowed_sections: [SECTION.legal],
     display_variants: ['default'],

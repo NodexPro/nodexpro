@@ -13,13 +13,19 @@ import {
   buildOwnerInvoiceLayoutIssueFreezeFromPublished,
   type OwnerInvoiceLayoutIssueFreeze,
 } from './owner-invoice-document-layout-issue-freeze.pure.js';
+import { buildOwnerDocumentPlatformAggregateSlice } from '../owner-document-platform/owner-document-platform-aggregate.pure.js';
+import { resolveActiveOwnerDocumentTemplateFamily } from '../owner-document-platform/owner-document-template-registry.pure.js';
+import { INVOICE_SECTION_LABELS } from '../owner-document-platform/owner-document-invoice-family.adapter.pure.js';
+import { buildOwnerInvoiceBuilderZones } from './owner-invoice-document-builder-zones.pure.js';
 import {
   assertOwnerInvoiceLayoutVersionMutable,
   moveOwnerInvoiceLayoutField,
   moveOwnerInvoiceLayoutSection,
+  placeOwnerInvoiceLayoutField,
   planPublishOwnerInvoiceLayoutVersion,
   resizeOwnerInvoiceLayoutSection,
   setOwnerInvoiceFieldVisibility,
+  setOwnerInvoiceSectionLock,
   setOwnerInvoiceTableColumn,
 } from './owner-invoice-document-layout-mutations.pure.js';
 import { buildOwnerInvoiceLayoutPreviewHtml } from './owner-invoice-document-layout-preview.service.js';
@@ -154,8 +160,10 @@ function allowedActionsFor(version: OwnerInvoiceLayoutVersionRow | null): string
       OWNER_INVOICE_LAYOUT_COMMANDS.move_section,
       OWNER_INVOICE_LAYOUT_COMMANDS.resize_section,
       OWNER_INVOICE_LAYOUT_COMMANDS.move_field,
+      OWNER_INVOICE_LAYOUT_COMMANDS.place_field,
       OWNER_INVOICE_LAYOUT_COMMANDS.set_field_visibility,
       OWNER_INVOICE_LAYOUT_COMMANDS.set_table_column,
+      OWNER_INVOICE_LAYOUT_COMMANDS.set_section_lock,
       OWNER_INVOICE_LAYOUT_COMMANDS.publish,
       OWNER_INVOICE_LAYOUT_COMMANDS.create_draft,
       OWNER_INVOICE_LAYOUT_COMMANDS.archive,
@@ -198,6 +206,8 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
     document_type_group?: string;
     country_code?: string | null;
     version_id?: string | null;
+    /** INV-13C — universal template family (invoice default). */
+    template_family?: string | null;
     /** Preview-only sample branding (within user_branding_bounds). Does not mutate layout. */
     preview_logo_size_key?: string | null;
     preview_color_theme_key?: string | null;
@@ -208,6 +218,7 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
   const document_type_group = asDocumentTypeGroup(opts?.document_type_group);
   const country_code =
     opts?.country_code === undefined ? 'IL' : asOptionalString(opts.country_code);
+  const template_family = resolveActiveOwnerDocumentTemplateFamily(opts?.template_family);
   const previewOverrides = {
     logo_size_key: asOptionalString(opts?.preview_logo_size_key),
     color_theme_key: asOptionalString(opts?.preview_color_theme_key),
@@ -219,15 +230,28 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
       ? versions.find((v) => v.id === String(opts.version_id).trim()) ?? null
       : pickWorkingVersion(versions);
 
+  const sampleLogoPresent = false; // Owner sample preview has no tenant logo asset.
+
   if (!working && versions.length === 0) {
     // Lazy seed: expose GM definition without writing until create_draft.
     const seed = buildSectionedGoldenMasterLayoutDefinitionV1();
     const preview_html = buildOwnerInvoiceLayoutPreviewHtml(seed, previewOverrides);
+    const platform = buildOwnerDocumentPlatformAggregateSlice({
+      template_family,
+      definition: seed,
+    });
+    const builder = buildOwnerInvoiceBuilderZones({
+      definition: seed,
+      editable: false,
+      sample_logo_present: sampleLogoPresent,
+      section_labels: (platform.section_labels as Record<string, string>) ?? INVOICE_SECTION_LABELS,
+    });
     return {
       aggregate_key: OWNER_INVOICE_LAYOUT_AGGREGATE_KEY,
       layout_key,
       document_type_group,
       country_code,
+      template_family,
       status: null,
       version_number: null,
       version_id: null,
@@ -236,9 +260,13 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
       section_constraints: sectionConstraints(seed),
       branding_bounds: seed.user_branding_bounds,
       preview_html,
+      builder_chrome: builder.chrome,
+      builder_zones: builder.zones,
+      document_platform: platform,
       preview_sample: {
         logo_size_key: previewOverrides.logo_size_key,
         color_theme_key: previewOverrides.color_theme_key,
+        sample_logo_present: sampleLogoPresent,
         note: 'Preview-only sample branding within Owner bounds. Does not mutate tenant Branding Studio.',
       },
       allowed_actions: allowedActionsFor(null),
@@ -248,6 +276,10 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
         legacy_policy:
           'Issued documents without owner_layout_version_id/snapshot keep exact legacy render path.',
         vat_boundary: 'VAT rates are Owner Legal Control / Country Pack only — never in layout JSON.',
+        builder_zones:
+          'builder_zones are Owner visual-editor chrome only — never in Preview/PDF/issued HTML.',
+        universal_platform:
+          'INV-13C: Builder is Universal Document Platform; invoice is first active template family.',
       },
     };
   }
@@ -256,12 +288,24 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
 
   const definition = working.layout_definition_json;
   const preview_html = buildOwnerInvoiceLayoutPreviewHtml(definition, previewOverrides);
+  const editable = working.status === 'draft';
+  const platform = buildOwnerDocumentPlatformAggregateSlice({
+    template_family,
+    definition,
+  });
+  const builder = buildOwnerInvoiceBuilderZones({
+    definition,
+    editable,
+    sample_logo_present: sampleLogoPresent,
+    section_labels: (platform.section_labels as Record<string, string>) ?? INVOICE_SECTION_LABELS,
+  });
 
   return {
     aggregate_key: OWNER_INVOICE_LAYOUT_AGGREGATE_KEY,
     layout_key: working.layout_key,
     document_type_group: working.document_type_group,
     country_code: working.country_code,
+    template_family,
     status: working.status,
     version_number: working.version_number,
     version_id: working.id,
@@ -273,9 +317,13 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
     section_constraints: sectionConstraints(definition),
     branding_bounds: definition.user_branding_bounds,
     preview_html,
+    builder_chrome: builder.chrome,
+    builder_zones: builder.zones,
+    document_platform: platform,
     preview_sample: {
       logo_size_key: previewOverrides.logo_size_key,
       color_theme_key: previewOverrides.color_theme_key,
+      sample_logo_present: sampleLogoPresent,
       note: 'Preview-only sample branding within Owner bounds. Does not mutate tenant Branding Studio.',
     },
     allowed_actions: allowedActionsFor(working),
@@ -294,6 +342,10 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
       legacy_policy:
         'Issued documents without owner_layout_version_id/snapshot keep exact legacy render path.',
       vat_boundary: 'VAT rates are Owner Legal Control / Country Pack only — never in layout JSON.',
+      builder_zones:
+        'builder_zones are Owner visual-editor chrome only — never in Preview/PDF/issued HTML.',
+      universal_platform:
+        'INV-13C: Builder is Universal Document Platform; invoice is first active template family.',
     },
   };
 }
@@ -380,6 +432,9 @@ async function handleCreateDraft(
   }
 
   const version_number = await nextVersionNumber({ layout_key, document_type_group });
+  const template_family = resolveActiveOwnerDocumentTemplateFamily(
+    asOptionalString(payload.template_family),
+  );
   const { data, error } = await supabaseAdmin
     .from('owner_invoice_document_layout_versions')
     .insert({
@@ -387,6 +442,7 @@ async function handleCreateDraft(
       version_number,
       document_type_group,
       country_code,
+      template_family,
       status: 'draft',
       layout_definition_json: definition,
       based_on_version_id,
@@ -396,7 +452,7 @@ async function handleCreateDraft(
     .select('*')
     .single();
   throwIfSupabaseError(error, 'createOwnerInvoiceLayoutDraft', {
-    migrationHint: '155_owner_invoice_document_layout_versions.sql',
+    migrationHint: '156_owner_document_layout_template_family.sql',
   });
   const row = mapRow(data as Record<string, unknown>);
   await auditLayout(ctx, AUDIT_ACTIONS.OWNER_INVOICE_LAYOUT_DRAFT_CREATED, row.id, {
@@ -590,6 +646,31 @@ export async function executeOwnerInvoiceLayoutCommand(
             field_key: asString(payload.field_key, 'field_key'),
             section_key: asOptionalString(payload.section_key) ?? undefined,
             order: payload.order == null ? undefined : Number(payload.order),
+          }),
+      );
+    case OWNER_INVOICE_LAYOUT_COMMANDS.place_field:
+      return mutateDraft(
+        ctx,
+        payload,
+        command,
+        AUDIT_ACTIONS.OWNER_INVOICE_LAYOUT_FIELD_PLACED,
+        (def) =>
+          placeOwnerInvoiceLayoutField(def, {
+            field_key: asString(payload.field_key, 'field_key'),
+            section_key: asString(payload.section_key, 'section_key'),
+            order: payload.order == null ? undefined : Number(payload.order),
+          }),
+      );
+    case OWNER_INVOICE_LAYOUT_COMMANDS.set_section_lock:
+      return mutateDraft(
+        ctx,
+        payload,
+        command,
+        AUDIT_ACTIONS.OWNER_INVOICE_LAYOUT_SECTION_LOCK_SET,
+        (def) =>
+          setOwnerInvoiceSectionLock(def, {
+            section_key: asString(payload.section_key, 'section_key'),
+            owner_locked: Boolean(payload.owner_locked),
           }),
       );
     case OWNER_INVOICE_LAYOUT_COMMANDS.set_field_visibility:

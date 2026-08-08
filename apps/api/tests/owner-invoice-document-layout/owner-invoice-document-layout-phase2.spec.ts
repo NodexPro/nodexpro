@@ -134,12 +134,11 @@ test('S: FE builder uses named commands + aggregate refresh (no PATCH)', () => {
   assert.match(section, /sandbox="allow-same-origin"/);
 });
 
-test('FE pure overlay helpers exist and use aggregate geometry only', async () => {
-  // Dynamic import of TS via relative path is not available in api tests runtime for web.
-  // Assert source contract instead.
+test('FE pure helpers consume aggregate builder_zones only', async () => {
   const pure = readFileSync(join(webRoot, 'pages/owner-invoice-document-builder.pure.ts'), 'utf8');
-  assert.match(pure, /buildOwnerBuilderSectionOverlayRects/);
+  assert.match(pure, /resolveBuilderZones/);
   assert.match(pure, /tenantBrandingStudioAllowsStructuralLayoutControls/);
   assert.match(pure, /return false/);
   assert.match(pure, /ownerBuilderActionAllowed/);
+  assert.match(pure, /zoneAllowsCommand/);
 });

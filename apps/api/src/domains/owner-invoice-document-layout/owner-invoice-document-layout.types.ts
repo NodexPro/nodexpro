@@ -25,8 +25,10 @@ export const OWNER_INVOICE_LAYOUT_COMMANDS = {
   move_section: 'move_owner_invoice_layout_section',
   resize_section: 'resize_owner_invoice_layout_section',
   move_field: 'move_owner_invoice_layout_field',
+  place_field: 'place_owner_invoice_layout_field',
   set_field_visibility: 'set_owner_invoice_field_visibility',
   set_table_column: 'set_owner_invoice_table_column',
+  set_section_lock: 'set_owner_invoice_section_lock',
   publish: 'publish_owner_invoice_layout_version',
   archive: 'archive_owner_invoice_layout_version',
 } as const;

@@ -120,6 +120,65 @@ export function setOwnerInvoiceFieldVisibility(
   return parseAndValidateOwnerInvoiceLayoutDefinition(next);
 }
 
+export function placeOwnerInvoiceLayoutField(
+  definition: OwnerInvoiceLayoutDefinitionV1,
+  params: { field_key: string; section_key: string; order?: number },
+): OwnerInvoiceLayoutDefinitionV1 {
+  const catalog = findOwnerInvoiceFieldCatalogEntry(params.field_key);
+  if (!catalog) throw badRequest(`Unknown field_key: ${params.field_key}`);
+  const sectionKey = params.section_key as OwnerInvoiceLayoutSectionKey;
+  try {
+    assertSectionAllowedForField(params.field_key, sectionKey);
+  } catch (e) {
+    throw badRequest(e instanceof Error ? e.message : 'Field section place rejected');
+  }
+  const next = cloneDefinition(definition);
+  if (!next.sections.some((s) => s.key === sectionKey)) {
+    throw badRequest(`Unknown section_key: ${params.section_key}`);
+  }
+  const existing = next.fields.find((f) => f.field_key === params.field_key);
+  const order =
+    params.order != null
+      ? Number(params.order)
+      : Math.max(0, ...next.fields.filter((f) => f.section_key === sectionKey).map((f) => f.order)) + 1;
+  if (!Number.isInteger(order) || order < 0) throw badRequest('order invalid');
+  if (existing) {
+    existing.section_key = sectionKey;
+    existing.order = order;
+    existing.visible = true;
+  } else {
+    if (
+      catalog.requiredness === 'required' ||
+      catalog.requiredness === 'legal_required' ||
+      catalog.requiredness === 'country_required'
+    ) {
+      // Required fields must already exist in seed; do not invent placements ad hoc.
+      throw badRequest(`Required field ${params.field_key} must already exist in layout`);
+    }
+    next.fields.push({
+      field_key: params.field_key,
+      section_key: sectionKey,
+      order,
+      visible: true,
+      width_span: 12,
+      display_variant: catalog.display_variants[0] ?? 'default',
+      owner_locked: false,
+    });
+  }
+  return parseAndValidateOwnerInvoiceLayoutDefinition(next);
+}
+
+export function setOwnerInvoiceSectionLock(
+  definition: OwnerInvoiceLayoutDefinitionV1,
+  params: { section_key: string; owner_locked: boolean },
+): OwnerInvoiceLayoutDefinitionV1 {
+  const next = cloneDefinition(definition);
+  const section = next.sections.find((s) => s.key === params.section_key);
+  if (!section) throw badRequest(`Unknown section_key: ${params.section_key}`);
+  section.owner_locked = Boolean(params.owner_locked);
+  return parseAndValidateOwnerInvoiceLayoutDefinition(next);
+}
+
 export function setOwnerInvoiceTableColumn(
   definition: OwnerInvoiceLayoutDefinitionV1,
   params: {
