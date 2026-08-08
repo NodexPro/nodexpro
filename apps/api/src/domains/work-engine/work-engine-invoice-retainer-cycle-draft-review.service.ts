@@ -36,6 +36,8 @@ import {
 import type { WorkEngineRecurringCycleDraftReviewAggregate } from './work-engine-invoice-retainer.types.js';
 import type { WorkEngineRecurringCycleDraftReviewDeliveryOutcome } from './work-engine-invoice-retainer.types.js';
 import { resolveDraftDeliveryContactEmail } from '../income/income-document-issue-and-send.pure.js';
+import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
+import { resolveRecurringCycleDraftDeliveryContactJson } from './work-engine-invoice-retainer-draft.service.js';
 
 function assertEditAccess(ctx: RequestContext): void {
   const perms = incomeWorkspacePermissionsFromContext(ctx);
@@ -53,10 +55,42 @@ type CycleDraftReviewRefs = {
   linkedWorkItemId?: string | null;
 };
 
+async function seedMissingCycleDraftDeliveryContact(params: {
+  ctx: RequestContext;
+  orgId: string;
+  endCustomerId: string;
+  draftRow: {
+    id: string;
+    status: string;
+    delivery_contact_json: Record<string, unknown> | null;
+  };
+}): Promise<Record<string, unknown> | null> {
+  if (params.draftRow.status !== 'draft') return params.draftRow.delivery_contact_json;
+  if (resolveDraftDeliveryContactEmail(params.draftRow.delivery_contact_json)) {
+    return params.draftRow.delivery_contact_json;
+  }
+  const scope = await loadActiveIncomeIssuerScope(params.ctx);
+  const seeded = await resolveRecurringCycleDraftDeliveryContactJson({
+    scope,
+    endCustomerId: params.endCustomerId,
+    snapshotDeliveryContactJson: null,
+  });
+  if (!seeded) return params.draftRow.delivery_contact_json;
+  const { error } = await supabaseAdmin
+    .from('income_document_drafts')
+    .update({ delivery_contact_json: seeded })
+    .eq('organization_id', params.orgId)
+    .eq('id', params.draftRow.id)
+    .eq('status', 'draft');
+  throwIfSupabaseError(error, 'seedMissingCycleDraftDeliveryContact');
+  return seeded;
+}
+
 async function loadCycleDraftReviewContext(
   params: CycleDraftReviewRefs & { ctx: RequestContext },
 ): Promise<{
   orgId: string;
+  endCustomerId: string;
   cycleRow: {
     id: string;
     recurring_profile_id: string;
@@ -81,13 +115,14 @@ async function loadCycleDraftReviewContext(
 
   const { data: profile, error: profileErr } = await supabaseAdmin
     .from('income_recurring_document_profiles')
-    .select('id, organization_id, represented_client_id')
+    .select('id, organization_id, represented_client_id, end_customer_id')
     .eq('organization_id', orgId)
     .eq('id', params.profileId)
     .eq('represented_client_id', params.representedClientId)
     .maybeSingle();
   throwIfSupabaseError(profileErr, 'loadRecurringProfileForCycleDraftReview');
   if (!profile) throw notFound('Recurring profile not found');
+  const endCustomerId = String((profile as { end_customer_id: string }).end_customer_id);
 
   const { data: cycle, error: cycleErr } = await supabaseAdmin
     .from('income_recurring_document_cycles')
@@ -173,7 +208,7 @@ async function loadCycleDraftReviewContext(
   });
   if (!validation.ok) throw badRequest(`Invalid cycle draft review request: ${validation.reason}`);
 
-  return { orgId, cycleRow, draftRow, workItemPeriodKey, workItemSourceEntityId };
+  return { orgId, endCustomerId, cycleRow, draftRow, workItemPeriodKey, workItemSourceEntityId };
 }
 
 async function loadIssuedDocumentNumberDisplay(
@@ -444,12 +479,22 @@ export async function refreshRecurringCycleDraftReviewCase(params: {
     periodKey: params.periodKey,
     linkedWorkItemId: params.linkedWorkItemId,
   };
-  const { orgId, cycleRow, draftRow } = await loadCycleDraftReviewContext({ ctx: params.ctx, ...refs });
+  const { orgId, endCustomerId, cycleRow, draftRow } = await loadCycleDraftReviewContext({
+    ctx: params.ctx,
+    ...refs,
+  });
 
   await prepareRecurringCycleReviewIssuerScope(params.ctx, {
     representedClientId: params.representedClientId,
     draft: draftRow,
     source: 'refresh_recurring_cycle_draft_review',
+  });
+
+  const deliveryContactJson = await seedMissingCycleDraftDeliveryContact({
+    ctx: params.ctx,
+    orgId,
+    endCustomerId,
+    draftRow,
   });
 
   const resolvedIssuedDocumentId =
@@ -479,7 +524,7 @@ export async function refreshRecurringCycleDraftReviewCase(params: {
     issuedDocumentNumberDisplay,
     deliveryOutcome: params.deliveryOutcome ?? null,
     income_workspace_aggregate,
-    draftDeliveryContactJson: draftRow.delivery_contact_json,
+    draftDeliveryContactJson: deliveryContactJson,
   });
   logAggregatePayloadBreakdown(
     'work_engine_recurring_cycle_draft_review_aggregate',
@@ -512,7 +557,10 @@ export async function openRecurringCycleDraftForReview(params: {
     periodKey: params.periodKey,
     linkedWorkItemId: params.linkedWorkItemId,
   };
-  const { orgId, cycleRow, draftRow } = await loadCycleDraftReviewContext({ ctx: params.ctx, ...refs });
+  const { orgId, endCustomerId, cycleRow, draftRow } = await loadCycleDraftReviewContext({
+    ctx: params.ctx,
+    ...refs,
+  });
 
   // Official Income convention: prepare workspace issuer context for the review client
   // before resume/preview (issue still resolves independently from trusted cycle truth).
@@ -529,6 +577,13 @@ export async function openRecurringCycleDraftForReview(params: {
       issuedDocumentId: draftRow.issued_document_id ?? cycleRow.generated_document_id,
     });
   }
+
+  const deliveryContactJson = await seedMissingCycleDraftDeliveryContact({
+    ctx: params.ctx,
+    orgId,
+    endCustomerId,
+    draftRow,
+  });
 
   const income_workspace_aggregate = await buildCycleDraftReviewIncomeWorkspace({
     ctx: params.ctx,
@@ -547,7 +602,7 @@ export async function openRecurringCycleDraftForReview(params: {
     issuedDocumentNumberDisplay: null,
     deliveryOutcome: null,
     income_workspace_aggregate,
-    draftDeliveryContactJson: draftRow.delivery_contact_json,
+    draftDeliveryContactJson: deliveryContactJson,
   });
 
   await writeAudit({

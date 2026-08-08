@@ -72,17 +72,36 @@ test('issue_and_send command orchestrates issue then send without frontend chain
   assert.ok(orchestratorSource.includes('executeSendIncomeDocumentByEmail'));
   assert.ok(orchestratorSource.includes('beginIncomeIssueAndSendIdempotency'));
   assert.ok(orchestratorSource.includes('AUDIT_ACTIONS.INCOME_DOCUMENT_ISSUE_AND_SEND'));
+  assert.ok(orchestratorSource.includes('errorMessage'));
   assert.ok(commandsSource.includes('INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT'));
   assert.ok(commandsSource.includes('refreshRecurringCycleDraftReviewCase'));
 });
 
+test('cycle draft creation and review seed delivery email from end customer when missing', () => {
+  const draftServiceSource = readFileSync(
+    join(dir, '../../src/domains/work-engine/work-engine-invoice-retainer-draft.service.ts'),
+    'utf8',
+  );
+  const reviewServiceSource = readFileSync(
+    join(dir, '../../src/domains/work-engine/work-engine-invoice-retainer-cycle-draft-review.service.ts'),
+    'utf8',
+  );
+  assert.ok(draftServiceSource.includes('resolveRecurringCycleDraftDeliveryContactJson'));
+  assert.ok(draftServiceSource.includes('loadIncomeRecipientById'));
+  assert.ok(reviewServiceSource.includes('seedMissingCycleDraftDeliveryContact'));
+});
+
 test('frontend issue and send uses single named command only', () => {
   const setupModalSource = readWebSource('components/work-engine/WorkEngineInvoiceRetainerSetupModal.tsx');
+  const previewModalSource = readWebSource('components/work-engine/WorkEngineInvoiceRetainerPreviewModal.tsx');
   const handlerStart = setupModalSource.indexOf('const runCycleDraftIssueAndSend');
-  const handlerEnd = setupModalSource.indexOf('const applyRetainerAggregate', handlerStart);
-  const handlerBlock = setupModalSource.slice(handlerStart, handlerEnd);
+  const handlerEnd = setupModalSource.indexOf('const handleCycleDraftIssueRequest', handlerStart);
+  const handlerBlock = setupModalSource.slice(handlerStart, handlerEnd === -1 ? undefined : handlerEnd);
   assert.ok(handlerBlock.includes('issue_and_send_document'));
   assert.ok(handlerBlock.includes('idempotency_key: crypto.randomUUID()'));
-  assert.ok(!handlerBlock.includes('issue_document'));
+  assert.ok(handlerBlock.includes("delivery_outcome?.status === 'failed'"));
+  assert.ok(!handlerBlock.includes("executeIncomeCommand(review.income_commands.issue_document"));
   assert.ok(!handlerBlock.includes('fetchWorkEngineInvoiceRetainerSetupAggregate'));
+  assert.ok(previewModalSource.includes('nx-we-retainer-preview-modal__error'));
+  assert.ok(setupModalSource.includes("error={cycleDraftViewMode === 'preview' ? error : null}"));
 });
