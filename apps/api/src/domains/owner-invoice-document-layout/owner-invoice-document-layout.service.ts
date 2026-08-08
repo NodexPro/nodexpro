@@ -178,25 +178,53 @@ function allowedActionsFor(version: OwnerInvoiceLayoutVersionRow | null): string
   return [OWNER_INVOICE_LAYOUT_COMMANDS.create_draft];
 }
 
+/** INV-13D — width presets as 12-col spans that fit current col_start (backend-owned eligibility). */
+const OWNER_BUILDER_WIDTH_SPAN_PRESETS = [3, 4, 6, 8, 9, 12] as const;
+const OWNER_BUILDER_ALIGNMENTS = ['start', 'center', 'end', 'stretch'] as const;
+
 function sectionConstraints(definition: OwnerInvoiceLayoutDefinitionV1) {
-  return definition.sections.map((s) => ({
-    section_key: s.key,
-    order: s.order,
-    zone: s.zone,
-    height_px: s.height_px,
-    min_height_px: s.min_height_px,
-    max_height_px: s.max_height_px,
-    col_start: s.col_start,
-    col_span: s.col_span,
-    alignment: s.alignment,
-    visible: s.visible,
-    owner_locked: s.owner_locked,
-    /** Column/span geometry moves — locked sections stay fixed. */
-    move_allowed: !s.owner_locked,
-    /** Vertical reorder via order index — allowed for all draft sections. */
-    reorder_allowed: true,
-    resize_allowed: !s.owner_locked,
-  }));
+  return definition.sections.map((s) => {
+    const maxSpan = Math.max(1, 12 - s.col_start + 1);
+    const allowed_col_spans = OWNER_BUILDER_WIDTH_SPAN_PRESETS.filter((span) => span <= maxSpan);
+    return {
+      section_key: s.key,
+      order: s.order,
+      zone: s.zone,
+      height_px: s.height_px,
+      min_height_px: s.min_height_px,
+      max_height_px: s.max_height_px,
+      col_start: s.col_start,
+      col_span: s.col_span,
+      alignment: s.alignment,
+      visible: s.visible,
+      owner_locked: s.owner_locked,
+      /** Column/span geometry moves — locked sections stay fixed. */
+      move_allowed: !s.owner_locked,
+      /** Vertical reorder via order index — allowed for all draft sections. */
+      reorder_allowed: true,
+      resize_allowed: !s.owner_locked,
+      allowed_col_spans,
+      allowed_alignments: [...OWNER_BUILDER_ALIGNMENTS],
+      width_percent_labels: Object.fromEntries(
+        allowed_col_spans.map((span) => [
+          String(span),
+          span === 3
+            ? '25%'
+            : span === 4
+              ? '33%'
+              : span === 6
+                ? '50%'
+                : span === 8
+                  ? '66%'
+                  : span === 9
+                    ? '75%'
+                    : span === 12
+                      ? '100%'
+                      : `${Math.round((span / 12) * 100)}%`,
+        ]),
+      ),
+    };
+  });
 }
 
 export async function buildOwnerInvoiceDocumentBuilderAggregate(
@@ -633,6 +661,14 @@ export async function executeOwnerInvoiceLayoutCommand(
             section_key: asString(payload.section_key, 'section_key'),
             height_px: payload.height_px == null ? undefined : Number(payload.height_px),
             col_span: payload.col_span == null ? undefined : Number(payload.col_span),
+            alignment:
+              payload.alignment == null
+                ? undefined
+                : (asString(payload.alignment, 'alignment') as
+                    | 'start'
+                    | 'center'
+                    | 'end'
+                    | 'stretch'),
           }),
       );
     case OWNER_INVOICE_LAYOUT_COMMANDS.move_field:

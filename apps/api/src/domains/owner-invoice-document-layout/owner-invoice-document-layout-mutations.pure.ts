@@ -47,7 +47,17 @@ export function moveOwnerInvoiceLayoutSection(
     if (!Number.isInteger(params.order) || params.order < 0) {
       throw badRequest('order invalid');
     }
-    section.order = params.order;
+    // INV-13D — swap with occupant so ↑/↓ controls keep unique orders.
+    const occupant = next.sections.find(
+      (s) => s.key !== section.key && s.order === params.order,
+    );
+    if (occupant) {
+      const previous = section.order;
+      section.order = params.order;
+      occupant.order = previous;
+    } else {
+      section.order = params.order;
+    }
   }
   if (params.col_start != null) {
     assertSectionResizeWithinBounds({ section, col_start: params.col_start });
@@ -59,7 +69,13 @@ export function moveOwnerInvoiceLayoutSection(
 
 export function resizeOwnerInvoiceLayoutSection(
   definition: OwnerInvoiceLayoutDefinitionV1,
-  params: { section_key: string; height_px?: number; col_span?: number },
+  params: {
+    section_key: string;
+    height_px?: number;
+    col_span?: number;
+    /** INV-13D — optional alignment update (same draft resize command). */
+    alignment?: 'start' | 'center' | 'end' | 'stretch';
+  },
 ): OwnerInvoiceLayoutDefinitionV1 {
   const next = cloneDefinition(definition);
   const section = next.sections.find((s) => s.key === params.section_key);
@@ -72,6 +88,12 @@ export function resizeOwnerInvoiceLayoutSection(
   assertSectionResizeWithinBounds({ section, height_px, col_span });
   section.height_px = height_px;
   section.col_span = col_span;
+  if (params.alignment != null) {
+    if (!['start', 'center', 'end', 'stretch'].includes(params.alignment)) {
+      throw badRequest('alignment invalid');
+    }
+    section.alignment = params.alignment;
+  }
   return parseAndValidateOwnerInvoiceLayoutDefinition(next);
 }
 
@@ -100,7 +122,21 @@ export function moveOwnerInvoiceLayoutField(
   }
   if (params.order != null) {
     if (!Number.isInteger(params.order) || params.order < 0) throw badRequest('order invalid');
-    field.order = params.order;
+    // INV-13D — swap with same-section occupant for ↑/↓ field order.
+    const sectionKey = field.section_key;
+    const occupant = next.fields.find(
+      (f) =>
+        f.field_key !== field.field_key &&
+        f.section_key === sectionKey &&
+        f.order === params.order,
+    );
+    if (occupant) {
+      const previous = field.order;
+      field.order = params.order;
+      occupant.order = previous;
+    } else {
+      field.order = params.order;
+    }
   }
   return parseAndValidateOwnerInvoiceLayoutDefinition(next);
 }
@@ -199,7 +235,17 @@ export function setOwnerInvoiceTableColumn(
   if (params.width_px !== undefined) col.width_px = params.width_px;
   if (params.order != null) {
     if (!Number.isInteger(params.order) || params.order < 0) throw badRequest('order invalid');
-    col.order = params.order;
+    // INV-13D — swap with occupant so table ↑/↓ keeps unique orders.
+    const occupant = next.table.columns.find(
+      (c) => c.key !== col.key && c.order === params.order,
+    );
+    if (occupant) {
+      const previous = col.order;
+      col.order = params.order;
+      occupant.order = previous;
+    } else {
+      col.order = params.order;
+    }
   }
   if (params.align != null) col.align = params.align;
   next.table.columns.sort((a, b) => a.order - b.order);

@@ -155,7 +155,8 @@ export function buildOwnerInvoiceBuilderZones(params: {
           }),
           logo_placeholder: {
             show: Boolean(logoField?.visible !== false) && !params.sample_logo_present,
-            label: 'Drop Logo Here',
+            // INV-13D — controlled config UX; sample preview only (no Owner upload).
+            label: 'Logo zone (sample preview)',
           },
           field_keys: ['logo'],
         });

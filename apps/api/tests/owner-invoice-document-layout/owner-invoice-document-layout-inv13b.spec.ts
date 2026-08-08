@@ -47,7 +47,7 @@ test('builder zones include Logo + core editable zones', () => {
   }
   const logo = zones.find((z) => z.zone_key === 'logo');
   assert.ok(logo?.logo_placeholder?.show);
-  assert.equal(logo?.logo_placeholder?.label, 'Drop Logo Here');
+  assert.match(String(logo?.logo_placeholder?.label ?? ''), /Logo zone/i);
 });
 
 test('catalog covers INV-13B field groups without inventing VAT rate', () => {
@@ -112,12 +112,13 @@ test('FE visual editor uses aggregate zones + named commands; no PATCH; no HTML 
   );
   assert.match(section, /builder_zones|resolveBuilderZones/);
   assert.match(section, /nx-oidb__zone--logo/);
-  assert.match(section, /Drop Logo Here|logo_placeholder/);
+  assert.match(section, /logo_placeholder|Logo zone/);
   assert.match(section, /place_field|OWNER_INVOICE_LAYOUT_COMMANDS\.place_field/);
   assert.match(section, /set_section_lock/);
   assert.match(section, /srcDoc=\{iframeSrcDoc\}/);
   assert.equal(section.includes('method: \'PATCH\''), false);
   assert.equal(section.includes('dangerouslySetInnerHTML'), false);
+  assert.equal(section.includes('draggable='), false);
 });
 
 test('zones chrome never claimed for PDF/issued in notes', () => {
