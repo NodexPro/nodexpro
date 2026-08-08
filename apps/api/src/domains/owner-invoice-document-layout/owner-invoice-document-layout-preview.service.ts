@@ -11,16 +11,26 @@ import type { IncomeBrandingResolvedProfile } from '../income/income-document-br
 import { adaptOwnerLayoutDefinitionForCanonicalRenderer } from './owner-invoice-document-layout-resolver.pure.js';
 import type { OwnerInvoiceLayoutDefinitionV1 } from './owner-invoice-document-layout.types.js';
 
+export type OwnerInvoiceLayoutPreviewSampleOverrides = {
+  logo_size_key?: string | null;
+  color_theme_key?: string | null;
+};
+
 function sampleBrandingForOwnerPreview(
   definition: OwnerInvoiceLayoutDefinitionV1,
+  overrides?: OwnerInvoiceLayoutPreviewSampleOverrides,
 ): IncomeBrandingResolvedProfile {
   const bounds = definition.user_branding_bounds;
-  const logoSize =
-    bounds.logo_size_keys_allowed.includes('medium')
+  const requestedLogo = overrides?.logo_size_key?.trim() || '';
+  const requestedTheme = overrides?.color_theme_key?.trim() || '';
+  const logoSize = bounds.logo_size_keys_allowed.includes(requestedLogo)
+    ? requestedLogo
+    : bounds.logo_size_keys_allowed.includes('medium')
       ? 'medium'
       : bounds.logo_size_keys_allowed[0] ?? 'medium';
-  const theme =
-    bounds.color_theme_keys_allowed.includes('nodexpro_premium')
+  const theme = bounds.color_theme_keys_allowed.includes(requestedTheme)
+    ? requestedTheme
+    : bounds.color_theme_keys_allowed.includes('nodexpro_premium')
       ? 'nodexpro_premium'
       : bounds.color_theme_keys_allowed[0] ?? 'nodexpro_premium';
 
@@ -77,9 +87,10 @@ function sampleBrandingForOwnerPreview(
 
 export function buildOwnerInvoiceLayoutPreviewHtml(
   definition: OwnerInvoiceLayoutDefinitionV1,
+  overrides?: OwnerInvoiceLayoutPreviewSampleOverrides,
 ): string {
   // Ensures adapter is exercised for layout-aware preview (sectioned + visibility).
   adaptOwnerLayoutDefinitionForCanonicalRenderer(definition);
-  const branding = sampleBrandingForOwnerPreview(definition);
+  const branding = sampleBrandingForOwnerPreview(definition, overrides);
   return renderStudioSamplePreviewHtml(branding, 'חשבונית מס');
 }

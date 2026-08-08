@@ -173,13 +173,21 @@ function allowedActionsFor(version: OwnerInvoiceLayoutVersionRow | null): string
 function sectionConstraints(definition: OwnerInvoiceLayoutDefinitionV1) {
   return definition.sections.map((s) => ({
     section_key: s.key,
+    order: s.order,
+    zone: s.zone,
+    height_px: s.height_px,
     min_height_px: s.min_height_px,
     max_height_px: s.max_height_px,
     col_start: s.col_start,
     col_span: s.col_span,
+    alignment: s.alignment,
+    visible: s.visible,
     owner_locked: s.owner_locked,
-    resize_allowed: !s.owner_locked,
+    /** Column/span geometry moves — locked sections stay fixed. */
     move_allowed: !s.owner_locked,
+    /** Vertical reorder via order index — allowed for all draft sections. */
+    reorder_allowed: true,
+    resize_allowed: !s.owner_locked,
   }));
 }
 
@@ -190,6 +198,9 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
     document_type_group?: string;
     country_code?: string | null;
     version_id?: string | null;
+    /** Preview-only sample branding (within user_branding_bounds). Does not mutate layout. */
+    preview_logo_size_key?: string | null;
+    preview_color_theme_key?: string | null;
   },
 ): Promise<Record<string, unknown>> {
   assertPlatformOwner(ctx);
@@ -197,6 +208,10 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
   const document_type_group = asDocumentTypeGroup(opts?.document_type_group);
   const country_code =
     opts?.country_code === undefined ? 'IL' : asOptionalString(opts.country_code);
+  const previewOverrides = {
+    logo_size_key: asOptionalString(opts?.preview_logo_size_key),
+    color_theme_key: asOptionalString(opts?.preview_color_theme_key),
+  };
 
   const versions = await listVersions({ layout_key, document_type_group, country_code });
   let working =
@@ -207,7 +222,7 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
   if (!working && versions.length === 0) {
     // Lazy seed: expose GM definition without writing until create_draft.
     const seed = buildSectionedGoldenMasterLayoutDefinitionV1();
-    const preview_html = buildOwnerInvoiceLayoutPreviewHtml(seed);
+    const preview_html = buildOwnerInvoiceLayoutPreviewHtml(seed, previewOverrides);
     return {
       aggregate_key: OWNER_INVOICE_LAYOUT_AGGREGATE_KEY,
       layout_key,
@@ -221,6 +236,11 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
       section_constraints: sectionConstraints(seed),
       branding_bounds: seed.user_branding_bounds,
       preview_html,
+      preview_sample: {
+        logo_size_key: previewOverrides.logo_size_key,
+        color_theme_key: previewOverrides.color_theme_key,
+        note: 'Preview-only sample branding within Owner bounds. Does not mutate tenant Branding Studio.',
+      },
       allowed_actions: allowedActionsFor(null),
       version_history: [],
       lifecycle: { draft: 'mutable', published: 'immutable', archived: 'immutable' },
@@ -235,7 +255,7 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
   if (!working) throw notFound('Owner invoice layout version not found');
 
   const definition = working.layout_definition_json;
-  const preview_html = buildOwnerInvoiceLayoutPreviewHtml(definition);
+  const preview_html = buildOwnerInvoiceLayoutPreviewHtml(definition, previewOverrides);
 
   return {
     aggregate_key: OWNER_INVOICE_LAYOUT_AGGREGATE_KEY,
@@ -253,6 +273,11 @@ export async function buildOwnerInvoiceDocumentBuilderAggregate(
     section_constraints: sectionConstraints(definition),
     branding_bounds: definition.user_branding_bounds,
     preview_html,
+    preview_sample: {
+      logo_size_key: previewOverrides.logo_size_key,
+      color_theme_key: previewOverrides.color_theme_key,
+      note: 'Preview-only sample branding within Owner bounds. Does not mutate tenant Branding Studio.',
+    },
     allowed_actions: allowedActionsFor(working),
     version_history: versions.map((v) => ({
       id: v.id,
