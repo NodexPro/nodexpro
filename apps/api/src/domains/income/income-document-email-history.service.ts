@@ -12,7 +12,9 @@ import { loadActiveIncomeIssuerScope } from './income-issuer-scope.service.js';
 import {
   buildIncomeDocumentEmailSendForm,
   mapDeliveryAttemptToDocumentHistoryRow,
+  normalizeRepresentedClientRecipientEmailPrefill,
   resolveIncomeDocumentEmailSendEligibility,
+  toIncomeDocumentPdfSendReadinessView,
   deliveryAttemptResultLabel,
   formatEmailDeliverySentAtDisplay,
   subjectPreviewFromMessageSnapshot,
@@ -24,6 +26,7 @@ import {
 } from './income-document-email-delivery.read-model.service.js';
 import type { IncomeDocumentType } from './income.types.js';
 import {
+  INCOME_COMMAND_RETRY_PDF_RENDER,
   INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL,
   INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY,
   INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY,
@@ -106,14 +109,23 @@ async function loadIssuedDocumentForHistory(
 async function loadRepresentedClient(orgId: string, clientId: string) {
   const { data, error } = await supabaseAdmin
     .from('clients')
-    .select('id, display_name, is_archived')
+    .select('id, display_name, email, is_archived')
     .eq('organization_id', orgId)
     .eq('id', clientId)
     .maybeSingle();
   throwIfSupabaseError(error, 'loadEmailHistoryRepresentedClient');
-  const row = data as { id: string; display_name: string; is_archived: boolean } | null;
+  const row = data as {
+    id: string;
+    display_name: string;
+    email: string | null;
+    is_archived: boolean;
+  } | null;
   if (!row || row.is_archived) throw notFound('Office client not found');
-  return row;
+  return {
+    id: row.id,
+    display_name: row.display_name,
+    email: normalizeRepresentedClientRecipientEmailPrefill(row.email),
+  };
 }
 
 export async function buildIncomeDocumentEmailHistoryAggregate(params: {
@@ -135,10 +147,18 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params: {
     pdfAssetId: doc.pdf_asset_id,
   });
 
+  const recipientEmailDefault =
+    doc.represented_client_id != null
+      ? (await loadRepresentedClient(scope.org_id, doc.represented_client_id)).email
+      : null;
+
   const rows = attempts.map((attempt) => mapDeliveryAttemptToDocumentHistoryRow(attempt));
   const allowedActions = ['view_income_document_email_history'];
   if (sendEligibility.enabled) {
     allowedActions.push(INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL);
+  }
+  if (sendEligibility.retry_pdf_render_allowed) {
+    allowedActions.push(INCOME_COMMAND_RETRY_PDF_RENDER);
   }
 
   return {
@@ -147,11 +167,13 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params: {
     document_number: doc.document_number,
     document_type_label: DOCUMENT_TYPE_LABELS[doc.document_type],
     represented_client_id: doc.represented_client_id,
+    pdf_send_readiness: toIncomeDocumentPdfSendReadinessView(sendEligibility.pdf_readiness),
     table_columns: DOCUMENT_HISTORY_COLUMNS,
     rows,
     send_form: buildIncomeDocumentEmailSendForm({
       incomeDocumentId,
       sendEligibility,
+      recipientEmailDefault,
     }),
     allowed_actions: allowedActions,
     empty_state: {

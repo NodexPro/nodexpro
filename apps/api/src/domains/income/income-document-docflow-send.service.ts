@@ -14,6 +14,7 @@ import {
   mapDeliveryAttemptToDocflowHistoryRow,
 } from './income-document-docflow-delivery.read-model.pure.js';
 import { resolveIncomeDocumentDocflowSendEligibility } from './income-document-docflow-delivery.pure.js';
+import { toIncomeDocumentPdfSendReadinessView } from './income-document-email-delivery.read-model.pure.js';
 import {
   isDocflowEntitledForOrg,
   listIncomeDocumentDocflowAttempts,
@@ -21,6 +22,7 @@ import {
 } from './income-document-email-delivery.read-model.service.js';
 import type { IncomeDocumentType } from './income.types.js';
 import {
+  INCOME_COMMAND_RETRY_PDF_RENDER,
   INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW,
   INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY,
   type IncomeDocumentDocflowSendAggregate,
@@ -129,6 +131,9 @@ export async function buildIncomeDocumentDocflowSendAggregate(params: {
   if (sendEligibility.enabled) {
     allowedActions.push(INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW);
   }
+  if (sendEligibility.retry_pdf_render_allowed) {
+    allowedActions.push(INCOME_COMMAND_RETRY_PDF_RENDER);
+  }
 
   const clientDisplayName =
     doc.represented_client_id != null
@@ -142,6 +147,7 @@ export async function buildIncomeDocumentDocflowSendAggregate(params: {
     document_type_label: DOCUMENT_TYPE_LABELS[doc.document_type],
     represented_client_id: doc.represented_client_id,
     client_display_name: clientDisplayName,
+    pdf_send_readiness: toIncomeDocumentPdfSendReadinessView(sendEligibility.pdf_readiness),
     table_columns: DOC_HISTORY_COLUMNS,
     rows,
     send_form: buildIncomeDocumentDocflowSendForm({

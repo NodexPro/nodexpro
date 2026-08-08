@@ -74,7 +74,11 @@ export function buildIncomeDocumentDocflowDeliveryBlock(params: {
 
 export function buildIncomeDocumentDocflowSendForm(params: {
   incomeDocumentId: string;
-  sendEligibility: { enabled: boolean; disabled_reason: string | null };
+  sendEligibility: {
+    enabled: boolean;
+    disabled_reason: string | null;
+    disabled_reason_key: string | null;
+  };
 }): IncomeDocumentDocflowSendForm {
   return {
     visible: true,
@@ -84,6 +88,7 @@ export function buildIncomeDocumentDocflowSendForm(params: {
     fields: [],
     enabled: params.sendEligibility.enabled,
     disabled_reason: params.sendEligibility.disabled_reason,
+    disabled_reason_key: params.sendEligibility.disabled_reason_key,
   };
 }
 

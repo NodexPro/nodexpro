@@ -180,6 +180,19 @@ export interface IncomeDocumentDocflowHistoryAttemptRow {
   body_preview: string | null;
 }
 
+export type IncomeDocumentPdfSendStatusKey =
+  | 'pdf_pending'
+  | 'pdf_failed'
+  | 'pdf_ready'
+  | 'pdf_unavailable';
+
+export interface IncomeDocumentPdfSendReadinessView {
+  status_key: IncomeDocumentPdfSendStatusKey;
+  status_label: string;
+  /** User-facing detail when not ready; null when PDF gate passes. */
+  message: string | null;
+}
+
 export interface IncomeDocumentDocflowSendForm {
   visible: boolean;
   command: typeof INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW;
@@ -188,6 +201,7 @@ export interface IncomeDocumentDocflowSendForm {
   fields: [];
   enabled: boolean;
   disabled_reason: string | null;
+  disabled_reason_key: string | null;
 }
 
 export interface IncomeDocumentDocflowSendAggregate {
@@ -197,6 +211,7 @@ export interface IncomeDocumentDocflowSendAggregate {
   document_type_label: string;
   represented_client_id: string | null;
   client_display_name: string | null;
+  pdf_send_readiness: IncomeDocumentPdfSendReadinessView;
   table_columns: Array<{ key: string; label: string }>;
   rows: IncomeDocumentDocflowHistoryAttemptRow[];
   send_form: IncomeDocumentDocflowSendForm;
@@ -238,6 +253,7 @@ export interface IncomeDocumentEmailSendFormField {
   label: string;
   required: boolean;
   type: 'email';
+  default_value?: string | null;
 }
 
 export interface IncomeDocumentEmailSendForm {
@@ -247,6 +263,7 @@ export interface IncomeDocumentEmailSendForm {
   fields: IncomeDocumentEmailSendFormField[];
   enabled: boolean;
   disabled_reason: string | null;
+  disabled_reason_key: string | null;
 }
 
 export interface IncomeDocumentEmailHistoryAggregate {
@@ -255,6 +272,7 @@ export interface IncomeDocumentEmailHistoryAggregate {
   document_number: string;
   document_type_label: string;
   represented_client_id: string | null;
+  pdf_send_readiness: IncomeDocumentPdfSendReadinessView;
   table_columns: Array<{ key: string; label: string }>;
   rows: IncomeDocumentEmailHistoryAttemptRow[];
   send_form: IncomeDocumentEmailSendForm;
