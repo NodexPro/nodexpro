@@ -72,11 +72,11 @@ test('no invoice customer email leaves recipient default empty', () => {
   assert.equal(form.fields[0]?.default_value, null);
 });
 
-test('send history prefills from invoice customer / delivery contact (not Core issuer)', () => {
+test('send history prefills from live invoice customer (not Core issuer / not stale delivery)', () => {
   assert.match(historyServiceSource, /resolveIssuedDocumentEmailRecipientPrefill/);
   assert.match(historyServiceSource, /loadIncomeRecipientById/);
+  assert.match(historyServiceSource, /incomeCustomerId:\s*params\.doc\.income_customer_id/);
   assert.match(historyServiceSource, /customer_snapshot_json/);
-  assert.match(historyServiceSource, /delivery_contact_json/);
   assert.doesNotMatch(
     historyServiceSource,
     /recipientEmailDefault[\s\S]{0,200}loadRepresentedClient/,

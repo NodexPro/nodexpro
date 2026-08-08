@@ -12,6 +12,7 @@ export function buildIncomeIssuedDocumentViewAction(params: {
   pdfRenderStatus: string;
   pdfAssetId: string | null;
   pdfDownloadPath: string | null;
+  pdfRenderError?: string | null;
 }): IncomeIssuedDocumentViewAction {
   const readiness = resolveIncomeDocumentPdfSendReadiness({
     pdfRenderStatus: params.pdfRenderStatus,
@@ -20,15 +21,22 @@ export function buildIncomeIssuedDocumentViewAction(params: {
   const enabled =
     params.canView && readiness.ready && Boolean(params.pdfDownloadPath);
   const retryAllowed = params.canRetryPdf && readiness.retry_eligible;
+  const baseReason = readiness.disabled_reason ?? 'המסמך אינו זמין לצפייה';
+  const renderError =
+    params.pdfRenderError != null ? String(params.pdfRenderError).trim() : '';
+  const disabledReason =
+    !enabled && readiness.status_key === 'pdf_failed' && renderError
+      ? `${baseReason} ${renderError}`.trim()
+      : enabled
+        ? null
+        : baseReason;
   return {
     action_key: 'open_document',
     label: 'צפייה במסמך',
     enabled,
     income_document_id: params.incomeDocumentId,
     pdf_download_path: enabled ? params.pdfDownloadPath : null,
-    disabled_reason: enabled
-      ? null
-      : readiness.disabled_reason ?? 'המסמך אינו זמין לצפייה',
+    disabled_reason: disabledReason,
     retry_command: retryAllowed ? INCOME_COMMAND_RETRY_PDF_RENDER : null,
   };
 }

@@ -155,6 +155,7 @@ async function resolveDocumentRecipientEmailDefault(params: {
   }
 
   return resolveIssuedDocumentEmailRecipientPrefill({
+    incomeCustomerId: params.doc.income_customer_id,
     draftDeliveryContactJson,
     incomeCustomerEmail,
     customerSnapshotJson: params.doc.customer_snapshot_json,

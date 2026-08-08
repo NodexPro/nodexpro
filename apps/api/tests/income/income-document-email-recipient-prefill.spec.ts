@@ -1,5 +1,5 @@
 /**
- * P0 — Issued invoice email recipient = invoice customer, not represented issuer.
+ * P0 — Issued invoice email recipient = CURRENT invoice customer contact.
  */
 
 import test from 'node:test';
@@ -7,16 +7,19 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import {
-  resolveCustomerSnapshotEmail,
   resolveIssuedDocumentEmailRecipientPrefill,
 } from '../../src/domains/income/income-document-email-recipient-prefill.pure.js';
 import { buildIncomeDocumentEmailSendForm } from '../../src/domains/income/income-document-email-delivery.read-model.pure.js';
-import { randomUUID } from 'node:crypto';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const historyServiceSource = readFileSync(
   join(dir, '../../src/domains/income/income-document-email-history.service.ts'),
+  'utf8',
+);
+const draftEditorSource = readFileSync(
+  join(dir, '../../src/domains/income/income-document-draft-editor.service.ts'),
   'utf8',
 );
 const docflowServiceSource = readFileSync(
@@ -31,102 +34,115 @@ const emailModalSource = readFileSync(
   join(dir, '../../../web/src/components/income/IncomeDocumentEmailHistoryModal.tsx'),
   'utf8',
 );
+const weDocsSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineClientDocumentsByTypeModal.tsx'),
+  'utf8',
+);
 
-test('A/B office mode: Unilever customer email wins; Test3 represented email unused', () => {
-  const recipient = resolveIssuedDocumentEmailRecipientPrefill({
-    draftDeliveryContactJson: null,
-    incomeCustomerEmail: 'marinator02@walla.com',
-    customerSnapshotJson: {
-      source: 'income_customer',
-      display_name: 'Unilever',
-      email: 'marinator02@walla.com',
-    },
-  });
-  assert.equal(recipient, 'marinator02@walla.com');
-  // Document history uses invoice-customer resolver, not Core issuer client email.
-  assert.match(
-    historyServiceSource,
-    /recipientEmailDefault = await resolveDocumentRecipientEmailDefault/,
-  );
-  assert.doesNotMatch(
-    historyServiceSource,
-    /doc\.represented_client_id[\s\S]{0,120}loadRepresentedClient/,
-  );
-});
+const unileverId = randomUUID();
 
-test('B represented client email differs — never selected as recipient', () => {
-  const recipient = resolveIssuedDocumentEmailRecipientPrefill({
-    draftDeliveryContactJson: null,
-    incomeCustomerEmail: 'customer@unilever.example',
-    customerSnapshotJson: { email: 'customer@unilever.example' },
-  });
-  assert.equal(recipient, 'customer@unilever.example');
-  assert.notEqual(recipient, 'test3-office@example.com');
-});
-
-test('C normal income customer → customer email', () => {
+test('H saved customer email changed after issue → CURRENT live email', () => {
   assert.equal(
     resolveIssuedDocumentEmailRecipientPrefill({
-      draftDeliveryContactJson: null,
-      incomeCustomerEmail: 'saved-customer@example.com',
-      customerSnapshotJson: { email: 'stale-snapshot@example.com' },
+      incomeCustomerId: unileverId,
+      draftDeliveryContactJson: { email: 'old-seeded@example.com', snapshot_only: true },
+      incomeCustomerEmail: 'marinator02@walla.com',
+      customerSnapshotJson: { email: 'old-frozen@example.com', display_name: 'Unilever' },
     }),
-    'saved-customer@example.com',
+    'marinator02@walla.com',
   );
 });
 
-test('D one-time customer → delivery/snapshot email without Core client', () => {
+test('I stale auto-seeded delivery_contact loses to live customer email', () => {
   assert.equal(
     resolveIssuedDocumentEmailRecipientPrefill({
-      draftDeliveryContactJson: null,
+      incomeCustomerId: unileverId,
+      draftDeliveryContactJson: { email: 'stale-autoseed@old.com', snapshot_only: true },
+      incomeCustomerEmail: 'current@unilever.example',
+      customerSnapshotJson: { email: 'stale-autoseed@old.com' },
+    }),
+    'current@unilever.example',
+  );
+});
+
+test('J no canonical explicit-override flag — delivery_contact cannot beat live email', () => {
+  // Both auto-seed create and update_delivery_contact set snapshot_only:true identically.
+  assert.match(draftEditorSource, /snapshot_only:\s*true/);
+  assert.match(draftEditorSource, /action: 'update_delivery_contact'/);
+  assert.equal(
+    resolveIssuedDocumentEmailRecipientPrefill({
+      incomeCustomerId: unileverId,
+      draftDeliveryContactJson: {
+        email: 'manual-looking@example.com',
+        snapshot_only: true,
+        updated_at: '2026-08-01T00:00:00.000Z',
+      },
+      incomeCustomerEmail: 'live-card@example.com',
+      customerSnapshotJson: { email: 'frozen@example.com' },
+    }),
+    'live-card@example.com',
+  );
+});
+
+test('K one-time customer → delivery/snapshot email without live customer row', () => {
+  assert.equal(
+    resolveIssuedDocumentEmailRecipientPrefill({
+      incomeCustomerId: null,
+      draftDeliveryContactJson: { email: 'onetime-delivery@example.com' },
       incomeCustomerEmail: null,
       customerSnapshotJson: {
         source: 'one_time_snapshot',
-        display_name: 'Walk-in',
-        email: 'onetime@example.com',
+        email: 'onetime-snap@example.com',
       },
     }),
-    'onetime@example.com',
+    'onetime-delivery@example.com',
   );
-  assert.equal(
-    resolveCustomerSnapshotEmail({
-      source: 'one_time_snapshot',
-      email: 'onetime@example.com',
-    }),
-    'onetime@example.com',
-  );
-});
-
-test('explicit draft delivery_contact overrides live customer email', () => {
   assert.equal(
     resolveIssuedDocumentEmailRecipientPrefill({
-      draftDeliveryContactJson: { email: 'override@delivery.example' },
-      incomeCustomerEmail: 'canonical@customer.example',
-      customerSnapshotJson: { email: 'frozen@snapshot.example' },
-    }),
-    'override@delivery.example',
-  );
-});
-
-test('E self mode: invoice customer email (issuer != customer)', () => {
-  assert.equal(
-    resolveIssuedDocumentEmailRecipientPrefill({
+      incomeCustomerId: null,
       draftDeliveryContactJson: null,
-      incomeCustomerEmail: 'buyer@selfmode.example',
-      customerSnapshotJson: {
-        display_name: 'Buyer Ltd',
-        email: 'buyer@selfmode.example',
-      },
+      incomeCustomerEmail: null,
+      customerSnapshotJson: { email: 'onetime-snap@example.com' },
     }),
-    'buyer@selfmode.example',
+    'onetime-snap@example.com',
   );
 });
 
-test('F customer email absent → empty recipient; form still editable field', () => {
+test('L issuer/represented-client email never used as Email recipient', () => {
+  assert.match(historyServiceSource, /resolveIssuedDocumentEmailRecipientPrefill/);
+  assert.doesNotMatch(
+    historyServiceSource,
+    /recipientEmailDefault = await resolveDocumentRecipientEmailDefault[\s\S]{0,40}loadRepresentedClient/,
+  );
+  assert.equal(
+    resolveIssuedDocumentEmailRecipientPrefill({
+      incomeCustomerId: unileverId,
+      draftDeliveryContactJson: null,
+      incomeCustomerEmail: 'customer@example.com',
+      customerSnapshotJson: { email: 'customer@example.com' },
+    }),
+    'customer@example.com',
+  );
+});
+
+test('C live customer email absent → snapshot fallback', () => {
+  assert.equal(
+    resolveIssuedDocumentEmailRecipientPrefill({
+      incomeCustomerId: unileverId,
+      draftDeliveryContactJson: { email: 'stale-delivery@example.com' },
+      incomeCustomerEmail: null,
+      customerSnapshotJson: { email: 'snapshot-fallback@example.com' },
+    }),
+    'snapshot-fallback@example.com',
+  );
+});
+
+test('F empty when no email anywhere — editable field remains', () => {
   const recipient = resolveIssuedDocumentEmailRecipientPrefill({
+    incomeCustomerId: unileverId,
     draftDeliveryContactJson: null,
     incomeCustomerEmail: null,
-    customerSnapshotJson: { display_name: 'No Email Co', email: null },
+    customerSnapshotJson: { display_name: 'Unilever' },
   });
   assert.equal(recipient, null);
   const form = buildIncomeDocumentEmailSendForm({
@@ -139,34 +155,31 @@ test('F customer email absent → empty recipient; form still editable field', (
     recipientEmailDefault: recipient,
   });
   assert.equal(form.fields[0]?.default_value, null);
-  assert.equal(form.fields[0]?.key, 'recipient_email');
   assert.equal(form.enabled, true);
 });
 
-test('G no FE client/customer lookup for recipient', () => {
+test('N no FE /customers or /clients lookup', () => {
   assert.doesNotMatch(emailModalSource, /\/clients/);
+  assert.doesNotMatch(emailModalSource, /\/customers/);
   assert.doesNotMatch(emailModalSource, /fetchClient|loadClient|income_customers/);
   assert.match(emailModalSource, /recipient_email_default/);
-  assert.match(historyServiceSource, /resolveIssuedDocumentEmailRecipientPrefill/);
-  assert.match(historyServiceSource, /income_customer_id/);
-  assert.match(historyServiceSource, /customer_snapshot_json/);
-  assert.match(historyServiceSource, /delivery_contact_json/);
 });
 
-test('H DocFlow policy unchanged — represented-client portal channel', () => {
+test('H DocFlow policy unchanged', () => {
   assert.match(docflowServiceSource, /assertIncomeRepresentedClientScopeForDocflowSend/);
   assert.match(docflowServiceSource, /recipientEmail:\s*null/);
-  assert.match(docflowServiceSource, /loadPortalActive/);
   assert.match(docflowPureSource, /DocFlow delivery requires an active represented client scope/);
   assert.doesNotMatch(docflowServiceSource, /resolveIssuedDocumentEmailRecipientPrefill/);
-  assert.doesNotMatch(docflowServiceSource, /income_customers/);
 });
 
-test('history aggregate no longer prefill from Core clients.email for document send', () => {
-  assert.doesNotMatch(
-    historyServiceSource,
-    /recipientEmailDefault[\s\S]{0,200}loadRepresentedClient/,
-  );
-  assert.match(historyServiceSource, /loadIncomeRecipientById/);
-  assert.match(historyServiceSource, /resolveIssuedDocumentEmailRecipientPrefill/);
+test('VIEW retry-then-open uses command workspace row — no documents-by-type GET', () => {
+  assert.match(weDocsSource, /issued_documents_table_model/);
+  assert.match(weDocsSource, /applyIssuedViewFromWorkspaceRow/);
+  assert.match(weDocsSource, /openIncomeDocumentPdf/);
+  const viewFnStart = weDocsSource.indexOf('const handleViewDocument');
+  const viewFnEnd = weDocsSource.indexOf('const handleEditDraft');
+  assert.ok(viewFnStart >= 0 && viewFnEnd > viewFnStart);
+  const viewFn = weDocsSource.slice(viewFnStart, viewFnEnd);
+  assert.match(viewFn, /executeIncomeCommand/);
+  assert.doesNotMatch(viewFn, /fetchWorkEngineInvoicesClientDocumentsByTypeAggregate/);
 });

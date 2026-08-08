@@ -198,7 +198,7 @@ async function loadIssuedDocumentCandidates(params: {
   const { data, error } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, created_at',
+      'id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error, created_at',
     )
     .eq('organization_id', params.orgId)
     .or(excludeSelfModeActingFilter())
@@ -250,6 +250,7 @@ async function loadIssuedDocumentCandidates(params: {
       customer_snapshot_json: Record<string, unknown> | null;
       pdf_render_status: string;
       pdf_asset_id: string | null;
+      pdf_render_error: string | null;
     };
     const year = issueYearFromIso(doc.issue_date);
     const amountRef = ledgerAmountFromTotalsSnapshot(doc.totals_snapshot_json);
@@ -264,6 +265,7 @@ async function loadIssuedDocumentCandidates(params: {
       pdfRenderStatus: doc.pdf_render_status,
       pdfAssetId: doc.pdf_asset_id,
       pdfDownloadPath: pdfPath,
+      pdfRenderError: doc.pdf_render_error,
     });
     const canViewDoc = view_action.enabled;
 

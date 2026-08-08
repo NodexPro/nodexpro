@@ -272,7 +272,7 @@ export interface IncomeDocumentEmailHistoryAggregate {
   document_number: string;
   document_type_label: string;
   represented_client_id: string | null;
-  /** Canonical Core clients.email prefill (same value as send_form field default_value). */
+  /** New-send recipient default from invoice customer contact (same as send_form default_value). */
   recipient_email_default: string | null;
   pdf_send_readiness: IncomeDocumentPdfSendReadinessView;
   table_columns: Array<{ key: string; label: string }>;

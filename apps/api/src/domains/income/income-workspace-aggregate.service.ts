@@ -245,7 +245,7 @@ async function loadIssuedDocuments(
   let query = supabaseAdmin
     .from('income_documents')
     .select(
-      'id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at, accounting_posting_status, accounting_entry_id, pdf_render_status, pdf_asset_id',
+      'id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at, accounting_posting_status, accounting_entry_id, pdf_render_status, pdf_asset_id, pdf_render_error',
     )
     .eq('document_status', 'issued')
     .order('issue_date', { ascending: false })
@@ -291,6 +291,7 @@ async function loadIssuedDocuments(
       accounting_entry_id: string | null;
       pdf_render_status: string;
       pdf_asset_id: string | null;
+      pdf_render_error: string | null;
     };
     const lines = Array.isArray(r.lines_snapshot_json) ? r.lines_snapshot_json : [];
     const customerDisplay =
@@ -318,6 +319,7 @@ async function loadIssuedDocuments(
       pdfRenderStatus: r.pdf_render_status,
       pdfAssetId: r.pdf_asset_id,
       pdfDownloadPath,
+      pdfRenderError: r.pdf_render_error,
     });
     if (view_action.retry_command) {
       rowActions.push(view_action.retry_command);

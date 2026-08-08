@@ -1046,8 +1046,20 @@ export async function executeIncomeCommand(
     const scope = await loadActiveIncomeIssuerScope(ctx);
     assertIncomeIssuePermission(scope);
     const income_document_id = reqUuid(body.income_document_id, 'income_document_id');
-    await renderIncomeDocumentPdf(ctx, scope.org_id, income_document_id);
-    return commandResponse(ctx, command);
+    const pdfResult = await renderIncomeDocumentPdf(ctx, scope.org_id, income_document_id);
+    const response = await commandResponse(ctx, command);
+    return {
+      ...response,
+      meta: {
+        income_document_id,
+        pdf_render_status:
+          pdfResult.pdf_render_status === 'rendered' ||
+          pdfResult.pdf_render_status === 'failed' ||
+          pdfResult.pdf_render_status === 'pending'
+            ? pdfResult.pdf_render_status
+            : undefined,
+      },
+    };
   }
 
   if (command === INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL) {

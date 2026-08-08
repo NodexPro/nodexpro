@@ -111,10 +111,12 @@ test('view_action enabled only for rendered + asset', () => {
     pdfRenderStatus: 'failed',
     pdfAssetId: null,
     pdfDownloadPath: null,
+    pdfRenderError: 'pdf_engine: boom',
   });
   assert.equal(failed.enabled, false);
   assert.equal(failed.retry_command, 'retry_income_document_pdf_render');
   assert.match(String(failed.disabled_reason), /PDF|pdf|הפקה|זמין/i);
+  assert.match(String(failed.disabled_reason), /pdf_engine: boom/);
 });
 
 test('issued lists wire document_number click to view_action / openIncomeDocumentPdf', () => {
@@ -123,6 +125,7 @@ test('issued lists wire document_number click to view_action / openIncomeDocumen
   assert.match(weDocsSource, /view_action/);
   assert.match(weDocsSource, /openIncomeDocumentPdf/);
   assert.match(weDocsSource, /retry_command/);
+  assert.match(weDocsSource, /issued_documents_table_model/);
   assert.doesNotMatch(weDocsSource, /resume_income_document_draft.*document_number/);
 });
 
