@@ -30,7 +30,7 @@ import { STUDIO_DOCUMENT_STYLE_KEYS } from './income-document-branding.types.js'
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
-export const DEFAULT_DOCUMENT_STYLE_KEY: IncomeDocumentStyleTemplateKey = 'classic';
+export const DEFAULT_DOCUMENT_STYLE_KEY: IncomeDocumentStyleTemplateKey = 'sectioned';
 export const DEFAULT_COLOR_THEME_KEY = 'nodexpro_premium';
 export const DEFAULT_LOGO_SIZE_KEY: IncomeLogoSizeKey = 'medium';
 export const DEFAULT_PRIMARY_COLOR = '#5B4DFF';
@@ -369,10 +369,10 @@ export const INCOME_DOCUMENT_TYPE_STYLE_GROUP_DEFS: Array<
 ];
 
 export const INCOME_DOCUMENT_TYPE_STYLE_DEFAULTS: IncomeDocumentTypeStyleDefault[] = [
-  { document_type_key: 'quote', document_type_label: 'הצעת מחיר', default_document_style_key: 'classic', default_color_theme_key: 'nodexpro_premium' },
-  { document_type_key: 'tax_invoice', document_type_label: 'חשבונית מס', default_document_style_key: 'classic', default_color_theme_key: 'nodexpro_premium' },
-  { document_type_key: 'receipt', document_type_label: 'קבלה', default_document_style_key: 'classic', default_color_theme_key: 'nodexpro_premium' },
-  { document_type_key: 'credit_note', document_type_label: 'זיכוי', default_document_style_key: 'classic', default_color_theme_key: 'nodexpro_premium' },
+  { document_type_key: 'quote', document_type_label: 'הצעת מחיר', default_document_style_key: 'sectioned', default_color_theme_key: 'nodexpro_premium' },
+  { document_type_key: 'tax_invoice', document_type_label: 'חשבונית מס', default_document_style_key: 'sectioned', default_color_theme_key: 'nodexpro_premium' },
+  { document_type_key: 'receipt', document_type_label: 'קבלה', default_document_style_key: 'sectioned', default_color_theme_key: 'nodexpro_premium' },
+  { document_type_key: 'credit_note', document_type_label: 'זיכוי', default_document_style_key: 'sectioned', default_color_theme_key: 'nodexpro_premium' },
 ];
 
 export function getDocumentTypeStyleDefaults(): IncomeDocumentTypeStyleDefault[] {

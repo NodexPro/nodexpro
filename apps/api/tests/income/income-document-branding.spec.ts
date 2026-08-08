@@ -62,12 +62,13 @@ test('studio navigation exposes seven SaaS sections', () => {
   assert.ok(sections.every((s) => s.description.trim().length > 0));
 });
 
-test('document type style groups default to classic and nodexpro premium', () => {
+test('document type style groups default to sectioned and nodexpro premium', () => {
   const groups = buildDocumentTypeStyleGroups({});
   assert.equal(groups.length, 4);
-  assert.ok(groups.every((g) => g.effective_document_style_key === 'classic'));
+  assert.ok(groups.every((g) => g.effective_document_style_key === 'sectioned'));
   assert.ok(groups.every((g) => g.effective_color_theme_key === DEFAULT_COLOR_THEME_KEY));
   assert.equal(DEFAULT_COLOR_THEME_KEY, 'nodexpro_premium');
+  assert.equal(DEFAULT_DOCUMENT_STYLE_KEY, 'sectioned');
 });
 
 test('document type group overrides resolve effective style for preview', () => {
@@ -231,10 +232,10 @@ test('preview uses unified layout, theme tokens, and draft number label', () => 
   const theme = branding.color_theme;
   assert.match(html, new RegExp(theme.recipient_accent_color.replace('#', '#')));
   assert.match(html, new RegExp(theme.table_header_color.replace('#', '#')));
-  assert.match(html, /nx-doc nx-doc--unified/);
-  assert.match(html, /nx-doc__upper-sheet/);
-  assert.match(html, /nx-doc__sheet-section--1/);
-  assert.match(html, /nx-doc__sheet-section--6/);
+  assert.match(html, /nx-doc nx-doc--unified nx-doc--sectioned/);
+  assert.match(html, /nx-doc__upper/);
+  assert.match(html, /nx-doc__branding/);
+  assert.match(html, /nx-doc__customer-card/);
   assert.match(html, /nx-doc__customer-name/);
   assert.match(html, /nx-doc__summary/);
   assert.match(html, /nx-doc__platform-footer/);
@@ -242,8 +243,6 @@ test('preview uses unified layout, theme tokens, and draft number label', () => 
   assert.match(html, /טיוטה/);
   assert.match(html, /Heebo, Arial, Helvetica, sans-serif/);
   assert.match(html, /font-family: inherit !important/);
-  assert.match(html, /fonts\.googleapis/);
-  assert.match(html, /family=Heebo/);
   assert.match(html, />לכבוד</);
   assert.doesNotMatch(html, /type="color"/i);
   assert.doesNotMatch(html, /nx-doc__header--elegant/);
@@ -375,14 +374,16 @@ test('unified preview html applies color theme tokens across document styles', (
     ...previewParams,
   });
 
+  // Client-facing render always uses sectioned golden-master layout; style keys
+  // currently share the same HTML (color theme still applies).
   for (const html of [classicHtml, modernHtml, elegantHtml]) {
-    assert.match(html, /class="nx-doc nx-doc--unified"/);
+    assert.match(html, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
     assert.match(html, /nx-doc__doc-number/);
     assert.match(html, /nx-doc__bottom/);
-    assert.doesNotMatch(html, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
     assert.doesNotMatch(html, /nx-doc__header--classic/);
     assert.doesNotMatch(html, /nx-doc__header--modern/);
     assert.doesNotMatch(html, /nx-doc__header--elegant/);
+    assert.doesNotMatch(html, /class="nx-doc__sheet-section-badge"/);
   }
 
   const sectionedHtml = renderIncomeBrandedPreviewHtml({
@@ -394,7 +395,7 @@ test('unified preview html applies color theme tokens across document styles', (
   assert.doesNotMatch(sectionedHtml, /nx-doc__doc-number-pill/);
   assert.match(sectionedHtml, /nx-doc__lines/);
   assert.doesNotMatch(sectionedHtml, /<button/);
-  assert.notEqual(sectionedHtml, classicHtml);
+  assert.equal(sectionedHtml, classicHtml);
 
   const yellowTheme = resolveColorThemePreset('yellow')!;
   const yellowPalette = resolveBrandingPreviewThemePalette(yellowTheme);
