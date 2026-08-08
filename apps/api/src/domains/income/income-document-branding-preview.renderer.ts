@@ -829,7 +829,8 @@ ${INVOICE_FONT_FACE}
   max-width: 100%;
   min-height: 0;
 }
-.nx-doc--unified .nx-doc__issuer-name {
+/* Classic only — sectioned party names use GM 18px/800 (.nx-doc--sectioned .nx-doc__issuer-name). */
+.nx-doc--unified:not(.nx-doc--sectioned) .nx-doc__issuer-name {
   font-size: 19px;
   font-weight: 700;
   margin-bottom: 0;
@@ -858,7 +859,8 @@ ${INVOICE_FONT_FACE}
   line-height: 1.2;
   color: var(--nx-doc-text);
 }
-.nx-doc--unified .nx-doc__customer-name {
+/* Classic only — sectioned party names use GM 18px/800 (.nx-doc--sectioned .nx-doc__customer-name). */
+.nx-doc--unified:not(.nx-doc--sectioned) .nx-doc__customer-name {
   font-size: 19px;
   font-weight: 700;
   margin-bottom: 3px;
@@ -1077,7 +1079,7 @@ ${INVOICE_FONT_FACE}
   margin: 0 0 4px 0;
   align-self: flex-end;
 }
-.nx-doc__issuer-name { font-size: 19px; font-weight: 700; margin-bottom: 0; line-height: 1.15; color: var(--nx-doc-text); }
+.nx-doc:not(.nx-doc--sectioned) .nx-doc__issuer-name { font-size: 19px; font-weight: 700; margin-bottom: 0; line-height: 1.15; color: var(--nx-doc-text); }
 .nx-doc__issuer-subtitle { font-size: 12px; color: var(--nx-doc-text-muted); margin-bottom: 2px; line-height: 1.25; }
 .nx-doc__issuer-line { display: grid; grid-template-columns: ${PARTY_LINE_ICON_PX}px minmax(0, 1fr); gap: ${PARTY_LINE_GAP_PX}px; align-items: start; padding: 0; font-size: 12px; color: var(--nx-doc-text); line-height: 1.35; }
 .nx-doc__issuer-line-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; color: var(--nx-doc-icon); width: ${PARTY_LINE_ICON_PX}px; height: ${PARTY_LINE_ICON_PX}px; }
@@ -1085,7 +1087,7 @@ ${INVOICE_FONT_FACE}
 .nx-doc__issuer-line-value { text-align: start; line-height: 1.35; min-width: 0; word-break: break-word; }
 .nx-doc__customer { width: 100%; margin: 0; padding: 0 0 6px; border-bottom: 1px solid var(--nx-doc-border); background: transparent; box-shadow: none; }
 .nx-doc__customer-head { font-weight: 600; font-size: 14px; margin-bottom: 2px; line-height: 1.2; color: var(--nx-doc-text); }
-.nx-doc__customer-name { font-size: 19px; font-weight: 700; margin-bottom: 2px; line-height: 1.15; color: var(--nx-doc-text); }
+.nx-doc:not(.nx-doc--sectioned) .nx-doc__customer-name { font-size: 19px; font-weight: 700; margin-bottom: 2px; line-height: 1.15; color: var(--nx-doc-text); }
 .nx-doc__customer-lines { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; width: 100%; }
 .nx-doc__customer-line { display: grid; grid-template-columns: ${PARTY_LINE_ICON_PX}px minmax(0, 1fr); gap: ${PARTY_LINE_GAP_PX}px; align-items: start; font-size: 12px; padding: 0; color: var(--nx-doc-text); line-height: 1.35; }
 .nx-doc__customer-line-icon { display: inline-flex; margin-top: 0; align-items: center; justify-content: center; color: var(--nx-doc-icon); width: ${PARTY_LINE_ICON_PX}px; height: ${PARTY_LINE_ICON_PX}px; }

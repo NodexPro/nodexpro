@@ -32,12 +32,15 @@ import {
   conversionTypeKey,
   decideConversionTargetDocumentLink,
   draftLinesFromIssuedSnapshot,
+  INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
   INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
   INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
   isIncomeConversionSourceType,
   isIncomeConversionTargetType,
   isPreliminaryCancellableType,
+  isPreliminaryEditableType,
   isTaxDocumentDirectCancelForbidden,
+  PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY,
   resolveDocumentSettingsForConversion,
   serializeConversionDocumentSettings,
   serializeConvertedDraftLines,
@@ -257,7 +260,10 @@ async function findOpenDraftConversion(
 
 async function buildConversionCommandResponse(params: {
   ctx: RequestContext;
-  command: typeof INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT | typeof INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT;
+  command:
+    | typeof INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT
+    | typeof INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT
+    | typeof INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT;
   source: SourceDoc;
   draftId: string | null;
   replay: boolean;
@@ -310,9 +316,202 @@ async function buildConversionCommandResponse(params: {
     meta: {
       idempotent_replay: params.replay,
       income_document_id: params.source.id,
-      ...(params.draftId ? { converted_draft_id: params.draftId } : {}),
+      ...(params.draftId && params.command === INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT
+        ? { converted_draft_id: params.draftId }
+        : {}),
+      ...(params.draftId && params.command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT
+        ? { edited_draft_id: params.draftId, converted_draft_id: params.draftId }
+        : {}),
     } as IncomeCommandResponse['meta'],
   };
+}
+
+async function findOpenPreliminaryEditDraft(params: {
+  orgId: string;
+  representedClientId: string;
+  sourceDocumentId: string;
+  documentType: string;
+}): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('income_document_drafts')
+    .select('id, document_settings_json')
+    .eq('organization_id', params.orgId)
+    .eq('represented_client_id', params.representedClientId)
+    .eq('document_type', params.documentType)
+    .eq('status', 'draft')
+    .order('updated_at', { ascending: false })
+    .limit(40);
+  throwIfSupabaseError(error, 'findOpenPreliminaryEditDraft');
+  for (const raw of data ?? []) {
+    const row = raw as { id: string; document_settings_json: unknown };
+    const settings =
+      row.document_settings_json &&
+      typeof row.document_settings_json === 'object' &&
+      !Array.isArray(row.document_settings_json)
+        ? (row.document_settings_json as Record<string, unknown>)
+        : null;
+    if (settings?.[PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY] === params.sourceDocumentId) {
+      return row.id;
+    }
+  }
+  return null;
+}
+
+export async function executeBeginEditIncomePreliminaryDocument(
+  ctx: RequestContext,
+  body: Record<string, unknown>,
+): Promise<IncomeCommandResponse> {
+  const orgId = ctx.organizationId!;
+  if (!orgId) throw forbidden('Organization context required');
+
+  const sourceDocumentId = String(body.income_document_id ?? body.source_document_id ?? '').trim();
+  if (!sourceDocumentId) throw badRequest('income_document_id required');
+
+  const documentsListYearRaw = body.documents_list_year;
+  const documentsListYear =
+    documentsListYearRaw == null || documentsListYearRaw === ''
+      ? null
+      : Number(documentsListYearRaw);
+
+  const source = await loadSourceDocument(orgId, sourceDocumentId);
+  if (!isPreliminaryEditableType(source.document_type)) {
+    throw badRequest('Only quote or deal_invoice can be opened for edit');
+  }
+  if (source.document_status === 'cancelled_future') {
+    throw badRequest('Cancelled documents cannot be edited');
+  }
+  if (source.document_status !== 'issued') {
+    throw badRequest('Document cannot be edited');
+  }
+  if (!source.represented_client_id) {
+    throw badRequest('Edit requires office represented client');
+  }
+
+  await applySelectIncomeIssuerContext(ctx, {
+    acting_mode: 'office_representative',
+    issuer_business_id: source.represented_client_id,
+    represented_client_id: source.represented_client_id,
+  });
+  const scope = await loadActiveIncomeIssuerScope(ctx);
+  assertIncomeEditPermission(scope);
+
+  const existingEditDraftId = await findOpenPreliminaryEditDraft({
+    orgId,
+    representedClientId: source.represented_client_id,
+    sourceDocumentId: source.id,
+    documentType: source.document_type,
+  });
+  if (existingEditDraftId) {
+    return buildConversionCommandResponse({
+      ctx,
+      command: INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
+      source,
+      draftId: existingEditDraftId,
+      replay: true,
+      documentsListYear,
+    });
+  }
+
+  const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
+  assertDocumentTypeEnabled(available_document_types, source.document_type as IncomeDocumentType);
+  const docType = findAvailableDocumentType(
+    available_document_types,
+    source.document_type as IncomeDocumentType,
+  );
+  if (!docType) throw badRequest('document_type is not available');
+
+  const draftLines = draftLinesFromIssuedSnapshot(source.lines_snapshot_json, source.currency);
+  const sourceDraftTerms = await loadSourceDraftTerms(orgId, source.source_draft_id);
+  const documentSettings = resolveDocumentSettingsForConversion({
+    sourceDraftSettingsJson: sourceDraftTerms.document_settings_json,
+    sourceTotalsSnapshotJson: source.totals_snapshot_json,
+  });
+  const documentSettingsJson = {
+    ...serializeConversionDocumentSettings(documentSettings),
+    [PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY]: source.id,
+  };
+  const customerPo =
+    source.customer_po_reference ??
+    sourceDraftTerms.customer_po_reference ??
+    (typeof source.legal_snapshot_json?.customer_po_reference === 'string'
+      ? String(source.legal_snapshot_json.customer_po_reference)
+      : null);
+  const oneTimeSnapshot =
+    !source.income_customer_id && source.customer_snapshot_json
+      ? source.customer_snapshot_json
+      : null;
+
+  const payload = {
+    document_type: source.document_type as IncomeDocumentType,
+    income_customer_id: source.income_customer_id,
+    one_time_customer_snapshot_json: oneTimeSnapshot,
+    draft_lines_json: serializeConvertedDraftLines(draftLines),
+    payment_terms_json: sourceDraftTerms.payment_terms_json,
+    due_date: source.due_date,
+    document_date: null as string | null,
+    payment_received_json: null as Record<string, unknown> | null,
+    notes: source.notes,
+    currency: source.currency || 'ILS',
+    language: source.language || 'he',
+    document_settings_json: documentSettingsJson,
+  };
+
+  const { validation_warnings_json, draft_totals_preview_json } =
+    await validateDraftAgainstDocumentTypeRules(payload, docType);
+
+  const { data: inserted, error: insertErr } = await supabaseAdmin
+    .from('income_document_drafts')
+    .insert({
+      organization_id: scope.org_id,
+      represented_client_id: scope.represented_client_id,
+      issuer_business_id: scope.issuer_business_id,
+      actor_user_id: scope.actor_user_id,
+      acting_mode: scope.acting_mode,
+      document_type: source.document_type,
+      income_customer_id: source.income_customer_id,
+      one_time_customer_snapshot_json: oneTimeSnapshot,
+      draft_lines_json: serializeConvertedDraftLines(draftLines),
+      payment_terms_json: sourceDraftTerms.payment_terms_json,
+      due_date: source.due_date,
+      notes: source.notes,
+      currency: source.currency || 'ILS',
+      language: source.language || 'he',
+      tax_allocation_number: source.tax_allocation_number,
+      customer_po_reference: customerPo,
+      document_settings_json: documentSettingsJson,
+      draft_totals_preview_json,
+      validation_warnings_json,
+      status: 'draft',
+      user_saved_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+  throwIfSupabaseError(insertErr, 'insertPreliminaryEditDraft');
+  const draftId = String((inserted as { id: string }).id);
+
+  await writeAudit({
+    organizationId: orgId,
+    actorUserId: ctx.user.id,
+    moduleCode: 'income',
+    entityType: 'income_document_draft',
+    entityId: draftId,
+    action: AUDIT_ACTIONS.INCOME_DOCUMENT_DRAFT_CREATED,
+    payload: {
+      edit_source_document_id: source.id,
+      document_type: source.document_type,
+      represented_client_id: source.represented_client_id,
+      command: INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
+    },
+  });
+
+  return buildConversionCommandResponse({
+    ctx,
+    command: INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
+    source,
+    draftId,
+    replay: false,
+    documentsListYear,
+  });
 }
 
 export async function executeConvertIncomeDocumentToDraft(

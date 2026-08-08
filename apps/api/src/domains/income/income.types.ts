@@ -17,6 +17,8 @@ export const INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT =
   'convert_income_document_to_draft' as const;
 export const INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT =
   'cancel_income_preliminary_document' as const;
+export const INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT =
+  'begin_edit_income_preliminary_document' as const;
 export const INCOME_COMMAND_ISSUE_DOCUMENT = 'issue_income_document' as const;
 export const INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT = 'issue_and_send_income_document' as const;
 export const INCOME_COMMAND_SEARCH_RECIPIENTS = 'search_income_recipients' as const;
@@ -399,6 +401,13 @@ export interface WorkEngineDocumentCancelAction {
   disabled_reason: string | null;
 }
 
+export interface WorkEngineDocumentEditAction {
+  enabled: boolean;
+  label: string;
+  command: typeof INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT;
+  disabled_reason: string | null;
+}
+
 export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   row_id: string;
   document_number: string | null;
@@ -423,6 +432,8 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   email_delivery: IncomeDocumentEmailDeliveryBlock | null;
   docflow_delivery: IncomeDocumentDocflowDeliveryBlock | null;
   record_payment_form: IncomeDocumentRecordPaymentForm | null;
+  /** Backend-owned edit for active quote / deal_invoice (opens same-type draft in wizard). */
+  edit_action: WorkEngineDocumentEditAction | null;
   /** Backend-owned conversion menu for quote / deal_invoice rows. */
   convert_action: WorkEngineDocumentConvertAction | null;
   /** Backend-owned cancel for quote / deal_invoice only (never tax). */
@@ -780,11 +791,14 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE
   | typeof INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT
   | typeof INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT
-  | typeof INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT;
+  | typeof INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT
+  | typeof INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT;
 
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;
   income_document_id?: string;
+  converted_draft_id?: string;
+  edited_draft_id?: string;
   pdf_render_status?: 'pending' | 'rendered' | 'failed';
   delivery_attempt_id?: string;
   delivery_result?: 'sent' | 'failed';

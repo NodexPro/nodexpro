@@ -45,6 +45,8 @@ import {
 } from '../income/income-document-payment.pure.js';
 import {
   buildConversionTargetOptions,
+  buildPreliminaryEditAction,
+  INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
   INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
   INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
   isIncomeConversionSourceType,
@@ -57,6 +59,7 @@ import {
   type IncomeWorkspacePermissions,
   type WorkEngineDocumentCancelAction,
   type WorkEngineDocumentConvertAction,
+  type WorkEngineDocumentEditAction,
   type WorkEngineInvoicesClientDocumentsByTypeAggregate,
   type WorkEngineInvoicesClientDocumentsByTypeRow,
 } from '../income/income.types.js';
@@ -100,7 +103,7 @@ const ISSUED_TABLE_COLUMNS = [
   { key: 'view', label: 'צפייה' },
 ];
 
-/** Quote / Deal Invoice: conversion (+) and cancel (×) live in this type's own list. */
+/** Quote / Deal Invoice: edit / convert / cancel / view live in one compact actions cell. */
 const PRELIMINARY_ISSUED_TABLE_COLUMNS = [
   { key: 'document_number', label: 'מספר מסמך' },
   { key: 'issue_date_display', label: 'תאריך' },
@@ -109,7 +112,6 @@ const PRELIMINARY_ISSUED_TABLE_COLUMNS = [
   { key: 'status_label', label: 'סטטוס' },
   { key: 'email_delivery', label: '@' },
   { key: 'docflow_delivery', label: 'דוקפלו' },
-  { key: 'view', label: 'צפייה' },
   { key: 'actions', label: 'פעולות' },
 ];
 
@@ -387,6 +389,7 @@ async function loadIssuedDocumentCandidates(params: {
     }
 
     const isCancelled = doc.document_status === 'cancelled_future';
+    let edit_action: WorkEngineDocumentEditAction | null = null;
     let convert_action: WorkEngineDocumentConvertAction | null = null;
     let cancel_action: WorkEngineDocumentCancelAction | null = null;
     let conversion_state_key: WorkEngineInvoicesClientDocumentsByTypeRow['conversion_state_key'] =
@@ -397,6 +400,12 @@ async function loadIssuedDocumentCandidates(params: {
         sourceStatus: doc.document_status,
         conversionCount: conversionCounts.get(doc.id) ?? 0,
       });
+      edit_action = buildPreliminaryEditAction({
+        sourceStatus: doc.document_status,
+        canEdit,
+      });
+      if (edit_action.enabled) allowedActions.push(INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT);
+
       const targets = buildConversionTargetOptions({
         sourceType: doc.document_type,
         sourceStatus: doc.document_status,
@@ -472,6 +481,7 @@ async function loadIssuedDocumentCandidates(params: {
         portalActive,
       }),
       record_payment_form,
+      edit_action,
       convert_action,
       cancel_action,
       conversion_state_key,
@@ -564,6 +574,7 @@ async function loadDraftCandidates(params: {
       email_delivery: null,
       docflow_delivery: null,
       record_payment_form: null,
+      edit_action: null,
       convert_action: null,
       cancel_action: null,
       conversion_state_key: null,

@@ -145,6 +145,7 @@ import {
   INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT,
   INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
   INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
+  INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
   type IncomeCommandResponse,
   type IncomeCommandType,
   type IncomeBrandingPreviewDraftCommandResponse,
@@ -152,6 +153,7 @@ import {
 } from './income.types.js';
 import { executeRecordIncomeDocumentPayment } from './income-document-payment.service.js';
 import {
+  executeBeginEditIncomePreliminaryDocument,
   executeCancelIncomePreliminaryDocument,
   executeConvertIncomeDocumentToDraft,
 } from './income-document-conversion.service.js';
@@ -196,6 +198,7 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT,
   INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
   INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
+  INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
 ]);
 
 async function commandResponse(
@@ -873,6 +876,10 @@ export async function executeIncomeCommand(
 
   if (command === INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT) {
     return executeCancelIncomePreliminaryDocument(ctx, body);
+  }
+
+  if (command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT) {
+    return executeBeginEditIncomePreliminaryDocument(ctx, body);
   }
 
   if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {

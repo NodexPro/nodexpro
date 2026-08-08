@@ -31,6 +31,12 @@ export const INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT =
   'convert_income_document_to_draft' as const;
 export const INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT =
   'cancel_income_preliminary_document' as const;
+export const INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT =
+  'begin_edit_income_preliminary_document' as const;
+
+/** Stored in draft document_settings_json to reuse one open edit draft per source. */
+export const PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY =
+  'preliminary_edit_source_document_id' as const;
 
 export type IncomeConversionSourceType = 'quote' | 'deal_invoice';
 export type IncomeConversionTargetType = 'deal_invoice' | 'tax_invoice' | 'tax_invoice_receipt';
@@ -165,6 +171,40 @@ export function documentTypeLabelHe(type: IncomeDocumentType | string): string {
 
 export function isPreliminaryCancellableType(type: string): boolean {
   return type === 'quote' || type === 'deal_invoice';
+}
+
+/** Quote / Deal Invoice may open an edit draft while active (not cancelled). */
+export function isPreliminaryEditableType(type: string): boolean {
+  return type === 'quote' || type === 'deal_invoice';
+}
+
+export function buildPreliminaryEditAction(params: {
+  sourceStatus: string;
+  canEdit: boolean;
+}): {
+  enabled: boolean;
+  label: string;
+  command: typeof INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT;
+  disabled_reason: string | null;
+} {
+  let enabled = true;
+  let disabled_reason: string | null = null;
+  if (params.sourceStatus === 'cancelled_future') {
+    enabled = false;
+    disabled_reason = 'המסמך מבוטל ואינו ניתן לעריכה';
+  } else if (params.sourceStatus !== 'issued') {
+    enabled = false;
+    disabled_reason = 'ניתן לערוך רק מסמך פעיל';
+  } else if (!params.canEdit) {
+    enabled = false;
+    disabled_reason = 'אין הרשאת עריכה';
+  }
+  return {
+    enabled,
+    label: 'עריכה',
+    command: INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
+    disabled_reason,
+  };
 }
 
 export function isTaxDocumentDirectCancelForbidden(type: string): boolean {
