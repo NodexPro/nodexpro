@@ -44,10 +44,19 @@ import {
   resolvePaymentStateIcon,
 } from '../income/income-document-payment.pure.js';
 import {
+  buildConversionTargetOptions,
+  INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
+  INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
+  isIncomeConversionSourceType,
+  resolveConversionStateKey,
+} from '../income/income-document-conversion.pure.js';
+import {
   WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY,
   type IncomeClientDocumentTypeCounterKey,
   type IncomeDocumentType,
   type IncomeWorkspacePermissions,
+  type WorkEngineDocumentCancelAction,
+  type WorkEngineDocumentConvertAction,
   type WorkEngineInvoicesClientDocumentsByTypeAggregate,
   type WorkEngineInvoicesClientDocumentsByTypeRow,
 } from '../income/income.types.js';
@@ -89,6 +98,19 @@ const ISSUED_TABLE_COLUMNS = [
   { key: 'email_delivery', label: '@' },
   { key: 'docflow_delivery', label: 'דוקפלו' },
   { key: 'view', label: 'צפייה' },
+];
+
+/** Quote / Deal Invoice: conversion (+) and cancel (×) live in this type's own list. */
+const PRELIMINARY_ISSUED_TABLE_COLUMNS = [
+  { key: 'document_number', label: 'מספר מסמך' },
+  { key: 'issue_date_display', label: 'תאריך' },
+  { key: 'customer_display_name', label: 'לקוח' },
+  { key: 'amount_display', label: 'סכום' },
+  { key: 'status_label', label: 'סטטוס' },
+  { key: 'email_delivery', label: '@' },
+  { key: 'docflow_delivery', label: 'דוקפלו' },
+  { key: 'view', label: 'צפייה' },
+  { key: 'actions', label: 'פעולות' },
 ];
 
 const TAX_INVOICE_TABLE_COLUMNS = [
@@ -190,6 +212,28 @@ async function loadCustomerNames(orgId: string, representedClientId: string): Pr
   return map;
 }
 
+async function loadConversionCountsBySource(
+  orgId: string,
+  sourceIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  for (const id of sourceIds) out.set(id, 0);
+  if (sourceIds.length === 0) return out;
+  const { data, error } = await supabaseAdmin
+    .from('income_document_conversions')
+    .select('source_document_id')
+    .eq('organization_id', orgId)
+    .in('source_document_id', sourceIds);
+  throwIfSupabaseError(error, 'loadConversionCountsBySource', {
+    migrationHint: '158_income_document_conversion_and_preliminary_cancel.sql',
+  });
+  for (const row of data ?? []) {
+    const id = String((row as { source_document_id: string }).source_document_id);
+    out.set(id, (out.get(id) ?? 0) + 1);
+  }
+  return out;
+}
+
 async function loadIssuedDocumentCandidates(params: {
   ctx: RequestContext;
   orgId: string;
@@ -198,19 +242,28 @@ async function loadIssuedDocumentCandidates(params: {
   canView: boolean;
   permissions: IncomeWorkspacePermissions;
 }): Promise<Array<WorkEngineInvoicesClientDocumentsByTypeRow & { year: number | null }>> {
-  const { data, error } = await supabaseAdmin
+  const preliminaryType = isIncomeConversionSourceType(params.documentType);
+  let query = supabaseAdmin
     .from('income_documents')
     .select(
-      'id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error, created_at',
+      'id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, document_status, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error, created_at',
     )
     .eq('organization_id', params.orgId)
     .or(excludeSelfModeActingFilter())
-    .eq('document_status', 'issued')
     .eq('document_type', params.documentType)
     .or(officeClientDocumentsOrFilter(params.representedClientId))
     .order('issue_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(5000);
+
+  // Quote / deal: include cancelled (מבוטל) in same type tile history. Tax/etc: issued only.
+  if (preliminaryType) {
+    query = query.in('document_status', ['issued', 'cancelled_future']);
+  } else {
+    query = query.eq('document_status', 'issued');
+  }
+
+  const { data, error } = await query;
   throwIfSupabaseError(error, 'loadDocumentsByTypeIssued');
 
   const filtered = (data ?? []).filter((raw) =>
@@ -229,23 +282,34 @@ async function loadIssuedDocumentCandidates(params: {
   const perms = params.ctx.membership?.permissions ?? [];
   const canPaymentWrite = perms.includes('accounting_base.payment.write');
   const canIncomeIssue = perms.includes('income.issue');
+  const canEdit = params.permissions.edit;
 
-  const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive, allocatedByDoc] =
-    await Promise.all([
-      loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds),
-      loadDocflowAttemptCountsByDocumentIds(params.orgId, documentIds),
-      isDocflowEntitledForOrg(params.orgId),
-      loadRepresentedClientDocflowPortalActive(params.orgId, params.representedClientId),
-      includePayment
-        ? sumPostedAllocationsForIncomeDocuments(params.orgId, documentIds)
-        : Promise.resolve(new Map<string, number>()),
-    ]);
+  const [
+    emailAttemptCounts,
+    docflowAttemptCounts,
+    docflowEntitled,
+    portalActive,
+    allocatedByDoc,
+    conversionCounts,
+  ] = await Promise.all([
+    loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds),
+    loadDocflowAttemptCountsByDocumentIds(params.orgId, documentIds),
+    isDocflowEntitledForOrg(params.orgId),
+    loadRepresentedClientDocflowPortalActive(params.orgId, params.representedClientId),
+    includePayment
+      ? sumPostedAllocationsForIncomeDocuments(params.orgId, documentIds)
+      : Promise.resolve(new Map<string, number>()),
+    preliminaryType
+      ? loadConversionCountsBySource(params.orgId, documentIds)
+      : Promise.resolve(new Map<string, number>()),
+  ]);
 
   return filtered.map((raw) => {
     const doc = raw as {
       id: string;
       document_number: string;
       document_type: IncomeDocumentType;
+      document_status: string;
       issue_date: string;
       due_date: string | null;
       currency: string;
@@ -322,6 +386,49 @@ async function loadIssuedDocumentCandidates(params: {
       });
     }
 
+    const isCancelled = doc.document_status === 'cancelled_future';
+    let convert_action: WorkEngineDocumentConvertAction | null = null;
+    let cancel_action: WorkEngineDocumentCancelAction | null = null;
+    let conversion_state_key: WorkEngineInvoicesClientDocumentsByTypeRow['conversion_state_key'] =
+      null;
+
+    if (preliminaryType) {
+      conversion_state_key = resolveConversionStateKey({
+        sourceStatus: doc.document_status,
+        conversionCount: conversionCounts.get(doc.id) ?? 0,
+      });
+      const targets = buildConversionTargetOptions({
+        sourceType: doc.document_type,
+        sourceStatus: doc.document_status,
+        canEdit,
+      });
+      const convertEnabled = targets.some((t) => t.enabled);
+      convert_action = {
+        enabled: convertEnabled,
+        label: 'הפקת מסמך',
+        command: INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
+        targets,
+      };
+      if (convertEnabled) allowedActions.push(INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT);
+
+      const cancelEnabled = !isCancelled && canEdit;
+      cancel_action = {
+        enabled: cancelEnabled,
+        label: 'ביטול',
+        command: INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
+        reason_required: false,
+        confirmation_title: 'ביטול המסמך',
+        confirmation_body:
+          'המסמך לא יימחק. הסטטוס ישתנה למבוטל, והמסמך יישאר בהיסטוריה ובביקורת.',
+        disabled_reason: isCancelled
+          ? 'המסמך כבר מבוטל'
+          : canEdit
+            ? null
+            : 'אין הרשאת עריכה',
+      };
+      if (cancelEnabled) allowedActions.push(INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT);
+    }
+
     return {
       row_id: doc.id,
       document_number: doc.document_number,
@@ -332,7 +439,7 @@ async function loadIssuedDocumentCandidates(params: {
       amount_display:
         amountRef > 0 ? formatLedgerMoneyReference(amountRef, doc.currency || 'ILS') : '—',
       due_date_display,
-      status_label: 'הונפק',
+      status_label: isCancelled ? 'מבוטל' : 'הונפק',
       payment_state_key,
       payment_state_label,
       payment_state_tone,
@@ -349,7 +456,7 @@ async function loadIssuedDocumentCandidates(params: {
         attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
         permissions: params.permissions,
         representedClientId: params.representedClientId,
-        documentStatus: 'issued',
+        documentStatus: isCancelled ? 'cancelled_future' : 'issued',
         pdfRenderStatus: doc.pdf_render_status,
         pdfAssetId: doc.pdf_asset_id,
       }),
@@ -358,13 +465,16 @@ async function loadIssuedDocumentCandidates(params: {
         attemptCount: docflowAttemptCounts.get(doc.id) ?? 0,
         permissions: params.permissions,
         representedClientId: params.representedClientId,
-        documentStatus: 'issued',
+        documentStatus: isCancelled ? 'cancelled_future' : 'issued',
         pdfRenderStatus: doc.pdf_render_status,
         pdfAssetId: doc.pdf_asset_id,
         docflowEntitled,
         portalActive,
       }),
       record_payment_form,
+      convert_action,
+      cancel_action,
+      conversion_state_key,
       allowed_actions: allowedActions,
       year,
     };
@@ -454,6 +564,9 @@ async function loadDraftCandidates(params: {
       email_delivery: null,
       docflow_delivery: null,
       record_payment_form: null,
+      convert_action: null,
+      cancel_action: null,
+      conversion_state_key: null,
       allowed_actions: canEditDraft ? ['edit_draft'] : [],
       year,
     };
@@ -539,7 +652,9 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
     ? DRAFT_TABLE_COLUMNS
     : documentTypeKey === 'tax_invoice'
       ? TAX_INVOICE_TABLE_COLUMNS
-      : ISSUED_TABLE_COLUMNS;
+      : documentTypeKey === 'quote' || documentTypeKey === 'deal_invoice'
+        ? PRELIMINARY_ISSUED_TABLE_COLUMNS
+        : ISSUED_TABLE_COLUMNS;
 
   const response: WorkEngineInvoicesClientDocumentsByTypeAggregate = {
     aggregate_key: WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY,

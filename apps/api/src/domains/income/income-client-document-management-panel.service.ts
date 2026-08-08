@@ -1,6 +1,8 @@
 /**
  * Income — Client Document Management panel (CRM-style client list).
  * Single aggregate read model; counters from SQL aggregation (P4.2).
+ * unpaid_amount_* binds to SQL unpaid_reference = Accounting Base remaining
+ * (original − effective posted allocations). No FE arithmetic.
  */
 
 import { supabaseAdmin } from '../../db/client.js';
@@ -290,7 +292,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     countSelfModeRows(orgId),
   ]);
   throwIfSupabaseError(statsRes.error, 'incomeClientDocumentManagementPanelStats', {
-    migrationHint: '152_income_client_document_management_panel_stats.sql',
+    migrationHint: '157_income_client_document_management_panel_unpaid_ab.sql',
   });
   stepStart = logPanelTiming('rpc_stats_and_self_counts', stepStart);
 
@@ -331,6 +333,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       const clientId = String(stat.represented_client_id);
       const meta = clientMetaById.get(clientId);
       const clientName = meta?.display_name ?? clientId;
+      // Backend-owned AB remaining sum from RPC (not original invoice total).
       const unpaidRaw = Number(stat.unpaid_reference ?? 0);
       const unpaidRef = Number.isFinite(unpaidRaw) && unpaidRaw > 0 ? unpaidRaw : null;
       const currency = String(stat.currency || 'ILS');

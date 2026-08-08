@@ -281,6 +281,10 @@ export const AUDIT_ACTIONS = {
   INCOME_DOCUMENT_BRANDING_LOGO_UPLOADED: 'income.document_branding_logo_uploaded',
   INCOME_DOCUMENT_BRANDING_SIGNATURE_UPLOADED: 'income.document_branding_signature_uploaded',
   INCOME_DOCUMENT_DRAFT_CANCELLED: 'income.document_draft_cancelled',
+  INCOME_DOCUMENT_CONVERSION_CREATED: 'income.document_conversion_created',
+  INCOME_DOCUMENT_CONVERSION_TARGET_LINKED: 'income.document_conversion_target_linked',
+  INCOME_DOCUMENT_CONVERSION_LINEAGE_CONFLICT: 'income.document_conversion_lineage_conflict',
+  INCOME_PRELIMINARY_DOCUMENT_CANCELLED: 'income.preliminary_document_cancelled',
   /** Income INC-3.5 — issuer profile projection synced from Core org business profile. */
   INCOME_ISSUER_PROFILE_SYNCED: 'income.issuer_profile_synced',
   /** Income INC-4 — issued document + numbering allocation. */

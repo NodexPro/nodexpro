@@ -20,6 +20,10 @@ const migration152 = readFileSync(
   join(dir, '../../../../supabase/migrations/152_income_client_document_management_panel_stats.sql'),
   'utf8',
 );
+const migration157 = readFileSync(
+  join(dir, '../../../../supabase/migrations/157_income_client_document_management_panel_unpaid_ab.sql'),
+  'utf8',
+);
 const migration151 = readFileSync(
   join(dir, '../../../../supabase/migrations/151_income_document_drafts_user_saved_at.sql'),
   'utf8',
@@ -55,6 +59,9 @@ test('P4.2 RPC returns per-type issued counters and draft counter', () => {
   assert.match(migration152, /tax_invoice_receipt_issued_count/);
   assert.match(migration152, /draft_documents_count/);
   assert.match(migration152, /unpaid_reference/);
+  // P0 AB: live unpaid_reference definition is migration 157 (remaining, not gross totals).
+  assert.match(migration157, /unpaid_reference/);
+  assert.match(migration157, /accounting_payment_allocations/);
   assert.match(panelSource, /document_type_counters/);
   assert.match(panelSource, /key: 'draft'/);
 });

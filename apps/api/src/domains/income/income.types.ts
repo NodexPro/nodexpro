@@ -13,6 +13,10 @@ export const INCOME_COMMAND_CREATE_ITEM = 'create_income_item' as const;
 export const INCOME_COMMAND_CREATE_DRAFT = 'create_income_document_draft' as const;
 export const INCOME_COMMAND_UPDATE_DRAFT = 'update_income_document_draft' as const;
 export const INCOME_COMMAND_CANCEL_DRAFT = 'cancel_income_document_draft' as const;
+export const INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT =
+  'convert_income_document_to_draft' as const;
+export const INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT =
+  'cancel_income_preliminary_document' as const;
 export const INCOME_COMMAND_ISSUE_DOCUMENT = 'issue_income_document' as const;
 export const INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT = 'issue_and_send_income_document' as const;
 export const INCOME_COMMAND_SEARCH_RECIPIENTS = 'search_income_recipients' as const;
@@ -371,6 +375,30 @@ export interface IncomeIssuedDocumentViewAggregate {
   allowed_actions: string[];
 }
 
+export interface WorkEngineDocumentConvertTargetOption {
+  document_type: 'deal_invoice' | 'tax_invoice' | 'tax_invoice_receipt';
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface WorkEngineDocumentConvertAction {
+  enabled: boolean;
+  label: string;
+  command: typeof INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT;
+  targets: WorkEngineDocumentConvertTargetOption[];
+}
+
+export interface WorkEngineDocumentCancelAction {
+  enabled: boolean;
+  label: string;
+  command: typeof INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT;
+  reason_required: boolean;
+  confirmation_title: string;
+  confirmation_body: string;
+  disabled_reason: string | null;
+}
+
 export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   row_id: string;
   document_number: string | null;
@@ -395,6 +423,11 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   email_delivery: IncomeDocumentEmailDeliveryBlock | null;
   docflow_delivery: IncomeDocumentDocflowDeliveryBlock | null;
   record_payment_form: IncomeDocumentRecordPaymentForm | null;
+  /** Backend-owned conversion menu for quote / deal_invoice rows. */
+  convert_action: WorkEngineDocumentConvertAction | null;
+  /** Backend-owned cancel for quote / deal_invoice only (never tax). */
+  cancel_action: WorkEngineDocumentCancelAction | null;
+  conversion_state_key: 'active' | 'converted' | 'partially_converted' | 'cancelled' | null;
   allowed_actions: string[];
 }
 
@@ -745,7 +778,9 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT
   | typeof INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO
   | typeof INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE
-  | typeof INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT;
+  | typeof INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT
+  | typeof INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT
+  | typeof INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT;
 
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;

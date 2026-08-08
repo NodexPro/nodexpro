@@ -76,6 +76,7 @@ import {
   type IncomeIssueDiagnostic,
 } from './income-issue-diagnostic.js';
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
+import { linkIncomeDocumentConversionTargetOnIssue } from './income-document-conversion.service.js';
 import {
   resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded,
   resolveAndApplyRecurringCycleIssueIssuerScope,
@@ -660,6 +661,14 @@ async function issueNewDocumentFromDraft(
     },
   );
 
+  // Conversion lineage (no-op when draft was not created via convert_income_document_to_draft).
+  await linkIncomeDocumentConversionTargetOnIssue({
+    orgId: scope.org_id,
+    draftId: draft.id,
+    issuedDocumentId: issuedId,
+    actorUserId: scope.actor_user_id,
+  });
+
   await writeAudit({
     organizationId: scope.org_id,
     actorUserId: scope.actor_user_id,
@@ -710,6 +719,13 @@ async function finishIdempotentIssue(
     issuedDocumentId,
     cycleId,
     diag,
+  });
+  // Idempotent issue must still heal / verify conversion lineage without duplicating rows.
+  await linkIncomeDocumentConversionTargetOnIssue({
+    orgId: scope.org_id,
+    draftId,
+    issuedDocumentId,
+    actorUserId: scope.actor_user_id,
   });
   if (lease?.kind === 'fresh') {
     await completeIncomeIssueIdempotency({

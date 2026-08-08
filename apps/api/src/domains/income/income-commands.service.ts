@@ -143,12 +143,18 @@ import {
   INCOME_COMMAND_UPDATE_LINE,
   INCOME_COMMAND_UPDATE_NOTES,
   INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT,
+  INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
+  INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
   type IncomeCommandResponse,
   type IncomeCommandType,
   type IncomeBrandingPreviewDraftCommandResponse,
   type SelectIncomeIssuerContextCommandResponse,
 } from './income.types.js';
 import { executeRecordIncomeDocumentPayment } from './income-document-payment.service.js';
+import {
+  executeCancelIncomePreliminaryDocument,
+  executeConvertIncomeDocumentToDraft,
+} from './income-document-conversion.service.js';
 
 const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_SELECT_ISSUER,
@@ -188,6 +194,8 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
   INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
   INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT,
+  INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
+  INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
 ]);
 
 async function commandResponse(
@@ -857,6 +865,14 @@ export async function executeIncomeCommand(
 
   if (command === INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT) {
     return executeRecordIncomeDocumentPayment(ctx, body);
+  }
+
+  if (command === INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT) {
+    return executeConvertIncomeDocumentToDraft(ctx, body);
+  }
+
+  if (command === INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT) {
+    return executeCancelIncomePreliminaryDocument(ctx, body);
   }
 
   if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
