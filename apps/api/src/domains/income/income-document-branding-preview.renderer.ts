@@ -254,13 +254,7 @@ export function renderIncomeBrandedPreviewHtml(params: {
 }): string {
   const b = params.branding;
   const d = b.display_options;
-  /**
-   * Client-facing documents always use the sectioned golden-master layout
-   * (retainer / issued view / PDF). Classic/modern/elegant historically shared a
-   * 6-zone wireframe with studio badges (1–6) — not for end users.
-   * Color themes still come from branding; style keys remain for studio selection.
-   */
-  const isSectioned = true;
+  const isSectioned = b.document_style_key === 'sectioned';
   const palette = resolveBrandingPreviewThemePalette(b.color_theme);
   const accent = palette.totals_accent_color;
   const numberDisplay = formatDocumentNumberDisplay(params.numberPreview);

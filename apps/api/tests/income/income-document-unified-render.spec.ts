@@ -38,7 +38,7 @@ function sampleBrandingRow(): IncomeBrandingProfileRow {
     logo_file_asset_id: null,
     signature_file_asset_id: null,
     company_subtitle: null,
-    document_style_key: 'sectioned',
+    document_style_key: 'classic',
     color_theme_key: 'nodexpro_premium',
     primary_color: '#5B4DFF',
     secondary_color: '#FFFFFF',
@@ -160,7 +160,7 @@ test('canonical render model maps issued snapshots to unified preview fields', (
   assert.equal(input.totals.discount, '₪50.00');
 });
 
-test('issuer logo comes from branding studio data url in branding head', () => {
+test('issuer logo comes from branding studio data url in issuer block', () => {
   const input = buildSampleUnifiedInput();
   input.branding = {
     ...input.branding,
@@ -168,12 +168,16 @@ test('issuer logo comes from branding studio data url in branding head', () => {
   };
   const html = renderUnifiedIncomeDocumentHtml(input);
   assert.match(html, /class="nx-doc__logo-img" src="data:image\/png;base64,logo-test"/);
-  const brandingStart = html.indexOf('class="nx-doc__branding"');
-  assert.ok(brandingStart >= 0);
-  const brandingBlock = html.slice(brandingStart, html.indexOf('</aside>', brandingStart));
-  assert.match(brandingBlock, /nx-doc__logo-img/);
-  assert.match(brandingBlock, /nx-doc__issuer-name/);
-  assert.match(brandingBlock, /nx-doc__issuer-details/);
+  const sheet1Start = html.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--1"');
+  const sheet2Start = html.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--2"');
+  assert.ok(sheet1Start >= 0 && sheet2Start > sheet1Start);
+  const section1 = html.slice(sheet1Start, sheet2Start);
+  const section2 = html.slice(sheet2Start, html.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--3"'));
+  assert.match(section1, /nx-doc__logo-img/);
+  assert.match(section1, /nx-doc__issuer-identity/);
+  assert.doesNotMatch(section1, /nx-doc__issuer-name/);
+  assert.match(section2, /nx-doc__issuer-name/);
+  assert.match(section2, /nx-doc__issuer-details/);
 });
 
 test('preview and PDF paths use the same unified HTML renderer', () => {
@@ -186,30 +190,30 @@ test('preview and PDF paths use the same unified HTML renderer', () => {
   assert.match(printHtml, /dir="rtl"/);
 });
 
-test('unified tax invoice html markers — sectioned golden-master order', () => {
+test('unified tax invoice html markers — section order and labels', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  const bodyStart = html.indexOf('<div class="nx-doc nx-doc--unified nx-doc--sectioned"');
+  const bodyStart = html.indexOf('<div class="nx-doc nx-doc--unified"');
   assert.ok(bodyStart >= 0);
   const body = html.slice(bodyStart);
-  const upperIdx = body.indexOf('<div class="nx-doc__upper"');
-  const brandingIdx = body.indexOf('class="nx-doc__branding"');
-  const customerIdx = body.indexOf('class="nx-doc__customer-card"');
+  const upperSheetIdx = body.indexOf('<div class="nx-doc__upper-sheet"');
+  const sheet1Idx = body.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--1"');
+  const sheet6Idx = body.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--6"');
   const tableIdx = body.indexOf('<table class="nx-doc__table"');
   const summaryIdx = body.indexOf('<section class="nx-doc__summary"');
   const commentsIdx = body.indexOf('<section class="nx-doc__comments"');
   const paymentsIdx = body.indexOf('<section class="nx-doc__payments"');
   const footerIdx = body.indexOf('<footer class="nx-doc__platform-footer"');
-  assert.ok(upperIdx >= 0);
-  assert.ok(brandingIdx >= 0);
-  assert.ok(customerIdx >= 0);
-  assert.ok(upperIdx < tableIdx);
-  assert.ok(customerIdx < tableIdx);
+  assert.ok(upperSheetIdx >= 0);
+  assert.ok(sheet1Idx >= 0);
+  assert.ok(sheet6Idx >= 0);
+  assert.ok(upperSheetIdx < tableIdx);
+  assert.ok(sheet1Idx < sheet6Idx);
+  assert.ok(sheet6Idx < tableIdx);
   assert.ok(tableIdx < summaryIdx);
   assert.ok(commentsIdx < summaryIdx);
   assert.ok(paymentsIdx < footerIdx);
   assert.match(html, /class="nx-doc__doc-number"/);
   assert.doesNotMatch(html, /class="nx-doc__doc-badge"/);
-  assert.doesNotMatch(html, /class="nx-doc__sheet-section-badge"/);
   assert.match(html, />מע״מ</);
   assert.match(html, />מחיר ליח'/);
   assert.match(html, />פירוט \*</);
@@ -218,10 +222,15 @@ test('unified tax invoice html markers — sectioned golden-master order', () =>
   assert.match(html, />סה״כ</);
   assert.doesNotMatch(html, />סכום מע״מ</);
   assert.doesNotMatch(html, />יחידת מידה</);
-  assert.doesNotMatch(html, /<header class="nx-doc__summary-head"/);
-  assert.match(html, /\.nx-doc--sectioned \.nx-doc__table thead th[\s\S]*background: var\(--nx-doc-primary\)/);
+  assert.match(html, /nx-doc__summary-head[\s\S]*סיכום כספי/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__grand-total[\s\S]*border-top: 2px solid var\(--nx-doc-primary\)/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__grand-total strong[\s\S]*font-size: 26px/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__grand-total strong[\s\S]*color: var\(--nx-doc-primary\)/);
   assert.match(html, /table-layout: fixed/);
   assert.match(html, /<colgroup>/);
+  assert.match(html, /\.nx-doc__comments \{[\s\S]*grid-column: 1/);
+  assert.match(html, /\.nx-doc__summary \{[\s\S]*grid-column: 2/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table thead th \{[\s\S]*background: #f8fafc/);
   assert.match(html, /nx-doc__payments-head/);
   assert.match(html, />אמצעי תשלום</);
   assert.match(html, /חשבונית מס/);
@@ -236,9 +245,8 @@ test('issuer is never hardcoded as NodexPro and footer branding appears once', (
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
   assert.match(html, /מכון טכנולוגי לדוגמה בע/);
   assert.doesNotMatch(html, /NODEXPRO/);
-  assert.match(html, /nx-doc__platform-footer/);
+  assert.match(html, /המסמך הופק באמצעות NodexPro/);
   assert.match(html, /https:\/\/www\.nodexpro\.com/);
-  assert.match(html, /מסמך זה הופק באופן אוטומטי על ידי המערכת/);
   const footerMatches = html.match(/<footer class="nx-doc__platform-footer"/g) ?? [];
   assert.equal(footerMatches.length, 1);
 });
@@ -250,12 +258,12 @@ test('discount row uses standard text color in unified css', () => {
   assert.doesNotMatch(html, /total-row--discount[\s\S]*red/i);
 });
 
-test('comments section empty shell when notes empty (sectioned)', () => {
+test('comments section hidden when notes empty', () => {
   const input = buildSampleUnifiedInput();
   input.notes = null;
   const html = renderUnifiedIncomeDocumentHtml(input);
-  assert.match(html, /nx-doc__comments--empty/);
-  assert.match(html, />הערות</);
+  assert.doesNotMatch(html, /<section class="nx-doc__comments"/);
+  assert.doesNotMatch(html, />הערות</);
 });
 
 test('payment bank details never appear inside comments section', () => {
@@ -272,16 +280,17 @@ test('payment bank details never appear inside comments section', () => {
 test('default premium theme uses brand primary on doc number and table header', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
   assert.match(html, /--nx-doc-primary: #5B4DFF/);
-  assert.match(html, /nx-doc__doc-number-text">2026-000154/);
+  assert.match(html, /class="nx-doc__doc-number">2026-000154/);
   assert.match(html, /--nx-doc-icon: var\(--nx-doc-primary\)/);
   assert.match(html, /nx-doc__issuer-details/);
   assert.match(html, /nx-doc__issuer-lines/);
 });
 
-test('sectioned payment cards keep credit column without live payment link', () => {
+test('credit card block hidden without backend payment link data', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /class="nx-doc__payment-col nx-doc__payment-col--card"/);
+  assert.doesNotMatch(html, /class="nx-doc__payment-col nx-doc__payment-col--card"/);
   assert.doesNotMatch(html, /pay\.nodexpro\.com/);
+  assert.doesNotMatch(html, /פרטי תשלום בכרטיס יוצגו/);
 });
 
 test('credit card block renders only with real payment link', () => {
@@ -474,10 +483,9 @@ test('issuer letterhead restores thin-outline contact icons', () => {
 test('issuer business number row includes ID icon', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
   const issuerStart = html.indexOf('<div class="nx-doc__issuer-lines">');
-  assert.ok(issuerStart >= 0);
-  const issuerLines = html.slice(issuerStart, issuerStart + 2500);
-  assert.match(issuerLines, /514789632/);
-  assert.match(issuerLines, /nx-doc__issuer-line-icon/);
+  const issuerEnd = html.indexOf('</div>', issuerStart);
+  const issuerLines = html.slice(issuerStart, issuerEnd);
+  assert.match(issuerLines, /nx-doc__issuer-line-icon[\s\S]*514789632/);
 });
 
 test('issuer address row includes location icon', () => {
@@ -488,11 +496,16 @@ test('issuer address row includes location icon', () => {
   assert.match(issuerBlock, /nx-doc__issuer-line-icon[\s\S]*רחוב העסק 1/);
 });
 
-test('customer block uses aligned icons for address tax id phone and email', () => {
-  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  const bodyStart = html.indexOf('<div class="nx-doc nx-doc--unified nx-doc--sectioned"');
+test('customer block uses aligned icons for address tax id phone email and website', () => {
+  const input = buildSampleUnifiedInput();
+  input.recipient = {
+    ...input.recipient,
+    website: 'www.client.example.com',
+  };
+  const html = renderUnifiedIncomeDocumentHtml(input);
+  const bodyStart = html.indexOf('<div class="nx-doc nx-doc--unified"');
   const body = html.slice(bodyStart);
-  const customerStart = body.indexOf('class="nx-doc__customer-card"');
+  const customerStart = body.indexOf('class="nx-doc__sheet-section nx-doc__sheet-section--6"');
   const customerEnd = body.indexOf('</section>', customerStart);
   const customerBlock = body.slice(customerStart, customerEnd);
   assert.match(customerBlock, /nx-doc__customer-lines/);
@@ -500,57 +513,72 @@ test('customer block uses aligned icons for address tax id phone and email', () 
   assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*998877665/);
   assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*050-7654321/);
   assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*client@example\.com/);
+  assert.match(customerBlock, /nx-doc__customer-line-icon[\s\S]*www\.client\.example\.com/);
   const lineCount = (customerBlock.match(/class="nx-doc__customer-line(?:\s|")/g) ?? []).length;
-  assert.equal(lineCount, 4);
+  assert.equal(lineCount, 5);
+});
+
+test('customer contact person row aligns with icon column spacer', () => {
+  const input = buildSampleUnifiedInput();
+  input.recipient = {
+    ...input.recipient,
+    contact_name: 'איש קשר לדוגמה',
+  };
+  const html = renderUnifiedIncomeDocumentHtml(input);
+  assert.match(html, /nx-doc__customer-line--plain[\s\S]*איש קשר לדוגמה/);
+  assert.match(html, /nx-doc__customer-line-icon--spacer/);
 });
 
 test('customer phone and email rows share aligned icon column', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
   assert.match(
     html,
-    /\.nx-doc--sectioned \.nx-doc__customer-line[\s\S]*grid-template-columns: 16px minmax\(0, 1fr\)/,
+    /\.nx-doc--unified \.nx-doc__customer-line[\s\S]*grid-template-columns: 16px minmax\(0, 1fr\)/,
   );
 });
 
-test('document number bar present in sectioned identity', () => {
+test('document number accent rule present in unified header', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /class="nx-doc__doc-number-bar"/);
-  assert.doesNotMatch(html, /class="nx-doc__doc-number-rule"/);
-  assert.doesNotMatch(html, /class="nx-doc__sheet-section-badge"/);
+  assert.match(html, /class="nx-doc__doc-number-rule"/);
 });
 
-test('issuer logo uses sectioned logo frame object-fit', () => {
+test('issuer logo fills section 1 without stretching aspect ratio', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
   assert.match(
     html,
-    /\.nx-doc--sectioned \.nx-doc__logo-img[\s\S]*object-fit: contain/,
+    /\.nx-doc--unified \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*max-height: 100%/,
+  );
+  assert.match(
+    html,
+    /\.nx-doc--unified \.nx-doc__sheet-section--1 \.nx-doc__logo-img[\s\S]*object-fit: contain/,
   );
 });
 
-test('table matches sectioned theme header styling', () => {
+test('table matches invoice editor grid styling', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /\.nx-doc--sectioned \.nx-doc__table thead th[\s\S]*background: var\(--nx-doc-primary\)/);
-  assert.match(html, /\.nx-doc--sectioned \.nx-doc__table tbody td[\s\S]*border-bottom: 1px solid #d8d8e4/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table[\s\S]*border: 1px solid #e2e8f0/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table thead th[\s\S]*background: #f8fafc/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table tbody td[\s\S]*border-bottom: 1px solid #f1f5f9/);
 });
 
-test('table starts after sectioned upper block', () => {
+test('table starts immediately after upper sheet grid', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /\.nx-doc--sectioned \.nx-doc__upper[\s\S]*grid-template-columns: 1fr 1fr/);
-  assert.match(html, /aria-label="שורות מסמך"/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__upper-sheet[\s\S]*margin: 0 0 8px/);
+  assert.match(html, /\.nx-doc--unified \.nx-doc__table[\s\S]*margin: 0 0 14px/);
 });
 
-test('default client render uses sectioned golden-master layout', () => {
+test('classic default render has no sectioned class or pill number', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
-  assert.match(html, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
+  assert.match(html, /class="nx-doc nx-doc--unified"/);
+  assert.doesNotMatch(html, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
   assert.doesNotMatch(html, /class="nx-doc__doc-number-pill"/);
-  assert.match(html, /aria-label="שורות מסמך"/);
+  assert.doesNotMatch(html, /aria-label="שורות מסמך"/);
   assert.match(html, />פירוט \*</);
   assert.match(html, />מטבע</);
   assert.doesNotMatch(html, />יחידת מידה</);
   assert.doesNotMatch(html, />הנחה</);
   assert.doesNotMatch(html, /data-income-allocation-edit/);
   assert.doesNotMatch(html, /<button/);
-  assert.doesNotMatch(html, /class="nx-doc__sheet-section-badge"/);
 });
 
 test('sectioned style matches golden-master printable layout', () => {

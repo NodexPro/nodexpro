@@ -134,8 +134,14 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
   });
   const allocationApplicable = isAllocationNumberApplicable(allocationPolicy, doc.document_type);
 
+  // Issued view/PDF only — do not mutate branding defaults used by retainer/wizard.
+  const issuedBranding =
+    branding.document_style_key === 'sectioned'
+      ? branding
+      : { ...branding, document_style_key: 'sectioned' as const };
+
   const renderInput = buildUnifiedIncomeDocumentRenderInput({
-    branding,
+    branding: issuedBranding,
     document_type: doc.document_type,
     language: doc.language,
     document_number: doc.document_number,
@@ -157,8 +163,7 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
     lineRows,
   });
 
-  // Retainer-parity: fill only missing party fields from live Core/customer
-  // (issued snapshot remains preferred when present).
+  // Issued view only: fill missing party fields from live Core/customer.
   const [liveIssuer, liveRecipient] = await Promise.all([
     loadLiveIssuerPartyForIssuedRender(scope, issuerWebsite),
     loadLiveRecipientPartyForIssuedRender(scope, doc.customer_snapshot_json ?? {}),
