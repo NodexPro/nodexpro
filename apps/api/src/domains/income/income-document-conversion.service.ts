@@ -14,7 +14,7 @@ import {
   resolveAvailableDocumentTypes,
 } from './income-document-types.resolver.js';
 import {
-  applySelectIncomeIssuerContext,
+  applyOfficialIncomeIssuerContext,
   buildIncomeWorkspaceContextAggregate,
 } from './income-issuer-context.service.js';
 import {
@@ -387,11 +387,15 @@ export async function executeBeginEditIncomePreliminaryDocument(
     throw badRequest('Edit requires office represented client');
   }
 
-  await applySelectIncomeIssuerContext(ctx, {
-    acting_mode: 'office_representative',
-    issuer_business_id: source.represented_client_id,
-    represented_client_id: source.represented_client_id,
-  });
+  await applyOfficialIncomeIssuerContext(
+    ctx,
+    {
+      acting_mode: 'office_representative',
+      issuer_business_id: source.represented_client_id,
+      represented_client_id: source.represented_client_id,
+    },
+    { source: INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT },
+  );
   const scope = await loadActiveIncomeIssuerScope(ctx);
   assertIncomeEditPermission(scope);
 
@@ -542,11 +546,15 @@ export async function executeConvertIncomeDocumentToDraft(
   if (existing) {
     const source = await loadSourceDocument(orgId, existing.source_document_id);
     if (source.represented_client_id) {
-      await applySelectIncomeIssuerContext(ctx, {
-        acting_mode: 'office_representative',
-        issuer_business_id: source.represented_client_id,
-        represented_client_id: source.represented_client_id,
-      });
+      await applyOfficialIncomeIssuerContext(
+        ctx,
+        {
+          acting_mode: 'office_representative',
+          issuer_business_id: source.represented_client_id,
+          represented_client_id: source.represented_client_id,
+        },
+        { source: INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT },
+      );
     }
     return buildConversionCommandResponse({
       ctx,
@@ -577,11 +585,15 @@ export async function executeConvertIncomeDocumentToDraft(
     throw badRequest(`Conversion ${sourceType} → ${targetType} is not allowed`);
   }
 
-  await applySelectIncomeIssuerContext(ctx, {
-    acting_mode: 'office_representative',
-    issuer_business_id: source.represented_client_id,
-    represented_client_id: source.represented_client_id,
-  });
+  await applyOfficialIncomeIssuerContext(
+    ctx,
+    {
+      acting_mode: 'office_representative',
+      issuer_business_id: source.represented_client_id,
+      represented_client_id: source.represented_client_id,
+    },
+    { source: INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT },
+  );
   const scope = await loadActiveIncomeIssuerScope(ctx);
   assertIncomeEditPermission(scope);
 
@@ -765,11 +777,15 @@ export async function executeCancelIncomePreliminaryDocument(
   if (source.document_status === 'cancelled_future') {
     // Idempotent cancel
     if (source.represented_client_id) {
-      await applySelectIncomeIssuerContext(ctx, {
-        acting_mode: 'office_representative',
-        issuer_business_id: source.represented_client_id,
-        represented_client_id: source.represented_client_id,
-      });
+      await applyOfficialIncomeIssuerContext(
+        ctx,
+        {
+          acting_mode: 'office_representative',
+          issuer_business_id: source.represented_client_id,
+          represented_client_id: source.represented_client_id,
+        },
+        { source: INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT },
+      );
     }
     return buildConversionCommandResponse({
       ctx,
@@ -787,11 +803,15 @@ export async function executeCancelIncomePreliminaryDocument(
     throw badRequest('Cancel requires office represented client');
   }
 
-  await applySelectIncomeIssuerContext(ctx, {
-    acting_mode: 'office_representative',
-    issuer_business_id: source.represented_client_id,
-    represented_client_id: source.represented_client_id,
-  });
+  await applyOfficialIncomeIssuerContext(
+    ctx,
+    {
+      acting_mode: 'office_representative',
+      issuer_business_id: source.represented_client_id,
+      represented_client_id: source.represented_client_id,
+    },
+    { source: INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT },
+  );
   const scope = await loadActiveIncomeIssuerScope(ctx);
   assertIncomeEditPermission(scope);
 
