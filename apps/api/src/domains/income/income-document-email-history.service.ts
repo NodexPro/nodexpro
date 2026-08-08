@@ -1,5 +1,8 @@
 /**
  * INV-1 P4 — email history aggregates (document + represented client scope).
+ *
+ * Document send recipient prefill = invoice customer / delivery contact
+ * (never Core represented-client issuer email).
  */
 
 import { supabaseAdmin } from '../../db/client.js';
@@ -8,11 +11,11 @@ import { forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertRowMatchesIssuerScope, reqUuid } from './income.guards.js';
 import { incomeWorkspacePermissionsFromContext } from './income-issuer-context.service.js';
-import { loadActiveIncomeIssuerScope } from './income-issuer-scope.service.js';
+import { loadActiveIncomeIssuerScope, type ActiveIncomeIssuerScope } from './income-issuer-scope.service.js';
 import {
   buildIncomeDocumentEmailSendForm,
   mapDeliveryAttemptToDocumentHistoryRow,
-  normalizeRepresentedClientRecipientEmailPrefill,
+  normalizeIncomeDocumentRecipientEmailPrefill,
   resolveIncomeDocumentEmailSendEligibility,
   toIncomeDocumentPdfSendReadinessView,
   deliveryAttemptResultLabel,
@@ -24,6 +27,8 @@ import {
   listRepresentedClientEmailAttempts,
   loadIncomeDocumentsMetaByIds,
 } from './income-document-email-delivery.read-model.service.js';
+import { resolveIssuedDocumentEmailRecipientPrefill } from './income-document-email-recipient-prefill.pure.js';
+import { loadIncomeRecipientById } from './income-recipient.service.js';
 import type { IncomeDocumentType } from './income.types.js';
 import {
   INCOME_COMMAND_RETRY_PDF_RENDER,
@@ -82,11 +87,14 @@ async function loadIssuedDocumentForHistory(
   document_status: string;
   pdf_render_status: string;
   pdf_asset_id: string | null;
+  income_customer_id: string | null;
+  customer_snapshot_json: Record<string, unknown> | null;
+  source_draft_id: string | null;
 }> {
   const { data, error } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, organization_id, issuer_business_id, represented_client_id, document_number, document_type, document_status, pdf_render_status, pdf_asset_id',
+      'id, organization_id, issuer_business_id, represented_client_id, document_number, document_type, document_status, pdf_render_status, pdf_asset_id, income_customer_id, customer_snapshot_json, source_draft_id',
     )
     .eq('id', incomeDocumentId)
     .eq('organization_id', orgId)
@@ -103,7 +111,54 @@ async function loadIssuedDocumentForHistory(
     document_status: string;
     pdf_render_status: string;
     pdf_asset_id: string | null;
+    income_customer_id: string | null;
+    customer_snapshot_json: Record<string, unknown> | null;
+    source_draft_id: string | null;
   };
+}
+
+async function loadDraftDeliveryContactJson(
+  orgId: string,
+  draftId: string,
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabaseAdmin
+    .from('income_document_drafts')
+    .select('delivery_contact_json')
+    .eq('organization_id', orgId)
+    .eq('id', draftId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadDraftDeliveryContactForEmailHistory');
+  const row = data as { delivery_contact_json?: Record<string, unknown> | null } | null;
+  return row?.delivery_contact_json ?? null;
+}
+
+async function resolveDocumentRecipientEmailDefault(params: {
+  scope: ActiveIncomeIssuerScope;
+  doc: {
+    income_customer_id: string | null;
+    customer_snapshot_json: Record<string, unknown> | null;
+    source_draft_id: string | null;
+  };
+}): Promise<string | null> {
+  let draftDeliveryContactJson: unknown = null;
+  if (params.doc.source_draft_id) {
+    draftDeliveryContactJson = await loadDraftDeliveryContactJson(
+      params.scope.org_id,
+      params.doc.source_draft_id,
+    );
+  }
+
+  let incomeCustomerEmail: string | null = null;
+  if (params.doc.income_customer_id) {
+    const customer = await loadIncomeRecipientById(params.scope, params.doc.income_customer_id);
+    incomeCustomerEmail = customer?.email ?? null;
+  }
+
+  return resolveIssuedDocumentEmailRecipientPrefill({
+    draftDeliveryContactJson,
+    incomeCustomerEmail,
+    customerSnapshotJson: params.doc.customer_snapshot_json,
+  });
 }
 
 async function loadRepresentedClient(orgId: string, clientId: string) {
@@ -124,7 +179,7 @@ async function loadRepresentedClient(orgId: string, clientId: string) {
   return {
     id: row.id,
     display_name: row.display_name,
-    email: normalizeRepresentedClientRecipientEmailPrefill(row.email),
+    email: normalizeIncomeDocumentRecipientEmailPrefill(row.email),
   };
 }
 
@@ -147,10 +202,7 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params: {
     pdfAssetId: doc.pdf_asset_id,
   });
 
-  const recipientEmailDefault =
-    doc.represented_client_id != null
-      ? (await loadRepresentedClient(scope.org_id, doc.represented_client_id)).email
-      : null;
+  const recipientEmailDefault = await resolveDocumentRecipientEmailDefault({ scope, doc });
 
   const rows = attempts.map((attempt) => mapDeliveryAttemptToDocumentHistoryRow(attempt));
   const allowedActions = ['view_income_document_email_history'];

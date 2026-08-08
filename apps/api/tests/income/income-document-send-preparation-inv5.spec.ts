@@ -43,7 +43,7 @@ const baseEmailInput = {
   documentStatus: 'issued' as const,
 };
 
-test('represented Core client email becomes send form default_value', () => {
+test('invoice customer email becomes send form default_value', () => {
   const form = buildIncomeDocumentEmailSendForm({
     incomeDocumentId: randomUUID(),
     sendEligibility: {
@@ -51,13 +51,13 @@ test('represented Core client email becomes send form default_value', () => {
       disabled_reason: null,
       disabled_reason_key: null,
     },
-    recipientEmailDefault: '  Client.Core@example.com ',
+    recipientEmailDefault: '  marinator02@walla.com ',
   });
   assert.equal(form.fields[0]?.key, 'recipient_email');
-  assert.equal(form.fields[0]?.default_value, 'Client.Core@example.com');
+  assert.equal(form.fields[0]?.default_value, 'marinator02@walla.com');
 });
 
-test('no Core email leaves recipient default empty', () => {
+test('no invoice customer email leaves recipient default empty', () => {
   assert.equal(normalizeRepresentedClientRecipientEmailPrefill(null), null);
   assert.equal(normalizeRepresentedClientRecipientEmailPrefill('   '), null);
   const form = buildIncomeDocumentEmailSendForm({
@@ -72,11 +72,15 @@ test('no Core email leaves recipient default empty', () => {
   assert.equal(form.fields[0]?.default_value, null);
 });
 
-test('send history loads clients.email for represented client prefill (not income_customers)', () => {
-  assert.match(historyServiceSource, /select\('id, display_name, email, is_archived'\)/);
-  assert.match(historyServiceSource, /recipientEmailDefault/);
-  assert.doesNotMatch(historyServiceSource, /income_customers/);
-  assert.doesNotMatch(historyServiceSource, /customer_snapshot_json\.email/);
+test('send history prefills from invoice customer / delivery contact (not Core issuer)', () => {
+  assert.match(historyServiceSource, /resolveIssuedDocumentEmailRecipientPrefill/);
+  assert.match(historyServiceSource, /loadIncomeRecipientById/);
+  assert.match(historyServiceSource, /customer_snapshot_json/);
+  assert.match(historyServiceSource, /delivery_contact_json/);
+  assert.doesNotMatch(
+    historyServiceSource,
+    /recipientEmailDefault[\s\S]{0,200}loadRepresentedClient/,
+  );
 });
 
 test('pending PDF disables send with pdf_pending', () => {

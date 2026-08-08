@@ -15,8 +15,16 @@ import {
   resolveIncomeDocumentPdfSendReadiness,
   type IncomeDocumentPdfSendReadiness,
 } from './income-document-pdf-send-readiness.pure.js';
+import {
+  normalizeIncomeDocumentRecipientEmailPrefill,
+  normalizeRepresentedClientRecipientEmailPrefill,
+} from './income-document-email-recipient-prefill.pure.js';
 
 export { INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY, INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY };
+export {
+  normalizeIncomeDocumentRecipientEmailPrefill,
+  normalizeRepresentedClientRecipientEmailPrefill,
+};
 
 export type IncomeDocumentEmailSendEligibilityInput = {
   permissions: IncomeWorkspacePermissions;
@@ -184,13 +192,6 @@ export function buildIncomeDocumentEmailDeliveryBlock(params: {
   };
 }
 
-export function normalizeRepresentedClientRecipientEmailPrefill(
-  email: string | null | undefined,
-): string | null {
-  const trimmed = email != null ? String(email).trim() : '';
-  return trimmed ? trimmed : null;
-}
-
 export function buildIncomeDocumentEmailSendForm(params: {
   incomeDocumentId: string;
   sendEligibility: Pick<
@@ -209,7 +210,7 @@ export function buildIncomeDocumentEmailSendForm(params: {
         label: 'אימייל נמען',
         required: true,
         type: 'email',
-        default_value: normalizeRepresentedClientRecipientEmailPrefill(params.recipientEmailDefault),
+        default_value: normalizeIncomeDocumentRecipientEmailPrefill(params.recipientEmailDefault),
       },
     ],
     enabled: params.sendEligibility.enabled,

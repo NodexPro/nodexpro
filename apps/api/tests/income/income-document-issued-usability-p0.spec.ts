@@ -46,15 +46,16 @@ const officePerms = {
   issue_on_behalf: true,
 };
 
-test('email send form + aggregate root expose Core recipient default', () => {
+test('email send form + aggregate root expose invoice-customer recipient default', () => {
   const form = buildIncomeDocumentEmailSendForm({
     incomeDocumentId: randomUUID(),
     sendEligibility: { enabled: true, disabled_reason: null, disabled_reason_key: null },
-    recipientEmailDefault: 'core@client.example',
+    recipientEmailDefault: 'marinator02@walla.com',
   });
-  assert.equal(form.fields[0]?.default_value, 'core@client.example');
+  assert.equal(form.fields[0]?.default_value, 'marinator02@walla.com');
   assert.match(historySource, /recipient_email_default/);
-  assert.match(historySource, /select\('id, display_name, email, is_archived'\)/);
+  assert.match(historySource, /resolveIssuedDocumentEmailRecipientPrefill/);
+  assert.match(historySource, /loadIncomeRecipientById/);
 });
 
 test('web email modal binds recipient_email_default / field default_value without /clients', () => {
