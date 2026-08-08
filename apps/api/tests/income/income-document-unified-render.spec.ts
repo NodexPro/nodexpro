@@ -186,7 +186,7 @@ test('preview and PDF paths use the same unified HTML renderer', () => {
   const printHtml = buildUnifiedIncomeDocumentPrintHtml(input);
   assert.equal(printHtml.includes(previewHtml), true);
   assert.match(previewHtml, /nx-doc nx-doc--unified/);
-  assert.match(printHtml, /@page \{ size: A4 portrait/);
+  assert.match(printHtml, /@page \{ size: A4 portrait; margin: 48px; \}/);
   assert.match(printHtml, /dir="rtl"/);
 });
 

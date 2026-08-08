@@ -113,6 +113,68 @@ test('F viewer HTML body is the same function PDF wraps for print', () => {
   assert.equal(typeof buildUnifiedIncomeDocumentPrintHtml, 'function');
 });
 
+test('F2 PDF matches viewer geometry without changing viewer chrome', () => {
+  const printHtmlSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-unified-render.html.ts'),
+    'utf8',
+  );
+  const pdfRendererSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-pdf.renderer.ts'),
+    'utf8',
+  );
+  const brandingRendererSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-branding-preview.renderer.ts'),
+    'utf8',
+  );
+  const queueCss = readFileSync(
+    join(dir, '../../../web/src/styles/nx-work-engine-queue.css'),
+    'utf8',
+  );
+  const retainerCss = readFileSync(
+    join(dir, '../../../web/src/styles/nx-work-engine-invoice-retainer.css'),
+    'utf8',
+  );
+
+  // A — viewer still has 48px paper inset
+  assert.match(queueCss, /\.nx-we-preview-paper__content\s*\{[^}]*padding:\s*48px;/);
+  assert.match(
+    retainerCss,
+    /\.nx-we-retainer-preview-modal__canvas \.nx-we-preview-paper__content\s*\{[^}]*padding:\s*48px;/,
+  );
+
+  // B — base sectioned screen CSS unchanged (padding-block: 0)
+  assert.match(
+    brandingRendererSource,
+    /\.nx-doc--sectioned\s*\{[\s\S]*?padding-block:\s*0;/,
+  );
+  assert.doesNotMatch(
+    brandingRendererSource,
+    /padding-block: \$\{GM\.page\.margin_top_px\}px \$\{GM\.page\.margin_bottom_px\}px/,
+  );
+
+  // C — PDF has exactly one 48px page inset via @page
+  assert.match(printHtmlSource, /@page \{ size: A4 portrait; margin: 48px; \}/);
+  assert.doesNotMatch(printHtmlSource, /margin: 10mm 12mm 12mm/);
+  assert.doesNotMatch(printHtmlSource, /body\s*\{[^}]*padding:\s*48px/);
+
+  // D/E — Puppeteer margins 0, scale 1
+  assert.match(pdfRendererSource, /scale:\s*1/);
+  assert.match(pdfRendererSource, /preferCSSPageSize:\s*true/);
+  assert.match(
+    pdfRendererSource,
+    /margin:\s*\{\s*top:\s*'0',\s*right:\s*'0',\s*bottom:\s*'0',\s*left:\s*'0'\s*\}/,
+  );
+  assert.doesNotMatch(pdfRendererSource, /top:\s*'10mm'/);
+
+  // F — print media does not wipe sectioned padding
+  assert.match(brandingRendererSource, /\.nx-doc:not\(\.nx-doc--sectioned\) \{ padding: 0; \}/);
+  const sectionedPrintIdx = brandingRendererSource.lastIndexOf('@media print');
+  assert.ok(sectionedPrintIdx >= 0);
+  const sectionedPrintBlock = brandingRendererSource.slice(sectionedPrintIdx);
+  assert.match(sectionedPrintBlock, /\.nx-doc--sectioned\s*\{/);
+  assert.doesNotMatch(sectionedPrintBlock, /\.nx-doc--sectioned\s*\{[^}]*padding:\s*0/);
+});
+
 test('G email remains blocked when PDF failed', () => {
   const email = resolveIncomeDocumentEmailSendEligibility({
     permissions: { view: true, edit: true, issue: true, issue_on_behalf: true },

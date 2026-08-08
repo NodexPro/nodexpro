@@ -1129,7 +1129,9 @@ ${INVOICE_FONT_FACE}
 .nx-doc__platform-link { display: inline-flex; align-items: center; gap: 8px; color: var(--nx-doc-text-muted); font-size: 11px; text-decoration: none; }
 .nx-doc__platform-link:hover { color: var(--nx-doc-primary); }
 @media print {
-  .nx-doc { max-width: none; padding: 0; }
+  /* Do not strip sectioned document padding — viewer golden master keeps padding-inline. */
+  .nx-doc { max-width: none; }
+  .nx-doc:not(.nx-doc--sectioned) { padding: 0; }
   .nx-doc__payment-col, .nx-doc__comments, .nx-doc__customer { box-shadow: none; }
 }
 
@@ -1147,7 +1149,7 @@ ${INVOICE_FONT_FACE}
   --nx-doc-logo-scale: ${sectionedLayout.scale};
   /* Full paper width. Equal 0.5cm side insets.
    * Viewport min-height so preview sheet fills the modal even when parent % height is indefinite.
-   * Print/PDF resets below — do not leave empty pages. */
+   * Print/PDF: clear min-height only — never strip padding (viewer is golden master). */
   width: 100%;
   max-width: 100%;
   flex: 1 1 auto;
@@ -1851,7 +1853,7 @@ ${INVOICE_FONT_FACE}
     width: 100%;
     max-width: none;
     min-height: 0;
-    padding: 0;
+    /* Preserve viewer sectioned padding (do not wipe). */
   }
 }
 </style>
