@@ -16,6 +16,7 @@ import {
   resolveAccountingDisplayStatus,
 } from './income-accounting-posting.mapping.js';
 import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
+import { buildIncomeIssuedDocumentViewAction } from './income-document-view-action.pure.js';
 import { buildIncomeDocumentEmailDeliveryBlock } from './income-document-email-delivery.read-model.pure.js';
 import { buildIncomeDocumentDocflowDeliveryBlock } from './income-document-docflow-delivery.read-model.pure.js';
 import {
@@ -307,7 +308,19 @@ async function loadIssuedDocuments(
     }
     if (canView && r.pdf_render_status === 'rendered' && r.pdf_asset_id) {
       rowActions.push('download_pdf');
+      rowActions.push('open_document');
     }
+    const pdfDownloadPath =
+      r.pdf_render_status === 'rendered' && r.pdf_asset_id
+        ? incomeDocumentDownloadPath(r.id)
+        : null;
+    const view_action = buildIncomeIssuedDocumentViewAction({
+      incomeDocumentId: r.id,
+      canView,
+      pdfRenderStatus: r.pdf_render_status,
+      pdfAssetId: r.pdf_asset_id,
+      pdfDownloadPath,
+    });
     return {
       document_id: r.id,
       document_number: r.document_number,
@@ -331,10 +344,8 @@ async function loadIssuedDocuments(
       pdf_render_status: r.pdf_render_status,
       pdf_status_label: pdfStatusLabel(r.pdf_render_status),
       pdf_asset_id: r.pdf_asset_id,
-      pdf_download_path:
-        r.pdf_render_status === 'rendered' && r.pdf_asset_id
-          ? incomeDocumentDownloadPath(r.id)
-          : null,
+      pdf_download_path: pdfDownloadPath,
+      view_action,
       email_delivery: buildIncomeDocumentEmailDeliveryBlock({
         incomeDocumentId: r.id,
         attemptCount: emailAttemptCounts.get(r.id) ?? 0,

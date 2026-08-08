@@ -169,8 +169,20 @@ export async function renderIncomeDocumentPdf(
     const scope = await loadActiveIncomeIssuerScope(ctx);
     const renderModel = await buildUnifiedIncomeDocumentRenderModelForIssuedDocument(scope, doc);
     const printHtml = buildUnifiedIncomeDocumentPrintHtml(renderModel);
-    const pdfBuffer = await renderIncomeDocumentPdfBufferFromHtml(printHtml);
-    const assetId = await storePdfAsset(ctx, orgId, doc.document_number, pdfBuffer);
+    let pdfBuffer: Buffer;
+    try {
+      pdfBuffer = await renderIncomeDocumentPdfBufferFromHtml(printHtml);
+    } catch (renderErr) {
+      const renderMessage = renderErr instanceof Error ? renderErr.message : String(renderErr);
+      throw new Error(`pdf_engine: ${renderMessage}`);
+    }
+    let assetId: string;
+    try {
+      assetId = await storePdfAsset(ctx, orgId, doc.document_number, pdfBuffer);
+    } catch (storeErr) {
+      const storeMessage = storeErr instanceof Error ? storeErr.message : String(storeErr);
+      throw new Error(`pdf_storage: ${storeMessage}`);
+    }
     const renderedAt = new Date().toISOString();
     const renderAuditSnapshot = buildUnifiedIncomeDocumentRenderAuditSnapshot(renderModel);
 

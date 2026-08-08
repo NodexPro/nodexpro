@@ -26,7 +26,7 @@ export function wrapUnifiedIncomeDocumentHtmlForPrint(documentBodyHtml: string):
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Income Document</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap');
+    /* No external font CDN — production PDF render must not wait on networkidle/Google Fonts. */
     /* 10mm top / 12mm sides+bottom → 38/45px @96dpi (golden-master page contract) */
     @page { size: A4 portrait; margin: 10mm 12mm 12mm; }
     html, body {

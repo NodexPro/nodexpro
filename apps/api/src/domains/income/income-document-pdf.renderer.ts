@@ -16,13 +16,26 @@ async function renderWithPuppeteer(fullHtml: string): Promise<Buffer | null> {
     const puppeteer = await import('puppeteer');
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--font-render-hinting=none',
+      ],
     });
     try {
       const page = await browser.newPage();
-      await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
+      // Prefer local DOM ready; avoid waiting on external network (CDN fonts).
+      await page.setContent(fullHtml, { waitUntil: 'domcontentloaded' });
       await page.evaluate(async () => {
-        await document.fonts.ready;
+        try {
+          await Promise.race([
+            document.fonts.ready,
+            new Promise((resolve) => setTimeout(resolve, 2_000)),
+          ]);
+        } catch {
+          /* fonts optional for PDF */
+        }
       });
       const pdfBytes = await page.pdf({
         format: 'A4',
@@ -40,7 +53,9 @@ async function renderWithPuppeteer(fullHtml: string): Promise<Buffer | null> {
     if (code === 'ERR_MODULE_NOT_FOUND' || message.includes("Cannot find package 'puppeteer'")) {
       return null;
     }
-    throw err;
+    // Browser missing / launch failure on host → try Chromium CLI fallback.
+    console.error('[income-pdf] puppeteer render failed; trying CLI fallback', { message });
+    return null;
   }
 }
 

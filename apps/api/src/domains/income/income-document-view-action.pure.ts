@@ -1,0 +1,31 @@
+/**
+ * Issued-document view action for dumb UI (click document number → final PDF).
+ */
+
+import { resolveIncomeDocumentPdfSendReadiness } from './income-document-pdf-send-readiness.pure.js';
+import type { IncomeIssuedDocumentViewAction } from './income.types.js';
+
+export function buildIncomeIssuedDocumentViewAction(params: {
+  incomeDocumentId: string;
+  canView: boolean;
+  pdfRenderStatus: string;
+  pdfAssetId: string | null;
+  pdfDownloadPath: string | null;
+}): IncomeIssuedDocumentViewAction {
+  const readiness = resolveIncomeDocumentPdfSendReadiness({
+    pdfRenderStatus: params.pdfRenderStatus,
+    pdfAssetId: params.pdfAssetId,
+  });
+  const enabled =
+    params.canView && readiness.ready && Boolean(params.pdfDownloadPath);
+  return {
+    action_key: 'open_document',
+    label: 'צפייה במסמך',
+    enabled,
+    income_document_id: params.incomeDocumentId,
+    pdf_download_path: enabled ? params.pdfDownloadPath : null,
+    disabled_reason: enabled
+      ? null
+      : readiness.disabled_reason ?? 'המסמך אינו זמין לצפייה',
+  };
+}

@@ -272,6 +272,8 @@ export interface IncomeDocumentEmailHistoryAggregate {
   document_number: string;
   document_type_label: string;
   represented_client_id: string | null;
+  /** Canonical Core clients.email prefill (same value as send_form field default_value). */
+  recipient_email_default: string | null;
   pdf_send_readiness: IncomeDocumentPdfSendReadinessView;
   table_columns: Array<{ key: string; label: string }>;
   rows: IncomeDocumentEmailHistoryAttemptRow[];
@@ -325,6 +327,15 @@ export interface IncomeDocumentRecordPaymentForm {
   fields: IncomeDocumentRecordPaymentFormField[];
 }
 
+export type IncomeIssuedDocumentViewAction = {
+  action_key: 'open_document';
+  label: string;
+  enabled: boolean;
+  income_document_id: string;
+  pdf_download_path: string | null;
+  disabled_reason: string | null;
+};
+
 export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   row_id: string;
   document_number: string | null;
@@ -344,6 +355,7 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   can_view_document: boolean;
   can_edit_draft: boolean;
   pdf_download_path: string | null;
+  view_action: IncomeIssuedDocumentViewAction | null;
   email_delivery: IncomeDocumentEmailDeliveryBlock | null;
   docflow_delivery: IncomeDocumentDocflowDeliveryBlock | null;
   record_payment_form: IncomeDocumentRecordPaymentForm | null;
@@ -592,6 +604,8 @@ export interface IncomeIssuedDocumentsTableRow {
   pdf_status_label: string;
   pdf_asset_id: string | null;
   pdf_download_path: string | null;
+  /** Backend view contract for clickable document number (immutable PDF artifact). */
+  view_action: IncomeIssuedDocumentViewAction;
   email_delivery: IncomeDocumentEmailDeliveryBlock;
   docflow_delivery: IncomeDocumentDocflowDeliveryBlock;
   allowed_actions: string[];

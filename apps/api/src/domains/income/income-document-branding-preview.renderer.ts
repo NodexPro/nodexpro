@@ -20,8 +20,8 @@ import {
 import type { IncomeDocumentType } from './income.types.js';
 
 const INVOICE_FONT = 'Heebo, Arial, Helvetica, sans-serif';
-const INVOICE_FONT_FACE =
-  "@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap');";
+/** No external font CDN — PDF render must not depend on Google Fonts network. */
+const INVOICE_FONT_FACE = '';
 const NODEXPRO_FOOTER_URL = 'https://www.nodexpro.com';
 
 function escapeHtml(value: unknown): string {

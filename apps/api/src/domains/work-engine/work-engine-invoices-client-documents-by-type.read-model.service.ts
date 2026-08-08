@@ -15,6 +15,7 @@ import {
 } from '../income/income-client-income-ledger-card.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
+import { buildIncomeIssuedDocumentViewAction } from '../income/income-document-view-action.pure.js';
 import { buildIncomeDocumentEmailDeliveryBlock } from '../income/income-document-email-delivery.read-model.pure.js';
 import { buildIncomeDocumentDocflowDeliveryBlock } from '../income/income-document-docflow-delivery.read-model.pure.js';
 import {
@@ -252,12 +253,24 @@ async function loadIssuedDocumentCandidates(params: {
     };
     const year = issueYearFromIso(doc.issue_date);
     const amountRef = ledgerAmountFromTotalsSnapshot(doc.totals_snapshot_json);
-    const canViewDoc =
-      params.canView && doc.pdf_render_status === 'rendered' && Boolean(doc.pdf_asset_id);
-    const pdfPath = canViewDoc ? incomeDocumentDownloadPath(doc.id) : null;
+    const pdfPath =
+      doc.pdf_render_status === 'rendered' && doc.pdf_asset_id
+        ? incomeDocumentDownloadPath(doc.id)
+        : null;
+    const view_action = buildIncomeIssuedDocumentViewAction({
+      incomeDocumentId: doc.id,
+      canView: params.canView,
+      pdfRenderStatus: doc.pdf_render_status,
+      pdfAssetId: doc.pdf_asset_id,
+      pdfDownloadPath: pdfPath,
+    });
+    const canViewDoc = view_action.enabled;
 
     const allowedActions: string[] = [];
-    if (canViewDoc) allowedActions.push('view_document');
+    if (canViewDoc) {
+      allowedActions.push('view_document');
+      allowedActions.push('open_document');
+    }
 
     let payment_state_key: WorkEngineInvoicesClientDocumentsByTypeRow['payment_state_key'] = null;
     let payment_state_label: string | null = null;
@@ -313,7 +326,8 @@ async function loadIssuedDocumentCandidates(params: {
       draft_id: null,
       can_view_document: canViewDoc,
       can_edit_draft: false,
-      pdf_download_path: pdfPath,
+      pdf_download_path: view_action.pdf_download_path,
+      view_action,
       email_delivery: buildIncomeDocumentEmailDeliveryBlock({
         incomeDocumentId: doc.id,
         attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
@@ -419,6 +433,7 @@ async function loadDraftCandidates(params: {
       can_view_document: false,
       can_edit_draft: canEditDraft,
       pdf_download_path: null,
+      view_action: null,
       email_delivery: null,
       docflow_delivery: null,
       record_payment_form: null,

@@ -167,6 +167,7 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params: {
     document_number: doc.document_number,
     document_type_label: DOCUMENT_TYPE_LABELS[doc.document_type],
     represented_client_id: doc.represented_client_id,
+    recipient_email_default: recipientEmailDefault,
     pdf_send_readiness: toIncomeDocumentPdfSendReadinessView(sendEligibility.pdf_readiness),
     table_columns: DOCUMENT_HISTORY_COLUMNS,
     rows,
