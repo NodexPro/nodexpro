@@ -349,11 +349,14 @@ async function wizardDraftCommandResponse(
   return {
     ok: true,
     command,
+    // Wizard mutations already carry document_details_step; FE merge preserves prior
+    // document_branding_profile. Skip a second expensive branding/studio rebuild.
     income_workspace_aggregate: await buildIncomeWorkspaceWizardPatchAggregate(
       scope,
       wizardDraftOverlay,
       recipientOverlay,
       startingStepKey,
+      { includeBrandingProfile: false },
     ),
     meta: { workspace_aggregate_mode: 'wizard_patch' },
   };

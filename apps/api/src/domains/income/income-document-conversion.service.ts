@@ -277,7 +277,9 @@ async function buildConversionCommandResponse(params: {
       ? Number(params.documentsListYear)
       : new Date().getFullYear();
 
-  let workspace = await buildIncomeWorkspaceAggregate(params.ctx);
+  // When a staging/target draft is present, skip the unused full aggregate that was
+  // previously built and immediately overwritten (major begin-edit / convert latency).
+  let workspace: Awaited<ReturnType<typeof buildIncomeWorkspaceAggregate>>;
   let wizard_starting_step_key: string | null | undefined;
   if (params.draftId) {
     const resumed = await resumeIncomeDocumentDraftFromContext(params.ctx, {
@@ -293,6 +295,8 @@ async function buildConversionCommandResponse(params: {
     if (wizard_starting_step_key) {
       workspace = { ...workspace, wizard_starting_step_key };
     }
+  } else {
+    workspace = await buildIncomeWorkspaceAggregate(params.ctx);
   }
 
   const [context, invoicesTab, documentsByType] = await Promise.all([

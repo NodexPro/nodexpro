@@ -754,6 +754,11 @@ export type BuildIncomeDocumentDetailsStepOptions = {
   totalsPreview?: DraftTotalsPreview;
   /** Retainer / tab reads: skip embedded branding + preview HTML payloads. */
   lean?: boolean;
+  /**
+   * Skip expensive branding studio aggregate on wizard mutation rebuilds.
+   * Preview HTML still loads resolved branding when preview_generated_at is set.
+   */
+  skip_branding_profile_aggregate?: boolean;
   /** Retainer template tab: alternate label for document_date only. */
   retainer_template_document_date_label?: string;
 };
@@ -928,29 +933,43 @@ export async function buildIncomeDocumentDetailsStep(
 
   const previewGeneratedAt = uiCache.preview_generated_at;
   const lean = options.lean === true;
-  const issuerBlock =
-    !lean && previewGeneratedAt != null
-      ? await loadIssuerPreviewBlock(scope)
-      : {
-          display_name: scope.issuer_label,
-          tax_id: null,
-          address: null,
-          phone: null,
-          email: null,
-        };
-  const recipientBlock =
-    !lean && previewGeneratedAt != null
-      ? await loadRecipientPreviewBlock(scope, row, recipientName ?? '—')
-      : {
-          display_name: recipientName ?? '—',
-          tax_id: null,
-          address: null,
-          phone: null,
-          email: null,
-        };
-  const previewLineRows =
-    !lean && previewGeneratedAt != null
-      ? await (async () => {
+  const needsPreviewPayload = !lean && previewGeneratedAt != null;
+  const previewVatLabel =
+    totals.vat_display != null
+      ? settings.vat_mode === 'standard'
+        ? `מע״מ (${vatResolution.standard_rate_percent_label})`
+        : 'מע״מ'
+      : null;
+
+  const emptyIssuerBlock = {
+    display_name: scope.issuer_label,
+    tax_id: null,
+    address: null,
+    phone: null,
+    email: null,
+  };
+  const emptyRecipientBlock = {
+    display_name: recipientName ?? '—',
+    tax_id: null,
+    address: null,
+    phone: null,
+    email: null,
+  };
+
+  const [
+    issuerBlock,
+    recipientBlock,
+    previewLineRows,
+    brandingProfileAggregate,
+    resolvedBranding,
+    allocationPolicy,
+  ] = await Promise.all([
+    needsPreviewPayload ? loadIssuerPreviewBlock(scope) : Promise.resolve(emptyIssuerBlock),
+    needsPreviewPayload
+      ? loadRecipientPreviewBlock(scope, row, recipientName ?? '—')
+      : Promise.resolve(emptyRecipientBlock),
+    needsPreviewPayload
+      ? (async () => {
           const builtRows = await buildLineRows(lines, settings, vatResolution, documentDate, false);
           const officialByCurrency = await resolveFxMapForDraftLines(lines, documentDate);
           return builtRows.map((r) => {
@@ -985,25 +1004,28 @@ export async function buildIncomeDocumentDetailsStep(
             };
           });
         })()
-      : [];
-  const previewVatLabel =
-    totals.vat_display != null
-      ? settings.vat_mode === 'standard'
-        ? `מע״מ (${vatResolution.standard_rate_percent_label})`
-        : 'מע״מ'
-      : null;
-  const brandingProfileAggregate = lean
-    ? null
-    : await buildDocumentBrandingProfileAggregate(scope, canEdit);
-  const resolvedBranding =
-    !lean && previewGeneratedAt != null && row.document_type
-      ? await loadResolvedBrandingProfileForDocumentType(scope, row.document_type)
-      : null;
-  const allocationPolicy = await resolveIncomeTaxAllocationNumberPolicyForOrg(
-    scope.org_id,
-    'IL',
-    documentDate,
-  );
+      : Promise.resolve(
+          [] as Array<{
+            row_number: number;
+            description: string;
+            quantity: string;
+            unit: string | null;
+            unit_price: string;
+            discount: string | null;
+            currency: string;
+            vat_display: string;
+            vat_rate_label: string | null;
+            total: string;
+          }>,
+        ),
+    lean || options.skip_branding_profile_aggregate === true
+      ? Promise.resolve(null)
+      : buildDocumentBrandingProfileAggregate(scope, canEdit),
+    needsPreviewPayload && row.document_type
+      ? loadResolvedBrandingProfileForDocumentType(scope, row.document_type)
+      : Promise.resolve(null),
+    resolveIncomeTaxAllocationNumberPolicyForOrg(scope.org_id, 'IL', documentDate),
+  ]);
   const allocationNumberField = buildIncomeDocumentAllocationNumberField({
     policy: allocationPolicy,
     documentType: row.document_type,

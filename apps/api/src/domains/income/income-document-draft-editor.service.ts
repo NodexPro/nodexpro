@@ -31,7 +31,7 @@ import {
   parseDocumentSettingsJson,
   serializeDocumentSettingsJson,
 } from './income-document-draft-totals.pure.js';
-import { isIncomeRetainerTemplateDraft } from './income-retainer-template-draft.service.js';
+import { hasRetainerTemplateMarker } from './income-retainer-template-draft.service.js';
 import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
 import {
   normalizeDocumentDiscountInput,
@@ -547,14 +547,18 @@ async function wizardDraftMutationOverlay(
     auditPayload,
     loadedRow,
   );
-  const isRetainerTemplate = await isIncomeRetainerTemplateDraft({
-    orgId: scope.org_id,
-    draftId: draft_id,
-    documentSettingsJson: saved.document_settings_json,
-  });
+  // Hot path: avoid retainer-profile DB probe on every line/settings mutation.
+  // Template drafts carry retainer_template marker in document_settings_json.
+  const isRetainerTemplate = hasRetainerTemplateMarker(saved.document_settings_json);
+  const generatingPreview =
+    typeof options?.totals_preview_patch?.preview_generated_at === 'string' &&
+    Boolean(String(options.totals_preview_patch.preview_generated_at).trim());
   return buildOverlayForDraft(scope, draft_id, true, saved, docType, {
     vatResolution: validation.vatResolution,
     totalsPreview: validation.totalsPreview,
+    // Non-preview mutations: skip branding studio + HTML payload rebuild.
+    lean: !generatingPreview,
+    skip_branding_profile_aggregate: true,
     ...(isRetainerTemplate ? { retainer_template_document_date_label: 'תאריך התחלה' } : {}),
   });
 }
