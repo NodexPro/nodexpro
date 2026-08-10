@@ -44,6 +44,96 @@ export const PRELIMINARY_EDIT_CANNOT_ISSUE_CODE = 'preliminary_edit_cannot_issue
 export const PRELIMINARY_EDIT_CANNOT_ISSUE_MESSAGE =
   'זהו עריכת מסמך קיים (הצעת מחיר / חשבון עסקה). יש לשמור את השינויים — לא להפיק מסמך חדש.' as const;
 
+/** Stable backend reason when preliminary-edit document_date is before original issue_date. */
+export const PRELIMINARY_EDIT_DATE_BEFORE_ORIGINAL_CODE =
+  'preliminary_edit_date_before_original' as const;
+
+export const PRELIMINARY_EDIT_DATE_BEFORE_ORIGINAL_MESSAGE =
+  'לא ניתן להקדים את תאריך המסמך לפני התאריך המקורי.' as const;
+
+function isBlankDate(value: string | null | undefined): boolean {
+  return value == null || String(value).trim() === '';
+}
+
+function isIsoDateOnly(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/**
+ * Null-only heal for preliminary-edit staging drafts on Pencil replay.
+ * Preserves any already-entered staging dates.
+ */
+export function decidePreliminaryEditStagingDateHeal(params: {
+  stagingDocumentDate: string | null | undefined;
+  stagingDueDate: string | null | undefined;
+  sourceIssueDate: string | null | undefined;
+  sourceDueDate: string | null | undefined;
+}): {
+  document_date?: string;
+  due_date?: string;
+} {
+  const patch: { document_date?: string; due_date?: string } = {};
+  const sourceIssue =
+    typeof params.sourceIssueDate === 'string' && isIsoDateOnly(params.sourceIssueDate.trim())
+      ? params.sourceIssueDate.trim()
+      : null;
+  const sourceDue =
+    typeof params.sourceDueDate === 'string' && isIsoDateOnly(params.sourceDueDate.trim())
+      ? params.sourceDueDate.trim()
+      : null;
+
+  if (isBlankDate(params.stagingDocumentDate) && sourceIssue) {
+    patch.document_date = sourceIssue;
+  }
+  if (isBlankDate(params.stagingDueDate) && sourceDue) {
+    patch.due_date = sourceDue;
+  }
+  return patch;
+}
+
+/**
+ * Canonical preliminary-edit document_date floor decision (pure).
+ * Caller must reject before mutating staging / source.
+ */
+export function decidePreliminaryEditDocumentDateGuard(params: {
+  documentSettingsJson: unknown;
+  originalIssueDate: string | null | undefined;
+  requestedDocumentDate: string | null | undefined;
+}):
+  | { action: 'allow' }
+  | {
+      action: 'reject';
+      code: typeof PRELIMINARY_EDIT_DATE_BEFORE_ORIGINAL_CODE;
+      message: typeof PRELIMINARY_EDIT_DATE_BEFORE_ORIGINAL_MESSAGE;
+      original_issue_date: string;
+      requested_document_date: string;
+    }
+  | { action: 'noop' } {
+  const sourceDocumentId = readPreliminaryEditSourceDocumentId(params.documentSettingsJson);
+  if (!sourceDocumentId) return { action: 'noop' };
+
+  const original =
+    typeof params.originalIssueDate === 'string' && isIsoDateOnly(params.originalIssueDate.trim())
+      ? params.originalIssueDate.trim()
+      : null;
+  const requested =
+    typeof params.requestedDocumentDate === 'string' &&
+    isIsoDateOnly(params.requestedDocumentDate.trim())
+      ? params.requestedDocumentDate.trim()
+      : null;
+  if (!original || !requested) return { action: 'allow' };
+  if (requested < original) {
+    return {
+      action: 'reject',
+      code: PRELIMINARY_EDIT_DATE_BEFORE_ORIGINAL_CODE,
+      message: PRELIMINARY_EDIT_DATE_BEFORE_ORIGINAL_MESSAGE,
+      original_issue_date: original,
+      requested_document_date: requested,
+    };
+  }
+  return { action: 'allow' };
+}
+
 export type PreliminaryDocumentEditMode = {
   type: 'preliminary_document_edit';
   source_document_id: string;

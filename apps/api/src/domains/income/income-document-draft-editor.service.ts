@@ -60,6 +60,7 @@ import { hasPermission } from '../rbac/rbac.service.js';
 import { publicDisplayNameOrNull } from './income-document-preview-party.pure.js';
 import { INCOME_PERMISSIONS } from './income.types.js';
 import {
+  decidePreliminaryEditDocumentDateGuard,
   isPreliminaryEditableType,
   PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY,
   readPreliminaryEditSourceDocumentId,
@@ -221,6 +222,35 @@ function preservePreliminaryEditMarker(
     ...nextSettingsJson,
     [PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY]: sourceDocumentId,
   };
+}
+
+async function loadPreliminaryEditSourceIssueDate(
+  scope: ActiveIncomeIssuerScope,
+  sourceDocumentId: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('income_documents')
+    .select('issue_date')
+    .eq('organization_id', scope.org_id)
+    .eq('id', sourceDocumentId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadPreliminaryEditSourceIssueDate');
+  const issueDate =
+    data && typeof (data as { issue_date?: unknown }).issue_date === 'string'
+      ? String((data as { issue_date: string }).issue_date).trim()
+      : '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(issueDate) ? issueDate : null;
+}
+
+function assertPreliminaryEditDocumentDateAllowed(params: {
+  documentSettingsJson: unknown;
+  originalIssueDate: string | null | undefined;
+  requestedDocumentDate: string | null | undefined;
+}): void {
+  const decision = decidePreliminaryEditDocumentDateGuard(params);
+  if (decision.action === 'reject') {
+    throw badRequest(decision.message, decision.code);
+  }
 }
 
 async function deliveryEmailFromRecipient(
@@ -798,6 +828,15 @@ export async function updateIncomeDocumentDraftSettings(
   if (key === 'document_date') {
     const s = optionalString(value);
     if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) throw badRequest('document_date must be YYYY-MM-DD');
+    const prelimSourceId = preliminaryEditSourceDocumentId(row);
+    if (prelimSourceId) {
+      const originalIssueDate = await loadPreliminaryEditSourceIssueDate(scope, prelimSourceId);
+      assertPreliminaryEditDocumentDateAllowed({
+        documentSettingsJson: row.document_settings_json,
+        originalIssueDate,
+        requestedDocumentDate: s,
+      });
+    }
     patch.document_date = s;
     if (row.document_type === 'tax_invoice' && row.income_customer_id && !settings.due_date_manual_override) {
       const paymentTerms = await loadIncomeCustomerDefaultPaymentTerms(scope, row.income_customer_id);
@@ -1044,7 +1083,7 @@ async function savePreliminaryDocumentEditIfNeeded(
   const { data: sourceRaw, error: sourceErr } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, organization_id, represented_client_id, issuer_business_id, actor_user_id, acting_mode, document_type, document_status, document_number, source_draft_id',
+      'id, organization_id, represented_client_id, issuer_business_id, actor_user_id, acting_mode, document_type, document_status, document_number, source_draft_id, issue_date',
     )
     .eq('organization_id', scope.org_id)
     .eq('id', sourceDocumentId)
@@ -1062,6 +1101,7 @@ async function savePreliminaryDocumentEditIfNeeded(
     document_status: string;
     document_number: string;
     source_draft_id: string | null;
+    issue_date: string | null;
   };
   assertRowMatchesIssuerScope(scope, source);
   if (!isPreliminaryEditableType(source.document_type)) {
@@ -1077,6 +1117,13 @@ async function savePreliminaryDocumentEditIfNeeded(
     throw badRequest('Preliminary edit cannot change document type');
   }
 
+  const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
+  assertPreliminaryEditDocumentDateAllowed({
+    documentSettingsJson: row.document_settings_json,
+    originalIssueDate: source.issue_date,
+    requestedDocumentDate: documentDate,
+  });
+
   const validation = await validationForRow(scope, row, docType);
   const customerSnapshot = await buildCustomerSnapshotForDraftRow(scope, row);
   const totalsSnapshot = {
@@ -1091,7 +1138,6 @@ async function savePreliminaryDocumentEditIfNeeded(
     payment_terms_json?: Record<string, unknown> | null;
     customer_po_reference?: string | null;
   };
-  const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
 
   const { error: updateDocErr } = await supabaseAdmin
     .from('income_documents')

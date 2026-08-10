@@ -41,6 +41,7 @@ import {
   isPreliminaryEditableType,
   isTaxDocumentDirectCancelForbidden,
   PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY,
+  decidePreliminaryEditStagingDateHeal,
   resolveDocumentSettingsForConversion,
   serializeConversionDocumentSettings,
   serializeConvertedDraftLines,
@@ -358,6 +359,66 @@ async function findOpenPreliminaryEditDraft(params: {
   return null;
 }
 
+/**
+ * Null-only reconcile of an open preliminary-edit staging draft against the source document.
+ * Preserves already-entered staging dates; heals empty document_date / due_date only.
+ */
+async function healPreliminaryEditStagingDraftDates(params: {
+  orgId: string;
+  draftId: string;
+  source: SourceDoc;
+}): Promise<void> {
+  const { data, error } = await supabaseAdmin
+    .from('income_document_drafts')
+    .select('id, document_date, due_date, draft_totals_preview_json')
+    .eq('organization_id', params.orgId)
+    .eq('id', params.draftId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadPreliminaryEditStagingForHeal');
+  if (!data) return;
+  const staging = data as {
+    id: string;
+    document_date: string | null;
+    due_date: string | null;
+    draft_totals_preview_json: unknown;
+  };
+
+  const heal = decidePreliminaryEditStagingDateHeal({
+    stagingDocumentDate: staging.document_date,
+    stagingDueDate: staging.due_date,
+    sourceIssueDate: params.source.issue_date,
+    sourceDueDate: params.source.due_date,
+  });
+  if (!heal.document_date && !heal.due_date) return;
+
+  const priorPreview =
+    staging.draft_totals_preview_json &&
+    typeof staging.draft_totals_preview_json === 'object' &&
+    !Array.isArray(staging.draft_totals_preview_json)
+      ? (staging.draft_totals_preview_json as Record<string, unknown>)
+      : {};
+  const patch: Record<string, unknown> = { ...heal };
+  // Keep same-number preview identity when healing stale staging rows.
+  if (
+    params.source.document_number &&
+    (typeof priorPreview.document_number_preview !== 'string' ||
+      !String(priorPreview.document_number_preview).trim())
+  ) {
+    patch.draft_totals_preview_json = {
+      ...priorPreview,
+      document_number_preview: params.source.document_number,
+    };
+  }
+
+  const { error: updateErr } = await supabaseAdmin
+    .from('income_document_drafts')
+    .update(patch)
+    .eq('organization_id', params.orgId)
+    .eq('id', params.draftId)
+    .eq('status', 'draft');
+  throwIfSupabaseError(updateErr, 'healPreliminaryEditStagingDraftDates');
+}
+
 export async function executeBeginEditIncomePreliminaryDocument(
   ctx: RequestContext,
   body: Record<string, unknown>,
@@ -407,6 +468,11 @@ export async function executeBeginEditIncomePreliminaryDocument(
     documentType: source.document_type,
   });
   if (existingEditDraftId) {
+    await healPreliminaryEditStagingDraftDates({
+      orgId,
+      draftId: existingEditDraftId,
+      source,
+    });
     return buildConversionCommandResponse({
       ctx,
       command: INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,

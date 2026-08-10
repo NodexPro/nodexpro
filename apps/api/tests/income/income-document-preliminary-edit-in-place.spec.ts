@@ -132,8 +132,9 @@ test('H — double Pencil reuses open staging edit session', () => {
   const beginIdx = conversionServiceSource.indexOf(
     'export async function executeBeginEditIncomePreliminaryDocument',
   );
-  const beginBody = conversionServiceSource.slice(beginIdx, beginIdx + 2500);
+  const beginBody = conversionServiceSource.slice(beginIdx, beginIdx + 3500);
   assert.match(beginBody, /existingEditDraftId/);
+  assert.match(beginBody, /healPreliminaryEditStagingDraftDates/);
   assert.match(beginBody, /replay:\s*true/);
 });
 

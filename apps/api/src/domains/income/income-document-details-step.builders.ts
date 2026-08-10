@@ -51,6 +51,7 @@ import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.t
 import {
   buildPreliminaryDocumentEditMode,
   buildWizardSessionActions,
+  readPreliminaryEditSourceDocumentId,
   type PreliminaryDocumentEditMode,
   type WizardSessionActions,
 } from './income-document-conversion.pure.js';
@@ -503,6 +504,7 @@ function buildSettingsSchema(
   vatResolution: IncomeDraftVatResolution,
   taxInvoicePayment: TaxInvoicePaymentContext | null = null,
   retainerTemplateDocumentDateLabel: string | null = null,
+  preliminaryEditDocumentDateMin: string | null = null,
 ): IncomeDocumentDetailsSettingField[] {
   const settings = parseDocumentSettingsJson(row.document_settings_json);
   const paymentNote =
@@ -520,6 +522,9 @@ function buildSettingsSchema(
       visible: true,
       disabled: !canEdit,
       disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
+      ...(preliminaryEditDocumentDateMin
+        ? { min_value: preliminaryEditDocumentDateMin }
+        : {}),
     },
     {
       key: 'currency',
@@ -1073,6 +1078,25 @@ export async function buildIncomeDocumentDetailsStep(
     editMode,
   });
 
+  let preliminaryEditDocumentDateMin: string | null = null;
+  const preliminaryEditSourceId = readPreliminaryEditSourceDocumentId(row.document_settings_json);
+  if (preliminaryEditSourceId) {
+    const { data: sourceDateRow, error: sourceDateErr } = await supabaseAdmin
+      .from('income_documents')
+      .select('issue_date')
+      .eq('organization_id', scope.org_id)
+      .eq('id', preliminaryEditSourceId)
+      .maybeSingle();
+    throwIfSupabaseError(sourceDateErr, 'loadPreliminaryEditSourceIssueDateForSchema');
+    const issueDate =
+      sourceDateRow && typeof (sourceDateRow as { issue_date?: unknown }).issue_date === 'string'
+        ? String((sourceDateRow as { issue_date: string }).issue_date).trim()
+        : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
+      preliminaryEditDocumentDateMin = issueDate;
+    }
+  }
+
   return {
     draft_id: row.id,
     document_type_key: row.document_type ?? null,
@@ -1119,6 +1143,7 @@ export async function buildIncomeDocumentDetailsStep(
       vatResolution,
       taxInvoicePayment,
       options.retainer_template_document_date_label ?? null,
+      preliminaryEditDocumentDateMin,
     ),
     line_items: {
       columns: [
