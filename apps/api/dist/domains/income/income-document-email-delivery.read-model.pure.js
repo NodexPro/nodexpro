@@ -1,19 +1,64 @@
 import { INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY, INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY, } from './income.types.js';
+import { resolveIncomeDocumentPdfSendReadiness, } from './income-document-pdf-send-readiness.pure.js';
+import { normalizeIncomeDocumentRecipientEmailPrefill, normalizeRepresentedClientRecipientEmailPrefill, } from './income-document-email-recipient-prefill.pure.js';
 export { INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY, INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY };
+export { normalizeIncomeDocumentRecipientEmailPrefill, normalizeRepresentedClientRecipientEmailPrefill, };
+export function toIncomeDocumentPdfSendReadinessView(readiness) {
+    return {
+        status_key: readiness.status_key,
+        status_label: readiness.status_label,
+        message: readiness.disabled_reason,
+    };
+}
 export function resolveIncomeDocumentEmailSendEligibility(input) {
+    const pdf_readiness = resolveIncomeDocumentPdfSendReadiness({
+        pdfRenderStatus: input.pdfRenderStatus,
+        pdfAssetId: input.pdfAssetId,
+    });
+    const retry_pdf_render_allowed = Boolean(input.permissions.issue) && pdf_readiness.retry_eligible;
     if (!input.permissions.issue) {
-        return { enabled: false, disabled_reason: 'אין הרשאת הנפקה' };
+        return {
+            enabled: false,
+            disabled_reason: 'אין הרשאת הנפקה',
+            disabled_reason_key: 'no_issue_permission',
+            pdf_readiness,
+            retry_pdf_render_allowed: false,
+        };
     }
     if (!input.representedClientId) {
-        return { enabled: false, disabled_reason: 'שליחה במייל זמינה במצב ניהול לקוח בלבד' };
+        return {
+            enabled: false,
+            disabled_reason: 'שליחה במייל זמינה במצב ניהול לקוח בלבד',
+            disabled_reason_key: 'self_mode_not_allowed',
+            pdf_readiness,
+            retry_pdf_render_allowed,
+        };
     }
     if (input.documentStatus !== 'issued') {
-        return { enabled: false, disabled_reason: 'המסמך טרם הונפק' };
+        return {
+            enabled: false,
+            disabled_reason: 'המסמך טרם הונפק',
+            disabled_reason_key: 'document_not_issued',
+            pdf_readiness,
+            retry_pdf_render_allowed,
+        };
     }
-    if (input.pdfRenderStatus !== 'rendered' || !input.pdfAssetId) {
-        return { enabled: false, disabled_reason: 'קובץ PDF אינו זמין לשליחה' };
+    if (!pdf_readiness.ready) {
+        return {
+            enabled: false,
+            disabled_reason: pdf_readiness.disabled_reason,
+            disabled_reason_key: pdf_readiness.disabled_reason_key,
+            pdf_readiness,
+            retry_pdf_render_allowed,
+        };
     }
-    return { enabled: true, disabled_reason: null };
+    return {
+        enabled: true,
+        disabled_reason: null,
+        disabled_reason_key: null,
+        pdf_readiness,
+        retry_pdf_render_allowed: false,
+    };
 }
 export function incomeEmailDeliveryAttemptCountLabel(attemptCount) {
     if (attemptCount <= 0)
@@ -92,10 +137,12 @@ export function buildIncomeDocumentEmailSendForm(params) {
                 label: 'אימייל נמען',
                 required: true,
                 type: 'email',
+                default_value: normalizeIncomeDocumentRecipientEmailPrefill(params.recipientEmailDefault),
             },
         ],
         enabled: params.sendEligibility.enabled,
         disabled_reason: params.sendEligibility.disabled_reason,
+        disabled_reason_key: params.sendEligibility.disabled_reason_key,
     };
 }
 export function mapDeliveryAttemptToDocumentHistoryRow(attempt) {

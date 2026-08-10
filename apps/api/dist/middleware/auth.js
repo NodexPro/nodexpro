@@ -70,6 +70,7 @@ export async function authMiddleware(req, _res, next) {
         user,
         membership,
         organizationId,
+        correlationId: req.correlationId,
     };
     next();
 }

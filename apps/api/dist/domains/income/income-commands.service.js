@@ -13,7 +13,7 @@ import { parseDraftPayloadBody, validateDraftAgainstDocumentTypeRules, } from '.
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { retryAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { executeIssueIncomeDocument } from './income-document-issue.service.js';
-import { withIncomeIssueStage } from './income-issue-diagnostic.js';
+import { logIncomeIssueStage, withIncomeIssueStage } from './income-issue-diagnostic.js';
 import { executeIssueAndSendIncomeDocument } from './income-document-issue-and-send.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceAggregate, buildIncomeWorkspaceWizardPatchAggregate, } from './income-workspace-aggregate.service.js';
@@ -28,11 +28,12 @@ import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from '../work-engine/work-engine-invoice-retainer.read-model.service.js';
 import { buildWorkEngineInvoicesTabAggregate } from '../work-engine/work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-engine/work-engine-invoices-client-documents-by-type.read-model.service.js';
-import { loadRecurringCycleReviewRefsByGeneratedDraft } from './income-recurring-cycle-issue-issuer-scope.service.js';
+import { loadRecurringCycleReviewRefsByGeneratedDraft, resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded, resolveAndApplyRecurringCycleIssueIssuerScope, } from './income-recurring-cycle-issue-issuer-scope.service.js';
 import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
 import { executeUpdateIncomeDocumentBrandingProfile, executeUpdateIncomeDocumentBrandingProfilePreviewDraft, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
-import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT, } from './income.types.js';
+import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT, INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT, INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT, INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT, } from './income.types.js';
 import { executeRecordIncomeDocumentPayment } from './income-document-payment.service.js';
+import { executeBeginEditIncomePreliminaryDocument, executeCancelIncomePreliminaryDocument, executeConvertIncomeDocumentToDraft, } from './income-document-conversion.service.js';
 const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_SELECT_ISSUER,
     INCOME_COMMAND_CREATE_CUSTOMER,
@@ -71,6 +72,9 @@ const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO,
     INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE,
     INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT,
+    INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
+    INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
+    INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
 ]);
 async function commandResponse(ctx, command, recipientOverlay = {}, wizardDraftOverlay = {}) {
     return {
@@ -82,6 +86,80 @@ async function commandResponse(ctx, command, recipientOverlay = {}, wizardDraftO
 function hasDraftIdInBody(body) {
     const raw = body.draft_id;
     return raw !== null && raw !== undefined && String(raw).trim() !== '';
+}
+/**
+ * Resolve authoritative issuer for wizard draft mutations.
+ * Recurring cycle review / office generated drafts: trusted draft→cycle→profile.
+ * Ordinary self drafts: leave active workspace scope unchanged.
+ */
+async function resolveIncomeWizardMutationIssuerScope(ctx, body) {
+    const review = parseRecurringCycleReviewCommandContext(body);
+    if (review && hasDraftIdInBody(body)) {
+        return resolveAndApplyRecurringCycleIssueIssuerScope(ctx, {
+            draftId: reqUuid(body.draft_id, 'draft_id'),
+            review,
+        });
+    }
+    if (hasDraftIdInBody(body)) {
+        const resolved = await resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded(ctx, {
+            draftId: reqUuid(body.draft_id, 'draft_id'),
+        });
+        if (resolved)
+            return resolved;
+    }
+    return loadActiveIncomeIssuerScope(ctx);
+}
+async function refreshRecurringCycleDraftReviewMutationCase(params) {
+    const reviewAggregate = await refreshRecurringCycleDraftReviewCase({
+        ctx: params.ctx,
+        representedClientId: params.review.represented_client_id,
+        profileId: params.review.profile_id,
+        cycleId: params.review.cycle_id,
+        generatedDraftId: params.review.generated_draft_id,
+        periodKey: params.review.period_key,
+        linkedWorkItemId: params.review.linked_work_item_id,
+    });
+    const orgId = params.ctx.organizationId;
+    if (!orgId)
+        throw badRequest('Organization context required');
+    const { data: profile, error: profileErr } = await supabaseAdmin
+        .from('income_recurring_document_profiles')
+        .select('end_customer_id')
+        .eq('organization_id', orgId)
+        .eq('id', params.review.profile_id)
+        .eq('represented_client_id', params.review.represented_client_id)
+        .maybeSingle();
+    throwIfSupabaseError(profileErr, 'loadRecurringProfileForDraftMutationRefresh');
+    if (!profile)
+        throw notFound('Recurring profile not found');
+    const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
+        ctx: params.ctx,
+        representedClientId: params.review.represented_client_id,
+        endCustomerId: String(profile.end_customer_id),
+        buildMode: 'schedule_refresh',
+    });
+    if (!params.includeDraftListAggregates) {
+        return {
+            reviewAggregate,
+            setupAggregate,
+            invoicesTabAggregate: null,
+            clientDocumentsByTypeAggregate: null,
+        };
+    }
+    const [invoicesTabAggregate, clientDocumentsByTypeAggregate] = await Promise.all([
+        buildWorkEngineInvoicesTabAggregate({ ctx: params.ctx }),
+        buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+            ctx: params.ctx,
+            representedClientId: params.review.represented_client_id,
+            documentTypeKey: 'draft',
+        }),
+    ]);
+    return {
+        reviewAggregate,
+        setupAggregate,
+        invoicesTabAggregate,
+        clientDocumentsByTypeAggregate,
+    };
 }
 async function brandingCommandResponse(ctx, command, body, run) {
     const scope = await loadActiveIncomeIssuerScope(ctx);
@@ -523,6 +601,15 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
     if (command === INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT) {
         return executeRecordIncomeDocumentPayment(ctx, body);
     }
+    if (command === INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT) {
+        return executeConvertIncomeDocumentToDraft(ctx, body);
+    }
+    if (command === INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT) {
+        return executeCancelIncomePreliminaryDocument(ctx, body);
+    }
+    if (command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT) {
+        return executeBeginEditIncomePreliminaryDocument(ctx, body);
+    }
     if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
         const issueResult = await executeIssueIncomeDocument(ctx, body);
         const orgId = ctx.organizationId;
@@ -563,27 +650,21 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
                 throwIfSupabaseError(profileErr, 'loadRecurringProfileForIssueRefresh');
                 if (!profile)
                     throw notFound('Recurring profile not found');
+                // Affected open UI after retainer review issue: review + schedule (setup).
+                // Do NOT rebuild invoices-tab / by-type lists (not open; counters refresh on next read).
                 const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
                     ctx,
                     representedClientId: reviewContext.represented_client_id,
                     endCustomerId: String(profile.end_customer_id),
                     buildMode: 'schedule_refresh',
                 });
-                const documentTypeKey = issueResult.issue_result.document_type_key || 'tax_invoice';
-                const [invoicesTabAggregate, clientDocumentsByTypeAggregate] = await Promise.all([
-                    buildWorkEngineInvoicesTabAggregate({ ctx }),
-                    buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
-                        ctx,
-                        representedClientId: reviewContext.represented_client_id,
-                        documentTypeKey,
-                    }),
-                ]);
                 return {
                     reviewAggregate: refreshed,
                     setupAggregate,
-                    invoicesTabAggregate,
-                    clientDocumentsByTypeAggregate,
                 };
+            });
+            logIncomeIssueStage(issueResult.diagnostic, 'issue_command_completed', {
+                duration_ms: Date.now() - issueResult.diagnostic.command_started_ms,
             });
             return {
                 ok: true,
@@ -591,41 +672,48 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
                 income_workspace_aggregate: reviewAggregate.reviewAggregate.income_workspace_aggregate,
                 work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate.reviewAggregate,
                 work_engine_invoice_retainer_setup_aggregate: reviewAggregate.setupAggregate,
-                work_engine_invoices_tab_aggregate: reviewAggregate.invoicesTabAggregate,
-                work_engine_invoices_client_documents_by_type_aggregate: reviewAggregate.clientDocumentsByTypeAggregate,
                 issue_result: issueResult.issue_result,
                 meta: {
                     idempotent_replay: issueResult.idempotentReplay,
                     income_document_id: issueResult.issuedDocumentId,
+                    pdf_render_status: issueResult.issue_result.pdf_render_status,
                 },
             };
         }
-        // Non-retainer / non-cycle office or self issue: workspace aggregate + by-type when office.
-        const response = await commandResponse(ctx, command);
-        const representedClientId = response.income_workspace_aggregate?.issuer_context?.represented_client_id ?? null;
-        const documentTypeKey = issueResult.issue_result.document_type_key || 'tax_invoice';
-        if (representedClientId) {
-            const clientDocumentsByTypeAggregate = await buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
-                ctx,
-                representedClientId,
-                documentTypeKey,
-            });
-            return {
-                ...response,
-                work_engine_invoices_client_documents_by_type_aggregate: clientDocumentsByTypeAggregate,
-                issue_result: issueResult.issue_result,
-                meta: {
-                    idempotent_replay: issueResult.idempotentReplay,
-                    income_document_id: issueResult.issuedDocumentId,
-                },
-            };
-        }
+        // Non-cycle issue: workspace truth only. Optional retainer setup refresh when open Setup UI
+        // sends end_customer_id (no invoices-tab / by-type rebuild).
+        const response = await withIncomeIssueStage(issueResult.diagnostic, {
+            started: 'refreshed_case_started',
+            completed: 'refreshed_case_completed',
+            failing_stage: 'refreshed_case',
+        }, async () => {
+            const base = await commandResponse(ctx, command);
+            const endCustomerId = optionalUuid(body.end_customer_id, 'end_customer_id');
+            const representedClientId = base.income_workspace_aggregate?.issuer_context?.represented_client_id ?? null;
+            if (endCustomerId && representedClientId) {
+                const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
+                    ctx,
+                    representedClientId,
+                    endCustomerId,
+                    buildMode: 'schedule_refresh',
+                });
+                return {
+                    ...base,
+                    work_engine_invoice_retainer_setup_aggregate: setupAggregate,
+                };
+            }
+            return base;
+        });
+        logIncomeIssueStage(issueResult.diagnostic, 'issue_command_completed', {
+            duration_ms: Date.now() - issueResult.diagnostic.command_started_ms,
+        });
         return {
             ...response,
             issue_result: issueResult.issue_result,
             meta: {
                 idempotent_replay: issueResult.idempotentReplay,
                 income_document_id: issueResult.issuedDocumentId,
+                pdf_render_status: issueResult.issue_result.pdf_render_status,
             },
         };
     }
@@ -694,8 +782,19 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         const scope = await loadActiveIncomeIssuerScope(ctx);
         assertIncomeIssuePermission(scope);
         const income_document_id = reqUuid(body.income_document_id, 'income_document_id');
-        await renderIncomeDocumentPdf(ctx, scope.org_id, income_document_id);
-        return commandResponse(ctx, command);
+        const pdfResult = await renderIncomeDocumentPdf(ctx, scope.org_id, income_document_id);
+        const response = await commandResponse(ctx, command);
+        return {
+            ...response,
+            meta: {
+                income_document_id,
+                pdf_render_status: pdfResult.pdf_render_status === 'rendered' ||
+                    pdfResult.pdf_render_status === 'failed' ||
+                    pdfResult.pdf_render_status === 'pending'
+                    ? pdfResult.pdf_render_status
+                    : undefined,
+            },
+        };
     }
     if (command === INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL) {
         const sendResult = await executeSendIncomeDocumentByEmail(ctx, body);
@@ -742,7 +841,7 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         return wizardDraftCommandResponse(ctx, command, resumed.scope, resumed.result.recipientOverlay, resumed.result.wizardOverlay, resumed.result.starting_step_key);
     }
     const wizardDraftCmd = async (runner) => {
-        const scope = await loadActiveIncomeIssuerScope(ctx);
+        const scope = await resolveIncomeWizardMutationIssuerScope(ctx, body);
         assertIncomeEditPermission(scope);
         const overlay = await runner(scope, body);
         return wizardDraftCommandResponse(ctx, command, scope, {}, overlay);
@@ -766,70 +865,69 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         return wizardDraftCmd(updateIncomeDocumentNotes);
     }
     if (command === INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER) {
+        const { isIssuedAllocationNumberCommandBody, updateIssuedIncomeDocumentAllocationNumber } = await import('./income-issued-document-view.service.js');
+        if (isIssuedAllocationNumberCommandBody(body)) {
+            const income_issued_document_view_aggregate = await updateIssuedIncomeDocumentAllocationNumber(ctx, body);
+            return {
+                ok: true,
+                command,
+                income_workspace_aggregate: await buildIncomeWorkspaceAggregate(ctx),
+                income_issued_document_view_aggregate,
+                meta: {
+                    income_document_id: income_issued_document_view_aggregate.income_document_id,
+                },
+            };
+        }
         return wizardDraftCmd(updateIncomeDocumentAllocationNumber);
     }
     if (command === INCOME_COMMAND_UPDATE_DELIVERY_CONTACT) {
         return wizardDraftCmd(updateIncomeDocumentDeliveryContact);
     }
     if (command === INCOME_COMMAND_SAVE_DRAFT) {
-        const scope = await loadActiveIncomeIssuerScope(ctx);
+        // Explicit שמור טיוטה — stamps user_saved_at (migration 151).
+        const scope = await resolveIncomeWizardMutationIssuerScope(ctx, body);
         assertIncomeEditPermission(scope);
         const overlay = await saveIncomeDocumentDraft(scope, body);
         const reviewContext = parseRecurringCycleReviewCommandContext(body);
         if (!reviewContext) {
             return wizardDraftCommandResponse(ctx, command, scope, {}, overlay);
         }
-        const reviewAggregate = await refreshRecurringCycleDraftReviewCase({
+        const refreshed = await refreshRecurringCycleDraftReviewMutationCase({
             ctx,
-            representedClientId: reviewContext.represented_client_id,
-            profileId: reviewContext.profile_id,
-            cycleId: reviewContext.cycle_id,
-            generatedDraftId: reviewContext.generated_draft_id,
-            periodKey: reviewContext.period_key,
-            linkedWorkItemId: reviewContext.linked_work_item_id,
+            review: reviewContext,
+            includeDraftListAggregates: true,
         });
-        const orgId = ctx.organizationId;
-        if (!orgId)
-            throw badRequest('Organization context required');
-        const { data: profile, error: profileErr } = await supabaseAdmin
-            .from('income_recurring_document_profiles')
-            .select('end_customer_id')
-            .eq('organization_id', orgId)
-            .eq('id', reviewContext.profile_id)
-            .eq('represented_client_id', reviewContext.represented_client_id)
-            .maybeSingle();
-        throwIfSupabaseError(profileErr, 'loadRecurringProfileForDraftSaveScheduleRefresh');
-        if (!profile)
-            throw notFound('Recurring profile not found');
-        const [setupAggregate, invoicesTabAggregate, clientDocumentsByTypeAggregate] = await Promise.all([
-            buildWorkEngineInvoiceRetainerSetupAggregate({
-                ctx,
-                representedClientId: reviewContext.represented_client_id,
-                endCustomerId: String(profile.end_customer_id),
-                buildMode: 'schedule_refresh',
-            }),
-            buildWorkEngineInvoicesTabAggregate({ ctx }),
-            buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
-                ctx,
-                representedClientId: reviewContext.represented_client_id,
-                documentTypeKey: 'draft',
-            }),
-        ]);
         return {
             ok: true,
             command,
-            income_workspace_aggregate: reviewAggregate.income_workspace_aggregate,
-            work_engine_recurring_cycle_draft_review_aggregate: reviewAggregate,
-            work_engine_invoice_retainer_setup_aggregate: setupAggregate,
-            work_engine_invoices_tab_aggregate: invoicesTabAggregate,
-            work_engine_invoices_client_documents_by_type_aggregate: clientDocumentsByTypeAggregate,
+            income_workspace_aggregate: refreshed.reviewAggregate.income_workspace_aggregate,
+            work_engine_recurring_cycle_draft_review_aggregate: refreshed.reviewAggregate,
+            work_engine_invoice_retainer_setup_aggregate: refreshed.setupAggregate,
+            work_engine_invoices_tab_aggregate: refreshed.invoicesTabAggregate ?? undefined,
+            work_engine_invoices_client_documents_by_type_aggregate: refreshed.clientDocumentsByTypeAggregate ?? undefined,
         };
     }
     if (command === INCOME_COMMAND_GENERATE_PREVIEW) {
-        const scope = await loadActiveIncomeIssuerScope(ctx);
+        // Normal recurring review Save: rebuild preview + refreshed case; does not stamp user draft list visibility.
+        const scope = await resolveIncomeWizardMutationIssuerScope(ctx, body);
         assertIncomeEditPermission(scope);
         const overlay = await generateIncomeDocumentPreview(scope, body);
-        return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+        const reviewContext = parseRecurringCycleReviewCommandContext(body);
+        if (!reviewContext) {
+            return wizardDraftCommandResponse(ctx, command, scope, {}, overlay, 'preview');
+        }
+        const refreshed = await refreshRecurringCycleDraftReviewMutationCase({
+            ctx,
+            review: reviewContext,
+            includeDraftListAggregates: false,
+        });
+        return {
+            ok: true,
+            command,
+            income_workspace_aggregate: refreshed.reviewAggregate.income_workspace_aggregate,
+            work_engine_recurring_cycle_draft_review_aggregate: refreshed.reviewAggregate,
+            work_engine_invoice_retainer_setup_aggregate: refreshed.setupAggregate,
+        };
     }
     if (command === INCOME_COMMAND_UPDATE_DISCOUNT) {
         return wizardDraftCmd(updateIncomeDocumentDiscount);

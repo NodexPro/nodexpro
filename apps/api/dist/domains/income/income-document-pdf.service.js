@@ -27,7 +27,7 @@ async function ensureIncomeDocumentsBucket() {
 async function loadIssuedDocumentForPdf(orgId, documentId) {
     const { data, error } = await supabaseAdmin
         .from('income_documents')
-        .select('id, organization_id, issuer_business_id, represented_client_id, document_type, document_number, issue_date, due_date, currency, language, notes, issuer_snapshot_json, customer_snapshot_json, lines_snapshot_json, totals_snapshot_json, legal_snapshot_json, source_draft_id, tax_allocation_number, pdf_render_status, pdf_asset_id')
+        .select('id, organization_id, issuer_business_id, represented_client_id, document_type, document_number, issue_date, due_date, currency, language, notes, issuer_snapshot_json, customer_snapshot_json, lines_snapshot_json, totals_snapshot_json, legal_snapshot_json, source_draft_id, tax_allocation_number, owner_layout_version_id, owner_layout_snapshot_json, pdf_render_status, pdf_asset_id')
         .eq('id', documentId)
         .eq('organization_id', orgId)
         .maybeSingle();
@@ -64,6 +64,41 @@ async function storePdfAsset(ctx, orgId, documentNumber, pdfBuffer) {
         throw assetErr ?? new Error('Failed to create PDF file asset');
     return asset.id;
 }
+/**
+ * Mark issued document PDF as pending and kick render off the caller critical path.
+ * Reuses renderIncomeDocumentPdf (pending → rendered | failed). Does not create a second PDF system.
+ * Delivery paths must still await ensure/render before send (see issue-and-send).
+ */
+export async function scheduleIncomeDocumentPdfRender(ctx, orgId, incomeDocumentId) {
+    const doc = await loadIssuedDocumentForPdf(orgId, incomeDocumentId);
+    if (!requiresPdfRender(doc.document_type)) {
+        await supabaseAdmin
+            .from('income_documents')
+            .update({ pdf_render_status: 'rendered', pdf_render_error: null })
+            .eq('id', incomeDocumentId)
+            .eq('organization_id', orgId);
+        return { pdf_asset_id: null, pdf_render_status: 'rendered', scheduled: false };
+    }
+    if (doc.pdf_render_status === 'rendered' && doc.pdf_asset_id) {
+        return { pdf_asset_id: doc.pdf_asset_id, pdf_render_status: 'rendered', scheduled: false };
+    }
+    if (doc.pdf_render_status !== 'pending') {
+        await supabaseAdmin
+            .from('income_documents')
+            .update({ pdf_render_status: 'pending', pdf_render_error: null })
+            .eq('id', incomeDocumentId)
+            .eq('organization_id', orgId);
+    }
+    void renderIncomeDocumentPdf(ctx, orgId, incomeDocumentId).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[income-pdf] background render failed', {
+            income_document_id: incomeDocumentId,
+            organization_id: orgId,
+            message,
+        });
+    });
+    return { pdf_asset_id: doc.pdf_asset_id, pdf_render_status: 'pending', scheduled: true };
+}
 export async function renderIncomeDocumentPdf(ctx, orgId, incomeDocumentId) {
     const doc = await loadIssuedDocumentForPdf(orgId, incomeDocumentId);
     if (!requiresPdfRender(doc.document_type)) {
@@ -95,8 +130,22 @@ export async function renderIncomeDocumentPdf(ctx, orgId, incomeDocumentId) {
         const scope = await loadActiveIncomeIssuerScope(ctx);
         const renderModel = await buildUnifiedIncomeDocumentRenderModelForIssuedDocument(scope, doc);
         const printHtml = buildUnifiedIncomeDocumentPrintHtml(renderModel);
-        const pdfBuffer = await renderIncomeDocumentPdfBufferFromHtml(printHtml);
-        const assetId = await storePdfAsset(ctx, orgId, doc.document_number, pdfBuffer);
+        let pdfBuffer;
+        try {
+            pdfBuffer = await renderIncomeDocumentPdfBufferFromHtml(printHtml);
+        }
+        catch (renderErr) {
+            const renderMessage = renderErr instanceof Error ? renderErr.message : String(renderErr);
+            throw new Error(`pdf_engine: ${renderMessage}`);
+        }
+        let assetId;
+        try {
+            assetId = await storePdfAsset(ctx, orgId, doc.document_number, pdfBuffer);
+        }
+        catch (storeErr) {
+            const storeMessage = storeErr instanceof Error ? storeErr.message : String(storeErr);
+            throw new Error(`pdf_storage: ${storeMessage}`);
+        }
         const renderedAt = new Date().toISOString();
         const renderAuditSnapshot = buildUnifiedIncomeDocumentRenderAuditSnapshot(renderModel);
         await supabaseAdmin

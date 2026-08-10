@@ -8,6 +8,7 @@ import { buildActiveRulesetContextAggregate, buildCountryPackDiagnosticsAggregat
 import { buildOwnerEmailProviderConfigAggregate } from '../shared/owner-email-provider-config.service.js';
 import { buildOwnerSystemHealthAggregate } from '../domains/owner-system-health/owner-system-health.service.js';
 import { buildOwnerClientDetailAggregate, buildOwnerClientsListAggregate, } from '../domains/owner-clients/owner-clients.service.js';
+import { buildOwnerInvoiceDocumentBuilderAggregate, executeOwnerInvoiceLayoutCommand, isOwnerInvoiceLayoutCommand, } from '../domains/owner-invoice-document-layout/owner-invoice-document-layout.service.js';
 const router = Router();
 async function assertOwnerOrAuditFailure(ctx, req) {
     try {
@@ -207,6 +208,26 @@ router.get('/active-ruleset-context/:organizationId', async (req, res, next) => 
         next(e);
     }
 });
+router.get('/invoice-document-builder', async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        await assertOwnerOrAuditFailure(ctx, req);
+        const asStr = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+        const aggregate = await buildOwnerInvoiceDocumentBuilderAggregate(ctx, {
+            layout_key: asStr(req.query.layout_key) ?? undefined,
+            document_type_group: asStr(req.query.document_type_group) ?? undefined,
+            country_code: req.query.country_code === undefined ? 'IL' : asStr(req.query.country_code),
+            version_id: asStr(req.query.version_id),
+            template_family: asStr(req.query.template_family),
+            preview_logo_size_key: asStr(req.query.preview_logo_size_key),
+            preview_color_theme_key: asStr(req.query.preview_color_theme_key),
+        });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
 router.post('/command', async (req, res, next) => {
     try {
         const ctx = req.context;
@@ -217,6 +238,10 @@ router.post('/command', async (req, res, next) => {
             throw badRequest('command is required');
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
             throw badRequest('payload must be an object');
+        }
+        if (isOwnerInvoiceLayoutCommand(commandName)) {
+            const out = await executeOwnerInvoiceLayoutCommand(ctx, commandName, payload);
+            return res.json(out);
         }
         const out = await executeCountryPackCommand(ctx, {
             command: commandName,

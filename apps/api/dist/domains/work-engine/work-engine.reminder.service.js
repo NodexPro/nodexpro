@@ -10,6 +10,7 @@ import { isUuid } from './work-engine.guards.js';
 import { resolveOperationalCommunicationPolicies } from '../country-pack/operational-communication-policy.service.js';
 import { renderReminderTemplate, } from '../country-pack/operational-communication-owner-payload.js';
 import { ACTIVE_REMINDER_CANDIDATE_STATUSES, assertResolvedReminderPolicy, buildReminderCandidateDedupKey, isManualReminderTriggerType, isWorkItemEligibleForAutoReminders, listEligibleCadenceSteps, resolveActiveObligationForWorkflow, resolveCadenceStepFromWorkflow, resolveChannelOrder, resolveReminderCandidateDedupKeyForInsert, resolveReminderTarget, resolveWorkflowFromPolicy, selectTemplateVersion, shouldEvaluateReminderWorkflow, TERMINAL_REMINDER_CANDIDATE_STATUSES, } from './work-engine.reminder.logic.js';
+import { INVOICE_COLLECTION_FOLLOWUP_WORK_TYPE } from './work-engine-collection-reminder.pure.js';
 export { buildReminderCandidateDedupKey, parseGenerateReminderCandidateWorkflowType, resolveCadenceStepFromWorkflow, resolveChannelOrder, resolveReminderTarget, resolveWorkflowFromPolicy, selectTemplateVersion, } from './work-engine.reminder.logic.js';
 function humanizeKey(key) {
     return key
@@ -50,6 +51,8 @@ function workTypeLabel(key) {
             return 'Annual Report Documents';
         case 'docflow_thread_followup':
             return 'Conversation';
+        case 'invoice_collection_followup':
+            return 'Invoice collection';
         default:
             return humanizeKey(key);
     }
@@ -325,6 +328,10 @@ export async function evaluateRemindersForWorkItem(params) {
     };
     const workItem = await loadWorkItemForReminderEvaluation(params.orgId, params.workItemId);
     if (!isWorkItemEligibleForAutoReminders(workItem.work_state)) {
+        return result;
+    }
+    if (workItem.work_type === INVOICE_COLLECTION_FOLLOWUP_WORK_TYPE &&
+        params.collectionDebtPrechecked !== true) {
         return result;
     }
     const asOf = params.asOf ?? new Date();

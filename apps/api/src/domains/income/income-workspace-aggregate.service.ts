@@ -531,6 +531,11 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(
   const brandingProfile = includeBrandingProfile
     ? await buildDocumentBrandingProfileAggregate(scope, canEdit)
     : null;
+  const editMode = wizardDraftOverlay.document_details_step?.edit_mode ?? null;
+  const allowedActions = buildWorkspaceAllowedActions(scope.permissions).filter((action) => {
+    if (!editMode) return true;
+    return action !== 'issue_income_document' && action !== 'issue_and_send_income_document';
+  });
 
   return {
     aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
@@ -547,11 +552,12 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(
     issued_documents_count: 0,
     recipient_search,
     document_details_step: wizardDraftOverlay.document_details_step ?? null,
+    edit_mode: editMode,
     wizard_starting_step_key: startingStepKey,
     active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
     document_branding_profile: brandingProfile,
     document_branding_settings_entrypoint: buildDocumentBrandingSettingsEntrypoint(scope.permissions),
-    allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
+    allowed_actions: allowedActions,
     warnings: [],
   };
 }
@@ -626,10 +632,17 @@ export async function buildIncomeWorkspaceAggregate(
     issued_documents_count: issuedCount,
     recipient_search,
     document_details_step: wizardDraftOverlay.document_details_step ?? null,
+    edit_mode: wizardDraftOverlay.document_details_step?.edit_mode ?? null,
     active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
     document_branding_profile: brandingProfile,
     document_branding_settings_entrypoint: buildDocumentBrandingSettingsEntrypoint(scope.permissions),
-    allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
+    allowed_actions: (() => {
+      const editMode = wizardDraftOverlay.document_details_step?.edit_mode ?? null;
+      return buildWorkspaceAllowedActions(scope.permissions).filter((action) => {
+        if (!editMode) return true;
+        return action !== 'issue_income_document' && action !== 'issue_and_send_income_document';
+      });
+    })(),
     warnings: docTypesResult.warnings,
   };
   logAggregatePayloadBreakdown(INCOME_WORKSPACE_AGGREGATE_KEY, response as unknown as Record<string, unknown>, {

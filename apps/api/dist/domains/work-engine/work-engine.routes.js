@@ -10,6 +10,8 @@
  *   - GET  /aggregates/invoices-client-documents-by-type
  *            -> work_engine_invoices_client_documents_by_type_aggregate;
  *   - GET  /aggregates/clients-tab  -> work_engine_clients_tab_aggregate (embedded CO registry);
+ *   - GET  /aggregates/collection-reminder-review -> collection_reminder_review_aggregate (INV-4C);
+ *   - GET  /aggregates/invoice-collection-control -> invoice_collection_control_aggregate (INV-4 ICC);
  *                                      backend-ready queue table with rows,
  *                                      summary_cards, filters, pagination,
  *                                      pending_mapping_section. Supports
@@ -51,8 +53,13 @@ import { buildWorkEngineInvoicesTabAggregate } from './work-engine-invoices-tab.
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from './work-engine-invoices-client-documents-by-type.read-model.service.js';
 import { buildWorkEngineInvoiceRetainerSetupAggregate } from './work-engine-invoice-retainer.read-model.service.js';
 import { executeWorkEngineInvoiceRetainerCommand } from './work-engine-invoice-retainer.commands.service.js';
+import { CRITICAL_WORK_ENGINE_COMMANDS, resolveCorrelationId, withCriticalCommandObs, } from '../../shared/observability.js';
+import { getRequestCorrelationId } from '../../middleware/correlation.js';
 import { buildWorkEngineClientsTabAggregate } from './work-engine-clients-tab.read-model.service.js';
+import { buildCollectionReminderReviewAggregate } from './work-engine-collection-reminder-review.read-model.service.js';
+import { buildInvoiceCollectionControlAggregate } from './work-engine-invoice-collection-control.read-model.service.js';
 import { WORK_ENGINE_MODULE_CODE, WORK_ENGINE_PERMISSIONS, } from './work-engine.rbac.js';
+import { isUuid } from './work-engine.guards.js';
 const router = Router();
 function requireInternalCronSecret(req) {
     const secret = String(req.headers['x-internal-cron-secret'] ?? '').trim();
@@ -65,7 +72,14 @@ router.post('/internal/scheduler/run', async (req, res, next) => {
     try {
         requireInternalCronSecret(req);
         const body = (req.body ?? {});
-        const summary = await runWorkEngineScheduler({
+        const correlation_id = getRequestCorrelationId(req);
+        const summary = await withCriticalCommandObs({
+            enabled: true,
+            correlation_id,
+            module: 'scheduler',
+            command: 'scheduler_run',
+            organization_id: typeof body.org_id === 'string' ? body.org_id.trim() : null,
+        }, () => runWorkEngineScheduler({
             org_id: typeof body.org_id === 'string' ? body.org_id.trim() : undefined,
             batch_size: typeof body.batch_size === 'number' ? body.batch_size : undefined,
             max_work_items_per_run: typeof body.max_work_items_per_run === 'number' ? body.max_work_items_per_run : undefined,
@@ -74,7 +88,8 @@ router.post('/internal/scheduler/run', async (req, res, next) => {
                 : undefined,
             run_context_key: typeof body.run_context_key === 'string' ? body.run_context_key.trim() : undefined,
             dry_run: body.dry_run === true,
-        });
+            correlation_id,
+        }));
         return res.json({
             ok: summary.ok,
             skipped: summary.skipped,
@@ -84,11 +99,18 @@ router.post('/internal/scheduler/run', async (req, res, next) => {
             escalations_created: summary.escalations_created,
             snoozed_woken: summary.snoozed_woken,
             errors: summary.errors,
+            correlation_id: summary.correlation_id,
+            run_id: summary.run_id,
+            started_at: summary.started_at,
+            completed_at: summary.completed_at,
             result: summary,
         });
     }
     catch (e) {
-        console.error('[work-engine] POST /internal/scheduler/run failed', e);
+        console.error('[work-engine] POST /internal/scheduler/run failed', {
+            correlation_id: getRequestCorrelationId(req),
+            error: e,
+        });
         next(e);
     }
 });
@@ -201,7 +223,17 @@ officeRouter.post('/commands/invoice-retainer', async (req, res, next) => {
         const ctx = req.context;
         const command = String(req.body?.command ?? '').trim();
         const payload = (req.body?.payload ?? req.body ?? {});
-        const out = await executeWorkEngineInvoiceRetainerCommand(ctx, command, payload);
+        const correlation_id = ctx.correlationId ?? resolveCorrelationId(req.correlationId);
+        const out = await withCriticalCommandObs({
+            enabled: CRITICAL_WORK_ENGINE_COMMANDS.has(command),
+            correlation_id,
+            module: 'work-engine',
+            command: command || 'unknown',
+            organization_id: ctx.organizationId,
+            entity_id: typeof payload.represented_client_id === 'string'
+                ? payload.represented_client_id
+                : null,
+        }, () => executeWorkEngineInvoiceRetainerCommand(ctx, command, payload));
         return res.json(out);
     }
     catch (e) {
@@ -212,6 +244,50 @@ officeRouter.get('/aggregates/clients-tab', requirePermission(WORK_ENGINE_PERMIS
     try {
         const ctx = req.context;
         const aggregate = await buildWorkEngineClientsTabAggregate({ ctx });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+/** INV-4C — collection reminder accountant review (approve ≠ send). */
+officeRouter.get('/aggregates/collection-reminder-review', requirePermission(WORK_ENGINE_PERMISSIONS.view), async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        const candidateId = String(req.query.reminder_candidate_id ?? '').trim();
+        if (!candidateId || !isUuid(candidateId)) {
+            throw badRequest('reminder_candidate_id query param is required');
+        }
+        const aggregate = await buildCollectionReminderReviewAggregate({
+            orgId: ctx.organizationId,
+            reminderCandidateId: candidateId,
+            viewer: ctx.membership
+                ? {
+                    userId: ctx.user.id,
+                    permissions: ctx.membership.permissions ?? [],
+                    roleCode: ctx.membership.roleCode ?? 'staff',
+                }
+                : null,
+        });
+        return res.json(aggregate);
+    }
+    catch (e) {
+        next(e);
+    }
+});
+/** INV-4 — future Invoice Control Center backend contract (no UI). */
+officeRouter.get('/aggregates/invoice-collection-control', requirePermission(WORK_ENGINE_PERMISSIONS.view), async (req, res, next) => {
+    try {
+        const ctx = req.context;
+        const incomeDocumentId = String(req.query.income_document_id ?? '').trim();
+        if (!incomeDocumentId || !isUuid(incomeDocumentId)) {
+            throw badRequest('income_document_id query param is required');
+        }
+        const aggregate = await buildInvoiceCollectionControlAggregate({
+            orgId: ctx.organizationId,
+            incomeDocumentId,
+            ctx,
+        });
         return res.json(aggregate);
     }
     catch (e) {
@@ -230,6 +306,8 @@ const ALLOWED_COMMANDS = new Set([
     'reject_work_item',
     'generate_reminder_candidate',
     'edit_reminder_candidate',
+    'approve_reminder_candidate',
+    'send_collection_reminder',
     'approve_send_reminder_candidate',
     'cancel_reminder_candidate',
     'snooze_reminder_candidate',
@@ -253,7 +331,14 @@ officeRouter.post('/commands', async (req, res, next) => {
             throw badRequest(`Unknown work engine command: ${command}`);
         }
         const payload = req.body?.payload ?? req.body ?? {};
-        const out = await executeWorkEngineCommand(ctx, command, payload);
+        const correlation_id = ctx.correlationId ?? resolveCorrelationId(req.correlationId);
+        const out = await withCriticalCommandObs({
+            enabled: CRITICAL_WORK_ENGINE_COMMANDS.has(command),
+            correlation_id,
+            module: 'work-engine',
+            command,
+            organization_id: ctx.organizationId,
+        }, () => executeWorkEngineCommand(ctx, command, payload));
         return res.json(out);
     }
     catch (e) {

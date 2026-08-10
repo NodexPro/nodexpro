@@ -3,6 +3,7 @@
  */
 export const ACCOUNTING_BASE_INCOME_PAYMENT_CASE_KEY = 'income_invoice_payment_case';
 export const ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT = 'record_and_allocate_income_payment';
+export const ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION = 'reverse_income_payment_allocation';
 export const ACCOUNTING_BASE_PAYMENT_WRITE_PERMISSION = 'accounting_base.payment.write';
 export const ACCOUNTING_BASE_VIEW_PERMISSION = 'accounting_base.view';
 const PAYMENT_METHOD_LABELS = {

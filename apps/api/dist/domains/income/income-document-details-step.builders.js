@@ -17,6 +17,7 @@ import { INCOME_DOCUMENT_NOTES_HINT_HE, INCOME_DOCUMENT_NOTES_MAX_LENGTH, } from
 import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
 import { totalsFromTotalsSnapshot } from './income-document-unified-render.pure.js';
 import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById } from './income-recipient.service.js';
+import { buildPreliminaryDocumentEditMode, buildWizardSessionActions, } from './income-document-conversion.pure.js';
 import { incomeCustomerPaymentTermsLabel, INCOME_CUSTOMER_PAYMENT_TERMS_OPTIONS, resolveTaxInvoiceDueDate, } from './income-customer-payment-terms.pure.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
@@ -661,9 +662,21 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
         : [];
     const documentDiscount = buildDocumentDiscountModel(settings, totals, canEdit);
     const totalsBlock = buildTotalsBlock(totals, settings, vatResolution);
+    const editMode = buildPreliminaryDocumentEditMode({
+        documentSettingsJson: row.document_settings_json,
+        documentType: row.document_type,
+        documentNumberPreview: numberPreview,
+    });
+    const sessionActions = buildWizardSessionActions({
+        canEdit,
+        canIssue: canEdit && scope.permissions.issue,
+        editMode,
+    });
     return {
         draft_id: row.id,
         document_type_key: row.document_type ?? null,
+        edit_mode: editMode,
+        session_actions: sessionActions,
         document_discount: documentDiscount,
         totals_block: totalsBlock,
         document_branding_profile: brandingProfileAggregate,
@@ -679,17 +692,19 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             currency: row.currency,
             preview_html: previewHtml,
             validation_messages: previewMessages,
-            allowed_actions: canEdit ? ['generate_income_document_preview'] : [],
+            allowed_actions: sessionActions.preview.enabled
+                ? ['generate_income_document_preview']
+                : [],
             toolbar_actions: buildPreviewToolbarActions(),
             allocation_number_field: allocationNumberField,
         },
         draft_state_display: {
             status: 'draft',
-            label: 'טיוטה',
+            label: editMode ? 'עריכת מסמך' : 'טיוטה',
             tone: 'neutral',
             last_saved_at: typeof row.updated_at === 'string' ? row.updated_at : null,
             saved_by_label: null,
-            allowed_actions: canEdit ? ['save_income_document_draft'] : [],
+            allowed_actions: sessionActions.save.enabled ? ['save_income_document_draft'] : [],
         },
         header: {
             title: headerTitle,

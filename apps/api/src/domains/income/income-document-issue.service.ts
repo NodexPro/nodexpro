@@ -50,6 +50,7 @@ import {
   buildLegalSnapshotForIssue,
   buildTotalsSnapshotForIssue,
 } from './income-document-issue.pure.js';
+import { decidePreliminaryEditIssueGuard } from './income-document-conversion.pure.js';
 import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
 import { scheduleIncomeDocumentPdfRender } from './income-document-pdf.service.js';
 import { emitIncomeWorkEventsAfterDocumentIssued } from './income-work-engine-bridge.js';
@@ -181,6 +182,7 @@ interface FullDraftRow {
   status: string;
   issued_document_id: string | null;
   tax_allocation_number: string | null;
+  document_settings_json: unknown;
 }
 
 async function loadFullDraftForIssue(
@@ -190,7 +192,7 @@ async function loadFullDraftForIssue(
   const { data, error } = await supabaseAdmin
     .from('income_document_drafts')
     .select(
-      'id, organization_id, issuer_business_id, represented_client_id, actor_user_id, acting_mode, document_type, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, draft_totals_preview_json, payment_terms_json, due_date, document_date, payment_received_json, notes, currency, language, status, issued_document_id, tax_allocation_number',
+      'id, organization_id, issuer_business_id, represented_client_id, actor_user_id, acting_mode, document_type, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, draft_totals_preview_json, payment_terms_json, due_date, document_date, payment_received_json, notes, currency, language, status, issued_document_id, tax_allocation_number, document_settings_json',
     )
     .eq('id', draftId)
     .eq('organization_id', scope.org_id)
@@ -377,6 +379,12 @@ async function issueNewDocumentFromDraft(
   body: Record<string, unknown>,
   diag: IncomeIssueDiagnostic,
 ): Promise<{ issuedId: string; created: boolean }> {
+  // P0: preliminary-edit staging drafts must never allocate numbers or insert documents.
+  const preliminaryEditGuard = decidePreliminaryEditIssueGuard(draft.document_settings_json);
+  if (preliminaryEditGuard.action === 'reject') {
+    throw badRequest(preliminaryEditGuard.message, preliminaryEditGuard.code);
+  }
+
   try {
     assertDraftReadyToIssue(draft);
   } catch (e) {

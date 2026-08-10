@@ -35,12 +35,18 @@ import { intakeWorkEvent } from './work-engine.event-intake.service.js';
 import { canStaffPickUpUnassigned, resolveWorkTypeWorkflowPolicy, } from './work-engine.policy.service.js';
 import { applySlaHooksForCommand } from './work-engine.sla.service.js';
 import { buildReminderCandidateDedupKey, generateReminderCandidate, parseGenerateReminderCandidateWorkflowType, } from './work-engine.reminder.service.js';
-import { approveSendReminderCandidate, cancelReminderCandidate, editReminderCandidate, loadReminderCandidate, parseReminderSnoozePreset, snoozeReminderCandidate, } from './work-engine.reminder-review.service.js';
+import { approveReminderCandidate, approveSendReminderCandidate, cancelReminderCandidate, editReminderCandidate, loadReminderCandidate, parseReminderSnoozePreset, snoozeReminderCandidate, } from './work-engine.reminder-review.service.js';
+import { assertCollectionReminderApprovable, buildCollectionReminderReviewAggregate, } from './work-engine-collection-reminder-review.read-model.service.js';
+import { sendCollectionReminder } from './work-engine-collection-reminder-send.service.js';
+import { buildInvoiceCollectionControlAggregate } from './work-engine-invoice-collection-control.read-model.service.js';
+import { COLLECTION_REMINDER_REVIEW_AGGREGATE_KEY, INVOICE_COLLECTION_CONTROL_AGGREGATE_KEY, INVOICE_COLLECTION_FOLLOWUP_WORK_TYPE, } from './work-engine-collection-reminder.pure.js';
 import { assertGenerateReminderCandidateDevAccess, resolveGenerateReminderDraftCadence, } from './work-engine.queue-dev-tools.js';
 import { WORK_ENGINE_PERMISSIONS, requireWorkEnginePermission, } from './work-engine.rbac.js';
 import { CREATION_SOURCE_TYPES, OVERRIDE_KINDS, OVERRIDE_KINDS_REQUIRING_REASON, } from './work-engine.types.js';
 const REFRESH_FOUNDATION = 'work_engine_foundation_aggregate';
 const REFRESH_QUEUE = 'work_engine_queue_aggregate';
+const REFRESH_COLLECTION_REVIEW = COLLECTION_REMINDER_REVIEW_AGGREGATE_KEY;
+const REFRESH_COLLECTION_CONTROL = INVOICE_COLLECTION_CONTROL_AGGREGATE_KEY;
 function viewerQueueContext(ctx) {
     if (!ctx.membership)
         return null;
@@ -103,13 +109,49 @@ function parseRefreshAggregateKey(payload) {
         return 'foundation';
     if (raw === REFRESH_QUEUE)
         return 'queue';
-    throw badRequest(`Invalid refresh_aggregate: use '${REFRESH_FOUNDATION}', '${REFRESH_QUEUE}', or omit`, 'invalid_refresh_aggregate');
+    if (raw === REFRESH_COLLECTION_REVIEW)
+        return 'collection_reminder_review';
+    if (raw === REFRESH_COLLECTION_CONTROL)
+        return 'invoice_collection_control';
+    throw badRequest(`Invalid refresh_aggregate: use '${REFRESH_FOUNDATION}', '${REFRESH_QUEUE}', '${REFRESH_COLLECTION_REVIEW}', '${REFRESH_COLLECTION_CONTROL}', or omit`, 'invalid_refresh_aggregate');
 }
 function isQueueRefreshMode(payload) {
     return parseRefreshAggregateKey(payload) === 'queue';
 }
+function reminderViewerContext(ctx) {
+    if (!ctx.membership)
+        return null;
+    return {
+        userId: ctx.user.id,
+        permissions: ctx.membership.permissions ?? [],
+        roleCode: ctx.membership.roleCode ?? 'staff',
+    };
+}
 async function buildRefreshedForPayload(orgId, payload, ctx) {
-    if (parseRefreshAggregateKey(payload) === 'queue') {
+    const refreshKey = parseRefreshAggregateKey(payload);
+    if (refreshKey === 'collection_reminder_review') {
+        const candidateId = reqString(payload, 'reminder_candidate_id');
+        return {
+            aggregate_key: REFRESH_COLLECTION_REVIEW,
+            aggregate: (await buildCollectionReminderReviewAggregate({
+                orgId,
+                reminderCandidateId: candidateId,
+                viewer: reminderViewerContext(ctx),
+            })),
+        };
+    }
+    if (refreshKey === 'invoice_collection_control') {
+        const incomeDocumentId = reqString(payload, 'income_document_id');
+        return {
+            aggregate_key: REFRESH_COLLECTION_CONTROL,
+            aggregate: (await buildInvoiceCollectionControlAggregate({
+                orgId,
+                incomeDocumentId,
+                ctx,
+            })),
+        };
+    }
+    if (refreshKey === 'queue') {
         const filters = coerceWorkEngineQueueFilters(payload.aggregate_filters);
         const viewer = viewerQueueContext(ctx);
         return {
@@ -124,6 +166,33 @@ async function buildRefreshedForPayload(orgId, payload, ctx) {
     return {
         aggregate_key: REFRESH_FOUNDATION,
         aggregate: await buildWorkEngineFoundationAggregate({ orgId }),
+    };
+}
+async function resolveReminderCommandRefreshPayload(orgId, payload, candidateId) {
+    const explicit = asOptionalString(payload.refresh_aggregate);
+    if (explicit === REFRESH_COLLECTION_REVIEW || explicit === REFRESH_QUEUE) {
+        return { ...payload, reminder_candidate_id: candidateId, refresh_aggregate: explicit };
+    }
+    const candidate = await loadReminderCandidate(orgId, candidateId);
+    const { data: workItem, error } = await supabaseAdmin
+        .from('work_items')
+        .select('work_type')
+        .eq('org_id', orgId)
+        .eq('id', candidate.work_item_id)
+        .maybeSingle();
+    if (error)
+        throw error;
+    if (String(workItem?.work_type ?? '') === INVOICE_COLLECTION_FOLLOWUP_WORK_TYPE) {
+        return {
+            ...payload,
+            reminder_candidate_id: candidateId,
+            refresh_aggregate: REFRESH_COLLECTION_REVIEW,
+        };
+    }
+    return {
+        ...payload,
+        reminder_candidate_id: candidateId,
+        refresh_aggregate: explicit || REFRESH_QUEUE,
     };
 }
 /**
@@ -1259,13 +1328,10 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
             });
         }
         case 'edit_reminder_candidate': {
-            const queuePayload = {
-                ...payload,
-                refresh_aggregate: REFRESH_QUEUE,
-            };
-            return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
+            const candidateId = reqString(payload, 'reminder_candidate_id');
+            const refreshPayload = await resolveReminderCommandRefreshPayload(orgId, payload, candidateId);
+            return executeWithCommandIdempotency(ctx, orgId, command, refreshPayload, async () => {
                 requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
-                const candidateId = reqString(payload, 'reminder_candidate_id');
                 const expectedVersion = reqInt(payload, 'expected_version');
                 const body = reqString(payload, 'body');
                 const subject = asOptionalString(payload.subject);
@@ -1281,14 +1347,53 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
                 return { workItemId: current.work_item_id };
             });
         }
-        case 'approve_send_reminder_candidate': {
-            const queuePayload = {
+        case 'approve_reminder_candidate': {
+            const candidateId = reqString(payload, 'reminder_candidate_id');
+            const refreshPayload = await resolveReminderCommandRefreshPayload(orgId, {
                 ...payload,
-                refresh_aggregate: REFRESH_QUEUE,
-            };
-            return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
+                refresh_aggregate: asOptionalString(payload.refresh_aggregate) ?? REFRESH_COLLECTION_REVIEW,
+            }, candidateId);
+            return executeWithCommandIdempotency(ctx, orgId, command, refreshPayload, async () => {
                 requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
-                const candidateId = reqString(payload, 'reminder_candidate_id');
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const current = await loadReminderCandidate(orgId, candidateId);
+                await assertCollectionReminderApprovable({
+                    orgId,
+                    candidate: current,
+                });
+                await approveReminderCandidate({
+                    orgId,
+                    actorUserId,
+                    candidateId,
+                    expectedVersion,
+                });
+                return { workItemId: current.work_item_id };
+            });
+        }
+        case 'send_collection_reminder': {
+            const candidateId = reqString(payload, 'reminder_candidate_id');
+            const refreshPayload = await resolveReminderCommandRefreshPayload(orgId, {
+                ...payload,
+                refresh_aggregate: asOptionalString(payload.refresh_aggregate) ?? REFRESH_COLLECTION_REVIEW,
+            }, candidateId);
+            return executeWithCommandIdempotency(ctx, orgId, command, refreshPayload, async () => {
+                requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
+                const expectedVersion = reqInt(payload, 'expected_version');
+                const current = await loadReminderCandidate(orgId, candidateId);
+                await sendCollectionReminder({
+                    orgId,
+                    actorUserId,
+                    candidateId,
+                    expectedVersion,
+                });
+                return { workItemId: current.work_item_id };
+            });
+        }
+        case 'approve_send_reminder_candidate': {
+            const candidateId = reqString(payload, 'reminder_candidate_id');
+            const refreshPayload = await resolveReminderCommandRefreshPayload(orgId, payload, candidateId);
+            return executeWithCommandIdempotency(ctx, orgId, command, refreshPayload, async () => {
+                requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
                 const expectedVersion = reqInt(payload, 'expected_version');
                 const current = await loadReminderCandidate(orgId, candidateId);
                 await approveSendReminderCandidate({
@@ -1301,13 +1406,10 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
             });
         }
         case 'cancel_reminder_candidate': {
-            const queuePayload = {
-                ...payload,
-                refresh_aggregate: REFRESH_QUEUE,
-            };
-            return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
+            const candidateId = reqString(payload, 'reminder_candidate_id');
+            const refreshPayload = await resolveReminderCommandRefreshPayload(orgId, payload, candidateId);
+            return executeWithCommandIdempotency(ctx, orgId, command, refreshPayload, async () => {
                 requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
-                const candidateId = reqString(payload, 'reminder_candidate_id');
                 const expectedVersion = reqInt(payload, 'expected_version');
                 const reason = asOptionalString(payload.reason);
                 const current = await loadReminderCandidate(orgId, candidateId);
@@ -1486,13 +1588,10 @@ export async function executeWorkEngineCommand(ctx, command, payloadInput) {
             });
         }
         case 'snooze_reminder_candidate': {
-            const queuePayload = {
-                ...payload,
-                refresh_aggregate: REFRESH_QUEUE,
-            };
-            return executeWithCommandIdempotency(ctx, orgId, command, queuePayload, async () => {
+            const candidateId = reqString(payload, 'reminder_candidate_id');
+            const refreshPayload = await resolveReminderCommandRefreshPayload(orgId, payload, candidateId);
+            return executeWithCommandIdempotency(ctx, orgId, command, refreshPayload, async () => {
                 requireWorkEnginePermission(ctx, WORK_ENGINE_PERMISSIONS.write);
-                const candidateId = reqString(payload, 'reminder_candidate_id');
                 const expectedVersion = reqInt(payload, 'expected_version');
                 const snoozePreset = parseReminderSnoozePreset(payload.snooze_preset);
                 const current = await loadReminderCandidate(orgId, candidateId);

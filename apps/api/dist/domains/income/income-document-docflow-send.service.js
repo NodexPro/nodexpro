@@ -5,12 +5,13 @@ import { supabaseAdmin } from '../../db/client.js';
 import { forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertRowMatchesIssuerScope, reqUuid } from './income.guards.js';
-import { loadActiveIncomeIssuerScope } from './income-issuer-scope.service.js';
 import { incomeWorkspacePermissionsFromContext } from './income-issuer-context.service.js';
+import { resolveIssuerScopeForIssuedDocument } from './income-issued-document-issuer-scope.service.js';
 import { buildIncomeDocumentDocflowSendForm, mapDeliveryAttemptToDocflowHistoryRow, } from './income-document-docflow-delivery.read-model.pure.js';
 import { resolveIncomeDocumentDocflowSendEligibility } from './income-document-docflow-delivery.pure.js';
+import { toIncomeDocumentPdfSendReadinessView } from './income-document-email-delivery.read-model.pure.js';
 import { isDocflowEntitledForOrg, listIncomeDocumentDocflowAttempts, loadRepresentedClientDocflowPortalActive, } from './income-document-email-delivery.read-model.service.js';
-import { INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY, } from './income.types.js';
+import { INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY, } from './income.types.js';
 const DOCUMENT_TYPE_LABELS = {
     quote: 'הצעת מחיר',
     deal_invoice: 'חשבון עסקה',
@@ -57,8 +58,11 @@ async function loadRepresentedClientDisplayName(orgId, clientId) {
 export async function buildIncomeDocumentDocflowSendAggregate(params) {
     assertDocflowSendViewAccess(params.ctx);
     const incomeDocumentId = reqUuid(params.incomeDocumentId, 'income_document_id');
-    const scope = await loadActiveIncomeIssuerScope(params.ctx);
-    const doc = await loadIssuedDocumentForDocflowSend(scope.org_id, incomeDocumentId);
+    const orgId = params.ctx.organizationId;
+    if (!orgId)
+        throw forbidden('Organization context required');
+    const doc = await loadIssuedDocumentForDocflowSend(orgId, incomeDocumentId);
+    const scope = await resolveIssuerScopeForIssuedDocument(params.ctx, doc);
     assertRowMatchesIssuerScope(scope, doc);
     const [attempts, docflowEntitled, portalActive] = await Promise.all([
         listIncomeDocumentDocflowAttempts(scope.org_id, incomeDocumentId),
@@ -81,6 +85,9 @@ export async function buildIncomeDocumentDocflowSendAggregate(params) {
     if (sendEligibility.enabled) {
         allowedActions.push(INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW);
     }
+    if (sendEligibility.retry_pdf_render_allowed) {
+        allowedActions.push(INCOME_COMMAND_RETRY_PDF_RENDER);
+    }
     const clientDisplayName = doc.represented_client_id != null
         ? await loadRepresentedClientDisplayName(scope.org_id, doc.represented_client_id)
         : null;
@@ -91,6 +98,7 @@ export async function buildIncomeDocumentDocflowSendAggregate(params) {
         document_type_label: DOCUMENT_TYPE_LABELS[doc.document_type],
         represented_client_id: doc.represented_client_id,
         client_display_name: clientDisplayName,
+        pdf_send_readiness: toIncomeDocumentPdfSendReadinessView(sendEligibility.pdf_readiness),
         table_columns: DOC_HISTORY_COLUMNS,
         rows,
         send_form: buildIncomeDocumentDocflowSendForm({

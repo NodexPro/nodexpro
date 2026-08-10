@@ -1,4 +1,5 @@
 import { badRequest } from '../../shared/errors.js';
+import { resolveIncomeDocumentPdfSendReadiness, } from './income-document-pdf-send-readiness.pure.js';
 export function parseIncomeDocumentDocflowIdempotencyKey(body) {
     const raw = String(body.idempotency_key ?? '').trim();
     if (!raw)
@@ -28,25 +29,72 @@ export function assertIncomeRepresentedClientScopeForDocflowSend(representedClie
     return representedClientId;
 }
 export function resolveIncomeDocumentDocflowSendEligibility(input) {
+    const pdf_readiness = resolveIncomeDocumentPdfSendReadiness({
+        pdfRenderStatus: input.pdfRenderStatus,
+        pdfAssetId: input.pdfAssetId,
+    });
+    const retry_pdf_render_allowed = Boolean(input.permissions.issue) && pdf_readiness.retry_eligible;
     if (!input.permissions.issue) {
-        return { enabled: false, disabled_reason: 'אין הרשאת הנפקה' };
+        return {
+            enabled: false,
+            disabled_reason: 'אין הרשאת הנפקה',
+            disabled_reason_key: 'no_issue_permission',
+            pdf_readiness,
+            retry_pdf_render_allowed: false,
+        };
     }
     if (!input.representedClientId) {
-        return { enabled: false, disabled_reason: 'שליחה בדוקפלו זמינה במצב ניהול לקוח בלבד' };
+        return {
+            enabled: false,
+            disabled_reason: 'שליחה בדוקפלו זמינה במצב ניהול לקוח בלבד',
+            disabled_reason_key: 'self_mode_not_allowed',
+            pdf_readiness,
+            retry_pdf_render_allowed,
+        };
     }
     if (!input.docflowEntitled) {
-        return { enabled: false, disabled_reason: 'מודול דוקפלו אינו פעיל עבור הארגון' };
+        return {
+            enabled: false,
+            disabled_reason: 'מודול דוקפלו אינו פעיל עבור הארגון',
+            disabled_reason_key: 'docflow_not_entitled',
+            pdf_readiness,
+            retry_pdf_render_allowed,
+        };
     }
     if (!input.portalActive) {
-        return { enabled: false, disabled_reason: 'ללקוח אין גישה פעילה לפורטל דוקפלו' };
+        return {
+            enabled: false,
+            disabled_reason: 'ללקוח אין גישה פעילה לפורטל דוקפלו',
+            disabled_reason_key: 'docflow_portal_inactive',
+            pdf_readiness,
+            retry_pdf_render_allowed,
+        };
     }
     if (input.documentStatus !== 'issued') {
-        return { enabled: false, disabled_reason: 'המסמך טרם הונפק' };
+        return {
+            enabled: false,
+            disabled_reason: 'המסמך טרם הונפק',
+            disabled_reason_key: 'document_not_issued',
+            pdf_readiness,
+            retry_pdf_render_allowed,
+        };
     }
-    if (input.pdfRenderStatus !== 'rendered' || !input.pdfAssetId) {
-        return { enabled: false, disabled_reason: 'קובץ PDF אינו זמין לשליחה' };
+    if (!pdf_readiness.ready) {
+        return {
+            enabled: false,
+            disabled_reason: pdf_readiness.disabled_reason,
+            disabled_reason_key: pdf_readiness.disabled_reason_key,
+            pdf_readiness,
+            retry_pdf_render_allowed,
+        };
     }
-    return { enabled: true, disabled_reason: null };
+    return {
+        enabled: true,
+        disabled_reason: null,
+        disabled_reason_key: null,
+        pdf_readiness,
+        retry_pdf_render_allowed: false,
+    };
 }
 export function incomeDocflowDeliveryAttemptCountLabel(attemptCount) {
     if (attemptCount <= 0)

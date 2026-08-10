@@ -12,7 +12,7 @@ import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from '../income
 import { incomeDraftVatFallbackResolution, } from '../income/income-draft-vat-fallback.pure.js';
 import { computeDraftLineAmounts, resolveLineFx, resolveFxMapForDraftLines } from '../income/income-draft-line-compute.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
-import { computeDueDateFromPaymentTerms, isIncomeCustomerPaymentTermsKey, } from '../income/income-customer-payment-terms.pure.js';
+import { computeDueDateFromPaymentTerms, incomeCustomerPaymentTermsLabel, isIncomeCustomerPaymentTermsKey, } from '../income/income-customer-payment-terms.pure.js';
 import { loadResolvedBrandingProfileForDocumentType } from '../income/income-document-branding.service.js';
 import { renderIncomeBrandedPreviewHtml } from '../income/income-document-branding-preview.renderer.js';
 import { buildIncomeIssuerSnapshotForScope } from '../income/income-issuer-snapshot.service.js';
@@ -265,6 +265,30 @@ function stripProjectionDocumentNumbers(step) {
         document_preview: null,
     };
 }
+function resolveProjectionPaymentTermsDisplay(step) {
+    const field = step.settings_schema.find((item) => item.key === 'payment_terms');
+    if (!field?.value)
+        return null;
+    const fromOptions = field.options?.find((option) => option.value === field.value)?.label?.trim();
+    if (fromOptions)
+        return fromOptions;
+    if (isIncomeCustomerPaymentTermsKey(field.value)) {
+        return incomeCustomerPaymentTermsLabel(field.value);
+    }
+    return null;
+}
+function resolveProjectionAllocationNumberField(step) {
+    if (step.document_preview?.allocation_number_field) {
+        return step.document_preview.allocation_number_field;
+    }
+    return buildIncomeDocumentAllocationNumberField({
+        policy: defaultIncomeTaxAllocationNumberPolicy(),
+        documentType: step.document_type_key ?? null,
+        value: null,
+        canEdit: false,
+        isIssued: false,
+    });
+}
 function applyCycleDocumentDate(step, cycleDate) {
     const paymentTermsRaw = step.settings_schema.find((field) => field.key === 'payment_terms')?.value;
     const paymentTermsKey = paymentTermsRaw && isIncomeCustomerPaymentTermsKey(paymentTermsRaw) ? paymentTermsRaw : null;
@@ -425,7 +449,9 @@ export async function renderFutureCycleProjectionPreview(params) {
     const discountRow = totals.rows.find((row) => row.key === 'discount');
     const subtotalBefore = totals.rows.find((row) => row.key === 'subtotal_before_discount');
     const subtotalAfter = totals.rows.find((row) => row.key === 'subtotal_after_discount');
-    const allocationField = params.step.document_preview?.allocation_number_field;
+    // document_preview is stripped before projection render — resolve meta rows from step settings.
+    const paymentTermsDisplay = resolveProjectionPaymentTermsDisplay(params.step);
+    const allocationField = resolveProjectionAllocationNumberField(params.step);
     const previewHtml = renderIncomeBrandedPreviewHtml({
         branding,
         docTypeLabel: RETAINER_DOC_TYPE_LABELS[documentType],
@@ -435,9 +461,10 @@ export async function renderFutureCycleProjectionPreview(params) {
         recipient,
         document_date: documentDate,
         due_date: dueDate,
-        allocation_number_visible: allocationField?.visible ?? false,
-        allocation_number_display: allocationField?.display_value ?? null,
-        allocation_number_value_empty: !allocationField?.value?.trim(),
+        payment_terms_display: paymentTermsDisplay,
+        allocation_number_visible: allocationField.visible,
+        allocation_number_display: allocationField.display_value,
+        allocation_number_value_empty: !allocationField.value?.trim(),
         currency: totals.currency,
         lineRows,
         totals: {
@@ -481,14 +508,7 @@ export async function attachFutureCycleProjectionPreview(step, preview) {
             validation_messages: [],
             allowed_actions: ['preview_recurring_cycle_override'],
             toolbar_actions: [],
-            allocation_number_field: step.document_preview?.allocation_number_field ??
-                buildIncomeDocumentAllocationNumberField({
-                    policy: defaultIncomeTaxAllocationNumberPolicy(),
-                    documentType: step.document_type_key ?? null,
-                    value: null,
-                    canEdit: false,
-                    isIssued: false,
-                }),
+            allocation_number_field: resolveProjectionAllocationNumberField(step),
         },
     };
 }

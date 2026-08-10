@@ -5,7 +5,8 @@ import { resolveSectionedBrandingLayout, SECTIONED_GOLDEN_MASTER as GM, } from '
 import { getSectionedLogoFrameMeta } from './income-document-sectioned-logo-frame.pure.js';
 import { logoCssFitPercent, prepareLogoDataUrlForDocumentRenderDetailed, } from './income-document-logo-visible-fit.pure.js';
 const INVOICE_FONT = 'Heebo, Arial, Helvetica, sans-serif';
-const INVOICE_FONT_FACE = "@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap');";
+/** No external font CDN — PDF render must not depend on Google Fonts network. */
+const INVOICE_FONT_FACE = '';
 const NODEXPRO_FOOTER_URL = 'https://www.nodexpro.com';
 function escapeHtml(value) {
     const s = value == null ? '' : String(value);
@@ -678,7 +679,8 @@ ${INVOICE_FONT_FACE}
   max-width: 100%;
   min-height: 0;
 }
-.nx-doc--unified .nx-doc__issuer-name {
+/* Classic only — sectioned party names use GM 18px/800 (.nx-doc--sectioned .nx-doc__issuer-name). */
+.nx-doc--unified:not(.nx-doc--sectioned) .nx-doc__issuer-name {
   font-size: 19px;
   font-weight: 700;
   margin-bottom: 0;
@@ -707,7 +709,8 @@ ${INVOICE_FONT_FACE}
   line-height: 1.2;
   color: var(--nx-doc-text);
 }
-.nx-doc--unified .nx-doc__customer-name {
+/* Classic only — sectioned party names use GM 18px/800 (.nx-doc--sectioned .nx-doc__customer-name). */
+.nx-doc--unified:not(.nx-doc--sectioned) .nx-doc__customer-name {
   font-size: 19px;
   font-weight: 700;
   margin-bottom: 3px;
@@ -926,7 +929,7 @@ ${INVOICE_FONT_FACE}
   margin: 0 0 4px 0;
   align-self: flex-end;
 }
-.nx-doc__issuer-name { font-size: 19px; font-weight: 700; margin-bottom: 0; line-height: 1.15; color: var(--nx-doc-text); }
+.nx-doc:not(.nx-doc--sectioned) .nx-doc__issuer-name { font-size: 19px; font-weight: 700; margin-bottom: 0; line-height: 1.15; color: var(--nx-doc-text); }
 .nx-doc__issuer-subtitle { font-size: 12px; color: var(--nx-doc-text-muted); margin-bottom: 2px; line-height: 1.25; }
 .nx-doc__issuer-line { display: grid; grid-template-columns: ${PARTY_LINE_ICON_PX}px minmax(0, 1fr); gap: ${PARTY_LINE_GAP_PX}px; align-items: start; padding: 0; font-size: 12px; color: var(--nx-doc-text); line-height: 1.35; }
 .nx-doc__issuer-line-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; color: var(--nx-doc-icon); width: ${PARTY_LINE_ICON_PX}px; height: ${PARTY_LINE_ICON_PX}px; }
@@ -934,7 +937,7 @@ ${INVOICE_FONT_FACE}
 .nx-doc__issuer-line-value { text-align: start; line-height: 1.35; min-width: 0; word-break: break-word; }
 .nx-doc__customer { width: 100%; margin: 0; padding: 0 0 6px; border-bottom: 1px solid var(--nx-doc-border); background: transparent; box-shadow: none; }
 .nx-doc__customer-head { font-weight: 600; font-size: 14px; margin-bottom: 2px; line-height: 1.2; color: var(--nx-doc-text); }
-.nx-doc__customer-name { font-size: 19px; font-weight: 700; margin-bottom: 2px; line-height: 1.15; color: var(--nx-doc-text); }
+.nx-doc:not(.nx-doc--sectioned) .nx-doc__customer-name { font-size: 19px; font-weight: 700; margin-bottom: 2px; line-height: 1.15; color: var(--nx-doc-text); }
 .nx-doc__customer-lines { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; width: 100%; }
 .nx-doc__customer-line { display: grid; grid-template-columns: ${PARTY_LINE_ICON_PX}px minmax(0, 1fr); gap: ${PARTY_LINE_GAP_PX}px; align-items: start; font-size: 12px; padding: 0; color: var(--nx-doc-text); line-height: 1.35; }
 .nx-doc__customer-line-icon { display: inline-flex; margin-top: 0; align-items: center; justify-content: center; color: var(--nx-doc-icon); width: ${PARTY_LINE_ICON_PX}px; height: ${PARTY_LINE_ICON_PX}px; }
@@ -978,7 +981,9 @@ ${INVOICE_FONT_FACE}
 .nx-doc__platform-link { display: inline-flex; align-items: center; gap: 8px; color: var(--nx-doc-text-muted); font-size: 11px; text-decoration: none; }
 .nx-doc__platform-link:hover { color: var(--nx-doc-primary); }
 @media print {
-  .nx-doc { max-width: none; padding: 0; }
+  /* Do not strip sectioned document padding — viewer golden master keeps padding-inline. */
+  .nx-doc { max-width: none; }
+  .nx-doc:not(.nx-doc--sectioned) { padding: 0; }
   .nx-doc__payment-col, .nx-doc__comments, .nx-doc__customer { box-shadow: none; }
 }
 
@@ -996,7 +1001,7 @@ ${INVOICE_FONT_FACE}
   --nx-doc-logo-scale: ${sectionedLayout.scale};
   /* Full paper width. Equal 0.5cm side insets.
    * Viewport min-height so preview sheet fills the modal even when parent % height is indefinite.
-   * Print/PDF resets below — do not leave empty pages. */
+   * Print/PDF: clear min-height only — never strip padding (viewer is golden master). */
   width: 100%;
   max-width: 100%;
   flex: 1 1 auto;
@@ -1700,7 +1705,7 @@ ${INVOICE_FONT_FACE}
     width: 100%;
     max-width: none;
     min-height: 0;
-    padding: 0;
+    /* Preserve viewer sectioned padding (do not wipe). */
   }
 }
 </style>

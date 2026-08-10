@@ -2,6 +2,7 @@
  * Retainer schedule row lifecycle status — read-model only (no writes).
  */
 import { RECURRING_FAILURE_WORK_TYPE, RECURRING_WORK_TYPE, } from './work-engine-invoice-retainer.pure.js';
+import { OVERDUE_UNISSUED_STATUS_KEY, OVERDUE_UNISSUED_STATUS_LABEL, isRecurringScheduleDateOverdue, } from './work-engine-invoice-retainer-overdue-issue-date.pure.js';
 const OPEN_WORK_ITEM_STATES = new Set([
     'new',
     'assigned',
@@ -63,7 +64,7 @@ export function resolveScheduleRowStatus(params) {
     if (cycle?.generated_document_id || cycle?.status === 'issued') {
         return {
             status_key: 'issued',
-            status_label: 'אושר',
+            status_label: 'הופק',
             status_tone: 'success',
             icon_key: 'check',
             icon_display: scheduleRowIconDisplay('check'),
@@ -111,6 +112,18 @@ export function resolveScheduleRowStatus(params) {
             work_item_href: openTask && reviewWorkItem
                 ? buildScheduleRowWorkItemHref(reviewWorkItem.work_item_id)
                 : null,
+        };
+    }
+    if (isRecurringScheduleDateOverdue(params.scheduled_document_date, params.today_iso ?? '')) {
+        return {
+            status_key: OVERDUE_UNISSUED_STATUS_KEY,
+            status_label: OVERDUE_UNISSUED_STATUS_LABEL,
+            status_tone: 'warning',
+            icon_key: 'alert',
+            icon_display: scheduleRowIconDisplay('alert'),
+            work_state_label: null,
+            has_open_task: false,
+            work_item_href: null,
         };
     }
     return {

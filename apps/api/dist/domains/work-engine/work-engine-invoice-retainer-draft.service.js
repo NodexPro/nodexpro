@@ -18,7 +18,21 @@ import { computeDraftTotalsPreview, parseDocumentSettingsJson, serializeDocument
 import { vatResolutionCachePayload } from '../income/income-draft-vat-fallback.pure.js';
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
+import { resolveDraftDeliveryContactEmail } from '../income/income-document-issue-and-send.pure.js';
+import { loadIncomeRecipientById } from '../income/income-recipient.service.js';
 import { WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS } from './work-engine-invoices-document-creation.builders.js';
+/** Prefer template delivery email; else seed from end-customer profile (same as wizard begin). */
+export async function resolveRecurringCycleDraftDeliveryContactJson(params) {
+    const fromSnapshot = resolveDraftDeliveryContactEmail(params.snapshotDeliveryContactJson ?? null);
+    if (fromSnapshot) {
+        return { email: fromSnapshot, snapshot_only: true };
+    }
+    const recipient = await loadIncomeRecipientById(params.scope, params.endCustomerId);
+    const fromCustomer = resolveDraftDeliveryContactEmail({ email: recipient?.email ?? null });
+    if (!fromCustomer)
+        return null;
+    return { email: fromCustomer, snapshot_only: true };
+}
 const DRAFT_SELECT = 'id, organization_id, represented_client_id, issuer_business_id, income_customer_id, document_type, document_date, due_date, currency, language, notes, document_settings_json, delivery_contact_json, draft_lines_json, draft_totals_preview_json, status';
 async function loadDraftRow(orgId, draftId) {
     const { data, error } = await supabaseAdmin
@@ -219,6 +233,11 @@ export async function createRecurringCycleDraftFromSnapshot(params) {
         discount_amount_reference: params.discountAmountReference,
         vat_resolution_cache: vatResolutionCachePayload(documentDate, vatResolution),
     };
+    const delivery_contact_json = await resolveRecurringCycleDraftDeliveryContactJson({
+        scope: params.scope,
+        endCustomerId: params.endCustomerId,
+        snapshotDeliveryContactJson: snapshot.delivery_contact_json,
+    });
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
         .insert({
@@ -237,7 +256,7 @@ export async function createRecurringCycleDraftFromSnapshot(params) {
         language: snapshot.language,
         notes: snapshot.notes,
         payment_received_json: null,
-        delivery_contact_json: snapshot.delivery_contact_json,
+        delivery_contact_json,
         document_settings_json: snapshot.document_settings_json,
         draft_totals_preview_json,
         validation_warnings_json,

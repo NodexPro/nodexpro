@@ -3,30 +3,48 @@
  * Prefers Puppeteer when installed; falls back to headless Chromium/Edge CLI.
  */
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-async function renderWithPuppeteer(fullHtml) {
+import { isPdfBrowserResolutionUsable, } from './income-document-pdf-browser.pure.js';
+import { resolvePdfBrowserForLaunch } from './income-document-pdf-browser.service.js';
+async function renderWithPuppeteer(fullHtml, executablePath) {
     try {
         const puppeteer = await import('puppeteer');
         const browser = await puppeteer.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none'],
+            executablePath,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--font-render-hinting=none',
+            ],
         });
         try {
             const page = await browser.newPage();
-            await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
+            // Prefer local DOM ready; avoid waiting on external network (CDN fonts).
+            await page.setContent(fullHtml, { waitUntil: 'domcontentloaded' });
             await page.evaluate(async () => {
-                await document.fonts.ready;
+                try {
+                    await Promise.race([
+                        document.fonts.ready,
+                        new Promise((resolve) => setTimeout(resolve, 2_000)),
+                    ]);
+                }
+                catch {
+                    /* fonts optional for PDF */
+                }
             });
+            // @page margin: 48px recreates viewer paper chrome. Puppeteer margins must stay 0.
             const pdfBytes = await page.pdf({
                 format: 'A4',
                 printBackground: true,
                 preferCSSPageSize: true,
-                margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
+                scale: 1,
+                margin: { top: '0', right: '0', bottom: '0', left: '0' },
             });
             return Buffer.from(pdfBytes);
         }
@@ -40,31 +58,13 @@ async function renderWithPuppeteer(fullHtml) {
         if (code === 'ERR_MODULE_NOT_FOUND' || message.includes("Cannot find package 'puppeteer'")) {
             return null;
         }
-        throw err;
+        // Browser missing / launch failure on host → try Chromium CLI fallback.
+        console.error('[income-pdf] puppeteer render failed; trying CLI fallback', {
+            message,
+            executablePath,
+        });
+        return null;
     }
-}
-function candidateChromiumExecutables() {
-    const fromEnv = [process.env.PUPPETEER_EXECUTABLE_PATH, process.env.CHROMIUM_PATH].filter((v) => Boolean(v?.trim()));
-    const win = [
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-        'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    ];
-    const linux = [
-        '/usr/bin/google-chrome',
-        '/usr/bin/google-chrome-stable',
-        '/usr/bin/chromium',
-        '/usr/bin/chromium-browser',
-    ];
-    return [...fromEnv, ...(process.platform === 'win32' ? win : linux)];
-}
-function resolveChromiumExecutable() {
-    for (const candidate of candidateChromiumExecutables()) {
-        if (existsSync(candidate))
-            return candidate;
-    }
-    return null;
 }
 async function renderWithChromiumCli(fullHtml, executablePath) {
     const id = randomUUID();
@@ -100,12 +100,22 @@ async function renderWithChromiumCli(fullHtml, executablePath) {
         await Promise.allSettled([unlink(htmlPath), unlink(pdfPath)]);
     }
 }
+function unavailablePdfEngineError(resolution) {
+    return new Error(`Unified PDF render unavailable: install puppeteer (npm install) or set CHROMIUM_PATH to a headless Chromium/Chrome binary (source=${resolution.source}, path_exists=${resolution.path_exists})`);
+}
 export async function renderIncomeDocumentPdfBufferFromHtml(fullHtml) {
-    const puppeteerBuffer = await renderWithPuppeteer(fullHtml);
+    const resolution = await resolvePdfBrowserForLaunch();
+    console.info('[income-pdf] browser resolution', {
+        browser_source: resolution.source,
+        browser_path_exists: resolution.path_exists,
+        browser_path: resolution.path,
+    });
+    if (!isPdfBrowserResolutionUsable(resolution) || !resolution.path) {
+        throw unavailablePdfEngineError(resolution);
+    }
+    const executablePath = resolution.path;
+    const puppeteerBuffer = await renderWithPuppeteer(fullHtml, executablePath);
     if (puppeteerBuffer)
         return puppeteerBuffer;
-    const chromium = resolveChromiumExecutable();
-    if (chromium)
-        return renderWithChromiumCli(fullHtml, chromium);
-    throw new Error('Unified PDF render unavailable: install puppeteer (npm install) or set CHROMIUM_PATH to a headless Chromium/Chrome binary');
+    return renderWithChromiumCli(fullHtml, executablePath);
 }

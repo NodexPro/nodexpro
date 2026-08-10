@@ -8,8 +8,9 @@ import { forCommandCreateEntry, forCommandGetEntry, forCommandUpdateEntry } from
 import { forCommandCreateLink, forCommandDeleteLink } from './link.service.js';
 import { forCommandCreatePeriod, forCommandGetPeriod, forCommandUpdatePeriod } from './period.service.js';
 import { forSystemRecomputeDerivedSummaries } from './summary.service.js';
-import { ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT, } from './accounting-base-income-payment.pure.js';
+import { ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT, ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION, } from './accounting-base-income-payment.pure.js';
 import { executeRecordAndAllocateIncomePayment } from './accounting-base-income-payment.service.js';
+import { executeReverseIncomePaymentAllocation } from './accounting-base-income-payment-reversal.service.js';
 const PERMISSIONS = {
     PERIOD_MANAGE: 'accounting_base.period.manage',
     ENTRY_WRITE: 'accounting_base.entry.write',
@@ -315,6 +316,21 @@ export async function executeAccountingBaseCommand(ctx, organizationId, body) {
             payment_id: out.payment_id,
             allocation_id: out.allocation_id,
             refreshed: out.refreshed,
+        };
+    }
+    if (type === ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION) {
+        const out = await executeReverseIncomePaymentAllocation(ctx, organizationId, payload);
+        return {
+            ok: true,
+            command: out.command,
+            payment_id: out.payment_id,
+            allocation_id: out.original_allocation_id,
+            original_allocation_id: out.original_allocation_id,
+            reversal_allocation_id: out.reversal_allocation_id,
+            income_document_id: out.income_document_id,
+            replay: out.replay,
+            refreshed: out.refreshed,
+            additional_refreshed: out.additional_refreshed,
         };
     }
     let refreshTarget;

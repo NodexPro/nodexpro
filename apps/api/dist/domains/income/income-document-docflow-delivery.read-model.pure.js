@@ -44,6 +44,7 @@ export function buildIncomeDocumentDocflowSendForm(params) {
         fields: [],
         enabled: params.sendEligibility.enabled,
         disabled_reason: params.sendEligibility.disabled_reason,
+        disabled_reason_key: params.sendEligibility.disabled_reason_key,
     };
 }
 export function mapDeliveryAttemptToDocflowHistoryRow(attempt) {

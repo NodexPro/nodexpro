@@ -12,18 +12,22 @@ import { assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './inc
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { assertIncomeDocumentIssueDateAllowed, resolveIssueDateFromDraft, } from './income-document-issue-date.validation.js';
 import { assertIssueMonthAllowed, parseIssueMonthFromCommandBody, resolveIssueDateForIssueMonth, } from '../work-engine/work-engine-invoice-retainer-issue-month-selector.pure.js';
+import { assertIssueDateNotBeforeMin, clampIssueDateNotBeforeMin, isRecurringScheduleDateOverdue, } from '../work-engine/work-engine-invoice-retainer-overdue-issue-date.pure.js';
 import { todayIsoDate } from './income-retainer-template-document-date.pure.js';
 import { resolveIncomeIssueMonthWindowForOrg } from './income-issue-month-window-resolver.js';
+import { resolveActivePublishedOwnerInvoiceLayoutFreeze } from '../owner-invoice-document-layout/owner-invoice-document-layout.service.js';
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { allocateIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { assertDraftReadyToIssue, buildLegalSnapshotForIssue, buildTotalsSnapshotForIssue, } from './income-document-issue.pure.js';
+import { decidePreliminaryEditIssueGuard } from './income-document-conversion.pure.js';
 import { applyAccountingPostingForIssuedDocument } from './income-accounting-posting.service.js';
-import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
+import { scheduleIncomeDocumentPdfRender } from './income-document-pdf.service.js';
 import { emitIncomeWorkEventsAfterDocumentIssued } from './income-work-engine-bridge.js';
 import { findRecurringCycleIssuedDocumentId, linkRecurringCycleIssuedDocument, } from '../work-engine/work-engine-invoice-retainer-cycles.service.js';
 import { abortIncomeIssueIdempotency, beginIncomeIssueIdempotency, completeIncomeIssueIdempotency, parseIssueIdempotencyKey, } from './income-issue-idempotency.js';
 import { createIncomeIssueDiagnostic, extractIncomeIssueSafeError, logIncomeIssueFailed, logIncomeIssueStage, optionalRecurringCycleIdFromBody, safeUuidForLog, withIncomeIssueStage, } from './income-issue-diagnostic.js';
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
+import { linkIncomeDocumentConversionTargetOnIssue } from './income-document-conversion.service.js';
 import { resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded, resolveAndApplyRecurringCycleIssueIssuerScope, } from './income-recurring-cycle-issue-issuer-scope.service.js';
 import { buildAlreadyIssuedIssueResult, buildFreshIssuedIssueResult, } from './income-document-issue-result.pure.js';
 const PG_UNIQUE_VIOLATION = '23505';
@@ -73,7 +77,7 @@ function isUniqueViolation(error) {
 async function loadFullDraftForIssue(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
-        .select('id, organization_id, issuer_business_id, represented_client_id, actor_user_id, acting_mode, document_type, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, draft_totals_preview_json, payment_terms_json, due_date, document_date, payment_received_json, notes, currency, language, status, issued_document_id, tax_allocation_number')
+        .select('id, organization_id, issuer_business_id, represented_client_id, actor_user_id, acting_mode, document_type, income_customer_id, one_time_customer_snapshot_json, draft_lines_json, draft_totals_preview_json, payment_terms_json, due_date, document_date, payment_received_json, notes, currency, language, status, issued_document_id, tax_allocation_number, document_settings_json')
         .eq('id', draftId)
         .eq('organization_id', scope.org_id)
         .maybeSingle();
@@ -101,7 +105,7 @@ async function findIssuedDocumentBySourceDraft(orgId, sourceDraftId) {
 async function loadIssuedDocumentSummary(scope, issuedDocumentId) {
     const { data, error } = await supabaseAdmin
         .from('income_documents')
-        .select('id, organization_id, issuer_business_id, document_number, document_type, issue_date, represented_client_id, accounting_posting_status, accounting_entry_id')
+        .select('id, organization_id, issuer_business_id, document_number, document_type, issue_date, represented_client_id, accounting_posting_status, accounting_entry_id, pdf_render_status')
         .eq('id', issuedDocumentId)
         .eq('organization_id', scope.org_id)
         .maybeSingle();
@@ -120,6 +124,7 @@ async function loadIssuedDocumentSummary(scope, issuedDocumentId) {
         represented_client_id: row.represented_client_id,
         accounting_posting_status: row.accounting_posting_status,
         accounting_entry_id: row.accounting_entry_id,
+        pdf_render_status: String(row.pdf_render_status ?? 'pending'),
     };
 }
 async function ensureRecurringCycleLinked(params) {
@@ -206,6 +211,11 @@ async function buildCustomerSnapshot(scope, draft) {
     };
 }
 async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
+    // P0: preliminary-edit staging drafts must never allocate numbers or insert documents.
+    const preliminaryEditGuard = decidePreliminaryEditIssueGuard(draft.document_settings_json);
+    if (preliminaryEditGuard.action === 'reject') {
+        throw badRequest(preliminaryEditGuard.message, preliminaryEditGuard.code);
+    }
     try {
         assertDraftReadyToIssue(draft);
     }
@@ -217,10 +227,60 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
     const docType = findAvailableDocumentType(docTypesResult.available_document_types, draft.document_type);
     if (!docType)
         throw badRequest('document_type is invalid');
+    const todayIso = todayIsoDate();
+    const reviewContext = parseRecurringCycleReviewCommandContext(body);
+    let overdueMinIssueDate = null;
+    if (reviewContext) {
+        const { data: cycleRow, error: cycleErr } = await supabaseAdmin
+            .from('income_recurring_document_cycles')
+            .select('scheduled_document_date, generated_document_id')
+            .eq('organization_id', scope.org_id)
+            .eq('id', reviewContext.cycle_id)
+            .eq('recurring_profile_id', reviewContext.profile_id)
+            .maybeSingle();
+        throwIfSupabaseError(cycleErr, 'loadRecurringCycleForOverdueIssueDate');
+        const cycle = cycleRow;
+        if (cycle &&
+            !cycle.generated_document_id &&
+            isRecurringScheduleDateOverdue(cycle.scheduled_document_date, todayIso)) {
+            overdueMinIssueDate = todayIso;
+        }
+    }
     const issueMonth = parseIssueMonthFromCommandBody(body);
+    const explicitIssueDate = optionalIssueDateFromBody(body);
     let issue_date;
-    if (issueMonth) {
-        const todayIso = todayIsoDate();
+    if (overdueMinIssueDate) {
+        // Overdue unissued: explicit calendar date wins; never earlier than today.
+        if (explicitIssueDate) {
+            issue_date = explicitIssueDate;
+        }
+        else if (issueMonth) {
+            const issueMonthWindow = await resolveIncomeIssueMonthWindowForOrg(scope.org_id, 'IL', todayIso);
+            try {
+                assertIssueMonthAllowed({
+                    todayIso,
+                    issueMonth,
+                    monthsBack: 0,
+                    monthsAhead: issueMonthWindow.months_ahead,
+                });
+            }
+            catch (e) {
+                throw badRequest(e instanceof Error ? e.message : 'issue_month is invalid');
+            }
+            issue_date = resolveIssueDateForIssueMonth(issueMonth, overdueMinIssueDate);
+        }
+        else {
+            issue_date = overdueMinIssueDate;
+        }
+        issue_date = clampIssueDateNotBeforeMin(issue_date, overdueMinIssueDate);
+        try {
+            assertIssueDateNotBeforeMin(issue_date, overdueMinIssueDate);
+        }
+        catch (e) {
+            throw badRequest(e instanceof Error ? e.message : 'issue_date is invalid');
+        }
+    }
+    else if (issueMonth) {
         const issueMonthWindow = await resolveIncomeIssueMonthWindowForOrg(scope.org_id, 'IL', todayIso);
         try {
             assertIssueMonthAllowed({
@@ -236,7 +296,7 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
         issue_date = resolveIssueDateForIssueMonth(issueMonth, draft.document_date);
     }
     else {
-        issue_date = resolveIssueDateFromDraft(draft.document_date, optionalIssueDateFromBody(body));
+        issue_date = resolveIssueDateFromDraft(draft.document_date, explicitIssueDate);
     }
     await assertIncomeDocumentIssueDateAllowed({
         scope,
@@ -276,6 +336,12 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
             source_draft_id: draft.id,
         },
     });
+    // INV-13A: freeze active published Owner layout on NEW issues only.
+    // No published layout / migration missing → null columns → legacy render path.
+    // Historical rows are never backfilled.
+    const ownerLayoutFreeze = await resolveActivePublishedOwnerInvoiceLayoutFreeze({
+        country_code: 'IL',
+    });
     const issuedInsert = await withIncomeIssueStage(diag, {
         started: 'issued_document_insert_started',
         completed: 'issued_document_insert_completed',
@@ -308,6 +374,12 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
             tax_allocation_number: typeof draft.tax_allocation_number === 'string' && draft.tax_allocation_number.trim()
                 ? draft.tax_allocation_number.trim()
                 : null,
+            ...(ownerLayoutFreeze
+                ? {
+                    owner_layout_version_id: ownerLayoutFreeze.owner_layout_version_id,
+                    owner_layout_snapshot_json: ownerLayoutFreeze.owner_layout_snapshot_json,
+                }
+                : {}),
         })
             .select('id')
             .single();
@@ -398,6 +470,13 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
             throw conflict('Draft was modified during issue', 'INCOME_DRAFT_ISSUE_CONFLICT');
         }
     });
+    // Conversion lineage (no-op when draft was not created via convert_income_document_to_draft).
+    await linkIncomeDocumentConversionTargetOnIssue({
+        orgId: scope.org_id,
+        draftId: draft.id,
+        issuedDocumentId: issuedId,
+        actorUserId: scope.actor_user_id,
+    });
     await writeAudit({
         organizationId: scope.org_id,
         actorUserId: scope.actor_user_id,
@@ -412,7 +491,6 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
             issuer_business_id: scope.issuer_business_id,
         },
     });
-    await renderIncomeDocumentPdf(ctx, scope.org_id, issuedId);
     void emitIncomeWorkEventsAfterDocumentIssued({
         ctx,
         orgId: scope.org_id,
@@ -440,6 +518,13 @@ async function finishIdempotentIssue(scope, draftId, issuedDocumentId, lease, di
         cycleId,
         diag,
     });
+    // Idempotent issue must still heal / verify conversion lineage without duplicating rows.
+    await linkIncomeDocumentConversionTargetOnIssue({
+        orgId: scope.org_id,
+        draftId,
+        issuedDocumentId,
+        actorUserId: scope.actor_user_id,
+    });
     if (lease?.kind === 'fresh') {
         await completeIncomeIssueIdempotency({
             leaseRowId: lease.leaseRowId,
@@ -457,6 +542,7 @@ async function finishIdempotentIssue(scope, draftId, issuedDocumentId, lease, di
             document_number: summary.document_number,
             document_type_key: summary.document_type,
             issued_date: summary.issue_date,
+            pdf_render_status: summary.pdf_render_status,
         }),
     };
 }
@@ -467,6 +553,7 @@ export async function executeIssueIncomeDocument(ctx, body) {
         org_id: typeof ctx.organizationId === 'string' && ctx.organizationId ? ctx.organizationId : 'unknown',
         draft_id: safeUuidForLog(body.draft_id) ?? 'unvalidated',
         recurring_cycle_id: recurringCycleId,
+        correlation_id: ctx.correlationId,
     });
     logIncomeIssueStage(diag, 'issue_command_received', { duration_ms: 0 });
     let draft_id;
@@ -596,6 +683,11 @@ export async function executeIssueIncomeDocument(ctx, body) {
             cycleId: recurringCycleId,
             diag,
         });
+        await withIncomeIssueStage(diag, {
+            started: 'pdf_scheduling_started',
+            completed: 'pdf_scheduling_completed',
+            failing_stage: 'pdf_scheduling',
+        }, () => scheduleIncomeDocumentPdfRender(ctx, scope.org_id, issuedDocumentId));
         if (lease?.kind === 'fresh') {
             await completeIncomeIssueIdempotency({
                 leaseRowId: lease.leaseRowId,
@@ -613,6 +705,7 @@ export async function executeIssueIncomeDocument(ctx, body) {
                 document_number: summary.document_number,
                 document_type_key: summary.document_type,
                 issued_date: summary.issue_date,
+                pdf_render_status: summary.pdf_render_status,
             }),
         };
     }

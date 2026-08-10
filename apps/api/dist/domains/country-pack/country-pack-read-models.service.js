@@ -1237,6 +1237,15 @@ export async function buildOwnerLegalControlPanelAggregate(ctx, opts) {
                 read_route: '/owner/system-health',
                 enabled: true,
             },
+            {
+                section_key: 'invoice_document_builder',
+                label: 'Invoice Document Builder',
+                description: 'INV-13A Owner global invoice layout (versioned). Structure only — VAT rates stay in Legal Values / Country Pack.',
+                aggregate_key: 'owner_invoice_document_builder_aggregate',
+                read_route: '/owner/invoice-document-builder',
+                enabled: true,
+                lazy: true,
+            },
         ],
         country_packs_admin: countryPacksAdmin,
         legal_values: {

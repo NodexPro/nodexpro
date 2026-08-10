@@ -3,12 +3,14 @@
  */
 import { supabaseAdmin } from '../../db/client.js';
 import { forbidden } from '../../shared/errors.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { loadActiveIncomeIssuerScope, toIssuerContextSummary } from './income-issuer-scope.service.js';
 import { buildDocumentCreationSchema } from './income-document-creation-schema.builders.js';
 import { resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
 import { accountingDisplayStatusLabel, resolveAccountingDisplayStatus, } from './income-accounting-posting.mapping.js';
 import { incomeDocumentDownloadPath } from './income-document-pdf.service.js';
+import { buildIncomeIssuedDocumentPdfAction, buildIncomeIssuedDocumentViewAction, } from './income-document-view-action.pure.js';
 import { buildIncomeDocumentEmailDeliveryBlock } from './income-document-email-delivery.read-model.pure.js';
 import { buildIncomeDocumentDocflowDeliveryBlock } from './income-document-docflow-delivery.read-model.pure.js';
 import { loadEmailAttemptCountsByDocumentIds, loadDocflowAttemptCountsByDocumentIds, isDocflowEntitledForOrg, loadRepresentedClientDocflowPortalActive, } from './income-document-email-delivery.read-model.service.js';
@@ -157,7 +159,7 @@ async function loadDrafts(scope, customerNames) {
 async function loadIssuedDocuments(scope) {
     let query = supabaseAdmin
         .from('income_documents')
-        .select('id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at, accounting_posting_status, accounting_entry_id, pdf_render_status, pdf_asset_id')
+        .select('id, document_number, document_type, document_status, customer_snapshot_json, issue_date, currency, lines_snapshot_json, source_draft_id, created_at, accounting_posting_status, accounting_entry_id, pdf_render_status, pdf_asset_id, pdf_render_error')
         .eq('document_status', 'issued')
         .order('issue_date', { ascending: false })
         .order('created_at', { ascending: false })
@@ -197,11 +199,29 @@ async function loadIssuedDocuments(scope) {
         if (canRetryPosting && r.accounting_posting_status === 'failed') {
             rowActions.push('retry_income_document_accounting_posting');
         }
-        if (canRetryPosting && r.pdf_render_status === 'failed') {
-            rowActions.push('retry_income_document_pdf_render');
+        const pdfDownloadPath = r.pdf_render_status === 'rendered' && r.pdf_asset_id
+            ? incomeDocumentDownloadPath(r.id)
+            : null;
+        const view_action = buildIncomeIssuedDocumentViewAction({
+            incomeDocumentId: r.id,
+            canView,
+        });
+        const pdf_action = buildIncomeIssuedDocumentPdfAction({
+            incomeDocumentId: r.id,
+            canRetryPdf: canRetryPosting,
+            pdfRenderStatus: r.pdf_render_status,
+            pdfAssetId: r.pdf_asset_id,
+            pdfDownloadPath,
+            pdfRenderError: r.pdf_render_error,
+        });
+        if (view_action.enabled) {
+            rowActions.push('open_document');
         }
-        if (canView && r.pdf_render_status === 'rendered' && r.pdf_asset_id) {
+        if (pdf_action.enabled) {
             rowActions.push('download_pdf');
+        }
+        if (pdf_action.retry_command) {
+            rowActions.push(pdf_action.retry_command);
         }
         return {
             document_id: r.id,
@@ -226,9 +246,9 @@ async function loadIssuedDocuments(scope) {
             pdf_render_status: r.pdf_render_status,
             pdf_status_label: pdfStatusLabel(r.pdf_render_status),
             pdf_asset_id: r.pdf_asset_id,
-            pdf_download_path: r.pdf_render_status === 'rendered' && r.pdf_asset_id
-                ? incomeDocumentDownloadPath(r.id)
-                : null,
+            pdf_download_path: pdf_action.pdf_download_path,
+            view_action,
+            pdf_action,
             email_delivery: buildIncomeDocumentEmailDeliveryBlock({
                 incomeDocumentId: r.id,
                 attemptCount: emailAttemptCounts.get(r.id) ?? 0,
@@ -384,6 +404,12 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(scope, wizardDraf
     const brandingProfile = includeBrandingProfile
         ? await buildDocumentBrandingProfileAggregate(scope, canEdit)
         : null;
+    const editMode = wizardDraftOverlay.document_details_step?.edit_mode ?? null;
+    const allowedActions = buildWorkspaceAllowedActions(scope.permissions).filter((action) => {
+        if (!editMode)
+            return true;
+        return action !== 'issue_income_document' && action !== 'issue_and_send_income_document';
+    });
     return {
         aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
         org_id: scope.org_id,
@@ -399,15 +425,17 @@ export async function buildIncomeWorkspaceWizardPatchAggregate(scope, wizardDraf
         issued_documents_count: 0,
         recipient_search,
         document_details_step: wizardDraftOverlay.document_details_step ?? null,
+        edit_mode: editMode,
         wizard_starting_step_key: startingStepKey,
         active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
         document_branding_profile: brandingProfile,
         document_branding_settings_entrypoint: buildDocumentBrandingSettingsEntrypoint(scope.permissions),
-        allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
+        allowed_actions: allowedActions,
         warnings: [],
     };
 }
 export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride, recipientOverlay = {}, wizardDraftOverlay = {}) {
+    const aggregateStartMs = Date.now();
     const scope = scopeOverride ?? (await loadActiveIncomeIssuerScope(ctx));
     if (!scope.permissions.view)
         throw forbidden('income.view required');
@@ -435,7 +463,7 @@ export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride, recipien
     const recipient_search = await buildIncomeRecipientSearchModel(scope, scope.permissions, recipientOverlay);
     const canEdit = scope.permissions.edit;
     const brandingProfile = await buildDocumentBrandingProfileAggregate(scope, canEdit);
-    return {
+    const response = {
         aggregate_key: INCOME_WORKSPACE_AGGREGATE_KEY,
         org_id: scope.org_id,
         actor_user_id: scope.actor_user_id,
@@ -457,10 +485,24 @@ export async function buildIncomeWorkspaceAggregate(ctx, scopeOverride, recipien
         issued_documents_count: issuedCount,
         recipient_search,
         document_details_step: wizardDraftOverlay.document_details_step ?? null,
+        edit_mode: wizardDraftOverlay.document_details_step?.edit_mode ?? null,
         active_wizard_draft_id: wizardDraftOverlay.active_wizard_draft_id ?? null,
         document_branding_profile: brandingProfile,
         document_branding_settings_entrypoint: buildDocumentBrandingSettingsEntrypoint(scope.permissions),
-        allowed_actions: buildWorkspaceAllowedActions(scope.permissions),
+        allowed_actions: (() => {
+            const editMode = wizardDraftOverlay.document_details_step?.edit_mode ?? null;
+            return buildWorkspaceAllowedActions(scope.permissions).filter((action) => {
+                if (!editMode)
+                    return true;
+                return action !== 'issue_income_document' && action !== 'issue_and_send_income_document';
+            });
+        })(),
         warnings: docTypesResult.warnings,
     };
+    logAggregatePayloadBreakdown(INCOME_WORKSPACE_AGGREGATE_KEY, response, {
+        correlation_id: ctx.correlationId ?? null,
+        organization_id: scope.org_id,
+        duration_ms: Date.now() - aggregateStartMs,
+    });
+    return response;
 }

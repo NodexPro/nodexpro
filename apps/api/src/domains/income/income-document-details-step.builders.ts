@@ -49,6 +49,12 @@ import type { IncomeDocumentBrandingProfileAggregate } from './income-document-b
 import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById } from './income-recipient.service.js';
 import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.types.js';
 import {
+  buildPreliminaryDocumentEditMode,
+  buildWizardSessionActions,
+  type PreliminaryDocumentEditMode,
+  type WizardSessionActions,
+} from './income-document-conversion.pure.js';
+import {
   incomeCustomerPaymentTermsLabel,
   INCOME_CUSTOMER_PAYMENT_TERMS_OPTIONS,
   resolveTaxInvoiceDueDate,
@@ -280,6 +286,10 @@ export type IncomeDocumentDetailsTotalsBlock = {
 export type IncomeDocumentDetailsStep = {
   draft_id: string;
   document_type_key?: IncomeDocumentType | null;
+  /** Present when wizard is editing an existing Quote / Deal Invoice in place. */
+  edit_mode?: PreliminaryDocumentEditMode | null;
+  /** Backend-owned footer/session actions for the active draft session. */
+  session_actions?: WizardSessionActions;
   document_discount: IncomeDocumentDetailsDiscount;
   totals_block: IncomeDocumentDetailsTotalsBlock;
   document_preview?: IncomeDocumentPreviewModel | null;
@@ -1052,10 +1062,22 @@ export async function buildIncomeDocumentDetailsStep(
 
   const documentDiscount = buildDocumentDiscountModel(settings, totals, canEdit);
   const totalsBlock = buildTotalsBlock(totals, settings, vatResolution);
+  const editMode = buildPreliminaryDocumentEditMode({
+    documentSettingsJson: row.document_settings_json,
+    documentType: row.document_type,
+    documentNumberPreview: numberPreview,
+  });
+  const sessionActions = buildWizardSessionActions({
+    canEdit,
+    canIssue: canEdit && scope.permissions.issue,
+    editMode,
+  });
 
   return {
     draft_id: row.id,
     document_type_key: row.document_type ?? null,
+    edit_mode: editMode,
+    session_actions: sessionActions,
     document_discount: documentDiscount,
     totals_block: totalsBlock,
     document_branding_profile: brandingProfileAggregate,
@@ -1071,17 +1093,19 @@ export async function buildIncomeDocumentDetailsStep(
       currency: row.currency,
       preview_html: previewHtml,
       validation_messages: previewMessages,
-      allowed_actions: canEdit ? ['generate_income_document_preview'] : [],
+      allowed_actions: sessionActions.preview.enabled
+        ? ['generate_income_document_preview']
+        : [],
       toolbar_actions: buildPreviewToolbarActions(),
       allocation_number_field: allocationNumberField,
     },
     draft_state_display: {
       status: 'draft',
-      label: 'טיוטה',
+      label: editMode ? 'עריכת מסמך' : 'טיוטה',
       tone: 'neutral',
       last_saved_at: typeof row.updated_at === 'string' ? row.updated_at : null,
       saved_by_label: null,
-      allowed_actions: canEdit ? ['save_income_document_draft'] : [],
+      allowed_actions: sessionActions.save.enabled ? ['save_income_document_draft'] : [],
     },
     header: {
       title: headerTitle,

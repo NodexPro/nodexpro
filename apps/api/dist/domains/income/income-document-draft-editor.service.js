@@ -25,6 +25,7 @@ import { computeDueDateFromPaymentTerms } from './income-customer-payment-terms.
 import { hasPermission } from '../rbac/rbac.service.js';
 import { publicDisplayNameOrNull } from './income-document-preview-party.pure.js';
 import { INCOME_PERMISSIONS } from './income.types.js';
+import { isPreliminaryEditableType, PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY, readPreliminaryEditSourceDocumentId, } from './income-document-conversion.pure.js';
 async function loadIssuerDisplayName(orgId, issuerBusinessId) {
     const { data, error } = await supabaseAdmin
         .from('clients')
@@ -86,7 +87,7 @@ export async function resumeIncomeDocumentDraftFromContext(ctx, body) {
     const result = await resumeIncomeDocumentDraft(scope, { draft_id });
     return { scope, result };
 }
-const DRAFT_SELECT = 'id, organization_id, issuer_business_id, represented_client_id, document_type, document_date, due_date, notes, currency, language, draft_lines_json, payment_received_json, delivery_contact_json, document_settings_json, validation_warnings_json, draft_totals_preview_json, income_customer_id, one_time_customer_snapshot_json, tax_allocation_number, status, user_saved_at, updated_at';
+const DRAFT_SELECT = 'id, organization_id, issuer_business_id, represented_client_id, document_type, document_date, due_date, notes, currency, language, draft_lines_json, payment_received_json, delivery_contact_json, document_settings_json, validation_warnings_json, draft_totals_preview_json, payment_terms_json, income_customer_id, one_time_customer_snapshot_json, tax_allocation_number, customer_po_reference, status, user_saved_at, updated_at';
 export async function loadWizardDraftRow(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
@@ -130,6 +131,18 @@ function recipientFieldsFromSelected(selected) {
         return { income_customer_id: selected.income_customer_id, one_time_customer_snapshot_json: null };
     }
     return { income_customer_id: null, one_time_customer_snapshot_json: selected.snapshot };
+}
+function preliminaryEditSourceDocumentId(row) {
+    return readPreliminaryEditSourceDocumentId(row.document_settings_json);
+}
+function preservePreliminaryEditMarker(row, nextSettingsJson) {
+    const sourceDocumentId = preliminaryEditSourceDocumentId(row);
+    if (!sourceDocumentId)
+        return nextSettingsJson;
+    return {
+        ...nextSettingsJson,
+        [PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY]: sourceDocumentId,
+    };
 }
 async function deliveryEmailFromRecipient(scope, selected) {
     if (!selected)
@@ -372,7 +385,9 @@ export async function updateIncomeDocumentDiscount(scope, body) {
         throw badRequest(fieldErrors.value ?? 'Invalid document discount');
     }
     const nextSettings = { ...settings, discount };
-    const patch = { document_settings_json: serializeDocumentSettingsJson(nextSettings) };
+    const patch = {
+        document_settings_json: preservePreliminaryEditMarker(row, serializeDocumentSettingsJson(nextSettings)),
+    };
     const merged = { ...row, ...patch };
     const priorCache = row.draft_totals_preview_json &&
         typeof row.draft_totals_preview_json === 'object' &&
@@ -530,10 +545,10 @@ export async function updateIncomeDocumentDraftSettings(scope, body) {
         const s = optionalString(value);
         const parsed = s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
         patch.due_date = parsed;
-        patch.document_settings_json = serializeDocumentSettingsJson({
+        patch.document_settings_json = preservePreliminaryEditMarker(row, serializeDocumentSettingsJson({
             ...settings,
             due_date_manual_override: parsed != null,
-        });
+        }));
     }
     else if (key === 'payment_received_note') {
         const note = optionalString(value);
@@ -543,12 +558,15 @@ export async function updateIncomeDocumentDraftSettings(scope, body) {
         if (value !== 'standard' && value !== 'exempt') {
             throw badRequest('invalid vat_mode');
         }
-        patch.document_settings_json = { ...settings, vat_mode: value };
+        patch.document_settings_json = preservePreliminaryEditMarker(row, { ...settings, vat_mode: value });
     }
     else if (key === 'amount_rounding') {
         if (value !== 'none' && value !== 'nearest_agora')
             throw badRequest('invalid amount_rounding');
-        patch.document_settings_json = { ...settings, amount_rounding: value };
+        patch.document_settings_json = preservePreliminaryEditMarker(row, {
+            ...settings,
+            amount_rounding: value,
+        });
     }
     else if (key === 'document_type') {
         const dt = parseIncomeDocumentType(value);
@@ -657,6 +675,165 @@ export async function updateIncomeDocumentDeliveryContact(scope, body) {
     const saved = await persistWizardDraft(scope, draft_id, { delivery_contact_json }, { action: 'update_delivery_contact', snapshot_only: true });
     return buildOverlayForDraft(scope, draft_id, true, saved, docType);
 }
+async function buildCustomerSnapshotForDraftRow(scope, row) {
+    if (row.income_customer_id) {
+        const { data, error } = await supabaseAdmin
+            .from('income_customers')
+            .select('id, organization_id, issuer_business_id, represented_client_id, display_name, phone, email, tax_id, address_json, is_one_time, status')
+            .eq('id', row.income_customer_id)
+            .eq('organization_id', scope.org_id)
+            .maybeSingle();
+        throwIfSupabaseError(error, 'buildPreliminaryEditCustomerSnapshot');
+        if (!data)
+            throw badRequest('Income customer not found');
+        const customer = data;
+        assertRowMatchesIssuerScope(scope, customer);
+        if (customer.status !== 'active')
+            throw badRequest('Income customer is not active');
+        return {
+            source: 'income_customer',
+            income_customer_id: customer.id,
+            display_name: customer.display_name,
+            phone: customer.phone,
+            email: customer.email,
+            tax_id: customer.tax_id,
+            address_json: customer.address_json,
+            is_one_time: customer.is_one_time,
+        };
+    }
+    return {
+        source: 'one_time_snapshot',
+        ...(row.one_time_customer_snapshot_json ?? {}),
+    };
+}
+async function savePreliminaryDocumentEditIfNeeded(scope, draftId, row, docType) {
+    const sourceDocumentId = preliminaryEditSourceDocumentId(row);
+    if (!sourceDocumentId)
+        return null;
+    if (!row.document_type || !isPreliminaryEditableType(row.document_type)) {
+        throw badRequest('Only quote or deal_invoice can be edited in place');
+    }
+    const { data: sourceRaw, error: sourceErr } = await supabaseAdmin
+        .from('income_documents')
+        .select('id, organization_id, represented_client_id, issuer_business_id, actor_user_id, acting_mode, document_type, document_status, document_number, source_draft_id')
+        .eq('organization_id', scope.org_id)
+        .eq('id', sourceDocumentId)
+        .maybeSingle();
+    throwIfSupabaseError(sourceErr, 'loadPreliminaryEditSourceDocument');
+    if (!sourceRaw)
+        throw notFound('Income document not found');
+    const source = sourceRaw;
+    assertRowMatchesIssuerScope(scope, source);
+    if (!isPreliminaryEditableType(source.document_type)) {
+        throw badRequest('Only quote or deal_invoice can be edited in place');
+    }
+    if (source.document_status === 'cancelled_future') {
+        throw badRequest('Cancelled preliminary document cannot be edited');
+    }
+    if (source.document_status !== 'issued') {
+        throw badRequest('Preliminary document is not editable');
+    }
+    if (source.document_type !== row.document_type) {
+        throw badRequest('Preliminary edit cannot change document type');
+    }
+    const validation = await validationForRow(scope, row, docType);
+    const customerSnapshot = await buildCustomerSnapshotForDraftRow(scope, row);
+    const totalsSnapshot = {
+        ...validation.draft_totals_preview_json,
+        preview: true,
+        not_financial_truth: true,
+        not_accounting_base_truth: true,
+        currency: row.currency || 'ILS',
+        line_count: Array.isArray(validation.draft_lines_json) ? validation.draft_lines_json.length : 0,
+    };
+    const draftExtras = row;
+    const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
+    const { error: updateDocErr } = await supabaseAdmin
+        .from('income_documents')
+        .update({
+        income_customer_id: row.income_customer_id,
+        customer_snapshot_json: customerSnapshot,
+        issue_date: documentDate,
+        due_date: row.due_date,
+        currency: row.currency || 'ILS',
+        language: row.language || 'he',
+        lines_snapshot_json: validation.draft_lines_json,
+        totals_snapshot_json: totalsSnapshot,
+        notes: row.notes,
+        tax_allocation_number: typeof row.tax_allocation_number === 'string' && row.tax_allocation_number.trim()
+            ? row.tax_allocation_number.trim()
+            : null,
+        customer_po_reference: draftExtras.customer_po_reference ?? null,
+    })
+        .eq('organization_id', scope.org_id)
+        .eq('id', source.id)
+        .eq('document_status', 'issued')
+        .eq('document_type', source.document_type)
+        .eq('document_number', source.document_number);
+    throwIfSupabaseError(updateDocErr, 'updatePreliminaryDocumentInPlace', {
+        migrationHint: '159_income_preliminary_document_edit_in_place.sql',
+    });
+    if (source.source_draft_id) {
+        // Never copy the staging-edit marker into the original source draft settings.
+        const sourceDraftSettingsJson = serializeDocumentSettingsJson(parseDocumentSettingsJson(row.document_settings_json));
+        const { error: updateSourceDraftErr } = await supabaseAdmin
+            .from('income_document_drafts')
+            .update({
+            income_customer_id: row.income_customer_id,
+            one_time_customer_snapshot_json: row.one_time_customer_snapshot_json,
+            draft_lines_json: validation.draft_lines_json,
+            draft_totals_preview_json: validation.draft_totals_preview_json,
+            validation_warnings_json: validation.validation_warnings_json,
+            payment_terms_json: draftExtras.payment_terms_json ?? null,
+            due_date: row.due_date,
+            document_date: documentDate,
+            payment_received_json: row.payment_received_json,
+            notes: row.notes,
+            currency: row.currency || 'ILS',
+            language: row.language || 'he',
+            document_settings_json: sourceDraftSettingsJson,
+            tax_allocation_number: typeof row.tax_allocation_number === 'string' && row.tax_allocation_number.trim()
+                ? row.tax_allocation_number.trim()
+                : null,
+            customer_po_reference: draftExtras.customer_po_reference ?? null,
+        })
+            .eq('organization_id', scope.org_id)
+            .eq('id', source.source_draft_id);
+        throwIfSupabaseError(updateSourceDraftErr, 'updatePreliminarySourceDraftContext');
+    }
+    await persistWizardDraft(scope, draftId, {
+        draft_lines_json: validation.draft_lines_json,
+        draft_totals_preview_json: {
+            ...validation.draft_totals_preview_json,
+            document_number_preview: source.document_number,
+        },
+        validation_warnings_json: validation.validation_warnings_json,
+        user_saved_at: null,
+    }, {
+        action: 'save_preliminary_document_edit',
+        source_document_id: source.id,
+        document_number: source.document_number,
+    }, row);
+    await writeAudit({
+        organizationId: scope.org_id,
+        actorUserId: scope.actor_user_id,
+        moduleCode: 'income',
+        entityType: 'income_document',
+        entityId: source.id,
+        action: AUDIT_ACTIONS.INCOME_PRELIMINARY_DOCUMENT_EDITED,
+        payload: {
+            source_document_id: source.id,
+            edit_draft_id: draftId,
+            document_type: source.document_type,
+            document_number: source.document_number,
+        },
+    });
+    const saved = await loadWizardDraftRow(scope, draftId);
+    return buildOverlayForDraft(scope, draftId, true, saved, docType, {
+        totalsPreview: validation.totalsPreview,
+        vatResolution: validation.vatResolution,
+    });
+}
 export async function saveIncomeDocumentDraft(scope, body) {
     if (clientSuppliedUserSavedAt(body)) {
         throw badRequest('user_saved_at cannot be set by client', 'VALIDATION_ERROR');
@@ -664,6 +841,9 @@ export async function saveIncomeDocumentDraft(scope, body) {
     const draft_id = reqUuid(body.draft_id, 'draft_id');
     const row = await loadWizardDraftRow(scope, draft_id);
     const docType = await resolveDocType(scope, row.document_type);
+    const preliminaryEditOverlay = await savePreliminaryDocumentEditIfNeeded(scope, draft_id, row, docType);
+    if (preliminaryEditOverlay)
+        return preliminaryEditOverlay;
     // Re-run validation + totals + BOI FX resolution and persist refreshed preview JSON.
     // First explicit save stamps user_saved_at (listable as טיוטה); repeats preserve original.
     const savePatch = {};

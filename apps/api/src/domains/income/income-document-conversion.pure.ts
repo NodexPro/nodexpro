@@ -38,6 +38,128 @@ export const INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT =
 export const PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY =
   'preliminary_edit_source_document_id' as const;
 
+/** Stable backend reason when Issue is attempted on a preliminary-edit staging draft. */
+export const PRELIMINARY_EDIT_CANNOT_ISSUE_CODE = 'preliminary_edit_cannot_issue' as const;
+
+export const PRELIMINARY_EDIT_CANNOT_ISSUE_MESSAGE =
+  'זהו עריכת מסמך קיים (הצעת מחיר / חשבון עסקה). יש לשמור את השינויים — לא להפיק מסמך חדש.' as const;
+
+export type PreliminaryDocumentEditMode = {
+  type: 'preliminary_document_edit';
+  source_document_id: string;
+  source_document_number: string | null;
+  source_document_type: string;
+};
+
+export type WizardSessionAction = {
+  enabled: boolean;
+  command: string | null;
+  label: string;
+  disabled_reason: string | null;
+};
+
+export type WizardSessionActions = {
+  save: WizardSessionAction;
+  preview: WizardSessionAction;
+  issue: WizardSessionAction;
+  issue_and_send: WizardSessionAction;
+};
+
+export function readPreliminaryEditSourceDocumentId(
+  documentSettingsJson: unknown,
+): string | null {
+  if (
+    !documentSettingsJson ||
+    typeof documentSettingsJson !== 'object' ||
+    Array.isArray(documentSettingsJson)
+  ) {
+    return null;
+  }
+  const sourceId = (documentSettingsJson as Record<string, unknown>)[
+    PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY
+  ];
+  return typeof sourceId === 'string' && sourceId.trim() ? sourceId.trim() : null;
+}
+
+/**
+ * Canonical Issue guard decision (pure). Caller must reject before numbering / insert.
+ */
+export function decidePreliminaryEditIssueGuard(documentSettingsJson: unknown):
+  | { action: 'allow' }
+  | {
+      action: 'reject';
+      code: typeof PRELIMINARY_EDIT_CANNOT_ISSUE_CODE;
+      message: typeof PRELIMINARY_EDIT_CANNOT_ISSUE_MESSAGE;
+      source_document_id: string;
+    } {
+  const sourceDocumentId = readPreliminaryEditSourceDocumentId(documentSettingsJson);
+  if (!sourceDocumentId) return { action: 'allow' };
+  return {
+    action: 'reject',
+    code: PRELIMINARY_EDIT_CANNOT_ISSUE_CODE,
+    message: PRELIMINARY_EDIT_CANNOT_ISSUE_MESSAGE,
+    source_document_id: sourceDocumentId,
+  };
+}
+
+export function buildPreliminaryDocumentEditMode(params: {
+  documentSettingsJson: unknown;
+  documentType: string | null;
+  documentNumberPreview: string | null;
+}): PreliminaryDocumentEditMode | null {
+  const sourceDocumentId = readPreliminaryEditSourceDocumentId(params.documentSettingsJson);
+  if (!sourceDocumentId || !params.documentType) return null;
+  return {
+    type: 'preliminary_document_edit',
+    source_document_id: sourceDocumentId,
+    source_document_number: params.documentNumberPreview,
+    source_document_type: params.documentType,
+  };
+}
+
+export function buildWizardSessionActions(params: {
+  canEdit: boolean;
+  canIssue: boolean;
+  editMode: PreliminaryDocumentEditMode | null;
+}): WizardSessionActions {
+  const isPreliminaryEdit = params.editMode?.type === 'preliminary_document_edit';
+  return {
+    save: {
+      enabled: params.canEdit,
+      command: params.canEdit ? 'save_income_document_draft' : null,
+      label: isPreliminaryEdit ? 'שמור שינויים' : 'שמירת טיוטה',
+      disabled_reason: params.canEdit ? null : 'נדרשת הרשאת עריכה',
+    },
+    preview: {
+      enabled: params.canEdit,
+      command: params.canEdit ? 'generate_income_document_preview' : null,
+      label: 'תצוגה מקדימה',
+      disabled_reason: params.canEdit ? null : 'נדרשת הרשאת עריכה',
+    },
+    issue: {
+      enabled: params.canIssue && !isPreliminaryEdit,
+      command: params.canIssue && !isPreliminaryEdit ? 'issue_income_document' : null,
+      label: 'הפק מסמך',
+      disabled_reason: isPreliminaryEdit
+        ? PRELIMINARY_EDIT_CANNOT_ISSUE_MESSAGE
+        : params.canIssue
+          ? null
+          : 'נדרשת הרשאת הפקה',
+    },
+    issue_and_send: {
+      enabled: params.canIssue && !isPreliminaryEdit,
+      command:
+        params.canIssue && !isPreliminaryEdit ? 'issue_and_send_income_document' : null,
+      label: 'הפק ושלח',
+      disabled_reason: isPreliminaryEdit
+        ? PRELIMINARY_EDIT_CANNOT_ISSUE_MESSAGE
+        : params.canIssue
+          ? null
+          : 'נדרשת הרשאת הפקה',
+    },
+  };
+}
+
 export type IncomeConversionSourceType = 'quote' | 'deal_invoice';
 export type IncomeConversionTargetType = 'deal_invoice' | 'tax_invoice' | 'tax_invoice_receipt';
 

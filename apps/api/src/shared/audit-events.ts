@@ -284,6 +284,7 @@ export const AUDIT_ACTIONS = {
   INCOME_DOCUMENT_CONVERSION_CREATED: 'income.document_conversion_created',
   INCOME_DOCUMENT_CONVERSION_TARGET_LINKED: 'income.document_conversion_target_linked',
   INCOME_DOCUMENT_CONVERSION_LINEAGE_CONFLICT: 'income.document_conversion_lineage_conflict',
+  INCOME_PRELIMINARY_DOCUMENT_EDITED: 'income.preliminary_document_edited',
   INCOME_PRELIMINARY_DOCUMENT_CANCELLED: 'income.preliminary_document_cancelled',
   /** Income INC-3.5 — issuer profile projection synced from Core org business profile. */
   INCOME_ISSUER_PROFILE_SYNCED: 'income.issuer_profile_synced',

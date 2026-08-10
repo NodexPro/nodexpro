@@ -62,6 +62,7 @@ type SourceDoc = {
   currency: string;
   language: string;
   notes: string | null;
+  issue_date: string | null;
   due_date: string | null;
   lines_snapshot_json: unknown;
   tax_allocation_number: string | null;
@@ -75,7 +76,7 @@ async function loadSourceDocument(orgId: string, documentId: string): Promise<So
   const { data, error } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, organization_id, represented_client_id, issuer_business_id, acting_mode, document_type, document_status, document_number, income_customer_id, customer_snapshot_json, currency, language, notes, due_date, lines_snapshot_json, tax_allocation_number, customer_po_reference, source_draft_id, legal_snapshot_json, totals_snapshot_json',
+      'id, organization_id, represented_client_id, issuer_business_id, acting_mode, document_type, document_status, document_number, income_customer_id, customer_snapshot_json, currency, language, notes, issue_date, due_date, lines_snapshot_json, tax_allocation_number, customer_po_reference, source_draft_id, legal_snapshot_json, totals_snapshot_json',
     )
     .eq('organization_id', orgId)
     .eq('id', documentId)
@@ -452,7 +453,7 @@ export async function executeBeginEditIncomePreliminaryDocument(
     draft_lines_json: serializeConvertedDraftLines(draftLines),
     payment_terms_json: sourceDraftTerms.payment_terms_json,
     due_date: source.due_date,
-    document_date: null as string | null,
+    document_date: source.issue_date,
     payment_received_json: null as Record<string, unknown> | null,
     notes: source.notes,
     currency: source.currency || 'ILS',
@@ -462,6 +463,10 @@ export async function executeBeginEditIncomePreliminaryDocument(
 
   const { validation_warnings_json, draft_totals_preview_json } =
     await validateDraftAgainstDocumentTypeRules(payload, docType);
+  const editDraftTotalsPreview = {
+    ...draft_totals_preview_json,
+    document_number_preview: source.document_number,
+  };
 
   const { data: inserted, error: insertErr } = await supabaseAdmin
     .from('income_document_drafts')
@@ -477,16 +482,17 @@ export async function executeBeginEditIncomePreliminaryDocument(
       draft_lines_json: serializeConvertedDraftLines(draftLines),
       payment_terms_json: sourceDraftTerms.payment_terms_json,
       due_date: source.due_date,
+      document_date: source.issue_date,
       notes: source.notes,
       currency: source.currency || 'ILS',
       language: source.language || 'he',
       tax_allocation_number: source.tax_allocation_number,
       customer_po_reference: customerPo,
       document_settings_json: documentSettingsJson,
-      draft_totals_preview_json,
+      draft_totals_preview_json: editDraftTotalsPreview,
       validation_warnings_json,
       status: 'draft',
-      user_saved_at: new Date().toISOString(),
+      user_saved_at: null,
     })
     .select('id')
     .single();

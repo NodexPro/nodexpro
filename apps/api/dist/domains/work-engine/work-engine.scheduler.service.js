@@ -18,8 +18,11 @@ import { reprocessPendingWorkEventsForOrg } from './work-engine.event-intake.ser
 import { scanAndEmitIncomeInvoiceOverdueForOrg } from '../income/income-work-engine-bridge.js';
 import { runWorkEngineRecurringDocumentScheduler } from './work-engine-invoice-retainer.scheduler.service.js';
 import { scanRecurringDocumentSendFollowupsForOrg } from './work-engine-invoice-retainer-send-followup.scheduler.service.js';
+import { scanCollectionReminderCandidatesForOrg } from './work-engine-collection-reminder.scheduler.service.js';
 import { wakeExpiredSnoozedReminderCandidates } from './work-engine.reminder-review.service.js';
 import { recomputeWorkItemSlaStatus } from './work-engine.sla.service.js';
+import { resolveApiDeployMarker } from '../income/income-issue-diagnostic.js';
+import { resolveCorrelationId } from '../../shared/observability.js';
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MAX_WORK_ITEMS_PER_RUN = 500;
 const DEFAULT_MAX_PENDING_EVENTS_PER_ORG = 50;
@@ -125,9 +128,12 @@ export async function runWorkEngineScheduler(params) {
             skipped_reason: 'run_in_progress',
             run_context_key: params?.run_context_key ?? 'scheduler:work_engine',
             dry_run: params?.dry_run === true,
+            correlation_id: params?.correlation_id,
         });
     }
     const runId = randomUUID();
+    const correlationId = resolveCorrelationId(params?.correlation_id ?? null);
+    const startedAtIso = new Date().toISOString();
     const runContextKey = String(params?.run_context_key ?? 'scheduler:work_engine').trim();
     const dryRun = params?.dry_run === true;
     const batchSize = Math.min(Math.max(Number(params?.batch_size ?? DEFAULT_BATCH_SIZE) || DEFAULT_BATCH_SIZE, 1), 500);
@@ -139,6 +145,9 @@ export async function runWorkEngineScheduler(params) {
     const summary = {
         ok: true,
         run_id: runId,
+        correlation_id: correlationId,
+        started_at: startedAtIso,
+        completed_at: null,
         run_context_key: runContextKey,
         dry_run: dryRun,
         skipped: false,
@@ -156,6 +165,8 @@ export async function runWorkEngineScheduler(params) {
         recurring_drafts_created: 0,
         recurring_failures: 0,
         recurring_send_followups_emitted: 0,
+        collection_reminder_items_scanned: 0,
+        collection_reminders_created: 0,
         errors: [],
     };
     try {
@@ -212,6 +223,22 @@ export async function runWorkEngineScheduler(params) {
                     if (actorUserId) {
                         const bridgeCtx = buildSchedulerIncomeBridgeContext(orgId, actorUserId);
                         await scanAndEmitIncomeInvoiceOverdueForOrg(orgId, bridgeCtx);
+                        // INV-4B — after intake, evaluate collection follow-up reminder candidates
+                        // with batched Accounting Base debt truth (no send).
+                        const collectionReminders = await scanCollectionReminderCandidatesForOrg({
+                            orgId,
+                            actorUserId,
+                            dryRun: false,
+                        });
+                        summary.collection_reminder_items_scanned += collectionReminders.work_items_scanned;
+                        summary.collection_reminders_created += collectionReminders.reminders_created;
+                        summary.reminders_created += collectionReminders.reminders_created;
+                        if (collectionReminders.errors > 0) {
+                            summary.errors.push({
+                                org_id: orgId,
+                                error: `collection_reminder_scan_errors:${collectionReminders.errors}`,
+                            });
+                        }
                         const recurring = await runWorkEngineRecurringDocumentScheduler({
                             org_id: orgId,
                             batch_size: batchSize,
@@ -247,6 +274,19 @@ export async function runWorkEngineScheduler(params) {
                 payload: { ...summary },
             });
         }
+        summary.completed_at = new Date().toISOString();
+        summary.ok = summary.errors.length === 0;
+        console.info('[scheduler][result]', {
+            correlation_id: summary.correlation_id,
+            run_id: summary.run_id,
+            started_at: summary.started_at,
+            completed_at: summary.completed_at,
+            processed: summary.scanned_work_items + summary.recurring_profiles_scanned,
+            succeeded: summary.recurring_drafts_created,
+            failed: summary.recurring_failures + summary.errors.length,
+            skipped: summary.skipped,
+            deploy_marker: resolveApiDeployMarker(),
+        });
         return summary;
     }
     finally {
@@ -254,9 +294,13 @@ export async function runWorkEngineScheduler(params) {
     }
 }
 function emptySummary(opts) {
+    const now = new Date().toISOString();
     return {
         ok: true,
         run_id: randomUUID(),
+        correlation_id: resolveCorrelationId(opts.correlation_id ?? null),
+        started_at: now,
+        completed_at: now,
         run_context_key: opts.run_context_key,
         dry_run: opts.dry_run,
         skipped: opts.skipped,
@@ -274,6 +318,8 @@ function emptySummary(opts) {
         recurring_drafts_created: 0,
         recurring_failures: 0,
         recurring_send_followups_emitted: 0,
+        collection_reminder_items_scanned: 0,
+        collection_reminders_created: 0,
         errors: [],
     };
 }

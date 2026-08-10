@@ -13,6 +13,10 @@ import { REMINDER_CHANNELS, } from '../country-pack/operational-communication-ow
 import { resolveOperationalCommunicationPolicies } from '../country-pack/operational-communication-policy.service.js';
 import { formatOffsetMinutesAsPeriodLabel } from './work-engine.reminder.logic.js';
 import { createSystemMessageCore } from '../docflow/docflow-system-message-core.service.js';
+import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
+import { resolveIncomeInvoiceOriginalAmount } from '../accounting-base/accounting-base-income-payment.pure.js';
+import { backendTodayIsoDate, resolveIncomeOverdueCollectionIntake, } from '../income/invoice-lifecycle.pure.js';
+import { composeCollectionReminderInvoiceTruth, INVOICE_COLLECTION_FOLLOWUP_WORK_TYPE, } from './work-engine-collection-reminder.pure.js';
 export const REMINDER_SNOOZE_PRESETS = [
     { preset_key: '1h', label: '1 hour', duration_minutes: 60 },
     { preset_key: '4h', label: '4 hours', duration_minutes: 240 },
@@ -406,6 +410,84 @@ async function ensureReminderDeliveryIntent(params) {
     });
     return notificationId;
 }
+/**
+ * INV-4C — approve only (ready for delivery). Does not create delivery intent or send.
+ * Reused by approve_send for the approve half of the legacy path.
+ */
+export async function approveReminderCandidate(params) {
+    let current = await assertExpectedCandidateVersion(params.orgId, params.candidateId, params.expectedVersion);
+    if (current.status === 'approved') {
+        return {
+            candidateId: params.candidateId,
+            status: 'approved',
+            alreadyApproved: true,
+        };
+    }
+    if (current.status === 'sending' || current.status === 'sent') {
+        return {
+            candidateId: params.candidateId,
+            status: current.status,
+            alreadyApproved: true,
+        };
+    }
+    assertApprovable(current);
+    const messageBody = (current.edited_body ?? current.body).trim();
+    if (!messageBody)
+        throw badRequest('Reminder message body is empty');
+    const channels = parseChannelOrder(current.channel_order_snapshot);
+    const primaryChannel = current.channel || channels[0] || 'docflow';
+    const nowIso = new Date().toISOString();
+    const { data: approvedRow, error: approveErr } = await supabaseAdmin
+        .from('work_reminder_candidates')
+        .update({
+        status: 'approved',
+        delivery_status: 'not_started',
+        delivery_error: null,
+        approved_by_user_id: params.actorUserId,
+        approved_at: nowIso,
+        version: current.version + 1,
+    })
+        .eq('org_id', params.orgId)
+        .eq('id', params.candidateId)
+        .eq('version', current.version)
+        .in('status', ['pending_review', 'edited', 'snoozed', 'delivery_failed'])
+        .select(REMINDER_CANDIDATE_SELECT)
+        .maybeSingle();
+    if (approveErr)
+        throw approveErr;
+    if (!approvedRow) {
+        current = await loadReminderCandidate(params.orgId, params.candidateId);
+        if (current.status === 'approved' ||
+            current.status === 'sending' ||
+            current.status === 'sent') {
+            return {
+                candidateId: params.candidateId,
+                status: current.status,
+                alreadyApproved: true,
+            };
+        }
+        throw conflict('Reminder candidate was updated by another session');
+    }
+    await writeAudit({
+        organizationId: params.orgId,
+        actorUserId: params.actorUserId,
+        moduleCode: 'work_engine',
+        entityType: 'work_reminder_candidate',
+        entityId: params.candidateId,
+        action: AUDIT_ACTIONS.REMINDER_CANDIDATE_APPROVED,
+        payload: {
+            work_item_id: current.work_item_id,
+            channel: primaryChannel,
+            ready_for_delivery: true,
+            sent: false,
+        },
+    });
+    return {
+        candidateId: params.candidateId,
+        status: 'approved',
+        alreadyApproved: false,
+    };
+}
 export async function approveSendReminderCandidate(params) {
     let current = await assertExpectedCandidateVersion(params.orgId, params.candidateId, params.expectedVersion);
     if (current.status === 'sent') {
@@ -416,6 +498,9 @@ export async function approveSendReminderCandidate(params) {
     }
     assertApprovable(current);
     const workItem = await loadWorkItemForReminder(params.orgId, current.work_item_id);
+    if (workItem.work_type === 'invoice_collection_followup') {
+        throw badRequest('Collection reminders cannot be sent via approve_send in INV-4C; use approve_reminder_candidate (send is INV-4D)', 'collection_approve_does_not_send');
+    }
     const clientId = current.client_id ?? workItem.client_id;
     if (!clientId)
         throw badRequest('Reminder candidate has no client target');
@@ -426,48 +511,13 @@ export async function approveSendReminderCandidate(params) {
     const primaryChannel = current.channel || channels[0] || 'docflow';
     const shouldDocflow = primaryChannel === 'docflow' || channels.includes('docflow');
     if (current.status !== 'approved' && current.status !== 'sending') {
-        const nowIso = new Date().toISOString();
-        const { data: approvedRow, error: approveErr } = await supabaseAdmin
-            .from('work_reminder_candidates')
-            .update({
-            status: 'approved',
-            delivery_status: 'pending_dispatch',
-            delivery_error: null,
-            approved_by_user_id: params.actorUserId,
-            approved_at: nowIso,
-            version: current.version + 1,
-        })
-            .eq('org_id', params.orgId)
-            .eq('id', params.candidateId)
-            .eq('version', current.version)
-            .in('status', ['pending_review', 'edited', 'snoozed', 'delivery_failed'])
-            .select(REMINDER_CANDIDATE_SELECT)
-            .maybeSingle();
-        if (approveErr)
-            throw approveErr;
-        if (!approvedRow) {
-            current = await loadReminderCandidate(params.orgId, params.candidateId);
-            if (current.status === 'sent') {
-                return {
-                    candidateId: params.candidateId,
-                    notificationId: current.work_notification_id,
-                };
-            }
-            throw conflict('Reminder candidate was updated by another session');
-        }
-        current = approvedRow;
-        await writeAudit({
-            organizationId: params.orgId,
+        await approveReminderCandidate({
+            orgId: params.orgId,
             actorUserId: params.actorUserId,
-            moduleCode: 'work_engine',
-            entityType: 'work_reminder_candidate',
-            entityId: params.candidateId,
-            action: AUDIT_ACTIONS.REMINDER_CANDIDATE_APPROVED,
-            payload: {
-                work_item_id: current.work_item_id,
-                channel: primaryChannel,
-            },
+            candidateId: params.candidateId,
+            expectedVersion: current.version,
         });
+        current = await loadReminderCandidate(params.orgId, params.candidateId);
     }
     const notificationId = await ensureReminderDeliveryIntent({
         orgId: params.orgId,
@@ -652,7 +702,7 @@ function canMutateReminderCandidates(viewer) {
     return (hasPermission(perms, WORK_ENGINE_PERMISSIONS.write) ||
         hasPermission(perms, WORK_ENGINE_PERMISSIONS.admin));
 }
-function buildReminderAllowedActions(row, viewer) {
+function buildReminderAllowedActions(row, viewer, opts) {
     const canWrite = canMutateReminderCandidates(viewer);
     const disabled = (reason) => canWrite ? { enabled: true, disabled_reason: null } : { enabled: false, disabled_reason: reason };
     const base = disabled(viewer == null
@@ -662,7 +712,49 @@ function buildReminderAllowedActions(row, viewer) {
         reminder_candidate_id: row.id,
         expected_version: row.version,
         idempotency_key: null,
+        ...(opts?.collectionFollowup
+            ? { refresh_aggregate: 'collection_reminder_review_aggregate' }
+            : {}),
     };
+    // INV-4C — collection: approve ≠ send; open dedicated review aggregate for debt truth.
+    if (opts?.collectionFollowup) {
+        return [
+            {
+                action_key: 'edit_reminder_candidate',
+                label: 'עריכה',
+                command: 'edit_reminder_candidate',
+                command_payload: { ...payloadBase },
+                ...base,
+            },
+            {
+                action_key: 'approve_reminder_candidate',
+                label: 'אישור',
+                command: 'approve_reminder_candidate',
+                command_payload: { ...payloadBase },
+                ...base,
+            },
+            {
+                action_key: 'cancel_reminder_candidate',
+                label: 'ביטול',
+                command: 'cancel_reminder_candidate',
+                command_payload: { ...payloadBase },
+                ...base,
+            },
+            {
+                action_key: 'snooze_reminder_candidate',
+                label: 'דחייה',
+                command: 'snooze_reminder_candidate',
+                command_payload: {
+                    ...payloadBase,
+                    snooze_presets: REMINDER_SNOOZE_PRESETS.map((p) => ({
+                        preset_key: p.preset_key,
+                        label: p.label,
+                    })),
+                },
+                ...base,
+            },
+        ];
+    }
     return [
         {
             action_key: 'edit_reminder_candidate',
@@ -735,19 +827,68 @@ export async function loadReminderReviewPage(params) {
             clientNameById.set(String(c.id), String(c.display_name ?? c.id));
         }
     }
+    const workItemById = new Map();
     if (workItemIds.length > 0) {
         const { data, error: wErr } = await supabaseAdmin
             .from('work_items')
-            .select('id, client_id')
+            .select('id, client_id, work_type, source_entity_id')
             .eq('org_id', params.orgId)
             .in('id', workItemIds);
         if (wErr)
             throw wErr;
         for (const w of data ?? []) {
+            const id = String(w.id);
             const cid = w.client_id ? String(w.client_id) : null;
+            workItemById.set(id, {
+                client_id: cid,
+                work_type: String(w.work_type ?? ''),
+                source_entity_id: String(w.source_entity_id ?? ''),
+            });
             if (cid && !clientNameById.has(cid)) {
                 clientNameById.set(cid, cid);
             }
+        }
+    }
+    const collectionDocIds = Array.from(new Set([...workItemById.values()]
+        .filter((w) => w.work_type === INVOICE_COLLECTION_FOLLOWUP_WORK_TYPE)
+        .map((w) => w.source_entity_id)
+        .filter((id) => id.length > 0)));
+    const collectionTruthByDocId = new Map();
+    if (collectionDocIds.length > 0) {
+        const todayIso = backendTodayIsoDate();
+        const { data: docs, error: dErr } = await supabaseAdmin
+            .from('income_documents')
+            .select('id, document_number, issue_date, due_date, currency, document_status, document_type, totals_snapshot_json, represented_client_id')
+            .eq('organization_id', params.orgId)
+            .in('id', collectionDocIds);
+        if (dErr)
+            throw dErr;
+        const paidMap = await sumPostedAllocationsForIncomeDocuments(params.orgId, collectionDocIds);
+        for (const doc of docs ?? []) {
+            const id = String(doc.id);
+            const paid = paidMap.get(id) ?? 0;
+            const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
+            const intake = resolveIncomeOverdueCollectionIntake({
+                documentStatus: String(doc.document_status),
+                documentType: String(doc.document_type),
+                dueDate: doc.due_date,
+                originalAmount: original,
+                paidAmount: paid,
+                todayIso,
+            });
+            collectionTruthByDocId.set(id, composeCollectionReminderInvoiceTruth({
+                incomeDocumentId: id,
+                documentNumber: String(doc.document_number ?? ''),
+                documentDate: doc.issue_date,
+                dueDate: doc.due_date,
+                daysOverdue: intake.days_overdue,
+                currency: String(doc.currency ?? 'ILS'),
+                originalAmount: original,
+                paidAmount: paid,
+                remainingBalance: intake.remaining_balance,
+                paymentStateKey: intake.payment_state_key,
+                clientId: doc.represented_client_id,
+            }));
         }
     }
     let reminderPolicy = null;
@@ -774,6 +915,10 @@ export async function loadReminderReviewPage(params) {
         const dueLabel = formatQueueLabel(dueAt);
         const subjectTrim = c.subject?.trim() || null;
         const showSubject = channelLabels.includes('Email');
+        const workItem = workItemById.get(c.work_item_id);
+        const collectionTruth = workItem?.work_type === INVOICE_COLLECTION_FOLLOWUP_WORK_TYPE
+            ? collectionTruthByDocId.get(workItem.source_entity_id) ?? null
+            : null;
         const summary_fields = [
             { key: 'client', label: 'Client', value: clientName },
             { key: 'workflow', label: 'Workflow', value: workflowLabel },
@@ -781,6 +926,29 @@ export async function loadReminderReviewPage(params) {
             { key: 'channel', label: 'Channel', value: formatChannelCell(channelLabels) },
             { key: 'status', label: 'Status', value: stateLabel },
         ];
+        if (collectionTruth) {
+            summary_fields.push({ key: 'document_number', label: 'Document', value: collectionTruth.document_number }, { key: 'document_date', label: 'Document date', value: collectionTruth.document_date }, { key: 'invoice_due_date', label: 'Invoice due', value: collectionTruth.due_date }, {
+                key: 'days_overdue',
+                label: 'Days overdue',
+                value: collectionTruth.days_overdue != null ? String(collectionTruth.days_overdue) : null,
+            }, { key: 'currency', label: 'Currency', value: collectionTruth.currency }, {
+                key: 'original_amount',
+                label: 'Original amount',
+                value: String(collectionTruth.original_amount),
+            }, {
+                key: 'paid_amount',
+                label: 'Paid amount',
+                value: String(collectionTruth.paid_amount),
+            }, {
+                key: 'remaining_balance',
+                label: 'Remaining balance',
+                value: String(collectionTruth.remaining_balance),
+            }, {
+                key: 'payment_state',
+                label: 'Payment state',
+                value: collectionTruth.payment_state_key,
+            });
+        }
         if (createdLabel) {
             summary_fields.push({ key: 'created_at', label: 'Created', value: createdLabel });
         }
@@ -817,7 +985,10 @@ export async function loadReminderReviewPage(params) {
                 },
                 channel_labels: channelLabels,
             },
-            allowed_actions: buildReminderAllowedActions(c, params.viewer),
+            allowed_actions: buildReminderAllowedActions(c, params.viewer, {
+                collectionFollowup: workItem?.work_type === 'invoice_collection_followup',
+            }),
+            collection_invoice_truth: collectionTruth,
         };
     });
     return { rows, total: count ?? rows.length };

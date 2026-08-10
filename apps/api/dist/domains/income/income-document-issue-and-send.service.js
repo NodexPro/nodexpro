@@ -58,14 +58,18 @@ function toDeliveryOutcome(sendResult, sendErrorMessage) {
 }
 async function runEmailSendStep(ctx, params) {
     try {
-        return await executeSendIncomeDocumentByEmail(ctx, {
+        const result = await executeSendIncomeDocumentByEmail(ctx, {
             income_document_id: params.issuedDocumentId,
             recipient_email: params.recipientEmail,
             idempotency_key: params.idempotencyKey,
         });
+        return { result, errorMessage: null };
     }
-    catch {
-        return null;
+    catch (error) {
+        const message = error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : 'שליחת המסמך נכשלה';
+        return { result: null, errorMessage: message };
     }
 }
 async function writeIssueAndSendAudit(params) {
@@ -93,12 +97,12 @@ async function writeIssueAndSendAudit(params) {
 async function finishIssueAndSend(ctx, params) {
     const scope = await loadActiveIncomeIssuerScope(ctx);
     await ensureIssuedDocumentPdfReady(ctx, scope.org_id, params.issuedDocumentId);
-    const sendResult = await runEmailSendStep(ctx, {
+    const sendStep = await runEmailSendStep(ctx, {
         issuedDocumentId: params.issuedDocumentId,
         recipientEmail: params.recipientEmail,
         idempotencyKey: params.idempotencyKey,
     });
-    const delivery = toDeliveryOutcome(sendResult, sendResult ? null : 'שליחת המסמך נכשלה');
+    const delivery = toDeliveryOutcome(sendStep.result, sendStep.errorMessage);
     if (params.lease?.kind === 'fresh') {
         await completeIncomeIssueAndSendIdempotency({
             leaseRowId: params.lease.leaseRowId,

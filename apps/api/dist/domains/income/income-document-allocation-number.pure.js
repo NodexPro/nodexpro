@@ -15,9 +15,10 @@ const ALLOCATION_NUMBER_PATTERN = /^[0-9]{1,64}$/;
 export function defaultIncomeTaxAllocationNumberPolicy() {
     return {
         applicable_document_types: [...DEFAULT_APPLICABLE_TYPES],
-        editable_after_issue: false,
+        /** Israel: allocation numbers are often entered after issue from the tax authority. */
+        editable_after_issue: true,
         required_at_issue: false,
-        empty_display: null,
+        empty_display: 'הזינו מספר הקצאה',
     };
 }
 export function parseIncomeTaxAllocationNumberPolicy(raw) {

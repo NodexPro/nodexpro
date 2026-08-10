@@ -743,6 +743,11 @@ export interface IncomeWorkspaceAggregate {
   recipient_search: IncomeRecipientSearchModel;
   /** Present while Work Engine income wizard has an active draft on document_details step. */
   document_details_step: IncomeDocumentDetailsStep | null;
+  /**
+   * Present when the active wizard draft is a preliminary-document in-place edit session.
+   * Mirrored from document_details_step.edit_mode for footer/session consumers.
+   */
+  edit_mode?: import('./income-document-conversion.pure.js').PreliminaryDocumentEditMode | null;
   /** Work Engine wizard — backend-owned start step key when resuming. */
   wizard_starting_step_key?: string | null;
   active_wizard_draft_id: string | null;

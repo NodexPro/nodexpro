@@ -7,8 +7,9 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, notFound } from '../../shared/errors.js';
 import { loadClientOperationsCoreClient } from '../client-operations/client-operations-client-core.read.js';
 import { beginAttempt, finalizeAttempt, sendEmail, } from '../delivery/index.js';
-import { assertRowMatchesIssuerScope, reqUuid, } from './income.guards.js';
-import { assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
+import { assertRowMatchesIssuerScope, reqUuid } from './income.guards.js';
+import { assertIncomeIssuePermission } from './income-issuer-scope.service.js';
+import { resolveIssuerScopeForIssuedDocument } from './income-issued-document-issuer-scope.service.js';
 import { loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
 import { assertIncomeDocumentReadyForEmailSend, assertIncomeRepresentedClientScopeForEmailSend, buildIncomeDocumentEmailDeliveryIdempotencyKey, buildIncomeDocumentEmailMessage, buildIncomeDocumentEmailTemplateValues, buildIncomeEmailSenderSnapshot, customerDisplayNameFromSnapshot, normalizeIncomeDocumentRecipientEmail, parseIncomeDocumentEmailIdempotencyKey, } from './income-document-email-delivery.pure.js';
 import { loadIssuedDocumentPdfBytesForEmail } from './income-document-pdf.service.js';
@@ -35,15 +36,18 @@ async function loadIssuedDocumentForEmail(orgId, incomeDocumentId) {
     return data;
 }
 export async function executeSendIncomeDocumentByEmail(ctx, body, deps = defaultDeps) {
-    const scope = await loadActiveIncomeIssuerScope(ctx);
-    assertIncomeIssuePermission(scope);
+    const orgId = ctx.organizationId;
+    if (!orgId)
+        throw badRequest('Organization context required');
     const incomeDocumentId = reqUuid(body.income_document_id, 'income_document_id');
     const recipientEmail = normalizeIncomeDocumentRecipientEmail(body.recipient_email);
     const commandIdempotencyKey = parseIncomeDocumentEmailIdempotencyKey(body);
-    const representedClientId = assertIncomeRepresentedClientScopeForEmailSend(scope.represented_client_id);
-    const doc = await loadIssuedDocumentForEmail(scope.org_id, incomeDocumentId);
+    const doc = await loadIssuedDocumentForEmail(orgId, incomeDocumentId);
+    const scope = await resolveIssuerScopeForIssuedDocument(ctx, doc);
+    assertIncomeIssuePermission(scope);
     assertRowMatchesIssuerScope(scope, doc);
     assertIncomeDocumentReadyForEmailSend(doc);
+    const representedClientId = assertIncomeRepresentedClientScopeForEmailSend(scope.represented_client_id);
     if (doc.represented_client_id !== representedClientId) {
         throw badRequest('Document is outside active represented client scope');
     }

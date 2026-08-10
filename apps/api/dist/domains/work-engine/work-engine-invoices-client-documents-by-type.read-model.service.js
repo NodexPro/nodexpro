@@ -4,10 +4,12 @@
  */
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { issueYearFromIso, ledgerAmountFromTotalsSnapshot, formatLedgerMoneyReference, } from '../income/income-client-income-ledger-card.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
+import { buildIncomeIssuedDocumentPdfAction, buildIncomeIssuedDocumentViewAction, } from '../income/income-document-view-action.pure.js';
 import { buildIncomeDocumentEmailDeliveryBlock } from '../income/income-document-email-delivery.read-model.pure.js';
 import { buildIncomeDocumentDocflowDeliveryBlock } from '../income/income-document-docflow-delivery.read-model.pure.js';
 import { loadEmailAttemptCountsByDocumentIds, loadDocflowAttemptCountsByDocumentIds, isDocflowEntitledForOrg, loadRepresentedClientDocflowPortalActive, } from '../income/income-document-email-delivery.read-model.service.js';
@@ -17,6 +19,7 @@ import { customerDisplayFromSnapshot } from '../income/income-work-engine-bridge
 import { resolveIncomeInvoiceOriginalAmount, resolveIncomeInvoicePaymentState, } from '../accounting-base/accounting-base-income-payment.pure.js';
 import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
 import { buildIncomeDocumentRecordPaymentForm, resolvePaymentStateIcon, } from '../income/income-document-payment.pure.js';
+import { buildConversionTargetOptions, buildPreliminaryEditAction, INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT, INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT, INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT, isIncomeConversionSourceType, resolveConversionStateKey, } from '../income/income-document-conversion.pure.js';
 import { WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY, } from '../income/income.types.js';
 const ISSUED_DOCUMENT_TYPES = [
     'quote',
@@ -52,6 +55,17 @@ const ISSUED_TABLE_COLUMNS = [
     { key: 'email_delivery', label: '@' },
     { key: 'docflow_delivery', label: 'דוקפלו' },
     { key: 'view', label: 'צפייה' },
+];
+/** Quote / Deal Invoice: edit / convert / cancel / view live in one compact actions cell. */
+const PRELIMINARY_ISSUED_TABLE_COLUMNS = [
+    { key: 'document_number', label: 'מספר מסמך' },
+    { key: 'issue_date_display', label: 'תאריך' },
+    { key: 'customer_display_name', label: 'לקוח' },
+    { key: 'amount_display', label: 'סכום' },
+    { key: 'status_label', label: 'סטטוס' },
+    { key: 'email_delivery', label: '@' },
+    { key: 'docflow_delivery', label: 'דוקפלו' },
+    { key: 'actions', label: 'פעולות' },
 ];
 const TAX_INVOICE_TABLE_COLUMNS = [
     { key: 'document_number', label: 'מספר מסמך' },
@@ -147,18 +161,46 @@ async function loadCustomerNames(orgId, representedClientId) {
     }
     return map;
 }
-async function loadIssuedDocumentCandidates(params) {
+async function loadConversionCountsBySource(orgId, sourceIds) {
+    const out = new Map();
+    for (const id of sourceIds)
+        out.set(id, 0);
+    if (sourceIds.length === 0)
+        return out;
     const { data, error } = await supabaseAdmin
+        .from('income_document_conversions')
+        .select('source_document_id')
+        .eq('organization_id', orgId)
+        .in('source_document_id', sourceIds);
+    throwIfSupabaseError(error, 'loadConversionCountsBySource', {
+        migrationHint: '158_income_document_conversion_and_preliminary_cancel.sql',
+    });
+    for (const row of data ?? []) {
+        const id = String(row.source_document_id);
+        out.set(id, (out.get(id) ?? 0) + 1);
+    }
+    return out;
+}
+async function loadIssuedDocumentCandidates(params) {
+    const preliminaryType = isIncomeConversionSourceType(params.documentType);
+    let query = supabaseAdmin
         .from('income_documents')
-        .select('id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, created_at')
+        .select('id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, document_status, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error, created_at')
         .eq('organization_id', params.orgId)
         .or(excludeSelfModeActingFilter())
-        .eq('document_status', 'issued')
         .eq('document_type', params.documentType)
         .or(officeClientDocumentsOrFilter(params.representedClientId))
         .order('issue_date', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(5000);
+    // Quote / deal: include cancelled (מבוטל) in same type tile history. Tax/etc: issued only.
+    if (preliminaryType) {
+        query = query.in('document_status', ['issued', 'cancelled_future']);
+    }
+    else {
+        query = query.eq('document_status', 'issued');
+    }
+    const { data, error } = await query;
     throwIfSupabaseError(error, 'loadDocumentsByTypeIssued');
     const filtered = (data ?? []).filter((raw) => belongsToOfficeClientRow(raw, params.representedClientId));
     const documentIds = filtered.map((raw) => String(raw.id));
@@ -166,7 +208,8 @@ async function loadIssuedDocumentCandidates(params) {
     const perms = params.ctx.membership?.permissions ?? [];
     const canPaymentWrite = perms.includes('accounting_base.payment.write');
     const canIncomeIssue = perms.includes('income.issue');
-    const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive, allocatedByDoc] = await Promise.all([
+    const canEdit = params.permissions.edit;
+    const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive, allocatedByDoc, conversionCounts,] = await Promise.all([
         loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds),
         loadDocflowAttemptCountsByDocumentIds(params.orgId, documentIds),
         isDocflowEntitledForOrg(params.orgId),
@@ -174,16 +217,41 @@ async function loadIssuedDocumentCandidates(params) {
         includePayment
             ? sumPostedAllocationsForIncomeDocuments(params.orgId, documentIds)
             : Promise.resolve(new Map()),
+        preliminaryType
+            ? loadConversionCountsBySource(params.orgId, documentIds)
+            : Promise.resolve(new Map()),
     ]);
     return filtered.map((raw) => {
         const doc = raw;
         const year = issueYearFromIso(doc.issue_date);
         const amountRef = ledgerAmountFromTotalsSnapshot(doc.totals_snapshot_json);
-        const canViewDoc = params.canView && doc.pdf_render_status === 'rendered' && Boolean(doc.pdf_asset_id);
-        const pdfPath = canViewDoc ? incomeDocumentDownloadPath(doc.id) : null;
+        const pdfPath = doc.pdf_render_status === 'rendered' && doc.pdf_asset_id
+            ? incomeDocumentDownloadPath(doc.id)
+            : null;
+        const view_action = buildIncomeIssuedDocumentViewAction({
+            incomeDocumentId: doc.id,
+            canView: params.canView,
+        });
+        const pdf_action = buildIncomeIssuedDocumentPdfAction({
+            incomeDocumentId: doc.id,
+            canRetryPdf: params.permissions.issue,
+            pdfRenderStatus: doc.pdf_render_status,
+            pdfAssetId: doc.pdf_asset_id,
+            pdfDownloadPath: pdfPath,
+            pdfRenderError: doc.pdf_render_error,
+        });
+        const canViewDoc = view_action.enabled;
         const allowedActions = [];
-        if (canViewDoc)
+        if (canViewDoc) {
             allowedActions.push('view_document');
+            allowedActions.push('open_document');
+        }
+        if (pdf_action.enabled) {
+            allowedActions.push('download_pdf');
+        }
+        if (pdf_action.retry_command) {
+            allowedActions.push(pdf_action.retry_command);
+        }
         let payment_state_key = null;
         let payment_state_label = null;
         let payment_state_tone = null;
@@ -217,6 +285,53 @@ async function loadIssuedDocumentCandidates(params) {
                 disabledReason,
             });
         }
+        const isCancelled = doc.document_status === 'cancelled_future';
+        let edit_action = null;
+        let convert_action = null;
+        let cancel_action = null;
+        let conversion_state_key = null;
+        if (preliminaryType) {
+            conversion_state_key = resolveConversionStateKey({
+                sourceStatus: doc.document_status,
+                conversionCount: conversionCounts.get(doc.id) ?? 0,
+            });
+            edit_action = buildPreliminaryEditAction({
+                sourceStatus: doc.document_status,
+                canEdit,
+            });
+            if (edit_action.enabled)
+                allowedActions.push(INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT);
+            const targets = buildConversionTargetOptions({
+                sourceType: doc.document_type,
+                sourceStatus: doc.document_status,
+                canEdit,
+            });
+            const convertEnabled = targets.some((t) => t.enabled);
+            convert_action = {
+                enabled: convertEnabled,
+                label: 'הפקת מסמך',
+                command: INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
+                targets,
+            };
+            if (convertEnabled)
+                allowedActions.push(INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT);
+            const cancelEnabled = !isCancelled && canEdit;
+            cancel_action = {
+                enabled: cancelEnabled,
+                label: 'ביטול',
+                command: INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
+                reason_required: false,
+                confirmation_title: 'ביטול המסמך',
+                confirmation_body: 'המסמך לא יימחק. הסטטוס ישתנה למבוטל, והמסמך יישאר בהיסטוריה ובביקורת.',
+                disabled_reason: isCancelled
+                    ? 'המסמך כבר מבוטל'
+                    : canEdit
+                        ? null
+                        : 'אין הרשאת עריכה',
+            };
+            if (cancelEnabled)
+                allowedActions.push(INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT);
+        }
         return {
             row_id: doc.id,
             document_number: doc.document_number,
@@ -226,7 +341,7 @@ async function loadIssuedDocumentCandidates(params) {
             customer_display_name: customerDisplayFromSnapshot(doc.customer_snapshot_json),
             amount_display: amountRef > 0 ? formatLedgerMoneyReference(amountRef, doc.currency || 'ILS') : '—',
             due_date_display,
-            status_label: 'הונפק',
+            status_label: isCancelled ? 'מבוטל' : 'הונפק',
             payment_state_key,
             payment_state_label,
             payment_state_tone,
@@ -235,13 +350,15 @@ async function loadIssuedDocumentCandidates(params) {
             draft_id: null,
             can_view_document: canViewDoc,
             can_edit_draft: false,
-            pdf_download_path: pdfPath,
+            pdf_download_path: pdf_action.pdf_download_path,
+            view_action,
+            pdf_action,
             email_delivery: buildIncomeDocumentEmailDeliveryBlock({
                 incomeDocumentId: doc.id,
                 attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
                 permissions: params.permissions,
                 representedClientId: params.representedClientId,
-                documentStatus: 'issued',
+                documentStatus: isCancelled ? 'cancelled_future' : 'issued',
                 pdfRenderStatus: doc.pdf_render_status,
                 pdfAssetId: doc.pdf_asset_id,
             }),
@@ -250,13 +367,17 @@ async function loadIssuedDocumentCandidates(params) {
                 attemptCount: docflowAttemptCounts.get(doc.id) ?? 0,
                 permissions: params.permissions,
                 representedClientId: params.representedClientId,
-                documentStatus: 'issued',
+                documentStatus: isCancelled ? 'cancelled_future' : 'issued',
                 pdfRenderStatus: doc.pdf_render_status,
                 pdfAssetId: doc.pdf_asset_id,
                 docflowEntitled,
                 portalActive,
             }),
             record_payment_form,
+            edit_action,
+            convert_action,
+            cancel_action,
+            conversion_state_key,
             allowed_actions: allowedActions,
             year,
         };
@@ -308,9 +429,15 @@ async function loadDraftCandidates(params) {
             can_view_document: false,
             can_edit_draft: canEditDraft,
             pdf_download_path: null,
+            view_action: null,
+            pdf_action: null,
             email_delivery: null,
             docflow_delivery: null,
             record_payment_form: null,
+            edit_action: null,
+            convert_action: null,
+            cancel_action: null,
+            conversion_state_key: null,
             allowed_actions: canEditDraft ? ['edit_draft'] : [],
             year,
         };
@@ -330,6 +457,7 @@ function filterCandidatesByYear(candidates, selectedYear) {
         .map(({ year: _ignored, ...row }) => row);
 }
 export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(params) {
+    const aggregateStartMs = Date.now();
     const orgId = params.ctx.organizationId;
     if (!orgId)
         throw forbidden('Organization context required');
@@ -382,8 +510,10 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
         ? DRAFT_TABLE_COLUMNS
         : documentTypeKey === 'tax_invoice'
             ? TAX_INVOICE_TABLE_COLUMNS
-            : ISSUED_TABLE_COLUMNS;
-    return {
+            : documentTypeKey === 'quote' || documentTypeKey === 'deal_invoice'
+                ? PRELIMINARY_ISSUED_TABLE_COLUMNS
+                : ISSUED_TABLE_COLUMNS;
+    const response = {
         aggregate_key: WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY,
         represented_client_id: representedClientId,
         client_display_name: client.display_name,
@@ -401,4 +531,10 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
             description: null,
         },
     };
+    logAggregatePayloadBreakdown(WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY, response, {
+        correlation_id: params.ctx.correlationId ?? null,
+        organization_id: orgId,
+        duration_ms: Date.now() - aggregateStartMs,
+    });
+    return response;
 }

@@ -29,6 +29,10 @@ import { workEngineRoutes } from './domains/work-engine/work-engine.routes.js';
 import { incomeRoutes } from './domains/income/income.routes.js';
 import { accountingBaseRoutes } from './domains/accounting-base/accounting-base.routes.js';
 import { logNodexproApiBoot, resolveApiDeployMarker, } from './domains/income/income-issue-diagnostic.js';
+import { ensureDefaultPuppeteerCacheDir, getCachedPdfEngineCapability, hasCachedPdfEngineCapability, logPdfEngineStartupProbe, refreshPdfEngineCapability, } from './domains/income/income-document-pdf-browser.service.js';
+import { correlationMiddleware, getRequestCorrelationId } from './middleware/correlation.js';
+import { supabaseAdmin } from './db/client.js';
+ensureDefaultPuppeteerCacheDir();
 registerExampleModuleHook();
 async function logModuleLoaded() {
     try {
@@ -47,6 +51,7 @@ async function logModuleLoaded() {
 }
 const app = express();
 app.use(helmet());
+app.use(correlationMiddleware);
 const corsAllowedOriginsRaw = process.env.CORS_ALLOWED_ORIGINS ?? '';
 /** Each configured origin plus its www ↔ apex twin (same scheme/port) to avoid prod footguns. */
 function expandCorsOriginsWithWwwVariants(origins) {
@@ -107,9 +112,32 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '15mb' }));
-app.get('/api/v1/health', (_req, res) => {
-    // Safe deploy proof for production triage (no secrets).
-    res.status(200).json({ ok: true, deploy_marker: resolveApiDeployMarker() });
+app.get('/api/v1/health', async (_req, res) => {
+    // Safe deploy + minimal DB connectivity probe (no secrets, no aggregate work).
+    // pdf_engine uses cached path existence only — never launches Chrome here.
+    let db = 'ok';
+    try {
+        const { error } = await supabaseAdmin
+            .from('organizations')
+            .select('id', { head: true, count: 'exact' })
+            .limit(1);
+        if (error)
+            db = 'unavailable';
+    }
+    catch {
+        db = 'unavailable';
+    }
+    // Path probe only (existsSync / puppeteer.executablePath) — never launches Chrome.
+    const pdfCapability = hasCachedPdfEngineCapability()
+        ? getCachedPdfEngineCapability()
+        : await refreshPdfEngineCapability();
+    const ok = db === 'ok';
+    res.status(ok ? 200 : 503).json({
+        ok,
+        deploy_marker: resolveApiDeployMarker(),
+        db,
+        pdf_engine: pdfCapability.pdf_engine,
+    });
 });
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/organizations', organizationsRoutes);
@@ -131,22 +159,24 @@ app.use('/api/v1/docflow', docflowRoutes);
 app.use('/api/v1/work-engine', workEngineRoutes);
 app.use('/api/v1/income', incomeRoutes);
 app.use('/api/v1/accounting-base', accountingBaseRoutes);
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
+    const correlation_id = getRequestCorrelationId(req);
     if (err instanceof AppError) {
         if (err.code === ENCRYPTION_NOT_CONFIGURED_CODE) {
-            console.error('[api] CLIENT_DATA_ENCRYPTION_KEY missing or invalid — set 32-byte key as base64 in apps/api/.env');
+            console.error('[api] CLIENT_DATA_ENCRYPTION_KEY missing or invalid — set 32-byte key as base64 in apps/api/.env', { correlation_id });
         }
         return res.status(err.statusCode).json({
             code: err.code ?? 'ERROR',
             message: err.message,
+            correlation_id,
             ...(err.details ?? {}),
         });
     }
-    console.error(err);
+    console.error('[api][INTERNAL_ERROR]', { correlation_id, error: err });
     // In development, surface Error.message so local debugging is not blind to non-AppError throws.
     const exposeDetails = config.nodeEnv !== 'production';
     const message = exposeDetails && err instanceof Error && err.message ? err.message : 'Internal server error';
-    return res.status(500).json({ code: 'INTERNAL_ERROR', message });
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message, correlation_id });
 });
 app.listen(config.port, () => {
     console.log(`API listening on port ${config.port}`);
@@ -154,5 +184,6 @@ app.listen(config.port, () => {
     const enc = getClientDataEncryptionEnvDiagnostic();
     const len = enc.decoded_length_bytes === null ? 'n/a' : String(enc.decoded_length_bytes);
     console.log(`[api] CLIENT_DATA_ENCRYPTION_KEY: env_set=${enc.env_set ? 'yes' : 'no'}, decoded_bytes=${len}, aes256_ok=${enc.valid_for_aes256 ? 'yes' : 'no'}`);
+    void logPdfEngineStartupProbe();
     logModuleLoaded();
 });

@@ -1,0 +1,52 @@
+/**
+ * Canonical PDF readiness for Income send preparation (email + DocFlow).
+ * Pure contract only — does not render PDFs or mutate documents.
+ */
+const PDF_PENDING_REASON = 'ה-PDF בהכנה. ניתן לשלוח לאחר סיום ההפקה.';
+const PDF_FAILED_REASON = 'הפקת קובץ ה-PDF נכשלה. ניתן לנסות שוב.';
+const PDF_UNAVAILABLE_REASON = 'קובץ PDF אינו זמין לשליחה';
+export function resolveIncomeDocumentPdfSendReadiness(params) {
+    const status = String(params.pdfRenderStatus ?? '').trim();
+    const assetId = params.pdfAssetId != null && String(params.pdfAssetId).trim()
+        ? String(params.pdfAssetId).trim()
+        : null;
+    if (status === 'pending') {
+        return {
+            ready: false,
+            status_key: 'pdf_pending',
+            status_label: 'PDF בהכנה',
+            disabled_reason: PDF_PENDING_REASON,
+            disabled_reason_key: 'pdf_pending',
+            retry_eligible: false,
+        };
+    }
+    if (status === 'failed') {
+        return {
+            ready: false,
+            status_key: 'pdf_failed',
+            status_label: 'הפקת PDF נכשלה',
+            disabled_reason: PDF_FAILED_REASON,
+            disabled_reason_key: 'pdf_failed',
+            retry_eligible: true,
+        };
+    }
+    if (status === 'rendered' && assetId) {
+        return {
+            ready: true,
+            status_key: 'pdf_ready',
+            status_label: 'PDF מוכן',
+            disabled_reason: null,
+            disabled_reason_key: null,
+            retry_eligible: false,
+        };
+    }
+    return {
+        ready: false,
+        status_key: 'pdf_unavailable',
+        status_label: 'PDF אינו זמין',
+        disabled_reason: PDF_UNAVAILABLE_REASON,
+        disabled_reason_key: 'pdf_unavailable',
+        // Missing/invalid asset on an issued doc — allow regenerate via retry command.
+        retry_eligible: true,
+    };
+}

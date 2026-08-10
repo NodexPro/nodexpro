@@ -29,8 +29,11 @@ export const INCOME_ISSUE_SUCCESS_STAGE_ORDER = [
     'draft_mark_issued_completed',
     'recurring_cycle_link_started',
     'recurring_cycle_link_completed',
+    'pdf_scheduling_started',
+    'pdf_scheduling_completed',
     'refreshed_case_started',
     'refreshed_case_completed',
+    'issue_command_completed',
 ];
 const SAFE_LOG_KEYS = new Set([
     'correlation_id',

@@ -14,29 +14,29 @@ export function wrapUnifiedIncomeDocumentHtmlForPrint(documentBodyHtml) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Income Document</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap');
-    /* 10mm top / 12mm sides+bottom → 38/45px @96dpi (golden-master page contract) */
-    @page { size: A4 portrait; margin: 10mm 12mm 12mm; }
+    /* No external font CDN — production PDF render must not wait on networkidle/Google Fonts. */
+    /*
+     * Issued HTML viewer golden master = 794×1123 paper + 48px chrome inset.
+     * Recreate that single inset here via @page. Puppeteer margins stay 0 (no double margin).
+     */
+    @page { size: A4 portrait; margin: 48px; }
     html, body {
       margin: 0;
       padding: 0;
+      width: 100%;
       background: #ffffff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
-      font-family: ${DOCUMENT_FONT} !important;
+      font-family: ${DOCUMENT_FONT};
     }
     body {
-      width: 210mm;
       min-height: 297mm;
-    }
-    body, body * {
-      font-family: ${DOCUMENT_FONT} !important;
     }
     a { color: inherit; }
     .nx-doc { max-width: 100%; box-sizing: border-box; }
     .nx-doc * { box-sizing: border-box; }
     @media print {
-      html, body { width: auto; min-height: 0; }
+      html, body { width: 100%; min-height: 0; }
       .nx-doc__platform-link { text-decoration: none; }
     }
   </style>

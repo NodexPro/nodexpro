@@ -8,8 +8,9 @@ import { badRequest, notFound } from '../../shared/errors.js';
 import { assertDocflowEntitled } from '../docflow/docflow.guards.js';
 import { beginAttempt, finalizeAttempt } from '../delivery/index.js';
 import { loadClientOperationsCoreClient } from '../client-operations/client-operations-client-core.read.js';
-import { assertRowMatchesIssuerScope, reqUuid, } from './income.guards.js';
-import { assertIncomeIssuePermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
+import { assertRowMatchesIssuerScope, reqUuid } from './income.guards.js';
+import { assertIncomeIssuePermission } from './income-issuer-scope.service.js';
+import { resolveIssuerScopeForIssuedDocument } from './income-issued-document-issuer-scope.service.js';
 import { assertIncomeDocumentReadyForDocflowSend, assertIncomeRepresentedClientScopeForDocflowSend, buildIncomeDocumentDocflowDeliveryIdempotencyKey, buildIncomeDocumentDocflowMessageSnapshot, buildIncomeDocflowSenderSnapshot, parseIncomeDocumentDocflowIdempotencyKey, } from './income-document-docflow-delivery.pure.js';
 import { customerDisplayNameFromSnapshot, } from './income-document-email-delivery.pure.js';
 import { postIncomeDocumentToDocflowThread } from './income-document-docflow-post.service.js';
@@ -41,19 +42,22 @@ async function loadIssuedDocumentForDocflow(orgId, incomeDocumentId) {
     return data;
 }
 export async function executeSendIncomeDocumentByDocflow(ctx, body, deps = defaultDeps) {
-    const scope = await loadActiveIncomeIssuerScope(ctx);
-    assertIncomeIssuePermission(scope);
+    const orgId = ctx.organizationId;
+    if (!orgId)
+        throw badRequest('Organization context required');
     const incomeDocumentId = reqUuid(body.income_document_id, 'income_document_id');
     const commandIdempotencyKey = parseIncomeDocumentDocflowIdempotencyKey(body);
+    const doc = await loadIssuedDocumentForDocflow(orgId, incomeDocumentId);
+    const scope = await resolveIssuerScopeForIssuedDocument(ctx, doc);
+    assertIncomeIssuePermission(scope);
+    assertRowMatchesIssuerScope(scope, doc);
+    assertIncomeDocumentReadyForDocflowSend(doc);
     const representedClientId = assertIncomeRepresentedClientScopeForDocflowSend(scope.represented_client_id);
     await deps.assertDocflowEntitled(scope.org_id);
     const portalActive = await deps.loadPortalActive(scope.org_id, representedClientId);
     if (!portalActive) {
         throw badRequest('Represented client does not have an active DocFlow portal');
     }
-    const doc = await loadIssuedDocumentForDocflow(scope.org_id, incomeDocumentId);
-    assertRowMatchesIssuerScope(scope, doc);
-    assertIncomeDocumentReadyForDocflowSend(doc);
     if (doc.represented_client_id !== representedClientId) {
         throw badRequest('Document is outside active represented client scope');
     }

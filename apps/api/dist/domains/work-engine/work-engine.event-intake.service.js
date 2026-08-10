@@ -25,8 +25,9 @@
  * types and events missing required envelope fields are persisted with
  * `processing_outcome = '<mapping reason>'` and DO NOT create a work_item.
  *
- * Stage 3A+3B is intake + dedup + mapped work item creation ONLY. No SLA, no
- * country deadlines, no notifications, no assignment, no DocFlow, no UI.
+ * Stage 3A+3B is intake + dedup + mapped work item creation. INV-4B starts
+ * waiting_client SLA when initial_state is waiting_client (reminder candidates
+ * are created later by the collection/SLA reminder evaluators — no auto-send).
  *
  * Source of truth: docs/work-engine-event-contract.md, docs/work-engine-dedup-policy.md,
  *                  docs/work-engine-domain-model.md, docs/work-engine-state-machine.md.
@@ -42,6 +43,9 @@ import { assertIncomeDocumentIntakeSourceEntity } from './work-engine-income-int
 import { isIncomeDocumentSentFactEventType } from './work-engine-income-document-sent-fact.pure.js';
 import { consumeIncomeDocumentSentFact } from './work-engine-income-document-sent-fact.service.js';
 import { assertCatalogPlatformEventVersionIfKnown } from '../../shared/platform-event-catalog.version.js';
+import { recomputeWorkItemSlaStatus, startWaitingClientObligationIfAbsent, } from './work-engine.sla.service.js';
+import { isIncomeInvoicePaidFactEventType } from './work-engine-collection-reminder.pure.js';
+import { consumeIncomeInvoicePaidFact } from './work-engine-collection-paid-fact.service.js';
 function validateEnvelope(env) {
     if (!env || typeof env !== 'object')
         throw badRequest('event envelope is required');
@@ -541,6 +545,33 @@ export async function intakeWorkEvent(caller, payloadInput) {
             pending_reason: 'income_document_sent_fact_consumed',
         };
     }
+    // ---- Step 1c: Income invoice paid facts (INV-4E) ----
+    // Fully paid → auto-close active invoice_collection_followup. Partial → ack only.
+    if (isIncomeInvoicePaidFactEventType(v.event_type)) {
+        const consumption = await consumeIncomeInvoicePaidFact({
+            orgId: v.org_id,
+            clientId: v.client_id,
+            incomeDocumentId: v.source_entity_id,
+            eventType: v.event_type,
+            eventId: v.event_id,
+            payload: v.payload,
+            actorUserId,
+        });
+        const workEventId = await insertIntakeEventRow(v, consumption.completedWorkItemId, consumption.processingOutcome);
+        await auditIntake(v, actorUserId, AUDIT_ACTIONS.WORK_EVENT_MAPPING_PENDING, consumption.completedWorkItemId, workEventId, {
+            pending_reason: consumption.processingOutcome,
+            collection_closed: consumption.closed,
+            cancelled_candidates: consumption.cancelledCandidateCount,
+        });
+        return {
+            intake_result: 'pending_mapping',
+            work_event_id: workEventId,
+            work_item_id: consumption.completedWorkItemId,
+            event_id: v.event_id,
+            dedup_key: v.dedup_key,
+            pending_reason: consumption.processingOutcome,
+        };
+    }
     // ---- Step 2: explicit mapping (Stage 3B) ----
     // Backend ONLY trusts the static allowlist in event-mapping.service.ts. The
     // mapper picks module_key / work_type / initial_state from that allowlist.
@@ -696,6 +727,23 @@ export async function intakeWorkEvent(caller, payloadInput) {
         mapped_module_key: mappedModuleKey,
         mapped_work_type: mappedWorkType,
     });
+    // INV-4B — waiting_client intake must start SLA obligation so Country Pack
+    // waiting_client cadence can produce reminder candidates when due.
+    if (mappedInitialState === 'waiting_client') {
+        await startWaitingClientObligationIfAbsent({
+            orgId: v.org_id,
+            workItemId: created.id,
+            sourceTransitionId: null,
+            actorUserId,
+            workType: mappedWorkType,
+        });
+        await recomputeWorkItemSlaStatus(v.org_id, created.id, {
+            actorUserId,
+            auditOnStatusChange: true,
+            // Collection candidates require batched AB precheck in dedicated scan.
+            collectionDebtPrechecked: false,
+        });
+    }
     return {
         intake_result: 'created',
         work_event_id: workEventId,

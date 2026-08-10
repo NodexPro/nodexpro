@@ -109,6 +109,26 @@ export async function startResponseObligationIfAbsent(args) {
     });
     return true;
 }
+/**
+ * INV-4B — start waiting_client SLA when intake creates items in waiting_client
+ * (e.g. invoice_collection_followup). Idempotent; does not create reminder candidates.
+ */
+export async function startWaitingClientObligationIfAbsent(args) {
+    if (await hasActiveObligation(args.orgId, args.workItemId, 'waiting_client')) {
+        return false;
+    }
+    const policy = await resolveWorkTypeSlaPolicy(args.orgId, args.workType);
+    await startObligation({
+        orgId: args.orgId,
+        workItemId: args.workItemId,
+        kind: 'waiting_client',
+        durationMinutes: policy.waiting_client_timeout_minutes,
+        sourceTransitionId: args.sourceTransitionId,
+        actorUserId: args.actorUserId,
+        policy,
+    });
+    return true;
+}
 async function startObligation(args) {
     await cancelActiveObligation(args.orgId, args.workItemId, args.kind, 'superseded');
     const startsAt = new Date().toISOString();
@@ -318,6 +338,7 @@ export async function recomputeWorkItemSlaStatus(orgId, workItemId, opts) {
         orgId,
         workItemId,
         actorUserId: opts?.actorUserId ?? null,
+        collectionDebtPrechecked: opts?.collectionDebtPrechecked === true,
     });
     const escalation = await evaluateEscalationsForWorkItem({
         orgId,
