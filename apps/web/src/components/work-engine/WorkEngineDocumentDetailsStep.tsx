@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, memo, type DragEvent } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  memo,
+  type DragEvent,
+} from 'react';
 import type {
   IncomeDocumentDetailsLineRow,
   IncomeDocumentDetailsStep,
@@ -6,6 +16,11 @@ import type {
 import type { IncomeWorkspaceAggregate } from '../../income/income-workspace-types';
 import { executeIncomeCommand } from '../../api/income';
 import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
+
+export type WorkEngineDocumentDetailsStepHandle = {
+  /** Persist local settings/lines/notes/discount before Preview / Save / Next. */
+  flushPendingEdits: () => Promise<void>;
+};
 
 type Props = {
   step: IncomeDocumentDetailsStep;
@@ -28,6 +43,22 @@ type LineDraft = {
   price_includes_vat: boolean;
   exchange_rate_override: string;
 };
+
+type LineFlushRegistration = {
+  isDirty: () => boolean;
+  flush: () => Promise<void>;
+};
+
+function lineDraftEquals(a: LineDraft, b: LineDraft): boolean {
+  return (
+    a.description === b.description &&
+    a.quantity === b.quantity &&
+    a.unit_price === b.unit_price &&
+    a.currency === b.currency &&
+    a.price_includes_vat === b.price_includes_vat &&
+    a.exchange_rate_override === b.exchange_rate_override
+  );
+}
 
 function sanitizeQuantityInput(raw: string): string {
   const cleaned = raw.replace(/[^\d.]/g, '');
@@ -78,18 +109,24 @@ const LineRowEditor = memo(function LineRowEditor({
   onDragStart,
   onDragOver,
   onDrop,
+  onRegisterFlush,
 }: {
   row: IncomeDocumentDetailsLineRow;
   saving: boolean;
-  onCommit: (lineId: string, patch: Record<string, unknown>) => void;
+  onCommit: (lineId: string, patch: Record<string, unknown>) => Promise<void>;
   onDelete: () => void;
   onDragStart: (lineId: string) => void;
   onDragOver: (e: DragEvent) => void;
   onDrop: (lineId: string) => void;
+  onRegisterFlush?: (lineId: string, registration: LineFlushRegistration | null) => void;
 }) {
   const [draft, setDraft] = useState<LineDraft>(() => lineDraftFromRow(row));
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const lineIdRef = useRef(row.id);
   const wasSavingRef = useRef(false);
+  const rowRef = useRef(row);
+  rowRef.current = row;
 
   useEffect(() => {
     if (row.id !== lineIdRef.current) {
@@ -114,11 +151,24 @@ const LineRowEditor = memo(function LineRowEditor({
     row.line_total_display,
   ]);
 
+  useEffect(() => {
+    if (!onRegisterFlush) return;
+    const registration: LineFlushRegistration = {
+      isDirty: () => !lineDraftEquals(draftRef.current, lineDraftFromRow(rowRef.current)),
+      flush: async () => {
+        if (!registration.isDirty()) return;
+        await onCommit(row.id, buildCommitPatch(draftRef.current));
+      },
+    };
+    onRegisterFlush(row.id, registration);
+    return () => onRegisterFlush(row.id, null);
+  }, [onCommit, onRegisterFlush, row.id]);
+
   const disabled = saving || !row.description.editable;
   const showFx = draft.currency !== 'ILS';
 
   const commitDraft = () => {
-    onCommit(row.id, buildCommitPatch(draft));
+    void onCommit(row.id, buildCommitPatch(draft));
   };
 
   return (
@@ -429,18 +479,24 @@ function applyProjectionMutation(
   return step;
 }
 
-export function WorkEngineDocumentDetailsStep({
-  step,
-  commands,
-  workspaceAgg,
-  busy,
-  onBusyChange,
-  onWorkspaceAgg,
-  onError,
-  hideHeader = false,
-  projectionMode = false,
-  onProjectionStepChange,
-}: Props) {
+export const WorkEngineDocumentDetailsStep = forwardRef<
+  WorkEngineDocumentDetailsStepHandle,
+  Props
+>(function WorkEngineDocumentDetailsStep(
+  {
+    step,
+    commands,
+    workspaceAgg,
+    busy,
+    onBusyChange,
+    onWorkspaceAgg,
+    onError,
+    hideHeader = false,
+    projectionMode = false,
+    onProjectionStepChange,
+  },
+  ref,
+) {
   const [settingsOpen, setSettingsOpen] = useState(true);
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -471,6 +527,19 @@ export function WorkEngineDocumentDetailsStep({
   const [discountValue, setDiscountValue] = useState(step.document_discount.value);
   const dragLineIdRef = useRef<string | null>(null);
   const commandsInFlight = useRef(0);
+  const lineFlushRegistry = useRef<Map<string, LineFlushRegistration>>(new Map());
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  const discountStateRef = useRef({
+    enabled: discountEnabled,
+    type: discountType,
+    value: discountValue,
+  });
+  discountStateRef.current = {
+    enabled: discountEnabled,
+    type: discountType,
+    value: discountValue,
+  };
 
   const visibleSettingsSchema = useMemo(
     () => step.settings_schema.filter((field) => field.visible && field.key !== 'payment_terms'),
@@ -601,6 +670,110 @@ export function WorkEngineDocumentDetailsStep({
     },
     [draftId, runCommand],
   );
+
+  const registerLineFlush = useCallback((lineId: string, registration: LineFlushRegistration | null) => {
+    if (!registration) {
+      lineFlushRegistry.current.delete(lineId);
+      return;
+    }
+    lineFlushRegistry.current.set(lineId, registration);
+  }, []);
+
+  const waitForCommandsIdle = useCallback(async () => {
+    for (let i = 0; i < 200; i += 1) {
+      if (commandsInFlight.current <= 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }, []);
+
+  const flushPendingEdits = useCallback(async () => {
+    if (projectionMode) return;
+
+    if (settingsTimer.current) {
+      clearTimeout(settingsTimer.current);
+      settingsTimer.current = null;
+    }
+    if (notesTimer.current) {
+      clearTimeout(notesTimer.current);
+      notesTimer.current = null;
+    }
+    if (emailTimer.current) {
+      clearTimeout(emailTimer.current);
+      emailTimer.current = null;
+    }
+
+    const pending = pendingSetting.current;
+    if (pending) {
+      pendingSetting.current = null;
+      inFlightSetting.current = pending;
+      await runCommand(
+        'update_draft_settings',
+        {
+          draft_id: draftId,
+          setting_key: pending.key,
+          setting_value: pending.value,
+        },
+        { lockUi: false },
+      ).catch(() => {
+        inFlightSetting.current = null;
+      });
+    }
+
+    const currentStep = stepRef.current;
+    if ((notesDraft.current ?? '') !== (currentStep.notes.value ?? '')) {
+      await runCommand(
+        'update_notes',
+        { draft_id: draftId, notes: notesDraft.current },
+        { lockUi: false },
+      );
+    }
+
+    const serverEmail = currentStep.delivery_contact.email ?? '';
+    if ((emailDraft.current || '') !== serverEmail) {
+      await runCommand(
+        'update_delivery_contact',
+        { draft_id: draftId, email: emailDraft.current || null },
+        { lockUi: false },
+      );
+    }
+
+    for (const registration of [...lineFlushRegistry.current.values()]) {
+      if (registration.isDirty()) {
+        await registration.flush();
+      }
+    }
+
+    const discountLocal = discountStateRef.current;
+    const discountServer = currentStep.document_discount;
+    const localValue = discountLocal.value.trim();
+    const serverValue = (discountServer.value ?? '').trim();
+    const discountDirty =
+      discountLocal.enabled !== discountServer.enabled ||
+      discountLocal.type !== discountServer.type ||
+      localValue !== serverValue;
+    if (
+      discountDirty &&
+      (discountServer.allowed_actions.includes('update_income_document_discount') ||
+        Boolean(commands.update_discount))
+    ) {
+      setSavingDiscount(true);
+      try {
+        const res = await executeIncomeCommand(commands.update_discount, {
+          draft_id: draftId,
+          enabled: discountLocal.enabled,
+          type: discountLocal.type,
+          value: localValue === '' ? 0 : localValue,
+        });
+        applyAggregate(res);
+      } finally {
+        setSavingDiscount(false);
+      }
+    }
+
+    await waitForCommandsIdle();
+  }, [applyAggregate, commands.update_discount, draftId, projectionMode, runCommand, waitForCommandsIdle]);
+
+  useImperativeHandle(ref, () => ({ flushPendingEdits }), [flushPendingEdits]);
 
   const handleReorder = useCallback(
     (targetLineId: string) => {
@@ -810,7 +983,8 @@ export function WorkEngineDocumentDetailsStep({
                   <LineRowEditor
                     row={row}
                     saving={savingLineId === row.id}
-                    onCommit={(lineId, patch) => void commitLine(lineId, patch)}
+                    onCommit={commitLine}
+                    onRegisterFlush={registerLineFlush}
                     onDelete={() =>
                       void runCommand(
                         'delete_line',
@@ -972,4 +1146,4 @@ export function WorkEngineDocumentDetailsStep({
       </section>
     </div>
   );
-}
+});

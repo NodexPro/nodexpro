@@ -9,7 +9,10 @@ import {
   WorkEngineRecipientSearchField,
   type WorkEngineRecipientSearchFieldHandle,
 } from './WorkEngineRecipientSearchField';
-import { WorkEngineDocumentDetailsStep } from './WorkEngineDocumentDetailsStep';
+import {
+  WorkEngineDocumentDetailsStep,
+  type WorkEngineDocumentDetailsStepHandle,
+} from './WorkEngineDocumentDetailsStep';
 import { WorkEngineIncomePreviewStep } from './WorkEngineIncomePreviewStep';
 import { executeIncomeCommand } from '../../api/income';
 import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
@@ -80,6 +83,7 @@ export function WorkEngineIncomeDocumentWizardModal({
   const [error, setError] = useState<string | null>(null);
   const [recipientPending, setRecipientPending] = useState(false);
   const recipientFieldRef = useRef<WorkEngineRecipientSearchFieldHandle>(null);
+  const detailsStepRef = useRef<WorkEngineDocumentDetailsStepHandle>(null);
   const [form, setForm] = useState<FormState>(() => ({
     document_type: '',
   }));
@@ -105,6 +109,8 @@ export function WorkEngineIncomeDocumentWizardModal({
 
   const documentTypes: IncomeAvailableDocumentType[] =
     workspaceAgg?.available_document_types ?? [];
+
+  const sessionActions = workspaceAgg?.document_details_step?.session_actions ?? null;
 
   const visibleSteps = useMemo(() => {
     return wizard.steps.filter((s) => {
@@ -252,7 +258,8 @@ export function WorkEngineIncomeDocumentWizardModal({
     }
     if (activeStepKey === 'document_details') {
       const nextKey = visibleSteps[stepIndex + 1]?.key;
-      if (nextKey === 'preview' && !documentDetailsStep?.document_preview?.visible) {
+      if (nextKey === 'preview') {
+        // Always flush local edits + regenerate so Preview never shows a stale session.
         await handleGeneratePreview(true);
         return;
       }
@@ -300,9 +307,18 @@ export function WorkEngineIncomeDocumentWizardModal({
     }
     onBusyChange(true);
     try {
+      await detailsStepRef.current?.flushPendingEdits();
       const res = await executeIncomeCommand(cmds.save_draft, { draft_id: draftId });
       if ('income_workspace_aggregate' in res) {
-        setWorkspaceAgg(res.income_workspace_aggregate);
+        const payload = res as {
+          income_workspace_aggregate: IncomeWorkspaceAggregate;
+          meta?: { workspace_aggregate_mode?: 'full' | 'wizard_patch' };
+        };
+        setWorkspaceAgg((prev) =>
+          payload.meta?.workspace_aggregate_mode === 'wizard_patch'
+            ? mergeIncomeWorkspaceWizardPatch(prev, payload.income_workspace_aggregate)
+            : payload.income_workspace_aggregate,
+        );
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'שגיאה בשמירה');
@@ -326,9 +342,21 @@ export function WorkEngineIncomeDocumentWizardModal({
     }
     onBusyChange(true);
     try {
+      // Canonical preview sync: persist CURRENT editor state to staging draft first,
+      // then generate preview from that refreshed staging draft (not issued source).
+      await detailsStepRef.current?.flushPendingEdits();
       const res = await executeIncomeCommand(cmds.generate_preview, { draft_id: draftId });
       if ('income_workspace_aggregate' in res) {
-        setWorkspaceAgg(res.income_workspace_aggregate);
+        const payload = res as {
+          income_workspace_aggregate: IncomeWorkspaceAggregate;
+          meta?: { workspace_aggregate_mode?: 'full' | 'wizard_patch' };
+        };
+        // Command response is truth — merge wizard_patch; do not follow with a stale GET.
+        setWorkspaceAgg((prev) =>
+          payload.meta?.workspace_aggregate_mode === 'wizard_patch'
+            ? mergeIncomeWorkspaceWizardPatch(prev, payload.income_workspace_aggregate)
+            : payload.income_workspace_aggregate,
+        );
         if (advanceToPreview && previewStepIndex >= 0) {
           setStepIndex(previewStepIndex);
         }
@@ -444,6 +472,7 @@ export function WorkEngineIncomeDocumentWizardModal({
       }
       return (
         <WorkEngineDocumentDetailsStep
+          ref={detailsStepRef}
           step={documentDetailsStep}
           commands={wizard.income_commands}
           workspaceAgg={workspaceAgg}
@@ -527,14 +556,15 @@ export function WorkEngineIncomeDocumentWizardModal({
               שמירת טיוטה
             </button>
           ) : null}
-          {activeStepKey === 'document_details' ? (
+          {activeStepKey === 'document_details' &&
+          (sessionActions?.preview?.enabled ?? true) ? (
             <button
               type="button"
               className="nx-btn nx-btn-taxes-compact"
-              disabled={footerLocked || !activeDraftId}
+              disabled={footerLocked || !activeDraftId || sessionActions?.preview?.enabled === false}
               onClick={() => void handleGeneratePreview(true)}
             >
-              תצוגה מקדימה
+              {sessionActions?.preview?.label ?? 'תצוגה מקדימה'}
             </button>
           ) : null}
           {!isLastStep ? (

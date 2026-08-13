@@ -140,6 +140,38 @@ export type IncomeDocumentDetailsStep = {
     }>;
     allocation_number_field: IncomeDocumentAllocationNumberField;
   } | null;
+  edit_mode?: {
+    type: 'preliminary_document_edit';
+    source_document_id: string;
+    source_document_number: string | null;
+    source_document_type: string;
+  } | null;
+  session_actions?: {
+    save: {
+      enabled: boolean;
+      command: string | null;
+      label: string;
+      disabled_reason: string | null;
+    };
+    preview: {
+      enabled: boolean;
+      command: string | null;
+      label: string;
+      disabled_reason: string | null;
+    };
+    issue: {
+      enabled: boolean;
+      command: string | null;
+      label: string;
+      disabled_reason: string | null;
+    };
+    issue_and_send: {
+      enabled: boolean;
+      command: string | null;
+      label: string;
+      disabled_reason: string | null;
+    };
+  };
   draft_state_display?: {
     status: 'draft';
     label: string;
