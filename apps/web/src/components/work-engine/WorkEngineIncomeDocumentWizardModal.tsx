@@ -14,6 +14,7 @@ import {
   type WorkEngineDocumentDetailsStepHandle,
 } from './WorkEngineDocumentDetailsStep';
 import { WorkEngineIncomePreviewStep } from './WorkEngineIncomePreviewStep';
+import { WorkEngineInvoiceRetainerPreviewModal } from './WorkEngineInvoiceRetainerPreviewModal';
 import { executeIncomeCommand } from '../../api/income';
 import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
 import type { WorkEngineInvoicesDocumentCreationEntrypoint } from '../../api/work-engine';
@@ -81,6 +82,10 @@ export function WorkEngineIncomeDocumentWizardModal({
     initialWorkspaceAgg ?? null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [readyToPrintPreviewOpen, setReadyToPrintPreviewOpen] = useState(false);
+  const [readyToPrintPreview, setReadyToPrintPreview] = useState<
+    NonNullable<IncomeWorkspaceAggregate['document_details_step']>['document_preview'] | null
+  >(null);
   const [recipientPending, setRecipientPending] = useState(false);
   const recipientFieldRef = useRef<WorkEngineRecipientSearchFieldHandle>(null);
   const detailsStepRef = useRef<WorkEngineDocumentDetailsStepHandle>(null);
@@ -92,6 +97,12 @@ export function WorkEngineIncomeDocumentWizardModal({
     if (!initialWorkspaceAgg) return;
     setWorkspaceAgg((prev) => mergeIncomeWorkspaceWizardPatch(prev, initialWorkspaceAgg));
   }, [initialWorkspaceAgg]);
+
+  useEffect(() => {
+    if (open) return;
+    setReadyToPrintPreviewOpen(false);
+    setReadyToPrintPreview(null);
+  }, [open]);
 
   useEffect(() => {
     if (!issuerBrandingProfile && !issuerBrandingEntrypoint) return;
@@ -374,7 +385,12 @@ export function WorkEngineIncomeDocumentWizardModal({
             ? mergeIncomeWorkspaceWizardPatch(prev, payload.income_workspace_aggregate)
             : payload.income_workspace_aggregate,
         );
-        if (advanceToPreview && previewStepIndex >= 0) {
+        const previewFromCommand =
+          payload.income_workspace_aggregate.document_details_step?.document_preview ?? null;
+        if (footerActions?.mode === 'preliminary_edit') {
+          setReadyToPrintPreview(previewFromCommand);
+          setReadyToPrintPreviewOpen(true);
+        } else if (advanceToPreview && previewStepIndex >= 0) {
           setStepIndex(previewStepIndex);
         }
       }
@@ -539,6 +555,7 @@ export function WorkEngineIncomeDocumentWizardModal({
           : '';
 
   return (
+    <>
     <div className="nx-modal-overlay nx-invoice-ui nx-invoice-designer-ui" role="dialog" aria-modal="true">
       <div
         className={`nx-modal nx-accounting-editor-modal nx-we-income-wizard-modal ${modalStepClass}`.trim()}
@@ -616,5 +633,18 @@ export function WorkEngineIncomeDocumentWizardModal({
         </div>
       </div>
     </div>
+    <WorkEngineInvoiceRetainerPreviewModal
+      open={readyToPrintPreviewOpen}
+      preview={readyToPrintPreview}
+      busy={busy}
+      title={documentDetailsStep?.header?.title ?? readyToPrintPreview?.document_type_label ?? 'תצוגה מקדימה'}
+      subtitle={
+        documentDetailsStep?.edit_mode?.source_document_number
+          ? `מספר ${documentDetailsStep.edit_mode.source_document_number}`
+          : null
+      }
+      onClose={() => setReadyToPrintPreviewOpen(false)}
+    />
+    </>
   );
 }

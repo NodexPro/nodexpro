@@ -74,6 +74,29 @@ const DOCUMENT_TYPE_LABELS: Record<IncomeDocumentType, string> = {
   quote: 'הצעת מחיר',
 };
 
+async function loadPreliminaryEditSourceIdentity(
+  scope: ActiveIncomeIssuerScope,
+  sourceDocumentId: string,
+): Promise<{ issue_date: string | null; document_number: string | null }> {
+  const { data, error } = await supabaseAdmin
+    .from('income_documents')
+    .select('issue_date, document_number')
+    .eq('organization_id', scope.org_id)
+    .eq('id', sourceDocumentId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadPreliminaryEditSourceIdentity');
+  const row = data as { issue_date?: unknown; document_number?: unknown } | null;
+  const issueDate = typeof row?.issue_date === 'string' ? row.issue_date.trim() : '';
+  const documentNumber =
+    typeof row?.document_number === 'string' && row.document_number.trim()
+      ? row.document_number.trim()
+      : null;
+  return {
+    issue_date: /^\d{4}-\d{2}-\d{2}$/.test(issueDate) ? issueDate : null,
+    document_number: documentNumber,
+  };
+}
+
 function previewPartyAddressLine(addressJson: unknown): string | null {
   if (!addressJson || typeof addressJson !== 'object' || Array.isArray(addressJson)) return null;
   const o = addressJson as Record<string, unknown>;
@@ -894,8 +917,14 @@ export async function buildIncomeDocumentDetailsStep(
     row.document_type && DOCUMENT_TYPE_LABELS[row.document_type]
       ? DOCUMENT_TYPE_LABELS[row.document_type]
       : 'מסמך';
+  const preliminaryEditSourceId = readPreliminaryEditSourceDocumentId(row.document_settings_json);
+  const preliminarySourceIdentity = preliminaryEditSourceId
+    ? await loadPreliminaryEditSourceIdentity(scope, preliminaryEditSourceId)
+    : null;
   let numberPreview = uiCache.document_number_preview;
-  if (!numberPreview && row.document_type != null) {
+  if (!numberPreview && preliminarySourceIdentity?.document_number) {
+    numberPreview = preliminarySourceIdentity.document_number;
+  } else if (!numberPreview && !preliminaryEditSourceId && row.document_type != null) {
     numberPreview = await previewNextIncomeDocumentNumber(scope, row.document_type);
   }
   let recipientName = uiCache.recipient_display_name ?? recipientDisplayNameFromRow(row);
@@ -1100,24 +1129,7 @@ export async function buildIncomeDocumentDetailsStep(
     editMode,
   });
 
-  let preliminaryEditDocumentDateMin: string | null = null;
-  const preliminaryEditSourceId = readPreliminaryEditSourceDocumentId(row.document_settings_json);
-  if (preliminaryEditSourceId) {
-    const { data: sourceDateRow, error: sourceDateErr } = await supabaseAdmin
-      .from('income_documents')
-      .select('issue_date')
-      .eq('organization_id', scope.org_id)
-      .eq('id', preliminaryEditSourceId)
-      .maybeSingle();
-    throwIfSupabaseError(sourceDateErr, 'loadPreliminaryEditSourceIssueDateForSchema');
-    const issueDate =
-      sourceDateRow && typeof (sourceDateRow as { issue_date?: unknown }).issue_date === 'string'
-        ? String((sourceDateRow as { issue_date: string }).issue_date).trim()
-        : '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
-      preliminaryEditDocumentDateMin = issueDate;
-    }
-  }
+  const preliminaryEditDocumentDateMin = preliminarySourceIdentity?.issue_date ?? null;
 
   return {
     draft_id: row.id,

@@ -243,6 +243,24 @@ async function loadPreliminaryEditSourceIssueDate(
   return /^\d{4}-\d{2}-\d{2}$/.test(issueDate) ? issueDate : null;
 }
 
+async function loadPreliminaryEditSourceDocumentNumber(
+  scope: ActiveIncomeIssuerScope,
+  sourceDocumentId: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('income_documents')
+    .select('document_number')
+    .eq('organization_id', scope.org_id)
+    .eq('id', sourceDocumentId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadPreliminaryEditSourceDocumentNumber');
+  const documentNumber =
+    data && typeof (data as { document_number?: unknown }).document_number === 'string'
+      ? String((data as { document_number: string }).document_number).trim()
+      : '';
+  return documentNumber || null;
+}
+
 function assertPreliminaryEditDocumentDateAllowed(params: {
   documentSettingsJson: unknown;
   originalIssueDate: string | null | undefined;
@@ -360,7 +378,10 @@ async function validationForRow(
       ? priorCache.recipient_display_name
       : null;
 
-  if (!document_number_preview && row.document_type) {
+  const preliminarySourceId = preliminaryEditSourceDocumentId(row);
+  if (!document_number_preview && preliminarySourceId) {
+    document_number_preview = await loadPreliminaryEditSourceDocumentNumber(scope, preliminarySourceId);
+  } else if (!document_number_preview && row.document_type) {
     document_number_preview = await previewNextIncomeDocumentNumber(scope, row.document_type);
   }
   if (!recipient_display_name) {
@@ -657,6 +678,17 @@ export async function generateIncomeDocumentPreview(
   }
   const docType = await resolveDocType(scope, row.document_type);
 
+  const priorCache =
+    row.draft_totals_preview_json &&
+    typeof row.draft_totals_preview_json === 'object' &&
+    !Array.isArray(row.draft_totals_preview_json)
+      ? (row.draft_totals_preview_json as Record<string, unknown>)
+      : {};
+  const cachedDocumentNumber =
+    typeof priorCache.document_number_preview === 'string' && priorCache.document_number_preview.trim()
+      ? priorCache.document_number_preview.trim()
+      : null;
+
   const overlay = await wizardDraftMutationOverlay(
     scope,
     draft_id,
@@ -665,7 +697,12 @@ export async function generateIncomeDocumentPreview(
     docType,
     {},
     { action: 'generate_preview', document_type: row.document_type },
-    { totals_preview_patch: { preview_generated_at: new Date().toISOString() } },
+    {
+      totals_preview_patch: {
+        preview_generated_at: new Date().toISOString(),
+        ...(cachedDocumentNumber ? { document_number_preview: cachedDocumentNumber } : {}),
+      },
+    },
   );
 
   void writeAudit({
@@ -1088,7 +1125,7 @@ async function savePreliminaryDocumentEditIfNeeded(
   const { data: sourceRaw, error: sourceErr } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, organization_id, represented_client_id, issuer_business_id, actor_user_id, acting_mode, document_type, document_status, document_number, source_draft_id, issue_date',
+      'id, organization_id, represented_client_id, issuer_business_id, actor_user_id, acting_mode, document_type, document_status, document_number, source_draft_id, issue_date, accounting_posting_status, accounting_entry_id, accounting_entry_link_id, accounting_posted_at, accounting_posting_error, accounting_posting_signature, cancelled_at, cancelled_by_user_id, cancel_reason',
     )
     .eq('organization_id', scope.org_id)
     .eq('id', sourceDocumentId)
@@ -1107,6 +1144,15 @@ async function savePreliminaryDocumentEditIfNeeded(
     document_number: string;
     source_draft_id: string | null;
     issue_date: string | null;
+    accounting_posting_status: string | null;
+    accounting_entry_id: string | null;
+    accounting_entry_link_id: string | null;
+    accounting_posted_at: string | null;
+    accounting_posting_error: string | null;
+    accounting_posting_signature: string | null;
+    cancelled_at: string | null;
+    cancelled_by_user_id: string | null;
+    cancel_reason: string | null;
   };
   assertRowMatchesIssuerScope(scope, source);
   if (!isPreliminaryEditableType(source.document_type)) {
@@ -1161,6 +1207,26 @@ async function savePreliminaryDocumentEditIfNeeded(
           ? row.tax_allocation_number.trim()
           : null,
       customer_po_reference: draftExtras.customer_po_reference ?? null,
+      // Pin 159 first-branch identity / accounting / cancel columns so in-place
+      // Quote / Deal edits cannot trip INCOME_DOCUMENT_IMMUTABLE_AFTER_ISSUE.
+      document_number: source.document_number,
+      document_type: source.document_type,
+      document_status: 'issued',
+      organization_id: source.organization_id,
+      represented_client_id: source.represented_client_id,
+      issuer_business_id: source.issuer_business_id,
+      actor_user_id: source.actor_user_id,
+      acting_mode: source.acting_mode,
+      source_draft_id: source.source_draft_id,
+      accounting_posting_status: source.accounting_posting_status,
+      accounting_entry_id: source.accounting_entry_id,
+      accounting_entry_link_id: source.accounting_entry_link_id,
+      accounting_posted_at: source.accounting_posted_at,
+      accounting_posting_error: source.accounting_posting_error,
+      accounting_posting_signature: source.accounting_posting_signature,
+      cancelled_at: source.cancelled_at,
+      cancelled_by_user_id: source.cancelled_by_user_id,
+      cancel_reason: source.cancel_reason,
     })
     .eq('organization_id', scope.org_id)
     .eq('id', source.id)
