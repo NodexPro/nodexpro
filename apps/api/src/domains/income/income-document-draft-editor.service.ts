@@ -108,6 +108,7 @@ async function buildScopeForDraftResume(ctx: RequestContext, draft: { issuer_bus
 export async function resumeIncomeDocumentDraftFromContext(
   ctx: RequestContext,
   body: Record<string, unknown>,
+  options?: { leanDetails?: boolean },
 ): Promise<{ scope: ActiveIncomeIssuerScope; result: WizardDraftResumeResult }> {
   const draft_id = reqUuid(body.draft_id, 'draft_id');
   const orgId = ctx.organizationId;
@@ -125,7 +126,7 @@ export async function resumeIncomeDocumentDraftFromContext(
   const scope = await buildScopeForDraftResume(ctx, row);
   // Permission + scope enforced before resume.
   if (!scope.permissions.edit) throw badRequest('נדרשת הרשאת income.edit');
-  const result = await resumeIncomeDocumentDraft(scope, { draft_id });
+  const result = await resumeIncomeDocumentDraft(scope, { draft_id }, options);
   return { scope, result };
 }
 
@@ -180,7 +181,7 @@ async function persistWizardDraft(
     .update(patch)
     .eq('id', draftId)
     .eq('organization_id', scope.org_id);
-  if (error) throw error;
+  throwIfSupabaseError(error, 'persistWizardDraft');
 
   void writeAudit({
     organizationId: scope.org_id,
@@ -1166,7 +1167,7 @@ async function savePreliminaryDocumentEditIfNeeded(
     .eq('document_status', 'issued')
     .eq('document_type', source.document_type)
     .eq('document_number', source.document_number);
-  throwIfSupabaseError(updateDocErr, 'updatePreliminaryDocumentInPlace', {
+  throwIfSupabaseError(updateDocErr, 'save_preliminary_edit:update_income_documents', {
     migrationHint: '159_income_preliminary_document_edit_in_place.sql',
   });
 
@@ -1222,7 +1223,7 @@ async function savePreliminaryDocumentEditIfNeeded(
     row,
   );
 
-  await writeAudit({
+  void writeAudit({
     organizationId: scope.org_id,
     actorUserId: scope.actor_user_id,
     moduleCode: 'income',
@@ -1235,12 +1236,16 @@ async function savePreliminaryDocumentEditIfNeeded(
       document_type: source.document_type,
       document_number: source.document_number,
     },
+  }).catch(() => {
+    /* audit must not fail a successful in-place save */
   });
 
   const saved = await loadWizardDraftRow(scope, draftId);
   return buildOverlayForDraft(scope, draftId, true, saved, docType, {
     totalsPreview: validation.totalsPreview,
     vatResolution: validation.vatResolution,
+    lean: true,
+    skip_branding_profile_aggregate: true,
   });
 }
 
@@ -1309,6 +1314,7 @@ export async function recipientOverlayForDraftRow(
 export async function resumeIncomeDocumentDraft(
   scope: ActiveIncomeIssuerScope,
   body: Record<string, unknown>,
+  options?: { leanDetails?: boolean },
 ): Promise<WizardDraftResumeResult> {
   const draft_id = reqUuid(body.draft_id, 'draft_id');
   const row = await loadWizardDraftRow(scope, draft_id);
@@ -1323,6 +1329,9 @@ export async function resumeIncomeDocumentDraft(
           true,
           row,
           row.document_type ? await resolveDocType(scope, row.document_type) : null,
+          options?.leanDetails
+            ? { lean: true, skip_branding_profile_aggregate: true }
+            : {},
         )
       : { active_wizard_draft_id: draft_id, document_details_step: null };
 

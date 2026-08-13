@@ -21,7 +21,14 @@ import {
   assertIncomeEditPermission,
   loadActiveIncomeIssuerScope,
 } from './income-issuer-scope.service.js';
-import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
+import {
+  buildIncomeWorkspaceAggregate,
+  buildIncomeWorkspaceWizardPatchAggregate,
+} from './income-workspace-aggregate.service.js';
+import {
+  createIncomeCommandTimings,
+  logIncomeCommandTimings,
+} from './income-command-timings.pure.js';
 import { buildWorkEngineInvoicesTabAggregate } from '../work-engine/work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-engine/work-engine-invoices-client-documents-by-type.read-model.service.js';
 import { validateDraftAgainstDocumentTypeRules } from './income-document-draft.helpers.js';
@@ -277,6 +284,45 @@ async function buildConversionCommandResponse(params: {
       ? Number(params.documentsListYear)
       : new Date().getFullYear();
 
+  const timings = createIncomeCommandTimings();
+
+  // Pencil open: lean wizard_patch only. Do not rebuild full workspace / branding studio /
+  // invoices history / by-type tables — the editor already has the list on screen.
+  if (params.command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT && params.draftId) {
+    const resumed = await resumeIncomeDocumentDraftFromContext(
+      params.ctx,
+      { draft_id: params.draftId },
+      { leanDetails: true },
+    );
+    timings.mark('draft_load_ms');
+    const workspace = await buildIncomeWorkspaceWizardPatchAggregate(
+      resumed.scope,
+      resumed.result.wizardOverlay,
+      resumed.result.recipientOverlay,
+      resumed.result.starting_step_key,
+      { includeBrandingProfile: false },
+    );
+    timings.mark('wizard_patch_aggregate_ms');
+    const snapshot = timings.snapshot();
+    logIncomeCommandTimings(params.command, snapshot, {
+      path: 'pencil_lean_open',
+      draft_id: params.draftId,
+    });
+    return {
+      ok: true,
+      command: params.command,
+      income_workspace_aggregate: workspace,
+      meta: {
+        idempotent_replay: params.replay,
+        income_document_id: params.source.id,
+        edited_draft_id: params.draftId,
+        converted_draft_id: params.draftId,
+        workspace_aggregate_mode: 'wizard_patch',
+        command_timings: snapshot,
+      },
+    };
+  }
+
   // When a staging/target draft is present, skip the unused full aggregate that was
   // previously built and immediately overwritten (major begin-edit / convert latency).
   let workspace: Awaited<ReturnType<typeof buildIncomeWorkspaceAggregate>>;
@@ -285,6 +331,7 @@ async function buildConversionCommandResponse(params: {
     const resumed = await resumeIncomeDocumentDraftFromContext(params.ctx, {
       draft_id: params.draftId,
     });
+    timings.mark('draft_load_ms');
     workspace = await buildIncomeWorkspaceAggregate(
       params.ctx,
       resumed.scope,
@@ -311,6 +358,10 @@ async function buildConversionCommandResponse(params: {
         })
       : Promise.resolve(null),
   ]);
+  timings.mark('invoices_tab_aggregate_ms');
+  timings.mark('documents_by_type_aggregate_ms');
+  const snapshot = timings.snapshot();
+  logIncomeCommandTimings(params.command, snapshot, { path: 'conversion_full' });
 
   return {
     ok: true,
@@ -322,11 +373,9 @@ async function buildConversionCommandResponse(params: {
     meta: {
       idempotent_replay: params.replay,
       income_document_id: params.source.id,
+      command_timings: snapshot,
       ...(params.draftId && params.command === INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT
         ? { converted_draft_id: params.draftId }
-        : {}),
-      ...(params.draftId && params.command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT
-        ? { edited_draft_id: params.draftId, converted_draft_id: params.draftId }
         : {}),
     } as IncomeCommandResponse['meta'],
   };

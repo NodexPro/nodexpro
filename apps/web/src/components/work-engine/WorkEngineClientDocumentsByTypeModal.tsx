@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  IncomeWorkspaceAggregate,
   WorkEngineInvoicesClientDocumentsByTypeAggregate,
   WorkEngineInvoicesClientDocumentsByTypeRow,
 } from '../../income/income-workspace-types';
@@ -26,7 +27,27 @@ type Props = {
   onClose: () => void;
   onError?: (message: string) => void;
   onEditDraft?: (draftId: string) => void | Promise<void>;
+  onInvoicesTabRefresh?: (aggregate: Record<string, unknown>) => void;
+  onOpenConvertedDraft?: (payload: {
+    draftId: string;
+    workspaceAggregate: IncomeWorkspaceAggregate;
+  }) => void | Promise<void>;
 };
+
+type PreliminaryDocumentEditAction = {
+  enabled: boolean;
+  label: string;
+  command: 'begin_edit_income_preliminary_document';
+  disabled_reason: string | null;
+};
+
+function preliminaryEditActionOf(
+  row: WorkEngineInvoicesClientDocumentsByTypeRow,
+): PreliminaryDocumentEditAction | null {
+  const action = (row as { edit_action?: PreliminaryDocumentEditAction | null }).edit_action;
+  if (!action || action.command !== 'begin_edit_income_preliminary_document') return null;
+  return action;
+}
 
 function renderCellValue(
   row: WorkEngineInvoicesClientDocumentsByTypeRow,
@@ -54,6 +75,8 @@ export function WorkEngineClientDocumentsByTypeModal({
   onClose,
   onError,
   onEditDraft,
+  onInvoicesTabRefresh,
+  onOpenConvertedDraft,
 }: Props) {
   const [aggregate, setAggregate] = useState<WorkEngineInvoicesClientDocumentsByTypeAggregate | null>(null);
   const [loading, setLoading] = useState(false);
@@ -112,6 +135,47 @@ export function WorkEngineClientDocumentsByTypeModal({
     onBusyChange?.(true);
     try {
       await executeIncomeCommand('resume_income_document_draft', { draft_id: row.draft_id });
+    } catch (e) {
+      onError?.(e instanceof Error ? e.message : String(e));
+    } finally {
+      onBusyChange?.(false);
+    }
+  };
+
+  const handleEditPreliminary = async (
+    row: WorkEngineInvoicesClientDocumentsByTypeRow,
+    editAction: PreliminaryDocumentEditAction,
+  ) => {
+    if (!row.document_id || !editAction.enabled) return;
+    onBusyChange?.(true);
+    try {
+      const raw = await executeIncomeCommand(editAction.command, {
+        income_document_id: row.document_id,
+        documents_list_year: aggregate?.selected_year ?? null,
+      });
+      if (typeof raw !== 'object' || raw == null || !('income_workspace_aggregate' in raw)) return;
+      const res = raw as {
+        income_workspace_aggregate: IncomeWorkspaceAggregate;
+        work_engine_invoices_client_documents_by_type_aggregate?: WorkEngineInvoicesClientDocumentsByTypeAggregate;
+        work_engine_invoices_tab_aggregate?: Record<string, unknown>;
+        meta?: { edited_draft_id?: string; converted_draft_id?: string };
+      };
+      const list = res.work_engine_invoices_client_documents_by_type_aggregate;
+      if (list) setAggregate(list);
+      if (res.work_engine_invoices_tab_aggregate) {
+        onInvoicesTabRefresh?.(res.work_engine_invoices_tab_aggregate);
+      }
+      const draftId =
+        res.meta?.edited_draft_id ??
+        res.meta?.converted_draft_id ??
+        res.income_workspace_aggregate.active_wizard_draft_id ??
+        null;
+      if (draftId && onOpenConvertedDraft) {
+        await onOpenConvertedDraft({
+          draftId,
+          workspaceAggregate: res.income_workspace_aggregate,
+        });
+      }
     } catch (e) {
       onError?.(e instanceof Error ? e.message : String(e));
     } finally {
@@ -196,6 +260,31 @@ export function WorkEngineClientDocumentsByTypeModal({
                           );
                         }
                         if (col.key === 'edit') {
+                          const editAction = preliminaryEditActionOf(row);
+                          if (editAction) {
+                            return (
+                              <td key={col.key} className="nx-we-documents-modal__action-col">
+                                <button
+                                  type="button"
+                                  className="nx-we-documents-modal__edit"
+                                  disabled={busy || loading || !editAction.enabled}
+                                  aria-label={editAction.label}
+                                  title={editAction.disabled_reason ?? editAction.label}
+                                  onClick={() => void handleEditPreliminary(row, editAction)}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                    <path
+                                      d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"
+                                      stroke="currentColor"
+                                      strokeWidth="1.8"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                </button>
+                              </td>
+                            );
+                          }
                           return (
                             <td key={col.key} className="nx-we-documents-modal__action-col">
                               {row.can_edit_draft ? (

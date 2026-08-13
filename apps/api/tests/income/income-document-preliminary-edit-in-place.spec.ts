@@ -192,12 +192,18 @@ test('Aggregate edit_mode + session_actions disable Issue / rename Save', () => 
     canIssue: true,
     editMode: mode,
   });
-  assert.equal(actions.save.label, 'שמור שינויים');
+  assert.equal(actions.save.label, 'שמירה');
   assert.equal(actions.save.enabled, true);
   assert.equal(actions.preview.enabled, true);
   assert.equal(actions.issue.enabled, false);
   assert.equal(actions.issue_and_send.enabled, false);
   assert.equal(actions.issue.disabled_reason, PRELIMINARY_EDIT_CANNOT_ISSUE_MESSAGE);
+  assert.equal(actions.footer.mode, 'preliminary_edit');
+  assert.equal(actions.footer.show_back, false);
+  assert.equal(actions.footer.show_next, false);
+  assert.equal(actions.footer.show_issue, false);
+  assert.equal(actions.footer.close_after_save, true);
+  assert.equal(actions.footer.close_control, 'icon');
 
   const normal = buildWizardSessionActions({
     canEdit: true,
@@ -211,5 +217,5 @@ test('Aggregate edit_mode + session_actions disable Issue / rename Save', () => 
   assert.match(detailsBuildersSource, /buildWizardSessionActions/);
   assert.match(workspaceAggSource, /edit_mode:/);
   assert.match(wizardModalSource, /sessionActions\?\.save\?\.label/);
-  assert.match(wizardModalSource, /sessionActions\?\.issue && !sessionActions\.issue\.enabled/);
+  assert.match(wizardModalSource, /footerActions\?\.mode === 'preliminary_edit'/);
 });

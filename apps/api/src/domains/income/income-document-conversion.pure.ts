@@ -148,11 +148,23 @@ export type WizardSessionAction = {
   disabled_reason: string | null;
 };
 
+export type WizardSessionFooterPresentation = {
+  mode: 'preliminary_edit' | 'wizard';
+  show_back: boolean;
+  show_next: boolean;
+  show_save: boolean;
+  show_preview: boolean;
+  show_issue: boolean;
+  close_after_save: boolean;
+  close_control: 'icon' | 'text';
+};
+
 export type WizardSessionActions = {
   save: WizardSessionAction;
   preview: WizardSessionAction;
   issue: WizardSessionAction;
   issue_and_send: WizardSessionAction;
+  footer: WizardSessionFooterPresentation;
 };
 
 export function readPreliminaryEditSourceDocumentId(
@@ -217,7 +229,7 @@ export function buildWizardSessionActions(params: {
     save: {
       enabled: params.canEdit,
       command: params.canEdit ? 'save_income_document_draft' : null,
-      label: isPreliminaryEdit ? 'שמור שינויים' : 'שמירת טיוטה',
+      label: isPreliminaryEdit ? 'שמירה' : 'שמירת טיוטה',
       disabled_reason: params.canEdit ? null : 'נדרשת הרשאת עריכה',
     },
     preview: {
@@ -247,6 +259,27 @@ export function buildWizardSessionActions(params: {
           ? null
           : 'נדרשת הרשאת הפקה',
     },
+    footer: isPreliminaryEdit
+      ? {
+          mode: 'preliminary_edit',
+          show_back: false,
+          show_next: false,
+          show_save: true,
+          show_preview: true,
+          show_issue: false,
+          close_after_save: true,
+          close_control: 'icon',
+        }
+      : {
+          mode: 'wizard',
+          show_back: true,
+          show_next: true,
+          show_save: true,
+          show_preview: true,
+          show_issue: true,
+          close_after_save: false,
+          close_control: 'text',
+        },
   };
 }
 

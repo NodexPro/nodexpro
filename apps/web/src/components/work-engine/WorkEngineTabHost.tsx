@@ -444,6 +444,10 @@ function WorkEngineInvoicesTabPanel(props: {
             setWizardBusy(false);
           }
         }}
+        onOpenConvertedDraft={async ({ workspaceAggregate }) => {
+          setWizardInitialAgg(workspaceAggregate);
+          setWizardOpen(true);
+        }}
       />
 
       {!showClientDocumentPanel && draftEntrypoints.length > 0 ? (

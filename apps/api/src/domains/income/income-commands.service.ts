@@ -50,6 +50,10 @@ import {
   buildIncomeWorkspaceWizardPatchAggregate,
 } from './income-workspace-aggregate.service.js';
 import {
+  createIncomeCommandTimings,
+  logIncomeCommandTimings,
+} from './income-command-timings.pure.js';
+import {
   insertSavedIncomeRecipient,
   loadIncomeRecipientById,
   searchIncomeRecipients,
@@ -346,19 +350,30 @@ async function wizardDraftCommandResponse(
   wizardDraftOverlay: WizardDraftOverlay,
   startingStepKey: string | null = null,
 ): Promise<IncomeCommandResponse> {
+  const timings = createIncomeCommandTimings();
+  const income_workspace_aggregate = await buildIncomeWorkspaceWizardPatchAggregate(
+    scope,
+    wizardDraftOverlay,
+    recipientOverlay,
+    startingStepKey,
+    { includeBrandingProfile: false },
+  );
+  timings.mark('wizard_patch_aggregate_ms');
+  const command_timings = timings.snapshot();
+  const serializedBytes = Buffer.byteLength(JSON.stringify(income_workspace_aggregate), 'utf8');
+  logIncomeCommandTimings(command, command_timings, {
+    serialized_workspace_bytes: serializedBytes,
+    has_studio_live_preview: JSON.stringify(income_workspace_aggregate).includes(
+      'studio_live_preview',
+    ),
+  });
   return {
     ok: true,
     command,
     // Wizard mutations already carry document_details_step; FE merge preserves prior
     // document_branding_profile. Skip a second expensive branding/studio rebuild.
-    income_workspace_aggregate: await buildIncomeWorkspaceWizardPatchAggregate(
-      scope,
-      wizardDraftOverlay,
-      recipientOverlay,
-      startingStepKey,
-      { includeBrandingProfile: false },
-    ),
-    meta: { workspace_aggregate_mode: 'wizard_patch' },
+    income_workspace_aggregate,
+    meta: { workspace_aggregate_mode: 'wizard_patch', command_timings },
   };
 }
 

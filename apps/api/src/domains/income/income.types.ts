@@ -813,6 +813,7 @@ export interface IncomeCommandResponseMeta {
   failure_reason?: string | null;
   /** `wizard_patch` = lightweight aggregate for Work Engine wizard line/settings edits. */
   workspace_aggregate_mode?: 'full' | 'wizard_patch';
+  command_timings?: import('./income-command-timings.pure.js').IncomeCommandTimings;
 }
 
 export interface IncomeCommandResponse {

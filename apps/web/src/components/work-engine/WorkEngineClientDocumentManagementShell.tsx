@@ -4,6 +4,7 @@ import type {
   IncomeCommandResponse,
   IncomeCustomersTableRow,
   IncomeTableModel,
+  IncomeWorkspaceAggregate,
   SelectIncomeIssuerContextCommandResponse,
 } from '../../api/income';
 import { executeIncomeCommand } from '../../api/income';
@@ -59,6 +60,10 @@ type ShellProps = {
   onError?: (message: string) => void;
   onEditDraft?: (draftId: string) => void | Promise<void>;
   onInvoicesTabRefresh?: (aggregate: Record<string, unknown>) => void;
+  onOpenConvertedDraft?: (payload: {
+    draftId: string;
+    workspaceAggregate: IncomeWorkspaceAggregate;
+  }) => void | Promise<void>;
 };
 
 export function WorkEngineClientDocumentManagementShell({
@@ -72,6 +77,7 @@ export function WorkEngineClientDocumentManagementShell({
   onError,
   onEditDraft,
   onInvoicesTabRefresh,
+  onOpenConvertedDraft,
 }: ShellProps) {
   const [endCustomersOpen, setEndCustomersOpen] = useState(false);
   const [endCustomersClientName, setEndCustomersClientName] = useState('');
@@ -281,6 +287,14 @@ export function WorkEngineClientDocumentManagementShell({
           setDocumentsModalOpen(false);
           setDocumentsModalParams(null);
         }}
+        onOpenConvertedDraft={async (payload) => {
+          if (onOpenConvertedDraft) {
+            await onOpenConvertedDraft(payload);
+          }
+          setDocumentsModalOpen(false);
+          setDocumentsModalParams(null);
+        }}
+        onInvoicesTabRefresh={onInvoicesTabRefresh}
       />
 
       <IncomeClientEndCustomersModal

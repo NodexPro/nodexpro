@@ -999,7 +999,7 @@ export async function buildIncomeDocumentDetailsStep(
               discount: lineDiscount,
               currency: r.currency.value,
               vat_display: sourceLine ? formatLineVatAmountDisplay(sourceLine, amounts) : '—',
-              vat_rate_label: r.vat_rate_label,
+              vat_rate_label: r.vat_rate_label ?? '',
               total: r.line_total_display,
             };
           });
@@ -1014,7 +1014,7 @@ export async function buildIncomeDocumentDetailsStep(
             discount: string | null;
             currency: string;
             vat_display: string;
-            vat_rate_label: string | null;
+            vat_rate_label: string;
             total: string;
           }>,
         ),

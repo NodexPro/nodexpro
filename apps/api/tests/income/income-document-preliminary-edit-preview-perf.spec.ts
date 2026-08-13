@@ -106,9 +106,9 @@ test('H — Preview source is staging draft, not issued source snapshot', () => 
 });
 
 test('I — Performance audit: redundant sequential ops identified and removed', () => {
-  // begin-edit no longer builds full workspace twice when draftId present
   const buildRespIdx = conversionServiceSource.indexOf('async function buildConversionCommandResponse');
-  const buildResp = conversionServiceSource.slice(buildRespIdx, buildRespIdx + 2500);
+  const buildResp = conversionServiceSource.slice(buildRespIdx, buildRespIdx + 8000);
+  assert.match(buildResp, /pencil_lean_open|leanDetails:\s*true/);
   assert.match(buildResp, /skip the unused full aggregate|When a staging\/target draft is present/);
   assert.match(buildResp, /else \{\s*workspace = await buildIncomeWorkspaceAggregate/);
 
@@ -126,9 +126,11 @@ test('I — Performance audit: redundant sequential ops identified and removed',
   assert.match(detailsBuildersSource, /loadResolvedBrandingProfileForDocumentType/);
 });
 
-test('J — Optimized path keeps Work Engine counters via begin-edit tab aggregates', () => {
+test('J — Pencil open uses lean wizard_patch; conversion still refreshes tab aggregates', () => {
   const buildRespIdx = conversionServiceSource.indexOf('async function buildConversionCommandResponse');
-  const buildResp = conversionServiceSource.slice(buildRespIdx, buildRespIdx + 2500);
+  const buildResp = conversionServiceSource.slice(buildRespIdx, buildRespIdx + 8000);
+  assert.match(buildResp, /pencil_lean_open/);
+  assert.match(buildResp, /buildIncomeWorkspaceWizardPatchAggregate/);
   assert.match(buildResp, /buildWorkEngineInvoicesTabAggregate/);
   assert.match(buildResp, /work_engine_invoices_tab_aggregate/);
 });

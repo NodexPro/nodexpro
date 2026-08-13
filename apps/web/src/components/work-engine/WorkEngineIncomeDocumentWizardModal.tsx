@@ -111,13 +111,22 @@ export function WorkEngineIncomeDocumentWizardModal({
     workspaceAgg?.available_document_types ?? [];
 
   const sessionActions = workspaceAgg?.document_details_step?.session_actions ?? null;
+  const footerActions = sessionActions?.footer ?? null;
+  const showBack = footerActions?.show_back ?? true;
+  const showNext = footerActions?.show_next ?? true;
+  const showSave = footerActions?.show_save ?? true;
+  const showPreview = footerActions?.show_preview ?? true;
+  const showIssue = footerActions?.show_issue ?? true;
+  const closeAfterSave = footerActions?.close_after_save ?? false;
+  const closeControl = footerActions?.close_control ?? 'text';
 
   const visibleSteps = useMemo(() => {
     return wizard.steps.filter((s) => {
       if (s.when === 'office_representative') return issuerChoice === 'office_client';
+      if (s.key === 'issue' && footerActions && !footerActions.show_issue) return false;
       return true;
     });
-  }, [wizard.steps, issuerChoice]);
+  }, [wizard.steps, issuerChoice, footerActions]);
 
   useEffect(() => {
     const startingStepKey = workspaceAgg?.wizard_starting_step_key ?? null;
@@ -278,6 +287,10 @@ export function WorkEngineIncomeDocumentWizardModal({
 
   const handleSaveAndIssue = async () => {
     setError(null);
+    if (sessionActions?.issue && !sessionActions.issue.enabled) {
+      setError(sessionActions.issue.disabled_reason ?? 'לא ניתן להפיק מסמך במצב עריכה זה');
+      return;
+    }
     onBusyChange(true);
     try {
       const cmds = wizard.income_commands;
@@ -319,6 +332,10 @@ export function WorkEngineIncomeDocumentWizardModal({
             ? mergeIncomeWorkspaceWizardPatch(prev, payload.income_workspace_aggregate)
             : payload.income_workspace_aggregate,
         );
+      }
+      if (closeAfterSave) {
+        onCompleted();
+        onClose();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'שגיאה בשמירה');
@@ -529,13 +546,19 @@ export function WorkEngineIncomeDocumentWizardModal({
       >
         <div className="nx-modal-header">
           <h2 className="nx-modal-title">{stepTitle}</h2>
-          <button type="button" className="nx-modal-close" onClick={onClose} disabled={footerLocked}>
-            סגירה
+          <button
+            type="button"
+            className="nx-modal-close"
+            onClick={onClose}
+            disabled={footerLocked}
+            aria-label={closeControl === 'icon' ? 'סגור' : 'סגירה'}
+          >
+            {closeControl === 'icon' ? '×' : 'סגירה'}
           </button>
         </div>
         <div className="nx-modal-body">{error ? <div className="nx-we-banner-error">{error}</div> : null}{renderBody()}</div>
         <div className="nx-modal-footer nx-tax-nested-modal-footer">
-          {stepIndex > 0 ? (
+          {showBack && stepIndex > 0 ? (
             <button
               type="button"
               className="nx-btn nx-btn-taxes-compact"
@@ -545,19 +568,9 @@ export function WorkEngineIncomeDocumentWizardModal({
               הקודם
             </button>
           ) : null}
-          {activeStepKey === 'document_details' ? (
-            <button
-              type="button"
-              className="nx-btn nx-btn-taxes-compact"
-              disabled={footerLocked || !activeDraftId}
-              onClick={() => void handleSaveDraft()}
-              title={documentDetailsStep?.draft_state_display?.label ?? undefined}
-            >
-              שמירת טיוטה
-            </button>
-          ) : null}
-          {activeStepKey === 'document_details' &&
-          (sessionActions?.preview?.enabled ?? true) ? (
+          {showPreview &&
+          (sessionActions?.preview?.enabled ?? true) &&
+          (footerActions?.mode === 'preliminary_edit' || activeStepKey === 'document_details') ? (
             <button
               type="button"
               className="nx-btn nx-btn-taxes-compact"
@@ -567,7 +580,20 @@ export function WorkEngineIncomeDocumentWizardModal({
               {sessionActions?.preview?.label ?? 'תצוגה מקדימה'}
             </button>
           ) : null}
-          {!isLastStep ? (
+          {showSave &&
+          (sessionActions?.save?.enabled ?? true) &&
+          (footerActions?.mode === 'preliminary_edit' || activeStepKey === 'document_details') ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+              disabled={footerLocked || !activeDraftId || sessionActions?.save?.enabled === false}
+              onClick={() => void handleSaveDraft()}
+              title={documentDetailsStep?.draft_state_display?.label ?? undefined}
+            >
+              {sessionActions?.save?.label ?? 'שמירת טיוטה'}
+            </button>
+          ) : null}
+          {showNext && !isLastStep ? (
             <button
               type="button"
               className="nx-btn nx-btn-primary nx-btn-taxes-compact"
@@ -576,16 +602,17 @@ export function WorkEngineIncomeDocumentWizardModal({
             >
               {recipientPending ? 'טוען...' : 'הבא'}
             </button>
-          ) : (
+          ) : null}
+          {showIssue && isLastStep ? (
             <button
               type="button"
               className="nx-btn nx-btn-primary nx-btn-taxes-compact"
               disabled={footerLocked || !form.document_type || !activeDraftId}
               onClick={() => void handleSaveAndIssue()}
             >
-              הפק מסמך
+              {sessionActions?.issue?.label ?? 'הפק מסמך'}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

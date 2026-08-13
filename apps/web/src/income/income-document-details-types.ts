@@ -171,6 +171,16 @@ export type IncomeDocumentDetailsStep = {
       label: string;
       disabled_reason: string | null;
     };
+    footer?: {
+      mode: 'preliminary_edit' | 'wizard';
+      show_back: boolean;
+      show_next: boolean;
+      show_save: boolean;
+      show_preview: boolean;
+      show_issue: boolean;
+      close_after_save: boolean;
+      close_control: 'icon' | 'text';
+    };
   };
   draft_state_display?: {
     status: 'draft';

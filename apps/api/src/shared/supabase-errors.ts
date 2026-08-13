@@ -93,6 +93,9 @@ export function throwIfSupabaseError(
   if (code === '42501') {
     throw new AppError(403, `${context}: database permission denied`, 'DB_PERMISSION', details);
   }
+  if (message.includes('income_documents business fields are immutable after issue')) {
+    throw new AppError(409, `${context}: ${message}`, 'INCOME_DOCUMENT_IMMUTABLE_AFTER_ISSUE', details);
+  }
 
   throw new AppError(500, `${context}: ${message}`, 'SUPABASE_ERROR', details);
 }
