@@ -46,6 +46,35 @@ test('documents modal table is Excel-like, RTL, no horizontal scroll at desktop 
   assert.doesNotMatch(css, /min-width:\s*720px/);
 });
 
+test('by-type rows keep email/docflow action truth but icons live in actions, not wide columns', () => {
+  const readModel = readFileSync(
+    join(
+      dir,
+      '../../src/domains/work-engine/work-engine-invoices-client-documents-by-type.read-model.service.ts',
+    ),
+    'utf8',
+  );
+  const start = readModel.indexOf('const TAX_INVOICE_TABLE_COLUMNS = [');
+  const end = readModel.indexOf('];', start);
+  const taxColumns = readModel.slice(start, end + 2);
+  assert.match(taxColumns, /key: 'actions'/);
+  assert.doesNotMatch(taxColumns, /key: 'email_delivery'/);
+  assert.doesNotMatch(taxColumns, /key: 'docflow_delivery'/);
+  const helperSource = readFileSync(
+    join(dir, '../../../web/src/components/work-engine/WorkEngineDocumentsRowDeliveryIcons.tsx'),
+    'utf8',
+  );
+  assert.match(readModel, /buildIncomeDocumentEmailDeliveryBlock/);
+  assert.match(readModel, /buildIncomeDocumentDocflowDeliveryBlock/);
+  assert.match(readModel, /email_delivery\.action\.key/);
+  assert.match(readModel, /docflow_delivery\.action\.key/);
+  assert.match(modalSource, /WorkEngineDocumentsRowDeliveryIcons/);
+  assert.match(helperSource, /email_delivery\?\.action\?\.enabled/);
+  assert.match(helperSource, /docflow_delivery\?\.action\?\.enabled/);
+  assert.match(modalSource, /IncomeDocumentEmailHistoryModal/);
+  assert.match(modalSource, /IncomeDocumentDocflowSendModal/);
+});
+
 test('invoices tab host no longer passes inline onError into documents shell', () => {
   assert.ok(tabHostSource.includes('onError={handlePanelError}'));
   assert.ok(!tabHostSource.includes('onError={(message) => setError(message)}'));

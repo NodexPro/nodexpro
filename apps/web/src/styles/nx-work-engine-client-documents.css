@@ -216,15 +216,13 @@
   width: 10%;
 }
 
-.nx-we-documents-modal__table col[data-col='email_delivery'],
-.nx-we-documents-modal__table col[data-col='docflow_delivery'],
 .nx-we-documents-modal__table col[data-col='view'],
 .nx-we-documents-modal__table col[data-col='edit'] {
-  width: 6%;
+  width: 8%;
 }
 
 .nx-we-documents-modal__table col[data-col='actions'] {
-  width: 18%;
+  width: 22%;
 }
 
 .nx-we-documents-modal__table col[data-col='document_type_label'] {

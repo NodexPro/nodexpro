@@ -102,8 +102,6 @@ const ISSUED_TABLE_COLUMNS = [
   { key: 'customer_display_name', label: 'לקוח' },
   { key: 'amount_display', label: 'סכום' },
   { key: 'status_label', label: 'סטטוס' },
-  { key: 'email_delivery', label: '@' },
-  { key: 'docflow_delivery', label: 'דוקפלו' },
   { key: 'view', label: 'צפייה' },
 ];
 
@@ -114,8 +112,6 @@ const PRELIMINARY_ISSUED_TABLE_COLUMNS = [
   { key: 'customer_display_name', label: 'לקוח' },
   { key: 'amount_display', label: 'סכום' },
   { key: 'status_label', label: 'סטטוס' },
-  { key: 'email_delivery', label: '@' },
-  { key: 'docflow_delivery', label: 'דוקפלו' },
   { key: 'actions', label: 'פעולות' },
 ];
 
@@ -126,8 +122,6 @@ const TAX_INVOICE_TABLE_COLUMNS = [
   { key: 'amount_display', label: 'סכום' },
   { key: 'due_date_display', label: 'תאריך לתשלום' },
   { key: 'payment_state', label: 'סטטוס תשלום' },
-  { key: 'email_delivery', label: '@' },
-  { key: 'docflow_delivery', label: 'דוקפלו' },
   { key: 'actions', label: 'פעולות' },
 ];
 
@@ -440,6 +434,33 @@ async function loadIssuedDocumentCandidates(params: {
       if (cancelEnabled) allowedActions.push(INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT);
     }
 
+    const email_delivery = buildIncomeDocumentEmailDeliveryBlock({
+      incomeDocumentId: doc.id,
+      attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
+      permissions: params.permissions,
+      representedClientId: params.representedClientId,
+      documentStatus: isCancelled ? 'cancelled_future' : 'issued',
+      pdfRenderStatus: doc.pdf_render_status,
+      pdfAssetId: doc.pdf_asset_id,
+    });
+    const docflow_delivery = buildIncomeDocumentDocflowDeliveryBlock({
+      incomeDocumentId: doc.id,
+      attemptCount: docflowAttemptCounts.get(doc.id) ?? 0,
+      permissions: params.permissions,
+      representedClientId: params.representedClientId,
+      documentStatus: isCancelled ? 'cancelled_future' : 'issued',
+      pdfRenderStatus: doc.pdf_render_status,
+      pdfAssetId: doc.pdf_asset_id,
+      docflowEntitled,
+      portalActive,
+    });
+    if (email_delivery.action.enabled) {
+      allowedActions.push(email_delivery.action.key);
+    }
+    if (docflow_delivery.action.enabled) {
+      allowedActions.push(docflow_delivery.action.key);
+    }
+
     return {
       row_id: doc.id,
       document_number: doc.document_number,
@@ -462,26 +483,8 @@ async function loadIssuedDocumentCandidates(params: {
       pdf_download_path: pdf_action.pdf_download_path,
       view_action,
       pdf_action,
-      email_delivery: buildIncomeDocumentEmailDeliveryBlock({
-        incomeDocumentId: doc.id,
-        attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
-        permissions: params.permissions,
-        representedClientId: params.representedClientId,
-        documentStatus: isCancelled ? 'cancelled_future' : 'issued',
-        pdfRenderStatus: doc.pdf_render_status,
-        pdfAssetId: doc.pdf_asset_id,
-      }),
-      docflow_delivery: buildIncomeDocumentDocflowDeliveryBlock({
-        incomeDocumentId: doc.id,
-        attemptCount: docflowAttemptCounts.get(doc.id) ?? 0,
-        permissions: params.permissions,
-        representedClientId: params.representedClientId,
-        documentStatus: isCancelled ? 'cancelled_future' : 'issued',
-        pdfRenderStatus: doc.pdf_render_status,
-        pdfAssetId: doc.pdf_asset_id,
-        docflowEntitled,
-        portalActive,
-      }),
+      email_delivery,
+      docflow_delivery,
       record_payment_form,
       edit_action,
       convert_action,

@@ -11,6 +11,9 @@ import {
   incomeApiPathFromBackend,
 } from '../../api/income';
 import { fetchWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../../api/work-engine';
+import { IncomeDocumentEmailHistoryModal } from '../income/IncomeDocumentEmailHistoryModal';
+import { IncomeDocumentDocflowSendModal } from '../income/IncomeDocumentDocflowSendModal';
+import { WorkEngineDocumentsRowDeliveryIcons, workEngineDocumentsRowDeliveryVisible } from './WorkEngineDocumentsRowDeliveryIcons';
 
 type OpenParams = {
   representedClientId: string;
@@ -80,6 +83,8 @@ export function WorkEngineClientDocumentsByTypeModal({
 }: Props) {
   const [aggregate, setAggregate] = useState<WorkEngineInvoicesClientDocumentsByTypeAggregate | null>(null);
   const [loading, setLoading] = useState(false);
+  const [docEmailHistoryId, setDocEmailHistoryId] = useState<string | null>(null);
+  const [docDocflowSendId, setDocDocflowSendId] = useState<string | null>(null);
 
   const loadAggregate = useCallback(
     async (year?: number | null) => {
@@ -192,6 +197,7 @@ export function WorkEngineClientDocumentsByTypeModal({
   const selectedYear = aggregate?.selected_year ?? new Date().getFullYear();
 
   return (
+    <>
     <div className="nx-income-wizard-overlay nx-invoice-ui nx-income-cdm-modal" role="dialog" aria-modal="true">
       <div className="nx-we-documents-modal nx-income-wizard nx-accounting-editor-modal">
         <div className="nx-income-wizard__head nx-we-documents-modal__head">
@@ -248,24 +254,36 @@ export function WorkEngineClientDocumentsByTypeModal({
                             !hasDedicatedViewColumn && Boolean(row.can_view_document);
                           return (
                             <td key={col.key} className="nx-we-documents-modal__action-col">
-                              {showView ? (
-                                <button
-                                  type="button"
-                                  className="nx-we-documents-modal__view"
-                                  disabled={busy || loading}
-                                  aria-label="צפייה במסמך"
-                                  title="צפייה במסמך"
-                                  onClick={() => void handleViewDocument(row)}
-                                >
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                                    <path
-                                      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
-                                      stroke="currentColor"
-                                      strokeWidth="1.8"
-                                    />
-                                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-                                  </svg>
-                                </button>
+                              {showView ||
+                              workEngineDocumentsRowDeliveryVisible(row).showEmail ||
+                              workEngineDocumentsRowDeliveryVisible(row).showDocflow ? (
+                                <div className="nx-we-documents-modal__row-actions">
+                                  {showView ? (
+                                    <button
+                                      type="button"
+                                      className="nx-we-documents-modal__view"
+                                      disabled={busy || loading}
+                                      aria-label="צפייה במסמך"
+                                      title="צפייה במסמך"
+                                      onClick={() => void handleViewDocument(row)}
+                                    >
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                        <path
+                                          d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
+                                          stroke="currentColor"
+                                          strokeWidth="1.8"
+                                        />
+                                        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                                      </svg>
+                                    </button>
+                                  ) : null}
+                                  <WorkEngineDocumentsRowDeliveryIcons
+                                    row={row}
+                                    busy={busy || loading}
+                                    onOpenEmail={setDocEmailHistoryId}
+                                    onOpenDocflow={setDocDocflowSendId}
+                                  />
+                                </div>
                               ) : (
                                 '—'
                               )}
@@ -273,26 +291,39 @@ export function WorkEngineClientDocumentsByTypeModal({
                           );
                         }
                         if (col.key === 'view') {
+                          const deliveryVisible = workEngineDocumentsRowDeliveryVisible(row);
                           return (
                             <td key={col.key} className="nx-we-documents-modal__action-col">
-                              {row.can_view_document ? (
-                                <button
-                                  type="button"
-                                  className="nx-we-documents-modal__view"
-                                  disabled={busy || loading}
-                                  aria-label="צפייה במסמך"
-                                  title="צפייה במסמך"
-                                  onClick={() => void handleViewDocument(row)}
-                                >
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                                    <path
-                                      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
-                                      stroke="currentColor"
-                                      strokeWidth="1.8"
-                                    />
-                                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-                                  </svg>
-                                </button>
+                              {row.can_view_document ||
+                              deliveryVisible.showEmail ||
+                              deliveryVisible.showDocflow ? (
+                                <div className="nx-we-documents-modal__row-actions">
+                                  {row.can_view_document ? (
+                                    <button
+                                      type="button"
+                                      className="nx-we-documents-modal__view"
+                                      disabled={busy || loading}
+                                      aria-label="צפייה במסמך"
+                                      title="צפייה במסמך"
+                                      onClick={() => void handleViewDocument(row)}
+                                    >
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                        <path
+                                          d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
+                                          stroke="currentColor"
+                                          strokeWidth="1.8"
+                                        />
+                                        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                                      </svg>
+                                    </button>
+                                  ) : null}
+                                  <WorkEngineDocumentsRowDeliveryIcons
+                                    row={row}
+                                    busy={busy || loading}
+                                    onOpenEmail={setDocEmailHistoryId}
+                                    onOpenDocflow={setDocDocflowSendId}
+                                  />
+                                </div>
                               ) : (
                                 '—'
                               )}
@@ -364,5 +395,24 @@ export function WorkEngineClientDocumentsByTypeModal({
 
       </div>
     </div>
+      <IncomeDocumentEmailHistoryModal
+        open={docEmailHistoryId != null}
+        incomeDocumentId={docEmailHistoryId}
+        representedClientId={params.representedClientId}
+        busy={busy}
+        onBusyChange={onBusyChange}
+        onClose={() => setDocEmailHistoryId(null)}
+        onError={onError}
+      />
+      <IncomeDocumentDocflowSendModal
+        open={docDocflowSendId != null}
+        incomeDocumentId={docDocflowSendId}
+        representedClientId={params.representedClientId}
+        busy={busy}
+        onBusyChange={onBusyChange}
+        onClose={() => setDocDocflowSendId(null)}
+        onError={onError}
+      />
+    </>
   );
 }
