@@ -374,6 +374,8 @@ export interface IncomeIssuedDocumentViewAggregate {
   /** Same descriptor as retainer/wizard preview — edit when policy.editable_after_issue. */
   allocation_number_field: import('./income-document-allocation-number.pure.js').IncomeDocumentAllocationNumberField;
   pdf_action: IncomeIssuedDocumentPdfAction;
+  email_delivery: IncomeDocumentEmailDeliveryBlock;
+  docflow_delivery: IncomeDocumentDocflowDeliveryBlock;
   allowed_actions: string[];
 }
 

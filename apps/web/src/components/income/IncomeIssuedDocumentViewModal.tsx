@@ -13,6 +13,8 @@ import {
 } from '../../api/income';
 import { normalizeIncomeDocumentPreviewHtml } from '../../lib/income-document-preview-display.pure';
 import { printIncomeIssuedDocumentHtml } from './income-issued-document-print.pure';
+import { IncomeDocumentEmailHistoryModal } from './IncomeDocumentEmailHistoryModal';
+import { IncomeDocumentDocflowSendModal } from './IncomeDocumentDocflowSendModal';
 import { WorkEngineIncomeDocumentPreviewPaper } from '../work-engine/WorkEngineIncomeDocumentPreviewPaper';
 import '../../styles/nx-work-engine-invoice-retainer.css';
 
@@ -69,6 +71,48 @@ function IssuedViewPrintIcon() {
   );
 }
 
+function IssuedViewEmailIcon() {
+  return (
+    <svg
+      width={23}
+      height={23}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      className="nx-we-retainer-preview-modal__head-icon-glyph"
+    >
+      <path
+        d="M4 6h16v12H4V6zm0 0 8 7 8-7"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IssuedViewDocflowIcon() {
+  return (
+    <svg
+      width={23}
+      height={23}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      className="nx-we-retainer-preview-modal__head-icon-glyph"
+    >
+      <path
+        d="M4 12 20 4l-3 8-5 2-2 5-2-7Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function IncomeIssuedDocumentViewModal({
   open,
   incomeDocumentId,
@@ -80,6 +124,8 @@ export function IncomeIssuedDocumentViewModal({
 }: Props) {
   const [aggregate, setAggregate] = useState<IncomeIssuedDocumentViewAggregate | null>(null);
   const [allocationModalOpen, setAllocationModalOpen] = useState(false);
+  const [emailHistoryOpen, setEmailHistoryOpen] = useState(false);
+  const [docflowSendOpen, setDocflowSendOpen] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const loadAggregate = useCallback(async () => {
@@ -107,6 +153,8 @@ export function IncomeIssuedDocumentViewModal({
     if (!open || !incomeDocumentId) {
       setAggregate(null);
       setAllocationModalOpen(false);
+      setEmailHistoryOpen(false);
+      setDocflowSendOpen(false);
       return;
     }
     void loadAggregate();
@@ -117,11 +165,16 @@ export function IncomeIssuedDocumentViewModal({
   const previewHtml = normalizeIncomeDocumentPreviewHtml(aggregate?.document_html?.trim() ?? '');
   const pdf = aggregate?.pdf_action ?? null;
   const allocationField = aggregate?.allocation_number_field ?? null;
+  const emailAction = aggregate?.email_delivery?.action ?? null;
+  const docflowAction = aggregate?.docflow_delivery?.action ?? null;
+  const emailVisible = Boolean(emailAction?.enabled);
+  const docflowVisible = Boolean(docflowAction?.enabled);
   const displayTitle = aggregate?.title?.trim() || 'צפייה במסמך';
   const downloadEnabled = Boolean(pdf?.enabled && pdf.pdf_download_path);
   const downloadTitle = downloadEnabled
     ? (pdf?.label ?? 'הורדה')
     : (pdf?.disabled_reason ?? 'קובץ PDF אינו זמין');
+  const nestedOpen = allocationModalOpen || emailHistoryOpen || docflowSendOpen;
 
   const handleDownload = async (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -171,84 +224,147 @@ export function IncomeIssuedDocumentViewModal({
   };
 
   return createPortal(
-    <div
-      className={`nx-we-retainer-preview-overlay nx-invoice-ui nx-income-issued-document-view${
-        allocationModalOpen ? ' nx-we-retainer-preview-overlay--blocked' : ''
-      }`}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="income-issued-document-view-title"
-      onClick={onClose}
-    >
-      <div className="nx-we-retainer-preview-modal" dir="rtl" onClick={(e) => e.stopPropagation()}>
-        <header className="nx-we-retainer-preview-modal__head">
-          <div className="nx-we-retainer-preview-modal__head-text">
-            <h2 id="income-issued-document-view-title" className="nx-we-retainer-preview-modal__title">
-              {displayTitle}
-            </h2>
-          </div>
-          <div className="nx-we-retainer-preview-modal__head-actions">
-            <div className="nx-we-retainer-preview-modal__head-icon-rail">
+    <>
+      <div
+        className={`nx-we-retainer-preview-overlay nx-invoice-ui nx-income-issued-document-view${
+          nestedOpen ? ' nx-we-retainer-preview-overlay--blocked' : ''
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="income-issued-document-view-title"
+        onClick={() => {
+          if (nestedOpen) return;
+          onClose();
+        }}
+      >
+        <div className="nx-we-retainer-preview-modal" dir="rtl" onClick={(e) => e.stopPropagation()}>
+          <header className="nx-we-retainer-preview-modal__head">
+            <div className="nx-we-retainer-preview-modal__head-text">
+              <h2 id="income-issued-document-view-title" className="nx-we-retainer-preview-modal__title">
+                {displayTitle}
+              </h2>
+            </div>
+            <div className="nx-we-retainer-preview-modal__head-actions">
+              <div className="nx-we-retainer-preview-modal__head-icon-rail">
+                <button
+                  type="button"
+                  className="nx-we-retainer-preview-modal__head-icon"
+                  data-testid="income-issued-document-download"
+                  aria-label="הורדה"
+                  title={downloadTitle}
+                  disabled={busy || !downloadEnabled}
+                  onClick={(e) => void handleDownload(e)}
+                >
+                  <IssuedViewDownloadIcon />
+                </button>
+                <button
+                  type="button"
+                  className="nx-we-retainer-preview-modal__head-icon"
+                  data-testid="income-issued-document-print"
+                  aria-label="הדפסה"
+                  title="הדפסה"
+                  disabled={busy || !previewHtml}
+                  onClick={handlePrint}
+                >
+                  <IssuedViewPrintIcon />
+                </button>
+                {emailVisible ? (
+                  <button
+                    type="button"
+                    className="nx-we-retainer-preview-modal__head-icon"
+                    data-testid="income-issued-document-email"
+                    aria-label={emailAction?.label ?? 'שליחה באימייל'}
+                    title={emailAction?.label ?? 'שליחה באימייל'}
+                    disabled={busy}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setEmailHistoryOpen(true);
+                    }}
+                  >
+                    <IssuedViewEmailIcon />
+                  </button>
+                ) : null}
+                {docflowVisible ? (
+                  <button
+                    type="button"
+                    className="nx-we-retainer-preview-modal__head-icon"
+                    data-testid="income-issued-document-docflow"
+                    aria-label={docflowAction?.label ?? 'שליחה בדוקפלו'}
+                    title={docflowAction?.label ?? 'שליחה בדוקפלו'}
+                    disabled={busy}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setDocflowSendOpen(true);
+                    }}
+                  >
+                    <IssuedViewDocflowIcon />
+                  </button>
+                ) : null}
+              </div>
               <button
                 type="button"
-                className="nx-we-retainer-preview-modal__head-icon"
-                data-testid="income-issued-document-download"
-                aria-label="הורדה"
-                title={downloadTitle}
-                disabled={busy || !downloadEnabled}
-                onClick={(e) => void handleDownload(e)}
+                className="nx-we-retainer-preview-modal__close"
+                aria-label="סגירה"
+                disabled={busy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onClose();
+                }}
               >
-                <IssuedViewDownloadIcon />
-              </button>
-              <button
-                type="button"
-                className="nx-we-retainer-preview-modal__head-icon"
-                data-testid="income-issued-document-print"
-                aria-label="הדפסה"
-                title="הדפסה"
-                disabled={busy || !previewHtml}
-                onClick={handlePrint}
-              >
-                <IssuedViewPrintIcon />
+                ×
               </button>
             </div>
-            <button
-              type="button"
-              className="nx-we-retainer-preview-modal__close"
-              aria-label="סגירה"
-              disabled={busy}
-              onClick={(event) => {
-                event.stopPropagation();
-                onClose();
-              }}
-            >
-              ×
-            </button>
-          </div>
-        </header>
+          </header>
 
-        <div
-          ref={canvasRef}
-          className={`nx-we-retainer-preview-modal__canvas${
-            allocationModalOpen ? ' nx-we-preview-canvas--blocked' : ''
-          }`}
-        >
-          {busy && !aggregate ? (
-            <p className="nx-we-retainer-preview-modal__status">טוען מסמך…</p>
-          ) : previewHtml ? (
-            <WorkEngineIncomeDocumentPreviewPaper
-              previewHtml={previewHtml}
-              busy={busy}
-              allocationField={allocationField}
-              onSaveAllocationNumber={handleSaveAllocationNumber}
-              onAllocationModalOpenChange={setAllocationModalOpen}
-            />
-          ) : (
-            <p className="nx-we-retainer-preview-modal__status">לא ניתן להציג את המסמך</p>
-          )}
+          <div
+            ref={canvasRef}
+            className={`nx-we-retainer-preview-modal__canvas${
+              nestedOpen ? ' nx-we-preview-canvas--blocked' : ''
+            }`}
+          >
+            {busy && !aggregate ? (
+              <p className="nx-we-retainer-preview-modal__status">טוען מסמך…</p>
+            ) : previewHtml ? (
+              <WorkEngineIncomeDocumentPreviewPaper
+                previewHtml={previewHtml}
+                busy={busy}
+                allocationField={allocationField}
+                onSaveAllocationNumber={handleSaveAllocationNumber}
+                onAllocationModalOpenChange={setAllocationModalOpen}
+              />
+            ) : (
+              <p className="nx-we-retainer-preview-modal__status">לא ניתן להציג את המסמך</p>
+            )}
+          </div>
         </div>
       </div>
-    </div>,
+      <IncomeDocumentEmailHistoryModal
+        open={emailHistoryOpen}
+        incomeDocumentId={emailHistoryOpen ? incomeDocumentId : null}
+        representedClientId={representedClientId}
+        busy={busy}
+        onBusyChange={onBusyChange}
+        onClose={() => setEmailHistoryOpen(false)}
+        onError={onError}
+        onAfterSendComplete={async () => {
+          await loadAggregate();
+        }}
+      />
+      <IncomeDocumentDocflowSendModal
+        open={docflowSendOpen}
+        incomeDocumentId={docflowSendOpen ? incomeDocumentId : null}
+        representedClientId={representedClientId}
+        busy={busy}
+        onBusyChange={onBusyChange}
+        onClose={() => setDocflowSendOpen(false)}
+        onError={onError}
+        onAfterSendComplete={async () => {
+          await loadAggregate();
+        }}
+      />
+    </>,
     document.body,
   );
 }

@@ -25,6 +25,14 @@ import {
   buildUnifiedIncomeDocumentRenderModelForIssuedDocument,
   type IssuedIncomeDocumentForRender,
 } from './income-document-unified-render.service.js';
+import { buildIncomeDocumentEmailDeliveryBlock } from './income-document-email-delivery.read-model.pure.js';
+import { buildIncomeDocumentDocflowDeliveryBlock } from './income-document-docflow-delivery.read-model.pure.js';
+import {
+  loadEmailAttemptCountsByDocumentIds,
+  loadDocflowAttemptCountsByDocumentIds,
+  isDocflowEntitledForOrg,
+  loadRepresentedClientDocflowPortalActive,
+} from './income-document-email-delivery.read-model.service.js';
 import {
   buildIncomeDocumentAllocationNumberField,
   normalizeAllocationNumberInput,
@@ -117,6 +125,36 @@ export async function buildIncomeIssuedDocumentViewAggregate(params: {
     pdfRenderError: doc.pdf_render_error,
   });
 
+  const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive] = await Promise.all([
+    loadEmailAttemptCountsByDocumentIds(scope.org_id, [doc.id]),
+    loadDocflowAttemptCountsByDocumentIds(scope.org_id, [doc.id]),
+    isDocflowEntitledForOrg(scope.org_id),
+    scope.represented_client_id
+      ? loadRepresentedClientDocflowPortalActive(scope.org_id, scope.represented_client_id)
+      : Promise.resolve(false),
+  ]);
+
+  const email_delivery = buildIncomeDocumentEmailDeliveryBlock({
+    incomeDocumentId: doc.id,
+    attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
+    permissions: scope.permissions,
+    representedClientId: scope.represented_client_id,
+    documentStatus: doc.document_status,
+    pdfRenderStatus: doc.pdf_render_status,
+    pdfAssetId: doc.pdf_asset_id,
+  });
+  const docflow_delivery = buildIncomeDocumentDocflowDeliveryBlock({
+    incomeDocumentId: doc.id,
+    attemptCount: docflowAttemptCounts.get(doc.id) ?? 0,
+    permissions: scope.permissions,
+    representedClientId: scope.represented_client_id,
+    documentStatus: doc.document_status,
+    pdfRenderStatus: doc.pdf_render_status,
+    pdfAssetId: doc.pdf_asset_id,
+    docflowEntitled,
+    portalActive,
+  });
+
   const typeLabel = DOCUMENT_TYPE_LABELS[doc.document_type];
   const allowedActions = ['view_issued_document'];
   if (allocation_number_field.editable) {
@@ -127,6 +165,12 @@ export async function buildIncomeIssuedDocumentViewAggregate(params: {
   }
   if (pdf_action.enabled) {
     allowedActions.push('download_pdf');
+  }
+  if (email_delivery.action.enabled) {
+    allowedActions.push(email_delivery.action.key);
+  }
+  if (docflow_delivery.action.enabled) {
+    allowedActions.push(docflow_delivery.action.key);
   }
 
   return {
@@ -140,6 +184,8 @@ export async function buildIncomeIssuedDocumentViewAggregate(params: {
     document_html,
     allocation_number_field,
     pdf_action,
+    email_delivery,
+    docflow_delivery,
     allowed_actions: allowedActions,
   };
 }

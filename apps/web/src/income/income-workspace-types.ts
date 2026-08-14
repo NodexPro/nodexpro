@@ -718,6 +718,34 @@ export type IncomeIssuedDocumentViewAction = {
   disabled_reason: string | null;
 };
 
+export type IncomeIssuedDocumentPdfAction = {
+  action_key: 'download_pdf';
+  label: string;
+  enabled: boolean;
+  income_document_id: string;
+  pdf_download_path: string | null;
+  pdf_status_key: 'pdf_pending' | 'pdf_failed' | 'pdf_ready' | 'pdf_unavailable';
+  pdf_status_label: string;
+  disabled_reason: string | null;
+  retry_command: 'retry_income_document_pdf_render' | null;
+};
+
+export interface IncomeIssuedDocumentViewAggregate {
+  aggregate_key: 'income_issued_document_view_aggregate';
+  income_document_id: string;
+  document_number: string;
+  document_type_label: string;
+  title: string;
+  read_only: true;
+  view_mode: 'issued_html';
+  document_html: string;
+  allocation_number_field: import('./income-document-details-types').IncomeDocumentAllocationNumberField;
+  pdf_action: IncomeIssuedDocumentPdfAction;
+  email_delivery: IncomeDocumentEmailDeliveryBlock;
+  docflow_delivery: IncomeDocumentDocflowDeliveryBlock;
+  allowed_actions: string[];
+};
+
 export interface IncomeClientIncomeLedgerCardPaymentChild {
   payment_id: string;
   allocation_id: string;

@@ -206,6 +206,18 @@ test('H/I FE opens issued HTML viewer; no draft fallback; no PDF required for nu
   assert.doesNotMatch(issuedModalSource, /contentWindow\?\.print/);
   assert.match(issuedModalSource, /income-issued-document-download/);
   assert.match(issuedModalSource, /income-issued-document-print/);
+  assert.match(issuedModalSource, /email_delivery/);
+  assert.match(issuedModalSource, /docflow_delivery/);
+  assert.match(issuedModalSource, /IncomeDocumentEmailHistoryModal/);
+  assert.match(issuedModalSource, /IncomeDocumentDocflowSendModal/);
+  assert.match(issuedModalSource, /income-issued-document-email/);
+  assert.match(issuedModalSource, /income-issued-document-docflow/);
+  assert.match(viewServiceSource, /buildIncomeDocumentEmailDeliveryBlock/);
+  assert.match(viewServiceSource, /buildIncomeDocumentDocflowDeliveryBlock/);
+  assert.match(viewServiceSource, /email_delivery/);
+  assert.match(viewServiceSource, /docflow_delivery/);
+  assert.match(viewServiceSource, /open_email_history|email_delivery\.action\.key/);
+  assert.match(viewServiceSource, /open_docflow_send|docflow_delivery\.action\.key/);
   const previewPaperSource = readFileSync(
     join(dir, '../../../web/src/components/work-engine/WorkEngineIncomeDocumentPreviewPaper.tsx'),
     'utf8',
