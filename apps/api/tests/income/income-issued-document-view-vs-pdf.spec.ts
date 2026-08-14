@@ -200,12 +200,24 @@ test('H/I FE opens issued HTML viewer; no draft fallback; no PDF required for nu
   assert.match(issuedModalSource, /createPortal/);
   assert.match(issuedModalSource, /document_html/);
   assert.match(issuedModalSource, /pdf_action/);
-  assert.match(issuedModalSource, /retry_command/);
+  assert.match(issuedModalSource, /downloadIncomeDocumentPdf/);
+  assert.match(issuedModalSource, /pdf_download_path/);
+  assert.match(issuedModalSource, /contentWindow\?\.print/);
+  assert.match(issuedModalSource, /income-issued-document-download/);
+  assert.match(issuedModalSource, /income-issued-document-print/);
+  assert.doesNotMatch(issuedModalSource, /פתיחת PDF/);
+  assert.doesNotMatch(issuedModalSource, /הורדת PDF/);
+  assert.doesNotMatch(issuedModalSource, /ניסיון חוזר להפקת PDF/);
+  assert.doesNotMatch(issuedModalSource, /nx-we-retainer-preview-modal__toolbar/);
+  assert.doesNotMatch(issuedModalSource, /openIncomeDocumentPdf/);
   assert.match(issuedModalSource, /allocationField/);
   assert.match(issuedModalSource, /onSaveAllocationNumber/);
   assert.match(issuedModalSource, /update_income_document_allocation_number/);
   assert.match(viewServiceSource, /allocation_number_field/);
   assert.match(viewServiceSource, /updateIssuedIncomeDocumentAllocationNumber/);
+  assert.match(viewServiceSource, /retry_command/);
+  assert.match(viewServiceSource, /INCOME_COMMAND_RETRY_PDF_RENDER/);
+  assert.match(viewServiceSource, /due_date_row_before_document_date: doc\.document_type === 'tax_invoice'/);
 });
 
 test('J no duplicate renderer — reuses unified HTML path', () => {

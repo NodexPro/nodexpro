@@ -92,7 +92,10 @@ export async function buildIncomeIssuedDocumentViewAggregate(params: {
   }
 
   const renderModel = await buildUnifiedIncomeDocumentRenderModelForIssuedDocument(scope, doc);
-  const document_html = renderUnifiedIncomeDocumentHtml(renderModel);
+  const document_html = renderUnifiedIncomeDocumentHtml({
+    ...renderModel,
+    due_date_row_before_document_date: doc.document_type === 'tax_invoice',
+  });
 
   const allocationPolicy = await resolveIncomeTaxAllocationNumberPolicyForOrg(
     scope.org_id,

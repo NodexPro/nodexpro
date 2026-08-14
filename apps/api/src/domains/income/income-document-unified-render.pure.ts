@@ -33,6 +33,11 @@ export type UnifiedIncomeDocumentRenderInput = {
   recipient: IncomeBrandingPreviewParty;
   document_date: string | null;
   due_date: string | null;
+  /**
+   * Issued Tax Invoice HTML view only: render due-date row above document-date row.
+   * Does not swap stored values. Default (unset/false) keeps document date first.
+   */
+  due_date_row_before_document_date?: boolean;
   payment_terms_display?: string | null;
   allocation_number_display?: string | null;
   allocation_number_visible?: boolean;

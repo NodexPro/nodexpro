@@ -241,6 +241,25 @@ test('unified tax invoice html markers — section order and labels', () => {
   assert.match(html, /סה״כ לתשלום/);
 });
 
+test('default date row order is document date then due date', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  const dueIdx = html.indexOf('תאריך לתשלום');
+  const docIdx = html.indexOf('תאריך המסמך');
+  assert.ok(docIdx >= 0 && dueIdx > docIdx);
+  assert.match(html, /תאריך המסמך[\s\S]*?11\/07\/2026[\s\S]*?תאריך לתשלום[\s\S]*?10\/08\/2026/);
+});
+
+test('issued tax invoice view flag puts due date above document date without swapping values', () => {
+  const html = renderUnifiedIncomeDocumentHtml({
+    ...buildSampleUnifiedInput(),
+    due_date_row_before_document_date: true,
+  });
+  const dueIdx = html.indexOf('תאריך לתשלום');
+  const docIdx = html.indexOf('תאריך המסמך');
+  assert.ok(dueIdx >= 0 && docIdx > dueIdx);
+  assert.match(html, /תאריך לתשלום[\s\S]*?10\/08\/2026[\s\S]*?תאריך המסמך[\s\S]*?11\/07\/2026/);
+});
+
 test('issuer is never hardcoded as NodexPro and footer branding appears once', () => {
   const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
   assert.match(html, /מכון טכנולוגי לדוגמה בע/);
