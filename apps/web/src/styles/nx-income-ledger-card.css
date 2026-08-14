@@ -9,9 +9,9 @@
   max-width: 1280px;
   max-height: calc(100vh - 96px);
   margin: 48px auto;
-  border-radius: 22px;
+  border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.22);
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.18);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -43,8 +43,8 @@
 
 .nx-income-ledger-modal__title {
   margin: 0;
-  font-size: 24px;
-  font-weight: 900;
+  font-size: 20px;
+  font-weight: 800;
   color: #0f172a;
   line-height: 1.2;
 }
@@ -216,8 +216,8 @@
 .nx-income-ledger-modal__table-wrap {
   flex: 1;
   min-height: 280px;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
+  border-radius: 0;
+  border: 1px solid #c5cdd8;
   overflow: auto;
   background: #ffffff;
 }
@@ -231,10 +231,11 @@
 
 .nx-income-ledger-modal__table th,
 .nx-income-ledger-modal__table td {
-  padding: 10px 14px;
+  padding: 6px 10px;
   text-align: right;
-  border-bottom: 1px solid #eef2f7;
+  border: 1px solid #d8dee8;
   font-size: 13px;
+  line-height: 1.25;
   vertical-align: middle;
 }
 
@@ -242,34 +243,59 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #f8fafc;
+  background: #eef2f6;
   font-size: 12px;
-  font-weight: 900;
-  color: #475569;
-  border-bottom: 1px solid #e5e7eb;
+  font-weight: 700;
+  color: #334155;
+  border: 1px solid #c5cdd8;
   white-space: nowrap;
 }
 
 .nx-income-ledger-modal__table tbody tr:last-child td {
-  border-bottom: none;
+  border-bottom: 1px solid #d8dee8;
 }
 
 .nx-income-ledger-modal__table tbody tr {
-  min-height: 48px;
+  height: 32px;
 }
 
 .nx-income-ledger-modal__table tbody tr:hover {
-  background: #fafbfc;
+  background: #f8fafc;
 }
 
-.nx-income-ledger-modal__income-col {
-  width: 18%;
+.nx-income-ledger-modal__row--parent td {
+  font-weight: 700;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.nx-income-ledger-modal__row--child td {
+  font-weight: 500;
+  color: #334155;
+  background: #f7f8fa;
+}
+
+.nx-income-ledger-modal__child-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline-start: 18px;
+  font-weight: 500;
+}
+
+.nx-income-ledger-modal__child-label::before {
+  content: '↳';
+  color: #94a3b8;
   font-weight: 600;
+}
+
+.nx-income-ledger-modal__type-col {
+  width: 22%;
   color: #334155;
 }
 
 .nx-income-ledger-modal__num-col {
-  width: 12%;
+  width: 14%;
   text-align: left;
   direction: ltr;
   font-variant-numeric: tabular-nums;
@@ -281,49 +307,44 @@
 }
 
 .nx-income-ledger-modal__doc-col {
-  width: 12%;
+  width: 14%;
   font-variant-numeric: tabular-nums;
   color: #475569;
 }
 
 .nx-income-ledger-modal__date-col {
-  width: 12%;
+  width: 14%;
   font-variant-numeric: tabular-nums;
   color: #475569;
   white-space: nowrap;
 }
 
 .nx-income-ledger-modal__view-col {
-  width: 64px;
+  width: 56px;
   text-align: center;
 }
 
-.nx-income-ledger-modal__debit {
-  color: #dc2626;
-  font-weight: 800;
-}
-
-.nx-income-ledger-modal__credit {
-  color: #16a34a;
-  font-weight: 800;
+.nx-income-ledger-modal__payment-amount {
+  color: #15803d;
+  font-weight: 700;
 }
 
 .nx-income-ledger-modal__balance {
   color: #0f172a;
-  font-weight: 900;
+  font-weight: 700;
 }
 
-.nx-income-ledger-modal__balance--open {
-  color: #0f172a;
+.nx-income-ledger-modal__balance--invoice {
+  font-weight: 800;
 }
 
 .nx-income-ledger-modal__view {
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  border: 1px solid rgba(124, 58, 237, 0.18);
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(124, 58, 237, 0.1));
-  color: #4f46e5;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -332,15 +353,22 @@
 }
 
 .nx-income-ledger-modal__view:hover:not(:disabled) {
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 45%, #7c3aed 100%);
-  color: #ffffff;
-  border-color: transparent;
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.nx-income-ledger-modal__empty {
+  margin: 16px;
+  font-size: 13px;
+  color: #64748b;
+  text-align: center;
 }
 
 .nx-income-ledger-modal__footer-row td {
-  border-top: 2px solid #e5e7eb;
-  background: #f8fafc;
-  padding: 12px 14px;
+  border: 1px solid #c5cdd8;
+  background: #eef2f6;
+  padding: 6px 10px;
 }
 
 .nx-income-ledger-modal__footer-label {
