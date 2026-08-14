@@ -275,11 +275,13 @@ export function WorkEngineInvoiceRetainerSetupModal({
           'preview_income_recurring_document_profile_settings',
           payload,
         );
-        if (res.work_engine_invoice_retainer_setup_aggregate.retainer_settings) {
-          setComputedSettings(res.work_engine_invoice_retainer_setup_aggregate.retainer_settings);
+        const previewSetupAggregate = res.work_engine_invoice_retainer_setup_aggregate;
+        if (!previewSetupAggregate) return;
+        if (previewSetupAggregate.retainer_settings) {
+          setComputedSettings(previewSetupAggregate.retainer_settings);
         }
-        if (res.work_engine_invoice_retainer_setup_aggregate.identity) {
-          setDisplayIdentity(res.work_engine_invoice_retainer_setup_aggregate.identity);
+        if (previewSetupAggregate.identity) {
+          setDisplayIdentity(previewSetupAggregate.identity);
         }
       } catch {
         // Preview is best-effort; form remains editable.
@@ -336,14 +338,16 @@ export function WorkEngineInvoiceRetainerSetupModal({
         ...extra,
       };
       const res = await executeWorkEngineInvoiceRetainerCommand(command, payload);
-      if (res.work_engine_invoice_retainer_setup_aggregate.retainer_settings) {
-        setRetainerForm(
-          retainerSettingsToForm(res.work_engine_invoice_retainer_setup_aggregate.retainer_settings),
-        );
+      const setupAggregate = res.work_engine_invoice_retainer_setup_aggregate;
+      if (!setupAggregate) {
+        throw new Error('לא התקבלה תשובת הגדרות ריטיינר מהשרת.');
       }
-      applyRetainerAggregate(res.work_engine_invoice_retainer_setup_aggregate);
-      setDisplayIdentity(res.work_engine_invoice_retainer_setup_aggregate.identity);
-      onSaved(res.work_engine_invoice_retainer_setup_aggregate, res.work_engine_invoices_tab_aggregate);
+      if (setupAggregate.retainer_settings) {
+        setRetainerForm(retainerSettingsToForm(setupAggregate.retainer_settings));
+      }
+      applyRetainerAggregate(setupAggregate);
+      setDisplayIdentity(setupAggregate.identity);
+      onSaved(setupAggregate, res.work_engine_invoices_tab_aggregate);
     } catch (e) {
       onError?.(e instanceof Error ? e.message : String(e));
     } finally {

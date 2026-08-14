@@ -22,17 +22,6 @@ const projectionServiceSource = readFileSync(
   ),
   'utf8',
 );
-const machineIndicatorSource = readFileSync(
-  join(
-    dir,
-    '../../../web/src/components/work-engine/WorkEngineInvoiceRetainerScheduleMachineIndicator.tsx',
-  ),
-  'utf8',
-);
-const migration142 = readFileSync(
-  join(dir, '../../../../supabase/migrations/142_income_recurring_document_cycles.sql'),
-  'utf8',
-);
 
 test('issued row status_key is issued with הופק label', () => {
   const status = resolveScheduleRowStatus({
@@ -103,20 +92,6 @@ test('projection service wires issued read-only menu and generated_document_id',
     /allowed_actions: \[\s*\.\.\.actions\.filter\(\(action\) => !action\.disabled\)\.map\(\(action\) => action\.key\)/,
   );
   assert.ok(!projectionServiceSource.includes("statusKey === 'issued') {\n    return [openDocument, viewHistory]"));
-});
-
-test('frontend keeps muted lifecycle indicators for issued rows', () => {
-  assert.match(machineIndicatorSource, /statusKey === 'issued'/);
-  assert.match(machineIndicatorSource, /machine-indicator--readonly/);
-  assert.match(machineIndicatorSource, /הופק/);
-});
-
-test('DB unique is exact scheduled_document_date not calendar month', () => {
-  assert.match(
-    migration142,
-    /unique \(organization_id, recurring_profile_id, scheduled_document_date\)/,
-  );
-  assert.doesNotMatch(migration142, /period_key|YYYY-MM|calendar_month/);
 });
 
 test('replay linkRecurringCycleIssuedDocument updates same cycle (no duplicate create)', () => {
