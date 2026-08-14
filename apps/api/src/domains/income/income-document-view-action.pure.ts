@@ -29,6 +29,19 @@ export function buildIncomeIssuedDocumentViewAction(params: {
   };
 }
 
+export function resolveIncomeIssuedPdfDownloadPath(params: {
+  incomeDocumentId: string;
+  pdfAssetId: string | null | undefined;
+}): string | null {
+  const incomeDocumentId = String(params.incomeDocumentId ?? '').trim();
+  const assetId =
+    params.pdfAssetId != null && String(params.pdfAssetId).trim()
+      ? String(params.pdfAssetId).trim()
+      : null;
+  if (!incomeDocumentId || !assetId) return null;
+  return `/api/v1/income/documents/${incomeDocumentId}/download`;
+}
+
 export function buildIncomeIssuedDocumentPdfAction(params: {
   incomeDocumentId: string;
   canRetryPdf: boolean;
@@ -37,11 +50,30 @@ export function buildIncomeIssuedDocumentPdfAction(params: {
   pdfDownloadPath: string | null;
   pdfRenderError?: string | null;
 }): IncomeIssuedDocumentPdfAction {
-  const readiness = resolveIncomeDocumentPdfSendReadiness({
+  const assetId =
+    params.pdfAssetId != null && String(params.pdfAssetId).trim()
+      ? String(params.pdfAssetId).trim()
+      : null;
+  const sendReadiness = resolveIncomeDocumentPdfSendReadiness({
     pdfRenderStatus: params.pdfRenderStatus,
     pdfAssetId: params.pdfAssetId,
   });
-  const enabled = readiness.ready && Boolean(params.pdfDownloadPath);
+  const readiness = assetId
+    ? {
+        ready: true as const,
+        status_key: 'pdf_ready' as const,
+        status_label: 'PDF מוכן',
+        disabled_reason: null,
+        retry_eligible: false,
+      }
+    : sendReadiness;
+  const downloadPath = assetId
+    ? params.pdfDownloadPath || resolveIncomeIssuedPdfDownloadPath({
+        incomeDocumentId: params.incomeDocumentId,
+        pdfAssetId: assetId,
+      })
+    : null;
+  const enabled = readiness.ready && Boolean(downloadPath);
   const retryAllowed = params.canRetryPdf && readiness.retry_eligible;
   const baseReason = readiness.disabled_reason ?? 'קובץ PDF אינו זמין';
   const renderError =
@@ -58,7 +90,7 @@ export function buildIncomeIssuedDocumentPdfAction(params: {
     label: 'הורדת PDF',
     enabled,
     income_document_id: params.incomeDocumentId,
-    pdf_download_path: enabled ? params.pdfDownloadPath : null,
+    pdf_download_path: enabled ? downloadPath : null,
     pdf_status_key: readiness.status_key,
     pdf_status_label: readiness.status_label,
     disabled_reason: disabledReason,

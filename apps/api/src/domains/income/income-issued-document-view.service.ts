@@ -92,10 +92,7 @@ export async function buildIncomeIssuedDocumentViewAggregate(params: {
   }
 
   const renderModel = await buildUnifiedIncomeDocumentRenderModelForIssuedDocument(scope, doc);
-  const document_html = renderUnifiedIncomeDocumentHtml({
-    ...renderModel,
-    due_date_row_before_document_date: doc.document_type === 'tax_invoice',
-  });
+  const document_html = renderUnifiedIncomeDocumentHtml(renderModel);
 
   const allocationPolicy = await resolveIncomeTaxAllocationNumberPolicyForOrg(
     scope.org_id,
@@ -110,10 +107,7 @@ export async function buildIncomeIssuedDocumentViewAggregate(params: {
     isIssued: true,
   });
 
-  const pdfPath =
-    doc.pdf_render_status === 'rendered' && doc.pdf_asset_id
-      ? incomeDocumentDownloadPath(doc.id)
-      : null;
+  const pdfPath = doc.pdf_asset_id ? incomeDocumentDownloadPath(doc.id) : null;
   const pdf_action = buildIncomeIssuedDocumentPdfAction({
     incomeDocumentId: doc.id,
     canRetryPdf: perms.issue,

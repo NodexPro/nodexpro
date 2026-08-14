@@ -14,6 +14,10 @@ import {
   formatLedgerMoneyReference,
 } from '../income/income-client-income-ledger-card.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
+import {
+  formatIncomeCalendarDateHe,
+  resolveIncomeDocumentSemanticDates,
+} from '../income/income-document-semantic-dates.pure.js';
 import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
 import {
   buildIncomeIssuedDocumentPdfAction,
@@ -94,7 +98,7 @@ const COUNTER_LABELS: Record<IncomeClientDocumentTypeCounterKey, string> = {
 
 const ISSUED_TABLE_COLUMNS = [
   { key: 'document_number', label: 'מספר מסמך' },
-  { key: 'issue_date_display', label: 'תאריך' },
+  { key: 'issue_date_display', label: 'תאריך מסמך' },
   { key: 'customer_display_name', label: 'לקוח' },
   { key: 'amount_display', label: 'סכום' },
   { key: 'status_label', label: 'סטטוס' },
@@ -106,7 +110,7 @@ const ISSUED_TABLE_COLUMNS = [
 /** Quote / Deal Invoice: edit / convert / cancel / view live in one compact actions cell. */
 const PRELIMINARY_ISSUED_TABLE_COLUMNS = [
   { key: 'document_number', label: 'מספר מסמך' },
-  { key: 'issue_date_display', label: 'תאריך' },
+  { key: 'issue_date_display', label: 'תאריך מסמך' },
   { key: 'customer_display_name', label: 'לקוח' },
   { key: 'amount_display', label: 'סכום' },
   { key: 'status_label', label: 'סטטוס' },
@@ -117,7 +121,7 @@ const PRELIMINARY_ISSUED_TABLE_COLUMNS = [
 
 const TAX_INVOICE_TABLE_COLUMNS = [
   { key: 'document_number', label: 'מספר מסמך' },
-  { key: 'issue_date_display', label: 'תאריך' },
+  { key: 'issue_date_display', label: 'תאריך מסמך' },
   { key: 'customer_display_name', label: 'לקוח' },
   { key: 'amount_display', label: 'סכום' },
   { key: 'due_date_display', label: 'תאריך לתשלום' },
@@ -137,9 +141,7 @@ const DRAFT_TABLE_COLUMNS = [
 ];
 
 function formatDateDisplay(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = iso.length >= 10 ? iso.slice(0, 10) : iso;
-  return new Date(d).toLocaleDateString('he-IL');
+  return formatIncomeCalendarDateHe(iso);
 }
 
 function resolveSelectedYear(availableYears: number[], requestedYear: number | null): number {
@@ -321,11 +323,12 @@ async function loadIssuedDocumentCandidates(params: {
       pdf_render_error: string | null;
     };
     const year = issueYearFromIso(doc.issue_date);
+    const semanticDates = resolveIncomeDocumentSemanticDates({
+      issue_date: doc.issue_date,
+      due_date: doc.due_date,
+    });
     const amountRef = ledgerAmountFromTotalsSnapshot(doc.totals_snapshot_json);
-    const pdfPath =
-      doc.pdf_render_status === 'rendered' && doc.pdf_asset_id
-        ? incomeDocumentDownloadPath(doc.id)
-        : null;
+    const pdfPath = doc.pdf_asset_id ? incomeDocumentDownloadPath(doc.id) : null;
     const view_action = buildIncomeIssuedDocumentViewAction({
       incomeDocumentId: doc.id,
       canView: params.canView,
@@ -367,7 +370,7 @@ async function loadIssuedDocumentCandidates(params: {
       payment_state_label = state.payment_state_label;
       payment_state_tone = state.payment_state_tone;
       payment_state_icon = resolvePaymentStateIcon(state.payment_state_key);
-      due_date_display = formatDateDisplay(doc.due_date);
+      due_date_display = formatDateDisplay(semanticDates.due_date);
 
       let disabledReason: string | null = null;
       if (!canPaymentWrite) disabledReason = 'חסרה הרשאה לרישום תשלום';
@@ -441,7 +444,7 @@ async function loadIssuedDocumentCandidates(params: {
       row_id: doc.id,
       document_number: doc.document_number,
       document_type_label: DOCUMENT_TYPE_LABELS[doc.document_type],
-      issue_date_display: formatDateDisplay(doc.issue_date),
+      issue_date_display: formatDateDisplay(semanticDates.document_date),
       created_at_display: null,
       customer_display_name: customerDisplayFromSnapshot(doc.customer_snapshot_json),
       amount_display:

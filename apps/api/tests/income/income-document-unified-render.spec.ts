@@ -13,6 +13,7 @@ import {
   buildUnifiedIncomeDocumentPrintHtml,
   renderUnifiedIncomeDocumentHtml,
 } from '../../src/domains/income/income-document-unified-render.html.js';
+import { resolveIncomeDocumentSemanticDates } from '../../src/domains/income/income-document-semantic-dates.pure.js';
 import type { IncomeBrandingProfileRow } from '../../src/domains/income/income-document-branding.types.js';
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -249,15 +250,21 @@ test('default date row order is document date then due date', () => {
   assert.match(html, /תאריך המסמך[\s\S]*?11\/07\/2026[\s\S]*?תאריך לתשלום[\s\S]*?10\/08\/2026/);
 });
 
-test('issued tax invoice view flag puts due date above document date without swapping values', () => {
+test('#4008 inverted stored pair renders document date 30/07 then due date 19/09', () => {
+  const mapped = resolveIncomeDocumentSemanticDates({
+    issue_date: '2026-09-19',
+    due_date: '2026-07-30',
+  });
   const html = renderUnifiedIncomeDocumentHtml({
     ...buildSampleUnifiedInput(),
-    due_date_row_before_document_date: true,
+    document_date: mapped.document_date ?? '2026-07-30',
+    due_date: mapped.due_date ?? '2026-09-19',
+    numberPreview: '4008',
   });
-  const dueIdx = html.indexOf('תאריך לתשלום');
   const docIdx = html.indexOf('תאריך המסמך');
-  assert.ok(dueIdx >= 0 && docIdx > dueIdx);
-  assert.match(html, /תאריך לתשלום[\s\S]*?10\/08\/2026[\s\S]*?תאריך המסמך[\s\S]*?11\/07\/2026/);
+  const dueIdx = html.indexOf('תאריך לתשלום');
+  assert.ok(docIdx >= 0 && dueIdx > docIdx);
+  assert.match(html, /תאריך המסמך[\s\S]*?30\/07\/2026[\s\S]*?תאריך לתשלום[\s\S]*?19\/09\/2026/);
 });
 
 test('issuer is never hardcoded as NodexPro and footer branding appears once', () => {

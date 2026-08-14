@@ -31,6 +31,7 @@ import {
   resolveIssuedDocumentLayoutSource,
 } from '../owner-invoice-document-layout/owner-invoice-document-layout-resolver.pure.js';
 import type { IncomeBrandingResolvedProfile } from './income-document-branding.types.js';
+import { resolveIncomeDocumentSemanticDates } from './income-document-semantic-dates.pure.js';
 
 export type IssuedIncomeDocumentForRender = {
   id: string;
@@ -193,13 +194,17 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
     );
   }
 
+  const semanticDates = resolveIncomeDocumentSemanticDates({
+    issue_date: doc.issue_date,
+    due_date: doc.due_date,
+  });
   const renderInput = buildUnifiedIncomeDocumentRenderInput({
     branding: issuedBranding,
     document_type: doc.document_type,
     language: doc.language,
     document_number: doc.document_number,
-    document_date: doc.issue_date,
-    due_date: doc.due_date,
+    document_date: semanticDates.document_date ?? doc.issue_date,
+    due_date: semanticDates.due_date,
     currency: doc.currency,
     notes: doc.notes,
     payment_terms_display: paymentTermsDisplay,

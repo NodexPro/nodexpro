@@ -33,6 +33,19 @@ test('by-type modal aborts stale fetch on close/key change and ignores unstable 
   assert.ok(!modalSource.includes('[onBusyChange, onError, params]'));
 });
 
+test('documents modal table is Excel-like, RTL, no horizontal scroll at desktop width', () => {
+  const css = readFileSync(
+    join(dir, '../../../web/src/styles/nx-work-engine-client-documents.css'),
+    'utf8',
+  );
+  assert.match(css, /\.nx-we-documents-modal\.nx-income-wizard\s*\{[^}]*width:\s*min\(1360px/);
+  assert.match(css, /\.nx-we-documents-modal__table-wrap\s*\{[^}]*overflow-x:\s*hidden/);
+  assert.match(css, /\.nx-we-documents-modal__table\s*\{[^}]*table-layout:\s*fixed/);
+  assert.match(css, /\.nx-we-documents-modal__table th\s*\{[^}]*text-align:\s*center/);
+  assert.match(css, /\.nx-we-documents-modal__table td\s*\{[^}]*text-align:\s*right/);
+  assert.doesNotMatch(css, /min-width:\s*720px/);
+});
+
 test('invoices tab host no longer passes inline onError into documents shell', () => {
   assert.ok(tabHostSource.includes('onError={handlePanelError}'));
   assert.ok(!tabHostSource.includes('onError={(message) => setError(message)}'));

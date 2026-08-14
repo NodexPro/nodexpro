@@ -290,7 +290,7 @@ export async function downloadIncomeDocumentPdfBuffer(
   incomeDocumentId: string,
 ): Promise<{ buffer: Buffer; fileName: string }> {
   const { doc } = await loadIncomeDocumentForDownload(ctx, incomeDocumentId);
-  if (doc.pdf_render_status !== 'rendered' || !doc.pdf_asset_id) {
+  if (!doc.pdf_asset_id) {
     throw notFound('PDF is not available for this document');
   }
 

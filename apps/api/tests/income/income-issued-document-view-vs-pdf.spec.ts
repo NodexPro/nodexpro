@@ -202,9 +202,16 @@ test('H/I FE opens issued HTML viewer; no draft fallback; no PDF required for nu
   assert.match(issuedModalSource, /pdf_action/);
   assert.match(issuedModalSource, /downloadIncomeDocumentPdf/);
   assert.match(issuedModalSource, /pdf_download_path/);
-  assert.match(issuedModalSource, /contentWindow\?\.print/);
+  assert.match(issuedModalSource, /printIncomeIssuedDocumentHtml/);
+  assert.doesNotMatch(issuedModalSource, /contentWindow\?\.print/);
   assert.match(issuedModalSource, /income-issued-document-download/);
   assert.match(issuedModalSource, /income-issued-document-print/);
+  const previewPaperSource = readFileSync(
+    join(dir, '../../../web/src/components/work-engine/WorkEngineIncomeDocumentPreviewPaper.tsx'),
+    'utf8',
+  );
+  assert.match(previewPaperSource, /sandbox="allow-same-origin"/);
+  assert.doesNotMatch(previewPaperSource, /allow-scripts/);
   assert.doesNotMatch(issuedModalSource, /פתיחת PDF/);
   assert.doesNotMatch(issuedModalSource, /הורדת PDF/);
   assert.doesNotMatch(issuedModalSource, /ניסיון חוזר להפקת PDF/);
@@ -217,7 +224,7 @@ test('H/I FE opens issued HTML viewer; no draft fallback; no PDF required for nu
   assert.match(viewServiceSource, /updateIssuedIncomeDocumentAllocationNumber/);
   assert.match(viewServiceSource, /retry_command/);
   assert.match(viewServiceSource, /INCOME_COMMAND_RETRY_PDF_RENDER/);
-  assert.match(viewServiceSource, /due_date_row_before_document_date: doc\.document_type === 'tax_invoice'/);
+  assert.doesNotMatch(viewServiceSource, /due_date_row_before_document_date/);
 });
 
 test('J no duplicate renderer — reuses unified HTML path', () => {

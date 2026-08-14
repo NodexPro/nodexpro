@@ -12,6 +12,7 @@ import {
   fetchIncomeIssuedDocumentViewAggregate,
 } from '../../api/income';
 import { normalizeIncomeDocumentPreviewHtml } from '../../lib/income-document-preview-display.pure';
+import { printIncomeIssuedDocumentHtml } from './income-issued-document-print.pure';
 import { WorkEngineIncomeDocumentPreviewPaper } from '../work-engine/WorkEngineIncomeDocumentPreviewPaper';
 import '../../styles/nx-work-engine-invoice-retainer.css';
 
@@ -142,10 +143,7 @@ export function IncomeIssuedDocumentViewModal({
   const handlePrint = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    const iframe = canvasRef.current?.querySelector<HTMLIFrameElement>(
-      '[data-testid="we-income-preview-fit-iframe"]',
-    );
-    iframe?.contentWindow?.print();
+    printIncomeIssuedDocumentHtml(previewHtml);
   };
 
   const handleSaveAllocationNumber = async (allocation_number: string | null) => {
@@ -188,11 +186,6 @@ export function IncomeIssuedDocumentViewModal({
             <h2 id="income-issued-document-view-title" className="nx-we-retainer-preview-modal__title">
               {displayTitle}
             </h2>
-            {pdf && !pdf.enabled ? (
-              <p className="nx-we-retainer-preview-modal__subtitle" title={pdf.disabled_reason ?? undefined}>
-                PDF: {pdf.pdf_status_label}
-              </p>
-            ) : null}
           </div>
           <div className="nx-we-retainer-preview-modal__head-actions">
             <div className="nx-we-retainer-preview-modal__head-icon-rail">
