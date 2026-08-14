@@ -41,6 +41,75 @@
   max-height: calc(100vh - 96px);
 }
 
+/* THIS setup modal only — operational table layout (no sidebar, no footer). */
+.nx-we-retainer-modal--operational.nx-we-retainer-modal--setup {
+  width: min(1720px, calc(100vw - 64px));
+  max-height: calc(100vh - 64px);
+}
+
+.nx-we-retainer-modal--operational.nx-income-branding-modal--studio .nx-income-branding-modal__head {
+  height: auto;
+  min-height: 56px;
+  padding: 10px 24px;
+  align-items: center;
+}
+
+.nx-we-retainer-modal--operational .nx-we-retainer-modal__info-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 18px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.3;
+  color: #475569;
+}
+
+.nx-we-retainer-modal--operational .nx-we-retainer-modal__info-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.nx-we-retainer-modal--operational .nx-we-retainer-modal__info-label {
+  font-weight: 600;
+  color: #64748b;
+}
+
+.nx-we-retainer-modal--operational .nx-we-retainer-modal__info-value {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.nx-we-retainer-modal--operational .nx-we-retainer-setup__body {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: none;
+  gap: 0;
+  padding: 16px 20px 20px;
+}
+
+.nx-we-retainer-modal--operational .nx-we-retainer-setup__main {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.nx-we-retainer-modal--operational .nx-we-retainer-schedule,
+.nx-we-retainer-modal--operational .nx-we-retainer-schedule__years,
+.nx-we-retainer-modal--operational .nx-we-retainer-schedule__year,
+.nx-we-retainer-modal--operational .nx-we-retainer-schedule__rows,
+.nx-we-retainer-modal--operational .nx-we-retainer-schedule__row {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.nx-we-retainer-modal--operational .nx-we-retainer-schedule__row {
+  grid-template-columns: 1.25rem minmax(110px, 1.4fr) minmax(110px, 1.2fr) minmax(140px, 1.8fr) minmax(96px, 1fr) auto;
+}
+
 .nx-we-retainer-overlay--setup {
   z-index: 13000;
 }
@@ -496,6 +565,12 @@
 @media (max-width: 1100px) {
   .nx-we-retainer-setup__body {
     grid-template-columns: 1fr;
+  }
+
+  .nx-we-retainer-modal--operational .nx-we-retainer-setup__body {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
   }
 }
 
