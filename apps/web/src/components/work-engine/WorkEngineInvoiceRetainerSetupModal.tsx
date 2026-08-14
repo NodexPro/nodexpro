@@ -18,6 +18,7 @@ import { WorkEngineInvoiceRetainerNextDocumentPanel } from './WorkEngineInvoiceR
 import { WorkEngineInvoiceRetainerSchedulePanel } from './WorkEngineInvoiceRetainerSchedulePanel';
 import { WorkEngineInvoiceRetainerPreviewModal } from './WorkEngineInvoiceRetainerPreviewModal';
 import {
+  WorkEngineInvoiceRetainerSettingsPanel,
   retainerSettingsToForm,
   type RetainerFormState,
 } from './WorkEngineInvoiceRetainerSettingsPanel';
@@ -488,20 +489,12 @@ export function WorkEngineInvoiceRetainerSetupModal({
     );
   };
 
-  // Keep named command handlers in this file (source-contract tests + command wiring).
-  // This operational layout does not render the setup sidebar or footer that invoked them.
-  void handleSaveDraft;
-  void handleGeneratePreview;
-  void handleIssueDocument;
-  void handleSaveProfile;
-  void handleFormChange;
-  void handleDocumentTypeChange;
-  void canSave;
-
   if (!open || !aggregate || !settings || !retainerForm || !computedSettings) return null;
 
   const footerLocked = busy || draftBusy || profileBusy || previewBusy;
+  const sidebarLocked = profileBusy;
   const showTemplateDraftPrompt = Boolean(aggregate.template_draft && !activeDraftId);
+  const issueAction = aggregate.issue_document_action;
   const confirmedDocumentType =
     (embeddedWorkspace?.document_details_step?.document_type_key as
       | 'quote'
@@ -555,7 +548,9 @@ export function WorkEngineInvoiceRetainerSetupModal({
       }}
     >
       <div
-        className="nx-we-retainer-modal nx-we-retainer-modal--setup nx-we-retainer-modal--operational nx-income-branding-modal nx-income-branding-modal--studio"
+        className={`nx-we-retainer-modal nx-we-retainer-modal--setup${
+          isScheduleTab ? ' nx-we-retainer-modal--operational' : ''
+        } nx-income-branding-modal nx-income-branding-modal--studio`}
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -568,6 +563,7 @@ export function WorkEngineInvoiceRetainerSetupModal({
               <h2 id="we-retainer-setup-title" className="nx-income-branding-modal__title nx-modal-title">
                 ריטיינר חשבוניות
               </h2>
+              {isScheduleTab ? (
               <div className="nx-we-retainer-modal__info-strip" role="group" aria-label="פרטי ריטיינר">
                 {computedSettings.end_customer_display_name ? (
                   <span className="nx-we-retainer-modal__info-item">
@@ -595,6 +591,9 @@ export function WorkEngineInvoiceRetainerSetupModal({
                   </span>
                 ) : null}
               </div>
+              ) : (
+              <p className="nx-income-branding-modal__subtitle">הגדרת מסמך חוזר ללקוח</p>
+              )}
             </div>
           </div>
           <div className="nx-income-branding-modal__head-actions">
@@ -711,7 +710,82 @@ export function WorkEngineInvoiceRetainerSetupModal({
             )
             ) : null}
           </div>
+
+          {isScheduleTab ? null : (
+          <WorkEngineInvoiceRetainerSettingsPanel
+            aggregate={aggregate}
+            identity={displayIdentity}
+            form={retainerForm}
+            computedSettings={computedSettings}
+            selectedDocumentType={selectedDocumentType}
+            paymentTermsDisplay={paymentTermsDisplay}
+            busy={sidebarLocked}
+            readOnly={isNextDocumentTab}
+            allowedActions={allowed}
+            onFormChange={handleFormChange}
+            onDocumentTypeChange={(documentType) => void handleDocumentTypeChange(documentType)}
+            onPause={() => void runRetainerCommand('pause_income_recurring_document_profile', { profile_id: settings.profile_id })}
+            onResume={() => void runRetainerCommand('resume_income_recurring_document_profile', { profile_id: settings.profile_id })}
+            onCancelProfile={() => void runRetainerCommand('cancel_income_recurring_document_profile', { profile_id: settings.profile_id })}
+          />
+          )}
         </div>
+
+        {isScheduleTab ? null : (
+        <div className="nx-we-retainer-modal__footer nx-we-retainer-setup__footer">
+          <button
+            type="button"
+            className="nx-btn nx-btn-taxes-compact"
+            disabled={footerLocked}
+            onClick={onClose}
+          >
+            ביטול
+          </button>
+          {isNextDocumentTab ? null : (
+            <>
+          {incomeCommands.save_draft ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              disabled={footerLocked || !activeDraftId}
+              onClick={() => void handleSaveDraft()}
+            >
+              שמירת טיוטה
+            </button>
+          ) : null}
+          {incomeCommands.generate_preview ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              disabled={footerLocked || !activeDraftId}
+              onClick={() => void handleGeneratePreview()}
+            >
+              תצוגה מקדימה
+            </button>
+          ) : null}
+          {issueAction?.visible ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+              disabled={footerLocked || Boolean(issueAction.disabled_reason) || !activeDraftId}
+              title={issueAction.disabled_reason ?? undefined}
+              onClick={() => void handleIssueDocument()}
+            >
+              {issueAction.label}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+            disabled={footerLocked || !canSave}
+            onClick={() => void handleSaveProfile()}
+          >
+            שמירה
+          </button>
+            </>
+          )}
+        </div>
+        )}
       </div>
     </div>
   );
