@@ -86,9 +86,6 @@ export function WorkEngineIncomeAllocationNumberModal({
         </div>
 
         <div className="nx-we-retainer-modal__footer nx-tax-nested-modal-footer">
-          <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={onClose}>
-            סגירה
-          </button>
           <button
             type="button"
             className="nx-btn nx-btn-primary nx-btn-taxes-compact"

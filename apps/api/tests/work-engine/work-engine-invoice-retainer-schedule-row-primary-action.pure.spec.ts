@@ -108,6 +108,9 @@ test('future projection row after next document exposes cycle override primary a
     cycle_index: 2,
   });
   assert.ok(result.preview_action?.visible);
+  assert.equal(result.preview_action?.command, 'preview_recurring_cycle_override');
+  assert.equal(result.preview_action?.payload.cycle_date, '2026-08-20');
+  assert.equal(result.preview_action?.payload.cycle_index, 2);
 });
 
 test('issued row never exposes edit/issue/override primary action', () => {
@@ -157,6 +160,18 @@ test('frontend schedule handler switches tab only for open_next_document_tab', (
   assert.ok(handlerBlock.includes('WorkEngineRecurringCycleOverrideModal') || setupModalSource.includes('WorkEngineRecurringCycleOverrideModal'));
   assert.ok(!handlerBlock.includes('refreshSetupAggregate'));
   assert.ok(!handlerBlock.includes("setActiveSetupTab('retainer')"));
+});
+
+test('frontend schedule panel renders backend preview_action as Eye icon', () => {
+  assert.ok(schedulePanelSource.includes('row.preview_action?.visible'));
+  assert.ok(schedulePanelSource.includes('row.allowed_actions.includes(row.preview_action.command)'));
+  assert.ok(schedulePanelSource.includes('nx-we-retainer-schedule__preview-eye'));
+  assert.ok(schedulePanelSource.includes('onScheduleRowPreviewAction'));
+  assert.ok(schedulePanelSource.includes('aria-label={row.preview_action.label}'));
+  assert.ok(!schedulePanelSource.includes('>{row.preview_action.label}<'));
+  assert.ok(setupModalSource.includes('handleScheduleRowPreviewAction'));
+  assert.ok(setupModalSource.includes('action.command'));
+  assert.ok(setupModalSource.includes('WorkEngineInvoiceRetainerPreviewModal'));
 });
 
 test('frontend schedule panel does not infer next row by date', () => {

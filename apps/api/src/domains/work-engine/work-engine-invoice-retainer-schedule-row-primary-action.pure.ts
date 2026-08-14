@@ -14,6 +14,14 @@ export type WorkEngineInvoiceRetainerScheduleRowPreviewAction = {
   visible: boolean;
   label: string;
   disabled_reason: string | null;
+  command: 'preview_recurring_cycle_override';
+  payload: {
+    represented_client_id: string;
+    profile_id: string;
+    cycle_date: string;
+    period_key: string;
+    cycle_index: number;
+  };
 };
 
 export type WorkEngineInvoiceRetainerScheduleOpenCycleDraftPrimaryAction = {
@@ -190,6 +198,14 @@ export function resolveScheduleRowPrimaryAction(params: {
         visible: true,
         label: 'תצוגה מקדימה',
         disabled_reason: null,
+        command: 'preview_recurring_cycle_override',
+        payload: {
+          represented_client_id: params.represented_client_id,
+          profile_id: params.profile_id,
+          cycle_date: params.scheduled_document_date,
+          period_key: params.period_key,
+          cycle_index: params.cycle_index,
+        },
       },
       override_exists: params.override_exists,
       override_scope: params.override_scope,

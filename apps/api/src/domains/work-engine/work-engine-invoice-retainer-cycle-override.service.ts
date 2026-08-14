@@ -329,6 +329,14 @@ async function buildCycleOverrideAggregate(params: {
       visible: true,
       label: 'תצוגה מקדימה',
       disabled_reason: null,
+      command: 'preview_recurring_cycle_override',
+      payload: {
+        represented_client_id: params.representedClientId,
+        profile_id: params.profileId,
+        cycle_date: params.cycleDate,
+        period_key: params.periodKey,
+        cycle_index: params.cycleIndex,
+      },
     },
     save_action: {
       visible: true,
@@ -397,10 +405,30 @@ export async function previewRecurringCycleOverride(params: {
   cycleDate: string;
   periodKey: string;
   cycleIndex: number;
-  documentDetailsStep: IncomeDocumentDetailsStep;
+  documentDetailsStep?: IncomeDocumentDetailsStep | null;
 }): Promise<WorkEngineRecurringCycleOverrideAggregate> {
-  return refreshRecurringCycleOverrideStep({
-    ...params,
+  if (params.documentDetailsStep) {
+    return refreshRecurringCycleOverrideStep({
+      ...params,
+      documentDetailsStep: params.documentDetailsStep,
+      includePreview: true,
+    });
+  }
+  assertEditAccess(params.ctx);
+  const orgId = params.ctx.organizationId;
+  if (!orgId) throw badRequest('Organization context required');
+  const overridesByDate = await loadRecurringCycleOverridesForProfile({
+    orgId,
+    profileId: params.profileId,
+  });
+  return buildCycleOverrideAggregate({
+    ctx: params.ctx,
+    representedClientId: params.representedClientId,
+    profileId: params.profileId,
+    cycleDate: params.cycleDate,
+    periodKey: params.periodKey,
+    cycleIndex: params.cycleIndex,
+    overridesByDate,
     includePreview: true,
   });
 }

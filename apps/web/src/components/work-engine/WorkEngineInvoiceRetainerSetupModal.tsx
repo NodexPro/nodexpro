@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { IncomeWorkspaceAggregate } from '../../income/income-workspace-types';
-import type { WorkEngineInvoiceRetainerSetupAggregate } from '../../income/income-workspace-types';
+import type {
+  WorkEngineInvoiceRetainerScheduleRowPreviewAction,
+  WorkEngineInvoiceRetainerSetupAggregate,
+} from '../../income/income-workspace-types';
 import { executeIncomeCommand } from '../../api/income';
 import {
   executeWorkEngineInvoiceRetainerCommand,
@@ -91,6 +94,10 @@ export function WorkEngineInvoiceRetainerSetupModal({
   const [draftBusy, setDraftBusy] = useState(false);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [scheduleRowPreviewOpen, setScheduleRowPreviewOpen] = useState(false);
+  const [scheduleRowPreview, setScheduleRowPreview] = useState<
+    NonNullable<IncomeDocumentDetailsStep['document_preview']> | null
+  >(null);
   const [profileBusy, setProfileBusy] = useState(false);
   const [pendingDocumentType, setPendingDocumentType] = useState<RetainerDocumentType | null>(null);
   const [activeSetupTab, setActiveSetupTab] = useState<SetupTabKey>('retainer');
@@ -120,6 +127,8 @@ export function WorkEngineInvoiceRetainerSetupModal({
     setPendingDocumentType(null);
     setPreviewModalOpen(false);
     setPreviewBusy(false);
+    setScheduleRowPreviewOpen(false);
+    setScheduleRowPreview(null);
   }, [aggregate?.represented_client_id, aggregate?.selected_end_customer_id, aggregate?.retainer_settings?.profile_id, open]);
 
   useEffect(() => {
@@ -133,15 +142,17 @@ export function WorkEngineInvoiceRetainerSetupModal({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || busy || draftBusy || profileBusy) return;
-      if (previewModalOpen) {
+      if (previewModalOpen || scheduleRowPreviewOpen) {
         setPreviewModalOpen(false);
+        setScheduleRowPreviewOpen(false);
+        setScheduleRowPreview(null);
         return;
       }
       onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [busy, draftBusy, onClose, open, previewModalOpen, profileBusy]);
+  }, [busy, draftBusy, onClose, open, previewModalOpen, scheduleRowPreviewOpen, profileBusy]);
 
   useEffect(() => {
     return () => {
@@ -338,6 +349,34 @@ export function WorkEngineInvoiceRetainerSetupModal({
     } finally {
       setProfileBusy(false);
       onBusyChange?.(false);
+    }
+  };
+
+  const handleScheduleRowPreviewAction = async (
+    action: WorkEngineInvoiceRetainerScheduleRowPreviewAction,
+  ) => {
+    if (!action.visible) return;
+    setScheduleRowPreviewOpen(true);
+    setScheduleRowPreview(null);
+    setPreviewBusy(true);
+    setError(null);
+    try {
+      const res = await executeWorkEngineInvoiceRetainerCommand(action.command, {
+        ...action.payload,
+      });
+      const preview =
+        res.work_engine_recurring_cycle_override_aggregate?.document_details_step?.document_preview ??
+        null;
+      if (!preview) {
+        throw new Error('לא התקבלה תשובת תצוגה מקדימה מהשרת.');
+      }
+      setScheduleRowPreview(preview);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      onError?.(message);
+    } finally {
+      setPreviewBusy(false);
     }
   };
 
@@ -562,7 +601,10 @@ export function WorkEngineInvoiceRetainerSetupModal({
                 onError={setError}
               />
             ) : isScheduleTab && scheduleProjection ? (
-              <WorkEngineInvoiceRetainerSchedulePanel projection={scheduleProjection} />
+              <WorkEngineInvoiceRetainerSchedulePanel
+                projection={scheduleProjection}
+                onScheduleRowPreviewAction={handleScheduleRowPreviewAction}
+              />
             ) : isRetainerTab ? (
               showTemplateDraftPrompt && aggregate.template_draft ? (
               <div className="nx-we-retainer-template-prompt">
@@ -716,6 +758,15 @@ export function WorkEngineInvoiceRetainerSetupModal({
         preview={documentDetailsStep?.document_preview}
         busy={previewBusy}
         onClose={() => setPreviewModalOpen(false)}
+      />
+      <WorkEngineInvoiceRetainerPreviewModal
+        open={scheduleRowPreviewOpen}
+        preview={scheduleRowPreview}
+        busy={previewBusy}
+        onClose={() => {
+          setScheduleRowPreviewOpen(false);
+          setScheduleRowPreview(null);
+        }}
       />
     </>
   );

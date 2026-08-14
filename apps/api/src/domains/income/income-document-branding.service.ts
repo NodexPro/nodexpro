@@ -365,7 +365,9 @@ async function buildDocumentBrandingStudio(
     navigation_sections: getStudioNavigationSections(),
     document_style_templates: getDocumentStyleTemplates(resolvedForGroup.color_theme_key),
     color_theme_presets: getColorThemePresets(),
-    studio_color_theme_presets: getStudioColorThemePresets(),
+    studio_color_theme_presets: getStudioColorThemePresets({
+      selectedColorThemeKey: resolvedForGroup.color_theme_key,
+    }),
     display_option_controls: buildDisplayOptionControls(display),
     issuer_identity_preview: buildStudioSampleIssuerIdentityPreview(),
     payment_settings_panel: buildPaymentSettingsPanel({

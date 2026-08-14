@@ -317,6 +317,20 @@ export type WorkEngineInvoiceRetainerScheduleRowPrimaryAction =
   | WorkEngineInvoiceRetainerScheduleOpenNextDocumentTabPrimaryAction
   | WorkEngineInvoiceRetainerScheduleOpenCycleOverridePrimaryAction;
 
+export type WorkEngineInvoiceRetainerScheduleRowPreviewAction = {
+  visible: boolean;
+  label: string;
+  disabled_reason: string | null;
+  command: 'preview_recurring_cycle_override';
+  payload: {
+    represented_client_id: string;
+    profile_id: string;
+    cycle_date: string;
+    period_key: string;
+    cycle_index: number;
+  };
+};
+
 export type RecurringCycleOverrideScope = 'single_cycle' | 'this_and_future';
 
 export type WorkEngineRecurringCycleOverrideApplyScopeDialog = {
@@ -399,11 +413,7 @@ export type WorkEngineRecurringCycleOverrideAggregate = {
   override_exists: boolean;
   override_scope: RecurringCycleOverrideScope | null;
   document_details_step: import('./income-document-details-types').IncomeDocumentDetailsStep;
-  preview_action: {
-    visible: boolean;
-    label: string;
-    disabled_reason: string | null;
-  };
+  preview_action: WorkEngineInvoiceRetainerScheduleRowPreviewAction;
   save_action: {
     visible: boolean;
     label: string;
@@ -531,11 +541,7 @@ export type WorkEngineInvoiceRetainerScheduleProjectionRow = {
     | 'future_projection'
     | null;
   primary_action: WorkEngineInvoiceRetainerScheduleRowPrimaryAction | null;
-  preview_action: {
-    visible: boolean;
-    label: string;
-    disabled_reason: string | null;
-  } | null;
+  preview_action: WorkEngineInvoiceRetainerScheduleRowPreviewAction | null;
   override_exists: boolean;
   override_scope: RecurringCycleOverrideScope | null;
   cycle_date: string;

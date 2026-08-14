@@ -124,7 +124,6 @@ const TAX_INVOICE_TABLE_COLUMNS = [
   { key: 'payment_state', label: 'סטטוס תשלום' },
   { key: 'email_delivery', label: '@' },
   { key: 'docflow_delivery', label: 'דוקפלו' },
-  { key: 'view', label: 'צפייה' },
   { key: 'actions', label: 'פעולות' },
 ];
 

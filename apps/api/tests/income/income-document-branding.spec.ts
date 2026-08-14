@@ -16,6 +16,7 @@ import {
   resolveBrandingPreviewThemePalette,
   getStudioNavigationSections,
   getStudioColorThemePresets,
+  DEPRECATED_STUDIO_COLOR_THEME_KEYS,
   buildStudioSampleIssuerIdentityPreview,
   buildStudioSampleLivePreview,
   resolveBrandingProfile,
@@ -43,15 +44,31 @@ test('color theme presets expose 14 studio themes including NodexPro premium def
   assert.equal(blackWhite!.label, 'שחור לבן');
 });
 
-test('studio color catalog exposes full fixed palette', () => {
+test('studio color catalog hides deprecated themes from new selection', () => {
   const presets = getStudioColorThemePresets();
-  assert.equal(presets.length, 14);
+  assert.equal(presets.length, 9);
   assert.ok(presets.some((p) => p.key === 'nodexpro_premium'));
   assert.ok(presets.some((p) => p.key === 'black_white' && p.studio_label === 'שחור לבן'));
-  assert.ok(presets.some((p) => p.key === 'pastel_purple'));
-  assert.ok(presets.some((p) => p.key === 'pale_peach'));
+  assert.ok(!presets.some((p) => p.key === 'pastel_purple'));
+  assert.ok(!presets.some((p) => p.key === 'pale_peach'));
+  assert.ok(!presets.some((p) => p.key === 'pale_blue'));
+  assert.ok(!presets.some((p) => p.key === 'yellow'));
+  assert.ok(!presets.some((p) => p.key === 'green'));
   assert.ok(!presets.some((p) => p.key === 'elegant_gold'));
   assert.ok(!presets.some((p) => p.key === 'modern_blue'));
+});
+
+test('historical deprecated theme remains renderable and can stay selected', () => {
+  const historical = resolveColorThemePreset('pale_peach');
+  assert.ok(historical);
+  assert.equal(historical!.label, 'Pale Peach');
+  const selectable = getStudioColorThemePresets({ selectedColorThemeKey: 'pale_peach' });
+  assert.ok(selectable.some((p) => p.key === 'pale_peach'));
+  assert.equal(selectable.length, 10);
+  assert.ok(!selectable.some((p) => p.key === 'yellow'));
+  for (const key of DEPRECATED_STUDIO_COLOR_THEME_KEYS) {
+    assert.ok(resolveColorThemePreset(key));
+  }
 });
 
 test('studio navigation exposes seven SaaS sections', () => {

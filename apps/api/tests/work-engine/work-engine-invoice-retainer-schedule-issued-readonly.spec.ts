@@ -100,7 +100,7 @@ test('projection service wires issued read-only menu and generated_document_id',
   assert.match(projectionServiceSource, /generated_document_id: cycle\?\.generated_document_id/);
   assert.match(
     projectionServiceSource,
-    /allowed_actions: actions\.filter\(\(action\) => !action\.disabled\)/,
+    /allowed_actions: \[\s*\.\.\.actions\.filter\(\(action\) => !action\.disabled\)\.map\(\(action\) => action\.key\)/,
   );
   assert.ok(!projectionServiceSource.includes("statusKey === 'issued') {\n    return [openDocument, viewHistory]"));
 });

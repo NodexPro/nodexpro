@@ -196,6 +196,7 @@ export function WorkEngineClientDocumentsByTypeModal({
       <div className="nx-we-documents-modal nx-income-wizard nx-accounting-editor-modal">
         <div className="nx-income-wizard__head nx-we-documents-modal__head">
           <h2 className="nx-modal-title">{title}</h2>
+          <div className="nx-we-documents-modal__head-actions">
           <div className="nx-we-documents-modal__year">
             <label htmlFor="nx-we-documents-year">שנה</label>
             <select
@@ -210,6 +211,15 @@ export function WorkEngineClientDocumentsByTypeModal({
                 </option>
               ))}
             </select>
+          </div>
+          <button
+            type="button"
+            className="nx-we-documents-modal__close"
+            aria-label="סגירה"
+            onClick={onClose}
+          >
+            ×
+          </button>
           </div>
         </div>
 
@@ -232,6 +242,36 @@ export function WorkEngineClientDocumentsByTypeModal({
                   {rows.map((row) => (
                     <tr key={row.row_id}>
                       {columns.map((col) => {
+                        if (col.key === 'actions') {
+                          const hasDedicatedViewColumn = columns.some((column) => column.key === 'view');
+                          const showView =
+                            !hasDedicatedViewColumn && Boolean(row.can_view_document);
+                          return (
+                            <td key={col.key} className="nx-we-documents-modal__action-col">
+                              {showView ? (
+                                <button
+                                  type="button"
+                                  className="nx-we-documents-modal__view"
+                                  disabled={busy || loading}
+                                  aria-label="צפייה במסמך"
+                                  title="צפייה במסמך"
+                                  onClick={() => void handleViewDocument(row)}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                    <path
+                                      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
+                                      stroke="currentColor"
+                                      strokeWidth="1.8"
+                                    />
+                                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                                  </svg>
+                                </button>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                          );
+                        }
                         if (col.key === 'view') {
                           return (
                             <td key={col.key} className="nx-we-documents-modal__action-col">
@@ -322,11 +362,6 @@ export function WorkEngineClientDocumentsByTypeModal({
           )}
         </div>
 
-        <div className="nx-income-wizard__footer nx-modal-footer nx-tax-nested-modal-footer">
-          <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy || loading} onClick={onClose}>
-            סגירה
-          </button>
-        </div>
       </div>
     </div>
   );

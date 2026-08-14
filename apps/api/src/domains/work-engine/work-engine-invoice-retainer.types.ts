@@ -232,6 +232,14 @@ export type WorkEngineInvoiceRetainerScheduleRowPreviewAction = {
   visible: boolean;
   label: string;
   disabled_reason: string | null;
+  command: 'preview_recurring_cycle_override';
+  payload: {
+    represented_client_id: string;
+    profile_id: string;
+    cycle_date: string;
+    period_key: string;
+    cycle_index: number;
+  };
 };
 
 export const WORK_ENGINE_RECURRING_CYCLE_OVERRIDE_AGGREGATE_KEY =

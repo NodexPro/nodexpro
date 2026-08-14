@@ -2,11 +2,28 @@ import { useEffect, useRef, useState } from 'react';
 import type {
   WorkEngineInvoiceRetainerScheduleProjection,
   WorkEngineInvoiceRetainerScheduleProjectionAction,
+  WorkEngineInvoiceRetainerScheduleRowPreviewAction,
 } from '../../income/income-workspace-types';
 
 type Props = {
   projection: WorkEngineInvoiceRetainerScheduleProjection;
+  onScheduleRowPreviewAction?: (
+    action: WorkEngineInvoiceRetainerScheduleRowPreviewAction,
+  ) => void | Promise<void>;
 };
+
+function ScheduleRowPreviewEyeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
 
 function initialExpandedYears(projection: WorkEngineInvoiceRetainerScheduleProjection): Set<number> {
   return new Set(
@@ -61,7 +78,7 @@ function ScheduleRowMenu({ actions }: { actions: WorkEngineInvoiceRetainerSchedu
   );
 }
 
-export function WorkEngineInvoiceRetainerSchedulePanel({ projection }: Props) {
+export function WorkEngineInvoiceRetainerSchedulePanel({ projection, onScheduleRowPreviewAction }: Props) {
   const [expandedYears, setExpandedYears] = useState<Set<number>>(() =>
     initialExpandedYears(projection),
   );
@@ -169,7 +186,25 @@ export function WorkEngineInvoiceRetainerSchedulePanel({ projection }: Props) {
                       <span className="nx-we-retainer-schedule__amount">{row.amount_display}</span>
                       <span className="nx-we-retainer-schedule__type">{row.document_type_label}</span>
                       <span className="nx-we-retainer-schedule__status">{row.status_label}</span>
+                      <span className="nx-we-retainer-schedule__row-actions">
+                      {row.preview_action?.visible &&
+                      row.allowed_actions.includes(row.preview_action.command) ? (
+                        <button
+                          type="button"
+                          className="nx-we-retainer-schedule__preview-eye"
+                          disabled={Boolean(row.preview_action.disabled_reason)}
+                          aria-label={row.preview_action.label}
+                          title={row.preview_action.disabled_reason ?? row.preview_action.label}
+                          onClick={() => {
+                            if (!row.preview_action || !onScheduleRowPreviewAction) return;
+                            void onScheduleRowPreviewAction(row.preview_action);
+                          }}
+                        >
+                          <ScheduleRowPreviewEyeIcon />
+                        </button>
+                      ) : null}
                       <ScheduleRowMenu actions={row.actions} />
+                      </span>
                     </li>
                   ))}
                 </ul>
