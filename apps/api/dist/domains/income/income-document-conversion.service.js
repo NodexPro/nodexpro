@@ -9,12 +9,13 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertDocumentTypeEnabled, findAvailableDocumentType, resolveAvailableDocumentTypes, } from './income-document-types.resolver.js';
 import { applyOfficialIncomeIssuerContext, buildIncomeWorkspaceContextAggregate, } from './income-issuer-context.service.js';
 import { assertIncomeEditPermission, loadActiveIncomeIssuerScope, } from './income-issuer-scope.service.js';
-import { buildIncomeWorkspaceAggregate } from './income-workspace-aggregate.service.js';
+import { buildIncomeWorkspaceAggregate, buildIncomeWorkspaceWizardPatchAggregate, } from './income-workspace-aggregate.service.js';
+import { createIncomeCommandTimings, logIncomeCommandTimings, } from './income-command-timings.pure.js';
 import { buildWorkEngineInvoicesTabAggregate } from '../work-engine/work-engine-invoices-tab.read-model.service.js';
 import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-engine/work-engine-invoices-client-documents-by-type.read-model.service.js';
 import { validateDraftAgainstDocumentTypeRules } from './income-document-draft.helpers.js';
 import { resumeIncomeDocumentDraftFromContext } from './income-document-draft-editor.service.js';
-import { CANCEL_SOURCE_CONVERSION_LINEAGE_RULE, conversionTypeKey, decideConversionTargetDocumentLink, draftLinesFromIssuedSnapshot, INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT, INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT, INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT, isIncomeConversionSourceType, isIncomeConversionTargetType, isPreliminaryCancellableType, isPreliminaryEditableType, isTaxDocumentDirectCancelForbidden, PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY, resolveDocumentSettingsForConversion, serializeConversionDocumentSettings, serializeConvertedDraftLines, } from './income-document-conversion.pure.js';
+import { CANCEL_SOURCE_CONVERSION_LINEAGE_RULE, conversionTypeKey, decideConversionTargetDocumentLink, draftLinesFromIssuedSnapshot, INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT, INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT, INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT, isIncomeConversionSourceType, isIncomeConversionTargetType, isPreliminaryCancellableType, isPreliminaryEditableType, isTaxDocumentDirectCancelForbidden, PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY, decidePreliminaryEditStagingDateHeal, resolveDocumentSettingsForConversion, serializeConversionDocumentSettings, serializeConvertedDraftLines, } from './income-document-conversion.pure.js';
 async function loadSourceDocument(orgId, documentId) {
     const { data, error } = await supabaseAdmin
         .from('income_documents')
@@ -163,17 +164,50 @@ async function buildConversionCommandResponse(params) {
     const year = params.documentsListYear != null && Number.isFinite(params.documentsListYear)
         ? Number(params.documentsListYear)
         : new Date().getFullYear();
-    let workspace = await buildIncomeWorkspaceAggregate(params.ctx);
+    const timings = createIncomeCommandTimings();
+    // Pencil open: lean wizard_patch only. Do not rebuild full workspace / branding studio /
+    // invoices history / by-type tables — the editor already has the list on screen.
+    if (params.command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT && params.draftId) {
+        const resumed = await resumeIncomeDocumentDraftFromContext(params.ctx, { draft_id: params.draftId }, { leanDetails: true });
+        timings.mark('draft_load_ms');
+        const workspace = await buildIncomeWorkspaceWizardPatchAggregate(resumed.scope, resumed.result.wizardOverlay, resumed.result.recipientOverlay, resumed.result.starting_step_key, { includeBrandingProfile: false });
+        timings.mark('wizard_patch_aggregate_ms');
+        const snapshot = timings.snapshot();
+        logIncomeCommandTimings(params.command, snapshot, {
+            path: 'pencil_lean_open',
+            draft_id: params.draftId,
+        });
+        return {
+            ok: true,
+            command: params.command,
+            income_workspace_aggregate: workspace,
+            meta: {
+                idempotent_replay: params.replay,
+                income_document_id: params.source.id,
+                edited_draft_id: params.draftId,
+                converted_draft_id: params.draftId,
+                workspace_aggregate_mode: 'wizard_patch',
+                command_timings: snapshot,
+            },
+        };
+    }
+    // When a staging/target draft is present, skip the unused full aggregate that was
+    // previously built and immediately overwritten (major begin-edit / convert latency).
+    let workspace;
     let wizard_starting_step_key;
     if (params.draftId) {
         const resumed = await resumeIncomeDocumentDraftFromContext(params.ctx, {
             draft_id: params.draftId,
         });
+        timings.mark('draft_load_ms');
         workspace = await buildIncomeWorkspaceAggregate(params.ctx, resumed.scope, resumed.result.recipientOverlay, resumed.result.wizardOverlay);
         wizard_starting_step_key = resumed.result.starting_step_key;
         if (wizard_starting_step_key) {
             workspace = { ...workspace, wizard_starting_step_key };
         }
+    }
+    else {
+        workspace = await buildIncomeWorkspaceAggregate(params.ctx);
     }
     const [context, invoicesTab, documentsByType] = await Promise.all([
         buildIncomeWorkspaceContextAggregate(params.ctx),
@@ -187,6 +221,10 @@ async function buildConversionCommandResponse(params) {
             })
             : Promise.resolve(null),
     ]);
+    timings.mark('invoices_tab_aggregate_ms');
+    timings.mark('documents_by_type_aggregate_ms');
+    const snapshot = timings.snapshot();
+    logIncomeCommandTimings(params.command, snapshot, { path: 'conversion_full' });
     return {
         ok: true,
         command: params.command,
@@ -197,11 +235,9 @@ async function buildConversionCommandResponse(params) {
         meta: {
             idempotent_replay: params.replay,
             income_document_id: params.source.id,
+            command_timings: snapshot,
             ...(params.draftId && params.command === INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT
                 ? { converted_draft_id: params.draftId }
-                : {}),
-            ...(params.draftId && params.command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT
-                ? { edited_draft_id: params.draftId, converted_draft_id: params.draftId }
                 : {}),
         },
     };
@@ -229,6 +265,52 @@ async function findOpenPreliminaryEditDraft(params) {
         }
     }
     return null;
+}
+/**
+ * Null-only reconcile of an open preliminary-edit staging draft against the source document.
+ * Preserves already-entered staging dates; heals empty document_date / due_date only.
+ */
+async function healPreliminaryEditStagingDraftDates(params) {
+    const { data, error } = await supabaseAdmin
+        .from('income_document_drafts')
+        .select('id, document_date, due_date, draft_totals_preview_json')
+        .eq('organization_id', params.orgId)
+        .eq('id', params.draftId)
+        .maybeSingle();
+    throwIfSupabaseError(error, 'loadPreliminaryEditStagingForHeal');
+    if (!data)
+        return;
+    const staging = data;
+    const heal = decidePreliminaryEditStagingDateHeal({
+        stagingDocumentDate: staging.document_date,
+        stagingDueDate: staging.due_date,
+        sourceIssueDate: params.source.issue_date,
+        sourceDueDate: params.source.due_date,
+    });
+    if (!heal.document_date && !heal.due_date)
+        return;
+    const priorPreview = staging.draft_totals_preview_json &&
+        typeof staging.draft_totals_preview_json === 'object' &&
+        !Array.isArray(staging.draft_totals_preview_json)
+        ? staging.draft_totals_preview_json
+        : {};
+    const patch = { ...heal };
+    // Keep same-number preview identity when healing stale staging rows.
+    if (params.source.document_number &&
+        (typeof priorPreview.document_number_preview !== 'string' ||
+            !String(priorPreview.document_number_preview).trim())) {
+        patch.draft_totals_preview_json = {
+            ...priorPreview,
+            document_number_preview: params.source.document_number,
+        };
+    }
+    const { error: updateErr } = await supabaseAdmin
+        .from('income_document_drafts')
+        .update(patch)
+        .eq('organization_id', params.orgId)
+        .eq('id', params.draftId)
+        .eq('status', 'draft');
+    throwIfSupabaseError(updateErr, 'healPreliminaryEditStagingDraftDates');
 }
 export async function executeBeginEditIncomePreliminaryDocument(ctx, body) {
     const orgId = ctx.organizationId;
@@ -268,6 +350,11 @@ export async function executeBeginEditIncomePreliminaryDocument(ctx, body) {
         documentType: source.document_type,
     });
     if (existingEditDraftId) {
+        await healPreliminaryEditStagingDraftDates({
+            orgId,
+            draftId: existingEditDraftId,
+            source,
+        });
         return buildConversionCommandResponse({
             ctx,
             command: INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,

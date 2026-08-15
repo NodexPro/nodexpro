@@ -180,6 +180,15 @@ export const INCOME_COLOR_THEME_PRESETS = COLOR_THEME_DEFS.map((t) => ({
     gradient: { ...t.gradient },
     mini_preview_markup: buildThemeMiniPreview({ ...t, mini_preview_markup: '' }),
 }));
+/** Hidden from new studio selection; still valid for historical render. */
+export const DEPRECATED_STUDIO_COLOR_THEME_KEYS = [
+    'pale_peach',
+    'yellow',
+    'pastel_purple',
+    'pale_blue',
+    'green',
+];
+const DEPRECATED_STUDIO_COLOR_THEME_KEY_SET = new Set(DEPRECATED_STUDIO_COLOR_THEME_KEYS);
 const STYLE_TEMPLATE_DEFS = [
     {
         key: 'classic',
@@ -268,8 +277,9 @@ const STUDIO_COLOR_THEME_LABELS = {
     green: 'Green',
     yellow: 'Yellow',
 };
-export function getStudioColorThemePresets() {
-    return INCOME_COLOR_THEME_PRESETS.map((preset) => ({
+export function getStudioColorThemePresets(params) {
+    const selected = String(params?.selectedColorThemeKey ?? '').trim();
+    return INCOME_COLOR_THEME_PRESETS.filter((preset) => !DEPRECATED_STUDIO_COLOR_THEME_KEY_SET.has(preset.key) || preset.key === selected).map((preset) => ({
         ...preset,
         gradient: { ...preset.gradient },
         mini_preview_markup: buildThemeMiniPreview(preset),

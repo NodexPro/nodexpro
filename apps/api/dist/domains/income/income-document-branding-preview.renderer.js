@@ -18,10 +18,12 @@ function escapeHtml(value) {
         .replaceAll("'", '&#39;');
 }
 function formatPreviewDate(iso) {
-    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso))
+    if (!iso)
         return '—';
-    const [y, m, d] = iso.split('-');
-    return `${d}/${m}/${y}`;
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso).trim());
+    if (!match)
+        return '—';
+    return `${match[3]}/${match[2]}/${match[1]}`;
 }
 function formatDiscountDisplay(value) {
     if (!value)
@@ -228,11 +230,15 @@ export function renderIncomeBrandedPreviewHtml(params) {
         ]
             .filter(Boolean)
             .join('');
+    const documentDateRow = metaRow('תאריך המסמך', formatPreviewDate(params.document_date), docPreviewIcon('calendar'));
+    const dueDateRow = params.due_date
+        ? metaRow('תאריך לתשלום', formatPreviewDate(params.due_date), docPreviewIcon(isSectioned ? 'calendar' : 'clock'))
+        : '';
+    const dateRows = params.due_date_row_before_document_date
+        ? [dueDateRow, documentDateRow]
+        : [documentDateRow, dueDateRow];
     const metaRows = [
-        metaRow('תאריך המסמך', formatPreviewDate(params.document_date), docPreviewIcon('calendar')),
-        params.due_date
-            ? metaRow('תאריך לתשלום', formatPreviewDate(params.due_date), docPreviewIcon(isSectioned ? 'calendar' : 'clock'))
-            : '',
+        ...dateRows,
         params.payment_terms_display?.trim()
             ? metaRow('תנאי תשלום', params.payment_terms_display, docPreviewIcon(isSectioned ? 'clock' : 'payment'))
             : '',

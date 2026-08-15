@@ -1,5 +1,5 @@
 import { INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY, INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY, } from './income.types.js';
-import { resolveIncomeDocumentPdfSendReadiness, } from './income-document-pdf-send-readiness.pure.js';
+import { hasCanonicalIncomeDocumentPdfAsset, resolveIncomeDocumentPdfSendReadiness, } from './income-document-pdf-send-readiness.pure.js';
 import { normalizeIncomeDocumentRecipientEmailPrefill, normalizeRepresentedClientRecipientEmailPrefill, } from './income-document-email-recipient-prefill.pure.js';
 export { INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY, INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY };
 export { normalizeIncomeDocumentRecipientEmailPrefill, normalizeRepresentedClientRecipientEmailPrefill, };
@@ -43,7 +43,9 @@ export function resolveIncomeDocumentEmailSendEligibility(input) {
             retry_pdf_render_allowed,
         };
     }
-    if (!pdf_readiness.ready) {
+    // Email send uses the same canonical artifact as Download: usable pdf_asset_id.
+    // Stale/failed pdf_render_status must not block send when the asset exists.
+    if (!hasCanonicalIncomeDocumentPdfAsset(input.pdfAssetId)) {
         return {
             enabled: false,
             disabled_reason: pdf_readiness.disabled_reason,
@@ -57,7 +59,7 @@ export function resolveIncomeDocumentEmailSendEligibility(input) {
         disabled_reason: null,
         disabled_reason_key: null,
         pdf_readiness,
-        retry_pdf_render_allowed: false,
+        retry_pdf_render_allowed,
     };
 }
 export function incomeEmailDeliveryAttemptCountLabel(attemptCount) {
@@ -124,6 +126,49 @@ export function buildIncomeDocumentEmailDeliveryBlock(params) {
             canOpenHistory,
             historyDisabledReason: canOpenHistory ? null : 'אין הרשאת צפייה',
         }),
+    };
+}
+const SEND_NOT_READY_USER_MESSAGE = 'לא ניתן לשלוח את המסמך כרגע.';
+const PDF_SEND_DISABLED_REASON_KEYS = new Set([
+    'pdf_pending',
+    'pdf_failed',
+    'pdf_unavailable',
+]);
+export function resolveIncomeDocumentEmailSendDisabledUserMessage(params) {
+    if (params.enabled)
+        return null;
+    if (params.disabled_reason_key && PDF_SEND_DISABLED_REASON_KEYS.has(params.disabled_reason_key)) {
+        return SEND_NOT_READY_USER_MESSAGE;
+    }
+    return params.disabled_reason;
+}
+export function buildIncomeDocumentEmailSendView(params) {
+    const typeLabel = String(params.documentTypeLabel ?? '').trim();
+    const documentNumber = String(params.documentNumber ?? '').trim();
+    const documentDisplay = [typeLabel, documentNumber].filter(Boolean).join(' ');
+    const senderDisplayName = String(params.senderDisplayName ?? '').trim() || '—';
+    const recipientDisplayName = String(params.recipientDisplayName ?? '').trim() || '—';
+    const attachment_ready = hasCanonicalIncomeDocumentPdfAsset(params.pdfAssetId);
+    return {
+        title: documentDisplay ? `שליחה במייל — ${documentDisplay}` : 'שליחה במייל',
+        sender_label: 'מאת',
+        sender_display_name: senderDisplayName,
+        recipient_name_label: 'אל',
+        recipient_display_name: recipientDisplayName,
+        document_label: 'מסמך',
+        document_display: documentDisplay || '—',
+        attachment_filename: attachment_ready
+            ? documentDisplay
+                ? `${documentDisplay}.pdf`
+                : 'document.pdf'
+            : null,
+        attachment_ready,
+        email_label: 'אימייל',
+        email_editable: params.emailFieldPresent,
+        send_button_label: 'שליחה',
+        send_disabled_user_message: resolveIncomeDocumentEmailSendDisabledUserMessage(params.sendEligibility),
+        history_toggle_label: 'היסטוריה',
+        history_available: params.historyAvailable,
     };
 }
 export function buildIncomeDocumentEmailSendForm(params) {

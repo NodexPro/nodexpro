@@ -11,6 +11,7 @@ import { buildUnifiedIncomeDocumentRenderAuditSnapshot, } from './income-documen
 import { buildUnifiedIncomeDocumentRenderModelForIssuedDocument, } from './income-document-unified-render.service.js';
 import { renderIncomeDocumentPdfBufferFromHtml } from './income-document-pdf.renderer.js';
 import { requiresPdfRender } from './income-pdf-template.resolver.js';
+import { hasCanonicalIncomeDocumentPdfAsset } from './income-document-pdf-send-readiness.pure.js';
 const BUCKET_INCOME_DOCUMENTS = 'income-documents';
 let bucketEnsured = false;
 async function ensureIncomeDocumentsBucket() {
@@ -109,8 +110,8 @@ export async function renderIncomeDocumentPdf(ctx, orgId, incomeDocumentId) {
             .eq('organization_id', orgId);
         return { pdf_asset_id: null, pdf_render_status: 'rendered' };
     }
-    if (doc.pdf_render_status === 'rendered' && doc.pdf_asset_id) {
-        return { pdf_asset_id: doc.pdf_asset_id, pdf_render_status: 'rendered' };
+    if (hasCanonicalIncomeDocumentPdfAsset(doc.pdf_asset_id)) {
+        return { pdf_asset_id: String(doc.pdf_asset_id).trim(), pdf_render_status: doc.pdf_render_status };
     }
     await supabaseAdmin
         .from('income_documents')
@@ -205,6 +206,20 @@ export async function loadIncomeDocumentForDownload(ctx, incomeDocumentId) {
 export function incomeDocumentDownloadPath(incomeDocumentId) {
     return `/api/v1/income/documents/${incomeDocumentId}/download`;
 }
+/**
+ * Same ensure used by issue-and-send: reuse existing renderIncomeDocumentPdf.
+ * Skips render when a canonical pdf_asset_id already exists.
+ */
+export async function ensureIssuedDocumentCanonicalPdfAsset(ctx, orgId, incomeDocumentId) {
+    const doc = await loadIssuedDocumentForPdf(orgId, incomeDocumentId);
+    if (hasCanonicalIncomeDocumentPdfAsset(doc.pdf_asset_id)) {
+        return {
+            pdf_asset_id: String(doc.pdf_asset_id).trim(),
+            pdf_render_status: doc.pdf_render_status,
+        };
+    }
+    return renderIncomeDocumentPdf(ctx, orgId, incomeDocumentId);
+}
 export async function loadIssuedDocumentPdfBytesForEmail(orgId, pdfAssetId) {
     const { data: asset, error: assetErr } = await supabaseAdmin
         .from('file_assets')
@@ -228,7 +243,7 @@ export async function loadIssuedDocumentPdfBytesForEmail(orgId, pdfAssetId) {
 }
 export async function downloadIncomeDocumentPdfBuffer(ctx, incomeDocumentId) {
     const { doc } = await loadIncomeDocumentForDownload(ctx, incomeDocumentId);
-    if (doc.pdf_render_status !== 'rendered' || !doc.pdf_asset_id) {
+    if (!hasCanonicalIncomeDocumentPdfAsset(doc.pdf_asset_id)) {
         throw notFound('PDF is not available for this document');
     }
     const { data: asset, error: assetErr } = await supabaseAdmin

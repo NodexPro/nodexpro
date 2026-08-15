@@ -564,28 +564,67 @@ export interface IncomeClientIncomeLedgerCardInvoiceGroup {
 
 export interface IncomeClientIncomeLedgerCardRenderRow {
   row_id: string;
+  transaction_id: string;
   row_kind: 'invoice' | 'payment';
-  visual_role: 'parent' | 'child';
-  document_type_label: string;
+  transaction_date: string;
+  transaction_date_display: string;
+  transaction_type_key: string;
+  transaction_type_label: string;
+  document_id: string | null;
   document_number: string;
-  issue_date_display: string;
-  original_amount_display: string;
-  remaining_balance_display: string;
-  amount_tone: 'default' | 'payment';
+  payment_document_id: string | null;
+  payment_document_number: string;
+  debit_amount_display: string;
+  credit_amount_display: string;
+  credit_amount_tone: 'emphasis' | 'none';
+  running_balance_display: string;
   view_action: IncomeIssuedDocumentViewAction | null;
+  allowed_actions: string[];
 }
 
 export interface IncomeClientIncomeLedgerCardTopAction {
   key: string;
   label: string;
-  icon_key: 'send' | 'print';
+  icon_key: 'print' | 'email' | 'docflow';
   enabled: boolean;
   disabled_reason: string | null;
+  income_document_id: string | null;
+  open_action_key: 'open_email_history' | 'open_docflow_send' | null;
+}
+
+export interface IncomeClientIncomeLedgerCardDeliveryAction {
+  key: 'send_by_email' | 'send_by_docflow';
+  label: string;
+  icon_key: 'email' | 'docflow';
+  enabled: boolean;
+  disabled_reason: string | null;
+  income_document_id: string | null;
+  open_action_key: 'open_email_history' | 'open_docflow_send';
 }
 
 export interface IncomeClientIncomeLedgerCardAggregate {
   aggregate_key: typeof INCOME_CLIENT_INCOME_LEDGER_CARD_AGGREGATE_KEY;
   financial_source: 'accounting_base';
+  title: string;
+  ledger_customer: {
+    id: string | null;
+    display_name: string;
+    tax_id: string | null;
+    tax_id_label: string;
+  };
+  issuer_context: {
+    issuer_business_id: string;
+    display_name: string;
+    represented_client_id: string;
+    acting_mode: IncomeActingMode;
+    label: string;
+  };
+  period: {
+    from_date: string;
+    to_date: string;
+    from_label: string;
+    to_label: string;
+  };
   represented_client_id: string;
   represented_client_display_name: string;
   selected_end_customer_id: string | null;
@@ -593,7 +632,9 @@ export interface IncomeClientIncomeLedgerCardAggregate {
   selected_year: number;
   available_years: number[];
   end_customer_options: IncomeClientIncomeLedgerCardEndCustomerOption[];
-  show_customer_picker: false;
+  show_customer_picker: boolean;
+  customer_picker_label: string;
+  customer_picker_placeholder: string;
   user_notice: string | null;
   summary: {
     total_debit_display: string;
@@ -603,10 +644,19 @@ export interface IncomeClientIncomeLedgerCardAggregate {
     payment_count: number;
     currency: string;
   };
+  totals: {
+    total_debit_display: string;
+    total_credit_display: string;
+    current_balance_display: string;
+    total_debit_label: string;
+    total_credit_label: string;
+    current_balance_label: string;
+  };
   table_columns: Array<{ key: string; label: string }>;
   documents: IncomeClientIncomeLedgerCardInvoiceGroup[];
   rows: IncomeClientIncomeLedgerCardRenderRow[];
   allowed_actions: string[];
+  delivery_actions: IncomeClientIncomeLedgerCardDeliveryAction[];
   top_actions: IncomeClientIncomeLedgerCardTopAction[];
   empty_state: {
     visible: boolean;

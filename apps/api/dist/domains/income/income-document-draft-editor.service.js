@@ -12,7 +12,7 @@ import { buildIncomeDocumentDetailsStep, } from './income-document-details-step.
 import { applyLineFieldUpdate, createEmptyDraftLine, deleteDraftLine, normalizeDraftLines, reorderDraftLines, serializeDraftLines, } from './income-document-draft-lines.pure.js';
 import { recomputeDraftLineAmounts } from './income-draft-line-compute.pure.js';
 import { computeDraftTotalsPreview, DEFAULT_DOCUMENT_SETTINGS, parseDocumentSettingsJson, serializeDocumentSettingsJson, } from './income-document-draft-totals.pure.js';
-import { isIncomeRetainerTemplateDraft } from './income-retainer-template-draft.service.js';
+import { hasRetainerTemplateMarker } from './income-retainer-template-draft.service.js';
 import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
 import { normalizeDocumentDiscountInput, validateDocumentDiscount, } from './income-document-discount.pure.js';
 import { readVatResolutionFromDraftPreview, vatResolutionCachePayload, } from './income-draft-vat-fallback.pure.js';
@@ -25,7 +25,7 @@ import { computeDueDateFromPaymentTerms } from './income-customer-payment-terms.
 import { hasPermission } from '../rbac/rbac.service.js';
 import { publicDisplayNameOrNull } from './income-document-preview-party.pure.js';
 import { INCOME_PERMISSIONS } from './income.types.js';
-import { isPreliminaryEditableType, PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY, readPreliminaryEditSourceDocumentId, } from './income-document-conversion.pure.js';
+import { decidePreliminaryEditDocumentDateGuard, isPreliminaryEditableType, PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY, readPreliminaryEditSourceDocumentId, } from './income-document-conversion.pure.js';
 async function loadIssuerDisplayName(orgId, issuerBusinessId) {
     const { data, error } = await supabaseAdmin
         .from('clients')
@@ -64,7 +64,7 @@ async function buildScopeForDraftResume(ctx, draft) {
         permissions: scopePermissionsFromContext(ctx),
     };
 }
-export async function resumeIncomeDocumentDraftFromContext(ctx, body) {
+export async function resumeIncomeDocumentDraftFromContext(ctx, body, options) {
     const draft_id = reqUuid(body.draft_id, 'draft_id');
     const orgId = ctx.organizationId;
     if (!orgId)
@@ -84,7 +84,7 @@ export async function resumeIncomeDocumentDraftFromContext(ctx, body) {
     // Permission + scope enforced before resume.
     if (!scope.permissions.edit)
         throw badRequest('נדרשת הרשאת income.edit');
-    const result = await resumeIncomeDocumentDraft(scope, { draft_id });
+    const result = await resumeIncomeDocumentDraft(scope, { draft_id }, options);
     return { scope, result };
 }
 const DRAFT_SELECT = 'id, organization_id, issuer_business_id, represented_client_id, document_type, document_date, due_date, notes, currency, language, draft_lines_json, payment_received_json, delivery_contact_json, document_settings_json, validation_warnings_json, draft_totals_preview_json, payment_terms_json, income_customer_id, one_time_customer_snapshot_json, tax_allocation_number, customer_po_reference, status, user_saved_at, updated_at';
@@ -111,8 +111,7 @@ async function persistWizardDraft(scope, draftId, patch, auditPayload, existingR
         .update(patch)
         .eq('id', draftId)
         .eq('organization_id', scope.org_id);
-    if (error)
-        throw error;
+    throwIfSupabaseError(error, 'persistWizardDraft');
     void writeAudit({
         organizationId: scope.org_id,
         actorUserId: scope.actor_user_id,
@@ -143,6 +142,38 @@ function preservePreliminaryEditMarker(row, nextSettingsJson) {
         ...nextSettingsJson,
         [PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY]: sourceDocumentId,
     };
+}
+async function loadPreliminaryEditSourceIssueDate(scope, sourceDocumentId) {
+    const { data, error } = await supabaseAdmin
+        .from('income_documents')
+        .select('issue_date')
+        .eq('organization_id', scope.org_id)
+        .eq('id', sourceDocumentId)
+        .maybeSingle();
+    throwIfSupabaseError(error, 'loadPreliminaryEditSourceIssueDate');
+    const issueDate = data && typeof data.issue_date === 'string'
+        ? String(data.issue_date).trim()
+        : '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(issueDate) ? issueDate : null;
+}
+async function loadPreliminaryEditSourceDocumentNumber(scope, sourceDocumentId) {
+    const { data, error } = await supabaseAdmin
+        .from('income_documents')
+        .select('document_number')
+        .eq('organization_id', scope.org_id)
+        .eq('id', sourceDocumentId)
+        .maybeSingle();
+    throwIfSupabaseError(error, 'loadPreliminaryEditSourceDocumentNumber');
+    const documentNumber = data && typeof data.document_number === 'string'
+        ? String(data.document_number).trim()
+        : '';
+    return documentNumber || null;
+}
+function assertPreliminaryEditDocumentDateAllowed(params) {
+    const decision = decidePreliminaryEditDocumentDateGuard(params);
+    if (decision.action === 'reject') {
+        throw badRequest(decision.message, decision.code);
+    }
 }
 async function deliveryEmailFromRecipient(scope, selected) {
     if (!selected)
@@ -205,7 +236,11 @@ async function validationForRow(scope, row, docType) {
     let recipient_display_name = typeof priorCache.recipient_display_name === 'string'
         ? priorCache.recipient_display_name
         : null;
-    if (!document_number_preview && row.document_type) {
+    const preliminarySourceId = preliminaryEditSourceDocumentId(row);
+    if (!document_number_preview && preliminarySourceId) {
+        document_number_preview = await loadPreliminaryEditSourceDocumentNumber(scope, preliminarySourceId);
+    }
+    else if (!document_number_preview && row.document_type) {
         document_number_preview = await previewNextIncomeDocumentNumber(scope, row.document_type);
     }
     if (!recipient_display_name) {
@@ -352,14 +387,17 @@ async function wizardDraftMutationOverlay(scope, draft_id, loadedRow, rowForVali
         validation_warnings_json: validation.validation_warnings_json,
         draft_totals_preview_json: draftTotalsPatched,
     }, auditPayload, loadedRow);
-    const isRetainerTemplate = await isIncomeRetainerTemplateDraft({
-        orgId: scope.org_id,
-        draftId: draft_id,
-        documentSettingsJson: saved.document_settings_json,
-    });
+    // Hot path: avoid retainer-profile DB probe on every line/settings mutation.
+    // Template drafts carry retainer_template marker in document_settings_json.
+    const isRetainerTemplate = hasRetainerTemplateMarker(saved.document_settings_json);
+    const generatingPreview = typeof options?.totals_preview_patch?.preview_generated_at === 'string' &&
+        Boolean(String(options.totals_preview_patch.preview_generated_at).trim());
     return buildOverlayForDraft(scope, draft_id, true, saved, docType, {
         vatResolution: validation.vatResolution,
         totalsPreview: validation.totalsPreview,
+        // Non-preview mutations: skip branding studio + HTML payload rebuild.
+        lean: !generatingPreview,
+        skip_branding_profile_aggregate: true,
         ...(isRetainerTemplate ? { retainer_template_document_date_label: 'תאריך התחלה' } : {}),
     });
 }
@@ -418,7 +456,20 @@ export async function generateIncomeDocumentPreview(scope, body) {
         throw badRequest('document_type is required before preview', 'INCOME_PREVIEW_DOCUMENT_TYPE_REQUIRED');
     }
     const docType = await resolveDocType(scope, row.document_type);
-    const overlay = await wizardDraftMutationOverlay(scope, draft_id, row, row, docType, {}, { action: 'generate_preview', document_type: row.document_type }, { totals_preview_patch: { preview_generated_at: new Date().toISOString() } });
+    const priorCache = row.draft_totals_preview_json &&
+        typeof row.draft_totals_preview_json === 'object' &&
+        !Array.isArray(row.draft_totals_preview_json)
+        ? row.draft_totals_preview_json
+        : {};
+    const cachedDocumentNumber = typeof priorCache.document_number_preview === 'string' && priorCache.document_number_preview.trim()
+        ? priorCache.document_number_preview.trim()
+        : null;
+    const overlay = await wizardDraftMutationOverlay(scope, draft_id, row, row, docType, {}, { action: 'generate_preview', document_type: row.document_type }, {
+        totals_preview_patch: {
+            preview_generated_at: new Date().toISOString(),
+            ...(cachedDocumentNumber ? { document_number_preview: cachedDocumentNumber } : {}),
+        },
+    });
     void writeAudit({
         organizationId: scope.org_id,
         actorUserId: scope.actor_user_id,
@@ -523,6 +574,15 @@ export async function updateIncomeDocumentDraftSettings(scope, body) {
         const s = optionalString(value);
         if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s))
             throw badRequest('document_date must be YYYY-MM-DD');
+        const prelimSourceId = preliminaryEditSourceDocumentId(row);
+        if (prelimSourceId) {
+            const originalIssueDate = await loadPreliminaryEditSourceIssueDate(scope, prelimSourceId);
+            assertPreliminaryEditDocumentDateAllowed({
+                documentSettingsJson: row.document_settings_json,
+                originalIssueDate,
+                requestedDocumentDate: s,
+            });
+        }
         patch.document_date = s;
         if (row.document_type === 'tax_invoice' && row.income_customer_id && !settings.due_date_manual_override) {
             const paymentTerms = await loadIncomeCustomerDefaultPaymentTerms(scope, row.income_customer_id);
@@ -715,7 +775,7 @@ async function savePreliminaryDocumentEditIfNeeded(scope, draftId, row, docType)
     }
     const { data: sourceRaw, error: sourceErr } = await supabaseAdmin
         .from('income_documents')
-        .select('id, organization_id, represented_client_id, issuer_business_id, actor_user_id, acting_mode, document_type, document_status, document_number, source_draft_id')
+        .select('id, organization_id, represented_client_id, issuer_business_id, actor_user_id, acting_mode, document_type, document_status, document_number, source_draft_id, issue_date')
         .eq('organization_id', scope.org_id)
         .eq('id', sourceDocumentId)
         .maybeSingle();
@@ -736,6 +796,12 @@ async function savePreliminaryDocumentEditIfNeeded(scope, draftId, row, docType)
     if (source.document_type !== row.document_type) {
         throw badRequest('Preliminary edit cannot change document type');
     }
+    const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
+    assertPreliminaryEditDocumentDateAllowed({
+        documentSettingsJson: row.document_settings_json,
+        originalIssueDate: source.issue_date,
+        requestedDocumentDate: documentDate,
+    });
     const validation = await validationForRow(scope, row, docType);
     const customerSnapshot = await buildCustomerSnapshotForDraftRow(scope, row);
     const totalsSnapshot = {
@@ -747,7 +813,8 @@ async function savePreliminaryDocumentEditIfNeeded(scope, draftId, row, docType)
         line_count: Array.isArray(validation.draft_lines_json) ? validation.draft_lines_json.length : 0,
     };
     const draftExtras = row;
-    const documentDate = row.document_date ?? new Date().toISOString().slice(0, 10);
+    // 159 first-branch: omit identity/accounting/cancel columns so NEW stays
+    // byte-identical to OLD there. JS write-back of those columns 409s.
     const { error: updateDocErr } = await supabaseAdmin
         .from('income_documents')
         .update({
@@ -770,7 +837,7 @@ async function savePreliminaryDocumentEditIfNeeded(scope, draftId, row, docType)
         .eq('document_status', 'issued')
         .eq('document_type', source.document_type)
         .eq('document_number', source.document_number);
-    throwIfSupabaseError(updateDocErr, 'updatePreliminaryDocumentInPlace', {
+    throwIfSupabaseError(updateDocErr, 'save_preliminary_edit:update_income_documents', {
         migrationHint: '159_income_preliminary_document_edit_in_place.sql',
     });
     if (source.source_draft_id) {
@@ -814,7 +881,7 @@ async function savePreliminaryDocumentEditIfNeeded(scope, draftId, row, docType)
         source_document_id: source.id,
         document_number: source.document_number,
     }, row);
-    await writeAudit({
+    void writeAudit({
         organizationId: scope.org_id,
         actorUserId: scope.actor_user_id,
         moduleCode: 'income',
@@ -827,11 +894,15 @@ async function savePreliminaryDocumentEditIfNeeded(scope, draftId, row, docType)
             document_type: source.document_type,
             document_number: source.document_number,
         },
+    }).catch(() => {
+        /* audit must not fail a successful in-place save */
     });
     const saved = await loadWizardDraftRow(scope, draftId);
     return buildOverlayForDraft(scope, draftId, true, saved, docType, {
         totalsPreview: validation.totalsPreview,
         vatResolution: validation.vatResolution,
+        lean: true,
+        skip_branding_profile_aggregate: true,
     });
 }
 export async function saveIncomeDocumentDraft(scope, body) {
@@ -882,13 +953,15 @@ export async function recipientOverlayForDraftRow(scope, row) {
     }
     return {};
 }
-export async function resumeIncomeDocumentDraft(scope, body) {
+export async function resumeIncomeDocumentDraft(scope, body, options) {
     const draft_id = reqUuid(body.draft_id, 'draft_id');
     const row = await loadWizardDraftRow(scope, draft_id);
     const starting_step_key = startingStepKeyForDraftRow(row);
     const recipientOverlay = await recipientOverlayForDraftRow(scope, row);
     const wizardOverlay = starting_step_key === 'document_details'
-        ? await buildOverlayForDraft(scope, draft_id, true, row, row.document_type ? await resolveDocType(scope, row.document_type) : null)
+        ? await buildOverlayForDraft(scope, draft_id, true, row, row.document_type ? await resolveDocType(scope, row.document_type) : null, options?.leanDetails
+            ? { lean: true, skip_branding_profile_aggregate: true }
+            : {})
         : { active_wizard_draft_id: draft_id, document_details_step: null };
     // Audit: resume is user action (not workflow event).
     void writeAudit({

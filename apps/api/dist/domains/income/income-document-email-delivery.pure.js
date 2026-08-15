@@ -1,4 +1,5 @@
 import { badRequest } from '../../shared/errors.js';
+import { hasCanonicalIncomeDocumentPdfAsset } from './income-document-pdf-send-readiness.pure.js';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function parseIncomeDocumentEmailIdempotencyKey(body) {
     const raw = String(body.idempotency_key ?? '').trim();
@@ -23,10 +24,7 @@ export function assertIncomeDocumentReadyForEmailSend(doc) {
     if (doc.document_status !== 'issued') {
         throw badRequest('Document must be issued before email delivery');
     }
-    if (doc.pdf_render_status !== 'rendered') {
-        throw badRequest('Document PDF is not ready for email delivery');
-    }
-    if (!doc.pdf_asset_id) {
+    if (!hasCanonicalIncomeDocumentPdfAsset(doc.pdf_asset_id)) {
         throw badRequest('Document PDF attachment is not available');
     }
 }

@@ -17,7 +17,7 @@ import { INCOME_DOCUMENT_NOTES_HINT_HE, INCOME_DOCUMENT_NOTES_MAX_LENGTH, } from
 import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
 import { totalsFromTotalsSnapshot } from './income-document-unified-render.pure.js';
 import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById } from './income-recipient.service.js';
-import { buildPreliminaryDocumentEditMode, buildWizardSessionActions, } from './income-document-conversion.pure.js';
+import { buildPreliminaryDocumentEditMode, buildWizardSessionActions, readPreliminaryEditSourceDocumentId, } from './income-document-conversion.pure.js';
 import { incomeCustomerPaymentTermsLabel, INCOME_CUSTOMER_PAYMENT_TERMS_OPTIONS, resolveTaxInvoiceDueDate, } from './income-customer-payment-terms.pure.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
@@ -30,6 +30,24 @@ const DOCUMENT_TYPE_LABELS = {
     deal_invoice: 'חשבונית עסקה',
     quote: 'הצעת מחיר',
 };
+async function loadPreliminaryEditSourceIdentity(scope, sourceDocumentId) {
+    const { data, error } = await supabaseAdmin
+        .from('income_documents')
+        .select('issue_date, document_number')
+        .eq('organization_id', scope.org_id)
+        .eq('id', sourceDocumentId)
+        .maybeSingle();
+    throwIfSupabaseError(error, 'loadPreliminaryEditSourceIdentity');
+    const row = data;
+    const issueDate = typeof row?.issue_date === 'string' ? row.issue_date.trim() : '';
+    const documentNumber = typeof row?.document_number === 'string' && row.document_number.trim()
+        ? row.document_number.trim()
+        : null;
+    return {
+        issue_date: /^\d{4}-\d{2}-\d{2}$/.test(issueDate) ? issueDate : null,
+        document_number: documentNumber,
+    };
+}
 function previewPartyAddressLine(addressJson) {
     if (!addressJson || typeof addressJson !== 'object' || Array.isArray(addressJson))
         return null;
@@ -189,7 +207,7 @@ async function resolveRecipientDisplayName(scope, row) {
     return '—';
 }
 export { buildDocumentDetailsHeaderTitle } from './income-document-details-header.pure.js';
-function buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment = null, retainerTemplateDocumentDateLabel = null) {
+function buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment = null, retainerTemplateDocumentDateLabel = null, preliminaryEditDocumentDateMin = null) {
     const settings = parseDocumentSettingsJson(row.document_settings_json);
     const paymentNote = row.payment_received_json && typeof row.payment_received_json.note === 'string'
         ? row.payment_received_json.note
@@ -204,6 +222,9 @@ function buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePay
             visible: true,
             disabled: !canEdit,
             disabled_reason: canEdit ? null : 'נדרשת הרשאת עריכה',
+            ...(preliminaryEditDocumentDateMin
+                ? { min_value: preliminaryEditDocumentDateMin }
+                : {}),
         },
         {
             key: 'currency',
@@ -508,8 +529,15 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
     const docTypeLabel = row.document_type && DOCUMENT_TYPE_LABELS[row.document_type]
         ? DOCUMENT_TYPE_LABELS[row.document_type]
         : 'מסמך';
+    const preliminaryEditSourceId = readPreliminaryEditSourceDocumentId(row.document_settings_json);
+    const preliminarySourceIdentity = preliminaryEditSourceId
+        ? await loadPreliminaryEditSourceIdentity(scope, preliminaryEditSourceId)
+        : null;
     let numberPreview = uiCache.document_number_preview;
-    if (!numberPreview && row.document_type != null) {
+    if (!numberPreview && preliminarySourceIdentity?.document_number) {
+        numberPreview = preliminarySourceIdentity.document_number;
+    }
+    else if (!numberPreview && !preliminaryEditSourceId && row.document_type != null) {
         numberPreview = await previewNextIncomeDocumentNumber(scope, row.document_type);
     }
     let recipientName = uiCache.recipient_display_name ?? recipientDisplayNameFromRow(row);
@@ -541,70 +569,73 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
     }));
     const previewGeneratedAt = uiCache.preview_generated_at;
     const lean = options.lean === true;
-    const issuerBlock = !lean && previewGeneratedAt != null
-        ? await loadIssuerPreviewBlock(scope)
-        : {
-            display_name: scope.issuer_label,
-            tax_id: null,
-            address: null,
-            phone: null,
-            email: null,
-        };
-    const recipientBlock = !lean && previewGeneratedAt != null
-        ? await loadRecipientPreviewBlock(scope, row, recipientName ?? '—')
-        : {
-            display_name: recipientName ?? '—',
-            tax_id: null,
-            address: null,
-            phone: null,
-            email: null,
-        };
-    const previewLineRows = !lean && previewGeneratedAt != null
-        ? await (async () => {
-            const builtRows = await buildLineRows(lines, settings, vatResolution, documentDate, false);
-            const officialByCurrency = await resolveFxMapForDraftLines(lines, documentDate);
-            return builtRows.map((r) => {
-                const sourceLine = lines[r.row_number - 1];
-                const unitLabel = sourceLine &&
-                    typeof sourceLine.unit_label === 'string'
-                    ? String(sourceLine.unit_label).trim() || null
-                    : null;
-                const lineDiscount = sourceLine &&
-                    typeof sourceLine.discount_display === 'string'
-                    ? String(sourceLine.discount_display).trim() ||
-                        null
-                    : null;
-                const fx = sourceLine ? resolveLineFx(sourceLine, documentDate, officialByCurrency) : null;
-                const amounts = sourceLine && fx
-                    ? computeDraftLineAmounts(sourceLine, settings, vatResolution, fx)
-                    : null;
-                return {
-                    row_number: r.row_number,
-                    description: r.description.value,
-                    quantity: r.quantity.value,
-                    unit: unitLabel,
-                    unit_price: r.unit_price.value,
-                    discount: lineDiscount,
-                    currency: r.currency.value,
-                    vat_display: sourceLine ? formatLineVatAmountDisplay(sourceLine, amounts) : '—',
-                    vat_rate_label: r.vat_rate_label,
-                    total: r.line_total_display,
-                };
-            });
-        })()
-        : [];
+    const needsPreviewPayload = !lean && previewGeneratedAt != null;
     const previewVatLabel = totals.vat_display != null
         ? settings.vat_mode === 'standard'
             ? `מע״מ (${vatResolution.standard_rate_percent_label})`
             : 'מע״מ'
         : null;
-    const brandingProfileAggregate = lean
-        ? null
-        : await buildDocumentBrandingProfileAggregate(scope, canEdit);
-    const resolvedBranding = !lean && previewGeneratedAt != null && row.document_type
-        ? await loadResolvedBrandingProfileForDocumentType(scope, row.document_type)
-        : null;
-    const allocationPolicy = await resolveIncomeTaxAllocationNumberPolicyForOrg(scope.org_id, 'IL', documentDate);
+    const emptyIssuerBlock = {
+        display_name: scope.issuer_label,
+        tax_id: null,
+        address: null,
+        phone: null,
+        email: null,
+    };
+    const emptyRecipientBlock = {
+        display_name: recipientName ?? '—',
+        tax_id: null,
+        address: null,
+        phone: null,
+        email: null,
+    };
+    const [issuerBlock, recipientBlock, previewLineRows, brandingProfileAggregate, resolvedBranding, allocationPolicy,] = await Promise.all([
+        needsPreviewPayload ? loadIssuerPreviewBlock(scope) : Promise.resolve(emptyIssuerBlock),
+        needsPreviewPayload
+            ? loadRecipientPreviewBlock(scope, row, recipientName ?? '—')
+            : Promise.resolve(emptyRecipientBlock),
+        needsPreviewPayload
+            ? (async () => {
+                const builtRows = await buildLineRows(lines, settings, vatResolution, documentDate, false);
+                const officialByCurrency = await resolveFxMapForDraftLines(lines, documentDate);
+                return builtRows.map((r) => {
+                    const sourceLine = lines[r.row_number - 1];
+                    const unitLabel = sourceLine &&
+                        typeof sourceLine.unit_label === 'string'
+                        ? String(sourceLine.unit_label).trim() || null
+                        : null;
+                    const lineDiscount = sourceLine &&
+                        typeof sourceLine.discount_display === 'string'
+                        ? String(sourceLine.discount_display).trim() ||
+                            null
+                        : null;
+                    const fx = sourceLine ? resolveLineFx(sourceLine, documentDate, officialByCurrency) : null;
+                    const amounts = sourceLine && fx
+                        ? computeDraftLineAmounts(sourceLine, settings, vatResolution, fx)
+                        : null;
+                    return {
+                        row_number: r.row_number,
+                        description: r.description.value,
+                        quantity: r.quantity.value,
+                        unit: unitLabel,
+                        unit_price: r.unit_price.value,
+                        discount: lineDiscount,
+                        currency: r.currency.value,
+                        vat_display: sourceLine ? formatLineVatAmountDisplay(sourceLine, amounts) : '—',
+                        vat_rate_label: r.vat_rate_label ?? '',
+                        total: r.line_total_display,
+                    };
+                });
+            })()
+            : Promise.resolve([]),
+        lean || options.skip_branding_profile_aggregate === true
+            ? Promise.resolve(null)
+            : buildDocumentBrandingProfileAggregate(scope, canEdit),
+        needsPreviewPayload && row.document_type
+            ? loadResolvedBrandingProfileForDocumentType(scope, row.document_type)
+            : Promise.resolve(null),
+        resolveIncomeTaxAllocationNumberPolicyForOrg(scope.org_id, 'IL', documentDate),
+    ]);
     const allocationNumberField = buildIncomeDocumentAllocationNumberField({
         policy: allocationPolicy,
         documentType: row.document_type,
@@ -672,6 +703,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
         canIssue: canEdit && scope.permissions.issue,
         editMode,
     });
+    const preliminaryEditDocumentDateMin = preliminarySourceIdentity?.issue_date ?? null;
     return {
         draft_id: row.id,
         document_type_key: row.document_type ?? null,
@@ -711,7 +743,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             subtitle: docType?.legal_hint ?? null,
             document_number_preview: numberPreview,
         },
-        settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment, options.retainer_template_document_date_label ?? null),
+        settings_schema: buildSettingsSchema(row, docType, canEdit, vatResolution, taxInvoicePayment, options.retainer_template_document_date_label ?? null, preliminaryEditDocumentDateMin),
         line_items: {
             columns: [
                 { key: 'drag', label: '' },

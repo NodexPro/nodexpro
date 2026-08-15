@@ -15,8 +15,9 @@ import {
 export function buildIncomeIssuedDocumentViewAction(params: {
   incomeDocumentId: string;
   canView: boolean;
+  disabledReason?: string | null;
 }): IncomeIssuedDocumentViewAction {
-  const enabled = params.canView;
+  const enabled = params.canView && Boolean(params.incomeDocumentId);
   return {
     action_key: 'open_document',
     label: 'צפייה במסמך',
@@ -25,7 +26,7 @@ export function buildIncomeIssuedDocumentViewAction(params: {
     income_document_id: params.incomeDocumentId,
     view_aggregate_key: INCOME_ISSUED_DOCUMENT_VIEW_AGGREGATE_KEY,
     view_aggregate_params: { income_document_id: params.incomeDocumentId },
-    disabled_reason: enabled ? null : 'אין הרשאת צפייה',
+    disabled_reason: enabled ? null : (params.disabledReason ?? 'אין הרשאת צפייה'),
   };
 }
 

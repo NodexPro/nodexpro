@@ -199,7 +199,7 @@ async function loadIssuedDocuments(scope) {
         if (canRetryPosting && r.accounting_posting_status === 'failed') {
             rowActions.push('retry_income_document_accounting_posting');
         }
-        const pdfDownloadPath = r.pdf_render_status === 'rendered' && r.pdf_asset_id
+        const pdfDownloadPath = r.pdf_asset_id
             ? incomeDocumentDownloadPath(r.id)
             : null;
         const view_action = buildIncomeIssuedDocumentViewAction({

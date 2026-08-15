@@ -18,12 +18,39 @@ export function buildIncomeIssuedDocumentViewAction(params) {
         disabled_reason: enabled ? null : 'אין הרשאת צפייה',
     };
 }
+export function resolveIncomeIssuedPdfDownloadPath(params) {
+    const incomeDocumentId = String(params.incomeDocumentId ?? '').trim();
+    const assetId = params.pdfAssetId != null && String(params.pdfAssetId).trim()
+        ? String(params.pdfAssetId).trim()
+        : null;
+    if (!incomeDocumentId || !assetId)
+        return null;
+    return `/api/v1/income/documents/${incomeDocumentId}/download`;
+}
 export function buildIncomeIssuedDocumentPdfAction(params) {
-    const readiness = resolveIncomeDocumentPdfSendReadiness({
+    const assetId = params.pdfAssetId != null && String(params.pdfAssetId).trim()
+        ? String(params.pdfAssetId).trim()
+        : null;
+    const sendReadiness = resolveIncomeDocumentPdfSendReadiness({
         pdfRenderStatus: params.pdfRenderStatus,
         pdfAssetId: params.pdfAssetId,
     });
-    const enabled = readiness.ready && Boolean(params.pdfDownloadPath);
+    const readiness = assetId
+        ? {
+            ready: true,
+            status_key: 'pdf_ready',
+            status_label: 'PDF מוכן',
+            disabled_reason: null,
+            retry_eligible: false,
+        }
+        : sendReadiness;
+    const downloadPath = assetId
+        ? params.pdfDownloadPath || resolveIncomeIssuedPdfDownloadPath({
+            incomeDocumentId: params.incomeDocumentId,
+            pdfAssetId: assetId,
+        })
+        : null;
+    const enabled = readiness.ready && Boolean(downloadPath);
     const retryAllowed = params.canRetryPdf && readiness.retry_eligible;
     const baseReason = readiness.disabled_reason ?? 'קובץ PDF אינו זמין';
     const renderError = params.pdfRenderError != null ? String(params.pdfRenderError).trim() : '';
@@ -37,7 +64,7 @@ export function buildIncomeIssuedDocumentPdfAction(params) {
         label: 'הורדת PDF',
         enabled,
         income_document_id: params.incomeDocumentId,
-        pdf_download_path: enabled ? params.pdfDownloadPath : null,
+        pdf_download_path: enabled ? downloadPath : null,
         pdf_status_key: readiness.status_key,
         pdf_status_label: readiness.status_label,
         disabled_reason: disabledReason,

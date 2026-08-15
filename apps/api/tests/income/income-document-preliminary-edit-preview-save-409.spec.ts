@@ -119,7 +119,6 @@ test('D — Save updates same source row', () => {
 
 test('E — Save preserves number', () => {
   const saveBody = saveInPlaceFn();
-  assert.match(saveBody, /document_number:\s*source\.document_number/);
   assert.match(saveBody, /\.eq\('document_number', source\.document_number\)/);
   assert.doesNotMatch(saveBody, /allocateIncomeDocumentNumber/);
   assert.match(migration159, /NEW\.document_number is not distinct from OLD\.document_number/);
@@ -132,13 +131,15 @@ test('F — Save creates no second document', () => {
   assert.doesNotMatch(saveBody, /\.from\('income_documents'\)[\s\S]*\.insert\(\{/);
 });
 
-test('G — 409 root cause fixed (159 first-branch identity pins + mapped trigger)', () => {
+test('G — 409 root cause fixed (159-allowed business columns only; no identity write-back)', () => {
   const saveBody = saveInPlaceFn();
-  assert.match(saveBody, /document_status:\s*'issued'/);
-  assert.match(saveBody, /actor_user_id:\s*source\.actor_user_id/);
-  assert.match(saveBody, /source_draft_id:\s*source\.source_draft_id/);
-  assert.match(saveBody, /accounting_posting_status:\s*source\.accounting_posting_status/);
-  assert.match(saveBody, /cancelled_at:\s*source\.cancelled_at/);
+  const updateStart = saveBody.indexOf('.update({');
+  const updateEnd = saveBody.indexOf('.eq(\'organization_id\'', updateStart);
+  const payload = saveBody.slice(updateStart, updateEnd > updateStart ? updateEnd : updateStart + 2500);
+  assert.doesNotMatch(payload, /document_status:\s*'issued'/);
+  assert.doesNotMatch(payload, /actor_user_id:/);
+  assert.doesNotMatch(payload, /accounting_posting_status:/);
+  assert.doesNotMatch(payload, /cancelled_at:/);
   assert.match(saveBody, /save_preliminary_edit:update_income_documents/);
   assert.match(supabaseErrorsSource, /INCOME_DOCUMENT_IMMUTABLE_AFTER_ISSUE/);
   assert.match(migration159, /OLD\.document_type in \('quote', 'deal_invoice'\)/);

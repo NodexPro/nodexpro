@@ -12,7 +12,7 @@ import { assertIncomeIssuePermission } from './income-issuer-scope.service.js';
 import { resolveIssuerScopeForIssuedDocument } from './income-issued-document-issuer-scope.service.js';
 import { loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
 import { assertIncomeDocumentReadyForEmailSend, assertIncomeRepresentedClientScopeForEmailSend, buildIncomeDocumentEmailDeliveryIdempotencyKey, buildIncomeDocumentEmailMessage, buildIncomeDocumentEmailTemplateValues, buildIncomeEmailSenderSnapshot, customerDisplayNameFromSnapshot, normalizeIncomeDocumentRecipientEmail, parseIncomeDocumentEmailIdempotencyKey, } from './income-document-email-delivery.pure.js';
-import { loadIssuedDocumentPdfBytesForEmail } from './income-document-pdf.service.js';
+import { ensureIssuedDocumentCanonicalPdfAsset, loadIssuedDocumentPdfBytesForEmail, } from './income-document-pdf.service.js';
 import { documentTypeLabel } from './income-pdf-template.resolver.js';
 import { emitIncomeWorkEventAfterDocumentSentByEmail } from './income-work-engine-bridge.js';
 const SOURCE_MODULE = 'income';
@@ -46,6 +46,11 @@ export async function executeSendIncomeDocumentByEmail(ctx, body, deps = default
     const scope = await resolveIssuerScopeForIssuedDocument(ctx, doc);
     assertIncomeIssuePermission(scope);
     assertRowMatchesIssuerScope(scope, doc);
+    if (doc.document_status === 'issued') {
+        const ensured = await ensureIssuedDocumentCanonicalPdfAsset(ctx, scope.org_id, incomeDocumentId);
+        doc.pdf_asset_id = ensured.pdf_asset_id;
+        doc.pdf_render_status = ensured.pdf_render_status;
+    }
     assertIncomeDocumentReadyForEmailSend(doc);
     const representedClientId = assertIncomeRepresentedClientScopeForEmailSend(scope.represented_client_id);
     if (doc.represented_client_id !== representedClientId) {

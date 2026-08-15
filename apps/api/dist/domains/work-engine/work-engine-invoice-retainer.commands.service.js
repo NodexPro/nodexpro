@@ -240,6 +240,7 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
         };
     }
     if (command === WORK_ENGINE_INVOICE_RETAINER_COMMANDS.previewCycleOverride) {
+        const rawStep = body.document_details_step;
         const overrideAggregate = await previewRecurringCycleOverride({
             ctx,
             representedClientId,
@@ -247,7 +248,9 @@ export async function executeWorkEngineInvoiceRetainerCommand(ctx, command, body
             cycleDate: reqString(body, 'cycle_date'),
             periodKey: reqString(body, 'period_key'),
             cycleIndex: reqNumber(body, 'cycle_index'),
-            documentDetailsStep: parseDocumentDetailsStepFromBody(body),
+            documentDetailsStep: rawStep && typeof rawStep === 'object'
+                ? rawStep
+                : null,
         });
         return {
             ok: true,

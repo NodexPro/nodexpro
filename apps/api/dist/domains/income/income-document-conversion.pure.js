@@ -21,6 +21,63 @@ export const PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY = 'preliminary_edit_source_
 /** Stable backend reason when Issue is attempted on a preliminary-edit staging draft. */
 export const PRELIMINARY_EDIT_CANNOT_ISSUE_CODE = 'preliminary_edit_cannot_issue';
 export const PRELIMINARY_EDIT_CANNOT_ISSUE_MESSAGE = 'זהו עריכת מסמך קיים (הצעת מחיר / חשבון עסקה). יש לשמור את השינויים — לא להפיק מסמך חדש.';
+/** Stable backend reason when preliminary-edit document_date is before original issue_date. */
+export const PRELIMINARY_EDIT_DATE_BEFORE_ORIGINAL_CODE = 'preliminary_edit_date_before_original';
+export const PRELIMINARY_EDIT_DATE_BEFORE_ORIGINAL_MESSAGE = 'לא ניתן להקדים את תאריך המסמך לפני התאריך המקורי.';
+function isBlankDate(value) {
+    return value == null || String(value).trim() === '';
+}
+function isIsoDateOnly(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+/**
+ * Null-only heal for preliminary-edit staging drafts on Pencil replay.
+ * Preserves any already-entered staging dates.
+ */
+export function decidePreliminaryEditStagingDateHeal(params) {
+    const patch = {};
+    const sourceIssue = typeof params.sourceIssueDate === 'string' && isIsoDateOnly(params.sourceIssueDate.trim())
+        ? params.sourceIssueDate.trim()
+        : null;
+    const sourceDue = typeof params.sourceDueDate === 'string' && isIsoDateOnly(params.sourceDueDate.trim())
+        ? params.sourceDueDate.trim()
+        : null;
+    if (isBlankDate(params.stagingDocumentDate) && sourceIssue) {
+        patch.document_date = sourceIssue;
+    }
+    if (isBlankDate(params.stagingDueDate) && sourceDue) {
+        patch.due_date = sourceDue;
+    }
+    return patch;
+}
+/**
+ * Canonical preliminary-edit document_date floor decision (pure).
+ * Caller must reject before mutating staging / source.
+ */
+export function decidePreliminaryEditDocumentDateGuard(params) {
+    const sourceDocumentId = readPreliminaryEditSourceDocumentId(params.documentSettingsJson);
+    if (!sourceDocumentId)
+        return { action: 'noop' };
+    const original = typeof params.originalIssueDate === 'string' && isIsoDateOnly(params.originalIssueDate.trim())
+        ? params.originalIssueDate.trim()
+        : null;
+    const requested = typeof params.requestedDocumentDate === 'string' &&
+        isIsoDateOnly(params.requestedDocumentDate.trim())
+        ? params.requestedDocumentDate.trim()
+        : null;
+    if (!original || !requested)
+        return { action: 'allow' };
+    if (requested < original) {
+        return {
+            action: 'reject',
+            code: PRELIMINARY_EDIT_DATE_BEFORE_ORIGINAL_CODE,
+            message: PRELIMINARY_EDIT_DATE_BEFORE_ORIGINAL_MESSAGE,
+            original_issue_date: original,
+            requested_document_date: requested,
+        };
+    }
+    return { action: 'allow' };
+}
 export function readPreliminaryEditSourceDocumentId(documentSettingsJson) {
     if (!documentSettingsJson ||
         typeof documentSettingsJson !== 'object' ||
@@ -61,7 +118,7 @@ export function buildWizardSessionActions(params) {
         save: {
             enabled: params.canEdit,
             command: params.canEdit ? 'save_income_document_draft' : null,
-            label: isPreliminaryEdit ? 'שמור שינויים' : 'שמירת טיוטה',
+            label: isPreliminaryEdit ? 'שמירה' : 'שמירת טיוטה',
             disabled_reason: params.canEdit ? null : 'נדרשת הרשאת עריכה',
         },
         preview: {
@@ -90,6 +147,27 @@ export function buildWizardSessionActions(params) {
                     ? null
                     : 'נדרשת הרשאת הפקה',
         },
+        footer: isPreliminaryEdit
+            ? {
+                mode: 'preliminary_edit',
+                show_back: false,
+                show_next: false,
+                show_save: true,
+                show_preview: true,
+                show_issue: false,
+                close_after_save: true,
+                close_control: 'icon',
+            }
+            : {
+                mode: 'wizard',
+                show_back: true,
+                show_next: true,
+                show_save: true,
+                show_preview: true,
+                show_issue: true,
+                close_after_save: false,
+                close_control: 'text',
+            },
     };
 }
 const TARGET_LABELS = {

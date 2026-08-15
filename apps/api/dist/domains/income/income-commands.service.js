@@ -17,11 +17,13 @@ import { logIncomeIssueStage, withIncomeIssueStage } from './income-issue-diagno
 import { executeIssueAndSendIncomeDocument } from './income-document-issue-and-send.service.js';
 import { renderIncomeDocumentPdf } from './income-document-pdf.service.js';
 import { buildIncomeWorkspaceAggregate, buildIncomeWorkspaceWizardPatchAggregate, } from './income-workspace-aggregate.service.js';
+import { createIncomeCommandTimings, logIncomeCommandTimings, } from './income-command-timings.pure.js';
 import { insertSavedIncomeRecipient, loadIncomeRecipientById, searchIncomeRecipients, selectedFromInputFields, selectedFromSavedRow, } from './income-recipient.service.js';
 import { DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS, parseIncomeCustomerPaymentTermsKey, } from './income-customer-payment-terms.pure.js';
 import { assertRecipientInputValid, parseRecipientInputBody, validateRecipientInputFields, } from './income-recipient.validation.js';
 import { beginIncomeWizardDocumentDraft, addIncomeDocumentLine, updateIncomeDocumentLine, deleteIncomeDocumentLine, reorderIncomeDocumentLines, saveIncomeDocumentDraft, resumeIncomeDocumentDraftFromContext, generateIncomeDocumentPreview, updateIncomeDocumentDiscount, updateIncomeDocumentDraftSettings, updateIncomeDocumentNotes, updateIncomeDocumentAllocationNumber, updateIncomeDocumentDeliveryContact, } from './income-document-draft-editor.service.js';
 import { executeSendIncomeDocumentByEmail } from './income-document-email-delivery.service.js';
+import { buildIncomeDocumentEmailHistoryAggregate } from './income-document-email-history.service.js';
 import { executeSendIncomeDocumentByDocflow } from './income-document-docflow-delivery.service.js';
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
 import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review.service.js';
@@ -177,11 +179,22 @@ async function brandingCommandResponse(ctx, command, body, run) {
     };
 }
 async function wizardDraftCommandResponse(_ctx, command, scope, recipientOverlay, wizardDraftOverlay, startingStepKey = null) {
+    const timings = createIncomeCommandTimings();
+    const income_workspace_aggregate = await buildIncomeWorkspaceWizardPatchAggregate(scope, wizardDraftOverlay, recipientOverlay, startingStepKey, { includeBrandingProfile: false });
+    timings.mark('wizard_patch_aggregate_ms');
+    const command_timings = timings.snapshot();
+    const serializedBytes = Buffer.byteLength(JSON.stringify(income_workspace_aggregate), 'utf8');
+    logIncomeCommandTimings(command, command_timings, {
+        serialized_workspace_bytes: serializedBytes,
+        has_studio_live_preview: JSON.stringify(income_workspace_aggregate).includes('studio_live_preview'),
+    });
     return {
         ok: true,
         command,
-        income_workspace_aggregate: await buildIncomeWorkspaceWizardPatchAggregate(scope, wizardDraftOverlay, recipientOverlay, startingStepKey),
-        meta: { workspace_aggregate_mode: 'wizard_patch' },
+        // Wizard mutations already carry document_details_step; FE merge preserves prior
+        // document_branding_profile. Skip a second expensive branding/studio rebuild.
+        income_workspace_aggregate,
+        meta: { workspace_aggregate_mode: 'wizard_patch', command_timings },
     };
 }
 async function recipientCommandResponse(ctx, command, scope, overlay) {
@@ -798,12 +811,17 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
     }
     if (command === INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL) {
         const sendResult = await executeSendIncomeDocumentByEmail(ctx, body);
-        const response = await commandResponse(ctx, command);
+        const incomeDocumentId = reqUuid(body.income_document_id, 'income_document_id');
+        const [response, income_document_email_history_aggregate] = await Promise.all([
+            commandResponse(ctx, command),
+            buildIncomeDocumentEmailHistoryAggregate({ ctx, incomeDocumentId }),
+        ]);
         return {
             ...response,
+            income_document_email_history_aggregate,
             meta: {
                 idempotent_replay: sendResult.idempotentReplay,
-                income_document_id: reqUuid(body.income_document_id, 'income_document_id'),
+                income_document_id: incomeDocumentId,
                 delivery_attempt_id: sendResult.deliveryAttemptId,
                 delivery_result: sendResult.deliveryResult,
                 provider_message_id: sendResult.providerMessageId,

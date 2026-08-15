@@ -10,8 +10,11 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { assertRowMatchesIssuerScope, reqUuid, } from './income.guards.js';
 import { incomeWorkspacePermissionsFromContext } from './income-issuer-context.service.js';
 import { resolveIssuerScopeForIssuedDocument } from './income-issued-document-issuer-scope.service.js';
-import { buildIncomeDocumentEmailSendForm, mapDeliveryAttemptToDocumentHistoryRow, normalizeIncomeDocumentRecipientEmailPrefill, resolveIncomeDocumentEmailSendEligibility, toIncomeDocumentPdfSendReadinessView, deliveryAttemptResultLabel, formatEmailDeliverySentAtDisplay, subjectPreviewFromMessageSnapshot, } from './income-document-email-delivery.read-model.pure.js';
+import { buildIncomeDocumentEmailSendForm, buildIncomeDocumentEmailSendView, mapDeliveryAttemptToDocumentHistoryRow, normalizeIncomeDocumentRecipientEmailPrefill, resolveIncomeDocumentEmailSendEligibility, toIncomeDocumentPdfSendReadinessView, deliveryAttemptResultLabel, formatEmailDeliverySentAtDisplay, subjectPreviewFromMessageSnapshot, } from './income-document-email-delivery.read-model.pure.js';
 import { listIncomeDocumentEmailAttempts, listRepresentedClientEmailAttempts, loadIncomeDocumentsMetaByIds, } from './income-document-email-delivery.read-model.service.js';
+import { customerDisplayNameFromSnapshot } from './income-document-email-delivery.pure.js';
+import { ensureIssuedDocumentCanonicalPdfAsset } from './income-document-pdf.service.js';
+import { hasCanonicalIncomeDocumentPdfAsset } from './income-document-pdf-send-readiness.pure.js';
 import { resolveIssuedDocumentEmailRecipientPrefill } from './income-document-email-recipient-prefill.pure.js';
 import { loadIncomeRecipientById } from './income-recipient.service.js';
 import { INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY, INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY, } from './income.types.js';
@@ -114,12 +117,22 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params) {
     const scope = await resolveIssuerScopeForIssuedDocument(params.ctx, doc);
     assertRowMatchesIssuerScope(scope, doc);
     const attempts = await listIncomeDocumentEmailAttempts(scope.org_id, incomeDocumentId);
+    let pdfAssetId = doc.pdf_asset_id;
+    let pdfRenderStatus = doc.pdf_render_status;
+    const canEnsureCanonicalPdf = Boolean(scope.permissions.issue) &&
+        Boolean(scope.represented_client_id) &&
+        doc.document_status === 'issued';
+    if (canEnsureCanonicalPdf && !hasCanonicalIncomeDocumentPdfAsset(pdfAssetId)) {
+        const ensured = await ensureIssuedDocumentCanonicalPdfAsset(params.ctx, scope.org_id, incomeDocumentId);
+        pdfAssetId = ensured.pdf_asset_id;
+        pdfRenderStatus = ensured.pdf_render_status;
+    }
     const sendEligibility = resolveIncomeDocumentEmailSendEligibility({
         permissions: scope.permissions,
         representedClientId: scope.represented_client_id,
         documentStatus: doc.document_status,
-        pdfRenderStatus: doc.pdf_render_status,
-        pdfAssetId: doc.pdf_asset_id,
+        pdfRenderStatus,
+        pdfAssetId,
     });
     const recipientEmailDefault = await resolveDocumentRecipientEmailDefault({ scope, doc });
     const rows = attempts.map((attempt) => mapDeliveryAttemptToDocumentHistoryRow(attempt));
@@ -130,20 +143,33 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params) {
     if (sendEligibility.retry_pdf_render_allowed) {
         allowedActions.push(INCOME_COMMAND_RETRY_PDF_RENDER);
     }
+    const documentTypeLabel = DOCUMENT_TYPE_LABELS[doc.document_type];
+    const sendForm = buildIncomeDocumentEmailSendForm({
+        incomeDocumentId,
+        sendEligibility,
+        recipientEmailDefault,
+    });
+    const senderDisplayName = scope.represented_client_label?.trim() || scope.issuer_label.trim();
     return {
         aggregate_key: INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY,
         income_document_id: incomeDocumentId,
         document_number: doc.document_number,
-        document_type_label: DOCUMENT_TYPE_LABELS[doc.document_type],
+        document_type_label: documentTypeLabel,
         represented_client_id: doc.represented_client_id,
         recipient_email_default: recipientEmailDefault,
         pdf_send_readiness: toIncomeDocumentPdfSendReadinessView(sendEligibility.pdf_readiness),
         table_columns: DOCUMENT_HISTORY_COLUMNS,
         rows,
-        send_form: buildIncomeDocumentEmailSendForm({
-            incomeDocumentId,
+        send_form: sendForm,
+        send_view: buildIncomeDocumentEmailSendView({
+            documentTypeLabel,
+            documentNumber: doc.document_number,
+            senderDisplayName,
+            recipientDisplayName: customerDisplayNameFromSnapshot(doc.customer_snapshot_json) ?? '',
             sendEligibility,
-            recipientEmailDefault,
+            emailFieldPresent: sendForm.fields.some((field) => field.key === 'recipient_email'),
+            historyAvailable: rows.length > 0,
+            pdfAssetId,
         }),
         allowed_actions: allowedActions,
         empty_state: {

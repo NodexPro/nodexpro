@@ -4,10 +4,10 @@ import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  buildLedgerInvoiceGroups,
-  flattenLedgerInvoiceGroups,
-  sumLedgerRemainingBalance,
+  buildLedgerTransactionRows,
+  incomeLedgerCashboxTypeLabel,
 } from '../../src/domains/income/income-client-income-ledger-card.pure.js';
+import { resolveIncomeDocumentSemanticDates } from '../../src/domains/income/income-document-semantic-dates.pure.js';
 import type { IncomeIssuedDocumentViewAction } from '../../src/domains/income/income.types.js';
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -33,187 +33,174 @@ function viewAction(documentId: string): IncomeIssuedDocumentViewAction {
   };
 }
 
-describe('income client ledger card grouping', () => {
-  it('keeps unpaid invoice as a parent with no payment children and full remaining', () => {
-    const documents = buildLedgerInvoiceGroups([
-      {
-        income_document_id: 'inv-1',
-        document_type_label: 'חשבונית מס',
-        document_number: '4006',
-        issue_date: '2026-08-01',
-        original_amount: 1298,
-        remaining_balance: 1298,
-        currency: 'ILS',
-        view_action: viewAction('inv-1'),
-        payments: [],
-      },
-    ]);
-    assert.equal(documents.length, 1);
-    assert.equal(documents[0]?.original_amount_display, '₪1,298.00');
-    assert.equal(documents[0]?.remaining_balance_display, '₪1,298.00');
-    assert.equal(documents[0]?.remaining_balance_tone, 'open');
-    assert.equal(documents[0]?.payments.length, 0);
+describe('income client ledger card debit/credit composition', () => {
+  it('builds chronological חובה / זכות / יתרה from Accounting Base amounts', () => {
+    const ledger = buildLedgerTransactionRows({
+      currency: 'ILS',
+      fromDate: '2026-08-01',
+      toDate: '2026-08-31',
+      events: [
+        {
+          transaction_id: 'inv-4007',
+          row_kind: 'invoice',
+          transaction_date: '2026-08-15',
+          transaction_type_key: 'tax_invoice',
+          transaction_type_label: 'חשבונית מס',
+          document_id: 'inv-4007',
+          document_number: '4007',
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: 1298,
+          credit_amount: null,
+          view_action: viewAction('inv-4007'),
+        },
+        {
+          transaction_id: 'alloc-1001',
+          row_kind: 'payment',
+          transaction_date: '2026-08-15',
+          transaction_type_key: 'cashbox',
+          transaction_type_label: 'קופת העברות',
+          document_id: null,
+          document_number: null,
+          payment_document_id: 'rcp-1001',
+          payment_document_number: '1001',
+          debit_amount: null,
+          credit_amount: 1000,
+          view_action: viewAction('rcp-1001'),
+        },
+        {
+          transaction_id: 'inv-4008',
+          row_kind: 'invoice',
+          transaction_date: '2026-08-16',
+          transaction_type_key: 'tax_invoice',
+          transaction_type_label: 'חשבונית מס',
+          document_id: 'inv-4008',
+          document_number: '4008',
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: 1203.6,
+          credit_amount: null,
+          view_action: viewAction('inv-4008'),
+        },
+      ],
+    });
+
+    assert.equal(ledger.rows.length, 3);
+    assert.equal(ledger.rows[0]?.document_number, '4007');
+    assert.equal(ledger.rows[0]?.debit_amount_display, '₪1,298.00');
+    assert.equal(ledger.rows[0]?.credit_amount_display, '');
+    assert.equal(ledger.rows[0]?.running_balance_display, '₪1,298.00');
+    assert.equal(ledger.rows[0]?.credit_amount_tone, 'none');
+
+    assert.equal(ledger.rows[1]?.transaction_type_label, 'קופת העברות');
+    assert.equal(ledger.rows[1]?.payment_document_number, '1001');
+    assert.equal(ledger.rows[1]?.debit_amount_display, '');
+    assert.equal(ledger.rows[1]?.credit_amount_display, '₪1,000.00');
+    assert.equal(ledger.rows[1]?.credit_amount_tone, 'emphasis');
+    assert.equal(ledger.rows[1]?.running_balance_display, '₪298.00');
+    assert.equal(ledger.rows[1]?.view_action?.enabled, true);
+
+    assert.equal(ledger.rows[2]?.document_number, '4008');
+    assert.equal(ledger.rows[2]?.debit_amount_display, '₪1,203.60');
+    assert.equal(ledger.rows[2]?.running_balance_display, '₪1,501.60');
+
+    assert.equal(ledger.total_debit, 2501.6);
+    assert.equal(ledger.total_credit, 1000);
+    assert.equal(ledger.current_balance, 1501.6);
   });
 
-  it('places payment children directly under the invoice and keeps remaining on the parent', () => {
-    const documents = buildLedgerInvoiceGroups([
-      {
-        income_document_id: 'inv-1',
-        document_type_label: 'חשבונית מס',
-        document_number: '4007',
-        issue_date: '2026-08-23',
-        original_amount: 1298,
-        remaining_balance: 298,
-        currency: 'ILS',
-        view_action: viewAction('inv-1'),
-        payments: [
-          {
-            payment_id: 'pay-1',
-            allocation_id: 'alloc-1',
-            cashbox_display: 'העברה בנקאית',
-            payment_date: '2026-08-14',
-            amount: 1000,
-            currency: 'ILS',
-          },
-        ],
-      },
-    ]);
-    assert.equal(documents[0]?.original_amount_display, '₪1,298.00');
-    assert.equal(documents[0]?.remaining_balance_display, '₪298.00');
-    assert.equal(documents[0]?.payments.length, 1);
-    assert.equal(documents[0]?.payments[0]?.cashbox_display, 'העברה בנקאית');
-    assert.equal(documents[0]?.payments[0]?.payment_date_display, '14/08/2026');
-    assert.equal(documents[0]?.payments[0]?.amount_display, '₪1,000.00');
-
-    const rows = flattenLedgerInvoiceGroups(documents);
-    assert.equal(rows.length, 2);
-    assert.equal(rows[0]?.row_kind, 'invoice');
-    assert.equal(rows[0]?.visual_role, 'parent');
-    assert.equal(rows[0]?.view_action?.enabled, true);
-    assert.equal(rows[1]?.row_kind, 'payment');
-    assert.equal(rows[1]?.visual_role, 'child');
-    assert.equal(rows[1]?.document_type_label, 'העברה בנקאית');
-    assert.equal(rows[1]?.original_amount_display, '₪1,000.00');
-    assert.equal(rows[1]?.amount_tone, 'payment');
-    assert.equal(rows[1]?.view_action, null);
-    assert.equal(rows[1]?.remaining_balance_display, '');
+  it('keeps running balance from full history when the displayed period is filtered', () => {
+    const ledger = buildLedgerTransactionRows({
+      currency: 'ILS',
+      fromDate: '2026-08-01',
+      toDate: '2026-08-31',
+      events: [
+        {
+          transaction_id: 'inv-old',
+          row_kind: 'invoice',
+          transaction_date: '2026-07-01',
+          transaction_type_key: 'tax_invoice',
+          transaction_type_label: 'חשבונית מס',
+          document_id: 'inv-old',
+          document_number: '4000',
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: 500,
+          credit_amount: null,
+          view_action: null,
+        },
+        {
+          transaction_id: 'inv-new',
+          row_kind: 'invoice',
+          transaction_date: '2026-08-10',
+          transaction_type_key: 'tax_invoice',
+          transaction_type_label: 'חשבונית מס',
+          document_id: 'inv-new',
+          document_number: '4001',
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: 200,
+          credit_amount: null,
+          view_action: null,
+        },
+      ],
+    });
+    assert.equal(ledger.rows.length, 1);
+    assert.equal(ledger.rows[0]?.document_number, '4001');
+    assert.equal(ledger.rows[0]?.running_balance_display, '₪700.00');
+    assert.equal(ledger.current_balance, 700);
+    assert.equal(ledger.total_debit, 200);
   });
 
-  it('keeps fully paid invoices visible with remaining zero and payment history', () => {
-    const documents = buildLedgerInvoiceGroups([
-      {
-        income_document_id: 'inv-2',
-        document_type_label: 'חשבונית מס',
-        document_number: '4008',
-        issue_date: '2026-09-19',
-        original_amount: 1203.6,
-        remaining_balance: 0,
-        currency: 'ILS',
-        view_action: viewAction('inv-2'),
-        payments: [
-          {
-            payment_id: 'pay-2',
-            allocation_id: 'alloc-2',
-            cashbox_display: 'העברה בנקאית',
-            payment_date: '2026-09-20',
-            amount: 1203.6,
-            currency: 'ILS',
-          },
-        ],
-      },
-    ]);
-    assert.equal(documents[0]?.remaining_balance_display, '₪0.00');
-    assert.equal(documents[0]?.remaining_balance_tone, 'zero');
-    assert.equal(documents[0]?.payments.length, 1);
+  it('returns backend cashbox labels for payment methods', () => {
+    assert.equal(incomeLedgerCashboxTypeLabel('bank_transfer'), 'קופת העברות');
+    assert.equal(incomeLedgerCashboxTypeLabel('check'), 'קופת צ׳קים');
+    assert.equal(incomeLedgerCashboxTypeLabel('credit_card'), 'קופת כ. אשראי');
+    assert.equal(incomeLedgerCashboxTypeLabel('cash'), 'קופת מזומן');
   });
 
-  it('keeps multiple payments under the same invoice in backend order by date', () => {
-    const documents = buildLedgerInvoiceGroups([
-      {
-        income_document_id: 'inv-3',
-        document_type_label: 'חשבונית מס',
-        document_number: '4009',
-        issue_date: '2026-08-01',
-        original_amount: 2000,
-        remaining_balance: 500,
-        currency: 'ILS',
-        view_action: viewAction('inv-3'),
-        payments: [
-          {
-            payment_id: 'pay-b',
-            allocation_id: 'alloc-b',
-            cashbox_display: "צ'ק",
-            payment_date: '2026-08-20',
-            amount: 500,
-            currency: 'ILS',
-          },
-          {
-            payment_id: 'pay-a',
-            allocation_id: 'alloc-a',
-            cashbox_display: 'העברה בנקאית',
-            payment_date: '2026-08-10',
-            amount: 1000,
-            currency: 'ILS',
-          },
-        ],
-      },
-    ]);
-    assert.equal(documents[0]?.payments.length, 2);
-    assert.equal(documents[0]?.payments[0]?.cashbox_display, 'העברה בנקאית');
-    assert.equal(documents[0]?.payments[1]?.cashbox_display, "צ'ק");
-    const rows = flattenLedgerInvoiceGroups(documents);
-    assert.equal(rows.map((r) => r.row_kind).join(','), 'invoice,payment,payment');
-  });
-
-  it('sums remaining balances already computed by Accounting Base', () => {
-    const total = sumLedgerRemainingBalance([
-      {
-        income_document_id: 'a',
-        document_type_label: 'חשבונית מס',
-        document_number: '1',
-        issue_date: '2026-01-01',
-        original_amount: 2000,
-        remaining_balance: 1500,
-        currency: 'ILS',
-        view_action: null,
-        payments: [],
-      },
-      {
-        income_document_id: 'b',
-        document_type_label: 'חשבונית מס',
-        document_number: '2',
-        issue_date: '2026-01-02',
-        original_amount: 500,
-        remaining_balance: 0,
-        currency: 'ILS',
-        view_action: null,
-        payments: [],
-      },
-    ]);
-    assert.equal(total, 1500);
+  it('uses semantic document_date, never due_date, as the ledger תאריך', () => {
+    const semantic = resolveIncomeDocumentSemanticDates({
+      issue_date: '2026-08-23',
+      due_date: '2026-08-15',
+    });
+    assert.equal(semantic.document_date, '2026-08-15');
+    assert.equal(semantic.due_date, '2026-08-23');
   });
 });
 
 describe('income client ledger card contracts', () => {
-  it('uses Accounting Base allocations and remaining balance, not document-snapshot running balance', () => {
+  it('composes Accounting Base allocations and does not invent a local financial source', () => {
     assert.match(serviceSource, /sumPostedAllocationsForIncomeDocuments/);
     assert.match(serviceSource, /accounting_payment_allocations/);
     assert.match(serviceSource, /resolveIncomeInvoicePaymentState/);
-    assert.match(serviceSource, /incomePaymentMethodLabel/);
+    assert.match(serviceSource, /incomeLedgerCashboxTypeLabel/);
+    assert.match(serviceSource, /resolveIncomeDocumentSemanticDates/);
+    assert.match(serviceSource, /income_document_payment_operations/);
+    assert.match(serviceSource, /ledger_customer/);
+    assert.match(serviceSource, /issuer_context/);
+    assert.match(serviceSource, /send_by_email/);
+    assert.match(serviceSource, /send_by_docflow/);
     assert.match(serviceSource, /financial_source: INCOME_LEDGER_FINANCIAL_SOURCE/);
-    assert.match(serviceSource, /show_customer_picker: false/);
     assert.doesNotMatch(serviceSource, /TEMPORARY_ACCOUNTING_BASE_PENDING/);
-    assert.doesNotMatch(serviceSource, /computeLedgerMovementRows/);
+    assert.doesNotMatch(serviceSource, /incomePaymentMethodLabel/);
+    assert.doesNotMatch(serviceSource, /void params.endCustomerId/);
   });
 
-  it('does not render the internal accounting marker or a client picker', () => {
-    assert.doesNotMatch(modalSource, /TEMPORARY_ACCOUNTING_BASE_PENDING/);
-    assert.doesNotMatch(modalSource, /nx-income-ledger-modal__customer-select/);
-    assert.doesNotMatch(modalSource, /end_customer_options/);
-    assert.match(modalSource, /user_notice/);
-    assert.match(modalSource, /view_action\?\.enabled/);
+  it('renders backend ledger truth without frontend debit/credit or payment-method mapping', () => {
+    assert.match(modalSource, /ledger_customer/);
+    assert.match(modalSource, /issuer_context/);
+    assert.match(modalSource, /delivery_actions/);
+    assert.match(modalSource, /IncomeDocumentEmailHistoryModal/);
+    assert.match(modalSource, /IncomeDocumentDocflowSendModal/);
     assert.match(modalSource, /IncomeIssuedDocumentViewModal/);
-    assert.match(modalSource, /nx-income-ledger-modal__payment-amount/);
-    assert.match(modalSource, /nx-income-ledger-modal__row--child/);
+    assert.match(modalSource, /viewAction\.enabled/);
+    assert.match(modalSource, /credit_amount_tone/);
+    assert.match(modalSource, /from_date/);
+    assert.match(modalSource, /end_customer_options/);
+    assert.doesNotMatch(modalSource, /קופת העברות/);
+    assert.doesNotMatch(modalSource, /previousBalance/);
+    assert.doesNotMatch(modalSource, /due_date/);
+    assert.doesNotMatch(modalSource, /TEMPORARY_ACCOUNTING_BASE_PENDING/);
   });
 });

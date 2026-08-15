@@ -8,6 +8,7 @@ import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-met
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { issueYearFromIso, ledgerAmountFromTotalsSnapshot, formatLedgerMoneyReference, } from '../income/income-client-income-ledger-card.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
+import { formatIncomeCalendarDateHe, resolveIncomeDocumentSemanticDates, } from '../income/income-document-semantic-dates.pure.js';
 import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
 import { buildIncomeIssuedDocumentPdfAction, buildIncomeIssuedDocumentViewAction, } from '../income/income-document-view-action.pure.js';
 import { buildIncomeDocumentEmailDeliveryBlock } from '../income/income-document-email-delivery.read-model.pure.js';
@@ -48,35 +49,28 @@ const COUNTER_LABELS = {
 };
 const ISSUED_TABLE_COLUMNS = [
     { key: 'document_number', label: 'מספר מסמך' },
-    { key: 'issue_date_display', label: 'תאריך' },
+    { key: 'issue_date_display', label: 'תאריך מסמך' },
     { key: 'customer_display_name', label: 'לקוח' },
     { key: 'amount_display', label: 'סכום' },
     { key: 'status_label', label: 'סטטוס' },
-    { key: 'email_delivery', label: '@' },
-    { key: 'docflow_delivery', label: 'דוקפלו' },
     { key: 'view', label: 'צפייה' },
 ];
 /** Quote / Deal Invoice: edit / convert / cancel / view live in one compact actions cell. */
 const PRELIMINARY_ISSUED_TABLE_COLUMNS = [
     { key: 'document_number', label: 'מספר מסמך' },
-    { key: 'issue_date_display', label: 'תאריך' },
+    { key: 'issue_date_display', label: 'תאריך מסמך' },
     { key: 'customer_display_name', label: 'לקוח' },
     { key: 'amount_display', label: 'סכום' },
     { key: 'status_label', label: 'סטטוס' },
-    { key: 'email_delivery', label: '@' },
-    { key: 'docflow_delivery', label: 'דוקפלו' },
     { key: 'actions', label: 'פעולות' },
 ];
 const TAX_INVOICE_TABLE_COLUMNS = [
     { key: 'document_number', label: 'מספר מסמך' },
-    { key: 'issue_date_display', label: 'תאריך' },
+    { key: 'issue_date_display', label: 'תאריך מסמך' },
     { key: 'customer_display_name', label: 'לקוח' },
     { key: 'amount_display', label: 'סכום' },
     { key: 'due_date_display', label: 'תאריך לתשלום' },
     { key: 'payment_state', label: 'סטטוס תשלום' },
-    { key: 'email_delivery', label: '@' },
-    { key: 'docflow_delivery', label: 'דוקפלו' },
-    { key: 'view', label: 'צפייה' },
     { key: 'actions', label: 'פעולות' },
 ];
 const DRAFT_TABLE_COLUMNS = [
@@ -88,10 +82,7 @@ const DRAFT_TABLE_COLUMNS = [
     { key: 'edit', label: 'עריכה' },
 ];
 function formatDateDisplay(iso) {
-    if (!iso)
-        return '—';
-    const d = iso.length >= 10 ? iso.slice(0, 10) : iso;
-    return new Date(d).toLocaleDateString('he-IL');
+    return formatIncomeCalendarDateHe(iso);
 }
 function resolveSelectedYear(availableYears, requestedYear) {
     const currentYear = new Date().getFullYear();
@@ -224,10 +215,12 @@ async function loadIssuedDocumentCandidates(params) {
     return filtered.map((raw) => {
         const doc = raw;
         const year = issueYearFromIso(doc.issue_date);
+        const semanticDates = resolveIncomeDocumentSemanticDates({
+            issue_date: doc.issue_date,
+            due_date: doc.due_date,
+        });
         const amountRef = ledgerAmountFromTotalsSnapshot(doc.totals_snapshot_json);
-        const pdfPath = doc.pdf_render_status === 'rendered' && doc.pdf_asset_id
-            ? incomeDocumentDownloadPath(doc.id)
-            : null;
+        const pdfPath = doc.pdf_asset_id ? incomeDocumentDownloadPath(doc.id) : null;
         const view_action = buildIncomeIssuedDocumentViewAction({
             incomeDocumentId: doc.id,
             canView: params.canView,
@@ -266,7 +259,7 @@ async function loadIssuedDocumentCandidates(params) {
             payment_state_label = state.payment_state_label;
             payment_state_tone = state.payment_state_tone;
             payment_state_icon = resolvePaymentStateIcon(state.payment_state_key);
-            due_date_display = formatDateDisplay(doc.due_date);
+            due_date_display = formatDateDisplay(semanticDates.due_date);
             let disabledReason = null;
             if (!canPaymentWrite)
                 disabledReason = 'חסרה הרשאה לרישום תשלום';
@@ -332,11 +325,37 @@ async function loadIssuedDocumentCandidates(params) {
             if (cancelEnabled)
                 allowedActions.push(INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT);
         }
+        const email_delivery = buildIncomeDocumentEmailDeliveryBlock({
+            incomeDocumentId: doc.id,
+            attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
+            permissions: params.permissions,
+            representedClientId: params.representedClientId,
+            documentStatus: isCancelled ? 'cancelled_future' : 'issued',
+            pdfRenderStatus: doc.pdf_render_status,
+            pdfAssetId: doc.pdf_asset_id,
+        });
+        const docflow_delivery = buildIncomeDocumentDocflowDeliveryBlock({
+            incomeDocumentId: doc.id,
+            attemptCount: docflowAttemptCounts.get(doc.id) ?? 0,
+            permissions: params.permissions,
+            representedClientId: params.representedClientId,
+            documentStatus: isCancelled ? 'cancelled_future' : 'issued',
+            pdfRenderStatus: doc.pdf_render_status,
+            pdfAssetId: doc.pdf_asset_id,
+            docflowEntitled,
+            portalActive,
+        });
+        if (email_delivery.action.enabled) {
+            allowedActions.push(email_delivery.action.key);
+        }
+        if (docflow_delivery.action.enabled) {
+            allowedActions.push(docflow_delivery.action.key);
+        }
         return {
             row_id: doc.id,
             document_number: doc.document_number,
             document_type_label: DOCUMENT_TYPE_LABELS[doc.document_type],
-            issue_date_display: formatDateDisplay(doc.issue_date),
+            issue_date_display: formatDateDisplay(semanticDates.document_date),
             created_at_display: null,
             customer_display_name: customerDisplayFromSnapshot(doc.customer_snapshot_json),
             amount_display: amountRef > 0 ? formatLedgerMoneyReference(amountRef, doc.currency || 'ILS') : '—',
@@ -353,26 +372,8 @@ async function loadIssuedDocumentCandidates(params) {
             pdf_download_path: pdf_action.pdf_download_path,
             view_action,
             pdf_action,
-            email_delivery: buildIncomeDocumentEmailDeliveryBlock({
-                incomeDocumentId: doc.id,
-                attemptCount: emailAttemptCounts.get(doc.id) ?? 0,
-                permissions: params.permissions,
-                representedClientId: params.representedClientId,
-                documentStatus: isCancelled ? 'cancelled_future' : 'issued',
-                pdfRenderStatus: doc.pdf_render_status,
-                pdfAssetId: doc.pdf_asset_id,
-            }),
-            docflow_delivery: buildIncomeDocumentDocflowDeliveryBlock({
-                incomeDocumentId: doc.id,
-                attemptCount: docflowAttemptCounts.get(doc.id) ?? 0,
-                permissions: params.permissions,
-                representedClientId: params.representedClientId,
-                documentStatus: isCancelled ? 'cancelled_future' : 'issued',
-                pdfRenderStatus: doc.pdf_render_status,
-                pdfAssetId: doc.pdf_asset_id,
-                docflowEntitled,
-                portalActive,
-            }),
+            email_delivery,
+            docflow_delivery,
             record_payment_form,
             edit_action,
             convert_action,

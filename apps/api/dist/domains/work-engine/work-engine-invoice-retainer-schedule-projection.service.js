@@ -515,7 +515,12 @@ export async function buildRetainerScheduleProjection(params) {
                 issue_default_date: overdueIssueBounds?.issue_default_date ?? null,
                 issue_min_date: overdueIssueBounds?.issue_min_date ?? null,
                 issue_max_date: overdueIssueBounds?.issue_max_date ?? null,
-                allowed_actions: actions.filter((action) => !action.disabled).map((action) => action.key),
+                allowed_actions: [
+                    ...actions.filter((action) => !action.disabled).map((action) => action.key),
+                    ...(rowInteraction.preview_action?.visible
+                        ? [rowInteraction.preview_action.command]
+                        : []),
+                ],
                 actions,
             });
         }

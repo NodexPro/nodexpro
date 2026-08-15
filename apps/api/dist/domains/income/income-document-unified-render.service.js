@@ -15,6 +15,7 @@ import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.serv
 import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { adaptOwnerLayoutDefinitionForCanonicalRenderer, resolveIssuedDocumentLayoutSource, } from '../owner-invoice-document-layout/owner-invoice-document-layout-resolver.pure.js';
+import { resolveIncomeDocumentSemanticDates } from './income-document-semantic-dates.pure.js';
 function applyOwnerLayoutAdapterToIssuedBranding(branding, definition) {
     const adapted = adaptOwnerLayoutDefinitionForCanonicalRenderer(definition);
     return {
@@ -120,13 +121,17 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(sco
     if (layoutSource.mode === 'owner_layout') {
         issuedBranding = applyOwnerLayoutAdapterToIssuedBranding(issuedBranding, layoutSource.definition);
     }
+    const semanticDates = resolveIncomeDocumentSemanticDates({
+        issue_date: doc.issue_date,
+        due_date: doc.due_date,
+    });
     const renderInput = buildUnifiedIncomeDocumentRenderInput({
         branding: issuedBranding,
         document_type: doc.document_type,
         language: doc.language,
         document_number: doc.document_number,
-        document_date: doc.issue_date,
-        due_date: doc.due_date,
+        document_date: semanticDates.document_date ?? doc.issue_date,
+        due_date: semanticDates.due_date,
         currency: doc.currency,
         notes: doc.notes,
         payment_terms_display: paymentTermsDisplay,

@@ -1,13 +1,30 @@
 /**
- * Income client ledger card — display helpers.
- * Invoice remaining / payment amounts come from Accounting Base; this module only formats
- * and groups already-linked invoice + allocation rows.
+ * Income client ledger card — display composition only.
+ * Debit / credit / remaining / running balance amounts come from Accounting Base;
+ * this module formats already-resolved amounts and does not invent financial truth.
  */
 
+import { roundMoney2, type IncomeInvoicePaymentMethodKey } from '../accounting-base/accounting-base-income-payment.pure.js';
 import { amountReferenceFromTotalsSnapshot } from './income-work-engine-bridge.pure.js';
+import {
+  calendarDateIso,
+  formatIncomeCalendarDateHe,
+} from './income-document-semantic-dates.pure.js';
 import type { IncomeIssuedDocumentViewAction } from './income.types.js';
 
 export const INCOME_LEDGER_FINANCIAL_SOURCE = 'accounting_base' as const;
+
+export const INCOME_LEDGER_CASHBOX_LABELS: Record<IncomeInvoicePaymentMethodKey, string> = {
+  bank_transfer: 'קופת העברות',
+  check: 'קופת צ׳קים',
+  credit_card: 'קופת כ. אשראי',
+  cash: 'קופת מזומן',
+  other: 'קופת אחר',
+};
+
+export function incomeLedgerCashboxTypeLabel(method: IncomeInvoicePaymentMethodKey): string {
+  return INCOME_LEDGER_CASHBOX_LABELS[method];
+}
 
 export type LedgerInvoicePaymentInput = {
   payment_id: string;
@@ -16,6 +33,9 @@ export type LedgerInvoicePaymentInput = {
   payment_date: string;
   amount: number;
   currency: string;
+  receipt_document_id: string | null;
+  receipt_document_number: string | null;
+  view_action: IncomeIssuedDocumentViewAction | null;
 };
 
 export type LedgerInvoiceGroupInput = {
@@ -50,17 +70,39 @@ export type IncomeClientIncomeLedgerCardInvoiceGroup = {
   payments: IncomeClientIncomeLedgerCardPaymentChild[];
 };
 
+export type LedgerTransactionEventInput = {
+  transaction_id: string;
+  row_kind: 'invoice' | 'payment';
+  transaction_date: string;
+  transaction_type_key: string;
+  transaction_type_label: string;
+  document_id: string | null;
+  document_number: string | null;
+  payment_document_id: string | null;
+  payment_document_number: string | null;
+  debit_amount: number | null;
+  credit_amount: number | null;
+  view_action: IncomeIssuedDocumentViewAction | null;
+};
+
 export type IncomeClientIncomeLedgerCardRenderRow = {
   row_id: string;
+  transaction_id: string;
   row_kind: 'invoice' | 'payment';
-  visual_role: 'parent' | 'child';
-  document_type_label: string;
+  transaction_date: string;
+  transaction_date_display: string;
+  transaction_type_key: string;
+  transaction_type_label: string;
+  document_id: string | null;
   document_number: string;
-  issue_date_display: string;
-  original_amount_display: string;
-  remaining_balance_display: string;
-  amount_tone: 'default' | 'payment';
+  payment_document_id: string | null;
+  payment_document_number: string;
+  debit_amount_display: string;
+  credit_amount_display: string;
+  credit_amount_tone: 'emphasis' | 'none';
+  running_balance_display: string;
   view_action: IncomeIssuedDocumentViewAction | null;
+  allowed_actions: string[];
 };
 
 export function ledgerAmountFromTotalsSnapshot(
@@ -83,17 +125,97 @@ export function formatLedgerMoneyReference(amount: number, currency: string): st
 }
 
 export function formatLedgerIssueDateDisplay(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = iso.length >= 10 ? iso.slice(0, 10) : iso;
-  const [y, m, day] = d.split('-');
-  if (!y || !m || !day) return d;
-  return `${day}/${m}/${y}`;
+  return formatIncomeCalendarDateHe(iso);
 }
 
 export function issueYearFromIso(iso: string | null | undefined): number | null {
-  if (!iso || iso.length < 4) return null;
-  const y = Number(iso.slice(0, 4));
+  const date = calendarDateIso(iso);
+  if (!date) return null;
+  const y = Number(date.slice(0, 4));
   return Number.isFinite(y) ? y : null;
+}
+
+export function parseLedgerCalendarDate(raw: string | null | undefined): string | null {
+  return calendarDateIso(raw);
+}
+
+function compareLedgerEvents(a: LedgerTransactionEventInput, b: LedgerTransactionEventInput): number {
+  const dateCmp = a.transaction_date.localeCompare(b.transaction_date);
+  if (dateCmp !== 0) return dateCmp;
+  if (a.row_kind !== b.row_kind) return a.row_kind === 'invoice' ? -1 : 1;
+  const aNum = a.document_number ?? a.payment_document_number ?? a.transaction_id;
+  const bNum = b.document_number ?? b.payment_document_number ?? b.transaction_id;
+  return aNum.localeCompare(bNum, 'he', { numeric: true });
+}
+
+function moneyCell(amount: number | null, currency: string): string {
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) return '';
+  return formatLedgerMoneyReference(amount, currency);
+}
+
+export function buildLedgerTransactionRows(params: {
+  events: LedgerTransactionEventInput[];
+  currency: string;
+  fromDate: string;
+  toDate: string;
+}): {
+  rows: IncomeClientIncomeLedgerCardRenderRow[];
+  total_debit: number;
+  total_credit: number;
+  current_balance: number;
+} {
+  const sorted = [...params.events].sort(compareLedgerEvents);
+  let running = 0;
+  let currentBalance = 0;
+  const composed: Array<IncomeClientIncomeLedgerCardRenderRow & { debit: number; credit: number }> = [];
+
+  for (const event of sorted) {
+    const debit = event.debit_amount != null && event.debit_amount > 0 ? roundMoney2(event.debit_amount) : 0;
+    const credit = event.credit_amount != null && event.credit_amount > 0 ? roundMoney2(event.credit_amount) : 0;
+    running = roundMoney2(running + debit - credit);
+    currentBalance = running;
+    const viewEnabled = Boolean(event.view_action?.enabled);
+    composed.push({
+      row_id: `${event.row_kind}:${event.transaction_id}`,
+      transaction_id: event.transaction_id,
+      row_kind: event.row_kind,
+      transaction_date: event.transaction_date,
+      transaction_date_display: formatLedgerIssueDateDisplay(event.transaction_date),
+      transaction_type_key: event.transaction_type_key,
+      transaction_type_label: event.transaction_type_label,
+      document_id: event.document_id,
+      document_number: event.document_number ?? '',
+      payment_document_id: event.payment_document_id,
+      payment_document_number: event.payment_document_number ?? '',
+      debit_amount_display: moneyCell(debit > 0 ? debit : null, params.currency),
+      credit_amount_display: moneyCell(credit > 0 ? credit : null, params.currency),
+      credit_amount_tone: credit > 0 ? 'emphasis' : 'none',
+      running_balance_display: formatLedgerMoneyReference(running, params.currency),
+      view_action: event.view_action,
+      allowed_actions: viewEnabled ? ['open_document'] : [],
+      debit,
+      credit,
+    });
+  }
+
+  const rows = composed
+    .filter((row) => row.transaction_date >= params.fromDate && row.transaction_date <= params.toDate)
+    .map(({ debit: _d, credit: _c, ...row }) => row);
+
+  let totalDebit = 0;
+  let totalCredit = 0;
+  for (const row of composed) {
+    if (row.transaction_date < params.fromDate || row.transaction_date > params.toDate) continue;
+    totalDebit = roundMoney2(totalDebit + row.debit);
+    totalCredit = roundMoney2(totalCredit + row.credit);
+  }
+
+  return {
+    rows,
+    total_debit: totalDebit,
+    total_credit: totalCredit,
+    current_balance: currentBalance,
+  };
 }
 
 function compareIsoThenNumber(aDate: string, bDate: string, aNum: string, bNum: string): number {
@@ -135,45 +257,10 @@ export function buildLedgerInvoiceGroups(
   });
 }
 
-export function flattenLedgerInvoiceGroups(
-  documents: IncomeClientIncomeLedgerCardInvoiceGroup[],
-): IncomeClientIncomeLedgerCardRenderRow[] {
-  const rows: IncomeClientIncomeLedgerCardRenderRow[] = [];
-  for (const doc of documents) {
-    rows.push({
-      row_id: `invoice:${doc.income_document_id}`,
-      row_kind: 'invoice',
-      visual_role: 'parent',
-      document_type_label: doc.document_type_label,
-      document_number: doc.document_number,
-      issue_date_display: doc.issue_date_display,
-      original_amount_display: doc.original_amount_display,
-      remaining_balance_display: doc.remaining_balance_display,
-      amount_tone: 'default',
-      view_action: doc.view_action,
-    });
-    for (const payment of doc.payments) {
-      rows.push({
-        row_id: `payment:${payment.allocation_id}`,
-        row_kind: 'payment',
-        visual_role: 'child',
-        document_type_label: payment.cashbox_display,
-        document_number: '',
-        issue_date_display: payment.payment_date_display,
-        original_amount_display: payment.amount_display,
-        remaining_balance_display: '',
-        amount_tone: 'payment',
-        view_action: null,
-      });
-    }
-  }
-  return rows;
-}
-
 export function sumLedgerRemainingBalance(invoices: LedgerInvoiceGroupInput[]): number {
   let total = 0;
   for (const invoice of invoices) {
     total += invoice.remaining_balance;
   }
-  return Math.round(total * 100) / 100;
+  return roundMoney2(total);
 }
