@@ -3,6 +3,7 @@ import type {
   IncomeDocumentEmailDeliveryBlock,
   IncomeDocumentEmailHistoryAttemptRow,
   IncomeDocumentEmailSendForm,
+  IncomeDocumentEmailSendView,
   IncomeDocumentPdfSendReadinessView,
   IncomeWorkspacePermissions,
 } from './income.types.js';
@@ -189,6 +190,62 @@ export function buildIncomeDocumentEmailDeliveryBlock(params: {
       canOpenHistory,
       historyDisabledReason: canOpenHistory ? null : 'אין הרשאת צפייה',
     }),
+  };
+}
+
+const SEND_NOT_READY_USER_MESSAGE = 'לא ניתן לשלוח את המסמך כרגע.';
+
+const PDF_SEND_DISABLED_REASON_KEYS = new Set([
+  'pdf_pending',
+  'pdf_failed',
+  'pdf_unavailable',
+]);
+
+export function resolveIncomeDocumentEmailSendDisabledUserMessage(params: {
+  enabled: boolean;
+  disabled_reason_key: string | null;
+  disabled_reason: string | null;
+}): string | null {
+  if (params.enabled) return null;
+  if (params.disabled_reason_key && PDF_SEND_DISABLED_REASON_KEYS.has(params.disabled_reason_key)) {
+    return SEND_NOT_READY_USER_MESSAGE;
+  }
+  return params.disabled_reason;
+}
+
+export function buildIncomeDocumentEmailSendView(params: {
+  documentTypeLabel: string;
+  documentNumber: string;
+  senderDisplayName: string;
+  recipientDisplayName: string;
+  sendEligibility: {
+    enabled: boolean;
+    disabled_reason_key: string | null;
+    disabled_reason: string | null;
+  };
+  emailFieldPresent: boolean;
+  historyAvailable: boolean;
+}): IncomeDocumentEmailSendView {
+  const typeLabel = String(params.documentTypeLabel ?? '').trim();
+  const documentNumber = String(params.documentNumber ?? '').trim();
+  const documentDisplay = [typeLabel, documentNumber].filter(Boolean).join(' ');
+  const senderDisplayName = String(params.senderDisplayName ?? '').trim() || '—';
+  const recipientDisplayName = String(params.recipientDisplayName ?? '').trim() || '—';
+  return {
+    title: documentDisplay ? `שליחה במייל — ${documentDisplay}` : 'שליחה במייל',
+    sender_label: 'מאת',
+    sender_display_name: senderDisplayName,
+    recipient_name_label: 'אל',
+    recipient_display_name: recipientDisplayName,
+    document_label: 'מסמך',
+    document_display: documentDisplay || '—',
+    attachment_filename: documentDisplay ? `${documentDisplay}.pdf` : 'document.pdf',
+    email_label: 'אימייל',
+    email_editable: params.emailFieldPresent,
+    send_button_label: 'שליחה',
+    send_disabled_user_message: resolveIncomeDocumentEmailSendDisabledUserMessage(params.sendEligibility),
+    history_toggle_label: 'היסטוריה',
+    history_available: params.historyAvailable,
   };
 }
 

@@ -272,6 +272,24 @@ export interface IncomeDocumentEmailSendForm {
   disabled_reason_key: string | null;
 }
 
+/** Ready-to-render Send Invoice view. Frontend must not infer sender/recipient/PDF meaning. */
+export interface IncomeDocumentEmailSendView {
+  title: string;
+  sender_label: string;
+  sender_display_name: string;
+  recipient_name_label: string;
+  recipient_display_name: string;
+  document_label: string;
+  document_display: string;
+  attachment_filename: string;
+  email_label: string;
+  email_editable: boolean;
+  send_button_label: string;
+  send_disabled_user_message: string | null;
+  history_toggle_label: string;
+  history_available: boolean;
+}
+
 export interface IncomeDocumentEmailHistoryAggregate {
   aggregate_key: typeof INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY;
   income_document_id: string;
@@ -284,6 +302,7 @@ export interface IncomeDocumentEmailHistoryAggregate {
   table_columns: Array<{ key: string; label: string }>;
   rows: IncomeDocumentEmailHistoryAttemptRow[];
   send_form: IncomeDocumentEmailSendForm;
+  send_view: IncomeDocumentEmailSendView;
   allowed_actions: string[];
   empty_state: { visible: boolean; title: string; description: string | null };
 }
@@ -848,6 +867,7 @@ export interface IncomeCommandResponse {
   work_engine_invoice_retainer_setup_aggregate?: import('../work-engine/work-engine-invoice-retainer.types.js').WorkEngineInvoiceRetainerSetupAggregate;
   work_engine_invoices_tab_aggregate?: import('../work-engine/work-engine-invoices-tab.read-model.service.js').WorkEngineInvoicesTabAggregate;
   work_engine_invoices_client_documents_by_type_aggregate?: WorkEngineInvoicesClientDocumentsByTypeAggregate;
+  income_document_email_history_aggregate?: IncomeDocumentEmailHistoryAggregate;
   issue_result?: import('./income-document-issue-result.pure.js').IncomeIssueResult;
   meta?: IncomeCommandResponseMeta & {
     payment_id?: string;

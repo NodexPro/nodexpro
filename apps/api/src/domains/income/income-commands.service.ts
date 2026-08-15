@@ -88,6 +88,7 @@ import {
   type WizardDraftOverlay,
 } from './income-document-draft-editor.service.js';
 import { executeSendIncomeDocumentByEmail } from './income-document-email-delivery.service.js';
+import { buildIncomeDocumentEmailHistoryAggregate } from './income-document-email-history.service.js';
 import { executeSendIncomeDocumentByDocflow } from './income-document-docflow-delivery.service.js';
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
 import { refreshRecurringCycleDraftReviewCase } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review.service.js';
@@ -1105,12 +1106,17 @@ export async function executeIncomeCommand(
 
   if (command === INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL) {
     const sendResult = await executeSendIncomeDocumentByEmail(ctx, body);
-    const response = await commandResponse(ctx, command);
+    const incomeDocumentId = reqUuid(body.income_document_id, 'income_document_id');
+    const [response, income_document_email_history_aggregate] = await Promise.all([
+      commandResponse(ctx, command),
+      buildIncomeDocumentEmailHistoryAggregate({ ctx, incomeDocumentId }),
+    ]);
     return {
       ...response,
+      income_document_email_history_aggregate,
       meta: {
         idempotent_replay: sendResult.idempotentReplay,
-        income_document_id: reqUuid(body.income_document_id, 'income_document_id'),
+        income_document_id: incomeDocumentId,
         delivery_attempt_id: sendResult.deliveryAttemptId,
         delivery_result: sendResult.deliveryResult,
         provider_message_id: sendResult.providerMessageId,

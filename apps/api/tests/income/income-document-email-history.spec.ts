@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   buildIncomeDocumentEmailDeliveryBlock,
+  buildIncomeDocumentEmailSendView,
   incomeEmailDeliveryAttemptCountLabel,
+  resolveIncomeDocumentEmailSendDisabledUserMessage,
   resolveIncomeDocumentEmailSendEligibility,
 } from '../../src/domains/income/income-document-email-delivery.read-model.pure.js';
 
@@ -102,4 +104,77 @@ test('types define email history aggregates and delivery block', () => {
   assert.match(typesSource, /income_represented_client_email_history_aggregate/);
   assert.match(typesSource, /IncomeDocumentEmailDeliveryBlock/);
   assert.match(typesSource, /email_delivery: IncomeDocumentEmailDeliveryBlock/);
+  assert.match(typesSource, /IncomeDocumentEmailSendView/);
+  assert.match(typesSource, /send_view: IncomeDocumentEmailSendView/);
+  assert.match(typesSource, /income_document_email_history_aggregate\?: IncomeDocumentEmailHistoryAggregate/);
+});
+
+test('email send view uses backend labels and hides PDF internals', () => {
+  const view = buildIncomeDocumentEmailSendView({
+    documentTypeLabel: 'חשבונית מס',
+    documentNumber: '4005',
+    senderDisplayName: 'Test4',
+    recipientDisplayName: 'NYC',
+    sendEligibility: { enabled: true, disabled_reason_key: null, disabled_reason: null },
+    emailFieldPresent: true,
+    historyAvailable: false,
+  });
+  assert.equal(view.title, 'שליחה במייל — חשבונית מס 4005');
+  assert.equal(view.sender_label, 'מאת');
+  assert.equal(view.sender_display_name, 'Test4');
+  assert.equal(view.recipient_name_label, 'אל');
+  assert.equal(view.recipient_display_name, 'NYC');
+  assert.equal(view.document_label, 'מסמך');
+  assert.equal(view.document_display, 'חשבונית מס 4005');
+  assert.equal(view.attachment_filename, 'חשבונית מס 4005.pdf');
+  assert.equal(view.email_label, 'אימייל');
+  assert.equal(view.email_editable, true);
+  assert.equal(view.send_button_label, 'שליחה');
+  assert.equal(view.send_disabled_user_message, null);
+});
+
+test('email send view maps PDF unreadiness to a short human message', () => {
+  assert.equal(
+    resolveIncomeDocumentEmailSendDisabledUserMessage({
+      enabled: false,
+      disabled_reason_key: 'pdf_failed',
+      disabled_reason: 'הפקת קובץ ה-PDF נכשלה. ניתן לנסות שוב.',
+    }),
+    'לא ניתן לשלוח את המסמך כרגע.',
+  );
+  assert.equal(
+    resolveIncomeDocumentEmailSendDisabledUserMessage({
+      enabled: false,
+      disabled_reason_key: 'pdf_pending',
+      disabled_reason: 'ה-PDF בהכנה. ניתן לשלוח לאחר סיום ההפקה.',
+    }),
+    'לא ניתן לשלוח את המסמך כרגע.',
+  );
+  assert.match(
+    String(
+      resolveIncomeDocumentEmailSendDisabledUserMessage({
+        enabled: false,
+        disabled_reason_key: 'self_mode_not_allowed',
+        disabled_reason: 'שליחה במייל זמינה במצב ניהול לקוח בלבד',
+      }),
+    ),
+    /ניהול לקוח/,
+  );
+});
+
+test('email history aggregate builder and send command return send_view without extra GET', () => {
+  const historyServiceSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-email-history.service.ts'),
+    'utf8',
+  );
+  const commandsSource = readFileSync(
+    join(dir, '../../src/domains/income/income-commands.service.ts'),
+    'utf8',
+  );
+  assert.match(historyServiceSource, /buildIncomeDocumentEmailSendView/);
+  assert.match(historyServiceSource, /customerDisplayNameFromSnapshot/);
+  assert.match(historyServiceSource, /represented_client_label/);
+  assert.match(commandsSource, /INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL/);
+  assert.match(commandsSource, /buildIncomeDocumentEmailHistoryAggregate/);
+  assert.match(commandsSource, /income_document_email_history_aggregate/);
 });

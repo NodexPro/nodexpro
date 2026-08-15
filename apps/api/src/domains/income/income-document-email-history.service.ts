@@ -18,6 +18,7 @@ import { incomeWorkspacePermissionsFromContext } from './income-issuer-context.s
 import { resolveIssuerScopeForIssuedDocument } from './income-issued-document-issuer-scope.service.js';
 import {
   buildIncomeDocumentEmailSendForm,
+  buildIncomeDocumentEmailSendView,
   mapDeliveryAttemptToDocumentHistoryRow,
   normalizeIncomeDocumentRecipientEmailPrefill,
   resolveIncomeDocumentEmailSendEligibility,
@@ -31,6 +32,7 @@ import {
   listRepresentedClientEmailAttempts,
   loadIncomeDocumentsMetaByIds,
 } from './income-document-email-delivery.read-model.service.js';
+import { customerDisplayNameFromSnapshot } from './income-document-email-delivery.pure.js';
 import { resolveIssuedDocumentEmailRecipientPrefill } from './income-document-email-recipient-prefill.pure.js';
 import { loadIncomeRecipientById } from './income-recipient.service.js';
 import type { IncomeDocumentType } from './income.types.js';
@@ -220,20 +222,34 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params: {
     allowedActions.push(INCOME_COMMAND_RETRY_PDF_RENDER);
   }
 
+  const documentTypeLabel = DOCUMENT_TYPE_LABELS[doc.document_type];
+  const sendForm = buildIncomeDocumentEmailSendForm({
+    incomeDocumentId,
+    sendEligibility,
+    recipientEmailDefault,
+  });
+  const senderDisplayName =
+    scope.represented_client_label?.trim() || scope.issuer_label.trim();
+
   return {
     aggregate_key: INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY,
     income_document_id: incomeDocumentId,
     document_number: doc.document_number,
-    document_type_label: DOCUMENT_TYPE_LABELS[doc.document_type],
+    document_type_label: documentTypeLabel,
     represented_client_id: doc.represented_client_id,
     recipient_email_default: recipientEmailDefault,
     pdf_send_readiness: toIncomeDocumentPdfSendReadinessView(sendEligibility.pdf_readiness),
     table_columns: DOCUMENT_HISTORY_COLUMNS,
     rows,
-    send_form: buildIncomeDocumentEmailSendForm({
-      incomeDocumentId,
+    send_form: sendForm,
+    send_view: buildIncomeDocumentEmailSendView({
+      documentTypeLabel,
+      documentNumber: doc.document_number,
+      senderDisplayName,
+      recipientDisplayName: customerDisplayNameFromSnapshot(doc.customer_snapshot_json) ?? '',
       sendEligibility,
-      recipientEmailDefault,
+      emailFieldPresent: sendForm.fields.some((field) => field.key === 'recipient_email'),
+      historyAvailable: rows.length > 0,
     }),
     allowed_actions: allowedActions,
     empty_state: {
