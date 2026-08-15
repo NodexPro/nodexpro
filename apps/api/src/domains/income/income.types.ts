@@ -281,7 +281,8 @@ export interface IncomeDocumentEmailSendView {
   recipient_display_name: string;
   document_label: string;
   document_display: string;
-  attachment_filename: string;
+  attachment_filename: string | null;
+  attachment_ready: boolean;
   email_label: string;
   email_editable: boolean;
   send_button_label: string;

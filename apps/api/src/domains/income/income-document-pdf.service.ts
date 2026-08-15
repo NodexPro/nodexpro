@@ -18,6 +18,7 @@ import {
 } from './income-document-unified-render.service.js';
 import { renderIncomeDocumentPdfBufferFromHtml } from './income-document-pdf.renderer.js';
 import { requiresPdfRender } from './income-pdf-template.resolver.js';
+import { hasCanonicalIncomeDocumentPdfAsset } from './income-document-pdf-send-readiness.pure.js';
 
 const BUCKET_INCOME_DOCUMENTS = 'income-documents';
 let bucketEnsured = false;
@@ -290,7 +291,7 @@ export async function downloadIncomeDocumentPdfBuffer(
   incomeDocumentId: string,
 ): Promise<{ buffer: Buffer; fileName: string }> {
   const { doc } = await loadIncomeDocumentForDownload(ctx, incomeDocumentId);
-  if (!doc.pdf_asset_id) {
+  if (!hasCanonicalIncomeDocumentPdfAsset(doc.pdf_asset_id)) {
     throw notFound('PDF is not available for this document');
   }
 

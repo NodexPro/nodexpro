@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import {
   buildIncomeDocumentEmailDeliveryBlock,
   buildIncomeDocumentEmailSendView,
@@ -10,6 +11,8 @@ import {
   resolveIncomeDocumentEmailSendDisabledUserMessage,
   resolveIncomeDocumentEmailSendEligibility,
 } from '../../src/domains/income/income-document-email-delivery.read-model.pure.js';
+import { hasCanonicalIncomeDocumentPdfAsset } from '../../src/domains/income/income-document-pdf-send-readiness.pure.js';
+import { assertIncomeDocumentReadyForEmailSend } from '../../src/domains/income/income-document-email-delivery.pure.js';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const routesSource = readFileSync(join(dir, '../../src/domains/income/income.routes.ts'), 'utf8');
@@ -118,6 +121,7 @@ test('email send view uses backend labels and hides PDF internals', () => {
     sendEligibility: { enabled: true, disabled_reason_key: null, disabled_reason: null },
     emailFieldPresent: true,
     historyAvailable: false,
+    pdfAssetId: randomUUID(),
   });
   assert.equal(view.title, 'שליחה במייל — חשבונית מס 4005');
   assert.equal(view.sender_label, 'מאת');
@@ -126,6 +130,7 @@ test('email send view uses backend labels and hides PDF internals', () => {
   assert.equal(view.recipient_display_name, 'NYC');
   assert.equal(view.document_label, 'מסמך');
   assert.equal(view.document_display, 'חשבונית מס 4005');
+  assert.equal(view.attachment_ready, true);
   assert.equal(view.attachment_filename, 'חשבונית מס 4005.pdf');
   assert.equal(view.email_label, 'אימייל');
   assert.equal(view.email_editable, true);
@@ -177,4 +182,73 @@ test('email history aggregate builder and send command return send_view without 
   assert.match(commandsSource, /INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL/);
   assert.match(commandsSource, /buildIncomeDocumentEmailHistoryAggregate/);
   assert.match(commandsSource, /income_document_email_history_aggregate/);
+});
+
+test('email send is enabled when canonical pdf_asset_id exists despite stale/failed render status', () => {
+  const assetId = randomUUID();
+  assert.equal(hasCanonicalIncomeDocumentPdfAsset(assetId), true);
+  for (const status of ['failed', 'pending', 'stale', 'rendered']) {
+    const email = resolveIncomeDocumentEmailSendEligibility({
+      permissions: officePerms,
+      representedClientId: 'b2222222-2222-4222-8222-222222222222',
+      documentStatus: 'issued',
+      pdfRenderStatus: status,
+      pdfAssetId: assetId,
+    });
+    assert.equal(email.enabled, true, `status=${status}`);
+    assert.equal(email.disabled_reason_key, null, `status=${status}`);
+    const view = buildIncomeDocumentEmailSendView({
+      documentTypeLabel: 'חשבונית מס',
+      documentNumber: '4007',
+      senderDisplayName: 'Test4',
+      recipientDisplayName: 'NYC',
+      sendEligibility: email,
+      emailFieldPresent: true,
+      historyAvailable: false,
+      pdfAssetId: assetId,
+    });
+    assert.equal(view.attachment_ready, true);
+    assert.equal(view.attachment_filename, 'חשבונית מס 4007.pdf');
+    assert.equal(view.send_disabled_user_message, null);
+    assert.doesNotThrow(() =>
+      assertIncomeDocumentReadyForEmailSend({
+        document_status: 'issued',
+        pdf_render_status: status,
+        pdf_asset_id: assetId,
+      } as never),
+    );
+  }
+});
+
+test('email send stays disabled and attachment is not ready when pdf_asset_id is missing', () => {
+  const email = resolveIncomeDocumentEmailSendEligibility({
+    permissions: officePerms,
+    representedClientId: 'b2222222-2222-4222-8222-222222222222',
+    documentStatus: 'issued',
+    pdfRenderStatus: 'failed',
+    pdfAssetId: null,
+  });
+  assert.equal(hasCanonicalIncomeDocumentPdfAsset(null), false);
+  assert.equal(email.enabled, false);
+  assert.equal(email.disabled_reason_key, 'pdf_failed');
+  const view = buildIncomeDocumentEmailSendView({
+    documentTypeLabel: 'חשבונית מס',
+    documentNumber: '4007',
+    senderDisplayName: 'Test4',
+    recipientDisplayName: 'NYC',
+    sendEligibility: email,
+    emailFieldPresent: true,
+    historyAvailable: false,
+    pdfAssetId: null,
+  });
+  assert.equal(view.attachment_ready, false);
+  assert.equal(view.attachment_filename, null);
+  assert.equal(view.send_disabled_user_message, 'לא ניתן לשלוח את המסמך כרגע.');
+  assert.throws(() =>
+    assertIncomeDocumentReadyForEmailSend({
+      document_status: 'issued',
+      pdf_render_status: 'failed',
+      pdf_asset_id: null,
+    } as never),
+  );
 });

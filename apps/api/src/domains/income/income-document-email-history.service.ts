@@ -250,6 +250,7 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params: {
       sendEligibility,
       emailFieldPresent: sendForm.fields.some((field) => field.key === 'recipient_email'),
       historyAvailable: rows.length > 0,
+      pdfAssetId: doc.pdf_asset_id,
     }),
     allowed_actions: allowedActions,
     empty_state: {

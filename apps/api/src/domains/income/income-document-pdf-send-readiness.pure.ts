@@ -28,6 +28,13 @@ const PDF_PENDING_REASON = 'ה-PDF בהכנה. ניתן לשלוח לאחר סי
 const PDF_FAILED_REASON = 'הפקת קובץ ה-PDF נכשלה. ניתן לנסות שוב.';
 const PDF_UNAVAILABLE_REASON = 'קובץ PDF אינו זמין לשליחה';
 
+/** Canonical usable PDF artifact — same truth Download uses (`pdf_asset_id` present). */
+export function hasCanonicalIncomeDocumentPdfAsset(
+  pdfAssetId: string | null | undefined,
+): boolean {
+  return pdfAssetId != null && String(pdfAssetId).trim() !== '';
+}
+
 export function resolveIncomeDocumentPdfSendReadiness(params: {
   pdfRenderStatus: string;
   pdfAssetId: string | null | undefined;

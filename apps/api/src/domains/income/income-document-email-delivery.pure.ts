@@ -1,4 +1,5 @@
 import { badRequest } from '../../shared/errors.js';
+import { hasCanonicalIncomeDocumentPdfAsset } from './income-document-pdf-send-readiness.pure.js';
 import type { ClientOperationsCoreClientRow } from '../client-operations/client-operations-client-core.read.js';
 import type { IncomeBrandingResolvedProfile } from './income-document-branding.types.js';
 import type { IncomeDocumentType } from './income.types.js';
@@ -48,10 +49,7 @@ export function assertIncomeDocumentReadyForEmailSend(doc: IncomeIssuedDocumentE
   if (doc.document_status !== 'issued') {
     throw badRequest('Document must be issued before email delivery');
   }
-  if (doc.pdf_render_status !== 'rendered') {
-    throw badRequest('Document PDF is not ready for email delivery');
-  }
-  if (!doc.pdf_asset_id) {
+  if (!hasCanonicalIncomeDocumentPdfAsset(doc.pdf_asset_id)) {
     throw badRequest('Document PDF attachment is not available');
   }
 }

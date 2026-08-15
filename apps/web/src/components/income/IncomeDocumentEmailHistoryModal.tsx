@@ -268,10 +268,12 @@ export function IncomeDocumentEmailHistoryModal({
                   <dd>{sendView.document_display}</dd>
                 </div>
               </dl>
-              <p className="nx-income-email-send-modal__attachment">
-                <span aria-hidden="true">📎</span>
-                <span>{sendView.attachment_filename}</span>
-              </p>
+              {sendView.attachment_ready && sendView.attachment_filename ? (
+                <p className="nx-income-email-send-modal__attachment">
+                  <span aria-hidden="true">📎</span>
+                  <span>{sendView.attachment_filename}</span>
+                </p>
+              ) : null}
               {sendView.send_disabled_user_message ? (
                 <p className="nx-income-email-send-modal__hint" role="status">
                   {sendView.send_disabled_user_message}

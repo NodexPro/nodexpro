@@ -17,6 +17,7 @@ test('email send modal renders backend send_view and one שליחה button', () 
   assert.match(modal, /recipient_display_name/);
   assert.match(modal, /document_display/);
   assert.match(modal, /attachment_filename/);
+  assert.match(modal, /attachment_ready/);
   assert.match(modal, /send_disabled_user_message/);
   assert.match(modal, /send_form\.command/);
   assert.match(modal, /income_document_email_history_aggregate/);

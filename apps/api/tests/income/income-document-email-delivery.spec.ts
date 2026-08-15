@@ -63,7 +63,31 @@ test('income email delivery pure validates readiness and recipient', () => {
       pdf_asset_id: randomUUID(),
     } as never),
   );
+  assert.doesNotThrow(() =>
+    assertIncomeDocumentReadyForEmailSend({
+      document_status: 'issued',
+      pdf_render_status: 'failed',
+      pdf_asset_id: randomUUID(),
+    } as never),
+  );
+  assert.throws(() =>
+    assertIncomeDocumentReadyForEmailSend({
+      document_status: 'issued',
+      pdf_render_status: 'rendered',
+      pdf_asset_id: null,
+    } as never),
+  );
   assert.throws(() => assertIncomeRepresentedClientScopeForEmailSend(null));
+});
+
+test('email send command loads the same canonical pdf_asset_id as download', () => {
+  const pdfServiceSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-pdf.service.ts'),
+    'utf8',
+  );
+  assert.match(serviceSource, /loadIssuedDocumentPdfBytesForEmail\(scope\.org_id, doc\.pdf_asset_id/);
+  assert.match(pdfServiceSource, /hasCanonicalIncomeDocumentPdfAsset\(doc\.pdf_asset_id\)/);
+  assert.match(pdfServiceSource, /loadIssuedDocumentPdfBytesForEmail/);
 });
 
 test('income email delivery pure builds sender snapshot from client operations', () => {

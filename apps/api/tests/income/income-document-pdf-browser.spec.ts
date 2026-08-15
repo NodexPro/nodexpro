@@ -102,11 +102,11 @@ test('E: issued HTML viewer does not import Chromium/PDF renderer', () => {
   assert.doesNotMatch(issuedViewSource, /CHROMIUM_PATH/);
 });
 
-test('F: Email stays PDF-gated on rendered status', () => {
+test('F: Email send is gated on canonical pdf_asset_id, not stale render status', () => {
   assert.match(emailPureSource, /assertIncomeDocumentReadyForEmailSend/);
-  assert.match(emailPureSource, /pdf_render_status !== 'rendered'/);
-  assert.match(emailPureSource, /Document PDF is not ready for email delivery/);
-  assert.match(emailPureSource, /pdf_asset_id/);
+  assert.match(emailPureSource, /hasCanonicalIncomeDocumentPdfAsset/);
+  assert.match(emailPureSource, /Document PDF attachment is not available/);
+  assert.doesNotMatch(emailPureSource, /pdf_render_status !== 'rendered'/);
 });
 
 test('G: retry / schedule can transition failed → pending → render path', () => {

@@ -13,6 +13,7 @@ import {
   INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY,
 } from './income.types.js';
 import {
+  hasCanonicalIncomeDocumentPdfAsset,
   resolveIncomeDocumentPdfSendReadiness,
   type IncomeDocumentPdfSendReadiness,
 } from './income-document-pdf-send-readiness.pure.js';
@@ -98,7 +99,9 @@ export function resolveIncomeDocumentEmailSendEligibility(
       retry_pdf_render_allowed,
     };
   }
-  if (!pdf_readiness.ready) {
+  // Email send uses the same canonical artifact as Download: usable pdf_asset_id.
+  // Stale/failed pdf_render_status must not block send when the asset exists.
+  if (!hasCanonicalIncomeDocumentPdfAsset(input.pdfAssetId)) {
     return {
       enabled: false,
       disabled_reason: pdf_readiness.disabled_reason,
@@ -112,7 +115,7 @@ export function resolveIncomeDocumentEmailSendEligibility(
     disabled_reason: null,
     disabled_reason_key: null,
     pdf_readiness,
-    retry_pdf_render_allowed: false,
+    retry_pdf_render_allowed,
   };
 }
 
@@ -225,12 +228,14 @@ export function buildIncomeDocumentEmailSendView(params: {
   };
   emailFieldPresent: boolean;
   historyAvailable: boolean;
+  pdfAssetId: string | null;
 }): IncomeDocumentEmailSendView {
   const typeLabel = String(params.documentTypeLabel ?? '').trim();
   const documentNumber = String(params.documentNumber ?? '').trim();
   const documentDisplay = [typeLabel, documentNumber].filter(Boolean).join(' ');
   const senderDisplayName = String(params.senderDisplayName ?? '').trim() || '—';
   const recipientDisplayName = String(params.recipientDisplayName ?? '').trim() || '—';
+  const attachment_ready = hasCanonicalIncomeDocumentPdfAsset(params.pdfAssetId);
   return {
     title: documentDisplay ? `שליחה במייל — ${documentDisplay}` : 'שליחה במייל',
     sender_label: 'מאת',
@@ -239,7 +244,12 @@ export function buildIncomeDocumentEmailSendView(params: {
     recipient_display_name: recipientDisplayName,
     document_label: 'מסמך',
     document_display: documentDisplay || '—',
-    attachment_filename: documentDisplay ? `${documentDisplay}.pdf` : 'document.pdf',
+    attachment_filename: attachment_ready
+      ? documentDisplay
+        ? `${documentDisplay}.pdf`
+        : 'document.pdf'
+      : null,
+    attachment_ready,
     email_label: 'אימייל',
     email_editable: params.emailFieldPresent,
     send_button_label: 'שליחה',

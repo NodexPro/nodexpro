@@ -116,6 +116,28 @@ test('failed PDF disables send with pdf_failed and retry when issue permitted', 
   assert.doesNotMatch(String(email.disabled_reason), /Error|stack|supabase/i);
 });
 
+test('email send enables on existing asset while DocFlow PDF mapping stays status-strict', () => {
+  const assetId = randomUUID();
+  const email = resolveIncomeDocumentEmailSendEligibility({
+    ...baseEmailInput,
+    pdfRenderStatus: 'failed',
+    pdfAssetId: assetId,
+  });
+  const docflow = resolveIncomeDocumentDocflowSendEligibility({
+    permissions: officePerms,
+    representedClientId: baseEmailInput.representedClientId,
+    documentStatus: 'issued',
+    pdfRenderStatus: 'failed',
+    pdfAssetId: assetId,
+    docflowEntitled: true,
+    portalActive: true,
+  });
+  assert.equal(email.enabled, true);
+  assert.equal(docflow.enabled, false);
+  assert.equal(email.pdf_readiness.status_key, docflow.pdf_readiness.status_key);
+  assert.equal(email.pdf_readiness.ready, false);
+});
+
 test('rendered + asset enables send when other gates pass', () => {
   const assetId = randomUUID();
   const email = resolveIncomeDocumentEmailSendEligibility({
@@ -174,7 +196,8 @@ test('Email and DocFlow share identical PDF readiness mapping', () => {
 test('web email modal initializes from default_value and has no /clients lookup', () => {
   assert.match(emailModalSource, /default_value/);
   assert.match(emailModalSource, /formValuesFromAggregate/);
-  assert.match(emailModalSource, /allowed_actions\.includes\('retry_income_document_pdf_render'\)/);
+  assert.match(emailModalSource, /attachment_ready/);
+  assert.doesNotMatch(emailModalSource, /נסה שוב להפיק PDF/);
   assert.doesNotMatch(emailModalSource, /\/clients/);
   assert.doesNotMatch(emailModalSource, /fetchClient|loadClient/);
   assert.doesNotMatch(emailModalSource, /pdf_render_status\s*===/);
