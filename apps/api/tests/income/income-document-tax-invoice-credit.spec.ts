@@ -41,6 +41,30 @@ const modalSource = readFileSync(
   join(dir, '../../../web/src/components/work-engine/WorkEngineClientDocumentsByTypeModal.tsx'),
   'utf8',
 );
+const creditConfirmSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineTaxInvoiceCreditConfirmModal.tsx'),
+  'utf8',
+);
+const documentsShellSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineClientDocumentManagementShell.tsx'),
+  'utf8',
+);
+const tabHostSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineTabHost.tsx'),
+  'utf8',
+);
+const incomeWizardSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineIncomeDocumentWizardModal.tsx'),
+  'utf8',
+);
+const retainerSetupSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineInvoiceRetainerSetupModal.tsx'),
+  'utf8',
+);
+const creditServiceSource = readFileSync(
+  join(dir, '../../src/domains/income/income-document-tax-invoice-credit.service.ts'),
+  'utf8',
+);
 const migration161 = readFileSync(
   join(dir, '../../../../supabase/migrations/161_income_tax_invoice_credit_lineage.sql'),
   'utf8',
@@ -173,9 +197,38 @@ test('tax invoice row owns credit_action; quote/deal cancel untouched', () => {
   assert.match(documentsByTypeSource, /params\.documentType === 'tax_invoice'/);
   assert.match(documentsByTypeSource, /INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT/);
   assert.match(modalSource, /row\.credit_action/);
-  assert.match(modalSource, /begin_income_tax_invoice_credit|creditTarget\.action\.command/);
-  assert.match(modalSource, /זיכוי מלא|creditMode/);
+  assert.match(modalSource, /onRequestTaxInvoiceCredit/);
+  assert.match(documentsShellSource, /begin_income_tax_invoice_credit|creditRequest\.action\.command/);
+  assert.match(creditConfirmSource, /זיכוי מלא|creditMode/);
+  assert.match(documentsShellSource, /setDocumentsModalOpen\(false\)/);
+  assert.doesNotMatch(modalSource, /nx-modal-overlay--nested[\s\S]{0,80}credit/);
   assert.doesNotMatch(modalSource, /cancel_action[\s\S]{0,80}tax_invoice/);
+});
+
+test('credit handoff opens canonical Income wizard, not retainer setup', () => {
+  const creditHandlerStart = documentsShellSource.indexOf('const handleConfirmTaxInvoiceCredit');
+  const creditHandlerEnd = documentsShellSource.indexOf('if (!panel?.visible)');
+  assert.ok(creditHandlerStart >= 0 && creditHandlerEnd > creditHandlerStart);
+  const creditHandler = documentsShellSource.slice(creditHandlerStart, creditHandlerEnd);
+  assert.match(creditHandler, /onOpenConvertedDraft/);
+  assert.match(creditHandler, /income_workspace_aggregate/);
+  assert.doesNotMatch(creditHandler, /setRetainerSetupOpen\(true\)/);
+  assert.doesNotMatch(creditHandler, /setRetainerCustomerOpen\(true\)/);
+  assert.match(tabHostSource, /WorkEngineIncomeDocumentWizardModal/);
+  assert.match(tabHostSource, /onOpenConvertedDraft=\{async \(\{ workspaceAggregate \}\) => \{/);
+  assert.match(tabHostSource, /setWizardOpen\(true\)/);
+  assert.match(incomeWizardSource, /resolveIncomeWizardStartingStepKey/);
+  assert.doesNotMatch(creditConfirmSource, /WorkEngineInvoiceRetainerSetupModal/);
+  assert.doesNotMatch(creditConfirmSource, /ריטיינר/);
+  assert.doesNotMatch(retainerSetupSource, /begin_income_tax_invoice_credit/);
+  assert.doesNotMatch(retainerSetupSource, /credit_tax_invoice/);
+});
+
+test('begin credit returns workspace starting at document_details', () => {
+  assert.match(creditServiceSource, /wizard_starting_step_key/);
+  assert.match(creditServiceSource, /resumed\.result\.starting_step_key/);
+  assert.match(creditServiceSource, /income_workspace_aggregate: workspace/);
+  assert.match(creditServiceSource, /converted_draft_id: params\.draftId/);
 });
 
 test('lineage migration is forward-only 161', () => {

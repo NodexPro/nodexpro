@@ -455,12 +455,16 @@ async function buildCreditCommandResponse(params: {
   const resumed = await resumeIncomeDocumentDraftFromContext(params.ctx, {
     draft_id: params.draftId,
   });
-  const workspace = await buildIncomeWorkspaceAggregate(
+  let workspace = await buildIncomeWorkspaceAggregate(
     params.ctx,
     resumed.scope,
     resumed.result.recipientOverlay,
     resumed.result.wizardOverlay,
   );
+  const wizard_starting_step_key = resumed.result.starting_step_key;
+  if (wizard_starting_step_key) {
+    workspace = { ...workspace, wizard_starting_step_key };
+  }
   const [context, invoicesTab, documentsByType] = await Promise.all([
     buildIncomeWorkspaceContextAggregate(params.ctx),
     buildWorkEngineInvoicesTabAggregate({ ctx: params.ctx }),

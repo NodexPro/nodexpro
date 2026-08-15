@@ -17,6 +17,7 @@ import { WorkEngineIncomePreviewStep } from './WorkEngineIncomePreviewStep';
 import { WorkEngineInvoiceRetainerPreviewModal } from './WorkEngineInvoiceRetainerPreviewModal';
 import { executeIncomeCommand } from '../../api/income';
 import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
+import { resolveIncomeWizardStartingStepKey } from '../../income/income-wizard-starting-step.pure';
 import type { WorkEngineInvoicesDocumentCreationEntrypoint } from '../../api/work-engine';
 import type {
   IncomeDocumentBrandingProfileAggregate,
@@ -140,10 +141,20 @@ export function WorkEngineIncomeDocumentWizardModal({
   }, [wizard.steps, issuerChoice, footerActions]);
 
   useEffect(() => {
-    const startingStepKey = workspaceAgg?.wizard_starting_step_key ?? null;
+    const startingStepKey = resolveIncomeWizardStartingStepKey({
+      steps: visibleSteps,
+      wizard_starting_step_key: workspaceAgg?.wizard_starting_step_key,
+      active_wizard_draft_id: workspaceAgg?.active_wizard_draft_id,
+      has_document_details_step: Boolean(workspaceAgg?.document_details_step),
+    });
     const idx = stepIndexForKey(visibleSteps, startingStepKey);
     if (idx != null) setStepIndex(idx);
-  }, [visibleSteps, workspaceAgg?.wizard_starting_step_key]);
+  }, [
+    visibleSteps,
+    workspaceAgg?.wizard_starting_step_key,
+    workspaceAgg?.active_wizard_draft_id,
+    workspaceAgg?.document_details_step,
+  ]);
 
   useEffect(() => {
     const docTypeFromDraft = (workspaceAgg as any)?.document_details_step?.document_type_key ?? null;
@@ -525,6 +536,31 @@ export function WorkEngineIncomeDocumentWizardModal({
           step={documentDetailsStep}
           busy={busy}
           onGeneratePreview={() => void handleGeneratePreview(false)}
+          onSaveAllocationNumber={async (allocation_number) => {
+            const cmds = wizard.income_commands;
+            const draftId = activeDraftId;
+            if (!draftId) throw new Error('טיוטה לא נמצאה');
+            onBusyChange(true);
+            try {
+              const res = await executeIncomeCommand(cmds.update_allocation_number, {
+                draft_id: draftId,
+                allocation_number,
+              });
+              if ('income_workspace_aggregate' in res) {
+                const payload = res as {
+                  income_workspace_aggregate: IncomeWorkspaceAggregate;
+                  meta?: { workspace_aggregate_mode?: 'full' | 'wizard_patch' };
+                };
+                setWorkspaceAgg((prev) =>
+                  payload.meta?.workspace_aggregate_mode === 'wizard_patch'
+                    ? mergeIncomeWorkspaceWizardPatch(prev, payload.income_workspace_aggregate)
+                    : payload.income_workspace_aggregate,
+                );
+              }
+            } finally {
+              onBusyChange(false);
+            }
+          }}
         />
       );
     }

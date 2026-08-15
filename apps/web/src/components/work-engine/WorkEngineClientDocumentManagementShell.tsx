@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
   IncomeClientDocumentManagementPanel,
-  IncomeCommandResponse,
   IncomeCustomersTableRow,
   IncomeTableModel,
   IncomeWorkspaceAggregate,
   SelectIncomeIssuerContextCommandResponse,
 } from '../../api/income';
-import { executeIncomeCommand } from '../../api/income';
+import { executeIncomeCommand, isIncomeCommandResponse } from '../../api/income';
 import type { IncomeClientDocumentTypeCounter } from '../../income/income-workspace-types';
 import {
   IncomeClientDocumentManagementPanelView,
@@ -17,8 +16,13 @@ import {
   type IncomeClientDocumentPanelActionResult,
 } from '../income/IncomeClientDocumentManagementPanel';
 import { IncomeClientIncomeLedgerCardModal } from '../income/IncomeClientIncomeLedgerCardModal';
+import { IncomeRepresentedClientEmailHistoryModal } from '../income/IncomeRepresentedClientEmailHistoryModal';
 import { WorkEngineClientDocumentTypeCounters } from './WorkEngineClientDocumentTypeCounters';
 import { WorkEngineClientDocumentsByTypeModal } from './WorkEngineClientDocumentsByTypeModal';
+import {
+  WorkEngineTaxInvoiceCreditConfirmModal,
+  type WorkEngineTaxInvoiceCreditRequest,
+} from './WorkEngineTaxInvoiceCreditConfirmModal';
 import { WorkEngineInvoiceRetainerCustomerModal } from './WorkEngineInvoiceRetainerCustomerModal';
 import { WorkEngineInvoiceRetainerSetupModal } from './WorkEngineInvoiceRetainerSetupModal';
 import type { WorkEngineInvoiceRetainerSetupAggregate } from '../../income/income-workspace-types';
@@ -43,10 +47,6 @@ function isSelectIssuerResponse(
     (res as { command: string }).command === 'select_income_issuer_context' &&
     'income_workspace_context_aggregate' in res
   );
-}
-
-function isIncomeCommandResponse(res: unknown): res is IncomeCommandResponse {
-  return typeof res === 'object' && res != null && 'income_workspace_aggregate' in res;
 }
 
 type ShellProps = {
@@ -105,6 +105,12 @@ export function WorkEngineClientDocumentManagementShell({
     useState<WorkEngineInvoiceRetainerSetupAggregate | null>(null);
   const [retainerAddCustomerPending, setRetainerAddCustomerPending] = useState(false);
   const [retainerListRefreshKey, setRetainerListRefreshKey] = useState(0);
+  const [emailHistoryOpen, setEmailHistoryOpen] = useState(false);
+  const [emailHistoryClientId, setEmailHistoryClientId] = useState<string | null>(null);
+  const [creditRequest, setCreditRequest] = useState<WorkEngineTaxInvoiceCreditRequest | null>(null);
+  const [creditMode, setCreditMode] = useState<'full' | 'partial'>('full');
+  const [creditReasonKey, setCreditReasonKey] = useState('billing_error');
+  const [creditReasonNote, setCreditReasonNote] = useState('');
 
   useEffect(() => {
     setEndCustomersModel(customersTableModel);
@@ -207,6 +213,11 @@ export function WorkEngineClientDocumentManagementShell({
         setRetainerCustomerOpen(true);
         return;
       }
+      if (result.kind === 'email_history') {
+        setEmailHistoryClientId(result.clientId);
+        setEmailHistoryOpen(true);
+        return;
+      }
 
       const { action } = result;
       if (!action.command) return;
@@ -252,6 +263,53 @@ export function WorkEngineClientDocumentManagementShell({
     [],
   );
 
+  const handleConfirmTaxInvoiceCredit = useCallback(async () => {
+    if (!creditRequest?.action.enabled) return;
+    onBusyChange?.(true);
+    try {
+      const res = await executeIncomeCommand(creditRequest.action.command, {
+        income_document_id: creditRequest.documentId,
+        credit_mode: creditMode,
+        reason_key: creditReasonKey,
+        reason_note: creditReasonNote.trim() || null,
+        idempotency_key: crypto.randomUUID(),
+        documents_list_year: creditRequest.documentsListYear,
+      });
+      if (!isIncomeCommandResponse(res)) return;
+      const draftId =
+        res.meta?.converted_draft_id ??
+        res.income_workspace_aggregate.active_wizard_draft_id ??
+        null;
+      setCreditRequest(null);
+      setCreditReasonNote('');
+      if (draftId && onOpenConvertedDraft) {
+        await onOpenConvertedDraft({
+          draftId,
+          workspaceAggregate: res.income_workspace_aggregate,
+        });
+      } else if (draftId && onEditDraft) {
+        await onEditDraft(draftId);
+      }
+      if (res.work_engine_invoices_tab_aggregate) {
+        onInvoicesTabRefresh?.(res.work_engine_invoices_tab_aggregate);
+      }
+    } catch (e) {
+      onError?.(e instanceof Error ? e.message : String(e));
+    } finally {
+      onBusyChange?.(false);
+    }
+  }, [
+    creditMode,
+    creditReasonKey,
+    creditReasonNote,
+    creditRequest,
+    onBusyChange,
+    onEditDraft,
+    onError,
+    onInvoicesTabRefresh,
+    onOpenConvertedDraft,
+  ]);
+
   if (!panel?.visible) return null;
 
   return (
@@ -294,7 +352,31 @@ export function WorkEngineClientDocumentManagementShell({
           setDocumentsModalOpen(false);
           setDocumentsModalParams(null);
         }}
+        onRequestTaxInvoiceCredit={(request) => {
+          setCreditMode(request.action.modes[0]?.key ?? 'full');
+          setCreditReasonKey(request.action.reason_options[0]?.key ?? 'billing_error');
+          setCreditReasonNote('');
+          setCreditRequest(request);
+          setDocumentsModalOpen(false);
+          setDocumentsModalParams(null);
+        }}
         onInvoicesTabRefresh={onInvoicesTabRefresh}
+      />
+
+      <WorkEngineTaxInvoiceCreditConfirmModal
+        request={creditRequest}
+        creditMode={creditMode}
+        creditReasonKey={creditReasonKey}
+        creditReasonNote={creditReasonNote}
+        busy={busy}
+        onCreditModeChange={setCreditMode}
+        onCreditReasonKeyChange={setCreditReasonKey}
+        onCreditReasonNoteChange={setCreditReasonNote}
+        onClose={() => {
+          setCreditRequest(null);
+          setCreditReasonNote('');
+        }}
+        onConfirm={() => void handleConfirmTaxInvoiceCredit()}
       />
 
       <IncomeClientEndCustomersModal
@@ -338,6 +420,18 @@ export function WorkEngineClientDocumentManagementShell({
           setLedgerOpen(false);
           setLedgerClientId(null);
           setLedgerClientName('');
+        }}
+        onError={onError}
+      />
+
+      <IncomeRepresentedClientEmailHistoryModal
+        open={emailHistoryOpen}
+        representedClientId={emailHistoryClientId}
+        busy={busy}
+        onBusyChange={onBusyChange}
+        onClose={() => {
+          setEmailHistoryOpen(false);
+          setEmailHistoryClientId(null);
         }}
         onError={onError}
       />

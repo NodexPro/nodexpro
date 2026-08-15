@@ -24,6 +24,7 @@ export function mergeIncomeWorkspaceWizardPatch(
     warnings: patch.warnings.length > 0 ? patch.warnings : previous.warnings,
     allowed_actions: patch.allowed_actions,
     document_details_step: patch.document_details_step,
+    wizard_starting_step_key: patch.wizard_starting_step_key ?? previous.wizard_starting_step_key,
     active_wizard_draft_id: patch.active_wizard_draft_id,
     document_branding_profile:
       patch.document_branding_profile ?? previous.document_branding_profile ?? null,

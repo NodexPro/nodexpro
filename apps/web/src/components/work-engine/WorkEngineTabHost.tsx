@@ -7,7 +7,7 @@
  *   - Each enabled tab loads its backend aggregate_route only.
  */
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   fetchWorkEngineClientsTabAggregate,
@@ -19,7 +19,12 @@ import {
   type WorkEngineQueueFiltersInput,
 } from '../../api/work-engine';
 import { userFacingApiMessage } from '../../api/client';
-import { executeIncomeCommand, isBrandingPreviewDraftCommandResponse } from '../../api/income';
+import {
+  executeIncomeCommand,
+  isBrandingPreviewDraftCommandResponse,
+  type IncomeWorkspaceAggregate,
+  type SelectIncomeIssuerContextCommandResponse,
+} from '../../api/income';
 import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
 import { ClientOperationsRegistryView } from '../client-operations/ClientOperationsRegistryView';
 import { resolveIncomeClientDocumentManagementPanel } from '../../income/income-workspace-types';
@@ -28,7 +33,6 @@ import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
 import { IncomeDocumentBrandingGearButton } from '../income/IncomeDocumentBrandingGearButton';
 import { IncomeDocumentBrandingSettingsModal } from '../income/IncomeDocumentBrandingSettingsModal';
 import { WorkEngineIncomeDocumentWizardModal } from './WorkEngineIncomeDocumentWizardModal';
-import type { IncomeWorkspaceAggregate } from '../../api/income';
 import '../../styles/nx-income-client-document-management.css';
 import '../../styles/nx-work-engine-client-documents.css';
 import '../../styles/nx-work-engine-invoice-retainer.css';
@@ -309,6 +313,9 @@ function WorkEngineInvoicesTabPanel(props: {
   const [brandingBusy, setBrandingBusy] = useState(false);
   const [panelBusy, setPanelBusy] = useState(false);
   const [issuerWorkspace, setIssuerWorkspace] = useState<IncomeWorkspaceAggregate | null>(null);
+  const wizardEntrypointRef = useRef<WorkEngineInvoicesTabAggregate['document_creation_entrypoint'] | null>(
+    null,
+  );
 
   const loadAggregate = useCallback(async () => {
     setLoading(true);
@@ -323,6 +330,32 @@ function WorkEngineInvoicesTabPanel(props: {
       setLoading(false);
     }
   }, [onWorkspaceTabs]);
+
+  const handlePanelError = useCallback((message: string) => {
+    setError(message);
+  }, []);
+
+  const handleAfterIssuerSelect = useCallback((res: SelectIncomeIssuerContextCommandResponse) => {
+    setIssuerWorkspace(res.income_workspace_aggregate);
+    setAggregate((prev) =>
+      prev
+        ? {
+            ...prev,
+            document_branding_profile:
+              res.income_workspace_aggregate.document_branding_profile ?? prev.document_branding_profile,
+            document_branding_settings_entrypoint:
+              res.income_workspace_aggregate.document_branding_settings_entrypoint ??
+              prev.document_branding_settings_entrypoint,
+          }
+        : prev,
+    );
+  }, []);
+
+  const handleInvoicesTabRefresh = useCallback((invoicesTabAggregate: Record<string, unknown>) => {
+    setAggregate((prev) =>
+      prev ? ({ ...prev, ...invoicesTabAggregate } as WorkEngineInvoicesTabAggregate) : prev,
+    );
+  }, []);
 
   useEffect(() => {
     void loadAggregate();
@@ -346,6 +379,10 @@ function WorkEngineInvoicesTabPanel(props: {
   const showClientDocumentPanel = clientDocumentPanel.visible;
   const allowedActions = aggregate.allowed_actions ?? [];
   const entry = aggregate.document_creation_entrypoint;
+  if (entry?.wizard) {
+    wizardEntrypointRef.current = entry;
+  }
+  const wizardEntrypoint = entry?.wizard ? entry : wizardEntrypointRef.current;
   const canOpenWizard = Boolean(
     entry?.allowed && entry.allowed_action && allowedActions.includes(entry.allowed_action),
   );
@@ -408,28 +445,10 @@ function WorkEngineInvoicesTabPanel(props: {
         customersTableModel={customersTableModel}
         customersAllowedActions={issuerWorkspace?.allowed_actions ?? []}
         onBusyChange={setPanelBusy}
-        onAfterIssuerSelect={(res) => {
-          setIssuerWorkspace(res.income_workspace_aggregate);
-          setAggregate((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  document_branding_profile:
-                    res.income_workspace_aggregate.document_branding_profile ?? prev.document_branding_profile,
-                  document_branding_settings_entrypoint:
-                    res.income_workspace_aggregate.document_branding_settings_entrypoint ??
-                    prev.document_branding_settings_entrypoint,
-                }
-              : prev,
-          );
-        }}
+        onAfterIssuerSelect={handleAfterIssuerSelect}
         onOpenBranding={() => setBrandingOpen(true)}
-        onError={(message) => setError(message)}
-        onInvoicesTabRefresh={(invoicesTabAggregate) => {
-          setAggregate((prev) =>
-            prev ? ({ ...prev, ...invoicesTabAggregate } as WorkEngineInvoicesTabAggregate) : prev,
-          );
-        }}
+        onError={handlePanelError}
+        onInvoicesTabRefresh={handleInvoicesTabRefresh}
         onEditDraft={async (draftId) => {
           setWizardBusy(true);
           try {
@@ -508,11 +527,11 @@ function WorkEngineInvoicesTabPanel(props: {
       {!showClientDocumentPanel ? (
         <WorkEngineModuleTabTable table={tableModel} summary={tableSummary} />
       ) : null}
-      {wizardOpen && entry?.wizard ? (
+      {wizardOpen && wizardEntrypoint?.wizard ? (
         <WorkEngineIncomeDocumentWizardModal
           open={wizardOpen}
           busy={wizardBusy}
-          entrypoint={entry}
+          entrypoint={wizardEntrypoint}
           initialWorkspaceAgg={wizardInitialAgg}
           issuerBrandingProfile={aggregate.document_branding_profile}
           issuerBrandingEntrypoint={aggregate.document_branding_settings_entrypoint}
