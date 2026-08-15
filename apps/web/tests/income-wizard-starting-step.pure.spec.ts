@@ -3,7 +3,10 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveIncomeWizardStartingStepKey } from '../src/income/income-wizard-starting-step.pure.ts';
+import {
+  resolveIncomeWizardStartingStepIndex,
+  resolveIncomeWizardStartingStepKey,
+} from '../src/income/income-wizard-starting-step.pure.ts';
 
 const WIZARD_STEPS = [
   { key: 'issuer_choice' },
@@ -48,6 +51,18 @@ test('empty new-document wizard stays on first backend step', () => {
     }),
     null,
   );
+  assert.equal(resolveIncomeWizardStartingStepIndex(WIZARD_STEPS, null), 0);
+});
+
+test('credit draft first paint is document_details index, not issuer_choice', () => {
+  assert.equal(
+    resolveIncomeWizardStartingStepIndex(WIZARD_STEPS, {
+      wizard_starting_step_key: 'document_details',
+      active_wizard_draft_id: 'credit-draft-1',
+      document_details_step: { document_type_key: 'credit_tax_invoice' },
+    }),
+    3,
+  );
 });
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -89,7 +104,11 @@ test('credit handoff opens WorkEngineIncomeDocumentWizardModal, not retainer set
   assert.match(tabHostSource, /setWizardInitialAgg\(workspaceAggregate\)/);
   assert.match(tabHostSource, /setWizardOpen\(true\)/);
   assert.match(tabHostSource, /WorkEngineIncomeDocumentWizardModal/);
-  assert.match(wizardSource, /resolveIncomeWizardStartingStepKey/);
+  assert.match(tabHostSource, /setWizardInitialAgg\(null\);\s*setWizardOpen\(true\)/);
+  assert.match(wizardSource, /resolveIncomeWizardStartingStepIndex/);
+  assert.match(wizardSource, /<WorkEngineDocumentDetailsStep/);
+  assert.doesNotMatch(wizardSource, /CreditNoteEditor|credit-note-editor|creditNoteForm/);
+  assert.match(retainerSetupSource, /<WorkEngineDocumentDetailsStep/);
 
   assert.doesNotMatch(creditConfirmSource, /WorkEngineInvoiceRetainerSetupModal/);
   assert.doesNotMatch(creditConfirmSource, /ריטיינר/);

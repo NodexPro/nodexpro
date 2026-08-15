@@ -217,7 +217,8 @@ test('credit handoff opens canonical Income wizard, not retainer setup', () => {
   assert.match(tabHostSource, /WorkEngineIncomeDocumentWizardModal/);
   assert.match(tabHostSource, /onOpenConvertedDraft=\{async \(\{ workspaceAggregate \}\) => \{/);
   assert.match(tabHostSource, /setWizardOpen\(true\)/);
-  assert.match(incomeWizardSource, /resolveIncomeWizardStartingStepKey/);
+  assert.match(incomeWizardSource, /resolveIncomeWizardStartingStepIndex/);
+  assert.match(incomeWizardSource, /<WorkEngineDocumentDetailsStep/);
   assert.doesNotMatch(creditConfirmSource, /WorkEngineInvoiceRetainerSetupModal/);
   assert.doesNotMatch(creditConfirmSource, /ריטיינר/);
   assert.doesNotMatch(retainerSetupSource, /begin_income_tax_invoice_credit/);

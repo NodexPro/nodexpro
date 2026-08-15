@@ -17,3 +17,22 @@ export function resolveIncomeWizardStartingStepKey(input: {
   }
   return null;
 }
+
+export function resolveIncomeWizardStartingStepIndex(
+  steps: ReadonlyArray<{ key: string }>,
+  workspace: {
+    wizard_starting_step_key?: string | null;
+    active_wizard_draft_id?: string | null;
+    document_details_step?: unknown;
+  } | null,
+): number {
+  const key = resolveIncomeWizardStartingStepKey({
+    steps,
+    wizard_starting_step_key: workspace?.wizard_starting_step_key,
+    active_wizard_draft_id: workspace?.active_wizard_draft_id,
+    has_document_details_step: Boolean(workspace?.document_details_step),
+  });
+  if (!key) return 0;
+  const idx = steps.findIndex((step) => step.key === key);
+  return idx >= 0 ? idx : 0;
+}

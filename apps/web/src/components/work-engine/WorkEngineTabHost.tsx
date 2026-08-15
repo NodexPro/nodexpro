@@ -529,6 +529,7 @@ function WorkEngineInvoicesTabPanel(props: {
       ) : null}
       {wizardOpen && wizardEntrypoint?.wizard ? (
         <WorkEngineIncomeDocumentWizardModal
+          key={wizardInitialAgg?.active_wizard_draft_id ?? 'new-income-document'}
           open={wizardOpen}
           busy={wizardBusy}
           entrypoint={wizardEntrypoint}

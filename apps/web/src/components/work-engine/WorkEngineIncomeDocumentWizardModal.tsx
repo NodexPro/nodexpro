@@ -17,7 +17,10 @@ import { WorkEngineIncomePreviewStep } from './WorkEngineIncomePreviewStep';
 import { WorkEngineInvoiceRetainerPreviewModal } from './WorkEngineInvoiceRetainerPreviewModal';
 import { executeIncomeCommand } from '../../api/income';
 import { mergeIncomeWorkspaceWizardPatch } from '../../income/merge-wizard-workspace-aggregate';
-import { resolveIncomeWizardStartingStepKey } from '../../income/income-wizard-starting-step.pure';
+import {
+  resolveIncomeWizardStartingStepIndex,
+  resolveIncomeWizardStartingStepKey,
+} from '../../income/income-wizard-starting-step.pure';
 import type { WorkEngineInvoicesDocumentCreationEntrypoint } from '../../api/work-engine';
 import type {
   IncomeDocumentBrandingProfileAggregate,
@@ -63,6 +66,11 @@ function stepIndexForKey(steps: { key: string }[], key: string | null | undefine
   return idx >= 0 ? idx : null;
 }
 
+function documentTypeKeyFromWorkspace(workspace: IncomeWorkspaceAggregate | null | undefined): string {
+  const key = workspace?.document_details_step?.document_type_key;
+  return typeof key === 'string' ? key : '';
+}
+
 export function WorkEngineIncomeDocumentWizardModal({
   open,
   busy,
@@ -75,12 +83,17 @@ export function WorkEngineIncomeDocumentWizardModal({
   issuerBrandingEntrypoint,
 }: Props) {
   const wizard = entrypoint.wizard;
-  const [stepIndex, setStepIndex] = useState(0);
   const [issuerChoice, setIssuerChoice] = useState<'self' | 'office_client' | null>(null);
   const [officeClientId, setOfficeClientId] = useState('');
   const [, setContextAgg] = useState<IncomeWorkspaceContextAggregate | null>(null);
   const [workspaceAgg, setWorkspaceAgg] = useState<IncomeWorkspaceAggregate | null>(
     initialWorkspaceAgg ?? null,
+  );
+  const [stepIndex, setStepIndex] = useState(() =>
+    resolveIncomeWizardStartingStepIndex(
+      wizard.steps.filter((s) => s.when !== 'office_representative'),
+      initialWorkspaceAgg ?? null,
+    ),
   );
   const [error, setError] = useState<string | null>(null);
   const [readyToPrintPreviewOpen, setReadyToPrintPreviewOpen] = useState(false);
@@ -91,7 +104,7 @@ export function WorkEngineIncomeDocumentWizardModal({
   const recipientFieldRef = useRef<WorkEngineRecipientSearchFieldHandle>(null);
   const detailsStepRef = useRef<WorkEngineDocumentDetailsStepHandle>(null);
   const [form, setForm] = useState<FormState>(() => ({
-    document_type: '',
+    document_type: documentTypeKeyFromWorkspace(initialWorkspaceAgg),
   }));
 
   useEffect(() => {
