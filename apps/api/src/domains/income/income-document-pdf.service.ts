@@ -146,8 +146,8 @@ export async function renderIncomeDocumentPdf(
     return { pdf_asset_id: null, pdf_render_status: 'rendered' };
   }
 
-  if (doc.pdf_render_status === 'rendered' && doc.pdf_asset_id) {
-    return { pdf_asset_id: doc.pdf_asset_id, pdf_render_status: 'rendered' };
+  if (hasCanonicalIncomeDocumentPdfAsset(doc.pdf_asset_id)) {
+    return { pdf_asset_id: String(doc.pdf_asset_id).trim(), pdf_render_status: doc.pdf_render_status };
   }
 
   await supabaseAdmin
@@ -258,6 +258,25 @@ export async function loadIncomeDocumentForDownload(
 
 export function incomeDocumentDownloadPath(incomeDocumentId: string): string {
   return `/api/v1/income/documents/${incomeDocumentId}/download`;
+}
+
+/**
+ * Same ensure used by issue-and-send: reuse existing renderIncomeDocumentPdf.
+ * Skips render when a canonical pdf_asset_id already exists.
+ */
+export async function ensureIssuedDocumentCanonicalPdfAsset(
+  ctx: RequestContext,
+  orgId: string,
+  incomeDocumentId: string,
+): Promise<{ pdf_asset_id: string | null; pdf_render_status: string }> {
+  const doc = await loadIssuedDocumentForPdf(orgId, incomeDocumentId);
+  if (hasCanonicalIncomeDocumentPdfAsset(doc.pdf_asset_id)) {
+    return {
+      pdf_asset_id: String(doc.pdf_asset_id).trim(),
+      pdf_render_status: doc.pdf_render_status,
+    };
+  }
+  return renderIncomeDocumentPdf(ctx, orgId, incomeDocumentId);
 }
 
 export async function loadIssuedDocumentPdfBytesForEmail(

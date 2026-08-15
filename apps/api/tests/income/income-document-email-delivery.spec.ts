@@ -85,8 +85,10 @@ test('email send command loads the same canonical pdf_asset_id as download', () 
     join(dir, '../../src/domains/income/income-document-pdf.service.ts'),
     'utf8',
   );
+  assert.match(serviceSource, /ensureIssuedDocumentCanonicalPdfAsset/);
   assert.match(serviceSource, /loadIssuedDocumentPdfBytesForEmail\(scope\.org_id, doc\.pdf_asset_id/);
   assert.match(pdfServiceSource, /hasCanonicalIncomeDocumentPdfAsset\(doc\.pdf_asset_id\)/);
+  assert.match(pdfServiceSource, /ensureIssuedDocumentCanonicalPdfAsset/);
   assert.match(pdfServiceSource, /loadIssuedDocumentPdfBytesForEmail/);
 });
 

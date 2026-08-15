@@ -33,6 +33,8 @@ import {
   loadIncomeDocumentsMetaByIds,
 } from './income-document-email-delivery.read-model.service.js';
 import { customerDisplayNameFromSnapshot } from './income-document-email-delivery.pure.js';
+import { ensureIssuedDocumentCanonicalPdfAsset } from './income-document-pdf.service.js';
+import { hasCanonicalIncomeDocumentPdfAsset } from './income-document-pdf-send-readiness.pure.js';
 import { resolveIssuedDocumentEmailRecipientPrefill } from './income-document-email-recipient-prefill.pure.js';
 import { loadIncomeRecipientById } from './income-recipient.service.js';
 import type { IncomeDocumentType } from './income.types.js';
@@ -203,12 +205,28 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params: {
   assertRowMatchesIssuerScope(scope, doc);
 
   const attempts = await listIncomeDocumentEmailAttempts(scope.org_id, incomeDocumentId);
+  let pdfAssetId = doc.pdf_asset_id;
+  let pdfRenderStatus = doc.pdf_render_status;
+  const canEnsureCanonicalPdf =
+    Boolean(scope.permissions.issue) &&
+    Boolean(scope.represented_client_id) &&
+    doc.document_status === 'issued';
+  if (canEnsureCanonicalPdf && !hasCanonicalIncomeDocumentPdfAsset(pdfAssetId)) {
+    const ensured = await ensureIssuedDocumentCanonicalPdfAsset(
+      params.ctx,
+      scope.org_id,
+      incomeDocumentId,
+    );
+    pdfAssetId = ensured.pdf_asset_id;
+    pdfRenderStatus = ensured.pdf_render_status;
+  }
+
   const sendEligibility = resolveIncomeDocumentEmailSendEligibility({
     permissions: scope.permissions,
     representedClientId: scope.represented_client_id,
     documentStatus: doc.document_status,
-    pdfRenderStatus: doc.pdf_render_status,
-    pdfAssetId: doc.pdf_asset_id,
+    pdfRenderStatus,
+    pdfAssetId,
   });
 
   const recipientEmailDefault = await resolveDocumentRecipientEmailDefault({ scope, doc });
@@ -250,7 +268,7 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params: {
       sendEligibility,
       emailFieldPresent: sendForm.fields.some((field) => field.key === 'recipient_email'),
       historyAvailable: rows.length > 0,
-      pdfAssetId: doc.pdf_asset_id,
+      pdfAssetId,
     }),
     allowed_actions: allowedActions,
     empty_state: {

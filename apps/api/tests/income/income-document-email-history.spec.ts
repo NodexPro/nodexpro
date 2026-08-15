@@ -182,6 +182,7 @@ test('email history aggregate builder and send command return send_view without 
   assert.match(commandsSource, /INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL/);
   assert.match(commandsSource, /buildIncomeDocumentEmailHistoryAggregate/);
   assert.match(commandsSource, /income_document_email_history_aggregate/);
+  assert.match(historyServiceSource, /ensureIssuedDocumentCanonicalPdfAsset/);
 });
 
 test('email send is enabled when canonical pdf_asset_id exists despite stale/failed render status', () => {
