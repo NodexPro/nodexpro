@@ -12,8 +12,8 @@ import {
 } from '../../api/income';
 import { fetchWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../../api/work-engine';
 import { IncomeDocumentEmailHistoryModal } from '../income/IncomeDocumentEmailHistoryModal';
-import { IncomeDocumentDocflowSendModal } from '../income/IncomeDocumentDocflowSendModal';
 import { WorkEngineDocumentsRowDeliveryIcons, workEngineDocumentsRowDeliveryVisible } from './WorkEngineDocumentsRowDeliveryIcons';
+import type { WorkEngineDocumentCreditAction } from '../../income/income-workspace-types';
 
 type OpenParams = {
   representedClientId: string;
@@ -84,7 +84,14 @@ export function WorkEngineClientDocumentsByTypeModal({
   const [aggregate, setAggregate] = useState<WorkEngineInvoicesClientDocumentsByTypeAggregate | null>(null);
   const [loading, setLoading] = useState(false);
   const [docEmailHistoryId, setDocEmailHistoryId] = useState<string | null>(null);
-  const [docDocflowSendId, setDocDocflowSendId] = useState<string | null>(null);
+  const [creditTarget, setCreditTarget] = useState<{
+    documentId: string;
+    documentNumber: string | null;
+    action: WorkEngineDocumentCreditAction;
+  } | null>(null);
+  const [creditMode, setCreditMode] = useState<'full' | 'partial'>('full');
+  const [creditReasonKey, setCreditReasonKey] = useState('billing_error');
+  const [creditReasonNote, setCreditReasonNote] = useState('');
 
   const loadAggregate = useCallback(
     async (year?: number | null) => {
@@ -115,6 +122,29 @@ export function WorkEngineClientDocumentsByTypeModal({
     }
     void loadAggregate();
   }, [loadAggregate, open, params]);
+
+  const handleConfirmCredit = async () => {
+    if (!creditTarget?.action.enabled) return;
+    onBusyChange?.(true);
+    try {
+      const res = await executeIncomeCommand(creditTarget.action.command, {
+        income_document_id: creditTarget.documentId,
+        credit_mode: creditMode,
+        reason_key: creditReasonKey,
+        reason_note: creditReasonNote.trim() || null,
+        idempotency_key: crypto.randomUUID(),
+        documents_list_year: aggregate?.selected_year ?? null,
+      });
+      const list = (res as { work_engine_invoices_client_documents_by_type_aggregate?: WorkEngineInvoicesClientDocumentsByTypeAggregate }).work_engine_invoices_client_documents_by_type_aggregate;
+      if (list) setAggregate(list);
+      setCreditTarget(null);
+      setCreditReasonNote('');
+    } catch (e) {
+      onError?.(e instanceof Error ? e.message : String(e));
+    } finally {
+      onBusyChange?.(false);
+    }
+  };
 
   const handleViewDocument = async (row: WorkEngineInvoicesClientDocumentsByTypeRow) => {
     if (!row.pdf_download_path || !row.can_view_document) return;
@@ -250,14 +280,37 @@ export function WorkEngineClientDocumentsByTypeModal({
                       {columns.map((col) => {
                         if (col.key === 'actions') {
                           const hasDedicatedViewColumn = columns.some((column) => column.key === 'view');
+                          const creditAction = row.credit_action ?? null;
+                          const showCredit = Boolean(creditAction);
                           const showView =
                             !hasDedicatedViewColumn && Boolean(row.can_view_document);
                           return (
                             <td key={col.key} className="nx-we-documents-modal__action-col">
                               {showView ||
+                              showCredit ||
                               workEngineDocumentsRowDeliveryVisible(row).showEmail ||
                               workEngineDocumentsRowDeliveryVisible(row).showDocflow ? (
                                 <div className="nx-we-documents-modal__row-actions">
+                                  {showCredit && creditAction ? (
+                                    <button
+                                      type="button"
+                                      className="nx-btn nx-btn-taxes-compact"
+                                      disabled={busy || loading || !creditAction.enabled}
+                                      title={creditAction.disabled_reason ?? creditAction.label}
+                                      onClick={() => {
+                                        setCreditTarget({
+                                          documentId: row.document_id ?? '',
+                                          documentNumber: row.document_number,
+                                          action: creditAction,
+                                        });
+                                        setCreditMode('full');
+                                        setCreditReasonKey(creditAction.reason_options[0]?.key ?? 'billing_error');
+                                        setCreditReasonNote('');
+                                      }}
+                                    >
+                                      {creditAction.label}
+                                    </button>
+                                  ) : null}
                                   {showView ? (
                                     <button
                                       type="button"
@@ -281,7 +334,7 @@ export function WorkEngineClientDocumentsByTypeModal({
                                     row={row}
                                     busy={busy || loading}
                                     onOpenEmail={setDocEmailHistoryId}
-                                    onOpenDocflow={setDocDocflowSendId}
+                                    onOpenDocflow={() => undefined}
                                   />
                                 </div>
                               ) : (
@@ -321,7 +374,7 @@ export function WorkEngineClientDocumentsByTypeModal({
                                     row={row}
                                     busy={busy || loading}
                                     onOpenEmail={setDocEmailHistoryId}
-                                    onOpenDocflow={setDocDocflowSendId}
+                                    onOpenDocflow={() => undefined}
                                   />
                                 </div>
                               ) : (
@@ -395,6 +448,30 @@ export function WorkEngineClientDocumentsByTypeModal({
 
       </div>
     </div>
+      {creditTarget ? (
+        <div className="nx-modal-overlay nx-modal-overlay--nested" role="dialog" aria-modal="true">
+          <div className="nx-modal nx-owner-legal-command-modal">
+            <div className="nx-modal-header">
+              <h2>{creditTarget.action.label}</h2>
+            </div>
+            <div className="nx-modal-body">
+              <p>החשבונית המקורית לא תבוטל. יווצר מסמך זיכוי חדש ומקושר.</p>
+              <label>
+                סוג זיכוי
+                <select value={creditMode} disabled={busy} onChange={(e) => setCreditMode(e.target.value === 'partial' ? 'partial' : 'full')}>
+                  {creditTarget.action.modes.map((mode) => (
+                    <option key={mode.key} value={mode.key}>{mode.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="nx-modal-footer nx-tax-nested-modal-footer">
+              <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={() => setCreditTarget(null)}>סגירה</button>
+              <button type="button" className="nx-btn nx-btn-taxes-compact nx-btn-primary" disabled={busy || !creditTarget.action.enabled} onClick={() => void handleConfirmCredit()}>המשך</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <IncomeDocumentEmailHistoryModal
         open={docEmailHistoryId != null}
         incomeDocumentId={docEmailHistoryId}
@@ -402,15 +479,6 @@ export function WorkEngineClientDocumentsByTypeModal({
         busy={busy}
         onBusyChange={onBusyChange}
         onClose={() => setDocEmailHistoryId(null)}
-        onError={onError}
-      />
-      <IncomeDocumentDocflowSendModal
-        open={docDocflowSendId != null}
-        incomeDocumentId={docDocflowSendId}
-        representedClientId={params.representedClientId}
-        busy={busy}
-        onBusyChange={onBusyChange}
-        onClose={() => setDocDocflowSendId(null)}
         onError={onError}
       />
     </>

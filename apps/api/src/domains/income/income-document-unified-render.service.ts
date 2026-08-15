@@ -32,6 +32,8 @@ import {
 } from '../owner-invoice-document-layout/owner-invoice-document-layout-resolver.pure.js';
 import type { IncomeBrandingResolvedProfile } from './income-document-branding.types.js';
 import { resolveIncomeDocumentSemanticDates } from './income-document-semantic-dates.pure.js';
+import { loadCreditSourceReferenceForDocument } from './income-document-tax-invoice-credit.read.js';
+import { mergeCreditSourceReferenceIntoNotes } from './income-document-tax-invoice-credit.pure.js';
 
 export type IssuedIncomeDocumentForRender = {
   id: string;
@@ -198,6 +200,10 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
     issue_date: doc.issue_date,
     due_date: doc.due_date,
   });
+  const creditReference =
+    doc.document_type === 'credit_tax_invoice'
+      ? await loadCreditSourceReferenceForDocument(scope.org_id, doc.id)
+      : null;
   const renderInput = buildUnifiedIncomeDocumentRenderInput({
     branding: issuedBranding,
     document_type: doc.document_type,
@@ -206,7 +212,7 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
     document_date: semanticDates.document_date ?? doc.issue_date,
     due_date: semanticDates.due_date,
     currency: doc.currency,
-    notes: doc.notes,
+    notes: mergeCreditSourceReferenceIntoNotes(doc.notes, creditReference),
     payment_terms_display: paymentTermsDisplay,
     payment_link_url: null,
     payment_qr_data_url: null,

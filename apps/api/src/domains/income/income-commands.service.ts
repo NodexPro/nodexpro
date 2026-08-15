@@ -151,6 +151,7 @@ import {
   INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
   INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
   INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
+  INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT,
   type IncomeCommandResponse,
   type IncomeCommandType,
   type IncomeBrandingPreviewDraftCommandResponse,
@@ -162,6 +163,10 @@ import {
   executeCancelIncomePreliminaryDocument,
   executeConvertIncomeDocumentToDraft,
 } from './income-document-conversion.service.js';
+import {
+  assertCreditDraftIdentityLocked,
+  executeBeginIncomeTaxInvoiceCredit,
+} from './income-document-tax-invoice-credit.service.js';
 
 const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_SELECT_ISSUER,
@@ -204,6 +209,7 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
   INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
   INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
+  INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT,
 ]);
 
 async function commandResponse(
@@ -444,10 +450,11 @@ async function loadDraftInScope(
   issuer_business_id: string;
   represented_client_id: string | null;
   status: string;
+  document_settings_json: unknown;
 }> {
   const { data, error } = await supabaseAdmin
     .from('income_document_drafts')
-    .select('id, organization_id, issuer_business_id, represented_client_id, status')
+    .select('id, organization_id, issuer_business_id, represented_client_id, status, document_settings_json')
     .eq('id', draftId)
     .eq('organization_id', scope.org_id)
     .maybeSingle();
@@ -459,6 +466,7 @@ async function loadDraftInScope(
     issuer_business_id: string;
     represented_client_id: string | null;
     status: string;
+    document_settings_json: unknown;
   };
   assertRowMatchesIssuerScope(scope, row);
   return row;
@@ -681,6 +689,12 @@ async function executeUpdateDraft(ctx: RequestContext, body: Record<string, unkn
   if (payload.income_customer_id) {
     await loadIncomeCustomerInScope(scope, payload.income_customer_id);
   }
+  assertCreditDraftIdentityLocked({
+    documentSettingsJson: existing.document_settings_json,
+    documentType: payload.document_type,
+    incomeCustomerId: payload.income_customer_id,
+    currency: (payload as { currency?: string | null }).currency,
+  });
 
   const { validation_warnings_json, draft_totals_preview_json } =
     await validateDraftAgainstDocumentTypeRules(payload, docType);
@@ -899,6 +913,10 @@ export async function executeIncomeCommand(
 
   if (command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT) {
     return executeBeginEditIncomePreliminaryDocument(ctx, body);
+  }
+
+  if (command === INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT) {
+    return executeBeginIncomeTaxInvoiceCredit(ctx, body);
   }
 
   if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {

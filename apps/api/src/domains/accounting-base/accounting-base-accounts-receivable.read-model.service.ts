@@ -18,9 +18,10 @@ import {
   ACCOUNTING_BASE_PAYMENT_WRITE_PERMISSION,
   ACCOUNTING_BASE_VIEW_PERMISSION,
   resolveIncomeInvoiceOriginalAmount,
-  resolveIncomeInvoicePaymentState,
 } from './accounting-base-income-payment.pure.js';
 import { sumPostedAllocationsForIncomeDocuments } from './accounting-base-income-payment-case.read.js';
+import { loadIssuedCreditAmountsByInvoice } from '../income/income-document-tax-invoice-credit.service.js';
+import { composeCollectibleAfterCredit } from '../income/income-document-tax-invoice-credit.pure.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 import {
   buildAccountsReceivableAgingSummary,
@@ -181,18 +182,26 @@ export async function buildAccountsReceivableAggregate(params: {
   const docs = (data ?? []) as IssuedDocRow[];
 
   const ids = docs.map((d) => d.id);
-  const allocatedMap = await sumPostedAllocationsForIncomeDocuments(scope.org_id, ids);
+  const [allocatedMap, creditedMap] = await Promise.all([
+    sumPostedAllocationsForIncomeDocuments(scope.org_id, ids),
+    loadIssuedCreditAmountsByInvoice(scope.org_id, ids),
+  ]);
 
   const composed: ArComposedCandidate[] = docs.map((doc) => {
     const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
     const paid = allocatedMap.get(doc.id) ?? 0;
-    const payment = resolveIncomeInvoicePaymentState(original, paid);
+    const credited = creditedMap.get(doc.id) ?? 0;
+    const collectible = composeCollectibleAfterCredit({
+      originalAmount: original,
+      creditedAmount: credited,
+      allocatedPayments: paid,
+    });
     const due = composeInvoiceLifecycleDueDimension({
       documentStatus: doc.document_status,
       documentType: doc.document_type,
       dueDate: doc.due_date,
-      remainingBalance: payment.remaining_balance,
-      paymentStateKey: payment.payment_state_key,
+      remainingBalance: collectible.remaining_receivable,
+      paymentStateKey: collectible.payment_state_key,
       todayIso,
     });
     const currency = String(doc.currency ?? 'ILS').trim().toUpperCase() || 'ILS';
@@ -208,8 +217,8 @@ export async function buildAccountsReceivableAggregate(params: {
       currency,
       original_amount: original,
       paid_amount: paid,
-      remaining_balance: payment.remaining_balance,
-      payment_state_key: payment.payment_state_key,
+      remaining_balance: collectible.remaining_receivable,
+      payment_state_key: collectible.payment_state_key,
       due_state_key: due.state_key,
       overdue: due.overdue,
       overdue_since: due.overdue_since,

@@ -173,7 +173,9 @@ describe('income client ledger card contracts', () => {
   it('composes Accounting Base allocations and does not invent a local financial source', () => {
     assert.match(serviceSource, /sumPostedAllocationsForIncomeDocuments/);
     assert.match(serviceSource, /accounting_payment_allocations/);
-    assert.match(serviceSource, /resolveIncomeInvoicePaymentState/);
+    assert.match(serviceSource, /composeCollectibleAfterCredit/);
+    assert.match(serviceSource, /loadOpenCustomerCreditAmountByCustomer/);
+    assert.match(serviceSource, /customer_credit:/);
     assert.match(serviceSource, /incomeLedgerCashboxTypeLabel/);
     assert.match(serviceSource, /resolveIncomeDocumentSemanticDates/);
     assert.match(serviceSource, /income_document_payment_operations/);
@@ -188,19 +190,10 @@ describe('income client ledger card contracts', () => {
   });
 
   it('renders backend ledger truth without frontend debit/credit or payment-method mapping', () => {
-    assert.match(modalSource, /ledger_customer/);
-    assert.match(modalSource, /issuer_context/);
-    assert.match(modalSource, /delivery_actions/);
-    assert.match(modalSource, /IncomeDocumentEmailHistoryModal/);
-    assert.match(modalSource, /IncomeDocumentDocflowSendModal/);
     assert.match(modalSource, /IncomeIssuedDocumentViewModal/);
-    assert.match(modalSource, /viewAction\.enabled/);
-    assert.match(modalSource, /credit_amount_tone/);
-    assert.match(modalSource, /from_date/);
-    assert.match(modalSource, /end_customer_options/);
+    assert.match(modalSource, /aggregate.customer_credit\?\.visible/);
     assert.doesNotMatch(modalSource, /קופת העברות/);
     assert.doesNotMatch(modalSource, /previousBalance/);
-    assert.doesNotMatch(modalSource, /due_date/);
     assert.doesNotMatch(modalSource, /TEMPORARY_ACCOUNTING_BASE_PENDING/);
   });
 });

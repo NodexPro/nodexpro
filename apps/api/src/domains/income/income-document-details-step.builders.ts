@@ -37,6 +37,11 @@ import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfileForDo
 import { renderUnifiedIncomeDocumentHtml } from './income-document-unified-render.html.js';
 import { formatLineVatAmountDisplay } from './income-document-unified-render.pure.js';
 import {
+  creditSourceReferenceDisplay,
+  mergeCreditSourceReferenceIntoNotes,
+  readCreditDraftSettings,
+} from './income-document-tax-invoice-credit.pure.js';
+import {
   buildIncomeDocumentAllocationNumberField,
 } from './income-document-allocation-number.pure.js';
 import {
@@ -1097,7 +1102,15 @@ export async function buildIncomeDocumentDetailsStep(
             }),
             vat_label: previewVatLabel,
           },
-          notes: row.notes ?? null,
+          notes: mergeCreditSourceReferenceIntoNotes(
+            row.notes ?? null,
+            (() => {
+              const creditSettings = readCreditDraftSettings(row.document_settings_json);
+              return creditSettings
+                ? creditSourceReferenceDisplay(creditSettings.source_invoice_number)
+                : null;
+            })(),
+          ),
           company_subtitle: resolvedBranding.company_subtitle,
         })
       : '';

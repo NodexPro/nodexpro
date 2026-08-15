@@ -38,10 +38,7 @@ import {
   officeClientDocumentsOrFilter,
 } from '../income/income-client-document-management-panel.pure.js';
 import { customerDisplayFromSnapshot } from '../income/income-work-engine-bridge.pure.js';
-import {
-  resolveIncomeInvoiceOriginalAmount,
-  resolveIncomeInvoicePaymentState,
-} from '../accounting-base/accounting-base-income-payment.pure.js';
+import { resolveIncomeInvoiceOriginalAmount } from '../accounting-base/accounting-base-income-payment.pure.js';
 import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
 import {
   buildIncomeDocumentRecordPaymentForm,
@@ -63,10 +60,19 @@ import {
   type IncomeWorkspacePermissions,
   type WorkEngineDocumentCancelAction,
   type WorkEngineDocumentConvertAction,
+  type WorkEngineDocumentCreditAction,
   type WorkEngineDocumentEditAction,
   type WorkEngineInvoicesClientDocumentsByTypeAggregate,
   type WorkEngineInvoicesClientDocumentsByTypeRow,
 } from '../income/income.types.js';
+import {
+  buildTaxInvoiceCreditAction,
+  loadIssuedCreditAmountsByInvoice,
+} from '../income/income-document-tax-invoice-credit.read.js';
+import { composeCollectibleAfterCredit } from '../income/income-document-tax-invoice-credit.pure.js';
+import { INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT } from '../income/income-document-tax-invoice-credit.pure.js';
+import { findAvailableDocumentType, resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
+import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 
 const ISSUED_DOCUMENT_TYPES: IncomeDocumentType[] = [
   'quote',
@@ -209,6 +215,16 @@ async function loadCustomerNames(orgId: string, representedClientId: string): Pr
   return map;
 }
 
+async function resolveCreditTypeEnabled(ctx: RequestContext, orgId: string): Promise<boolean> {
+  try {
+    const scope = await loadActiveIncomeIssuerScope(ctx);
+    const { available_document_types } = await resolveAvailableDocumentTypes(orgId, scope);
+    return Boolean(findAvailableDocumentType(available_document_types, 'credit_tax_invoice')?.enabled);
+  } catch {
+    return true;
+  }
+}
+
 async function loadConversionCountsBySource(
   orgId: string,
   sourceIds: string[],
@@ -288,6 +304,8 @@ async function loadIssuedDocumentCandidates(params: {
     portalActive,
     allocatedByDoc,
     conversionCounts,
+    creditedByDoc,
+    creditTypeEnabled,
   ] = await Promise.all([
     loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds),
     loadDocflowAttemptCountsByDocumentIds(params.orgId, documentIds),
@@ -299,6 +317,12 @@ async function loadIssuedDocumentCandidates(params: {
     preliminaryType
       ? loadConversionCountsBySource(params.orgId, documentIds)
       : Promise.resolve(new Map<string, number>()),
+    includePayment
+      ? loadIssuedCreditAmountsByInvoice(params.orgId, documentIds)
+      : Promise.resolve(new Map<string, number>()),
+    includePayment
+      ? resolveCreditTypeEnabled(params.ctx, params.orgId)
+      : Promise.resolve(false),
   ]);
 
   return filtered.map((raw) => {
@@ -359,26 +383,31 @@ async function loadIssuedDocumentCandidates(params: {
     if (includePayment) {
       const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
       const allocated = allocatedByDoc.get(doc.id) ?? 0;
-      const state = resolveIncomeInvoicePaymentState(original, allocated);
-      payment_state_key = state.payment_state_key;
-      payment_state_label = state.payment_state_label;
-      payment_state_tone = state.payment_state_tone;
-      payment_state_icon = resolvePaymentStateIcon(state.payment_state_key);
+      const credited = creditedByDoc.get(doc.id) ?? 0;
+      const collectible = composeCollectibleAfterCredit({
+        originalAmount: original,
+        creditedAmount: credited,
+        allocatedPayments: allocated,
+      });
+      payment_state_key = collectible.payment_state_key;
+      payment_state_label = collectible.payment_state_label;
+      payment_state_tone = collectible.payment_state_tone;
+      payment_state_icon = resolvePaymentStateIcon(collectible.payment_state_key);
       due_date_display = formatDateDisplay(semanticDates.due_date);
 
       let disabledReason: string | null = null;
       if (!canPaymentWrite) disabledReason = 'חסרה הרשאה לרישום תשלום';
       else if (!canIncomeIssue) disabledReason = 'חסרה הרשאה להפקת מסמך הכנסה';
-      else if (state.remaining_balance <= 0) disabledReason = 'החשבונית כבר שולמה במלואה';
+      else if (collectible.remaining_receivable <= 0) disabledReason = 'אין יתרת גבייה לחשבונית';
 
       const canRecord =
-        canPaymentWrite && canIncomeIssue && state.remaining_balance > 0;
+        canPaymentWrite && canIncomeIssue && collectible.remaining_receivable > 0;
       if (canRecord) allowedActions.push('record_payment');
 
       record_payment_form = buildIncomeDocumentRecordPaymentForm({
         incomeDocumentId: doc.id,
         currency: doc.currency || 'ILS',
-        remainingBalance: state.remaining_balance,
+        remainingBalance: collectible.remaining_receivable,
         enabled: canRecord,
         disabledReason,
       });
@@ -388,6 +417,7 @@ async function loadIssuedDocumentCandidates(params: {
     let edit_action: WorkEngineDocumentEditAction | null = null;
     let convert_action: WorkEngineDocumentConvertAction | null = null;
     let cancel_action: WorkEngineDocumentCancelAction | null = null;
+    let credit_action: WorkEngineDocumentCreditAction | null = null;
     let conversion_state_key: WorkEngineInvoicesClientDocumentsByTypeRow['conversion_state_key'] =
       null;
 
@@ -432,6 +462,18 @@ async function loadIssuedDocumentCandidates(params: {
             : 'אין הרשאת עריכה',
       };
       if (cancelEnabled) allowedActions.push(INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT);
+    }
+
+    if (params.documentType === 'tax_invoice') {
+      const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
+      const credited = creditedByDoc.get(doc.id) ?? 0;
+      const remaining = Math.max(0, original - credited);
+      credit_action = buildTaxInvoiceCreditAction({
+        remainingCreditable: remaining,
+        canEdit,
+        creditTypeEnabled,
+      });
+      if (credit_action.enabled) allowedActions.push(INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT);
     }
 
     const email_delivery = buildIncomeDocumentEmailDeliveryBlock({
@@ -489,6 +531,7 @@ async function loadIssuedDocumentCandidates(params: {
       edit_action,
       convert_action,
       cancel_action,
+      credit_action,
       conversion_state_key,
       allowed_actions: allowedActions,
       year,
@@ -582,6 +625,7 @@ async function loadDraftCandidates(params: {
       edit_action: null,
       convert_action: null,
       cancel_action: null,
+      credit_action: null,
       conversion_state_key: null,
       allowed_actions: canEditDraft ? ['edit_draft'] : [],
       year,

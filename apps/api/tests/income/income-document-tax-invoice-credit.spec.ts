@@ -1,0 +1,410 @@
+/**
+ * Tax invoice → credit_tax_invoice workflow: pure truth + wiring contracts.
+ */
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  CREDIT_AMOUNT_EXCEEDS_REMAINING_CREDITABLE,
+  CREDIT_LINE_EXCEEDS_REMAINING_CREDITABLE,
+  INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT,
+  INCOME_CREDIT_DOCUMENT_TYPE,
+  assertCreditAmountWithinRemaining,
+  composeCollectibleAfterCredit,
+  creditSourceReferenceDisplay,
+  decideAtomicCreditConsume,
+  mergeCreditSourceReferenceIntoNotes,
+  readCreditDraftSettings,
+  resolveCreditState,
+  resolveReceivableAfterCredit,
+  sourceLineIdentityFromSnapshot,
+  writeCreditDraftSettings,
+} from '../../src/domains/income/income-document-tax-invoice-credit.pure.js';
+import { isTaxDocumentDirectCancelForbidden } from '../../src/domains/income/income-document-conversion.pure.js';
+
+const dir = dirname(fileURLToPath(import.meta.url));
+const commandsSource = readFileSync(
+  join(dir, '../../src/domains/income/income-commands.service.ts'),
+  'utf8',
+);
+const issueSource = readFileSync(
+  join(dir, '../../src/domains/income/income-document-issue.service.ts'),
+  'utf8',
+);
+const documentsByTypeSource = readFileSync(
+  join(dir, '../../src/domains/work-engine/work-engine-invoices-client-documents-by-type.read-model.service.ts'),
+  'utf8',
+);
+const modalSource = readFileSync(
+  join(dir, '../../../web/src/components/work-engine/WorkEngineClientDocumentsByTypeModal.tsx'),
+  'utf8',
+);
+const migration161 = readFileSync(
+  join(dir, '../../../../supabase/migrations/161_income_tax_invoice_credit_lineage.sql'),
+  'utf8',
+);
+const numberingSource = readFileSync(
+  join(dir, '../../src/domains/income/income-document-numbering.service.ts'),
+  'utf8',
+);
+
+test('document type key is existing credit_tax_invoice', () => {
+  assert.equal(INCOME_CREDIT_DOCUMENT_TYPE, 'credit_tax_invoice');
+  assert.equal(isTaxDocumentDirectCancelForbidden('tax_invoice'), true);
+});
+
+test('command name is begin_income_tax_invoice_credit', () => {
+  assert.equal(INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT, 'begin_income_tax_invoice_credit');
+  assert.match(commandsSource, /INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT/);
+  assert.match(commandsSource, /executeBeginIncomeTaxInvoiceCredit/);
+});
+
+test('credit state none / partial / full', () => {
+  assert.deepEqual(resolveCreditState({ originalAmount: 10000, creditedAmount: 0 }), {
+    credit_state: 'none',
+    remaining_creditable_amount: 10000,
+  });
+  assert.deepEqual(resolveCreditState({ originalAmount: 10000, creditedAmount: 5000 }), {
+    credit_state: 'partial',
+    remaining_creditable_amount: 5000,
+  });
+  assert.deepEqual(resolveCreditState({ originalAmount: 10000, creditedAmount: 10000 }), {
+    credit_state: 'full',
+    remaining_creditable_amount: 0,
+  });
+});
+
+test('TEST A/D — multiple credits remaining', () => {
+  const afterFirst = resolveCreditState({ originalAmount: 10000, creditedAmount: 3000 });
+  assert.equal(afterFirst.remaining_creditable_amount, 7000);
+  const afterSecond = resolveCreditState({ originalAmount: 10000, creditedAmount: 5000 });
+  assert.equal(afterSecond.credit_state, 'partial');
+  assert.equal(afterSecond.remaining_creditable_amount, 5000);
+});
+
+test('TEST E — over-credit guard throws stable code', () => {
+  assert.throws(
+    () => assertCreditAmountWithinRemaining({ requestedAmount: 4000, remainingAmount: 3000 }),
+    (err: Error & { code?: string }) => err.code === CREDIT_AMOUNT_EXCEEDS_REMAINING_CREDITABLE,
+  );
+  assert.doesNotThrow(() =>
+    assertCreditAmountWithinRemaining({ requestedAmount: 3000, remainingAmount: 3000 }),
+  );
+});
+
+test('TEST G/H — payment plus credit receivable / customer credit', () => {
+  const partialPaid = resolveReceivableAfterCredit({
+    originalAmount: 10000,
+    creditedAmount: 3000,
+    allocatedPayments: 4000,
+  });
+  assert.equal(partialPaid.net_invoice_amount, 7000);
+  assert.equal(partialPaid.remaining_receivable, 3000);
+  assert.equal(partialPaid.customer_credit, 0);
+
+  const fullyPaid = resolveReceivableAfterCredit({
+    originalAmount: 10000,
+    creditedAmount: 3000,
+    allocatedPayments: 10000,
+  });
+  assert.equal(fullyPaid.remaining_receivable, 0);
+  assert.equal(fullyPaid.customer_credit, 3000);
+});
+
+test('TEST I — VAT components are not frontend-negated; collectible uses net', () => {
+  const collectible = composeCollectibleAfterCredit({
+    originalAmount: 1180,
+    creditedAmount: 1180,
+    allocatedPayments: 0,
+  });
+  assert.equal(collectible.net_invoice_amount, 0);
+  assert.equal(collectible.remaining_receivable, 0);
+  assert.equal(collectible.payment_state_key, 'paid');
+});
+
+test('source line identity is not display text', () => {
+  assert.equal(sourceLineIdentityFromSnapshot({ line_id: 'line-a', description: 'Service A' }, 0), 'line-a');
+  assert.equal(sourceLineIdentityFromSnapshot({ description: 'Service A' }, 2), 'source_index:2');
+});
+
+test('credit reference wording is backend-owned', () => {
+  assert.equal(creditSourceReferenceDisplay('4008'), 'זיכוי עבור חשבונית מס מספר 4008');
+  const merged = mergeCreditSourceReferenceIntoNotes('הערה', 'זיכוי עבור חשבונית מס מספר 4008');
+  assert.match(String(merged), /זיכוי עבור חשבונית מס מספר 4008/);
+});
+
+test('locked identity persists in draft settings', () => {
+  const written = writeCreditDraftSettings(
+    {},
+    {
+      source_invoice_id: 'inv-1',
+      source_invoice_number: '4008',
+      credit_mode: 'partial',
+      reason_key: 'billing_error',
+      reason_note: null,
+      locked_income_customer_id: 'cust-1',
+      locked_currency: 'USD',
+      line_map: {
+        'draft-1': { source_line_identity: 'line-a', original_quantity: 1, original_amount: 1000 },
+      },
+    },
+  );
+  const read = readCreditDraftSettings(written);
+  assert.equal(read?.source_invoice_id, 'inv-1');
+  assert.equal(read?.locked_currency, 'USD');
+  assert.equal(read?.line_map['draft-1']?.source_line_identity, 'line-a');
+});
+
+test('issue consumes credit remaining via atomic Accounting Base RPC', () => {
+  assert.match(issueSource, /assertAndConsumeCreditOnIssue/);
+  assert.match(issueSource, /reverseCreditConsumeOnIssueFailure/);
+  const creditService = readFileSync(
+    join(dir, '../../src/domains/income/income-document-tax-invoice-credit.service.ts'),
+    'utf8',
+  );
+  assert.match(creditService, /callConsumeIncomeTaxInvoiceCreditRpc/);
+  assert.match(creditService, /callReverseIncomeTaxInvoiceCreditConsumeRpc/);
+});
+
+test('tax invoice row owns credit_action; quote/deal cancel untouched', () => {
+  assert.match(documentsByTypeSource, /credit_action = buildTaxInvoiceCreditAction/);
+  assert.match(documentsByTypeSource, /params\.documentType === 'tax_invoice'/);
+  assert.match(documentsByTypeSource, /INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT/);
+  assert.match(modalSource, /row\.credit_action/);
+  assert.match(modalSource, /begin_income_tax_invoice_credit|creditTarget\.action\.command/);
+  assert.match(modalSource, /זיכוי מלא|creditMode/);
+  assert.doesNotMatch(modalSource, /cancel_action[\s\S]{0,80}tax_invoice/);
+});
+
+test('lineage migration is forward-only 161', () => {
+  assert.match(migration161, /income_document_credit_links/);
+  assert.match(migration161, /income_invoice_credit_control/);
+  assert.match(migration161, /income_invoice_credit_line_control/);
+});
+
+test('numbering path is not reinvented in credit workflow', () => {
+  assert.match(numberingSource, /allocateIncomeDocumentNumber/);
+  const creditService = readFileSync(
+    join(dir, '../../src/domains/income/income-document-tax-invoice-credit.service.ts'),
+    'utf8',
+  );
+  assert.doesNotMatch(creditService, /6000|starting_number|next_number\s*=/);
+});
+
+const migration162 = readFileSync(
+  join(dir, '../../../../supabase/migrations/162_accounting_base_customer_credit_and_atomic_credit_consume.sql'),
+  'utf8',
+);
+const consumeRpcSource = readFileSync(
+  join(dir, '../../src/domains/accounting-base/accounting-base-customer-credit.service.ts'),
+  'utf8',
+);
+
+test('A — FULL CREDIT remaining receivable and credit_state', () => {
+  const state = resolveCreditState({ originalAmount: 10000, creditedAmount: 10000 });
+  const money = resolveReceivableAfterCredit({
+    originalAmount: 10000,
+    creditedAmount: 10000,
+    allocatedPayments: 0,
+  });
+  assert.equal(state.credit_state, 'full');
+  assert.equal(state.remaining_creditable_amount, 0);
+  assert.equal(money.remaining_receivable, 0);
+  assert.equal(money.customer_credit, 0);
+});
+
+test('B — PARTIAL CREDIT remaining 7,000', () => {
+  const state = resolveCreditState({ originalAmount: 10000, creditedAmount: 3000 });
+  assert.equal(state.credit_state, 'partial');
+  assert.equal(state.remaining_creditable_amount, 7000);
+});
+
+test('C — MULTIPLE CREDIT 3,000 + 2,000', () => {
+  const first = decideAtomicCreditConsume({
+    originalAmount: 10000,
+    creditedAmount: 0,
+    requestedAmount: 3000,
+  });
+  assert.equal(first.ok, true);
+  if (!first.ok) return;
+  const second = decideAtomicCreditConsume({
+    originalAmount: 10000,
+    creditedAmount: first.nextCredited,
+    requestedAmount: 2000,
+  });
+  assert.equal(second.ok, true);
+  if (!second.ok) return;
+  const state = resolveCreditState({ originalAmount: 10000, creditedAmount: second.nextCredited });
+  assert.equal(state.remaining_creditable_amount, 5000);
+  assert.equal(second.nextCredited, 5000);
+});
+
+test('D — OVER-CREDIT remaining 3,000 attempt 4,000', () => {
+  const result = decideAtomicCreditConsume({
+    originalAmount: 10000,
+    creditedAmount: 7000,
+    requestedAmount: 4000,
+  });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.code, CREDIT_AMOUNT_EXCEEDS_REMAINING_CREDITABLE);
+});
+
+test('E — CONCURRENT CREDIT remaining 5,000 two 4,000 attempts', () => {
+  let credited = 5000;
+  const original = 10000;
+  const remainingAtOpen = original - credited;
+  assert.equal(remainingAtOpen, 5000);
+  const outcomes: Array<'ok' | 'reject'> = [];
+  for (const requested of [4000, 4000]) {
+    const decision = decideAtomicCreditConsume({
+      originalAmount: original,
+      creditedAmount: credited,
+      requestedAmount: requested,
+    });
+    if (decision.ok) {
+      credited = decision.nextCredited;
+      outcomes.push('ok');
+    } else {
+      outcomes.push('reject');
+    }
+  }
+  assert.deepEqual(outcomes, ['ok', 'reject']);
+  assert.equal(credited, 9000);
+  assert.equal(credited <= original, true);
+});
+
+test('F — PARTIAL PAYMENT + CREDIT remaining receivable 3,000', () => {
+  const money = resolveReceivableAfterCredit({
+    originalAmount: 10000,
+    creditedAmount: 3000,
+    allocatedPayments: 4000,
+  });
+  assert.equal(money.net_invoice_amount, 7000);
+  assert.equal(money.remaining_receivable, 3000);
+  assert.equal(money.customer_credit, 0);
+});
+
+test('G — FULL PAYMENT + CREDIT creates AB customer credit amount 3,000', () => {
+  const money = resolveReceivableAfterCredit({
+    originalAmount: 10000,
+    creditedAmount: 3000,
+    allocatedPayments: 10000,
+  });
+  assert.equal(money.remaining_receivable, 0);
+  assert.equal(money.customer_credit, 3000);
+  assert.match(migration162, /accounting_customer_credits/);
+  assert.match(migration162, /status text not null default 'open'/);
+  assert.doesNotMatch(migration162, /insert into public\.accounting_payments/);
+  assert.doesNotMatch(migration162, /insert into public\.accounting_payment_allocations/);
+  assert.match(consumeRpcSource, /accounting_customer_credits/);
+  assert.match(consumeRpcSource, /ACCOUNTING_BASE_CONSUME_INCOME_TAX_INVOICE_CREDIT_RPC/);
+});
+
+test('atomic consume RPC locks control and line rows', () => {
+  assert.match(migration162, /accounting_base_consume_income_tax_invoice_credit/);
+  assert.match(migration162, /from public\.income_invoice_credit_control[\s\S]*for update/);
+  assert.match(migration162, /from public\.income_invoice_credit_line_control[\s\S]*for update/);
+  assert.match(migration162, /from public\.income_document_credit_links[\s\S]*for update/);
+  assert.match(migration162, /CREDIT_AMOUNT_EXCEEDS_REMAINING_CREDITABLE/);
+  assert.match(migration162, /CREDIT_LINE_EXCEEDS_REMAINING_CREDITABLE/);
+  assert.match(migration162, /accounting_base_reverse_income_tax_invoice_credit_consume/);
+  assert.match(migration162, /status = 'reversed'/);
+});
+
+test('line guard uses source identity not display text', () => {
+  const blocked = decideAtomicCreditConsume({
+    originalAmount: 1000,
+    creditedAmount: 0,
+    requestedAmount: 500,
+    lines: [{ remainingQuantity: 2, remainingAmount: 200, requestedQuantity: 5, requestedAmount: 500 }],
+  });
+  assert.equal(blocked.ok, false);
+  if (blocked.ok) return;
+  assert.equal(blocked.code, CREDIT_LINE_EXCEEDS_REMAINING_CREDITABLE);
+});
+
+test('H — ledger reads first-class Accounting Base customer credit', () => {
+  const ledger = readFileSync(
+    join(dir, '../../src/domains/income/income-client-income-ledger-card.service.ts'),
+    'utf8',
+  );
+  assert.match(ledger, /loadOpenCustomerCreditAmountByCustomer/);
+  assert.match(ledger, /financial_source: 'accounting_base'/);
+  assert.match(ledger, /יתרת זכות ללקוח/);
+});
+
+test('I — A/R remaining is collectible only', () => {
+  const ar = readFileSync(
+    join(dir, '../../src/domains/accounting-base/accounting-base-accounts-receivable.read-model.service.ts'),
+    'utf8',
+  );
+  assert.match(ar, /composeCollectibleAfterCredit/);
+  const money = composeCollectibleAfterCredit({
+    originalAmount: 10000,
+    creditedAmount: 3000,
+    allocatedPayments: 10000,
+  });
+  assert.equal(money.remaining_receivable, 0);
+  assert.equal(money.customer_credit, 3000);
+});
+
+test('J — collection reconcile runs only after successful posting', () => {
+  assert.match(issueSource, /finalizeIssuedTaxInvoiceCreditSideEffects/);
+  assert.match(issueSource, /accounting_posting_completed[\s\S]*finalizeIssuedTaxInvoiceCreditSideEffects/);
+  const collection = readFileSync(
+    join(dir, '../../src/domains/work-engine/work-engine-collection-credit-fact.service.ts'),
+    'utf8',
+  );
+  assert.match(collection, /tax_invoice_credit_issued/);
+  assert.match(collection, /collection_followup_auto_closed_credited/);
+});
+
+test('K/L/M — PDF / Email / DocFlow reuse canonical systems', () => {
+  const render = readFileSync(
+    join(dir, '../../src/domains/income/income-document-unified-render.service.ts'),
+    'utf8',
+  );
+  const email = readFileSync(
+    join(dir, '../../src/domains/income/income-document-email-history.service.ts'),
+    'utf8',
+  );
+  const docflow = readFileSync(
+    join(dir, '../../src/domains/income/income-document-docflow-send.service.ts'),
+    'utf8',
+  );
+  assert.match(render, /loadCreditSourceReferenceForDocument/);
+  assert.match(render, /mergeCreditSourceReferenceIntoNotes/);
+  assert.match(email, /credit_tax_invoice/);
+  assert.match(docflow, /credit_tax_invoice/);
+  assert.doesNotMatch(issueSource, /credit-specific PDF|second preview/);
+  assert.match(numberingSource, /allocateIncomeDocumentNumber/);
+});
+
+test('N — issued credit and original invoice stay immutable', () => {
+  assert.match(commandsSource, /Cannot update an issued draft/);
+  assert.doesNotMatch(issueSource, /from\('income_documents'\)[\s\S]{0,120}\.update\(/);
+  const creditService = readFileSync(
+    join(dir, '../../src/domains/income/income-document-tax-invoice-credit.service.ts'),
+    'utf8',
+  );
+  assert.doesNotMatch(creditService, /from\('income_documents'\)[\s\S]{0,80}\.update\(/);
+});
+
+test('O — numbering is existing credit_tax_invoice sequence only', () => {
+  assert.match(numberingSource, /allocateIncomeDocumentNumber/);
+  const creditService = readFileSync(
+    join(dir, '../../src/domains/income/income-document-tax-invoice-credit.service.ts'),
+    'utf8',
+  );
+  assert.doesNotMatch(creditService, /6000|starting_number|next_number\s*=/);
+  assert.doesNotMatch(migration162, /starting_number|next_number/);
+});
+
+test('posting failure reverses consume including customer credit', () => {
+  assert.match(issueSource, /reverseCreditConsumeOnIssueFailure/);
+  assert.match(issueSource, /issuedDocumentId: issuedId/);
+  assert.match(migration162, /status = 'reversed'/);
+});

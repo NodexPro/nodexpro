@@ -1,5 +1,7 @@
 import type { IncomeDocumentDetailsStep } from './income-document-details-step.builders.js';
 import type { IncomeRecipientSearchModel } from './income-recipient.service.js';
+import { INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT } from './income-document-tax-invoice-credit.pure.js';
+export { INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT };
 
 export const INCOME_CONTEXT_AGGREGATE_KEY = 'income_workspace_context_aggregate' as const;
 export const INCOME_WORKSPACE_AGGREGATE_KEY = 'income_workspace_aggregate' as const;
@@ -430,6 +432,17 @@ export interface WorkEngineDocumentEditAction {
   disabled_reason: string | null;
 }
 
+export interface WorkEngineDocumentCreditAction {
+  visible: true;
+  enabled: boolean;
+  label: string;
+  command: typeof INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT;
+  disabled_reason: string | null;
+  modes: Array<{ key: 'full' | 'partial'; label: string }>;
+  reason_options: Array<{ key: string; label: string }>;
+  reason_required: true;
+}
+
 export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   row_id: string;
   document_number: string | null;
@@ -460,6 +473,8 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   convert_action: WorkEngineDocumentConvertAction | null;
   /** Backend-owned cancel for quote / deal_invoice only (never tax). */
   cancel_action: WorkEngineDocumentCancelAction | null;
+  /** Backend-owned tax-invoice credit (new credit_tax_invoice). Never mutates the invoice. */
+  credit_action: WorkEngineDocumentCreditAction | null;
   conversion_state_key: 'active' | 'converted' | 'partially_converted' | 'cancelled' | null;
   allowed_actions: string[];
 }
@@ -651,6 +666,14 @@ export interface IncomeClientIncomeLedgerCardAggregate {
     total_debit_label: string;
     total_credit_label: string;
     current_balance_label: string;
+  };
+  customer_credit: {
+    visible: boolean;
+    label: string;
+    amount_display: string;
+    amount_reference: number;
+    status_label: string;
+    financial_source: 'accounting_base';
   };
   table_columns: Array<{ key: string; label: string }>;
   documents: IncomeClientIncomeLedgerCardInvoiceGroup[];
@@ -888,7 +911,8 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT
   | typeof INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT
   | typeof INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT
-  | typeof INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT;
+  | typeof INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT
+  | typeof INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT;
 
 export interface IncomeCommandResponseMeta {
   idempotent_replay?: boolean;

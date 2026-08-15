@@ -12,6 +12,8 @@ import {
   resolveIncomeInvoiceOriginalAmount,
 } from '../accounting-base/accounting-base-income-payment.pure.js';
 import { sumPostedAllocationsForIncomeDocument } from '../accounting-base/accounting-base-income-payment-case.read.js';
+import { loadIssuedCreditAmountsByInvoice } from './income-document-tax-invoice-credit.service.js';
+import { composeCollectibleAfterCredit } from './income-document-tax-invoice-credit.pure.js';
 import { listAttempts } from '../delivery/delivery.runtime.js';
 import {
   INCOME_WORK_ENGINE_ENTITY_TYPE,
@@ -203,8 +205,9 @@ export async function buildInvoiceLifecycleAggregate(params: {
     throw badRequest('invoice_lifecycle_aggregate supports issued documents only in INV-2A');
   }
 
-  const [paidAmount, deliveryAttempts, collectionItem, lastPaymentAt] = await Promise.all([
+  const [paidAmount, creditedMap, deliveryAttempts, collectionItem, lastPaymentAt] = await Promise.all([
     sumPostedAllocationsForIncomeDocument(scope.org_id, document.id),
+    loadIssuedCreditAmountsByInvoice(scope.org_id, [document.id]),
     listAttempts({
       organizationId: scope.org_id,
       sourceModule: 'income',
@@ -217,7 +220,15 @@ export async function buildInvoiceLifecycleAggregate(params: {
   ]);
 
   const originalAmount = resolveIncomeInvoiceOriginalAmount(document.totals_snapshot_json);
-  const paymentState = composeInvoiceLifecyclePaymentState(originalAmount, paidAmount);
+  const collectible = composeCollectibleAfterCredit({
+    originalAmount,
+    creditedAmount: creditedMap.get(document.id) ?? 0,
+    allocatedPayments: paidAmount,
+  });
+  const paymentState = composeInvoiceLifecyclePaymentState(
+    collectible.net_invoice_amount,
+    paidAmount,
+  );
 
   const attemptSlices: LifecycleDeliveryAttemptSlice[] = deliveryAttempts.map((a) => ({
     channel: a.channel,
@@ -231,8 +242,8 @@ export async function buildInvoiceLifecycleAggregate(params: {
     documentStatus: document.document_status,
     documentType: document.document_type,
     dueDate: document.due_date,
-    remainingBalance: paymentState.remaining_balance,
-    paymentStateKey: paymentState.payment_state_key,
+    remainingBalance: collectible.remaining_receivable,
+    paymentStateKey: collectible.payment_state_key,
     todayIso,
   });
 

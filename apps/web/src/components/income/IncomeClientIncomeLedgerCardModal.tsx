@@ -305,7 +305,22 @@ export function IncomeClientIncomeLedgerCardModal({
                     </td>
                     <td />
                   </tr>
-                </tfoot>
+                                  {aggregate.customer_credit?.visible ? (
+                    <tr className="nx-income-ledger-modal__footer-row">
+                      <td colSpan={4} className="nx-income-ledger-modal__footer-label">
+                        {aggregate.customer_credit.label}
+                      </td>
+                      <td />
+                      <td className="nx-income-ledger-modal__num-col nx-income-ledger-modal__credit-amount">
+                        {aggregate.customer_credit.amount_display}
+                      </td>
+                      <td className="nx-income-ledger-modal__num-col">
+                        {aggregate.customer_credit.status_label}
+                      </td>
+                      <td />
+                    </tr>
+                  ) : null}
+</tfoot>
               ) : null}
             </table>
             {aggregate?.empty_state.visible ? (

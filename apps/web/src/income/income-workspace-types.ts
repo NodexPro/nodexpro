@@ -102,6 +102,18 @@ export interface IncomeClientDocumentTypeCounter {
   action_key: 'open_documents_by_type';
 }
 
+
+export interface WorkEngineDocumentCreditAction {
+  visible: true;
+  enabled: boolean;
+  label: string;
+  command: 'begin_income_tax_invoice_credit';
+  disabled_reason: string | null;
+  modes: Array<{ key: 'full' | 'partial'; label: string }>;
+  reason_options: Array<{ key: string; label: string }>;
+  reason_required: true;
+}
+
 export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   row_id: string;
   document_number: string | null;
@@ -119,6 +131,7 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   allowed_actions: string[];
   email_delivery: IncomeDocumentEmailDeliveryBlock | null;
   docflow_delivery: IncomeDocumentDocflowDeliveryBlock | null;
+  credit_action?: WorkEngineDocumentCreditAction | null;
 }
 
 export interface WorkEngineInvoicesClientDocumentsByTypeAggregate {
@@ -807,6 +820,14 @@ export interface IncomeClientIncomeLedgerCardAggregate {
     payment_count: number;
     currency: string;
   };
+  customer_credit?: {
+    visible: boolean;
+    label: string;
+    amount_display: string;
+    amount_reference: number;
+    status_label: string;
+    financial_source: 'accounting_base';
+  };
   table_columns: Array<{ key: string; label: string }>;
   documents: IncomeClientIncomeLedgerCardInvoiceGroup[];
   rows: IncomeClientIncomeLedgerCardRenderRow[];
@@ -992,6 +1013,18 @@ export interface IncomeDocumentDocflowSendForm {
   disabled_reason: string | null;
 }
 
+export type IncomeDocumentPdfSendStatusKey =
+  | 'pdf_pending'
+  | 'pdf_failed'
+  | 'pdf_ready'
+  | 'pdf_unavailable';
+
+export interface IncomeDocumentPdfSendReadinessView {
+  status_key: IncomeDocumentPdfSendStatusKey;
+  status_label: string;
+  message: string | null;
+}
+
 export interface IncomeDocumentDocflowSendAggregate {
   aggregate_key: typeof INCOME_DOCUMENT_DOCFLOW_SEND_AGGREGATE_KEY;
   income_document_id: string;
@@ -999,6 +1032,7 @@ export interface IncomeDocumentDocflowSendAggregate {
   document_type_label: string;
   represented_client_id: string | null;
   client_display_name: string | null;
+  pdf_send_readiness: IncomeDocumentPdfSendReadinessView;
   table_columns: Array<{ key: string; label: string }>;
   rows: IncomeDocumentDocflowHistoryAttemptRow[];
   send_form: IncomeDocumentDocflowSendForm;
@@ -1040,6 +1074,7 @@ export interface IncomeDocumentEmailSendFormField {
   label: string;
   required: boolean;
   type: 'email';
+  default_value?: string | null;
 }
 
 export interface IncomeDocumentEmailSendForm {
@@ -1075,6 +1110,7 @@ export interface IncomeDocumentEmailHistoryAggregate {
   document_number: string;
   document_type_label: string;
   represented_client_id: string | null;
+  recipient_email_default: string | null;
   table_columns: Array<{ key: string; label: string }>;
   rows: IncomeDocumentEmailHistoryAttemptRow[];
   send_form: IncomeDocumentEmailSendForm;

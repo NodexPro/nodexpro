@@ -6,6 +6,8 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import { loadIssuedCreditAmountsByInvoice } from '../income/income-document-tax-invoice-credit.read.js';
+import { composeCollectibleAfterCredit } from '../income/income-document-tax-invoice-credit.pure.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 import {
   ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT,
@@ -181,7 +183,22 @@ export async function buildIncomeInvoicePaymentCaseAggregate(
 
   const original = resolveIncomeInvoiceOriginalAmount(row.totals_snapshot_json);
   const allocated = await sumPostedAllocationsForIncomeDocument(organizationId, row.id);
-  const state = resolveIncomeInvoicePaymentState(original, allocated);
+  const credited = (await loadIssuedCreditAmountsByInvoice(organizationId, [row.id])).get(row.id) ?? 0;
+  const collectible = composeCollectibleAfterCredit({
+    originalAmount: original,
+    creditedAmount: credited,
+    allocatedPayments: allocated,
+  });
+  const state = {
+    ...resolveIncomeInvoicePaymentState(
+      collectible.net_invoice_amount > 0 ? collectible.net_invoice_amount : original,
+      allocated,
+    ),
+    remaining_balance: collectible.remaining_receivable,
+    payment_state_key: collectible.payment_state_key,
+    payment_state_label: collectible.payment_state_label,
+    payment_state_tone: collectible.payment_state_tone,
+  };
   const canWrite = hasPerm(ctx, 'accounting_base.payment.write');
 
   const { data: allocRows, error: allocErr } = await supabaseAdmin

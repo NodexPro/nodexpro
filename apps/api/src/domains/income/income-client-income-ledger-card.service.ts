@@ -10,7 +10,6 @@ import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import {
   parseIncomePaymentMethodKey,
   resolveIncomeInvoiceOriginalAmount,
-  resolveIncomeInvoicePaymentState,
   type IncomeInvoicePaymentMethodKey,
 } from '../accounting-base/accounting-base-income-payment.pure.js';
 import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
@@ -38,6 +37,12 @@ import {
   type LedgerInvoicePaymentInput,
   type LedgerTransactionEventInput,
 } from './income-client-income-ledger-card.pure.js';
+import {
+  loadIssuedCreditAmountsByInvoice,
+  loadIssuedCreditRowsForInvoices,
+} from './income-document-tax-invoice-credit.service.js';
+import { composeCollectibleAfterCredit } from './income-document-tax-invoice-credit.pure.js';
+import { loadOpenCustomerCreditAmountByCustomer } from '../accounting-base/accounting-base-customer-credit.service.js';
 import {
   INCOME_CLIENT_INCOME_LEDGER_CARD_AGGREGATE_KEY,
   type IncomeActingMode,
@@ -145,6 +150,28 @@ async function loadRepresentedClient(orgId: string, clientId: string) {
     | null;
   if (!row || row.is_archived) throw notFound('Office client not found');
   return row;
+}
+
+async function loadLedgerCreditDocuments(
+  orgId: string,
+  representedClientId: string,
+  creditDocumentIds: string[],
+): Promise<Map<string, { document_number: string; issue_date: string }>> {
+  const byId = new Map<string, { document_number: string; issue_date: string }>();
+  if (creditDocumentIds.length === 0) return byId;
+  const { data, error } = await supabaseAdmin
+    .from('income_documents')
+    .select('id, document_number, issue_date')
+    .eq('organization_id', orgId)
+    .eq('represented_client_id', representedClientId)
+    .eq('document_type', 'credit_tax_invoice')
+    .eq('document_status', 'issued')
+    .in('id', creditDocumentIds);
+  throwIfSupabaseError(error, 'loadLedgerCreditDocuments');
+  for (const row of (data ?? []) as Array<{ id: string; document_number: string; issue_date: string }>) {
+    byId.set(row.id, { document_number: row.document_number, issue_date: row.issue_date });
+  }
+  return byId;
 }
 
 async function loadLedgerInvoices(orgId: string, representedClientId: string): Promise<RawDoc[]> {
@@ -469,24 +496,38 @@ export async function buildIncomeClientIncomeLedgerCardAggregate(params: {
     : [];
 
   const invoiceIds = customerDocs.map((d) => d.id);
-  const [allocatedByInvoice, paymentsByInvoice, docflowEntitled, portalActive] = await Promise.all([
-    sumPostedAllocationsForIncomeDocuments(orgId, invoiceIds),
-    loadPostedAllocationsByInvoice(orgId, representedClientId, invoiceIds, perms.view),
-    isDocflowEntitledForOrg(orgId),
-    loadRepresentedClientDocflowPortalActive(orgId, representedClientId),
-  ]);
+  const [allocatedByInvoice, paymentsByInvoice, creditedByInvoice, creditRows, customerCreditAmount, docflowEntitled, portalActive] =
+    await Promise.all([
+      sumPostedAllocationsForIncomeDocuments(orgId, invoiceIds),
+      loadPostedAllocationsByInvoice(orgId, representedClientId, invoiceIds, perms.view),
+      loadIssuedCreditAmountsByInvoice(orgId, invoiceIds),
+      loadIssuedCreditRowsForInvoices(orgId, invoiceIds),
+      loadOpenCustomerCreditAmountByCustomer(orgId, selectedEndCustomerId),
+      isDocflowEntitledForOrg(orgId),
+      loadRepresentedClientDocflowPortalActive(orgId, representedClientId),
+    ]);
+  const creditDocs = await loadLedgerCreditDocuments(
+    orgId,
+    representedClientId,
+    creditRows.map((row) => row.credit_document_id),
+  );
 
   const invoiceInputs: LedgerInvoiceGroupInput[] = customerDocs.map((doc) => {
     const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
     const allocated = allocatedByInvoice.get(doc.id) ?? 0;
-    const state = resolveIncomeInvoicePaymentState(original, allocated);
+    const credited = creditedByInvoice.get(doc.id) ?? 0;
+    const collectible = composeCollectibleAfterCredit({
+      originalAmount: original,
+      creditedAmount: credited,
+      allocatedPayments: allocated,
+    });
     return {
       income_document_id: doc.id,
       document_type_label: DOCUMENT_TYPE_LABELS.tax_invoice,
       document_number: doc.document_number,
       issue_date: invoiceTransactionDate(doc),
       original_amount: original,
-      remaining_balance: state.remaining_balance,
+      remaining_balance: collectible.remaining_receivable,
       currency: doc.currency || 'ILS',
       view_action: buildIncomeIssuedDocumentViewAction({
         incomeDocumentId: doc.id,
@@ -526,6 +567,26 @@ export async function buildIncomeClientIncomeLedgerCardAggregate(params: {
         debit_amount: null,
         credit_amount: payment.amount,
         view_action: payment.view_action,
+      });
+    }
+    for (const credit of creditRows.filter((row) => row.source_invoice_id === invoice.income_document_id)) {
+      const creditDoc = creditDocs.get(credit.credit_document_id);
+      events.push({
+        transaction_id: credit.credit_document_id,
+        row_kind: 'payment',
+        transaction_date: creditDoc?.issue_date ?? invoice.issue_date,
+        transaction_type_key: 'credit_tax_invoice',
+        transaction_type_label: 'חשבונית מס/זיכוי',
+        document_id: credit.credit_document_id,
+        document_number: creditDoc?.document_number ?? null,
+        payment_document_id: null,
+        payment_document_number: null,
+        debit_amount: null,
+        credit_amount: credit.credited_amount_reference,
+        view_action: buildIncomeIssuedDocumentViewAction({
+          incomeDocumentId: credit.credit_document_id,
+          canView: perms.view,
+        }),
       });
     }
   }
@@ -641,6 +702,14 @@ export async function buildIncomeClientIncomeLedgerCardAggregate(params: {
       total_debit_label: 'סה״כ חובה',
       total_credit_label: 'סה״כ זכות',
       current_balance_label: 'יתרה נוכחית',
+    },
+    customer_credit: {
+      visible: customerCreditAmount > 0.005,
+      label: 'יתרת זכות ללקוח',
+      amount_display: formatLedgerMoneyReference(customerCreditAmount, currency),
+      amount_reference: customerCreditAmount,
+      status_label: 'פתוחה — ללא החזר אוטומטי',
+      financial_source: 'accounting_base',
     },
     table_columns: [
       { key: 'transaction_date_display', label: 'תאריך' },

@@ -5,6 +5,9 @@
  *   GET /income/aggregates/workspace-context
  *   GET /income/aggregates/workspace
  *   GET /income/aggregates/client-income-ledger-card
+ *   GET /income/aggregates/document-email-history
+ *   GET /income/aggregates/document-docflow-send
+ *   GET /income/aggregates/issued-document-view
  *   GET /income/documents/:id/download (binary)
  *
  * Writes: POST /income/commands
@@ -15,6 +18,9 @@ import { INCOME } from './endpoints';
 import type {
   IncomeClientIncomeLedgerCardAggregate,
   IncomeCommandResponse,
+  IncomeDocumentDocflowSendAggregate,
+  IncomeDocumentEmailHistoryAggregate,
+  IncomeIssuedDocumentViewAggregate,
   IncomeWorkspaceAggregate,
   IncomeWorkspaceContextAggregate,
   SelectIncomeIssuerContextCommandResponse,
@@ -36,6 +42,9 @@ export type {
   IncomeDocumentCreationSchema,
   IncomeDocumentCreationStep,
   IncomeDraftsTableRow,
+  IncomeDocumentDocflowSendAggregate,
+  IncomeDocumentEmailHistoryAggregate,
+  IncomeIssuedDocumentViewAggregate,
   IncomeIssuedDocumentsTableRow,
   IncomeItemsTableRow,
   IncomeIssuerContextSummary,
@@ -63,6 +72,46 @@ export function isBrandingPreviewDraftCommandResponse(
     'document_branding_studio_preview' in res
   );
 }
+
+/** Narrow executeIncomeCommand union to the general Income command response (not select-issuer / branding-preview). */
+export function isIncomeCommandResponse(res: unknown): res is IncomeCommandResponse {
+  if (typeof res !== 'object' || res == null) return false;
+  if (!('command' in res) || !('income_workspace_aggregate' in res)) return false;
+  const command = (res as { command: unknown }).command;
+  return (
+    typeof command === 'string' &&
+    command !== 'select_income_issuer_context' &&
+    command !== 'update_income_document_branding_profile_preview_draft'
+  );
+}
+
+export async function fetchIncomeDocumentEmailHistoryAggregate(params: {
+  incomeDocumentId: string;
+}): Promise<IncomeDocumentEmailHistoryAggregate> {
+  const q = new URLSearchParams({ income_document_id: params.incomeDocumentId });
+  return apiJson<IncomeDocumentEmailHistoryAggregate>(
+    `${INCOME.documentEmailHistoryAggregate}?${q.toString()}`,
+  );
+}
+
+export async function fetchIncomeDocumentDocflowSendAggregate(params: {
+  incomeDocumentId: string;
+}): Promise<IncomeDocumentDocflowSendAggregate> {
+  const q = new URLSearchParams({ income_document_id: params.incomeDocumentId });
+  return apiJson<IncomeDocumentDocflowSendAggregate>(
+    `${INCOME.documentDocflowSendAggregate}?${q.toString()}`,
+  );
+}
+
+export async function fetchIncomeIssuedDocumentViewAggregate(params: {
+  incomeDocumentId: string;
+}): Promise<IncomeIssuedDocumentViewAggregate> {
+  const q = new URLSearchParams({ income_document_id: params.incomeDocumentId });
+  return apiJson<IncomeIssuedDocumentViewAggregate>(
+    `${INCOME.issuedDocumentViewAggregate}?${q.toString()}`,
+  );
+}
+
 
 export async function fetchIncomeWorkspaceContextAggregate(): Promise<IncomeWorkspaceContextAggregate> {
   return apiJson<IncomeWorkspaceContextAggregate>(INCOME.workspaceContextAggregate);

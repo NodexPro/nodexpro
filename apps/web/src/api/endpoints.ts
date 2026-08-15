@@ -343,6 +343,9 @@ export const INCOME = {
   workspaceContextAggregate: '/income/aggregates/workspace-context',
   workspaceAggregate: '/income/aggregates/workspace',
   clientIncomeLedgerCardAggregate: '/income/aggregates/client-income-ledger-card',
+  documentEmailHistoryAggregate: '/income/aggregates/document-email-history',
+  documentDocflowSendAggregate: '/income/aggregates/document-docflow-send',
+  issuedDocumentViewAggregate: '/income/aggregates/issued-document-view',
   commands: '/income/commands',
   documentDownload: (documentId: string) => `/income/documents/${encodeURIComponent(documentId)}/download`,
 } as const;

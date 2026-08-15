@@ -17,6 +17,8 @@ import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.servi
 import { emitIncomeWorkEventAfterInvoicePaidOrPartial } from '../income/income-work-engine-bridge.js';
 import { INCOME_WORK_EVENTS_DEFERRED } from '../income/income-work-engine-bridge.pure.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
+import { loadIssuedCreditAmountsByInvoice } from '../income/income-document-tax-invoice-credit.service.js';
+import { composeCollectibleAfterCredit } from '../income/income-document-tax-invoice-credit.pure.js';
 import {
   ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT,
   ACCOUNTING_BASE_INCOME_PAYMENT_CASE_KEY,
@@ -271,6 +273,16 @@ export async function executeRecordAndAllocateIncomePayment(
     if (original <= 0) {
       throw badRequest('Income document has no allocatable original amount');
     }
+    const credited =
+      (await loadIssuedCreditAmountsByInvoice(organizationId, [doc.id])).get(doc.id) ?? 0;
+    const collectible = composeCollectibleAfterCredit({
+      originalAmount: original,
+      creditedAmount: credited,
+      allocatedPayments: 0,
+    });
+    if (collectible.net_invoice_amount <= 0) {
+      throw badRequest('Income document has no remaining allocatable amount after credit');
+    }
 
     const rpcResult = await callRecordAndAllocateIncomePaymentRpc({
       organizationId,
@@ -285,13 +297,13 @@ export async function executeRecordAndAllocateIncomePayment(
       note,
       idempotencyKey,
       createdBy: ctx.user.id,
-      originalAmount: original,
+      originalAmount: collectible.net_invoice_amount,
     });
 
     const paymentId = rpcResult.payment_id;
     const allocationId = rpcResult.allocation_id;
     const allocatedAfter = rpcResult.allocated_total;
-    const stateAfter = resolveIncomeInvoicePaymentState(original, allocatedAfter);
+    const stateAfter = resolveIncomeInvoicePaymentState(collectible.net_invoice_amount, allocatedAfter);
 
     if (!rpcResult.replay) {
       await writeAudit({

@@ -24,6 +24,8 @@ import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service
 import type { IntakeWorkEventMeta } from '../work-engine/work-engine.types.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
+import { loadIssuedCreditAmountsByInvoice } from './income-document-tax-invoice-credit.service.js';
+import { composeCollectibleAfterCredit } from './income-document-tax-invoice-credit.pure.js';
 import {
   isSupportedIncomePaymentDocumentType,
   resolveIncomeInvoiceOriginalAmount,
@@ -143,11 +145,19 @@ async function emitOverdueIntakeIfEligible(
   paidAmount: number,
 ): Promise<IntakeWorkEventMeta | null> {
   const original = resolveIncomeInvoiceOriginalAmount(signal.totalsSnapshotJson);
+  const credited = (await loadIssuedCreditAmountsByInvoice(signal.orgId, [signal.incomeDocumentId])).get(
+    signal.incomeDocumentId,
+  ) ?? 0;
+  const collectible = composeCollectibleAfterCredit({
+    originalAmount: original,
+    creditedAmount: credited,
+    allocatedPayments: paidAmount,
+  });
   const intake = resolveIncomeOverdueCollectionIntake({
     documentStatus: 'issued',
     documentType: signal.documentType,
     dueDate: signal.dueDate,
-    originalAmount: original,
+    originalAmount: collectible.net_invoice_amount,
     paidAmount,
     todayIso,
   });
@@ -376,7 +386,10 @@ export async function scanAndEmitIncomeInvoiceOverdueForOrg(
     scanned += rows.length;
 
     const ids = rows.map((r) => r.id);
-    const paidMap = await sumPostedAllocationsForIncomeDocuments(orgId, ids);
+    const [paidMap, creditedMap] = await Promise.all([
+      sumPostedAllocationsForIncomeDocuments(orgId, ids),
+      loadIssuedCreditAmountsByInvoice(orgId, ids),
+    ]);
 
     for (const r of rows) {
       if (!isSupportedIncomePaymentDocumentType(r.document_type)) continue;
@@ -395,11 +408,16 @@ export async function scanAndEmitIncomeInvoiceOverdueForOrg(
       };
       const paid = paidMap.get(r.id) ?? 0;
       const original = resolveIncomeInvoiceOriginalAmount(r.totals_snapshot_json);
+      const collectible = composeCollectibleAfterCredit({
+        originalAmount: original,
+        creditedAmount: creditedMap.get(r.id) ?? 0,
+        allocatedPayments: paid,
+      });
       const decision = resolveIncomeOverdueCollectionIntake({
         documentStatus: r.document_status,
         documentType: r.document_type,
         dueDate: r.due_date,
-        originalAmount: original,
+        originalAmount: collectible.net_invoice_amount,
         paidAmount: paid,
         todayIso,
       });

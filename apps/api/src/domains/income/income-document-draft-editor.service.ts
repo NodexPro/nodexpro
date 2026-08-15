@@ -47,6 +47,10 @@ import { previewNextIncomeDocumentNumber } from './income-document-numbering.ser
 import { findAvailableDocumentType, resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
 import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.types.js';
 import { optionalJsonObject, optionalString, optionalUuid, parseIncomeDocumentType, reqUuid } from './income.guards.js';
+import {
+  assertCreditDraftIdentityLocked,
+  assertNoNewCreditLines,
+} from './income-document-tax-invoice-credit.service.js';
 import type { RecipientSearchOverlay } from './income-recipient.service.js';
 import {
   loadIncomeCustomerDefaultPaymentTerms,
@@ -761,6 +765,11 @@ export async function addIncomeDocumentLine(
 ): Promise<WizardDraftOverlay> {
   const draft_id = reqUuid(body.draft_id, 'draft_id');
   const row = await loadWizardDraftRow(scope, draft_id);
+  await assertNoNewCreditLines({
+    orgId: scope.org_id,
+    draftId: draft_id,
+    documentSettingsJson: row.document_settings_json,
+  });
   const settings = parseDocumentSettingsJson(row.document_settings_json);
   const lines = normalizeDraftLines(row.draft_lines_json);
   lines.push(
@@ -888,6 +897,10 @@ export async function updateIncomeDocumentDraftSettings(
     }
   } else if (key === 'currency') {
     const c = optionalString(value) ?? 'ILS';
+    assertCreditDraftIdentityLocked({
+      documentSettingsJson: row.document_settings_json,
+      currency: c,
+    });
     patch.currency = c;
   } else if (key === 'language') {
     const lang = optionalString(value) ?? 'he';
@@ -921,6 +934,10 @@ export async function updateIncomeDocumentDraftSettings(
   } else if (key === 'document_type') {
     const dt = parseIncomeDocumentType(value);
     if (!dt) throw badRequest('document_type is invalid');
+    assertCreditDraftIdentityLocked({
+      documentSettingsJson: row.document_settings_json,
+      documentType: dt,
+    });
     const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
     const docType = findAvailableDocumentType(available_document_types, dt);
     if (!docType?.enabled) throw badRequest('document_type is not available for issuer');

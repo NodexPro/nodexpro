@@ -79,6 +79,13 @@ import {
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
 import { linkIncomeDocumentConversionTargetOnIssue } from './income-document-conversion.service.js';
 import {
+  assertAndConsumeCreditOnIssue,
+  finalizeIssuedTaxInvoiceCreditSideEffects,
+  reverseCreditConsumeOnIssueFailure,
+} from './income-document-tax-invoice-credit.service.js';
+import { readCreditDraftSettings } from './income-document-tax-invoice-credit.pure.js';
+import { resolveIncomeInvoiceOriginalAmount } from '../accounting-base/accounting-base-income-payment.pure.js';
+import {
   resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded,
   resolveAndApplyRecurringCycleIssueIssuerScope,
 } from './income-recurring-cycle-issue-issuer-scope.service.js';
@@ -596,6 +603,20 @@ async function issueNewDocumentFromDraft(
   const issuedId = issuedInsert.issuedId;
   diag.issued_document_id = issuedId;
 
+  const creditSettings = readCreditDraftSettings(draft.document_settings_json);
+  const consumedCredit = creditSettings
+    ? await assertAndConsumeCreditOnIssue({
+        ctx,
+        orgId: scope.org_id,
+        draftId: draft.id,
+        issuedDocumentId: issuedId,
+        documentSettingsJson: draft.document_settings_json,
+        draftLinesJson: draft.draft_lines_json,
+        totalsSnapshotJson: totals_snapshot_json,
+        actorUserId: scope.actor_user_id,
+      })
+    : null;
+
   const postingStartedAt = Date.now();
   logIncomeIssueStage(diag, 'accounting_posting_started', { duration_ms: 0 });
   try {
@@ -616,6 +637,15 @@ async function issueNewDocumentFromDraft(
     logIncomeIssueStage(diag, 'accounting_posting_completed', {
       duration_ms: Date.now() - postingStartedAt,
     });
+    if (consumedCredit) {
+      await finalizeIssuedTaxInvoiceCreditSideEffects({
+        orgId: scope.org_id,
+        sourceInvoiceId: consumedCredit.sourceInvoiceId,
+        creditDocumentId: issuedId,
+        remainingReceivable: consumedCredit.remainingReceivable,
+        actorUserId: scope.actor_user_id,
+      });
+    }
   } catch (postingErr) {
     logIncomeIssueStage(diag, 'accounting_posting_failed', {
       ...extractIncomeIssueSafeError(postingErr),
@@ -623,6 +653,17 @@ async function issueNewDocumentFromDraft(
     });
     const cleanupStartedAt = Date.now();
     logIncomeIssueStage(diag, 'issued_document_cleanup_started', { duration_ms: 0 });
+    if (creditSettings) {
+      await reverseCreditConsumeOnIssueFailure({
+        orgId: scope.org_id,
+        draftId: draft.id,
+        sourceInvoiceId: creditSettings.source_invoice_id,
+        issuedDocumentId: issuedId,
+        requestedAmount: resolveIncomeInvoiceOriginalAmount(totals_snapshot_json),
+        documentSettingsJson: draft.document_settings_json,
+        draftLinesJson: draft.draft_lines_json,
+      });
+    }
     await supabaseAdmin
       .from('income_documents')
       .delete()
