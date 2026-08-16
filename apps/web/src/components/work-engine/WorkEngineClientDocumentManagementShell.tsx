@@ -280,6 +280,9 @@ export function WorkEngineClientDocumentManagementShell({
         res.meta?.converted_draft_id ??
         res.income_workspace_aggregate.active_wizard_draft_id ??
         null;
+      setRetainerSetupOpen(false);
+      setRetainerSetupAggregate(null);
+      setRetainerCustomerOpen(false);
       setCreditRequest(null);
       setCreditReasonNote('');
       if (draftId && onOpenConvertedDraft) {

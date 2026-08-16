@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   IncomeAvailableDocumentType,
   IncomeWorkspaceAggregate,
@@ -603,9 +604,9 @@ export function WorkEngineIncomeDocumentWizardModal({
           ? 'nx-we-income-wizard-modal--details-step'
           : '';
 
-  return (
+  return createPortal(
     <>
-    <div className="nx-modal-overlay nx-invoice-ui nx-invoice-designer-ui" role="dialog" aria-modal="true">
+    <div className="nx-modal-overlay nx-we-income-wizard-overlay nx-invoice-ui nx-invoice-designer-ui" role="dialog" aria-modal="true">
       <div
         className={`nx-modal nx-accounting-editor-modal nx-we-income-wizard-modal ${modalStepClass}`.trim()}
         dir="rtl"
@@ -694,6 +695,7 @@ export function WorkEngineIncomeDocumentWizardModal({
       }
       onClose={() => setReadyToPrintPreviewOpen(false)}
     />
-    </>
+    </>,
+    document.body,
   );
 }

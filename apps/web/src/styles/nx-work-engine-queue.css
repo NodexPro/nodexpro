@@ -359,6 +359,10 @@
 
 /* Work Engine income wizard — inherits Inter stack from .nx-invoice-ui */
 
+.nx-we-income-wizard-overlay.nx-modal-overlay {
+  z-index: 14000;
+}
+
 /* Work Engine income wizard — working modal (not a tiny confirm dialog) */
 .nx-we-income-wizard-modal.nx-modal {
   width: min(1150px, 96vw);

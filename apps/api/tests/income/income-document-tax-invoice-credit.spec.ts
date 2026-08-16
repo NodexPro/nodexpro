@@ -212,6 +212,7 @@ test('credit handoff opens canonical Income wizard, not retainer setup', () => {
   const creditHandler = documentsShellSource.slice(creditHandlerStart, creditHandlerEnd);
   assert.match(creditHandler, /onOpenConvertedDraft/);
   assert.match(creditHandler, /income_workspace_aggregate/);
+  assert.match(creditHandler, /setRetainerSetupOpen\(false\)/);
   assert.doesNotMatch(creditHandler, /setRetainerSetupOpen\(true\)/);
   assert.doesNotMatch(creditHandler, /setRetainerCustomerOpen\(true\)/);
   assert.match(tabHostSource, /WorkEngineIncomeDocumentWizardModal/);

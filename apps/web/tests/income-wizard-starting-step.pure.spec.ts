@@ -94,8 +94,8 @@ test('credit handoff opens WorkEngineIncomeDocumentWizardModal, not retainer set
   const creditHandler = shellSource.slice(creditHandlerStart, creditHandlerEnd);
 
   assert.match(creditHandler, /onOpenConvertedDraft/);
+  assert.match(creditHandler, /setRetainerSetupOpen\(false\)/);
   assert.match(creditHandler, /income_workspace_aggregate/);
-  assert.match(creditHandler, /converted_draft_id/);
   assert.doesNotMatch(creditHandler, /setRetainerSetupOpen\(true\)/);
   assert.doesNotMatch(creditHandler, /setRetainerCustomerOpen\(true\)/);
   assert.doesNotMatch(creditHandler, /WorkEngineInvoiceRetainerSetupModal/);
@@ -107,6 +107,8 @@ test('credit handoff opens WorkEngineIncomeDocumentWizardModal, not retainer set
   assert.match(tabHostSource, /setWizardInitialAgg\(null\);\s*setWizardOpen\(true\)/);
   assert.match(wizardSource, /resolveIncomeWizardStartingStepIndex/);
   assert.match(wizardSource, /<WorkEngineDocumentDetailsStep/);
+  assert.match(wizardSource, /nx-we-income-wizard-overlay/);
+  assert.match(wizardSource, /createPortal/);
   assert.doesNotMatch(wizardSource, /CreditNoteEditor|credit-note-editor|creditNoteForm/);
   assert.match(retainerSetupSource, /<WorkEngineDocumentDetailsStep/);
 
