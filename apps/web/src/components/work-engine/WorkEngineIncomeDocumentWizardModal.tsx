@@ -72,6 +72,19 @@ function documentTypeKeyFromWorkspace(workspace: IncomeWorkspaceAggregate | null
   return typeof key === 'string' ? key : '';
 }
 
+function WizardPreviewEyeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 export function WorkEngineIncomeDocumentWizardModal({
   open,
   busy,
@@ -138,6 +151,10 @@ export function WorkEngineIncomeDocumentWizardModal({
 
   const sessionActions = workspaceAgg?.document_details_step?.session_actions ?? null;
   const footerActions = sessionActions?.footer ?? null;
+  const overlayFooterMode =
+    footerActions?.mode === 'preliminary_edit' || footerActions?.mode === 'credit_note';
+  const previewUsesEye =
+    sessionActions?.preview?.icon === 'eye' || sessionActions?.preview?.presentation === 'icon';
   const showBack = footerActions?.show_back ?? true;
   const showNext = footerActions?.show_next ?? true;
   const showSave = footerActions?.show_save ?? true;
@@ -412,7 +429,7 @@ export function WorkEngineIncomeDocumentWizardModal({
         );
         const previewFromCommand =
           payload.income_workspace_aggregate.document_details_step?.document_preview ?? null;
-        if (footerActions?.mode === 'preliminary_edit') {
+        if (footerActions?.mode === 'preliminary_edit' || footerActions?.mode === 'credit_note') {
           setReadyToPrintPreview(previewFromCommand);
           setReadyToPrintPreviewOpen(true);
         } else if (advanceToPreview && previewStepIndex >= 0) {
@@ -636,8 +653,9 @@ export function WorkEngineIncomeDocumentWizardModal({
             </button>
           ) : null}
           {showPreview &&
+          !previewUsesEye &&
           (sessionActions?.preview?.enabled ?? true) &&
-          (footerActions?.mode === 'preliminary_edit' || activeStepKey === 'document_details') ? (
+          (overlayFooterMode || activeStepKey === 'document_details') ? (
             <button
               type="button"
               className="nx-btn nx-btn-taxes-compact"
@@ -649,7 +667,7 @@ export function WorkEngineIncomeDocumentWizardModal({
           ) : null}
           {showSave &&
           (sessionActions?.save?.enabled ?? true) &&
-          (footerActions?.mode === 'preliminary_edit' || activeStepKey === 'document_details') ? (
+          (overlayFooterMode || activeStepKey === 'document_details') ? (
             <button
               type="button"
               className="nx-btn nx-btn-primary nx-btn-taxes-compact"
@@ -658,6 +676,21 @@ export function WorkEngineIncomeDocumentWizardModal({
               title={documentDetailsStep?.draft_state_display?.label ?? undefined}
             >
               {sessionActions?.save?.label ?? 'שמירת טיוטה'}
+            </button>
+          ) : null}
+          {showPreview &&
+          previewUsesEye &&
+          (sessionActions?.preview?.enabled ?? true) &&
+          (overlayFooterMode || activeStepKey === 'document_details') ? (
+            <button
+              type="button"
+              className="nx-we-retainer-schedule__preview-eye"
+              disabled={footerLocked || !activeDraftId || sessionActions?.preview?.enabled === false}
+              aria-label={sessionActions?.preview?.label ?? 'תצוגה מקדימה'}
+              title={sessionActions?.preview?.disabled_reason ?? sessionActions?.preview?.label ?? 'תצוגה מקדימה'}
+              onClick={() => void handleGeneratePreview(true)}
+            >
+              <WizardPreviewEyeIcon />
             </button>
           ) : null}
           {showNext && !isLastStep ? (

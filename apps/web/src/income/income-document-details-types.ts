@@ -158,6 +158,8 @@ export type IncomeDocumentDetailsStep = {
       command: string | null;
       label: string;
       disabled_reason: string | null;
+      presentation?: 'button' | 'icon';
+      icon?: 'eye' | null;
     };
     issue: {
       enabled: boolean;
@@ -172,7 +174,7 @@ export type IncomeDocumentDetailsStep = {
       disabled_reason: string | null;
     };
     footer?: {
-      mode: 'preliminary_edit' | 'wizard';
+      mode: 'preliminary_edit' | 'wizard' | 'credit_note';
       show_back: boolean;
       show_next: boolean;
       show_save: boolean;

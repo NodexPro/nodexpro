@@ -1140,6 +1140,7 @@ export async function buildIncomeDocumentDetailsStep(
     canEdit,
     canIssue: canEdit && scope.permissions.issue,
     editMode,
+    documentType: row.document_type,
   });
 
   const preliminaryEditDocumentDateMin = preliminarySourceIdentity?.issue_date ?? null;

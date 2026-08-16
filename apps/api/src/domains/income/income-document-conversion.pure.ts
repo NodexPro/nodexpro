@@ -146,10 +146,14 @@ export type WizardSessionAction = {
   command: string | null;
   label: string;
   disabled_reason: string | null;
+  presentation?: 'button' | 'icon';
+  icon?: 'eye' | null;
 };
 
+export type WizardSessionFooterMode = 'preliminary_edit' | 'wizard' | 'credit_note';
+
 export type WizardSessionFooterPresentation = {
-  mode: 'preliminary_edit' | 'wizard';
+  mode: WizardSessionFooterMode;
   show_back: boolean;
   show_next: boolean;
   show_save: boolean;
@@ -223,13 +227,15 @@ export function buildWizardSessionActions(params: {
   canEdit: boolean;
   canIssue: boolean;
   editMode: PreliminaryDocumentEditMode | null;
+  documentType?: string | null;
 }): WizardSessionActions {
   const isPreliminaryEdit = params.editMode?.type === 'preliminary_document_edit';
+  const isCreditNote = !isPreliminaryEdit && params.documentType === 'credit_tax_invoice';
   return {
     save: {
       enabled: params.canEdit,
       command: params.canEdit ? 'save_income_document_draft' : null,
-      label: isPreliminaryEdit ? 'שמירה' : 'שמירת טיוטה',
+      label: isPreliminaryEdit || isCreditNote ? 'שמירה' : 'שמירת טיוטה',
       disabled_reason: params.canEdit ? null : 'נדרשת הרשאת עריכה',
     },
     preview: {
@@ -237,6 +243,8 @@ export function buildWizardSessionActions(params: {
       command: params.canEdit ? 'generate_income_document_preview' : null,
       label: 'תצוגה מקדימה',
       disabled_reason: params.canEdit ? null : 'נדרשת הרשאת עריכה',
+      presentation: isCreditNote ? 'icon' : 'button',
+      icon: isCreditNote ? 'eye' : null,
     },
     issue: {
       enabled: params.canIssue && !isPreliminaryEdit,
@@ -270,16 +278,27 @@ export function buildWizardSessionActions(params: {
           close_after_save: true,
           close_control: 'icon',
         }
-      : {
-          mode: 'wizard',
-          show_back: true,
-          show_next: true,
-          show_save: true,
-          show_preview: true,
-          show_issue: true,
-          close_after_save: false,
-          close_control: 'text',
-        },
+      : isCreditNote
+        ? {
+            mode: 'credit_note',
+            show_back: false,
+            show_next: false,
+            show_save: true,
+            show_preview: true,
+            show_issue: false,
+            close_after_save: true,
+            close_control: 'icon',
+          }
+        : {
+            mode: 'wizard',
+            show_back: true,
+            show_next: true,
+            show_save: true,
+            show_preview: true,
+            show_issue: true,
+            close_after_save: false,
+            close_control: 'text',
+          },
   };
 }
 
