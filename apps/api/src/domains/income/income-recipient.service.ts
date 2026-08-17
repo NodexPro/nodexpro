@@ -311,6 +311,27 @@ export async function loadIncomeCustomerDefaultPaymentTerms(
   return DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS;
 }
 
+export async function loadIncomeCustomerPaymentTermsByIds(
+  orgId: string,
+  customerIds: string[],
+): Promise<Map<string, IncomeCustomerPaymentTermsKey>> {
+  const unique = [...new Set(customerIds.filter(Boolean))];
+  const out = new Map<string, IncomeCustomerPaymentTermsKey>();
+  if (unique.length === 0) return out;
+  const { data, error } = await supabaseAdmin
+    .from('income_customers')
+    .select('id, default_payment_terms')
+    .eq('organization_id', orgId)
+    .in('id', unique);
+  throwIfSupabaseError(error, 'loadIncomeCustomerPaymentTermsByIds');
+  for (const row of data ?? []) {
+    const id = String((row as { id: string }).id);
+    const raw = (row as { default_payment_terms: string | null }).default_payment_terms ?? '';
+    out.set(id, isIncomeCustomerPaymentTermsKey(raw) ? raw : DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS);
+  }
+  return out;
+}
+
 export function selectedFromSavedRow(row: IncomeRecipientListRow): IncomeRecipientSelected {
   return {
     kind: 'saved',

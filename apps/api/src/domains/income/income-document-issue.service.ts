@@ -78,6 +78,12 @@ import {
 } from './income-issue-diagnostic.js';
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
 import { linkIncomeDocumentConversionTargetOnIssue } from './income-document-conversion.service.js';
+import { parseDocumentSettingsJson } from './income-document-draft-totals.pure.js';
+import {
+  paymentTermsKeyFromUnknown,
+  resolveTaxInvoiceDueDateForIssue,
+} from './income-customer-payment-terms.pure.js';
+import { loadIncomeCustomerDefaultPaymentTerms } from './income-recipient.service.js';
 import {
   assertAndConsumeCreditOnIssue,
   finalizeIssuedTaxInvoiceCreditSideEffects,
@@ -379,6 +385,26 @@ async function buildCustomerSnapshot(
   };
 }
 
+async function resolveDueDateForIssuedDocument(
+  scope: ActiveIncomeIssuerScope,
+  draft: FullDraftRow,
+  issueDate: string,
+): Promise<string | null> {
+  if (draft.document_type !== 'tax_invoice') return draft.due_date;
+  const settings = parseDocumentSettingsJson(draft.document_settings_json);
+  const paymentTerms =
+    paymentTermsKeyFromUnknown(draft.payment_terms_json) ??
+    (draft.income_customer_id
+      ? await loadIncomeCustomerDefaultPaymentTerms(scope, draft.income_customer_id)
+      : null);
+  return resolveTaxInvoiceDueDateForIssue({
+    storedDueDate: draft.due_date,
+    documentDateIso: draft.document_date ?? issueDate,
+    paymentTerms,
+    dueDateManualOverride: settings.due_date_manual_override === true,
+  });
+}
+
 async function issueNewDocumentFromDraft(
   ctx: RequestContext,
   scope: ActiveIncomeIssuerScope,
@@ -499,6 +525,7 @@ async function issueNewDocumentFromDraft(
     draft.currency ?? 'ILS',
     lines.length,
   );
+  const due_date = await resolveDueDateForIssuedDocument(scope, draft, issue_date);
 
   const allocated = await withIncomeIssueStage(
     diag,
@@ -555,7 +582,7 @@ async function issueNewDocumentFromDraft(
           document_number: allocated.document_number,
           document_status: 'issued',
           issue_date,
-          due_date: draft.due_date,
+          due_date,
           currency: draft.currency ?? 'ILS',
           language: draft.language ?? 'he',
           lines_snapshot_json: lines,
@@ -741,7 +768,7 @@ async function issueNewDocumentFromDraft(
     documentType: draft.document_type!,
     documentNumber: allocated.document_number,
     issueDate: issue_date,
-    dueDate: draft.due_date,
+    dueDate: due_date,
     currency: draft.currency ?? 'ILS',
     customerSnapshotJson: customer_snapshot_json,
     totalsSnapshotJson: totals_snapshot_json,

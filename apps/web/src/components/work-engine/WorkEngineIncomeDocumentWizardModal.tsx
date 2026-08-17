@@ -170,6 +170,9 @@ export function WorkEngineIncomeDocumentWizardModal({
     return wizard.steps.filter((s) => {
       if (s.when === 'office_representative') return issuerChoice === 'office_client';
       if (s.key === 'issue' && footerActions && !footerActions.show_issue) return false;
+      // Credit Note Eye opens the ready-to-print overlay, not the wizard preview step
+      // (sidebar / numbered zones / designer chrome).
+      if (s.key === 'preview' && footerActions?.mode === 'credit_note') return false;
       return true;
     });
   }, [wizard.steps, issuerChoice, footerActions]);
@@ -391,7 +394,8 @@ export function WorkEngineIncomeDocumentWizardModal({
         onCompleted(
           'work_engine_invoices_tab_aggregate' in res
             ? {
-                work_engine_invoices_tab_aggregate: res.work_engine_invoices_tab_aggregate,
+                work_engine_invoices_tab_aggregate:
+                  res.work_engine_invoices_tab_aggregate as Record<string, unknown> | undefined,
                 work_engine_invoices_client_documents_by_type_aggregate:
                   'work_engine_invoices_client_documents_by_type_aggregate' in res
                     ? res.work_engine_invoices_client_documents_by_type_aggregate
@@ -754,6 +758,9 @@ export function WorkEngineIncomeDocumentWizardModal({
         documentDetailsStep?.edit_mode?.source_document_number
           ? `מספר ${documentDetailsStep.edit_mode.source_document_number}`
           : null
+      }
+      overlayClassName={
+        footerActions?.mode === 'credit_note' ? 'nx-we-retainer-preview-overlay--above-wizard' : undefined
       }
       onClose={() => setReadyToPrintPreviewOpen(false)}
     />

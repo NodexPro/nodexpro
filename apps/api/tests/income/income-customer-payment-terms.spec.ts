@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   computeDueDateFromPaymentTerms,
   incomeCustomerPaymentTermsLabel,
+  resolveIncomeDueDateFromDocument,
   resolveTaxInvoiceDueDate,
+  resolveTaxInvoiceDueDateForIssue,
 } from '../../src/domains/income/income-customer-payment-terms.pure.js';
 
 test('payment terms labels match Hebrew options', () => {
@@ -40,5 +42,53 @@ test('resolveTaxInvoiceDueDate respects manual override', () => {
       dueDateManualOverride: false,
     }),
     '2026-04-30',
+  );
+});
+
+test('issue persists the due date shown on the tax invoice document', () => {
+  assert.equal(
+    resolveTaxInvoiceDueDateForIssue({
+      storedDueDate: null,
+      documentDateIso: '2026-08-07',
+      paymentTerms: 'eom_plus_30',
+      dueDateManualOverride: false,
+    }),
+    '2026-09-30',
+  );
+  assert.equal(
+    resolveTaxInvoiceDueDateForIssue({
+      storedDueDate: '2026-10-15',
+      documentDateIso: '2026-08-07',
+      paymentTerms: 'eom_plus_30',
+      dueDateManualOverride: true,
+    }),
+    '2026-10-15',
+  );
+});
+
+test('issued display recovers document due date from payment terms when stored due_date is null', () => {
+  assert.equal(
+    resolveIncomeDueDateFromDocument({
+      storedDueDate: null,
+      documentDateIso: '2026-08-07',
+      paymentTerms: 'eom_plus_30',
+    }),
+    '2026-09-30',
+  );
+  assert.equal(
+    resolveIncomeDueDateFromDocument({
+      storedDueDate: '2026-09-19',
+      documentDateIso: '2026-08-07',
+      paymentTerms: 'eom_plus_30',
+    }),
+    '2026-09-19',
+  );
+  assert.equal(
+    resolveIncomeDueDateFromDocument({
+      storedDueDate: null,
+      documentDateIso: '2026-08-07',
+      paymentTerms: null,
+    }),
+    null,
   );
 });

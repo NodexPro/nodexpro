@@ -13,7 +13,6 @@ import {
 import { fetchWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../../api/work-engine';
 import { IncomeDocumentEmailHistoryModal } from '../income/IncomeDocumentEmailHistoryModal';
 import { WorkEngineDocumentsRowDeliveryIcons, workEngineDocumentsRowDeliveryVisible } from './WorkEngineDocumentsRowDeliveryIcons';
-import type { WorkEngineDocumentCreditAction } from '../../income/income-workspace-types';
 import type { WorkEngineTaxInvoiceCreditRequest } from './WorkEngineTaxInvoiceCreditConfirmModal';
 
 type OpenParams = {

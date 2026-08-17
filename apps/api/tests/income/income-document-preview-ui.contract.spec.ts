@@ -211,6 +211,27 @@ test('retainer preview modal renders one document canvas without sidebar', () =>
   assert.match(retainerPreviewModalSource, /nx-we-retainer-preview-modal__canvas/);
 });
 
+test('credit_note Eye opens ready-to-print overlay, not wizard editor preview', () => {
+  const generatePreviewHandler = wizardSource.slice(
+    wizardSource.indexOf('const handleGeneratePreview'),
+    wizardSource.indexOf('if (!open) return null'),
+  );
+  assert.match(generatePreviewHandler, /flushPendingEdits/);
+  assert.match(generatePreviewHandler, /cmds\.generate_preview/);
+  assert.match(generatePreviewHandler, /footerActions\?\.mode === 'credit_note'/);
+  assert.match(generatePreviewHandler, /setReadyToPrintPreviewOpen\(true\)/);
+  assert.doesNotMatch(generatePreviewHandler, /fetch\(/);
+  assert.match(wizardSource, /WorkEngineInvoiceRetainerPreviewModal/);
+  assert.match(wizardSource, /s.key === 'preview' && footerActions\?\.mode === 'credit_note'/);
+  assert.match(wizardSource, /nx-we-retainer-preview-overlay--above-wizard/);
+  assert.match(retainerCss, /\.nx-we-retainer-preview-overlay--above-wizard\s*\{[\s\S]*?z-index:\s*14100/);
+  assert.match(retainerCss, /\.nx-we-retainer-preview-overlay\s*\{[\s\S]*?z-index:\s*13100/);
+  assert.match(previewStepSource, /WorkEngineIncomeDocumentPreviewSidebar/);
+  assert.match(wizardSource, /WorkEngineIncomePreviewStep/);
+  assert.doesNotMatch(wizardSource, /IncomeDocumentBrandingSettingsModal/);
+  assert.doesNotMatch(wizardSource, /OwnerInvoiceDocumentBuilderSection/);
+});
+
 test('allocation save uses named command and refreshed aggregate', () => {
   assert.match(retainerSetupSource, /handleSaveCycleDraftAllocationNumber/);
   assert.match(retainerSetupSource, /update_allocation_number/);

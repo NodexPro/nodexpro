@@ -90,6 +90,6 @@ test('tax invoice documents modal renders backend due_date_display', () => {
   );
   assert.match(readModel, /key: 'due_date_display', label: 'תאריך לתשלום'/);
   assert.match(readModel, /formatIncomeDueDateDisplayHe/);
+  assert.match(readModel, /resolveIncomeDueDateFromDocument/);
   assert.match(modalSource, /due_date_display: row\.due_date_display/);
-  assert.doesNotMatch(modalSource, /issue_date_display \|\| row\.due_date/);
 });

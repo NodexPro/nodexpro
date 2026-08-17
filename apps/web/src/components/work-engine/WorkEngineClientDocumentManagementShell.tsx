@@ -16,7 +16,6 @@ import {
   type IncomeClientDocumentPanelActionResult,
 } from '../income/IncomeClientDocumentManagementPanel';
 import { IncomeClientIncomeLedgerCardModal } from '../income/IncomeClientIncomeLedgerCardModal';
-import { IncomeRepresentedClientEmailHistoryModal } from '../income/IncomeRepresentedClientEmailHistoryModal';
 import { WorkEngineClientDocumentTypeCounters } from './WorkEngineClientDocumentTypeCounters';
 import { WorkEngineClientDocumentsByTypeModal } from './WorkEngineClientDocumentsByTypeModal';
 import {
@@ -105,8 +104,6 @@ export function WorkEngineClientDocumentManagementShell({
     useState<WorkEngineInvoiceRetainerSetupAggregate | null>(null);
   const [retainerAddCustomerPending, setRetainerAddCustomerPending] = useState(false);
   const [retainerListRefreshKey, setRetainerListRefreshKey] = useState(0);
-  const [emailHistoryOpen, setEmailHistoryOpen] = useState(false);
-  const [emailHistoryClientId, setEmailHistoryClientId] = useState<string | null>(null);
   const [creditRequest, setCreditRequest] = useState<WorkEngineTaxInvoiceCreditRequest | null>(null);
   const [creditMode, setCreditMode] = useState<'full' | 'partial'>('full');
   const [creditReasonKey, setCreditReasonKey] = useState('billing_error');
@@ -213,12 +210,6 @@ export function WorkEngineClientDocumentManagementShell({
         setRetainerCustomerOpen(true);
         return;
       }
-      if (result.kind === 'email_history') {
-        setEmailHistoryClientId(result.clientId);
-        setEmailHistoryOpen(true);
-        return;
-      }
-
       const { action } = result;
       if (!action.command) return;
 
@@ -276,8 +267,12 @@ export function WorkEngineClientDocumentManagementShell({
         documents_list_year: creditRequest.documentsListYear,
       });
       if (!isIncomeCommandResponse(res)) return;
+      const convertedDraftId =
+        res.meta && 'converted_draft_id' in res.meta
+          ? (res.meta as { converted_draft_id?: string }).converted_draft_id
+          : undefined;
       const draftId =
-        res.meta?.converted_draft_id ??
+        convertedDraftId ??
         res.income_workspace_aggregate.active_wizard_draft_id ??
         null;
       setRetainerSetupOpen(false);
@@ -293,8 +288,13 @@ export function WorkEngineClientDocumentManagementShell({
       } else if (draftId && onEditDraft) {
         await onEditDraft(draftId);
       }
-      if (res.work_engine_invoices_tab_aggregate) {
-        onInvoicesTabRefresh?.(res.work_engine_invoices_tab_aggregate);
+      const invoicesTabAggregate =
+        'work_engine_invoices_tab_aggregate' in res
+          ? (res as { work_engine_invoices_tab_aggregate?: Record<string, unknown> })
+              .work_engine_invoices_tab_aggregate
+          : undefined;
+      if (invoicesTabAggregate) {
+        onInvoicesTabRefresh?.(invoicesTabAggregate);
       }
     } catch (e) {
       onError?.(e instanceof Error ? e.message : String(e));
@@ -423,18 +423,6 @@ export function WorkEngineClientDocumentManagementShell({
           setLedgerOpen(false);
           setLedgerClientId(null);
           setLedgerClientName('');
-        }}
-        onError={onError}
-      />
-
-      <IncomeRepresentedClientEmailHistoryModal
-        open={emailHistoryOpen}
-        representedClientId={emailHistoryClientId}
-        busy={busy}
-        onBusyChange={onBusyChange}
-        onClose={() => {
-          setEmailHistoryOpen(false);
-          setEmailHistoryClientId(null);
         }}
         onError={onError}
       />

@@ -131,6 +131,29 @@ test('missing canonical due_date is not invented from issue_date or payment date
   );
 });
 
+test('issue copies the tax-invoice document due date, not a null draft leftover', () => {
+  const issueSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-issue.service.ts'),
+    'utf8',
+  );
+  assert.match(issueSource, /resolveDueDateForIssuedDocument/);
+  assert.match(issueSource, /resolveTaxInvoiceDueDateForIssue/);
+  assert.doesNotMatch(issueSource, /due_date:\s*draft\.due_date/);
+});
+
+test('begin tax invoice wizard draft persists payment-terms due date', () => {
+  const draftEditorSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-draft-editor.service.ts'),
+    'utf8',
+  );
+  const beginStart = draftEditorSource.indexOf('export async function beginIncomeWizardDocumentDraft');
+  const beginEnd = draftEditorSource.indexOf('async function wizardDraftMutationOverlay');
+  assert.ok(beginStart >= 0 && beginEnd > beginStart);
+  const beginFn = draftEditorSource.slice(beginStart, beginEnd);
+  assert.match(beginFn, /computeDueDateFromPaymentTerms\(document_date, paymentTerms\)/);
+  assert.match(beginFn, /due_date,/);
+});
+
 test('documents-by-type due_date_display is independent of payment composition', () => {
   const documentsByType = readFileSync(
     join(

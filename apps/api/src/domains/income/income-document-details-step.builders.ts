@@ -1073,10 +1073,14 @@ export async function buildIncomeDocumentDetailsStep(
     value_empty: !allocationNumberField.value?.trim(),
   };
 
+  const previewBranding =
+    resolvedBranding && row.document_type === 'credit_tax_invoice'
+      ? { ...resolvedBranding, document_style_key: 'sectioned' as const }
+      : resolvedBranding;
   const previewHtml =
-    !lean && previewGeneratedAt != null && resolvedBranding
+    !lean && previewGeneratedAt != null && previewBranding
       ? renderUnifiedIncomeDocumentHtml({
-          branding: resolvedBranding,
+          branding: previewBranding,
           docTypeLabel,
           numberPreview,
           document_type: row.document_type,
@@ -1111,7 +1115,7 @@ export async function buildIncomeDocumentDetailsStep(
                 : null;
             })(),
           ),
-          company_subtitle: resolvedBranding.company_subtitle,
+          company_subtitle: previewBranding.company_subtitle,
         })
       : '';
 

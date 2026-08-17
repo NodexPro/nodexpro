@@ -6,6 +6,7 @@
  * 13100 — invoice preview overlay
  * 13200 — invoice preview when stacked above another retainer overlay
  * 13300 — child dialogs above preview (confirm, save, edit)
+ * 14100 — Credit Note Eye preview above Work Engine income wizard (14000)
  * blocked — pointer-events: none on preview while child dialog is open
  */
 
@@ -134,6 +135,10 @@
 
 .nx-we-retainer-preview-overlay--stacked {
   z-index: 13200;
+}
+
+.nx-we-retainer-preview-overlay--above-wizard {
+  z-index: 14100;
 }
 
 .nx-we-retainer-preview-modal {

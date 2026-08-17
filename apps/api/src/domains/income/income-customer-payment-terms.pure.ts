@@ -1,4 +1,5 @@
 import { badRequest } from '../../shared/errors.js';
+import { calendarDateIso } from './income-document-semantic-dates.pure.js';
 
 export const INCOME_CUSTOMER_PAYMENT_TERMS_KEYS = [
   'immediate',
@@ -96,4 +97,51 @@ export function resolveTaxInvoiceDueDate(params: {
     return params.storedDueDate;
   }
   return computeDueDateFromPaymentTerms(params.documentDateIso, params.paymentTerms);
+}
+
+export function paymentTermsKeyFromUnknown(raw: unknown): IncomeCustomerPaymentTermsKey | null {
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    return isIncomeCustomerPaymentTermsKey(trimmed) ? trimmed : null;
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  return paymentTermsKeyFromUnknown(o.key ?? o.payment_terms_key);
+}
+
+/** Persist the due date the tax-invoice document actually displayed. */
+export function resolveTaxInvoiceDueDateForIssue(params: {
+  storedDueDate: string | null | undefined;
+  documentDateIso: string | null | undefined;
+  paymentTerms: IncomeCustomerPaymentTermsKey | null | undefined;
+  dueDateManualOverride: boolean;
+}): string | null {
+  const stored = calendarDateIso(params.storedDueDate);
+  const documentDate = calendarDateIso(params.documentDateIso);
+  if (documentDate && params.paymentTerms) {
+    return resolveTaxInvoiceDueDate({
+      documentDateIso: documentDate,
+      paymentTerms: params.paymentTerms,
+      storedDueDate: stored,
+      dueDateManualOverride: params.dueDateManualOverride,
+    });
+  }
+  return stored;
+}
+
+/**
+ * Due date that belongs on the issued document.
+ * Uses stored due_date when present; otherwise payment-terms date from the document date.
+ * Does not invent a due date from issue_date alone.
+ */
+export function resolveIncomeDueDateFromDocument(params: {
+  storedDueDate: string | null | undefined;
+  documentDateIso: string | null | undefined;
+  paymentTerms: IncomeCustomerPaymentTermsKey | null | undefined;
+}): string | null {
+  const stored = calendarDateIso(params.storedDueDate);
+  if (stored) return stored;
+  const documentDate = calendarDateIso(params.documentDateIso);
+  if (!documentDate || !params.paymentTerms) return null;
+  return computeDueDateFromPaymentTerms(documentDate, params.paymentTerms);
 }

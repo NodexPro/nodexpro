@@ -39,6 +39,12 @@ import {
   officeClientDocumentsOrFilter,
 } from '../income/income-client-document-management-panel.pure.js';
 import { customerDisplayFromSnapshot } from '../income/income-work-engine-bridge.pure.js';
+import {
+  paymentTermsKeyFromUnknown,
+  resolveIncomeDueDateFromDocument,
+  type IncomeCustomerPaymentTermsKey,
+} from '../income/income-customer-payment-terms.pure.js';
+import { loadIncomeCustomerPaymentTermsByIds } from '../income/income-recipient.service.js';
 import { resolveIncomeInvoiceOriginalAmount } from '../accounting-base/accounting-base-income-payment.pure.js';
 import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
 import {
@@ -248,6 +254,38 @@ async function loadConversionCountsBySource(
   return out;
 }
 
+type SourceDraftDueDateContext = {
+  due_date: string | null;
+  document_date: string | null;
+  payment_terms_json: Record<string, unknown> | null;
+  income_customer_id: string | null;
+};
+
+async function loadSourceDraftDueDateContext(
+  orgId: string,
+  draftIds: string[],
+): Promise<Map<string, SourceDraftDueDateContext>> {
+  const unique = [...new Set(draftIds.filter(Boolean))];
+  const out = new Map<string, SourceDraftDueDateContext>();
+  if (unique.length === 0) return out;
+  const { data, error } = await supabaseAdmin
+    .from('income_document_drafts')
+    .select('id, due_date, document_date, payment_terms_json, income_customer_id')
+    .eq('organization_id', orgId)
+    .in('id', unique);
+  throwIfSupabaseError(error, 'loadSourceDraftDueDateContext');
+  for (const row of data ?? []) {
+    const typed = row as SourceDraftDueDateContext & { id: string };
+    out.set(String(typed.id), {
+      due_date: typed.due_date,
+      document_date: typed.document_date,
+      payment_terms_json: typed.payment_terms_json,
+      income_customer_id: typed.income_customer_id,
+    });
+  }
+  return out;
+}
+
 async function loadIssuedDocumentCandidates(params: {
   ctx: RequestContext;
   orgId: string;
@@ -260,7 +298,7 @@ async function loadIssuedDocumentCandidates(params: {
   let query = supabaseAdmin
     .from('income_documents')
     .select(
-      'id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, document_status, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error, created_at',
+      'id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, document_status, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error, created_at, source_draft_id, income_customer_id',
     )
     .eq('organization_id', params.orgId)
     .or(excludeSelfModeActingFilter())
@@ -297,6 +335,15 @@ async function loadIssuedDocumentCandidates(params: {
   const canPaymentWrite = perms.includes('accounting_base.payment.write');
   const canIncomeIssue = perms.includes('income.issue');
   const canEdit = params.permissions.edit;
+  const missingDue = includePayment
+    ? filtered.filter((raw) => !(raw as { due_date: string | null }).due_date)
+    : [];
+  const missingDueDraftIds = missingDue
+    .map((raw) => String((raw as { source_draft_id?: string | null }).source_draft_id ?? ''))
+    .filter(Boolean);
+  const missingDueCustomerIds = missingDue
+    .map((raw) => String((raw as { income_customer_id?: string | null }).income_customer_id ?? ''))
+    .filter(Boolean);
 
   const [
     emailAttemptCounts,
@@ -307,6 +354,8 @@ async function loadIssuedDocumentCandidates(params: {
     conversionCounts,
     creditedByDoc,
     creditTypeEnabled,
+    sourceDraftDueById,
+    paymentTermsByCustomer,
   ] = await Promise.all([
     loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds),
     loadDocflowAttemptCountsByDocumentIds(params.orgId, documentIds),
@@ -324,6 +373,8 @@ async function loadIssuedDocumentCandidates(params: {
     includePayment
       ? resolveCreditTypeEnabled(params.ctx, params.orgId)
       : Promise.resolve(false),
+    loadSourceDraftDueDateContext(params.orgId, missingDueDraftIds),
+    loadIncomeCustomerPaymentTermsByIds(params.orgId, missingDueCustomerIds),
   ]);
 
   return filtered.map((raw) => {
@@ -340,11 +391,24 @@ async function loadIssuedDocumentCandidates(params: {
       pdf_render_status: string;
       pdf_asset_id: string | null;
       pdf_render_error: string | null;
+      source_draft_id: string | null;
+      income_customer_id: string | null;
     };
     const year = issueYearFromIso(doc.issue_date);
+    const sourceDraft = doc.source_draft_id ? sourceDraftDueById.get(doc.source_draft_id) : undefined;
+    const paymentTerms: IncomeCustomerPaymentTermsKey | null =
+      paymentTermsKeyFromUnknown(sourceDraft?.payment_terms_json) ??
+      paymentTermsByCustomer.get(doc.income_customer_id ?? '') ??
+      paymentTermsByCustomer.get(sourceDraft?.income_customer_id ?? '') ??
+      null;
+    const dueDateFromDocument = resolveIncomeDueDateFromDocument({
+      storedDueDate: doc.due_date ?? sourceDraft?.due_date ?? null,
+      documentDateIso: sourceDraft?.document_date ?? doc.issue_date,
+      paymentTerms,
+    });
     const semanticDates = resolveIncomeDocumentSemanticDates({
       issue_date: doc.issue_date,
-      due_date: doc.due_date,
+      due_date: dueDateFromDocument,
     });
     const amountRef = ledgerAmountFromTotalsSnapshot(doc.totals_snapshot_json);
     const pdfPath = doc.pdf_asset_id ? incomeDocumentDownloadPath(doc.id) : null;
@@ -381,7 +445,7 @@ async function loadIssuedDocumentCandidates(params: {
     let record_payment_form: WorkEngineInvoicesClientDocumentsByTypeRow['record_payment_form'] = null;
     const due_date_display = formatIncomeDueDateDisplayHe({
       issue_date: doc.issue_date,
-      due_date: doc.due_date,
+      due_date: dueDateFromDocument,
     });
 
     if (includePayment) {

@@ -79,6 +79,18 @@ test('4 — preview remains generate_income_document_preview', () => {
   assert.equal(actions.preview.presentation, 'icon');
 });
 
+test('4b — credit preview HTML uses canonical sectioned paper, not zone chrome', () => {
+  const previewHtmlStart = detailsBuildersSource.indexOf('const previewBranding');
+  const previewHtmlSlice = detailsBuildersSource.slice(
+    previewHtmlStart,
+    detailsBuildersSource.indexOf('const deliveryEmail'),
+  );
+  assert.match(previewHtmlSlice, /document_type === 'credit_tax_invoice'/);
+  assert.match(previewHtmlSlice, /document_style_key: 'sectioned'/);
+  assert.match(previewHtmlSlice, /renderUnifiedIncomeDocumentHtml/);
+  assert.doesNotMatch(previewHtmlSlice, /renderIncomeBrandedPreviewHtml\(/);
+});
+
 test('5 — credit issue response refreshes invoices tab + credit document list', () => {
   const issueHandler = commandsSource.slice(
     commandsSource.indexOf('if (command === INCOME_COMMAND_ISSUE_DOCUMENT)'),

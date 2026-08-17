@@ -472,13 +472,23 @@ export async function beginIncomeWizardDocumentDraft(
   };
   const currency = optionalString(body.currency) ?? 'ILS';
   const language = optionalString(body.language) === 'en' ? 'en' : 'he';
+  let due_date: string | null = null;
+  if (document_type === 'tax_invoice' && recipient.income_customer_id) {
+    const paymentTerms = await loadIncomeCustomerDefaultPaymentTerms(
+      scope,
+      recipient.income_customer_id,
+    );
+    if (paymentTerms) {
+      due_date = computeDueDateFromPaymentTerms(document_date, paymentTerms);
+    }
+  }
 
   const prefilledEmail = await deliveryEmailFromRecipient(scope, selected);
   const draftRow: IncomeWizardDraftRow = {
     id: '',
     document_type,
     document_date,
-    due_date: null,
+    due_date,
     notes: null,
     currency,
     language,
@@ -511,7 +521,7 @@ export async function beginIncomeWizardDocumentDraft(
       currency,
       language,
       notes: null,
-      due_date: null,
+      due_date,
       payment_received_json: null,
       delivery_contact_json: draftRow.delivery_contact_json,
       document_settings_json: serializeDocumentSettingsJson(settings),
