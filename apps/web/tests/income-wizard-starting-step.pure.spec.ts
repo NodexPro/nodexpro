@@ -117,8 +117,10 @@ test('credit handoff opens WorkEngineIncomeDocumentWizardModal, not retainer set
 
   assert.match(wizardSource, /footerActions\?\.mode === 'credit_note'/);
   assert.match(wizardSource, /preview\?\.icon === 'eye'/);
-  assert.match(wizardSource, /nx-we-retainer-schedule__preview-eye/);
+  assert.match(wizardSource, /sessionActions\?\.save\?\.command/);
+  assert.match(wizardSource, /issue_income_document/);
   assert.match(wizardSource, /WorkEngineInvoiceRetainerPreviewModal/);
+  assert.doesNotMatch(wizardSource, /nx-we-retainer-schedule__preview-eye/);
   assert.doesNotMatch(wizardSource, /document_type_key === 'credit_tax_invoice'/);
   assert.doesNotMatch(retainerSetupSource, /begin_income_tax_invoice_credit/);
   assert.doesNotMatch(retainerSetupSource, /credit_tax_invoice/);

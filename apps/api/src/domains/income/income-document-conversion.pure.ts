@@ -233,10 +233,22 @@ export function buildWizardSessionActions(params: {
   const isCreditNote = !isPreliminaryEdit && params.documentType === 'credit_tax_invoice';
   return {
     save: {
-      enabled: params.canEdit,
-      command: params.canEdit ? 'save_income_document_draft' : null,
+      enabled: isCreditNote ? params.canIssue : params.canEdit,
+      command: isCreditNote
+        ? params.canIssue
+          ? 'issue_income_document'
+          : null
+        : params.canEdit
+          ? 'save_income_document_draft'
+          : null,
       label: isPreliminaryEdit || isCreditNote ? 'שמירה' : 'שמירת טיוטה',
-      disabled_reason: params.canEdit ? null : 'נדרשת הרשאת עריכה',
+      disabled_reason: isCreditNote
+        ? params.canIssue
+          ? null
+          : 'נדרשת הרשאת הפקה'
+        : params.canEdit
+          ? null
+          : 'נדרשת הרשאת עריכה',
     },
     preview: {
       enabled: params.canEdit,

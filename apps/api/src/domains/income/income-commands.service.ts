@@ -1007,6 +1007,28 @@ export async function executeIncomeCommand(
         const endCustomerId = optionalUuid(body.end_customer_id, 'end_customer_id');
         const representedClientId =
           base.income_workspace_aggregate?.issuer_context?.represented_client_id ?? null;
+        if (issueResult.issue_result.document_type_key === 'credit_tax_invoice') {
+          const issuedYear = Number(
+            String(issueResult.issue_result.issued_date ?? '').slice(0, 4),
+          );
+          const year = Number.isFinite(issuedYear) && issuedYear > 0 ? issuedYear : new Date().getFullYear();
+          const [invoicesTab, documentsByType] = await Promise.all([
+            buildWorkEngineInvoicesTabAggregate({ ctx }),
+            representedClientId
+              ? buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+                  ctx,
+                  representedClientId,
+                  documentTypeKey: 'credit_tax_invoice',
+                  year,
+                })
+              : Promise.resolve(null),
+          ]);
+          return {
+            ...base,
+            work_engine_invoices_tab_aggregate: invoicesTab,
+            work_engine_invoices_client_documents_by_type_aggregate: documentsByType ?? undefined,
+          };
+        }
         if (endCustomerId && representedClientId) {
           const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
             ctx,

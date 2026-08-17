@@ -541,7 +541,13 @@ function WorkEngineInvoicesTabPanel(props: {
             setWizardInitialAgg(null);
           }}
           onBusyChange={setWizardBusy}
-          onCompleted={() => void loadAggregate()}
+          onCompleted={(result) => {
+            if (result?.work_engine_invoices_tab_aggregate) {
+              handleInvoicesTabRefresh(result.work_engine_invoices_tab_aggregate);
+              return;
+            }
+            void loadAggregate();
+          }}
         />
       ) : null}
       <IncomeDocumentBrandingSettingsModal

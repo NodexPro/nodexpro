@@ -55,7 +55,10 @@ type Props = {
   entrypoint: WorkEngineInvoicesDocumentCreationEntrypoint;
   onClose: () => void;
   onBusyChange: (busy: boolean) => void;
-  onCompleted: () => void;
+  onCompleted: (result?: {
+    work_engine_invoices_tab_aggregate?: Record<string, unknown>;
+    work_engine_invoices_client_documents_by_type_aggregate?: unknown;
+  }) => void;
   initialWorkspaceAgg?: IncomeWorkspaceAggregate | null;
   issuerBrandingProfile?: IncomeDocumentBrandingProfileAggregate | null;
   issuerBrandingEntrypoint?: IncomeDocumentBrandingSettingsEntrypoint | null;
@@ -74,7 +77,7 @@ function documentTypeKeyFromWorkspace(workspace: IncomeWorkspaceAggregate | null
 
 function WizardPreviewEyeIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
         d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
         stroke="currentColor"
@@ -371,9 +374,34 @@ export function WorkEngineIncomeDocumentWizardModal({
       setError('טיוטה לא נמצאה');
       return;
     }
+    const primaryCommand = sessionActions?.save?.command ?? cmds.save_draft;
+    if (sessionActions?.save && !sessionActions.save.enabled) {
+      setError(sessionActions.save.disabled_reason ?? 'לא ניתן לשמור במצב זה');
+      return;
+    }
     onBusyChange(true);
     try {
       await detailsStepRef.current?.flushPendingEdits();
+      if (primaryCommand === 'issue_income_document' || primaryCommand === cmds.issue_document) {
+        const document_date = settingValue(documentDetailsStep, 'document_date');
+        const res = await executeIncomeCommand(cmds.issue_document, {
+          draft_id: draftId,
+          document_date: document_date?.trim() || null,
+        });
+        onCompleted(
+          'work_engine_invoices_tab_aggregate' in res
+            ? {
+                work_engine_invoices_tab_aggregate: res.work_engine_invoices_tab_aggregate,
+                work_engine_invoices_client_documents_by_type_aggregate:
+                  'work_engine_invoices_client_documents_by_type_aggregate' in res
+                    ? res.work_engine_invoices_client_documents_by_type_aggregate
+                    : undefined,
+              }
+            : undefined,
+        );
+        onClose();
+        return;
+      }
       const res = await executeIncomeCommand(cmds.save_draft, { draft_id: draftId });
       if ('income_workspace_aggregate' in res) {
         const payload = res as {
@@ -630,15 +658,31 @@ export function WorkEngineIncomeDocumentWizardModal({
       >
         <div className="nx-modal-header">
           <h2 className="nx-modal-title">{stepTitle}</h2>
-          <button
-            type="button"
-            className="nx-modal-close"
-            onClick={onClose}
-            disabled={footerLocked}
-            aria-label={closeControl === 'icon' ? 'סגור' : 'סגירה'}
-          >
-            {closeControl === 'icon' ? '×' : 'סגירה'}
-          </button>
+          <div className="nx-modal-title-wrap">
+            {showPreview &&
+            previewUsesEye &&
+            (sessionActions?.preview?.enabled ?? true) ? (
+              <button
+                type="button"
+                className="nx-modal-close"
+                disabled={footerLocked || !activeDraftId || sessionActions?.preview?.enabled === false}
+                aria-label={sessionActions?.preview?.label ?? 'תצוגה מקדימה'}
+                title={sessionActions?.preview?.disabled_reason ?? sessionActions?.preview?.label ?? 'תצוגה מקדימה'}
+                onClick={() => void handleGeneratePreview(true)}
+              >
+                <WizardPreviewEyeIcon />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="nx-modal-close"
+              onClick={onClose}
+              disabled={footerLocked}
+              aria-label={closeControl === 'icon' ? 'סגור' : 'סגירה'}
+            >
+              {closeControl === 'icon' ? '×' : 'סגירה'}
+            </button>
+          </div>
         </div>
         <div className="nx-modal-body">{error ? <div className="nx-we-banner-error">{error}</div> : null}{renderBody()}</div>
         <div className="nx-modal-footer nx-tax-nested-modal-footer">
@@ -676,21 +720,6 @@ export function WorkEngineIncomeDocumentWizardModal({
               title={documentDetailsStep?.draft_state_display?.label ?? undefined}
             >
               {sessionActions?.save?.label ?? 'שמירת טיוטה'}
-            </button>
-          ) : null}
-          {showPreview &&
-          previewUsesEye &&
-          (sessionActions?.preview?.enabled ?? true) &&
-          (overlayFooterMode || activeStepKey === 'document_details') ? (
-            <button
-              type="button"
-              className="nx-we-retainer-schedule__preview-eye"
-              disabled={footerLocked || !activeDraftId || sessionActions?.preview?.enabled === false}
-              aria-label={sessionActions?.preview?.label ?? 'תצוגה מקדימה'}
-              title={sessionActions?.preview?.disabled_reason ?? sessionActions?.preview?.label ?? 'תצוגה מקדימה'}
-              onClick={() => void handleGeneratePreview(true)}
-            >
-              <WizardPreviewEyeIcon />
             </button>
           ) : null}
           {showNext && !isLastStep ? (
