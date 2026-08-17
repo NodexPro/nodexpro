@@ -64,6 +64,7 @@ function renderCellValue(
     created_at_display: row.created_at_display,
     customer_display_name: row.customer_display_name,
     amount_display: row.amount_display,
+    due_date_display: row.due_date_display,
     status_label: row.status_label,
     document_type_label: row.document_type_label,
   };

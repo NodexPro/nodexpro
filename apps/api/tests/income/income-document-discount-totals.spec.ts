@@ -10,10 +10,13 @@ import {
   computeDraftTotalsPreview,
   DEFAULT_DOCUMENT_SETTINGS,
 } from '../../src/domains/income/income-document-draft-totals.pure.js';
+
 import {
   computeDiscountAmountIls,
+  normalizeDocumentDiscountInput,
   validateDocumentDiscount,
 } from '../../src/domains/income/income-document-discount.pure.js';
+
 import { incomeDraftVatFallbackResolution } from '../../src/domains/income/income-draft-vat-fallback.pure.js';
 
 const vat = incomeDraftVatFallbackResolution();
@@ -104,4 +107,61 @@ test('mixed VAT row: exempt line keeps zero VAT after document discount', async 
   assert.equal(totals.subtotal_before_discount_reference, 150);
   assert.equal(totals.discount_amount_reference, 15);
   assert.equal(totals.vat_reference, 16.2);
+});
+
+async function lineTotals2000Ils() {
+  const lines = normalizeDraftLines(serializeDraftLines([createEmptyDraftLine(0)]));
+  return applyLineFieldUpdate(lines, lines[0].line_id, {
+    unit_price_reference: 2000,
+    quantity: 1,
+    currency: 'ILS',
+    price_includes_vat: false,
+    vat_rate_code: 'standard',
+  });
+}
+
+test('discount enabled affects canonical totals', async () => {
+  const lines = await lineTotals2000Ils();
+  const settings = {
+    ...DEFAULT_DOCUMENT_SETTINGS,
+    discount: { enabled: true, type: 'fixed_amount' as const, value: 1184.85 },
+  };
+  const totals = await computeDraftTotalsPreview(lines, 'ILS', settings, vat, date);
+  assert.equal(totals.subtotal_before_discount_reference, 2000);
+  assert.equal(totals.discount_enabled, true);
+  assert.equal(totals.discount_amount_reference, 1184.85);
+  assert.equal(totals.subtotal_after_discount_reference, 815.15);
+  assert.equal(totals.vat_reference, 146.73);
+  assert.equal(totals.grand_total_reference, 961.88);
+});
+
+test('discount disabled does not affect totals even if old amount remains stored', async () => {
+  const lines = await lineTotals2000Ils();
+  const settings = {
+    ...DEFAULT_DOCUMENT_SETTINGS,
+    discount: { enabled: false, type: 'fixed_amount' as const, value: 1184.85 },
+  };
+  const totals = await computeDraftTotalsPreview(lines, 'ILS', settings, vat, date);
+  assert.equal(totals.discount_enabled, false);
+  assert.equal(totals.discount_amount_reference, null);
+  assert.equal(totals.subtotal_after_discount_reference, 2000);
+  assert.equal(totals.vat_reference, 360);
+  assert.equal(totals.grand_total_reference, 2360);
+});
+
+test('preview snapshot matches disabled-discount canonical totals', async () => {
+  const lines = await lineTotals2000Ils();
+  const normalized = normalizeDocumentDiscountInput(false, 'fixed_amount', 1184.85);
+  assert.equal(normalized.enabled, false);
+  assert.equal(normalized.value, 0);
+  const totals = await computeDraftTotalsPreview(
+    lines,
+    'ILS',
+    { ...DEFAULT_DOCUMENT_SETTINGS, discount: normalized },
+    vat,
+    date,
+  );
+  assert.equal(totals.discount_enabled, false);
+  assert.equal(totals.grand_total_reference, 2360);
+  assert.equal(totals.discount_amount_display, null);
 });

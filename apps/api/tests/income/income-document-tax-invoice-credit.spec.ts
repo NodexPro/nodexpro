@@ -448,6 +448,22 @@ test('N — issued credit and original invoice stay immutable', () => {
   assert.doesNotMatch(creditService, /from\('income_documents'\)[\s\S]{0,80}\.update\(/);
 });
 
+test('partial and full credit do not mutate source invoice due_date', () => {
+  const creditService = readFileSync(
+    join(dir, '../../src/domains/income/income-document-tax-invoice-credit.service.ts'),
+    'utf8',
+  );
+  const loadStart = creditService.indexOf('async function loadSourceInvoice');
+  const loadEnd = creditService.indexOf('async function findCreditLinkByDraft');
+  assert.ok(loadStart >= 0 && loadEnd > loadStart);
+  const loadSource = creditService.slice(loadStart, loadEnd);
+  assert.doesNotMatch(loadSource, /due_date/);
+  assert.doesNotMatch(creditService, /from\('income_documents'\)[\s\S]{0,200}\.update\(/);
+  assert.doesNotMatch(issueSource, /from\('income_documents'\)[\s\S]{0,200}\.update\(/);
+  assert.doesNotMatch(creditService, /due_date:\s*source/);
+  assert.doesNotMatch(issueSource, /due_date:\s*source/);
+});
+
 test('O — numbering is existing credit_tax_invoice sequence only', () => {
   assert.match(numberingSource, /allocateIncomeDocumentNumber/);
   const creditService = readFileSync(

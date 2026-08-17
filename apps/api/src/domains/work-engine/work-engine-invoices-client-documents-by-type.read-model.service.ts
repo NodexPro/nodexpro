@@ -16,6 +16,7 @@ import {
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
 import {
   formatIncomeCalendarDateHe,
+  formatIncomeDueDateDisplayHe,
   resolveIncomeDocumentSemanticDates,
 } from '../income/income-document-semantic-dates.pure.js';
 import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
@@ -378,7 +379,10 @@ async function loadIssuedDocumentCandidates(params: {
     let payment_state_tone: WorkEngineInvoicesClientDocumentsByTypeRow['payment_state_tone'] = null;
     let payment_state_icon: WorkEngineInvoicesClientDocumentsByTypeRow['payment_state_icon'] = null;
     let record_payment_form: WorkEngineInvoicesClientDocumentsByTypeRow['record_payment_form'] = null;
-    let due_date_display: string | null = null;
+    const due_date_display = formatIncomeDueDateDisplayHe({
+      issue_date: doc.issue_date,
+      due_date: doc.due_date,
+    });
 
     if (includePayment) {
       const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
@@ -393,7 +397,6 @@ async function loadIssuedDocumentCandidates(params: {
       payment_state_label = collectible.payment_state_label;
       payment_state_tone = collectible.payment_state_tone;
       payment_state_icon = resolvePaymentStateIcon(collectible.payment_state_key);
-      due_date_display = formatDateDisplay(semanticDates.due_date);
 
       let disabledReason: string | null = null;
       if (!canPaymentWrite) disabledReason = 'חסרה הרשאה לרישום תשלום';

@@ -79,3 +79,17 @@ test('invoices tab host no longer passes inline onError into documents shell', (
   assert.ok(tabHostSource.includes('onError={handlePanelError}'));
   assert.ok(!tabHostSource.includes('onError={(message) => setError(message)}'));
 });
+
+test('tax invoice documents modal renders backend due_date_display', () => {
+  const readModel = readFileSync(
+    join(
+      dir,
+      '../../src/domains/work-engine/work-engine-invoices-client-documents-by-type.read-model.service.ts',
+    ),
+    'utf8',
+  );
+  assert.match(readModel, /key: 'due_date_display', label: 'תאריך לתשלום'/);
+  assert.match(readModel, /formatIncomeDueDateDisplayHe/);
+  assert.match(modalSource, /due_date_display: row\.due_date_display/);
+  assert.doesNotMatch(modalSource, /issue_date_display \|\| row\.due_date/);
+});

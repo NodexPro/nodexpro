@@ -122,6 +122,7 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   created_at_display: string | null;
   customer_display_name: string | null;
   amount_display: string;
+  due_date_display: string | null;
   status_label: string;
   document_id: string | null;
   draft_id: string | null;

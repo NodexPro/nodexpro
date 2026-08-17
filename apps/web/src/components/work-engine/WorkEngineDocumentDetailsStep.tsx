@@ -659,6 +659,42 @@ export const WorkEngineDocumentDetailsStep = forwardRef<
     [applyAggregate, commands, onBusyChange, onError, onProjectionStepChange, projectionMode, step],
   );
 
+  const persistDiscountCommand = useCallback(
+    async (next: { enabled: boolean; type: 'percent' | 'fixed_amount'; value: string }) => {
+      const payload = {
+        draft_id: draftId,
+        enabled: next.enabled,
+        type: next.type,
+        value: next.value.trim() === '' ? 0 : next.value.trim(),
+      };
+      if (projectionMode) {
+        onProjectionStepChange?.(applyProjectionMutation(step, 'update_discount', payload));
+        return;
+      }
+      if (!commands.update_discount) throw new Error('Missing command: update_discount');
+      setSavingDiscount(true);
+      onError(null);
+      try {
+        const res = await executeIncomeCommand(commands.update_discount, payload);
+        applyAggregate(res);
+      } catch (e) {
+        onError(e instanceof Error ? e.message : 'שגיאה בעדכון הנחה');
+        throw e;
+      } finally {
+        setSavingDiscount(false);
+      }
+    },
+    [
+      applyAggregate,
+      commands.update_discount,
+      draftId,
+      onError,
+      onProjectionStepChange,
+      projectionMode,
+      step,
+    ],
+  );
+
   const commitLine = useCallback(
     async (lineId: string, patch: Record<string, unknown>) => {
       setSavingLineId(lineId);
@@ -756,22 +792,22 @@ export const WorkEngineDocumentDetailsStep = forwardRef<
       (discountServer.allowed_actions.includes('update_income_document_discount') ||
         Boolean(commands.update_discount))
     ) {
-      setSavingDiscount(true);
-      try {
-        const res = await executeIncomeCommand(commands.update_discount, {
-          draft_id: draftId,
-          enabled: discountLocal.enabled,
-          type: discountLocal.type,
-          value: localValue === '' ? 0 : localValue,
-        });
-        applyAggregate(res);
-      } finally {
-        setSavingDiscount(false);
-      }
+      await persistDiscountCommand({
+        enabled: discountLocal.enabled,
+        type: discountLocal.type,
+        value: localValue,
+      });
     }
 
     await waitForCommandsIdle();
-  }, [applyAggregate, commands.update_discount, draftId, projectionMode, runCommand, waitForCommandsIdle]);
+  }, [
+    persistDiscountCommand,
+    commands.update_discount,
+    draftId,
+    projectionMode,
+    runCommand,
+    waitForCommandsIdle,
+  ]);
 
   useImperativeHandle(ref, () => ({ flushPendingEdits }), [flushPendingEdits]);
 
@@ -1011,7 +1047,18 @@ export const WorkEngineDocumentDetailsStep = forwardRef<
               type="checkbox"
               checked={discountEnabled}
               disabled={busy || savingDiscount || !step.document_discount.editable}
-              onChange={(e) => setDiscountEnabled(e.target.checked)}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                setDiscountEnabled(enabled);
+                if (projectionMode) return;
+                void persistDiscountCommand({
+                  enabled,
+                  type: discountType,
+                  value: discountValue,
+                }).catch(() => {
+                  setDiscountEnabled(!enabled);
+                });
+              }}
             />
             <span>הפעל הנחה</span>
           </label>
@@ -1065,33 +1112,11 @@ export const WorkEngineDocumentDetailsStep = forwardRef<
               className="nx-btn nx-btn-taxes-compact"
               disabled={busy || savingDiscount}
               onClick={() => {
-                void (async () => {
-                  setSavingDiscount(true);
-                  onError(null);
-                  try {
-                    if (projectionMode) {
-                      onProjectionStepChange?.(
-                        applyProjectionMutation(step, 'update_discount', {
-                          enabled: discountEnabled,
-                          type: discountType,
-                          value: discountValue.trim() === '' ? 0 : discountValue.trim(),
-                        }),
-                      );
-                      return;
-                    }
-                    const res = await executeIncomeCommand(commands.update_discount, {
-                      draft_id: draftId,
-                      enabled: discountEnabled,
-                      type: discountType,
-                      value: discountValue.trim() === '' ? 0 : discountValue.trim(),
-                    });
-                    applyAggregate(res);
-                  } catch (e) {
-                    onError(e instanceof Error ? e.message : 'שגיאה בעדכון הנחה');
-                  } finally {
-                    setSavingDiscount(false);
-                  }
-                })();
+                void persistDiscountCommand({
+                  enabled: discountEnabled,
+                  type: discountType,
+                  value: discountValue,
+                });
               }}
             >
               {savingDiscount ? 'שומר…' : 'שמירת הנחה'}

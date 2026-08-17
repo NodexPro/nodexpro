@@ -45,3 +45,17 @@ export function resolveIncomeDocumentSemanticDates(params: {
   }
   return { document_date: issue, due_date: due };
 }
+
+/**
+ * Display for תאריך לתשלום. Null when canonical due_date is missing.
+ * Does not invent a date from issue_date or payment date.
+ */
+export function formatIncomeDueDateDisplayHe(params: {
+  issue_date: string | null | undefined;
+  due_date: string | null | undefined;
+}): string | null {
+  const semantic = resolveIncomeDocumentSemanticDates(params);
+  if (!semantic.due_date) return null;
+  const formatted = formatIncomeCalendarDateHe(semantic.due_date);
+  return formatted === '—' ? null : formatted;
+}

@@ -91,7 +91,7 @@ test('update_income_document_line returns refreshed overlay', () => {
 test('document details UI does not calculate financial totals', () => {
   assert.ok(!/subtotal_reference|vat_reference|grand_total_reference/.test(docDetailsStepSource));
   assert.ok(!/amount_reference\s*\*|\.reduce\(/.test(docDetailsStepSource));
-  assert.ok(docDetailsStepSource.includes('step.line_items.totals.subtotal.display'));
+  assert.ok(docDetailsStepSource.includes('step.totals_block.rows.map'));
 });
 
 test('document details UI does not hardcode VAT 18%', () => {
@@ -105,4 +105,19 @@ test('line edits commit via V button without global busy lock', () => {
   assert.ok(docDetailsStepSource.includes('nx-we-doc-details__confirm'));
   assert.ok(docDetailsStepSource.includes('commitDraft'));
   assert.ok(!docDetailsStepSource.includes('scheduleLineUpdate'));
+});
+
+test('discount enable checkbox immediately persists via named command', () => {
+  const toggleStart = docDetailsStepSource.indexOf('הפעל הנחה');
+  assert.ok(toggleStart >= 0);
+  const checkboxIdx = docDetailsStepSource.lastIndexOf('type="checkbox"', toggleStart);
+  const checkboxBlock = docDetailsStepSource.slice(checkboxIdx, toggleStart);
+  assert.match(checkboxBlock, /persistDiscountCommand/);
+  assert.match(checkboxBlock, /enabled/);
+  assert.doesNotMatch(
+    docDetailsStepSource,
+    /onChange=\{\(e\) => setDiscountEnabled\(e\.target\.checked\)\}/,
+  );
+  assert.match(docDetailsStepSource, /commands\.update_discount/);
+  assert.match(docDetailsStepSource, /step\.totals_block\.rows\.map/);
 });
