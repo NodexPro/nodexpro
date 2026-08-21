@@ -89,8 +89,7 @@ import {
   finalizeIssuedTaxInvoiceCreditSideEffects,
   reverseCreditConsumeOnIssueFailure,
 } from './income-document-tax-invoice-credit.service.js';
-import { readCreditDraftSettings } from './income-document-tax-invoice-credit.pure.js';
-import { resolveIncomeInvoiceOriginalAmount } from '../accounting-base/accounting-base-income-payment.pure.js';
+import { readCreditDraftSettings, resolveCanonicalCreditNoteAmount } from './income-document-tax-invoice-credit.pure.js';
 import {
   resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded,
   resolveAndApplyRecurringCycleIssueIssuerScope,
@@ -424,6 +423,13 @@ async function issueNewDocumentFromDraft(
     throw badRequest(e instanceof Error ? e.message : 'Draft is not ready to issue');
   }
 
+  // Credit Notes must never issue without SYSTEM-OWNED lineage metadata.
+  // Validate before numbering / insert so orphans cannot be allocated.
+  const creditSettingsEarly = readCreditDraftSettings(draft.document_settings_json);
+  if (draft.document_type === 'credit_tax_invoice' && !creditSettingsEarly) {
+    throw badRequest('Credit Note lineage is required');
+  }
+
   const docTypesResult = await resolveAvailableDocumentTypes(scope.org_id, scope);
   assertDocumentTypeEnabled(docTypesResult.available_document_types, draft.document_type!);
   const docType = findAvailableDocumentType(
@@ -631,18 +637,37 @@ async function issueNewDocumentFromDraft(
   diag.issued_document_id = issuedId;
 
   const creditSettings = readCreditDraftSettings(draft.document_settings_json);
-  const consumedCredit = creditSettings
-    ? await assertAndConsumeCreditOnIssue({
-        ctx,
-        orgId: scope.org_id,
-        draftId: draft.id,
-        issuedDocumentId: issuedId,
-        documentSettingsJson: draft.document_settings_json,
-        draftLinesJson: draft.draft_lines_json,
-        totalsSnapshotJson: totals_snapshot_json,
-        actorUserId: scope.actor_user_id,
-      })
-    : null;
+
+  let consumedCredit: Awaited<ReturnType<typeof assertAndConsumeCreditOnIssue>> = null;
+  try {
+    consumedCredit = creditSettings
+      ? await assertAndConsumeCreditOnIssue({
+          ctx,
+          orgId: scope.org_id,
+          draftId: draft.id,
+          issuedDocumentId: issuedId,
+          documentSettingsJson: draft.document_settings_json,
+          draftLinesJson: draft.draft_lines_json,
+          totalsSnapshotJson: totals_snapshot_json,
+          actorUserId: scope.actor_user_id,
+        })
+      : null;
+  } catch (consumeErr) {
+    const cleanupStartedAt = Date.now();
+    logIncomeIssueStage(diag, 'issued_document_cleanup_started', {
+      duration_ms: 0,
+    });
+    await supabaseAdmin
+      .from('income_documents')
+      .delete()
+      .eq('id', issuedId)
+      .eq('organization_id', scope.org_id);
+    logIncomeIssueStage(diag, 'issued_document_cleanup_completed', {
+      duration_ms: Date.now() - cleanupStartedAt,
+    });
+    logIncomeIssueFailed(diag, 'credit_consume', consumeErr);
+    throw consumeErr;
+  }
 
   const postingStartedAt = Date.now();
   logIncomeIssueStage(diag, 'accounting_posting_started', { duration_ms: 0 });
@@ -686,7 +711,7 @@ async function issueNewDocumentFromDraft(
         draftId: draft.id,
         sourceInvoiceId: creditSettings.source_invoice_id,
         issuedDocumentId: issuedId,
-        requestedAmount: resolveIncomeInvoiceOriginalAmount(totals_snapshot_json),
+        requestedAmount: resolveCanonicalCreditNoteAmount(totals_snapshot_json),
         documentSettingsJson: draft.document_settings_json,
         draftLinesJson: draft.draft_lines_json,
       });

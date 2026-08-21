@@ -16,12 +16,20 @@ import {
   creditSourceReferenceDisplay,
   decideAtomicCreditConsume,
   mergeCreditSourceReferenceIntoNotes,
+  preserveIncomeTaxInvoiceCreditInDocumentSettings,
   readCreditDraftSettings,
+  resolveCanonicalCreditNoteAmount,
+  resolveCreditNoteDraftDocumentSettings,
+  applySourceDocumentDiscountNetToCreditDraftLines,
   resolveCreditState,
   resolveReceivableAfterCredit,
   sourceLineIdentityFromSnapshot,
   writeCreditDraftSettings,
 } from '../../src/domains/income/income-document-tax-invoice-credit.pure.js';
+import {
+  parseDocumentSettingsJson,
+  serializeDocumentSettingsJson,
+} from '../../src/domains/income/income-document-draft-totals.pure.js';
 import { isTaxDocumentDirectCancelForbidden } from '../../src/domains/income/income-document-conversion.pure.js';
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -190,6 +198,179 @@ test('issue consumes credit remaining via atomic Accounting Base RPC', () => {
   );
   assert.match(creditService, /callConsumeIncomeTaxInvoiceCreditRpc/);
   assert.match(creditService, /callReverseIncomeTaxInvoiceCreditConsumeRpc/);
+  assert.match(creditService, /resolveCanonicalCreditNoteAmount/);
+  assert.match(issueSource, /resolveCanonicalCreditNoteAmount\(totals_snapshot_json\)/);
+  assert.doesNotMatch(
+    creditService,
+    /requestedAmount = resolveIncomeInvoiceOriginalAmount\(params\.totalsSnapshotJson\)/,
+  );
+  assert.doesNotMatch(creditService, /sourceTotalsSnapshotJson: source\.totals_snapshot_json/);
+});
+
+test('canonical Credit Note amount is Income totals grand_total, not source/discount/subtotal', () => {
+  const snapshot = {
+    grand_total_reference: 6960.82,
+    subtotal_reference: 5899,
+    subtotal_before_discount_reference: 5899,
+    discount_enabled: false,
+    discount_amount_reference: 0,
+  };
+  assert.equal(resolveCanonicalCreditNoteAmount(snapshot), 6960.82);
+  assert.equal(
+    resolveCanonicalCreditNoteAmount({
+      grand_total_reference: 2000,
+      subtotal_reference: 1694.92,
+    }),
+    2000,
+  );
+  assert.equal(
+    resolveCanonicalCreditNoteAmount({
+      subtotal_reference: 5899,
+      discount_amount_reference: 1184.85,
+      amount_reference: 7922.7,
+    }),
+    0,
+  );
+});
+
+test('DISCOUNT IS NOT CREDIT — source invoice discount is not the Credit Note amount', () => {
+  const sourceInvoice = {
+    grand_total_reference: 7922.7,
+    discount_enabled: true,
+    discount_amount_reference: 1184.85,
+    subtotal_before_discount_reference: 7722.54,
+  };
+  const creditNote = {
+    grand_total_reference: 6960.82,
+    subtotal_reference: 5899,
+    discount_enabled: false,
+    discount_amount_reference: 0,
+  };
+  const creditAmount = resolveCanonicalCreditNoteAmount(creditNote);
+  assert.equal(creditAmount, 6960.82);
+  assert.notEqual(creditAmount, sourceInvoice.discount_amount_reference);
+  assert.notEqual(creditAmount, sourceInvoice.grand_total_reference);
+  const collectible = composeCollectibleAfterCredit({
+    originalAmount: 7922.7,
+    creditedAmount: creditAmount,
+    allocatedPayments: 0,
+  });
+  assert.equal(collectible.remaining_receivable, 961.88);
+  const settings = resolveCreditNoteDraftDocumentSettings();
+  assert.equal(settings.discount.enabled, false);
+  assert.equal(settings.discount.value, 0);
+  const creditService = readFileSync(
+    join(dir, '../../src/domains/income/income-document-tax-invoice-credit.service.ts'),
+    'utf8',
+  );
+  assert.match(creditService, /resolveCreditNoteDraftDocumentSettings/);
+  assert.match(creditService, /applySourceDocumentDiscountNetToCreditDraftLines/);
+  assert.doesNotMatch(creditService, /resolveDocumentSettingsForConversion/);
+});
+
+test('Credit Note ₪2,000 stays ₪2,000 — no remaining/original normalization', () => {
+  const requested = resolveCanonicalCreditNoteAmount({ grand_total_reference: 2000 });
+  assert.equal(requested, 2000);
+  const consume = decideAtomicCreditConsume({
+    originalAmount: 7922.7,
+    creditedAmount: 0,
+    requestedAmount: requested,
+  });
+  assert.equal(consume.ok, true);
+  if (!consume.ok) return;
+  assert.equal(consume.nextCredited, 2000);
+  const collectible = composeCollectibleAfterCredit({
+    originalAmount: 7922.7,
+    creditedAmount: 2000,
+    allocatedPayments: 0,
+  });
+  assert.equal(collectible.remaining_receivable, 5922.7);
+});
+
+test('source discount nets into Credit Note draft lines without re-applying discount settings', () => {
+  const lines = applySourceDocumentDiscountNetToCreditDraftLines({
+    lines: [
+      { amount_reference: 10000, unit_price_reference: 10000 },
+      { amount_reference: 0, unit_price_reference: 0 },
+    ],
+    sourceTotalsSnapshot: {
+      discount_enabled: true,
+      subtotal_before_discount_reference: 10000,
+      subtotal_after_discount_reference: 9000,
+      discount_amount_reference: 1000,
+      grand_total_reference: 10620,
+    },
+  });
+  assert.equal(lines[0]?.amount_reference, 9000);
+  assert.equal(lines[0]?.unit_price_reference, 9000);
+  const settings = resolveCreditNoteDraftDocumentSettings();
+  assert.equal(settings.discount.enabled, false);
+});
+
+test('payment + credit remaining is original − payments − issued credits', () => {
+  const collectible = composeCollectibleAfterCredit({
+    originalAmount: 7922.7,
+    creditedAmount: 2000,
+    allocatedPayments: 1000,
+  });
+  assert.equal(collectible.remaining_receivable, 4922.7);
+});
+
+test('two successive partial Credit Notes accumulate (500 + 118)', () => {
+  const first = decideAtomicCreditConsume({
+    originalAmount: 7922.7,
+    creditedAmount: 0,
+    requestedAmount: 500,
+  });
+  assert.equal(first.ok, true);
+  if (!first.ok) return;
+  const second = decideAtomicCreditConsume({
+    originalAmount: 7922.7,
+    creditedAmount: first.nextCredited,
+    requestedAmount: 118,
+  });
+  assert.equal(second.ok, true);
+  if (!second.ok) return;
+  assert.equal(second.nextCredited, 618);
+  const collectible = composeCollectibleAfterCredit({
+    originalAmount: 7922.7,
+    creditedAmount: second.nextCredited,
+    allocatedPayments: 0,
+  });
+  assert.equal(collectible.remaining_receivable, 7304.7);
+});
+
+test('loadIssuedCreditAmountsByInvoice sums all issued links (wiring)', () => {
+  const readSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-tax-invoice-credit.read.ts'),
+    'utf8',
+  );
+  assert.match(readSource, /status', 'issued'/);
+  assert.match(readSource, /credited_amount_reference/);
+  assert.match(readSource, /current \+ Number\(row\.credited_amount_reference/);
+});
+
+test('issue cleans up orphan Credit Note when consume fails', () => {
+  assert.match(issueSource, /Credit Note lineage is required/);
+  assert.match(issueSource, /creditSettingsEarly/);
+  assert.match(issueSource, /logIncomeIssueFailed\(diag, 'credit_consume'/);
+  assert.match(issueSource, /assertAndConsumeCreditOnIssue/);
+});
+
+test('credit issue refreshes invoices-tab panel unpaid surface (no FE unpaid math)', () => {
+  assert.match(commandsSource, /document_type_key === 'credit_tax_invoice'/);
+  assert.match(commandsSource, /buildWorkEngineInvoicesTabAggregate/);
+  assert.match(commandsSource, /client_document_management_panel \(לא שולם\)/);
+});
+
+test('over-credit guard uses canonical Credit Note total against remaining creditable', () => {
+  assert.doesNotThrow(() =>
+    assertCreditAmountWithinRemaining({ requestedAmount: 6960.82, remainingAmount: 7000 }),
+  );
+  assert.throws(
+    () => assertCreditAmountWithinRemaining({ requestedAmount: 7100, remainingAmount: 7000 }),
+    (err: Error & { code?: string }) => err.code === CREDIT_AMOUNT_EXCEEDS_REMAINING_CREDITABLE,
+  );
 });
 
 test('tax invoice row owns credit_action; quote/deal cancel untouched', () => {
@@ -478,4 +659,181 @@ test('posting failure reverses consume including customer credit', () => {
   assert.match(issueSource, /reverseCreditConsumeOnIssueFailure/);
   assert.match(issueSource, /issuedDocumentId: issuedId/);
   assert.match(migration162, /status = 'reversed'/);
+});
+
+test('begin credit writes income_tax_invoice_credit lineage metadata', () => {
+  const sample = writeCreditDraftSettings(
+    { vat_mode: 'standard', discount: { enabled: false, type: 'percent', value: 0 } },
+    {
+      source_invoice_id: '52ab543b-8854-4891-8719-796e8512dced',
+      source_invoice_number: '4006',
+      credit_mode: 'partial',
+      reason_key: 'pricing_correction',
+      reason_note: null,
+      locked_income_customer_id: '88ef2ff3-605b-4c71-bab6-0bd439d43341',
+      locked_currency: 'ILS',
+      line_map: {
+        'draft-line-1': {
+          source_line_identity: '0563fb2c-4821-46ee-bff0-9b55c5499f6a',
+          original_quantity: 1,
+          original_amount: 7922.7,
+        },
+      },
+    },
+  );
+  const read = readCreditDraftSettings(sample);
+  assert.ok(read);
+  assert.equal(read!.source_invoice_id, '52ab543b-8854-4891-8719-796e8512dced');
+  assert.equal(read!.source_invoice_number, '4006');
+  assert.equal(read!.line_map['draft-line-1']?.source_line_identity, '0563fb2c-4821-46ee-bff0-9b55c5499f6a');
+  assert.match(creditServiceSource, /writeCreditDraftSettings/);
+  assert.match(creditServiceSource, /document_settings_json: documentSettingsJson/);
+});
+
+test('serializeDocumentSettingsJson alone strips credit lineage (regression of wipe)', () => {
+  const withCredit = writeCreditDraftSettings(
+    {
+      vat_mode: 'standard',
+      amount_rounding: 'none',
+      discount: { enabled: false, type: 'percent', value: 0 },
+      due_date_manual_override: false,
+    },
+    {
+      source_invoice_id: '52ab543b-8854-4891-8719-796e8512dced',
+      source_invoice_number: '4006',
+      credit_mode: 'partial',
+      reason_key: 'other',
+      reason_note: null,
+      locked_income_customer_id: '88ef2ff3-605b-4c71-bab6-0bd439d43341',
+      locked_currency: 'ILS',
+      line_map: {},
+    },
+  );
+  const wiped = serializeDocumentSettingsJson(parseDocumentSettingsJson(withCredit));
+  assert.equal(readCreditDraftSettings(wiped), null);
+});
+
+test('preserveIncomeTaxInvoiceCreditInDocumentSettings keeps lineage across discount/VAT/settings rewrite', () => {
+  const existing = writeCreditDraftSettings(
+    {
+      vat_mode: 'standard',
+      amount_rounding: 'none',
+      discount: { enabled: false, type: 'percent', value: 0 },
+    },
+    {
+      source_invoice_id: '52ab543b-8854-4891-8719-796e8512dced',
+      source_invoice_number: '4006',
+      credit_mode: 'partial',
+      reason_key: 'billing_error',
+      reason_note: null,
+      locked_income_customer_id: '88ef2ff3-605b-4c71-bab6-0bd439d43341',
+      locked_currency: 'ILS',
+      line_map: {
+        a: { source_line_identity: '0563fb2c-4821-46ee-bff0-9b55c5499f6a', original_quantity: 1, original_amount: 100 },
+      },
+    },
+  );
+
+  // Simulate update_income_document_discount / update_income_document_draft_settings rewrite.
+  const nextFromEditor = {
+    vat_mode: 'exempt',
+    amount_rounding: 'nearest_agora',
+    discount: { enabled: true, type: 'percent', value: 10 },
+    due_date_manual_override: true,
+  };
+  const preserved = preserveIncomeTaxInvoiceCreditInDocumentSettings(existing, nextFromEditor);
+  const credit = readCreditDraftSettings(preserved);
+  assert.ok(credit);
+  assert.equal(credit!.source_invoice_id, '52ab543b-8854-4891-8719-796e8512dced');
+  assert.equal(credit!.source_invoice_number, '4006');
+  assert.equal(preserved.vat_mode, 'exempt');
+  assert.equal((preserved.discount as { value: number }).value, 10);
+  assert.equal(credit!.line_map.a?.source_line_identity, '0563fb2c-4821-46ee-bff0-9b55c5499f6a');
+});
+
+test('client cannot overwrite or delete credit lineage via settings payload', () => {
+  const existing = writeCreditDraftSettings(
+    { vat_mode: 'standard' },
+    {
+      source_invoice_id: '52ab543b-8854-4891-8719-796e8512dced',
+      source_invoice_number: '4006',
+      credit_mode: 'partial',
+      reason_key: 'other',
+      reason_note: null,
+      locked_income_customer_id: 'cust-1',
+      locked_currency: 'ILS',
+      line_map: {},
+    },
+  );
+
+  const maliciousOverwrite = preserveIncomeTaxInvoiceCreditInDocumentSettings(existing, {
+    vat_mode: 'standard',
+    income_tax_invoice_credit: {
+      source_invoice_id: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+      source_invoice_number: 'HACKED',
+      credit_mode: 'full',
+      reason_key: 'other',
+      reason_note: null,
+      locked_income_customer_id: 'other-cust',
+      locked_currency: 'USD',
+      line_map: {},
+    },
+  });
+  assert.equal(readCreditDraftSettings(maliciousOverwrite)!.source_invoice_id, '52ab543b-8854-4891-8719-796e8512dced');
+  assert.equal(readCreditDraftSettings(maliciousOverwrite)!.source_invoice_number, '4006');
+
+  const maliciousDelete = preserveIncomeTaxInvoiceCreditInDocumentSettings(existing, {
+    vat_mode: 'zero',
+    // omit income_tax_invoice_credit entirely
+  });
+  assert.ok(readCreditDraftSettings(maliciousDelete));
+  assert.equal(readCreditDraftSettings(maliciousDelete)!.source_invoice_id, '52ab543b-8854-4891-8719-796e8512dced');
+});
+
+test('client cannot invent credit lineage on a normal draft', () => {
+  const forged = preserveIncomeTaxInvoiceCreditInDocumentSettings(
+    { vat_mode: 'standard', discount: { enabled: false, type: 'percent', value: 0 } },
+    {
+      vat_mode: 'standard',
+      income_tax_invoice_credit: {
+        source_invoice_id: '52ab543b-8854-4891-8719-796e8512dced',
+        source_invoice_number: '4006',
+        credit_mode: 'partial',
+        reason_key: 'other',
+        reason_note: null,
+        locked_income_customer_id: null,
+        locked_currency: 'ILS',
+        line_map: {},
+      },
+    },
+  );
+  assert.equal(readCreditDraftSettings(forged), null);
+  assert.equal(forged.vat_mode, 'standard');
+});
+
+test('draft editor settings/discount paths preserve protected credit metadata', () => {
+  const draftEditorSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-draft-editor.service.ts'),
+    'utf8',
+  );
+  assert.match(draftEditorSource, /preserveIncomeTaxInvoiceCreditInDocumentSettings/);
+  assert.match(
+    draftEditorSource,
+    /function preservePreliminaryEditMarker[\s\S]*preserveIncomeTaxInvoiceCreditInDocumentSettings/,
+  );
+  assert.match(draftEditorSource, /updateIncomeDocumentDiscount[\s\S]*preservePreliminaryEditMarker/);
+  assert.match(draftEditorSource, /updateIncomeDocumentDraftSettings[\s\S]*preservePreliminaryEditMarker/);
+  assert.match(
+    draftEditorSource,
+    /serializeDocumentSettingsJson\(\{ \.\.\.settings, vat_mode: value \}\)/,
+  );
+});
+
+test('4006 expected remaining after issued credits 2360 + 118', () => {
+  const collectible = composeCollectibleAfterCredit({
+    originalAmount: 7922.7,
+    creditedAmount: 2360 + 118,
+    allocatedPayments: 0,
+  });
+  assert.equal(collectible.remaining_receivable, 5444.7);
 });

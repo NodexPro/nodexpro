@@ -547,6 +547,8 @@ export async function buildIncomeClientIncomeLedgerCardAggregate(params: {
       transaction_type_label: invoice.document_type_label,
       document_id: invoice.income_document_id,
       document_number: invoice.document_number,
+      source_document_id: null,
+      source_document_number: null,
       payment_document_id: null,
       payment_document_number: null,
       debit_amount: invoice.original_amount,
@@ -562,6 +564,8 @@ export async function buildIncomeClientIncomeLedgerCardAggregate(params: {
         transaction_type_label: payment.cashbox_display,
         document_id: null,
         document_number: null,
+        source_document_id: invoice.income_document_id,
+        source_document_number: invoice.document_number,
         payment_document_id: payment.receipt_document_id,
         payment_document_number: payment.receipt_document_number,
         debit_amount: null,
@@ -570,19 +574,23 @@ export async function buildIncomeClientIncomeLedgerCardAggregate(params: {
       });
     }
     for (const credit of creditRows.filter((row) => row.source_invoice_id === invoice.income_document_id)) {
+      const amount = Number(credit.credited_amount_reference ?? 0);
+      if (!(amount > 0)) continue;
       const creditDoc = creditDocs.get(credit.credit_document_id);
       events.push({
         transaction_id: credit.credit_document_id,
-        row_kind: 'payment',
+        row_kind: 'credit_note',
         transaction_date: creditDoc?.issue_date ?? invoice.issue_date,
         transaction_type_key: 'credit_tax_invoice',
-        transaction_type_label: 'חשבונית מס/זיכוי',
+        transaction_type_label: 'חשבונית מס זיכוי',
         document_id: credit.credit_document_id,
         document_number: creditDoc?.document_number ?? null,
+        source_document_id: invoice.income_document_id,
+        source_document_number: invoice.document_number,
         payment_document_id: null,
         payment_document_number: null,
         debit_amount: null,
-        credit_amount: credit.credited_amount_reference,
+        credit_amount: amount,
         view_action: buildIncomeIssuedDocumentViewAction({
           incomeDocumentId: credit.credit_document_id,
           canView: perms.view,

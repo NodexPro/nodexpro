@@ -3,6 +3,7 @@
  */
 
 import type { IncomeDocumentType } from './income.types.js';
+import { resolveCanonicalCreditNoteAmount } from './income-document-tax-invoice-credit.pure.js';
 
 export type IncomeAccountingPostingStatus =
   | 'pending'
@@ -175,4 +176,16 @@ export function extractPostingAmountFromTotals(
     }
   }
   return sum;
+}
+
+/** Credit Note AB posting uses the canonical Income totals/VAT grand total only. */
+export function extractIncomeDocumentPostingAmount(
+  documentType: IncomeDocumentType,
+  totalsSnapshot: Record<string, unknown> | null,
+  linesSnapshot: unknown[],
+): number {
+  if (documentType === 'credit_tax_invoice') {
+    return resolveCanonicalCreditNoteAmount(totalsSnapshot);
+  }
+  return extractPostingAmountFromTotals(totalsSnapshot, linesSnapshot);
 }

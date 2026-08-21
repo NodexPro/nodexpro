@@ -15,7 +15,7 @@ import { forSystemRecomputeDerivedSummaries } from './summary.service.js';
 import type { IncomeDocumentType } from '../income/income.types.js';
 import {
   buildAccountingPostingSignature,
-  extractPostingAmountFromTotals,
+  extractIncomeDocumentPostingAmount,
   resolveIncomeAccountingPostingPlan,
   type IncomeAccountingPostingPlan,
 } from '../income/income-accounting-posting.mapping.js';
@@ -141,7 +141,11 @@ async function postRequiredEntries(
   input: PostIncomeDocumentToAccountingInput,
   plan: IncomeAccountingPostingPlan,
 ): Promise<PostIncomeDocumentToAccountingResult> {
-  const amount = extractPostingAmountFromTotals(input.totals_snapshot_json, input.lines_snapshot_json);
+  const amount = extractIncomeDocumentPostingAmount(
+    input.document_type,
+    input.totals_snapshot_json,
+    input.lines_snapshot_json,
+  );
   if (amount <= 0) {
     throw badRequest('Cannot post to Accounting Base without a positive amount');
   }

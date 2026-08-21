@@ -10,14 +10,14 @@ import {
   computeDraftTotalsPreview,
   DEFAULT_DOCUMENT_SETTINGS,
 } from '../../src/domains/income/income-document-draft-totals.pure.js';
-
 import {
   computeDiscountAmountIls,
   normalizeDocumentDiscountInput,
   validateDocumentDiscount,
 } from '../../src/domains/income/income-document-discount.pure.js';
-
 import { incomeDraftVatFallbackResolution } from '../../src/domains/income/income-draft-vat-fallback.pure.js';
+import { resolveCreditNoteDraftDocumentSettings } from '../../src/domains/income/income-document-tax-invoice-credit.pure.js';
+import { extractIncomeDocumentPostingAmount } from '../../src/domains/income/income-accounting-posting.mapping.js';
 
 const vat = incomeDraftVatFallbackResolution();
 const date = '2026-05-21';
@@ -149,6 +149,24 @@ test('discount disabled does not affect totals even if old amount remains stored
   assert.equal(totals.grand_total_reference, 2360);
 });
 
+test('source invoice discount does not leak into Credit Note draft settings/totals', async () => {
+  const creditSettings = resolveCreditNoteDraftDocumentSettings();
+  assert.equal(creditSettings.discount.enabled, false);
+  assert.equal(creditSettings.discount.value, 0);
+  const lines = await lineTotals2000Ils();
+  const totals = await computeDraftTotalsPreview(
+    lines,
+    'ILS',
+    { ...DEFAULT_DOCUMENT_SETTINGS, ...creditSettings },
+    vat,
+    date,
+  );
+  assert.equal(totals.discount_enabled, false);
+  assert.equal(totals.discount_amount_reference, null);
+  assert.notEqual(totals.grand_total_reference, 961.88);
+  assert.equal(totals.grand_total_reference, 2360);
+});
+
 test('preview snapshot matches disabled-discount canonical totals', async () => {
   const lines = await lineTotals2000Ils();
   const normalized = normalizeDocumentDiscountInput(false, 'fixed_amount', 1184.85);
@@ -164,4 +182,26 @@ test('preview snapshot matches disabled-discount canonical totals', async () => 
   assert.equal(totals.discount_enabled, false);
   assert.equal(totals.grand_total_reference, 2360);
   assert.equal(totals.discount_amount_display, null);
+});
+
+test('Issue / AB posting uses corrected Credit Note grand_total after discount disable', async () => {
+  const lines = await lineTotals2000Ils();
+  const totals = await computeDraftTotalsPreview(
+    lines,
+    'ILS',
+    {
+      ...DEFAULT_DOCUMENT_SETTINGS,
+      discount: { enabled: false, type: 'fixed_amount', value: 1184.85 },
+    },
+    vat,
+    date,
+  );
+  assert.equal(
+    extractIncomeDocumentPostingAmount(
+      'credit_tax_invoice',
+      { grand_total_reference: totals.grand_total_reference ?? 0 },
+      [],
+    ),
+    2360,
+  );
 });

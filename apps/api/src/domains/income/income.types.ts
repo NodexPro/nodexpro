@@ -580,13 +580,16 @@ export interface IncomeClientIncomeLedgerCardInvoiceGroup {
 export interface IncomeClientIncomeLedgerCardRenderRow {
   row_id: string;
   transaction_id: string;
-  row_kind: 'invoice' | 'payment';
+  row_kind: 'invoice' | 'payment' | 'credit_note';
   transaction_date: string;
   transaction_date_display: string;
   transaction_type_key: string;
   transaction_type_label: string;
   document_id: string | null;
   document_number: string;
+  /** Backend-owned Credit Note → source invoice lineage (null for invoice/payment). */
+  source_document_id: string | null;
+  source_document_number: string | null;
   payment_document_id: string | null;
   payment_document_number: string;
   debit_amount_display: string;

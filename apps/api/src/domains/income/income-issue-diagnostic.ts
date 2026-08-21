@@ -56,6 +56,7 @@ export type IncomeIssueFailingStage =
   | 'existing_issued_document_check'
   | 'numbering'
   | 'issued_document_insert'
+  | 'credit_consume'
   | 'accounting_posting'
   | 'issued_document_cleanup'
   | 'draft_mark_issued'

@@ -72,6 +72,77 @@ export function sourceLineIdentityFromSnapshot(
   return id || `source_index:${index}`;
 }
 
+/**
+ * Authoritative issued Credit Note amount = canonical Income totals/VAT grand total.
+ * Never infer from source invoice total, source discount, remaining, or line reconstruction.
+ */
+export function resolveCanonicalCreditNoteAmount(
+  totalsSnapshot: Record<string, unknown> | null | undefined,
+): number {
+  if (!totalsSnapshot || typeof totalsSnapshot !== 'object') return 0;
+  const grand = totalsSnapshot.grand_total_reference;
+  if (typeof grand === 'number' && Number.isFinite(grand) && grand > 0) {
+    return roundMoney2(grand);
+  }
+  return 0;
+}
+
+/**
+ * Credit draft starts with the normal Income editor.
+ * Source invoice document-level discount is NOT reused as a Credit Note discount
+ * (that would double-discount already-net amounts or confuse discount with credit amount).
+ */
+export function resolveCreditNoteDraftDocumentSettings(): {
+  vat_mode: 'standard';
+  amount_rounding: 'none';
+  discount: { enabled: false; type: 'percent'; value: 0 };
+} {
+  return {
+    vat_mode: 'standard',
+    amount_rounding: 'none',
+    discount: { enabled: false, type: 'percent', value: 0 },
+  };
+}
+
+/**
+ * Issued invoice lines are pre–document-discount amounts.
+ * With Credit Note discount disabled, scale line money by source
+ * (subtotal_after_discount / subtotal_before_discount) so a full Credit Note
+ * seeds to the same net as the source invoice grand path — without re-applying discount.
+ * Does not invent the Credit Note amount; accountant may still edit lines/VAT mode.
+ */
+export function applySourceDocumentDiscountNetToCreditDraftLines<
+  T extends {
+    amount_reference: number | null;
+    unit_price_reference: number | null;
+  },
+>(params: {
+  lines: T[];
+  sourceTotalsSnapshot: Record<string, unknown> | null | undefined;
+}): T[] {
+  const totals = params.sourceTotalsSnapshot;
+  if (!totals || typeof totals !== 'object' || totals.discount_enabled !== true) {
+    return params.lines;
+  }
+  const before = Number(totals.subtotal_before_discount_reference);
+  const after = Number(totals.subtotal_after_discount_reference);
+  if (!(before > 0) || !Number.isFinite(after) || after < 0) return params.lines;
+  const factor = after / before;
+  if (!(factor > 0) || factor > 1.0001) return params.lines;
+  if (Math.abs(factor - 1) < 0.0000001) return params.lines;
+  return params.lines.map((line) => {
+    const amount = line.amount_reference;
+    const unit = line.unit_price_reference;
+    return {
+      ...line,
+      amount_reference:
+        typeof amount === 'number' && Number.isFinite(amount) ? roundMoney2(amount * factor) : amount,
+      unit_price_reference:
+        typeof unit === 'number' && Number.isFinite(unit) ? roundMoney2(unit * factor) : unit,
+    };
+  });
+}
+
 export function resolveCreditState(params: {
   originalAmount: number;
   creditedAmount: number;
@@ -210,6 +281,42 @@ export function writeCreditDraftSettings(
   return {
     ...(documentSettingsJson ?? {}),
     [INCOME_CREDIT_SOURCE_SETTINGS_KEY]: settings,
+  };
+}
+
+/**
+ * SYSTEM-OWNED: income_tax_invoice_credit must survive ordinary draft settings rewrites
+ * (discount / VAT / rounding / due-date). Never trust a client-supplied credit block.
+ *
+ * - If existing draft has lineage → always restore the existing raw block onto next settings.
+ * - If client payload includes income_tax_invoice_credit → strip it (cannot invent/overwrite).
+ * - Non-credit drafts (no existing block) → unchanged editable settings only.
+ */
+export function preserveIncomeTaxInvoiceCreditInDocumentSettings(
+  existingDocumentSettingsJson: unknown,
+  nextSettingsJson: Record<string, unknown>,
+): Record<string, unknown> {
+  const nextWithoutClientCredit: Record<string, unknown> = { ...nextSettingsJson };
+  delete nextWithoutClientCredit[INCOME_CREDIT_SOURCE_SETTINGS_KEY];
+
+  if (
+    !existingDocumentSettingsJson ||
+    typeof existingDocumentSettingsJson !== 'object' ||
+    Array.isArray(existingDocumentSettingsJson)
+  ) {
+    return nextWithoutClientCredit;
+  }
+
+  const existingRaw = (existingDocumentSettingsJson as Record<string, unknown>)[
+    INCOME_CREDIT_SOURCE_SETTINGS_KEY
+  ];
+  if (existingRaw === undefined) {
+    return nextWithoutClientCredit;
+  }
+
+  return {
+    ...nextWithoutClientCredit,
+    [INCOME_CREDIT_SOURCE_SETTINGS_KEY]: existingRaw,
   };
 }
 

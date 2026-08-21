@@ -2,7 +2,7 @@
  * Income — Client Document Management panel (CRM-style client list).
  * Single aggregate read model; counters from SQL aggregation (P4.2).
  * unpaid_amount_* binds to SQL unpaid_reference = Accounting Base remaining
- * (original − effective posted allocations). No FE arithmetic.
+ * (original − posted allocations − issued Credit Note totals). No FE arithmetic.
  */
 
 import { supabaseAdmin } from '../../db/client.js';
@@ -292,7 +292,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     countSelfModeRows(orgId),
   ]);
   throwIfSupabaseError(statsRes.error, 'incomeClientDocumentManagementPanelStats', {
-    migrationHint: '157_income_client_document_management_panel_unpaid_ab.sql',
+    migrationHint: '163_income_client_panel_unpaid_subtract_issued_credits.sql',
   });
   stepStart = logPanelTiming('rpc_stats_and_self_counts', stepStart);
 

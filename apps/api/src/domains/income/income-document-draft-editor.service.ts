@@ -51,6 +51,7 @@ import {
   assertCreditDraftIdentityLocked,
   assertNoNewCreditLines,
 } from './income-document-tax-invoice-credit.service.js';
+import { preserveIncomeTaxInvoiceCreditInDocumentSettings } from './income-document-tax-invoice-credit.pure.js';
 import type { RecipientSearchOverlay } from './income-recipient.service.js';
 import {
   loadIncomeCustomerDefaultPaymentTerms,
@@ -221,10 +222,15 @@ function preservePreliminaryEditMarker(
   row: { document_settings_json: unknown },
   nextSettingsJson: Record<string, unknown>,
 ): Record<string, unknown> {
+  // Also preserves SYSTEM-OWNED income_tax_invoice_credit (parse/serialize strips it).
+  const withProtectedCredit = preserveIncomeTaxInvoiceCreditInDocumentSettings(
+    row.document_settings_json,
+    nextSettingsJson,
+  );
   const sourceDocumentId = preliminaryEditSourceDocumentId(row);
-  if (!sourceDocumentId) return nextSettingsJson;
+  if (!sourceDocumentId) return withProtectedCredit;
   return {
-    ...nextSettingsJson,
+    ...withProtectedCredit,
     [PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY]: sourceDocumentId,
   };
 }
@@ -934,13 +940,16 @@ export async function updateIncomeDocumentDraftSettings(
     if (value !== 'standard' && value !== 'exempt') {
       throw badRequest('invalid vat_mode');
     }
-    patch.document_settings_json = preservePreliminaryEditMarker(row, { ...settings, vat_mode: value });
+    patch.document_settings_json = preservePreliminaryEditMarker(
+      row,
+      serializeDocumentSettingsJson({ ...settings, vat_mode: value }),
+    );
   } else if (key === 'amount_rounding') {
     if (value !== 'none' && value !== 'nearest_agora') throw badRequest('invalid amount_rounding');
-    patch.document_settings_json = preservePreliminaryEditMarker(row, {
-      ...settings,
-      amount_rounding: value,
-    });
+    patch.document_settings_json = preservePreliminaryEditMarker(
+      row,
+      serializeDocumentSettingsJson({ ...settings, amount_rounding: value }),
+    );
   } else if (key === 'document_type') {
     const dt = parseIncomeDocumentType(value);
     if (!dt) throw badRequest('document_type is invalid');

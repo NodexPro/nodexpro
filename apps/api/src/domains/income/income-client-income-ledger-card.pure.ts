@@ -72,12 +72,15 @@ export type IncomeClientIncomeLedgerCardInvoiceGroup = {
 
 export type LedgerTransactionEventInput = {
   transaction_id: string;
-  row_kind: 'invoice' | 'payment';
+  row_kind: 'invoice' | 'payment' | 'credit_note';
   transaction_date: string;
   transaction_type_key: string;
   transaction_type_label: string;
   document_id: string | null;
   document_number: string | null;
+  /** Backend lineage: Credit Note → source tax invoice (null for invoice/payment). */
+  source_document_id: string | null;
+  source_document_number: string | null;
   payment_document_id: string | null;
   payment_document_number: string | null;
   debit_amount: number | null;
@@ -88,13 +91,15 @@ export type LedgerTransactionEventInput = {
 export type IncomeClientIncomeLedgerCardRenderRow = {
   row_id: string;
   transaction_id: string;
-  row_kind: 'invoice' | 'payment';
+  row_kind: 'invoice' | 'payment' | 'credit_note';
   transaction_date: string;
   transaction_date_display: string;
   transaction_type_key: string;
   transaction_type_label: string;
   document_id: string | null;
   document_number: string;
+  source_document_id: string | null;
+  source_document_number: string | null;
   payment_document_id: string | null;
   payment_document_number: string;
   debit_amount_display: string;
@@ -142,7 +147,13 @@ export function parseLedgerCalendarDate(raw: string | null | undefined): string 
 function compareLedgerEvents(a: LedgerTransactionEventInput, b: LedgerTransactionEventInput): number {
   const dateCmp = a.transaction_date.localeCompare(b.transaction_date);
   if (dateCmp !== 0) return dateCmp;
-  if (a.row_kind !== b.row_kind) return a.row_kind === 'invoice' ? -1 : 1;
+  const kindRank = (kind: LedgerTransactionEventInput['row_kind']): number => {
+    if (kind === 'invoice') return 0;
+    if (kind === 'credit_note') return 1;
+    return 2;
+  };
+  const kindCmp = kindRank(a.row_kind) - kindRank(b.row_kind);
+  if (kindCmp !== 0) return kindCmp;
   const aNum = a.document_number ?? a.payment_document_number ?? a.transaction_id;
   const bNum = b.document_number ?? b.payment_document_number ?? b.transaction_id;
   return aNum.localeCompare(bNum, 'he', { numeric: true });
@@ -185,6 +196,8 @@ export function buildLedgerTransactionRows(params: {
       transaction_type_label: event.transaction_type_label,
       document_id: event.document_id,
       document_number: event.document_number ?? '',
+      source_document_id: event.source_document_id,
+      source_document_number: event.source_document_number,
       payment_document_id: event.payment_document_id,
       payment_document_number: event.payment_document_number ?? '',
       debit_amount_display: moneyCell(debit > 0 ? debit : null, params.currency),

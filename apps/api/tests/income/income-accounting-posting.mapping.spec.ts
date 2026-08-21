@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
+  extractIncomeDocumentPostingAmount,
   extractPostingAmountFromTotals,
   resolveAccountingDisplayStatus,
   resolveIncomeAccountingPostingPlan,
@@ -68,9 +69,34 @@ test('extractPostingAmountFromTotals sums line amount_reference', () => {
   assert.equal(amount, 150);
 });
 
+test('credit_tax_invoice AB posting uses canonical grand_total, not subtotal or discount', () => {
+  const amount = extractIncomeDocumentPostingAmount(
+    'credit_tax_invoice',
+    {
+      grand_total_reference: 6960.82,
+      subtotal_reference: 5899,
+      discount_amount_reference: 1184.85,
+    },
+    [{ amount_reference: 5899 }],
+  );
+  assert.equal(amount, 6960.82);
+  assert.equal(
+    extractIncomeDocumentPostingAmount('credit_tax_invoice', { grand_total_reference: 2000 }, []),
+    2000,
+  );
+});
+
+test('tax_invoice posting amount path is unchanged (subtotal/lines, not Credit Note helper)', () => {
+  assert.equal(
+    extractIncomeDocumentPostingAmount('tax_invoice', { subtotal_reference: 5899, grand_total_reference: 6960.82 }, []),
+    5899,
+  );
+});
+
 test('Accounting Base posting service uses forCommandCreateEntry not raw inserts', () => {
   assert.match(postingServiceSource, /forCommandCreateEntry/);
   assert.match(postingServiceSource, /forCommandCreateLink/);
+  assert.match(postingServiceSource, /extractIncomeDocumentPostingAmount/);
   assert.doesNotMatch(postingServiceSource, /\.from\('accounting_entries'\)\.insert/);
 });
 

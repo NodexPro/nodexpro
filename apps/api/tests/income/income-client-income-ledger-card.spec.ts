@@ -33,6 +33,8 @@ function viewAction(documentId: string): IncomeIssuedDocumentViewAction {
   };
 }
 
+const noSource = { source_document_id: null as string | null, source_document_number: null as string | null };
+
 describe('income client ledger card debit/credit composition', () => {
   it('builds chronological חובה / זכות / יתרה from Accounting Base amounts', () => {
     const ledger = buildLedgerTransactionRows({
@@ -48,6 +50,7 @@ describe('income client ledger card debit/credit composition', () => {
           transaction_type_label: 'חשבונית מס',
           document_id: 'inv-4007',
           document_number: '4007',
+          ...noSource,
           payment_document_id: null,
           payment_document_number: null,
           debit_amount: 1298,
@@ -62,6 +65,8 @@ describe('income client ledger card debit/credit composition', () => {
           transaction_type_label: 'קופת העברות',
           document_id: null,
           document_number: null,
+          source_document_id: 'inv-4007',
+          source_document_number: '4007',
           payment_document_id: 'rcp-1001',
           payment_document_number: '1001',
           debit_amount: null,
@@ -76,6 +81,7 @@ describe('income client ledger card debit/credit composition', () => {
           transaction_type_label: 'חשבונית מס',
           document_id: 'inv-4008',
           document_number: '4008',
+          ...noSource,
           payment_document_id: null,
           payment_document_number: null,
           debit_amount: 1203.6,
@@ -123,6 +129,7 @@ describe('income client ledger card debit/credit composition', () => {
           transaction_type_label: 'חשבונית מס',
           document_id: 'inv-old',
           document_number: '4000',
+          ...noSource,
           payment_document_id: null,
           payment_document_number: null,
           debit_amount: 500,
@@ -137,6 +144,7 @@ describe('income client ledger card debit/credit composition', () => {
           transaction_type_label: 'חשבונית מס',
           document_id: 'inv-new',
           document_number: '4001',
+          ...noSource,
           payment_document_id: null,
           payment_document_number: null,
           debit_amount: 200,
@@ -150,6 +158,135 @@ describe('income client ledger card debit/credit composition', () => {
     assert.equal(ledger.rows[0]?.running_balance_display, '₪700.00');
     assert.equal(ledger.current_balance, 700);
     assert.equal(ledger.total_debit, 200);
+  });
+
+  it('renders two successive Credit Notes under source invoice with cumulative זכות', () => {
+    const ledger = buildLedgerTransactionRows({
+      currency: 'ILS',
+      fromDate: '2026-01-01',
+      toDate: '2026-12-31',
+      events: [
+        {
+          transaction_id: 'inv-4006',
+          row_kind: 'invoice',
+          transaction_date: '2026-08-07',
+          transaction_type_key: 'tax_invoice',
+          transaction_type_label: 'חשבונית מס',
+          document_id: 'inv-4006',
+          document_number: '4006',
+          ...noSource,
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: 7922.7,
+          credit_amount: null,
+          view_action: viewAction('inv-4006'),
+        },
+        {
+          transaction_id: 'cn-a',
+          row_kind: 'credit_note',
+          transaction_date: '2026-08-10',
+          transaction_type_key: 'credit_tax_invoice',
+          transaction_type_label: 'חשבונית מס זיכוי',
+          document_id: 'cn-a',
+          document_number: '6001',
+          source_document_id: 'inv-4006',
+          source_document_number: '4006',
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: null,
+          credit_amount: 500,
+          view_action: viewAction('cn-a'),
+        },
+        {
+          transaction_id: 'cn-b',
+          row_kind: 'credit_note',
+          transaction_date: '2026-08-17',
+          transaction_type_key: 'credit_tax_invoice',
+          transaction_type_label: 'חשבונית מס זיכוי',
+          document_id: 'cn-b',
+          document_number: '6002',
+          source_document_id: 'inv-4006',
+          source_document_number: '4006',
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: null,
+          credit_amount: 118,
+          view_action: viewAction('cn-b'),
+        },
+      ],
+    });
+    assert.equal(ledger.rows.length, 3);
+    assert.equal(ledger.rows[1]?.row_kind, 'credit_note');
+    assert.equal(ledger.rows[1]?.source_document_number, '4006');
+    assert.equal(ledger.rows[1]?.document_number, '6001');
+    assert.equal(ledger.rows[1]?.payment_document_number, '');
+    assert.equal(ledger.rows[1]?.credit_amount_display, '₪500.00');
+    assert.equal(ledger.rows[1]?.running_balance_display, '₪7,422.70');
+    assert.equal(ledger.rows[2]?.document_number, '6002');
+    assert.equal(ledger.rows[2]?.credit_amount_display, '₪118.00');
+    assert.equal(ledger.rows[2]?.running_balance_display, '₪7,304.70');
+    assert.equal(ledger.total_debit, 7922.7);
+    assert.equal(ledger.total_credit, 618);
+    assert.equal(ledger.current_balance, 7304.7);
+  });
+
+  it('payment + multiple credits compose remaining balance', () => {
+    const ledger = buildLedgerTransactionRows({
+      currency: 'ILS',
+      fromDate: '2026-01-01',
+      toDate: '2026-12-31',
+      events: [
+        {
+          transaction_id: 'inv-4006',
+          row_kind: 'invoice',
+          transaction_date: '2026-08-07',
+          transaction_type_key: 'tax_invoice',
+          transaction_type_label: 'חשבונית מס',
+          document_id: 'inv-4006',
+          document_number: '4006',
+          ...noSource,
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: 7922.7,
+          credit_amount: null,
+          view_action: viewAction('inv-4006'),
+        },
+        {
+          transaction_id: 'pay-1',
+          row_kind: 'payment',
+          transaction_date: '2026-08-08',
+          transaction_type_key: 'cashbox',
+          transaction_type_label: 'קופת העברות',
+          document_id: null,
+          document_number: null,
+          source_document_id: 'inv-4006',
+          source_document_number: '4006',
+          payment_document_id: 'rcp-1',
+          payment_document_number: '1001',
+          debit_amount: null,
+          credit_amount: 1000,
+          view_action: viewAction('rcp-1'),
+        },
+        {
+          transaction_id: 'cn-a',
+          row_kind: 'credit_note',
+          transaction_date: '2026-08-09',
+          transaction_type_key: 'credit_tax_invoice',
+          transaction_type_label: 'חשבונית מס זיכוי',
+          document_id: 'cn-a',
+          document_number: '6001',
+          source_document_id: 'inv-4006',
+          source_document_number: '4006',
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: null,
+          credit_amount: 2000,
+          view_action: viewAction('cn-a'),
+        },
+      ],
+    });
+    assert.equal(ledger.current_balance, 4922.7);
+    assert.equal(ledger.total_credit, 3000);
   });
 
   it('returns backend cashbox labels for payment methods', () => {

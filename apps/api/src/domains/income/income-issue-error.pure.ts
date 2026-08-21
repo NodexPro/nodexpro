@@ -23,6 +23,7 @@ const FAILING_STAGE_HEBREW: Record<string, string> = {
   existing_issued_document_check: 'לא ניתן להפיק — בדיקת מסמך קיים נכשלה.',
   numbering: 'לא ניתן להפיק — כשל בהקצאת מספר מסמך.',
   issued_document_insert: 'לא ניתן להפיק — כשל בשמירת המסמך שהופק.',
+  credit_consume: 'לא ניתן להפיק — כשל ברישום זיכוי החשבונית.',
   accounting_posting: 'לא ניתן להפיק — כשל ברישום בחשבונאות.',
   draft_mark_issued: 'לא ניתן להפיק — כשל בעדכון סטטוס הטיוטה.',
   recurring_cycle_link: 'לא ניתן להפיק — כשל בקישור למחזור הרטנר.',

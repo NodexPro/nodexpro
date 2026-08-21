@@ -63,13 +63,29 @@ test('migration 157 unpaid_reference subtracts effective posted allocations via 
   );
 });
 
+test('migration 163 unpaid_reference also subtracts issued Credit Note totals', () => {
+  const mig163 = readFileSync(
+    join(dir, '../../../../supabase/migrations/163_income_client_panel_unpaid_subtract_issued_credits.sql'),
+    'utf8',
+  );
+  assert.match(mig163, /income_document_credit_links/);
+  assert.match(mig163, /status = 'issued'/);
+  assert.match(mig163, /credited_amount_reference/);
+  assert.match(mig163, /credited_amount/);
+  assert.match(
+    mig163,
+    /round\(oi\.original_amount, 2\)\s*-\s*round\(coalesce\(p\.paid_amount[\s\S]*-\s*round\(coalesce\(c\.credited_amount/,
+  );
+  assert.doesNotMatch(mig163, /discount_amount_reference/);
+});
+
 test('UI לא שולם binds unpaid_amount_display only (no FE original-paid math)', () => {
   assert.match(webPanel, /unpaid_amount_display/);
   assert.doesNotMatch(webPanel, /original_amount\s*-\s*paid/);
   assert.doesNotMatch(webPanel, /grand_total.*allocated|allocated.*grand_total/);
   assert.match(panelSource, /unpaid_amount_display/);
   assert.match(panelSource, /label: 'לא שולם'/);
-  assert.match(panelSource, /157_income_client_document_management_panel_unpaid_ab/);
+  assert.match(panelSource, /163_income_client_panel_unpaid_subtract_issued_credits/);
 });
 
 test('Work Engine invoices tab composes client panel (לא שולם surface)', () => {

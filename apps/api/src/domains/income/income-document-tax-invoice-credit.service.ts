@@ -32,11 +32,11 @@ import {
 } from '../accounting-base/accounting-base-customer-credit.service.js';
 import {
   draftLinesFromIssuedSnapshot,
-  resolveDocumentSettingsForConversion,
   serializeConversionDocumentSettings,
   serializeConvertedDraftLines,
 } from './income-document-conversion.pure.js';
 import {
+  applySourceDocumentDiscountNetToCreditDraftLines,
   CREDIT_AMOUNT_EXCEEDS_REMAINING_CREDITABLE,
   CREDIT_LINE_EXCEEDS_REMAINING_CREDITABLE,
   INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT,
@@ -45,6 +45,8 @@ import {
   isIncomeTaxInvoiceCreditMode,
   parseIncomeTaxInvoiceCreditReasonKey,
   readCreditDraftSettings,
+  resolveCanonicalCreditNoteAmount,
+  resolveCreditNoteDraftDocumentSettings,
   resolveCreditState,
   sourceLineIdentityFromSnapshot,
   writeCreditDraftSettings,
@@ -312,7 +314,10 @@ export async function executeBeginIncomeTaxInvoiceCredit(
     })),
   });
 
-  const draftLines = draftLinesFromIssuedSnapshot(source.lines_snapshot_json, source.currency);
+  const draftLines = applySourceDocumentDiscountNetToCreditDraftLines({
+    lines: draftLinesFromIssuedSnapshot(source.lines_snapshot_json, source.currency),
+    sourceTotalsSnapshot: source.totals_snapshot_json,
+  });
   const line_map: Record<string, IncomeCreditSourceLineMapEntry> = {};
   draftLines.forEach((line, index) => {
     const sourceLine = sourceLines[index];
@@ -324,10 +329,7 @@ export async function executeBeginIncomeTaxInvoiceCredit(
     };
   });
 
-  const documentSettings = resolveDocumentSettingsForConversion({
-    sourceDraftSettingsJson: null,
-    sourceTotalsSnapshotJson: source.totals_snapshot_json,
-  });
+  const documentSettings = resolveCreditNoteDraftDocumentSettings();
   const creditSettings: IncomeCreditDraftSettings = {
     source_invoice_id: source.id,
     source_invoice_number: source.document_number,
@@ -522,7 +524,10 @@ export async function assertAndConsumeCreditOnIssue(params: {
     };
   }
 
-  const requestedAmount = resolveIncomeInvoiceOriginalAmount(params.totalsSnapshotJson);
+  const requestedAmount = resolveCanonicalCreditNoteAmount(params.totalsSnapshotJson);
+  if (requestedAmount <= 0) {
+    throw badRequest('Credit Note total is required from the Income totals engine');
+  }
   let lines;
   try {
     lines = creditConsumeLinesFromDraft({
