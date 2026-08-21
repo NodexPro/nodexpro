@@ -14,6 +14,7 @@ import { fetchWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../../api
 import { IncomeDocumentEmailHistoryModal } from '../income/IncomeDocumentEmailHistoryModal';
 import { WorkEngineDocumentsRowDeliveryIcons, workEngineDocumentsRowDeliveryVisible } from './WorkEngineDocumentsRowDeliveryIcons';
 import type { WorkEngineTaxInvoiceCreditRequest } from './WorkEngineTaxInvoiceCreditConfirmModal';
+import { btnPrimary } from '../../pages/owner-legal-control-panel-actions';
 
 type OpenParams = {
   representedClientId: string;
@@ -53,6 +54,29 @@ function preliminaryEditActionOf(
   return action;
 }
 
+
+type DocumentConvertTargetOption = {
+  document_type: string;
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+};
+
+type DocumentConvertAction = {
+  enabled: boolean;
+  label: string;
+  command: 'convert_income_document_to_draft';
+  targets: DocumentConvertTargetOption[];
+};
+
+function convertActionOf(
+  row: WorkEngineInvoicesClientDocumentsByTypeRow,
+): DocumentConvertAction | null {
+  const action = (row as { convert_action?: DocumentConvertAction | null }).convert_action;
+  if (!action || action.command !== 'convert_income_document_to_draft') return null;
+  return action;
+}
+
 function renderCellValue(
   row: WorkEngineInvoicesClientDocumentsByTypeRow,
   columnKey: string,
@@ -87,6 +111,11 @@ export function WorkEngineClientDocumentsByTypeModal({
   const [aggregate, setAggregate] = useState<WorkEngineInvoicesClientDocumentsByTypeAggregate | null>(null);
   const [loading, setLoading] = useState(false);
   const [docEmailHistoryId, setDocEmailHistoryId] = useState<string | null>(null);
+  const [convertTarget, setConvertTarget] = useState<{
+    row: WorkEngineInvoicesClientDocumentsByTypeRow;
+    action: DocumentConvertAction;
+  } | null>(null);
+  const [selectedConvertDocumentType, setSelectedConvertDocumentType] = useState<string | null>(null);
 
   const loadAggregate = useCallback(
     async (year?: number | null) => {
@@ -113,6 +142,8 @@ export function WorkEngineClientDocumentsByTypeModal({
   useEffect(() => {
     if (!open || !params) {
       setAggregate(null);
+      setConvertTarget(null);
+      setSelectedConvertDocumentType(null);
       return;
     }
     void loadAggregate();
@@ -190,6 +221,58 @@ export function WorkEngineClientDocumentsByTypeModal({
     }
   };
 
+
+  const closeConvertModal = () => {
+    setConvertTarget(null);
+    setSelectedConvertDocumentType(null);
+  };
+
+  const handleConfirmConvert = async () => {
+    if (!convertTarget?.row.document_id || !convertTarget.action.enabled) return;
+    const selectedTarget = convertTarget.action.targets.find(
+      (target) => target.document_type === selectedConvertDocumentType,
+    );
+    if (!selectedTarget?.enabled) return;
+    onBusyChange?.(true);
+    try {
+      const raw = await executeIncomeCommand(convertTarget.action.command, {
+        source_document_id: convertTarget.row.document_id,
+        target_document_type: selectedTarget.document_type,
+        idempotency_key: crypto.randomUUID(),
+        documents_list_year: aggregate?.selected_year ?? null,
+      });
+      if (typeof raw !== 'object' || raw == null || !('income_workspace_aggregate' in raw)) return;
+      const res = raw as {
+        income_workspace_aggregate: IncomeWorkspaceAggregate;
+        work_engine_invoices_client_documents_by_type_aggregate?: WorkEngineInvoicesClientDocumentsByTypeAggregate;
+        work_engine_invoices_tab_aggregate?: Record<string, unknown>;
+        meta?: { converted_draft_id?: string };
+      };
+      const list = res.work_engine_invoices_client_documents_by_type_aggregate;
+      if (list) setAggregate(list);
+      if (res.work_engine_invoices_tab_aggregate) {
+        onInvoicesTabRefresh?.(res.work_engine_invoices_tab_aggregate);
+      }
+      closeConvertModal();
+      const draftId =
+        res.meta?.converted_draft_id ??
+        res.income_workspace_aggregate.active_wizard_draft_id ??
+        null;
+      if (draftId && onOpenConvertedDraft) {
+        await onOpenConvertedDraft({
+          draftId,
+          workspaceAggregate: res.income_workspace_aggregate,
+        });
+      } else if (draftId && onEditDraft) {
+        await onEditDraft(draftId);
+      }
+    } catch (e) {
+      onError?.(e instanceof Error ? e.message : String(e));
+    } finally {
+      onBusyChange?.(false);
+    }
+  };
+
   if (!open || !params) return null;
 
   const title = `מסמכים — ${params.documentTypeLabel} — ${params.clientDisplayName}`;
@@ -253,16 +336,41 @@ export function WorkEngineClientDocumentsByTypeModal({
                         if (col.key === 'actions') {
                           const hasDedicatedViewColumn = columns.some((column) => column.key === 'view');
                           const creditAction = row.credit_action ?? null;
+                          const convertAction = convertActionOf(row);
                           const showCredit = Boolean(creditAction);
+                          const showConvert = Boolean(convertAction);
                           const showView =
                             !hasDedicatedViewColumn && Boolean(row.can_view_document);
                           return (
                             <td key={col.key} className="nx-we-documents-modal__action-col">
                               {showView ||
                               showCredit ||
+                              showConvert ||
                               workEngineDocumentsRowDeliveryVisible(row).showEmail ||
                               workEngineDocumentsRowDeliveryVisible(row).showDocflow ? (
                                 <div className="nx-we-documents-modal__row-actions">
+                                  {showConvert && convertAction ? (
+                                    <button
+                                      type="button"
+                                      className="nx-we-documents-modal__icon-btn"
+                                      disabled={busy || loading || !convertAction.enabled}
+                                      title={convertAction.label}
+                                      aria-label={convertAction.label}
+                                      onClick={() => {
+                                        setConvertTarget({ row, action: convertAction });
+                                        setSelectedConvertDocumentType(null);
+                                      }}
+                                    >
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                        <path
+                                          d="M12 5v14M5 12h14"
+                                          stroke="currentColor"
+                                          strokeWidth="1.8"
+                                          strokeLinecap="round"
+                                        />
+                                      </svg>
+                                    </button>
+                                  ) : null}
                                   {showCredit && creditAction ? (
                                     <button
                                       type="button"
@@ -428,6 +536,97 @@ export function WorkEngineClientDocumentsByTypeModal({
         onClose={() => setDocEmailHistoryId(null)}
         onError={onError}
       />
+
+      {convertTarget ? (
+        <div
+          className="nx-modal-overlay nx-modal-overlay--nested nx-we-documents-convert-overlay"
+          role="dialog"
+          aria-modal="true"
+          dir="rtl"
+        >
+          <div className="nx-modal nx-owner-legal-command-modal nx-accounting-editor-modal">
+            <div className="nx-modal-header">
+              <h2>{convertTarget.action.label || 'הפקת מסמך'}</h2>
+            </div>
+            <div className="nx-modal-body">
+              {convertTarget.row.document_number ? (
+                <p>
+                  מסמך מקור: <strong>{convertTarget.row.document_number}</strong>
+                </p>
+              ) : null}
+              <div
+                role="radiogroup"
+                aria-label={convertTarget.action.label || 'הפקת מסמך'}
+                style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}
+              >
+                {convertTarget.action.targets.map((target) => {
+                  const optionId = `nx-we-convert-target-${target.document_type}`;
+                  return (
+                    <label
+                      key={target.document_type}
+                      htmlFor={optionId}
+                      title={target.disabled_reason ?? target.label}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 8,
+                        padding: '8px 10px',
+                        borderRadius: 6,
+                        border: '1px solid #d1d5db',
+                        opacity: target.enabled ? 1 : 0.55,
+                        cursor: busy || !target.enabled ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      <input
+                        id={optionId}
+                        type="radio"
+                        name="nx-we-convert-target"
+                        value={target.document_type}
+                        checked={selectedConvertDocumentType === target.document_type}
+                        disabled={busy || !target.enabled}
+                        onChange={() => setSelectedConvertDocumentType(target.document_type)}
+                        style={{ marginTop: 2 }}
+                      />
+                      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600 }}>{target.label}</span>
+                        {!target.enabled && target.disabled_reason ? (
+                          <span style={{ fontSize: 12, color: '#64748b' }}>{target.disabled_reason}</span>
+                        ) : null}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="nx-modal-footer nx-tax-nested-modal-footer">
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                disabled={busy}
+                onClick={closeConvertModal}
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact nx-btn-primary"
+                style={btnPrimary}
+                disabled={
+                  busy ||
+                  !selectedConvertDocumentType ||
+                  !convertTarget.action.targets.some(
+                    (target) =>
+                      target.document_type === selectedConvertDocumentType && target.enabled,
+                  )
+                }
+                onClick={() => void handleConfirmConvert()}
+              >
+                המשך
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

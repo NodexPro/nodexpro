@@ -373,6 +373,11 @@
   cursor: not-allowed;
 }
 
+/* Nested convert chooser must sit above documents modal (.nx-income-wizard-overlay = 8000). */
+.nx-modal-overlay.nx-modal-overlay--nested.nx-we-documents-convert-overlay {
+  z-index: 8100;
+}
+
 .nx-we-documents-modal__convert-wrap {
   position: relative;
   display: inline-flex;
