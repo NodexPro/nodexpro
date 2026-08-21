@@ -12,6 +12,7 @@ import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.serv
 import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
 import { renderUnifiedIncomeDocumentHtml } from './income-document-unified-render.html.js';
 import { formatLineVatAmountDisplay } from './income-document-unified-render.pure.js';
+import { creditSourceReferenceDisplay, mergeCreditSourceReferenceIntoNotes, readCreditDraftSettings, } from './income-document-tax-invoice-credit.pure.js';
 import { buildIncomeDocumentAllocationNumberField, } from './income-document-allocation-number.pure.js';
 import { INCOME_DOCUMENT_NOTES_HINT_HE, INCOME_DOCUMENT_NOTES_MAX_LENGTH, } from './income-document-notes.pure.js';
 import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
@@ -648,9 +649,12 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
         display: allocationNumberField.display_value,
         value_empty: !allocationNumberField.value?.trim(),
     };
-    const previewHtml = !lean && previewGeneratedAt != null && resolvedBranding
+    const previewBranding = resolvedBranding && row.document_type === 'credit_tax_invoice'
+        ? { ...resolvedBranding, document_style_key: 'sectioned' }
+        : resolvedBranding;
+    const previewHtml = !lean && previewGeneratedAt != null && previewBranding
         ? renderUnifiedIncomeDocumentHtml({
-            branding: resolvedBranding,
+            branding: previewBranding,
             docTypeLabel,
             numberPreview,
             document_type: row.document_type,
@@ -676,8 +680,13 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
                 }),
                 vat_label: previewVatLabel,
             },
-            notes: row.notes ?? null,
-            company_subtitle: resolvedBranding.company_subtitle,
+            notes: mergeCreditSourceReferenceIntoNotes(row.notes ?? null, (() => {
+                const creditSettings = readCreditDraftSettings(row.document_settings_json);
+                return creditSettings
+                    ? creditSourceReferenceDisplay(creditSettings.source_invoice_number)
+                    : null;
+            })()),
+            company_subtitle: previewBranding.company_subtitle,
         })
         : '';
     const deliveryEmail = row.delivery_contact_json && typeof row.delivery_contact_json.email === 'string'
@@ -702,6 +711,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
         canEdit,
         canIssue: canEdit && scope.permissions.issue,
         editMode,
+        documentType: row.document_type,
     });
     const preliminaryEditDocumentDateMin = preliminarySourceIdentity?.issue_date ?? null;
     return {

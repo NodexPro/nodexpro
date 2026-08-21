@@ -28,6 +28,11 @@ import { abortIncomeIssueIdempotency, beginIncomeIssueIdempotency, completeIncom
 import { createIncomeIssueDiagnostic, extractIncomeIssueSafeError, logIncomeIssueFailed, logIncomeIssueStage, optionalRecurringCycleIdFromBody, safeUuidForLog, withIncomeIssueStage, } from './income-issue-diagnostic.js';
 import { parseRecurringCycleReviewCommandContext } from '../work-engine/work-engine-invoice-retainer-cycle-draft-review-context.pure.js';
 import { linkIncomeDocumentConversionTargetOnIssue } from './income-document-conversion.service.js';
+import { parseDocumentSettingsJson } from './income-document-draft-totals.pure.js';
+import { paymentTermsKeyFromUnknown, resolveTaxInvoiceDueDateForIssue, } from './income-customer-payment-terms.pure.js';
+import { loadIncomeCustomerDefaultPaymentTerms } from './income-recipient.service.js';
+import { assertAndConsumeCreditOnIssue, finalizeIssuedTaxInvoiceCreditSideEffects, reverseCreditConsumeOnIssueFailure, } from './income-document-tax-invoice-credit.service.js';
+import { readCreditDraftSettings, resolveCanonicalCreditNoteAmount } from './income-document-tax-invoice-credit.pure.js';
 import { resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded, resolveAndApplyRecurringCycleIssueIssuerScope, } from './income-recurring-cycle-issue-issuer-scope.service.js';
 import { buildAlreadyIssuedIssueResult, buildFreshIssuedIssueResult, } from './income-document-issue-result.pure.js';
 const PG_UNIQUE_VIOLATION = '23505';
@@ -210,6 +215,21 @@ async function buildCustomerSnapshot(scope, draft) {
         ...(draft.one_time_customer_snapshot_json ?? {}),
     };
 }
+async function resolveDueDateForIssuedDocument(scope, draft, issueDate) {
+    if (draft.document_type !== 'tax_invoice')
+        return draft.due_date;
+    const settings = parseDocumentSettingsJson(draft.document_settings_json);
+    const paymentTerms = paymentTermsKeyFromUnknown(draft.payment_terms_json) ??
+        (draft.income_customer_id
+            ? await loadIncomeCustomerDefaultPaymentTerms(scope, draft.income_customer_id)
+            : null);
+    return resolveTaxInvoiceDueDateForIssue({
+        storedDueDate: draft.due_date,
+        documentDateIso: draft.document_date ?? issueDate,
+        paymentTerms,
+        dueDateManualOverride: settings.due_date_manual_override === true,
+    });
+}
 async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
     // P0: preliminary-edit staging drafts must never allocate numbers or insert documents.
     const preliminaryEditGuard = decidePreliminaryEditIssueGuard(draft.document_settings_json);
@@ -221,6 +241,12 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
     }
     catch (e) {
         throw badRequest(e instanceof Error ? e.message : 'Draft is not ready to issue');
+    }
+    // Credit Notes must never issue without SYSTEM-OWNED lineage metadata.
+    // Validate before numbering / insert so orphans cannot be allocated.
+    const creditSettingsEarly = readCreditDraftSettings(draft.document_settings_json);
+    if (draft.document_type === 'credit_tax_invoice' && !creditSettingsEarly) {
+        throw badRequest('Credit Note lineage is required');
     }
     const docTypesResult = await resolveAvailableDocumentTypes(scope.org_id, scope);
     assertDocumentTypeEnabled(docTypesResult.available_document_types, draft.document_type);
@@ -316,6 +342,7 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
         warnings: docTypesResult.warnings,
     });
     const totals_snapshot_json = buildTotalsSnapshotForIssue(draft.draft_totals_preview_json, draft.currency ?? 'ILS', lines.length);
+    const due_date = await resolveDueDateForIssuedDocument(scope, draft, issue_date);
     const allocated = await withIncomeIssueStage(diag, {
         started: 'numbering_started',
         completed: 'numbering_completed',
@@ -361,7 +388,7 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
             document_number: allocated.document_number,
             document_status: 'issued',
             issue_date,
-            due_date: draft.due_date,
+            due_date,
             currency: draft.currency ?? 'ILS',
             language: draft.language ?? 'he',
             lines_snapshot_json: lines,
@@ -404,6 +431,38 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
     }
     const issuedId = issuedInsert.issuedId;
     diag.issued_document_id = issuedId;
+    const creditSettings = readCreditDraftSettings(draft.document_settings_json);
+    let consumedCredit = null;
+    try {
+        consumedCredit = creditSettings
+            ? await assertAndConsumeCreditOnIssue({
+                ctx,
+                orgId: scope.org_id,
+                draftId: draft.id,
+                issuedDocumentId: issuedId,
+                documentSettingsJson: draft.document_settings_json,
+                draftLinesJson: draft.draft_lines_json,
+                totalsSnapshotJson: totals_snapshot_json,
+                actorUserId: scope.actor_user_id,
+            })
+            : null;
+    }
+    catch (consumeErr) {
+        const cleanupStartedAt = Date.now();
+        logIncomeIssueStage(diag, 'issued_document_cleanup_started', {
+            duration_ms: 0,
+        });
+        await supabaseAdmin
+            .from('income_documents')
+            .delete()
+            .eq('id', issuedId)
+            .eq('organization_id', scope.org_id);
+        logIncomeIssueStage(diag, 'issued_document_cleanup_completed', {
+            duration_ms: Date.now() - cleanupStartedAt,
+        });
+        logIncomeIssueFailed(diag, 'credit_consume', consumeErr);
+        throw consumeErr;
+    }
     const postingStartedAt = Date.now();
     logIncomeIssueStage(diag, 'accounting_posting_started', { duration_ms: 0 });
     try {
@@ -424,6 +483,15 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
         logIncomeIssueStage(diag, 'accounting_posting_completed', {
             duration_ms: Date.now() - postingStartedAt,
         });
+        if (consumedCredit) {
+            await finalizeIssuedTaxInvoiceCreditSideEffects({
+                orgId: scope.org_id,
+                sourceInvoiceId: consumedCredit.sourceInvoiceId,
+                creditDocumentId: issuedId,
+                remainingReceivable: consumedCredit.remainingReceivable,
+                actorUserId: scope.actor_user_id,
+            });
+        }
     }
     catch (postingErr) {
         logIncomeIssueStage(diag, 'accounting_posting_failed', {
@@ -432,6 +500,17 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
         });
         const cleanupStartedAt = Date.now();
         logIncomeIssueStage(diag, 'issued_document_cleanup_started', { duration_ms: 0 });
+        if (creditSettings) {
+            await reverseCreditConsumeOnIssueFailure({
+                orgId: scope.org_id,
+                draftId: draft.id,
+                sourceInvoiceId: creditSettings.source_invoice_id,
+                issuedDocumentId: issuedId,
+                requestedAmount: resolveCanonicalCreditNoteAmount(totals_snapshot_json),
+                documentSettingsJson: draft.document_settings_json,
+                draftLinesJson: draft.draft_lines_json,
+            });
+        }
         await supabaseAdmin
             .from('income_documents')
             .delete()
@@ -499,7 +578,7 @@ async function issueNewDocumentFromDraft(ctx, scope, draft, body, diag) {
         documentType: draft.document_type,
         documentNumber: allocated.document_number,
         issueDate: issue_date,
-        dueDate: draft.due_date,
+        dueDate: due_date,
         currency: draft.currency ?? 'ILS',
         customerSnapshotJson: customer_snapshot_json,
         totalsSnapshotJson: totals_snapshot_json,

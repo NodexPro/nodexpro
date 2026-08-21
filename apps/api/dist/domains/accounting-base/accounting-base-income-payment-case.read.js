@@ -4,6 +4,8 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
+import { loadIssuedCreditAmountsByInvoice } from '../income/income-document-tax-invoice-credit.read.js';
+import { composeCollectibleAfterCredit } from '../income/income-document-tax-invoice-credit.pure.js';
 import { assertOrgInContext } from './accounting-base.guards.js';
 import { ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT, ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION, ACCOUNTING_BASE_INCOME_PAYMENT_CASE_KEY, ACCOUNTING_BASE_VIEW_PERMISSION, incomePaymentMethodLabel, isSupportedIncomePaymentDocumentType, parseIncomePaymentMethodKey, resolveIncomeInvoiceOriginalAmount, resolveIncomeInvoicePaymentState, } from './accounting-base-income-payment.pure.js';
 function hasPerm(ctx, code) {
@@ -87,7 +89,19 @@ export async function buildIncomeInvoicePaymentCaseAggregate(ctx, organizationId
     const row = doc;
     const original = resolveIncomeInvoiceOriginalAmount(row.totals_snapshot_json);
     const allocated = await sumPostedAllocationsForIncomeDocument(organizationId, row.id);
-    const state = resolveIncomeInvoicePaymentState(original, allocated);
+    const credited = (await loadIssuedCreditAmountsByInvoice(organizationId, [row.id])).get(row.id) ?? 0;
+    const collectible = composeCollectibleAfterCredit({
+        originalAmount: original,
+        creditedAmount: credited,
+        allocatedPayments: allocated,
+    });
+    const state = {
+        ...resolveIncomeInvoicePaymentState(collectible.net_invoice_amount > 0 ? collectible.net_invoice_amount : original, allocated),
+        remaining_balance: collectible.remaining_receivable,
+        payment_state_key: collectible.payment_state_key,
+        payment_state_label: collectible.payment_state_label,
+        payment_state_tone: collectible.payment_state_tone,
+    };
     const canWrite = hasPerm(ctx, 'accounting_base.payment.write');
     const { data: allocRows, error: allocErr } = await supabaseAdmin
         .from('accounting_payment_allocations')

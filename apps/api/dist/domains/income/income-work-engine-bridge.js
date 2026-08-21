@@ -21,6 +21,8 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
+import { loadIssuedCreditAmountsByInvoice } from './income-document-tax-invoice-credit.service.js';
+import { composeCollectibleAfterCredit } from './income-document-tax-invoice-credit.pure.js';
 import { isSupportedIncomePaymentDocumentType, resolveIncomeInvoiceOriginalAmount, } from '../accounting-base/accounting-base-income-payment.pure.js';
 import { resolveIncomeOverdueCollectionIntake } from './invoice-lifecycle.pure.js';
 import { INCOME_OVERDUE_SCAN_MAX_PAGES, INCOME_OVERDUE_SCAN_PAGE_SIZE, INCOME_WORK_ENGINE_ENTITY_TYPE, INCOME_WORK_ENGINE_SCHEMA_VERSION, INCOME_WORK_ENGINE_SOURCE_MODULE, INCOME_WORK_EVENT_CREDIT_ISSUED, INCOME_WORK_EVENT_DOCUMENT_ISSUED, INCOME_WORK_EVENT_DOCUMENT_SENT_BY_EMAIL, INCOME_WORK_EVENT_DOCUMENT_SENT_BY_DOCFLOW, INCOME_WORK_EVENT_DUE_DATE_SET, INCOME_WORK_EVENT_OVERDUE, amountReferenceFromTotalsSnapshot, customerDisplayFromSnapshot, incomeDocumentPeriodKey, incomeInvoiceCollectionPeriodKey, isCreditIncomeDocumentType, resolveIncomeWorkEngineClientId, } from './income-work-engine-bridge.pure.js';
@@ -83,11 +85,17 @@ async function emitIntake(signal, eventType, extraPayload = {}, periodKey) {
 }
 async function emitOverdueIntakeIfEligible(signal, todayIso, paidAmount) {
     const original = resolveIncomeInvoiceOriginalAmount(signal.totalsSnapshotJson);
+    const credited = (await loadIssuedCreditAmountsByInvoice(signal.orgId, [signal.incomeDocumentId])).get(signal.incomeDocumentId) ?? 0;
+    const collectible = composeCollectibleAfterCredit({
+        originalAmount: original,
+        creditedAmount: credited,
+        allocatedPayments: paidAmount,
+    });
     const intake = resolveIncomeOverdueCollectionIntake({
         documentStatus: 'issued',
         documentType: signal.documentType,
         dueDate: signal.dueDate,
-        originalAmount: original,
+        originalAmount: collectible.net_invoice_amount,
         paidAmount,
         todayIso,
     });
@@ -218,7 +226,10 @@ export async function scanAndEmitIncomeInvoiceOverdueForOrg(orgId, ctx, todayIso
         pages += 1;
         scanned += rows.length;
         const ids = rows.map((r) => r.id);
-        const paidMap = await sumPostedAllocationsForIncomeDocuments(orgId, ids);
+        const [paidMap, creditedMap] = await Promise.all([
+            sumPostedAllocationsForIncomeDocuments(orgId, ids),
+            loadIssuedCreditAmountsByInvoice(orgId, ids),
+        ]);
         for (const r of rows) {
             if (!isSupportedIncomePaymentDocumentType(r.document_type))
                 continue;
@@ -237,11 +248,16 @@ export async function scanAndEmitIncomeInvoiceOverdueForOrg(orgId, ctx, todayIso
             };
             const paid = paidMap.get(r.id) ?? 0;
             const original = resolveIncomeInvoiceOriginalAmount(r.totals_snapshot_json);
+            const collectible = composeCollectibleAfterCredit({
+                originalAmount: original,
+                creditedAmount: creditedMap.get(r.id) ?? 0,
+                allocatedPayments: paid,
+            });
             const decision = resolveIncomeOverdueCollectionIntake({
                 documentStatus: r.document_status,
                 documentType: r.document_type,
                 dueDate: r.due_date,
-                originalAmount: original,
+                originalAmount: collectible.net_invoice_amount,
                 paidAmount: paid,
                 todayIso,
             });

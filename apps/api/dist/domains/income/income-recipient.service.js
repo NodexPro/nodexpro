@@ -164,6 +164,24 @@ export async function loadIncomeCustomerDefaultPaymentTerms(scope, incomeCustome
         return raw;
     return DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS;
 }
+export async function loadIncomeCustomerPaymentTermsByIds(orgId, customerIds) {
+    const unique = [...new Set(customerIds.filter(Boolean))];
+    const out = new Map();
+    if (unique.length === 0)
+        return out;
+    const { data, error } = await supabaseAdmin
+        .from('income_customers')
+        .select('id, default_payment_terms')
+        .eq('organization_id', orgId)
+        .in('id', unique);
+    throwIfSupabaseError(error, 'loadIncomeCustomerPaymentTermsByIds');
+    for (const row of data ?? []) {
+        const id = String(row.id);
+        const raw = row.default_payment_terms ?? '';
+        out.set(id, isIncomeCustomerPaymentTermsKey(raw) ? raw : DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS);
+    }
+    return out;
+}
 export function selectedFromSavedRow(row) {
     return {
         kind: 'saved',

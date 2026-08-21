@@ -10,6 +10,8 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
 import { resolveIncomeInvoiceOriginalAmount } from '../accounting-base/accounting-base-income-payment.pure.js';
+import { loadIssuedCreditAmountsByInvoice } from '../income/income-document-tax-invoice-credit.service.js';
+import { composeCollectibleAfterCredit } from '../income/income-document-tax-invoice-credit.pure.js';
 import { backendTodayIsoDate, resolveIncomeOverdueCollectionIntake, } from '../income/invoice-lifecycle.pure.js';
 import { COLLECTION_REMINDER_SCAN_MAX_PAGES, COLLECTION_REMINDER_SCAN_PAGE_SIZE, INVOICE_COLLECTION_FOLLOWUP_WORK_TYPE, shouldCreateCollectionReminderCandidate, } from './work-engine-collection-reminder.pure.js';
 import { recomputeWorkItemSlaStatus, startWaitingClientObligationIfAbsent, } from './work-engine.sla.service.js';
@@ -64,7 +66,10 @@ export async function scanCollectionReminderCandidatesForOrg(params) {
                 docById.set(String(d.id), d);
             }
         }
-        const paidMap = await sumPostedAllocationsForIncomeDocuments(params.orgId, documentIds);
+        const [paidMap, creditedMap] = await Promise.all([
+            sumPostedAllocationsForIncomeDocuments(params.orgId, documentIds),
+            loadIssuedCreditAmountsByInvoice(params.orgId, documentIds),
+        ]);
         const eligibleItems = [];
         for (const item of rows) {
             const docId = String(item.source_entity_id ?? '').trim();
@@ -81,11 +86,16 @@ export async function scanCollectionReminderCandidatesForOrg(params) {
             }
             const paid = paidMap.get(docId) ?? 0;
             const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
+            const collectible = composeCollectibleAfterCredit({
+                originalAmount: original,
+                creditedAmount: creditedMap.get(docId) ?? 0,
+                allocatedPayments: paid,
+            });
             const intake = resolveIncomeOverdueCollectionIntake({
                 documentStatus: doc.document_status,
                 documentType: doc.document_type,
                 dueDate: doc.due_date,
-                originalAmount: original,
+                originalAmount: collectible.net_invoice_amount,
                 paidAmount: paid,
                 todayIso,
             });

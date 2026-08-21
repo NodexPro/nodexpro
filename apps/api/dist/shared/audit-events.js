@@ -132,6 +132,7 @@ export const AUDIT_ACTIONS = {
     ACCOUNTING_BASE_INCOME_INVOICE_PAID_EVENT_EMITTED: 'accounting_base.income_invoice_paid_event_emitted',
     ACCOUNTING_BASE_PAYMENT_ALLOCATION_FAILED: 'accounting_base.payment_allocation_failed',
     ACCOUNTING_BASE_PAYMENT_ALLOCATION_REVERSED: 'accounting_base.payment_allocation_reversed',
+    ACCOUNTING_BASE_CUSTOMER_CREDIT_OPENED: 'accounting_base.customer_credit_opened',
     ACCOUNTING_BASE_PAYMENT_ALLOCATION_REVERSAL_FAILED: 'accounting_base.payment_allocation_reversal_failed',
     INCOME_DOCUMENT_PAYMENT_ORCHESTRATION_STARTED: 'income.document_payment_orchestration_started',
     INCOME_DOCUMENT_PAYMENT_AB_LINKED: 'income.document_payment_ab_linked',

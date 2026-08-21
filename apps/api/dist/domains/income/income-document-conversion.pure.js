@@ -114,18 +114,33 @@ export function buildPreliminaryDocumentEditMode(params) {
 }
 export function buildWizardSessionActions(params) {
     const isPreliminaryEdit = params.editMode?.type === 'preliminary_document_edit';
+    const isCreditNote = !isPreliminaryEdit && params.documentType === 'credit_tax_invoice';
     return {
         save: {
-            enabled: params.canEdit,
-            command: params.canEdit ? 'save_income_document_draft' : null,
-            label: isPreliminaryEdit ? 'שמירה' : 'שמירת טיוטה',
-            disabled_reason: params.canEdit ? null : 'נדרשת הרשאת עריכה',
+            enabled: isCreditNote ? params.canIssue : params.canEdit,
+            command: isCreditNote
+                ? params.canIssue
+                    ? 'issue_income_document'
+                    : null
+                : params.canEdit
+                    ? 'save_income_document_draft'
+                    : null,
+            label: isPreliminaryEdit || isCreditNote ? 'שמירה' : 'שמירת טיוטה',
+            disabled_reason: isCreditNote
+                ? params.canIssue
+                    ? null
+                    : 'נדרשת הרשאת הפקה'
+                : params.canEdit
+                    ? null
+                    : 'נדרשת הרשאת עריכה',
         },
         preview: {
             enabled: params.canEdit,
             command: params.canEdit ? 'generate_income_document_preview' : null,
             label: 'תצוגה מקדימה',
             disabled_reason: params.canEdit ? null : 'נדרשת הרשאת עריכה',
+            presentation: isCreditNote ? 'icon' : 'button',
+            icon: isCreditNote ? 'eye' : null,
         },
         issue: {
             enabled: params.canIssue && !isPreliminaryEdit,
@@ -158,16 +173,27 @@ export function buildWizardSessionActions(params) {
                 close_after_save: true,
                 close_control: 'icon',
             }
-            : {
-                mode: 'wizard',
-                show_back: true,
-                show_next: true,
-                show_save: true,
-                show_preview: true,
-                show_issue: true,
-                close_after_save: false,
-                close_control: 'text',
-            },
+            : isCreditNote
+                ? {
+                    mode: 'credit_note',
+                    show_back: false,
+                    show_next: false,
+                    show_save: true,
+                    show_preview: true,
+                    show_issue: false,
+                    close_after_save: true,
+                    close_control: 'icon',
+                }
+                : {
+                    mode: 'wizard',
+                    show_back: true,
+                    show_next: true,
+                    show_save: true,
+                    show_preview: true,
+                    show_issue: true,
+                    close_after_save: false,
+                    close_control: 'text',
+                },
     };
 }
 const TARGET_LABELS = {

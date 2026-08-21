@@ -10,7 +10,7 @@ import { forCommandCreateLink } from './link.service.js';
 import { forCommandCreatePeriod } from './period.service.js';
 import { forCommandCreateCategory } from './category.service.js';
 import { forSystemRecomputeDerivedSummaries } from './summary.service.js';
-import { buildAccountingPostingSignature, extractPostingAmountFromTotals, resolveIncomeAccountingPostingPlan, } from '../income/income-accounting-posting.mapping.js';
+import { buildAccountingPostingSignature, extractIncomeDocumentPostingAmount, resolveIncomeAccountingPostingPlan, } from '../income/income-accounting-posting.mapping.js';
 const INCOME_CATEGORY_CODE = 'income_module_revenue';
 const INCOME_CATEGORY_NAME = 'Income module revenue';
 async function findExistingPosting(organizationId, incomeDocumentId) {
@@ -87,7 +87,7 @@ async function auditAccountingEntry(ctx, organizationId, entryId, payload) {
     });
 }
 async function postRequiredEntries(ctx, input, plan) {
-    const amount = extractPostingAmountFromTotals(input.totals_snapshot_json, input.lines_snapshot_json);
+    const amount = extractIncomeDocumentPostingAmount(input.document_type, input.totals_snapshot_json, input.lines_snapshot_json);
     if (amount <= 0) {
         throw badRequest('Cannot post to Accounting Base without a positive amount');
     }

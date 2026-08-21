@@ -7,6 +7,8 @@ import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { isSupportedIncomePaymentDocumentType, resolveIncomeInvoiceOriginalAmount, } from '../accounting-base/accounting-base-income-payment.pure.js';
 import { sumPostedAllocationsForIncomeDocument } from '../accounting-base/accounting-base-income-payment-case.read.js';
+import { loadIssuedCreditAmountsByInvoice } from './income-document-tax-invoice-credit.service.js';
+import { composeCollectibleAfterCredit } from './income-document-tax-invoice-credit.pure.js';
 import { listAttempts } from '../delivery/delivery.runtime.js';
 import { INCOME_WORK_ENGINE_ENTITY_TYPE, INCOME_WORK_ENGINE_SOURCE_MODULE, } from './income-work-engine-bridge.pure.js';
 import { assertRowMatchesIssuerScope, reqUuid } from './income.guards.js';
@@ -140,8 +142,9 @@ export async function buildInvoiceLifecycleAggregate(params) {
     if (document.document_status !== 'issued') {
         throw badRequest('invoice_lifecycle_aggregate supports issued documents only in INV-2A');
     }
-    const [paidAmount, deliveryAttempts, collectionItem, lastPaymentAt] = await Promise.all([
+    const [paidAmount, creditedMap, deliveryAttempts, collectionItem, lastPaymentAt] = await Promise.all([
         sumPostedAllocationsForIncomeDocument(scope.org_id, document.id),
+        loadIssuedCreditAmountsByInvoice(scope.org_id, [document.id]),
         listAttempts({
             organizationId: scope.org_id,
             sourceModule: 'income',
@@ -153,7 +156,12 @@ export async function buildInvoiceLifecycleAggregate(params) {
         loadLastPaymentAt(scope.org_id, document.id),
     ]);
     const originalAmount = resolveIncomeInvoiceOriginalAmount(document.totals_snapshot_json);
-    const paymentState = composeInvoiceLifecyclePaymentState(originalAmount, paidAmount);
+    const collectible = composeCollectibleAfterCredit({
+        originalAmount,
+        creditedAmount: creditedMap.get(document.id) ?? 0,
+        allocatedPayments: paidAmount,
+    });
+    const paymentState = composeInvoiceLifecyclePaymentState(collectible.net_invoice_amount, paidAmount);
     const attemptSlices = deliveryAttempts.map((a) => ({
         channel: a.channel,
         result: a.result,
@@ -165,8 +173,8 @@ export async function buildInvoiceLifecycleAggregate(params) {
         documentStatus: document.document_status,
         documentType: document.document_type,
         dueDate: document.due_date,
-        remainingBalance: paymentState.remaining_balance,
-        paymentStateKey: paymentState.payment_state_key,
+        remainingBalance: collectible.remaining_receivable,
+        paymentStateKey: collectible.payment_state_key,
         todayIso,
     });
     const permissions = incomeWorkspacePermissionsFromContext(params.ctx);

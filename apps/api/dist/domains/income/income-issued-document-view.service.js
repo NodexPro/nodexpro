@@ -31,7 +31,7 @@ const DOCUMENT_TYPE_LABELS = {
 async function loadIssuedDocumentForView(orgId, incomeDocumentId) {
     const { data, error } = await supabaseAdmin
         .from('income_documents')
-        .select('id, organization_id, issuer_business_id, represented_client_id, document_type, document_number, document_status, issue_date, due_date, currency, language, notes, issuer_snapshot_json, customer_snapshot_json, lines_snapshot_json, totals_snapshot_json, source_draft_id, tax_allocation_number, owner_layout_version_id, owner_layout_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error')
+        .select('id, organization_id, issuer_business_id, represented_client_id, document_type, document_number, document_status, issue_date, due_date, currency, language, notes, issuer_snapshot_json, customer_snapshot_json, lines_snapshot_json, totals_snapshot_json, source_draft_id, income_customer_id, tax_allocation_number, owner_layout_version_id, owner_layout_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error')
         .eq('id', incomeDocumentId)
         .eq('organization_id', orgId)
         .maybeSingle();

@@ -1,6 +1,7 @@
 /**
  * INC-5 — Income document type → Accounting Base posting plan (pure mapping).
  */
+import { resolveCanonicalCreditNoteAmount } from './income-document-tax-invoice-credit.pure.js';
 export function resolveIncomeAccountingPostingPlan(documentType) {
     switch (documentType) {
         case 'receipt':
@@ -135,4 +136,11 @@ export function extractPostingAmountFromTotals(totalsSnapshot, linesSnapshot) {
         }
     }
     return sum;
+}
+/** Credit Note AB posting uses the canonical Income totals/VAT grand total only. */
+export function extractIncomeDocumentPostingAmount(documentType, totalsSnapshot, linesSnapshot) {
+    if (documentType === 'credit_tax_invoice') {
+        return resolveCanonicalCreditNoteAmount(totalsSnapshot);
+    }
+    return extractPostingAmountFromTotals(totalsSnapshot, linesSnapshot);
 }

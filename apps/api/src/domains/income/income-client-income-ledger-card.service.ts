@@ -589,8 +589,10 @@ export async function buildIncomeClientIncomeLedgerCardAggregate(params: {
         source_document_number: invoice.document_number,
         payment_document_id: null,
         payment_document_number: null,
-        debit_amount: null,
-        credit_amount: amount,
+        // Presentation: Credit Note is a חובה reduction (parentheses), not a זכות payment.
+        // Stored / AB amount remains positive; balance effect is applied in buildLedgerTransactionRows.
+        debit_amount: amount,
+        credit_amount: null,
         view_action: buildIncomeIssuedDocumentViewAction({
           incomeDocumentId: credit.credit_document_id,
           canView: perms.view,

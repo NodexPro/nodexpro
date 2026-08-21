@@ -43,11 +43,15 @@ router.get('/aggregates/client-income-ledger-card', requirePermission(INCOME_PER
         const endCustomerIdRaw = String(req.query.end_customer_id ?? '').trim();
         const yearRaw = String(req.query.year ?? '').trim();
         const year = yearRaw ? Number(yearRaw) : null;
+        const fromDateRaw = String(req.query.from_date ?? '').trim();
+        const toDateRaw = String(req.query.to_date ?? '').trim();
         const aggregate = await buildIncomeClientIncomeLedgerCardAggregate({
             ctx: req.context,
             representedClientId,
             endCustomerId: endCustomerIdRaw || null,
             year: year != null && Number.isFinite(year) ? year : null,
+            fromDate: fromDateRaw || null,
+            toDate: toDateRaw || null,
         });
         return res.json(aggregate);
     }

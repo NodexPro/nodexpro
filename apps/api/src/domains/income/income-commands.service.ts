@@ -1012,6 +1012,9 @@ export async function executeIncomeCommand(
             String(issueResult.issue_result.issued_date ?? '').slice(0, 4),
           );
           const year = Number.isFinite(issuedYear) && issuedYear > 0 ? issuedYear : new Date().getFullYear();
+          // invoices-tab aggregate embeds client_document_management_panel (לא שולם).
+          // documents-by-type for credit_tax_invoice refreshes credit counters/list.
+          // Ledger card is opened via its own aggregate GET when the modal opens (not open in this flow).
           const [invoicesTab, documentsByType] = await Promise.all([
             buildWorkEngineInvoicesTabAggregate({ ctx }),
             representedClientId

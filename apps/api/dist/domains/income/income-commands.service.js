@@ -33,9 +33,10 @@ import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-e
 import { loadRecurringCycleReviewRefsByGeneratedDraft, resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded, resolveAndApplyRecurringCycleIssueIssuerScope, } from './income-recurring-cycle-issue-issuer-scope.service.js';
 import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
 import { executeUpdateIncomeDocumentBrandingProfile, executeUpdateIncomeDocumentBrandingProfilePreviewDraft, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
-import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT, INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT, INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT, INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT, } from './income.types.js';
+import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT, INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT, INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT, INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT, INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT, } from './income.types.js';
 import { executeRecordIncomeDocumentPayment } from './income-document-payment.service.js';
 import { executeBeginEditIncomePreliminaryDocument, executeCancelIncomePreliminaryDocument, executeConvertIncomeDocumentToDraft, } from './income-document-conversion.service.js';
+import { assertCreditDraftIdentityLocked, executeBeginIncomeTaxInvoiceCredit, } from './income-document-tax-invoice-credit.service.js';
 const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_SELECT_ISSUER,
     INCOME_COMMAND_CREATE_CUSTOMER,
@@ -77,6 +78,7 @@ const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
     INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
     INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
+    INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT,
 ]);
 async function commandResponse(ctx, command, recipientOverlay = {}, wizardDraftOverlay = {}) {
     return {
@@ -235,7 +237,7 @@ async function loadIncomeCustomerInScope(scope, customerId) {
 async function loadDraftInScope(scope, draftId) {
     const { data, error } = await supabaseAdmin
         .from('income_document_drafts')
-        .select('id, organization_id, issuer_business_id, represented_client_id, status')
+        .select('id, organization_id, issuer_business_id, represented_client_id, status, document_settings_json')
         .eq('id', draftId)
         .eq('organization_id', scope.org_id)
         .maybeSingle();
@@ -434,6 +436,12 @@ async function executeUpdateDraft(ctx, body) {
     if (payload.income_customer_id) {
         await loadIncomeCustomerInScope(scope, payload.income_customer_id);
     }
+    assertCreditDraftIdentityLocked({
+        documentSettingsJson: existing.document_settings_json,
+        documentType: payload.document_type,
+        incomeCustomerId: payload.income_customer_id,
+        currency: payload.currency,
+    });
     const { validation_warnings_json, draft_totals_preview_json } = await validateDraftAgainstDocumentTypeRules(payload, docType);
     const { error } = await supabaseAdmin
         .from('income_document_drafts')
@@ -623,6 +631,9 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
     if (command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT) {
         return executeBeginEditIncomePreliminaryDocument(ctx, body);
     }
+    if (command === INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT) {
+        return executeBeginIncomeTaxInvoiceCredit(ctx, body);
+    }
     if (command === INCOME_COMMAND_ISSUE_DOCUMENT) {
         const issueResult = await executeIssueIncomeDocument(ctx, body);
         const orgId = ctx.organizationId;
@@ -703,6 +714,29 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
             const base = await commandResponse(ctx, command);
             const endCustomerId = optionalUuid(body.end_customer_id, 'end_customer_id');
             const representedClientId = base.income_workspace_aggregate?.issuer_context?.represented_client_id ?? null;
+            if (issueResult.issue_result.document_type_key === 'credit_tax_invoice') {
+                const issuedYear = Number(String(issueResult.issue_result.issued_date ?? '').slice(0, 4));
+                const year = Number.isFinite(issuedYear) && issuedYear > 0 ? issuedYear : new Date().getFullYear();
+                // invoices-tab aggregate embeds client_document_management_panel (לא שולם).
+                // documents-by-type for credit_tax_invoice refreshes credit counters/list.
+                // Ledger card is opened via its own aggregate GET when the modal opens (not open in this flow).
+                const [invoicesTab, documentsByType] = await Promise.all([
+                    buildWorkEngineInvoicesTabAggregate({ ctx }),
+                    representedClientId
+                        ? buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
+                            ctx,
+                            representedClientId,
+                            documentTypeKey: 'credit_tax_invoice',
+                            year,
+                        })
+                        : Promise.resolve(null),
+                ]);
+                return {
+                    ...base,
+                    work_engine_invoices_tab_aggregate: invoicesTab,
+                    work_engine_invoices_client_documents_by_type_aggregate: documentsByType ?? undefined,
+                };
+            }
             if (endCustomerId && representedClientId) {
                 const setupAggregate = await buildWorkEngineInvoiceRetainerSetupAggregate({
                     ctx,

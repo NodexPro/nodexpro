@@ -164,6 +164,25 @@ function moneyCell(amount: number | null, currency: string): string {
   return formatLedgerMoneyReference(amount, currency);
 }
 
+/**
+ * Customer-ledger presentation:
+ * - Invoice → חובה (positive money string)
+ * - Credit Note → חובה with parentheses (reduction display); NOT זכות
+ * - Payment → זכות only
+ *
+ * Financial running balance still treats Credit Note as receivable reduction.
+ * Stored CN amounts remain positive; parentheses are display-only.
+ */
+function formatLedgerDebitDisplay(params: {
+  amount: number;
+  currency: string;
+  isCreditNoteReduction: boolean;
+}): string {
+  if (!(params.amount > 0)) return '';
+  const money = formatLedgerMoneyReference(params.amount, params.currency);
+  return params.isCreditNoteReduction ? `(${money})` : money;
+}
+
 export function buildLedgerTransactionRows(params: {
   events: LedgerTransactionEventInput[];
   currency: string;
@@ -178,12 +197,26 @@ export function buildLedgerTransactionRows(params: {
   const sorted = [...params.events].sort(compareLedgerEvents);
   let running = 0;
   let currentBalance = 0;
-  const composed: Array<IncomeClientIncomeLedgerCardRenderRow & { debit: number; credit: number }> = [];
+  const composed: Array<
+    IncomeClientIncomeLedgerCardRenderRow & {
+      debit_for_total: number;
+      credit_for_total: number;
+    }
+  > = [];
 
   for (const event of sorted) {
-    const debit = event.debit_amount != null && event.debit_amount > 0 ? roundMoney2(event.debit_amount) : 0;
-    const credit = event.credit_amount != null && event.credit_amount > 0 ? roundMoney2(event.credit_amount) : 0;
-    running = roundMoney2(running + debit - credit);
+    const debit =
+      event.debit_amount != null && event.debit_amount > 0 ? roundMoney2(event.debit_amount) : 0;
+    const credit =
+      event.credit_amount != null && event.credit_amount > 0 ? roundMoney2(event.credit_amount) : 0;
+    const isCreditNoteReduction = event.row_kind === 'credit_note';
+
+    // Presentation columns are owned here; receivable math stays separate from column placement.
+    if (isCreditNoteReduction) {
+      running = roundMoney2(running - debit);
+    } else {
+      running = roundMoney2(running + debit - credit);
+    }
     currentBalance = running;
     const viewEnabled = Boolean(event.view_action?.enabled);
     composed.push({
@@ -200,27 +233,33 @@ export function buildLedgerTransactionRows(params: {
       source_document_number: event.source_document_number,
       payment_document_id: event.payment_document_id,
       payment_document_number: event.payment_document_number ?? '',
-      debit_amount_display: moneyCell(debit > 0 ? debit : null, params.currency),
+      debit_amount_display: formatLedgerDebitDisplay({
+        amount: debit,
+        currency: params.currency,
+        isCreditNoteReduction,
+      }),
       credit_amount_display: moneyCell(credit > 0 ? credit : null, params.currency),
-      credit_amount_tone: credit > 0 ? 'emphasis' : 'none',
+      // Green tone is payment-only (זכות). Credit Notes stay black in חובה.
+      credit_amount_tone: !isCreditNoteReduction && credit > 0 ? 'emphasis' : 'none',
       running_balance_display: formatLedgerMoneyReference(running, params.currency),
       view_action: event.view_action,
       allowed_actions: viewEnabled ? ['open_document'] : [],
-      debit,
-      credit,
+      // Net חובה = invoices − Credit Notes; זכות = payments only.
+      debit_for_total: isCreditNoteReduction ? -debit : debit,
+      credit_for_total: isCreditNoteReduction ? 0 : credit,
     });
   }
 
   const rows = composed
     .filter((row) => row.transaction_date >= params.fromDate && row.transaction_date <= params.toDate)
-    .map(({ debit: _d, credit: _c, ...row }) => row);
+    .map(({ debit_for_total: _d, credit_for_total: _c, ...row }) => row);
 
   let totalDebit = 0;
   let totalCredit = 0;
   for (const row of composed) {
     if (row.transaction_date < params.fromDate || row.transaction_date > params.toDate) continue;
-    totalDebit = roundMoney2(totalDebit + row.debit);
-    totalCredit = roundMoney2(totalCredit + row.credit);
+    totalDebit = roundMoney2(totalDebit + row.debit_for_total);
+    totalCredit = roundMoney2(totalCredit + row.credit_for_total);
   }
 
   return {

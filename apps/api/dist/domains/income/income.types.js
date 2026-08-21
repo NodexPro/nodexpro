@@ -1,3 +1,5 @@
+import { INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT } from './income-document-tax-invoice-credit.pure.js';
+export { INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT };
 export const INCOME_CONTEXT_AGGREGATE_KEY = 'income_workspace_context_aggregate';
 export const INCOME_WORKSPACE_AGGREGATE_KEY = 'income_workspace_aggregate';
 export const INCOME_COMMAND_SELECT_ISSUER = 'select_income_issuer_context';

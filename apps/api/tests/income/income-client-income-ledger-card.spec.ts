@@ -160,7 +160,7 @@ describe('income client ledger card debit/credit composition', () => {
     assert.equal(ledger.total_debit, 200);
   });
 
-  it('renders two successive Credit Notes under source invoice with cumulative זכות', () => {
+  it('renders Credit Notes in חובה with parentheses; זכות is payments only', () => {
     const ledger = buildLedgerTransactionRows({
       currency: 'ILS',
       fromDate: '2026-01-01',
@@ -193,8 +193,8 @@ describe('income client ledger card debit/credit composition', () => {
           source_document_number: '4006',
           payment_document_id: null,
           payment_document_number: null,
-          debit_amount: null,
-          credit_amount: 500,
+          debit_amount: 500,
+          credit_amount: null,
           view_action: viewAction('cn-a'),
         },
         {
@@ -209,28 +209,35 @@ describe('income client ledger card debit/credit composition', () => {
           source_document_number: '4006',
           payment_document_id: null,
           payment_document_number: null,
-          debit_amount: null,
-          credit_amount: 118,
+          debit_amount: 118,
+          credit_amount: null,
           view_action: viewAction('cn-b'),
         },
       ],
     });
     assert.equal(ledger.rows.length, 3);
+    assert.equal(ledger.rows[0]?.debit_amount_display, '₪7,922.70');
+    assert.equal(ledger.rows[0]?.credit_amount_display, '');
     assert.equal(ledger.rows[1]?.row_kind, 'credit_note');
     assert.equal(ledger.rows[1]?.source_document_number, '4006');
     assert.equal(ledger.rows[1]?.document_number, '6001');
     assert.equal(ledger.rows[1]?.payment_document_number, '');
-    assert.equal(ledger.rows[1]?.credit_amount_display, '₪500.00');
+    assert.equal(ledger.rows[1]?.debit_amount_display, '(₪500.00)');
+    assert.equal(ledger.rows[1]?.credit_amount_display, '');
+    assert.equal(ledger.rows[1]?.credit_amount_tone, 'none');
     assert.equal(ledger.rows[1]?.running_balance_display, '₪7,422.70');
     assert.equal(ledger.rows[2]?.document_number, '6002');
-    assert.equal(ledger.rows[2]?.credit_amount_display, '₪118.00');
+    assert.equal(ledger.rows[2]?.debit_amount_display, '(₪118.00)');
+    assert.equal(ledger.rows[2]?.credit_amount_display, '');
+    assert.equal(ledger.rows[2]?.credit_amount_tone, 'none');
     assert.equal(ledger.rows[2]?.running_balance_display, '₪7,304.70');
-    assert.equal(ledger.total_debit, 7922.7);
-    assert.equal(ledger.total_credit, 618);
+    // Net חובה = invoices − Credit Notes; זכות = 0 (no payments).
+    assert.equal(ledger.total_debit, 7304.7);
+    assert.equal(ledger.total_credit, 0);
     assert.equal(ledger.current_balance, 7304.7);
   });
 
-  it('payment + multiple credits compose remaining balance', () => {
+  it('payment + Credit Note: CN stays חובה parentheses; payment stays זכות; balance correct', () => {
     const ledger = buildLedgerTransactionRows({
       currency: 'ILS',
       fromDate: '2026-01-01',
@@ -279,14 +286,148 @@ describe('income client ledger card debit/credit composition', () => {
           source_document_number: '4006',
           payment_document_id: null,
           payment_document_number: null,
-          debit_amount: null,
-          credit_amount: 2000,
+          debit_amount: 2000,
+          credit_amount: null,
           view_action: viewAction('cn-a'),
         },
       ],
     });
+    assert.equal(ledger.rows[1]?.credit_amount_display, '₪1,000.00');
+    assert.equal(ledger.rows[1]?.credit_amount_tone, 'emphasis');
+    assert.equal(ledger.rows[1]?.debit_amount_display, '');
+    assert.equal(ledger.rows[2]?.debit_amount_display, '(₪2,000.00)');
+    assert.equal(ledger.rows[2]?.credit_amount_display, '');
+    assert.equal(ledger.rows[2]?.credit_amount_tone, 'none');
     assert.equal(ledger.current_balance, 4922.7);
-    assert.equal(ledger.total_credit, 3000);
+    assert.equal(ledger.total_debit, 5922.7);
+    assert.equal(ledger.total_credit, 1000);
+  });
+
+  it('all payment cashboxes appear in זכות with green tone; Credit Note does not', () => {
+    const methods = [
+      { id: 'p-bank', label: 'קופת העברות', amount: 100 },
+      { id: 'p-check', label: 'קופת צ׳קים', amount: 200 },
+      { id: 'p-card', label: 'קופת כ. אשראי', amount: 300 },
+      { id: 'p-cash', label: 'קופת מזומן', amount: 400 },
+    ] as const;
+    const ledger = buildLedgerTransactionRows({
+      currency: 'ILS',
+      fromDate: '2026-01-01',
+      toDate: '2026-12-31',
+      events: [
+        {
+          transaction_id: 'inv-1',
+          row_kind: 'invoice',
+          transaction_date: '2026-08-01',
+          transaction_type_key: 'tax_invoice',
+          transaction_type_label: 'חשבונית מס',
+          document_id: 'inv-1',
+          document_number: '4006',
+          ...noSource,
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: 7922.7,
+          credit_amount: null,
+          view_action: viewAction('inv-1'),
+        },
+        {
+          transaction_id: 'cn-6002',
+          row_kind: 'credit_note',
+          transaction_date: '2026-08-02',
+          transaction_type_key: 'credit_tax_invoice',
+          transaction_type_label: 'חשבונית מס זיכוי',
+          document_id: 'cn-6002',
+          document_number: '6002',
+          source_document_id: 'inv-1',
+          source_document_number: '4006',
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: 118,
+          credit_amount: null,
+          view_action: viewAction('cn-6002'),
+        },
+        ...methods.map((m, i) => ({
+          transaction_id: m.id,
+          row_kind: 'payment' as const,
+          transaction_date: `2026-08-0${3 + i}`,
+          transaction_type_key: 'cashbox',
+          transaction_type_label: m.label,
+          document_id: null,
+          document_number: null,
+          source_document_id: 'inv-1',
+          source_document_number: '4006',
+          payment_document_id: `rcp-${m.id}`,
+          payment_document_number: `9${i}`,
+          debit_amount: null,
+          credit_amount: m.amount,
+          view_action: viewAction(`rcp-${m.id}`),
+        })),
+      ],
+    });
+    const cn = ledger.rows.find((r) => r.row_kind === 'credit_note');
+    assert.equal(cn?.debit_amount_display, '(₪118.00)');
+    assert.equal(cn?.credit_amount_display, '');
+    assert.equal(cn?.credit_amount_tone, 'none');
+    const payments = ledger.rows.filter((r) => r.row_kind === 'payment');
+    assert.equal(payments.length, 4);
+    for (const p of payments) {
+      assert.equal(p.debit_amount_display, '');
+      assert.match(p.credit_amount_display, /^₪/);
+      assert.equal(p.credit_amount_tone, 'emphasis');
+    }
+    assert.equal(ledger.total_credit, 1000);
+    assert.equal(ledger.total_debit, 7804.7);
+    assert.equal(ledger.current_balance, 6804.7);
+  });
+
+  it('production 4006 + CN 6002: חובה parentheses, empty זכות, balance 7804.70', () => {
+    const ledger = buildLedgerTransactionRows({
+      currency: 'ILS',
+      fromDate: '2026-01-01',
+      toDate: '2026-12-31',
+      events: [
+        {
+          transaction_id: 'inv-4006',
+          row_kind: 'invoice',
+          transaction_date: '2026-08-07',
+          transaction_type_key: 'tax_invoice',
+          transaction_type_label: 'חשבונית מס',
+          document_id: 'inv-4006',
+          document_number: '4006',
+          ...noSource,
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: 7922.7,
+          credit_amount: null,
+          view_action: viewAction('inv-4006'),
+        },
+        {
+          transaction_id: 'cn-6002',
+          row_kind: 'credit_note',
+          transaction_date: '2026-08-21',
+          transaction_type_key: 'credit_tax_invoice',
+          transaction_type_label: 'חשבונית מס זיכוי',
+          document_id: 'cn-6002',
+          document_number: '6002',
+          source_document_id: 'inv-4006',
+          source_document_number: '4006',
+          payment_document_id: null,
+          payment_document_number: null,
+          debit_amount: 118,
+          credit_amount: null,
+          view_action: viewAction('cn-6002'),
+        },
+      ],
+    });
+    assert.equal(ledger.rows[0]?.debit_amount_display, '₪7,922.70');
+    assert.equal(ledger.rows[0]?.credit_amount_display, '');
+    assert.equal(ledger.rows[1]?.debit_amount_display, '(₪118.00)');
+    assert.equal(ledger.rows[1]?.credit_amount_display, '');
+    assert.equal(ledger.rows[1]?.credit_amount_tone, 'none');
+    assert.equal(ledger.rows[1]?.running_balance_display, '₪7,804.70');
+    assert.equal(ledger.total_debit, 7804.7);
+    assert.equal(ledger.total_credit, 0);
+    assert.equal(ledger.current_balance, 7804.7);
   });
 
   it('returns backend cashbox labels for payment methods', () => {
@@ -332,5 +473,18 @@ describe('income client ledger card contracts', () => {
     assert.doesNotMatch(modalSource, /קופת העברות/);
     assert.doesNotMatch(modalSource, /previousBalance/);
     assert.doesNotMatch(modalSource, /TEMPORARY_ACCOUNTING_BASE_PENDING/);
+    assert.doesNotMatch(modalSource, /row_kind\s*===\s*['"]credit_note['"]/);
+    assert.doesNotMatch(modalSource, /debit_amount_display\s*=/);
+  });
+
+  it('service emits Credit Note as debit presentation input (not זכות)', () => {
+    assert.match(
+      serviceSource,
+      /row_kind: 'credit_note'[\s\S]*debit_amount: amount[\s\S]*credit_amount: null/,
+    );
+    assert.doesNotMatch(
+      serviceSource,
+      /row_kind: 'credit_note'[\s\S]*debit_amount: null[\s\S]*credit_amount: amount/,
+    );
   });
 });

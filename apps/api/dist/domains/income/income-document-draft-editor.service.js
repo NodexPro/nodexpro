@@ -20,6 +20,8 @@ import { resolveIncomeDraftVatForOrg } from './income-draft-vat-resolver.js';
 import { previewNextIncomeDocumentNumber } from './income-document-numbering.service.js';
 import { findAvailableDocumentType, resolveAvailableDocumentTypes } from './income-document-types.resolver.js';
 import { optionalJsonObject, optionalString, optionalUuid, parseIncomeDocumentType, reqUuid } from './income.guards.js';
+import { assertCreditDraftIdentityLocked, assertNoNewCreditLines, } from './income-document-tax-invoice-credit.service.js';
+import { preserveIncomeTaxInvoiceCreditInDocumentSettings } from './income-document-tax-invoice-credit.pure.js';
 import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById, selectedFromSavedRow, } from './income-recipient.service.js';
 import { computeDueDateFromPaymentTerms } from './income-customer-payment-terms.pure.js';
 import { hasPermission } from '../rbac/rbac.service.js';
@@ -135,11 +137,13 @@ function preliminaryEditSourceDocumentId(row) {
     return readPreliminaryEditSourceDocumentId(row.document_settings_json);
 }
 function preservePreliminaryEditMarker(row, nextSettingsJson) {
+    // Also preserves SYSTEM-OWNED income_tax_invoice_credit (parse/serialize strips it).
+    const withProtectedCredit = preserveIncomeTaxInvoiceCreditInDocumentSettings(row.document_settings_json, nextSettingsJson);
     const sourceDocumentId = preliminaryEditSourceDocumentId(row);
     if (!sourceDocumentId)
-        return nextSettingsJson;
+        return withProtectedCredit;
     return {
-        ...nextSettingsJson,
+        ...withProtectedCredit,
         [PRELIMINARY_EDIT_SOURCE_DOCUMENT_ID_KEY]: sourceDocumentId,
     };
 }
@@ -308,12 +312,19 @@ export async function beginIncomeWizardDocumentDraft(scope, body, recipientOverl
     };
     const currency = optionalString(body.currency) ?? 'ILS';
     const language = optionalString(body.language) === 'en' ? 'en' : 'he';
+    let due_date = null;
+    if (document_type === 'tax_invoice' && recipient.income_customer_id) {
+        const paymentTerms = await loadIncomeCustomerDefaultPaymentTerms(scope, recipient.income_customer_id);
+        if (paymentTerms) {
+            due_date = computeDueDateFromPaymentTerms(document_date, paymentTerms);
+        }
+    }
     const prefilledEmail = await deliveryEmailFromRecipient(scope, selected);
     const draftRow = {
         id: '',
         document_type,
         document_date,
-        due_date: null,
+        due_date,
         notes: null,
         currency,
         language,
@@ -344,7 +355,7 @@ export async function beginIncomeWizardDocumentDraft(scope, body, recipientOverl
         currency,
         language,
         notes: null,
-        due_date: null,
+        due_date,
         payment_received_json: null,
         delivery_contact_json: draftRow.delivery_contact_json,
         document_settings_json: serializeDocumentSettingsJson(settings),
@@ -513,6 +524,11 @@ export async function buildReadOnlyIncomeDocumentPreviewOverlay(scope, draftId, 
 export async function addIncomeDocumentLine(scope, body) {
     const draft_id = reqUuid(body.draft_id, 'draft_id');
     const row = await loadWizardDraftRow(scope, draft_id);
+    await assertNoNewCreditLines({
+        orgId: scope.org_id,
+        draftId: draft_id,
+        documentSettingsJson: row.document_settings_json,
+    });
     const settings = parseDocumentSettingsJson(row.document_settings_json);
     const lines = normalizeDraftLines(row.draft_lines_json);
     lines.push(createEmptyDraftLine(lines.length, {
@@ -593,6 +609,10 @@ export async function updateIncomeDocumentDraftSettings(scope, body) {
     }
     else if (key === 'currency') {
         const c = optionalString(value) ?? 'ILS';
+        assertCreditDraftIdentityLocked({
+            documentSettingsJson: row.document_settings_json,
+            currency: c,
+        });
         patch.currency = c;
     }
     else if (key === 'language') {
@@ -618,20 +638,21 @@ export async function updateIncomeDocumentDraftSettings(scope, body) {
         if (value !== 'standard' && value !== 'exempt') {
             throw badRequest('invalid vat_mode');
         }
-        patch.document_settings_json = preservePreliminaryEditMarker(row, { ...settings, vat_mode: value });
+        patch.document_settings_json = preservePreliminaryEditMarker(row, serializeDocumentSettingsJson({ ...settings, vat_mode: value }));
     }
     else if (key === 'amount_rounding') {
         if (value !== 'none' && value !== 'nearest_agora')
             throw badRequest('invalid amount_rounding');
-        patch.document_settings_json = preservePreliminaryEditMarker(row, {
-            ...settings,
-            amount_rounding: value,
-        });
+        patch.document_settings_json = preservePreliminaryEditMarker(row, serializeDocumentSettingsJson({ ...settings, amount_rounding: value }));
     }
     else if (key === 'document_type') {
         const dt = parseIncomeDocumentType(value);
         if (!dt)
             throw badRequest('document_type is invalid');
+        assertCreditDraftIdentityLocked({
+            documentSettingsJson: row.document_settings_json,
+            documentType: dt,
+        });
         const { available_document_types } = await resolveAvailableDocumentTypes(scope.org_id, scope);
         const docType = findAvailableDocumentType(available_document_types, dt);
         if (!docType?.enabled)

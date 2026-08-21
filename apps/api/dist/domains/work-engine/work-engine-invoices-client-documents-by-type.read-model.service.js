@@ -8,7 +8,7 @@ import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-met
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { issueYearFromIso, ledgerAmountFromTotalsSnapshot, formatLedgerMoneyReference, } from '../income/income-client-income-ledger-card.pure.js';
 import { formatMoneyReference } from '../income/income-document-draft-lines.pure.js';
-import { formatIncomeCalendarDateHe, resolveIncomeDocumentSemanticDates, } from '../income/income-document-semantic-dates.pure.js';
+import { formatIncomeCalendarDateHe, formatIncomeDueDateDisplayHe, resolveIncomeDocumentSemanticDates, } from '../income/income-document-semantic-dates.pure.js';
 import { incomeDocumentDownloadPath } from '../income/income-document-pdf.service.js';
 import { buildIncomeIssuedDocumentPdfAction, buildIncomeIssuedDocumentViewAction, } from '../income/income-document-view-action.pure.js';
 import { buildIncomeDocumentEmailDeliveryBlock } from '../income/income-document-email-delivery.read-model.pure.js';
@@ -17,11 +17,18 @@ import { loadEmailAttemptCountsByDocumentIds, loadDocflowAttemptCountsByDocument
 import { incomeWorkspacePermissionsFromContext } from '../income/income-issuer-context.service.js';
 import { belongsToOfficeClientRow, excludeSelfModeActingFilter, officeClientDocumentsOrFilter, } from '../income/income-client-document-management-panel.pure.js';
 import { customerDisplayFromSnapshot } from '../income/income-work-engine-bridge.pure.js';
-import { resolveIncomeInvoiceOriginalAmount, resolveIncomeInvoicePaymentState, } from '../accounting-base/accounting-base-income-payment.pure.js';
+import { paymentTermsKeyFromUnknown, resolveIncomeDueDateFromDocument, } from '../income/income-customer-payment-terms.pure.js';
+import { loadIncomeCustomerPaymentTermsByIds } from '../income/income-recipient.service.js';
+import { resolveIncomeInvoiceOriginalAmount } from '../accounting-base/accounting-base-income-payment.pure.js';
 import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
 import { buildIncomeDocumentRecordPaymentForm, resolvePaymentStateIcon, } from '../income/income-document-payment.pure.js';
 import { buildConversionTargetOptions, buildPreliminaryEditAction, INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT, INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT, INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT, isIncomeConversionSourceType, resolveConversionStateKey, } from '../income/income-document-conversion.pure.js';
 import { WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY, } from '../income/income.types.js';
+import { buildTaxInvoiceCreditAction, loadIssuedCreditAmountsByInvoice, } from '../income/income-document-tax-invoice-credit.read.js';
+import { composeCollectibleAfterCredit } from '../income/income-document-tax-invoice-credit.pure.js';
+import { INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT } from '../income/income-document-tax-invoice-credit.pure.js';
+import { findAvailableDocumentType, resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
+import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 const ISSUED_DOCUMENT_TYPES = [
     'quote',
     'deal_invoice',
@@ -152,6 +159,16 @@ async function loadCustomerNames(orgId, representedClientId) {
     }
     return map;
 }
+async function resolveCreditTypeEnabled(ctx, orgId) {
+    try {
+        const scope = await loadActiveIncomeIssuerScope(ctx);
+        const { available_document_types } = await resolveAvailableDocumentTypes(orgId, scope);
+        return Boolean(findAvailableDocumentType(available_document_types, 'credit_tax_invoice')?.enabled);
+    }
+    catch {
+        return true;
+    }
+}
 async function loadConversionCountsBySource(orgId, sourceIds) {
     const out = new Map();
     for (const id of sourceIds)
@@ -172,11 +189,33 @@ async function loadConversionCountsBySource(orgId, sourceIds) {
     }
     return out;
 }
+async function loadSourceDraftDueDateContext(orgId, draftIds) {
+    const unique = [...new Set(draftIds.filter(Boolean))];
+    const out = new Map();
+    if (unique.length === 0)
+        return out;
+    const { data, error } = await supabaseAdmin
+        .from('income_document_drafts')
+        .select('id, due_date, document_date, payment_terms_json, income_customer_id')
+        .eq('organization_id', orgId)
+        .in('id', unique);
+    throwIfSupabaseError(error, 'loadSourceDraftDueDateContext');
+    for (const row of data ?? []) {
+        const typed = row;
+        out.set(String(typed.id), {
+            due_date: typed.due_date,
+            document_date: typed.document_date,
+            payment_terms_json: typed.payment_terms_json,
+            income_customer_id: typed.income_customer_id,
+        });
+    }
+    return out;
+}
 async function loadIssuedDocumentCandidates(params) {
     const preliminaryType = isIncomeConversionSourceType(params.documentType);
     let query = supabaseAdmin
         .from('income_documents')
-        .select('id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, document_status, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error, created_at')
+        .select('id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, document_status, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error, created_at, source_draft_id, income_customer_id')
         .eq('organization_id', params.orgId)
         .or(excludeSelfModeActingFilter())
         .eq('document_type', params.documentType)
@@ -200,7 +239,16 @@ async function loadIssuedDocumentCandidates(params) {
     const canPaymentWrite = perms.includes('accounting_base.payment.write');
     const canIncomeIssue = perms.includes('income.issue');
     const canEdit = params.permissions.edit;
-    const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive, allocatedByDoc, conversionCounts,] = await Promise.all([
+    const missingDue = includePayment
+        ? filtered.filter((raw) => !raw.due_date)
+        : [];
+    const missingDueDraftIds = missingDue
+        .map((raw) => String(raw.source_draft_id ?? ''))
+        .filter(Boolean);
+    const missingDueCustomerIds = missingDue
+        .map((raw) => String(raw.income_customer_id ?? ''))
+        .filter(Boolean);
+    const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive, allocatedByDoc, conversionCounts, creditedByDoc, creditTypeEnabled, sourceDraftDueById, paymentTermsByCustomer,] = await Promise.all([
         loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds),
         loadDocflowAttemptCountsByDocumentIds(params.orgId, documentIds),
         isDocflowEntitledForOrg(params.orgId),
@@ -211,13 +259,31 @@ async function loadIssuedDocumentCandidates(params) {
         preliminaryType
             ? loadConversionCountsBySource(params.orgId, documentIds)
             : Promise.resolve(new Map()),
+        includePayment
+            ? loadIssuedCreditAmountsByInvoice(params.orgId, documentIds)
+            : Promise.resolve(new Map()),
+        includePayment
+            ? resolveCreditTypeEnabled(params.ctx, params.orgId)
+            : Promise.resolve(false),
+        loadSourceDraftDueDateContext(params.orgId, missingDueDraftIds),
+        loadIncomeCustomerPaymentTermsByIds(params.orgId, missingDueCustomerIds),
     ]);
     return filtered.map((raw) => {
         const doc = raw;
         const year = issueYearFromIso(doc.issue_date);
+        const sourceDraft = doc.source_draft_id ? sourceDraftDueById.get(doc.source_draft_id) : undefined;
+        const paymentTerms = paymentTermsKeyFromUnknown(sourceDraft?.payment_terms_json) ??
+            paymentTermsByCustomer.get(doc.income_customer_id ?? '') ??
+            paymentTermsByCustomer.get(sourceDraft?.income_customer_id ?? '') ??
+            null;
+        const dueDateFromDocument = resolveIncomeDueDateFromDocument({
+            storedDueDate: doc.due_date ?? sourceDraft?.due_date ?? null,
+            documentDateIso: sourceDraft?.document_date ?? doc.issue_date,
+            paymentTerms,
+        });
         const semanticDates = resolveIncomeDocumentSemanticDates({
             issue_date: doc.issue_date,
-            due_date: doc.due_date,
+            due_date: dueDateFromDocument,
         });
         const amountRef = ledgerAmountFromTotalsSnapshot(doc.totals_snapshot_json);
         const pdfPath = doc.pdf_asset_id ? incomeDocumentDownloadPath(doc.id) : null;
@@ -250,30 +316,37 @@ async function loadIssuedDocumentCandidates(params) {
         let payment_state_tone = null;
         let payment_state_icon = null;
         let record_payment_form = null;
-        let due_date_display = null;
+        const due_date_display = formatIncomeDueDateDisplayHe({
+            issue_date: doc.issue_date,
+            due_date: dueDateFromDocument,
+        });
         if (includePayment) {
             const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
             const allocated = allocatedByDoc.get(doc.id) ?? 0;
-            const state = resolveIncomeInvoicePaymentState(original, allocated);
-            payment_state_key = state.payment_state_key;
-            payment_state_label = state.payment_state_label;
-            payment_state_tone = state.payment_state_tone;
-            payment_state_icon = resolvePaymentStateIcon(state.payment_state_key);
-            due_date_display = formatDateDisplay(semanticDates.due_date);
+            const credited = creditedByDoc.get(doc.id) ?? 0;
+            const collectible = composeCollectibleAfterCredit({
+                originalAmount: original,
+                creditedAmount: credited,
+                allocatedPayments: allocated,
+            });
+            payment_state_key = collectible.payment_state_key;
+            payment_state_label = collectible.payment_state_label;
+            payment_state_tone = collectible.payment_state_tone;
+            payment_state_icon = resolvePaymentStateIcon(collectible.payment_state_key);
             let disabledReason = null;
             if (!canPaymentWrite)
                 disabledReason = 'חסרה הרשאה לרישום תשלום';
             else if (!canIncomeIssue)
                 disabledReason = 'חסרה הרשאה להפקת מסמך הכנסה';
-            else if (state.remaining_balance <= 0)
-                disabledReason = 'החשבונית כבר שולמה במלואה';
-            const canRecord = canPaymentWrite && canIncomeIssue && state.remaining_balance > 0;
+            else if (collectible.remaining_receivable <= 0)
+                disabledReason = 'אין יתרת גבייה לחשבונית';
+            const canRecord = canPaymentWrite && canIncomeIssue && collectible.remaining_receivable > 0;
             if (canRecord)
                 allowedActions.push('record_payment');
             record_payment_form = buildIncomeDocumentRecordPaymentForm({
                 incomeDocumentId: doc.id,
                 currency: doc.currency || 'ILS',
-                remainingBalance: state.remaining_balance,
+                remainingBalance: collectible.remaining_receivable,
                 enabled: canRecord,
                 disabledReason,
             });
@@ -282,6 +355,7 @@ async function loadIssuedDocumentCandidates(params) {
         let edit_action = null;
         let convert_action = null;
         let cancel_action = null;
+        let credit_action = null;
         let conversion_state_key = null;
         if (preliminaryType) {
             conversion_state_key = resolveConversionStateKey({
@@ -324,6 +398,18 @@ async function loadIssuedDocumentCandidates(params) {
             };
             if (cancelEnabled)
                 allowedActions.push(INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT);
+        }
+        if (params.documentType === 'tax_invoice') {
+            const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
+            const credited = creditedByDoc.get(doc.id) ?? 0;
+            const remaining = Math.max(0, original - credited);
+            credit_action = buildTaxInvoiceCreditAction({
+                remainingCreditable: remaining,
+                canEdit,
+                creditTypeEnabled,
+            });
+            if (credit_action.enabled)
+                allowedActions.push(INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT);
         }
         const email_delivery = buildIncomeDocumentEmailDeliveryBlock({
             incomeDocumentId: doc.id,
@@ -378,6 +464,7 @@ async function loadIssuedDocumentCandidates(params) {
             edit_action,
             convert_action,
             cancel_action,
+            credit_action,
             conversion_state_key,
             allowed_actions: allowedActions,
             year,
@@ -438,6 +525,7 @@ async function loadDraftCandidates(params) {
             edit_action: null,
             convert_action: null,
             cancel_action: null,
+            credit_action: null,
             conversion_state_key: null,
             allowed_actions: canEditDraft ? ['edit_draft'] : [],
             year,
