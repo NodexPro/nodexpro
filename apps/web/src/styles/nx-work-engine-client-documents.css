@@ -378,6 +378,85 @@
   z-index: 8100;
 }
 
+.nx-we-documents-convert-modal {
+  width: min(440px, calc(100vw - 32px));
+  max-height: min(90vh, 640px);
+  text-align: right;
+}
+
+.nx-we-documents-convert-modal .nx-modal-header {
+  justify-content: flex-start;
+}
+
+.nx-we-documents-convert-modal .nx-modal-header h2,
+.nx-we-documents-convert-modal .nx-modal-body {
+  text-align: right;
+}
+
+.nx-we-documents-convert-modal__source {
+  margin: 0 0 12px;
+  text-align: right;
+}
+
+.nx-we-documents-convert-modal__options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.nx-we-documents-convert-modal__option {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: right;
+}
+
+.nx-we-documents-convert-modal__option input[type='radio'] {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.nx-we-documents-convert-modal__option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.nx-we-documents-convert-modal__option-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.nx-we-documents-convert-modal__option-reason {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.nx-we-documents-convert-modal__option--selected {
+  border-color: #818cf8;
+  background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
+}
+
+.nx-we-documents-convert-modal__option--selected .nx-we-documents-convert-modal__option-label {
+  color: #4338ca;
+}
+
+.nx-we-documents-convert-modal__option--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .nx-we-documents-modal__convert-wrap {
   position: relative;
   display: inline-flex;

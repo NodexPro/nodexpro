@@ -14,7 +14,6 @@ import { fetchWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../../api
 import { IncomeDocumentEmailHistoryModal } from '../income/IncomeDocumentEmailHistoryModal';
 import { WorkEngineDocumentsRowDeliveryIcons, workEngineDocumentsRowDeliveryVisible } from './WorkEngineDocumentsRowDeliveryIcons';
 import type { WorkEngineTaxInvoiceCreditRequest } from './WorkEngineTaxInvoiceCreditConfirmModal';
-import { btnPrimary } from '../../pages/owner-legal-control-panel-actions';
 
 type OpenParams = {
   representedClientId: string;
@@ -542,55 +541,57 @@ export function WorkEngineClientDocumentsByTypeModal({
           className="nx-modal-overlay nx-modal-overlay--nested nx-we-documents-convert-overlay"
           role="dialog"
           aria-modal="true"
-          dir="rtl"
         >
-          <div className="nx-modal nx-owner-legal-command-modal nx-accounting-editor-modal">
+          <div
+            className="nx-modal nx-owner-legal-command-modal nx-accounting-editor-modal nx-we-documents-convert-modal"
+            dir="rtl"
+            style={{ direction: 'rtl' }}
+          >
             <div className="nx-modal-header">
               <h2>{convertTarget.action.label || 'הפקת מסמך'}</h2>
             </div>
             <div className="nx-modal-body">
               {convertTarget.row.document_number ? (
-                <p>
+                <p className="nx-we-documents-convert-modal__source">
                   מסמך מקור: <strong>{convertTarget.row.document_number}</strong>
                 </p>
               ) : null}
               <div
+                className="nx-we-documents-convert-modal__options"
                 role="radiogroup"
                 aria-label={convertTarget.action.label || 'הפקת מסמך'}
-                style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}
               >
                 {convertTarget.action.targets.map((target) => {
                   const optionId = `nx-we-convert-target-${target.document_type}`;
+                  const selected = selectedConvertDocumentType === target.document_type;
                   return (
                     <label
                       key={target.document_type}
                       htmlFor={optionId}
                       title={target.disabled_reason ?? target.label}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: 8,
-                        padding: '8px 10px',
-                        borderRadius: 6,
-                        border: '1px solid #d1d5db',
-                        opacity: target.enabled ? 1 : 0.55,
-                        cursor: busy || !target.enabled ? 'not-allowed' : 'pointer',
-                      }}
+                      className={[
+                        'nx-we-documents-convert-modal__option',
+                        selected ? 'nx-we-documents-convert-modal__option--selected' : '',
+                        !target.enabled ? 'nx-we-documents-convert-modal__option--disabled' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
                     >
                       <input
                         id={optionId}
                         type="radio"
                         name="nx-we-convert-target"
                         value={target.document_type}
-                        checked={selectedConvertDocumentType === target.document_type}
+                        checked={selected}
                         disabled={busy || !target.enabled}
                         onChange={() => setSelectedConvertDocumentType(target.document_type)}
-                        style={{ marginTop: 2 }}
                       />
-                      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>{target.label}</span>
+                      <span className="nx-we-documents-convert-modal__option-text">
+                        <span className="nx-we-documents-convert-modal__option-label">{target.label}</span>
                         {!target.enabled && target.disabled_reason ? (
-                          <span style={{ fontSize: 12, color: '#64748b' }}>{target.disabled_reason}</span>
+                          <span className="nx-we-documents-convert-modal__option-reason">
+                            {target.disabled_reason}
+                          </span>
                         ) : null}
                       </span>
                     </label>
@@ -601,16 +602,7 @@ export function WorkEngineClientDocumentsByTypeModal({
             <div className="nx-modal-footer nx-tax-nested-modal-footer">
               <button
                 type="button"
-                className="nx-btn nx-btn-taxes-compact"
-                disabled={busy}
-                onClick={closeConvertModal}
-              >
-                ביטול
-              </button>
-              <button
-                type="button"
-                className="nx-btn nx-btn-taxes-compact nx-btn-primary"
-                style={btnPrimary}
+                className="nx-btn nx-btn-primary nx-btn-taxes-compact"
                 disabled={
                   busy ||
                   !selectedConvertDocumentType ||
@@ -622,6 +614,14 @@ export function WorkEngineClientDocumentsByTypeModal({
                 onClick={() => void handleConfirmConvert()}
               >
                 המשך
+              </button>
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                disabled={busy}
+                onClick={closeConvertModal}
+              >
+                ביטול
               </button>
             </div>
           </div>
