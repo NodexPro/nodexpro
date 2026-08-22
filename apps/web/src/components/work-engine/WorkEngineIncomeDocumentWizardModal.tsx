@@ -172,9 +172,15 @@ export function WorkEngineIncomeDocumentWizardModal({
     return wizard.steps.filter((s) => {
       if (s.when === 'office_representative') return issuerChoice === 'office_client';
       if (s.key === 'issue' && footerActions && !footerActions.show_issue) return false;
-      // Credit Note Eye opens the ready-to-print overlay, not the wizard preview step
-      // (sidebar / numbered zones / designer chrome).
-      if (s.key === 'preview' && footerActions?.mode === 'credit_note') return false;
+      // Credit Note / conversion: ready-to-print overlay only — never the wizard preview step
+      // (sidebar / numbered zones / designer chrome). generate_preview may set
+      // wizard_starting_step_key=preview; filtering the step prevents that navigation.
+      if (
+        s.key === 'preview' &&
+        (footerActions?.mode === 'credit_note' || footerActions?.mode === 'conversion')
+      ) {
+        return false;
+      }
       return true;
     });
   }, [wizard.steps, issuerChoice, footerActions]);
@@ -757,12 +763,16 @@ export function WorkEngineIncomeDocumentWizardModal({
       busy={busy}
       title={documentDetailsStep?.header?.title ?? readyToPrintPreview?.document_type_label ?? 'תצוגה מקדימה'}
       subtitle={
-        documentDetailsStep?.edit_mode?.source_document_number
-          ? `מספר ${documentDetailsStep.edit_mode.source_document_number}`
-          : null
+        documentDetailsStep?.conversion_source?.display_line
+          ? documentDetailsStep.conversion_source.display_line
+          : documentDetailsStep?.edit_mode?.source_document_number
+            ? `מספר ${documentDetailsStep.edit_mode.source_document_number}`
+            : null
       }
       overlayClassName={
-        footerActions?.mode === 'credit_note' ? 'nx-we-retainer-preview-overlay--above-wizard' : undefined
+        footerActions?.mode === 'credit_note' || footerActions?.mode === 'conversion'
+          ? 'nx-we-retainer-preview-overlay--above-wizard'
+          : undefined
       }
       onClose={() => setReadyToPrintPreviewOpen(false)}
     />

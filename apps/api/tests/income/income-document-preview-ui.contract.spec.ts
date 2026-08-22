@@ -222,7 +222,10 @@ test('credit_note Eye opens ready-to-print overlay, not wizard editor preview', 
   assert.match(generatePreviewHandler, /setReadyToPrintPreviewOpen\(true\)/);
   assert.doesNotMatch(generatePreviewHandler, /fetch\(/);
   assert.match(wizardSource, /WorkEngineInvoiceRetainerPreviewModal/);
-  assert.match(wizardSource, /s.key === 'preview' && footerActions\?\.mode === 'credit_note'/);
+  assert.match(
+    wizardSource,
+    /s\.key === 'preview'[\s\S]*?footerActions\?\.mode === 'credit_note'[\s\S]*?footerActions\?\.mode === 'conversion'/,
+  );
   assert.match(wizardSource, /nx-we-retainer-preview-overlay--above-wizard/);
   assert.match(retainerCss, /\.nx-we-retainer-preview-overlay--above-wizard\s*\{[\s\S]*?z-index:\s*14100/);
   assert.match(retainerCss, /\.nx-we-retainer-preview-overlay\s*\{[\s\S]*?z-index:\s*13100/);
@@ -230,6 +233,27 @@ test('credit_note Eye opens ready-to-print overlay, not wizard editor preview', 
   assert.match(wizardSource, /WorkEngineIncomePreviewStep/);
   assert.doesNotMatch(wizardSource, /IncomeDocumentBrandingSettingsModal/);
   assert.doesNotMatch(wizardSource, /OwnerInvoiceDocumentBuilderSection/);
+});
+
+test('conversion תצוגה מקדימה opens same ready-to-print overlay above wizard', () => {
+  const generatePreviewHandler = wizardSource.slice(
+    wizardSource.indexOf('const handleGeneratePreview'),
+    wizardSource.indexOf('if (!open) return null'),
+  );
+  assert.match(generatePreviewHandler, /footerActions\?\.mode === 'conversion'/);
+  assert.match(generatePreviewHandler, /setReadyToPrintPreviewOpen\(true\)/);
+  assert.match(generatePreviewHandler, /WorkEngineInvoiceRetainerPreviewModal|setReadyToPrintPreview\(/);
+  assert.match(
+    wizardSource,
+    /footerActions\?\.mode === 'credit_note' \|\| footerActions\?\.mode === 'conversion'/,
+  );
+  assert.match(wizardSource, /conversion_source\?\.display_line/);
+  assert.doesNotMatch(generatePreviewHandler, /fetch\(/);
+  // Must not route conversion into the sidebar / designer preview step.
+  assert.match(
+    wizardSource,
+    /s\.key === 'preview'[\s\S]*?mode === 'conversion'/,
+  );
 });
 
 test('allocation save uses named command and refreshed aggregate', () => {
