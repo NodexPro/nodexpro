@@ -76,9 +76,11 @@ test('TAX-K1.2 contract: migration 600 untouched, no payload copy, no unrelated 
   const allowed = new Set([
     'supabase/migrations/601_tax_knowledge_provenance_links.sql',
     'supabase/migrations/602_tax_knowledge_publication_guard.sql',
+    'supabase/migrations/603_tax_knowledge_rule_relationships.sql',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-foundation.spec.ts',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-2-provenance.spec.ts',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-2a-publication-guard.spec.ts',
+    'apps/api/tests/tax-knowledge/tax-knowledge-k1-3-relationships.spec.ts',
   ]);
   const unexpected = porcelain.filter((path) => !allowed.has(path));
   assert.deepEqual(unexpected, [], `20) unrelated files changed: ${unexpected.join(', ')}`);
