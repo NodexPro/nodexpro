@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   allowedConversionTargetsForSource,
+  buildConversionDraftSourceRef,
+  buildConversionSourceDisplayLine,
   buildConversionTargetOptions,
+  buildWizardSessionActions,
   conversionTypeKey,
   draftLinesFromIssuedSnapshot,
   isIncomeConversionSourceType,
@@ -127,4 +130,45 @@ test('J — document-type tiles remain separate (no mixed preliminary key)', () 
       assert.ok(isIncomeConversionTargetType(target));
     }
   }
+});
+
+test('K — conversion source display_line uses backend type label + number', () => {
+  assert.equal(
+    buildConversionSourceDisplayLine({
+      sourceDocumentTypeLabel: 'הצעת מחיר',
+      sourceDocumentNumber: '2000',
+    }),
+    'הופק בגין הצעת מחיר מספר 2000',
+  );
+  const ref = buildConversionDraftSourceRef({
+    sourceDocumentId: 'src-1',
+    sourceDocumentType: 'deal_invoice',
+    sourceDocumentNumber: '3001',
+  });
+  assert.equal(ref.source_document_type_label, 'חשבון עסקה');
+  assert.equal(ref.display_line, 'הופק בגין חשבון עסקה מספר 3001');
+});
+
+test('L — conversion draft session_actions: icon close, no back/next, save=שמירה, issue kept', () => {
+  const conversionSource = buildConversionDraftSourceRef({
+    sourceDocumentId: 'src-1',
+    sourceDocumentType: 'quote',
+    sourceDocumentNumber: '2000',
+  });
+  const actions = buildWizardSessionActions({
+    canEdit: true,
+    canIssue: true,
+    editMode: null,
+    documentType: 'deal_invoice',
+    conversionSource,
+  });
+  assert.equal(actions.save.label, 'שמירה');
+  assert.equal(actions.save.command, 'save_income_document_draft');
+  assert.equal(actions.footer.mode, 'conversion');
+  assert.equal(actions.footer.close_control, 'icon');
+  assert.equal(actions.footer.show_back, false);
+  assert.equal(actions.footer.show_next, false);
+  assert.equal(actions.footer.show_save, true);
+  assert.equal(actions.footer.show_issue, true);
+  assert.equal(actions.issue.enabled, true);
 });

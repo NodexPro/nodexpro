@@ -907,6 +907,9 @@ export const WorkEngineDocumentDetailsStep = forwardRef<
           {step.header.subtitle ? (
             <p className="nx-we-doc-details__subtitle">{step.header.subtitle}</p>
           ) : null}
+          {step.conversion_source?.display_line ? (
+            <p className="nx-we-doc-details__conversion-source">{step.conversion_source.display_line}</p>
+          ) : null}
         </header>
       ) : null}
 

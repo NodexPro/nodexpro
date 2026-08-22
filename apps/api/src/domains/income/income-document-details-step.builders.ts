@@ -54,9 +54,11 @@ import type { IncomeDocumentBrandingProfileAggregate } from './income-document-b
 import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById } from './income-recipient.service.js';
 import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.types.js';
 import {
+  buildConversionDraftSourceRef,
   buildPreliminaryDocumentEditMode,
   buildWizardSessionActions,
   readPreliminaryEditSourceDocumentId,
+  type ConversionDraftSourceRef,
   type PreliminaryDocumentEditMode,
   type WizardSessionActions,
 } from './income-document-conversion.pure.js';
@@ -100,6 +102,37 @@ async function loadPreliminaryEditSourceIdentity(
     issue_date: /^\d{4}-\d{2}-\d{2}$/.test(issueDate) ? issueDate : null,
     document_number: documentNumber,
   };
+}
+
+async function loadConversionDraftSourceRef(
+  scope: ActiveIncomeIssuerScope,
+  draftId: string,
+): Promise<ConversionDraftSourceRef | null> {
+  const { data, error } = await supabaseAdmin
+    .from('income_document_conversions')
+    .select('source_document_id, source_document_type')
+    .eq('organization_id', scope.org_id)
+    .eq('target_draft_id', draftId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadConversionDraftSourceRef', {
+    migrationHint: '158_income_document_conversion_and_preliminary_cancel.sql',
+  });
+  const row = data as { source_document_id?: unknown; source_document_type?: unknown } | null;
+  const sourceDocumentId =
+    typeof row?.source_document_id === 'string' && row.source_document_id.trim()
+      ? row.source_document_id.trim()
+      : '';
+  const sourceDocumentType =
+    typeof row?.source_document_type === 'string' && row.source_document_type.trim()
+      ? row.source_document_type.trim()
+      : '';
+  if (!sourceDocumentId || !sourceDocumentType) return null;
+  const identity = await loadPreliminaryEditSourceIdentity(scope, sourceDocumentId);
+  return buildConversionDraftSourceRef({
+    sourceDocumentId,
+    sourceDocumentType,
+    sourceDocumentNumber: identity.document_number,
+  });
 }
 
 function previewPartyAddressLine(addressJson: unknown): string | null {
@@ -317,6 +350,11 @@ export type IncomeDocumentDetailsStep = {
   document_type_key?: IncomeDocumentType | null;
   /** Present when wizard is editing an existing Quote / Deal Invoice in place. */
   edit_mode?: PreliminaryDocumentEditMode | null;
+  /**
+   * Present when the active draft was created via convert_income_document_to_draft.
+   * Lineage truth from income_document_conversions (+ source document number).
+   */
+  conversion_source?: ConversionDraftSourceRef | null;
   /** Backend-owned footer/session actions for the active draft session. */
   session_actions?: WizardSessionActions;
   document_discount: IncomeDocumentDetailsDiscount;
@@ -1140,11 +1178,15 @@ export async function buildIncomeDocumentDetailsStep(
     documentType: row.document_type,
     documentNumberPreview: numberPreview,
   });
+  const conversionSource = editMode
+    ? null
+    : await loadConversionDraftSourceRef(scope, row.id);
   const sessionActions = buildWizardSessionActions({
     canEdit,
     canIssue: canEdit && scope.permissions.issue,
     editMode,
     documentType: row.document_type,
+    conversionSource,
   });
 
   const preliminaryEditDocumentDateMin = preliminarySourceIdentity?.issue_date ?? null;
@@ -1153,6 +1195,7 @@ export async function buildIncomeDocumentDetailsStep(
     draft_id: row.id,
     document_type_key: row.document_type ?? null,
     edit_mode: editMode,
+    conversion_source: conversionSource,
     session_actions: sessionActions,
     document_discount: documentDiscount,
     totals_block: totalsBlock,

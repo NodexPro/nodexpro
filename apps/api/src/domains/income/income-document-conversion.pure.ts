@@ -150,7 +150,7 @@ export type WizardSessionAction = {
   icon?: 'eye' | null;
 };
 
-export type WizardSessionFooterMode = 'preliminary_edit' | 'wizard' | 'credit_note';
+export type WizardSessionFooterMode = 'preliminary_edit' | 'wizard' | 'credit_note' | 'conversion';
 
 export type WizardSessionFooterPresentation = {
   mode: WizardSessionFooterMode;
@@ -162,6 +162,44 @@ export type WizardSessionFooterPresentation = {
   close_after_save: boolean;
   close_control: 'icon' | 'text';
 };
+
+/** Backend-owned conversion lineage display for a converted draft (from income_document_conversions). */
+export type ConversionDraftSourceRef = {
+  source_document_id: string;
+  source_document_number: string | null;
+  source_document_type: string;
+  source_document_type_label: string;
+  /** Ready-to-render Hebrew line, e.g. הופק בגין הצעת מחיר מספר 2000 */
+  display_line: string;
+};
+
+export function buildConversionSourceDisplayLine(params: {
+  sourceDocumentTypeLabel: string;
+  sourceDocumentNumber: string | null;
+}): string {
+  const typeLabel = params.sourceDocumentTypeLabel.trim() || 'מסמך';
+  const number = (params.sourceDocumentNumber ?? '').trim();
+  if (number) return `הופק בגין ${typeLabel} מספר ${number}`;
+  return `הופק בגין ${typeLabel}`;
+}
+
+export function buildConversionDraftSourceRef(params: {
+  sourceDocumentId: string;
+  sourceDocumentType: string;
+  sourceDocumentNumber: string | null;
+}): ConversionDraftSourceRef {
+  const source_document_type_label = documentTypeLabelHe(params.sourceDocumentType);
+  return {
+    source_document_id: params.sourceDocumentId,
+    source_document_number: params.sourceDocumentNumber,
+    source_document_type: params.sourceDocumentType,
+    source_document_type_label,
+    display_line: buildConversionSourceDisplayLine({
+      sourceDocumentTypeLabel: source_document_type_label,
+      sourceDocumentNumber: params.sourceDocumentNumber,
+    }),
+  };
+}
 
 export type WizardSessionActions = {
   save: WizardSessionAction;
@@ -228,9 +266,12 @@ export function buildWizardSessionActions(params: {
   canIssue: boolean;
   editMode: PreliminaryDocumentEditMode | null;
   documentType?: string | null;
+  conversionSource?: ConversionDraftSourceRef | null;
 }): WizardSessionActions {
   const isPreliminaryEdit = params.editMode?.type === 'preliminary_document_edit';
-  const isCreditNote = !isPreliminaryEdit && params.documentType === 'credit_tax_invoice';
+  const isConversionDraft = !isPreliminaryEdit && Boolean(params.conversionSource);
+  const isCreditNote =
+    !isPreliminaryEdit && !isConversionDraft && params.documentType === 'credit_tax_invoice';
   return {
     save: {
       enabled: isCreditNote ? params.canIssue : params.canEdit,
@@ -241,7 +282,7 @@ export function buildWizardSessionActions(params: {
         : params.canEdit
           ? 'save_income_document_draft'
           : null,
-      label: isPreliminaryEdit || isCreditNote ? 'שמירה' : 'שמירת טיוטה',
+      label: isPreliminaryEdit || isCreditNote || isConversionDraft ? 'שמירה' : 'שמירת טיוטה',
       disabled_reason: isCreditNote
         ? params.canIssue
           ? null
@@ -290,6 +331,17 @@ export function buildWizardSessionActions(params: {
           close_after_save: true,
           close_control: 'icon',
         }
+      : isConversionDraft
+        ? {
+            mode: 'conversion',
+            show_back: false,
+            show_next: false,
+            show_save: true,
+            show_preview: true,
+            show_issue: true,
+            close_after_save: false,
+            close_control: 'icon',
+          }
       : isCreditNote
         ? {
             mode: 'credit_note',

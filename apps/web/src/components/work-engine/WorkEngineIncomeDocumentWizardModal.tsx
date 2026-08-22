@@ -155,7 +155,9 @@ export function WorkEngineIncomeDocumentWizardModal({
   const sessionActions = workspaceAgg?.document_details_step?.session_actions ?? null;
   const footerActions = sessionActions?.footer ?? null;
   const overlayFooterMode =
-    footerActions?.mode === 'preliminary_edit' || footerActions?.mode === 'credit_note';
+    footerActions?.mode === 'preliminary_edit' ||
+    footerActions?.mode === 'credit_note' ||
+    footerActions?.mode === 'conversion';
   const previewUsesEye =
     sessionActions?.preview?.icon === 'eye' || sessionActions?.preview?.presentation === 'icon';
   const showBack = footerActions?.show_back ?? true;
@@ -461,7 +463,7 @@ export function WorkEngineIncomeDocumentWizardModal({
         );
         const previewFromCommand =
           payload.income_workspace_aggregate.document_details_step?.document_preview ?? null;
-        if (footerActions?.mode === 'preliminary_edit' || footerActions?.mode === 'credit_note') {
+        if (footerActions?.mode === 'preliminary_edit' || footerActions?.mode === 'credit_note' || footerActions?.mode === 'conversion') {
           setReadyToPrintPreview(previewFromCommand);
           setReadyToPrintPreviewOpen(true);
         } else if (advanceToPreview && previewStepIndex >= 0) {
@@ -736,7 +738,7 @@ export function WorkEngineIncomeDocumentWizardModal({
               {recipientPending ? 'טוען...' : 'הבא'}
             </button>
           ) : null}
-          {showIssue && isLastStep ? (
+          {showIssue && (isLastStep || footerActions?.mode === 'conversion') ? (
             <button
               type="button"
               className="nx-btn nx-btn-primary nx-btn-taxes-compact"

@@ -85,6 +85,8 @@ import {
   updateIncomeDocumentNotes,
   updateIncomeDocumentAllocationNumber,
   updateIncomeDocumentDeliveryContact,
+  loadWizardDraftRow,
+  recipientOverlayForDraftRow,
   type WizardDraftOverlay,
 } from './income-document-draft-editor.service.js';
 import { executeSendIncomeDocumentByEmail } from './income-document-email-delivery.service.js';
@@ -1261,6 +1263,27 @@ export async function executeIncomeCommand(
     const overlay = await saveIncomeDocumentDraft(scope, body);
     const reviewContext = parseRecurringCycleReviewCommandContext(body);
     if (!reviewContext) {
+      // Conversion-sourced drafts (income_document_conversions → conversion_source on
+      // document_details_step): return FULL workspace so FE can full-replace.
+      // Do not use wizard_patch merge for this path. Other non-conversion saves stay lean.
+      const conversionSource = overlay.document_details_step?.conversion_source ?? null;
+      if (conversionSource) {
+        const draftId = reqUuid(body.draft_id, 'draft_id');
+        const draftRow = await loadWizardDraftRow(scope, draftId);
+        const recipientOverlay = await recipientOverlayForDraftRow(scope, draftRow);
+        const income_workspace_aggregate = await buildIncomeWorkspaceAggregate(
+          ctx,
+          scope,
+          recipientOverlay,
+          overlay,
+        );
+        return {
+          ok: true,
+          command,
+          income_workspace_aggregate,
+          meta: { workspace_aggregate_mode: 'full' },
+        };
+      }
       return wizardDraftCommandResponse(ctx, command, scope, {}, overlay);
     }
     const refreshed = await refreshRecurringCycleDraftReviewMutationCase({

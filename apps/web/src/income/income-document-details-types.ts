@@ -146,6 +146,13 @@ export type IncomeDocumentDetailsStep = {
     source_document_number: string | null;
     source_document_type: string;
   } | null;
+  conversion_source?: {
+    source_document_id: string;
+    source_document_number: string | null;
+    source_document_type: string;
+    source_document_type_label: string;
+    display_line: string;
+  } | null;
   session_actions?: {
     save: {
       enabled: boolean;
@@ -174,7 +181,7 @@ export type IncomeDocumentDetailsStep = {
       disabled_reason: string | null;
     };
     footer?: {
-      mode: 'preliminary_edit' | 'wizard' | 'credit_note';
+      mode: 'preliminary_edit' | 'wizard' | 'credit_note' | 'conversion';
       show_back: boolean;
       show_next: boolean;
       show_save: boolean;

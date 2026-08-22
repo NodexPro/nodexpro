@@ -441,6 +441,14 @@
   color: #64748b;
 }
 
+.nx-we-doc-details__conversion-source {
+  margin: 8px 0 0;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
 .nx-invoice-ui .nx-we-doc-details__subtitle {
   font-size: var(--nx-type-body-size);
   font-weight: var(--nx-type-body-weight);
