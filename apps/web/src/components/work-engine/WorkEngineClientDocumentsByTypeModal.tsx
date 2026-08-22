@@ -68,6 +68,24 @@ type DocumentConvertAction = {
   targets: DocumentConvertTargetOption[];
 };
 
+type DocumentCancelAction = {
+  enabled: boolean;
+  label: string;
+  command: 'cancel_income_preliminary_document';
+  disabled_reason: string | null;
+  confirmation_title: string;
+  confirmation_body: string;
+  reason_required: boolean;
+};
+
+function cancelActionOf(
+  row: WorkEngineInvoicesClientDocumentsByTypeRow,
+): DocumentCancelAction | null {
+  const action = (row as { cancel_action?: DocumentCancelAction | null }).cancel_action;
+  if (!action || action.command !== 'cancel_income_preliminary_document') return null;
+  return action;
+}
+
 function convertActionOf(
   row: WorkEngineInvoicesClientDocumentsByTypeRow,
 ): DocumentConvertAction | null {
@@ -115,6 +133,12 @@ export function WorkEngineClientDocumentsByTypeModal({
     action: DocumentConvertAction;
   } | null>(null);
   const [selectedConvertDocumentType, setSelectedConvertDocumentType] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{
+    documentId: string;
+    documentNumber: string | null;
+    action: DocumentCancelAction;
+  } | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   const loadAggregate = useCallback(
     async (year?: number | null) => {
@@ -143,6 +167,8 @@ export function WorkEngineClientDocumentsByTypeModal({
       setAggregate(null);
       setConvertTarget(null);
       setSelectedConvertDocumentType(null);
+      setCancelTarget(null);
+      setCancelReason('');
       return;
     }
     void loadAggregate();
@@ -226,6 +252,11 @@ export function WorkEngineClientDocumentsByTypeModal({
     setSelectedConvertDocumentType(null);
   };
 
+  const clearCancelModal = () => {
+    setCancelTarget(null);
+    setCancelReason('');
+  };
+
   const handleConfirmConvert = async () => {
     if (!convertTarget?.row.document_id || !convertTarget.action.enabled) return;
     const selectedTarget = convertTarget.action.targets.find(
@@ -253,6 +284,7 @@ export function WorkEngineClientDocumentsByTypeModal({
         onInvoicesTabRefresh?.(res.work_engine_invoices_tab_aggregate);
       }
       closeConvertModal();
+      clearCancelModal();
       const draftId =
         res.meta?.converted_draft_id ??
         res.income_workspace_aggregate.active_wizard_draft_id ??
@@ -265,6 +297,33 @@ export function WorkEngineClientDocumentsByTypeModal({
       } else if (draftId && onEditDraft) {
         await onEditDraft(draftId);
       }
+    } catch (e) {
+      onError?.(e instanceof Error ? e.message : String(e));
+    } finally {
+      onBusyChange?.(false);
+    }
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancelTarget?.action.enabled) return;
+    onBusyChange?.(true);
+    try {
+      const raw = await executeIncomeCommand(cancelTarget.action.command, {
+        income_document_id: cancelTarget.documentId,
+        reason: cancelReason.trim() || null,
+        documents_list_year: aggregate?.selected_year ?? null,
+      });
+      if (typeof raw !== 'object' || raw == null || !('ok' in raw)) return;
+      const res = raw as {
+        work_engine_invoices_client_documents_by_type_aggregate?: WorkEngineInvoicesClientDocumentsByTypeAggregate;
+        work_engine_invoices_tab_aggregate?: Record<string, unknown>;
+      };
+      const list = res.work_engine_invoices_client_documents_by_type_aggregate;
+      if (list) setAggregate(list);
+      if (res.work_engine_invoices_tab_aggregate) {
+        onInvoicesTabRefresh?.(res.work_engine_invoices_tab_aggregate);
+      }
+      clearCancelModal();
     } catch (e) {
       onError?.(e instanceof Error ? e.message : String(e));
     } finally {
@@ -336,8 +395,10 @@ export function WorkEngineClientDocumentsByTypeModal({
                           const hasDedicatedViewColumn = columns.some((column) => column.key === 'view');
                           const creditAction = row.credit_action ?? null;
                           const convertAction = convertActionOf(row);
+                          const cancelAction = cancelActionOf(row);
                           const showCredit = Boolean(creditAction);
                           const showConvert = Boolean(convertAction);
+                          const showCancel = Boolean(cancelAction);
                           const showView =
                             !hasDedicatedViewColumn && Boolean(row.can_view_document);
                           return (
@@ -356,6 +417,7 @@ export function WorkEngineClientDocumentsByTypeModal({
                                       title={convertAction.label}
                                       aria-label={convertAction.label}
                                       onClick={() => {
+                                        clearCancelModal();
                                         setConvertTarget({ row, action: convertAction });
                                         setSelectedConvertDocumentType(null);
                                       }}
@@ -363,6 +425,33 @@ export function WorkEngineClientDocumentsByTypeModal({
                                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
                                         <path
                                           d="M12 5v14M5 12h14"
+                                          stroke="currentColor"
+                                          strokeWidth="1.8"
+                                          strokeLinecap="round"
+                                        />
+                                      </svg>
+                                    </button>
+                                  ) : null}
+                                  {showCancel && cancelAction ? (
+                                    <button
+                                      type="button"
+                                      className="nx-we-documents-modal__icon-btn nx-we-documents-modal__icon-btn--danger"
+                                      disabled={busy || loading || !cancelAction.enabled}
+                                      title={cancelAction.disabled_reason ?? cancelAction.label}
+                                      aria-label={cancelAction.label}
+                                      onClick={() => {
+                                        if (!row.document_id) return;
+                                        setCancelReason('');
+                                        setCancelTarget({
+                                          documentId: row.document_id,
+                                          documentNumber: row.document_number,
+                                          action: cancelAction,
+                                        });
+                                      }}
+                                    >
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                        <path
+                                          d="M6 6l12 12M18 6L6 18"
                                           stroke="currentColor"
                                           strokeWidth="1.8"
                                           strokeLinecap="round"
@@ -622,6 +711,60 @@ export function WorkEngineClientDocumentsByTypeModal({
                 onClick={closeConvertModal}
               >
                 ביטול
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Cancel confirm mounts only on explicit cancel click — never under convert/wizard. */}
+      {cancelTarget && !convertTarget ? (
+        <div className="nx-modal-overlay nx-modal-overlay--nested" role="dialog" aria-modal="true">
+          <div className="nx-modal nx-owner-legal-command-modal">
+            <div className="nx-modal-header">
+              <h2>{cancelTarget.action.confirmation_title}</h2>
+            </div>
+            <div className="nx-modal-body">
+              <p>{cancelTarget.action.confirmation_body}</p>
+              {cancelTarget.documentNumber ? (
+                <p>
+                  מסמך: <strong>{cancelTarget.documentNumber}</strong>
+                </p>
+              ) : null}
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                סיבת ביטול {cancelTarget.action.reason_required ? '(חובה)' : '(אופציונלי)'}
+                <input
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  disabled={busy}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    border: '1px solid #d1d5db',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+            </div>
+            <div className="nx-modal-footer nx-tax-nested-modal-footer">
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                disabled={busy}
+                onClick={clearCancelModal}
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact nx-btn-primary"
+                disabled={
+                  busy ||
+                  (cancelTarget.action.reason_required && !cancelReason.trim())
+                }
+                onClick={() => void handleConfirmCancel()}
+              >
+                אישור ביטול
               </button>
             </div>
           </div>

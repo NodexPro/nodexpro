@@ -228,8 +228,13 @@ function buildPaymentCards(params: {
   </section>`;
 }
 
+/**
+ * Classic layout structural cell only.
+ * Customer-facing printable / PDF / draft preview must NOT expose builder zone chrome
+ * (numbered אזור badges/labels) — that is Branding Studio / layout-editor UI only.
+ */
 function buildSheetSection(sectionNumber: number, bodyHtml: string): string {
-  return `<section class="nx-doc__sheet-section nx-doc__sheet-section--${sectionNumber}" data-sheet-section="${sectionNumber}" aria-label="אזור ${sectionNumber}"><span class="nx-doc__sheet-section-badge" aria-hidden="true">${sectionNumber}</span><span class="nx-doc__sheet-section-label">אזור ${sectionNumber}</span><div class="nx-doc__sheet-section-body">${bodyHtml}</div></section>`;
+  return `<section class="nx-doc__sheet-section nx-doc__sheet-section--${sectionNumber}" data-sheet-section="${sectionNumber}"><div class="nx-doc__sheet-section-body">${bodyHtml}</div></section>`;
 }
 
 export function renderIncomeBrandedPreviewHtml(params: {
@@ -635,36 +640,10 @@ ${INVOICE_FONT_FACE}
 .nx-doc--unified .nx-doc__sheet-section-body {
   height: 100%;
 }
-.nx-doc--unified .nx-doc__sheet-section-badge {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 2;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #4f46e5;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  pointer-events: none;
-  box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(15, 23, 42, 0.28);
-}
+/* Zone badge/label chrome is never emitted in customer printable HTML. */
+.nx-doc--unified .nx-doc__sheet-section-badge,
 .nx-doc--unified .nx-doc__sheet-section-label {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #64748b;
-  text-transform: uppercase;
-  pointer-events: none;
+  display: none !important;
 }
 .nx-doc--unified .nx-doc__header {
   display: grid;

@@ -336,7 +336,8 @@ export function buildWizardSessionActions(params: {
             mode: 'conversion',
             show_back: false,
             show_next: false,
-            show_save: true,
+            // Converted draft: produce via issue only — no footer שמירה.
+            show_save: false,
             show_preview: true,
             show_issue: true,
             close_after_save: false,

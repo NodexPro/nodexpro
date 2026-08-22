@@ -731,3 +731,13 @@ test('sectioned style matches golden-master printable layout', () => {
   assert.match(previewHtml, /nx-doc__platform-legal/);
   assert.equal(printHtml.includes(previewHtml), true);
 });
+
+test('classic customer printable HTML never emits builder zone אזור chrome', () => {
+  const html = renderUnifiedIncomeDocumentHtml(buildSampleUnifiedInput());
+  assert.match(html, /nx-doc__upper-sheet/);
+  assert.match(html, /nx-doc__sheet-section--1/);
+  assert.doesNotMatch(html, /class="nx-doc__sheet-section-badge"/);
+  assert.doesNotMatch(html, /class="nx-doc__sheet-section-label"/);
+  assert.doesNotMatch(html, /aria-label="אזור \d"/);
+  assert.doesNotMatch(html, />אזור \d</);
+});

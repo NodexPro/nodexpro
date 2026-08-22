@@ -149,7 +149,7 @@ test('K — conversion source display_line uses backend type label + number', ()
   assert.equal(ref.display_line, 'הופק בגין חשבון עסקה מספר 3001');
 });
 
-test('L — conversion draft session_actions: icon close, no back/next, save=שמירה, issue kept', () => {
+test('L — conversion draft session_actions: icon close, no back/next, no footer save, issue kept', () => {
   const conversionSource = buildConversionDraftSourceRef({
     sourceDocumentId: 'src-1',
     sourceDocumentType: 'quote',
@@ -162,13 +162,25 @@ test('L — conversion draft session_actions: icon close, no back/next, save=ש�
     documentType: 'deal_invoice',
     conversionSource,
   });
-  assert.equal(actions.save.label, 'שמירה');
   assert.equal(actions.save.command, 'save_income_document_draft');
   assert.equal(actions.footer.mode, 'conversion');
   assert.equal(actions.footer.close_control, 'icon');
   assert.equal(actions.footer.show_back, false);
   assert.equal(actions.footer.show_next, false);
-  assert.equal(actions.footer.show_save, true);
+  assert.equal(actions.footer.show_save, false);
+  assert.equal(actions.footer.show_preview, true);
   assert.equal(actions.footer.show_issue, true);
   assert.equal(actions.issue.enabled, true);
+});
+
+test('M — non-conversion wizard footer still shows save when applicable', () => {
+  const wizard = buildWizardSessionActions({
+    canEdit: true,
+    canIssue: true,
+    editMode: null,
+    documentType: 'deal_invoice',
+    conversionSource: null,
+  });
+  assert.equal(wizard.footer.mode, 'wizard');
+  assert.equal(wizard.footer.show_save, true);
 });
