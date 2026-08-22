@@ -75,7 +75,10 @@ test('TAX-K1.2 contract: migration 600 untouched, no payload copy, no unrelated 
     .map((line) => line.replace(/^[A-Z?]{1,2}\s+/, '').replace(/.* -> /, ''));
   const allowed = new Set([
     'supabase/migrations/601_tax_knowledge_provenance_links.sql',
+    'supabase/migrations/602_tax_knowledge_publication_guard.sql',
+    'apps/api/tests/tax-knowledge/tax-knowledge-k1-foundation.spec.ts',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-2-provenance.spec.ts',
+    'apps/api/tests/tax-knowledge/tax-knowledge-k1-2a-publication-guard.spec.ts',
   ]);
   const unexpected = porcelain.filter((path) => !allowed.has(path));
   assert.deepEqual(unexpected, [], `20) unrelated files changed: ${unexpected.join(', ')}`);
@@ -314,6 +317,9 @@ test('TAX-K1.2 DB provenance safety', async (t) => {
 
   await t.test('5-8) Active version citations are frozen', async () => {
     assert.ifError(
+      (await supabaseAdmin.from('tax_sources').update({ status: 'active' }).eq('id', sourceIl)).error,
+    );
+    assert.ifError(
       (
         await supabaseAdmin.from('tax_rule_version_sources').insert({
           id: citeActive,
@@ -465,6 +471,17 @@ test('TAX-K1.2 DB provenance safety', async (t) => {
           tax_rule_version_id: bindVer,
           legal_value_id: lvIl,
           country_code: 'IL',
+        })
+      ).error,
+    );
+    assert.ifError(
+      (
+        await supabaseAdmin.from('tax_rule_version_sources').insert({
+          id: randomUUID(),
+          tax_rule_version_id: bindVer,
+          tax_source_id: sourceIl,
+          country_code: 'IL',
+          locator: 'art. bind-active',
         })
       ).error,
     );

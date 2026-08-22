@@ -32,12 +32,7 @@ function k1Payload(): Record<string, unknown> {
 }
 
 type AdminClient = {
-  from: (table: string) => {
-    insert: (row: Record<string, unknown>) => Promise<{ error: { message?: string; code?: string } | null }>;
-    update: (row: Record<string, unknown>) => {
-      eq: (col: string, val: string) => Promise<{ error: { message?: string; code?: string } | null }>;
-    };
-  };
+  from: (table: string) => any;
 };
 
 async function insertDraftVersion(
@@ -47,10 +42,54 @@ async function insertDraftVersion(
   return admin.from('tax_rule_versions').insert({ ...row, status: 'draft' });
 }
 
+async function ensureActivePublicationCitation(
+  admin: AdminClient,
+  versionId: string,
+): Promise<{ error: { message?: string; code?: string } | null }> {
+  const probe = await admin.from('tax_rule_version_sources').select('id').limit(1);
+  if (probe.error && isSupabaseMissingTableError(probe.error, 'tax_rule_version_sources')) {
+    return { error: null };
+  }
+  if (probe.error) return { error: probe.error };
+
+  const { data: version, error: verErr } = await admin
+    .from('tax_rule_versions')
+    .select('id, country_code')
+    .eq('id', versionId)
+    .single();
+  if (verErr || !version) return { error: verErr ?? { message: 'tax_rule_version not found' } };
+
+  const sourceId = randomUUID();
+  const { error: srcIns } = await admin.from('tax_sources').insert({
+    id: sourceId,
+    country_code: version.country_code,
+    source_code: `tk-pub-${sourceId}`,
+    title: 'Publication fixture source',
+    provenance_type: 'official_guidance',
+    status: 'draft',
+  });
+  if (srcIns) return { error: srcIns };
+
+  const { error: srcAct } = await admin.from('tax_sources').update({ status: 'active' }).eq('id', sourceId);
+  if (srcAct) return { error: srcAct };
+
+  const { error: citeErr } = await admin.from('tax_rule_version_sources').insert({
+    id: randomUUID(),
+    tax_rule_version_id: versionId,
+    tax_source_id: sourceId,
+    country_code: version.country_code,
+    locator: 'publication-fixture',
+  });
+  if (citeErr) return { error: citeErr };
+  return { error: null };
+}
+
 async function activateVersion(
   admin: AdminClient,
   id: string,
 ): Promise<{ error: { message?: string; code?: string } | null }> {
+  const cited = await ensureActivePublicationCitation(admin, id);
+  if (cited.error) return cited;
   return admin.from('tax_rule_versions').update({ status: 'active' }).eq('id', id);
 }
 
