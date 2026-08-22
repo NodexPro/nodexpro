@@ -36,6 +36,7 @@ import {
   resolveIssuedDocumentLayoutSource,
 } from '../owner-invoice-document-layout/owner-invoice-document-layout-resolver.pure.js';
 import type { IncomeBrandingResolvedProfile } from './income-document-branding.types.js';
+import { resolveCustomerFacingIncomeDocumentBranding } from './income-document-customer-facing-style.pure.js';
 import { resolveIncomeDocumentSemanticDates } from './income-document-semantic-dates.pure.js';
 import { loadCreditSourceReferenceForDocument } from './income-document-tax-invoice-credit.read.js';
 import { mergeCreditSourceReferenceIntoNotes } from './income-document-tax-invoice-credit.pure.js';
@@ -169,7 +170,7 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
   });
   const allocationApplicable = isAllocationNumberApplicable(allocationPolicy, doc.document_type);
 
-  // INV-13A: legacy issued docs (no freeze) → exact existing sectioned force path.
+  // INV-13A: customer-facing finished layout (sectioned), same as draft preview.
   // Layout-aware only when snapshot present on the issued row (no Owner DB lookup).
   const layoutSource = resolveIssuedDocumentLayoutSource({
     owner_layout_version_id: doc.owner_layout_version_id,
@@ -177,9 +178,7 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(
   });
 
   let issuedBranding: IncomeBrandingResolvedProfile =
-    branding.document_style_key === 'sectioned'
-      ? branding
-      : { ...branding, document_style_key: 'sectioned' as const };
+    resolveCustomerFacingIncomeDocumentBranding(branding);
 
   if (layoutSource.mode === 'owner_layout') {
     issuedBranding = applyOwnerLayoutAdapterToIssuedBranding(

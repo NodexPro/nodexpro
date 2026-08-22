@@ -35,6 +35,7 @@ import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
 import { renderUnifiedIncomeDocumentHtml } from './income-document-unified-render.html.js';
+import { resolveCustomerFacingIncomeDocumentBranding } from './income-document-customer-facing-style.pure.js';
 import { formatLineVatAmountDisplay } from './income-document-unified-render.pure.js';
 import {
   creditSourceReferenceDisplay,
@@ -1111,10 +1112,11 @@ export async function buildIncomeDocumentDetailsStep(
     value_empty: !allocationNumberField.value?.trim(),
   };
 
-  const previewBranding =
-    resolvedBranding && row.document_type === 'credit_tax_invoice'
-      ? { ...resolvedBranding, document_style_key: 'sectioned' as const }
-      : resolvedBranding;
+  // Customer-facing draft preview uses the same finished style as issued (INV-13A sectioned).
+  // Not conversion-specific — all document types, converted or not.
+  const previewBranding = resolvedBranding
+    ? resolveCustomerFacingIncomeDocumentBranding(resolvedBranding)
+    : null;
   const previewHtml =
     !lean && previewGeneratedAt != null && previewBranding
       ? renderUnifiedIncomeDocumentHtml({
