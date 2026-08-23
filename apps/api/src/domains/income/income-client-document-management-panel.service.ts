@@ -179,7 +179,7 @@ function buildOfficeClientRowActions(
   return actions;
 }
 
-/** End-customer actions: only domain-valid controls; branding/end-customers list omitted. */
+/** End-customer actions: same visual slots/order as office; disable office-only concepts. */
 function buildEndCustomerRowActions(params: {
   representedClientId: string;
   incomeCustomerId: string;
@@ -188,6 +188,30 @@ function buildEndCustomerRowActions(params: {
 }): IncomeClientDocumentManagementRowAction[] {
   const { representedClientId, incomeCustomerId, perms } = params;
   const actions: IncomeClientDocumentManagementRowAction[] = [
+    {
+      key: 'open_branding_studio',
+      label: 'הגדרות מסמך',
+      icon_key: 'settings',
+      command: null,
+      command_payload: {
+        represented_client_id: representedClientId,
+        income_customer_id: incomeCustomerId,
+      },
+      enabled: false,
+      disabled_reason: 'הגדרות מסמך שייכות ללקוח המשרד, לא ללקוח קצה',
+    },
+    {
+      key: 'open_end_customers',
+      label: 'לקוחות הלקוח',
+      icon_key: 'end_customers',
+      command: null,
+      command_payload: {
+        represented_client_id: representedClientId,
+        income_customer_id: incomeCustomerId,
+      },
+      enabled: false,
+      disabled_reason: 'ניהול לקוחות קצה זמין משורת לקוח המשרד בלבד',
+    },
     {
       key: 'open_reports',
       label: 'דוחות',

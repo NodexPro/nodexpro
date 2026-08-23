@@ -25,6 +25,7 @@ import {
 import { WorkEngineInvoiceRetainerCustomerModal } from './WorkEngineInvoiceRetainerCustomerModal';
 import { WorkEngineInvoiceRetainerSetupModal } from './WorkEngineInvoiceRetainerSetupModal';
 import type { WorkEngineInvoiceRetainerSetupAggregate } from '../../income/income-workspace-types';
+import { fetchWorkEngineInvoiceRetainerSetupAggregate } from '../../api/work-engine';
 import {
   WORK_ENGINE_INVOICES_POPULATIONS_DISPLAY_DEFAULT,
   type WorkEngineInvoicesPopulationsDisplayMode,
@@ -93,6 +94,7 @@ export function WorkEngineClientDocumentManagementShell({
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [ledgerClientId, setLedgerClientId] = useState<string | null>(null);
   const [ledgerClientName, setLedgerClientName] = useState('');
+  const [ledgerEndCustomerId, setLedgerEndCustomerId] = useState<string | null>(null);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [documentsModalParams, setDocumentsModalParams] = useState<{
     representedClientId: string;
@@ -202,6 +204,7 @@ export function WorkEngineClientDocumentManagementShell({
       if (result.kind === 'ledger') {
         setLedgerClientId(result.clientId);
         setLedgerClientName(result.clientName);
+        setLedgerEndCustomerId(result.endCustomerId ?? null);
         setLedgerOpen(true);
         return;
       }
@@ -216,6 +219,24 @@ export function WorkEngineClientDocumentManagementShell({
         setRetainerClientName(result.clientName);
         setRetainerSetupAggregate(null);
         setRetainerSetupOpen(false);
+        const endCustomerId = result.endCustomerId ?? null;
+        if (endCustomerId) {
+          onBusyChange?.(true);
+          try {
+            const aggregate = await fetchWorkEngineInvoiceRetainerSetupAggregate({
+              representedClientId: result.clientId,
+              endCustomerId,
+            });
+            setRetainerSetupAggregate(aggregate);
+            setRetainerSetupOpen(true);
+            setRetainerCustomerOpen(false);
+          } catch (e) {
+            onError?.(e instanceof Error ? e.message : String(e));
+          } finally {
+            onBusyChange?.(false);
+          }
+          return;
+        }
         setRetainerCustomerOpen(true);
         return;
       }
@@ -429,12 +450,14 @@ export function WorkEngineClientDocumentManagementShell({
         open={ledgerOpen}
         representedClientId={ledgerClientId}
         representedClientDisplayName={ledgerClientName}
+        initialEndCustomerId={ledgerEndCustomerId}
         busy={busy}
         onBusyChange={onBusyChange}
         onClose={() => {
           setLedgerOpen(false);
           setLedgerClientId(null);
           setLedgerClientName('');
+          setLedgerEndCustomerId(null);
         }}
         onError={onError}
       />

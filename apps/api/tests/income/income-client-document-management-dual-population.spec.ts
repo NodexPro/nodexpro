@@ -9,6 +9,8 @@ import { dirname, join } from 'node:path';
 import {
   endCustomerPopulationKey,
   groupEndCustomerRowsByParent,
+  incomeCdmActionKeysMatchCanonical,
+  incomeCdmCanonicalActionSlotKeys,
   mergeOfficeClientsWithDocumentStats,
   zeroOfficeClientDocumentStat,
 } from '../../src/domains/income/income-client-document-management-panel.pure.js';
@@ -123,15 +125,95 @@ test('grouping helper nests end customers under parent labels', () => {
   assert.equal(groups[1].parent_represented_client_id, 'p2');
 });
 
-test('end-customer actions omit branding / open_end_customers', () => {
+test('end-customer actions share canonical slots; office-only concepts stay disabled', () => {
   assert.match(panelSource, /buildEndCustomerRowActions/);
   const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
   const endFnEnd = panelSource.indexOf('function formatMoneyReference');
   const endFn = panelSource.slice(endFnStart, endFnEnd);
-  assert.doesNotMatch(endFn, /open_branding_studio/);
-  assert.doesNotMatch(endFn, /open_end_customers/);
-  assert.match(endFn, /open_income_ledger_card/);
+  assert.match(endFn, /key: 'open_branding_studio'/);
+  assert.match(endFn, /key: 'open_end_customers'/);
+  assert.match(endFn, /key: 'open_reports'/);
+  assert.match(endFn, /key: 'open_income_ledger_card'/);
+  assert.match(endFn, /key: 'open_email_history'/);
+  assert.match(endFn, /key: 'more'/);
+  assert.match(endFn, /הגדרות מסמך שייכות ללקוח המשרד/);
+  assert.match(endFn, /ניהול לקוחות קצה זמין משורת לקוח המשרד בלבד/);
+  assert.match(endFn, /דוחות לפי לקוח קצה — בקרוב/);
+  assert.match(endFn, /היסטוריית מייל לפי לקוח קצה — בקרוב/);
   assert.match(endFn, /end_customer_id: incomeCustomerId/);
+  assert.match(endFn, /income_customer_id: incomeCustomerId/);
+  // Must not enable branding/end-customers for end-customer rows.
+  const brandingBlock = endFn.slice(
+    endFn.indexOf("key: 'open_branding_studio'"),
+    endFn.indexOf("key: 'open_end_customers'"),
+  );
+  assert.match(brandingBlock, /enabled: false/);
+  const endCustomersBlock = endFn.slice(
+    endFn.indexOf("key: 'open_end_customers'"),
+    endFn.indexOf("key: 'open_reports'"),
+  );
+  assert.match(endCustomersBlock, /enabled: false/);
+});
+
+test('canonical action slot order is identical for both populations', () => {
+  const withRetainer = incomeCdmCanonicalActionSlotKeys(true);
+  const withoutRetainer = incomeCdmCanonicalActionSlotKeys(false);
+  assert.deepEqual(withRetainer, [
+    'open_branding_studio',
+    'open_end_customers',
+    'open_reports',
+    'open_income_ledger_card',
+    'open_email_history',
+    'open_invoice_retainer_setup',
+    'more',
+  ]);
+  assert.deepEqual(withoutRetainer, [
+    'open_branding_studio',
+    'open_end_customers',
+    'open_reports',
+    'open_income_ledger_card',
+    'open_email_history',
+    'more',
+  ]);
+  assert.equal(incomeCdmActionKeysMatchCanonical(withRetainer, true), true);
+  assert.equal(incomeCdmActionKeysMatchCanonical(withoutRetainer, false), true);
+  assert.equal(
+    incomeCdmActionKeysMatchCanonical(['open_reports', 'open_income_ledger_card', 'more'], false),
+    false,
+  );
+
+  const officeFnStart = panelSource.indexOf('function buildOfficeClientRowActions');
+  const officeFnEnd = panelSource.indexOf('function buildEndCustomerRowActions');
+  const officeFn = panelSource.slice(officeFnStart, officeFnEnd);
+  const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
+  const endFnEnd = panelSource.indexOf('function formatMoneyReference');
+  const endFn = panelSource.slice(endFnStart, endFnEnd);
+
+  for (const key of withoutRetainer) {
+    assert.match(officeFn, new RegExp(`key: '${key}'`));
+    assert.match(endFn, new RegExp(`key: '${key}'`));
+  }
+});
+
+test('ledger/retainer end-customer payloads keep parent + income_customer_id', () => {
+  const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
+  const endFnEnd = panelSource.indexOf('function formatMoneyReference');
+  const endFn = panelSource.slice(endFnStart, endFnEnd);
+  assert.match(endFn, /represented_client_id: representedClientId/);
+  assert.match(endFn, /end_customer_id: incomeCustomerId/);
+  assert.match(endFn, /income_customer_id: incomeCustomerId/);
+});
+
+test('frontend action cell does not filter by population', () => {
+  const panelFe = readFileSync(
+    join(dir, '../../../web/src/components/income/IncomeClientDocumentManagementPanel.tsx'),
+    'utf8',
+  );
+  assert.match(panelFe, /\(row\.actions \?\? \[\]\)\.map/);
+  assert.doesNotMatch(panelFe, /population_key\s*===/);
+  assert.doesNotMatch(panelFe, /if\s*\(.*income_customer_id.*\)\s*\{[\s\S]*hide/);
+  assert.doesNotMatch(panelFe, /actions\.filter\(/);
+  assert.match(panelFe, /function ActionButton/);
 });
 
 test('A/B — office section starts from Core clients and left-joins stats (zero-doc clients included)', () => {

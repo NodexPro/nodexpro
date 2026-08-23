@@ -7,6 +7,8 @@ type Props = {
   open: boolean;
   representedClientId: string | null;
   representedClientDisplayName?: string | null;
+  /** Optional backend-scoped end customer when opening from an end-customer row. */
+  initialEndCustomerId?: string | null;
   busy: boolean;
   onBusyChange?: (busy: boolean) => void;
   onClose: () => void;
@@ -70,6 +72,7 @@ export function IncomeClientIncomeLedgerCardModal({
   open,
   representedClientId,
   representedClientDisplayName,
+  initialEndCustomerId = null,
   busy,
   onBusyChange,
   onClose,
@@ -80,12 +83,13 @@ export function IncomeClientIncomeLedgerCardModal({
   const [issuedViewDocId, setIssuedViewDocId] = useState<string | null>(null);
 
   const loadAggregate = useCallback(
-    async (params: { year?: number | null }) => {
+    async (params: { year?: number | null; endCustomerId?: string | null }) => {
       if (!representedClientId) return;
       onBusyChange?.(true);
       try {
         const next = await fetchIncomeClientIncomeLedgerCardAggregate({
           representedClientId,
+          endCustomerId: params.endCustomerId ?? null,
           year: params.year ?? null,
         });
         setAggregate(next);
@@ -104,8 +108,10 @@ export function IncomeClientIncomeLedgerCardModal({
       setIssuedViewDocId(null);
       return;
     }
-    void loadAggregate({});
-  }, [loadAggregate, open, representedClientId]);
+    void loadAggregate({
+      endCustomerId: initialEndCustomerId ?? null,
+    });
+  }, [loadAggregate, open, representedClientId, initialEndCustomerId]);
 
   const handleYearChange = (year: number) => {
     void loadAggregate({ year });

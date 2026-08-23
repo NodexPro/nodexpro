@@ -12,6 +12,38 @@ export type IncomeClientDocumentManagementPopulationKey =
   | 'office_client'
   | 'office_client_customer';
 
+/**
+ * Canonical visual action-slot order for Invoice CDM rows (both populations).
+ * Retainer slot is present only when the panel includes retainer actions.
+ */
+export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE = [
+  'open_branding_studio',
+  'open_end_customers',
+  'open_reports',
+  'open_income_ledger_card',
+  'open_email_history',
+] as const;
+
+export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_RETAINER = 'open_invoice_retainer_setup' as const;
+export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_MORE = 'more' as const;
+
+export function incomeCdmCanonicalActionSlotKeys(includeRetainer: boolean): string[] {
+  return [
+    ...INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE,
+    ...(includeRetainer ? [INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_RETAINER] : []),
+    INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_MORE,
+  ];
+}
+
+export function incomeCdmActionKeysMatchCanonical(
+  actionKeys: string[],
+  includeRetainer: boolean,
+): boolean {
+  const expected = incomeCdmCanonicalActionSlotKeys(includeRetainer);
+  if (actionKeys.length !== expected.length) return false;
+  return actionKeys.every((key, index) => key === expected[index]);
+}
+
 /** Stable dual-identity key: parent office client + end customer. */
 export function endCustomerPopulationKey(params: {
   representedClientId: string;

@@ -119,8 +119,20 @@ function ActionIcon({ iconKey }: { iconKey: string }) {
 export type IncomeClientDocumentPanelActionResult =
   | { kind: 'command'; action: IncomeClientDocumentManagementRowAction; clientName: string }
   | { kind: 'reports'; clientId: string; clientName: string }
-  | { kind: 'ledger'; clientId: string; clientName: string }
-  | { kind: 'retainer'; clientId: string; clientName: string }
+  | {
+      kind: 'ledger';
+      clientId: string;
+      clientName: string;
+      /** Backend action payload end-customer scope when present. */
+      endCustomerId?: string | null;
+    }
+  | {
+      kind: 'retainer';
+      clientId: string;
+      clientName: string;
+      /** Backend action payload end-customer scope when present. */
+      endCustomerId?: string | null;
+    }
   | { kind: 'more'; clientId: string; clientName: string; anchor: HTMLButtonElement };
 
 type PanelProps = {
@@ -227,18 +239,34 @@ function renderDataCell(
                                     return;
                                   }
                                   if (action.key === 'open_income_ledger_card') {
+                                    const payload = action.command_payload ?? {};
+                                    const endCustomerId =
+                                      typeof payload.income_customer_id === 'string'
+                                        ? payload.income_customer_id
+                                        : typeof payload.end_customer_id === 'string'
+                                          ? payload.end_customer_id
+                                          : null;
                                     void onAction({
                                       kind: 'ledger',
                                       clientId: row.represented_client_id,
                                       clientName: row.client_display_name,
+                                      endCustomerId,
                                     });
                                     return;
                                   }
                                   if (action.key === 'open_invoice_retainer_setup') {
+                                    const payload = action.command_payload ?? {};
+                                    const endCustomerId =
+                                      typeof payload.income_customer_id === 'string'
+                                        ? payload.income_customer_id
+                                        : typeof payload.end_customer_id === 'string'
+                                          ? payload.end_customer_id
+                                          : null;
                                     void onAction({
                                       kind: 'retainer',
                                       clientId: row.represented_client_id,
                                       clientName: row.client_display_name,
+                                      endCustomerId,
                                     });
                                     return;
                                   }
