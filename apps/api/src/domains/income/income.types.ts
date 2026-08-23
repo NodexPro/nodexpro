@@ -152,6 +152,11 @@ export interface IncomeClientDocumentTypeCounter {
   tone: string;
   tooltip_label: string;
   action_key: 'open_documents_by_type';
+  /** Backend-ready open context; FE must not invent parent/customer linkage. */
+  action_params?: {
+    represented_client_id: string;
+    income_customer_id: string | null;
+  };
 }
 
 export const INCOME_DOCUMENT_EMAIL_HISTORY_AGGREGATE_KEY =
@@ -523,8 +528,27 @@ export interface WorkEngineInvoicesClientDocumentsByTypeAggregate {
 export const INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY =
   'income_client_document_management_panel' as const;
 
-export interface IncomeClientDocumentManagementRow {
+export type IncomeClientDocumentManagementPopulationKey =
+  | 'office_client'
+  | 'office_client_customer';
+
+export interface IncomeClientDocumentManagementRowContext {
+  population_key: IncomeClientDocumentManagementPopulationKey;
+  acting_mode: 'office_representative';
+  issuer_business_id: string;
   represented_client_id: string;
+  /** Null for direct office-client rows; set for end-customer population. */
+  income_customer_id: string | null;
+}
+
+export interface IncomeClientDocumentManagementRow {
+  population_key: IncomeClientDocumentManagementPopulationKey;
+  represented_client_id: string;
+  /** End customer id when population_key = office_client_customer; otherwise null. */
+  income_customer_id: string | null;
+  /** Explicit parent office client for end-customer rows; null for office-client rows. */
+  parent_represented_client_id: string | null;
+  parent_client_display_name: string | null;
   client_display_name: string;
   client_logo_url: string | null;
   client_initials: string;
@@ -545,6 +569,7 @@ export interface IncomeClientDocumentManagementRow {
   last_activity_display: string;
   status_label: string;
   actions: IncomeClientDocumentManagementRowAction[];
+  row_context: IncomeClientDocumentManagementRowContext;
 }
 
 export interface IncomeClientDocumentManagementReportItem {
@@ -554,13 +579,48 @@ export interface IncomeClientDocumentManagementReportItem {
   disabled_reason: string | null;
 }
 
+export interface IncomeClientDocumentManagementCustomerGroup {
+  parent_represented_client_id: string;
+  parent_client_display_name: string;
+  total_customers: number;
+  rows: IncomeClientDocumentManagementRow[];
+}
+
+export interface IncomeClientDocumentManagementSectionPage {
+  /** null = full batch returned (current scale strategy); reserved for future paging. */
+  limit: number | null;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface IncomeClientDocumentManagementSection {
+  section_key: 'office_clients' | 'office_client_customers';
+  title: string;
+  total_count: number;
+  rows: IncomeClientDocumentManagementRow[];
+  /** Present for end-customer section; null for office-clients section. */
+  groups: IncomeClientDocumentManagementCustomerGroup[] | null;
+  page: IncomeClientDocumentManagementSectionPage;
+  empty_state: {
+    visible: boolean;
+    title: string;
+    description: string | null;
+  };
+}
+
 export interface IncomeClientDocumentManagementPanel {
   aggregate_key: typeof INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY;
   visible: boolean;
   title: string;
   description: string | null;
   columns: Array<{ key: string; label: string }>;
+  /**
+   * Backward-compatible flat list = office_clients_section.rows only.
+   * FE split must use the explicit sections (next task).
+   */
   rows: IncomeClientDocumentManagementRow[];
+  office_clients_section: IncomeClientDocumentManagementSection;
+  office_client_customers_section: IncomeClientDocumentManagementSection;
   report_catalog: IncomeClientDocumentManagementReportItem[];
   empty_state: {
     visible: boolean;

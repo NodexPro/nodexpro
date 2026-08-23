@@ -3,6 +3,12 @@
  * Single aggregate read model; counters from SQL aggregation (P4.2).
  * unpaid_amount_* binds to SQL unpaid_reference = Accounting Base remaining
  * (original − posted allocations − issued Credit Note totals). No FE arithmetic.
+ *
+ * Dual populations (invoices tab foundation):
+ * - office_clients_section: ALL eligible Core office clients (left-join document stats;
+ *   zero counters when no docs). Population is not document-derived.
+ * - office_client_customers_section: income_customers with document stats under those clients
+ * `rows` remains office_clients_section.rows for backward compatibility.
  */
 
 import { supabaseAdmin } from '../../db/client.js';
@@ -18,9 +24,15 @@ import type {
   IncomeClientDocumentManagementReportItem,
   IncomeClientDocumentManagementRow,
   IncomeClientDocumentManagementRowAction,
+  IncomeClientDocumentManagementSection,
   IncomeClientDocumentTypeCounter,
   IncomeWorkspacePermissions,
 } from './income.types.js';
+import {
+  groupEndCustomerRowsByParent,
+  mergeOfficeClientsWithDocumentStats,
+  zeroOfficeClientDocumentStat,
+} from './income-client-document-management-panel.pure.js';
 
 const REPORT_CATALOG: IncomeClientDocumentManagementReportItem[] = [
   { key: 'income_summary', label: 'דוח הכנסות', enabled: false, disabled_reason: 'בקרוב' },
@@ -28,6 +40,16 @@ const REPORT_CATALOG: IncomeClientDocumentManagementReportItem[] = [
   { key: 'documents', label: 'דוח מסמכים', enabled: false, disabled_reason: 'בקרוב' },
   { key: 'payments', label: 'דוח תשלומים', enabled: false, disabled_reason: 'בקרוב' },
   { key: 'csv_export', label: 'CSV Export', enabled: false, disabled_reason: 'בקרוב' },
+];
+
+const PANEL_COLUMNS: Array<{ key: string; label: string }> = [
+  { key: 'client', label: 'לקוח' },
+  { key: 'total_documents_count', label: 'מסמכים' },
+  { key: 'unpaid_amount_display', label: 'לא שולם' },
+  { key: 'last_document_date_display', label: 'מסמך אחרון' },
+  { key: 'last_activity_display', label: 'פעילות אחרונה' },
+  { key: 'status_label', label: 'סטטוס' },
+  { key: 'actions', label: '' },
 ];
 
 type PanelStatRow = {
@@ -51,7 +73,11 @@ type PanelStatRow = {
   currency: string | null;
 };
 
-function buildRowActions(
+type EndCustomerStatRow = PanelStatRow & {
+  income_customer_id: string;
+};
+
+function buildOfficeClientRowActions(
   clientId: string,
   perms: IncomeWorkspacePermissions,
   options?: { includeRetainerAction?: boolean },
@@ -153,6 +179,92 @@ function buildRowActions(
   return actions;
 }
 
+/** End-customer actions: only domain-valid controls; branding/end-customers list omitted. */
+function buildEndCustomerRowActions(params: {
+  representedClientId: string;
+  incomeCustomerId: string;
+  perms: IncomeWorkspacePermissions;
+  includeRetainerAction?: boolean;
+}): IncomeClientDocumentManagementRowAction[] {
+  const { representedClientId, incomeCustomerId, perms } = params;
+  const actions: IncomeClientDocumentManagementRowAction[] = [
+    {
+      key: 'open_reports',
+      label: 'דוחות',
+      icon_key: 'reports',
+      command: null,
+      command_payload: {
+        open_reports_panel: true,
+        client_id: representedClientId,
+        income_customer_id: incomeCustomerId,
+      },
+      enabled: false,
+      disabled_reason: 'דוחות לפי לקוח קצה — בקרוב',
+    },
+    {
+      key: 'open_income_ledger_card',
+      label: 'כרטסת הכנסות',
+      icon_key: 'ledger',
+      command: null,
+      command_payload: {
+        open_income_ledger_card: true,
+        represented_client_id: representedClientId,
+        end_customer_id: incomeCustomerId,
+        income_customer_id: incomeCustomerId,
+      },
+      enabled: perms.view,
+      disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
+    },
+    {
+      key: 'open_email_history',
+      label: '@',
+      icon_key: 'at',
+      command: null,
+      command_payload: {
+        open_email_history: true,
+        represented_client_id: representedClientId,
+        income_customer_id: incomeCustomerId,
+        aggregate_key: INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY,
+      },
+      enabled: false,
+      disabled_reason: 'היסטוריית מייל לפי לקוח קצה — בקרוב',
+    },
+  ];
+
+  if (params.includeRetainerAction) {
+    actions.push({
+      key: 'open_invoice_retainer_setup',
+      label: 'ריטיינר חשבוניות',
+      icon_key: 'retainer',
+      command: null,
+      command_payload: {
+        open_invoice_retainer_setup: true,
+        represented_client_id: representedClientId,
+        end_customer_id: incomeCustomerId,
+        income_customer_id: incomeCustomerId,
+      },
+      enabled: perms.edit,
+      disabled_reason: perms.edit ? null : 'אין הרשאת עריכה',
+    });
+  }
+
+  actions.push({
+    key: 'more',
+    label: 'פעולות נוספות',
+    icon_key: 'more',
+    command: null,
+    command_payload: {
+      open_more_menu: true,
+      client_id: representedClientId,
+      income_customer_id: incomeCustomerId,
+    },
+    enabled: true,
+    disabled_reason: null,
+  });
+
+  return actions;
+}
+
 function formatMoneyReference(amount: number, currency: string): string {
   return `${amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
@@ -163,24 +275,10 @@ function formatDateDisplay(iso: string | null): string {
   return new Date(d).toLocaleDateString('he-IL');
 }
 
-function emptyPanel(visible: boolean): IncomeClientDocumentManagementPanel {
-  return {
-    aggregate_key: INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
-    visible,
-    title: 'ניהול מסמכים לפי לקוח',
-    description: visible ? 'לקוחות שכבר הופקו עבורם מסמכי הכנסה' : null,
-    columns: [],
-    rows: [],
-    report_catalog: visible ? REPORT_CATALOG : [],
-    empty_state: {
-      visible: false,
-      title: visible ? 'אין עדיין לקוחות עם מסמכים' : '',
-      description: visible ? 'לאחר הפקת מסמך עבור לקוח — הוא יופיע כאן.' : null,
-    },
-  };
-}
-
-function buildDocumentTypeCounters(stat: PanelStatRow): IncomeClientDocumentTypeCounter[] {
+function buildDocumentTypeCounters(
+  stat: PanelStatRow,
+  actionParams: { represented_client_id: string; income_customer_id: string | null },
+): IncomeClientDocumentTypeCounter[] {
   return [
     {
       key: 'quote',
@@ -189,6 +287,7 @@ function buildDocumentTypeCounters(stat: PanelStatRow): IncomeClientDocumentType
       tone: 'blue',
       tooltip_label: 'הצעות מחיר',
       action_key: 'open_documents_by_type',
+      action_params: actionParams,
     },
     {
       key: 'deal_invoice',
@@ -197,6 +296,7 @@ function buildDocumentTypeCounters(stat: PanelStatRow): IncomeClientDocumentType
       tone: 'purple',
       tooltip_label: 'חשבונות עסקה',
       action_key: 'open_documents_by_type',
+      action_params: actionParams,
     },
     {
       key: 'tax_invoice',
@@ -205,6 +305,7 @@ function buildDocumentTypeCounters(stat: PanelStatRow): IncomeClientDocumentType
       tone: 'cyan',
       tooltip_label: 'חשבוניות מס',
       action_key: 'open_documents_by_type',
+      action_params: actionParams,
     },
     {
       key: 'tax_invoice_receipt',
@@ -213,6 +314,7 @@ function buildDocumentTypeCounters(stat: PanelStatRow): IncomeClientDocumentType
       tone: 'teal',
       tooltip_label: 'חשבוניות מס/קבלה',
       action_key: 'open_documents_by_type',
+      action_params: actionParams,
     },
     {
       key: 'receipt',
@@ -221,6 +323,7 @@ function buildDocumentTypeCounters(stat: PanelStatRow): IncomeClientDocumentType
       tone: 'green',
       tooltip_label: 'קבלות',
       action_key: 'open_documents_by_type',
+      action_params: actionParams,
     },
     {
       key: 'credit_tax_invoice',
@@ -229,6 +332,7 @@ function buildDocumentTypeCounters(stat: PanelStatRow): IncomeClientDocumentType
       tone: 'red',
       tooltip_label: 'זיכויים',
       action_key: 'open_documents_by_type',
+      action_params: actionParams,
     },
     {
       key: 'draft',
@@ -237,8 +341,61 @@ function buildDocumentTypeCounters(stat: PanelStatRow): IncomeClientDocumentType
       tone: 'slate',
       tooltip_label: 'טיוטות',
       action_key: 'open_documents_by_type',
+      action_params: actionParams,
     },
   ];
+}
+
+function statusLabelFromStat(stat: PanelStatRow): string {
+  const totalDocuments = Number(stat.total_documents_count) || 0;
+  const draftDocuments = Number(stat.draft_documents_count) || 0;
+  const unpaidRaw = Number(stat.unpaid_reference ?? 0);
+  const unpaidRef = Number.isFinite(unpaidRaw) && unpaidRaw > 0 ? unpaidRaw : null;
+  if (totalDocuments > 0) {
+    return unpaidRef != null ? 'פתוח לגבייה' : 'פעיל';
+  }
+  return draftDocuments > 0 ? 'טיוטות פעילות' : 'פעיל';
+}
+
+function emptySection(
+  section_key: IncomeClientDocumentManagementSection['section_key'],
+  title: string,
+): IncomeClientDocumentManagementSection {
+  return {
+    section_key,
+    title,
+    total_count: 0,
+    rows: [],
+    groups: section_key === 'office_client_customers' ? [] : null,
+    page: { limit: null, offset: 0, has_more: false },
+    empty_state: {
+      visible: true,
+      title:
+        section_key === 'office_clients' ? 'אין לקוחות במשרד' : 'אין עדיין לקוחות קצה עם מסמכים',
+      description: null,
+    },
+  };
+}
+
+function emptyPanel(visible: boolean): IncomeClientDocumentManagementPanel {
+  const office = emptySection('office_clients', 'לקוחות המשרד');
+  const customers = emptySection('office_client_customers', 'לקוחות של לקוחות המשרד');
+  return {
+    aggregate_key: INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
+    visible,
+    title: 'ניהול מסמכים לפי לקוח',
+    description: visible ? 'לקוחות שכבר הופקו עבורם מסמכי הכנסה' : null,
+    columns: [],
+    rows: [],
+    office_clients_section: office,
+    office_client_customers_section: customers,
+    report_catalog: visible ? REPORT_CATALOG : [],
+    empty_state: {
+      visible: false,
+      title: visible ? 'אין עדיין לקוחות עם מסמכים' : '',
+      description: visible ? 'לאחר הפקת מסמך עבור לקוח — הוא יופיע כאן.' : null,
+    },
+  };
 }
 
 async function countSelfModeRows(orgId: string): Promise<{ issued: number; drafts: number }> {
@@ -271,6 +428,129 @@ function logPanelTiming(label: string, startedAt: number): number {
   return Date.now();
 }
 
+function buildOfficeClientRow(params: {
+  stat: PanelStatRow;
+  meta: { display_name: string; tax_id: string | null; email: string | null } | undefined;
+  perms: IncomeWorkspacePermissions;
+  includeRetainerAction?: boolean;
+}): IncomeClientDocumentManagementRow {
+  const clientId = String(params.stat.represented_client_id);
+  const clientName = params.meta?.display_name ?? clientId;
+  const unpaidRaw = Number(params.stat.unpaid_reference ?? 0);
+  const unpaidRef = Number.isFinite(unpaidRaw) && unpaidRaw > 0 ? unpaidRaw : null;
+  const currency = String(params.stat.currency || 'ILS');
+  const totalDocuments = Number(params.stat.total_documents_count) || 0;
+  const lastDocumentDate =
+    typeof params.stat.last_document_date === 'string' ? params.stat.last_document_date : null;
+  const lastActivityAt =
+    typeof params.stat.last_activity_at === 'string' ? params.stat.last_activity_at : null;
+
+  return {
+    population_key: 'office_client',
+    represented_client_id: clientId,
+    income_customer_id: null,
+    parent_represented_client_id: null,
+    parent_client_display_name: null,
+    client_display_name: clientName,
+    client_logo_url: null,
+    client_initials: clientName.trim().slice(0, 2) || '—',
+    tax_id: params.meta?.tax_id ?? null,
+    email: params.meta?.email ?? null,
+    total_documents_count: totalDocuments,
+    quote_count: Number(params.stat.quote_count) || 0,
+    deal_count: Number(params.stat.deal_count) || 0,
+    tax_invoice_count: Number(params.stat.tax_invoice_count) || 0,
+    receipt_count: Number(params.stat.receipt_count) || 0,
+    credit_count: Number(params.stat.credit_count) || 0,
+    document_type_counters: buildDocumentTypeCounters(params.stat, {
+      represented_client_id: clientId,
+      income_customer_id: null,
+    }),
+    unpaid_amount_reference: unpaidRef,
+    unpaid_amount_display:
+      unpaidRef != null ? formatMoneyReference(unpaidRef, currency) : '—',
+    last_document_date: lastDocumentDate,
+    last_document_date_display: formatDateDisplay(lastDocumentDate),
+    last_activity_at: lastActivityAt,
+    last_activity_display: formatDateDisplay(lastActivityAt),
+    status_label: statusLabelFromStat(params.stat),
+    actions: buildOfficeClientRowActions(clientId, params.perms, {
+      includeRetainerAction: params.includeRetainerAction,
+    }),
+    row_context: {
+      population_key: 'office_client',
+      acting_mode: 'office_representative',
+      issuer_business_id: clientId,
+      represented_client_id: clientId,
+      income_customer_id: null,
+    },
+  };
+}
+
+function buildEndCustomerRow(params: {
+  stat: EndCustomerStatRow;
+  customerMeta: { display_name: string; tax_id: string | null; email: string | null } | undefined;
+  parentDisplayName: string;
+  perms: IncomeWorkspacePermissions;
+  includeRetainerAction?: boolean;
+}): IncomeClientDocumentManagementRow {
+  const representedClientId = String(params.stat.represented_client_id);
+  const incomeCustomerId = String(params.stat.income_customer_id);
+  const customerName = params.customerMeta?.display_name ?? incomeCustomerId;
+  const unpaidRaw = Number(params.stat.unpaid_reference ?? 0);
+  const unpaidRef = Number.isFinite(unpaidRaw) && unpaidRaw > 0 ? unpaidRaw : null;
+  const currency = String(params.stat.currency || 'ILS');
+  const totalDocuments = Number(params.stat.total_documents_count) || 0;
+  const lastDocumentDate =
+    typeof params.stat.last_document_date === 'string' ? params.stat.last_document_date : null;
+  const lastActivityAt =
+    typeof params.stat.last_activity_at === 'string' ? params.stat.last_activity_at : null;
+
+  return {
+    population_key: 'office_client_customer',
+    represented_client_id: representedClientId,
+    income_customer_id: incomeCustomerId,
+    parent_represented_client_id: representedClientId,
+    parent_client_display_name: params.parentDisplayName,
+    client_display_name: customerName,
+    client_logo_url: null,
+    client_initials: customerName.trim().slice(0, 2) || '—',
+    tax_id: params.customerMeta?.tax_id ?? null,
+    email: params.customerMeta?.email ?? null,
+    total_documents_count: totalDocuments,
+    quote_count: Number(params.stat.quote_count) || 0,
+    deal_count: Number(params.stat.deal_count) || 0,
+    tax_invoice_count: Number(params.stat.tax_invoice_count) || 0,
+    receipt_count: Number(params.stat.receipt_count) || 0,
+    credit_count: Number(params.stat.credit_count) || 0,
+    document_type_counters: buildDocumentTypeCounters(params.stat, {
+      represented_client_id: representedClientId,
+      income_customer_id: incomeCustomerId,
+    }),
+    unpaid_amount_reference: unpaidRef,
+    unpaid_amount_display:
+      unpaidRef != null ? formatMoneyReference(unpaidRef, currency) : '—',
+    last_document_date: lastDocumentDate,
+    last_document_date_display: formatDateDisplay(lastDocumentDate),
+    last_activity_at: lastActivityAt,
+    last_activity_display: formatDateDisplay(lastActivityAt),
+    status_label: statusLabelFromStat(params.stat),
+    actions: buildEndCustomerRowActions({
+      representedClientId,
+      incomeCustomerId,
+      perms: params.perms,
+      includeRetainerAction: params.includeRetainerAction,
+    }),
+    row_context: {
+      population_key: 'office_client_customer',
+      acting_mode: 'office_representative',
+      issuer_business_id: representedClientId,
+      represented_client_id: representedClientId,
+      income_customer_id: incomeCustomerId,
+    },
+  };
+}
+
 export async function buildIncomeClientDocumentManagementPanel(params: {
   ctx: RequestContext;
   perms: IncomeWorkspacePermissions;
@@ -285,40 +565,100 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
   }
 
   let stepStart = aggregateStartMs;
-  const [statsRes, selfCounts] = await Promise.all([
+  const [statsRes, endCustomerStatsRes, selfCounts, officeClientsRes] = await Promise.all([
     supabaseAdmin.rpc('income_client_document_management_panel_stats', {
       p_org_id: orgId,
     }),
+    supabaseAdmin.rpc('income_client_document_management_end_customer_stats', {
+      p_org_id: orgId,
+    }),
     countSelfModeRows(orgId),
+    /** Canonical ALL eligible office clients (Core clients), not document-derived. */
+    supabaseAdmin
+      .from('clients')
+      .select('id, display_name, tax_id, email')
+      .eq('organization_id', orgId)
+      .eq('is_archived', false)
+      .order('display_name', { ascending: true })
+      .limit(500),
   ]);
   throwIfSupabaseError(statsRes.error, 'incomeClientDocumentManagementPanelStats', {
     migrationHint: '163_income_client_panel_unpaid_subtract_issued_credits.sql',
   });
-  stepStart = logPanelTiming('rpc_stats_and_self_counts', stepStart);
+  throwIfSupabaseError(endCustomerStatsRes.error, 'incomeClientDocumentManagementEndCustomerStats', {
+    migrationHint: '165_income_client_document_management_end_customer_stats.sql',
+  });
+  throwIfSupabaseError(officeClientsRes.error, 'loadOfficeClientsForDocumentManagementPanel');
+  stepStart = logPanelTiming('rpc_office_and_end_customer_stats_and_clients', stepStart);
 
   const stats = (statsRes.data ?? []) as PanelStatRow[];
-  const clientIds = stats
-    .map((s) => String(s.represented_client_id ?? '').trim())
-    .filter(Boolean);
+  const endCustomerStats = (endCustomerStatsRes.data ?? []) as EndCustomerStatRow[];
+  const officeClients = (officeClientsRes.data ?? []) as Array<{
+    id: string;
+    display_name: string;
+    tax_id: string | null;
+    email: string | null;
+  }>;
+
+  const incomeCustomerIds = [
+    ...new Set(
+      endCustomerStats.map((s) => String(s.income_customer_id ?? '').trim()).filter(Boolean),
+    ),
+  ];
 
   const clientMetaById = new Map<
     string,
     { display_name: string; tax_id: string | null; email: string | null }
   >();
-  if (clientIds.length > 0) {
-    const { data: clients, error: clientsErr } = await supabaseAdmin
-      .from('clients')
-      .select('id, display_name, tax_id, email')
-      .eq('organization_id', orgId)
-      .in('id', clientIds);
-    throwIfSupabaseError(clientsErr, 'loadClientDocumentManagementClients');
-    for (const c of clients ?? []) {
-      const client = c as {
-        id: string;
-        display_name: string;
-        tax_id: string | null;
-        email: string | null;
-      };
+  const customerMetaById = new Map<
+    string,
+    { display_name: string; tax_id: string | null; email: string | null }
+  >();
+
+  for (const client of officeClients) {
+    clientMetaById.set(client.id, {
+      display_name: client.display_name,
+      tax_id: client.tax_id,
+      email: client.email,
+    });
+  }
+
+  /** Parents referenced by end-customer stats may be missing from active list — load those meta only. */
+  const missingParentIds = [
+    ...new Set(
+      endCustomerStats
+        .map((s) => String(s.represented_client_id ?? '').trim())
+        .filter((id) => id && !clientMetaById.has(id)),
+    ),
+  ];
+
+  const [customersRes, missingParentsRes] = await Promise.all([
+    incomeCustomerIds.length > 0
+      ? supabaseAdmin
+          .from('income_customers')
+          .select('id, display_name, tax_id, email, represented_client_id')
+          .eq('organization_id', orgId)
+          .in('id', incomeCustomerIds)
+      : Promise.resolve({ data: [], error: null }),
+    missingParentIds.length > 0
+      ? supabaseAdmin
+          .from('clients')
+          .select('id, display_name, tax_id, email')
+          .eq('organization_id', orgId)
+          .in('id', missingParentIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  throwIfSupabaseError(customersRes.error, 'loadClientDocumentManagementEndCustomers');
+  throwIfSupabaseError(missingParentsRes.error, 'loadMissingParentClientsForEndCustomerSection');
+
+  for (const c of missingParentsRes.data ?? []) {
+    const client = c as {
+      id: string;
+      display_name: string;
+      tax_id: string | null;
+      email: string | null;
+    };
+    if (!clientMetaById.has(client.id)) {
       clientMetaById.set(client.id, {
         display_name: client.display_name,
         tax_id: client.tax_id,
@@ -326,87 +666,127 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       });
     }
   }
-  stepStart = logPanelTiming('load_client_meta', stepStart);
+  for (const c of customersRes.data ?? []) {
+    const customer = c as {
+      id: string;
+      display_name: string;
+      tax_id: string | null;
+      email: string | null;
+    };
+    customerMetaById.set(customer.id, {
+      display_name: customer.display_name,
+      tax_id: customer.tax_id,
+      email: customer.email,
+    });
+  }
+  stepStart = logPanelTiming('load_client_and_customer_meta', stepStart);
 
-  const rows: IncomeClientDocumentManagementRow[] = stats
-    .map((stat) => {
-      const clientId = String(stat.represented_client_id);
-      const meta = clientMetaById.get(clientId);
-      const clientName = meta?.display_name ?? clientId;
-      // Backend-owned AB remaining sum from RPC (not original invoice total).
-      const unpaidRaw = Number(stat.unpaid_reference ?? 0);
-      const unpaidRef = Number.isFinite(unpaidRaw) && unpaidRaw > 0 ? unpaidRaw : null;
-      const currency = String(stat.currency || 'ILS');
-      const totalDocuments = Number(stat.total_documents_count) || 0;
-      const draftDocuments = Number(stat.draft_documents_count) || 0;
-      const lastDocumentDate =
-        typeof stat.last_document_date === 'string' ? stat.last_document_date : null;
-      const lastActivityAt =
-        typeof stat.last_activity_at === 'string' ? stat.last_activity_at : null;
-      return {
-        represented_client_id: clientId,
-        client_display_name: clientName,
-        client_logo_url: null,
-        client_initials: clientName.trim().slice(0, 2) || '—',
-        tax_id: meta?.tax_id ?? null,
-        email: meta?.email ?? null,
-        total_documents_count: totalDocuments,
-        quote_count: Number(stat.quote_count) || 0,
-        deal_count: Number(stat.deal_count) || 0,
-        tax_invoice_count: Number(stat.tax_invoice_count) || 0,
-        receipt_count: Number(stat.receipt_count) || 0,
-        credit_count: Number(stat.credit_count) || 0,
-        document_type_counters: buildDocumentTypeCounters(stat),
-        unpaid_amount_reference: unpaidRef,
-        unpaid_amount_display:
-          unpaidRef != null ? formatMoneyReference(unpaidRef, currency) : '—',
-        last_document_date: lastDocumentDate,
-        last_document_date_display: formatDateDisplay(lastDocumentDate),
-        last_activity_at: lastActivityAt,
-        last_activity_display: formatDateDisplay(lastActivityAt),
-        status_label:
-          totalDocuments > 0
-            ? unpaidRef != null
-              ? 'פתוח לגבייה'
-              : 'פעיל'
-            : draftDocuments > 0
-              ? 'טיוטות פעילות'
-              : 'פעיל',
-        actions: buildRowActions(clientId, params.perms, {
-          includeRetainerAction: params.includeRetainerAction,
-        }),
-      };
-    })
+  const statsByClientId = new Map<string, PanelStatRow>();
+  for (const stat of stats) {
+    const id = String(stat.represented_client_id ?? '').trim();
+    if (id) statsByClientId.set(id, stat);
+  }
+
+  const officeRows: IncomeClientDocumentManagementRow[] = mergeOfficeClientsWithDocumentStats(
+    officeClients,
+    statsByClientId,
+    (clientId) => zeroOfficeClientDocumentStat(clientId) as PanelStatRow,
+  )
+    .map(({ clientId, stat }) =>
+      buildOfficeClientRow({
+        stat,
+        meta: clientMetaById.get(clientId),
+        perms: params.perms,
+        includeRetainerAction: params.includeRetainerAction,
+      }),
+    )
     .sort((a, b) => a.client_display_name.localeCompare(b.client_display_name, 'he'));
+
+  const endCustomerRows: IncomeClientDocumentManagementRow[] = endCustomerStats
+    .map((stat) => {
+      const parentId = String(stat.represented_client_id);
+      return buildEndCustomerRow({
+        stat,
+        customerMeta: customerMetaById.get(String(stat.income_customer_id)),
+        parentDisplayName: clientMetaById.get(parentId)?.display_name ?? parentId,
+        perms: params.perms,
+        includeRetainerAction: params.includeRetainerAction,
+      });
+    })
+    .sort((a, b) => {
+      const parentCmp = (a.parent_client_display_name ?? '').localeCompare(
+        b.parent_client_display_name ?? '',
+        'he',
+      );
+      if (parentCmp !== 0) return parentCmp;
+      return a.client_display_name.localeCompare(b.client_display_name, 'he');
+    });
+
+  const endCustomerGroups = groupEndCustomerRowsByParent(
+    endCustomerRows.map((row) => ({
+      ...row,
+      parent_represented_client_id: row.parent_represented_client_id!,
+      parent_client_display_name: row.parent_client_display_name!,
+    })),
+  );
+
+  const office_clients_section: IncomeClientDocumentManagementSection = {
+    section_key: 'office_clients',
+    title: 'לקוחות המשרד',
+    total_count: officeRows.length,
+    rows: officeRows,
+    groups: null,
+    page: { limit: null, offset: 0, has_more: false },
+    empty_state: {
+      visible: officeRows.length === 0,
+      title: 'אין לקוחות במשרד',
+      description:
+        officeRows.length === 0 && (selfCounts.issued > 0 || selfCounts.drafts > 0)
+          ? 'מסמכים במצב עצמי (self) אינם מוצגים כאן. לקוחות המשרד מופיעים כאן לפי רשימת הלקוחות של הארגון.'
+          : 'הוסף לקוח למשרד כדי לראות אותו כאן עם מוני מסמכים ופעולות.',
+    },
+  };
+
+  const office_client_customers_section: IncomeClientDocumentManagementSection = {
+    section_key: 'office_client_customers',
+    title: 'לקוחות של לקוחות המשרד',
+    total_count: endCustomerRows.length,
+    rows: endCustomerRows,
+    groups: endCustomerGroups,
+    page: { limit: null, offset: 0, has_more: false },
+    empty_state: {
+      visible: endCustomerRows.length === 0,
+      title: 'אין עדיין לקוחות קצה עם מסמכים',
+      description:
+        'לאחר הפקת מסמך או שמירת טיוטה ללקוח קצה במצב נציג משרד — הוא יופיע כאן תחת לקוח המשרד.',
+    },
+  };
 
   logPanelTiming('TOTAL', aggregateStartMs);
   console.info(
-    `[income][client-document-panel][payload] clients=${rows.length} stats_rows=${stats.length}`,
+    `[income][client-document-panel][payload] office_clients=${officeRows.length} end_customers=${endCustomerRows.length}`,
   );
 
   return {
     aggregate_key: INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
     visible: true,
     title: 'ניהול מסמכים לפי לקוח',
-    description: 'לקוחות עם מסמכים שהונפקו או טיוטות פעילות במצב נציג משרד',
-    columns: [
-      { key: 'client', label: 'לקוח' },
-      { key: 'total_documents_count', label: 'מסמכים' },
-      { key: 'unpaid_amount_display', label: 'לא שולם' },
-      { key: 'last_document_date_display', label: 'מסמך אחרון' },
-      { key: 'last_activity_display', label: 'פעילות אחרונה' },
-      { key: 'status_label', label: 'סטטוס' },
-      { key: 'actions', label: '' },
-    ],
-    rows,
+    description:
+      'כל לקוחות המשרד, ולקוחות קצה עם מסמכים שהונפקו או טיוטות פעילות במצב נציג משרד',
+    columns: PANEL_COLUMNS,
+    rows: officeRows,
+    office_clients_section,
+    office_client_customers_section,
     report_catalog: REPORT_CATALOG,
     empty_state: {
-      visible: rows.length === 0,
-      title: 'אין עדיין לקוחות עם מסמכים',
+      visible: officeRows.length === 0 && endCustomerRows.length === 0,
+      title: 'אין לקוחות במשרד',
       description:
-        rows.length === 0 && (selfCounts.issued > 0 || selfCounts.drafts > 0)
-          ? 'מסמכים במצב עצמי (self) אינם מוצגים כאן. בחר לקוח במצב נציג משרד, צור טיוטה או הפק מסמך — והלקוח יופיע בשורה אחת.'
-          : 'לאחר הפקת מסמך או שמירת טיוטה עבור לקוח במצב נציג משרד — הוא יופיע כאן.',
+        officeRows.length === 0 &&
+        endCustomerRows.length === 0 &&
+        (selfCounts.issued > 0 || selfCounts.drafts > 0)
+          ? 'מסמכים במצב עצמי (self) אינם מוצגים כאן. לקוחות המשרד מופיעים כאן לפי רשימת הלקוחות של הארגון.'
+          : 'הוסף לקוח למשרד כדי להתחיל.',
     },
   };
 }

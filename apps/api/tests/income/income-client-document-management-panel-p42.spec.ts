@@ -35,6 +35,7 @@ const pureSource = readFileSync(
 
 test('P4.2 panel uses SQL RPC aggregation and does not hydrate 5000 document rows', () => {
   assert.match(panelSource, /income_client_document_management_panel_stats/);
+  assert.match(panelSource, /income_client_document_management_end_customer_stats/);
   assert.match(panelSource, /\.rpc\(/);
   assert.doesNotMatch(panelSource, /\.limit\(5000\)/);
   assert.doesNotMatch(panelSource, /totals_snapshot_json/);

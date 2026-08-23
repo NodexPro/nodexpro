@@ -1,0 +1,202 @@
+/**
+ * Dual-population invoices panel: office clients vs end customers.
+ */
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import {
+  endCustomerPopulationKey,
+  groupEndCustomerRowsByParent,
+  mergeOfficeClientsWithDocumentStats,
+  zeroOfficeClientDocumentStat,
+} from '../../src/domains/income/income-client-document-management-panel.pure.js';
+
+const dir = dirname(fileURLToPath(import.meta.url));
+const panelSource = readFileSync(
+  join(dir, '../../src/domains/income/income-client-document-management-panel.service.ts'),
+  'utf8',
+);
+const typesSource = readFileSync(
+  join(dir, '../../src/domains/income/income.types.ts'),
+  'utf8',
+);
+const invoicesTabSource = readFileSync(
+  join(dir, '../../src/domains/work-engine/work-engine-invoices-tab.read-model.service.ts'),
+  'utf8',
+);
+const migration165 = readFileSync(
+  join(dir, '../../../../supabase/migrations/165_income_client_document_management_end_customer_stats.sql'),
+  'utf8',
+);
+
+test('1 — office clients section is backend-defined and separate from end customers', () => {
+  assert.match(typesSource, /office_clients_section/);
+  assert.match(typesSource, /office_client_customers_section/);
+  assert.match(panelSource, /section_key: 'office_clients'/);
+  assert.match(panelSource, /section_key: 'office_client_customers'/);
+  assert.match(panelSource, /population_key: 'office_client'/);
+  assert.match(panelSource, /population_key: 'office_client_customer'/);
+});
+
+test('2/3 — end-customer rows carry explicit parent represented-client context', () => {
+  assert.match(typesSource, /parent_represented_client_id/);
+  assert.match(typesSource, /parent_client_display_name/);
+  assert.match(typesSource, /income_customer_id/);
+  assert.match(panelSource, /parent_represented_client_id: representedClientId/);
+  assert.match(panelSource, /income_customer_id: incomeCustomerId/);
+  assert.match(panelSource, /row_context/);
+});
+
+test('4 — dual identity key distinguishes same name under two parents', () => {
+  const a = endCustomerPopulationKey({
+    representedClientId: 'office-a',
+    incomeCustomerId: 'cust-same-name',
+  });
+  const b = endCustomerPopulationKey({
+    representedClientId: 'office-b',
+    incomeCustomerId: 'cust-same-name',
+  });
+  assert.notEqual(a, b);
+  assert.equal(a, 'office-a::cust-same-name');
+});
+
+test('5 — end-customer SQL stats group by parent + income_customer_id', () => {
+  assert.match(migration165, /group by oi\.client_id, oi\.income_customer_id/);
+  assert.match(migration165, /income_customer_id is not null/);
+  assert.match(migration165, /accounting_payment_allocations/);
+  assert.match(migration165, /income_document_credit_links/);
+  assert.match(panelSource, /income_client_document_management_end_customer_stats/);
+  assert.match(panelSource, /action_params/);
+});
+
+test('6 — direct office rows remain in backward-compatible rows list', () => {
+  assert.match(panelSource, /rows: officeRows/);
+  assert.match(typesSource, /Backward-compatible flat list = office_clients_section\.rows/);
+});
+
+test('7 — no FE inference hooks in panel service', () => {
+  assert.doesNotMatch(panelSource, /if \(.*name.*\)/);
+  assert.match(panelSource, /parentDisplayName: clientMetaById/);
+});
+
+test('8 — no N+1: both RPCs + meta loads are batched / parallel', () => {
+  assert.match(panelSource, /Promise\.all\(\[/);
+  assert.match(panelSource, /income_client_document_management_panel_stats/);
+  assert.match(panelSource, /income_client_document_management_end_customer_stats/);
+  assert.doesNotMatch(panelSource, /for \(.*of .*\) \{\s*await/);
+});
+
+test('9/11 — invoices tab still one composed read via panel builder', () => {
+  assert.match(invoicesTabSource, /buildIncomeClientDocumentManagementPanel/);
+  assert.match(invoicesTabSource, /Promise\.all\(/);
+  assert.equal((invoicesTabSource.match(/buildIncomeClientDocumentManagementPanel/g) ?? []).length, 2);
+});
+
+test('10 — permissions still gate visibility via issue_on_behalf', () => {
+  assert.match(panelSource, /perms\.issue_on_behalf/);
+  assert.match(panelSource, /emptyPanel\(false\)/);
+});
+
+test('grouping helper nests end customers under parent labels', () => {
+  const groups = groupEndCustomerRowsByParent([
+    {
+      parent_represented_client_id: 'p1',
+      parent_client_display_name: 'Parent One',
+      client_display_name: 'Cust B',
+    },
+    {
+      parent_represented_client_id: 'p1',
+      parent_client_display_name: 'Parent One',
+      client_display_name: 'Cust A',
+    },
+    {
+      parent_represented_client_id: 'p2',
+      parent_client_display_name: 'Parent Two',
+      client_display_name: 'Cust C',
+    },
+  ]);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].parent_represented_client_id, 'p1');
+  assert.equal(groups[0].total_customers, 2);
+  assert.equal(groups[1].parent_represented_client_id, 'p2');
+});
+
+test('end-customer actions omit branding / open_end_customers', () => {
+  assert.match(panelSource, /buildEndCustomerRowActions/);
+  const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
+  const endFnEnd = panelSource.indexOf('function formatMoneyReference');
+  const endFn = panelSource.slice(endFnStart, endFnEnd);
+  assert.doesNotMatch(endFn, /open_branding_studio/);
+  assert.doesNotMatch(endFn, /open_end_customers/);
+  assert.match(endFn, /open_income_ledger_card/);
+  assert.match(endFn, /end_customer_id: incomeCustomerId/);
+});
+
+test('A/B — office section starts from Core clients and left-joins stats (zero-doc clients included)', () => {
+  assert.match(panelSource, /\.from\('clients'\)/);
+  assert.match(panelSource, /is_archived',\s*false/);
+  assert.match(panelSource, /mergeOfficeClientsWithDocumentStats/);
+  assert.match(panelSource, /zeroOfficeClientDocumentStat/);
+  assert.doesNotMatch(
+    panelSource,
+    /const officeRows: IncomeClientDocumentManagementRow\[\] = stats\s*\.map/,
+  );
+});
+
+test('C — zeroOfficeClientDocumentStat yields all-zero counters', () => {
+  const z = zeroOfficeClientDocumentStat('client-zero');
+  assert.equal(z.represented_client_id, 'client-zero');
+  assert.equal(z.total_documents_count, 0);
+  assert.equal(z.draft_documents_count, 0);
+  assert.equal(z.quote_issued_count, 0);
+  assert.equal(z.deal_issued_count, 0);
+  assert.equal(z.tax_invoice_issued_count, 0);
+  assert.equal(z.tax_invoice_receipt_issued_count, 0);
+  assert.equal(z.receipt_issued_count, 0);
+  assert.equal(z.credit_issued_count, 0);
+  assert.equal(z.unpaid_reference, null);
+  assert.equal(z.last_document_date, null);
+});
+
+test('D — office actions still built via buildOfficeClientRowActions (backend-driven)', () => {
+  assert.match(panelSource, /buildOfficeClientRowActions\(/);
+  assert.match(panelSource, /actions: buildOfficeClientRowActions/);
+});
+
+test('E/F — populations stay separated (end customers from endCustomerStats only)', () => {
+  assert.match(panelSource, /const endCustomerRows: IncomeClientDocumentManagementRow\[\] = endCustomerStats/);
+  assert.match(panelSource, /section_key: 'office_clients'/);
+  assert.match(panelSource, /section_key: 'office_client_customers'/);
+  assert.match(panelSource, /population_key: 'office_client'/);
+  assert.match(panelSource, /population_key: 'office_client_customer'/);
+});
+
+test('mergeOfficeClientsWithDocumentStats includes clients missing from stats', () => {
+  const statsByClientId = new Map([
+    [
+      'with-docs',
+      {
+        represented_client_id: 'with-docs',
+        total_documents_count: 3,
+      },
+    ],
+  ]);
+  const merged = mergeOfficeClientsWithDocumentStats(
+    [{ id: 'with-docs' }, { id: 'zero-docs' }],
+    statsByClientId,
+    (id) => zeroOfficeClientDocumentStat(id),
+  );
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].clientId, 'with-docs');
+  assert.equal(merged[0].stat.total_documents_count, 3);
+  assert.equal(merged[1].clientId, 'zero-docs');
+  assert.equal(merged[1].stat.total_documents_count, 0);
+});
+
+test('J — no FE population inference hooks added for office membership', () => {
+  assert.doesNotMatch(panelSource, /shouldIncludeOfficeClient/);
+  assert.doesNotMatch(panelSource, /classifyPopulation/);
+  assert.match(panelSource, /Canonical ALL eligible office clients/);
+});
