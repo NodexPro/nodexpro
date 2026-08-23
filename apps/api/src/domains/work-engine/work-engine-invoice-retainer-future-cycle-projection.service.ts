@@ -17,6 +17,7 @@ import {
   buildIncomeDocumentDetailsStep,
   type IncomeWizardDraftRow,
 } from '../income/income-document-details-step.builders.js';
+import { buildIncomeDocumentPreviewToolbarActions } from '../income/income-document-preview-toolbar.pure.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 import { normalizeDraftLines } from '../income/income-document-draft-lines.pure.js';
 import {
@@ -653,7 +654,9 @@ export async function attachFutureCycleProjectionPreview(
       preview_html: preview.previewHtml,
       validation_messages: [],
       allowed_actions: ['preview_recurring_cycle_override'],
-      toolbar_actions: [],
+      toolbar_actions: buildIncomeDocumentPreviewToolbarActions({
+        previewReady: Boolean(preview.previewHtml?.trim()),
+      }),
       allocation_number_field: resolveProjectionAllocationNumberField(step),
     },
   };

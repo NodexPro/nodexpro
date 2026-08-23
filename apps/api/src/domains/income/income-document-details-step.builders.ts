@@ -52,6 +52,10 @@ import {
 import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
 import { totalsFromTotalsSnapshot } from './income-document-unified-render.pure.js';
 import type { IncomeDocumentBrandingProfileAggregate } from './income-document-branding.types.js';
+import {
+  buildIncomeDocumentPreviewToolbarActions,
+  type IncomeDocumentPreviewToolbarAction,
+} from './income-document-preview-toolbar.pure.js';
 import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById } from './income-recipient.service.js';
 import type { IncomeAvailableDocumentType, IncomeDocumentType } from './income.types.js';
 import {
@@ -424,12 +428,7 @@ export type IncomeDocumentPreviewPartyBlock = {
   contact_name?: string | null;
 };
 
-export type IncomeDocumentPreviewToolbarAction = {
-  action: string;
-  label: string;
-  enabled: boolean;
-  reason: string | null;
-};
+export type { IncomeDocumentPreviewToolbarAction } from './income-document-preview-toolbar.pure.js';
 
 export type IncomeDocumentPreviewModel = {
   visible: boolean;
@@ -447,14 +446,6 @@ export type IncomeDocumentPreviewModel = {
   toolbar_actions: IncomeDocumentPreviewToolbarAction[];
   allocation_number_field: import('./income-document-allocation-number.pure.js').IncomeDocumentAllocationNumberField;
 };
-
-function buildPreviewToolbarActions(): IncomeDocumentPreviewToolbarAction[] {
-  return [
-    { action: 'preview_export_pdf', label: 'PDF', enabled: false, reason: 'זמין לאחר הפקה' },
-    { action: 'preview_print', label: 'הדפסה', enabled: false, reason: 'זמין לאחר הפקה' },
-    { action: 'preview_download', label: 'הורדה', enabled: false, reason: 'זמין לאחר הפקה' },
-  ];
-}
 
 export type IncomeWizardDraftRow = {
   id: string;
@@ -1217,7 +1208,9 @@ export async function buildIncomeDocumentDetailsStep(
       allowed_actions: sessionActions.preview.enabled
         ? ['generate_income_document_preview']
         : [],
-      toolbar_actions: buildPreviewToolbarActions(),
+      toolbar_actions: buildIncomeDocumentPreviewToolbarActions({
+        previewReady: Boolean(previewGeneratedAt != null && previewHtml.trim()),
+      }),
       allocation_number_field: allocationNumberField,
     },
     draft_state_display: {
