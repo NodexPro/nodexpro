@@ -153,6 +153,7 @@ import {
   INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
   INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
   INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
+  INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT,
   INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT,
   type IncomeCommandResponse,
   type IncomeCommandType,
@@ -164,6 +165,7 @@ import {
   executeBeginEditIncomePreliminaryDocument,
   executeCancelIncomePreliminaryDocument,
   executeConvertIncomeDocumentToDraft,
+  executeReopenIncomePreliminaryDocument,
 } from './income-document-conversion.service.js';
 import {
   assertCreditDraftIdentityLocked,
@@ -211,6 +213,7 @@ const ALLOWED_COMMANDS = new Set<IncomeCommandType>([
   INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
   INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
   INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
+  INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT,
   INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT,
 ]);
 
@@ -911,6 +914,10 @@ export async function executeIncomeCommand(
 
   if (command === INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT) {
     return executeCancelIncomePreliminaryDocument(ctx, body);
+  }
+
+  if (command === INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT) {
+    return executeReopenIncomePreliminaryDocument(ctx, body);
   }
 
   if (command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT) {

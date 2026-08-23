@@ -335,6 +335,25 @@
   width: 100%;
 }
 
+.nx-we-documents-modal__row--muted td {
+  color: #6b7280;
+  opacity: 0.78;
+}
+
+.nx-we-documents-modal__status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1.25;
+}
+
+.nx-we-documents-modal__status-detail {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
 .nx-we-documents-modal__icon-btn {
   display: inline-flex;
   align-items: center;

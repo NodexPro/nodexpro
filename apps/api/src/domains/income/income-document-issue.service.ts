@@ -768,6 +768,7 @@ async function issueNewDocumentFromDraft(
     draftId: draft.id,
     issuedDocumentId: issuedId,
     actorUserId: scope.actor_user_id,
+    ctx,
   });
 
   await writeAudit({

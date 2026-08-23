@@ -55,6 +55,13 @@ import {
   type IncomeConversionSourceType,
   type IncomeConversionTargetType,
 } from './income-document-conversion.pure.js';
+import {
+  decideClosePreliminarySourceOnIssuedChild,
+  decideReopenPreliminaryDocument,
+  INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT,
+  resolvePreliminaryLifecycleState,
+} from './income-document-preliminary-lifecycle.pure.js';
+import { emitIncomeWorkEventAfterPreliminaryLifecycleChange } from './income-work-engine-bridge.js';
 
 type SourceDoc = {
   id: string;
@@ -78,13 +85,14 @@ type SourceDoc = {
   source_draft_id: string | null;
   legal_snapshot_json: Record<string, unknown> | null;
   totals_snapshot_json: Record<string, unknown> | null;
+  preliminary_lifecycle_state: string | null;
 };
 
 async function loadSourceDocument(orgId: string, documentId: string): Promise<SourceDoc> {
   const { data, error } = await supabaseAdmin
     .from('income_documents')
     .select(
-      'id, organization_id, represented_client_id, issuer_business_id, acting_mode, document_type, document_status, document_number, income_customer_id, customer_snapshot_json, currency, language, notes, issue_date, due_date, lines_snapshot_json, tax_allocation_number, customer_po_reference, source_draft_id, legal_snapshot_json, totals_snapshot_json',
+      'id, organization_id, represented_client_id, issuer_business_id, acting_mode, document_type, document_status, document_number, income_customer_id, customer_snapshot_json, currency, language, notes, issue_date, due_date, lines_snapshot_json, tax_allocation_number, customer_po_reference, source_draft_id, legal_snapshot_json, totals_snapshot_json, preliminary_lifecycle_state',
     )
     .eq('organization_id', orgId)
     .eq('id', documentId)
@@ -136,6 +144,7 @@ export async function linkIncomeDocumentConversionTargetOnIssue(params: {
   draftId: string;
   issuedDocumentId: string;
   actorUserId: string;
+  ctx?: RequestContext;
 }): Promise<void> {
   const { data, error } = await supabaseAdmin
     .from('income_document_conversions')
@@ -158,7 +167,17 @@ export async function linkIncomeDocumentConversionTargetOnIssue(params: {
     conversionRow: row,
     issuedDocumentId: params.issuedDocumentId,
   });
-  if (decision.action === 'noop' || decision.action === 'idempotent') return;
+  if (decision.action === 'noop') return;
+  if (decision.action === 'idempotent') {
+    await closePreliminarySourceAfterDownstreamIssued({
+      orgId: params.orgId,
+      sourceDocumentId: row!.source_document_id,
+      downstreamDocumentId: params.issuedDocumentId,
+      actorUserId: params.actorUserId,
+      ctx: params.ctx,
+    });
+    return;
+  }
   if (decision.action === 'conflict') {
     await writeAudit({
       organizationId: params.orgId,
@@ -222,6 +241,14 @@ export async function linkIncomeDocumentConversionTargetOnIssue(params: {
       cancel_lineage_rule: CANCEL_SOURCE_CONVERSION_LINEAGE_RULE,
     },
   });
+
+  await closePreliminarySourceAfterDownstreamIssued({
+    orgId: params.orgId,
+    sourceDocumentId: row!.source_document_id,
+    downstreamDocumentId: params.issuedDocumentId,
+    actorUserId: params.actorUserId,
+    ctx: params.ctx,
+  });
 }
 
 async function findConversionByIdempotency(orgId: string, key: string) {
@@ -272,7 +299,8 @@ async function buildConversionCommandResponse(params: {
   command:
     | typeof INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT
     | typeof INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT
-    | typeof INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT;
+    | typeof INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT
+    | typeof INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT;
   source: SourceDoc;
   draftId: string | null;
   replay: boolean;
@@ -498,6 +526,14 @@ export async function executeBeginEditIncomePreliminaryDocument(
   if (source.document_status !== 'issued') {
     throw badRequest('Document cannot be edited');
   }
+  const editLifecycle = resolvePreliminaryLifecycleState({
+    documentType: source.document_type,
+    documentStatus: source.document_status,
+    storedLifecycle: source.preliminary_lifecycle_state,
+  });
+  if (editLifecycle === 'closed') {
+    throw badRequest('Closed preliminary documents must be reopened before edit');
+  }
   if (!source.represented_client_id) {
     throw badRequest('Edit requires office represented client');
   }
@@ -697,6 +733,14 @@ export async function executeConvertIncomeDocumentToDraft(
   }
   if (source.document_status !== 'issued') {
     throw badRequest('Cancelled or inactive documents cannot be converted');
+  }
+  const sourceLifecycle = resolvePreliminaryLifecycleState({
+    documentType: source.document_type,
+    documentStatus: source.document_status,
+    storedLifecycle: source.preliminary_lifecycle_state,
+  });
+  if (sourceLifecycle === 'closed') {
+    throw badRequest('Closed preliminary documents must be reopened before conversion');
   }
   if (!source.represented_client_id) {
     throw badRequest('Conversion requires office represented client');
@@ -921,6 +965,14 @@ export async function executeCancelIncomePreliminaryDocument(
       documentsListYear,
     });
   }
+  const cancelLifecycle = resolvePreliminaryLifecycleState({
+    documentType: source.document_type,
+    documentStatus: source.document_status,
+    storedLifecycle: source.preliminary_lifecycle_state,
+  });
+  if (cancelLifecycle === 'closed') {
+    throw badRequest('Closed preliminary documents must be reopened before cancel');
+  }
   if (source.document_status !== 'issued') {
     throw badRequest('Document cannot be cancelled');
   }
@@ -977,6 +1029,218 @@ export async function executeCancelIncomePreliminaryDocument(
     ctx,
     command: INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
     source: cancelled,
+    draftId: null,
+    replay: false,
+    documentsListYear,
+  });
+}
+
+/**
+ * After a conversion draft is issued: mark quote/deal source as closed (idempotent).
+ * Does not change document number or delete conversion lineage.
+ */
+export async function closePreliminarySourceAfterDownstreamIssued(params: {
+  orgId: string;
+  sourceDocumentId: string;
+  downstreamDocumentId: string;
+  actorUserId: string;
+  ctx?: RequestContext;
+}): Promise<void> {
+  const source = await loadSourceDocument(params.orgId, params.sourceDocumentId);
+  const currentLifecycle = resolvePreliminaryLifecycleState({
+    documentType: source.document_type,
+    documentStatus: source.document_status,
+    storedLifecycle: source.preliminary_lifecycle_state,
+  });
+  const decision = decideClosePreliminarySourceOnIssuedChild({
+    sourceDocumentType: source.document_type,
+    sourceDocumentStatus: source.document_status,
+    currentLifecycle,
+    downstreamDocumentId: params.downstreamDocumentId,
+  });
+  if (decision.action === 'noop' || decision.action === 'idempotent') {
+    if (decision.action === 'idempotent') {
+      // Keep closed pointer fresh when a newer child issues while already closed.
+      await supabaseAdmin
+        .from('income_documents')
+        .update({
+          preliminary_closed_by_downstream_document_id: params.downstreamDocumentId,
+        })
+        .eq('organization_id', params.orgId)
+        .eq('id', source.id)
+        .eq('preliminary_lifecycle_state', 'closed');
+    }
+    return;
+  }
+
+  const closedAt = new Date().toISOString();
+  const { error } = await supabaseAdmin
+    .from('income_documents')
+    .update({
+      preliminary_lifecycle_state: 'closed',
+      preliminary_closed_at: closedAt,
+      preliminary_closed_by_downstream_document_id: params.downstreamDocumentId,
+    })
+    .eq('organization_id', params.orgId)
+    .eq('id', source.id)
+    .eq('document_status', 'issued')
+    .or('preliminary_lifecycle_state.is.null,preliminary_lifecycle_state.eq.open');
+  throwIfSupabaseError(error, 'closePreliminarySourceAfterDownstreamIssued', {
+    migrationHint: '164_income_preliminary_document_lifecycle_open_closed.sql',
+  });
+
+  const { data: downstream, error: downErr } = await supabaseAdmin
+    .from('income_documents')
+    .select('id, document_number, document_type')
+    .eq('organization_id', params.orgId)
+    .eq('id', params.downstreamDocumentId)
+    .maybeSingle();
+  throwIfSupabaseError(downErr, 'loadDownstreamForPreliminaryCloseAudit');
+  const down = downstream as {
+    id: string;
+    document_number: string | null;
+    document_type: string;
+  } | null;
+
+  await writeAudit({
+    organizationId: params.orgId,
+    actorUserId: params.actorUserId,
+    moduleCode: 'income',
+    entityType: 'income_document',
+    entityId: source.id,
+    action: AUDIT_ACTIONS.INCOME_PRELIMINARY_DOCUMENT_CLOSED,
+    payload: {
+      source_document_id: source.id,
+      source_document_type: source.document_type,
+      source_document_number: source.document_number,
+      downstream_document_id: params.downstreamDocumentId,
+      downstream_document_type: down?.document_type ?? null,
+      downstream_document_number: down?.document_number ?? null,
+      triggering_command: 'issue_income_document',
+      closed_at: closedAt,
+    },
+  });
+
+  void emitIncomeWorkEventAfterPreliminaryLifecycleChange({
+    orgId: params.orgId,
+    actorUserId: params.actorUserId,
+    incomeDocumentId: source.id,
+    documentType: source.document_type,
+    documentNumber: source.document_number,
+    representedClientId: source.represented_client_id,
+    eventKey: 'income.preliminary_document_closed',
+    downstreamDocumentId: params.downstreamDocumentId,
+    ctx: params.ctx,
+  }).catch(() => {
+    /* bridge must not block issue */
+  });
+}
+
+export async function executeReopenIncomePreliminaryDocument(
+  ctx: RequestContext,
+  body: Record<string, unknown>,
+): Promise<IncomeCommandResponse> {
+  const orgId = ctx.organizationId!;
+  if (!orgId) throw forbidden('Organization context required');
+
+  const documentId = String(body.income_document_id ?? body.source_document_id ?? '').trim();
+  if (!documentId) throw badRequest('income_document_id required');
+  const reason = String(body.reason ?? '').trim() || null;
+
+  const documentsListYearRaw = body.documents_list_year;
+  const documentsListYear =
+    documentsListYearRaw == null || documentsListYearRaw === ''
+      ? null
+      : Number(documentsListYearRaw);
+
+  const source = await loadSourceDocument(orgId, documentId);
+  const lifecycleState = resolvePreliminaryLifecycleState({
+    documentType: source.document_type,
+    documentStatus: source.document_status,
+    storedLifecycle: source.preliminary_lifecycle_state,
+  });
+  const decision = decideReopenPreliminaryDocument({
+    documentType: source.document_type,
+    documentStatus: source.document_status,
+    lifecycleState,
+    reason,
+  });
+  if (decision.action === 'reject') {
+    throw badRequest(decision.message, decision.code);
+  }
+  if (!source.represented_client_id) {
+    throw badRequest('Reopen requires office represented client');
+  }
+
+  await applyOfficialIncomeIssuerContext(
+    ctx,
+    {
+      acting_mode: 'office_representative',
+      issuer_business_id: source.represented_client_id,
+      represented_client_id: source.represented_client_id,
+    },
+    { source: INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT },
+  );
+  const scope = await loadActiveIncomeIssuerScope(ctx);
+  assertIncomeEditPermission(scope);
+
+  const reopenedAt = new Date().toISOString();
+  const { error } = await supabaseAdmin
+    .from('income_documents')
+    .update({
+      preliminary_lifecycle_state: 'open',
+      preliminary_reopened_at: reopenedAt,
+      preliminary_reopened_by_user_id: ctx.user.id,
+      preliminary_reopen_reason: reason,
+    })
+    .eq('organization_id', orgId)
+    .eq('id', source.id)
+    .eq('document_status', 'issued')
+    .eq('preliminary_lifecycle_state', 'closed');
+  throwIfSupabaseError(error, 'reopenPreliminaryDocument', {
+    migrationHint: '164_income_preliminary_document_lifecycle_open_closed.sql',
+  });
+
+  const reopened = {
+    ...source,
+    preliminary_lifecycle_state: 'open',
+  };
+
+  await writeAudit({
+    organizationId: orgId,
+    actorUserId: ctx.user.id,
+    moduleCode: 'income',
+    entityType: 'income_document',
+    entityId: source.id,
+    action: AUDIT_ACTIONS.INCOME_PRELIMINARY_DOCUMENT_REOPENED,
+    payload: {
+      document_id: source.id,
+      document_type: source.document_type,
+      document_number: source.document_number,
+      reason,
+      reopened_at: reopenedAt,
+      represented_client_id: source.represented_client_id,
+    },
+  });
+
+  void emitIncomeWorkEventAfterPreliminaryLifecycleChange({
+    orgId,
+    actorUserId: ctx.user.id,
+    incomeDocumentId: source.id,
+    documentType: source.document_type,
+    documentNumber: source.document_number,
+    representedClientId: source.represented_client_id,
+    eventKey: 'income.preliminary_document_reopened',
+    reason,
+    ctx,
+  }).catch(() => {
+    /* bridge must not block reopen */
+  });
+
+  return buildConversionCommandResponse({
+    ctx,
+    command: INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT,
+    source: reopened,
     draftId: null,
     replay: false,
     documentsListYear,

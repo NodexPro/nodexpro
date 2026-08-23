@@ -43,6 +43,8 @@ import {
   INCOME_WORK_EVENT_DOCUMENT_SENT_BY_DOCFLOW,
   INCOME_WORK_EVENT_DUE_DATE_SET,
   INCOME_WORK_EVENT_OVERDUE,
+  INCOME_WORK_EVENT_PRELIMINARY_DOCUMENT_CLOSED,
+  INCOME_WORK_EVENT_PRELIMINARY_DOCUMENT_REOPENED,
   INCOME_WORK_EVENTS_DEFERRED,
   amountReferenceFromTotalsSnapshot,
   customerDisplayFromSnapshot,
@@ -431,4 +433,66 @@ export async function scanAndEmitIncomeInvoiceOverdueForOrg(
   }
 
   return { scanned, emitted, pages, eligible };
+}
+
+/**
+ * Preliminary open/closed lifecycle → Work Engine intake only (no work_items writes).
+ * Close may run from issue without a full RequestContext; use docflow_portal_trust path.
+ */
+export async function emitIncomeWorkEventAfterPreliminaryLifecycleChange(params: {
+  orgId: string;
+  actorUserId: string;
+  incomeDocumentId: string;
+  documentType: string;
+  documentNumber: string | null;
+  representedClientId: string | null;
+  eventKey: 'income.preliminary_document_closed' | 'income.preliminary_document_reopened';
+  downstreamDocumentId?: string;
+  reason?: string | null;
+  ctx?: RequestContext;
+}): Promise<void> {
+  const clientId = resolveIncomeWorkEngineClientId(params.representedClientId);
+  if (!clientId) return;
+
+  const eventType =
+    params.eventKey === 'income.preliminary_document_closed'
+      ? INCOME_WORK_EVENT_PRELIMINARY_DOCUMENT_CLOSED
+      : INCOME_WORK_EVENT_PRELIMINARY_DOCUMENT_REOPENED;
+
+  const body = {
+    org_id: params.orgId,
+    client_id: clientId,
+    source_module: INCOME_WORK_ENGINE_SOURCE_MODULE,
+    source_entity_type: INCOME_WORK_ENGINE_ENTITY_TYPE,
+    source_entity_id: params.incomeDocumentId,
+    event_type: eventType,
+    period_key: incomeDocumentPeriodKey(new Date().toISOString().slice(0, 10)),
+    occurred_at: new Date().toISOString(),
+    schema_version: INCOME_WORK_ENGINE_SCHEMA_VERSION,
+    emitted_by_type: 'system' as const,
+    emitted_by_id: null,
+    payload: {
+      document_number: params.documentNumber,
+      document_type: params.documentType,
+      downstream_document_id: params.downstreamDocumentId ?? null,
+      reason: params.reason ?? null,
+    },
+  };
+
+  try {
+    if (params.ctx) {
+      await intakeWorkEvent({ kind: 'office_request', ctx: params.ctx }, body);
+    } else {
+      await intakeWorkEvent(
+        {
+          kind: 'docflow_portal_trust',
+          orgId: params.orgId,
+          auditActorUserId: params.actorUserId,
+        },
+        body,
+      );
+    }
+  } catch {
+    // Bridge must never fail Income lifecycle transitions.
+  }
 }

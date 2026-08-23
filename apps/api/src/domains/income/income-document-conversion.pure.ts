@@ -411,6 +411,7 @@ export function buildConversionTargetOptions(params: {
   sourceType: string;
   sourceStatus: string;
   canEdit: boolean;
+  lifecycleState?: 'open' | 'closed' | null;
 }): IncomeConversionTargetOption[] {
   const targets = allowedConversionTargetsForSource(params.sourceType);
   return targets.map((document_type) => {
@@ -419,6 +420,9 @@ export function buildConversionTargetOptions(params: {
     if (params.sourceStatus !== 'issued') {
       enabled = false;
       disabled_reason = 'ניתן להמיר רק מסמך פעיל';
+    } else if (params.lifecycleState === 'closed') {
+      enabled = false;
+      disabled_reason = 'המסמך סגור — יש לפתוח מחדש לפני הפקה';
     } else if (!params.canEdit) {
       enabled = false;
       disabled_reason = 'אין הרשאת עריכה';
@@ -510,6 +514,7 @@ export function isPreliminaryEditableType(type: string): boolean {
 export function buildPreliminaryEditAction(params: {
   sourceStatus: string;
   canEdit: boolean;
+  lifecycleState?: 'open' | 'closed' | null;
 }): {
   enabled: boolean;
   label: string;
@@ -521,6 +526,9 @@ export function buildPreliminaryEditAction(params: {
   if (params.sourceStatus === 'cancelled_future') {
     enabled = false;
     disabled_reason = 'המסמך מבוטל ואינו ניתן לעריכה';
+  } else if (params.lifecycleState === 'closed') {
+    enabled = false;
+    disabled_reason = 'המסמך סגור — יש לפתוח מחדש לפני עריכה';
   } else if (params.sourceStatus !== 'issued') {
     enabled = false;
     disabled_reason = 'ניתן לערוך רק מסמך פעיל';

@@ -103,6 +103,16 @@ export interface IncomeClientDocumentTypeCounter {
 }
 
 
+export interface WorkEngineDocumentReopenAction {
+  enabled: boolean;
+  label: string;
+  command: 'reopen_income_preliminary_document';
+  reason_required: true;
+  confirmation_title: string;
+  confirmation_body: string;
+  disabled_reason: string | null;
+}
+
 export interface WorkEngineDocumentCreditAction {
   visible: true;
   enabled: boolean;
@@ -133,6 +143,17 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   email_delivery: IncomeDocumentEmailDeliveryBlock | null;
   docflow_delivery: IncomeDocumentDocflowDeliveryBlock | null;
   credit_action?: WorkEngineDocumentCreditAction | null;
+  reopen_action?: WorkEngineDocumentReopenAction | null;
+  lifecycle_state?: 'open' | 'closed' | null;
+  lifecycle_label?: string | null;
+  status_detail?: string | null;
+  linked_document?: {
+    document_id: string;
+    document_number: string;
+    document_type: string;
+    document_type_label: string;
+  } | null;
+  row_visual_state?: 'muted' | null;
 }
 
 export interface WorkEngineInvoicesClientDocumentsByTypeAggregate {

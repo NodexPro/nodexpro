@@ -21,6 +21,8 @@ export const INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT =
   'cancel_income_preliminary_document' as const;
 export const INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT =
   'begin_edit_income_preliminary_document' as const;
+export const INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT =
+  'reopen_income_preliminary_document' as const;
 export const INCOME_COMMAND_ISSUE_DOCUMENT = 'issue_income_document' as const;
 export const INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT = 'issue_and_send_income_document' as const;
 export const INCOME_COMMAND_SEARCH_RECIPIENTS = 'search_income_recipients' as const;
@@ -425,6 +427,16 @@ export interface WorkEngineDocumentCancelAction {
   disabled_reason: string | null;
 }
 
+export interface WorkEngineDocumentReopenAction {
+  enabled: boolean;
+  label: string;
+  command: typeof INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT;
+  reason_required: true;
+  confirmation_title: string;
+  confirmation_body: string;
+  disabled_reason: string | null;
+}
+
 export interface WorkEngineDocumentEditAction {
   enabled: boolean;
   label: string;
@@ -473,9 +485,23 @@ export interface WorkEngineInvoicesClientDocumentsByTypeRow {
   convert_action: WorkEngineDocumentConvertAction | null;
   /** Backend-owned cancel for quote / deal_invoice only (never tax). */
   cancel_action: WorkEngineDocumentCancelAction | null;
+  /** Backend-owned reopen for closed quote / deal_invoice only. */
+  reopen_action: WorkEngineDocumentReopenAction | null;
   /** Backend-owned tax-invoice credit (new credit_tax_invoice). Never mutates the invoice. */
   credit_action: WorkEngineDocumentCreditAction | null;
   conversion_state_key: 'active' | 'converted' | 'partially_converted' | 'cancelled' | null;
+  /** Preliminary lifecycle (quote/deal only). Null for tax/receipt/credit/drafts. */
+  lifecycle_state: 'open' | 'closed' | null;
+  lifecycle_label: string | null;
+  status_detail: string | null;
+  linked_document: {
+    document_id: string;
+    document_number: string;
+    document_type: string;
+    document_type_label: string;
+  } | null;
+  /** Backend visual hint for closed preliminary rows (do not infer on FE). */
+  row_visual_state: 'muted' | null;
   allowed_actions: string[];
 }
 
@@ -915,6 +941,7 @@ export type IncomeCommandType =
   | typeof INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT
   | typeof INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT
   | typeof INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT
+  | typeof INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT
   | typeof INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT;
 
 export interface IncomeCommandResponseMeta {

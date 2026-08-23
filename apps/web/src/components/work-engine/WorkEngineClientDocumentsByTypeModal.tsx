@@ -78,11 +78,29 @@ type DocumentCancelAction = {
   reason_required: boolean;
 };
 
+type DocumentReopenAction = {
+  enabled: boolean;
+  label: string;
+  command: 'reopen_income_preliminary_document';
+  disabled_reason: string | null;
+  confirmation_title: string;
+  confirmation_body: string;
+  reason_required: true;
+};
+
 function cancelActionOf(
   row: WorkEngineInvoicesClientDocumentsByTypeRow,
 ): DocumentCancelAction | null {
   const action = (row as { cancel_action?: DocumentCancelAction | null }).cancel_action;
   if (!action || action.command !== 'cancel_income_preliminary_document') return null;
+  return action;
+}
+
+function reopenActionOf(
+  row: WorkEngineInvoicesClientDocumentsByTypeRow,
+): DocumentReopenAction | null {
+  const action = (row as { reopen_action?: DocumentReopenAction | null }).reopen_action;
+  if (!action || action.command !== 'reopen_income_preliminary_document') return null;
   return action;
 }
 
@@ -139,6 +157,13 @@ export function WorkEngineClientDocumentsByTypeModal({
     action: DocumentCancelAction;
   } | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [reopenTarget, setReopenTarget] = useState<{
+    documentId: string;
+    documentNumber: string | null;
+    documentTypeLabel: string | null;
+    action: DocumentReopenAction;
+  } | null>(null);
+  const [reopenReason, setReopenReason] = useState('');
 
   const loadAggregate = useCallback(
     async (year?: number | null) => {
@@ -169,6 +194,8 @@ export function WorkEngineClientDocumentsByTypeModal({
       setSelectedConvertDocumentType(null);
       setCancelTarget(null);
       setCancelReason('');
+      setReopenTarget(null);
+      setReopenReason('');
       return;
     }
     void loadAggregate();
@@ -257,6 +284,11 @@ export function WorkEngineClientDocumentsByTypeModal({
     setCancelReason('');
   };
 
+  const clearReopenModal = () => {
+    setReopenTarget(null);
+    setReopenReason('');
+  };
+
   const handleConfirmConvert = async () => {
     if (!convertTarget?.row.document_id || !convertTarget.action.enabled) return;
     const selectedTarget = convertTarget.action.targets.find(
@@ -331,6 +363,34 @@ export function WorkEngineClientDocumentsByTypeModal({
     }
   };
 
+  const handleConfirmReopen = async () => {
+    if (!reopenTarget?.action.enabled) return;
+    if (reopenTarget.action.reason_required && !reopenReason.trim()) return;
+    onBusyChange?.(true);
+    try {
+      const raw = await executeIncomeCommand(reopenTarget.action.command, {
+        income_document_id: reopenTarget.documentId,
+        reason: reopenReason.trim(),
+        documents_list_year: aggregate?.selected_year ?? null,
+      });
+      if (typeof raw !== 'object' || raw == null || !('ok' in raw)) return;
+      const res = raw as {
+        work_engine_invoices_client_documents_by_type_aggregate?: WorkEngineInvoicesClientDocumentsByTypeAggregate;
+        work_engine_invoices_tab_aggregate?: Record<string, unknown>;
+      };
+      const list = res.work_engine_invoices_client_documents_by_type_aggregate;
+      if (list) setAggregate(list);
+      if (res.work_engine_invoices_tab_aggregate) {
+        onInvoicesTabRefresh?.(res.work_engine_invoices_tab_aggregate);
+      }
+      clearReopenModal();
+    } catch (e) {
+      onError?.(e instanceof Error ? e.message : String(e));
+    } finally {
+      onBusyChange?.(false);
+    }
+  };
+
   if (!open || !params) return null;
 
   const title = `מסמכים — ${params.documentTypeLabel} — ${params.clientDisplayName}`;
@@ -389,16 +449,39 @@ export function WorkEngineClientDocumentsByTypeModal({
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <tr key={row.row_id}>
+                    <tr
+                      key={row.row_id}
+                      className={
+                        row.row_visual_state === 'muted'
+                          ? 'nx-we-documents-modal__row nx-we-documents-modal__row--muted'
+                          : undefined
+                      }
+                    >
                       {columns.map((col) => {
+                        if (col.key === 'status_label' || col.key === 'status') {
+                          return (
+                            <td key={col.key}>
+                              <div className="nx-we-documents-modal__status-cell">
+                                <span>{row.status_label || '—'}</span>
+                                {row.status_detail ? (
+                                  <span className="nx-we-documents-modal__status-detail">
+                                    {row.status_detail}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </td>
+                          );
+                        }
                         if (col.key === 'actions') {
                           const hasDedicatedViewColumn = columns.some((column) => column.key === 'view');
                           const creditAction = row.credit_action ?? null;
                           const convertAction = convertActionOf(row);
                           const cancelAction = cancelActionOf(row);
+                          const reopenAction = reopenActionOf(row);
                           const showCredit = Boolean(creditAction);
                           const showConvert = Boolean(convertAction);
                           const showCancel = Boolean(cancelAction);
+                          const showReopen = Boolean(reopenAction);
                           const showView =
                             !hasDedicatedViewColumn && Boolean(row.can_view_document);
                           return (
@@ -441,6 +524,7 @@ export function WorkEngineClientDocumentsByTypeModal({
                                       aria-label={cancelAction.label}
                                       onClick={() => {
                                         if (!row.document_id) return;
+                                        clearReopenModal();
                                         setCancelReason('');
                                         setCancelTarget({
                                           documentId: row.document_id,
@@ -455,6 +539,43 @@ export function WorkEngineClientDocumentsByTypeModal({
                                           stroke="currentColor"
                                           strokeWidth="1.8"
                                           strokeLinecap="round"
+                                        />
+                                      </svg>
+                                    </button>
+                                  ) : null}
+                                  {showReopen && reopenAction ? (
+                                    <button
+                                      type="button"
+                                      className="nx-we-documents-modal__icon-btn"
+                                      disabled={busy || loading || !reopenAction.enabled}
+                                      title={reopenAction.disabled_reason ?? reopenAction.label}
+                                      aria-label={reopenAction.label}
+                                      onClick={() => {
+                                        if (!row.document_id) return;
+                                        clearCancelModal();
+                                        setReopenReason('');
+                                        setReopenTarget({
+                                          documentId: row.document_id,
+                                          documentNumber: row.document_number,
+                                          documentTypeLabel: row.document_type_label,
+                                          action: reopenAction,
+                                        });
+                                      }}
+                                    >
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                        <path
+                                          d="M3 12a9 9 0 0 1 15.5-6.4M21 3v6h-6"
+                                          stroke="currentColor"
+                                          strokeWidth="1.8"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                        />
+                                        <path
+                                          d="M21 12a9 9 0 0 1-15.5 6.4M3 21v-6h6"
+                                          stroke="currentColor"
+                                          strokeWidth="1.8"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
                                         />
                                       </svg>
                                     </button>
@@ -718,7 +839,7 @@ export function WorkEngineClientDocumentsByTypeModal({
       ) : null}
 
       {/* Cancel confirm mounts only on explicit cancel click — never under convert/wizard. */}
-      {cancelTarget && !convertTarget ? (
+      {cancelTarget && !convertTarget && !reopenTarget ? (
         <div className="nx-modal-overlay nx-modal-overlay--nested" role="dialog" aria-modal="true">
           <div className="nx-modal nx-owner-legal-command-modal">
             <div className="nx-modal-header">
@@ -765,6 +886,61 @@ export function WorkEngineClientDocumentsByTypeModal({
                 onClick={() => void handleConfirmCancel()}
               >
                 אישור ביטול
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {reopenTarget && !convertTarget && !cancelTarget ? (
+        <div className="nx-modal-overlay nx-modal-overlay--nested" role="dialog" aria-modal="true">
+          <div className="nx-modal nx-owner-legal-command-modal">
+            <div className="nx-modal-header">
+              <h2>{reopenTarget.action.confirmation_title}</h2>
+            </div>
+            <div className="nx-modal-body">
+              <p>{reopenTarget.action.confirmation_body}</p>
+              {(reopenTarget.documentTypeLabel || reopenTarget.documentNumber) ? (
+                <p>
+                  מסמך:{' '}
+                  <strong>
+                    {[reopenTarget.documentTypeLabel, reopenTarget.documentNumber]
+                      .filter(Boolean)
+                      .join(' ')}
+                  </strong>
+                </p>
+              ) : null}
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                סיבת פתיחה מחדש (חובה)
+                <input
+                  value={reopenReason}
+                  onChange={(e) => setReopenReason(e.target.value)}
+                  disabled={busy}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    border: '1px solid #d1d5db',
+                    fontSize: 14,
+                  }}
+                />
+              </label>
+            </div>
+            <div className="nx-modal-footer nx-tax-nested-modal-footer">
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                disabled={busy}
+                onClick={clearReopenModal}
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact nx-btn-primary"
+                disabled={busy || !reopenReason.trim()}
+                onClick={() => void handleConfirmReopen()}
+              >
+                פתיחה מחדש
               </button>
             </div>
           </div>
