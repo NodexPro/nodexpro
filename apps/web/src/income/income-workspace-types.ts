@@ -60,8 +60,27 @@ export interface IncomeClientDocumentManagementRowAction {
   disabled_reason: string | null;
 }
 
-export interface IncomeClientDocumentManagementRow {
+
+export type IncomeClientDocumentManagementPopulationKey =
+  | 'office_client'
+  | 'office_client_customer';
+
+export interface IncomeClientDocumentManagementRowContext {
+  population_key: IncomeClientDocumentManagementPopulationKey;
+  acting_mode: 'office_representative';
+  issuer_business_id: string;
   represented_client_id: string;
+  income_customer_id: string | null;
+}
+
+export interface IncomeClientDocumentManagementRow {
+  /** Backend population identity; optional for legacy aggregates. */
+  population_key?: IncomeClientDocumentManagementPopulationKey;
+  represented_client_id: string;
+  /** End customer id when population_key = office_client_customer; otherwise null/omitted. */
+  income_customer_id?: string | null;
+  parent_represented_client_id?: string | null;
+  parent_client_display_name?: string | null;
   client_display_name: string;
   client_logo_url: string | null;
   client_initials: string;
@@ -82,6 +101,34 @@ export interface IncomeClientDocumentManagementRow {
   last_activity_display: string;
   status_label: string;
   actions: IncomeClientDocumentManagementRowAction[];
+  row_context?: IncomeClientDocumentManagementRowContext;
+}
+
+export interface IncomeClientDocumentManagementCustomerGroup {
+  parent_represented_client_id: string;
+  parent_client_display_name: string;
+  total_customers: number;
+  rows: IncomeClientDocumentManagementRow[];
+}
+
+export interface IncomeClientDocumentManagementSectionPage {
+  limit: number | null;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface IncomeClientDocumentManagementSection {
+  section_key: 'office_clients' | 'office_client_customers';
+  title: string;
+  total_count: number;
+  rows: IncomeClientDocumentManagementRow[];
+  groups: IncomeClientDocumentManagementCustomerGroup[] | null;
+  page: IncomeClientDocumentManagementSectionPage;
+  empty_state: {
+    visible: boolean;
+    title: string;
+    description: string | null;
+  };
 }
 
 export type IncomeClientDocumentTypeCounterKey =
@@ -100,6 +147,11 @@ export interface IncomeClientDocumentTypeCounter {
   tone: string;
   tooltip_label: string;
   action_key: 'open_documents_by_type';
+  /** Backend-ready open context; FE must not invent parent/customer linkage. */
+  action_params?: {
+    represented_client_id: string;
+    income_customer_id: string | null;
+  };
 }
 
 
@@ -722,7 +774,13 @@ export interface IncomeClientDocumentManagementPanel {
   title: string;
   description: string | null;
   columns: Array<{ key: string; label: string }>;
+  /**
+   * Legacy flat list = office_clients_section.rows only.
+   * Dual-population UI must use the explicit sections below.
+   */
   rows: IncomeClientDocumentManagementRow[];
+  office_clients_section: IncomeClientDocumentManagementSection;
+  office_client_customers_section: IncomeClientDocumentManagementSection;
   report_catalog: IncomeClientDocumentManagementReportItem[];
   empty_state: {
     visible: boolean;
@@ -864,6 +922,83 @@ export interface IncomeClientIncomeLedgerCardAggregate {
 }
 
 /** Safe fallback when backend aggregate predates client_document_management_panel. */
+const EMPTY_CDM_SECTION_PAGE = { limit: null, offset: 0, has_more: false } as const;
+
+function emptyOfficeClientsSection(
+  rows: IncomeClientDocumentManagementRow[] = [],
+): IncomeClientDocumentManagementSection {
+  return {
+    section_key: 'office_clients',
+    title: 'לקוחות המשרד',
+    total_count: rows.length,
+    rows,
+    groups: null,
+    page: { ...EMPTY_CDM_SECTION_PAGE },
+    empty_state: {
+      visible: rows.length === 0,
+      title: '',
+      description: null,
+    },
+  };
+}
+
+function emptyOfficeClientCustomersSection(): IncomeClientDocumentManagementSection {
+  return {
+    section_key: 'office_client_customers',
+    title: 'לקוחות של לקוחות המשרד',
+    total_count: 0,
+    rows: [],
+    groups: [],
+    page: { ...EMPTY_CDM_SECTION_PAGE },
+    empty_state: {
+      visible: true,
+      title: '',
+      description: null,
+    },
+  };
+}
+
+function normalizeCdmRow(row: IncomeClientDocumentManagementRow): IncomeClientDocumentManagementRow {
+  return {
+    ...row,
+    actions: row.actions ?? [],
+    document_type_counters: row.document_type_counters ?? [],
+  };
+}
+
+function normalizeCdmSection(
+  section: IncomeClientDocumentManagementSection | null | undefined,
+  fallback: IncomeClientDocumentManagementSection,
+): IncomeClientDocumentManagementSection {
+  if (!section || typeof section.section_key !== 'string') {
+    return fallback;
+  }
+  const rows = (section.rows ?? []).map(normalizeCdmRow);
+  const groups =
+    section.groups == null
+      ? section.section_key === 'office_client_customers'
+        ? []
+        : null
+      : section.groups.map((group) => ({
+          ...group,
+          rows: (group.rows ?? []).map(normalizeCdmRow),
+        }));
+  return {
+    ...fallback,
+    ...section,
+    rows,
+    groups,
+    page: {
+      ...EMPTY_CDM_SECTION_PAGE,
+      ...(section.page ?? {}),
+    },
+    empty_state: {
+      ...fallback.empty_state,
+      ...(section.empty_state ?? {}),
+    },
+  };
+}
+
 export const EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL: IncomeClientDocumentManagementPanel = {
   aggregate_key: 'income_client_document_management_panel',
   visible: false,
@@ -871,6 +1006,8 @@ export const EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL: IncomeClientDocument
   description: null,
   columns: [],
   rows: [],
+  office_clients_section: emptyOfficeClientsSection(),
+  office_client_customers_section: emptyOfficeClientCustomersSection(),
   report_catalog: [],
   empty_state: {
     visible: false,
@@ -880,20 +1017,40 @@ export const EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL: IncomeClientDocument
 };
 
 export function resolveIncomeClientDocumentManagementPanel(
-  panel: IncomeClientDocumentManagementPanel | null | undefined,
+  panel:
+    | (Omit<
+        IncomeClientDocumentManagementPanel,
+        'office_clients_section' | 'office_client_customers_section'
+      > & {
+        office_clients_section?: IncomeClientDocumentManagementSection;
+        office_client_customers_section?: IncomeClientDocumentManagementSection;
+      })
+    | null
+    | undefined,
 ): IncomeClientDocumentManagementPanel {
   if (!panel || typeof panel.visible !== 'boolean') {
     return EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL;
   }
+  const rows = (panel.rows ?? []).map(normalizeCdmRow);
+  /**
+   * Explicit sections only. Never reclassify legacy `rows` into end-customer population.
+   * If office section is missing, treat legacy `rows` as office clients (backward compat).
+   */
+  const office_clients_section = normalizeCdmSection(
+    panel.office_clients_section,
+    emptyOfficeClientsSection(rows),
+  );
+  const office_client_customers_section = normalizeCdmSection(
+    panel.office_client_customers_section,
+    emptyOfficeClientCustomersSection(),
+  );
   return {
     ...EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL,
     ...panel,
     columns: panel.columns ?? [],
-    rows: (panel.rows ?? []).map((row) => ({
-      ...row,
-      actions: row.actions ?? [],
-      document_type_counters: row.document_type_counters ?? [],
-    })),
+    rows: panel.office_clients_section ? office_clients_section.rows : rows,
+    office_clients_section,
+    office_client_customers_section,
     report_catalog: panel.report_catalog ?? [],
     empty_state: {
       ...EMPTY_INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL.empty_state,
@@ -901,6 +1058,7 @@ export function resolveIncomeClientDocumentManagementPanel(
     },
   };
 }
+
 
 export interface IncomeWorkspaceContextAggregate {
   aggregate_key: 'income_workspace_context_aggregate';

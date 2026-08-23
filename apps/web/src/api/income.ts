@@ -30,10 +30,12 @@ import type { IncomeBrandingPreviewDraftCommandResponse } from '../income/income
 export type {
   IncomeActingMode,
   IncomeAvailableDocumentType,
+  IncomeClientDocumentManagementCustomerGroup,
   IncomeClientDocumentManagementPanel,
   IncomeClientDocumentManagementReportItem,
   IncomeClientDocumentManagementRow,
   IncomeClientDocumentManagementRowAction,
+  IncomeClientDocumentManagementSection,
   IncomeClientIncomeLedgerCardAggregate,
   IncomeCommandResponse,
   IncomeCommandType,

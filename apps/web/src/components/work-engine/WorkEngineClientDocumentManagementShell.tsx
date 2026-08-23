@@ -25,6 +25,10 @@ import {
 import { WorkEngineInvoiceRetainerCustomerModal } from './WorkEngineInvoiceRetainerCustomerModal';
 import { WorkEngineInvoiceRetainerSetupModal } from './WorkEngineInvoiceRetainerSetupModal';
 import type { WorkEngineInvoiceRetainerSetupAggregate } from '../../income/income-workspace-types';
+import {
+  WORK_ENGINE_INVOICES_POPULATIONS_DISPLAY_DEFAULT,
+  type WorkEngineInvoicesPopulationsDisplayMode,
+} from '../../income/income-client-document-management-populations-display.pure';
 
 const EMPTY_CUSTOMERS_TABLE_MODEL: IncomeTableModel<IncomeCustomersTableRow> = {
   columns: [
@@ -108,6 +112,11 @@ export function WorkEngineClientDocumentManagementShell({
   const [creditMode, setCreditMode] = useState<'full' | 'partial'>('full');
   const [creditReasonKey, setCreditReasonKey] = useState('billing_error');
   const [creditReasonNote, setCreditReasonNote] = useState('');
+  /** UI display preference only — not persisted (no safe preference store found). */
+  const [populationsDisplayMode, setPopulationsDisplayMode] =
+    useState<WorkEngineInvoicesPopulationsDisplayMode>(
+      WORK_ENGINE_INVOICES_POPULATIONS_DISPLAY_DEFAULT,
+    );
 
   useEffect(() => {
     setEndCustomersModel(customersTableModel);
@@ -321,6 +330,9 @@ export function WorkEngineClientDocumentManagementShell({
         panel={panel}
         busy={busy}
         hideStatusColumn
+        populationsLayoutEnabled
+        populationsDisplayMode={populationsDisplayMode}
+        onPopulationsDisplayModeChange={setPopulationsDisplayMode}
         onAction={(result) => void handlePanelAction(result)}
         renderDocumentsCell={(row) => (
           <WorkEngineClientDocumentTypeCounters

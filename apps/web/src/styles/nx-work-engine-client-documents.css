@@ -526,3 +526,120 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* ---- Invoices dual populations (display preference only) ---- */
+
+.nx-we-invoices-cdm__head {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.nx-we-invoices-cdm-seg {
+  display: inline-flex;
+  flex-shrink: 0;
+  direction: rtl;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+
+.nx-we-invoices-cdm-seg__btn {
+  appearance: none;
+  margin: 0;
+  border: 0;
+  border-inline-start: 1px solid #e2e8f0;
+  background: transparent;
+  color: #475569;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.nx-we-invoices-cdm-seg__btn:first-child {
+  border-inline-start: 0;
+}
+
+.nx-we-invoices-cdm-seg__btn:hover:not(.nx-we-invoices-cdm-seg__btn--active) {
+  background: rgba(255, 255, 255, 0.55);
+  color: #0f172a;
+}
+
+.nx-we-invoices-cdm-seg__btn--active {
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: inset 0 0 0 1px #93c5fd;
+}
+
+.nx-we-invoices-cdm-populations {
+  display: grid;
+  gap: 10px;
+  padding: 0 10px 12px;
+  direction: rtl;
+  min-width: 0;
+}
+
+.nx-we-invoices-cdm-populations--both {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.nx-we-invoices-cdm-populations--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.nx-we-invoices-cdm-population {
+  min-width: 0;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.nx-we-invoices-cdm-population__title {
+  margin: 0;
+  padding: 10px 12px 8px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #334155;
+  border-bottom: 1px solid #eef2f7;
+  background: #f8fafc;
+}
+
+.nx-we-invoices-cdm-group-header-row td {
+  padding: 8px 12px !important;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.nx-we-invoices-cdm-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  direction: rtl;
+}
+
+.nx-we-invoices-cdm-group-header__name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.nx-we-invoices-cdm-group-header__count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+@media (max-width: 1100px) {
+  .nx-we-invoices-cdm-populations--both {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+

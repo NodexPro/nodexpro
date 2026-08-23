@@ -1,13 +1,22 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
+  IncomeClientDocumentManagementCustomerGroup,
   IncomeClientDocumentManagementPanel,
   IncomeClientDocumentManagementReportItem,
   IncomeClientDocumentManagementRow,
   IncomeClientDocumentManagementRowAction,
+  IncomeClientDocumentManagementSection,
   IncomeCustomerEditorField,
   IncomeCustomersTableRow,
   IncomeTableModel,
 } from '../../api/income';
+import {
+  WORK_ENGINE_INVOICES_POPULATIONS_BOTH_LABEL,
+  WORK_ENGINE_INVOICES_POPULATIONS_DISPLAY_DEFAULT,
+  incomeClientDocumentManagementRowReactKey,
+  resolveWorkEngineInvoicesPopulationsVisibility,
+  type WorkEngineInvoicesPopulationsDisplayMode,
+} from '../../income/income-client-document-management-populations-display.pure';
 
 /** RTL visual order (first = far right). Display-only; backend column order unchanged. */
 const VISUAL_COLUMN_KEYS = [
@@ -121,6 +130,13 @@ type PanelProps = {
   renderDocumentsCell?: (row: IncomeClientDocumentManagementRow) => ReactNode;
   /** Work Engine invoices tab: hide סטטוס column; backend field unchanged. */
   hideStatusColumn?: boolean;
+  /**
+   * Work Engine invoices tab only: dual-population layout from backend sections.
+   * Display mode is UI preference only — does not reload or reclassify populations.
+   */
+  populationsLayoutEnabled?: boolean;
+  populationsDisplayMode?: WorkEngineInvoicesPopulationsDisplayMode;
+  onPopulationsDisplayModeChange?: (mode: WorkEngineInvoicesPopulationsDisplayMode) => void;
 };
 
 function ActionButton({
@@ -253,17 +269,269 @@ function renderDataCell(
   );
 }
 
+function renderClientDocumentManagementDataRows(
+  rows: IncomeClientDocumentManagementRow[],
+  visualColumns: Array<{ key: VisualColumnKey; label: string }>,
+  busy: boolean,
+  onAction: PanelProps['onAction'],
+  renderDocumentsCell?: PanelProps['renderDocumentsCell'],
+) {
+  return rows.map((row) => (
+    <tr key={incomeClientDocumentManagementRowReactKey(row)}>
+      {visualColumns.map((col) => (
+        <td
+          key={col.key}
+          className={
+            col.key === 'client'
+              ? 'nx-income-cdm__cell--client'
+              : col.key === 'actions'
+                ? 'nx-income-cdm__cell--actions'
+                : undefined
+          }
+        >
+          {renderDataCell(row, col.key, busy, onAction, renderDocumentsCell)}
+        </td>
+      ))}
+    </tr>
+  ));
+}
+
+function ClientDocumentManagementRowsTable({
+  columns,
+  rows,
+  groups,
+  busy,
+  onAction,
+  renderDocumentsCell,
+  emptyState,
+}: {
+  columns: Array<{ key: VisualColumnKey; label: string }>;
+  rows: IncomeClientDocumentManagementRow[];
+  groups?: IncomeClientDocumentManagementCustomerGroup[] | null;
+  busy: boolean;
+  onAction: PanelProps['onAction'];
+  renderDocumentsCell?: PanelProps['renderDocumentsCell'];
+  emptyState?: IncomeClientDocumentManagementSection['empty_state'] | null;
+}) {
+  if (emptyState?.visible) {
+    return (
+      <div className="nx-income-cdm__empty">
+        <p className="nx-income-cdm__empty-title">{emptyState.title}</p>
+        {emptyState.description ? (
+          <p className="nx-income-cdm__empty-desc">{emptyState.description}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  const useGroups = Array.isArray(groups) && groups.length > 0;
+
+  return (
+    <div className="nx-income-cdm__table-wrap">
+      <table className="nx-income-cdm__table">
+        <thead>
+          <tr>
+            {columns.map((col) => (
+              <th
+                key={col.key}
+                scope="col"
+                className={
+                  col.key === 'client'
+                    ? 'nx-income-cdm__cell--client'
+                    : col.key === 'actions'
+                      ? 'nx-income-cdm__cell--actions'
+                      : undefined
+                }
+              >
+                {col.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {useGroups
+            ? groups!.map((group) => (
+                <Fragment key={`group:${group.parent_represented_client_id}`}>
+                  <tr className="nx-we-invoices-cdm-group-header-row">
+                    <td colSpan={columns.length}>
+                      <div className="nx-we-invoices-cdm-group-header">
+                        <span className="nx-we-invoices-cdm-group-header__name">
+                          {group.parent_client_display_name}
+                        </span>
+                        {typeof group.total_customers === 'number' ? (
+                          <span className="nx-we-invoices-cdm-group-header__count">
+                            {group.total_customers}
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                  {renderClientDocumentManagementDataRows(
+                    group.rows ?? [],
+                    columns,
+                    busy,
+                    onAction,
+                    renderDocumentsCell,
+                  )}
+                </Fragment>
+              ))
+            : renderClientDocumentManagementDataRows(
+                rows,
+                columns,
+                busy,
+                onAction,
+                renderDocumentsCell,
+              )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PopulationsSegmentedControl({
+  mode,
+  officeTitle,
+  customersTitle,
+  onChange,
+}: {
+  mode: WorkEngineInvoicesPopulationsDisplayMode;
+  officeTitle: string;
+  customersTitle: string;
+  onChange: (mode: WorkEngineInvoicesPopulationsDisplayMode) => void;
+}) {
+  const options: Array<{ key: WorkEngineInvoicesPopulationsDisplayMode; label: string }> = [
+    { key: 'office', label: officeTitle },
+    { key: 'both', label: WORK_ENGINE_INVOICES_POPULATIONS_BOTH_LABEL },
+    { key: 'office_client_customers', label: customersTitle },
+  ];
+
+  return (
+    <div
+      className="nx-we-invoices-cdm-seg"
+      role="tablist"
+      aria-label="תצוגת אוכלוסיות לקוחות"
+      dir="rtl"
+    >
+      {options.map((option) => {
+        const active = mode === option.key;
+        return (
+          <button
+            key={option.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={`nx-we-invoices-cdm-seg__btn${active ? ' nx-we-invoices-cdm-seg__btn--active' : ''}`}
+            onClick={() => onChange(option.key)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PopulationSectionPanel({
+  section,
+  visualColumns,
+  busy,
+  onAction,
+  renderDocumentsCell,
+}: {
+  section: IncomeClientDocumentManagementSection;
+  visualColumns: Array<{ key: VisualColumnKey; label: string }>;
+  busy: boolean;
+  onAction: PanelProps['onAction'];
+  renderDocumentsCell?: PanelProps['renderDocumentsCell'];
+}) {
+  return (
+    <div className="nx-we-invoices-cdm-population" data-section-key={section.section_key}>
+      <h3 className="nx-we-invoices-cdm-population__title">{section.title}</h3>
+      <ClientDocumentManagementRowsTable
+        columns={visualColumns}
+        rows={section.rows ?? []}
+        groups={section.groups}
+        busy={busy}
+        onAction={onAction}
+        renderDocumentsCell={renderDocumentsCell}
+        emptyState={section.empty_state}
+      />
+    </div>
+  );
+}
+
 export function IncomeClientDocumentManagementPanelView({
   panel,
   busy,
   onAction,
   renderDocumentsCell,
   hideStatusColumn = false,
+  populationsLayoutEnabled = false,
+  populationsDisplayMode = WORK_ENGINE_INVOICES_POPULATIONS_DISPLAY_DEFAULT,
+  onPopulationsDisplayModeChange,
 }: PanelProps) {
   if (!panel?.visible) return null;
 
   const visualColumns = resolveVisualColumns(panel.columns ?? [], hideStatusColumn);
   const rows = panel.rows ?? [];
+
+  if (populationsLayoutEnabled) {
+    const officeSection = panel.office_clients_section;
+    const customersSection = panel.office_client_customers_section;
+    const visibility = resolveWorkEngineInvoicesPopulationsVisibility(populationsDisplayMode);
+    const layoutClass =
+      populationsDisplayMode === 'both'
+        ? 'nx-we-invoices-cdm-populations nx-we-invoices-cdm-populations--both'
+        : 'nx-we-invoices-cdm-populations nx-we-invoices-cdm-populations--single';
+
+    return (
+      <section
+        className="nx-income-cdm nx-we-invoices-cdm"
+        dir="rtl"
+        aria-labelledby="income-cdm-title"
+      >
+        <div className="nx-income-cdm__card">
+          <div className="nx-income-cdm__head nx-we-invoices-cdm__head">
+            <div className="nx-income-cdm__head-main">
+              <h2 id="income-cdm-title" className="nx-income-cdm__title">
+                {panel.title}
+              </h2>
+              {panel.description ? (
+                <p className="nx-income-cdm__description">{panel.description}</p>
+              ) : null}
+            </div>
+            <PopulationsSegmentedControl
+              mode={populationsDisplayMode}
+              officeTitle={officeSection?.title ?? 'לקוחות המשרד'}
+              customersTitle={customersSection?.title ?? 'לקוחות של לקוחות המשרד'}
+              onChange={(mode) => onPopulationsDisplayModeChange?.(mode)}
+            />
+          </div>
+
+          <div className={layoutClass}>
+            {visibility.showOfficeClients && officeSection ? (
+              <PopulationSectionPanel
+                section={officeSection}
+                visualColumns={visualColumns}
+                busy={busy}
+                onAction={onAction}
+                renderDocumentsCell={renderDocumentsCell}
+              />
+            ) : null}
+            {visibility.showOfficeClientCustomers && customersSection ? (
+              <PopulationSectionPanel
+                section={customersSection}
+                visualColumns={visualColumns}
+                busy={busy}
+                onAction={onAction}
+                renderDocumentsCell={renderDocumentsCell}
+              />
+            ) : null}
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section
@@ -289,49 +557,13 @@ export function IncomeClientDocumentManagementPanelView({
             ) : null}
           </div>
         ) : (
-          <div className="nx-income-cdm__table-wrap">
-            <table className="nx-income-cdm__table">
-              <thead>
-                <tr>
-                  {visualColumns.map((col) => (
-                    <th
-                      key={col.key}
-                      scope="col"
-                      className={
-                        col.key === 'client'
-                          ? 'nx-income-cdm__cell--client'
-                          : col.key === 'actions'
-                            ? 'nx-income-cdm__cell--actions'
-                            : undefined
-                      }
-                    >
-                      {col.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.represented_client_id}>
-                    {visualColumns.map((col) => (
-                      <td
-                        key={col.key}
-                        className={
-                          col.key === 'client'
-                            ? 'nx-income-cdm__cell--client'
-                            : col.key === 'actions'
-                              ? 'nx-income-cdm__cell--actions'
-                              : undefined
-                        }
-                      >
-                        {renderDataCell(row, col.key, busy, onAction, renderDocumentsCell)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ClientDocumentManagementRowsTable
+            columns={visualColumns}
+            rows={rows}
+            busy={busy}
+            onAction={onAction}
+            renderDocumentsCell={renderDocumentsCell}
+          />
         )}
       </div>
     </section>
