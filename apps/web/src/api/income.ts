@@ -6,6 +6,7 @@
  *   GET /income/aggregates/workspace
  *   GET /income/aggregates/client-income-ledger-card
  *   GET /income/aggregates/document-email-history
+ *   GET /income/aggregates/represented-client-email-history
  *   GET /income/aggregates/document-docflow-send
  *   GET /income/aggregates/issued-document-view
  *   GET /income/documents/:id/download (binary)
@@ -20,6 +21,7 @@ import type {
   IncomeCommandResponse,
   IncomeDocumentDocflowSendAggregate,
   IncomeDocumentEmailHistoryAggregate,
+  IncomeRepresentedClientEmailHistoryAggregate,
   IncomeIssuedDocumentViewAggregate,
   IncomeWorkspaceAggregate,
   IncomeWorkspaceContextAggregate,
@@ -46,6 +48,7 @@ export type {
   IncomeDraftsTableRow,
   IncomeDocumentDocflowSendAggregate,
   IncomeDocumentEmailHistoryAggregate,
+  IncomeRepresentedClientEmailHistoryAggregate,
   IncomeIssuedDocumentViewAggregate,
   IncomeIssuedDocumentsTableRow,
   IncomeItemsTableRow,
@@ -93,6 +96,17 @@ export async function fetchIncomeDocumentEmailHistoryAggregate(params: {
   const q = new URLSearchParams({ income_document_id: params.incomeDocumentId });
   return apiJson<IncomeDocumentEmailHistoryAggregate>(
     `${INCOME.documentEmailHistoryAggregate}?${q.toString()}`,
+  );
+}
+
+export async function fetchIncomeRepresentedClientEmailHistoryAggregate(params: {
+  representedClientId: string;
+  incomeCustomerId?: string | null;
+}): Promise<IncomeRepresentedClientEmailHistoryAggregate> {
+  const q = new URLSearchParams({ represented_client_id: params.representedClientId });
+  if (params.incomeCustomerId) q.set('income_customer_id', params.incomeCustomerId);
+  return apiJson<IncomeRepresentedClientEmailHistoryAggregate>(
+    `${INCOME.representedClientEmailHistoryAggregate}?${q.toString()}`,
   );
 }
 

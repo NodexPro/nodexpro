@@ -166,6 +166,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       ctx: params.ctx,
       perms: incomePerms,
       includeRetainerAction: true,
+      workEngineInvoicesFunctionalParity: true,
     }),
     loadInvoicesTabBranding({ ctx: params.ctx }),
     buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx),

@@ -344,6 +344,7 @@ export const INCOME = {
   workspaceAggregate: '/income/aggregates/workspace',
   clientIncomeLedgerCardAggregate: '/income/aggregates/client-income-ledger-card',
   documentEmailHistoryAggregate: '/income/aggregates/document-email-history',
+  representedClientEmailHistoryAggregate: '/income/aggregates/represented-client-email-history',
   documentDocflowSendAggregate: '/income/aggregates/document-docflow-send',
   issuedDocumentViewAggregate: '/income/aggregates/issued-document-view',
   commands: '/income/commands',

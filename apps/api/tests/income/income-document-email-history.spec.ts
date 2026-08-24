@@ -74,6 +74,20 @@ test('income routes expose email history aggregates', () => {
   assert.match(routesSource, /represented-client-email-history/);
   assert.match(routesSource, /buildIncomeDocumentEmailHistoryAggregate/);
   assert.match(routesSource, /buildIncomeRepresentedClientEmailHistoryAggregate/);
+  assert.match(routesSource, /income_customer_id/);
+});
+
+test('represented-client email history aggregate accepts optional income_customer_id filter', () => {
+  const historyServiceSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-email-history.service.ts'),
+    'utf8',
+  );
+  assert.match(historyServiceSource, /incomeCustomerId\?:/);
+  assert.match(historyServiceSource, /row\.income_customer_id === incomeCustomerId/);
+  assert.match(
+    historyServiceSource,
+    /טרם נשלחו מסמכי הכנסה במייל עבור לקוח קצה זה/,
+  );
 });
 
 test('document email history resolves office issuer scope for WE mismatch', () => {

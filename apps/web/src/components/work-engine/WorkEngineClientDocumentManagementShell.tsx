@@ -16,6 +16,7 @@ import {
   type IncomeClientDocumentPanelActionResult,
 } from '../income/IncomeClientDocumentManagementPanel';
 import { IncomeClientIncomeLedgerCardModal } from '../income/IncomeClientIncomeLedgerCardModal';
+import { IncomeRepresentedClientEmailHistoryModal } from '../income/IncomeRepresentedClientEmailHistoryModal';
 import { WorkEngineClientDocumentTypeCounters } from './WorkEngineClientDocumentTypeCounters';
 import { WorkEngineClientDocumentsByTypeModal } from './WorkEngineClientDocumentsByTypeModal';
 import {
@@ -86,6 +87,7 @@ export function WorkEngineClientDocumentManagementShell({
   const [endCustomersOpen, setEndCustomersOpen] = useState(false);
   const [endCustomersClientName, setEndCustomersClientName] = useState('');
   const [endCustomersModel, setEndCustomersModel] = useState(customersTableModel);
+  const [endCustomersInitialEditId, setEndCustomersInitialEditId] = useState<string | null>(null);
   const [reportsOpen, setReportsOpen] = useState(false);
   const [reportsClientName, setReportsClientName] = useState('');
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -95,6 +97,9 @@ export function WorkEngineClientDocumentManagementShell({
   const [ledgerClientId, setLedgerClientId] = useState<string | null>(null);
   const [ledgerClientName, setLedgerClientName] = useState('');
   const [ledgerEndCustomerId, setLedgerEndCustomerId] = useState<string | null>(null);
+  const [emailHistoryOpen, setEmailHistoryOpen] = useState(false);
+  const [emailHistoryClientId, setEmailHistoryClientId] = useState<string | null>(null);
+  const [emailHistoryEndCustomerId, setEmailHistoryEndCustomerId] = useState<string | null>(null);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [documentsModalParams, setDocumentsModalParams] = useState<{
     representedClientId: string;
@@ -240,22 +245,40 @@ export function WorkEngineClientDocumentManagementShell({
         setRetainerCustomerOpen(true);
         return;
       }
+      if (result.kind === 'email_history') {
+        setEmailHistoryClientId(result.clientId);
+        setEmailHistoryEndCustomerId(result.endCustomerId ?? null);
+        setEmailHistoryOpen(true);
+        return;
+      }
+
       const { action } = result;
       if (!action.command) return;
 
       const payload = { ...action.command_payload };
       const openBranding = payload.open_document_branding_studio === true;
       const openEndCustomers = payload.open_end_customers_panel === true;
+      const openEndCustomerSettings = payload.open_end_customer_settings === true;
+      const settingsCustomerId =
+        typeof payload.income_customer_id === 'string' ? payload.income_customer_id : null;
+      const parentDisplayName =
+        typeof payload.parent_client_display_name === 'string'
+          ? payload.parent_client_display_name
+          : result.clientName;
       delete payload.open_document_branding_studio;
       delete payload.open_end_customers_panel;
+      delete payload.open_end_customer_settings;
+      delete payload.focus_income_customer_id;
+      delete payload.parent_client_display_name;
 
       onBusyChange?.(true);
       try {
         const res = await executeIncomeCommand(action.command, payload);
         applyCustomersTableFromResponse(res);
         if (openBranding) onOpenBranding?.();
-        if (openEndCustomers) {
-          setEndCustomersClientName(result.clientName);
+        if (openEndCustomers || openEndCustomerSettings) {
+          setEndCustomersClientName(parentDisplayName);
+          setEndCustomersInitialEditId(openEndCustomerSettings ? settingsCustomerId : null);
           setEndCustomersOpen(true);
         }
       } catch (e) {
@@ -422,8 +445,10 @@ export function WorkEngineClientDocumentManagementShell({
         busy={busy}
         canCreate={canCreateCustomer}
         canEdit={canEditCustomer}
+        initialEditCustomerId={endCustomersInitialEditId}
         onClose={() => {
           setEndCustomersOpen(false);
+          setEndCustomersInitialEditId(null);
           if (retainerCustomerOpen) setRetainerListRefreshKey((k) => k + 1);
         }}
         onCreateCustomer={handleCreateCustomer}
@@ -458,6 +483,20 @@ export function WorkEngineClientDocumentManagementShell({
           setLedgerClientId(null);
           setLedgerClientName('');
           setLedgerEndCustomerId(null);
+        }}
+        onError={onError}
+      />
+
+      <IncomeRepresentedClientEmailHistoryModal
+        open={emailHistoryOpen}
+        representedClientId={emailHistoryClientId}
+        incomeCustomerId={emailHistoryEndCustomerId}
+        busy={busy}
+        onBusyChange={onBusyChange}
+        onClose={() => {
+          setEmailHistoryOpen(false);
+          setEmailHistoryClientId(null);
+          setEmailHistoryEndCustomerId(null);
         }}
         onError={onError}
       />

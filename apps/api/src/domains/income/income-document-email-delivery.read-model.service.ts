@@ -92,18 +92,24 @@ export async function loadIncomeDocumentsMetaByIds(
       document_number: string;
       document_type: string;
       document_type_label: string;
+      income_customer_id: string | null;
     }
   >
 > {
   const meta = new Map<
     string,
-    { document_number: string; document_type: string; document_type_label: string }
+    {
+      document_number: string;
+      document_type: string;
+      document_type_label: string;
+      income_customer_id: string | null;
+    }
   >();
   if (documentIds.length === 0) return meta;
 
   const { data, error } = await supabaseAdmin
     .from('income_documents')
-    .select('id, document_number, document_type')
+    .select('id, document_number, document_type, income_customer_id')
     .eq('organization_id', organizationId)
     .in('id', documentIds);
   throwIfSupabaseError(error, 'loadIncomeDocumentsMetaByIds');
@@ -118,11 +124,17 @@ export async function loadIncomeDocumentsMetaByIds(
   };
 
   for (const raw of data ?? []) {
-    const row = raw as { id: string; document_number: string; document_type: string };
+    const row = raw as {
+      id: string;
+      document_number: string;
+      document_type: string;
+      income_customer_id: string | null;
+    };
     meta.set(row.id, {
       document_number: row.document_number,
       document_type: row.document_type,
       document_type_label: labels[row.document_type] ?? row.document_type,
+      income_customer_id: row.income_customer_id ?? null,
     });
   }
   return meta;

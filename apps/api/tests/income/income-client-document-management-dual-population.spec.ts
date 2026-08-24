@@ -125,8 +125,9 @@ test('grouping helper nests end customers under parent labels', () => {
   assert.equal(groups[1].parent_represented_client_id, 'p2');
 });
 
-test('end-customer actions share canonical slots; office-only concepts stay disabled', () => {
+test('end-customer actions share canonical slots; /m/income keeps artificial disablement', () => {
   assert.match(panelSource, /buildEndCustomerRowActions/);
+  assert.match(panelSource, /workEngineInvoicesFunctionalParity/);
   const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
   const endFnEnd = panelSource.indexOf('function formatMoneyReference');
   const endFn = panelSource.slice(endFnStart, endFnEnd);
@@ -136,23 +137,41 @@ test('end-customer actions share canonical slots; office-only concepts stay disa
   assert.match(endFn, /key: 'open_income_ledger_card'/);
   assert.match(endFn, /key: 'open_email_history'/);
   assert.match(endFn, /key: 'more'/);
+  // Legacy (/m/income) branch still carries artificial disablement reasons.
   assert.match(endFn, /הגדרות מסמך שייכות ללקוח המשרד/);
   assert.match(endFn, /ניהול לקוחות קצה זמין משורת לקוח המשרד בלבד/);
   assert.match(endFn, /דוחות לפי לקוח קצה — בקרוב/);
   assert.match(endFn, /היסטוריית מייל לפי לקוח קצה — בקרוב/);
   assert.match(endFn, /end_customer_id: incomeCustomerId/);
   assert.match(endFn, /income_customer_id: incomeCustomerId/);
-  // Must not enable branding/end-customers for end-customer rows.
-  const brandingBlock = endFn.slice(
-    endFn.indexOf("key: 'open_branding_studio'"),
-    endFn.indexOf("key: 'open_end_customers'"),
+  // WE parity branch uses real contracts (settings editor + parent customers panel).
+  assert.match(endFn, /open_end_customer_settings:\s*true/);
+  assert.match(endFn, /open_end_customers_panel:\s*true/);
+  assert.match(endFn, /focus_income_customer_id:\s*incomeCustomerId/);
+});
+
+test('WE invoices tab enables end-customer functional parity; income issuer context does not', () => {
+  const invoicesTabSource = readFileSync(
+    join(dir, '../../src/domains/work-engine/work-engine-invoices-tab.read-model.service.ts'),
+    'utf8',
   );
-  assert.match(brandingBlock, /enabled: false/);
-  const endCustomersBlock = endFn.slice(
-    endFn.indexOf("key: 'open_end_customers'"),
-    endFn.indexOf("key: 'open_reports'"),
+  const issuerContextSource = readFileSync(
+    join(dir, '../../src/domains/income/income-issuer-context.service.ts'),
+    'utf8',
   );
-  assert.match(endCustomersBlock, /enabled: false/);
+  assert.match(invoicesTabSource, /workEngineInvoicesFunctionalParity:\s*true/);
+  assert.doesNotMatch(issuerContextSource, /workEngineInvoicesFunctionalParity:\s*true/);
+});
+
+test('end-customer WE parity actions are permission-gated not population-gated', () => {
+  const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
+  const endFnEnd = panelSource.indexOf('function formatMoneyReference');
+  const endFn = panelSource.slice(endFnStart, endFnEnd);
+  assert.match(endFn, /enabled: perms\.edit/);
+  assert.match(endFn, /weParity \? perms\.view : false/);
+  assert.match(endFn, /weParity \? canEmail : false/);
+  assert.match(endFn, /open_end_customer_settings/);
+  assert.doesNotMatch(endFn, /population_key\s*===/);
 });
 
 test('canonical action slot order is identical for both populations', () => {
@@ -214,6 +233,26 @@ test('frontend action cell does not filter by population', () => {
   assert.doesNotMatch(panelFe, /if\s*\(.*income_customer_id.*\)\s*\{[\s\S]*hide/);
   assert.doesNotMatch(panelFe, /actions\.filter\(/);
   assert.match(panelFe, /function ActionButton/);
+  assert.match(panelFe, /kind: 'email_history'/);
+  assert.match(panelFe, /initialEditCustomerId/);
+});
+
+test('WE shell wires end-customer settings/email context; Income shell stays unscoped', () => {
+  const weShell = readFileSync(
+    join(dir, '../../../web/src/components/work-engine/WorkEngineClientDocumentManagementShell.tsx'),
+    'utf8',
+  );
+  const incomeShell = readFileSync(
+    join(dir, '../../../web/src/components/income/IncomeClientDocumentManagementShell.tsx'),
+    'utf8',
+  );
+  assert.match(weShell, /open_end_customer_settings/);
+  assert.match(weShell, /endCustomersInitialEditId/);
+  assert.match(weShell, /emailHistoryEndCustomerId/);
+  assert.match(weShell, /incomeCustomerId=\{emailHistoryEndCustomerId\}/);
+  assert.doesNotMatch(incomeShell, /open_end_customer_settings/);
+  assert.doesNotMatch(incomeShell, /endCustomersInitialEditId/);
+  assert.doesNotMatch(incomeShell, /emailHistoryEndCustomerId/);
 });
 
 test('A/B — office section starts from Core clients and left-joins stats (zero-doc clients included)', () => {

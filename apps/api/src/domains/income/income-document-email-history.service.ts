@@ -282,9 +282,15 @@ export async function buildIncomeDocumentEmailHistoryAggregate(params: {
 export async function buildIncomeRepresentedClientEmailHistoryAggregate(params: {
   ctx: RequestContext;
   representedClientId: string;
+  /** Optional: scope history to a single end customer under the represented client. */
+  incomeCustomerId?: string | null;
 }): Promise<IncomeRepresentedClientEmailHistoryAggregate> {
   assertClientEmailHistoryAccess(params.ctx);
   const representedClientId = reqUuid(params.representedClientId, 'represented_client_id');
+  const incomeCustomerIdRaw = String(params.incomeCustomerId ?? '').trim();
+  const incomeCustomerId = incomeCustomerIdRaw
+    ? reqUuid(incomeCustomerIdRaw, 'income_customer_id')
+    : null;
   const orgId = params.ctx.organizationId;
   if (!orgId) throw forbidden('Organization context required');
   const client = await loadRepresentedClient(orgId, representedClientId);
@@ -292,25 +298,32 @@ export async function buildIncomeRepresentedClientEmailHistoryAggregate(params: 
   const documentIds = [...new Set(attempts.map((a) => a.sourceEntityId))];
   const docMeta = await loadIncomeDocumentsMetaByIds(orgId, documentIds);
 
-  const rows = attempts.map((attempt) => {
-    const meta = docMeta.get(attempt.sourceEntityId);
-    return {
-      attempt_id: attempt.id,
-      income_document_id: attempt.sourceEntityId,
-      document_number: meta?.document_number ?? null,
-      document_type_label: meta?.document_type_label ?? null,
-      sent_at_display: formatEmailDeliverySentAtDisplay(attempt.sentAt),
-      recipient_email: attempt.recipientEmail,
-      result: attempt.result,
-      result_label: deliveryAttemptResultLabel(attempt.result),
-      failure_reason: attempt.failureReason,
-      subject_preview: subjectPreviewFromMessageSnapshot(attempt.messageSnapshotJson),
-    };
-  });
+  const rows = attempts
+    .map((attempt) => {
+      const meta = docMeta.get(attempt.sourceEntityId);
+      return {
+        attempt_id: attempt.id,
+        income_document_id: attempt.sourceEntityId,
+        document_number: meta?.document_number ?? null,
+        document_type_label: meta?.document_type_label ?? null,
+        sent_at_display: formatEmailDeliverySentAtDisplay(attempt.sentAt),
+        recipient_email: attempt.recipientEmail,
+        result: attempt.result,
+        result_label: deliveryAttemptResultLabel(attempt.result),
+        failure_reason: attempt.failureReason,
+        subject_preview: subjectPreviewFromMessageSnapshot(attempt.messageSnapshotJson),
+        income_customer_id: meta?.income_customer_id ?? null,
+      };
+    })
+    .filter((row) =>
+      incomeCustomerId ? row.income_customer_id === incomeCustomerId : true,
+    )
+    .map(({ income_customer_id: _omit, ...row }) => row);
 
   return {
     aggregate_key: INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY,
     represented_client_id: representedClientId,
+    income_customer_id: incomeCustomerId,
     client_display_name: client.display_name,
     table_columns: CLIENT_HISTORY_COLUMNS,
     rows,
@@ -318,7 +331,9 @@ export async function buildIncomeRepresentedClientEmailHistoryAggregate(params: 
     empty_state: {
       visible: rows.length === 0,
       title: 'אין היסטוריית שליחה במייל',
-      description: 'טרם נשלחו מסמכי הכנסה במייל עבור לקוח זה.',
+      description: incomeCustomerId
+        ? 'טרם נשלחו מסמכי הכנסה במייל עבור לקוח קצה זה.'
+        : 'טרם נשלחו מסמכי הכנסה במייל עבור לקוח זה.',
     },
   };
 }

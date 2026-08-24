@@ -1315,6 +1315,8 @@ export interface IncomeRepresentedClientEmailHistoryAttemptRow {
 export interface IncomeRepresentedClientEmailHistoryAggregate {
   aggregate_key: typeof INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY;
   represented_client_id: string;
+  /** Present when history is scoped to a single end customer. */
+  income_customer_id?: string | null;
   client_display_name: string;
   table_columns: Array<{ key: string; label: string }>;
   rows: IncomeRepresentedClientEmailHistoryAttemptRow[];

@@ -111,6 +111,8 @@ function ActionIcon({ iconKey }: { iconKey: string }) {
       return <span className="nx-income-cdm__action-letter">כ</span>;
     case 'retainer':
       return <span className="nx-income-cdm__action-letter">ר</span>;
+    case 'at':
+      return <span className="nx-income-cdm__action-letter">@</span>;
     default:
       return null;
   }
@@ -118,9 +120,16 @@ function ActionIcon({ iconKey }: { iconKey: string }) {
 
 export type IncomeClientDocumentPanelActionResult =
   | { kind: 'command'; action: IncomeClientDocumentManagementRowAction; clientName: string }
-  | { kind: 'reports'; clientId: string; clientName: string }
+  | { kind: 'reports'; clientId: string; clientName: string; endCustomerId?: string | null }
   | {
       kind: 'ledger';
+      clientId: string;
+      clientName: string;
+      /** Backend action payload end-customer scope when present. */
+      endCustomerId?: string | null;
+    }
+  | {
+      kind: 'email_history';
       clientId: string;
       clientName: string;
       /** Backend action payload end-customer scope when present. */
@@ -231,10 +240,18 @@ function renderDataCell(
             busy={busy}
             onClick={(anchor) => {
                                   if (action.key === 'open_reports') {
+                                    const payload = action.command_payload ?? {};
+                                    const endCustomerId =
+                                      typeof payload.income_customer_id === 'string'
+                                        ? payload.income_customer_id
+                                        : typeof payload.end_customer_id === 'string'
+                                          ? payload.end_customer_id
+                                          : null;
                                     void onAction({
                                       kind: 'reports',
                                       clientId: row.represented_client_id,
                                       clientName: row.client_display_name,
+                                      endCustomerId,
                                     });
                                     return;
                                   }
@@ -248,6 +265,22 @@ function renderDataCell(
                                           : null;
                                     void onAction({
                                       kind: 'ledger',
+                                      clientId: row.represented_client_id,
+                                      clientName: row.client_display_name,
+                                      endCustomerId,
+                                    });
+                                    return;
+                                  }
+                                  if (action.key === 'open_email_history') {
+                                    const payload = action.command_payload ?? {};
+                                    const endCustomerId =
+                                      typeof payload.income_customer_id === 'string'
+                                        ? payload.income_customer_id
+                                        : typeof payload.end_customer_id === 'string'
+                                          ? payload.end_customer_id
+                                          : null;
+                                    void onAction({
+                                      kind: 'email_history',
                                       clientId: row.represented_client_id,
                                       clientName: row.client_display_name,
                                       endCustomerId,
@@ -727,6 +760,8 @@ export function IncomeClientEndCustomersModal({
   onClose,
   onCreateCustomer,
   onUpdateCustomer,
+  /** When set, open the edit form for this customer once the modal opens. */
+  initialEditCustomerId = null,
 }: {
   open: boolean;
   clientName: string;
@@ -737,16 +772,37 @@ export function IncomeClientEndCustomersModal({
   onClose: () => void;
   onCreateCustomer: (payload: IncomeEndCustomerFormPayload) => Promise<void>;
   onUpdateCustomer: (customerId: string, payload: IncomeEndCustomerFormPayload) => Promise<void>;
+  initialEditCustomerId?: string | null;
 }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create');
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>(() => emptyCustomerForm(model));
   const [submitting, setSubmitting] = useState(false);
+  const appliedInitialEditRef = useRef<string | null>(null);
 
   const columns = model?.columns ?? [];
   const rows = model?.rows ?? [];
   const editorFields = model.editor_fields ?? [];
+
+  useEffect(() => {
+    if (!open) {
+      appliedInitialEditRef.current = null;
+      setEditorOpen(false);
+      setEditingCustomerId(null);
+      return;
+    }
+    const targetId = initialEditCustomerId?.trim() || null;
+    if (!targetId || !canEdit) return;
+    if (appliedInitialEditRef.current === targetId) return;
+    const row = rows.find((r) => r.customer_id === targetId);
+    if (!row) return;
+    appliedInitialEditRef.current = targetId;
+    setEditorMode('edit');
+    setEditingCustomerId(row.customer_id);
+    setForm(customerFormFromRow(row, model));
+    setEditorOpen(true);
+  }, [open, initialEditCustomerId, canEdit, rows, model]);
 
   const openCreate = () => {
     setEditorMode('create');

@@ -105,9 +105,11 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const representedClientId = String(req.query.represented_client_id ?? '').trim();
+      const incomeCustomerIdRaw = String(req.query.income_customer_id ?? '').trim();
       const aggregate = await buildIncomeRepresentedClientEmailHistoryAggregate({
         ctx: req.context as RequestContext,
         representedClientId,
+        incomeCustomerId: incomeCustomerIdRaw || null,
       });
       return res.json(aggregate);
     } catch (e) {
