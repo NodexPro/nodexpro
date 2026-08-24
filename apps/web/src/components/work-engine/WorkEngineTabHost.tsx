@@ -447,6 +447,10 @@ function WorkEngineInvoicesTabPanel(props: {
         onBusyChange={setPanelBusy}
         onAfterIssuerSelect={handleAfterIssuerSelect}
         onOpenBranding={() => setBrandingOpen(true)}
+        onOpenNewDocument={async (workspaceAggregate) => {
+          setWizardInitialAgg(workspaceAggregate);
+          setWizardOpen(true);
+        }}
         onError={handlePanelError}
         onInvoicesTabRefresh={handleInvoicesTabRefresh}
         onEditDraft={async (draftId) => {
@@ -529,7 +533,12 @@ function WorkEngineInvoicesTabPanel(props: {
       ) : null}
       {wizardOpen && wizardEntrypoint?.wizard ? (
         <WorkEngineIncomeDocumentWizardModal
-          key={wizardInitialAgg?.active_wizard_draft_id ?? 'new-income-document'}
+          key={
+            wizardInitialAgg?.active_wizard_draft_id ??
+            (wizardInitialAgg?.issuer_context
+              ? `row-${String(wizardInitialAgg.issuer_context.active_issuer_business_id)}-${String(wizardInitialAgg.recipient_search?.selected?.income_customer_id ?? 'none')}`
+              : 'new-income-document')
+          }
           open={wizardOpen}
           busy={wizardBusy}
           entrypoint={wizardEntrypoint}

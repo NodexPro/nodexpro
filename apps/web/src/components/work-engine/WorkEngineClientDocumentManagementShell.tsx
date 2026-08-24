@@ -62,6 +62,8 @@ type ShellProps = {
   onBusyChange?: (busy: boolean) => void;
   onAfterIssuerSelect?: (response: SelectIncomeIssuerContextCommandResponse) => void;
   onOpenBranding?: () => void;
+  /** Open Income document wizard with workspace truth already scoped to the row. */
+  onOpenNewDocument?: (workspaceAggregate: IncomeWorkspaceAggregate) => void | Promise<void>;
   onError?: (message: string) => void;
   onEditDraft?: (draftId: string) => void | Promise<void>;
   onInvoicesTabRefresh?: (aggregate: Record<string, unknown>) => void;
@@ -79,6 +81,7 @@ export function WorkEngineClientDocumentManagementShell({
   onBusyChange,
   onAfterIssuerSelect,
   onOpenBranding,
+  onOpenNewDocument,
   onError,
   onEditDraft,
   onInvoicesTabRefresh,
@@ -258,8 +261,12 @@ export function WorkEngineClientDocumentManagementShell({
       const payload = { ...action.command_payload };
       const openBranding = payload.open_document_branding_studio === true;
       const openEndCustomers = payload.open_end_customers_panel === true;
-      const openEndCustomerSettings = payload.open_end_customer_settings === true;
-      const settingsCustomerId =
+      const openNewDocument = payload.open_new_income_document === true;
+      const focusCustomerId =
+        typeof payload.focus_income_customer_id === 'string'
+          ? payload.focus_income_customer_id
+          : null;
+      const incomeCustomerId =
         typeof payload.income_customer_id === 'string' ? payload.income_customer_id : null;
       const parentDisplayName =
         typeof payload.parent_client_display_name === 'string'
@@ -267,19 +274,34 @@ export function WorkEngineClientDocumentManagementShell({
           : result.clientName;
       delete payload.open_document_branding_studio;
       delete payload.open_end_customers_panel;
-      delete payload.open_end_customer_settings;
+      delete payload.open_new_income_document;
       delete payload.focus_income_customer_id;
       delete payload.parent_client_display_name;
+      delete payload.end_customer_id;
+      // select_income_issuer_context does not accept recipient; select after issuer if needed.
+      delete payload.income_customer_id;
 
       onBusyChange?.(true);
       try {
         const res = await executeIncomeCommand(action.command, payload);
         applyCustomersTableFromResponse(res);
         if (openBranding) onOpenBranding?.();
-        if (openEndCustomers || openEndCustomerSettings) {
+        if (openEndCustomers) {
           setEndCustomersClientName(parentDisplayName);
-          setEndCustomersInitialEditId(openEndCustomerSettings ? settingsCustomerId : null);
+          setEndCustomersInitialEditId(focusCustomerId);
           setEndCustomersOpen(true);
+        }
+        if (openNewDocument && isSelectIssuerResponse(res)) {
+          let workspace = res.income_workspace_aggregate;
+          if (incomeCustomerId) {
+            const recipientRes = await executeIncomeCommand('select_income_recipient', {
+              income_customer_id: incomeCustomerId,
+            });
+            if (isIncomeCommandResponse(recipientRes)) {
+              workspace = recipientRes.income_workspace_aggregate;
+            }
+          }
+          await onOpenNewDocument?.(workspace);
         }
       } catch (e) {
         onError?.(e instanceof Error ? e.message : String(e));
@@ -287,7 +309,13 @@ export function WorkEngineClientDocumentManagementShell({
         onBusyChange?.(false);
       }
     },
-    [applyCustomersTableFromResponse, onBusyChange, onError, onOpenBranding],
+    [
+      applyCustomersTableFromResponse,
+      onBusyChange,
+      onError,
+      onOpenBranding,
+      onOpenNewDocument,
+    ],
   );
 
   const handleCounterClick = useCallback(

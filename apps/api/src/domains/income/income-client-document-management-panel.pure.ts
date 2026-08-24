@@ -26,20 +26,29 @@ export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE = [
 
 export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_RETAINER = 'open_invoice_retainer_setup' as const;
 export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_MORE = 'more' as const;
+/** Work Engine invoices tab: replaces `more` with new-document action. */
+export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_NEW_DOCUMENT = 'open_new_income_document' as const;
 
-export function incomeCdmCanonicalActionSlotKeys(includeRetainer: boolean): string[] {
+export function incomeCdmCanonicalActionSlotKeys(
+  includeRetainer: boolean,
+  options?: { newDocumentInsteadOfMore?: boolean },
+): string[] {
+  const trailing = options?.newDocumentInsteadOfMore
+    ? INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_NEW_DOCUMENT
+    : INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_MORE;
   return [
     ...INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE,
     ...(includeRetainer ? [INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_RETAINER] : []),
-    INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_MORE,
+    trailing,
   ];
 }
 
 export function incomeCdmActionKeysMatchCanonical(
   actionKeys: string[],
   includeRetainer: boolean,
+  options?: { newDocumentInsteadOfMore?: boolean },
 ): boolean {
-  const expected = incomeCdmCanonicalActionSlotKeys(includeRetainer);
+  const expected = incomeCdmCanonicalActionSlotKeys(includeRetainer, options);
   if (actionKeys.length !== expected.length) return false;
   return actionKeys.every((key, index) => key === expected[index]);
 }

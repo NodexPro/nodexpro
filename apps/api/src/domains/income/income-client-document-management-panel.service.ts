@@ -80,9 +80,14 @@ type EndCustomerStatRow = PanelStatRow & {
 function buildOfficeClientRowActions(
   clientId: string,
   perms: IncomeWorkspacePermissions,
-  options?: { includeRetainerAction?: boolean },
+  options?: {
+    includeRetainerAction?: boolean;
+    /** Work Engine invoices: replace … with + new document. */
+    newDocumentInsteadOfMore?: boolean;
+  },
 ): IncomeClientDocumentManagementRowAction[] {
   const canEdit = perms.edit;
+  const canCreateDocument = perms.issue || perms.edit;
   const actions: IncomeClientDocumentManagementRowAction[] = [
     {
       key: 'open_branding_studio',
@@ -166,15 +171,33 @@ function buildOfficeClientRowActions(
     });
   }
 
-  actions.push({
-    key: 'more',
-    label: 'פעולות נוספות',
-    icon_key: 'more',
-    command: null,
-    command_payload: { open_more_menu: true, client_id: clientId },
-    enabled: true,
-    disabled_reason: null,
-  });
+  if (options?.newDocumentInsteadOfMore) {
+    actions.push({
+      key: 'open_new_income_document',
+      label: 'מסמך חדש',
+      icon_key: 'plus',
+      command: INCOME_COMMAND_SELECT_ISSUER,
+      command_payload: {
+        command: INCOME_COMMAND_SELECT_ISSUER,
+        acting_mode: 'office_representative',
+        issuer_business_id: clientId,
+        represented_client_id: clientId,
+        open_new_income_document: true,
+      },
+      enabled: canCreateDocument,
+      disabled_reason: canCreateDocument ? null : 'אין הרשאת הפקה',
+    });
+  } else {
+    actions.push({
+      key: 'more',
+      label: 'פעולות נוספות',
+      icon_key: 'more',
+      command: null,
+      command_payload: { open_more_menu: true, client_id: clientId },
+      enabled: true,
+      disabled_reason: null,
+    });
+  }
 
   return actions;
 }
@@ -194,10 +217,12 @@ function buildEndCustomerRowActions(params: {
   perms: IncomeWorkspacePermissions;
   includeRetainerAction?: boolean;
   workEngineInvoicesFunctionalParity?: boolean;
+  newDocumentInsteadOfMore?: boolean;
 }): IncomeClientDocumentManagementRowAction[] {
   const { representedClientId, incomeCustomerId, parentClientDisplayName, perms } = params;
   const weParity = params.workEngineInvoicesFunctionalParity === true;
   const canEmail = perms.view && perms.issue_on_behalf;
+  const canCreateDocument = perms.issue || perms.edit;
 
   const settingsAction: IncomeClientDocumentManagementRowAction = weParity
     ? {
@@ -212,8 +237,12 @@ function buildEndCustomerRowActions(params: {
           represented_client_id: representedClientId,
           income_customer_id: incomeCustomerId,
           parent_client_display_name: parentClientDisplayName,
-          /** WE invoices: open THIS end-customer's editor — not Branding Studio. */
-          open_end_customer_settings: true,
+          /**
+           * Document settings = Branding Studio for the parent issuer.
+           * Row context keeps income_customer_id; branding profiles are issuer-scoped.
+           * Must NOT open the end-customer CRM identity editor.
+           */
+          open_document_branding_studio: true,
         },
         enabled: perms.edit,
         disabled_reason: perms.edit ? null : 'אין הרשאת עריכה',
@@ -338,19 +367,40 @@ function buildEndCustomerRowActions(params: {
     });
   }
 
-  actions.push({
-    key: 'more',
-    label: 'פעולות נוספות',
-    icon_key: 'more',
-    command: null,
-    command_payload: {
-      open_more_menu: true,
-      client_id: representedClientId,
-      income_customer_id: incomeCustomerId,
-    },
-    enabled: true,
-    disabled_reason: null,
-  });
+  if (params.newDocumentInsteadOfMore) {
+    actions.push({
+      key: 'open_new_income_document',
+      label: 'מסמך חדש',
+      icon_key: 'plus',
+      command: INCOME_COMMAND_SELECT_ISSUER,
+      command_payload: {
+        command: INCOME_COMMAND_SELECT_ISSUER,
+        acting_mode: 'office_representative',
+        issuer_business_id: representedClientId,
+        represented_client_id: representedClientId,
+        income_customer_id: incomeCustomerId,
+        end_customer_id: incomeCustomerId,
+        parent_client_display_name: parentClientDisplayName,
+        open_new_income_document: true,
+      },
+      enabled: canCreateDocument,
+      disabled_reason: canCreateDocument ? null : 'אין הרשאת הפקה',
+    });
+  } else {
+    actions.push({
+      key: 'more',
+      label: 'פעולות נוספות',
+      icon_key: 'more',
+      command: null,
+      command_payload: {
+        open_more_menu: true,
+        client_id: representedClientId,
+        income_customer_id: incomeCustomerId,
+      },
+      enabled: true,
+      disabled_reason: null,
+    });
+  }
 
   return actions;
 }
@@ -368,8 +418,9 @@ function formatDateDisplay(iso: string | null): string {
 function buildDocumentTypeCounters(
   stat: PanelStatRow,
   actionParams: { represented_client_id: string; income_customer_id: string | null },
+  options?: { omitDraftDocumentTypeCounter?: boolean },
 ): IncomeClientDocumentTypeCounter[] {
-  return [
+  const counters: IncomeClientDocumentTypeCounter[] = [
     {
       key: 'quote',
       label: 'הצעת מחיר',
@@ -424,7 +475,9 @@ function buildDocumentTypeCounters(
       action_key: 'open_documents_by_type',
       action_params: actionParams,
     },
-    {
+  ];
+  if (options?.omitDraftDocumentTypeCounter !== true) {
+    counters.push({
       key: 'draft',
       label: 'טיוטות',
       count: Number(stat.draft_documents_count) || 0,
@@ -432,8 +485,9 @@ function buildDocumentTypeCounters(
       tooltip_label: 'טיוטות',
       action_key: 'open_documents_by_type',
       action_params: actionParams,
-    },
-  ];
+    });
+  }
+  return counters;
 }
 
 function statusLabelFromStat(stat: PanelStatRow): string {
@@ -523,6 +577,8 @@ function buildOfficeClientRow(params: {
   meta: { display_name: string; tax_id: string | null; email: string | null } | undefined;
   perms: IncomeWorkspacePermissions;
   includeRetainerAction?: boolean;
+  newDocumentInsteadOfMore?: boolean;
+  omitDraftDocumentTypeCounter?: boolean;
 }): IncomeClientDocumentManagementRow {
   const clientId = String(params.stat.represented_client_id);
   const clientName = params.meta?.display_name ?? clientId;
@@ -552,10 +608,14 @@ function buildOfficeClientRow(params: {
     tax_invoice_count: Number(params.stat.tax_invoice_count) || 0,
     receipt_count: Number(params.stat.receipt_count) || 0,
     credit_count: Number(params.stat.credit_count) || 0,
-    document_type_counters: buildDocumentTypeCounters(params.stat, {
-      represented_client_id: clientId,
-      income_customer_id: null,
-    }),
+    document_type_counters: buildDocumentTypeCounters(
+      params.stat,
+      {
+        represented_client_id: clientId,
+        income_customer_id: null,
+      },
+      { omitDraftDocumentTypeCounter: params.omitDraftDocumentTypeCounter },
+    ),
     unpaid_amount_reference: unpaidRef,
     unpaid_amount_display:
       unpaidRef != null ? formatMoneyReference(unpaidRef, currency) : '—',
@@ -566,6 +626,7 @@ function buildOfficeClientRow(params: {
     status_label: statusLabelFromStat(params.stat),
     actions: buildOfficeClientRowActions(clientId, params.perms, {
       includeRetainerAction: params.includeRetainerAction,
+      newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
     }),
     row_context: {
       population_key: 'office_client',
@@ -584,6 +645,8 @@ function buildEndCustomerRow(params: {
   perms: IncomeWorkspacePermissions;
   includeRetainerAction?: boolean;
   workEngineInvoicesFunctionalParity?: boolean;
+  newDocumentInsteadOfMore?: boolean;
+  omitDraftDocumentTypeCounter?: boolean;
 }): IncomeClientDocumentManagementRow {
   const representedClientId = String(params.stat.represented_client_id);
   const incomeCustomerId = String(params.stat.income_customer_id);
@@ -614,10 +677,14 @@ function buildEndCustomerRow(params: {
     tax_invoice_count: Number(params.stat.tax_invoice_count) || 0,
     receipt_count: Number(params.stat.receipt_count) || 0,
     credit_count: Number(params.stat.credit_count) || 0,
-    document_type_counters: buildDocumentTypeCounters(params.stat, {
-      represented_client_id: representedClientId,
-      income_customer_id: incomeCustomerId,
-    }),
+    document_type_counters: buildDocumentTypeCounters(
+      params.stat,
+      {
+        represented_client_id: representedClientId,
+        income_customer_id: incomeCustomerId,
+      },
+      { omitDraftDocumentTypeCounter: params.omitDraftDocumentTypeCounter },
+    ),
     unpaid_amount_reference: unpaidRef,
     unpaid_amount_display:
       unpaidRef != null ? formatMoneyReference(unpaidRef, currency) : '—',
@@ -633,6 +700,7 @@ function buildEndCustomerRow(params: {
       perms: params.perms,
       includeRetainerAction: params.includeRetainerAction,
       workEngineInvoicesFunctionalParity: params.workEngineInvoicesFunctionalParity,
+      newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
     }),
     row_context: {
       population_key: 'office_client_customer',
@@ -653,6 +721,15 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
    * end-customer contracts. Must stay false for /m/income (default).
    */
   workEngineInvoicesFunctionalParity?: boolean;
+  /**
+   * Work Engine invoices tab only: replace trailing `more` with `open_new_income_document`.
+   */
+  newDocumentInsteadOfMore?: boolean;
+  /**
+   * Work Engine invoices tab only: omit the draft (טיוטות) document-type cube.
+   * Does not remove draft domain storage or commands.
+   */
+  omitDraftDocumentTypeCounter?: boolean;
 }): Promise<IncomeClientDocumentManagementPanel> {
   const orgId = params.ctx.organizationId!;
   const visible = params.perms.issue_on_behalf;
@@ -796,6 +873,8 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
         meta: clientMetaById.get(clientId),
         perms: params.perms,
         includeRetainerAction: params.includeRetainerAction,
+        newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
+        omitDraftDocumentTypeCounter: params.omitDraftDocumentTypeCounter,
       }),
     )
     .sort((a, b) => a.client_display_name.localeCompare(b.client_display_name, 'he'));
@@ -810,6 +889,8 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
         perms: params.perms,
         includeRetainerAction: params.includeRetainerAction,
         workEngineInvoicesFunctionalParity: params.workEngineInvoicesFunctionalParity,
+        newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
+        omitDraftDocumentTypeCounter: params.omitDraftDocumentTypeCounter,
       });
     })
     .sort((a, b) => {

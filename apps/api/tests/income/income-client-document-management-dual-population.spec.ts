@@ -137,6 +137,7 @@ test('end-customer actions share canonical slots; /m/income keeps artificial dis
   assert.match(endFn, /key: 'open_income_ledger_card'/);
   assert.match(endFn, /key: 'open_email_history'/);
   assert.match(endFn, /key: 'more'/);
+  assert.match(endFn, /key: 'open_new_income_document'/);
   // Legacy (/m/income) branch still carries artificial disablement reasons.
   assert.match(endFn, /הגדרות מסמך שייכות ללקוח המשרד/);
   assert.match(endFn, /ניהול לקוחות קצה זמין משורת לקוח המשרד בלבד/);
@@ -144,8 +145,9 @@ test('end-customer actions share canonical slots; /m/income keeps artificial dis
   assert.match(endFn, /היסטוריית מייל לפי לקוח קצה — בקרוב/);
   assert.match(endFn, /end_customer_id: incomeCustomerId/);
   assert.match(endFn, /income_customer_id: incomeCustomerId/);
-  // WE parity branch uses real contracts (settings editor + parent customers panel).
-  assert.match(endFn, /open_end_customer_settings:\s*true/);
+  // WE parity: document settings = Branding Studio (not CRM customer editor).
+  assert.match(endFn, /open_document_branding_studio:\s*true/);
+  assert.doesNotMatch(endFn, /open_end_customer_settings/);
   assert.match(endFn, /open_end_customers_panel:\s*true/);
   assert.match(endFn, /focus_income_customer_id:\s*incomeCustomerId/);
 });
@@ -160,7 +162,11 @@ test('WE invoices tab enables end-customer functional parity; income issuer cont
     'utf8',
   );
   assert.match(invoicesTabSource, /workEngineInvoicesFunctionalParity:\s*true/);
+  assert.match(invoicesTabSource, /newDocumentInsteadOfMore:\s*true/);
+  assert.match(invoicesTabSource, /omitDraftDocumentTypeCounter:\s*true/);
   assert.doesNotMatch(issuerContextSource, /workEngineInvoicesFunctionalParity:\s*true/);
+  assert.doesNotMatch(issuerContextSource, /newDocumentInsteadOfMore:\s*true/);
+  assert.doesNotMatch(issuerContextSource, /omitDraftDocumentTypeCounter:\s*true/);
 });
 
 test('end-customer WE parity actions are permission-gated not population-gated', () => {
@@ -170,7 +176,8 @@ test('end-customer WE parity actions are permission-gated not population-gated',
   assert.match(endFn, /enabled: perms\.edit/);
   assert.match(endFn, /weParity \? perms\.view : false/);
   assert.match(endFn, /weParity \? canEmail : false/);
-  assert.match(endFn, /open_end_customer_settings/);
+  assert.match(endFn, /open_document_branding_studio:\s*true/);
+  assert.doesNotMatch(endFn, /open_end_customer_settings/);
   assert.doesNotMatch(endFn, /population_key\s*===/);
 });
 
@@ -194,11 +201,28 @@ test('canonical action slot order is identical for both populations', () => {
     'open_email_history',
     'more',
   ]);
+  assert.deepEqual(incomeCdmCanonicalActionSlotKeys(true, { newDocumentInsteadOfMore: true }), [
+    'open_branding_studio',
+    'open_end_customers',
+    'open_reports',
+    'open_income_ledger_card',
+    'open_email_history',
+    'open_invoice_retainer_setup',
+    'open_new_income_document',
+  ]);
   assert.equal(incomeCdmActionKeysMatchCanonical(withRetainer, true), true);
   assert.equal(incomeCdmActionKeysMatchCanonical(withoutRetainer, false), true);
   assert.equal(
     incomeCdmActionKeysMatchCanonical(['open_reports', 'open_income_ledger_card', 'more'], false),
     false,
+  );
+  assert.equal(
+    incomeCdmActionKeysMatchCanonical(
+      incomeCdmCanonicalActionSlotKeys(true, { newDocumentInsteadOfMore: true }),
+      true,
+      { newDocumentInsteadOfMore: true },
+    ),
+    true,
   );
 
   const officeFnStart = panelSource.indexOf('function buildOfficeClientRowActions');
@@ -212,6 +236,8 @@ test('canonical action slot order is identical for both populations', () => {
     assert.match(officeFn, new RegExp(`key: '${key}'`));
     assert.match(endFn, new RegExp(`key: '${key}'`));
   }
+  assert.match(officeFn, /key: 'open_new_income_document'/);
+  assert.match(endFn, /key: 'open_new_income_document'/);
 });
 
 test('ledger/retainer end-customer payloads keep parent + income_customer_id', () => {
@@ -235,9 +261,10 @@ test('frontend action cell does not filter by population', () => {
   assert.match(panelFe, /function ActionButton/);
   assert.match(panelFe, /kind: 'email_history'/);
   assert.match(panelFe, /initialEditCustomerId/);
+  assert.match(panelFe, /case 'plus'/);
 });
 
-test('WE shell wires end-customer settings/email context; Income shell stays unscoped', () => {
+test('WE shell wires document settings + new document; Income shell stays unscoped', () => {
   const weShell = readFileSync(
     join(dir, '../../../web/src/components/work-engine/WorkEngineClientDocumentManagementShell.tsx'),
     'utf8',
@@ -246,13 +273,44 @@ test('WE shell wires end-customer settings/email context; Income shell stays uns
     join(dir, '../../../web/src/components/income/IncomeClientDocumentManagementShell.tsx'),
     'utf8',
   );
-  assert.match(weShell, /open_end_customer_settings/);
+  assert.doesNotMatch(weShell, /open_end_customer_settings/);
+  assert.match(weShell, /open_document_branding_studio/);
+  assert.match(weShell, /open_new_income_document/);
+  assert.match(weShell, /select_income_recipient/);
+  assert.match(weShell, /onOpenNewDocument/);
   assert.match(weShell, /endCustomersInitialEditId/);
   assert.match(weShell, /emailHistoryEndCustomerId/);
   assert.match(weShell, /incomeCustomerId=\{emailHistoryEndCustomerId\}/);
   assert.doesNotMatch(incomeShell, /open_end_customer_settings/);
+  assert.doesNotMatch(incomeShell, /open_new_income_document/);
   assert.doesNotMatch(incomeShell, /endCustomersInitialEditId/);
   assert.doesNotMatch(incomeShell, /emailHistoryEndCustomerId/);
+});
+
+test('WE invoices omits draft cube from counters; draft domain key still exists in builder', () => {
+  assert.match(panelSource, /omitDraftDocumentTypeCounter/);
+  assert.match(panelSource, /key: 'draft'/);
+  assert.match(panelSource, /label: 'טיוטות'/);
+  const counterFnStart = panelSource.indexOf('function buildDocumentTypeCounters');
+  const counterFnEnd = panelSource.indexOf('function statusLabelFromStat');
+  const counterFn = panelSource.slice(counterFnStart, counterFnEnd);
+  assert.match(counterFn, /omitDraftDocumentTypeCounter/);
+  assert.match(counterFn, /key: 'draft'/);
+});
+
+test('WE + action payloads carry exact row context for office and end customer', () => {
+  const officeFnStart = panelSource.indexOf('function buildOfficeClientRowActions');
+  const officeFnEnd = panelSource.indexOf('function buildEndCustomerRowActions');
+  const officeFn = panelSource.slice(officeFnStart, officeFnEnd);
+  const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
+  const endFnEnd = panelSource.indexOf('function formatMoneyReference');
+  const endFn = panelSource.slice(endFnStart, endFnEnd);
+  assert.match(officeFn, /open_new_income_document:\s*true/);
+  assert.match(officeFn, /represented_client_id: clientId/);
+  assert.match(endFn, /open_new_income_document:\s*true/);
+  assert.match(endFn, /represented_client_id: representedClientId/);
+  assert.match(endFn, /income_customer_id: incomeCustomerId/);
+  assert.match(endFn, /issuer_business_id: representedClientId/);
 });
 
 test('A/B — office section starts from Core clients and left-joins stats (zero-doc clients included)', () => {

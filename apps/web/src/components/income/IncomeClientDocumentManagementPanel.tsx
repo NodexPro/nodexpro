@@ -107,6 +107,13 @@ function ActionIcon({ iconKey }: { iconKey: string }) {
           <circle cx="18" cy="12" r="1.6" fill="currentColor" />
         </svg>
       );
+    case 'plus':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M12 5v14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      );
     case 'ledger':
       return <span className="nx-income-cdm__action-letter">כ</span>;
     case 'retainer':

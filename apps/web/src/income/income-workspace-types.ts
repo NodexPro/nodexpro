@@ -48,7 +48,8 @@ export type IncomeClientDocumentManagementActionIconKey =
   | 'ledger'
   | 'retainer'
   | 'at'
-  | 'more';
+  | 'more'
+  | 'plus';
 
 export interface IncomeClientDocumentManagementRowAction {
   key: string;

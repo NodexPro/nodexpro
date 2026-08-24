@@ -54,6 +54,26 @@ test('empty new-document wizard stays on first backend step', () => {
   assert.equal(resolveIncomeWizardStartingStepIndex(WIZARD_STEPS, null), 0);
 });
 
+test('row-scoped new document with issuer_context starts at document_type', () => {
+  assert.equal(
+    resolveIncomeWizardStartingStepKey({
+      steps: WIZARD_STEPS,
+      wizard_starting_step_key: null,
+      active_wizard_draft_id: null,
+      has_document_details_step: false,
+      has_issuer_context: true,
+    }),
+    'document_type',
+  );
+  assert.equal(
+    resolveIncomeWizardStartingStepIndex(WIZARD_STEPS, {
+      issuer_context: { issuer_business_id: 'issuer-1' },
+      active_wizard_draft_id: null,
+    }),
+    1,
+  );
+});
+
 test('credit draft first paint is document_details index, not issuer_choice', () => {
   assert.equal(
     resolveIncomeWizardStartingStepIndex(WIZARD_STEPS, {
@@ -99,6 +119,20 @@ test('credit handoff opens WorkEngineIncomeDocumentWizardModal, not retainer set
   assert.doesNotMatch(creditHandler, /setRetainerSetupOpen\(true\)/);
   assert.doesNotMatch(creditHandler, /setRetainerCustomerOpen\(true\)/);
   assert.doesNotMatch(creditHandler, /WorkEngineInvoiceRetainerSetupModal/);
+
+  assert.match(tabHostSource, /onOpenNewDocument=\{async \(workspaceAggregate\) => \{/);
+  assert.match(tabHostSource, /setWizardInitialAgg\(workspaceAggregate\)/);
+  assert.match(shellSource, /select_income_recipient/);
+  assert.doesNotMatch(shellSource, /open_end_customer_settings/);
+  assert.match(
+    shellSource,
+    /select_income_recipient[\s\S]*?income_customer_id: incomeCustomerId/,
+  );
+  assert.doesNotMatch(
+    shellSource,
+    /select_income_recipient[\s\S]*?display_name/,
+  );
+  assert.match(wizardSource, /has_issuer_context: Boolean\(workspaceAgg\?\.issuer_context\)/);
 
   assert.match(tabHostSource, /onOpenConvertedDraft=\{async \(\{ workspaceAggregate \}\) => \{/);
   assert.match(tabHostSource, /setWizardInitialAgg\(workspaceAggregate\)/);

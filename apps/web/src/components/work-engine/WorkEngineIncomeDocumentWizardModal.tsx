@@ -191,6 +191,7 @@ export function WorkEngineIncomeDocumentWizardModal({
       wizard_starting_step_key: workspaceAgg?.wizard_starting_step_key,
       active_wizard_draft_id: workspaceAgg?.active_wizard_draft_id,
       has_document_details_step: Boolean(workspaceAgg?.document_details_step),
+      has_issuer_context: Boolean(workspaceAgg?.issuer_context),
     });
     const idx = stepIndexForKey(visibleSteps, startingStepKey);
     if (idx != null) setStepIndex(idx);
@@ -199,6 +200,7 @@ export function WorkEngineIncomeDocumentWizardModal({
     workspaceAgg?.wizard_starting_step_key,
     workspaceAgg?.active_wizard_draft_id,
     workspaceAgg?.document_details_step,
+    workspaceAgg?.issuer_context,
   ]);
 
   useEffect(() => {
