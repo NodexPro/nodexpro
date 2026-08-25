@@ -331,10 +331,17 @@ async function loadIssuedDocumentCandidates(params: {
   ctx: RequestContext;
   orgId: string;
   representedClientId: string;
+  /** End-customer scope. When null, office-client cube scope (Office→client) — empty until modeled. */
+  incomeCustomerId: string | null;
   documentType: IncomeDocumentType;
   canView: boolean;
   permissions: IncomeWorkspacePermissions;
 }): Promise<Array<WorkEngineInvoicesClientDocumentsByTypeRow & { year: number | null }>> {
+  // Office→Core-client documents are not classifiable yet; match panel_stats emptiness.
+  if (!params.incomeCustomerId) {
+    return [];
+  }
+
   const preliminaryType = isIncomeConversionSourceType(params.documentType);
   let query = supabaseAdmin
     .from('income_documents')
@@ -345,6 +352,7 @@ async function loadIssuedDocumentCandidates(params: {
     .or(excludeSelfModeActingFilter())
     .eq('document_type', params.documentType)
     .or(officeClientDocumentsOrFilter(params.representedClientId))
+    .eq('income_customer_id', params.incomeCustomerId)
     .order('issue_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(5000);
@@ -726,9 +734,14 @@ async function loadIssuedDocumentCandidates(params: {
 async function loadDraftCandidates(params: {
   orgId: string;
   representedClientId: string;
+  incomeCustomerId: string | null;
   canEdit: boolean;
   customerNames: Map<string, string>;
 }): Promise<Array<WorkEngineInvoicesClientDocumentsByTypeRow & { year: number | null }>> {
+  if (!params.incomeCustomerId) {
+    return [];
+  }
+
   const { data, error } = await supabaseAdmin
     .from('income_document_drafts')
     .select(
@@ -739,6 +752,7 @@ async function loadDraftCandidates(params: {
     .eq('status', 'draft')
     .not('user_saved_at', 'is', null)
     .or(officeClientDocumentsOrFilter(params.representedClientId))
+    .eq('income_customer_id', params.incomeCustomerId)
     .order('updated_at', { ascending: false })
     .limit(5000);
   throwIfSupabaseError(error, 'loadDocumentsByTypeDrafts');
@@ -845,6 +859,8 @@ function filterCandidatesByYear(
 export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(params: {
   ctx: RequestContext;
   representedClientId: string;
+  /** When set: Test3→customer scope. When null: Office→Test3 scope (empty until modeled). */
+  incomeCustomerId?: string | null;
   documentTypeKey: string;
   year?: number | null;
 }): Promise<WorkEngineInvoicesClientDocumentsByTypeAggregate> {
@@ -856,6 +872,10 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
 
   const representedClientId = String(params.representedClientId ?? '').trim();
   if (!representedClientId) throw badRequest('represented_client_id is required');
+  const incomeCustomerId =
+    params.incomeCustomerId != null && String(params.incomeCustomerId).trim() !== ''
+      ? String(params.incomeCustomerId).trim()
+      : null;
 
   const documentTypeKey = parseDocumentTypeKey(params.documentTypeKey);
   const perms = incomeWorkspacePermissionsFromContext(params.ctx);
@@ -871,6 +891,7 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
     const candidates = await loadDraftCandidates({
       orgId,
       representedClientId,
+      incomeCustomerId,
       canEdit: perms.edit,
       customerNames,
     });
@@ -886,6 +907,7 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
       ctx: params.ctx,
       orgId,
       representedClientId,
+      incomeCustomerId,
       documentType: issuedType,
       canView: perms.view,
       permissions: perms,

@@ -85,7 +85,7 @@ test('UI לא שולם binds unpaid_amount_display only (no FE original-paid mat
   assert.doesNotMatch(webPanel, /grand_total.*allocated|allocated.*grand_total/);
   assert.match(panelSource, /unpaid_amount_display/);
   assert.match(panelSource, /label: 'לא שולם'/);
-  assert.match(panelSource, /166_income_client_panel_stats_exclude_end_customer_docs/);
+  assert.match(panelSource, /167_income_client_panel_stats_office_to_client_scope/);
 });
 
 test('Work Engine invoices tab composes client panel (לא שולם surface)', () => {

@@ -109,6 +109,7 @@ export function WorkEngineClientDocumentManagementShell({
     clientDisplayName: string;
     documentTypeKey: IncomeClientDocumentTypeCounter['key'];
     documentTypeLabel: string;
+    incomeCustomerId: string | null;
   } | null>(null);
   const [retainerCustomerOpen, setRetainerCustomerOpen] = useState(false);
   const [retainerClientId, setRetainerClientId] = useState<string | null>(null);
@@ -324,11 +325,17 @@ export function WorkEngineClientDocumentManagementShell({
       clientDisplayName: string;
       counter: IncomeClientDocumentTypeCounter;
     }) => {
+      const incomeCustomerId =
+        typeof params.counter.action_params?.income_customer_id === 'string' &&
+        params.counter.action_params.income_customer_id.trim() !== ''
+          ? params.counter.action_params.income_customer_id.trim()
+          : null;
       setDocumentsModalParams({
         representedClientId: params.representedClientId,
         clientDisplayName: params.clientDisplayName,
         documentTypeKey: params.counter.key,
         documentTypeLabel: params.counter.label,
+        incomeCustomerId,
       });
       setDocumentsModalOpen(true);
     },

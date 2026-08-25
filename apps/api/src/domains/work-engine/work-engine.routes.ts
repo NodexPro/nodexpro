@@ -229,6 +229,8 @@ officeRouter.get(
       const ctx = req.context as RequestContext;
       const representedClientId = String(req.query.represented_client_id ?? '').trim();
       const documentTypeKey = String(req.query.document_type_key ?? '').trim();
+      const incomeCustomerIdRaw = String(req.query.income_customer_id ?? '').trim();
+      const incomeCustomerId = incomeCustomerIdRaw !== '' ? incomeCustomerIdRaw : null;
       const yearRaw = req.query.year;
       const year =
         yearRaw != null && String(yearRaw).trim() !== '' ? Number(yearRaw) : null;
@@ -238,6 +240,7 @@ officeRouter.get(
       const aggregate = await buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
         ctx,
         representedClientId,
+        incomeCustomerId,
         documentTypeKey,
         year,
       });

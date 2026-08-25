@@ -20,6 +20,8 @@ type OpenParams = {
   clientDisplayName: string;
   documentTypeKey: IncomeClientDocumentTypeCounterKey;
   documentTypeLabel: string;
+  /** Backend scope from counter action_params — null = Office→client (empty until modeled). */
+  incomeCustomerId: string | null;
 };
 
 type Props = {
@@ -174,6 +176,7 @@ export function WorkEngineClientDocumentsByTypeModal({
         const agg = await fetchWorkEngineInvoicesClientDocumentsByTypeAggregate({
           representedClientId: params.representedClientId,
           documentTypeKey: params.documentTypeKey,
+          incomeCustomerId: params.incomeCustomerId,
           year,
         });
         setAggregate(agg);

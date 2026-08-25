@@ -586,12 +586,16 @@ export async function fetchWorkEngineInvoicesTabAggregate(): Promise<WorkEngineI
 export async function fetchWorkEngineInvoicesClientDocumentsByTypeAggregate(params: {
   representedClientId: string;
   documentTypeKey: IncomeClientDocumentTypeCounterKey;
+  incomeCustomerId?: string | null;
   year?: number | null;
 }): Promise<WorkEngineInvoicesClientDocumentsByTypeAggregate> {
   const qs = new URLSearchParams({
     represented_client_id: params.representedClientId,
     document_type_key: params.documentTypeKey,
   });
+  if (params.incomeCustomerId != null && String(params.incomeCustomerId).trim() !== '') {
+    qs.set('income_customer_id', String(params.incomeCustomerId).trim());
+  }
   if (params.year != null) qs.set('year', String(params.year));
   return apiJson<WorkEngineInvoicesClientDocumentsByTypeAggregate>(
     `${WORK_ENGINE.aggregateInvoicesClientDocumentsByType}?${qs.toString()}`,

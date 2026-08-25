@@ -106,6 +106,79 @@ export function zeroOfficeClientDocumentStat(representedClientId: string): {
   };
 }
 
+/** Zero counters for an end customer with no stats row (population still includes the customer). */
+export function zeroEndCustomerDocumentStat(params: {
+  representedClientId: string;
+  incomeCustomerId: string;
+}): {
+  represented_client_id: string;
+  income_customer_id: string;
+  total_documents_count: number;
+  draft_documents_count: number;
+  quote_count: number;
+  deal_count: number;
+  tax_invoice_count: number;
+  receipt_count: number;
+  credit_count: number;
+  quote_issued_count: number;
+  deal_issued_count: number;
+  tax_invoice_issued_count: number;
+  tax_invoice_receipt_issued_count: number;
+  receipt_issued_count: number;
+  credit_issued_count: number;
+  last_document_date: string | null;
+  last_activity_at: string | null;
+  unpaid_reference: number | null;
+  currency: string | null;
+} {
+  return {
+    represented_client_id: params.representedClientId,
+    income_customer_id: params.incomeCustomerId,
+    total_documents_count: 0,
+    draft_documents_count: 0,
+    quote_count: 0,
+    deal_count: 0,
+    tax_invoice_count: 0,
+    receipt_count: 0,
+    credit_count: 0,
+    quote_issued_count: 0,
+    deal_issued_count: 0,
+    tax_invoice_issued_count: 0,
+    tax_invoice_receipt_issued_count: 0,
+    receipt_issued_count: 0,
+    credit_issued_count: 0,
+    last_document_date: null,
+    last_activity_at: null,
+    unpaid_reference: null,
+    currency: null,
+  };
+}
+
+/**
+ * End-customer section population: ALL eligible income_customers, left-join stats.
+ * Does not invent membership — `customers` must already be the canonical list.
+ */
+export function mergeEndCustomersWithDocumentStats<
+  TStat extends { represented_client_id: string; income_customer_id: string },
+>(
+  customers: Array<{ id: string; represented_client_id: string }>,
+  statsByPairKey: Map<string, TStat>,
+  zeroStat: (params: { representedClientId: string; incomeCustomerId: string }) => TStat,
+): Array<{ representedClientId: string; incomeCustomerId: string; stat: TStat }> {
+  return customers.map((customer) => {
+    const representedClientId = String(customer.represented_client_id);
+    const incomeCustomerId = String(customer.id);
+    const pairKey = endCustomerPopulationKey({ representedClientId, incomeCustomerId });
+    return {
+      representedClientId,
+      incomeCustomerId,
+      stat:
+        statsByPairKey.get(pairKey) ??
+        zeroStat({ representedClientId, incomeCustomerId }),
+    };
+  });
+}
+
 /**
  * Office section population: start from ALL eligible office clients, left-join stats.
  * Does not invent membership — `officeClients` must already be the canonical Core list.
@@ -203,24 +276,25 @@ export function resolveOfficeClientGroupKey(row: OfficeClientDocumentScopeRow): 
   return null;
 }
 
-function hasEndCustomerRecipient(row: { income_customer_id?: string | null }): boolean {
-  const id = row.income_customer_id;
-  return id != null && String(id).trim() !== '';
-}
-
 /**
- * Office-client COUNTER / office-row document scope key.
- * Same issuer scope as resolveOfficeClientGroupKey, but excludes documents that
- * already have an end-customer recipient (Test3 → Chicago must not inflate Test3 office cubes).
+ * Office-client COUNTER scope key for OFFICE → Core client documents.
+ *
+ * Domain truth: `office_representative` means issuer = represented client
+ * (Client → recipient), NEVER Accounting Office → Core client.
+ * True Office→Core-client recipient linkage is not modeled yet (self-mode has
+ * no Core-client-as-recipient FK). Until that exists, counter key is always null.
  */
-export function resolveOfficeClientCounterGroupKey(row: OfficeClientDocumentScopeRow): string | null {
-  if (hasEndCustomerRecipient(row)) return null;
-  return resolveOfficeClientGroupKey(row);
+export function resolveOfficeClientCounterGroupKey(_row: OfficeClientDocumentScopeRow): string | null {
+  return null;
 }
 
 /**
  * Pure counter composition for office-client vs end-customer populations.
  * Mirrors SQL directional rules (panel_stats vs end_customer_stats).
+ *
+ * - Saved end customer (income_customer_id set) under office_representative → end-customer
+ * - office_representative without income_customer_id → excluded (one-time/orphan; not Office→client)
+ * - Office→Core client → not classifiable until schema exists (excluded)
  */
 export function classifyDocumentPopulationForCounters(row: {
   represented_client_id: string | null;
@@ -251,7 +325,8 @@ export function classifyDocumentPopulationForCounters(row: {
     };
   }
 
-  return { population: 'office_client', represented_client_id: issuerScopeKey };
+  // Client-as-issuer without saved income_customer is not Office→client.
+  return { population: 'excluded' };
 }
 
 export type DocumentCounterBucket = {

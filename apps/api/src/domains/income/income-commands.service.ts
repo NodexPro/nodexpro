@@ -319,6 +319,7 @@ async function refreshRecurringCycleDraftReviewMutationCase(params: {
     buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
       ctx: params.ctx,
       representedClientId: params.review.represented_client_id,
+      incomeCustomerId: String((profile as { end_customer_id: string }).end_customer_id),
       documentTypeKey: 'draft',
     }),
   ]);
@@ -1030,6 +1031,7 @@ export async function executeIncomeCommand(
               ? buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
                   ctx,
                   representedClientId,
+                  incomeCustomerId: endCustomerId,
                   documentTypeKey: 'credit_tax_invoice',
                   year,
                 })

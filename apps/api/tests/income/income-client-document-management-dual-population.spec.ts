@@ -80,13 +80,16 @@ test('6 — direct office rows remain in backward-compatible rows list', () => {
 
 test('7 — no FE inference hooks in panel service', () => {
   assert.doesNotMatch(panelSource, /if \(.*name.*\)/);
-  assert.match(panelSource, /parentDisplayName: clientMetaById/);
+  assert.match(panelSource, /parentDisplayName:/);
+  assert.match(panelSource, /clientMetaById\.get\(representedClientId\)/);
 });
 
 test('8 — no N+1: both RPCs + meta loads are batched / parallel', () => {
   assert.match(panelSource, /Promise\.all\(\[/);
   assert.match(panelSource, /income_client_document_management_panel_stats/);
   assert.match(panelSource, /income_client_document_management_end_customer_stats/);
+  assert.match(panelSource, /mergeEndCustomersWithDocumentStats/);
+  assert.match(panelSource, /from\('income_customers'\)/);
   assert.doesNotMatch(panelSource, /for \(.*of .*\) \{\s*await/);
 });
 
@@ -344,8 +347,8 @@ test('D — office actions still built via buildOfficeClientRowActions (backend-
   assert.match(panelSource, /actions: buildOfficeClientRowActions/);
 });
 
-test('E/F — populations stay separated (end customers from endCustomerStats only)', () => {
-  assert.match(panelSource, /const endCustomerRows: IncomeClientDocumentManagementRow\[\] = endCustomerStats/);
+test('E/F — populations stay separated (end customers from canonical income_customers + stats)', () => {
+  assert.match(panelSource, /const endCustomerRows: IncomeClientDocumentManagementRow\[\] = mergeEndCustomersWithDocumentStats/);
   assert.match(panelSource, /section_key: 'office_clients'/);
   assert.match(panelSource, /section_key: 'office_client_customers'/);
   assert.match(panelSource, /population_key: 'office_client'/);

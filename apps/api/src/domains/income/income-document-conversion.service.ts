@@ -381,6 +381,7 @@ async function buildConversionCommandResponse(params: {
       ? buildWorkEngineInvoicesClientDocumentsByTypeAggregate({
           ctx: params.ctx,
           representedClientId: params.source.represented_client_id,
+          incomeCustomerId: params.source.income_customer_id,
           documentTypeKey: sourceTypeKey,
           year,
         })

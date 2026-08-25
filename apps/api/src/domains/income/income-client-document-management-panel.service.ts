@@ -7,10 +7,10 @@
  * Dual populations (invoices tab foundation):
  * - office_clients_section: ALL eligible Core office clients (left-join document stats;
  *   zero counters when no docs). Population is not document-derived.
- *   Office-client document counters = office-representative docs for that client with
- *   income_customer_id IS NULL (not Test3 → end-customer docs).
- * - office_client_customers_section: income_customers with document stats under those clients
- *   (represented_client + income_customer_id).
+ *   Office→Core-client document counters stay empty until recipient linkage exists;
+ *   office_representative docs are Client→recipient (never Office→client).
+ * - office_client_customers_section: ALL active income_customers under those clients
+ *   (left-join end-customer document stats by represented_client + income_customer_id).
  * `rows` remains office_clients_section.rows for backward compatibility.
  */
 
@@ -32,8 +32,11 @@ import type {
   IncomeWorkspacePermissions,
 } from './income.types.js';
 import {
+  endCustomerPopulationKey,
   groupEndCustomerRowsByParent,
+  mergeEndCustomersWithDocumentStats,
   mergeOfficeClientsWithDocumentStats,
+  zeroEndCustomerDocumentStat,
   zeroOfficeClientDocumentStat,
 } from './income-client-document-management-panel.pure.js';
 
@@ -518,7 +521,7 @@ function emptySection(
     empty_state: {
       visible: true,
       title:
-        section_key === 'office_clients' ? 'אין לקוחות במשרד' : 'אין עדיין לקוחות קצה עם מסמכים',
+        section_key === 'office_clients' ? 'אין לקוחות במשרד' : 'אין לקוחות קצה',
       description: null,
     },
   };
@@ -761,7 +764,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       .limit(500),
   ]);
   throwIfSupabaseError(statsRes.error, 'incomeClientDocumentManagementPanelStats', {
-    migrationHint: '166_income_client_panel_stats_exclude_end_customer_docs.sql',
+    migrationHint: '167_income_client_panel_stats_office_to_client_scope.sql',
   });
   throwIfSupabaseError(endCustomerStatsRes.error, 'incomeClientDocumentManagementEndCustomerStats', {
     migrationHint: '165_income_client_document_management_end_customer_stats.sql',
@@ -778,11 +781,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     email: string | null;
   }>;
 
-  const incomeCustomerIds = [
-    ...new Set(
-      endCustomerStats.map((s) => String(s.income_customer_id ?? '').trim()).filter(Boolean),
-    ),
-  ];
+  const officeClientIds = officeClients.map((c) => String(c.id)).filter(Boolean);
 
   const clientMetaById = new Map<
     string,
@@ -801,56 +800,34 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     });
   }
 
-  /** Parents referenced by end-customer stats may be missing from active list — load those meta only. */
-  const missingParentIds = [
-    ...new Set(
-      endCustomerStats
-        .map((s) => String(s.represented_client_id ?? '').trim())
-        .filter((id) => id && !clientMetaById.has(id)),
-    ),
-  ];
-
-  const [customersRes, missingParentsRes] = await Promise.all([
-    incomeCustomerIds.length > 0
+  /**
+   * Canonical end-customer population: ALL active saved income_customers under
+   * eligible office clients (not document-derived). Batched; no N+1.
+   */
+  const [canonicalCustomersRes] = await Promise.all([
+    officeClientIds.length > 0
       ? supabaseAdmin
           .from('income_customers')
           .select('id, display_name, tax_id, email, represented_client_id')
           .eq('organization_id', orgId)
-          .in('id', incomeCustomerIds)
-      : Promise.resolve({ data: [], error: null }),
-    missingParentIds.length > 0
-      ? supabaseAdmin
-          .from('clients')
-          .select('id, display_name, tax_id, email')
-          .eq('organization_id', orgId)
-          .in('id', missingParentIds)
+          .eq('status', 'active')
+          .eq('is_one_time', false)
+          .in('represented_client_id', officeClientIds)
+          .order('display_name', { ascending: true })
+          .limit(5000)
       : Promise.resolve({ data: [], error: null }),
   ]);
-  throwIfSupabaseError(customersRes.error, 'loadClientDocumentManagementEndCustomers');
-  throwIfSupabaseError(missingParentsRes.error, 'loadMissingParentClientsForEndCustomerSection');
+  throwIfSupabaseError(canonicalCustomersRes.error, 'loadCanonicalEndCustomersForDocumentManagementPanel');
 
-  for (const c of missingParentsRes.data ?? []) {
-    const client = c as {
-      id: string;
-      display_name: string;
-      tax_id: string | null;
-      email: string | null;
-    };
-    if (!clientMetaById.has(client.id)) {
-      clientMetaById.set(client.id, {
-        display_name: client.display_name,
-        tax_id: client.tax_id,
-        email: client.email,
-      });
-    }
-  }
-  for (const c of customersRes.data ?? []) {
-    const customer = c as {
-      id: string;
-      display_name: string;
-      tax_id: string | null;
-      email: string | null;
-    };
+  const canonicalCustomers = (canonicalCustomersRes.data ?? []) as Array<{
+    id: string;
+    display_name: string;
+    tax_id: string | null;
+    email: string | null;
+    represented_client_id: string;
+  }>;
+
+  for (const customer of canonicalCustomers) {
     customerMetaById.set(customer.id, {
       display_name: customer.display_name,
       tax_id: customer.tax_id,
@@ -863,6 +840,20 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
   for (const stat of stats) {
     const id = String(stat.represented_client_id ?? '').trim();
     if (id) statsByClientId.set(id, stat);
+  }
+
+  const endCustomerStatsByPair = new Map<string, EndCustomerStatRow>();
+  for (const stat of endCustomerStats) {
+    const parentId = String(stat.represented_client_id ?? '').trim();
+    const customerId = String(stat.income_customer_id ?? '').trim();
+    if (!parentId || !customerId) continue;
+    endCustomerStatsByPair.set(
+      endCustomerPopulationKey({
+        representedClientId: parentId,
+        incomeCustomerId: customerId,
+      }),
+      stat,
+    );
   }
 
   const officeRows: IncomeClientDocumentManagementRow[] = mergeOfficeClientsWithDocumentStats(
@@ -882,20 +873,33 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     )
     .sort((a, b) => a.client_display_name.localeCompare(b.client_display_name, 'he'));
 
-  const endCustomerRows: IncomeClientDocumentManagementRow[] = endCustomerStats
-    .map((stat) => {
-      const parentId = String(stat.represented_client_id);
-      return buildEndCustomerRow({
-        stat,
-        customerMeta: customerMetaById.get(String(stat.income_customer_id)),
-        parentDisplayName: clientMetaById.get(parentId)?.display_name ?? parentId,
+  const endCustomerRows: IncomeClientDocumentManagementRow[] = mergeEndCustomersWithDocumentStats(
+    canonicalCustomers
+      .filter((c) => Boolean(String(c.represented_client_id ?? '').trim()))
+      .map((c) => ({
+        id: String(c.id),
+        represented_client_id: String(c.represented_client_id),
+      })),
+    endCustomerStatsByPair,
+    (params) => zeroEndCustomerDocumentStat(params) as EndCustomerStatRow,
+  )
+    .map(({ representedClientId, incomeCustomerId, stat }) =>
+      buildEndCustomerRow({
+        stat: {
+          ...stat,
+          represented_client_id: representedClientId,
+          income_customer_id: incomeCustomerId,
+        },
+        customerMeta: customerMetaById.get(incomeCustomerId),
+        parentDisplayName:
+          clientMetaById.get(representedClientId)?.display_name ?? representedClientId,
         perms: params.perms,
         includeRetainerAction: params.includeRetainerAction,
         workEngineInvoicesFunctionalParity: params.workEngineInvoicesFunctionalParity,
         newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
         omitDraftDocumentTypeCounter: params.omitDraftDocumentTypeCounter,
-      });
-    })
+      }),
+    )
     .sort((a, b) => {
       const parentCmp = (a.parent_client_display_name ?? '').localeCompare(
         b.parent_client_display_name ?? '',
@@ -939,9 +943,9 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     page: { limit: null, offset: 0, has_more: false },
     empty_state: {
       visible: endCustomerRows.length === 0,
-      title: 'אין עדיין לקוחות קצה עם מסמכים',
+      title: 'אין לקוחות קצה',
       description:
-        'לאחר הפקת מסמך או שמירת טיוטה ללקוח קצה במצב נציג משרד — הוא יופיע כאן תחת לקוח המשרד.',
+        'לקוחות קצה מופיעים כאן לפי רשימת הלקוחות של לקוחות המשרד (גם ללא מסמכים).',
     },
   };
 
@@ -955,7 +959,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     visible: true,
     title: 'ניהול מסמכים לפי לקוח',
     description:
-      'כל לקוחות המשרד, ולקוחות קצה עם מסמכים שהונפקו או טיוטות פעילות במצב נציג משרד',
+      'כל לקוחות המשרד, וכל לקוחות הקצה שלהם (מוני מסמכים מתעדכנים לפי מסמכים במצב נציג משרד)',
     columns: PANEL_COLUMNS,
     rows: officeRows,
     office_clients_section,
