@@ -6,6 +6,7 @@ import type {
   IncomeClientDocumentManagementRow,
   IncomeClientDocumentManagementRowAction,
   IncomeClientDocumentManagementSection,
+  IncomeClientQuickCardAction,
   IncomeCustomerEditorField,
   IncomeCustomersTableRow,
   IncomeTableModel,
@@ -17,6 +18,7 @@ import {
   resolveWorkEngineInvoicesPopulationsVisibility,
   type WorkEngineInvoicesPopulationsDisplayMode,
 } from '../../income/income-client-document-management-populations-display.pure';
+import { ClientQuickCardPopover } from '../work-engine/ClientQuickCardPopover';
 
 /** RTL visual order (first = far right). Display-only; backend column order unchanged. */
 const VISUAL_COLUMN_KEYS = [
@@ -149,7 +151,12 @@ export type IncomeClientDocumentPanelActionResult =
       /** Backend action payload end-customer scope when present. */
       endCustomerId?: string | null;
     }
-  | { kind: 'more'; clientId: string; clientName: string; anchor: HTMLButtonElement };
+  | { kind: 'more'; clientId: string; clientName: string; anchor: HTMLButtonElement }
+  | {
+      kind: 'quick_card_action';
+      action: IncomeClientQuickCardAction;
+      clientName: string;
+    };
 
 type PanelProps = {
   panel: IncomeClientDocumentManagementPanel;
@@ -159,6 +166,11 @@ type PanelProps = {
   /** Work Engine invoices tab: hide סטטוס column; backend field unchanged. */
   hideStatusColumn?: boolean;
   /**
+   * Work Engine invoices tab only: compact Quick Card on avatar click;
+   * hides email/tax id from the main row identity area.
+   */
+  clientQuickCardEnabled?: boolean;
+  /**
    * Work Engine invoices tab only: dual-population layout from backend sections.
    * Display mode is UI preference only — does not reload or reclassify populations.
    */
@@ -167,6 +179,12 @@ type PanelProps = {
   onPopulationsDisplayModeChange?: (mode: WorkEngineInvoicesPopulationsDisplayMode) => void;
 };
 
+type QuickCardOpenState = {
+  rowKey: string;
+  anchorEl: HTMLElement;
+  card: NonNullable<IncomeClientDocumentManagementRow['client_quick_card']>;
+  clientName: string;
+};
 function ActionButton({
   action,
   busy,
@@ -190,20 +208,52 @@ function ActionButton({
   );
 }
 
-function ClientCell({ row }: { row: IncomeClientDocumentManagementRow }) {
-  const subtext = [row.tax_id, row.email].filter(Boolean).join(' · ');
+function ClientCell({
+  row,
+  clientQuickCardEnabled,
+  quickCardOpenRowKey,
+  onToggleQuickCard,
+}: {
+  row: IncomeClientDocumentManagementRow;
+  clientQuickCardEnabled?: boolean;
+  quickCardOpenRowKey?: string | null;
+  onToggleQuickCard?: (row: IncomeClientDocumentManagementRow, anchorEl: HTMLElement) => void;
+}) {
+  const rowKey = incomeClientDocumentManagementRowReactKey(row);
+  const quickCard = row.client_quick_card;
+  const showQuickCard =
+    Boolean(clientQuickCardEnabled) && Boolean(quickCard?.enabled);
+  const subtext = showQuickCard
+    ? ''
+    : [row.tax_id, row.email].filter(Boolean).join(' · ');
+
+  const avatar = (
+    <div className="nx-income-cdm__avatar">
+      {row.client_logo_url ? (
+        <img className="nx-income-cdm__logo" src={row.client_logo_url} alt="" />
+      ) : (
+        <span className="nx-income-cdm__logo-fallback" aria-hidden>
+          {row.client_initials}
+        </span>
+      )}
+    </div>
+  );
 
   return (
     <div className="nx-income-cdm__client">
-      <div className="nx-income-cdm__avatar">
-        {row.client_logo_url ? (
-          <img className="nx-income-cdm__logo" src={row.client_logo_url} alt="" />
-        ) : (
-          <span className="nx-income-cdm__logo-fallback" aria-hidden>
-            {row.client_initials}
-          </span>
-        )}
-      </div>
+      {showQuickCard && onToggleQuickCard ? (
+        <button
+          type="button"
+          className="nx-income-cdm__avatar-btn"
+          aria-label={`כרטיס לקוח — ${row.client_display_name}`}
+          aria-expanded={quickCardOpenRowKey === rowKey}
+          onClick={(e) => onToggleQuickCard(row, e.currentTarget)}
+        >
+          {avatar}
+        </button>
+      ) : (
+        avatar
+      )}
       <div className="nx-income-cdm__client-meta">
         <span className="nx-income-cdm__client-name">{row.client_display_name}</span>
         {subtext ? <span className="nx-income-cdm__client-sub">{subtext}</span> : null}
@@ -225,8 +275,20 @@ function renderDataCell(
   busy: boolean,
   onAction: PanelProps['onAction'],
   renderDocumentsCell?: PanelProps['renderDocumentsCell'],
+  clientQuickCardEnabled?: boolean,
+  quickCardOpenRowKey?: string | null,
+  onToggleQuickCard?: (row: IncomeClientDocumentManagementRow, anchorEl: HTMLElement) => void,
 ) {
-  if (colKey === 'client') return <ClientCell row={row} />;
+  if (colKey === 'client') {
+    return (
+      <ClientCell
+        row={row}
+        clientQuickCardEnabled={clientQuickCardEnabled}
+        quickCardOpenRowKey={quickCardOpenRowKey}
+        onToggleQuickCard={onToggleQuickCard}
+      />
+    );
+  }
   if (colKey === 'total_documents_count' && renderDocumentsCell) {
     return renderDocumentsCell(row);
   }
@@ -343,6 +405,9 @@ function renderClientDocumentManagementDataRows(
   busy: boolean,
   onAction: PanelProps['onAction'],
   renderDocumentsCell?: PanelProps['renderDocumentsCell'],
+  clientQuickCardEnabled?: boolean,
+  quickCardOpenRowKey?: string | null,
+  onToggleQuickCard?: (row: IncomeClientDocumentManagementRow, anchorEl: HTMLElement) => void,
 ) {
   return rows.map((row) => (
     <tr key={incomeClientDocumentManagementRowReactKey(row)}>
@@ -357,7 +422,16 @@ function renderClientDocumentManagementDataRows(
                 : undefined
           }
         >
-          {renderDataCell(row, col.key, busy, onAction, renderDocumentsCell)}
+          {renderDataCell(
+            row,
+            col.key,
+            busy,
+            onAction,
+            renderDocumentsCell,
+            clientQuickCardEnabled,
+            quickCardOpenRowKey,
+            onToggleQuickCard,
+          )}
         </td>
       ))}
     </tr>
@@ -372,6 +446,9 @@ function ClientDocumentManagementRowsTable({
   onAction,
   renderDocumentsCell,
   emptyState,
+  clientQuickCardEnabled,
+  quickCardOpenRowKey,
+  onToggleQuickCard,
 }: {
   columns: Array<{ key: VisualColumnKey; label: string }>;
   rows: IncomeClientDocumentManagementRow[];
@@ -380,6 +457,9 @@ function ClientDocumentManagementRowsTable({
   onAction: PanelProps['onAction'];
   renderDocumentsCell?: PanelProps['renderDocumentsCell'];
   emptyState?: IncomeClientDocumentManagementSection['empty_state'] | null;
+  clientQuickCardEnabled?: boolean;
+  quickCardOpenRowKey?: string | null;
+  onToggleQuickCard?: (row: IncomeClientDocumentManagementRow, anchorEl: HTMLElement) => void;
 }) {
   if (emptyState?.visible) {
     return (
@@ -440,6 +520,9 @@ function ClientDocumentManagementRowsTable({
                     busy,
                     onAction,
                     renderDocumentsCell,
+                    clientQuickCardEnabled,
+                    quickCardOpenRowKey,
+                    onToggleQuickCard,
                   )}
                 </Fragment>
               ))
@@ -449,6 +532,9 @@ function ClientDocumentManagementRowsTable({
                 busy,
                 onAction,
                 renderDocumentsCell,
+                clientQuickCardEnabled,
+                quickCardOpenRowKey,
+                onToggleQuickCard,
               )}
         </tbody>
       </table>
@@ -505,12 +591,18 @@ function PopulationSectionPanel({
   busy,
   onAction,
   renderDocumentsCell,
+  clientQuickCardEnabled,
+  quickCardOpenRowKey,
+  onToggleQuickCard,
 }: {
   section: IncomeClientDocumentManagementSection;
   visualColumns: Array<{ key: VisualColumnKey; label: string }>;
   busy: boolean;
   onAction: PanelProps['onAction'];
   renderDocumentsCell?: PanelProps['renderDocumentsCell'];
+  clientQuickCardEnabled?: boolean;
+  quickCardOpenRowKey?: string | null;
+  onToggleQuickCard?: (row: IncomeClientDocumentManagementRow, anchorEl: HTMLElement) => void;
 }) {
   return (
     <div className="nx-we-invoices-cdm-population" data-section-key={section.section_key}>
@@ -523,6 +615,9 @@ function PopulationSectionPanel({
         onAction={onAction}
         renderDocumentsCell={renderDocumentsCell}
         emptyState={section.empty_state}
+        clientQuickCardEnabled={clientQuickCardEnabled}
+        quickCardOpenRowKey={quickCardOpenRowKey}
+        onToggleQuickCard={onToggleQuickCard}
       />
     </div>
   );
@@ -534,14 +629,56 @@ export function IncomeClientDocumentManagementPanelView({
   onAction,
   renderDocumentsCell,
   hideStatusColumn = false,
+  clientQuickCardEnabled = false,
   populationsLayoutEnabled = false,
   populationsDisplayMode = WORK_ENGINE_INVOICES_POPULATIONS_DISPLAY_DEFAULT,
   onPopulationsDisplayModeChange,
 }: PanelProps) {
+  const [quickCardOpen, setQuickCardOpen] = useState<QuickCardOpenState | null>(null);
+
+  useEffect(() => {
+    setQuickCardOpen(null);
+  }, [panel]);
+
   if (!panel?.visible) return null;
 
   const visualColumns = resolveVisualColumns(panel.columns ?? [], hideStatusColumn);
   const rows = panel.rows ?? [];
+  const quickCardOpenRowKey = quickCardOpen?.rowKey ?? null;
+
+  const onToggleQuickCard = (row: IncomeClientDocumentManagementRow, anchorEl: HTMLElement) => {
+    const card = row.client_quick_card;
+    if (!card?.enabled) return;
+    const rowKey = incomeClientDocumentManagementRowReactKey(row);
+    setQuickCardOpen((prev) =>
+      prev?.rowKey === rowKey
+        ? null
+        : {
+            rowKey,
+            anchorEl,
+            card,
+            clientName: row.client_display_name,
+          },
+    );
+  };
+
+  const quickCardPortal =
+    clientQuickCardEnabled && quickCardOpen ? (
+      <ClientQuickCardPopover
+        card={quickCardOpen.card}
+        anchorEl={quickCardOpen.anchorEl}
+        busy={busy}
+        onClose={() => setQuickCardOpen(null)}
+        onAction={(action) => {
+          setQuickCardOpen(null);
+          void onAction({
+            kind: 'quick_card_action',
+            action,
+            clientName: quickCardOpen.clientName,
+          });
+        }}
+      />
+    ) : null;
 
   if (populationsLayoutEnabled) {
     const officeSection = panel.office_clients_section;
@@ -553,88 +690,95 @@ export function IncomeClientDocumentManagementPanelView({
         : 'nx-we-invoices-cdm-populations nx-we-invoices-cdm-populations--single';
 
     return (
-      <section
-        className="nx-income-cdm nx-we-invoices-cdm"
-        dir="rtl"
-        aria-labelledby="income-cdm-title"
-      >
-        <div className="nx-income-cdm__card">
-          <div className="nx-income-cdm__head nx-we-invoices-cdm__head">
-            <div className="nx-income-cdm__head-main">
-              <h2 id="income-cdm-title" className="nx-income-cdm__title">
-                {panel.title}
-              </h2>
-              {panel.description ? (
-                <p className="nx-income-cdm__description">{panel.description}</p>
+      <>
+        <section
+          className="nx-income-cdm nx-we-invoices-cdm"
+          dir="rtl"
+          aria-labelledby="income-cdm-title"
+        >
+          <div className="nx-income-cdm__card">
+            <div className="nx-income-cdm__head nx-we-invoices-cdm__head">
+              <div className="nx-income-cdm__head-main">
+                <h2 id="income-cdm-title" className="nx-income-cdm__title">
+                  {panel.title}
+                </h2>
+                {panel.description ? (
+                  <p className="nx-income-cdm__description">{panel.description}</p>
+                ) : null}
+              </div>
+              <PopulationsSegmentedControl
+                mode={populationsDisplayMode}
+                officeTitle={officeSection?.title ?? 'לקוחות המשרד'}
+                customersTitle={customersSection?.title ?? 'לקוחות של לקוחות המשרד'}
+                onChange={(mode) => onPopulationsDisplayModeChange?.(mode)}
+              />
+            </div>
+
+            <div className={layoutClass}>
+              {visibility.showOfficeClients && officeSection ? (
+                <PopulationSectionPanel
+                  section={officeSection}
+                  visualColumns={visualColumns}
+                  busy={busy}
+                  onAction={onAction}
+                  renderDocumentsCell={renderDocumentsCell}
+                  clientQuickCardEnabled={clientQuickCardEnabled}
+                  quickCardOpenRowKey={quickCardOpenRowKey}
+                  onToggleQuickCard={onToggleQuickCard}
+                />
+              ) : null}
+              {visibility.showOfficeClientCustomers && customersSection ? (
+                <PopulationSectionPanel
+                  section={customersSection}
+                  visualColumns={visualColumns}
+                  busy={busy}
+                  onAction={onAction}
+                  renderDocumentsCell={renderDocumentsCell}
+                  clientQuickCardEnabled={clientQuickCardEnabled}
+                  quickCardOpenRowKey={quickCardOpenRowKey}
+                  onToggleQuickCard={onToggleQuickCard}
+                />
               ) : null}
             </div>
-            <PopulationsSegmentedControl
-              mode={populationsDisplayMode}
-              officeTitle={officeSection?.title ?? 'לקוחות המשרד'}
-              customersTitle={customersSection?.title ?? 'לקוחות של לקוחות המשרד'}
-              onChange={(mode) => onPopulationsDisplayModeChange?.(mode)}
-            />
           </div>
-
-          <div className={layoutClass}>
-            {visibility.showOfficeClients && officeSection ? (
-              <PopulationSectionPanel
-                section={officeSection}
-                visualColumns={visualColumns}
-                busy={busy}
-                onAction={onAction}
-                renderDocumentsCell={renderDocumentsCell}
-              />
-            ) : null}
-            {visibility.showOfficeClientCustomers && customersSection ? (
-              <PopulationSectionPanel
-                section={customersSection}
-                visualColumns={visualColumns}
-                busy={busy}
-                onAction={onAction}
-                renderDocumentsCell={renderDocumentsCell}
-              />
-            ) : null}
-          </div>
-        </div>
-      </section>
+        </section>
+        {quickCardPortal}
+      </>
     );
   }
 
   return (
-    <section
-      className={hideStatusColumn ? 'nx-income-cdm nx-we-invoices-cdm' : 'nx-income-cdm'}
-      dir="rtl"
-      aria-labelledby="income-cdm-title"
-    >
-      <div className="nx-income-cdm__card">
-        <div className="nx-income-cdm__head">
-          <div className="nx-income-cdm__head-main">
-            <h2 id="income-cdm-title" className="nx-income-cdm__title">
-              {panel.title}
-            </h2>
-            {panel.description ? <p className="nx-income-cdm__description">{panel.description}</p> : null}
+    <>
+      <section
+        className={hideStatusColumn ? 'nx-income-cdm nx-we-invoices-cdm' : 'nx-income-cdm'}
+        dir="rtl"
+        aria-labelledby="income-cdm-title"
+      >
+        <div className="nx-income-cdm__card">
+          <div className="nx-income-cdm__head">
+            <div className="nx-income-cdm__head-main">
+              <h2 id="income-cdm-title" className="nx-income-cdm__title">
+                {panel.title}
+              </h2>
+              {panel.description ? <p className="nx-income-cdm__description">{panel.description}</p> : null}
+            </div>
           </div>
-        </div>
 
-        {(panel.empty_state?.visible ?? false) ? (
-          <div className="nx-income-cdm__empty">
-            <p className="nx-income-cdm__empty-title">{panel.empty_state.title}</p>
-            {panel.empty_state.description ? (
-              <p className="nx-income-cdm__empty-desc">{panel.empty_state.description}</p>
-            ) : null}
-          </div>
-        ) : (
           <ClientDocumentManagementRowsTable
             columns={visualColumns}
             rows={rows}
             busy={busy}
             onAction={onAction}
             renderDocumentsCell={renderDocumentsCell}
+            emptyState={panel.empty_state}
+            clientQuickCardEnabled={clientQuickCardEnabled}
+            quickCardOpenRowKey={quickCardOpenRowKey}
+            onToggleQuickCard={onToggleQuickCard}
           />
-        )}
-      </div>
-    </section>
+        </div>
+      </section>
+      {quickCardPortal}
+    </>
   );
 }
 

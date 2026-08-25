@@ -544,6 +544,33 @@ export interface IncomeClientDocumentManagementRowContext {
   income_customer_id: string | null;
 }
 
+/** Ready-to-render Client Quick Card (Work Engine invoices tab). */
+export interface IncomeClientQuickCardRow {
+  key: string;
+  label: string;
+  display_value: string;
+  copy_value: string | null;
+  copy_enabled: boolean;
+}
+
+export interface IncomeClientQuickCardAction {
+  action_key: string;
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  state_key: string | null;
+  command: string | null;
+  command_payload: Record<string, unknown>;
+}
+
+export interface IncomeClientQuickCard {
+  enabled: boolean;
+  client_id: string;
+  population_key: IncomeClientDocumentManagementPopulationKey;
+  rows: IncomeClientQuickCardRow[];
+  actions: IncomeClientQuickCardAction[];
+}
+
 export interface IncomeClientDocumentManagementRow {
   population_key: IncomeClientDocumentManagementPopulationKey;
   represented_client_id: string;
@@ -573,6 +600,11 @@ export interface IncomeClientDocumentManagementRow {
   status_label: string;
   actions: IncomeClientDocumentManagementRowAction[];
   row_context: IncomeClientDocumentManagementRowContext;
+  /**
+   * Work Engine invoices tab only: compact identity + actions popover contract.
+   * Null/absent on /m/income panel builds.
+   */
+  client_quick_card?: IncomeClientQuickCard | null;
 }
 
 export interface IncomeClientDocumentManagementReportItem {

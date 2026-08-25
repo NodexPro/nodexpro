@@ -39,6 +39,14 @@ import {
   zeroEndCustomerDocumentStat,
   zeroOfficeClientDocumentStat,
 } from './income-client-document-management-panel.pure.js';
+import {
+  buildEndCustomerQuickCard,
+  buildOfficeClientQuickCard,
+  resolveClientQuickCardDocflowInviteStatus,
+  type ClientQuickCardDocflowInviteState,
+} from './income-client-quick-card.pure.js';
+import { clientOperationsBusinessTypeDisplayHe } from '../client-operations/client-operations-client-core.read.js';
+import { resolveEntitlement } from '../modules/entitlement.service.js';
 
 const REPORT_CATALOG: IncomeClientDocumentManagementReportItem[] = [
   { key: 'income_summary', label: 'דוח הכנסות', enabled: false, disabled_reason: 'בקרוב' },
@@ -580,11 +588,21 @@ function logPanelTiming(label: string, startedAt: number): number {
 
 function buildOfficeClientRow(params: {
   stat: PanelStatRow;
-  meta: { display_name: string; tax_id: string | null; email: string | null } | undefined;
+  meta:
+    | {
+        display_name: string;
+        tax_id: string | null;
+        email: string | null;
+        phone: string | null;
+        business_type: string | null;
+        contact_person: string | null;
+      }
+    | undefined;
   perms: IncomeWorkspacePermissions;
   includeRetainerAction?: boolean;
   newDocumentInsteadOfMore?: boolean;
   omitDraftDocumentTypeCounter?: boolean;
+  clientQuickCard?: IncomeClientDocumentManagementRow['client_quick_card'];
 }): IncomeClientDocumentManagementRow {
   const clientId = String(params.stat.represented_client_id);
   const clientName = params.meta?.display_name ?? clientId;
@@ -641,18 +659,29 @@ function buildOfficeClientRow(params: {
       represented_client_id: clientId,
       income_customer_id: null,
     },
+    ...(params.clientQuickCard !== undefined
+      ? { client_quick_card: params.clientQuickCard }
+      : {}),
   };
 }
 
 function buildEndCustomerRow(params: {
   stat: EndCustomerStatRow;
-  customerMeta: { display_name: string; tax_id: string | null; email: string | null } | undefined;
+  customerMeta:
+    | {
+        display_name: string;
+        tax_id: string | null;
+        email: string | null;
+        phone: string | null;
+      }
+    | undefined;
   parentDisplayName: string;
   perms: IncomeWorkspacePermissions;
   includeRetainerAction?: boolean;
   workEngineInvoicesFunctionalParity?: boolean;
   newDocumentInsteadOfMore?: boolean;
   omitDraftDocumentTypeCounter?: boolean;
+  clientQuickCard?: IncomeClientDocumentManagementRow['client_quick_card'];
 }): IncomeClientDocumentManagementRow {
   const representedClientId = String(params.stat.represented_client_id);
   const incomeCustomerId = String(params.stat.income_customer_id);
@@ -715,6 +744,9 @@ function buildEndCustomerRow(params: {
       represented_client_id: representedClientId,
       income_customer_id: incomeCustomerId,
     },
+    ...(params.clientQuickCard !== undefined
+      ? { client_quick_card: params.clientQuickCard }
+      : {}),
   };
 }
 
@@ -736,10 +768,16 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
    * Does not remove draft domain storage or commands.
    */
   omitDraftDocumentTypeCounter?: boolean;
+  /**
+   * Work Engine invoices tab only: attach `client_quick_card` to each row
+   * (batched identity + DocFlow invite state). Must stay false for /m/income.
+   */
+  includeClientQuickCard?: boolean;
 }): Promise<IncomeClientDocumentManagementPanel> {
   const orgId = params.ctx.organizationId!;
   const visible = params.perms.issue_on_behalf;
   const aggregateStartMs = Date.now();
+  const includeClientQuickCard = params.includeClientQuickCard === true;
 
   if (!visible) {
     return emptyPanel(false);
@@ -757,7 +795,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     /** Canonical ALL eligible office clients (Core clients), not document-derived. */
     supabaseAdmin
       .from('clients')
-      .select('id, display_name, tax_id, email')
+      .select('id, display_name, tax_id, email, phone')
       .eq('organization_id', orgId)
       .eq('is_archived', false)
       .order('display_name', { ascending: true })
@@ -779,24 +817,37 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     display_name: string;
     tax_id: string | null;
     email: string | null;
+    phone?: string | null;
   }>;
 
   const officeClientIds = officeClients.map((c) => String(c.id)).filter(Boolean);
 
-  const clientMetaById = new Map<
-    string,
-    { display_name: string; tax_id: string | null; email: string | null }
-  >();
-  const customerMetaById = new Map<
-    string,
-    { display_name: string; tax_id: string | null; email: string | null }
-  >();
+  type OfficeClientMeta = {
+    display_name: string;
+    tax_id: string | null;
+    email: string | null;
+    phone: string | null;
+    business_type: string | null;
+    contact_person: string | null;
+  };
+  type EndCustomerMeta = {
+    display_name: string;
+    tax_id: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+
+  const clientMetaById = new Map<string, OfficeClientMeta>();
+  const customerMetaById = new Map<string, EndCustomerMeta>();
 
   for (const client of officeClients) {
     clientMetaById.set(client.id, {
       display_name: client.display_name,
       tax_id: client.tax_id,
       email: client.email,
+      phone: client.phone ?? null,
+      business_type: null,
+      contact_person: null,
     });
   }
 
@@ -808,7 +859,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     officeClientIds.length > 0
       ? supabaseAdmin
           .from('income_customers')
-          .select('id, display_name, tax_id, email, represented_client_id')
+          .select('id, display_name, tax_id, email, phone, represented_client_id')
           .eq('organization_id', orgId)
           .eq('status', 'active')
           .eq('is_one_time', false)
@@ -824,6 +875,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     display_name: string;
     tax_id: string | null;
     email: string | null;
+    phone?: string | null;
     represented_client_id: string;
   }>;
 
@@ -832,9 +884,135 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       display_name: customer.display_name,
       tax_id: customer.tax_id,
       email: customer.email,
+      phone: customer.phone ?? null,
     });
   }
   stepStart = logPanelTiming('load_client_and_customer_meta', stepStart);
+
+  const docflowInviteByClientId = new Map<string, ClientQuickCardDocflowInviteState>();
+  let docflowModuleEntitled = false;
+
+  if (includeClientQuickCard && officeClientIds.length > 0) {
+    const [profilesRes, contactsRes, modulesRes] = await Promise.all([
+      supabaseAdmin
+        .from('client_operational_profiles')
+        .select('client_id, business_type')
+        .eq('organization_id', orgId)
+        .in('client_id', officeClientIds),
+      supabaseAdmin
+        .from('client_contacts')
+        .select('client_id, full_name, is_primary, status')
+        .eq('organization_id', orgId)
+        .in('client_id', officeClientIds)
+        .order('created_at', { ascending: true }),
+      supabaseAdmin.from('modules').select('id').eq('code', 'docflow').maybeSingle(),
+    ]);
+    throwIfSupabaseError(profilesRes.error, 'loadClientOperationalProfilesForQuickCard');
+    throwIfSupabaseError(contactsRes.error, 'loadClientContactsForQuickCard');
+    throwIfSupabaseError(modulesRes.error, 'loadDocflowModuleForQuickCard');
+
+    for (const profile of profilesRes.data ?? []) {
+      const cid = String((profile as { client_id?: string }).client_id ?? '');
+      const meta = clientMetaById.get(cid);
+      if (!meta) continue;
+      meta.business_type = clientOperationsBusinessTypeDisplayHe(
+        (profile as { business_type?: string | null }).business_type ?? null,
+      );
+    }
+
+    const contactByClient = new Map<string, string>();
+    for (const contact of contactsRes.data ?? []) {
+      const cid = String((contact as { client_id?: string }).client_id ?? '');
+      if (!cid || contactByClient.has(cid)) continue;
+      const status = String((contact as { status?: string }).status ?? 'active');
+      if (status && status !== 'active') continue;
+      const name = String((contact as { full_name?: string }).full_name ?? '').trim();
+      if (!name) continue;
+      const isPrimary = Boolean((contact as { is_primary?: boolean }).is_primary);
+      if (isPrimary || !contactByClient.has(cid)) {
+        contactByClient.set(cid, name);
+      }
+    }
+    // Prefer primary: second pass
+    for (const contact of contactsRes.data ?? []) {
+      const cid = String((contact as { client_id?: string }).client_id ?? '');
+      if (!cid) continue;
+      const status = String((contact as { status?: string }).status ?? 'active');
+      if (status && status !== 'active') continue;
+      if (!(contact as { is_primary?: boolean }).is_primary) continue;
+      const name = String((contact as { full_name?: string }).full_name ?? '').trim();
+      if (name) contactByClient.set(cid, name);
+    }
+    for (const [cid, name] of contactByClient) {
+      const meta = clientMetaById.get(cid);
+      if (meta) meta.contact_person = name;
+    }
+
+    const modId = modulesRes.data?.id ? String(modulesRes.data.id) : null;
+    if (modId) {
+      const entitlement = await resolveEntitlement(orgId, modId);
+      docflowModuleEntitled =
+        entitlement.status === 'entitled' || entitlement.status === 'trial';
+    }
+
+    const [portalUsersRes, invitesRes] = await Promise.all([
+      supabaseAdmin
+        .from('client_portal_users')
+        .select('client_id, status, updated_at')
+        .eq('org_id', orgId)
+        .in('client_id', officeClientIds)
+        .order('updated_at', { ascending: false }),
+      supabaseAdmin
+        .from('client_portal_invitations')
+        .select('client_id, status, token_expires_at, created_at')
+        .eq('org_id', orgId)
+        .in('client_id', officeClientIds)
+        .order('created_at', { ascending: false }),
+    ]);
+    throwIfSupabaseError(portalUsersRes.error, 'loadPortalUsersForQuickCard');
+    throwIfSupabaseError(invitesRes.error, 'loadPortalInvitationsForQuickCard');
+
+    const latestPortalByClient = new Map<string, string | null>();
+    for (const row of portalUsersRes.data ?? []) {
+      const cid = String((row as { client_id?: string }).client_id ?? '');
+      if (!cid || latestPortalByClient.has(cid)) continue;
+      latestPortalByClient.set(
+        cid,
+        (row as { status?: string | null }).status
+          ? String((row as { status: string }).status)
+          : null,
+      );
+    }
+    const latestInviteByClient = new Map<
+      string,
+      { status: string | null; tokenExpiresAt: string | null }
+    >();
+    for (const row of invitesRes.data ?? []) {
+      const cid = String((row as { client_id?: string }).client_id ?? '');
+      if (!cid || latestInviteByClient.has(cid)) continue;
+      latestInviteByClient.set(cid, {
+        status: (row as { status?: string | null }).status
+          ? String((row as { status: string }).status)
+          : null,
+        tokenExpiresAt: (row as { token_expires_at?: string | null }).token_expires_at
+          ? String((row as { token_expires_at: string }).token_expires_at)
+          : null,
+      });
+    }
+
+    for (const cid of officeClientIds) {
+      const invite = latestInviteByClient.get(cid);
+      docflowInviteByClientId.set(cid, {
+        module_entitled: docflowModuleEntitled,
+        invite_status: resolveClientQuickCardDocflowInviteStatus({
+          portalStatus: latestPortalByClient.get(cid) ?? null,
+          inviteStatus: invite?.status ?? null,
+          tokenExpiresAt: invite?.tokenExpiresAt ?? null,
+        }),
+      });
+    }
+    stepStart = logPanelTiming('load_quick_card_enrichment', stepStart);
+  }
 
   const statsByClientId = new Map<string, PanelStatRow>();
   for (const stat of stats) {
@@ -861,16 +1039,35 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     statsByClientId,
     (clientId) => zeroOfficeClientDocumentStat(clientId) as PanelStatRow,
   )
-    .map(({ clientId, stat }) =>
-      buildOfficeClientRow({
+    .map(({ clientId, stat }) => {
+      const meta = clientMetaById.get(clientId);
+      const quickCard = includeClientQuickCard
+        ? buildOfficeClientQuickCard({
+            clientId,
+            identity: {
+              display_name: meta?.display_name ?? clientId,
+              tax_id: meta?.tax_id ?? null,
+              email: meta?.email ?? null,
+              phone: meta?.phone ?? null,
+              business_type: meta?.business_type ?? null,
+              contact_person: meta?.contact_person ?? null,
+            },
+            docflow: docflowInviteByClientId.get(clientId) ?? {
+              module_entitled: docflowModuleEntitled,
+              invite_status: 'not_invited',
+            },
+          })
+        : undefined;
+      return buildOfficeClientRow({
         stat,
-        meta: clientMetaById.get(clientId),
+        meta,
         perms: params.perms,
         includeRetainerAction: params.includeRetainerAction,
         newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
         omitDraftDocumentTypeCounter: params.omitDraftDocumentTypeCounter,
-      }),
-    )
+        clientQuickCard: quickCard,
+      });
+    })
     .sort((a, b) => a.client_display_name.localeCompare(b.client_display_name, 'he'));
 
   const endCustomerRows: IncomeClientDocumentManagementRow[] = mergeEndCustomersWithDocumentStats(
@@ -883,14 +1080,28 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     endCustomerStatsByPair,
     (params) => zeroEndCustomerDocumentStat(params) as EndCustomerStatRow,
   )
-    .map(({ representedClientId, incomeCustomerId, stat }) =>
-      buildEndCustomerRow({
+    .map(({ representedClientId, incomeCustomerId, stat }) => {
+      const customerMeta = customerMetaById.get(incomeCustomerId);
+      const quickCard = includeClientQuickCard
+        ? buildEndCustomerQuickCard({
+            incomeCustomerId,
+            identity: {
+              display_name: customerMeta?.display_name ?? incomeCustomerId,
+              tax_id: customerMeta?.tax_id ?? null,
+              email: customerMeta?.email ?? null,
+              phone: customerMeta?.phone ?? null,
+              business_type: null,
+              contact_person: null,
+            },
+          })
+        : undefined;
+      return buildEndCustomerRow({
         stat: {
           ...stat,
           represented_client_id: representedClientId,
           income_customer_id: incomeCustomerId,
         },
-        customerMeta: customerMetaById.get(incomeCustomerId),
+        customerMeta,
         parentDisplayName:
           clientMetaById.get(representedClientId)?.display_name ?? representedClientId,
         perms: params.perms,
@@ -898,8 +1109,9 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
         workEngineInvoicesFunctionalParity: params.workEngineInvoicesFunctionalParity,
         newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
         omitDraftDocumentTypeCounter: params.omitDraftDocumentTypeCounter,
-      }),
-    )
+        clientQuickCard: quickCard,
+      });
+    })
     .sort((a, b) => {
       const parentCmp = (a.parent_client_display_name ?? '').localeCompare(
         b.parent_client_display_name ?? '',

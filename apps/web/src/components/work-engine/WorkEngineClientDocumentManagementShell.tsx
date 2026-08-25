@@ -7,6 +7,9 @@ import type {
   SelectIncomeIssuerContextCommandResponse,
 } from '../../api/income';
 import { executeIncomeCommand, isIncomeCommandResponse } from '../../api/income';
+import { apiJson, userFacingApiMessage } from '../../api/client';
+import { getBackendActiveOrganizationId } from '../../api/org-context';
+import { docflowOfficeCommands } from '../../api/endpoints';
 import type { IncomeClientDocumentTypeCounter } from '../../income/income-workspace-types';
 import {
   IncomeClientDocumentManagementPanelView,
@@ -26,7 +29,7 @@ import {
 import { WorkEngineInvoiceRetainerCustomerModal } from './WorkEngineInvoiceRetainerCustomerModal';
 import { WorkEngineInvoiceRetainerSetupModal } from './WorkEngineInvoiceRetainerSetupModal';
 import type { WorkEngineInvoiceRetainerSetupAggregate } from '../../income/income-workspace-types';
-import { fetchWorkEngineInvoiceRetainerSetupAggregate } from '../../api/work-engine';
+import { fetchWorkEngineInvoiceRetainerSetupAggregate, fetchWorkEngineInvoicesTabAggregate } from '../../api/work-engine';
 import {
   WORK_ENGINE_INVOICES_POPULATIONS_DISPLAY_DEFAULT,
   type WorkEngineInvoicesPopulationsDisplayMode,
@@ -255,6 +258,32 @@ export function WorkEngineClientDocumentManagementShell({
         setEmailHistoryOpen(true);
         return;
       }
+      if (result.kind === 'quick_card_action') {
+        const { action } = result;
+        if (!action.enabled || !action.command) return;
+        onBusyChange?.(true);
+        try {
+          const orgId = getBackendActiveOrganizationId() ?? '';
+          if (!orgId) throw new Error('No active organization selected');
+          await apiJson(docflowOfficeCommands, {
+            method: 'POST',
+            body: JSON.stringify({
+              command: action.command,
+              payload: {
+                org_id: orgId,
+                ...action.command_payload,
+              },
+            }),
+          });
+          const tabAggregate = await fetchWorkEngineInvoicesTabAggregate();
+          onInvoicesTabRefresh?.(tabAggregate as unknown as Record<string, unknown>);
+        } catch (e) {
+          onError?.(userFacingApiMessage(e));
+        } finally {
+          onBusyChange?.(false);
+        }
+        return;
+      }
 
       const { action } = result;
       if (!action.command) return;
@@ -409,6 +438,7 @@ export function WorkEngineClientDocumentManagementShell({
         panel={panel}
         busy={busy}
         hideStatusColumn
+        clientQuickCardEnabled
         populationsLayoutEnabled
         populationsDisplayMode={populationsDisplayMode}
         onPopulationsDisplayModeChange={setPopulationsDisplayMode}

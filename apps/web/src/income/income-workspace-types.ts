@@ -103,6 +103,34 @@ export interface IncomeClientDocumentManagementRow {
   status_label: string;
   actions: IncomeClientDocumentManagementRowAction[];
   row_context?: IncomeClientDocumentManagementRowContext;
+  /** Work Engine invoices tab: backend-owned Quick Card contract. */
+  client_quick_card?: IncomeClientQuickCard | null;
+}
+
+export interface IncomeClientQuickCardRow {
+  key: string;
+  label: string;
+  display_value: string;
+  copy_value: string | null;
+  copy_enabled: boolean;
+}
+
+export interface IncomeClientQuickCardAction {
+  action_key: string;
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  state_key: string | null;
+  command: string | null;
+  command_payload: Record<string, unknown>;
+}
+
+export interface IncomeClientQuickCard {
+  enabled: boolean;
+  client_id: string;
+  population_key: IncomeClientDocumentManagementPopulationKey;
+  rows: IncomeClientQuickCardRow[];
+  actions: IncomeClientQuickCardAction[];
 }
 
 export interface IncomeClientDocumentManagementCustomerGroup {

@@ -34,6 +34,7 @@ import { IncomeDocumentBrandingGearButton } from '../income/IncomeDocumentBrandi
 import { IncomeDocumentBrandingSettingsModal } from '../income/IncomeDocumentBrandingSettingsModal';
 import { WorkEngineIncomeDocumentWizardModal } from './WorkEngineIncomeDocumentWizardModal';
 import '../../styles/nx-income-client-document-management.css';
+import '../../styles/nx-client-quick-card.css';
 import '../../styles/nx-work-engine-client-documents.css';
 import '../../styles/nx-work-engine-invoice-retainer.css';
 import '../../styles/nx-income-ledger-card.css';

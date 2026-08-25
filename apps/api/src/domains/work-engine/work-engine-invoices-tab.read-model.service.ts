@@ -169,6 +169,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       workEngineInvoicesFunctionalParity: true,
       newDocumentInsteadOfMore: true,
       omitDraftDocumentTypeCounter: true,
+      includeClientQuickCard: true,
     }),
     loadInvoicesTabBranding({ ctx: params.ctx }),
     buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx),
