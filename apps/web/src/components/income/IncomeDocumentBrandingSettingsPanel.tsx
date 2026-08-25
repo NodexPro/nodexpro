@@ -18,6 +18,11 @@ import type {
   IncomeEmailTemplateToken,
   IncomeLogoSizeOption,
 } from '../../income/income-document-branding-types';
+import {
+  fingerprintBrandingPreviewDraft,
+  mergePreviewDraftSelectionIntoDraft,
+  shouldScheduleBrandingPreviewRequest,
+} from '../../income/income-document-branding-preview-sync.pure';
 
 export type IncomeBrandingCommandsMap = {
   update_branding_profile: string;
@@ -978,6 +983,8 @@ export function IncomeDocumentBrandingSettingsPanel({
   const canPreview = profile.allowed_actions.includes(commands.preview_branding_profile_draft);
   const previewRequestRef = useRef(0);
   const debounceRef = useRef<number | null>(null);
+  /** Last preview-draft fingerprint applied from aggregate hydration or a successful preview command. */
+  const lastAppliedPreviewFingerprintRef = useRef<string | null>(null);
 
   const [livePreview, setLivePreview] = useState<IncomeDocumentBrandingStudioLivePreview>(
     studio.studio_live_preview,
@@ -994,12 +1001,18 @@ export function IncomeDocumentBrandingSettingsPanel({
     setStyleTemplates(studio.document_style_templates);
     setStyleGroups(studio.document_type_style_groups);
     setPreviewError(null);
+    // Aggregate already includes studio_live_preview — do not treat hydration as a user edit.
+    lastAppliedPreviewFingerprintRef.current = fingerprintBrandingPreviewDraft(
+      buildDraftFromProfile(profile),
+      buildBrandingPreviewDraftBody,
+    );
   }, [profile]);
 
   const refreshPreview = useCallback(
     async (nextDraft: IncomeBrandingStudioDraft) => {
       if (!canPreview) return;
       const requestId = ++previewRequestRef.current;
+      const requestedFingerprint = fingerprintBrandingPreviewDraft(nextDraft, buildBrandingPreviewDraftBody);
       setPreviewLoading(true);
       setPreviewError(null);
       try {
@@ -1010,12 +1023,8 @@ export function IncomeDocumentBrandingSettingsPanel({
           setStyleTemplates(result.document_style_templates);
           setStyleGroups(result.document_type_style_groups);
           setEmailPreview(result.email_template_preview);
-          onDraftChange((current) => ({
-            ...current,
-            selected_document_type_group_key: result.selected_document_type_group_key,
-            document_style_key: result.selected_document_style_key,
-            color_theme_key: result.selected_color_theme_key,
-          }));
+          lastAppliedPreviewFingerprintRef.current = requestedFingerprint;
+          onDraftChange((current) => mergePreviewDraftSelectionIntoDraft(current, result));
         }
       } catch {
         if (requestId !== previewRequestRef.current) return;
@@ -1028,7 +1037,17 @@ export function IncomeDocumentBrandingSettingsPanel({
   );
 
   useEffect(() => {
-    if (!canPreview || busy) return;
+    const draftFingerprint = fingerprintBrandingPreviewDraft(draft, buildBrandingPreviewDraftBody);
+    if (
+      !shouldScheduleBrandingPreviewRequest({
+        canPreview,
+        busy,
+        draftFingerprint,
+        lastAppliedFingerprint: lastAppliedPreviewFingerprintRef.current,
+      })
+    ) {
+      return;
+    }
     if (debounceRef.current != null) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       void refreshPreview(draft);

@@ -3,7 +3,7 @@
 /* Document Branding Studio — premium Brand Studio (RTL) */
 .nx-income-branding-overlay--studio {
   --nx-branding-studio-font-family: Heebo, Arial, sans-serif;
-  padding: 24px;
+  padding: 20px 12px;
   background: rgba(15, 23, 42, 0.55);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -28,10 +28,10 @@
   flex-direction: column;
   box-sizing: border-box;
   overflow: hidden;
-  width: min(1720px, calc(100vw - 48px));
-  max-width: min(1720px, calc(100vw - 48px));
-  height: calc(100vh - 48px);
-  max-height: calc(100vh - 48px);
+  width: min(1720px, calc(100vw - 24px));
+  max-width: min(1720px, calc(100vw - 24px));
+  height: calc(100vh - 40px);
+  max-height: calc(100vh - 40px);
   border-radius: 22px;
   box-shadow: 0 24px 80px rgba(15, 23, 42, 0.22);
   background: #ffffff;
@@ -215,9 +215,10 @@
 
 .nx-branding-studio {
   display: grid;
-  grid-template-columns: 15% 40% 45%;
+  /* RTL: areas are nav | content | preview → visual right→left; preview column is largest. */
+  grid-template-columns: 12% 37% 51%;
   grid-template-areas: 'nav content preview';
-  gap: 24px;
+  gap: 12px;
   height: 100%;
   min-height: 0;
   overflow: hidden;
