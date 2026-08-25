@@ -174,14 +174,15 @@ export function buildRecipientCreateFieldsSchema(): IncomeRecipientCreateFieldSc
     { key: 'phone', label: 'טלפון', required: false, input_type: 'text', placeholder: null },
     { key: 'email', label: 'אימייל', required: false, input_type: 'text', placeholder: null },
     { key: 'address', label: 'כתובת', required: false, input_type: 'text', placeholder: null },
-    { key: 'city', label: 'עיר', required: false, input_type: 'text', placeholder: null },
     {
-      key: 'save_for_future',
-      label: 'שמור לשימוש עתידי',
+      key: 'city',
+      label: 'עיר',
       required: false,
-      input_type: 'checkbox',
+      input_type: 'text',
       placeholder: null,
     },
+    // Product: every newly entered recipient is persisted as income_customers.
+    // No "save for future" / one-time toggle in the create schema.
   ];
 }
 
@@ -191,6 +192,7 @@ export function recipientSearchAllowedActions(perms: IncomeWorkspacePermissions)
     actions.push(
       'search_income_recipients',
       'select_income_recipient',
+      // Both create commands persist a canonical income_customer (no snapshot-only identity).
       'set_income_recipient_snapshot',
       'save_income_recipient_for_future',
     );
@@ -378,7 +380,8 @@ export async function buildIncomeRecipientSearchModel(
     },
     create_fields_schema: buildRecipientCreateFieldsSchema(),
     save_for_future_label: 'שמור לשימוש עתידי',
-    save_for_future_available: canEdit,
+    /** Always false — new recipients are always persisted; checkbox removed from schema. */
+    save_for_future_available: false,
     selected: overlay.selected ?? null,
     field_errors: overlay.field_errors ?? {},
     allowed_actions: recipientSearchAllowedActions(perms),

@@ -48,12 +48,14 @@ test('save for future inserts income_customer not core clients', () => {
   assert.match(recipientService, /is_one_time: false/);
 });
 
-test('set snapshot does not insert income_customer in service layer', () => {
-  assert.match(recipientService, /selectedFromInputFields/);
-  assert.match(recipientService, /buildRecipientSnapshotJson/);
+test('set_income_recipient_snapshot persists via insertSavedIncomeRecipient (canonical customer)', () => {
+  assert.match(commandsSource, /INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT/);
+  assert.match(commandsSource, /insertSavedIncomeRecipient/);
+  assert.match(recipientService, /selectedFromSavedRow/);
 });
 
-test('one-time snapshot has no income_customer_id in selected model', () => {
+test('legacy snapshot JSON helper remains for immutable issued docs / validation', () => {
+  assert.match(recipientService, /buildRecipientSnapshotJson/);
   const fields = parseRecipientInputBody({
     display_name: 'Buyer Ltd',
     tax_id: '514123456',

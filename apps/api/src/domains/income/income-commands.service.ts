@@ -57,7 +57,6 @@ import {
   insertSavedIncomeRecipient,
   loadIncomeRecipientById,
   searchIncomeRecipients,
-  selectedFromInputFields,
   selectedFromSavedRow,
   type RecipientSearchOverlay,
 } from './income-recipient.service.js';
@@ -867,6 +866,8 @@ export async function executeIncomeCommand(
   }
 
   if (command === INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT) {
+    // Product rule: newly entered document recipients are always canonical income_customers.
+    // Snapshot-only identity is not used for the normal create path (legacy issued docs may still store snapshots).
     const scope = await loadActiveIncomeIssuerScope(ctx);
     assertIncomeEditPermission(scope);
     const fields = parseRecipientInputBody(body);
@@ -874,8 +875,24 @@ export async function executeIncomeCommand(
     if (Object.keys(field_errors).length > 0) {
       return recipientCommandResponse(ctx, command, scope, { field_errors, selected: null });
     }
+    const row = await insertSavedIncomeRecipient(scope, fields, scope.actor_user_id);
+    await writeAudit({
+      organizationId: scope.org_id,
+      actorUserId: scope.actor_user_id,
+      moduleCode: 'income',
+      entityType: 'income_customer',
+      entityId: row.income_customer_id,
+      action: AUDIT_ACTIONS.INCOME_CUSTOMER_CREATED,
+      payload: {
+        display_name: fields.display_name,
+        is_one_time: false,
+        issuer_business_id: scope.issuer_business_id,
+        represented_client_id: scope.represented_client_id,
+        via: INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT,
+      },
+    });
     return recipientCommandResponse(ctx, command, scope, {
-      selected: selectedFromInputFields(fields),
+      selected: selectedFromSavedRow(row),
       field_errors: {},
     });
   }
@@ -896,6 +913,7 @@ export async function executeIncomeCommand(
         display_name: fields.display_name,
         is_one_time: false,
         issuer_business_id: scope.issuer_business_id,
+        represented_client_id: scope.represented_client_id,
         save_for_future: true,
       },
     });

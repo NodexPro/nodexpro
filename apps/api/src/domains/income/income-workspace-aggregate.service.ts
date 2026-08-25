@@ -501,7 +501,7 @@ function minimalRecipientSearchStub(
     },
     create_fields_schema: buildRecipientCreateFieldsSchema(),
     save_for_future_label: 'שמור לשימוש עתידי',
-    save_for_future_available: canEdit,
+    save_for_future_available: false,
     selected: null,
     field_errors: {},
     allowed_actions: recipientSearchAllowedActions(scope.permissions),

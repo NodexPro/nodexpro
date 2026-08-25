@@ -179,7 +179,6 @@ export const WorkEngineRecipientSearchField = forwardRef<
   const selectedLine = model?.selected?.display_line ?? null;
 
   const textFields = shell.create_fields_schema.filter((f) => f.input_type === 'text');
-  const saveField = shell.create_fields_schema.find((f) => f.key === 'save_for_future');
 
   const buildCreateBody = useCallback(
     (): Record<string, unknown> => ({
@@ -198,13 +197,14 @@ export const WorkEngineRecipientSearchField = forwardRef<
       devLog('create recipient skipped — command already in flight');
       return null;
     }
-    const saveForFuture = createValues.save_for_future === 'true';
-    const command = saveForFuture ? cmds.save_recipient_for_future : cmds.set_recipient_snapshot;
+    // Product: newly entered recipients are always canonical income_customers.
+    // Never use set_income_recipient_snapshot (snapshot-only) for the WE create path.
+    const command = cmds.save_recipient_for_future ?? cmds.set_recipient_snapshot;
     if (!command) return null;
 
     createInFlight.current = true;
     setRecipientPending({ kind: 'create' });
-    devLog(saveForFuture ? 'save_income_recipient_for_future' : 'set_income_recipient_snapshot');
+    devLog('save_income_recipient_for_future (always persist)');
     onError(null);
     try {
       const res = await executeIncomeCommand(command, buildCreateBody());
@@ -215,6 +215,10 @@ export const WorkEngineRecipientSearchField = forwardRef<
       if (Object.keys(errs).length > 0) return null;
       if (!agg.recipient_search?.selected) {
         onError('מקבל לא נשמר');
+        return null;
+      }
+      if (agg.recipient_search.selected.kind !== 'saved') {
+        onError('מקבל לא נשמר כלקוח קבוע');
         return null;
       }
       skipSearchEffectRef.current = true;
@@ -234,7 +238,6 @@ export const WorkEngineRecipientSearchField = forwardRef<
     clearRecipientPending,
     cmds.save_recipient_for_future,
     cmds.set_recipient_snapshot,
-    createValues.save_for_future,
     onError,
     onWorkspaceAgg,
     setRecipientPending,
@@ -412,22 +415,6 @@ export const WorkEngineRecipientSearchField = forwardRef<
               </div>
             ))}
           </div>
-          {saveField && model?.save_for_future_available ? (
-            <label className="nx-we-recipient-search__checkbox">
-              <input
-                type="checkbox"
-                checked={createValues.save_for_future === 'true'}
-                disabled={recipientCommandLocked}
-                onChange={(e) =>
-                  setCreateValues((v) => ({
-                    ...v,
-                    save_for_future: e.target.checked ? 'true' : '',
-                  }))
-                }
-              />
-              {shell.save_for_future_label}
-            </label>
-          ) : null}
         </div>
       ) : null}
     </div>
