@@ -630,8 +630,9 @@
 
 .nx-we-invoices-cdm-population .nx-income-cdm__client-name {
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1.2;
 }
 
 .nx-we-invoices-cdm-population .nx-we-doc-counter__count {
@@ -645,10 +646,22 @@
 .nx-we-invoices-cdm-population .nx-income-cdm__table td {
   border-bottom: 1px solid #e2e8f0;
   vertical-align: middle;
+  /* Compact Excel cells: base CDM uses 14px block padding which fights denser rows. */
+  padding-block: 0;
+  padding-inline: 8px;
 }
 
+.nx-we-invoices-cdm-population .nx-income-cdm__table td:has(.nx-we-doc-counters) {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/*
+ * Target ~34px (~40% of 56) is blocked by unchanged 40×40 document cubes and
+ * 42×42 settings-sized action buttons. Closest safe usable data-row height: 42px.
+ */
 .nx-we-invoices-cdm-population .nx-income-cdm__table tbody tr {
-  height: 56px;
+  height: 42px;
 }
 
 .nx-we-invoices-cdm-population .nx-income-cdm__table tbody tr:hover {
@@ -656,12 +669,48 @@
   box-shadow: none;
 }
 
+/* Identity column: min-width 240px → 168px (~30% narrower). Freed space stays with documents/actions. */
 .nx-we-invoices-cdm-population .nx-income-cdm__cell--client {
   border-inline-end: 1px solid #e2e8f0;
+  min-width: 168px;
+  width: 168px;
+  max-width: 168px;
+}
+
+.nx-we-invoices-cdm-population .nx-income-cdm__client {
+  gap: 6px;
+}
+
+.nx-we-invoices-cdm-population .nx-income-cdm__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.nx-we-invoices-cdm-population .nx-income-cdm__avatar-btn {
+  border-radius: 8px;
+}
+
+.nx-we-invoices-cdm-population .nx-income-cdm__logo-fallback {
+  font-size: 11px;
+}
+
+/*
+ * Row actions: lock every action slot to the existing הגדרות מסמך / settings control
+ * (shared base is already 42×42 with 20×20 SVG icons).
+ */
+.nx-we-invoices-cdm-population .nx-income-cdm__actions {
+  gap: 4px;
+}
+
+.nx-we-invoices-cdm-population .nx-income-cdm__action {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
 }
 
 .nx-we-invoices-cdm-group-header-row td {
-  padding: 8px 12px !important;
+  padding: 4px 8px !important;
   background: #e2e8f0;
   border-bottom: 1px solid #cbd5e1;
   height: auto;
