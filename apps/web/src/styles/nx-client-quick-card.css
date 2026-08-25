@@ -20,11 +20,14 @@
   padding: 12px 14px 14px;
   direction: rtl;
   text-align: right;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
 }
 
 .nx-client-quick-card__title {
   margin: 0 0 10px;
-  font-size: 14px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
   font-weight: 700;
   color: #0f172a;
 }
@@ -50,6 +53,7 @@
 
 .nx-client-quick-card__label {
   margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
   font-size: 12px;
   font-weight: 600;
   color: #64748b;
@@ -67,7 +71,8 @@
 .nx-client-quick-card__value {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 13px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
   font-weight: 600;
   color: #0f172a;
   line-height: 1.35;
@@ -115,6 +120,8 @@
 
 .nx-client-quick-card__action-btn {
   min-width: 96px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
 }
 
 .nx-income-cdm__avatar-btn {
