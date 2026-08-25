@@ -677,6 +677,87 @@
   max-width: 168px;
 }
 
+/*
+ * Column rebalance (WE invoices dual populations only; hideStatusColumn order):
+ * 1 client | 2 documents | 3 unpaid (לא שולם) | 4 last document | 5 last activity | 6 actions
+ * Middle info columns stay narrow Excel cells; פעולות consumes remaining width.
+ */
+.nx-we-invoices-cdm-population .nx-income-cdm__table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1150px;
+}
+
+.nx-we-invoices-cdm-population .nx-income-cdm__table th,
+.nx-we-invoices-cdm-population .nx-income-cdm__table td {
+  border-inline-end: 1px solid #e2e8f0;
+}
+
+.nx-we-invoices-cdm-population .nx-income-cdm__table th:last-child,
+.nx-we-invoices-cdm-population .nx-income-cdm__table td:last-child {
+  border-inline-end: none;
+}
+
+/* מסמכים — keep cube floor; override the earlier 36% width that stole action space. */
+.nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(2),
+.nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(2) {
+  width: 400px;
+  min-width: 400px;
+  max-width: 400px;
+}
+
+.nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(2):has(.nx-we-doc-counters) {
+  width: 400px;
+  min-width: 400px;
+  max-width: 400px;
+}
+
+/* לא שולם — amount column only (no separate סכום). */
+.nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(3),
+.nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(3) {
+  width: 85px;
+  min-width: 85px;
+  max-width: 85px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* מסמך אחרון */
+.nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(4),
+.nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(4) {
+  width: 95px;
+  min-width: 95px;
+  max-width: 95px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* פעילות אחרונה */
+.nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(5),
+.nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(5) {
+  width: 95px;
+  min-width: 95px;
+  max-width: 95px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* פעולות — remaining width; distribute buttons across the cell. */
+.nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(6),
+.nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(6),
+.nx-we-invoices-cdm-population .nx-income-cdm__cell--actions {
+  width: auto;
+  min-width: 280px;
+  max-width: none;
+  white-space: normal;
+}
+
 .nx-we-invoices-cdm-population .nx-income-cdm__client {
   gap: 6px;
 }
@@ -698,12 +779,19 @@
 /*
  * Row actions: lock every action slot to the existing הגדרות מסמך / settings control
  * (shared base is already 42×42 with 20×20 SVG icons).
+ * Spread buttons across the full פעולות cell width — do not stretch button boxes.
  */
 .nx-we-invoices-cdm-population .nx-income-cdm__actions {
-  gap: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 0;
+  box-sizing: border-box;
 }
 
 .nx-we-invoices-cdm-population .nx-income-cdm__action {
+  flex: 0 0 auto;
   width: 42px;
   height: 42px;
   border-radius: 14px;
