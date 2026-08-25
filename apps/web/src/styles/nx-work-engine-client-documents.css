@@ -598,12 +598,15 @@
   border-radius: 6px;
   background: #fff;
   overflow: hidden;
+  /* WE invoices dual-table typography only — does not affect /m/income or global CDM. */
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 .nx-we-invoices-cdm-population__title {
   margin: 0;
   padding: 9px 10px 8px;
-  font-size: 14px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.3;
   color: #334155;
@@ -620,7 +623,22 @@
   background: #f8fafc;
   border-bottom: 1px solid #cbd5e1;
   color: #334155;
-  font-weight: 800;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.nx-we-invoices-cdm-population .nx-income-cdm__client-name {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nx-we-invoices-cdm-population .nx-we-doc-counter__count {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .nx-we-invoices-cdm-population .nx-income-cdm__table th,
@@ -658,13 +676,15 @@
 }
 
 .nx-we-invoices-cdm-group-header__name {
-  font-size: 13px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
   font-weight: 700;
   color: #0f172a;
 }
 
 .nx-we-invoices-cdm-group-header__count {
-  font-size: 12px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
   font-weight: 600;
   color: #64748b;
 }
