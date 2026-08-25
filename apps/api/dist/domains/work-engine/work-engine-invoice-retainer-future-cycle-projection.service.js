@@ -6,6 +6,7 @@ import { buildIncomeDocumentAllocationNumberField, defaultIncomeTaxAllocationNum
 import { findAvailableDocumentType } from '../income/income-document-types.fallback.js';
 import { resolveAvailableDocumentTypes } from '../income/income-document-types.resolver.js';
 import { buildIncomeDocumentDetailsStep, } from '../income/income-document-details-step.builders.js';
+import { buildIncomeDocumentPreviewToolbarActions } from '../income/income-document-preview-toolbar.pure.js';
 import { loadActiveIncomeIssuerScope } from '../income/income-issuer-scope.service.js';
 import { normalizeDraftLines } from '../income/income-document-draft-lines.pure.js';
 import { computeDraftTotalsPreview, parseDocumentSettingsJson, } from '../income/income-document-draft-totals.pure.js';
@@ -507,7 +508,9 @@ export async function attachFutureCycleProjectionPreview(step, preview) {
             preview_html: preview.previewHtml,
             validation_messages: [],
             allowed_actions: ['preview_recurring_cycle_override'],
-            toolbar_actions: [],
+            toolbar_actions: buildIncomeDocumentPreviewToolbarActions({
+                previewReady: Boolean(preview.previewHtml?.trim()),
+            }),
             allocation_number_field: resolveProjectionAllocationNumberField(step),
         },
     };

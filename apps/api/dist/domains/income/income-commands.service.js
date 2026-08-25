@@ -21,7 +21,7 @@ import { createIncomeCommandTimings, logIncomeCommandTimings, } from './income-c
 import { insertSavedIncomeRecipient, loadIncomeRecipientById, searchIncomeRecipients, selectedFromInputFields, selectedFromSavedRow, } from './income-recipient.service.js';
 import { DEFAULT_INCOME_CUSTOMER_PAYMENT_TERMS, parseIncomeCustomerPaymentTermsKey, } from './income-customer-payment-terms.pure.js';
 import { assertRecipientInputValid, parseRecipientInputBody, validateRecipientInputFields, } from './income-recipient.validation.js';
-import { beginIncomeWizardDocumentDraft, addIncomeDocumentLine, updateIncomeDocumentLine, deleteIncomeDocumentLine, reorderIncomeDocumentLines, saveIncomeDocumentDraft, resumeIncomeDocumentDraftFromContext, generateIncomeDocumentPreview, updateIncomeDocumentDiscount, updateIncomeDocumentDraftSettings, updateIncomeDocumentNotes, updateIncomeDocumentAllocationNumber, updateIncomeDocumentDeliveryContact, } from './income-document-draft-editor.service.js';
+import { beginIncomeWizardDocumentDraft, addIncomeDocumentLine, updateIncomeDocumentLine, deleteIncomeDocumentLine, reorderIncomeDocumentLines, saveIncomeDocumentDraft, resumeIncomeDocumentDraftFromContext, generateIncomeDocumentPreview, updateIncomeDocumentDiscount, updateIncomeDocumentDraftSettings, updateIncomeDocumentNotes, updateIncomeDocumentAllocationNumber, updateIncomeDocumentDeliveryContact, loadWizardDraftRow, recipientOverlayForDraftRow, } from './income-document-draft-editor.service.js';
 import { executeSendIncomeDocumentByEmail } from './income-document-email-delivery.service.js';
 import { buildIncomeDocumentEmailHistoryAggregate } from './income-document-email-history.service.js';
 import { executeSendIncomeDocumentByDocflow } from './income-document-docflow-delivery.service.js';
@@ -33,9 +33,9 @@ import { buildWorkEngineInvoicesClientDocumentsByTypeAggregate } from '../work-e
 import { loadRecurringCycleReviewRefsByGeneratedDraft, resolveAndApplyIssuerScopeFromTrustedOfficeDraftIfNeeded, resolveAndApplyRecurringCycleIssueIssuerScope, } from './income-recurring-cycle-issue-issuer-scope.service.js';
 import { clientSuppliedUserSavedAt } from './income-document-draft-user-saved.pure.js';
 import { executeUpdateIncomeDocumentBrandingProfile, executeUpdateIncomeDocumentBrandingProfilePreviewDraft, executeUploadIncomeDocumentLogo, executeUploadIncomeDocumentSignature, } from './income-document-branding.commands.js';
-import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT, INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT, INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT, INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT, INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT, } from './income.types.js';
+import { INCOME_COMMAND_ADD_LINE, INCOME_COMMAND_BEGIN_WIZARD_DRAFT, INCOME_COMMAND_CANCEL_DRAFT, INCOME_COMMAND_DELETE_LINE, INCOME_COMMAND_ISSUE_DOCUMENT, INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT, INCOME_COMMAND_REORDER_LINES, INCOME_COMMAND_SAVE_DRAFT, INCOME_COMMAND_RESUME_DRAFT, INCOME_COMMAND_GENERATE_PREVIEW, INCOME_COMMAND_UPDATE_DISCOUNT, INCOME_COMMAND_UPDATE_BRANDING_PROFILE, INCOME_COMMAND_UPDATE_BRANDING_PROFILE_PREVIEW_DRAFT, INCOME_COMMAND_UPLOAD_DOCUMENT_LOGO, INCOME_COMMAND_UPLOAD_DOCUMENT_SIGNATURE, INCOME_COMMAND_SEARCH_RECIPIENTS, INCOME_COMMAND_SELECT_RECIPIENT, INCOME_COMMAND_SET_RECIPIENT_SNAPSHOT, INCOME_COMMAND_SAVE_RECIPIENT_FOR_FUTURE, INCOME_COMMAND_RETRY_ACCOUNTING_POSTING, INCOME_COMMAND_RETRY_PDF_RENDER, INCOME_COMMAND_SEND_DOCUMENT_BY_EMAIL, INCOME_COMMAND_SEND_DOCUMENT_BY_DOCFLOW, INCOME_COMMAND_CREATE_CUSTOMER, INCOME_COMMAND_CREATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_UPDATE_CUSTOMER_FOR_ISSUER, INCOME_COMMAND_CREATE_DRAFT, INCOME_COMMAND_CREATE_ITEM, INCOME_COMMAND_CREATE_ONE_TIME_CUSTOMER, INCOME_COMMAND_SELECT_ISSUER, INCOME_COMMAND_UPDATE_DRAFT, INCOME_COMMAND_UPDATE_DRAFT_SETTINGS, INCOME_COMMAND_UPDATE_DELIVERY_CONTACT, INCOME_COMMAND_UPDATE_ALLOCATION_NUMBER, INCOME_COMMAND_UPDATE_LINE, INCOME_COMMAND_UPDATE_NOTES, INCOME_COMMAND_RECORD_DOCUMENT_PAYMENT, INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT, INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT, INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT, INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT, INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT, } from './income.types.js';
 import { executeRecordIncomeDocumentPayment } from './income-document-payment.service.js';
-import { executeBeginEditIncomePreliminaryDocument, executeCancelIncomePreliminaryDocument, executeConvertIncomeDocumentToDraft, } from './income-document-conversion.service.js';
+import { executeBeginEditIncomePreliminaryDocument, executeCancelIncomePreliminaryDocument, executeConvertIncomeDocumentToDraft, executeReopenIncomePreliminaryDocument, } from './income-document-conversion.service.js';
 import { assertCreditDraftIdentityLocked, executeBeginIncomeTaxInvoiceCredit, } from './income-document-tax-invoice-credit.service.js';
 const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_SELECT_ISSUER,
@@ -78,6 +78,7 @@ const ALLOWED_COMMANDS = new Set([
     INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
     INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
     INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT,
+    INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT,
     INCOME_COMMAND_BEGIN_TAX_INVOICE_CREDIT,
 ]);
 async function commandResponse(ctx, command, recipientOverlay = {}, wizardDraftOverlay = {}) {
@@ -628,6 +629,9 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
     if (command === INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT) {
         return executeCancelIncomePreliminaryDocument(ctx, body);
     }
+    if (command === INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT) {
+        return executeReopenIncomePreliminaryDocument(ctx, body);
+    }
     if (command === INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT) {
         return executeBeginEditIncomePreliminaryDocument(ctx, body);
     }
@@ -942,6 +946,22 @@ export async function executeIncomeCommand(ctx, body, auditMeta) {
         const overlay = await saveIncomeDocumentDraft(scope, body);
         const reviewContext = parseRecurringCycleReviewCommandContext(body);
         if (!reviewContext) {
+            // Conversion-sourced drafts (income_document_conversions → conversion_source on
+            // document_details_step): return FULL workspace so FE can full-replace.
+            // Do not use wizard_patch merge for this path. Other non-conversion saves stay lean.
+            const conversionSource = overlay.document_details_step?.conversion_source ?? null;
+            if (conversionSource) {
+                const draftId = reqUuid(body.draft_id, 'draft_id');
+                const draftRow = await loadWizardDraftRow(scope, draftId);
+                const recipientOverlay = await recipientOverlayForDraftRow(scope, draftRow);
+                const income_workspace_aggregate = await buildIncomeWorkspaceAggregate(ctx, scope, recipientOverlay, overlay);
+                return {
+                    ok: true,
+                    command,
+                    income_workspace_aggregate,
+                    meta: { workspace_aggregate_mode: 'full' },
+                };
+            }
             return wizardDraftCommandResponse(ctx, command, scope, {}, overlay);
         }
         const refreshed = await refreshRecurringCycleDraftReviewMutationCase({

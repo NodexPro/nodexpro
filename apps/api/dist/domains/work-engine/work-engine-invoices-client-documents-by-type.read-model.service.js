@@ -23,6 +23,7 @@ import { resolveIncomeInvoiceOriginalAmount } from '../accounting-base/accountin
 import { sumPostedAllocationsForIncomeDocuments } from '../accounting-base/accounting-base-income-payment-case.read.js';
 import { buildIncomeDocumentRecordPaymentForm, resolvePaymentStateIcon, } from '../income/income-document-payment.pure.js';
 import { buildConversionTargetOptions, buildPreliminaryEditAction, INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT, INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT, INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT, isIncomeConversionSourceType, resolveConversionStateKey, } from '../income/income-document-conversion.pure.js';
+import { buildPreliminaryLifecycleStatusDetail, buildPreliminaryReopenAction, INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT, linkedDocumentRefFromIssuedTarget, preliminaryLifecycleLabel, resolvePreliminaryLifecycleState, } from '../income/income-document-preliminary-lifecycle.pure.js';
 import { WORK_ENGINE_INVOICES_CLIENT_DOCUMENTS_BY_TYPE_AGGREGATE_KEY, } from '../income/income.types.js';
 import { buildTaxInvoiceCreditAction, loadIssuedCreditAmountsByInvoice, } from '../income/income-document-tax-invoice-credit.read.js';
 import { composeCollectibleAfterCredit } from '../income/income-document-tax-invoice-credit.pure.js';
@@ -189,6 +190,23 @@ async function loadConversionCountsBySource(orgId, sourceIds) {
     }
     return out;
 }
+async function loadLinkedDocumentsByIds(orgId, documentIds) {
+    const unique = [...new Set(documentIds.filter(Boolean))];
+    const out = new Map();
+    if (unique.length === 0)
+        return out;
+    const { data, error } = await supabaseAdmin
+        .from('income_documents')
+        .select('id, document_number, document_type')
+        .eq('organization_id', orgId)
+        .in('id', unique);
+    throwIfSupabaseError(error, 'loadLinkedDocumentsByIds');
+    for (const row of data ?? []) {
+        const typed = row;
+        out.set(typed.id, typed);
+    }
+    return out;
+}
 async function loadSourceDraftDueDateContext(orgId, draftIds) {
     const unique = [...new Set(draftIds.filter(Boolean))];
     const out = new Map();
@@ -215,7 +233,7 @@ async function loadIssuedDocumentCandidates(params) {
     const preliminaryType = isIncomeConversionSourceType(params.documentType);
     let query = supabaseAdmin
         .from('income_documents')
-        .select('id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, document_status, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error, created_at, source_draft_id, income_customer_id')
+        .select('id, represented_client_id, issuer_business_id, acting_mode, document_number, document_type, document_status, issue_date, due_date, currency, totals_snapshot_json, customer_snapshot_json, pdf_render_status, pdf_asset_id, pdf_render_error, created_at, source_draft_id, income_customer_id, preliminary_lifecycle_state, preliminary_closed_by_downstream_document_id')
         .eq('organization_id', params.orgId)
         .or(excludeSelfModeActingFilter())
         .eq('document_type', params.documentType)
@@ -248,7 +266,13 @@ async function loadIssuedDocumentCandidates(params) {
     const missingDueCustomerIds = missingDue
         .map((raw) => String(raw.income_customer_id ?? ''))
         .filter(Boolean);
-    const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive, allocatedByDoc, conversionCounts, creditedByDoc, creditTypeEnabled, sourceDraftDueById, paymentTermsByCustomer,] = await Promise.all([
+    const linkedDownstreamIds = preliminaryType
+        ? filtered
+            .map((raw) => String(raw
+            .preliminary_closed_by_downstream_document_id ?? ''))
+            .filter(Boolean)
+        : [];
+    const [emailAttemptCounts, docflowAttemptCounts, docflowEntitled, portalActive, allocatedByDoc, conversionCounts, creditedByDoc, creditTypeEnabled, sourceDraftDueById, paymentTermsByCustomer, linkedDocsById,] = await Promise.all([
         loadEmailAttemptCountsByDocumentIds(params.orgId, documentIds),
         loadDocflowAttemptCountsByDocumentIds(params.orgId, documentIds),
         isDocflowEntitledForOrg(params.orgId),
@@ -267,6 +291,9 @@ async function loadIssuedDocumentCandidates(params) {
             : Promise.resolve(false),
         loadSourceDraftDueDateContext(params.orgId, missingDueDraftIds),
         loadIncomeCustomerPaymentTermsByIds(params.orgId, missingDueCustomerIds),
+        preliminaryType
+            ? loadLinkedDocumentsByIds(params.orgId, linkedDownstreamIds)
+            : Promise.resolve(new Map()),
     ]);
     return filtered.map((raw) => {
         const doc = raw;
@@ -355,49 +382,89 @@ async function loadIssuedDocumentCandidates(params) {
         let edit_action = null;
         let convert_action = null;
         let cancel_action = null;
+        let reopen_action = null;
         let credit_action = null;
         let conversion_state_key = null;
+        let lifecycle_state = null;
+        let lifecycle_label = null;
+        let status_detail = null;
+        let linked_document = null;
+        let row_visual_state = null;
         if (preliminaryType) {
+            lifecycle_state = resolvePreliminaryLifecycleState({
+                documentType: doc.document_type,
+                documentStatus: doc.document_status,
+                storedLifecycle: doc.preliminary_lifecycle_state,
+            });
+            lifecycle_label = preliminaryLifecycleLabel(lifecycle_state);
+            const linkedRaw = doc.preliminary_closed_by_downstream_document_id
+                ? linkedDocsById.get(doc.preliminary_closed_by_downstream_document_id)
+                : null;
+            linked_document = linkedRaw
+                ? linkedDocumentRefFromIssuedTarget({
+                    documentId: linkedRaw.id,
+                    documentNumber: linkedRaw.document_number,
+                    documentType: linkedRaw.document_type,
+                })
+                : null;
+            status_detail = buildPreliminaryLifecycleStatusDetail({
+                lifecycleState: lifecycle_state,
+                linked: linked_document,
+            });
+            row_visual_state = lifecycle_state === 'closed' ? 'muted' : null;
             conversion_state_key = resolveConversionStateKey({
                 sourceStatus: doc.document_status,
                 conversionCount: conversionCounts.get(doc.id) ?? 0,
             });
-            edit_action = buildPreliminaryEditAction({
-                sourceStatus: doc.document_status,
+            if (lifecycle_state !== 'closed') {
+                edit_action = buildPreliminaryEditAction({
+                    sourceStatus: doc.document_status,
+                    canEdit,
+                    lifecycleState: lifecycle_state,
+                });
+                if (edit_action.enabled)
+                    allowedActions.push(INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT);
+                const targets = buildConversionTargetOptions({
+                    sourceType: doc.document_type,
+                    sourceStatus: doc.document_status,
+                    canEdit,
+                    lifecycleState: lifecycle_state,
+                });
+                const convertEnabled = targets.some((t) => t.enabled);
+                convert_action = {
+                    enabled: convertEnabled,
+                    label: 'הפקת מסמך',
+                    command: INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
+                    targets,
+                };
+                if (convertEnabled)
+                    allowedActions.push(INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT);
+                const cancelEnabled = !isCancelled && canEdit;
+                cancel_action = {
+                    enabled: cancelEnabled,
+                    label: 'ביטול',
+                    command: INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
+                    reason_required: false,
+                    confirmation_title: 'ביטול המסמך',
+                    confirmation_body: 'המסמך לא יימחק. הסטטוס ישתנה למבוטל, והמסמך יישאר בהיסטוריה ובביקורת.',
+                    disabled_reason: isCancelled
+                        ? 'המסמך כבר מבוטל'
+                        : canEdit
+                            ? null
+                            : 'אין הרשאת עריכה',
+                };
+                if (cancelEnabled)
+                    allowedActions.push(INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT);
+            }
+            const reopenCandidate = buildPreliminaryReopenAction({
+                lifecycleState: lifecycle_state,
+                documentStatus: doc.document_status,
                 canEdit,
             });
-            if (edit_action.enabled)
-                allowedActions.push(INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT);
-            const targets = buildConversionTargetOptions({
-                sourceType: doc.document_type,
-                sourceStatus: doc.document_status,
-                canEdit,
-            });
-            const convertEnabled = targets.some((t) => t.enabled);
-            convert_action = {
-                enabled: convertEnabled,
-                label: 'הפקת מסמך',
-                command: INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT,
-                targets,
-            };
-            if (convertEnabled)
-                allowedActions.push(INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT);
-            const cancelEnabled = !isCancelled && canEdit;
-            cancel_action = {
-                enabled: cancelEnabled,
-                label: 'ביטול',
-                command: INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT,
-                reason_required: false,
-                confirmation_title: 'ביטול המסמך',
-                confirmation_body: 'המסמך לא יימחק. הסטטוס ישתנה למבוטל, והמסמך יישאר בהיסטוריה ובביקורת.',
-                disabled_reason: isCancelled
-                    ? 'המסמך כבר מבוטל'
-                    : canEdit
-                        ? null
-                        : 'אין הרשאת עריכה',
-            };
-            if (cancelEnabled)
-                allowedActions.push(INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT);
+            if (reopenCandidate.enabled) {
+                reopen_action = reopenCandidate;
+                allowedActions.push(INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT);
+            }
         }
         if (params.documentType === 'tax_invoice') {
             const original = resolveIncomeInvoiceOriginalAmount(doc.totals_snapshot_json);
@@ -437,6 +504,13 @@ async function loadIssuedDocumentCandidates(params) {
         if (docflow_delivery.action.enabled) {
             allowedActions.push(docflow_delivery.action.key);
         }
+        const status_label = isCancelled
+            ? 'מבוטל'
+            : lifecycle_state === 'closed'
+                ? 'סגור'
+                : lifecycle_state === 'open' && status_detail
+                    ? 'פתוח'
+                    : 'הונפק';
         return {
             row_id: doc.id,
             document_number: doc.document_number,
@@ -446,7 +520,7 @@ async function loadIssuedDocumentCandidates(params) {
             customer_display_name: customerDisplayFromSnapshot(doc.customer_snapshot_json),
             amount_display: amountRef > 0 ? formatLedgerMoneyReference(amountRef, doc.currency || 'ILS') : '—',
             due_date_display,
-            status_label: isCancelled ? 'מבוטל' : 'הונפק',
+            status_label,
             payment_state_key,
             payment_state_label,
             payment_state_tone,
@@ -464,8 +538,14 @@ async function loadIssuedDocumentCandidates(params) {
             edit_action,
             convert_action,
             cancel_action,
+            reopen_action,
             credit_action,
             conversion_state_key,
+            lifecycle_state,
+            lifecycle_label,
+            status_detail,
+            linked_document,
+            row_visual_state,
             allowed_actions: allowedActions,
             year,
         };
@@ -525,8 +605,14 @@ async function loadDraftCandidates(params) {
             edit_action: null,
             convert_action: null,
             cancel_action: null,
+            reopen_action: null,
             credit_action: null,
             conversion_state_key: null,
+            lifecycle_state: null,
+            lifecycle_label: null,
+            status_detail: null,
+            linked_document: null,
+            row_visual_state: null,
             allowed_actions: canEditDraft ? ['edit_draft'] : [],
             year,
         };

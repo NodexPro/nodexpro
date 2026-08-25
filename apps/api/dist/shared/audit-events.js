@@ -282,6 +282,10 @@ export const AUDIT_ACTIONS = {
     INCOME_DOCUMENT_CONVERSION_LINEAGE_CONFLICT: 'income.document_conversion_lineage_conflict',
     INCOME_PRELIMINARY_DOCUMENT_EDITED: 'income.preliminary_document_edited',
     INCOME_PRELIMINARY_DOCUMENT_CANCELLED: 'income.preliminary_document_cancelled',
+    /** Quote/deal closed after downstream conversion target successfully issued. */
+    INCOME_PRELIMINARY_DOCUMENT_CLOSED: 'income.preliminary_document_closed',
+    /** Quote/deal reopened (same document id + number; conversion lineage kept). */
+    INCOME_PRELIMINARY_DOCUMENT_REOPENED: 'income.preliminary_document_reopened',
     /** Income INC-3.5 — issuer profile projection synced from Core org business profile. */
     INCOME_ISSUER_PROFILE_SYNCED: 'income.issuer_profile_synced',
     /** Income INC-4 — issued document + numbering allocation. */
