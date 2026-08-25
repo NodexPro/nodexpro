@@ -109,12 +109,13 @@
 }
 
 /*
- * Invoices tab only: shrink outer horizontal whitespace so dual populations
- * can use nearly full queue width. Does not change AppShell or other tabs.
+ * Invoices tab only: reclaim queue horizontal padding so dual populations
+ * use nearly the full available content width. Does not change AppShell or other tabs.
+ * Leave a small safety gutter (2px/side) to avoid page-level overflow.
  */
 .nx-we-invoices-tab {
-  margin-inline: -14px;
-  width: calc(100% + 28px);
+  margin-inline: -22px;
+  width: calc(100% + 44px);
   max-width: none;
   box-sizing: border-box;
 }
@@ -124,12 +125,17 @@
 }
 
 .nx-we-invoices-tab .nx-income-cdm__head {
-  padding: 14px 12px 12px;
+  padding: 14px 8px 12px;
 }
 
 .nx-we-invoices-tab .nx-income-cdm__table th,
 .nx-we-invoices-tab .nx-income-cdm__table td {
   padding-inline: 10px;
+}
+
+.nx-we-invoices-tab .nx-income-cdm__card {
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
 }
 
 .nx-we-wizard-issuer-grid {

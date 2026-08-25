@@ -262,8 +262,11 @@ test('shell enables populations layout with local UI state only (no API on mode 
 
 test('invoices-tab-only whitespace and 50/50 layout CSS exist', () => {
   assert.match(queueCss, /\.nx-we-invoices-tab\s*\{/);
-  assert.match(queueCss, /margin-inline:\s*-14px/);
+  assert.match(queueCss, /margin-inline:\s*-22px/);
+  assert.match(queueCss, /width:\s*calc\(100%\s*\+\s*44px\)/);
   assert.match(cdmCss, /nx-we-invoices-cdm-populations--both/);
   assert.match(cdmCss, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(0,\s*1fr\)/);
   assert.match(cdmCss, /@media \(max-width: 1100px\)/);
+  assert.match(cdmCss, /\.nx-we-invoices-cdm-population\s*\{[\s\S]*?border:\s*1px solid #cbd5e1/);
+  assert.match(cdmCss, /\.nx-we-invoices-cdm-population\s+\.nx-income-cdm__cell--client/);
 });
