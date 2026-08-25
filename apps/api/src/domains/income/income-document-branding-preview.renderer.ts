@@ -6,6 +6,7 @@ import {
   STUDIO_SAMPLE_ISSUER,
   STUDIO_SAMPLE_RECIPIENT,
 } from './income-document-branding.pure.js';
+import { resolveCustomerFacingIncomeDocumentBranding } from './income-document-customer-facing-style.pure.js';
 import { docPreviewIcon, nodexproFooterLogoMarkup } from './income-document-preview-icons.pure.js';
 import { resolveSectionedDocumentIdentityPresentation } from './income-document-sectioned-identity.pure.js';
 import {
@@ -1867,12 +1868,18 @@ ${INVOICE_FONT_FACE}
   `.trim();
 }
 
+/**
+ * Large Branding Studio sample preview — how the finished customer document looks.
+ * Forces customer-facing `sectioned` via resolveCustomerFacingIncomeDocumentBranding;
+ * does NOT mutate the stored studio profile (classic/etc. remain as saved).
+ */
 export function renderStudioSamplePreviewHtml(
   branding: IncomeBrandingResolvedProfile,
   docTypeLabel = 'הצעת מחיר',
 ): string {
+  const customerFacingBranding = resolveCustomerFacingIncomeDocumentBranding(branding);
   return renderIncomeBrandedPreviewHtml({
-    branding,
+    branding: customerFacingBranding,
     docTypeLabel,
     document_type: 'quote',
     numberPreview: '2026-000154',

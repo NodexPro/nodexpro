@@ -123,10 +123,17 @@ test('document type group overrides resolve effective style for preview', () => 
   };
   const resolved = resolveBrandingProfileForDocumentTypeGroup(row, { logo_data_url: null, signature_data_url: null }, 'tax_group');
   assert.equal(resolved.color_theme_key, 'red');
+  assert.equal(resolved.document_style_key, 'classic');
   const html = renderStudioSamplePreviewHtml(resolved, 'חשבונית מס');
   assert.match(html, /חשבונית מס/);
   assert.match(html, /לקוח לדוגמה/);
   assert.doesNotMatch(html, /Test4/);
+  // Large studio sample is customer-facing finished layout (sectioned), not classic grid.
+  assert.match(html, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
+  assert.doesNotMatch(html, /class="nx-doc__upper-sheet"/);
+  assert.match(html, /class="nx-doc__upper"/);
+  // Stored/resolved studio style was not mutated by sample render.
+  assert.equal(resolved.document_style_key, 'classic');
 });
 
 test('document style templates expose studio archetypes including sectioned', () => {
@@ -655,6 +662,7 @@ test('studio sample live preview labels sample-only and uses example customer', 
     payment_methods_json: null,
   };
   const resolved = resolveBrandingProfile(row, { logo_data_url: null, signature_data_url: null });
+  assert.equal(resolved.document_style_key, 'classic');
   const preview = buildStudioSampleLivePreview({
     preview_html: renderStudioSamplePreviewHtml(resolved),
   });
@@ -662,4 +670,103 @@ test('studio sample live preview labels sample-only and uses example customer', 
   assert.equal(preview.preview_footnote, 'המסמך הסופי נוצר בשרת.');
   assert.match(preview.preview_html, /לקוח לדוגמה/);
   assert.doesNotMatch(preview.preview_html, /Test4/);
+  assert.match(preview.preview_html, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
+  assert.doesNotMatch(preview.preview_html, /class="nx-doc__upper-sheet"/);
+  assert.equal(resolved.document_style_key, 'classic');
+});
+
+test('studio large sample preview forces customer-facing sectioned without mutating classic input', () => {
+  const row: IncomeBrandingProfileRow = {
+    id: 'studio-sample-classic',
+    organization_id: 'org',
+    issuer_business_id: 'biz',
+    represented_client_id: null,
+    logo_file_asset_id: null,
+    signature_file_asset_id: null,
+    company_subtitle: null,
+    document_style_key: 'classic',
+    primary_color: '#111827',
+    secondary_color: '#ffffff',
+    table_header_color: '#111827',
+    totals_color: '#111827',
+    client_block_position: 'right',
+    footer_text: null,
+    bank_name: null,
+    bank_branch: null,
+    bank_account: null,
+    iban: null,
+    swift: null,
+    email_subject_template: null,
+    email_body_template: null,
+    customer_notes: null,
+    terms_and_conditions: null,
+    logo_size_key: 'medium',
+    color_theme_key: 'black_white',
+    display_options_json: null,
+    payment_methods_json: null,
+  };
+  const classic = resolveBrandingProfile(row, { logo_data_url: null, signature_data_url: null });
+  assert.equal(classic.document_style_key, 'classic');
+
+  const classicDirect = renderIncomeBrandedPreviewHtml({
+    branding: classic,
+    docTypeLabel: 'הצעת מחיר',
+    document_type: 'quote',
+    numberPreview: '1',
+    issuer: { display_name: 'A', tax_id: null, address: null, phone: null, email: null },
+    recipient: { display_name: 'B', tax_id: null, address: null, phone: null, email: null },
+    document_date: null,
+    due_date: null,
+    currency: 'ILS',
+    lineRows: [],
+    totals: {
+      subtotal_before_discount: '₪0.00',
+      discount: null,
+      subtotal_after_discount: '₪0.00',
+      vat_label: null,
+      vat: null,
+      grand_total: '₪0.00',
+    },
+    notes: null,
+    company_subtitle: null,
+  });
+  assert.match(classicDirect, /class="nx-doc__upper-sheet"/);
+  assert.doesNotMatch(classicDirect, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
+
+  const studioSample = renderStudioSamplePreviewHtml(classic);
+  assert.match(studioSample, /class="nx-doc nx-doc--unified nx-doc--sectioned"/);
+  assert.doesNotMatch(studioSample, /class="nx-doc__upper-sheet"/);
+  assert.match(studioSample, /לקוח לדוגמה/);
+  assert.match(studioSample, /רישיון תוכנה שנתי/);
+  assert.equal(classic.document_style_key, 'classic');
+});
+
+test('studio sample renderer source wires customer-facing resolver; preview draft path unchanged', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const renderer = await readFile(
+    new URL('../../src/domains/income/income-document-branding-preview.renderer.ts', import.meta.url),
+    'utf8',
+  );
+  const service = await readFile(
+    new URL('../../src/domains/income/income-document-branding.service.ts', import.meta.url),
+    'utf8',
+  );
+  const css = await readFile(
+    new URL('../../../web/src/styles/nx-branding-studio.css', import.meta.url),
+    'utf8',
+  );
+  const modalCss = await readFile(
+    new URL('../../../web/src/styles/nx-modal.css', import.meta.url),
+    'utf8',
+  );
+  assert.match(renderer, /resolveCustomerFacingIncomeDocumentBranding\(branding\)/);
+  assert.match(renderer, /STUDIO_SAMPLE_ISSUER/);
+  assert.match(renderer, /STUDIO_SAMPLE_RECIPIENT/);
+  assert.match(renderer, /function buildSheetSection/);
+  assert.match(service, /renderStudioSamplePreviewHtml\(resolved, groupDef\.sample_document_type_label\)/);
+  assert.match(service, /previewIncomeDocumentBrandingProfileDraft/);
+  assert.match(css, /\.nx-income-branding-overlay--studio\s*\{[\s\S]*?padding:\s*24px;/);
+  assert.match(css, /\.nx-income-branding-modal--studio\s*\{[\s\S]*?calc\(100vw - 48px\)/);
+  assert.match(css, /height:\s*calc\(100vh - 48px\)/);
+  assert.doesNotMatch(modalCss, /\.nx-income-branding-modal--studio/);
 });
