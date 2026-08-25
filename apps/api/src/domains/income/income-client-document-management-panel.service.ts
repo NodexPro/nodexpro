@@ -7,7 +7,10 @@
  * Dual populations (invoices tab foundation):
  * - office_clients_section: ALL eligible Core office clients (left-join document stats;
  *   zero counters when no docs). Population is not document-derived.
+ *   Office-client document counters = office-representative docs for that client with
+ *   income_customer_id IS NULL (not Test3 → end-customer docs).
  * - office_client_customers_section: income_customers with document stats under those clients
+ *   (represented_client + income_customer_id).
  * `rows` remains office_clients_section.rows for backward compatibility.
  */
 
@@ -758,7 +761,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       .limit(500),
   ]);
   throwIfSupabaseError(statsRes.error, 'incomeClientDocumentManagementPanelStats', {
-    migrationHint: '163_income_client_panel_unpaid_subtract_issued_credits.sql',
+    migrationHint: '166_income_client_panel_stats_exclude_end_customer_docs.sql',
   });
   throwIfSupabaseError(endCustomerStatsRes.error, 'incomeClientDocumentManagementEndCustomerStats', {
     migrationHint: '165_income_client_document_management_end_customer_stats.sql',

@@ -6,6 +6,8 @@ export type OfficeClientDocumentScopeRow = {
   represented_client_id: string | null;
   issuer_business_id: string;
   acting_mode: string;
+  /** When set, document belongs to end-customer population — not the office-client row. */
+  income_customer_id?: string | null;
 };
 
 export type IncomeClientDocumentManagementPopulationKey =
@@ -178,8 +180,10 @@ function isLegacyOfficeRepresentativeRow(row: OfficeClientDocumentScopeRow): boo
 }
 
 /**
- * Resolve the single office-client row key for a document/draft.
+ * Resolve the single office-client issuer-scope key for a document/draft.
  * Returns null for self mode, cross-client mismatches, or non-office rows.
+ * Does not decide office-row vs end-customer counters — see
+ * `classifyDocumentPopulationForCounters` / `resolveOfficeClientCounterGroupKey`.
  */
 export function resolveOfficeClientGroupKey(row: OfficeClientDocumentScopeRow): string | null {
   if (isExplicitSelfMode(row)) return null;
@@ -197,6 +201,118 @@ export function resolveOfficeClientGroupKey(row: OfficeClientDocumentScopeRow): 
   }
 
   return null;
+}
+
+function hasEndCustomerRecipient(row: { income_customer_id?: string | null }): boolean {
+  const id = row.income_customer_id;
+  return id != null && String(id).trim() !== '';
+}
+
+/**
+ * Office-client COUNTER / office-row document scope key.
+ * Same issuer scope as resolveOfficeClientGroupKey, but excludes documents that
+ * already have an end-customer recipient (Test3 → Chicago must not inflate Test3 office cubes).
+ */
+export function resolveOfficeClientCounterGroupKey(row: OfficeClientDocumentScopeRow): string | null {
+  if (hasEndCustomerRecipient(row)) return null;
+  return resolveOfficeClientGroupKey(row);
+}
+
+/**
+ * Pure counter composition for office-client vs end-customer populations.
+ * Mirrors SQL directional rules (panel_stats vs end_customer_stats).
+ */
+export function classifyDocumentPopulationForCounters(row: {
+  represented_client_id: string | null;
+  issuer_business_id: string;
+  acting_mode: string;
+  income_customer_id: string | null;
+}):
+  | { population: 'office_client'; represented_client_id: string }
+  | { population: 'office_client_customer'; represented_client_id: string; income_customer_id: string }
+  | { population: 'excluded' } {
+  const issuerScopeKey = resolveOfficeClientGroupKey({
+    represented_client_id: row.represented_client_id,
+    issuer_business_id: row.issuer_business_id,
+    acting_mode: row.acting_mode,
+  });
+  if (!issuerScopeKey) return { population: 'excluded' };
+
+  const customerId =
+    row.income_customer_id != null && String(row.income_customer_id).trim() !== ''
+      ? String(row.income_customer_id).trim()
+      : null;
+
+  if (customerId) {
+    return {
+      population: 'office_client_customer',
+      represented_client_id: issuerScopeKey,
+      income_customer_id: customerId,
+    };
+  }
+
+  return { population: 'office_client', represented_client_id: issuerScopeKey };
+}
+
+export type DocumentCounterBucket = {
+  quote: number;
+  deal_invoice: number;
+  tax_invoice: number;
+  receipt: number;
+  credit_tax_invoice: number;
+};
+
+function emptyCounterBucket(): DocumentCounterBucket {
+  return { quote: 0, deal_invoice: 0, tax_invoice: 0, receipt: 0, credit_tax_invoice: 0 };
+}
+
+function bumpCounter(bucket: DocumentCounterBucket, documentType: string): void {
+  if (documentType === 'quote') bucket.quote += 1;
+  else if (documentType === 'deal_invoice') bucket.deal_invoice += 1;
+  else if (documentType === 'tax_invoice' || documentType === 'tax_invoice_receipt') {
+    bucket.tax_invoice += 1;
+  } else if (documentType === 'receipt') bucket.receipt += 1;
+  else if (documentType === 'credit_tax_invoice') bucket.credit_tax_invoice += 1;
+}
+
+/**
+ * Aggregate fixture documents into office-client and end-customer counter maps.
+ * Used by focused directional-scope tests (no DB).
+ */
+export function aggregateDirectionalDocumentCounters(
+  docs: Array<{
+    represented_client_id: string | null;
+    issuer_business_id: string;
+    acting_mode: string;
+    income_customer_id: string | null;
+    document_type: string;
+  }>,
+): {
+  office_clients: Map<string, DocumentCounterBucket>;
+  office_client_customers: Map<string, DocumentCounterBucket>;
+} {
+  const office_clients = new Map<string, DocumentCounterBucket>();
+  const office_client_customers = new Map<string, DocumentCounterBucket>();
+
+  for (const doc of docs) {
+    const classified = classifyDocumentPopulationForCounters(doc);
+    if (classified.population === 'excluded') continue;
+    if (classified.population === 'office_client') {
+      const bucket = office_clients.get(classified.represented_client_id) ?? emptyCounterBucket();
+      bumpCounter(bucket, doc.document_type);
+      office_clients.set(classified.represented_client_id, bucket);
+      continue;
+    }
+    const key = endCustomerPopulationKey({
+      representedClientId: classified.represented_client_id,
+      incomeCustomerId: classified.income_customer_id,
+    });
+    const bucket = office_client_customers.get(key) ?? emptyCounterBucket();
+    bumpCounter(bucket, doc.document_type);
+    office_client_customers.set(key, bucket);
+  }
+
+  return { office_clients, office_client_customers };
 }
 
 /** True when the row belongs exclusively to the given office client row. */
