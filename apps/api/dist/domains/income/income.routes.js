@@ -75,11 +75,9 @@ router.get('/aggregates/document-email-history', requirePermission(INCOME_PERMIS
 router.get('/aggregates/represented-client-email-history', requirePermission(INCOME_PERMISSIONS.view), async (req, res, next) => {
     try {
         const representedClientId = String(req.query.represented_client_id ?? '').trim();
-        const incomeCustomerIdRaw = String(req.query.income_customer_id ?? '').trim();
         const aggregate = await buildIncomeRepresentedClientEmailHistoryAggregate({
             ctx: req.context,
             representedClientId,
-            incomeCustomerId: incomeCustomerIdRaw || null,
         });
         return res.json(aggregate);
     }

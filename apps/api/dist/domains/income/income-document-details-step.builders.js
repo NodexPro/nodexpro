@@ -11,16 +11,14 @@ import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.service.js';
 import { buildDocumentBrandingProfileAggregate, loadResolvedBrandingProfileForDocumentType } from './income-document-branding.service.js';
 import { renderUnifiedIncomeDocumentHtml } from './income-document-unified-render.html.js';
-import { resolveCustomerFacingIncomeDocumentBranding } from './income-document-customer-facing-style.pure.js';
 import { formatLineVatAmountDisplay } from './income-document-unified-render.pure.js';
 import { creditSourceReferenceDisplay, mergeCreditSourceReferenceIntoNotes, readCreditDraftSettings, } from './income-document-tax-invoice-credit.pure.js';
 import { buildIncomeDocumentAllocationNumberField, } from './income-document-allocation-number.pure.js';
 import { INCOME_DOCUMENT_NOTES_HINT_HE, INCOME_DOCUMENT_NOTES_MAX_LENGTH, } from './income-document-notes.pure.js';
 import { resolveIncomeTaxAllocationNumberPolicyForOrg } from './income-document-allocation-number-resolver.js';
 import { totalsFromTotalsSnapshot } from './income-document-unified-render.pure.js';
-import { buildIncomeDocumentPreviewToolbarActions, } from './income-document-preview-toolbar.pure.js';
 import { loadIncomeCustomerDefaultPaymentTerms, loadIncomeRecipientById } from './income-recipient.service.js';
-import { buildConversionDraftSourceRef, buildPreliminaryDocumentEditMode, buildWizardSessionActions, readPreliminaryEditSourceDocumentId, } from './income-document-conversion.pure.js';
+import { buildPreliminaryDocumentEditMode, buildWizardSessionActions, readPreliminaryEditSourceDocumentId, } from './income-document-conversion.pure.js';
 import { incomeCustomerPaymentTermsLabel, INCOME_CUSTOMER_PAYMENT_TERMS_OPTIONS, resolveTaxInvoiceDueDate, } from './income-customer-payment-terms.pure.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
@@ -50,32 +48,6 @@ async function loadPreliminaryEditSourceIdentity(scope, sourceDocumentId) {
         issue_date: /^\d{4}-\d{2}-\d{2}$/.test(issueDate) ? issueDate : null,
         document_number: documentNumber,
     };
-}
-async function loadConversionDraftSourceRef(scope, draftId) {
-    const { data, error } = await supabaseAdmin
-        .from('income_document_conversions')
-        .select('source_document_id, source_document_type')
-        .eq('organization_id', scope.org_id)
-        .eq('target_draft_id', draftId)
-        .maybeSingle();
-    throwIfSupabaseError(error, 'loadConversionDraftSourceRef', {
-        migrationHint: '158_income_document_conversion_and_preliminary_cancel.sql',
-    });
-    const row = data;
-    const sourceDocumentId = typeof row?.source_document_id === 'string' && row.source_document_id.trim()
-        ? row.source_document_id.trim()
-        : '';
-    const sourceDocumentType = typeof row?.source_document_type === 'string' && row.source_document_type.trim()
-        ? row.source_document_type.trim()
-        : '';
-    if (!sourceDocumentId || !sourceDocumentType)
-        return null;
-    const identity = await loadPreliminaryEditSourceIdentity(scope, sourceDocumentId);
-    return buildConversionDraftSourceRef({
-        sourceDocumentId,
-        sourceDocumentType,
-        sourceDocumentNumber: identity.document_number,
-    });
 }
 function previewPartyAddressLine(addressJson) {
     if (!addressJson || typeof addressJson !== 'object' || Array.isArray(addressJson))
@@ -167,6 +139,13 @@ function formatPreviewDate(iso) {
         return '—';
     const [y, m, d] = iso.split('-');
     return `${d}/${m}/${y}`;
+}
+function buildPreviewToolbarActions() {
+    return [
+        { action: 'preview_export_pdf', label: 'PDF', enabled: false, reason: 'זמין לאחר הפקה' },
+        { action: 'preview_print', label: 'הדפסה', enabled: false, reason: 'זמין לאחר הפקה' },
+        { action: 'preview_download', label: 'הורדה', enabled: false, reason: 'זמין לאחר הפקה' },
+    ];
 }
 const CURRENCY_OPTIONS = [
     { value: 'ILS', label: '₪' },
@@ -670,11 +649,9 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
         display: allocationNumberField.display_value,
         value_empty: !allocationNumberField.value?.trim(),
     };
-    // Customer-facing draft preview uses the same finished style as issued (INV-13A sectioned).
-    // Not conversion-specific — all document types, converted or not.
-    const previewBranding = resolvedBranding
-        ? resolveCustomerFacingIncomeDocumentBranding(resolvedBranding)
-        : null;
+    const previewBranding = resolvedBranding && row.document_type === 'credit_tax_invoice'
+        ? { ...resolvedBranding, document_style_key: 'sectioned' }
+        : resolvedBranding;
     const previewHtml = !lean && previewGeneratedAt != null && previewBranding
         ? renderUnifiedIncomeDocumentHtml({
             branding: previewBranding,
@@ -730,22 +707,17 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
         documentType: row.document_type,
         documentNumberPreview: numberPreview,
     });
-    const conversionSource = editMode
-        ? null
-        : await loadConversionDraftSourceRef(scope, row.id);
     const sessionActions = buildWizardSessionActions({
         canEdit,
         canIssue: canEdit && scope.permissions.issue,
         editMode,
         documentType: row.document_type,
-        conversionSource,
     });
     const preliminaryEditDocumentDateMin = preliminarySourceIdentity?.issue_date ?? null;
     return {
         draft_id: row.id,
         document_type_key: row.document_type ?? null,
         edit_mode: editMode,
-        conversion_source: conversionSource,
         session_actions: sessionActions,
         document_discount: documentDiscount,
         totals_block: totalsBlock,
@@ -765,9 +737,7 @@ export async function buildIncomeDocumentDetailsStep(scope, row, docType, canEdi
             allowed_actions: sessionActions.preview.enabled
                 ? ['generate_income_document_preview']
                 : [],
-            toolbar_actions: buildIncomeDocumentPreviewToolbarActions({
-                previewReady: Boolean(previewGeneratedAt != null && previewHtml.trim()),
-            }),
+            toolbar_actions: buildPreviewToolbarActions(),
             allocation_number_field: allocationNumberField,
         },
         draft_state_display: {

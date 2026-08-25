@@ -66,7 +66,7 @@ export async function loadIncomeDocumentsMetaByIds(organizationId, documentIds) 
         return meta;
     const { data, error } = await supabaseAdmin
         .from('income_documents')
-        .select('id, document_number, document_type, income_customer_id')
+        .select('id, document_number, document_type')
         .eq('organization_id', organizationId)
         .in('id', documentIds);
     throwIfSupabaseError(error, 'loadIncomeDocumentsMetaByIds');
@@ -84,7 +84,6 @@ export async function loadIncomeDocumentsMetaByIds(organizationId, documentIds) 
             document_number: row.document_number,
             document_type: row.document_type,
             document_type_label: labels[row.document_type] ?? row.document_type,
-            income_customer_id: row.income_customer_id ?? null,
         });
     }
     return meta;

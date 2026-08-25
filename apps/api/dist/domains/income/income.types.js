@@ -14,7 +14,6 @@ export const INCOME_COMMAND_CANCEL_DRAFT = 'cancel_income_document_draft';
 export const INCOME_COMMAND_CONVERT_DOCUMENT_TO_DRAFT = 'convert_income_document_to_draft';
 export const INCOME_COMMAND_CANCEL_PRELIMINARY_DOCUMENT = 'cancel_income_preliminary_document';
 export const INCOME_COMMAND_BEGIN_EDIT_PRELIMINARY_DOCUMENT = 'begin_edit_income_preliminary_document';
-export const INCOME_COMMAND_REOPEN_PRELIMINARY_DOCUMENT = 'reopen_income_preliminary_document';
 export const INCOME_COMMAND_ISSUE_DOCUMENT = 'issue_income_document';
 export const INCOME_COMMAND_ISSUE_AND_SEND_DOCUMENT = 'issue_and_send_income_document';
 export const INCOME_COMMAND_SEARCH_RECIPIENTS = 'search_income_recipients';

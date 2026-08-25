@@ -1,5 +1,4 @@
 import { formatDocumentNumberDisplay, resolveBrandingPreviewThemePalette, resolveLogoSizeDimensions, STUDIO_SAMPLE_ISSUER, STUDIO_SAMPLE_RECIPIENT, } from './income-document-branding.pure.js';
-import { resolveCustomerFacingIncomeDocumentBranding } from './income-document-customer-facing-style.pure.js';
 import { docPreviewIcon, nodexproFooterLogoMarkup } from './income-document-preview-icons.pure.js';
 import { resolveSectionedDocumentIdentityPresentation } from './income-document-sectioned-identity.pure.js';
 import { resolveSectionedBrandingLayout, SECTIONED_GOLDEN_MASTER as GM, } from './income-document-sectioned-golden-master.pure.js';
@@ -144,13 +143,8 @@ function buildPaymentCards(params) {
     <div class="nx-doc__payments-grid">${cards.join('')}</div>
   </section>`;
 }
-/**
- * Classic layout structural cell only.
- * Customer-facing printable / PDF / draft preview must NOT expose builder zone chrome
- * (numbered אזור badges/labels) — that is Branding Studio / layout-editor UI only.
- */
 function buildSheetSection(sectionNumber, bodyHtml) {
-    return `<section class="nx-doc__sheet-section nx-doc__sheet-section--${sectionNumber}" data-sheet-section="${sectionNumber}"><div class="nx-doc__sheet-section-body">${bodyHtml}</div></section>`;
+    return `<section class="nx-doc__sheet-section nx-doc__sheet-section--${sectionNumber}" data-sheet-section="${sectionNumber}" aria-label="אזור ${sectionNumber}"><span class="nx-doc__sheet-section-badge" aria-hidden="true">${sectionNumber}</span><span class="nx-doc__sheet-section-label">אזור ${sectionNumber}</span><div class="nx-doc__sheet-section-body">${bodyHtml}</div></section>`;
 }
 export function renderIncomeBrandedPreviewHtml(params) {
     const b = params.branding;
@@ -487,10 +481,36 @@ ${INVOICE_FONT_FACE}
 .nx-doc--unified .nx-doc__sheet-section-body {
   height: 100%;
 }
-/* Zone badge/label chrome is never emitted in customer printable HTML. */
-.nx-doc--unified .nx-doc__sheet-section-badge,
+.nx-doc--unified .nx-doc__sheet-section-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(15, 23, 42, 0.28);
+}
 .nx-doc--unified .nx-doc__sheet-section-label {
-  display: none !important;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  text-transform: uppercase;
+  pointer-events: none;
 }
 .nx-doc--unified .nx-doc__header {
   display: grid;
@@ -1713,15 +1733,9 @@ ${INVOICE_FONT_FACE}
 </div>
   `.trim();
 }
-/**
- * Large Branding Studio sample preview — how the finished customer document looks.
- * Forces customer-facing `sectioned` via resolveCustomerFacingIncomeDocumentBranding;
- * does NOT mutate the stored studio profile (classic/etc. remain as saved).
- */
 export function renderStudioSamplePreviewHtml(branding, docTypeLabel = 'הצעת מחיר') {
-    const customerFacingBranding = resolveCustomerFacingIncomeDocumentBranding(branding);
     return renderIncomeBrandedPreviewHtml({
-        branding: customerFacingBranding,
+        branding,
         docTypeLabel,
         document_type: 'quote',
         numberPreview: '2026-000154',

@@ -78,26 +78,6 @@ export function decidePreliminaryEditDocumentDateGuard(params) {
     }
     return { action: 'allow' };
 }
-export function buildConversionSourceDisplayLine(params) {
-    const typeLabel = params.sourceDocumentTypeLabel.trim() || 'מסמך';
-    const number = (params.sourceDocumentNumber ?? '').trim();
-    if (number)
-        return `הופק בגין ${typeLabel} מספר ${number}`;
-    return `הופק בגין ${typeLabel}`;
-}
-export function buildConversionDraftSourceRef(params) {
-    const source_document_type_label = documentTypeLabelHe(params.sourceDocumentType);
-    return {
-        source_document_id: params.sourceDocumentId,
-        source_document_number: params.sourceDocumentNumber,
-        source_document_type: params.sourceDocumentType,
-        source_document_type_label,
-        display_line: buildConversionSourceDisplayLine({
-            sourceDocumentTypeLabel: source_document_type_label,
-            sourceDocumentNumber: params.sourceDocumentNumber,
-        }),
-    };
-}
 export function readPreliminaryEditSourceDocumentId(documentSettingsJson) {
     if (!documentSettingsJson ||
         typeof documentSettingsJson !== 'object' ||
@@ -134,8 +114,7 @@ export function buildPreliminaryDocumentEditMode(params) {
 }
 export function buildWizardSessionActions(params) {
     const isPreliminaryEdit = params.editMode?.type === 'preliminary_document_edit';
-    const isConversionDraft = !isPreliminaryEdit && Boolean(params.conversionSource);
-    const isCreditNote = !isPreliminaryEdit && !isConversionDraft && params.documentType === 'credit_tax_invoice';
+    const isCreditNote = !isPreliminaryEdit && params.documentType === 'credit_tax_invoice';
     return {
         save: {
             enabled: isCreditNote ? params.canIssue : params.canEdit,
@@ -146,7 +125,7 @@ export function buildWizardSessionActions(params) {
                 : params.canEdit
                     ? 'save_income_document_draft'
                     : null,
-            label: isPreliminaryEdit || isCreditNote || isConversionDraft ? 'שמירה' : 'שמירת טיוטה',
+            label: isPreliminaryEdit || isCreditNote ? 'שמירה' : 'שמירת טיוטה',
             disabled_reason: isCreditNote
                 ? params.canIssue
                     ? null
@@ -194,39 +173,27 @@ export function buildWizardSessionActions(params) {
                 close_after_save: true,
                 close_control: 'icon',
             }
-            : isConversionDraft
+            : isCreditNote
                 ? {
-                    mode: 'conversion',
+                    mode: 'credit_note',
                     show_back: false,
                     show_next: false,
-                    // Converted draft: produce via issue only — no footer שמירה.
-                    show_save: false,
+                    show_save: true,
+                    show_preview: true,
+                    show_issue: false,
+                    close_after_save: true,
+                    close_control: 'icon',
+                }
+                : {
+                    mode: 'wizard',
+                    show_back: true,
+                    show_next: true,
+                    show_save: true,
                     show_preview: true,
                     show_issue: true,
                     close_after_save: false,
-                    close_control: 'icon',
-                }
-                : isCreditNote
-                    ? {
-                        mode: 'credit_note',
-                        show_back: false,
-                        show_next: false,
-                        show_save: true,
-                        show_preview: true,
-                        show_issue: false,
-                        close_after_save: true,
-                        close_control: 'icon',
-                    }
-                    : {
-                        mode: 'wizard',
-                        show_back: true,
-                        show_next: true,
-                        show_save: true,
-                        show_preview: true,
-                        show_issue: true,
-                        close_after_save: false,
-                        close_control: 'text',
-                    },
+                    close_control: 'text',
+                },
     };
 }
 const TARGET_LABELS = {
@@ -259,10 +226,6 @@ export function buildConversionTargetOptions(params) {
         if (params.sourceStatus !== 'issued') {
             enabled = false;
             disabled_reason = 'ניתן להמיר רק מסמך פעיל';
-        }
-        else if (params.lifecycleState === 'closed') {
-            enabled = false;
-            disabled_reason = 'המסמך סגור — יש לפתוח מחדש לפני הפקה';
         }
         else if (!params.canEdit) {
             enabled = false;
@@ -348,10 +311,6 @@ export function buildPreliminaryEditAction(params) {
     if (params.sourceStatus === 'cancelled_future') {
         enabled = false;
         disabled_reason = 'המסמך מבוטל ואינו ניתן לעריכה';
-    }
-    else if (params.lifecycleState === 'closed') {
-        enabled = false;
-        disabled_reason = 'המסמך סגור — יש לפתוח מחדש לפני עריכה';
     }
     else if (params.sourceStatus !== 'issued') {
         enabled = false;

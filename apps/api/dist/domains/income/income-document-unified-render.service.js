@@ -16,7 +16,6 @@ import { buildIncomeIssuerSnapshotForScope } from './income-issuer-snapshot.serv
 import { toPublicPreviewParty } from './income-document-preview-party.pure.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import { adaptOwnerLayoutDefinitionForCanonicalRenderer, resolveIssuedDocumentLayoutSource, } from '../owner-invoice-document-layout/owner-invoice-document-layout-resolver.pure.js';
-import { resolveCustomerFacingIncomeDocumentBranding } from './income-document-customer-facing-style.pure.js';
 import { resolveIncomeDocumentSemanticDates } from './income-document-semantic-dates.pure.js';
 import { loadCreditSourceReferenceForDocument } from './income-document-tax-invoice-credit.read.js';
 import { mergeCreditSourceReferenceIntoNotes } from './income-document-tax-invoice-credit.pure.js';
@@ -89,13 +88,15 @@ export async function buildUnifiedIncomeDocumentRenderModelForIssuedDocument(sco
         vatResolution,
     });
     const allocationApplicable = isAllocationNumberApplicable(allocationPolicy, doc.document_type);
-    // INV-13A: customer-facing finished layout (sectioned), same as draft preview.
+    // INV-13A: legacy issued docs (no freeze) → exact existing sectioned force path.
     // Layout-aware only when snapshot present on the issued row (no Owner DB lookup).
     const layoutSource = resolveIssuedDocumentLayoutSource({
         owner_layout_version_id: doc.owner_layout_version_id,
         owner_layout_snapshot_json: doc.owner_layout_snapshot_json,
     });
-    let issuedBranding = resolveCustomerFacingIncomeDocumentBranding(branding);
+    let issuedBranding = branding.document_style_key === 'sectioned'
+        ? branding
+        : { ...branding, document_style_key: 'sectioned' };
     if (layoutSource.mode === 'owner_layout') {
         issuedBranding = applyOwnerLayoutAdapterToIssuedBranding(issuedBranding, layoutSource.definition);
     }
