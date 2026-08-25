@@ -219,12 +219,15 @@ test('preview draft command remains update_income_document_branding_profile_prev
   assert.match(types, /command:\s*'update_income_document_branding_profile_preview_draft'/);
 });
 
-test('Branding Studio CSS: tighter gutters, gap, and 12/37/51 columns', () => {
+test('Branding Studio CSS: tighter gutters, gap, and 50/25/25 (2fr/1fr/1fr RTL) columns', () => {
   const css = readFileSync(join(webRoot, 'src/styles/nx-branding-studio.css'), 'utf8');
   assert.match(css, /\.nx-income-branding-overlay--studio\s*\{[^}]*padding:\s*20px\s+12px;/s);
   assert.match(css, /\.nx-income-branding-modal--studio\s*\{[^}]*calc\(100vw\s*-\s*24px\)/s);
   assert.match(css, /\.nx-income-branding-modal--studio\s*\{[^}]*calc\(100vh\s*-\s*40px\)/s);
-  assert.match(css, /\.nx-branding-studio\s*\{[^}]*grid-template-columns:\s*12%\s+37%\s+51%;/s);
+  assert.match(
+    css,
+    /\.nx-branding-studio\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(0,\s*1fr\)\s+minmax\(0,\s*2fr\);/s,
+  );
   assert.match(css, /\.nx-branding-studio\s*\{[^}]*gap:\s*12px;/s);
   // Tablet/mobile fallback preserved (single column)
   assert.match(css, /@media\s*\(max-width:\s*960px\)[\s\S]*\.nx-branding-studio\s*\{[\s\S]*grid-template-columns:\s*1fr;/);

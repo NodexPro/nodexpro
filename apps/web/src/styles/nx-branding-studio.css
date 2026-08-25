@@ -216,7 +216,12 @@
 .nx-branding-studio {
   display: grid;
   /* RTL: areas are nav | content | preview → visual right→left; preview column is largest. */
-  grid-template-columns: 12% 37% 51%;
+  /*
+   * RTL (dir=rtl): column 1 is visual RIGHT, column 3 is visual LEFT.
+   * areas: nav | content | preview
+   * visual: right nav 25% | middle content 25% | left preview 50%
+   */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
   grid-template-areas: 'nav content preview';
   gap: 12px;
   height: 100%;
