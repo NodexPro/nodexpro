@@ -68,8 +68,6 @@ test('TAX-K2D contract: allowed_actions eligibility, ID selection, JSON syntax o
 
 test('TAX-K2D contract: no K2F+ command/UI leakage', () => {
   const panel = readRepo(PANEL);
-  assert.doesNotMatch(panel, /onCommand\('create_tax_rule_relationship'/);
-  assert.doesNotMatch(panel, /onCommand\('delete_tax_rule_relationship'/);
   assert.doesNotMatch(panel, /onCommand\('activate_tax_rule_version'/);
   assert.doesNotMatch(panel, /onCommand\('retire_tax_rule_version'/);
   assert.doesNotMatch(panel, /onCommand\('close_tax_rule_version_effective_to'/);

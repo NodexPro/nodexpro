@@ -11,11 +11,14 @@ import type {
   TaxKnowledgeCitation,
   TaxKnowledgeCountry,
   TaxKnowledgeLegalValueBinding,
+  TaxKnowledgeRelationship,
   TaxKnowledgeRule,
   TaxKnowledgeSource,
   TaxKnowledgeVersion,
   UnknownRecord,
 } from './owner-legal-control-types';
+import { TAX_KNOWLEDGE_RELATIONSHIP_TYPES } from './owner-legal-control-types';
+
 import { emptyTaxKnowledgeAggregate } from './owner-legal-control-types';
 import '../styles/nx-modal.css';
 import '../templates/template-1/tokens.css';
@@ -151,6 +154,28 @@ function parseLegalValuePickerRows(raw: unknown): OwnerLegalValueRow[] {
     }));
 }
 
+function parseRelationships(raw: unknown): TaxKnowledgeRelationship[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      id: asString(row.id),
+      from_tax_rule_version_id: asString(row.from_tax_rule_version_id),
+      to_tax_rule_version_id: asString(row.to_tax_rule_version_id),
+      relationship_type: asString(row.relationship_type),
+      status: asString(row.status),
+      owner_note: asNullableString(row.owner_note),
+      created_at: asString(row.created_at),
+      to_tax_rule_id: asString(row.to_tax_rule_id),
+      to_rule_code: asString(row.to_rule_code),
+      to_title: asString(row.to_title),
+      to_version_no: typeof row.to_version_no === 'number' ? row.to_version_no : Number(row.to_version_no) || 0,
+      to_status: asString(row.to_status),
+      allowed_actions: parseAllowedActions(row.allowed_actions),
+    }));
+}
+
 function parseVersion(row: UnknownRecord): TaxKnowledgeVersion {
   return {
     id: asString(row.id),
@@ -168,7 +193,7 @@ function parseVersion(row: UnknownRecord): TaxKnowledgeVersion {
     created_at: asString(row.created_at),
     sources: parseCitations(row.sources),
     legal_value_bindings: parseBindings(row.legal_value_bindings),
-    relationships: [],
+    relationships: parseRelationships(row.relationships),
     allowed_actions: parseAllowedActions(row.allowed_actions),
   };
 }
@@ -354,6 +379,8 @@ type DialogKind =
   | 'unpin_tax_rule_version_source'
   | 'bind_tax_rule_version_legal_value'
   | 'unbind_tax_rule_version_legal_value'
+  | 'create_tax_rule_relationship'
+  | 'delete_tax_rule_relationship'
   | null;
 
 export function OwnerTaxKnowledgePanel({
@@ -419,6 +446,12 @@ export function OwnerTaxKnowledgePanel({
   const [bindLegalValueId, setBindLegalValueId] = useState('');
   const [pendingCitationId, setPendingCitationId] = useState(null as string | null);
   const [pendingBindingId, setPendingBindingId] = useState(null as string | null);
+  const [pendingRelationshipId, setPendingRelationshipId] = useState(null as string | null);
+  const [relationshipForm, setRelationshipForm] = useState({
+    to_tax_rule_version_id: '',
+    relationship_type: TAX_KNOWLEDGE_RELATIONSHIP_TYPES[0] as string,
+    owner_note: '',
+  });
 
   const selectedSource = taxKnowledge.sources.find((row) => row.id && row.id === selectedSourceId) ?? null;
   const selectedRule = taxKnowledge.rules.find((row) => row.id && row.id === selectedRuleId) ?? null;
@@ -438,6 +471,20 @@ export function OwnerTaxKnowledgePanel({
     selectedVersion?.sources.find((row) => row.id && row.id === pendingCitationId) ?? null;
   const pendingBinding =
     selectedVersion?.legal_value_bindings.find((row) => row.id && row.id === pendingBindingId) ?? null;
+  const pendingRelationship =
+    selectedVersion?.relationships.find((row) => row.id && row.id === pendingRelationshipId) ?? null;
+  const targetVersionsForRelationship = selectedVersion
+    ? taxKnowledge.rules.flatMap((rule) =>
+        rule.versions
+          .filter(
+            (version) =>
+              Boolean(version.id) &&
+              version.id !== selectedVersion.id &&
+              version.country_code === selectedVersion.country_code,
+          )
+          .map((version) => ({ rule, version })),
+      )
+    : [];
 
   useEffect(() => {
     if (selectedSourceId && !taxKnowledge.sources.some((row) => row.id === selectedSourceId)) {
@@ -463,6 +510,13 @@ export function OwnerTaxKnowledgePanel({
     }
     if (dialogKind === 'bind_tax_rule_version_legal_value') {
       setBindLegalValueId('');
+    }
+    if (dialogKind === 'create_tax_rule_relationship') {
+      setRelationshipForm({
+        to_tax_rule_version_id: '',
+        relationship_type: TAX_KNOWLEDGE_RELATIONSHIP_TYPES[0] as string,
+        owner_note: '',
+      });
     }
     if (dialogKind === 'create_tax_source' || dialogKind === 'create_tax_rule') {
       setSourceForm({
@@ -702,12 +756,41 @@ export function OwnerTaxKnowledgePanel({
         await onCommand('unbind_tax_rule_version_legal_value', {
           tax_rule_version_legal_value_id: pendingBinding.id,
         });
+      } else if (dialogKind === 'create_tax_rule_relationship') {
+        if (
+          !enabledAction(selectedVersion?.allowed_actions ?? [], 'create_tax_rule_relationship') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        if (!relationshipForm.to_tax_rule_version_id || !relationshipForm.relationship_type) {
+          setFormError('to_tax_rule_version_id and relationship_type are required.');
+          return;
+        }
+        const createRel: UnknownRecord = {
+          from_tax_rule_version_id: selectedVersion.id,
+          to_tax_rule_version_id: relationshipForm.to_tax_rule_version_id,
+          relationship_type: relationshipForm.relationship_type,
+        };
+        if (relationshipForm.owner_note.trim()) createRel.owner_note = relationshipForm.owner_note.trim();
+        await onCommand('create_tax_rule_relationship', createRel);
+      } else if (dialogKind === 'delete_tax_rule_relationship') {
+        if (
+          !pendingRelationship ||
+          !enabledAction(pendingRelationship.allowed_actions, 'delete_tax_rule_relationship')
+        ) {
+          return;
+        }
+        await onCommand('delete_tax_rule_relationship', {
+          tax_rule_relationship_id: pendingRelationship.id,
+        });
       } else {
         return;
       }
       setDialogKind(null);
       setPendingCitationId(null);
       setPendingBindingId(null);
+      setPendingRelationshipId(null);
     } catch (e) {
       setFormError(userFacingApiMessage(e));
     }
@@ -1147,6 +1230,71 @@ export function OwnerTaxKnowledgePanel({
                           </button>
                         ) : null}
                       </div>
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Relationships</div>
+                        {selectedVersion.relationships.length ? (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={TABLE_STYLE}>
+                              <thead>
+                                <tr>
+                                  <th style={TH_STYLE}>relationship_type</th>
+                                  <th style={TH_STYLE}>to_rule_code</th>
+                                  <th style={TH_STYLE}>to_title</th>
+                                  <th style={TH_STYLE}>to_version_no</th>
+                                  <th style={TH_STYLE}>to_status</th>
+                                  <th style={TH_STYLE}>owner_note</th>
+                                  <th style={TH_STYLE}>created_at</th>
+                                  <th style={TH_STYLE}></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedVersion.relationships.map((rel) => {
+                                  const del = enabledAction(rel.allowed_actions, 'delete_tax_rule_relationship');
+                                  return (
+                                    <tr key={rel.id || `${rel.to_tax_rule_version_id}-${rel.relationship_type}`}>
+                                      <td style={TD_STYLE}>{rel.relationship_type}</td>
+                                      <td style={TD_STYLE}>{rel.to_rule_code}</td>
+                                      <td style={TD_STYLE}>{rel.to_title}</td>
+                                      <td style={TD_STYLE}>{String(rel.to_version_no)}</td>
+                                      <td style={TD_STYLE}>{rel.to_status}</td>
+                                      <td style={TD_STYLE}>{rel.owner_note ?? ''}</td>
+                                      <td style={TD_STYLE}>{rel.created_at}</td>
+                                      <td style={TD_STYLE}>
+                                        {del ? (
+                                          <button
+                                            type="button"
+                                            className="nx-btn nx-btn-taxes-compact"
+                                            disabled={busy}
+                                            onClick={() => {
+                                              setPendingRelationshipId(rel.id);
+                                              setDialogKind('delete_tax_rule_relationship');
+                                            }}
+                                          >
+                                            {actionLabel('delete_tax_rule_relationship')}
+                                          </button>
+                                        ) : null}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>No outgoing relationships.</p>
+                        )}
+                        {enabledAction(selectedVersion.allowed_actions, 'create_tax_rule_relationship') ? (
+                          <button
+                            type="button"
+                            className="nx-btn nx-btn-taxes-compact"
+                            disabled={busy}
+                            style={{ marginTop: 8 }}
+                            onClick={() => setDialogKind('create_tax_rule_relationship')}
+                          >
+                            {actionLabel('create_tax_rule_relationship')}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   ) : selectedRule.versions.length ? (
                     <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>
@@ -1201,6 +1349,10 @@ export function OwnerTaxKnowledgePanel({
                             ? ` · version_no ${selectedVersion.version_no}`
                             : dialogKind === 'unbind_tax_rule_version_legal_value' && pendingBinding
                               ? ` · ${pendingBinding.value_key}`
+                              : dialogKind === 'create_tax_rule_relationship' && selectedVersion
+                                ? ` · version_no ${selectedVersion.version_no}`
+                                : dialogKind === 'delete_tax_rule_relationship' && pendingRelationship
+                                  ? ` · ${pendingRelationship.relationship_type}`
                       : dialogKind.startsWith('create_')
                         ? ` · country ${selectedCountryCode || '—'}`
                         : selectedSource && dialogKind.includes('source')
@@ -1476,6 +1628,60 @@ export function OwnerTaxKnowledgePanel({
                   {pendingBinding.label ? ` — ${pendingBinding.label}` : ''}
                 </p>
               ) : null}
+              {dialogKind === 'create_tax_rule_relationship' ? (
+                <div className="nx-form-grid">
+                  <label className="nx-field">
+                    <span className="nx-field-label">relationship_type</span>
+                    <select
+                      className="nx-select"
+                      value={relationshipForm.relationship_type}
+                      onChange={(e) =>
+                        setRelationshipForm((s) => ({ ...s, relationship_type: e.target.value }))
+                      }
+                    >
+                      {TAX_KNOWLEDGE_RELATIONSHIP_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">to_tax_rule_version_id</span>
+                    <select
+                      className="nx-select"
+                      value={relationshipForm.to_tax_rule_version_id}
+                      onChange={(e) =>
+                        setRelationshipForm((s) => ({ ...s, to_tax_rule_version_id: e.target.value }))
+                      }
+                    >
+                      <option value="">Select target version</option>
+                      {targetVersionsForRelationship.map(({ rule, version }) => (
+                        <option key={version.id} value={version.id}>
+                          {rule.rule_code} · version_no {version.version_no} · {version.status}
+                          {rule.title ? ` — ${rule.title}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">owner_note</span>
+                    <textarea
+                      className="nx-textarea"
+                      rows={3}
+                      value={relationshipForm.owner_note}
+                      onChange={(e) => setRelationshipForm((s) => ({ ...s, owner_note: e.target.value }))}
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {dialogKind === 'delete_tax_rule_relationship' && pendingRelationship ? (
+                <p style={{ fontSize: 14, margin: 0 }}>
+                  {pendingRelationship.relationship_type}
+                  {pendingRelationship.to_rule_code ? ` · ${pendingRelationship.to_rule_code}` : ''}
+                  {` · version_no ${pendingRelationship.to_version_no}`}
+                </p>
+              ) : null}
               {dialogKind === 'retire_tax_source' && selectedSource ? (
                 <div className="nx-form-grid">
                   <p style={{ fontSize: 14, margin: 0 }}>
@@ -1514,7 +1720,8 @@ export function OwnerTaxKnowledgePanel({
                   : dialogKind === 'activate_tax_source' ||
                       dialogKind === 'retire_tax_source' ||
                       dialogKind === 'unpin_tax_rule_version_source' ||
-                      dialogKind === 'unbind_tax_rule_version_legal_value'
+                      dialogKind === 'unbind_tax_rule_version_legal_value' ||
+                      dialogKind === 'delete_tax_rule_relationship'
                     ? 'Confirm'
                     : 'Save'}
               </button>

@@ -76,6 +76,17 @@ export type TaxKnowledgeLegalValueBinding = {
   allowed_actions: TaxKnowledgeAllowedAction[];
 };
 
+/** Locked to backend TAX_RULE_RELATIONSHIP_TYPES. Not parsed from payload hints. */
+export const TAX_KNOWLEDGE_RELATIONSHIP_TYPES = [
+  'depends_on',
+  'conflicts_with',
+  'exception_to',
+  'overrides',
+  'alternative_to',
+  'special_case_of',
+  'elaborates',
+] as const;
+
 export type TaxKnowledgeRelationship = {
   id: string;
   from_tax_rule_version_id: string;
