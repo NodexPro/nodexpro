@@ -93,6 +93,37 @@ function throwIfTaxKnowledgeWriteError(
   throw error;
 }
 
+function throwIfTaxRuleVersionLifecycleError(error: { code?: string; message?: string } | null): void {
+  if (!error) return;
+  const code = String(error.code ?? '');
+  const message = String(error.message ?? '');
+  if (/cannot activate without at least one citation/i.test(message)) {
+    throw conflict('tax_rule_versions cannot activate without at least one citation to an active tax_source');
+  }
+  if (/cannot activate while a blocking relationship/i.test(message)) {
+    throw conflict(
+      'tax_rule_versions cannot activate while a blocking relationship points to a non-active tax_rule_version',
+    );
+  }
+  if (/Invalid tax_rule_versions status transition/i.test(message)) {
+    throw conflict(message);
+  }
+  if (
+    /effective_to cannot be/i.test(message) ||
+    /effective_to is frozen/i.test(message) ||
+    /effective_to is null or effective_to >= effective_from/i.test(message)
+  ) {
+    throw conflict(message);
+  }
+  if (code === '23P01' || /exclusion constraint/i.test(message) || /no_active_overlap/i.test(message)) {
+    throw conflict('Active tax rule versions cannot overlap');
+  }
+  if (code === '23514') {
+    throw conflict(message || 'tax_rule_versions check constraint violated');
+  }
+  throw error;
+}
+
 async function audit(
   ctx: RequestContext,
   action: string,
@@ -942,6 +973,129 @@ async function handleDeleteTaxRuleRelationship(
   };
 }
 
+async function handleActivateTaxRuleVersion(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const versionId = asUuid(payload.tax_rule_version_id, 'tax_rule_version_id');
+  const version = await loadTaxRuleVersion(versionId);
+  if (version.status !== TAX_KNOWLEDGE_INITIAL_STATUS) {
+    throw conflict('activate_tax_rule_version is only valid from draft to active');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_versions')
+    .update({ status: 'active' })
+    .eq('id', versionId)
+    .eq('status', TAX_KNOWLEDGE_INITIAL_STATUS)
+    .select('id, tax_rule_id, country_code, status, version_no, payload_checksum')
+    .maybeSingle();
+  throwIfTaxRuleVersionLifecycleError(error);
+  if (!data) throw conflict('activate_tax_rule_version is only valid from draft to active');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_ACTIVATED, 'tax_rule_version', versionId, {
+    tax_rule_id: data.tax_rule_id,
+    country_code: data.country_code,
+    previous_status: version.status,
+    status: data.status,
+    version_no: data.version_no,
+    payload_checksum: data.payload_checksum,
+  });
+
+  return {
+    ok: true,
+    command: 'activate_tax_rule_version',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, version.country_code),
+  };
+}
+
+async function handleRetireTaxRuleVersion(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const versionId = asUuid(payload.tax_rule_version_id, 'tax_rule_version_id');
+  const version = await loadTaxRuleVersion(versionId);
+  if (version.status === 'retired') {
+    throw conflict('tax_rule_version is already retired');
+  }
+  if (version.status !== 'draft' && version.status !== 'active' && version.status !== 'superseded') {
+    throw conflict('retire_tax_rule_version is only valid from draft, active, or superseded');
+  }
+  const reason = asOptionalString(payload.reason, 'reason');
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_versions')
+    .update({
+      status: 'retired',
+      retired_at: new Date().toISOString(),
+      retired_reason: reason,
+    })
+    .eq('id', versionId)
+    .in('status', ['draft', 'active', 'superseded'])
+    .select('id, tax_rule_id, country_code, status')
+    .maybeSingle();
+  throwIfTaxRuleVersionLifecycleError(error);
+  if (!data) throw conflict('retire_tax_rule_version is only valid from draft, active, or superseded');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_RETIRED, 'tax_rule_version', versionId, {
+    tax_rule_id: data.tax_rule_id,
+    country_code: data.country_code,
+    previous_status: version.status,
+    status: data.status,
+    reason,
+  });
+
+  return {
+    ok: true,
+    command: 'retire_tax_rule_version',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, version.country_code),
+  };
+}
+
+async function handleCloseTaxRuleVersionEffectiveTo(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const versionId = asUuid(payload.tax_rule_version_id, 'tax_rule_version_id');
+  const effectiveTo = asDate(payload.effective_to, 'effective_to');
+  const version = await loadTaxRuleVersion(versionId);
+  if (version.status === 'superseded' || version.status === 'retired') {
+    throw conflict('tax_rule_versions.effective_to is frozen after supersession/retirement');
+  }
+  if (version.status !== 'active') {
+    throw conflict('close_tax_rule_version_effective_to is only valid while the version is active');
+  }
+  if (effectiveTo < version.effective_from) {
+    throw badRequest('effective_to must be >= effective_from');
+  }
+  if (version.effective_to != null && effectiveTo > version.effective_to) {
+    throw conflict('tax_rule_versions.effective_to cannot be extended after leaving draft');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_versions')
+    .update({ effective_to: effectiveTo })
+    .eq('id', versionId)
+    .eq('status', 'active')
+    .select('id, tax_rule_id, country_code, status, effective_from, effective_to')
+    .maybeSingle();
+  throwIfTaxRuleVersionLifecycleError(error);
+  if (!data) throw conflict('close_tax_rule_version_effective_to is only valid while the version is active');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_EFFECTIVE_TO_CLOSED, 'tax_rule_version', versionId, {
+    tax_rule_id: data.tax_rule_id,
+    country_code: data.country_code,
+    previous_effective_to: version.effective_to,
+    effective_to: data.effective_to,
+  });
+
+  return {
+    ok: true,
+    command: 'close_tax_rule_version_effective_to',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, version.country_code),
+  };
+}
+
 export async function executeTaxKnowledgeCommand(
   ctx: RequestContext,
   command: string,
@@ -982,6 +1136,12 @@ export async function executeTaxKnowledgeCommand(
       return handleCreateTaxRuleRelationship(ctx, payload);
     case 'delete_tax_rule_relationship':
       return handleDeleteTaxRuleRelationship(ctx, payload);
+    case 'activate_tax_rule_version':
+      return handleActivateTaxRuleVersion(ctx, payload);
+    case 'retire_tax_rule_version':
+      return handleRetireTaxRuleVersion(ctx, payload);
+    case 'close_tax_rule_version_effective_to':
+      return handleCloseTaxRuleVersionEffectiveTo(ctx, payload);
     default:
       throw badRequest(`Unsupported tax-knowledge command: ${command}`);
   }

@@ -86,6 +86,8 @@ function ruleAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
 
 function versionAllowedActions(status: string): OwnerTaxKnowledgeAllowedAction[] {
   const draft = status === 'draft';
+  const active = status === 'active';
+  const canRetire = status === 'draft' || status === 'active' || status === 'superseded';
   return [
     action('update_tax_rule_version_draft', draft, {
       tax_rule_version_id: 'uuid',
@@ -110,6 +112,17 @@ function versionAllowedActions(status: string): OwnerTaxKnowledgeAllowedAction[]
       relationship_type:
         'depends_on|conflicts_with|exception_to|overrides|alternative_to|special_case_of|elaborates',
       owner_note: 'optional string',
+    }),
+    action('activate_tax_rule_version', draft, {
+      tax_rule_version_id: 'uuid',
+    }),
+    action('retire_tax_rule_version', canRetire, {
+      tax_rule_version_id: 'uuid',
+      reason: 'optional string',
+    }),
+    action('close_tax_rule_version_effective_to', active, {
+      tax_rule_version_id: 'uuid',
+      effective_to: 'YYYY-MM-DD',
     }),
   ];
 }

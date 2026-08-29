@@ -97,6 +97,7 @@ test('TAX-K1.3 contract: migrations 600/601/602 untouched and no unrelated files
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-4b-lifecycle.spec.ts',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-4c-provenance-bindings.spec.ts',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-4d-relationships.spec.ts',
+    'apps/api/tests/tax-knowledge/tax-knowledge-k1-4e-version-lifecycle.spec.ts',
   ]);
   const unexpected = porcelain.filter((path) => !allowed.has(path));
   assert.deepEqual(unexpected, [], `20) unrelated files changed: ${unexpected.join(', ')}`);

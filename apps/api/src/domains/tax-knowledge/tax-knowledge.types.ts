@@ -13,6 +13,9 @@ export const TAX_KNOWLEDGE_COMMANDS = [
   'unbind_tax_rule_version_legal_value',
   'create_tax_rule_relationship',
   'delete_tax_rule_relationship',
+  'activate_tax_rule_version',
+  'retire_tax_rule_version',
+  'close_tax_rule_version_effective_to',
 ] as const;
 
 export type TaxKnowledgeCommandName = (typeof TAX_KNOWLEDGE_COMMANDS)[number];

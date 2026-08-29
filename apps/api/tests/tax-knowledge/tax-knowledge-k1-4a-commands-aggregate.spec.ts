@@ -26,6 +26,7 @@ const K14A_PATHS = [
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4b-lifecycle.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4c-provenance-bindings.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4d-relationships.spec.ts',
+  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4e-version-lifecycle.spec.ts',
 ] as const;
 
 const KNOWLEDGE_MIGRATIONS = [
@@ -72,7 +73,7 @@ test('TAX-K1.4A contract: dispatcher recognizes implemented commands', () => {
   const commandsSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts');
   assert.match(commandsSrc, /export async function executeTaxKnowledgeCommand/);
   assert.match(commandsSrc, /Unsupported tax-knowledge command/);
-  assert.doesNotMatch(commandsSrc, /activate_tax_rule_version|pin_tax_source|bind_legal_value/);
+  assert.doesNotMatch(commandsSrc, /pin_tax_source|bind_legal_value/);
 
   const countryPackCommands = readRepo('apps/api/src/domains/country-pack/country-pack-commands.service.ts');
   assert.doesNotMatch(countryPackCommands, /create_tax_source|create_tax_rule|executeTaxKnowledgeCommand/);

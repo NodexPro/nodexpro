@@ -31,6 +31,7 @@ const K14D_ALLOWED = [
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4b-lifecycle.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4c-provenance-bindings.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4d-relationships.spec.ts',
+  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4e-version-lifecycle.spec.ts',
 ] as const;
 
 const KNOWLEDGE_MIGRATIONS = [
@@ -43,11 +44,7 @@ const KNOWLEDGE_MIGRATIONS = [
 
 const NEW_COMMANDS = ['create_tax_rule_relationship', 'delete_tax_rule_relationship'] as const;
 
-const FUTURE_COMMANDS = [
-  'activate_tax_rule_version',
-  'retire_tax_rule_version',
-  'supersede_tax_rule_version',
-] as const;
+const FUTURE_COMMANDS = ['supersede_tax_rule_version'] as const;
 
 const BLOCKING_TYPES = [
   'depends_on',
@@ -105,7 +102,7 @@ test('TAX-K1.4D contract: dispatcher recognizes both relationship commands', () 
   for (const command of NEW_COMMANDS) {
     assert.equal(isTaxKnowledgeCommand(command), true, command);
   }
-  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 14);
+  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 17);
   assert.deepEqual(
     TAX_KNOWLEDGE_COMMANDS,
     [
@@ -123,6 +120,9 @@ test('TAX-K1.4D contract: dispatcher recognizes both relationship commands', () 
       'unbind_tax_rule_version_legal_value',
       'create_tax_rule_relationship',
       'delete_tax_rule_relationship',
+      'activate_tax_rule_version',
+      'retire_tax_rule_version',
+      'close_tax_rule_version_effective_to',
     ],
   );
   for (const command of FUTURE_COMMANDS) {
@@ -176,13 +176,14 @@ test('TAX-K1.4D contract: types, 604 untouched, K1.3A policy not reimplemented',
   assert.doesNotMatch(typesSrc, /'supersedes'/);
 
   const commandsSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts');
-  assert.doesNotMatch(commandsSrc, /tax_rule_versions_guard_publication_relationships/);
-  assert.doesNotMatch(
-    commandsSrc,
-    /cannot activate while a blocking relationship points to a non-active tax_rule_version/,
+  const createRelSrc = commandsSrc.slice(
+    commandsSrc.indexOf('async function handleCreateTaxRuleRelationship'),
+    commandsSrc.indexOf('async function handleDeleteTaxRuleRelationship'),
   );
-  assert.doesNotMatch(commandsSrc, /to\.status === 'active'/);
-  assert.doesNotMatch(commandsSrc, /dest\.status is distinct from 'active'/);
+  assert.doesNotMatch(commandsSrc, /tax_rule_versions_guard_publication_relationships/);
+  assert.doesNotMatch(createRelSrc, /cannot activate while a blocking relationship/);
+  assert.doesNotMatch(createRelSrc, /to\.status === 'active'/);
+  assert.doesNotMatch(createRelSrc, /dest\.status is distinct from 'active'/);
   for (const type of BLOCKING_TYPES) {
     assert.doesNotMatch(
       commandsSrc,
@@ -217,8 +218,6 @@ test('TAX-K1.4D contract: types, 604 untouched, K1.3A policy not reimplemented',
   assert.match(readSrc, /implemented_commands: \[\.\.\.TAX_KNOWLEDGE_COMMANDS\]/);
   assert.match(readSrc, /action\('create_tax_source'/);
   assert.match(readSrc, /action\('create_tax_rule'/);
-  assert.doesNotMatch(readSrc, /activate_tax_rule_version/);
-  assert.doesNotMatch(readSrc, /retire_tax_rule_version/);
   assert.doesNotMatch(readSrc, /supersede_tax_rule_version/);
   assert.doesNotMatch(readSrc, /organization_id/);
   assert.doesNotMatch(readSrc, /with recursive/i);
