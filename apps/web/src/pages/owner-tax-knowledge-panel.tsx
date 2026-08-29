@@ -178,11 +178,41 @@ export function parseTaxKnowledgeAggregate(raw: unknown): TaxKnowledgeAggregate 
   };
 }
 
+const K2C_SOURCE_ACTION_KEYS = [
+  'update_tax_source_metadata',
+  'activate_tax_source',
+  'retire_tax_source',
+] as const;
+
+const K2C_RULE_ACTION_KEYS = ['update_tax_rule_metadata'] as const;
+
 function catalogAction(
   actions: TaxKnowledgeAllowedAction[],
-  actionKey: 'create_tax_source' | 'create_tax_rule',
+  actionKey: string,
 ): TaxKnowledgeAllowedAction | null {
   return actions.find((action) => action.action_key === actionKey) ?? null;
+}
+
+function enabledAction(actions: TaxKnowledgeAllowedAction[], actionKey: string): TaxKnowledgeAllowedAction | null {
+  const found = catalogAction(actions, actionKey);
+  return found && found.enabled === true ? found : null;
+}
+
+function actionLabel(actionKey: string): string {
+  return actionKey
+    .split('_')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function StateRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 8, fontSize: 13, padding: '3px 0' }}>
+      <span style={{ color: '#6b7280' }}>{label}</span>
+      <span style={{ color: '#111827', wordBreak: 'break-word' }}>{value || '—'}</span>
+    </div>
+  );
 }
 
 function omitBlank(fields: Record<string, string>): Record<string, string> {
@@ -194,7 +224,14 @@ function omitBlank(fields: Record<string, string>): Record<string, string> {
   return out;
 }
 
-type CreateKind = 'create_tax_source' | 'create_tax_rule' | null;
+type DialogKind =
+  | 'create_tax_source'
+  | 'create_tax_rule'
+  | 'update_tax_source_metadata'
+  | 'activate_tax_source'
+  | 'retire_tax_source'
+  | 'update_tax_rule_metadata'
+  | null;
 
 export function OwnerTaxKnowledgePanel({
   taxKnowledge,
@@ -217,8 +254,11 @@ export function OwnerTaxKnowledgePanel({
   const createSourceAllowed = createSourceAction?.enabled === true;
   const createRuleAllowed = createRuleAction?.enabled === true;
 
-  const [createKind, setCreateKind] = useState(null as CreateKind);
+  const [selectedSourceId, setSelectedSourceId] = useState(null as string | null);
+  const [selectedRuleId, setSelectedRuleId] = useState(null as string | null);
+  const [dialogKind, setDialogKind] = useState(null as DialogKind);
   const [formError, setFormError] = useState('');
+  const [retireReason, setRetireReason] = useState('');
   const [sourceForm, setSourceForm] = useState({
     source_code: '',
     title: '',
@@ -236,31 +276,66 @@ export function OwnerTaxKnowledgePanel({
     owner_note: '',
   });
 
-  useEffect(() => {
-    if (!createKind) return;
-    setFormError('');
-    setSourceForm({
-      source_code: '',
-      title: '',
-      provenance_type: '',
-      issuer: '',
-      citation_ref: '',
-      source_url: '',
-      published_on: '',
-      owner_note: '',
-    });
-    setRuleForm({ rule_code: '', title: '', usage_hint: '', owner_note: '' });
-  }, [createKind]);
+  const selectedSource = taxKnowledge.sources.find((row) => row.id && row.id === selectedSourceId) ?? null;
+  const selectedRule = taxKnowledge.rules.find((row) => row.id && row.id === selectedRuleId) ?? null;
 
-  async function submitCreate(): Promise<void> {
-    if (!selectedCountryCode) {
-      setFormError('Select a country first.');
-      return;
+  useEffect(() => {
+    if (selectedSourceId && !taxKnowledge.sources.some((row) => row.id === selectedSourceId)) {
+      setSelectedSourceId(null);
     }
+    if (selectedRuleId && !taxKnowledge.rules.some((row) => row.id === selectedRuleId)) {
+      setSelectedRuleId(null);
+    }
+  }, [taxKnowledge.sources, taxKnowledge.rules, selectedSourceId, selectedRuleId]);
+
+  useEffect(() => {
+    if (!dialogKind) return;
+    setFormError('');
+    setRetireReason('');
+    if (dialogKind === 'create_tax_source' || dialogKind === 'create_tax_rule') {
+      setSourceForm({
+        source_code: '',
+        title: '',
+        provenance_type: '',
+        issuer: '',
+        citation_ref: '',
+        source_url: '',
+        published_on: '',
+        owner_note: '',
+      });
+      setRuleForm({ rule_code: '', title: '', usage_hint: '', owner_note: '' });
+    }
+    if (dialogKind === 'update_tax_source_metadata' && selectedSource) {
+      setSourceForm({
+        source_code: selectedSource.source_code,
+        title: selectedSource.title,
+        provenance_type: selectedSource.provenance_type,
+        issuer: selectedSource.issuer ?? '',
+        citation_ref: selectedSource.citation_ref ?? '',
+        source_url: selectedSource.source_url ?? '',
+        published_on: (selectedSource.published_on ?? '').slice(0, 10),
+        owner_note: selectedSource.owner_note ?? '',
+      });
+    }
+    if (dialogKind === 'update_tax_rule_metadata' && selectedRule) {
+      setRuleForm({
+        rule_code: selectedRule.rule_code,
+        title: selectedRule.title,
+        usage_hint: selectedRule.usage_hint ?? '',
+        owner_note: selectedRule.owner_note ?? '',
+      });
+    }
+  }, [dialogKind, selectedSource, selectedRule]);
+
+  async function submitDialog(): Promise<void> {
     setFormError('');
     try {
-      if (createKind === 'create_tax_source') {
-        if (!createSourceAction?.enabled) return;
+      if (dialogKind === 'create_tax_source') {
+        if (!createSourceAllowed) return;
+        if (!selectedCountryCode) {
+          setFormError('Select a country first.');
+          return;
+        }
         const required = omitBlank({
           country_code: selectedCountryCode,
           source_code: sourceForm.source_code,
@@ -281,8 +356,12 @@ export function OwnerTaxKnowledgePanel({
             owner_note: sourceForm.owner_note,
           }),
         });
-      } else if (createKind === 'create_tax_rule') {
-        if (!createRuleAction?.enabled) return;
+      } else if (dialogKind === 'create_tax_rule') {
+        if (!createRuleAllowed) return;
+        if (!selectedCountryCode) {
+          setFormError('Select a country first.');
+          return;
+        }
         const required = omitBlank({
           country_code: selectedCountryCode,
           rule_code: ruleForm.rule_code,
@@ -299,10 +378,55 @@ export function OwnerTaxKnowledgePanel({
             owner_note: ruleForm.owner_note,
           }),
         });
+      } else if (dialogKind === 'update_tax_source_metadata') {
+        if (!enabledAction(selectedSource?.allowed_actions ?? [], 'update_tax_source_metadata') || !selectedSource) {
+          return;
+        }
+        if (!sourceForm.title.trim()) {
+          setFormError('title is required.');
+          return;
+        }
+        await onCommand('update_tax_source_metadata', {
+          tax_source_id: selectedSource.id,
+          title: sourceForm.title.trim(),
+          issuer: sourceForm.issuer.trim(),
+          citation_ref: sourceForm.citation_ref.trim(),
+          source_url: sourceForm.source_url.trim(),
+          published_on: sourceForm.published_on.trim(),
+          owner_note: sourceForm.owner_note.trim(),
+          ...omitBlank({ provenance_type: sourceForm.provenance_type }),
+        });
+      } else if (dialogKind === 'activate_tax_source') {
+        if (!enabledAction(selectedSource?.allowed_actions ?? [], 'activate_tax_source') || !selectedSource) {
+          return;
+        }
+        await onCommand('activate_tax_source', { tax_source_id: selectedSource.id });
+      } else if (dialogKind === 'retire_tax_source') {
+        if (!enabledAction(selectedSource?.allowed_actions ?? [], 'retire_tax_source') || !selectedSource) {
+          return;
+        }
+        const payload: UnknownRecord = { tax_source_id: selectedSource.id };
+        const reason = retireReason.trim();
+        if (reason) payload.reason = reason;
+        await onCommand('retire_tax_source', payload);
+      } else if (dialogKind === 'update_tax_rule_metadata') {
+        if (!enabledAction(selectedRule?.allowed_actions ?? [], 'update_tax_rule_metadata') || !selectedRule) {
+          return;
+        }
+        if (!ruleForm.title.trim()) {
+          setFormError('title is required.');
+          return;
+        }
+        await onCommand('update_tax_rule_metadata', {
+          tax_rule_id: selectedRule.id,
+          title: ruleForm.title.trim(),
+          usage_hint: ruleForm.usage_hint.trim(),
+          owner_note: ruleForm.owner_note.trim(),
+        });
       } else {
         return;
       }
-      setCreateKind(null);
+      setDialogKind(null);
     } catch (e) {
       setFormError(userFacingApiMessage(e));
     }
@@ -374,7 +498,7 @@ export function OwnerTaxKnowledgePanel({
           type="button"
           className="nx-btn nx-btn-taxes-compact"
           disabled={busy || !createSourceAllowed}
-          onClick={() => setCreateKind('create_tax_source')}
+          onClick={() => setDialogKind('create_tax_source')}
         >
           Create tax source
         </button>
@@ -382,7 +506,7 @@ export function OwnerTaxKnowledgePanel({
           type="button"
           className="nx-btn nx-btn-taxes-compact"
           disabled={busy || !createRuleAllowed}
-          onClick={() => setCreateKind('create_tax_rule')}
+          onClick={() => setDialogKind('create_tax_rule')}
         >
           Create tax rule
         </button>
@@ -420,21 +544,65 @@ export function OwnerTaxKnowledgePanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {taxKnowledge.sources.map((row) => (
-                      <tr key={row.id || row.source_code}>
-                        <td style={TD_STYLE}>{row.source_code}</td>
-                        <td style={TD_STYLE}>{row.title}</td>
-                        <td style={TD_STYLE}>{row.provenance_type}</td>
-                        <td style={TD_STYLE}>{row.status}</td>
-                        <td style={TD_STYLE}>{row.issuer ?? ''}</td>
-                      </tr>
-                    ))}
+                    {taxKnowledge.sources.map((row) => {
+                      const isSelected = Boolean(row.id) && row.id === selectedSourceId;
+                      return (
+                        <tr
+                          key={row.id || row.source_code}
+                          onClick={() => row.id && setSelectedSourceId(row.id)}
+                          style={{ cursor: row.id ? 'pointer' : 'default', background: isSelected ? '#eff6ff' : undefined }}
+                        >
+                          <td style={TD_STYLE}>{row.source_code}</td>
+                          <td style={TD_STYLE}>{row.title}</td>
+                          <td style={TD_STYLE}>{row.provenance_type}</td>
+                          <td style={TD_STYLE}>{row.status}</td>
+                          <td style={TD_STYLE}>{row.issuer ?? ''}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             ) : (
               <EmptyState title="No sources" description="No tax sources for this country." />
             )}
+            {selectedSource ? (
+              <div style={{ marginTop: 12, padding: 12, border: '1px solid #e5e7eb', borderRadius: 6, background: '#f9fafb' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Source</div>
+                <StateRow label="source_code" value={selectedSource.source_code} />
+                <StateRow label="title" value={selectedSource.title} />
+                <StateRow label="provenance_type" value={selectedSource.provenance_type} />
+                <StateRow label="issuer" value={selectedSource.issuer ?? ''} />
+                <StateRow label="citation_ref" value={selectedSource.citation_ref ?? ''} />
+                <StateRow label="source_url" value={selectedSource.source_url ?? ''} />
+                <StateRow label="published_on" value={selectedSource.published_on ?? ''} />
+                <StateRow label="status" value={selectedSource.status} />
+                <StateRow label="owner_note" value={selectedSource.owner_note ?? ''} />
+                <StateRow label="retired_at" value={selectedSource.retired_at ?? ''} />
+                <StateRow label="retired_reason" value={selectedSource.retired_reason ?? ''} />
+                <StateRow label="created_at" value={selectedSource.created_at} />
+                <StateRow label="updated_at" value={selectedSource.updated_at} />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                  {K2C_SOURCE_ACTION_KEYS.map((actionKey) => {
+                    const action = enabledAction(selectedSource.allowed_actions, actionKey);
+                    if (!action) return null;
+                    return (
+                      <button
+                        key={actionKey}
+                        type="button"
+                        className="nx-btn nx-btn-taxes-compact"
+                        disabled={busy}
+                        onClick={() => setDialogKind(actionKey)}
+                      >
+                        {actionLabel(actionKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : taxKnowledge.sources.length ? (
+              <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>Select a source to view details and actions.</p>
+            ) : null}
           </div>
           <div>
             <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Rules</h3>
@@ -451,54 +619,101 @@ export function OwnerTaxKnowledgePanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {taxKnowledge.rules.map((row) => (
-                      <tr key={row.id || row.rule_code}>
-                        <td style={TD_STYLE}>{row.rule_code}</td>
-                        <td style={TD_STYLE}>{row.title}</td>
-                        <td style={TD_STYLE}>{row.rule_kind}</td>
-                        <td style={TD_STYLE}>{row.status}</td>
-                        <td style={TD_STYLE}>{row.versions.length}</td>
-                      </tr>
-                    ))}
+                    {taxKnowledge.rules.map((row) => {
+                      const isSelected = Boolean(row.id) && row.id === selectedRuleId;
+                      return (
+                        <tr
+                          key={row.id || row.rule_code}
+                          onClick={() => row.id && setSelectedRuleId(row.id)}
+                          style={{ cursor: row.id ? 'pointer' : 'default', background: isSelected ? '#eff6ff' : undefined }}
+                        >
+                          <td style={TD_STYLE}>{row.rule_code}</td>
+                          <td style={TD_STYLE}>{row.title}</td>
+                          <td style={TD_STYLE}>{row.rule_kind}</td>
+                          <td style={TD_STYLE}>{row.status}</td>
+                          <td style={TD_STYLE}>{row.versions.length}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             ) : (
               <EmptyState title="No rules" description="No tax rules for this country." />
             )}
+            {selectedRule ? (
+              <div style={{ marginTop: 12, padding: 12, border: '1px solid #e5e7eb', borderRadius: 6, background: '#f9fafb' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Rule</div>
+                <StateRow label="rule_code" value={selectedRule.rule_code} />
+                <StateRow label="title" value={selectedRule.title} />
+                <StateRow label="rule_kind" value={selectedRule.rule_kind} />
+                <StateRow label="status" value={selectedRule.status} />
+                <StateRow label="usage_hint" value={selectedRule.usage_hint ?? ''} />
+                <StateRow label="owner_note" value={selectedRule.owner_note ?? ''} />
+                <StateRow label="created_at" value={selectedRule.created_at} />
+                <StateRow label="updated_at" value={selectedRule.updated_at} />
+                <StateRow label="versions" value={String(selectedRule.versions.length)} />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                  {K2C_RULE_ACTION_KEYS.map((actionKey) => {
+                    const action = enabledAction(selectedRule.allowed_actions, actionKey);
+                    if (!action) return null;
+                    return (
+                      <button
+                        key={actionKey}
+                        type="button"
+                        className="nx-btn nx-btn-taxes-compact"
+                        disabled={busy}
+                        onClick={() => setDialogKind(actionKey)}
+                      >
+                        {actionLabel(actionKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : taxKnowledge.rules.length ? (
+              <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>Select a rule to view details and actions.</p>
+            ) : null}
           </div>
         </div>
       ) : null}
 
-      {createKind ? (
+      {dialogKind ? (
         <div
           className="nx-modal-overlay"
           role="presentation"
           onClick={(e) => {
-            if (e.target === e.currentTarget && !busy) setCreateKind(null);
+            if (e.target === e.currentTarget && !busy) setDialogKind(null);
           }}
         >
           <div
             className="nx-modal nx-accounting-editor-modal"
             role="dialog"
             aria-modal="true"
-            aria-label={createKind === 'create_tax_source' ? 'Create tax source' : 'Create tax rule'}
+            aria-label={actionLabel(dialogKind)}
             style={{ direction: 'ltr', maxWidth: 560 }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked" style={{ alignItems: 'flex-start' }}>
                 <h2 className="nx-modal-title" style={{ fontSize: 18 }}>
-                  {createKind === 'create_tax_source' ? 'Create tax source' : 'Create tax rule'}
+                  {actionLabel(dialogKind)}
                 </h2>
                 <span className="nx-modal-subtitle">
-                  {createKind} · country {selectedCountryCode || '—'}
+                  {dialogKind}
+                  {dialogKind.startsWith('create_')
+                    ? ` · country ${selectedCountryCode || '—'}`
+                    : selectedSource && dialogKind.includes('source')
+                      ? ` · ${selectedSource.source_code}`
+                      : selectedRule && dialogKind.includes('rule')
+                        ? ` · ${selectedRule.rule_code}`
+                        : ''}
                 </span>
               </div>
               <button
                 type="button"
                 className="nx-modal-close"
-                onClick={() => setCreateKind(null)}
+                onClick={() => setDialogKind(null)}
                 disabled={busy}
                 aria-label="Close"
               >
@@ -507,16 +722,18 @@ export function OwnerTaxKnowledgePanel({
             </div>
             <div className="nx-modal-body" style={{ flex: '0 1 auto' }}>
               {formError ? <p style={{ color: '#b91c1c', fontSize: 13, marginTop: 0 }}>{formError}</p> : null}
-              {createKind === 'create_tax_source' ? (
+              {dialogKind === 'create_tax_source' || dialogKind === 'update_tax_source_metadata' ? (
                 <div className="nx-form-grid">
-                  <label className="nx-field">
-                    <span className="nx-field-label">source_code</span>
-                    <input
-                      className="nx-input"
-                      value={sourceForm.source_code}
-                      onChange={(e) => setSourceForm((s) => ({ ...s, source_code: e.target.value }))}
-                    />
-                  </label>
+                  {dialogKind === 'create_tax_source' ? (
+                    <label className="nx-field">
+                      <span className="nx-field-label">source_code</span>
+                      <input
+                        className="nx-input"
+                        value={sourceForm.source_code}
+                        onChange={(e) => setSourceForm((s) => ({ ...s, source_code: e.target.value }))}
+                      />
+                    </label>
+                  ) : null}
                   <label className="nx-field">
                     <span className="nx-field-label">title</span>
                     <input
@@ -576,16 +793,19 @@ export function OwnerTaxKnowledgePanel({
                     />
                   </label>
                 </div>
-              ) : (
+              ) : null}
+              {dialogKind === 'create_tax_rule' || dialogKind === 'update_tax_rule_metadata' ? (
                 <div className="nx-form-grid">
-                  <label className="nx-field">
-                    <span className="nx-field-label">rule_code</span>
-                    <input
-                      className="nx-input"
-                      value={ruleForm.rule_code}
-                      onChange={(e) => setRuleForm((s) => ({ ...s, rule_code: e.target.value }))}
-                    />
-                  </label>
+                  {dialogKind === 'create_tax_rule' ? (
+                    <label className="nx-field">
+                      <span className="nx-field-label">rule_code</span>
+                      <input
+                        className="nx-input"
+                        value={ruleForm.rule_code}
+                        onChange={(e) => setRuleForm((s) => ({ ...s, rule_code: e.target.value }))}
+                      />
+                    </label>
+                  ) : null}
                   <label className="nx-field">
                     <span className="nx-field-label">title</span>
                     <input
@@ -612,14 +832,37 @@ export function OwnerTaxKnowledgePanel({
                     />
                   </label>
                 </div>
-              )}
+              ) : null}
+              {dialogKind === 'activate_tax_source' && selectedSource ? (
+                <p style={{ fontSize: 14, margin: 0 }}>
+                  {selectedSource.source_code}
+                  {selectedSource.title ? ` — ${selectedSource.title}` : ''}
+                </p>
+              ) : null}
+              {dialogKind === 'retire_tax_source' && selectedSource ? (
+                <div className="nx-form-grid">
+                  <p style={{ fontSize: 14, margin: 0 }}>
+                    {selectedSource.source_code}
+                    {selectedSource.title ? ` — ${selectedSource.title}` : ''}
+                  </p>
+                  <label className="nx-field">
+                    <span className="nx-field-label">reason</span>
+                    <textarea
+                      className="nx-textarea"
+                      rows={3}
+                      value={retireReason}
+                      onChange={(e) => setRetireReason(e.target.value)}
+                    />
+                  </label>
+                </div>
+              ) : null}
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer" style={{ justifyContent: 'center' }}>
               <button
                 type="button"
                 className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
                 disabled={busy}
-                onClick={() => setCreateKind(null)}
+                onClick={() => setDialogKind(null)}
               >
                 Close
               </button>
@@ -627,9 +870,9 @@ export function OwnerTaxKnowledgePanel({
                 type="button"
                 className="nx-btn nx-btn-primary nx-btn-taxes-compact"
                 disabled={busy}
-                onClick={() => void submitCreate()}
+                onClick={() => void submitDialog()}
               >
-                {busy ? '…' : 'Save'}
+                {busy ? '…' : dialogKind === 'activate_tax_source' || dialogKind === 'retire_tax_source' ? 'Confirm' : 'Save'}
               </button>
             </div>
           </div>

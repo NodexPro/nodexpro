@@ -627,6 +627,9 @@ async function handleUpdateTaxSourceMetadata(
 ): Promise<TaxKnowledgeCommandResponse> {
   const sourceId = asUuid(payload.tax_source_id, 'tax_source_id');
   const source = await loadTaxSource(sourceId);
+  if (source.status !== 'draft' && source.status !== 'active') {
+    throw conflict('update_tax_source_metadata is only valid from draft or active');
+  }
   if ('country_code' in payload || 'source_code' in payload || 'status' in payload) {
     throw badRequest('country_code, source_code, and status cannot be changed via update_tax_source_metadata');
   }
@@ -651,8 +654,15 @@ async function handleUpdateTaxSourceMetadata(
     throw badRequest('update_tax_source_metadata requires at least one metadata field');
   }
 
-  const { error } = await supabaseAdmin.from('tax_sources').update(patch).eq('id', sourceId);
+  const { data, error } = await supabaseAdmin
+    .from('tax_sources')
+    .update(patch)
+    .eq('id', sourceId)
+    .in('status', ['draft', 'active'])
+    .select('id')
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw conflict('update_tax_source_metadata is only valid from draft or active');
 
   await audit(ctx, AUDIT_ACTIONS.TAX_SOURCE_METADATA_UPDATED, 'tax_source', sourceId, {
     country_code: source.country_code,

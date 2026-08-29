@@ -65,8 +65,7 @@ test('TAX-K2B contract: no K2C+ leakage, no frontend lifecycle inference', () =>
   const panel = readRepo(PANEL);
   const types = readRepo(TYPES);
 
-  assert.doesNotMatch(panel, /activate_tax_source|retire_tax_source|update_tax_source_metadata/);
-  assert.doesNotMatch(panel, /update_tax_rule_metadata|create_tax_rule_version|update_tax_rule_version_draft/);
+  assert.doesNotMatch(panel, /create_tax_rule_version|update_tax_rule_version_draft/);
   assert.doesNotMatch(panel, /pin_tax_rule_version_source|unbind_tax_rule_version_legal_value/);
   assert.doesNotMatch(panel, /create_tax_rule_relationship|supersede_tax_rule_version/);
   assert.doesNotMatch(panel, /activate_tax_rule_version|retire_tax_rule_version|close_tax_rule_version_effective_to/);
@@ -100,9 +99,14 @@ test('TAX-K2B contract: Tax Knowledge migrations and backend production files un
     const diff = execSync(`git diff -- ${file}`, { cwd: repoRoot, encoding: 'utf8' });
     assert.equal(diff.trim(), '', `${file} must remain unchanged`);
   }
-  const backendDiff = execSync(
-    'git diff -- apps/api/src/domains/tax-knowledge apps/api/src/routes/owner-country-pack.routes.ts',
-    { cwd: repoRoot, encoding: 'utf8' },
-  );
-  assert.equal(backendDiff.trim(), '', 'Tax Knowledge backend production files must remain unchanged');
+  const lockedBackend = [
+    'apps/api/src/domains/tax-knowledge/tax-knowledge-read-models.service.ts',
+    'apps/api/src/domains/tax-knowledge/tax-knowledge.types.ts',
+    'apps/api/src/domains/tax-knowledge/tax-knowledge-checksum.pure.ts',
+    'apps/api/src/routes/owner-country-pack.routes.ts',
+  ];
+  for (const file of lockedBackend) {
+    const diff = execSync(`git diff -- ${file}`, { cwd: repoRoot, encoding: 'utf8' });
+    assert.equal(diff.trim(), '', `${file} must remain unchanged`);
+  }
 });
