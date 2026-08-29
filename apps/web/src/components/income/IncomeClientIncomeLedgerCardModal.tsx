@@ -71,7 +71,6 @@ function columnClassName(key: string): string | undefined {
 export function IncomeClientIncomeLedgerCardModal({
   open,
   representedClientId,
-  representedClientDisplayName,
   initialEndCustomerId = null,
   busy,
   onBusyChange,
@@ -108,6 +107,8 @@ export function IncomeClientIncomeLedgerCardModal({
       setIssuedViewDocId(null);
       return;
     }
+    // Clear prior recipient identity before reload (no stale Uniliver→Chicago flash).
+    setAggregate(null);
     void loadAggregate({
       endCustomerId: initialEndCustomerId ?? null,
     });
@@ -140,8 +141,10 @@ export function IncomeClientIncomeLedgerCardModal({
 
   if (!open) return null;
 
-  const officeClientName =
-    aggregate?.represented_client_display_name ?? representedClientDisplayName ?? '—';
+  // Primary = recipient when scoped; issuer otherwise. Aggregate-only (no prop fallback).
+  const recipientName = aggregate?.selected_end_customer_display_name?.trim() || null;
+  const issuerName = aggregate?.represented_client_display_name ?? '—';
+  const primaryName = recipientName || issuerName;
   const topActions = aggregate?.top_actions ?? [];
   const yearOptions =
     aggregate?.available_years?.length ? aggregate.available_years : [new Date().getFullYear()];
@@ -155,7 +158,13 @@ export function IncomeClientIncomeLedgerCardModal({
       <div className="nx-income-ledger-modal__dialog">
         <header className="nx-income-ledger-modal__header">
           <div className="nx-income-ledger-modal__header-top">
-            <h2 className="nx-income-ledger-modal__title">כרטסת הכנסות</h2>
+            <div className="nx-income-ledger-modal__header-main">
+              <h2 className="nx-income-ledger-modal__title">כרטסת הכנסות</h2>
+              <p className="nx-income-ledger-modal__customer-name">{primaryName}</p>
+              {recipientName ? (
+                <p className="nx-income-ledger-modal__issuer">עבור העסק: {issuerName}</p>
+              ) : null}
+            </div>
             <div className="nx-income-ledger-modal__header-actions">
               {topActions.map((action) => {
                 const isSend = action.key === 'send_ledger';
@@ -200,10 +209,6 @@ export function IncomeClientIncomeLedgerCardModal({
           </div>
 
           <div className="nx-income-ledger-modal__meta">
-            <span className="nx-income-ledger-modal__meta-item">
-              <span className="nx-income-ledger-modal__meta-label">לקוח:</span>
-              <span className="nx-income-ledger-modal__meta-value">{officeClientName}</span>
-            </span>
             <label className="nx-income-ledger-modal__year">
               <span className="nx-income-ledger-modal__meta-label">שנה:</span>
               <select

@@ -90,6 +90,21 @@ test('represented-client email history aggregate accepts optional income_custome
   );
 });
 
+test('represented-client email history title uses recipient display_name when scoped', () => {
+  const historyServiceSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-email-history.service.ts'),
+    'utf8',
+  );
+  const typesSource = readFileSync(
+    join(dir, '../../src/domains/income/income.types.ts'),
+    'utf8',
+  );
+  assert.match(historyServiceSource, /loadIncomeCustomerDisplayName/);
+  assert.match(historyServiceSource, /issuer_context_label/);
+  assert.match(historyServiceSource, /מנפיק:/);
+  assert.match(typesSource, /issuer_context_label: string \| null/);
+});
+
 test('document email history resolves office issuer scope for WE mismatch', () => {
   const historyServiceSource = readFileSync(
     join(dir, '../../src/domains/income/income-document-email-history.service.ts'),

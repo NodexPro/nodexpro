@@ -192,6 +192,26 @@ async function loadRepresentedClient(orgId: string, clientId: string) {
   };
 }
 
+/** Canonical income_customers.display_name for recipient-scoped email history title. */
+async function loadIncomeCustomerDisplayName(
+  orgId: string,
+  representedClientId: string,
+  incomeCustomerId: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('income_customers')
+    .select('display_name')
+    .eq('organization_id', orgId)
+    .eq('issuer_business_id', representedClientId)
+    .eq('represented_client_id', representedClientId)
+    .eq('id', incomeCustomerId)
+    .maybeSingle();
+  throwIfSupabaseError(error, 'loadEmailHistoryIncomeCustomerDisplayName');
+  const row = data as { display_name: string } | null;
+  const name = String(row?.display_name ?? '').trim();
+  return name || null;
+}
+
 export async function buildIncomeDocumentEmailHistoryAggregate(params: {
   ctx: RequestContext;
   incomeDocumentId: string;
@@ -294,6 +314,9 @@ export async function buildIncomeRepresentedClientEmailHistoryAggregate(params: 
   const orgId = params.ctx.organizationId;
   if (!orgId) throw forbidden('Organization context required');
   const client = await loadRepresentedClient(orgId, representedClientId);
+  const recipientDisplayName = incomeCustomerId
+    ? await loadIncomeCustomerDisplayName(orgId, representedClientId, incomeCustomerId)
+    : null;
   const attempts = await listRepresentedClientEmailAttempts(orgId, representedClientId);
   const documentIds = [...new Set(attempts.map((a) => a.sourceEntityId))];
   const docMeta = await loadIncomeDocumentsMetaByIds(orgId, documentIds);
@@ -320,11 +343,16 @@ export async function buildIncomeRepresentedClientEmailHistoryAggregate(params: 
     )
     .map(({ income_customer_id: _omit, ...row }) => row);
 
+  // Title primary = recipient when scoped; issuer when issuer-level history.
+  const clientDisplayName = recipientDisplayName ?? client.display_name;
+  const issuerContextLabel = incomeCustomerId ? `מנפיק: ${client.display_name}` : null;
+
   return {
     aggregate_key: INCOME_REPRESENTED_CLIENT_EMAIL_HISTORY_AGGREGATE_KEY,
     represented_client_id: representedClientId,
     income_customer_id: incomeCustomerId,
-    client_display_name: client.display_name,
+    client_display_name: clientDisplayName,
+    issuer_context_label: issuerContextLabel,
     table_columns: CLIENT_HISTORY_COLUMNS,
     rows,
     allowed_actions: ['view_income_represented_client_email_history'],

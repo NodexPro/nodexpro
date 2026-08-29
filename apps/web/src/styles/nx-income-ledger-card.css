@@ -41,12 +41,33 @@
   flex: 1;
 }
 
+.nx-income-ledger-modal__header-main {
+  min-width: 0;
+  flex: 1;
+}
+
 .nx-income-ledger-modal__title {
   margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.nx-income-ledger-modal__customer-name {
+  margin: 4px 0 0;
   font-size: 20px;
   font-weight: 800;
   color: #0f172a;
   line-height: 1.2;
+}
+
+.nx-income-ledger-modal__issuer {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.3;
 }
 
 .nx-income-ledger-modal__meta {
@@ -407,6 +428,21 @@
     overflow: visible;
     border: 1px solid #e5e7eb;
   }
+}
+
+.nx-income-email-history-modal__header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.nx-income-email-history-modal__subtitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.3;
 }
 
 .nx-income-email-history-overlay .nx-income-email-send-modal {

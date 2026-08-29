@@ -1351,7 +1351,16 @@ export interface IncomeRepresentedClientEmailHistoryAggregate {
   represented_client_id: string;
   /** Present when history is scoped to a single end customer. */
   income_customer_id?: string | null;
+  /**
+   * Primary identity for the modal title.
+   * Recipient display name when income_customer_id is scoped; otherwise issuer/client.
+   */
   client_display_name: string;
+  /**
+   * Ready-to-render secondary issuer line when history is recipient-scoped
+   * (e.g. "מנפיק: Test3"). Null for issuer-level history.
+   */
+  issuer_context_label: string | null;
   table_columns: Array<{ key: string; label: string }>;
   rows: IncomeRepresentedClientEmailHistoryAttemptRow[];
   allowed_actions: string[];

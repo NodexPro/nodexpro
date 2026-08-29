@@ -52,6 +52,8 @@ export function IncomeRepresentedClientEmailHistoryModal({
 
   const rows = aggregate?.rows ?? [];
   const columns = aggregate?.table_columns ?? [];
+  const primaryName = aggregate?.client_display_name ?? '…';
+  const issuerContextLabel = aggregate?.issuer_context_label ?? null;
 
   return (
     <div className="nx-income-wizard-overlay nx-invoice-ui nx-income-email-history-overlay" role="presentation">
@@ -63,9 +65,14 @@ export function IncomeRepresentedClientEmailHistoryModal({
         dir="rtl"
       >
         <div className="nx-modal-header">
-          <h2 id="income-client-email-history-title" className="nx-modal-title">
-            היסטוריית שליחה במייל — {aggregate?.client_display_name ?? '…'}
-          </h2>
+          <div className="nx-income-email-history-modal__header-text">
+            <h2 id="income-client-email-history-title" className="nx-modal-title">
+              {primaryName} — היסטוריית שליחה במייל
+            </h2>
+            {issuerContextLabel ? (
+              <p className="nx-income-email-history-modal__subtitle">{issuerContextLabel}</p>
+            ) : null}
+          </div>
           <button
             type="button"
             className="nx-income-ledger-modal__close-btn"
