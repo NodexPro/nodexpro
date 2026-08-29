@@ -146,6 +146,22 @@ export type TaxKnowledgeRule = {
   allowed_actions: TaxKnowledgeAllowedAction[];
 };
 
+export type OwnerCountryPackRow = {
+  id: string;
+  country_code: string;
+  pack_code: string;
+  name: string;
+  status: string;
+};
+
+export type OwnerRulesetRow = {
+  id: string;
+  country_pack_id: string;
+  ruleset_code: string;
+  ruleset_version: string;
+  status: string;
+};
+
 export type TaxKnowledgeAggregate = {
   selected_country_code: string | null;
   countries: TaxKnowledgeCountry[];

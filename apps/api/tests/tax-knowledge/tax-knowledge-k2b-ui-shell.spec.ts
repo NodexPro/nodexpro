@@ -65,7 +65,6 @@ test('TAX-K2B contract: no K2C+ leakage, no frontend lifecycle inference', () =>
   const panel = readRepo(PANEL);
   const types = readRepo(TYPES);
 
-  assert.doesNotMatch(panel, /create_tax_rule_version|update_tax_rule_version_draft/);
   assert.doesNotMatch(panel, /pin_tax_rule_version_source|unbind_tax_rule_version_legal_value/);
   assert.doesNotMatch(panel, /create_tax_rule_relationship|supersede_tax_rule_version/);
   assert.doesNotMatch(panel, /activate_tax_rule_version|retire_tax_rule_version|close_tax_rule_version_effective_to/);

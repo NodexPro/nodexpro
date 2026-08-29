@@ -3,11 +3,14 @@ import { userFacingApiMessage } from '../api/client';
 import { EmptyState } from '../templates/template-1/components/EmptyState';
 import { SectionCard } from '../templates/template-1/components/SectionCard';
 import type {
+  OwnerCountryPackRow,
+  OwnerRulesetRow,
   TaxKnowledgeAggregate,
   TaxKnowledgeAllowedAction,
   TaxKnowledgeCountry,
   TaxKnowledgeRule,
   TaxKnowledgeSource,
+  TaxKnowledgeVersion,
   UnknownRecord,
 } from './owner-legal-control-types';
 import { emptyTaxKnowledgeAggregate } from './owner-legal-control-types';
@@ -85,6 +88,81 @@ function parseCountries(raw: unknown): TaxKnowledgeCountry[] {
     }));
 }
 
+function parsePayloadObject(raw: unknown): UnknownRecord {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return raw as UnknownRecord;
+}
+
+function parseVersion(row: UnknownRecord): TaxKnowledgeVersion {
+  return {
+    id: asString(row.id),
+    tax_rule_id: asString(row.tax_rule_id),
+    country_code: asString(row.country_code),
+    version_no: typeof row.version_no === 'number' ? row.version_no : Number(row.version_no) || 0,
+    status: asString(row.status),
+    country_pack_id: asString(row.country_pack_id),
+    country_pack_ruleset_id: asString(row.country_pack_ruleset_id),
+    effective_from: asString(row.effective_from),
+    effective_to: asNullableString(row.effective_to),
+    payload_json: parsePayloadObject(row.payload_json),
+    payload_checksum: asString(row.payload_checksum),
+    supersedes_version_id: asNullableString(row.supersedes_version_id),
+    created_at: asString(row.created_at),
+    sources: [],
+    legal_value_bindings: [],
+    relationships: [],
+    allowed_actions: parseAllowedActions(row.allowed_actions),
+  };
+}
+
+function parseVersions(raw: unknown): TaxKnowledgeVersion[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map(parseVersion);
+}
+
+function parseCountryPacks(raw: unknown): OwnerCountryPackRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null && asString(row.id).trim() !== '')
+    .map((row) => ({
+      id: asString(row.id),
+      country_code: asString(row.country_code),
+      pack_code: asString(row.pack_code),
+      name: asString(row.name),
+      status: asString(row.status),
+    }));
+}
+
+function parseRulesets(raw: unknown): OwnerRulesetRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null && asString(row.id).trim() !== '')
+    .map((row) => ({
+      id: asString(row.id),
+      country_pack_id: asString(row.country_pack_id),
+      ruleset_code: asString(row.ruleset_code),
+      ruleset_version: asString(row.ruleset_version),
+      status: asString(row.status),
+    }));
+}
+
+function parsePayloadJsonText(text: string): { ok: true; value: UnknownRecord } | { ok: false; error: string } {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { ok: false, error: 'payload_json must be a JSON object.' };
+    }
+    return { ok: true, value: parsed as UnknownRecord };
+  } catch {
+    return { ok: false, error: 'payload_json is not valid JSON.' };
+  }
+}
+
 function parseSources(raw: unknown): TaxKnowledgeSource[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -115,41 +193,20 @@ function parseRules(raw: unknown): TaxKnowledgeRule[] {
   return raw
     .map((row) => asRecord(row))
     .filter((row): row is UnknownRecord => row !== null)
-    .map((row) => {
-      const versionsRaw = Array.isArray(row.versions) ? row.versions : [];
-      return {
-        id: asString(row.id),
-        country_code: asString(row.country_code),
-        rule_code: asString(row.rule_code),
-        title: asString(row.title),
-        rule_kind: asString(row.rule_kind),
-        status: asString(row.status),
-        usage_hint: asNullableString(row.usage_hint),
-        owner_note: asNullableString(row.owner_note),
-        created_at: asString(row.created_at),
-        updated_at: asString(row.updated_at),
-        versions: versionsRaw.map(() => ({
-          id: '',
-          tax_rule_id: '',
-          country_code: '',
-          version_no: 0,
-          status: '',
-          country_pack_id: '',
-          country_pack_ruleset_id: '',
-          effective_from: '',
-          effective_to: null,
-          payload_json: {},
-          payload_checksum: '',
-          supersedes_version_id: null,
-          created_at: '',
-          sources: [],
-          legal_value_bindings: [],
-          relationships: [],
-          allowed_actions: [],
-        })),
-        allowed_actions: parseAllowedActions(row.allowed_actions),
-      };
-    });
+    .map((row) => ({
+      id: asString(row.id),
+      country_code: asString(row.country_code),
+      rule_code: asString(row.rule_code),
+      title: asString(row.title),
+      rule_kind: asString(row.rule_kind),
+      status: asString(row.status),
+      usage_hint: asNullableString(row.usage_hint),
+      owner_note: asNullableString(row.owner_note),
+      created_at: asString(row.created_at),
+      updated_at: asString(row.updated_at),
+      versions: parseVersions(row.versions),
+      allowed_actions: parseAllowedActions(row.allowed_actions),
+    }));
 }
 
 export function parseTaxKnowledgeAggregate(raw: unknown): TaxKnowledgeAggregate {
@@ -167,7 +224,7 @@ export function parseTaxKnowledgeAggregate(raw: unknown): TaxKnowledgeAggregate 
     countries: parseCountries(rec.countries),
     sources: parseSources(rec.sources),
     rules: parseRules(rec.rules),
-    rule_versions: [],
+    rule_versions: parseVersions(rec.rule_versions),
     allowed_actions: parseAllowedActions(rec.allowed_actions),
     implemented_commands: Array.isArray(rec.implemented_commands)
       ? rec.implemented_commands.filter((item): item is string => typeof item === 'string')
@@ -185,6 +242,8 @@ const K2C_SOURCE_ACTION_KEYS = [
 ] as const;
 
 const K2C_RULE_ACTION_KEYS = ['update_tax_rule_metadata'] as const;
+const K2D_RULE_ACTION_KEYS = ['create_tax_rule_version'] as const;
+const K2D_VERSION_ACTION_KEYS = ['update_tax_rule_version_draft'] as const;
 
 function catalogAction(
   actions: TaxKnowledgeAllowedAction[],
@@ -231,16 +290,22 @@ type DialogKind =
   | 'activate_tax_source'
   | 'retire_tax_source'
   | 'update_tax_rule_metadata'
+  | 'create_tax_rule_version'
+  | 'update_tax_rule_version_draft'
   | null;
 
 export function OwnerTaxKnowledgePanel({
   taxKnowledge,
+  countryPacks: countryPacksRaw,
+  rulesets: rulesetsRaw,
   pendingCountryCode,
   busy,
   onSelectCountry,
   onCommand,
 }: {
   taxKnowledge: TaxKnowledgeAggregate;
+  countryPacks: unknown;
+  rulesets: unknown;
   pendingCountryCode: string | null;
   busy: boolean;
   onSelectCountry: (countryCode: string) => void;
@@ -249,6 +314,8 @@ export function OwnerTaxKnowledgePanel({
   const selectedCountryCode = taxKnowledge.selected_country_code;
   const selectValue = pendingCountryCode ?? selectedCountryCode ?? '';
   const schemaNotApplied = taxKnowledge.warnings.includes(SCHEMA_NOT_APPLIED);
+  const countryPacks = parseCountryPacks(countryPacksRaw);
+  const rulesets = parseRulesets(rulesetsRaw);
   const createSourceAction = catalogAction(taxKnowledge.allowed_actions, 'create_tax_source');
   const createRuleAction = catalogAction(taxKnowledge.allowed_actions, 'create_tax_rule');
   const createSourceAllowed = createSourceAction?.enabled === true;
@@ -256,6 +323,7 @@ export function OwnerTaxKnowledgePanel({
 
   const [selectedSourceId, setSelectedSourceId] = useState(null as string | null);
   const [selectedRuleId, setSelectedRuleId] = useState(null as string | null);
+  const [selectedVersionId, setSelectedVersionId] = useState(null as string | null);
   const [dialogKind, setDialogKind] = useState(null as DialogKind);
   const [formError, setFormError] = useState('');
   const [retireReason, setRetireReason] = useState('');
@@ -275,9 +343,22 @@ export function OwnerTaxKnowledgePanel({
     usage_hint: '',
     owner_note: '',
   });
+  const [versionForm, setVersionForm] = useState({
+    country_pack_id: '',
+    country_pack_ruleset_id: '',
+    effective_from: '',
+    effective_to: '',
+    payload_json: '{}',
+  });
 
   const selectedSource = taxKnowledge.sources.find((row) => row.id && row.id === selectedSourceId) ?? null;
   const selectedRule = taxKnowledge.rules.find((row) => row.id && row.id === selectedRuleId) ?? null;
+  const selectedVersion =
+    selectedRule?.versions.find((row) => row.id && row.id === selectedVersionId) ?? null;
+  const packsForSelectedRule = selectedRule
+    ? countryPacks.filter((row) => row.country_code === selectedRule.country_code)
+    : [];
+  const rulesetsForSelectedPack = rulesets.filter((row) => row.country_pack_id === versionForm.country_pack_id);
 
   useEffect(() => {
     if (selectedSourceId && !taxKnowledge.sources.some((row) => row.id === selectedSourceId)) {
@@ -287,6 +368,12 @@ export function OwnerTaxKnowledgePanel({
       setSelectedRuleId(null);
     }
   }, [taxKnowledge.sources, taxKnowledge.rules, selectedSourceId, selectedRuleId]);
+
+  useEffect(() => {
+    if (selectedVersionId && !selectedRule?.versions.some((row) => row.id === selectedVersionId)) {
+      setSelectedVersionId(null);
+    }
+  }, [selectedRule, selectedVersionId]);
 
   useEffect(() => {
     if (!dialogKind) return;
@@ -325,7 +412,25 @@ export function OwnerTaxKnowledgePanel({
         owner_note: selectedRule.owner_note ?? '',
       });
     }
-  }, [dialogKind, selectedSource, selectedRule]);
+    if (dialogKind === 'create_tax_rule_version') {
+      setVersionForm({
+        country_pack_id: '',
+        country_pack_ruleset_id: '',
+        effective_from: '',
+        effective_to: '',
+        payload_json: '{}',
+      });
+    }
+    if (dialogKind === 'update_tax_rule_version_draft' && selectedVersion) {
+      setVersionForm({
+        country_pack_id: selectedVersion.country_pack_id,
+        country_pack_ruleset_id: selectedVersion.country_pack_ruleset_id,
+        effective_from: (selectedVersion.effective_from ?? '').slice(0, 10),
+        effective_to: (selectedVersion.effective_to ?? '').slice(0, 10),
+        payload_json: JSON.stringify(selectedVersion.payload_json ?? {}, null, 2),
+      });
+    }
+  }, [dialogKind, selectedSource, selectedRule, selectedVersion]);
 
   async function submitDialog(): Promise<void> {
     setFormError('');
@@ -422,6 +527,52 @@ export function OwnerTaxKnowledgePanel({
           title: ruleForm.title.trim(),
           usage_hint: ruleForm.usage_hint.trim(),
           owner_note: ruleForm.owner_note.trim(),
+        });
+      } else if (dialogKind === 'create_tax_rule_version') {
+        if (!enabledAction(selectedRule?.allowed_actions ?? [], 'create_tax_rule_version') || !selectedRule) {
+          return;
+        }
+        if (!versionForm.country_pack_id || !versionForm.country_pack_ruleset_id || !versionForm.effective_from.trim()) {
+          setFormError('country_pack_id, country_pack_ruleset_id, and effective_from are required.');
+          return;
+        }
+        const parsedPayload = parsePayloadJsonText(versionForm.payload_json);
+        if (!parsedPayload.ok) {
+          setFormError(parsedPayload.error);
+          return;
+        }
+        const createPayload: UnknownRecord = {
+          tax_rule_id: selectedRule.id,
+          country_pack_id: versionForm.country_pack_id,
+          country_pack_ruleset_id: versionForm.country_pack_ruleset_id,
+          effective_from: versionForm.effective_from.trim(),
+          payload_json: parsedPayload.value,
+        };
+        if (versionForm.effective_to.trim()) createPayload.effective_to = versionForm.effective_to.trim();
+        await onCommand('create_tax_rule_version', createPayload);
+      } else if (dialogKind === 'update_tax_rule_version_draft') {
+        if (
+          !enabledAction(selectedVersion?.allowed_actions ?? [], 'update_tax_rule_version_draft') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        if (!versionForm.country_pack_id || !versionForm.country_pack_ruleset_id || !versionForm.effective_from.trim()) {
+          setFormError('country_pack_id, country_pack_ruleset_id, and effective_from are required.');
+          return;
+        }
+        const parsedPayload = parsePayloadJsonText(versionForm.payload_json);
+        if (!parsedPayload.ok) {
+          setFormError(parsedPayload.error);
+          return;
+        }
+        await onCommand('update_tax_rule_version_draft', {
+          tax_rule_version_id: selectedVersion.id,
+          country_pack_id: versionForm.country_pack_id,
+          country_pack_ruleset_id: versionForm.country_pack_ruleset_id,
+          effective_from: versionForm.effective_from.trim(),
+          effective_to: versionForm.effective_to.trim(),
+          payload_json: parsedPayload.value,
         });
       } else {
         return;
@@ -654,7 +805,7 @@ export function OwnerTaxKnowledgePanel({
                 <StateRow label="updated_at" value={selectedRule.updated_at} />
                 <StateRow label="versions" value={String(selectedRule.versions.length)} />
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                  {K2C_RULE_ACTION_KEYS.map((actionKey) => {
+                  {[...K2C_RULE_ACTION_KEYS, ...K2D_RULE_ACTION_KEYS].map((actionKey) => {
                     const action = enabledAction(selectedRule.allowed_actions, actionKey);
                     if (!action) return null;
                     return (
@@ -669,6 +820,80 @@ export function OwnerTaxKnowledgePanel({
                       </button>
                     );
                   })}
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Versions</div>
+                  {selectedRule.versions.length ? (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={TABLE_STYLE}>
+                        <thead>
+                          <tr>
+                            <th style={TH_STYLE}>version_no</th>
+                            <th style={TH_STYLE}>status</th>
+                            <th style={TH_STYLE}>effective_from</th>
+                            <th style={TH_STYLE}>effective_to</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedRule.versions.map((row) => {
+                            const isSelected = Boolean(row.id) && row.id === selectedVersionId;
+                            return (
+                              <tr
+                                key={row.id || String(row.version_no)}
+                                onClick={() => row.id && setSelectedVersionId(row.id)}
+                                style={{
+                                  cursor: row.id ? 'pointer' : 'default',
+                                  background: isSelected ? '#eff6ff' : undefined,
+                                }}
+                              >
+                                <td style={TD_STYLE}>{String(row.version_no)}</td>
+                                <td style={TD_STYLE}>{row.status}</td>
+                                <td style={TD_STYLE}>{row.effective_from}</td>
+                                <td style={TD_STYLE}>{row.effective_to ?? ''}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>No versions for this rule.</p>
+                  )}
+                  {selectedVersion ? (
+                    <div style={{ marginTop: 10, padding: 10, border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff' }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Version</div>
+                      <StateRow label="version_no" value={String(selectedVersion.version_no)} />
+                      <StateRow label="status" value={selectedVersion.status} />
+                      <StateRow label="effective_from" value={selectedVersion.effective_from} />
+                      <StateRow label="effective_to" value={selectedVersion.effective_to ?? ''} />
+                      <StateRow label="country_pack_id" value={selectedVersion.country_pack_id} />
+                      <StateRow label="country_pack_ruleset_id" value={selectedVersion.country_pack_ruleset_id} />
+                      <StateRow label="payload_checksum" value={selectedVersion.payload_checksum} />
+                      <StateRow label="supersedes_version_id" value={selectedVersion.supersedes_version_id ?? ''} />
+                      <StateRow label="created_at" value={selectedVersion.created_at} />
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                        {K2D_VERSION_ACTION_KEYS.map((actionKey) => {
+                          const action = enabledAction(selectedVersion.allowed_actions, actionKey);
+                          if (!action) return null;
+                          return (
+                            <button
+                              key={actionKey}
+                              type="button"
+                              className="nx-btn nx-btn-taxes-compact"
+                              disabled={busy}
+                              onClick={() => setDialogKind(actionKey)}
+                            >
+                              {actionLabel(actionKey)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : selectedRule.versions.length ? (
+                    <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>
+                      Select a version to view details and actions.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ) : taxKnowledge.rules.length ? (
@@ -691,7 +916,11 @@ export function OwnerTaxKnowledgePanel({
             role="dialog"
             aria-modal="true"
             aria-label={actionLabel(dialogKind)}
-            style={{ direction: 'ltr', maxWidth: 560 }}
+            style={{
+              direction: 'ltr',
+              maxWidth:
+                dialogKind === 'create_tax_rule_version' || dialogKind === 'update_tax_rule_version_draft' ? 640 : 560,
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="nx-modal-header">
@@ -701,13 +930,17 @@ export function OwnerTaxKnowledgePanel({
                 </h2>
                 <span className="nx-modal-subtitle">
                   {dialogKind}
-                  {dialogKind.startsWith('create_')
-                    ? ` · country ${selectedCountryCode || '—'}`
-                    : selectedSource && dialogKind.includes('source')
-                      ? ` · ${selectedSource.source_code}`
-                      : selectedRule && dialogKind.includes('rule')
-                        ? ` · ${selectedRule.rule_code}`
-                        : ''}
+                  {dialogKind === 'create_tax_rule_version' && selectedRule
+                    ? ` · ${selectedRule.rule_code}`
+                    : dialogKind === 'update_tax_rule_version_draft' && selectedVersion
+                      ? ` · version_no ${selectedVersion.version_no}`
+                      : dialogKind.startsWith('create_')
+                        ? ` · country ${selectedCountryCode || '—'}`
+                        : selectedSource && dialogKind.includes('source')
+                          ? ` · ${selectedSource.source_code}`
+                          : selectedRule && dialogKind.includes('rule')
+                            ? ` · ${selectedRule.rule_code}`
+                            : ''}
                 </span>
               </div>
               <button
@@ -838,6 +1071,81 @@ export function OwnerTaxKnowledgePanel({
                   {selectedSource.source_code}
                   {selectedSource.title ? ` — ${selectedSource.title}` : ''}
                 </p>
+              ) : null}
+              {dialogKind === 'create_tax_rule_version' || dialogKind === 'update_tax_rule_version_draft' ? (
+                <div className="nx-form-grid">
+                  <label className="nx-field">
+                    <span className="nx-field-label">country_pack_id</span>
+                    <select
+                      className="nx-select"
+                      value={versionForm.country_pack_id}
+                      onChange={(e) =>
+                        setVersionForm((s) => ({
+                          ...s,
+                          country_pack_id: e.target.value,
+                          country_pack_ruleset_id: '',
+                        }))
+                      }
+                    >
+                      <option value="">Select country pack</option>
+                      {packsForSelectedRule.map((pack) => (
+                        <option key={pack.id} value={pack.id}>
+                          {pack.pack_code || pack.id}
+                          {pack.name ? ` — ${pack.name}` : ''}
+                          {pack.status ? ` (${pack.status})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">country_pack_ruleset_id</span>
+                    <select
+                      className="nx-select"
+                      value={versionForm.country_pack_ruleset_id}
+                      onChange={(e) =>
+                        setVersionForm((s) => ({ ...s, country_pack_ruleset_id: e.target.value }))
+                      }
+                    >
+                      <option value="">Select ruleset</option>
+                      {rulesetsForSelectedPack.map((ruleset) => (
+                        <option key={ruleset.id} value={ruleset.id}>
+                          {ruleset.ruleset_code || ruleset.id}
+                          {ruleset.ruleset_version ? ` ${ruleset.ruleset_version}` : ''}
+                          {ruleset.status ? ` (${ruleset.status})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">effective_from</span>
+                    <input
+                      className="nx-input"
+                      type="date"
+                      value={versionForm.effective_from}
+                      onChange={(e) => setVersionForm((s) => ({ ...s, effective_from: e.target.value }))}
+                    />
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">effective_to</span>
+                    <input
+                      className="nx-input"
+                      type="date"
+                      value={versionForm.effective_to}
+                      onChange={(e) => setVersionForm((s) => ({ ...s, effective_to: e.target.value }))}
+                    />
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">payload_json</span>
+                    <textarea
+                      className="nx-textarea"
+                      rows={8}
+                      value={versionForm.payload_json}
+                      onChange={(e) => setVersionForm((s) => ({ ...s, payload_json: e.target.value }))}
+                      spellCheck={false}
+                      style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 }}
+                    />
+                  </label>
+                </div>
               ) : null}
               {dialogKind === 'retire_tax_source' && selectedSource ? (
                 <div className="nx-form-grid">
