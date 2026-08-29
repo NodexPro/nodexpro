@@ -210,6 +210,39 @@ async function assertPackRulesetForCountry(
   }
 }
 
+function normalizeCitationLocator(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw badRequest('locator must be a string');
+  const locator = value.trim();
+  return locator.length ? locator : null;
+}
+
+function assertParentVersionDraft(status: string, command: string): void {
+  if (status !== TAX_KNOWLEDGE_INITIAL_STATUS) {
+    throw conflict(`${command} is only allowed while the tax rule version is draft`);
+  }
+}
+
+function locatorKey(locator: string | null | undefined): string {
+  return locator == null ? '' : locator.trim();
+}
+
+async function loadLegalValueIdentity(id: string): Promise<{
+  id: string;
+  country_code: string;
+  value_key: string;
+  label: string;
+}> {
+  const { data, error } = await supabaseAdmin
+    .from('country_legal_values')
+    .select('id, country_code, value_key, label')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Legal value not found');
+  return data as { id: string; country_code: string; value_key: string; label: string };
+}
+
 async function nextVersionNo(taxRuleId: string): Promise<number> {
   const { data, error } = await supabaseAdmin
     .from('tax_rule_versions')
@@ -609,6 +642,191 @@ async function handleUpdateTaxRuleMetadata(
   };
 }
 
+async function handlePinTaxRuleVersionSource(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const versionId = asUuid(payload.tax_rule_version_id, 'tax_rule_version_id');
+  const sourceId = asUuid(payload.tax_source_id, 'tax_source_id');
+  const version = await loadTaxRuleVersion(versionId);
+  assertParentVersionDraft(version.status, 'pin_tax_rule_version_source');
+  const source = await loadTaxSource(sourceId);
+  if (source.country_code !== version.country_code) {
+    throw badRequest('tax_source_id must belong to the same country as the tax rule version');
+  }
+  const locator = normalizeCitationLocator(payload.locator);
+
+  const { data: existing, error: existingErr } = await supabaseAdmin
+    .from('tax_rule_version_sources')
+    .select('id, locator')
+    .eq('tax_rule_version_id', versionId)
+    .eq('tax_source_id', sourceId);
+  if (existingErr) throw existingErr;
+  if ((existing ?? []).some((row) => locatorKey(row.locator as string | null) === locatorKey(locator))) {
+    throw conflict('Tax source citation already exists for this version');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_version_sources')
+    .insert({
+      tax_rule_version_id: versionId,
+      tax_source_id: sourceId,
+      country_code: version.country_code,
+      locator,
+    })
+    .select('id, tax_rule_version_id, tax_source_id, locator')
+    .single();
+  throwIfTaxKnowledgeWriteError(error, 'Tax source citation already exists for this version');
+  if (!data) throw new Error('tax_rule_version_sources insert returned no row');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_SOURCE_PINNED, 'tax_rule_version_source', String(data.id), {
+    tax_rule_version_id: versionId,
+    tax_source_id: sourceId,
+    country_code: version.country_code,
+    locator,
+  });
+
+  return {
+    ok: true,
+    command: 'pin_tax_rule_version_source',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, version.country_code),
+  };
+}
+
+async function handleUnpinTaxRuleVersionSource(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const citationId = asUuid(payload.tax_rule_version_source_id, 'tax_rule_version_source_id');
+  const { data: citation, error: citationErr } = await supabaseAdmin
+    .from('tax_rule_version_sources')
+    .select('id, tax_rule_version_id, tax_source_id, country_code')
+    .eq('id', citationId)
+    .maybeSingle();
+  if (citationErr) throw citationErr;
+  if (!citation) throw notFound('Tax source citation not found');
+
+  const version = await loadTaxRuleVersion(String(citation.tax_rule_version_id));
+  assertParentVersionDraft(version.status, 'unpin_tax_rule_version_source');
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_version_sources')
+    .delete()
+    .eq('id', citationId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Tax source citation not found');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_SOURCE_UNPINNED, 'tax_rule_version_source', citationId, {
+    tax_rule_version_id: version.id,
+    tax_source_id: citation.tax_source_id,
+    country_code: version.country_code,
+  });
+
+  return {
+    ok: true,
+    command: 'unpin_tax_rule_version_source',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, version.country_code),
+  };
+}
+
+async function handleBindTaxRuleVersionLegalValue(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  if (
+    'legal_value_version_id' in payload ||
+    'rate' in payload ||
+    'threshold' in payload ||
+    'amount' in payload
+  ) {
+    throw badRequest(
+      'bind_tax_rule_version_legal_value stores legal_value_id only; legal_value_version_id and amounts are not accepted',
+    );
+  }
+  const versionId = asUuid(payload.tax_rule_version_id, 'tax_rule_version_id');
+  const legalValueId = asUuid(payload.legal_value_id, 'legal_value_id');
+  const version = await loadTaxRuleVersion(versionId);
+  assertParentVersionDraft(version.status, 'bind_tax_rule_version_legal_value');
+  const legalValue = await loadLegalValueIdentity(legalValueId);
+  if (legalValue.country_code !== version.country_code) {
+    throw badRequest('legal_value_id must belong to the same country as the tax rule version');
+  }
+
+  const { data: existing, error: existingErr } = await supabaseAdmin
+    .from('tax_rule_version_legal_values')
+    .select('id')
+    .eq('tax_rule_version_id', versionId)
+    .eq('legal_value_id', legalValueId)
+    .maybeSingle();
+  if (existingErr) throw existingErr;
+  if (existing) throw conflict('Legal value binding already exists for this version');
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_version_legal_values')
+    .insert({
+      tax_rule_version_id: versionId,
+      legal_value_id: legalValueId,
+      country_code: version.country_code,
+    })
+    .select('id, tax_rule_version_id, legal_value_id')
+    .single();
+  throwIfTaxKnowledgeWriteError(error, 'Legal value binding already exists for this version');
+  if (!data) throw new Error('tax_rule_version_legal_values insert returned no row');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_LEGAL_VALUE_BOUND, 'tax_rule_version_legal_value', String(data.id), {
+    tax_rule_version_id: versionId,
+    legal_value_id: legalValueId,
+    country_code: version.country_code,
+    value_key: legalValue.value_key,
+  });
+
+  return {
+    ok: true,
+    command: 'bind_tax_rule_version_legal_value',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, version.country_code),
+  };
+}
+
+async function handleUnbindTaxRuleVersionLegalValue(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const bindingId = asUuid(payload.tax_rule_version_legal_value_id, 'tax_rule_version_legal_value_id');
+  const { data: binding, error: bindingErr } = await supabaseAdmin
+    .from('tax_rule_version_legal_values')
+    .select('id, tax_rule_version_id, legal_value_id, country_code')
+    .eq('id', bindingId)
+    .maybeSingle();
+  if (bindingErr) throw bindingErr;
+  if (!binding) throw notFound('Legal value binding not found');
+
+  const version = await loadTaxRuleVersion(String(binding.tax_rule_version_id));
+  assertParentVersionDraft(version.status, 'unbind_tax_rule_version_legal_value');
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_version_legal_values')
+    .delete()
+    .eq('id', bindingId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Legal value binding not found');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_LEGAL_VALUE_UNBOUND, 'tax_rule_version_legal_value', bindingId, {
+    tax_rule_version_id: version.id,
+    legal_value_id: binding.legal_value_id,
+    country_code: version.country_code,
+  });
+
+  return {
+    ok: true,
+    command: 'unbind_tax_rule_version_legal_value',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, version.country_code),
+  };
+}
+
 export async function executeTaxKnowledgeCommand(
   ctx: RequestContext,
   command: string,
@@ -637,6 +855,14 @@ export async function executeTaxKnowledgeCommand(
       return handleUpdateTaxSourceMetadata(ctx, payload);
     case 'update_tax_rule_metadata':
       return handleUpdateTaxRuleMetadata(ctx, payload);
+    case 'pin_tax_rule_version_source':
+      return handlePinTaxRuleVersionSource(ctx, payload);
+    case 'unpin_tax_rule_version_source':
+      return handleUnpinTaxRuleVersionSource(ctx, payload);
+    case 'bind_tax_rule_version_legal_value':
+      return handleBindTaxRuleVersionLegalValue(ctx, payload);
+    case 'unbind_tax_rule_version_legal_value':
+      return handleUnbindTaxRuleVersionLegalValue(ctx, payload);
     default:
       throw badRequest(`Unsupported tax-knowledge command: ${command}`);
   }

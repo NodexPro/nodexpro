@@ -23,8 +23,9 @@ const K14A_PATHS = [
     'apps/api/src/shared/audit-events.ts',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-4a-commands-aggregate.spec.ts',
     'apps/api/src/domains/tax-knowledge/tax-knowledge-checksum.pure.ts',
-    'apps/api/tests/tax-knowledge/tax-knowledge-k1-4b-lifecycle.spec.ts',
-  ] as const;
+  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4b-lifecycle.spec.ts',
+  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4c-provenance-bindings.spec.ts',
+] as const;
 
 const KNOWLEDGE_MIGRATIONS = [
   'supabase/migrations/600_tax_knowledge_core_foundation.sql',

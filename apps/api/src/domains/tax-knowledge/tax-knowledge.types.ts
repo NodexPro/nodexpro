@@ -7,6 +7,10 @@ export const TAX_KNOWLEDGE_COMMANDS = [
   'retire_tax_source',
   'update_tax_source_metadata',
   'update_tax_rule_metadata',
+  'pin_tax_rule_version_source',
+  'unpin_tax_rule_version_source',
+  'bind_tax_rule_version_legal_value',
+  'unbind_tax_rule_version_legal_value',
 ] as const;
 
 export type TaxKnowledgeCommandName = (typeof TAX_KNOWLEDGE_COMMANDS)[number];
@@ -87,6 +91,32 @@ export type OwnerTaxRuleDto = {
   allowed_actions: OwnerTaxKnowledgeAllowedAction[];
 };
 
+export type OwnerTaxRuleVersionSourceDto = {
+  id: string;
+  tax_rule_version_id: string;
+  tax_source_id: string;
+  source_code: string;
+  title: string;
+  provenance_type: string;
+  status: string;
+  locator: string | null;
+  created_at: string;
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
+export type OwnerTaxRuleVersionLegalValueDto = {
+  id: string;
+  tax_rule_version_id: string;
+  legal_value_id: string;
+  value_key: string;
+  label: string;
+  category: string | null;
+  module_scope: string | null;
+  status: string;
+  created_at: string;
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
 export type OwnerTaxRuleVersionDto = {
   id: string;
   tax_rule_id: string;
@@ -101,6 +131,8 @@ export type OwnerTaxRuleVersionDto = {
   payload_checksum: string;
   supersedes_version_id: string | null;
   created_at: string;
+  sources: OwnerTaxRuleVersionSourceDto[];
+  legal_value_bindings: OwnerTaxRuleVersionLegalValueDto[];
   allowed_actions: OwnerTaxKnowledgeAllowedAction[];
 };
 

@@ -9,6 +9,8 @@ import {
   type OwnerTaxKnowledgeCountryDto,
   type OwnerTaxRuleDto,
   type OwnerTaxRuleVersionDto,
+  type OwnerTaxRuleVersionLegalValueDto,
+  type OwnerTaxRuleVersionSourceDto,
   type OwnerTaxSourceDto,
 } from './tax-knowledge.types.js';
 
@@ -82,14 +84,40 @@ function ruleAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
 }
 
 function versionAllowedActions(status: string): OwnerTaxKnowledgeAllowedAction[] {
+  const draft = status === 'draft';
   return [
-    action('update_tax_rule_version_draft', status === 'draft', {
+    action('update_tax_rule_version_draft', draft, {
       tax_rule_version_id: 'uuid',
       country_pack_id: 'optional uuid',
       country_pack_ruleset_id: 'optional uuid',
       effective_from: 'optional YYYY-MM-DD',
       effective_to: 'optional YYYY-MM-DD',
       payload_json: 'optional JSON object',
+    }),
+    action('pin_tax_rule_version_source', draft, {
+      tax_rule_version_id: 'uuid',
+      tax_source_id: 'uuid',
+      locator: 'optional string',
+    }),
+    action('bind_tax_rule_version_legal_value', draft, {
+      tax_rule_version_id: 'uuid',
+      legal_value_id: 'uuid',
+    }),
+  ];
+}
+
+function citationAllowedActions(parentDraft: boolean): OwnerTaxKnowledgeAllowedAction[] {
+  return [
+    action('unpin_tax_rule_version_source', parentDraft, {
+      tax_rule_version_source_id: 'uuid',
+    }),
+  ];
+}
+
+function bindingAllowedActions(parentDraft: boolean): OwnerTaxKnowledgeAllowedAction[] {
+  return [
+    action('unbind_tax_rule_version_legal_value', parentDraft, {
+      tax_rule_version_legal_value_id: 'uuid',
     }),
   ];
 }
@@ -116,7 +144,11 @@ function mapSource(row: Record<string, unknown>): OwnerTaxSourceDto {
   };
 }
 
-function mapVersion(row: Record<string, unknown>): OwnerTaxRuleVersionDto {
+function mapVersion(
+  row: Record<string, unknown>,
+  sources: OwnerTaxRuleVersionSourceDto[],
+  legalValueBindings: OwnerTaxRuleVersionLegalValueDto[],
+): OwnerTaxRuleVersionDto {
   const status = String(row.status);
   const rawPayload = row.payload_json;
   const payloadJson =
@@ -137,6 +169,8 @@ function mapVersion(row: Record<string, unknown>): OwnerTaxRuleVersionDto {
     payload_checksum: String(row.payload_checksum),
     supersedes_version_id: row.supersedes_version_id == null ? null : String(row.supersedes_version_id),
     created_at: String(row.created_at),
+    sources,
+    legal_value_bindings: legalValueBindings,
     allowed_actions: versionAllowedActions(status),
   };
 }
@@ -215,8 +249,8 @@ export async function buildOwnerTaxKnowledgeAggregate(
   let rules: OwnerTaxRuleDto[] = [];
   let ruleVersions: OwnerTaxRuleVersionDto[] = [];
 
-  if (selectedCountryCode) {
-    const [sourceResult, ruleResult, versionResult] = await Promise.all([
+    if (selectedCountryCode) {
+    const [sourceResult, ruleResult, versionResult, citationResult, bindingResult] = await Promise.all([
       supabaseAdmin
         .from('tax_sources')
         .select(TAX_SOURCE_SELECT)
@@ -232,6 +266,16 @@ export async function buildOwnerTaxKnowledgeAggregate(
         .select(TAX_RULE_VERSION_SELECT)
         .eq('country_code', selectedCountryCode)
         .order('version_no', { ascending: true }),
+      supabaseAdmin
+        .from('tax_rule_version_sources')
+        .select('id, tax_rule_version_id, tax_source_id, locator, created_at')
+        .eq('country_code', selectedCountryCode)
+        .order('created_at', { ascending: true }),
+      supabaseAdmin
+        .from('tax_rule_version_legal_values')
+        .select('id, tax_rule_version_id, legal_value_id, created_at')
+        .eq('country_code', selectedCountryCode)
+        .order('created_at', { ascending: true }),
     ]);
 
     if (sourceResult.error && isSupabaseMissingTableError(sourceResult.error, 'tax_sources')) {
@@ -256,8 +300,104 @@ export async function buildOwnerTaxKnowledgeAggregate(
       }
     } else if (versionResult.error) {
       throw versionResult.error;
-    } else {
-      ruleVersions = (versionResult.data ?? []).map((row) => mapVersion(row as Record<string, unknown>));
+    }
+
+    if (citationResult.error && isSupabaseMissingTableError(citationResult.error, 'tax_rule_version_sources')) {
+      if (!warnings.includes('tax_knowledge_schema_not_applied')) {
+        warnings.push('tax_knowledge_schema_not_applied');
+      }
+    } else if (citationResult.error) {
+      throw citationResult.error;
+    }
+
+    if (bindingResult.error && isSupabaseMissingTableError(bindingResult.error, 'tax_rule_version_legal_values')) {
+      if (!warnings.includes('tax_knowledge_schema_not_applied')) {
+        warnings.push('tax_knowledge_schema_not_applied');
+      }
+    } else if (bindingResult.error) {
+      throw bindingResult.error;
+    }
+
+    const sourceById = new Map(sources.map((row) => [row.id, row]));
+    const legalValueIds = [
+      ...new Set((bindingResult.data ?? []).map((row) => String((row as { legal_value_id: string }).legal_value_id))),
+    ];
+    const legalValueById = new Map<
+      string,
+      { value_key: string; label: string; category: string | null; module_scope: string | null; status: string }
+    >();
+    if (legalValueIds.length) {
+      const legalValues = await supabaseAdmin
+        .from('country_legal_values')
+        .select('id, value_key, label, category, module_scope, status')
+        .eq('country_code', selectedCountryCode)
+        .in('id', legalValueIds);
+      if (legalValues.error) throw legalValues.error;
+      for (const row of legalValues.data ?? []) {
+        legalValueById.set(String(row.id), {
+          value_key: String(row.value_key),
+          label: String(row.label),
+          category: row.category == null ? null : String(row.category),
+          module_scope: row.module_scope == null ? null : String(row.module_scope),
+          status: String(row.status),
+        });
+      }
+    }
+
+    if (!versionResult.error) {
+      const citationsByVersion = new Map<string, OwnerTaxRuleVersionSourceDto[]>();
+      for (const row of citationResult.data ?? []) {
+        const versionId = String((row as { tax_rule_version_id: string }).tax_rule_version_id);
+        const sourceId = String((row as { tax_source_id: string }).tax_source_id);
+        const source = sourceById.get(sourceId);
+        const parent = (versionResult.data ?? []).find((v) => String((v as { id: string }).id) === versionId) as
+          | { status?: string }
+          | undefined;
+        const list = citationsByVersion.get(versionId) ?? [];
+        list.push({
+          id: String((row as { id: string }).id),
+          tax_rule_version_id: versionId,
+          tax_source_id: sourceId,
+          source_code: source?.source_code ?? '',
+          title: source?.title ?? '',
+          provenance_type: source?.provenance_type ?? '',
+          status: source?.status ?? '',
+          locator: (row as { locator?: string | null }).locator == null ? null : String((row as { locator: string }).locator),
+          created_at: String((row as { created_at: string }).created_at),
+          allowed_actions: citationAllowedActions(parent?.status === 'draft'),
+        });
+        citationsByVersion.set(versionId, list);
+      }
+
+      const bindingsByVersion = new Map<string, OwnerTaxRuleVersionLegalValueDto[]>();
+      for (const row of bindingResult.data ?? []) {
+        const versionId = String((row as { tax_rule_version_id: string }).tax_rule_version_id);
+        const legalValueId = String((row as { legal_value_id: string }).legal_value_id);
+        const legal = legalValueById.get(legalValueId);
+        const parent = (versionResult.data ?? []).find((v) => String((v as { id: string }).id) === versionId) as
+          | { status?: string }
+          | undefined;
+        const list = bindingsByVersion.get(versionId) ?? [];
+        list.push({
+          id: String((row as { id: string }).id),
+          tax_rule_version_id: versionId,
+          legal_value_id: legalValueId,
+          value_key: legal?.value_key ?? '',
+          label: legal?.label ?? '',
+          category: legal?.category ?? null,
+          module_scope: legal?.module_scope ?? null,
+          status: legal?.status ?? '',
+          created_at: String((row as { created_at: string }).created_at),
+          allowed_actions: bindingAllowedActions(parent?.status === 'draft'),
+        });
+        bindingsByVersion.set(versionId, list);
+      }
+
+      ruleVersions = (versionResult.data ?? []).map((row) => {
+        const mapped = row as Record<string, unknown>;
+        const id = String(mapped.id);
+        return mapVersion(mapped, citationsByVersion.get(id) ?? [], bindingsByVersion.get(id) ?? []);
+      });
     }
 
     if (!ruleResult.error) {

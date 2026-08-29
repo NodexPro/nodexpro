@@ -33,6 +33,7 @@ const K14B_ALLOWED = [
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-3a-relationship-publication.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4a-commands-aggregate.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4b-lifecycle.spec.ts',
+  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4c-provenance-bindings.spec.ts',
 ] as const;
 
 const KNOWLEDGE_MIGRATIONS = [
