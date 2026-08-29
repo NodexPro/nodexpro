@@ -18,6 +18,7 @@ import {
   CommunicationPoliciesToolbar,
   OperationalReminderWorkflowWizard,
 } from './operational-reminder-owner-forms';
+import { OwnerTaxKnowledgePanel, parseTaxKnowledgeAggregate } from './owner-tax-knowledge-panel';
 
 function isForbidden(e: unknown): boolean {
   return e instanceof ApiError && (e.status === 401 || e.status === 403);
@@ -179,6 +180,8 @@ export function PlatformOwnerLegalControl() {
   const [commercialEntitlementStatus, setCommercialEntitlementStatus] = useState('');
   const [commercialActivationStatus, setCommercialActivationStatus] = useState('');
   const [commercialExpandedOrgIds, setCommercialExpandedOrgIds] = useState<Set<string>>(() => new Set());
+  const [taxKnowledgeCountryQuery, setTaxKnowledgeCountryQuery] = useState('');
+  const [pendingTaxKnowledgeCountry, setPendingTaxKnowledgeCountry] = useState(null as string | null);
 
   const [orgSettings, setOrgSettings] = useState(null as UnknownRecord | null);
   const [orgDiagnostics, setOrgDiagnostics] = useState(null as UnknownRecord | null);
@@ -281,6 +284,7 @@ export function PlatformOwnerLegalControl() {
       if (commercialModuleKey.trim()) qs.set('commercial_module_key', commercialModuleKey.trim());
       if (commercialEntitlementStatus.trim()) qs.set('commercial_entitlement_status', commercialEntitlementStatus.trim());
       if (commercialActivationStatus.trim()) qs.set('commercial_activation_status', commercialActivationStatus.trim());
+      if (taxKnowledgeCountryQuery.trim()) qs.set('tax_knowledge_country_code', taxKnowledgeCountryQuery.trim());
 
       const path = `${OWNER.legalControl}?${qs.toString()}`;
       const p = (await apiJson(path)) as UnknownRecord;
@@ -310,6 +314,7 @@ export function PlatformOwnerLegalControl() {
     commercialModuleKey,
     commercialEntitlementStatus,
     commercialActivationStatus,
+    taxKnowledgeCountryQuery,
   ]);
 
   async function loadOrgDiagnostics(): Promise<void> {
@@ -562,6 +567,17 @@ export function PlatformOwnerLegalControl() {
     const w = panel?.warnings as { combined?: unknown[] } | undefined;
     return Array.isArray(w?.combined) ? (w.combined as string[]) : [];
   }, [panel]);
+
+  const taxKnowledge = useMemo(() => parseTaxKnowledgeAggregate(panel?.tax_knowledge), [panel]);
+
+  useEffect(() => {
+    if (loading) return;
+    setPendingTaxKnowledgeCountry(null);
+    const selected = taxKnowledge.selected_country_code ?? '';
+    if (selected && selected !== taxKnowledgeCountryQuery) {
+      setTaxKnowledgeCountryQuery(selected);
+    }
+  }, [loading, panel, taxKnowledge.selected_country_code, taxKnowledgeCountryQuery]);
 
   const auditRecent = useMemo(() => {
     const s = panel?.audit_summary as { recent?: unknown[] } | undefined;
@@ -1047,6 +1063,19 @@ export function PlatformOwnerLegalControl() {
           </ul>
         </div>
       ) : null}
+
+      <OwnerTaxKnowledgePanel
+        taxKnowledge={taxKnowledge}
+        pendingCountryCode={pendingTaxKnowledgeCountry}
+        busy={commandBusy}
+        onSelectCountry={(countryCode) => {
+          setPendingTaxKnowledgeCountry(countryCode);
+          setTaxKnowledgeCountryQuery(countryCode);
+        }}
+        onCommand={async (command, payload) => {
+          await sendOwnerCommand(command, payload);
+        }}
+      />
 
       <section style={{ marginTop: 18, padding: 12, border: '1px solid #c4b5fd', borderRadius: 8, background: '#faf5ff' }}>
         <h2 style={{ margin: 0 }}>Communication policies (Work Engine reminders)</h2>
