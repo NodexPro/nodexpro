@@ -2,7 +2,7 @@ import 'dotenv/config';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -214,17 +214,32 @@ test('TAX-K1.4F contract: aggregate actions, audit, 18 commands, no frontend', (
   assert.deepEqual(webHits, [], '24) frontend files must not change');
 });
 
-test('TAX-K1.4F contract: migrations 600–604 unchanged, only 605 added, no unrelated files', () => {
+test('TAX-K1.4F contract: migrations 600–604 present, 605 is atomic supersession, no 606+', () => {
   for (const file of UNCHANGED_MIGRATIONS) {
+    assert.equal(existsSync(join(repoRoot, file)), true, `${file} must exist`);
     const diff = execSync(`git diff -- ${file}`, { cwd: repoRoot, encoding: 'utf8' });
     assert.equal(diff.trim(), '', `${file} must remain unchanged`);
   }
-  assert.equal(existsSync(join(repoRoot, 'supabase/migrations/605_tax_knowledge_atomic_supersession.sql')), true);
-  assert.equal(existsSync(join(repoRoot, 'supabase/migrations/605_tax_knowledge_commands.sql')), false);
+  const migrationsDir = join(repoRoot, 'supabase/migrations');
+  const taxBrainMigrations = readdirSync(migrationsDir)
+    .filter((name) => /^\d{3}_.+\.sql$/.test(name) && Number(name.slice(0, 3)) >= 600 && Number(name.slice(0, 3)) <= 699)
+    .sort();
+  assert.deepEqual(taxBrainMigrations, [
+    '600_tax_knowledge_core_foundation.sql',
+    '601_tax_knowledge_provenance_links.sql',
+    '602_tax_knowledge_publication_guard.sql',
+    '603_tax_knowledge_rule_relationships.sql',
+    '604_tax_knowledge_relationship_publication_guard.sql',
+    '605_tax_knowledge_atomic_supersession.sql',
+  ]);
+  assert.equal(existsSync(join(migrationsDir, '605_tax_knowledge_commands.sql')), false);
+  const diff605 = execSync('git diff -- supabase/migrations/605_tax_knowledge_atomic_supersession.sql', {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  assert.equal(diff605.trim(), '', 'migration 605 must remain unchanged');
   const unexpected = porcelainPaths().filter((path) => !K14F_ALLOWED.includes(path as (typeof K14F_ALLOWED)[number]));
   assert.deepEqual(unexpected, [], `28) unrelated files changed: ${unexpected.join(', ')}`);
-  const sqlHits = porcelainPaths().filter((path) => path.startsWith('supabase/migrations/'));
-  assert.deepEqual(sqlHits, ['supabase/migrations/605_tax_knowledge_atomic_supersession.sql']);
 });
 
 test('TAX-K1.4F commands require Platform Owner', async (t) => {
