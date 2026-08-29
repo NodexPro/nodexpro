@@ -591,7 +591,8 @@
 }
 
 .nx-we-invoices-cdm-populations--both {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* DOM order: office_clients, office_client_customers. RTL: right=45%, left=55%. */
+  grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
   /* Drop residual 4px side padding so panels use full workspace width. */
   padding-inline: 1px;
 }
