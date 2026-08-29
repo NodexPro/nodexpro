@@ -671,7 +671,7 @@
 
 /* Identity column: min-width 240px → 168px (~30% narrower). Freed space stays with documents/actions. */
 .nx-we-invoices-cdm-population .nx-income-cdm__cell--client {
-  border-inline-end: 1px solid #e2e8f0;
+  border-inline-end: 1px solid #cbd5e1;
   min-width: 168px;
   width: 168px;
   max-width: 168px;
@@ -690,12 +690,36 @@
 
 .nx-we-invoices-cdm-population .nx-income-cdm__table th,
 .nx-we-invoices-cdm-population .nx-income-cdm__table td {
-  border-inline-end: 1px solid #e2e8f0;
+  /* Excel-like vertical segmentation — same chrome through header + body cells. */
+  border-inline-end: 1px solid #cbd5e1;
 }
 
 .nx-we-invoices-cdm-population .nx-income-cdm__table th:last-child,
 .nx-we-invoices-cdm-population .nx-income-cdm__table td:last-child {
   border-inline-end: none;
+}
+
+/*
+ * office_client_customers only: population title lives in the client <th>,
+ * so allow that header cell to fit "לקוחות של לקוחות המשרד" on one line
+ * without a second stacked population title row.
+ */
+.nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  th.nx-income-cdm__cell--client {
+  min-width: 200px;
+  width: 200px;
+  max-width: 220px;
+  white-space: nowrap;
+  background: #f1f5f9;
+}
+
+.nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  td.nx-income-cdm__cell--client {
+  min-width: 200px;
+  width: 200px;
+  max-width: 220px;
 }
 
 /* מסמכים — keep cube floor; override the earlier 36% width that stole action space. */
