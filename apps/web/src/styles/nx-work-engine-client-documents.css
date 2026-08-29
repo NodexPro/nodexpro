@@ -939,6 +939,26 @@
   color: #0f172a;
 }
 
+/*
+ * office_client_customers only: swap visual hierarchy —
+ * issuer/group (Test3/Test4) uses former recipient size;
+ * recipient rows use former group size.
+ * Typography only — no layout/dimension changes.
+ */
+.nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-we-invoices-cdm-group-header__name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__client-name {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .nx-we-invoices-cdm-group-header__count {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 11px;
