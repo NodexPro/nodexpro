@@ -31,6 +31,8 @@ const K14E_ALLOWED = [
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4c-provenance-bindings.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4d-relationships.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4e-version-lifecycle.spec.ts',
+  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4f-atomic-supersession.spec.ts',
+  'supabase/migrations/605_tax_knowledge_atomic_supersession.sql',
 ] as const;
 
 const KNOWLEDGE_MIGRATIONS = [
@@ -95,8 +97,8 @@ test('TAX-K1.4E contract: dispatcher recognizes implemented lifecycle commands o
   for (const command of NEW_COMMANDS) {
     assert.equal(isTaxKnowledgeCommand(command), true, command);
   }
-  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 17);
-  assert.equal(isTaxKnowledgeCommand('supersede_tax_rule_version'), false);
+  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 18);
+  assert.equal(isTaxKnowledgeCommand('supersede_tax_rule_version'), true);
   assert.equal(isTaxKnowledgeCommand('reactivate_tax_rule_version'), false);
   assert.equal(isTaxKnowledgeCommand('reopen_tax_rule_version'), false);
 
@@ -104,7 +106,7 @@ test('TAX-K1.4E contract: dispatcher recognizes implemented lifecycle commands o
   for (const command of NEW_COMMANDS) {
     assert.match(commandsSrc, new RegExp(`case '${command}'`));
   }
-  assert.doesNotMatch(commandsSrc, /case 'supersede_tax_rule_version'/);
+  assert.match(commandsSrc, /case 'supersede_tax_rule_version'/);
   assert.match(commandsSrc, /assertPlatformOwner\(ctx\)/);
   assert.doesNotMatch(commandsSrc, /organization_id:/);
   assert.doesNotMatch(commandsSrc, /resolveCountryContext\(/);
@@ -153,14 +155,14 @@ test('TAX-K1.4E contract: migration 600 lifecycle + 602/604 remain publication o
   for (const command of NEW_COMMANDS) {
     assert.match(typesSrc, new RegExp(`'${command}'`));
   }
-  assert.doesNotMatch(typesSrc, /'supersede_tax_rule_version'/);
+  assert.match(typesSrc, /'supersede_tax_rule_version'/);
 
   const readSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-read-models.service.ts');
   assert.match(readSrc, /activate_tax_rule_version/);
   assert.match(readSrc, /retire_tax_rule_version/);
   assert.match(readSrc, /close_tax_rule_version_effective_to/);
   assert.match(readSrc, /implemented_commands: \[\.\.\.TAX_KNOWLEDGE_COMMANDS\]/);
-  assert.doesNotMatch(readSrc, /supersede_tax_rule_version/);
+  assert.match(readSrc, /supersede_tax_rule_version/);
   assert.doesNotMatch(readSrc, /organization_id/);
   const catalog = readSrc.slice(
     readSrc.indexOf('function catalogAllowedActions'),
@@ -176,14 +178,18 @@ test('TAX-K1.4E contract: migration 600 lifecycle + 602/604 remain publication o
   assert.match(auditSrc, /TAX_RULE_VERSION_ACTIVATED:\s*'tax_rule_version_activated'/);
   assert.match(auditSrc, /TAX_RULE_VERSION_RETIRED:\s*'tax_rule_version_retired'/);
   assert.match(auditSrc, /TAX_RULE_VERSION_EFFECTIVE_TO_CLOSED:\s*'tax_rule_version_effective_to_closed'/);
-  assert.doesNotMatch(auditSrc, /TAX_RULE_VERSION_SUPERSEDED/);
+  assert.match(auditSrc, /TAX_RULE_VERSION_SUPERSEDED/);
 });
 
-test('TAX-K1.4E contract: supersession blocked without atomic multi-row writes', () => {
+test('TAX-K1.4E contract: supersession uses one atomic RPC, not client multi-update', () => {
   const clientSrc = readRepo('apps/api/src/db/client.ts');
-  assert.doesNotMatch(clientSrc, /withTransaction|begin\(|\.rpc\(/);
+  assert.doesNotMatch(clientSrc, /withTransaction|begin\(/);
   const commandsSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts');
-  assert.doesNotMatch(commandsSrc, /supersede_tax_rule_version/);
+  const start = commandsSrc.indexOf('async function handleSupersedeTaxRuleVersion');
+  const end = commandsSrc.indexOf('export async function executeTaxKnowledgeCommand');
+  const slice = commandsSrc.slice(start, end);
+  assert.match(slice, /\.rpc\('tax_knowledge_supersede_tax_rule_version'/);
+  assert.doesNotMatch(slice, /\.update\(/);
   const sql600 = readRepo('supabase/migrations/600_tax_knowledge_core_foundation.sql');
   assert.match(
     sql600,
@@ -544,15 +550,20 @@ test('TAX-K1.4E live version publication lifecycle', async (t) => {
     for (const command of NEW_COMMANDS) {
       assert.ok(tk.implemented_commands.includes(command), command);
     }
-    assert.ok(!tk.implemented_commands.includes('supersede_tax_rule_version'));
+    assert.ok(tk.implemented_commands.includes('supersede_tax_rule_version'));
     const activeActions = tk.rule_versions.find((row) => row.id === closeId)?.allowed_actions as Array<{
       action_key: string;
       enabled: boolean;
+      candidates?: unknown[];
+      payload?: Record<string, string>;
     }>;
     assert.equal(activeActions.find((a) => a.action_key === 'activate_tax_rule_version')?.enabled, false);
     assert.equal(activeActions.find((a) => a.action_key === 'retire_tax_rule_version')?.enabled, true);
     assert.equal(activeActions.find((a) => a.action_key === 'close_tax_rule_version_effective_to')?.enabled, true);
-    assert.equal(activeActions.some((a) => a.action_key === 'supersede_tax_rule_version'), false);
+    const supersedeClose = activeActions.find((a) => a.action_key === 'supersede_tax_rule_version');
+    assert.ok(supersedeClose);
+    assert.equal(supersedeClose.enabled, false);
+    assert.deepEqual(supersedeClose.candidates ?? [], []);
   });
 
   await t.test('audits emitted for implemented lifecycle commands', async () => {

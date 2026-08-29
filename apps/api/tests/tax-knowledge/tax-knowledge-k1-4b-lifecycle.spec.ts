@@ -36,6 +36,8 @@ const K14B_ALLOWED = [
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4c-provenance-bindings.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4d-relationships.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4e-version-lifecycle.spec.ts',
+  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4f-atomic-supersession.spec.ts',
+  'supabase/migrations/605_tax_knowledge_atomic_supersession.sql',
 ] as const;
 
 const KNOWLEDGE_MIGRATIONS = [
@@ -93,7 +95,7 @@ test('TAX-K1.4B contract: dispatcher recognizes all six new commands', () => {
   assert.equal(isTaxKnowledgeCommand('pin_tax_source_citation'), false);
   assert.equal(isTaxKnowledgeCommand('bind_tax_legal_value'), false);
   assert.equal(isTaxKnowledgeCommand('retire_tax_rule_version'), true);
-  assert.equal(isTaxKnowledgeCommand('supersede_tax_rule_version'), false);
+  assert.equal(isTaxKnowledgeCommand('supersede_tax_rule_version'), true);
 
   const commandsSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts');
   for (const command of NEW_COMMANDS) {
@@ -131,7 +133,7 @@ test('TAX-K1.4B contract: aggregate versions + backend allowed_actions, no futur
   assert.match(readSrc, /update_tax_rule_version_draft/);
   assert.match(readSrc, /activate_tax_source/);
   assert.match(readSrc, /retire_tax_source/);
-  assert.doesNotMatch(readSrc, /supersede_tax_rule_version/);
+  assert.match(readSrc, /supersede_tax_rule_version/);
   assert.doesNotMatch(readSrc, /pin_tax_source/);
   assert.doesNotMatch(readSrc, /bind_legal_value/);
   assert.doesNotMatch(readSrc, /organization_id/);
@@ -382,7 +384,7 @@ test('TAX-K1.4B live draft version + source/rule lifecycle', async (t) => {
     assert.equal(version.country_code, 'IL');
     assert.equal(version.payload_checksum, expectedChecksum);
     assert.notEqual(version.payload_checksum, 'client-must-be-ignored');
-    assert.ok(!tk.implemented_commands.includes('supersede_tax_rule_version'));
+    assert.ok(tk.implemented_commands.includes('supersede_tax_rule_version'));
   });
 
   await t.test('version_no increments; unique race maps to conflict', async () => {

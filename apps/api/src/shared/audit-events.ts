@@ -194,6 +194,7 @@ export const AUDIT_ACTIONS = {
   TAX_RULE_VERSION_ACTIVATED: 'tax_rule_version_activated',
   TAX_RULE_VERSION_RETIRED: 'tax_rule_version_retired',
   TAX_RULE_VERSION_EFFECTIVE_TO_CLOSED: 'tax_rule_version_effective_to_closed',
+  TAX_RULE_VERSION_SUPERSEDED: 'tax_rule_version_superseded',
   OWNER_NOTE_UPDATED: 'owner_note_updated',
   USAGE_HINT_UPDATED: 'usage_hint_updated',
   MODULE_SCOPE_UPDATED: 'module_scope_updated',

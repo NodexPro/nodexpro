@@ -6,6 +6,7 @@ import {
   TAX_KNOWLEDGE_COMMANDS,
   type OwnerTaxKnowledgeAggregateOpts,
   type OwnerTaxKnowledgeAllowedAction,
+  type OwnerTaxKnowledgeSupersessionPair,
   type OwnerTaxKnowledgeCountryDto,
   type OwnerTaxRuleDto,
   type OwnerTaxRuleRelationshipDto,
@@ -41,8 +42,78 @@ function action(
   actionKey: OwnerTaxKnowledgeAllowedAction['action_key'],
   enabled: boolean,
   payload: Record<string, string>,
+  candidates?: OwnerTaxKnowledgeSupersessionPair[],
 ): OwnerTaxKnowledgeAllowedAction {
-  return { action_key: actionKey, enabled, payload };
+  return candidates ? { action_key: actionKey, enabled, payload, candidates } : { action_key: actionKey, enabled, payload };
+}
+
+type VersionPairingRow = {
+  id: string;
+  tax_rule_id: string;
+  country_code: string;
+  status: string;
+  supersedes_version_id: string | null;
+};
+
+function asPairingRow(row: Record<string, unknown>): VersionPairingRow {
+  return {
+    id: String(row.id),
+    tax_rule_id: String(row.tax_rule_id),
+    country_code: String(row.country_code),
+    status: String(row.status),
+    supersedes_version_id: row.supersedes_version_id == null ? null : String(row.supersedes_version_id),
+  };
+}
+
+function lineageCompatible(neu: VersionPairingRow, old: VersionPairingRow): boolean {
+  return neu.supersedes_version_id == null || neu.supersedes_version_id === old.id;
+}
+
+function eligibleSupersessionPairs(
+  version: VersionPairingRow,
+  siblings: VersionPairingRow[],
+): OwnerTaxKnowledgeSupersessionPair[] {
+  const pairs: OwnerTaxKnowledgeSupersessionPair[] = [];
+  for (const other of siblings) {
+    if (other.id === version.id) continue;
+    if (other.tax_rule_id !== version.tax_rule_id) continue;
+    if (other.country_code !== version.country_code) continue;
+    if (version.status === 'draft' && other.status === 'active' && lineageCompatible(version, other)) {
+      pairs.push({
+        new_tax_rule_version_id: version.id,
+        old_tax_rule_version_id: other.id,
+      });
+    } else if (version.status === 'active' && other.status === 'draft' && lineageCompatible(other, version)) {
+      pairs.push({
+        new_tax_rule_version_id: other.id,
+        old_tax_rule_version_id: version.id,
+      });
+    }
+  }
+  pairs.sort((a, b) => {
+    const byNew = a.new_tax_rule_version_id.localeCompare(b.new_tax_rule_version_id);
+    return byNew !== 0 ? byNew : a.old_tax_rule_version_id.localeCompare(b.old_tax_rule_version_id);
+  });
+  return pairs;
+}
+
+function supersedeAllowedAction(
+  version: VersionPairingRow,
+  siblings: VersionPairingRow[],
+): OwnerTaxKnowledgeAllowedAction {
+  const candidates = eligibleSupersessionPairs(version, siblings);
+  const enabled = candidates.length > 0;
+  const payload =
+    candidates.length === 1
+      ? {
+          new_tax_rule_version_id: candidates[0].new_tax_rule_version_id,
+          old_tax_rule_version_id: candidates[0].old_tax_rule_version_id,
+        }
+      : {
+          new_tax_rule_version_id: '',
+          old_tax_rule_version_id: '',
+        };
+  return action('supersede_tax_rule_version', enabled, payload, candidates);
 }
 
 function sourceAllowedActions(status: string): OwnerTaxKnowledgeAllowedAction[] {
@@ -84,10 +155,13 @@ function ruleAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
   ];
 }
 
-function versionAllowedActions(status: string): OwnerTaxKnowledgeAllowedAction[] {
-  const draft = status === 'draft';
-  const active = status === 'active';
-  const canRetire = status === 'draft' || status === 'active' || status === 'superseded';
+function versionAllowedActions(
+  version: VersionPairingRow,
+  siblings: VersionPairingRow[],
+): OwnerTaxKnowledgeAllowedAction[] {
+  const draft = version.status === 'draft';
+  const active = version.status === 'active';
+  const canRetire = version.status === 'draft' || version.status === 'active' || version.status === 'superseded';
   return [
     action('update_tax_rule_version_draft', draft, {
       tax_rule_version_id: 'uuid',
@@ -124,6 +198,7 @@ function versionAllowedActions(status: string): OwnerTaxKnowledgeAllowedAction[]
       tax_rule_version_id: 'uuid',
       effective_to: 'YYYY-MM-DD',
     }),
+    supersedeAllowedAction(version, siblings),
   ];
 }
 
@@ -178,6 +253,7 @@ function mapVersion(
   sources: OwnerTaxRuleVersionSourceDto[],
   legalValueBindings: OwnerTaxRuleVersionLegalValueDto[],
   relationships: OwnerTaxRuleRelationshipDto[],
+  siblings: VersionPairingRow[],
 ): OwnerTaxRuleVersionDto {
   const status = String(row.status);
   const rawPayload = row.payload_json;
@@ -185,10 +261,11 @@ function mapVersion(
     rawPayload && typeof rawPayload === 'object' && !Array.isArray(rawPayload)
       ? (rawPayload as Record<string, unknown>)
       : {};
+  const pairing = asPairingRow(row);
   return {
-    id: String(row.id),
-    tax_rule_id: String(row.tax_rule_id),
-    country_code: String(row.country_code),
+    id: pairing.id,
+    tax_rule_id: pairing.tax_rule_id,
+    country_code: pairing.country_code,
     version_no: Number(row.version_no),
     status,
     country_pack_id: String(row.country_pack_id),
@@ -197,12 +274,12 @@ function mapVersion(
     effective_to: row.effective_to == null ? null : String(row.effective_to),
     payload_json: payloadJson,
     payload_checksum: String(row.payload_checksum),
-    supersedes_version_id: row.supersedes_version_id == null ? null : String(row.supersedes_version_id),
+    supersedes_version_id: pairing.supersedes_version_id,
     created_at: String(row.created_at),
     sources,
     legal_value_bindings: legalValueBindings,
     relationships,
-    allowed_actions: versionAllowedActions(status),
+    allowed_actions: versionAllowedActions(pairing, siblings),
   };
 }
 
@@ -491,6 +568,7 @@ export async function buildOwnerTaxKnowledgeAggregate(
         relationshipsByFrom.set(fromId, list);
       }
 
+      const pairingRows = (versionResult.data ?? []).map((row) => asPairingRow(row as Record<string, unknown>));
       ruleVersions = (versionResult.data ?? []).map((row) => {
         const mapped = row as Record<string, unknown>;
         const id = String(mapped.id);
@@ -499,6 +577,7 @@ export async function buildOwnerTaxKnowledgeAggregate(
           citationsByVersion.get(id) ?? [],
           bindingsByVersion.get(id) ?? [],
           relationshipsByFrom.get(id) ?? [],
+          pairingRows,
         );
       });
     }

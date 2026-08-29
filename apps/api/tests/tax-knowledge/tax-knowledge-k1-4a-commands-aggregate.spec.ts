@@ -27,6 +27,7 @@ const K14A_PATHS = [
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4c-provenance-bindings.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4d-relationships.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4e-version-lifecycle.spec.ts',
+  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4f-atomic-supersession.spec.ts',
 ] as const;
 
 const KNOWLEDGE_MIGRATIONS = [
@@ -138,6 +139,7 @@ test('TAX-K1.4A contract: migrations 600–604 unchanged, no 605, no unrelated f
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-2a-publication-guard.spec.ts',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-3-relationships.spec.ts',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-3a-relationship-publication.spec.ts',
+    'supabase/migrations/605_tax_knowledge_atomic_supersession.sql',
   ]);
   const unexpected = porcelainPaths().filter((path) => !allowed.has(path));
   assert.deepEqual(unexpected, [], `unrelated files changed: ${unexpected.join(', ')}`);

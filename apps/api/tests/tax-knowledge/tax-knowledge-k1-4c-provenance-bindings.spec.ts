@@ -31,6 +31,8 @@ const K14C_ALLOWED = [
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4c-provenance-bindings.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4d-relationships.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4e-version-lifecycle.spec.ts',
+  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4f-atomic-supersession.spec.ts',
+  'supabase/migrations/605_tax_knowledge_atomic_supersession.sql',
 ] as const;
 
 const KNOWLEDGE_MIGRATIONS = [
@@ -80,11 +82,11 @@ test('TAX-K1.4C contract: dispatcher recognizes all four new commands', () => {
   for (const command of NEW_COMMANDS) {
     assert.equal(isTaxKnowledgeCommand(command), true, command);
   }
-  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 17);
+  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 18);
   assert.equal(isTaxKnowledgeCommand('activate_tax_rule_version'), true);
   assert.equal(isTaxKnowledgeCommand('create_tax_rule_relationship'), true);
   assert.equal(isTaxKnowledgeCommand('retire_tax_rule_version'), true);
-  assert.equal(isTaxKnowledgeCommand('supersede_tax_rule_version'), false);
+  assert.equal(isTaxKnowledgeCommand('supersede_tax_rule_version'), true);
 
   const commandsSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts');
   for (const command of NEW_COMMANDS) {
@@ -133,7 +135,7 @@ test('TAX-K1.4C contract: locator normalization, no copied amounts, implemented_
   assert.match(readSrc, /implemented_commands: \[\.\.\.TAX_KNOWLEDGE_COMMANDS\]/);
   assert.match(readSrc, /action\('create_tax_source'/);
   assert.match(readSrc, /action\('create_tax_rule'/);
-  assert.doesNotMatch(readSrc, /supersede_tax_rule_version/);
+  assert.match(readSrc, /supersede_tax_rule_version/);
   assert.doesNotMatch(readSrc, /value_payload_json/);
   assert.doesNotMatch(readSrc, /organization_id/);
 

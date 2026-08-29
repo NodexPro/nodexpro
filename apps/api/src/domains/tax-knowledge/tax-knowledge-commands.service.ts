@@ -93,10 +93,12 @@ function throwIfTaxKnowledgeWriteError(
   throw error;
 }
 
-function throwIfTaxRuleVersionLifecycleError(error: { code?: string; message?: string } | null): void {
+function throwIfTaxRuleVersionLifecycleError(
+  error: { code?: string; message?: string; details?: string } | null,
+): void {
   if (!error) return;
   const code = String(error.code ?? '');
-  const message = String(error.message ?? '');
+  const message = [error.message, error.details].filter(Boolean).join(' ');
   if (/cannot activate without at least one citation/i.test(message)) {
     throw conflict('tax_rule_versions cannot activate without at least one citation to an active tax_source');
   }
@@ -117,6 +119,21 @@ function throwIfTaxRuleVersionLifecycleError(error: { code?: string; message?: s
   }
   if (code === '23P01' || /exclusion constraint/i.test(message) || /no_active_overlap/i.test(message)) {
     throw conflict('Active tax rule versions cannot overlap');
+  }
+  if (/Tax rule version not found/i.test(message)) {
+    throw notFound('Tax rule version not found');
+  }
+  if (/must be different/i.test(message) && /old_tax_rule_version_id/i.test(message)) {
+    throw badRequest('new_tax_rule_version_id and old_tax_rule_version_id must be different');
+  }
+  if (/NEW version to be draft/i.test(message) || /OLD version to be active/i.test(message)) {
+    throw conflict(message);
+  }
+  if (/same tax_rule/i.test(message) || /same country/i.test(message)) {
+    throw badRequest(message);
+  }
+  if (/supersedes_version_id must be empty/i.test(message)) {
+    throw conflict(message);
   }
   if (code === '23514') {
     throw conflict(message || 'tax_rule_versions check constraint violated');
@@ -1096,6 +1113,57 @@ async function handleCloseTaxRuleVersionEffectiveTo(
   };
 }
 
+async function handleSupersedeTaxRuleVersion(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const newId = asUuid(payload.new_tax_rule_version_id, 'new_tax_rule_version_id');
+  const oldId = asUuid(payload.old_tax_rule_version_id, 'old_tax_rule_version_id');
+  if (newId === oldId) {
+    throw badRequest('new_tax_rule_version_id and old_tax_rule_version_id must be different');
+  }
+
+  const neu = await loadTaxRuleVersion(newId);
+  const old = await loadTaxRuleVersion(oldId);
+  if (neu.status !== TAX_KNOWLEDGE_INITIAL_STATUS) {
+    throw conflict('supersede_tax_rule_version requires the NEW version to be draft');
+  }
+  if (old.status !== 'active') {
+    throw conflict('supersede_tax_rule_version requires the OLD version to be active');
+  }
+  if (neu.tax_rule_id !== old.tax_rule_id) {
+    throw badRequest('NEW and OLD tax rule versions must belong to the same tax_rule');
+  }
+  if (neu.country_code !== old.country_code) {
+    throw badRequest('NEW and OLD tax rule versions must belong to the same country');
+  }
+  if (neu.supersedes_version_id != null && neu.supersedes_version_id !== old.id) {
+    throw conflict('NEW.supersedes_version_id must be empty or exactly the OLD version');
+  }
+
+  const { data, error } = await supabaseAdmin.rpc('tax_knowledge_supersede_tax_rule_version', {
+    p_new_tax_rule_version_id: newId,
+    p_old_tax_rule_version_id: oldId,
+  });
+  throwIfTaxRuleVersionLifecycleError(error);
+  if (!data) throw new Error('tax_knowledge_supersede_tax_rule_version returned no result');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_SUPERSEDED, 'tax_rule_version', newId, {
+    old_tax_rule_version_id: oldId,
+    new_tax_rule_version_id: newId,
+    tax_rule_id: neu.tax_rule_id,
+    country_code: neu.country_code,
+    previous_old_status: old.status,
+    previous_new_status: neu.status,
+  });
+
+  return {
+    ok: true,
+    command: 'supersede_tax_rule_version',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, neu.country_code),
+  };
+}
+
 export async function executeTaxKnowledgeCommand(
   ctx: RequestContext,
   command: string,
@@ -1142,6 +1210,8 @@ export async function executeTaxKnowledgeCommand(
       return handleRetireTaxRuleVersion(ctx, payload);
     case 'close_tax_rule_version_effective_to':
       return handleCloseTaxRuleVersionEffectiveTo(ctx, payload);
+    case 'supersede_tax_rule_version':
+      return handleSupersedeTaxRuleVersion(ctx, payload);
     default:
       throw badRequest(`Unsupported tax-knowledge command: ${command}`);
   }

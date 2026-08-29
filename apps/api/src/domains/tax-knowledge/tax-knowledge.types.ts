@@ -16,6 +16,7 @@ export const TAX_KNOWLEDGE_COMMANDS = [
   'activate_tax_rule_version',
   'retire_tax_rule_version',
   'close_tax_rule_version_effective_to',
+  'supersede_tax_rule_version',
 ] as const;
 
 export type TaxKnowledgeCommandName = (typeof TAX_KNOWLEDGE_COMMANDS)[number];
@@ -62,10 +63,17 @@ export type TaxKnowledgeCommandResponse = {
   };
 };
 
+export type OwnerTaxKnowledgeSupersessionPair = {
+  new_tax_rule_version_id: string;
+  old_tax_rule_version_id: string;
+};
+
 export type OwnerTaxKnowledgeAllowedAction = {
   action_key: TaxKnowledgeCommandName;
   enabled: boolean;
   payload: Record<string, string>;
+  /** Backend-owned executable pairs. Present only on supersede_tax_rule_version. */
+  candidates?: OwnerTaxKnowledgeSupersessionPair[];
 };
 
 export type OwnerTaxKnowledgeCountryDto = {
