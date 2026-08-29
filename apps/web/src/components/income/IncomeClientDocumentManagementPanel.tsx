@@ -707,22 +707,24 @@ function PopulationSectionPanel({
   return (
     <div className="nx-we-invoices-cdm-population" data-section-key={section.section_key}>
       <div className="nx-we-invoices-cdm-population__head">
-        <h3 className="nx-we-invoices-cdm-population__title">{section.title}</h3>
-        {showNewDocument ? (
-          <button
-            type="button"
-            className="nx-btn nx-btn-primary nx-btn-taxes-compact nx-we-invoices-cdm-population__new-doc"
-            disabled={busy || !newDocumentAction!.enabled}
-            title={
-              newDocumentAction!.enabled
-                ? newDocumentAction!.button_label
-                : (newDocumentAction!.disabled_reason ?? newDocumentAction!.button_label)
-            }
-            onClick={() => onNewDocument?.()}
-          >
-            {newDocumentAction!.button_label}
-          </button>
-        ) : null}
+        <div className="nx-we-invoices-cdm-population__head-group">
+          <h3 className="nx-we-invoices-cdm-population__title">{section.title}</h3>
+          {showNewDocument ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-primary nx-btn-taxes-compact nx-we-invoices-cdm-population__new-doc"
+              disabled={busy || !newDocumentAction!.enabled}
+              title={
+                newDocumentAction!.enabled
+                  ? newDocumentAction!.button_label
+                  : (newDocumentAction!.disabled_reason ?? newDocumentAction!.button_label)
+              }
+              onClick={() => onNewDocument?.()}
+            >
+              {newDocumentAction!.button_label}
+            </button>
+          ) : null}
+        </div>
       </div>
       <ClientDocumentManagementRowsTable
         columns={tableColumns}
@@ -813,18 +815,10 @@ export function IncomeClientDocumentManagementPanelView({
         <section
           className="nx-income-cdm nx-we-invoices-cdm"
           dir="rtl"
-          aria-labelledby="income-cdm-title"
+          aria-label={panel.title}
         >
           <div className="nx-income-cdm__card">
             <div className="nx-income-cdm__head nx-we-invoices-cdm__head">
-              <div className="nx-income-cdm__head-main">
-                <h2 id="income-cdm-title" className="nx-income-cdm__title">
-                  {panel.title}
-                </h2>
-                {panel.description ? (
-                  <p className="nx-income-cdm__description">{panel.description}</p>
-                ) : null}
-              </div>
               <PopulationsSegmentedControl
                 mode={populationsDisplayMode}
                 officeTitle={officeSection?.title ?? 'לקוחות המשרד'}

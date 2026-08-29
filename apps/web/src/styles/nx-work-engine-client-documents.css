@@ -532,7 +532,12 @@
 .nx-we-invoices-cdm__head {
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 8px;
+  /* Compact toolbar only (population mode selector) — no page hero title. */
+  padding: 6px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
 }
 
 .nx-we-invoices-cdm-seg {
@@ -602,36 +607,81 @@
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Soft glass context — office clients (lilac). Data cells stay near-white below. */
+.nx-we-invoices-cdm-population[data-section-key='office_clients'] {
+  background: rgba(139, 92, 246, 0.05);
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.nx-we-invoices-cdm-population[data-section-key='office_clients']
+  .nx-we-invoices-cdm-population__head {
+  background: rgba(139, 92, 246, 0.08);
+  border-bottom-color: rgba(139, 92, 246, 0.18);
+}
+
+/* Soft glass context — customers of office clients (green). */
+.nx-we-invoices-cdm-population[data-section-key='office_client_customers'] {
+  background: rgba(34, 197, 94, 0.05);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-we-invoices-cdm-population__head {
+  background: rgba(34, 197, 94, 0.08);
+  border-bottom-color: rgba(34, 197, 94, 0.18);
+}
+
 .nx-we-invoices-cdm-population__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
+  /* Title + +מסמך as one RTL cluster (not opposite edges of the half-panel). */
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 3px 8px;
+  min-height: 30px;
   border-bottom: 1px solid #cbd5e1;
   background: #f1f5f9;
+  box-sizing: border-box;
+}
+
+.nx-we-invoices-cdm-population__head-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .nx-we-invoices-cdm-population__title {
   margin: 0;
   padding: 0;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.2;
   color: #334155;
   border-bottom: none;
   background: transparent;
+  white-space: nowrap;
 }
 
-.nx-we-invoices-cdm-population__new-doc {
+.nx-we-invoices-cdm-population__new-doc.nx-btn.nx-btn-taxes-compact {
   flex: 0 0 auto;
-  min-width: 96px;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: 6px;
 }
 
-/* Excel-like table chrome (WE invoices dual populations only). */
+/* Keep data rows readable on tinted panels. */
 .nx-we-invoices-cdm-population .nx-income-cdm__table-wrap {
   overflow-x: auto;
+  background: #fff;
 }
 
 .nx-we-invoices-cdm-population .nx-income-cdm__table th {

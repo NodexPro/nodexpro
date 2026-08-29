@@ -31,7 +31,6 @@ import { ClientOperationsRegistryView } from '../client-operations/ClientOperati
 import { resolveIncomeClientDocumentManagementPanel } from '../../income/income-workspace-types';
 import { WorkEngineClientDocumentManagementShell } from './WorkEngineClientDocumentManagementShell';
 import { WorkEngineModuleTabTable } from './WorkEngineModuleTabTable';
-import { IncomeDocumentBrandingGearButton } from '../income/IncomeDocumentBrandingGearButton';
 import { IncomeDocumentBrandingSettingsModal } from '../income/IncomeDocumentBrandingSettingsModal';
 import { WorkEngineIncomeDocumentWizardModal } from './WorkEngineIncomeDocumentWizardModal';
 import '../../styles/nx-income-client-document-management.css';
@@ -454,20 +453,6 @@ function WorkEngineInvoicesTabPanel(props: {
 
   return (
     <div className="nx-invoice-ui nx-we-invoices-tab">
-      <div className="nx-we-invoices-tab__header">
-        <div>
-          <h1 className="nx-we-queue__title nx-we-invoices-tab__title nx-page-title">
-            <span>{aggregate.title}</span>
-            <IncomeDocumentBrandingGearButton
-              entrypoint={aggregate.document_branding_settings_entrypoint}
-              disabled={wizardBusy || brandingBusy || panelBusy}
-              onClick={() => setBrandingOpen(true)}
-            />
-          </h1>
-          <p className="nx-we-queue__subtitle nx-body-text nx-body-text--muted">{aggregate.description}</p>
-        </div>
-      </div>
-
       <WorkEngineClientDocumentManagementShell
         panel={clientDocumentPanel}
         busy={panelBusy}
