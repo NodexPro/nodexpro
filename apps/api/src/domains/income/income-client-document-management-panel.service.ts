@@ -67,6 +67,11 @@ const PANEL_COLUMNS: Array<{ key: string; label: string }> = [
   { key: 'actions', label: '' },
 ];
 
+/** Work Engine invoices: omit פעילות אחרונה from the column presentation contract. */
+const PANEL_COLUMNS_WE_INVOICES: Array<{ key: string; label: string }> = PANEL_COLUMNS.filter(
+  (col) => col.key !== 'last_activity_display',
+);
+
 type PanelStatRow = {
   represented_client_id: string;
   total_documents_count: number;
@@ -99,6 +104,11 @@ function buildOfficeClientRowActions(
     includeRetainerAction?: boolean;
     /** Work Engine invoices: replace … with + new document. */
     newDocumentInsteadOfMore?: boolean;
+    /**
+     * Work Engine invoices office_clients only: omit customer-list entrypoint.
+     * Does not remove customer management elsewhere (issuer group /m/income).
+     */
+    omitEndCustomersAction?: boolean;
   },
 ): IncomeClientDocumentManagementRowAction[] {
   const canEdit = perms.edit;
@@ -119,7 +129,10 @@ function buildOfficeClientRowActions(
       enabled: canEdit,
       disabled_reason: canEdit ? null : 'אין הרשאת עריכה',
     },
-    {
+  ];
+
+  if (!options?.omitEndCustomersAction) {
+    actions.push({
       key: 'open_end_customers',
       label: 'לקוחות הלקוח',
       icon_key: 'end_customers',
@@ -133,7 +146,10 @@ function buildOfficeClientRowActions(
       },
       enabled: perms.view,
       disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
-    },
+    });
+  }
+
+  actions.push(
     {
       key: 'open_reports',
       label: 'דוחות',
@@ -169,7 +185,7 @@ function buildOfficeClientRowActions(
       disabled_reason:
         perms.view && perms.issue_on_behalf ? null : 'זמין במצב ניהול לקוח בלבד',
     },
-  ];
+  );
 
   if (options?.includeRetainerAction) {
     actions.push({
@@ -624,6 +640,8 @@ function buildOfficeClientRow(params: {
   perms: IncomeWorkspacePermissions;
   includeRetainerAction?: boolean;
   newDocumentInsteadOfMore?: boolean;
+  /** Work Engine invoices: omit office-row customer-list entrypoint. */
+  omitEndCustomersAction?: boolean;
   omitDraftDocumentTypeCounter?: boolean;
   clientQuickCard?: IncomeClientDocumentManagementRow['client_quick_card'];
 }): IncomeClientDocumentManagementRow {
@@ -674,6 +692,7 @@ function buildOfficeClientRow(params: {
     actions: buildOfficeClientRowActions(clientId, params.perms, {
       includeRetainerAction: params.includeRetainerAction,
       newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
+      omitEndCustomersAction: params.omitEndCustomersAction,
     }),
     row_context: {
       population_key: 'office_client',
@@ -1087,6 +1106,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
         perms: params.perms,
         includeRetainerAction: params.includeRetainerAction,
         newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
+        omitEndCustomersAction: params.workEngineInvoicesFunctionalParity === true,
         omitDraftDocumentTypeCounter: params.omitDraftDocumentTypeCounter,
         clientQuickCard: quickCard,
       });
@@ -1198,7 +1218,10 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     title: 'ניהול מסמכים לפי לקוח',
     description:
       'כל לקוחות המשרד, וכל לקוחות הקצה שלהם (מוני מסמכים מתעדכנים לפי מסמכים במצב נציג משרד)',
-    columns: PANEL_COLUMNS,
+    columns:
+      params.workEngineInvoicesFunctionalParity === true
+        ? PANEL_COLUMNS_WE_INVOICES
+        : PANEL_COLUMNS,
     rows: officeRows,
     office_clients_section,
     office_client_customers_section,

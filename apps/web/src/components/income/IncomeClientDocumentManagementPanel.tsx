@@ -693,15 +693,6 @@ function PopulationSectionPanel({
   newDocumentAction?: WorkEngineInvoicesPopulationNewDocumentAction | null;
   onNewDocument?: () => void;
 }) {
-  /**
-   * office_client_customers only: omit פעילות אחרונה from rendered columns.
-   * Both populations show section title + backend +מסמך in the population head.
-   */
-  const isOfficeClientCustomers = section.section_key === 'office_client_customers';
-  const tableColumns = isOfficeClientCustomers
-    ? visualColumns.filter((col) => col.key !== 'last_activity_display')
-    : visualColumns;
-
   const showNewDocument = Boolean(newDocumentAction && onNewDocument);
 
   return (
@@ -727,7 +718,7 @@ function PopulationSectionPanel({
         </div>
       </div>
       <ClientDocumentManagementRowsTable
-        columns={tableColumns}
+        columns={visualColumns}
         rows={section.rows ?? []}
         groups={section.groups}
         busy={busy}

@@ -189,6 +189,25 @@ test('WE invoices tab enables end-customer functional parity; income issuer cont
   assert.doesNotMatch(issuerContextSource, /omitDraftDocumentTypeCounter:\s*true/);
 });
 
+test('WE invoices office_clients omits last_activity column + open_end_customers; issuer group keeps לקוחות', () => {
+  assert.match(panelSource, /PANEL_COLUMNS_WE_INVOICES/);
+  assert.match(panelSource, /col\.key !== 'last_activity_display'/);
+  assert.match(
+    panelSource,
+    /workEngineInvoicesFunctionalParity === true\s*\?\s*PANEL_COLUMNS_WE_INVOICES/,
+  );
+  assert.match(
+    panelSource,
+    /omitEndCustomersAction:\s*params\.workEngineInvoicesFunctionalParity === true/,
+  );
+  const groupFnStart = panelSource.indexOf('function buildIssuerCustomerGroupActions');
+  const groupFnEnd = panelSource.indexOf('function buildEndCustomerRowActions');
+  const groupFn = panelSource.slice(groupFnStart, groupFnEnd);
+  assert.match(groupFn, /key: 'open_end_customers'/);
+  assert.match(groupFn, /label: 'לקוחות'/);
+  assert.doesNotMatch(groupFn, /omitEndCustomersAction/);
+});
+
 test('end-customer WE parity actions are permission-gated not population-gated', () => {
   const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
   const endFnEnd = panelSource.indexOf('function formatMoneyReference');
@@ -223,6 +242,7 @@ test('office canonical slots stay issuer-complete; WE recipient rows use recipie
     'open_email_history',
     'more',
   ]);
+  // /m/income-style WE trailing without omitting customers (legacy slot helper).
   assert.deepEqual(incomeCdmCanonicalActionSlotKeys(true, { newDocumentInsteadOfMore: true }), [
     'open_branding_studio',
     'open_end_customers',
@@ -232,6 +252,21 @@ test('office canonical slots stay issuer-complete; WE recipient rows use recipie
     'open_invoice_retainer_setup',
     'open_new_income_document',
   ]);
+  // Work Engine invoices office_clients: omit customer-list entrypoint.
+  assert.deepEqual(
+    incomeCdmCanonicalActionSlotKeys(true, {
+      newDocumentInsteadOfMore: true,
+      omitEndCustomersAction: true,
+    }),
+    [
+      'open_branding_studio',
+      'open_reports',
+      'open_income_ledger_card',
+      'open_email_history',
+      'open_invoice_retainer_setup',
+      'open_new_income_document',
+    ],
+  );
   assert.deepEqual(incomeCdmEndCustomerRowActionSlotKeys(false, { newDocumentInsteadOfMore: true }), [
     'open_reports',
     'open_income_ledger_card',
@@ -251,9 +286,12 @@ test('office canonical slots stay issuer-complete; WE recipient rows use recipie
   );
   assert.equal(
     incomeCdmActionKeysMatchCanonical(
-      incomeCdmCanonicalActionSlotKeys(true, { newDocumentInsteadOfMore: true }),
+      incomeCdmCanonicalActionSlotKeys(true, {
+        newDocumentInsteadOfMore: true,
+        omitEndCustomersAction: true,
+      }),
       true,
-      { newDocumentInsteadOfMore: true },
+      { newDocumentInsteadOfMore: true, omitEndCustomersAction: true },
     ),
     true,
   );
@@ -270,6 +308,8 @@ test('office canonical slots stay issuer-complete; WE recipient rows use recipie
   for (const key of withoutRetainer) {
     assert.match(officeFn, new RegExp(`key: '${key}'`));
   }
+  assert.match(officeFn, /omitEndCustomersAction/);
+  assert.match(officeFn, /if \(!options\?\.omitEndCustomersAction\)/);
   for (const key of incomeCdmEndCustomerRowActionSlotKeys(false, { newDocumentInsteadOfMore: true })) {
     assert.match(endFn, new RegExp(`key: '${key}'`));
   }

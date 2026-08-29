@@ -27,6 +27,17 @@ export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE = [
 ] as const;
 
 /**
+ * Work Engine invoices office_clients rows: omit customer-list entrypoint.
+ * Issuer-group /m/income office rows keep `open_end_customers`.
+ */
+export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_WE_OFFICE = [
+  'open_branding_studio',
+  'open_reports',
+  'open_income_ledger_card',
+  'open_email_history',
+] as const;
+
+/**
  * Issuer/group-level actions for end-customer population parents (e.g. Test3).
  * Document settings + customer list + issuer-scoped reports live here — not on recipient rows.
  */
@@ -53,13 +64,16 @@ export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_NEW_DOCUMENT = 'open_new_incom
 
 export function incomeCdmCanonicalActionSlotKeys(
   includeRetainer: boolean,
-  options?: { newDocumentInsteadOfMore?: boolean },
+  options?: { newDocumentInsteadOfMore?: boolean; omitEndCustomersAction?: boolean },
 ): string[] {
   const trailing = options?.newDocumentInsteadOfMore
     ? INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_NEW_DOCUMENT
     : INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_MORE;
+  const base = options?.omitEndCustomersAction
+    ? INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_WE_OFFICE
+    : INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE;
   return [
-    ...INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE,
+    ...base,
     ...(includeRetainer ? [INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_RETAINER] : []),
     trailing,
   ];
@@ -83,7 +97,7 @@ export function incomeCdmEndCustomerRowActionSlotKeys(
 export function incomeCdmActionKeysMatchCanonical(
   actionKeys: string[],
   includeRetainer: boolean,
-  options?: { newDocumentInsteadOfMore?: boolean },
+  options?: { newDocumentInsteadOfMore?: boolean; omitEndCustomersAction?: boolean },
 ): boolean {
   const expected = incomeCdmCanonicalActionSlotKeys(includeRetainer, options);
   if (actionKeys.length !== expected.length) return false;
