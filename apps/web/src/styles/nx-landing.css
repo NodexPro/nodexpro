@@ -115,7 +115,9 @@
   background-color: #020617;
   background-image: url('/nodexpro-hero.png');
   background-repeat: no-repeat;
-  background-size: cover;
+  /* Height-fit (not cover): avoid upscaling past native 1672×940 — keeps
+     embedded panel digits sharper on large desktops. Dark left fill matches art. */
+  background-size: auto 100%;
   background-position: right center;
 }
 
@@ -308,6 +310,8 @@
   }
 
   .nx-landing__hero {
+    /* Narrower viewports: fill width so the finance cluster stays visible. */
+    background-size: cover;
     background-position: 72% center;
   }
 
