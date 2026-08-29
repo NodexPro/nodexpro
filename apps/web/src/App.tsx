@@ -32,6 +32,7 @@ import { DocflowInvitesManagementPage } from './pages/DocflowInvitesManagementPa
 import { DocflowMessengerPage } from './pages/DocflowMessengerPage';
 import { WorkEngineQueue } from './pages/WorkEngineQueue';
 import { IncomeWorkspacePage } from './pages/IncomeWorkspacePage';
+import { LandingPage } from './pages/LandingPage';
 import { I18nProvider } from './i18n/I18nProvider';
 
 function PwaUpdatePrompt() {
@@ -116,6 +117,7 @@ function PwaUpdatePrompt() {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
@@ -128,8 +130,7 @@ function AppRoutes() {
       <Route path="/client-portal/docflow" element={<ClientPortalDocflow />} />
       <Route path="/onboarding" element={<RequireAuth><CreateOrganization /></RequireAuth>} />
       <Route path="/select-org" element={<RequireAuth><SelectOrganization /></RequireAuth>} />
-      <Route path="/" element={<RequireAuth><RequireOrg><AppShell /></RequireOrg></RequireAuth>}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
+      <Route element={<RequireAuth><RequireOrg><AppShell /></RequireOrg></RequireAuth>}>
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="settings" element={<Settings />} />
         <Route path="users-roles" element={<UsersRoles />} />

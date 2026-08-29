@@ -1,0 +1,367 @@
+/* Public NodexPro landing — marketing surface only. No app-shell styles. */
+
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap');
+
+.nx-landing {
+  --nx-landing-brand: #123756;
+  --nx-landing-cyan: #5ee7ff;
+  --nx-landing-blue: #3b82f6;
+  --nx-landing-purple: #8b5cf6;
+  --nx-landing-text: #f8fafc;
+  --nx-landing-muted: rgba(226, 232, 240, 0.82);
+
+  min-height: 100vh;
+  color: var(--nx-landing-text);
+  background-color: #020617;
+  font-family: Manrope, system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+.nx-landing a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.nx-landing__header {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  z-index: 20;
+  background: transparent;
+}
+
+.nx-landing__header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px 28px 12px;
+}
+
+.nx-landing__brand {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.nx-landing__logo {
+  display: block;
+  height: 34px;
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
+}
+
+.nx-landing__nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.nx-landing__nav-link,
+.nx-landing__nav-cta {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgba(248, 250, 252, 0.92);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.nx-landing__nav-link:hover {
+  color: #fff;
+}
+
+.nx-landing__nav-cta {
+  padding: 7px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.25);
+}
+
+.nx-landing__nav-cta:hover {
+  color: #fff;
+  border-color: rgba(94, 231, 255, 0.55);
+  background: rgba(18, 55, 86, 0.35);
+}
+
+/* Thin neon horizon under header */
+.nx-landing__horizon {
+  height: 1px;
+  margin: 0 4%;
+  border: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(139, 92, 246, 0.08) 0%,
+    rgba(59, 130, 246, 0.45) 22%,
+    rgba(94, 231, 255, 0.95) 50%,
+    rgba(59, 130, 246, 0.45) 78%,
+    rgba(139, 92, 246, 0.08) 100%
+  );
+  box-shadow:
+    0 0 8px rgba(94, 231, 255, 0.45),
+    0 0 18px rgba(59, 130, 246, 0.25);
+}
+
+.nx-landing__hero {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  padding: 96px 28px 72px;
+  box-sizing: border-box;
+  background-color: #020617;
+  background-image: url('/nodexpro-hero.png');
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: right center;
+}
+
+.nx-landing__hero::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 140px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(2, 6, 23, 0), rgba(2, 6, 23, 0.92) 70%, #020617);
+}
+
+.nx-landing__hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 520px;
+  width: min(100%, 520px);
+  margin-inline-end: auto;
+  margin-inline-start: max(0px, calc((100% - 1180px) / 2));
+}
+
+.nx-landing__hero-title {
+  margin: 0 0 18px;
+  font-family: Sora, Manrope, system-ui, sans-serif;
+  font-size: clamp(2.35rem, 5vw, 3.6rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  color: #f8fafc;
+  text-shadow: 0 2px 24px rgba(2, 6, 23, 0.45);
+}
+
+.nx-landing__hero-accent {
+  background: linear-gradient(135deg, #5ee7ff 0%, #60a5fa 45%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.nx-landing__hero-lead {
+  margin: 0 0 28px;
+  max-width: 34rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--nx-landing-muted);
+}
+
+.nx-landing__hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.nx-landing__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 118px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.nx-landing__btn--primary {
+  color: #f8fafc;
+  background: linear-gradient(135deg, #123756 0%, #1d4ed8 55%, #2563eb 100%);
+  border: 1px solid rgba(94, 231, 255, 0.28);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.28);
+}
+
+.nx-landing__btn--primary:hover {
+  transform: translateY(-1px);
+  border-color: rgba(94, 231, 255, 0.5);
+}
+
+.nx-landing__btn--ghost {
+  color: rgba(248, 250, 252, 0.95);
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.nx-landing__btn--ghost:hover {
+  border-color: rgba(94, 231, 255, 0.45);
+  background: rgba(18, 55, 86, 0.4);
+}
+
+.nx-landing__modules {
+  position: relative;
+  padding: 56px 28px 80px;
+  background-color: #020617;
+  background-image: url('/nodexpro-space-background.png');
+  background-repeat: repeat-y;
+  background-size: cover;
+  background-position: center top;
+}
+
+.nx-landing__modules::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 80px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, #020617, rgba(2, 6, 23, 0));
+}
+
+.nx-landing__modules-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.nx-landing__eyebrow {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(94, 231, 255, 0.85);
+}
+
+.nx-landing__modules-title {
+  margin: 0 0 36px;
+  font-family: Sora, Manrope, system-ui, sans-serif;
+  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+}
+
+.nx-landing__module-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.nx-landing__module-card {
+  padding: 22px 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: linear-gradient(
+    160deg,
+    rgba(15, 23, 42, 0.55) 0%,
+    rgba(18, 55, 86, 0.28) 55%,
+    rgba(2, 6, 23, 0.45) 100%
+  );
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.nx-landing__module-name {
+  margin: 0 0 8px;
+  font-family: Sora, Manrope, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.nx-landing__module-desc {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: rgba(203, 213, 225, 0.88);
+}
+
+.nx-landing__footer {
+  padding: 24px 28px 36px;
+  background: #020617;
+  border-top: 1px solid rgba(51, 65, 85, 0.45);
+  text-align: center;
+}
+
+.nx-landing__footer-copy {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+@media (max-width: 960px) {
+  .nx-landing__module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nx-landing__hero {
+    background-position: 72% center;
+  }
+
+  .nx-landing__hero-content {
+    max-width: 460px;
+    padding: 16px 16px 16px 0;
+    background: linear-gradient(
+      90deg,
+      rgba(2, 6, 23, 0.72) 0%,
+      rgba(2, 6, 23, 0.45) 70%,
+      rgba(2, 6, 23, 0) 100%
+    );
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .nx-landing__header-inner {
+    padding: 14px 18px 10px;
+  }
+
+  .nx-landing__logo {
+    height: 28px;
+  }
+
+  .nx-landing__hero {
+    min-height: auto;
+    padding: 88px 18px 56px;
+    background-position: 85% center;
+    background-size: cover;
+  }
+
+  .nx-landing__hero-content {
+    max-width: 100%;
+    margin-inline-start: 0;
+    padding: 14px;
+    background: rgba(2, 6, 23, 0.72);
+  }
+
+  .nx-landing__hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nx-landing__btn {
+    width: 100%;
+  }
+
+  .nx-landing__modules {
+    padding: 40px 18px 64px;
+    background-position: center top;
+  }
+
+  .nx-landing__module-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
