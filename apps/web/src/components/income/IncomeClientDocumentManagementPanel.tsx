@@ -686,20 +686,21 @@ function PopulationSectionPanel({
   onToggleQuickCard?: (row: IncomeClientDocumentManagementRow, anchorEl: HTMLElement) => void;
 }) {
   /**
-   * office_client_customers only: fold population title into the client column
-   * header so there is one Excel-like header row (no separate "לקוח" + title stack).
-   * office_clients keeps the external population title + "לקוח" column label.
+   * office_client_customers only:
+   * - fold population title into the client column header (no separate "לקוח" stack)
+   * - omit פעילות אחרונה from rendered columns (header + body) so no blank slot remains
+   * office_clients keeps external title, "לקוח", and last-activity column.
    */
-  const unifyHeaderIntoClientColumn = section.section_key === 'office_client_customers';
-  const tableColumns = unifyHeaderIntoClientColumn
-    ? visualColumns.map((col) =>
-        col.key === 'client' ? { ...col, label: section.title } : col,
-      )
+  const isOfficeClientCustomers = section.section_key === 'office_client_customers';
+  const tableColumns = isOfficeClientCustomers
+    ? visualColumns
+        .filter((col) => col.key !== 'last_activity_display')
+        .map((col) => (col.key === 'client' ? { ...col, label: section.title } : col))
     : visualColumns;
 
   return (
     <div className="nx-we-invoices-cdm-population" data-section-key={section.section_key}>
-      {unifyHeaderIntoClientColumn ? null : (
+      {isOfficeClientCustomers ? null : (
         <h3 className="nx-we-invoices-cdm-population__title">{section.title}</h3>
       )}
       <ClientDocumentManagementRowsTable

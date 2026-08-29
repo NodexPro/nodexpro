@@ -772,6 +772,25 @@
   text-overflow: ellipsis;
 }
 
+/*
+ * office_client_customers omits פעילות אחרונה — column 5 is פעולות.
+ * Override the activity nth-child(5) squeeze so actions keep remaining width.
+ */
+.nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  th:nth-child(5),
+.nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  td:nth-child(5) {
+  width: auto;
+  min-width: 280px;
+  max-width: none;
+  text-align: start;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 /* פעולות — remaining width; distribute buttons across the cell. */
 .nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(6),
 .nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(6),
