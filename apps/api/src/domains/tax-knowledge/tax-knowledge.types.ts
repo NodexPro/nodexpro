@@ -11,6 +11,8 @@ export const TAX_KNOWLEDGE_COMMANDS = [
   'unpin_tax_rule_version_source',
   'bind_tax_rule_version_legal_value',
   'unbind_tax_rule_version_legal_value',
+  'create_tax_rule_relationship',
+  'delete_tax_rule_relationship',
 ] as const;
 
 export type TaxKnowledgeCommandName = (typeof TAX_KNOWLEDGE_COMMANDS)[number];
@@ -29,6 +31,18 @@ export const TAX_SOURCE_PROVENANCE_TYPES = [
 export type TaxSourceProvenanceType = (typeof TAX_SOURCE_PROVENANCE_TYPES)[number];
 
 export const TAX_RULE_KIND = 'legal_rule' as const;
+
+export const TAX_RULE_RELATIONSHIP_TYPES = [
+  'depends_on',
+  'conflicts_with',
+  'exception_to',
+  'overrides',
+  'alternative_to',
+  'special_case_of',
+  'elaborates',
+] as const;
+
+export type TaxRuleRelationshipType = (typeof TAX_RULE_RELATIONSHIP_TYPES)[number];
 
 export const TAX_KNOWLEDGE_INITIAL_STATUS = 'draft' as const;
 
@@ -117,6 +131,22 @@ export type OwnerTaxRuleVersionLegalValueDto = {
   allowed_actions: OwnerTaxKnowledgeAllowedAction[];
 };
 
+export type OwnerTaxRuleRelationshipDto = {
+  id: string;
+  from_tax_rule_version_id: string;
+  to_tax_rule_version_id: string;
+  relationship_type: string;
+  status: string;
+  owner_note: string | null;
+  created_at: string;
+  to_tax_rule_id: string;
+  to_rule_code: string;
+  to_title: string;
+  to_version_no: number;
+  to_status: string;
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
 export type OwnerTaxRuleVersionDto = {
   id: string;
   tax_rule_id: string;
@@ -133,6 +163,7 @@ export type OwnerTaxRuleVersionDto = {
   created_at: string;
   sources: OwnerTaxRuleVersionSourceDto[];
   legal_value_bindings: OwnerTaxRuleVersionLegalValueDto[];
+  relationships: OwnerTaxRuleRelationshipDto[];
   allowed_actions: OwnerTaxKnowledgeAllowedAction[];
 };
 

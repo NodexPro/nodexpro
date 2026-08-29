@@ -29,6 +29,7 @@ const K14C_ALLOWED = [
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4a-commands-aggregate.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4b-lifecycle.spec.ts',
   'apps/api/tests/tax-knowledge/tax-knowledge-k1-4c-provenance-bindings.spec.ts',
+  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4d-relationships.spec.ts',
 ] as const;
 
 const KNOWLEDGE_MIGRATIONS = [
@@ -78,9 +79,9 @@ test('TAX-K1.4C contract: dispatcher recognizes all four new commands', () => {
   for (const command of NEW_COMMANDS) {
     assert.equal(isTaxKnowledgeCommand(command), true, command);
   }
-  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 12);
+  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 14);
   assert.equal(isTaxKnowledgeCommand('activate_tax_rule_version'), false);
-  assert.equal(isTaxKnowledgeCommand('create_tax_rule_relationship'), false);
+  assert.equal(isTaxKnowledgeCommand('create_tax_rule_relationship'), true);
   assert.equal(isTaxKnowledgeCommand('retire_tax_rule_version'), false);
 
   const commandsSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts');
@@ -131,7 +132,6 @@ test('TAX-K1.4C contract: locator normalization, no copied amounts, implemented_
   assert.match(readSrc, /action\('create_tax_source'/);
   assert.match(readSrc, /action\('create_tax_rule'/);
   assert.doesNotMatch(readSrc, /activate_tax_rule_version/);
-  assert.doesNotMatch(readSrc, /create_tax_rule_relationship/);
   assert.doesNotMatch(readSrc, /value_payload_json/);
   assert.doesNotMatch(readSrc, /organization_id/);
 

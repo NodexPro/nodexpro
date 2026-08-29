@@ -11,10 +11,12 @@ import { parseTaxRulePayloadJson, taxRulePayloadChecksum } from './tax-knowledge
 import {
   TAX_KNOWLEDGE_INITIAL_STATUS,
   TAX_RULE_KIND,
+  TAX_RULE_RELATIONSHIP_TYPES,
   TAX_SOURCE_PROVENANCE_TYPES,
   isTaxKnowledgeCommand,
   type TaxKnowledgeCommandName,
   type TaxKnowledgeCommandResponse,
+  type TaxRuleRelationshipType,
   type TaxSourceProvenanceType,
 } from './tax-knowledge.types.js';
 
@@ -225,6 +227,22 @@ function assertParentVersionDraft(status: string, command: string): void {
 
 function locatorKey(locator: string | null | undefined): string {
   return locator == null ? '' : locator.trim();
+}
+
+function asRelationshipType(value: unknown): TaxRuleRelationshipType {
+  const relationshipType = asString(value, 'relationship_type');
+  if (!(TAX_RULE_RELATIONSHIP_TYPES as readonly string[]).includes(relationshipType)) {
+    throw badRequest('relationship_type must be one of the K1.3 allowed types');
+  }
+  return relationshipType as TaxRuleRelationshipType;
+}
+
+function assertCreateRelationshipPayload(payload: Record<string, unknown>): void {
+  for (const field of ['organization_id', 'status', 'created_at', 'retired_at', 'retired_reason'] as const) {
+    if (field in payload) {
+      throw badRequest(`create_tax_rule_relationship does not accept ${field}`);
+    }
+  }
 }
 
 async function loadLegalValueIdentity(id: string): Promise<{
@@ -827,6 +845,103 @@ async function handleUnbindTaxRuleVersionLegalValue(
   };
 }
 
+async function handleCreateTaxRuleRelationship(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  assertCreateRelationshipPayload(payload);
+  const fromId = asUuid(payload.from_tax_rule_version_id, 'from_tax_rule_version_id');
+  const toId = asUuid(payload.to_tax_rule_version_id, 'to_tax_rule_version_id');
+  const relationshipType = asRelationshipType(payload.relationship_type);
+  if (fromId === toId) {
+    throw badRequest('from_tax_rule_version_id and to_tax_rule_version_id must be different');
+  }
+  const from = await loadTaxRuleVersion(fromId);
+  assertParentVersionDraft(from.status, 'create_tax_rule_relationship');
+  const to = await loadTaxRuleVersion(toId);
+  if (to.country_code !== from.country_code) {
+    throw badRequest('to_tax_rule_version_id must belong to the same country as from_tax_rule_version_id');
+  }
+  const ownerNote = asOptionalString(payload.owner_note, 'owner_note');
+
+  const { data: existing, error: existingErr } = await supabaseAdmin
+    .from('tax_rule_relationships')
+    .select('id')
+    .eq('from_tax_rule_version_id', fromId)
+    .eq('to_tax_rule_version_id', toId)
+    .eq('relationship_type', relationshipType)
+    .maybeSingle();
+  if (existingErr) throw existingErr;
+  if (existing) throw conflict('Tax rule relationship already exists');
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_relationships')
+    .insert({
+      from_tax_rule_version_id: fromId,
+      to_tax_rule_version_id: toId,
+      relationship_type: relationshipType,
+      country_code: from.country_code,
+      status: 'active',
+      owner_note: ownerNote,
+    })
+    .select('id, from_tax_rule_version_id, to_tax_rule_version_id, relationship_type')
+    .single();
+  throwIfTaxKnowledgeWriteError(error, 'Tax rule relationship already exists');
+  if (!data) throw new Error('tax_rule_relationships insert returned no row');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_RELATIONSHIP_CREATED, 'tax_rule_relationship', String(data.id), {
+    from_tax_rule_version_id: fromId,
+    to_tax_rule_version_id: toId,
+    relationship_type: relationshipType,
+    country_code: from.country_code,
+  });
+
+  return {
+    ok: true,
+    command: 'create_tax_rule_relationship',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, from.country_code),
+  };
+}
+
+async function handleDeleteTaxRuleRelationship(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const relationshipId = asUuid(payload.tax_rule_relationship_id, 'tax_rule_relationship_id');
+  const { data: relationship, error: relationshipErr } = await supabaseAdmin
+    .from('tax_rule_relationships')
+    .select('id, from_tax_rule_version_id, to_tax_rule_version_id, relationship_type, country_code')
+    .eq('id', relationshipId)
+    .maybeSingle();
+  if (relationshipErr) throw relationshipErr;
+  if (!relationship) throw notFound('Tax rule relationship not found');
+
+  const from = await loadTaxRuleVersion(String(relationship.from_tax_rule_version_id));
+  assertParentVersionDraft(from.status, 'delete_tax_rule_relationship');
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_relationships')
+    .delete()
+    .eq('id', relationshipId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Tax rule relationship not found');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_RELATIONSHIP_DELETED, 'tax_rule_relationship', relationshipId, {
+    from_tax_rule_version_id: from.id,
+    to_tax_rule_version_id: relationship.to_tax_rule_version_id,
+    relationship_type: relationship.relationship_type,
+    country_code: from.country_code,
+  });
+
+  return {
+    ok: true,
+    command: 'delete_tax_rule_relationship',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, from.country_code),
+  };
+}
+
 export async function executeTaxKnowledgeCommand(
   ctx: RequestContext,
   command: string,
@@ -863,6 +978,10 @@ export async function executeTaxKnowledgeCommand(
       return handleBindTaxRuleVersionLegalValue(ctx, payload);
     case 'unbind_tax_rule_version_legal_value':
       return handleUnbindTaxRuleVersionLegalValue(ctx, payload);
+    case 'create_tax_rule_relationship':
+      return handleCreateTaxRuleRelationship(ctx, payload);
+    case 'delete_tax_rule_relationship':
+      return handleDeleteTaxRuleRelationship(ctx, payload);
     default:
       throw badRequest(`Unsupported tax-knowledge command: ${command}`);
   }

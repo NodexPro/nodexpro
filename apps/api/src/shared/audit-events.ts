@@ -189,6 +189,8 @@ export const AUDIT_ACTIONS = {
   TAX_RULE_VERSION_SOURCE_UNPINNED: 'tax_rule_version_source_unpinned',
   TAX_RULE_VERSION_LEGAL_VALUE_BOUND: 'tax_rule_version_legal_value_bound',
   TAX_RULE_VERSION_LEGAL_VALUE_UNBOUND: 'tax_rule_version_legal_value_unbound',
+  TAX_RULE_RELATIONSHIP_CREATED: 'tax_rule_relationship_created',
+  TAX_RULE_RELATIONSHIP_DELETED: 'tax_rule_relationship_deleted',
   OWNER_NOTE_UPDATED: 'owner_note_updated',
   USAGE_HINT_UPDATED: 'usage_hint_updated',
   MODULE_SCOPE_UPDATED: 'module_scope_updated',

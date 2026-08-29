@@ -819,6 +819,7 @@ const OWNER_LEGAL_CONTROL_AUDIT_ENTITY_TYPES = [
   'tax_rule_version',
   'tax_rule_version_source',
   'tax_rule_version_legal_value',
+  'tax_rule_relationship',
 ] as const;
 
 type OwnerLegalControlAuditRow = {

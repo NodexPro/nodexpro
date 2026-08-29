@@ -8,6 +8,7 @@ import {
   type OwnerTaxKnowledgeAllowedAction,
   type OwnerTaxKnowledgeCountryDto,
   type OwnerTaxRuleDto,
+  type OwnerTaxRuleRelationshipDto,
   type OwnerTaxRuleVersionDto,
   type OwnerTaxRuleVersionLegalValueDto,
   type OwnerTaxRuleVersionSourceDto,
@@ -103,6 +104,13 @@ function versionAllowedActions(status: string): OwnerTaxKnowledgeAllowedAction[]
       tax_rule_version_id: 'uuid',
       legal_value_id: 'uuid',
     }),
+    action('create_tax_rule_relationship', draft, {
+      from_tax_rule_version_id: 'uuid',
+      to_tax_rule_version_id: 'uuid',
+      relationship_type:
+        'depends_on|conflicts_with|exception_to|overrides|alternative_to|special_case_of|elaborates',
+      owner_note: 'optional string',
+    }),
   ];
 }
 
@@ -118,6 +126,14 @@ function bindingAllowedActions(parentDraft: boolean): OwnerTaxKnowledgeAllowedAc
   return [
     action('unbind_tax_rule_version_legal_value', parentDraft, {
       tax_rule_version_legal_value_id: 'uuid',
+    }),
+  ];
+}
+
+function relationshipAllowedActions(fromDraft: boolean): OwnerTaxKnowledgeAllowedAction[] {
+  return [
+    action('delete_tax_rule_relationship', fromDraft, {
+      tax_rule_relationship_id: 'uuid',
     }),
   ];
 }
@@ -148,6 +164,7 @@ function mapVersion(
   row: Record<string, unknown>,
   sources: OwnerTaxRuleVersionSourceDto[],
   legalValueBindings: OwnerTaxRuleVersionLegalValueDto[],
+  relationships: OwnerTaxRuleRelationshipDto[],
 ): OwnerTaxRuleVersionDto {
   const status = String(row.status);
   const rawPayload = row.payload_json;
@@ -171,6 +188,7 @@ function mapVersion(
     created_at: String(row.created_at),
     sources,
     legal_value_bindings: legalValueBindings,
+    relationships,
     allowed_actions: versionAllowedActions(status),
   };
 }
@@ -250,7 +268,7 @@ export async function buildOwnerTaxKnowledgeAggregate(
   let ruleVersions: OwnerTaxRuleVersionDto[] = [];
 
     if (selectedCountryCode) {
-    const [sourceResult, ruleResult, versionResult, citationResult, bindingResult] = await Promise.all([
+    const [sourceResult, ruleResult, versionResult, citationResult, bindingResult, relationshipResult] = await Promise.all([
       supabaseAdmin
         .from('tax_sources')
         .select(TAX_SOURCE_SELECT)
@@ -274,6 +292,13 @@ export async function buildOwnerTaxKnowledgeAggregate(
       supabaseAdmin
         .from('tax_rule_version_legal_values')
         .select('id, tax_rule_version_id, legal_value_id, created_at')
+        .eq('country_code', selectedCountryCode)
+        .order('created_at', { ascending: true }),
+      supabaseAdmin
+        .from('tax_rule_relationships')
+        .select(
+          'id, from_tax_rule_version_id, to_tax_rule_version_id, relationship_type, status, owner_note, created_at',
+        )
         .eq('country_code', selectedCountryCode)
         .order('created_at', { ascending: true }),
     ]);
@@ -316,6 +341,14 @@ export async function buildOwnerTaxKnowledgeAggregate(
       }
     } else if (bindingResult.error) {
       throw bindingResult.error;
+    }
+
+    if (relationshipResult.error && isSupabaseMissingTableError(relationshipResult.error, 'tax_rule_relationships')) {
+      if (!warnings.includes('tax_knowledge_schema_not_applied')) {
+        warnings.push('tax_knowledge_schema_not_applied');
+      }
+    } else if (relationshipResult.error) {
+      throw relationshipResult.error;
     }
 
     const sourceById = new Map(sources.map((row) => [row.id, row]));
@@ -393,10 +426,67 @@ export async function buildOwnerTaxKnowledgeAggregate(
         bindingsByVersion.set(versionId, list);
       }
 
+      const ruleMetaById = new Map(
+        (ruleResult.data ?? []).map((row) => {
+          const mapped = row as { id: string; rule_code: string; title: string };
+          return [
+            String(mapped.id),
+            { rule_code: String(mapped.rule_code), title: String(mapped.title) },
+          ] as const;
+        }),
+      );
+      const versionMetaById = new Map(
+        (versionResult.data ?? []).map((row) => {
+          const mapped = row as { id: string; tax_rule_id: string; version_no: number; status: string };
+          return [
+            String(mapped.id),
+            {
+              tax_rule_id: String(mapped.tax_rule_id),
+              version_no: Number(mapped.version_no),
+              status: String(mapped.status),
+            },
+          ] as const;
+        }),
+      );
+
+      const relationshipsByFrom = new Map<string, OwnerTaxRuleRelationshipDto[]>();
+      for (const row of relationshipResult.data ?? []) {
+        const fromId = String((row as { from_tax_rule_version_id: string }).from_tax_rule_version_id);
+        const toId = String((row as { to_tax_rule_version_id: string }).to_tax_rule_version_id);
+        const toVersion = versionMetaById.get(toId);
+        const toRule = toVersion ? ruleMetaById.get(toVersion.tax_rule_id) : undefined;
+        const fromVersion = versionMetaById.get(fromId);
+        const list = relationshipsByFrom.get(fromId) ?? [];
+        list.push({
+          id: String((row as { id: string }).id),
+          from_tax_rule_version_id: fromId,
+          to_tax_rule_version_id: toId,
+          relationship_type: String((row as { relationship_type: string }).relationship_type),
+          status: String((row as { status: string }).status),
+          owner_note:
+            (row as { owner_note?: string | null }).owner_note == null
+              ? null
+              : String((row as { owner_note: string }).owner_note),
+          created_at: String((row as { created_at: string }).created_at),
+          to_tax_rule_id: toVersion?.tax_rule_id ?? '',
+          to_rule_code: toRule?.rule_code ?? '',
+          to_title: toRule?.title ?? '',
+          to_version_no: toVersion?.version_no ?? 0,
+          to_status: toVersion?.status ?? '',
+          allowed_actions: relationshipAllowedActions(fromVersion?.status === 'draft'),
+        });
+        relationshipsByFrom.set(fromId, list);
+      }
+
       ruleVersions = (versionResult.data ?? []).map((row) => {
         const mapped = row as Record<string, unknown>;
         const id = String(mapped.id);
-        return mapVersion(mapped, citationsByVersion.get(id) ?? [], bindingsByVersion.get(id) ?? []);
+        return mapVersion(
+          mapped,
+          citationsByVersion.get(id) ?? [],
+          bindingsByVersion.get(id) ?? [],
+          relationshipsByFrom.get(id) ?? [],
+        );
       });
     }
 
