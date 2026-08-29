@@ -967,6 +967,136 @@
   color: #64748b;
 }
 
+/*
+ * שניהם only — keep identical structure/placement; shrink internal
+ * horizontal dimensions (~85–90%) so each 50% panel fits without
+ * horizontal scroll. Single-population modes are unchanged.
+ * No zoom / transform: scale().
+ */
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table {
+  min-width: 0;
+  width: 100%;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table th,
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table td {
+  padding-inline: 5px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__cell--client {
+  min-width: 132px;
+  width: 132px;
+  max-width: 140px;
+}
+
+.nx-we-invoices-cdm-populations--both
+  .nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  th.nx-income-cdm__cell--client,
+.nx-we-invoices-cdm-populations--both
+  .nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  td.nx-income-cdm__cell--client {
+  min-width: 140px;
+  width: 140px;
+  max-width: 150px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__client {
+  gap: 4px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(2),
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(2),
+.nx-we-invoices-cdm-populations--both
+  .nx-we-invoices-cdm-population
+  .nx-income-cdm__table
+  td:nth-child(2):has(.nx-we-doc-counters),
+.nx-we-invoices-cdm-populations--both
+  .nx-we-invoices-cdm-population
+  .nx-income-cdm__table
+  td:has(.nx-we-doc-counters) {
+  width: 1%;
+  min-width: 0;
+  max-width: none;
+  white-space: nowrap;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-we-doc-counters {
+  min-width: 0;
+  width: max-content;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-we-doc-counter {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-we-doc-counter__count {
+  font-size: 10px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(3),
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(3) {
+  width: 64px;
+  min-width: 64px;
+  max-width: 72px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(4),
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(4) {
+  width: 72px;
+  min-width: 72px;
+  max-width: 80px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(5),
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(5) {
+  width: 72px;
+  min-width: 72px;
+  max-width: 80px;
+}
+
+.nx-we-invoices-cdm-populations--both
+  .nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  th:nth-child(5),
+.nx-we-invoices-cdm-populations--both
+  .nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  td:nth-child(5),
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table th:nth-child(6),
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__table td:nth-child(6),
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__cell--actions {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__actions {
+  gap: 2px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__action {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__action svg {
+  width: 15px;
+  height: 15px;
+}
+
 @media (max-width: 1100px) {
   .nx-we-invoices-cdm-populations--both {
     grid-template-columns: minmax(0, 1fr);
