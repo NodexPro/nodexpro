@@ -20,9 +20,11 @@ const K14A_PATHS = [
   'apps/api/src/domains/tax-knowledge/tax-knowledge-read-models.service.ts',
   'apps/api/src/routes/owner-country-pack.routes.ts',
   'apps/api/src/domains/country-pack/country-pack-read-models.service.ts',
-  'apps/api/src/shared/audit-events.ts',
-  'apps/api/tests/tax-knowledge/tax-knowledge-k1-4a-commands-aggregate.spec.ts',
-] as const;
+    'apps/api/src/shared/audit-events.ts',
+    'apps/api/tests/tax-knowledge/tax-knowledge-k1-4a-commands-aggregate.spec.ts',
+    'apps/api/src/domains/tax-knowledge/tax-knowledge-checksum.pure.ts',
+    'apps/api/tests/tax-knowledge/tax-knowledge-k1-4b-lifecycle.spec.ts',
+  ] as const;
 
 const KNOWLEDGE_MIGRATIONS = [
   'supabase/migrations/600_tax_knowledge_core_foundation.sql',
@@ -56,19 +58,19 @@ function porcelainPaths(): string[] {
     .map((line) => line.replace(/^[A-Z?]{1,2}\s+/, '').replace(/.* -> /, '').replace(/\\/g, '/'));
 }
 
-test('TAX-K1.4A contract: dispatcher recognizes only implemented commands', () => {
-  assert.deepEqual([...TAX_KNOWLEDGE_COMMANDS], ['create_tax_source', 'create_tax_rule']);
+test('TAX-K1.4A contract: dispatcher recognizes implemented commands', () => {
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.includes('create_tax_source'));
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.includes('create_tax_rule'));
   assert.equal(isTaxKnowledgeCommand('create_tax_source'), true);
   assert.equal(isTaxKnowledgeCommand('create_tax_rule'), true);
   assert.equal(isTaxKnowledgeCommand('activate_tax_rule'), false);
   assert.equal(isTaxKnowledgeCommand('update_tax_source'), false);
   assert.equal(isTaxKnowledgeCommand('create_country'), false);
-  assert.equal(isTaxKnowledgeCommand('create_tax_rule_version'), false);
 
   const commandsSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts');
   assert.match(commandsSrc, /export async function executeTaxKnowledgeCommand/);
   assert.match(commandsSrc, /Unsupported tax-knowledge command/);
-  assert.doesNotMatch(commandsSrc, /activate_tax_|retire_tax_|update_tax_|create_tax_rule_version/);
+  assert.doesNotMatch(commandsSrc, /activate_tax_rule_version|pin_tax_source|bind_legal_value/);
 
   const countryPackCommands = readRepo('apps/api/src/domains/country-pack/country-pack-commands.service.ts');
   assert.doesNotMatch(countryPackCommands, /create_tax_source|create_tax_rule|executeTaxKnowledgeCommand/);
@@ -94,11 +96,11 @@ test('TAX-K1.4A contract: platform owner, no tenant org, no dedicated GET, no PA
   assert.doesNotMatch(readSrc, /resolveCountryContext\(/);
   assert.doesNotMatch(readSrc, /country-pack-resolver/);
   assert.doesNotMatch(readSrc, /organization_id/);
-  assert.match(readSrc, /action_key: 'create_tax_source'/);
-  assert.match(readSrc, /action_key: 'create_tax_rule'/);
-  assert.doesNotMatch(readSrc, /action_key: 'activate_/);
-  assert.doesNotMatch(readSrc, /action_key: 'update_/);
-  assert.doesNotMatch(readSrc, /action_key: 'retire_/);
+  assert.match(readSrc, /action\('create_tax_source'/);
+  assert.match(readSrc, /action\('create_tax_rule'/);
+  assert.doesNotMatch(readSrc, /action_key: 'activate_tax_rule/);
+  assert.doesNotMatch(readSrc, /action_key: 'pin_/);
+  assert.doesNotMatch(readSrc, /action_key: 'bind_/);
 
   const panelSrc = readRepo('apps/api/src/domains/country-pack/country-pack-read-models.service.ts');
   assert.match(panelSrc, /tax_knowledge: taxKnowledge/);

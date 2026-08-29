@@ -816,6 +816,7 @@ const OWNER_LEGAL_CONTROL_AUDIT_ENTITY_TYPES = [
   'docflow_request_template_definition',
   'tax_source',
   'tax_rule',
+  'tax_rule_version',
 ] as const;
 
 type OwnerLegalControlAuditRow = {
