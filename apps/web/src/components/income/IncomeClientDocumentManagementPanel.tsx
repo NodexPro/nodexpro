@@ -694,26 +694,55 @@ function PopulationSectionPanel({
   onNewDocument?: () => void;
 }) {
   const showNewDocument = Boolean(newDocumentAction && onNewDocument);
+  const headerActions = section.header_actions ?? [];
 
   return (
     <div className="nx-we-invoices-cdm-population" data-section-key={section.section_key}>
       <div className="nx-we-invoices-cdm-population__head">
         <div className="nx-we-invoices-cdm-population__head-group">
           <h3 className="nx-we-invoices-cdm-population__title">{section.title}</h3>
-          {showNewDocument ? (
-            <button
-              type="button"
-              className="nx-btn nx-btn-primary nx-btn-taxes-compact nx-we-invoices-cdm-population__new-doc"
-              disabled={busy || !newDocumentAction!.enabled}
-              title={
-                newDocumentAction!.enabled
-                  ? newDocumentAction!.button_label
-                  : (newDocumentAction!.disabled_reason ?? newDocumentAction!.button_label)
-              }
-              onClick={() => onNewDocument?.()}
-            >
-              {newDocumentAction!.button_label}
-            </button>
+          {showNewDocument || headerActions.length > 0 ? (
+            <div className="nx-we-invoices-cdm-population__head-actions">
+              {showNewDocument ? (
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-primary nx-btn-taxes-compact nx-we-invoices-cdm-population__new-doc"
+                  disabled={busy || !newDocumentAction!.enabled}
+                  title={
+                    newDocumentAction!.enabled
+                      ? newDocumentAction!.button_label
+                      : (newDocumentAction!.disabled_reason ?? newDocumentAction!.button_label)
+                  }
+                  onClick={() => onNewDocument?.()}
+                >
+                  {newDocumentAction!.button_label}
+                </button>
+              ) : null}
+              {headerActions.map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  className="nx-btn nx-btn-taxes-compact nx-we-invoices-cdm-population__header-action"
+                  disabled={busy || !action.enabled}
+                  title={action.enabled ? action.label : (action.disabled_reason ?? action.label)}
+                  aria-label={action.label}
+                  onClick={() => {
+                    void onAction({
+                      kind: 'command',
+                      action,
+                      clientName: section.title,
+                    });
+                  }}
+                >
+                  {action.icon_key === 'settings' ? (
+                    <span className="nx-we-invoices-cdm-population__header-action-icon" aria-hidden>
+                      <ActionIcon iconKey="settings" />
+                    </span>
+                  ) : null}
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </div>
           ) : null}
         </div>
       </div>

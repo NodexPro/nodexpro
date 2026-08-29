@@ -650,6 +650,11 @@ export interface IncomeClientDocumentManagementSection {
   /** Present for end-customer section; null for office-clients section. */
   groups: IncomeClientDocumentManagementCustomerGroup[] | null;
   page: IncomeClientDocumentManagementSectionPage;
+  /**
+   * Backend-owned population header actions (WE invoices office_clients).
+   * Empty when the surface has no header actions. FE must not invent these.
+   */
+  header_actions: IncomeClientDocumentManagementRowAction[];
   empty_state: {
     visible: boolean;
     title: string;

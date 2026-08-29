@@ -27,11 +27,11 @@ export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE = [
 ] as const;
 
 /**
- * Work Engine invoices office_clients rows: omit customer-list entrypoint.
- * Issuer-group /m/income office rows keep `open_end_customers`.
+ * Work Engine invoices office_clients rows: omit customer-list + document-settings
+ * entrypoints (settings live on section.header_actions with office self issuer).
+ * Issuer-group /m/income office rows keep those actions.
  */
 export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_WE_OFFICE = [
-  'open_branding_studio',
   'open_reports',
   'open_income_ledger_card',
   'open_email_history',
@@ -64,14 +64,21 @@ export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_NEW_DOCUMENT = 'open_new_incom
 
 export function incomeCdmCanonicalActionSlotKeys(
   includeRetainer: boolean,
-  options?: { newDocumentInsteadOfMore?: boolean; omitEndCustomersAction?: boolean },
+  options?: {
+    newDocumentInsteadOfMore?: boolean;
+    omitEndCustomersAction?: boolean;
+    omitBrandingStudioAction?: boolean;
+  },
 ): string[] {
   const trailing = options?.newDocumentInsteadOfMore
     ? INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_NEW_DOCUMENT
     : INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_MORE;
-  const base = options?.omitEndCustomersAction
-    ? INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_WE_OFFICE
-    : INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE;
+  let base: string[] = options?.omitEndCustomersAction
+    ? [...INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_WE_OFFICE]
+    : [...INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE];
+  if (options?.omitBrandingStudioAction) {
+    base = base.filter((key) => key !== 'open_branding_studio');
+  }
   return [
     ...base,
     ...(includeRetainer ? [INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_RETAINER] : []),
@@ -97,7 +104,11 @@ export function incomeCdmEndCustomerRowActionSlotKeys(
 export function incomeCdmActionKeysMatchCanonical(
   actionKeys: string[],
   includeRetainer: boolean,
-  options?: { newDocumentInsteadOfMore?: boolean; omitEndCustomersAction?: boolean },
+  options?: {
+    newDocumentInsteadOfMore?: boolean;
+    omitEndCustomersAction?: boolean;
+    omitBrandingStudioAction?: boolean;
+  },
 ): boolean {
   const expected = incomeCdmCanonicalActionSlotKeys(includeRetainer, options);
   if (actionKeys.length !== expected.length) return false;

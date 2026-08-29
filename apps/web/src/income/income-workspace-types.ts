@@ -158,6 +158,11 @@ export interface IncomeClientDocumentManagementSection {
   rows: IncomeClientDocumentManagementRow[];
   groups: IncomeClientDocumentManagementCustomerGroup[] | null;
   page: IncomeClientDocumentManagementSectionPage;
+  /**
+   * Backend-owned population header actions (WE invoices office_clients).
+   * Empty when absent. FE must not invent these.
+   */
+  header_actions: IncomeClientDocumentManagementRowAction[];
   empty_state: {
     visible: boolean;
     title: string;
@@ -968,6 +973,7 @@ function emptyOfficeClientsSection(
     rows,
     groups: null,
     page: { ...EMPTY_CDM_SECTION_PAGE },
+    header_actions: [],
     empty_state: {
       visible: rows.length === 0,
       title: '',
@@ -984,6 +990,7 @@ function emptyOfficeClientCustomersSection(): IncomeClientDocumentManagementSect
     rows: [],
     groups: [],
     page: { ...EMPTY_CDM_SECTION_PAGE },
+    header_actions: [],
     empty_state: {
       visible: true,
       title: '',
@@ -1022,6 +1029,7 @@ function normalizeCdmSection(
     ...section,
     rows,
     groups,
+    header_actions: Array.isArray(section.header_actions) ? section.header_actions : [],
     page: {
       ...EMPTY_CDM_SECTION_PAGE,
       ...(section.page ?? {}),

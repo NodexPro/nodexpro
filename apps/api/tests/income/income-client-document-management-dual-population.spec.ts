@@ -200,12 +200,36 @@ test('WE invoices office_clients omits last_activity column + open_end_customers
     panelSource,
     /omitEndCustomersAction:\s*params\.workEngineInvoicesFunctionalParity === true/,
   );
+  assert.match(
+    panelSource,
+    /omitBrandingStudioAction:\s*params\.workEngineInvoicesFunctionalParity === true/,
+  );
   const groupFnStart = panelSource.indexOf('function buildIssuerCustomerGroupActions');
   const groupFnEnd = panelSource.indexOf('function buildEndCustomerRowActions');
   const groupFn = panelSource.slice(groupFnStart, groupFnEnd);
   assert.match(groupFn, /key: 'open_end_customers'/);
   assert.match(groupFn, /label: 'לקוחות'/);
   assert.doesNotMatch(groupFn, /omitEndCustomersAction/);
+});
+
+test('WE invoices office_clients moves open_branding_studio to section.header_actions', () => {
+  assert.match(panelSource, /function buildOfficeClientsPopulationHeaderActions/);
+  assert.match(panelSource, /header_actions: officeClientsHeaderActions/);
+  assert.match(panelSource, /header_actions: \[\]/);
+  const headerFnStart = panelSource.indexOf('function buildOfficeClientsPopulationHeaderActions');
+  const headerFnEnd = panelSource.indexOf('function buildIssuerCustomerGroupActions');
+  const headerFn = panelSource.slice(headerFnStart, headerFnEnd);
+  assert.match(headerFn, /key: 'open_branding_studio'/);
+  assert.match(headerFn, /label: 'הגדרות מסמך'/);
+  assert.match(headerFn, /icon_key: 'settings'/);
+  assert.match(headerFn, /acting_mode: 'self'/);
+  assert.match(headerFn, /open_document_branding_studio:\s*true/);
+  assert.match(headerFn, /represented_client_id: null/);
+  const officeFnStart = panelSource.indexOf('function buildOfficeClientRowActions');
+  const officeFnEnd = panelSource.indexOf('function buildOfficeClientsPopulationHeaderActions');
+  const officeFn = panelSource.slice(officeFnStart, officeFnEnd);
+  assert.match(officeFn, /omitBrandingStudioAction/);
+  assert.match(officeFn, /if \(!options\?\.omitBrandingStudioAction\)/);
 });
 
 test('end-customer WE parity actions are permission-gated not population-gated', () => {
@@ -252,14 +276,14 @@ test('office canonical slots stay issuer-complete; WE recipient rows use recipie
     'open_invoice_retainer_setup',
     'open_new_income_document',
   ]);
-  // Work Engine invoices office_clients: omit customer-list entrypoint.
+  // Work Engine invoices office_clients: omit customers + row branding (header owns settings).
   assert.deepEqual(
     incomeCdmCanonicalActionSlotKeys(true, {
       newDocumentInsteadOfMore: true,
       omitEndCustomersAction: true,
+      omitBrandingStudioAction: true,
     }),
     [
-      'open_branding_studio',
       'open_reports',
       'open_income_ledger_card',
       'open_email_history',
@@ -289,17 +313,22 @@ test('office canonical slots stay issuer-complete; WE recipient rows use recipie
       incomeCdmCanonicalActionSlotKeys(true, {
         newDocumentInsteadOfMore: true,
         omitEndCustomersAction: true,
+        omitBrandingStudioAction: true,
       }),
       true,
-      { newDocumentInsteadOfMore: true, omitEndCustomersAction: true },
+      {
+        newDocumentInsteadOfMore: true,
+        omitEndCustomersAction: true,
+        omitBrandingStudioAction: true,
+      },
     ),
     true,
   );
 
   const officeFnStart = panelSource.indexOf('function buildOfficeClientRowActions');
-  const officeFnEnd = panelSource.indexOf('function buildIssuerCustomerGroupActions');
+  const officeFnEnd = panelSource.indexOf('function buildOfficeClientsPopulationHeaderActions');
   const officeFn = panelSource.slice(officeFnStart, officeFnEnd === -1
-    ? panelSource.indexOf('function buildEndCustomerRowActions')
+    ? panelSource.indexOf('function buildIssuerCustomerGroupActions')
     : officeFnEnd);
   const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
   const endFnEnd = panelSource.indexOf('function formatMoneyReference');

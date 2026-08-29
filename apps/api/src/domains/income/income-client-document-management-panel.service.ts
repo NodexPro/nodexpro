@@ -48,6 +48,7 @@ import {
 } from './income-client-quick-card.pure.js';
 import { clientOperationsBusinessTypeDisplayHe } from '../client-operations/client-operations-client-core.read.js';
 import { resolveEntitlement } from '../modules/entitlement.service.js';
+import { ensureOrgIncomeIssuerProfile } from './income-issuer-context.service.js';
 
 const REPORT_CATALOG: IncomeClientDocumentManagementReportItem[] = [
   { key: 'income_summary', label: 'דוח הכנסות', enabled: false, disabled_reason: 'בקרוב' },
@@ -109,12 +110,19 @@ function buildOfficeClientRowActions(
      * Does not remove customer management elsewhere (issuer group /m/income).
      */
     omitEndCustomersAction?: boolean;
+    /**
+     * Work Engine invoices office_clients only: omit row document-settings.
+     * Same action is exposed on section.header_actions (office self issuer).
+     */
+    omitBrandingStudioAction?: boolean;
   },
 ): IncomeClientDocumentManagementRowAction[] {
   const canEdit = perms.edit;
   const canCreateDocument = perms.issue || perms.edit;
-  const actions: IncomeClientDocumentManagementRowAction[] = [
-    {
+  const actions: IncomeClientDocumentManagementRowAction[] = [];
+
+  if (!options?.omitBrandingStudioAction) {
+    actions.push({
       key: 'open_branding_studio',
       label: 'הגדרות מסמך',
       icon_key: 'settings',
@@ -128,8 +136,8 @@ function buildOfficeClientRowActions(
       },
       enabled: canEdit,
       disabled_reason: canEdit ? null : 'אין הרשאת עריכה',
-    },
-  ];
+    });
+  }
 
   if (!options?.omitEndCustomersAction) {
     actions.push({
@@ -231,6 +239,35 @@ function buildOfficeClientRowActions(
   }
 
   return actions;
+}
+
+/**
+ * Work Engine invoices → office_clients population header.
+ * Same action id / select-issuer + open branding contract as row settings,
+ * scoped to office self issuer (matches population +מסמך).
+ */
+function buildOfficeClientsPopulationHeaderActions(params: {
+  orgIssuerId: string;
+  perms: IncomeWorkspacePermissions;
+}): IncomeClientDocumentManagementRowAction[] {
+  const canEdit = params.perms.edit;
+  return [
+    {
+      key: 'open_branding_studio',
+      label: 'הגדרות מסמך',
+      icon_key: 'settings',
+      command: INCOME_COMMAND_SELECT_ISSUER,
+      command_payload: {
+        command: INCOME_COMMAND_SELECT_ISSUER,
+        acting_mode: 'self',
+        issuer_business_id: params.orgIssuerId,
+        represented_client_id: null,
+        open_document_branding_studio: true,
+      },
+      enabled: canEdit,
+      disabled_reason: canEdit ? null : 'אין הרשאת עריכה',
+    },
+  ];
 }
 
 /**
@@ -565,6 +602,7 @@ function emptySection(
     rows: [],
     groups: section_key === 'office_client_customers' ? [] : null,
     page: { limit: null, offset: 0, has_more: false },
+    header_actions: [],
     empty_state: {
       visible: true,
       title:
@@ -642,6 +680,8 @@ function buildOfficeClientRow(params: {
   newDocumentInsteadOfMore?: boolean;
   /** Work Engine invoices: omit office-row customer-list entrypoint. */
   omitEndCustomersAction?: boolean;
+  /** Work Engine invoices: omit office-row document-settings (moved to header). */
+  omitBrandingStudioAction?: boolean;
   omitDraftDocumentTypeCounter?: boolean;
   clientQuickCard?: IncomeClientDocumentManagementRow['client_quick_card'];
 }): IncomeClientDocumentManagementRow {
@@ -693,6 +733,7 @@ function buildOfficeClientRow(params: {
       includeRetainerAction: params.includeRetainerAction,
       newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
       omitEndCustomersAction: params.omitEndCustomersAction,
+      omitBrandingStudioAction: params.omitBrandingStudioAction,
     }),
     row_context: {
       population_key: 'office_client',
@@ -1107,6 +1148,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
         includeRetainerAction: params.includeRetainerAction,
         newDocumentInsteadOfMore: params.newDocumentInsteadOfMore,
         omitEndCustomersAction: params.workEngineInvoicesFunctionalParity === true,
+        omitBrandingStudioAction: params.workEngineInvoicesFunctionalParity === true,
         omitDraftDocumentTypeCounter: params.omitDraftDocumentTypeCounter,
         clientQuickCard: quickCard,
       });
@@ -1175,6 +1217,14 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     actions: buildIssuerCustomerGroupActions(group.parent_represented_client_id, params.perms),
   }));
 
+  const officeClientsHeaderActions =
+    params.workEngineInvoicesFunctionalParity === true
+      ? buildOfficeClientsPopulationHeaderActions({
+          orgIssuerId: (await ensureOrgIncomeIssuerProfile(orgId)).id,
+          perms: params.perms,
+        })
+      : [];
+
   const office_clients_section: IncomeClientDocumentManagementSection = {
     section_key: 'office_clients',
     title: 'לקוחות המשרד',
@@ -1182,6 +1232,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     rows: officeRows,
     groups: null,
     page: { limit: null, offset: 0, has_more: false },
+    header_actions: officeClientsHeaderActions,
     empty_state: {
       visible: officeRows.length === 0,
       title: 'אין לקוחות במשרד',
@@ -1199,6 +1250,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     rows: endCustomerRows,
     groups: endCustomerGroups,
     page: { limit: null, offset: 0, has_more: false },
+    header_actions: [],
     empty_state: {
       visible: endCustomerRows.length === 0,
       title: 'אין לקוחות קצה',

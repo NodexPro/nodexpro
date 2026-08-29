@@ -682,6 +682,43 @@
   border-radius: 6px;
 }
 
+
+.nx-we-invoices-cdm-population__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.nx-we-invoices-cdm-population__header-action.nx-btn.nx-btn-taxes-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: 6px;
+}
+
+.nx-we-invoices-cdm-population__header-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.nx-we-invoices-cdm-population__header-action-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* Keep data rows readable on tinted panels. */
 .nx-we-invoices-cdm-population .nx-income-cdm__table-wrap {
   overflow-x: auto;
