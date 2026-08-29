@@ -35,10 +35,12 @@ export function resolveIncomeWizardStartingStepIndex(
     document_details_step?: unknown;
     issuer_context?: unknown;
   } | null,
+  openHints?: { wizard_starting_step_key?: string | null } | null,
 ): number {
   const key = resolveIncomeWizardStartingStepKey({
     steps,
-    wizard_starting_step_key: workspace?.wizard_starting_step_key,
+    wizard_starting_step_key:
+      openHints?.wizard_starting_step_key ?? workspace?.wizard_starting_step_key,
     active_wizard_draft_id: workspace?.active_wizard_draft_id,
     has_document_details_step: Boolean(workspace?.document_details_step),
     has_issuer_context: Boolean(workspace?.issuer_context),

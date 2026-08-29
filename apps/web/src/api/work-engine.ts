@@ -486,11 +486,32 @@ export type WorkEngineOfficeClientIssuerOption = {
   disabled_reason: string | null;
 };
 
+export type WorkEngineInvoicesPopulationNewDocumentAction = {
+  section_key: 'office_clients' | 'office_client_customers';
+  button_label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  select_issuer_command: {
+    command: 'select_income_issuer_context';
+    command_payload: {
+      acting_mode: 'self' | 'office_representative';
+      issuer_business_id: string;
+      represented_client_id: string | null;
+    };
+  } | null;
+  wizard_open: {
+    preset_issuer_choice_key: 'self' | 'office_client' | null;
+    wizard_starting_step_key: string | null;
+    lock_issuer_choice_step: boolean;
+  };
+};
+
 export type WorkEngineInvoicesDocumentCreationEntrypoint = {
   button_label: string;
   allowed: boolean;
   allowed_action: string;
   disabled_reason: string | null;
+  population_actions: WorkEngineInvoicesPopulationNewDocumentAction[];
   wizard: {
     steps: { key: string; label: string; when?: string }[];
     issuer_choice: {

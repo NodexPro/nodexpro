@@ -18,6 +18,7 @@ import {
   resolveWorkEngineInvoicesPopulationsVisibility,
   type WorkEngineInvoicesPopulationsDisplayMode,
 } from '../../income/income-client-document-management-populations-display.pure';
+import type { WorkEngineInvoicesPopulationNewDocumentAction } from '../../api/work-engine';
 import { ClientQuickCardPopover } from '../work-engine/ClientQuickCardPopover';
 
 /** RTL visual order (first = far right). Display-only; backend column order unchanged. */
@@ -217,6 +218,9 @@ type PanelProps = {
   populationsLayoutEnabled?: boolean;
   populationsDisplayMode?: WorkEngineInvoicesPopulationsDisplayMode;
   onPopulationsDisplayModeChange?: (mode: WorkEngineInvoicesPopulationsDisplayMode) => void;
+  /** Backend-owned +מסמך actions per population section (WE invoices). */
+  populationNewDocumentActions?: WorkEngineInvoicesPopulationNewDocumentAction[];
+  onPopulationNewDocument?: (sectionKey: 'office_clients' | 'office_client_customers') => void;
 };
 
 type QuickCardOpenState = {
@@ -675,6 +679,8 @@ function PopulationSectionPanel({
   clientQuickCardEnabled,
   quickCardOpenRowKey,
   onToggleQuickCard,
+  newDocumentAction,
+  onNewDocument,
 }: {
   section: IncomeClientDocumentManagementSection;
   visualColumns: Array<{ key: VisualColumnKey; label: string }>;
@@ -684,25 +690,40 @@ function PopulationSectionPanel({
   clientQuickCardEnabled?: boolean;
   quickCardOpenRowKey?: string | null;
   onToggleQuickCard?: (row: IncomeClientDocumentManagementRow, anchorEl: HTMLElement) => void;
+  newDocumentAction?: WorkEngineInvoicesPopulationNewDocumentAction | null;
+  onNewDocument?: () => void;
 }) {
   /**
-   * office_client_customers only:
-   * - fold population title into the client column header (no separate "לקוח" stack)
-   * - omit פעילות אחרונה from rendered columns (header + body) so no blank slot remains
-   * office_clients keeps external title, "לקוח", and last-activity column.
+   * office_client_customers only: omit פעילות אחרונה from rendered columns.
+   * Both populations show section title + backend +מסמך in the population head.
    */
   const isOfficeClientCustomers = section.section_key === 'office_client_customers';
   const tableColumns = isOfficeClientCustomers
-    ? visualColumns
-        .filter((col) => col.key !== 'last_activity_display')
-        .map((col) => (col.key === 'client' ? { ...col, label: section.title } : col))
+    ? visualColumns.filter((col) => col.key !== 'last_activity_display')
     : visualColumns;
+
+  const showNewDocument = Boolean(newDocumentAction && onNewDocument);
 
   return (
     <div className="nx-we-invoices-cdm-population" data-section-key={section.section_key}>
-      {isOfficeClientCustomers ? null : (
+      <div className="nx-we-invoices-cdm-population__head">
         <h3 className="nx-we-invoices-cdm-population__title">{section.title}</h3>
-      )}
+        {showNewDocument ? (
+          <button
+            type="button"
+            className="nx-btn nx-btn-primary nx-btn-taxes-compact nx-we-invoices-cdm-population__new-doc"
+            disabled={busy || !newDocumentAction!.enabled}
+            title={
+              newDocumentAction!.enabled
+                ? newDocumentAction!.button_label
+                : (newDocumentAction!.disabled_reason ?? newDocumentAction!.button_label)
+            }
+            onClick={() => onNewDocument?.()}
+          >
+            {newDocumentAction!.button_label}
+          </button>
+        ) : null}
+      </div>
       <ClientDocumentManagementRowsTable
         columns={tableColumns}
         rows={section.rows ?? []}
@@ -729,6 +750,8 @@ export function IncomeClientDocumentManagementPanelView({
   populationsLayoutEnabled = false,
   populationsDisplayMode = WORK_ENGINE_INVOICES_POPULATIONS_DISPLAY_DEFAULT,
   onPopulationsDisplayModeChange,
+  populationNewDocumentActions = [],
+  onPopulationNewDocument,
 }: PanelProps) {
   const [quickCardOpen, setQuickCardOpen] = useState<QuickCardOpenState | null>(null);
 
@@ -821,6 +844,15 @@ export function IncomeClientDocumentManagementPanelView({
                   clientQuickCardEnabled={clientQuickCardEnabled}
                   quickCardOpenRowKey={quickCardOpenRowKey}
                   onToggleQuickCard={onToggleQuickCard}
+                  newDocumentAction={
+                    populationNewDocumentActions.find((a) => a.section_key === 'office_clients') ??
+                    null
+                  }
+                  onNewDocument={
+                    onPopulationNewDocument
+                      ? () => onPopulationNewDocument('office_clients')
+                      : undefined
+                  }
                 />
               ) : null}
               {visibility.showOfficeClientCustomers && customersSection ? (
@@ -833,6 +865,16 @@ export function IncomeClientDocumentManagementPanelView({
                   clientQuickCardEnabled={clientQuickCardEnabled}
                   quickCardOpenRowKey={quickCardOpenRowKey}
                   onToggleQuickCard={onToggleQuickCard}
+                  newDocumentAction={
+                    populationNewDocumentActions.find(
+                      (a) => a.section_key === 'office_client_customers',
+                    ) ?? null
+                  }
+                  onNewDocument={
+                    onPopulationNewDocument
+                      ? () => onPopulationNewDocument('office_client_customers')
+                      : undefined
+                  }
                 />
               ) : null}
             </div>

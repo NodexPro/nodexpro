@@ -61,11 +61,40 @@ export const WORK_ENGINE_INVOICE_WIZARD_INCOME_COMMANDS = {
   issue_and_send_document: 'issue_and_send_income_document',
 } as const;
 
+/**
+ * Per-population +מסמך entry — backend-owned issuer entry context.
+ * FE only executes select_issuer_command (when present) and opens the wizard
+ * with wizard_open hints; no frontend issuer eligibility logic.
+ */
+export type WorkEngineInvoicesPopulationNewDocumentAction = {
+  section_key: 'office_clients' | 'office_client_customers';
+  button_label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+  select_issuer_command: {
+    command: 'select_income_issuer_context';
+    command_payload: {
+      acting_mode: 'self' | 'office_representative';
+      issuer_business_id: string;
+      represented_client_id: string | null;
+    };
+  } | null;
+  wizard_open: {
+    /** Seed wizard issuerChoice so office_client step visibility matches entry. */
+    preset_issuer_choice_key: 'self' | 'office_client' | null;
+    wizard_starting_step_key: string | null;
+    /** Hide issuer_choice step when entry context already fixed the issuer type. */
+    lock_issuer_choice_step: boolean;
+  };
+};
+
 export type WorkEngineInvoicesDocumentCreationEntrypoint = {
   button_label: string;
   allowed: boolean;
   allowed_action: string;
   disabled_reason: string | null;
+  /** Population-scoped +מסמך actions (replaces global header button). */
+  population_actions: WorkEngineInvoicesPopulationNewDocumentAction[];
   wizard: {
     steps: { key: string; label: string; when?: string }[];
     issuer_choice: {
@@ -177,11 +206,51 @@ export async function buildWorkEngineInvoicesDocumentCreationEntrypoint(
     ? await loadOfficeClientIssuerOptions(orgId)
     : [];
 
+  const officeClientsNewDocument: WorkEngineInvoicesPopulationNewDocumentAction = {
+    section_key: 'office_clients',
+    button_label: '+ מסמך',
+    enabled: allowed,
+    disabled_reason: disabledReason,
+    // Office population → accounting office is issuer (self). Skip "מי מנפיק?".
+    select_issuer_command: {
+      command: 'select_income_issuer_context',
+      command_payload: {
+        acting_mode: 'self',
+        issuer_business_id: orgIssuer.id,
+        represented_client_id: null,
+      },
+    },
+    wizard_open: {
+      preset_issuer_choice_key: null,
+      wizard_starting_step_key: null,
+      lock_issuer_choice_step: true,
+    },
+  };
+
+  const officeClientCustomersNewDocument: WorkEngineInvoicesPopulationNewDocumentAction = {
+    section_key: 'office_client_customers',
+    button_label: '+ מסמך',
+    enabled: allowed && perms.issue_on_behalf,
+    disabled_reason: !allowed
+      ? disabledReason
+      : !perms.issue_on_behalf
+        ? 'נדרשת הרשאת income.issue_on_behalf'
+        : null,
+    // Customers population → represented-client issuer required; pick Test3/Test4 next.
+    select_issuer_command: null,
+    wizard_open: {
+      preset_issuer_choice_key: 'office_client',
+      wizard_starting_step_key: 'office_client',
+      lock_issuer_choice_step: true,
+    },
+  };
+
   return {
     button_label: '+ מסמך',
     allowed,
     allowed_action: 'open_income_document_wizard',
     disabled_reason: disabledReason,
+    population_actions: [officeClientsNewDocument, officeClientCustomersNewDocument],
     wizard: {
       steps: [
         { key: 'issuer_choice', label: 'בחירת מנפיק' },

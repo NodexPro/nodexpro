@@ -30,6 +30,7 @@ import { WorkEngineInvoiceRetainerCustomerModal } from './WorkEngineInvoiceRetai
 import { WorkEngineInvoiceRetainerSetupModal } from './WorkEngineInvoiceRetainerSetupModal';
 import type { WorkEngineInvoiceRetainerSetupAggregate } from '../../income/income-workspace-types';
 import { fetchWorkEngineInvoiceRetainerSetupAggregate, fetchWorkEngineInvoicesTabAggregate } from '../../api/work-engine';
+import type { WorkEngineInvoicesPopulationNewDocumentAction } from '../../api/work-engine';
 import {
   WORK_ENGINE_INVOICES_POPULATIONS_DISPLAY_DEFAULT,
   type WorkEngineInvoicesPopulationsDisplayMode,
@@ -67,6 +68,9 @@ type ShellProps = {
   onOpenBranding?: () => void;
   /** Open Income document wizard with workspace truth already scoped to the row. */
   onOpenNewDocument?: (workspaceAggregate: IncomeWorkspaceAggregate) => void | Promise<void>;
+  /** Backend-owned per-population +מסמך actions from invoices tab entrypoint. */
+  populationNewDocumentActions?: WorkEngineInvoicesPopulationNewDocumentAction[];
+  onPopulationNewDocument?: (sectionKey: 'office_clients' | 'office_client_customers') => void;
   onError?: (message: string) => void;
   onEditDraft?: (draftId: string) => void | Promise<void>;
   onInvoicesTabRefresh?: (aggregate: Record<string, unknown>) => void;
@@ -85,6 +89,8 @@ export function WorkEngineClientDocumentManagementShell({
   onAfterIssuerSelect,
   onOpenBranding,
   onOpenNewDocument,
+  populationNewDocumentActions = [],
+  onPopulationNewDocument,
   onError,
   onEditDraft,
   onInvoicesTabRefresh,
@@ -451,6 +457,8 @@ export function WorkEngineClientDocumentManagementShell({
         populationsLayoutEnabled
         populationsDisplayMode={populationsDisplayMode}
         onPopulationsDisplayModeChange={setPopulationsDisplayMode}
+        populationNewDocumentActions={populationNewDocumentActions}
+        onPopulationNewDocument={onPopulationNewDocument}
         onAction={(result) => void handlePanelAction(result)}
         renderDocumentsCell={(row) => (
           <WorkEngineClientDocumentTypeCounters

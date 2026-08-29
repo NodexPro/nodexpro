@@ -60,6 +60,8 @@ type Props = {
     work_engine_invoices_client_documents_by_type_aggregate?: unknown;
   }) => void;
   initialWorkspaceAgg?: IncomeWorkspaceAggregate | null;
+  /** Backend-owned open hints from population +מסמך entry (no FE issuer eligibility). */
+  openHints?: WorkEngineInvoicesDocumentCreationEntrypoint['population_actions'][number]['wizard_open'] | null;
   issuerBrandingProfile?: IncomeDocumentBrandingProfileAggregate | null;
   issuerBrandingEntrypoint?: IncomeDocumentBrandingSettingsEntrypoint | null;
 };
@@ -96,22 +98,33 @@ export function WorkEngineIncomeDocumentWizardModal({
   onBusyChange,
   onCompleted,
   initialWorkspaceAgg,
+  openHints = null,
   issuerBrandingProfile,
   issuerBrandingEntrypoint,
 }: Props) {
   const wizard = entrypoint.wizard;
-  const [issuerChoice, setIssuerChoice] = useState<'self' | 'office_client' | null>(null);
+  const lockIssuerChoiceStep = Boolean(openHints?.lock_issuer_choice_step);
+  const [issuerChoice, setIssuerChoice] = useState<'self' | 'office_client' | null>(
+    () => openHints?.preset_issuer_choice_key ?? null,
+  );
   const [officeClientId, setOfficeClientId] = useState('');
   const [, setContextAgg] = useState<IncomeWorkspaceContextAggregate | null>(null);
   const [workspaceAgg, setWorkspaceAgg] = useState<IncomeWorkspaceAggregate | null>(
     initialWorkspaceAgg ?? null,
   );
-  const [stepIndex, setStepIndex] = useState(() =>
-    resolveIncomeWizardStartingStepIndex(
-      wizard.steps.filter((s) => s.when !== 'office_representative'),
+  const [stepIndex, setStepIndex] = useState(() => {
+    const initialChoice = openHints?.preset_issuer_choice_key ?? null;
+    const stepsForInit = wizard.steps.filter((s) => {
+      if (lockIssuerChoiceStep && s.key === 'issuer_choice') return false;
+      if (s.when === 'office_representative') return initialChoice === 'office_client';
+      return true;
+    });
+    return resolveIncomeWizardStartingStepIndex(
+      stepsForInit,
       initialWorkspaceAgg ?? null,
-    ),
-  );
+      openHints,
+    );
+  });
   const [error, setError] = useState<string | null>(null);
   const [readyToPrintPreviewOpen, setReadyToPrintPreviewOpen] = useState(false);
   const [readyToPrintPreview, setReadyToPrintPreview] = useState<
@@ -170,6 +183,7 @@ export function WorkEngineIncomeDocumentWizardModal({
 
   const visibleSteps = useMemo(() => {
     return wizard.steps.filter((s) => {
+      if (lockIssuerChoiceStep && s.key === 'issuer_choice') return false;
       if (s.when === 'office_representative') return issuerChoice === 'office_client';
       if (s.key === 'issue' && footerActions && !footerActions.show_issue) return false;
       // Credit Note / conversion: ready-to-print overlay only — never the wizard preview step
@@ -183,12 +197,13 @@ export function WorkEngineIncomeDocumentWizardModal({
       }
       return true;
     });
-  }, [wizard.steps, issuerChoice, footerActions]);
+  }, [wizard.steps, issuerChoice, footerActions, lockIssuerChoiceStep]);
 
   useEffect(() => {
     const startingStepKey = resolveIncomeWizardStartingStepKey({
       steps: visibleSteps,
-      wizard_starting_step_key: workspaceAgg?.wizard_starting_step_key,
+      wizard_starting_step_key:
+        openHints?.wizard_starting_step_key ?? workspaceAgg?.wizard_starting_step_key,
       active_wizard_draft_id: workspaceAgg?.active_wizard_draft_id,
       has_document_details_step: Boolean(workspaceAgg?.document_details_step),
       has_issuer_context: Boolean(workspaceAgg?.issuer_context),
@@ -201,6 +216,7 @@ export function WorkEngineIncomeDocumentWizardModal({
     workspaceAgg?.active_wizard_draft_id,
     workspaceAgg?.document_details_step,
     workspaceAgg?.issuer_context,
+    openHints?.wizard_starting_step_key,
   ]);
 
   useEffect(() => {
@@ -509,7 +525,9 @@ export function WorkEngineIncomeDocumentWizardModal({
     if (activeStepKey === 'office_client') {
       return (
         <div className="nx-income-field">
-          <label>{wizard.issuer_choice.title}</label>
+          <label>
+            {wizard.steps.find((s) => s.key === 'office_client')?.label ?? 'לקוח מהמשרד'}
+          </label>
           <select
             value={officeClientId}
             disabled={busy}

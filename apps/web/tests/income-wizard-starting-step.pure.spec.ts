@@ -74,6 +74,20 @@ test('row-scoped new document with issuer_context starts at document_type', () =
   );
 });
 
+test('population openHints.wizard_starting_step_key overrides empty workspace', () => {
+  const stepsWithOfficeClient = [
+    { key: 'office_client' },
+    { key: 'document_type' },
+    { key: 'recipient' },
+  ];
+  assert.equal(
+    resolveIncomeWizardStartingStepIndex(stepsWithOfficeClient, null, {
+      wizard_starting_step_key: 'office_client',
+    }),
+    0,
+  );
+});
+
 test('credit draft first paint is document_details index, not issuer_choice', () => {
   assert.equal(
     resolveIncomeWizardStartingStepIndex(WIZARD_STEPS, {
@@ -134,11 +148,20 @@ test('credit handoff opens WorkEngineIncomeDocumentWizardModal, not retainer set
   );
   assert.match(wizardSource, /has_issuer_context: Boolean\(workspaceAgg\?\.issuer_context\)/);
 
+  assert.match(tabHostSource, /openPopulationNewDocument/);
+  assert.match(tabHostSource, /population_actions/);
+  assert.match(tabHostSource, /setWizardOpenHints\(action\.wizard_open\)/);
+  assert.doesNotMatch(tabHostSource, /entry\.button_label/);
+  assert.match(wizardSource, /lock_issuer_choice_step/);
+  assert.match(wizardSource, /openHints/);
+  assert.match(shellSource, /populationNewDocumentActions/);
+  assert.match(shellSource, /onPopulationNewDocument/);
+
   assert.match(tabHostSource, /onOpenConvertedDraft=\{async \(\{ workspaceAggregate \}\) => \{/);
   assert.match(tabHostSource, /setWizardInitialAgg\(workspaceAggregate\)/);
   assert.match(tabHostSource, /setWizardOpen\(true\)/);
   assert.match(tabHostSource, /WorkEngineIncomeDocumentWizardModal/);
-  assert.match(tabHostSource, /setWizardInitialAgg\(null\);\s*setWizardOpen\(true\)/);
+  assert.match(tabHostSource, /setWizardOpenHints\(null\)/);
   assert.match(wizardSource, /resolveIncomeWizardStartingStepIndex/);
   assert.match(wizardSource, /<WorkEngineDocumentDetailsStep/);
   assert.match(wizardSource, /nx-we-income-wizard-overlay/);

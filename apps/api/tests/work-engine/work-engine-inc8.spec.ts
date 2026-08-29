@@ -89,3 +89,13 @@ test('invoices tab aggregate includes document creation wizard entrypoint', () =
   assert.match(invoicesWizardSource, /המשרד —/);
   assert.match(invoicesWizardSource, /לקוח מהמשרד/);
 });
+
+test('document creation entrypoint exposes per-population +מסמך actions', () => {
+  assert.match(invoicesWizardSource, /population_actions/);
+  assert.match(invoicesWizardSource, /section_key: 'office_clients'/);
+  assert.match(invoicesWizardSource, /section_key: 'office_client_customers'/);
+  assert.match(invoicesWizardSource, /acting_mode: 'self'/);
+  assert.match(invoicesWizardSource, /preset_issuer_choice_key: 'office_client'/);
+  assert.match(invoicesWizardSource, /wizard_starting_step_key: 'office_client'/);
+  assert.match(invoicesWizardSource, /lock_issuer_choice_step: true/);
+});

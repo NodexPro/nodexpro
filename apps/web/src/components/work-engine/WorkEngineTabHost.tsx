@@ -15,6 +15,7 @@ import {
   fetchWorkEngineQueueAggregate,
   type AccountantWorkspaceTab,
   type WorkEngineClientsTabAggregate,
+  type WorkEngineInvoicesPopulationNewDocumentAction,
   type WorkEngineInvoicesTabAggregate,
   type WorkEngineQueueFiltersInput,
 } from '../../api/work-engine';
@@ -310,6 +311,9 @@ function WorkEngineInvoicesTabPanel(props: {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardBusy, setWizardBusy] = useState(false);
   const [wizardInitialAgg, setWizardInitialAgg] = useState<IncomeWorkspaceAggregate | null>(null);
+  const [wizardOpenHints, setWizardOpenHints] = useState<
+    WorkEngineInvoicesPopulationNewDocumentAction['wizard_open'] | null
+  >(null);
   const [brandingOpen, setBrandingOpen] = useState(false);
   const [brandingBusy, setBrandingBusy] = useState(false);
   const [panelBusy, setPanelBusy] = useState(false);
@@ -351,6 +355,43 @@ function WorkEngineInvoicesTabPanel(props: {
         : prev,
     );
   }, []);
+
+  const openPopulationNewDocument = useCallback(
+    async (sectionKey: 'office_clients' | 'office_client_customers') => {
+      const entrypoint = aggregate?.document_creation_entrypoint;
+      const action = (entrypoint?.population_actions ?? []).find((a) => a.section_key === sectionKey);
+      if (!action) return;
+      if (!action.enabled) {
+        if (action.disabled_reason) setError(action.disabled_reason);
+        return;
+      }
+      setWizardBusy(true);
+      setError(null);
+      try {
+        let workspace: IncomeWorkspaceAggregate | null = null;
+        if (action.select_issuer_command) {
+          const res = await executeIncomeCommand(
+            action.select_issuer_command.command,
+            action.select_issuer_command.command_payload,
+          );
+          if ('income_workspace_aggregate' in res) {
+            workspace = res.income_workspace_aggregate;
+            if ('income_workspace_context_aggregate' in res) {
+              handleAfterIssuerSelect(res as SelectIncomeIssuerContextCommandResponse);
+            }
+          }
+        }
+        setWizardOpenHints(action.wizard_open);
+        setWizardInitialAgg(workspace);
+        setWizardOpen(true);
+      } catch (e) {
+        setError(userFacingApiMessage(e));
+      } finally {
+        setWizardBusy(false);
+      }
+    },
+    [aggregate?.document_creation_entrypoint, handleAfterIssuerSelect],
+  );
 
   const handleInvoicesTabRefresh = useCallback((invoicesTabAggregate: Record<string, unknown>) => {
     setAggregate((prev) =>
@@ -425,19 +466,6 @@ function WorkEngineInvoicesTabPanel(props: {
           </h1>
           <p className="nx-we-queue__subtitle nx-body-text nx-body-text--muted">{aggregate.description}</p>
         </div>
-        {canOpenWizard ? (
-          <button
-            type="button"
-            className="nx-btn nx-btn-primary nx-btn-taxes-compact"
-            disabled={wizardBusy || panelBusy}
-            onClick={() => {
-              setWizardInitialAgg(null);
-              setWizardOpen(true);
-            }}
-          >
-            {entry?.button_label ?? 'מסמך חדש'}
-          </button>
-        ) : null}
       </div>
 
       <WorkEngineClientDocumentManagementShell
@@ -445,10 +473,17 @@ function WorkEngineInvoicesTabPanel(props: {
         busy={panelBusy}
         customersTableModel={customersTableModel}
         customersAllowedActions={issuerWorkspace?.allowed_actions ?? []}
+        populationNewDocumentActions={entry?.population_actions ?? []}
+        onPopulationNewDocument={
+          canOpenWizard || (entry?.population_actions?.some((a) => a.enabled) ?? false)
+            ? (sectionKey) => void openPopulationNewDocument(sectionKey)
+            : undefined
+        }
         onBusyChange={setPanelBusy}
         onAfterIssuerSelect={handleAfterIssuerSelect}
         onOpenBranding={() => setBrandingOpen(true)}
         onOpenNewDocument={async (workspaceAggregate) => {
+          setWizardOpenHints(null);
           setWizardInitialAgg(workspaceAggregate);
           setWizardOpen(true);
         }}
@@ -459,6 +494,7 @@ function WorkEngineInvoicesTabPanel(props: {
           try {
             const res = await executeIncomeCommand('resume_income_document_draft', { draft_id: draftId });
             if ('income_workspace_aggregate' in res) {
+              setWizardOpenHints(null);
               setWizardInitialAgg(res.income_workspace_aggregate);
               setWizardOpen(true);
             }
@@ -469,6 +505,7 @@ function WorkEngineInvoicesTabPanel(props: {
           }
         }}
         onOpenConvertedDraft={async ({ workspaceAggregate }) => {
+          setWizardOpenHints(null);
           setWizardInitialAgg(workspaceAggregate);
           setWizardOpen(true);
         }}
@@ -538,17 +575,21 @@ function WorkEngineInvoicesTabPanel(props: {
             wizardInitialAgg?.active_wizard_draft_id ??
             (wizardInitialAgg?.issuer_context
               ? `row-${String(wizardInitialAgg.issuer_context.active_issuer_business_id)}-${String(wizardInitialAgg.recipient_search?.selected?.income_customer_id ?? 'none')}`
-              : 'new-income-document')
+              : wizardOpenHints?.wizard_starting_step_key
+                ? `population-${wizardOpenHints.wizard_starting_step_key}-${wizardOpenHints.preset_issuer_choice_key ?? 'none'}`
+                : 'new-income-document')
           }
           open={wizardOpen}
           busy={wizardBusy}
           entrypoint={wizardEntrypoint}
           initialWorkspaceAgg={wizardInitialAgg}
+          openHints={wizardOpenHints}
           issuerBrandingProfile={aggregate.document_branding_profile}
           issuerBrandingEntrypoint={aggregate.document_branding_settings_entrypoint}
           onClose={() => {
             setWizardOpen(false);
             setWizardInitialAgg(null);
+            setWizardOpenHints(null);
           }}
           onBusyChange={setWizardBusy}
           onCompleted={(result) => {
