@@ -177,6 +177,8 @@ export const AUDIT_ACTIONS = {
   LEGAL_VALUE_VERSION_UPDATED: 'legal_value_version_updated',
   LEGAL_VALUE_VERSION_ACTIVATED: 'legal_value_version_activated',
   LEGAL_VALUE_VERSION_DEACTIVATED: 'legal_value_version_deactivated',
+  TAX_SOURCE_CREATED: 'tax_source_created',
+  TAX_RULE_CREATED: 'tax_rule_created',
   OWNER_NOTE_UPDATED: 'owner_note_updated',
   USAGE_HINT_UPDATED: 'usage_hint_updated',
   MODULE_SCOPE_UPDATED: 'module_scope_updated',

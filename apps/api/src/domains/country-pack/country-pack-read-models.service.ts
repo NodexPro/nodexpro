@@ -24,6 +24,7 @@ import {
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
 import { buildOwnerLegalValuesTableModel } from './owner-legal-values-table.pure.js';
+import { buildOwnerTaxKnowledgeAggregate } from '../tax-knowledge/tax-knowledge-read-models.service.js';
 type CommercialControlsQuery = {
   page: number;
   page_size: number;
@@ -813,6 +814,8 @@ const OWNER_LEGAL_CONTROL_AUDIT_ENTITY_TYPES = [
   'owner_country_pack_api',
   'country_pack_command',
   'docflow_request_template_definition',
+  'tax_source',
+  'tax_rule',
 ] as const;
 
 type OwnerLegalControlAuditRow = {
@@ -1336,11 +1339,14 @@ async function fetchOwnerLegalControlPanelAuditSummary(): Promise<{ recent: Owne
 
 /**
  * Single read model for GET /api/v1/owner/legal-control.
- * Composes existing owner aggregates only (no extra domain queries beyond audit summary).
+ * Composes existing owner aggregates plus the Tax Knowledge slice (no dedicated TK GET).
  */
 export async function buildOwnerLegalControlPanelAggregate(
   ctx: RequestContext,
-  opts?: { commercial_controls?: Partial<CommercialControlsQuery> }
+  opts?: {
+    commercial_controls?: Partial<CommercialControlsQuery>;
+    tax_knowledge_country_code?: string | null;
+  }
 ): Promise<Record<string, unknown>> {
   assertPlatformOwner(ctx);
 
@@ -1409,6 +1415,11 @@ export async function buildOwnerLegalControlPanelAggregate(
   const lvWarnings = (legalValues.validation_warnings as string[] | undefined) ?? [];
   const prWarnings = (platformPricing.warnings as string[] | undefined) ?? [];
   const commWarnings = communicationPolicies.validation_errors;
+  const taxKnowledge = await buildOwnerTaxKnowledgeAggregate(ctx, {
+    country_code: opts?.tax_knowledge_country_code ?? null,
+    countries: (tables?.countries as Array<{ code?: string; name?: string; status?: string }> | undefined) ?? [],
+  });
+  const tkWarnings = (taxKnowledge.warnings as string[] | undefined) ?? [];
 
   return {
     aggregate_key: 'owner_legal_control_panel_aggregate',
@@ -1452,6 +1463,7 @@ export async function buildOwnerLegalControlPanelAggregate(
     docflow_communication_templates: docflowCommunicationTemplates,
     docflow_request_templates: docflowRequestTemplates,
     commercial_controls: commercialControls,
+    tax_knowledge: taxKnowledge,
     docflow_communication_quick_actions: [
       {
         action_key: 'create_legal_value',
@@ -1494,11 +1506,13 @@ export async function buildOwnerLegalControlPanelAggregate(
       legal_values: lvWarnings,
       communication_policies: commWarnings,
       platform_pricing: prWarnings,
-      combined: [...cpWarnings, ...lvWarnings, ...commWarnings, ...prWarnings],
+      tax_knowledge: tkWarnings,
+      combined: [...cpWarnings, ...lvWarnings, ...commWarnings, ...prWarnings, ...tkWarnings],
     },
     available_actions: {
       country_pack_admin: countryPacksAdmin.actions ?? [],
       legal_values: legalValues.actions ?? [],
+      tax_knowledge: taxKnowledge.allowed_actions ?? [],
       platform_pricing: platformPricing.actions ?? [],
       owner_email_provider_config: [
         {

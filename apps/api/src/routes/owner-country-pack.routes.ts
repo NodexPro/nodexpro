@@ -26,6 +26,10 @@ import {
   executeOwnerInvoiceLayoutCommand,
   isOwnerInvoiceLayoutCommand,
 } from '../domains/owner-invoice-document-layout/owner-invoice-document-layout.service.js';
+import {
+  executeTaxKnowledgeCommand,
+  isTaxKnowledgeCommand,
+} from '../domains/tax-knowledge/tax-knowledge-commands.service.js';
 
 const router = Router();
 
@@ -79,6 +83,8 @@ router.get('/legal-control', async (req: Request, res: Response, next: NextFunct
         entitlement_status: typeof req.query.commercial_entitlement_status === 'string' ? req.query.commercial_entitlement_status : null,
         activation_status: typeof req.query.commercial_activation_status === 'string' ? req.query.commercial_activation_status : null,
       },
+      tax_knowledge_country_code:
+        typeof req.query.tax_knowledge_country_code === 'string' ? req.query.tax_knowledge_country_code : undefined,
     });
     return res.json(aggregate);
   } catch (e) {
@@ -254,6 +260,15 @@ router.post('/command', async (req: Request, res: Response, next: NextFunction) 
     if (!commandName) throw badRequest('command is required');
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw badRequest('payload must be an object');
+    }
+
+    if (isTaxKnowledgeCommand(commandName)) {
+      const out = await executeTaxKnowledgeCommand(
+        ctx,
+        commandName,
+        payload as Record<string, unknown>,
+      );
+      return res.json(out);
     }
 
     if (isOwnerInvoiceLayoutCommand(commandName)) {
