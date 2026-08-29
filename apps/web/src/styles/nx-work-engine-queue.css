@@ -134,6 +134,22 @@
   width: 100%;
 }
 
+/*
+ * REAL outer gutter (production screenshot): TemplateLayout .t1-pageMain
+ * uses padding-inline: 32px (tokens.css). The WE-queue modifier only changed
+ * padding-top — horizontal 32px remained between sidebar and workspace.
+ * Also drop the centered maxWidth:1600 wrapper so BOTH can use full main width.
+ * Scoped to invoices BOTH only — no other WE tabs.
+ */
+.t1-pageMain--work-engine-queue:has(.nx-we-invoices-cdm-populations--both) {
+  padding-inline: 2px;
+}
+
+.t1-pageMain--work-engine-queue:has(.nx-we-invoices-cdm-populations--both) > div {
+  max-width: none !important;
+  margin-inline: 0 !important;
+}
+
 .nx-we-invoices-tab .nx-income-cdm {
   margin-block: 4px 8px;
 }
