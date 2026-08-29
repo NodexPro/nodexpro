@@ -503,13 +503,42 @@ function ClientDocumentManagementRowsTable({
                   <tr className="nx-we-invoices-cdm-group-header-row">
                     <td colSpan={columns.length}>
                       <div className="nx-we-invoices-cdm-group-header">
-                        <span className="nx-we-invoices-cdm-group-header__name">
-                          {group.parent_client_display_name}
-                        </span>
-                        {typeof group.total_customers === 'number' ? (
-                          <span className="nx-we-invoices-cdm-group-header__count">
-                            {group.total_customers}
+                        <div className="nx-we-invoices-cdm-group-header__identity">
+                          <span className="nx-we-invoices-cdm-group-header__name">
+                            {group.parent_client_display_name}
                           </span>
+                          {typeof group.total_customers === 'number' ? (
+                            <span className="nx-we-invoices-cdm-group-header__count">
+                              {group.total_customers}
+                            </span>
+                          ) : null}
+                        </div>
+                        {(group.actions ?? []).length > 0 ? (
+                          <div className="nx-income-cdm__actions nx-we-invoices-cdm-group-header__actions">
+                            {(group.actions ?? []).map((action) => (
+                              <ActionButton
+                                key={action.key}
+                                action={action}
+                                busy={busy}
+                                onClick={() => {
+                                  if (action.key === 'open_reports') {
+                                    void onAction({
+                                      kind: 'reports',
+                                      clientId: group.parent_represented_client_id,
+                                      clientName: group.parent_client_display_name,
+                                      endCustomerId: null,
+                                    });
+                                    return;
+                                  }
+                                  void onAction({
+                                    kind: 'command',
+                                    action,
+                                    clientName: group.parent_client_display_name,
+                                  });
+                                }}
+                              />
+                            ))}
+                          </div>
                         ) : null}
                       </div>
                     </td>

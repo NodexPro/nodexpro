@@ -15,12 +15,32 @@ export type IncomeClientDocumentManagementPopulationKey =
   | 'office_client_customer';
 
 /**
- * Canonical visual action-slot order for Invoice CDM rows (both populations).
+ * Canonical visual action-slot order for Invoice CDM **office** rows.
  * Retainer slot is present only when the panel includes retainer actions.
  */
 export const INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE = [
   'open_branding_studio',
   'open_end_customers',
+  'open_reports',
+  'open_income_ledger_card',
+  'open_email_history',
+] as const;
+
+/**
+ * Issuer/group-level actions for end-customer population parents (e.g. Test3).
+ * Document settings + customer list + issuer-scoped reports live here — not on recipient rows.
+ */
+export const INCOME_CDM_ISSUER_GROUP_ACTION_SLOT_KEYS = [
+  'open_branding_studio',
+  'open_end_customers',
+  'open_reports',
+] as const;
+
+/**
+ * Recipient/end-customer row slots (WE invoices).
+ * Issuer-owned settings/customers are omitted; reports + email stay recipient-scoped.
+ */
+export const INCOME_CDM_END_CUSTOMER_ROW_ACTION_SLOT_KEYS_BASE = [
   'open_reports',
   'open_income_ledger_card',
   'open_email_history',
@@ -40,6 +60,21 @@ export function incomeCdmCanonicalActionSlotKeys(
     : INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_MORE;
   return [
     ...INCOME_CDM_CANONICAL_ACTION_SLOT_KEYS_BASE,
+    ...(includeRetainer ? [INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_RETAINER] : []),
+    trailing,
+  ];
+}
+
+/** Recipient-row slot keys for WE invoices (issuer settings/customers live on the group). */
+export function incomeCdmEndCustomerRowActionSlotKeys(
+  includeRetainer: boolean,
+  options?: { newDocumentInsteadOfMore?: boolean },
+): string[] {
+  const trailing = options?.newDocumentInsteadOfMore
+    ? INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_NEW_DOCUMENT
+    : INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_MORE;
+  return [
+    ...INCOME_CDM_END_CUSTOMER_ROW_ACTION_SLOT_KEYS_BASE,
     ...(includeRetainer ? [INCOME_CDM_CANONICAL_ACTION_SLOT_KEY_RETAINER] : []),
     trailing,
   ];

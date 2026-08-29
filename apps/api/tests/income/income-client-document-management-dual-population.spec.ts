@@ -11,6 +11,8 @@ import {
   groupEndCustomerRowsByParent,
   incomeCdmActionKeysMatchCanonical,
   incomeCdmCanonicalActionSlotKeys,
+  incomeCdmEndCustomerRowActionSlotKeys,
+  INCOME_CDM_ISSUER_GROUP_ACTION_SLOT_KEYS,
   mergeOfficeClientsWithDocumentStats,
   zeroOfficeClientDocumentStat,
 } from '../../src/domains/income/income-client-document-management-panel.pure.js';
@@ -128,19 +130,23 @@ test('grouping helper nests end customers under parent labels', () => {
   assert.equal(groups[1].parent_represented_client_id, 'p2');
 });
 
-test('end-customer actions share canonical slots; /m/income keeps artificial disablement', () => {
+test('end-customer WE rows omit issuer settings/customers; /m/income keeps disabled placeholders', () => {
   assert.match(panelSource, /buildEndCustomerRowActions/);
+  assert.match(panelSource, /buildIssuerCustomerGroupActions/);
   assert.match(panelSource, /workEngineInvoicesFunctionalParity/);
   const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
   const endFnEnd = panelSource.indexOf('function formatMoneyReference');
   const endFn = panelSource.slice(endFnStart, endFnEnd);
-  assert.match(endFn, /key: 'open_branding_studio'/);
-  assert.match(endFn, /key: 'open_end_customers'/);
+  const groupFnStart = panelSource.indexOf('function buildIssuerCustomerGroupActions');
+  const groupFnEnd = panelSource.indexOf('function buildEndCustomerRowActions');
+  const groupFn = panelSource.slice(groupFnStart, groupFnEnd);
+
   assert.match(endFn, /key: 'open_reports'/);
   assert.match(endFn, /key: 'open_income_ledger_card'/);
   assert.match(endFn, /key: 'open_email_history'/);
   assert.match(endFn, /key: 'more'/);
   assert.match(endFn, /key: 'open_new_income_document'/);
+  assert.match(endFn, /report_scope: 'recipient'/);
   // Legacy (/m/income) branch still carries artificial disablement reasons.
   assert.match(endFn, /הגדרות מסמך שייכות ללקוח המשרד/);
   assert.match(endFn, /ניהול לקוחות קצה זמין משורת לקוח המשרד בלבד/);
@@ -148,11 +154,20 @@ test('end-customer actions share canonical slots; /m/income keeps artificial dis
   assert.match(endFn, /היסטוריית מייל לפי לקוח קצה — בקרוב/);
   assert.match(endFn, /end_customer_id: incomeCustomerId/);
   assert.match(endFn, /income_customer_id: incomeCustomerId/);
-  // WE parity: document settings = Branding Studio (not CRM customer editor).
-  assert.match(endFn, /open_document_branding_studio:\s*true/);
   assert.doesNotMatch(endFn, /open_end_customer_settings/);
-  assert.match(endFn, /open_end_customers_panel:\s*true/);
-  assert.match(endFn, /focus_income_customer_id:\s*incomeCustomerId/);
+  // WE recipient rows do not own issuer Branding Studio / customer-list.
+  assert.doesNotMatch(endFn, /open_document_branding_studio:\s*true/);
+  assert.doesNotMatch(endFn, /focus_income_customer_id:\s*incomeCustomerId/);
+
+  // Issuer group owns settings + customers + issuer reports.
+  assert.match(groupFn, /key: 'open_branding_studio'/);
+  assert.match(groupFn, /key: 'open_end_customers'/);
+  assert.match(groupFn, /key: 'open_reports'/);
+  assert.match(groupFn, /open_document_branding_studio:\s*true/);
+  assert.match(groupFn, /open_end_customers_panel:\s*true/);
+  assert.match(groupFn, /report_scope: 'issuer'/);
+  assert.match(endFn, /report_scope: 'recipient'/);
+  assert.match(panelSource, /actions: buildIssuerCustomerGroupActions/);
 });
 
 test('WE invoices tab enables end-customer functional parity; income issuer context does not', () => {
@@ -176,15 +191,17 @@ test('end-customer WE parity actions are permission-gated not population-gated',
   const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
   const endFnEnd = panelSource.indexOf('function formatMoneyReference');
   const endFn = panelSource.slice(endFnStart, endFnEnd);
-  assert.match(endFn, /enabled: perms\.edit/);
+  const groupFnStart = panelSource.indexOf('function buildIssuerCustomerGroupActions');
+  const groupFnEnd = panelSource.indexOf('function buildEndCustomerRowActions');
+  const groupFn = panelSource.slice(groupFnStart, groupFnEnd);
+  assert.match(groupFn, /enabled: canEdit/);
   assert.match(endFn, /weParity \? perms\.view : false/);
   assert.match(endFn, /weParity \? canEmail : false/);
-  assert.match(endFn, /open_document_branding_studio:\s*true/);
   assert.doesNotMatch(endFn, /open_end_customer_settings/);
   assert.doesNotMatch(endFn, /population_key\s*===/);
 });
 
-test('canonical action slot order is identical for both populations', () => {
+test('office canonical slots stay issuer-complete; WE recipient rows use recipient slots', () => {
   const withRetainer = incomeCdmCanonicalActionSlotKeys(true);
   const withoutRetainer = incomeCdmCanonicalActionSlotKeys(false);
   assert.deepEqual(withRetainer, [
@@ -213,6 +230,17 @@ test('canonical action slot order is identical for both populations', () => {
     'open_invoice_retainer_setup',
     'open_new_income_document',
   ]);
+  assert.deepEqual(incomeCdmEndCustomerRowActionSlotKeys(false, { newDocumentInsteadOfMore: true }), [
+    'open_reports',
+    'open_income_ledger_card',
+    'open_email_history',
+    'open_new_income_document',
+  ]);
+  assert.deepEqual([...INCOME_CDM_ISSUER_GROUP_ACTION_SLOT_KEYS], [
+    'open_branding_studio',
+    'open_end_customers',
+    'open_reports',
+  ]);
   assert.equal(incomeCdmActionKeysMatchCanonical(withRetainer, true), true);
   assert.equal(incomeCdmActionKeysMatchCanonical(withoutRetainer, false), true);
   assert.equal(
@@ -229,14 +257,18 @@ test('canonical action slot order is identical for both populations', () => {
   );
 
   const officeFnStart = panelSource.indexOf('function buildOfficeClientRowActions');
-  const officeFnEnd = panelSource.indexOf('function buildEndCustomerRowActions');
-  const officeFn = panelSource.slice(officeFnStart, officeFnEnd);
+  const officeFnEnd = panelSource.indexOf('function buildIssuerCustomerGroupActions');
+  const officeFn = panelSource.slice(officeFnStart, officeFnEnd === -1
+    ? panelSource.indexOf('function buildEndCustomerRowActions')
+    : officeFnEnd);
   const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
   const endFnEnd = panelSource.indexOf('function formatMoneyReference');
   const endFn = panelSource.slice(endFnStart, endFnEnd);
 
   for (const key of withoutRetainer) {
     assert.match(officeFn, new RegExp(`key: '${key}'`));
+  }
+  for (const key of incomeCdmEndCustomerRowActionSlotKeys(false, { newDocumentInsteadOfMore: true })) {
     assert.match(endFn, new RegExp(`key: '${key}'`));
   }
   assert.match(officeFn, /key: 'open_new_income_document'/);
@@ -252,12 +284,13 @@ test('ledger/retainer end-customer payloads keep parent + income_customer_id', (
   assert.match(endFn, /income_customer_id: incomeCustomerId/);
 });
 
-test('frontend action cell does not filter by population', () => {
+test('frontend action cell does not filter by population; group renders backend actions', () => {
   const panelFe = readFileSync(
     join(dir, '../../../web/src/components/income/IncomeClientDocumentManagementPanel.tsx'),
     'utf8',
   );
   assert.match(panelFe, /\(row\.actions \?\? \[\]\)\.map/);
+  assert.match(panelFe, /\(group\.actions \?\? \[\]\)\.map/);
   assert.doesNotMatch(panelFe, /population_key\s*===/);
   assert.doesNotMatch(panelFe, /if\s*\(.*income_customer_id.*\)\s*\{[\s\S]*hide/);
   assert.doesNotMatch(panelFe, /actions\.filter\(/);
@@ -303,7 +336,7 @@ test('WE invoices omits draft cube from counters; draft domain key still exists 
 
 test('WE + action payloads carry exact row context for office and end customer', () => {
   const officeFnStart = panelSource.indexOf('function buildOfficeClientRowActions');
-  const officeFnEnd = panelSource.indexOf('function buildEndCustomerRowActions');
+  const officeFnEnd = panelSource.indexOf('function buildIssuerCustomerGroupActions');
   const officeFn = panelSource.slice(officeFnStart, officeFnEnd);
   const endFnStart = panelSource.indexOf('function buildEndCustomerRowActions');
   const endFnEnd = panelSource.indexOf('function formatMoneyReference');

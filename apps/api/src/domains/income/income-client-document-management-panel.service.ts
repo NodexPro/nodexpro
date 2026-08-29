@@ -217,12 +217,70 @@ function buildOfficeClientRowActions(
 }
 
 /**
- * End-customer actions: same visual slots/order as office.
+ * Issuer/group actions for end-customer population parents (Test3-level).
+ * Reuses the same command contracts as office-row settings / customers / reports.
+ */
+function buildIssuerCustomerGroupActions(
+  clientId: string,
+  perms: IncomeWorkspacePermissions,
+): IncomeClientDocumentManagementRowAction[] {
+  const canEdit = perms.edit;
+  return [
+    {
+      key: 'open_branding_studio',
+      label: 'הגדרות מסמך',
+      icon_key: 'settings',
+      command: INCOME_COMMAND_SELECT_ISSUER,
+      command_payload: {
+        command: INCOME_COMMAND_SELECT_ISSUER,
+        acting_mode: 'office_representative',
+        issuer_business_id: clientId,
+        represented_client_id: clientId,
+        open_document_branding_studio: true,
+      },
+      enabled: canEdit,
+      disabled_reason: canEdit ? null : 'אין הרשאת עריכה',
+    },
+    {
+      key: 'open_end_customers',
+      label: 'לקוחות',
+      icon_key: 'end_customers',
+      command: INCOME_COMMAND_SELECT_ISSUER,
+      command_payload: {
+        command: INCOME_COMMAND_SELECT_ISSUER,
+        acting_mode: 'office_representative',
+        issuer_business_id: clientId,
+        represented_client_id: clientId,
+        open_end_customers_panel: true,
+      },
+      enabled: perms.view,
+      disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
+    },
+    {
+      key: 'open_reports',
+      label: 'דוחות',
+      icon_key: 'reports',
+      command: null,
+      command_payload: {
+        open_reports_panel: true,
+        client_id: clientId,
+        report_scope: 'issuer',
+      },
+      enabled: perms.view,
+      disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
+    },
+  ];
+}
+
+/**
+ * End-customer (recipient) row actions.
  *
- * When `workEngineInvoicesFunctionalParity` is true (Work Engine invoices tab only):
- * enable each slot with a valid end-customer backend contract (RBAC still applies).
- * When false (/m/income and other surfaces): keep artificial disablement for slots
- * that lack a surface-scoped destination on that screen.
+ * Work Engine invoices (workEngineInvoicesFunctionalParity):
+ * - Issuer-owned settings / customer-list live on the parent **group** actions, not here.
+ * - Recipient keeps reports (customer-scoped), email history, ledger, retainer, + document.
+ *
+ * /m/income and other surfaces: keep legacy disabled placeholders for settings/customers
+ * so that screen does not invent a new visual contract.
  */
 function buildEndCustomerRowActions(params: {
   representedClientId: string;
@@ -238,74 +296,34 @@ function buildEndCustomerRowActions(params: {
   const canEmail = perms.view && perms.issue_on_behalf;
   const canCreateDocument = perms.issue || perms.edit;
 
-  const settingsAction: IncomeClientDocumentManagementRowAction = weParity
-    ? {
-        key: 'open_branding_studio',
-        label: 'הגדרות מסמך',
-        icon_key: 'settings',
-        command: INCOME_COMMAND_SELECT_ISSUER,
-        command_payload: {
-          command: INCOME_COMMAND_SELECT_ISSUER,
-          acting_mode: 'office_representative',
-          issuer_business_id: representedClientId,
-          represented_client_id: representedClientId,
-          income_customer_id: incomeCustomerId,
-          parent_client_display_name: parentClientDisplayName,
-          /**
-           * Document settings = Branding Studio for the parent issuer.
-           * Row context keeps income_customer_id; branding profiles are issuer-scoped.
-           * Must NOT open the end-customer CRM identity editor.
-           */
-          open_document_branding_studio: true,
+  const legacyDisabledIssuerSlots: IncomeClientDocumentManagementRowAction[] = weParity
+    ? []
+    : [
+        {
+          key: 'open_branding_studio',
+          label: 'הגדרות מסמך',
+          icon_key: 'settings',
+          command: null,
+          command_payload: {
+            represented_client_id: representedClientId,
+            income_customer_id: incomeCustomerId,
+          },
+          enabled: false,
+          disabled_reason: 'הגדרות מסמך שייכות ללקוח המשרד, לא ללקוח קצה',
         },
-        enabled: perms.edit,
-        disabled_reason: perms.edit ? null : 'אין הרשאת עריכה',
-      }
-    : {
-        key: 'open_branding_studio',
-        label: 'הגדרות מסמך',
-        icon_key: 'settings',
-        command: null,
-        command_payload: {
-          represented_client_id: representedClientId,
-          income_customer_id: incomeCustomerId,
+        {
+          key: 'open_end_customers',
+          label: 'לקוחות הלקוח',
+          icon_key: 'end_customers',
+          command: null,
+          command_payload: {
+            represented_client_id: representedClientId,
+            income_customer_id: incomeCustomerId,
+          },
+          enabled: false,
+          disabled_reason: 'ניהול לקוחות קצה זמין משורת לקוח המשרד בלבד',
         },
-        enabled: false,
-        disabled_reason: 'הגדרות מסמך שייכות ללקוח המשרד, לא ללקוח קצה',
-      };
-
-  const clientManagementAction: IncomeClientDocumentManagementRowAction = weParity
-    ? {
-        key: 'open_end_customers',
-        label: 'לקוחות הלקוח',
-        icon_key: 'end_customers',
-        command: INCOME_COMMAND_SELECT_ISSUER,
-        command_payload: {
-          command: INCOME_COMMAND_SELECT_ISSUER,
-          acting_mode: 'office_representative',
-          issuer_business_id: representedClientId,
-          represented_client_id: representedClientId,
-          income_customer_id: incomeCustomerId,
-          parent_client_display_name: parentClientDisplayName,
-          /** Reuse parent end-customers panel; focus THIS end customer (not invent children). */
-          open_end_customers_panel: true,
-          focus_income_customer_id: incomeCustomerId,
-        },
-        enabled: perms.view,
-        disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
-      }
-    : {
-        key: 'open_end_customers',
-        label: 'לקוחות הלקוח',
-        icon_key: 'end_customers',
-        command: null,
-        command_payload: {
-          represented_client_id: representedClientId,
-          income_customer_id: incomeCustomerId,
-        },
-        enabled: false,
-        disabled_reason: 'ניהול לקוחות קצה זמין משורת לקוח המשרד בלבד',
-      };
+      ];
 
   const reportsAction: IncomeClientDocumentManagementRowAction = {
     key: 'open_reports',
@@ -316,6 +334,7 @@ function buildEndCustomerRowActions(params: {
       open_reports_panel: true,
       client_id: representedClientId,
       income_customer_id: incomeCustomerId,
+      report_scope: 'recipient',
     },
     enabled: weParity ? perms.view : false,
     disabled_reason: weParity
@@ -326,8 +345,7 @@ function buildEndCustomerRowActions(params: {
   };
 
   const actions: IncomeClientDocumentManagementRowAction[] = [
-    settingsAction,
-    clientManagementAction,
+    ...legacyDisabledIssuerSlots,
     reportsAction,
     {
       key: 'open_income_ledger_card',
@@ -1127,7 +1145,10 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
       parent_represented_client_id: row.parent_represented_client_id!,
       parent_client_display_name: row.parent_client_display_name!,
     })),
-  );
+  ).map((group) => ({
+    ...group,
+    actions: buildIssuerCustomerGroupActions(group.parent_represented_client_id, params.perms),
+  }));
 
   const office_clients_section: IncomeClientDocumentManagementSection = {
     section_key: 'office_clients',

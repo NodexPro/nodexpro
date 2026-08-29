@@ -619,6 +619,11 @@ export interface IncomeClientDocumentManagementCustomerGroup {
   parent_client_display_name: string;
   total_customers: number;
   rows: IncomeClientDocumentManagementRow[];
+  /**
+   * Issuer-level actions for this parent (document settings / customers / reports).
+   * Backend-owned; not derived on the frontend from population or row position.
+   */
+  actions: IncomeClientDocumentManagementRowAction[];
 }
 
 export interface IncomeClientDocumentManagementSectionPage {

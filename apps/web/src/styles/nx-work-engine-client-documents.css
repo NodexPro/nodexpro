@@ -812,6 +812,18 @@
   direction: rtl;
 }
 
+.nx-we-invoices-cdm-group-header__identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nx-we-invoices-cdm-group-header__actions {
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
 .nx-we-invoices-cdm-group-header__name {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 12px;
