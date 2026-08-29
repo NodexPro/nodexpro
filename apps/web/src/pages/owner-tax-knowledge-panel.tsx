@@ -4,10 +4,13 @@ import { EmptyState } from '../templates/template-1/components/EmptyState';
 import { SectionCard } from '../templates/template-1/components/SectionCard';
 import type {
   OwnerCountryPackRow,
+  OwnerLegalValueRow,
   OwnerRulesetRow,
   TaxKnowledgeAggregate,
   TaxKnowledgeAllowedAction,
+  TaxKnowledgeCitation,
   TaxKnowledgeCountry,
+  TaxKnowledgeLegalValueBinding,
   TaxKnowledgeRule,
   TaxKnowledgeSource,
   TaxKnowledgeVersion,
@@ -93,6 +96,61 @@ function parsePayloadObject(raw: unknown): UnknownRecord {
   return raw as UnknownRecord;
 }
 
+function parseCitations(raw: unknown): TaxKnowledgeCitation[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      id: asString(row.id),
+      tax_rule_version_id: asString(row.tax_rule_version_id),
+      tax_source_id: asString(row.tax_source_id),
+      source_code: asString(row.source_code),
+      title: asString(row.title),
+      provenance_type: asString(row.provenance_type),
+      status: asString(row.status),
+      locator: asNullableString(row.locator),
+      created_at: asString(row.created_at),
+      allowed_actions: parseAllowedActions(row.allowed_actions),
+    }));
+}
+
+function parseBindings(raw: unknown): TaxKnowledgeLegalValueBinding[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      id: asString(row.id),
+      tax_rule_version_id: asString(row.tax_rule_version_id),
+      legal_value_id: asString(row.legal_value_id),
+      value_key: asString(row.value_key),
+      label: asString(row.label),
+      category: asNullableString(row.category),
+      module_scope: asNullableString(row.module_scope),
+      status: asString(row.status),
+      created_at: asString(row.created_at),
+      allowed_actions: parseAllowedActions(row.allowed_actions),
+    }));
+}
+
+function parseLegalValuePickerRows(raw: unknown): OwnerLegalValueRow[] {
+  const rec = asRecord(raw);
+  const table = rec && Array.isArray(rec.table) ? rec.table : Array.isArray(raw) ? raw : [];
+  return table
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null && asString(row.id).trim() !== '')
+    .map((row) => ({
+      id: asString(row.id),
+      country_code: asString(row.country_code),
+      value_key: asString(row.value_key),
+      label: asString(row.label),
+      category: asNullableString(row.category),
+      module_scope: asNullableString(row.module_scope),
+      status: asString(row.status),
+    }));
+}
+
 function parseVersion(row: UnknownRecord): TaxKnowledgeVersion {
   return {
     id: asString(row.id),
@@ -108,8 +166,8 @@ function parseVersion(row: UnknownRecord): TaxKnowledgeVersion {
     payload_checksum: asString(row.payload_checksum),
     supersedes_version_id: asNullableString(row.supersedes_version_id),
     created_at: asString(row.created_at),
-    sources: [],
-    legal_value_bindings: [],
+    sources: parseCitations(row.sources),
+    legal_value_bindings: parseBindings(row.legal_value_bindings),
     relationships: [],
     allowed_actions: parseAllowedActions(row.allowed_actions),
   };
@@ -292,12 +350,17 @@ type DialogKind =
   | 'update_tax_rule_metadata'
   | 'create_tax_rule_version'
   | 'update_tax_rule_version_draft'
+  | 'pin_tax_rule_version_source'
+  | 'unpin_tax_rule_version_source'
+  | 'bind_tax_rule_version_legal_value'
+  | 'unbind_tax_rule_version_legal_value'
   | null;
 
 export function OwnerTaxKnowledgePanel({
   taxKnowledge,
   countryPacks: countryPacksRaw,
   rulesets: rulesetsRaw,
+  legalValues: legalValuesRaw,
   pendingCountryCode,
   busy,
   onSelectCountry,
@@ -306,6 +369,7 @@ export function OwnerTaxKnowledgePanel({
   taxKnowledge: TaxKnowledgeAggregate;
   countryPacks: unknown;
   rulesets: unknown;
+  legalValues: unknown;
   pendingCountryCode: string | null;
   busy: boolean;
   onSelectCountry: (countryCode: string) => void;
@@ -316,6 +380,7 @@ export function OwnerTaxKnowledgePanel({
   const schemaNotApplied = taxKnowledge.warnings.includes(SCHEMA_NOT_APPLIED);
   const countryPacks = parseCountryPacks(countryPacksRaw);
   const rulesets = parseRulesets(rulesetsRaw);
+  const legalValueRows = parseLegalValuePickerRows(legalValuesRaw);
   const createSourceAction = catalogAction(taxKnowledge.allowed_actions, 'create_tax_source');
   const createRuleAction = catalogAction(taxKnowledge.allowed_actions, 'create_tax_rule');
   const createSourceAllowed = createSourceAction?.enabled === true;
@@ -350,6 +415,10 @@ export function OwnerTaxKnowledgePanel({
     effective_to: '',
     payload_json: '{}',
   });
+  const [pinForm, setPinForm] = useState({ tax_source_id: '', locator: '' });
+  const [bindLegalValueId, setBindLegalValueId] = useState('');
+  const [pendingCitationId, setPendingCitationId] = useState(null as string | null);
+  const [pendingBindingId, setPendingBindingId] = useState(null as string | null);
 
   const selectedSource = taxKnowledge.sources.find((row) => row.id && row.id === selectedSourceId) ?? null;
   const selectedRule = taxKnowledge.rules.find((row) => row.id && row.id === selectedRuleId) ?? null;
@@ -359,6 +428,16 @@ export function OwnerTaxKnowledgePanel({
     ? countryPacks.filter((row) => row.country_code === selectedRule.country_code)
     : [];
   const rulesetsForSelectedPack = rulesets.filter((row) => row.country_pack_id === versionForm.country_pack_id);
+  const sourcesForSelectedVersion = selectedVersion
+    ? taxKnowledge.sources.filter((row) => row.country_code === selectedVersion.country_code)
+    : [];
+  const legalValuesForSelectedVersion = selectedVersion
+    ? legalValueRows.filter((row) => row.country_code === selectedVersion.country_code)
+    : [];
+  const pendingCitation =
+    selectedVersion?.sources.find((row) => row.id && row.id === pendingCitationId) ?? null;
+  const pendingBinding =
+    selectedVersion?.legal_value_bindings.find((row) => row.id && row.id === pendingBindingId) ?? null;
 
   useEffect(() => {
     if (selectedSourceId && !taxKnowledge.sources.some((row) => row.id === selectedSourceId)) {
@@ -379,6 +458,12 @@ export function OwnerTaxKnowledgePanel({
     if (!dialogKind) return;
     setFormError('');
     setRetireReason('');
+    if (dialogKind === 'pin_tax_rule_version_source') {
+      setPinForm({ tax_source_id: '', locator: '' });
+    }
+    if (dialogKind === 'bind_tax_rule_version_legal_value') {
+      setBindLegalValueId('');
+    }
     if (dialogKind === 'create_tax_source' || dialogKind === 'create_tax_rule') {
       setSourceForm({
         source_code: '',
@@ -574,10 +659,55 @@ export function OwnerTaxKnowledgePanel({
           effective_to: versionForm.effective_to.trim(),
           payload_json: parsedPayload.value,
         });
+      } else if (dialogKind === 'pin_tax_rule_version_source') {
+        if (!enabledAction(selectedVersion?.allowed_actions ?? [], 'pin_tax_rule_version_source') || !selectedVersion) {
+          return;
+        }
+        if (!pinForm.tax_source_id) {
+          setFormError('tax_source_id is required.');
+          return;
+        }
+        const pinPayload: UnknownRecord = {
+          tax_rule_version_id: selectedVersion.id,
+          tax_source_id: pinForm.tax_source_id,
+        };
+        if (pinForm.locator.trim()) pinPayload.locator = pinForm.locator.trim();
+        await onCommand('pin_tax_rule_version_source', pinPayload);
+      } else if (dialogKind === 'unpin_tax_rule_version_source') {
+        if (!pendingCitation || !enabledAction(pendingCitation.allowed_actions, 'unpin_tax_rule_version_source')) {
+          return;
+        }
+        await onCommand('unpin_tax_rule_version_source', {
+          tax_rule_version_source_id: pendingCitation.id,
+        });
+      } else if (dialogKind === 'bind_tax_rule_version_legal_value') {
+        if (
+          !enabledAction(selectedVersion?.allowed_actions ?? [], 'bind_tax_rule_version_legal_value') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        if (!bindLegalValueId) {
+          setFormError('legal_value_id is required.');
+          return;
+        }
+        await onCommand('bind_tax_rule_version_legal_value', {
+          tax_rule_version_id: selectedVersion.id,
+          legal_value_id: bindLegalValueId,
+        });
+      } else if (dialogKind === 'unbind_tax_rule_version_legal_value') {
+        if (!pendingBinding || !enabledAction(pendingBinding.allowed_actions, 'unbind_tax_rule_version_legal_value')) {
+          return;
+        }
+        await onCommand('unbind_tax_rule_version_legal_value', {
+          tax_rule_version_legal_value_id: pendingBinding.id,
+        });
       } else {
         return;
       }
       setDialogKind(null);
+      setPendingCitationId(null);
+      setPendingBindingId(null);
     } catch (e) {
       setFormError(userFacingApiMessage(e));
     }
@@ -888,6 +1018,135 @@ export function OwnerTaxKnowledgePanel({
                           );
                         })}
                       </div>
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Provenance</div>
+                        {selectedVersion.sources.length ? (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={TABLE_STYLE}>
+                              <thead>
+                                <tr>
+                                  <th style={TH_STYLE}>source_code</th>
+                                  <th style={TH_STYLE}>title</th>
+                                  <th style={TH_STYLE}>provenance_type</th>
+                                  <th style={TH_STYLE}>status</th>
+                                  <th style={TH_STYLE}>locator</th>
+                                  <th style={TH_STYLE}>created_at</th>
+                                  <th style={TH_STYLE}></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedVersion.sources.map((citation) => {
+                                  const unpin = enabledAction(citation.allowed_actions, 'unpin_tax_rule_version_source');
+                                  return (
+                                    <tr key={citation.id || `${citation.tax_source_id}-${citation.locator ?? ''}`}>
+                                      <td style={TD_STYLE}>{citation.source_code}</td>
+                                      <td style={TD_STYLE}>{citation.title}</td>
+                                      <td style={TD_STYLE}>{citation.provenance_type}</td>
+                                      <td style={TD_STYLE}>{citation.status}</td>
+                                      <td style={TD_STYLE}>{citation.locator ?? ''}</td>
+                                      <td style={TD_STYLE}>{citation.created_at}</td>
+                                      <td style={TD_STYLE}>
+                                        {unpin ? (
+                                          <button
+                                            type="button"
+                                            className="nx-btn nx-btn-taxes-compact"
+                                            disabled={busy}
+                                            onClick={() => {
+                                              setPendingCitationId(citation.id);
+                                              setDialogKind('unpin_tax_rule_version_source');
+                                            }}
+                                          >
+                                            {actionLabel('unpin_tax_rule_version_source')}
+                                          </button>
+                                        ) : null}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>No pinned sources.</p>
+                        )}
+                        {enabledAction(selectedVersion.allowed_actions, 'pin_tax_rule_version_source') ? (
+                          <button
+                            type="button"
+                            className="nx-btn nx-btn-taxes-compact"
+                            disabled={busy}
+                            style={{ marginTop: 8 }}
+                            onClick={() => setDialogKind('pin_tax_rule_version_source')}
+                          >
+                            {actionLabel('pin_tax_rule_version_source')}
+                          </button>
+                        ) : null}
+                      </div>
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Legal value bindings</div>
+                        {selectedVersion.legal_value_bindings.length ? (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={TABLE_STYLE}>
+                              <thead>
+                                <tr>
+                                  <th style={TH_STYLE}>value_key</th>
+                                  <th style={TH_STYLE}>label</th>
+                                  <th style={TH_STYLE}>category</th>
+                                  <th style={TH_STYLE}>module_scope</th>
+                                  <th style={TH_STYLE}>status</th>
+                                  <th style={TH_STYLE}>created_at</th>
+                                  <th style={TH_STYLE}></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedVersion.legal_value_bindings.map((binding) => {
+                                  const unbind = enabledAction(
+                                    binding.allowed_actions,
+                                    'unbind_tax_rule_version_legal_value',
+                                  );
+                                  return (
+                                    <tr key={binding.id || binding.legal_value_id}>
+                                      <td style={TD_STYLE}>{binding.value_key}</td>
+                                      <td style={TD_STYLE}>{binding.label}</td>
+                                      <td style={TD_STYLE}>{binding.category ?? ''}</td>
+                                      <td style={TD_STYLE}>{binding.module_scope ?? ''}</td>
+                                      <td style={TD_STYLE}>{binding.status}</td>
+                                      <td style={TD_STYLE}>{binding.created_at}</td>
+                                      <td style={TD_STYLE}>
+                                        {unbind ? (
+                                          <button
+                                            type="button"
+                                            className="nx-btn nx-btn-taxes-compact"
+                                            disabled={busy}
+                                            onClick={() => {
+                                              setPendingBindingId(binding.id);
+                                              setDialogKind('unbind_tax_rule_version_legal_value');
+                                            }}
+                                          >
+                                            {actionLabel('unbind_tax_rule_version_legal_value')}
+                                          </button>
+                                        ) : null}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>No legal value bindings.</p>
+                        )}
+                        {enabledAction(selectedVersion.allowed_actions, 'bind_tax_rule_version_legal_value') ? (
+                          <button
+                            type="button"
+                            className="nx-btn nx-btn-taxes-compact"
+                            disabled={busy}
+                            style={{ marginTop: 8 }}
+                            onClick={() => setDialogKind('bind_tax_rule_version_legal_value')}
+                          >
+                            {actionLabel('bind_tax_rule_version_legal_value')}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   ) : selectedRule.versions.length ? (
                     <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>
@@ -934,6 +1193,14 @@ export function OwnerTaxKnowledgePanel({
                     ? ` · ${selectedRule.rule_code}`
                     : dialogKind === 'update_tax_rule_version_draft' && selectedVersion
                       ? ` · version_no ${selectedVersion.version_no}`
+                      : dialogKind === 'pin_tax_rule_version_source' && selectedVersion
+                        ? ` · version_no ${selectedVersion.version_no}`
+                        : dialogKind === 'unpin_tax_rule_version_source' && pendingCitation
+                          ? ` · ${pendingCitation.source_code}`
+                          : dialogKind === 'bind_tax_rule_version_legal_value' && selectedVersion
+                            ? ` · version_no ${selectedVersion.version_no}`
+                            : dialogKind === 'unbind_tax_rule_version_legal_value' && pendingBinding
+                              ? ` · ${pendingBinding.value_key}`
                       : dialogKind.startsWith('create_')
                         ? ` · country ${selectedCountryCode || '—'}`
                         : selectedSource && dialogKind.includes('source')
@@ -1147,6 +1414,68 @@ export function OwnerTaxKnowledgePanel({
                   </label>
                 </div>
               ) : null}
+              {dialogKind === 'pin_tax_rule_version_source' ? (
+                <div className="nx-form-grid">
+                  <label className="nx-field">
+                    <span className="nx-field-label">tax_source_id</span>
+                    <select
+                      className="nx-select"
+                      value={pinForm.tax_source_id}
+                      onChange={(e) => setPinForm((s) => ({ ...s, tax_source_id: e.target.value }))}
+                    >
+                      <option value="">Select source</option>
+                      {sourcesForSelectedVersion.map((source) => (
+                        <option key={source.id} value={source.id}>
+                          {source.source_code}
+                          {source.title ? ` — ${source.title}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">locator</span>
+                    <input
+                      className="nx-input"
+                      value={pinForm.locator}
+                      onChange={(e) => setPinForm((s) => ({ ...s, locator: e.target.value }))}
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {dialogKind === 'unpin_tax_rule_version_source' && pendingCitation ? (
+                <p style={{ fontSize: 14, margin: 0 }}>
+                  {pendingCitation.source_code}
+                  {pendingCitation.title ? ` — ${pendingCitation.title}` : ''}
+                  {pendingCitation.locator ? ` · ${pendingCitation.locator}` : ''}
+                </p>
+              ) : null}
+              {dialogKind === 'bind_tax_rule_version_legal_value' ? (
+                <div className="nx-form-grid">
+                  <label className="nx-field">
+                    <span className="nx-field-label">legal_value_id</span>
+                    <select
+                      className="nx-select"
+                      value={bindLegalValueId}
+                      onChange={(e) => setBindLegalValueId(e.target.value)}
+                    >
+                      <option value="">Select legal value</option>
+                      {legalValuesForSelectedVersion.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.value_key}
+                          {row.label ? ` — ${row.label}` : ''}
+                          {row.category ? ` · ${row.category}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+              {dialogKind === 'unbind_tax_rule_version_legal_value' && pendingBinding ? (
+                <p style={{ fontSize: 14, margin: 0 }}>
+                  {pendingBinding.value_key}
+                  {pendingBinding.label ? ` — ${pendingBinding.label}` : ''}
+                </p>
+              ) : null}
               {dialogKind === 'retire_tax_source' && selectedSource ? (
                 <div className="nx-form-grid">
                   <p style={{ fontSize: 14, margin: 0 }}>
@@ -1180,7 +1509,14 @@ export function OwnerTaxKnowledgePanel({
                 disabled={busy}
                 onClick={() => void submitDialog()}
               >
-                {busy ? '…' : dialogKind === 'activate_tax_source' || dialogKind === 'retire_tax_source' ? 'Confirm' : 'Save'}
+                {busy
+                  ? '…'
+                  : dialogKind === 'activate_tax_source' ||
+                      dialogKind === 'retire_tax_source' ||
+                      dialogKind === 'unpin_tax_rule_version_source' ||
+                      dialogKind === 'unbind_tax_rule_version_legal_value'
+                    ? 'Confirm'
+                    : 'Save'}
               </button>
             </div>
           </div>

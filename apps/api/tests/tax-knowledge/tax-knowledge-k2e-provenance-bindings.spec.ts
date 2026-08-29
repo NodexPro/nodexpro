@@ -26,47 +26,51 @@ function readRepo(rel: string): string {
   return readFileSync(join(repoRoot, rel), 'utf8');
 }
 
-test('TAX-K2D contract: exact two named commands, no new GET/PATCH/route', () => {
+test('TAX-K2E contract: exact four named commands, no new GET/PATCH/route', () => {
   const page = readRepo(PAGE);
   const panel = readRepo(PANEL);
   const endpoints = readRepo(ENDPOINTS);
   const app = readRepo(APP);
 
-  assert.match(panel, /onCommand\('create_tax_rule_version'/);
-  assert.match(panel, /onCommand\('update_tax_rule_version_draft'/);
-  assert.match(panel, /tax_rule_id: selectedRule\.id/);
+  assert.match(panel, /onCommand\('pin_tax_rule_version_source'/);
+  assert.match(panel, /onCommand\('unpin_tax_rule_version_source'/);
+  assert.match(panel, /onCommand\('bind_tax_rule_version_legal_value'/);
+  assert.match(panel, /onCommand\('unbind_tax_rule_version_legal_value'/);
   assert.match(panel, /tax_rule_version_id: selectedVersion\.id/);
+  assert.match(panel, /tax_source_id: pinForm\.tax_source_id/);
+  assert.match(panel, /tax_rule_version_source_id: pendingCitation\.id/);
+  assert.match(panel, /legal_value_id: bindLegalValueId/);
+  assert.match(panel, /tax_rule_version_legal_value_id: pendingBinding\.id/);
   assert.match(page, /setPanel\(refreshed\)/);
-  assert.match(page, /OWNER\.command/);
-  assert.match(page, /OWNER\.legalControl/);
-  assert.match(page, /countryPacks=\{panel\?\.country_packs\}/);
-  assert.match(page, /rulesets=\{panel\?\.rulesets\}/);
+  assert.match(page, /legalValues=\{panel\?\.legal_values\}/);
   assert.doesNotMatch(page, /apiJson\(`\/owner\/tax/);
   assert.doesNotMatch(panel, /apiJson\(|fetch\(|method:\s*['"]PATCH['"]|method:\s*['"]GET['"]/);
   assert.doesNotMatch(endpoints, /tax-knowledge/);
   assert.doesNotMatch(app, /tax-knowledge/);
 });
 
-test('TAX-K2D contract: allowed_actions eligibility, ID selection, JSON syntax only', () => {
+test('TAX-K2E contract: allowed_actions eligibility and no frontend domain inference', () => {
   const panel = readRepo(PANEL);
 
-  assert.match(panel, /enabledAction\(selectedRule\?\.allowed_actions \?\? \[\], 'create_tax_rule_version'\)/);
-  assert.match(panel, /enabledAction\(selectedVersion\?\.allowed_actions \?\? \[\], 'update_tax_rule_version_draft'\)/);
-  assert.match(panel, /enabledAction\(selectedRule\.allowed_actions, actionKey\)/);
-  assert.match(panel, /enabledAction\(selectedVersion\.allowed_actions, actionKey\)/);
+  assert.match(panel, /enabledAction\(selectedVersion\?\.allowed_actions \?\? \[\], 'pin_tax_rule_version_source'\)/);
+  assert.match(panel, /enabledAction\(pendingCitation\.allowed_actions, 'unpin_tax_rule_version_source'\)/);
+  assert.match(panel, /enabledAction\(selectedVersion\?\.allowed_actions \?\? \[\], 'bind_tax_rule_version_legal_value'\)/);
+  assert.match(panel, /enabledAction\(pendingBinding\.allowed_actions, 'unbind_tax_rule_version_legal_value'\)/);
+  assert.match(panel, /enabledAction\(citation\.allowed_actions, 'unpin_tax_rule_version_source'\)/);
+  assert.match(panel, /enabledAction\(\s*binding\.allowed_actions,\s*'unbind_tax_rule_version_legal_value'/);
   assert.match(panel, /selectedVersionId/);
-  assert.match(panel, /JSON\.parse/);
-  assert.match(panel, /payload_json must be a JSON object/);
+  assert.match(panel, /pendingCitationId/);
+  assert.match(panel, /pendingBindingId/);
   assert.doesNotMatch(panel, /status === ['"]draft['"]/);
   assert.doesNotMatch(panel, /if \(selectedVersion\.status/);
-  assert.doesNotMatch(panel, /latest.?version|superseded_by_version_id/i);
-  assert.doesNotMatch(panel, /taxRulePayloadChecksum|createHash|nextVersionNo|version_no \+ 1/);
-  assert.doesNotMatch(panel, /ensureCountryPackAndRulesetForCountry/);
-  assert.doesNotMatch(panel, /createPayload\.supersedes|supersedes_version_id: versionForm|field-label">supersedes_version_id/);
+  assert.doesNotMatch(panel, /source\.status ===|provenance_type === ['"]official/);
+  assert.doesNotMatch(panel, /legal_value_version_id|as_of_date|current_active_value/);
+  assert.doesNotMatch(panel, /rate:|threshold:|amount:/);
   assert.doesNotMatch(panel, /window\.confirm/);
+  assert.doesNotMatch(panel, /missing source|publication.?ready/i);
 });
 
-test('TAX-K2D contract: no K2F+ command/UI leakage', () => {
+test('TAX-K2E contract: no K2F/G command/UI leakage', () => {
   const panel = readRepo(PANEL);
   assert.doesNotMatch(panel, /onCommand\('create_tax_rule_relationship'/);
   assert.doesNotMatch(panel, /onCommand\('delete_tax_rule_relationship'/);
@@ -76,7 +80,7 @@ test('TAX-K2D contract: no K2F+ command/UI leakage', () => {
   assert.doesNotMatch(panel, /onCommand\('supersede_tax_rule_version'/);
 });
 
-test('TAX-K2D contract: Tax Knowledge migrations and backend production files unchanged', () => {
+test('TAX-K2E contract: Tax Knowledge migrations and backend production files unchanged', () => {
   for (const file of KNOWLEDGE_MIGRATIONS) {
     const diff = execSync(`git diff -- ${file}`, { cwd: repoRoot, encoding: 'utf8' });
     assert.equal(diff.trim(), '', `${file} must remain unchanged`);

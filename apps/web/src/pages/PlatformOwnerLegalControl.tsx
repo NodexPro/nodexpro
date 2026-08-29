@@ -1068,6 +1068,7 @@ export function PlatformOwnerLegalControl() {
         taxKnowledge={taxKnowledge}
         countryPacks={panel?.country_packs}
         rulesets={panel?.rulesets}
+        legalValues={panel?.legal_values}
         pendingCountryCode={pendingTaxKnowledgeCountry}
         busy={commandBusy}
         onSelectCountry={(countryCode) => {

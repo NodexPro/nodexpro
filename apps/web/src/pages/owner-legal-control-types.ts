@@ -162,6 +162,16 @@ export type OwnerRulesetRow = {
   status: string;
 };
 
+export type OwnerLegalValueRow = {
+  id: string;
+  country_code: string;
+  value_key: string;
+  label: string;
+  category: string | null;
+  module_scope: string | null;
+  status: string;
+};
+
 export type TaxKnowledgeAggregate = {
   selected_country_code: string | null;
   countries: TaxKnowledgeCountry[];

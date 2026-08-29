@@ -66,8 +66,6 @@ test('TAX-K2C contract: allowed_actions eligibility, no status inference, no hin
 
 test('TAX-K2C contract: no K2E+ command/UI leakage', () => {
   const panel = readRepo(PANEL);
-  assert.doesNotMatch(panel, /onCommand\('pin_tax_rule_version_source'/);
-  assert.doesNotMatch(panel, /onCommand\('bind_tax_rule_version_legal_value'/);
   assert.doesNotMatch(panel, /onCommand\('create_tax_rule_relationship'/);
   assert.doesNotMatch(panel, /onCommand\('activate_tax_rule_version'/);
   assert.doesNotMatch(panel, /onCommand\('retire_tax_rule_version'/);
