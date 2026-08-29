@@ -80,9 +80,11 @@ test('TAX-K1.3 contract: migrations 600/601/602 untouched and no unrelated files
     .map((line) => line.replace(/^[A-Z?]{1,2}\s+/, '').replace(/.* -> /, ''));
   const allowed = new Set([
     'supabase/migrations/603_tax_knowledge_rule_relationships.sql',
+    'supabase/migrations/604_tax_knowledge_relationship_publication_guard.sql',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-2-provenance.spec.ts',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-2a-publication-guard.spec.ts',
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-3-relationships.spec.ts',
+    'apps/api/tests/tax-knowledge/tax-knowledge-k1-3a-relationship-publication.spec.ts',
   ]);
   const unexpected = porcelain.filter((path) => !allowed.has(path));
   assert.deepEqual(unexpected, [], `20) unrelated files changed: ${unexpected.join(', ')}`);
@@ -343,6 +345,7 @@ test('TAX-K1.3 DB relationship safety', async (t) => {
   await t.test('10-12) FROM active relationship mutations rejected', async () => {
     const fromId = await insertDraftVersion({ country: 'IL', effectiveFrom: '2017-01-01', effectiveTo: '2017-12-31' });
     const toId = await insertDraftVersion({ country: 'IL', effectiveFrom: '2018-01-01', effectiveTo: '2018-12-31' });
+    await citeAndActivate(toId);
     const relId = randomUUID();
     assert.ifError(
       (
@@ -389,6 +392,7 @@ test('TAX-K1.3 DB relationship safety', async (t) => {
       effectiveTo: '2020-12-31',
     });
     const toId = await insertDraftVersion({ country: 'IL', effectiveFrom: '2021-01-01', effectiveTo: '2021-12-31' });
+    await citeAndActivate(toId);
 
     const relSup = randomUUID();
     assert.ifError(
