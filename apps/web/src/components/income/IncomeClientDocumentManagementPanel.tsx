@@ -129,7 +129,23 @@ function ActionIcon({ iconKey }: { iconKey: string }) {
 
 export type IncomeClientDocumentPanelActionResult =
   | { kind: 'command'; action: IncomeClientDocumentManagementRowAction; clientName: string }
-  | { kind: 'reports'; clientId: string; clientName: string; endCustomerId?: string | null }
+  | {
+      kind: 'reports';
+      clientId: string;
+      clientName: string;
+      endCustomerId?: string | null;
+      /** Backend `report_scope` when present — FE must not invent catalog from this alone. */
+      reportScope?: 'issuer' | 'recipient' | null;
+      /** Issuer display name for scope header (group / parent). */
+      issuerDisplayName?: string | null;
+      /** Recipient display name when report_scope is recipient. */
+      recipientDisplayName?: string | null;
+      /**
+       * Backend `available_reports` when present.
+       * Null means shell should fall back to panel.report_catalog (office population).
+       */
+      catalog: IncomeClientDocumentManagementReportItem[] | null;
+    }
   | {
       kind: 'ledger';
       clientId: string;
@@ -157,6 +173,30 @@ export type IncomeClientDocumentPanelActionResult =
       action: IncomeClientQuickCardAction;
       clientName: string;
     };
+
+function parseReportsCatalogFromPayload(
+  payload: Record<string, unknown>,
+): IncomeClientDocumentManagementReportItem[] | null {
+  const raw = payload.available_reports;
+  if (!Array.isArray(raw)) return null;
+  return raw
+    .filter((item): item is Record<string, unknown> => item != null && typeof item === 'object')
+    .map((item) => ({
+      key: typeof item.key === 'string' ? item.key : '',
+      label: typeof item.label === 'string' ? item.label : '',
+      enabled: item.enabled === true,
+      disabled_reason: typeof item.disabled_reason === 'string' ? item.disabled_reason : null,
+    }))
+    .filter((item) => item.key.length > 0);
+}
+
+function parseReportScopeFromPayload(
+  payload: Record<string, unknown>,
+): 'issuer' | 'recipient' | null {
+  return payload.report_scope === 'issuer' || payload.report_scope === 'recipient'
+    ? payload.report_scope
+    : null;
+}
 
 type PanelProps = {
   panel: IncomeClientDocumentManagementPanel;
@@ -321,6 +361,13 @@ function renderDataCell(
                                       clientId: row.represented_client_id,
                                       clientName: row.client_display_name,
                                       endCustomerId,
+                                      reportScope: parseReportScopeFromPayload(payload),
+                                      issuerDisplayName:
+                                        row.parent_client_display_name ?? row.client_display_name,
+                                      recipientDisplayName: endCustomerId
+                                        ? row.client_display_name
+                                        : null,
+                                      catalog: parseReportsCatalogFromPayload(payload),
                                     });
                                     return;
                                   }
@@ -522,11 +569,16 @@ function ClientDocumentManagementRowsTable({
                                 busy={busy}
                                 onClick={() => {
                                   if (action.key === 'open_reports') {
+                                    const payload = action.command_payload ?? {};
                                     void onAction({
                                       kind: 'reports',
                                       clientId: group.parent_represented_client_id,
                                       clientName: group.parent_client_display_name,
                                       endCustomerId: null,
+                                      reportScope: parseReportScopeFromPayload(payload),
+                                      issuerDisplayName: group.parent_client_display_name,
+                                      recipientDisplayName: null,
+                                      catalog: parseReportsCatalogFromPayload(payload),
                                     });
                                     return;
                                   }
@@ -817,20 +869,39 @@ export function IncomeClientDocumentReportsModal({
   catalog,
   busy,
   onClose,
+  reportScope = null,
+  issuerDisplayName = null,
+  recipientDisplayName = null,
 }: {
   open: boolean;
   clientName: string;
   catalog: IncomeClientDocumentManagementReportItem[];
   busy: boolean;
   onClose: () => void;
+  reportScope?: 'issuer' | 'recipient' | null;
+  issuerDisplayName?: string | null;
+  recipientDisplayName?: string | null;
 }) {
   if (!open) return null;
+
+  const scopeIssuer = issuerDisplayName ?? clientName;
+  const scopeRecipient = recipientDisplayName;
 
   return (
     <div className="nx-income-wizard-overlay nx-invoice-ui nx-income-cdm-modal" role="dialog" aria-modal="true">
       <div className="nx-income-wizard nx-income-wizard--compact nx-accounting-editor-modal">
         <div className="nx-income-wizard__head">
-          <h2 className="nx-modal-title">דוחות — {clientName}</h2>
+          <h2 className="nx-modal-title">דוחות</h2>
+          <div className="nx-income-cdm-reports-scope" dir="rtl">
+            {reportScope === 'recipient' && scopeRecipient ? (
+              <>
+                <div>לקוח: {scopeRecipient}</div>
+                <div>מנפיק: {scopeIssuer}</div>
+              </>
+            ) : (
+              <div>מנפיק: {scopeIssuer}</div>
+            )}
+          </div>
         </div>
         <div className="nx-income-wizard__body">
           <div className="nx-income-cdm-reports">

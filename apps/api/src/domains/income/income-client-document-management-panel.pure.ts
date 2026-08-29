@@ -90,6 +90,162 @@ export function incomeCdmActionKeysMatchCanonical(
   return actionKeys.every((key, index) => key === expected[index]);
 }
 
+export type IncomeClientDocumentReportScope = 'issuer' | 'recipient';
+
+export type IncomeClientDocumentReportCatalogItem = {
+  key: string;
+  label: string;
+  enabled: boolean;
+  disabled_reason: string | null;
+};
+
+/**
+ * Backend-owned report catalogs for WE invoices CDM.
+ * Bodies remain disabled until canonical AB / Income report aggregates exist.
+ * Frontend must render this list as returned — do not invent income at recipient scope.
+ */
+export function buildIncomeClientDocumentReportCatalog(
+  scope: IncomeClientDocumentReportScope,
+): IncomeClientDocumentReportCatalogItem[] {
+  const blockedAbIncome =
+    'BLOCKED: אין read model מוכן לדוח הכנסות לפי מנפיק+תקופה מ-Accounting Base (accounting_entries)';
+  const blockedArSemantics =
+    'BLOCKED: A/R קיים (accounts_receivable) אך חסרה סמנטיקת תקופה מאושרת + סינון recipient מפורש למרכז הדוחות';
+  const blockedReceipts =
+    'BLOCKED: אין דוח קבלות/תשלומים לפי תקופה — allocations קיימים per-invoice בלבד';
+  const blockedDocuments =
+    'BLOCKED: documents-by-type קיים לפי שנה/סוג; חסר דוח תקופתי חודש/טווח לכל הסוגים';
+  const blockedCancelled =
+    'BLOCKED: cancelled_future + cancelled_at קיימים במסמכים; חסר דוח תקופתי ייעודי';
+
+  const unpaid: IncomeClientDocumentReportCatalogItem = {
+    key: 'unpaid_outstanding',
+    label: 'דוח חובות / טרם שילמו',
+    enabled: false,
+    disabled_reason: blockedArSemantics,
+  };
+  const receipts: IncomeClientDocumentReportCatalogItem = {
+    key: 'receipts',
+    label: 'דוח קבלות',
+    enabled: false,
+    disabled_reason: blockedReceipts,
+  };
+  const documents: IncomeClientDocumentReportCatalogItem = {
+    key: 'documents',
+    label: 'דוח מסמכים',
+    enabled: false,
+    disabled_reason: blockedDocuments,
+  };
+  const cancelled: IncomeClientDocumentReportCatalogItem = {
+    key: 'cancelled_documents',
+    label: 'דוח מסמכים שבוטלו',
+    enabled: false,
+    disabled_reason: blockedCancelled,
+  };
+
+  if (scope === 'issuer') {
+    return [
+      {
+        key: 'income_summary',
+        label: 'דוח הכנסות',
+        enabled: false,
+        disabled_reason: blockedAbIncome,
+      },
+      unpaid,
+      receipts,
+      documents,
+      cancelled,
+    ];
+  }
+
+  return [unpaid, receipts, documents, cancelled];
+}
+
+export type IncomeClientDocumentReportPeriodMode = 'month' | 'range';
+
+export type IncomeClientDocumentReportPeriodInput =
+  | { mode: 'month'; month: number; year: number }
+  | {
+      mode: 'range';
+      from_month: number;
+      from_year: number;
+      to_month: number;
+      to_year: number;
+    };
+
+export type IncomeClientDocumentReportPeriodNormalized = {
+  mode: IncomeClientDocumentReportPeriodMode;
+  from_month: number;
+  from_year: number;
+  to_month: number;
+  to_year: number;
+  /** Inclusive ISO date YYYY-MM-DD (UTC calendar month bounds). */
+  normalized_from: string;
+  normalized_to: string;
+};
+
+function assertMonthYear(month: number, year: number, label: string): void {
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error(`${label}: month must be 1–12`);
+  }
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    throw new Error(`${label}: year out of supported range`);
+  }
+}
+
+function monthStartIso(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-01`;
+}
+
+function monthEndIso(year: number, month: number): string {
+  // Day 0 of next month = last day of this month (UTC).
+  const end = new Date(Date.UTC(year, month, 0));
+  const y = end.getUTCFullYear();
+  const m = String(end.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(end.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function ymKey(year: number, month: number): number {
+  return year * 12 + month;
+}
+
+/**
+ * Normalize report period for future report aggregates.
+ * Deterministic UTC calendar month bounds — no browser-local heuristics.
+ */
+export function normalizeIncomeClientDocumentReportPeriod(
+  input: IncomeClientDocumentReportPeriodInput,
+): IncomeClientDocumentReportPeriodNormalized {
+  if (input.mode === 'month') {
+    assertMonthYear(input.month, input.year, 'month');
+    return {
+      mode: 'month',
+      from_month: input.month,
+      from_year: input.year,
+      to_month: input.month,
+      to_year: input.year,
+      normalized_from: monthStartIso(input.year, input.month),
+      normalized_to: monthEndIso(input.year, input.month),
+    };
+  }
+
+  assertMonthYear(input.from_month, input.from_year, 'from');
+  assertMonthYear(input.to_month, input.to_year, 'to');
+  if (ymKey(input.from_year, input.from_month) > ymKey(input.to_year, input.to_month)) {
+    throw new Error('range: from must be <= to');
+  }
+  return {
+    mode: 'range',
+    from_month: input.from_month,
+    from_year: input.from_year,
+    to_month: input.to_month,
+    to_year: input.to_year,
+    normalized_from: monthStartIso(input.from_year, input.from_month),
+    normalized_to: monthEndIso(input.to_year, input.to_month),
+  };
+}
+
 /** Stable dual-identity key: parent office client + end customer. */
 export function endCustomerPopulationKey(params: {
   representedClientId: string;

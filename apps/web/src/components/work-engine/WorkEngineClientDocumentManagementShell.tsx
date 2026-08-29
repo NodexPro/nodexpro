@@ -96,6 +96,10 @@ export function WorkEngineClientDocumentManagementShell({
   const [endCustomersInitialEditId, setEndCustomersInitialEditId] = useState<string | null>(null);
   const [reportsOpen, setReportsOpen] = useState(false);
   const [reportsClientName, setReportsClientName] = useState('');
+  const [reportsCatalog, setReportsCatalog] = useState(panel.report_catalog ?? []);
+  const [reportsScope, setReportsScope] = useState<'issuer' | 'recipient' | null>(null);
+  const [reportsIssuerName, setReportsIssuerName] = useState<string | null>(null);
+  const [reportsRecipientName, setReportsRecipientName] = useState<string | null>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [moreMenuClientName, setMoreMenuClientName] = useState('');
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLButtonElement | null>(null);
@@ -210,6 +214,10 @@ export function WorkEngineClientDocumentManagementShell({
     async (result: IncomeClientDocumentPanelActionResult) => {
       if (result.kind === 'reports') {
         setReportsClientName(result.clientName);
+        setReportsCatalog(result.catalog ?? panel.report_catalog ?? []);
+        setReportsScope(result.reportScope ?? null);
+        setReportsIssuerName(result.issuerDisplayName ?? result.clientName);
+        setReportsRecipientName(result.recipientDisplayName ?? null);
         setReportsOpen(true);
         return;
       }
@@ -345,6 +353,7 @@ export function WorkEngineClientDocumentManagementShell({
       onError,
       onOpenBranding,
       onOpenNewDocument,
+      panel.report_catalog,
     ],
   );
 
@@ -523,7 +532,10 @@ export function WorkEngineClientDocumentManagementShell({
       <IncomeClientDocumentReportsModal
         open={reportsOpen}
         clientName={reportsClientName}
-        catalog={panel.report_catalog ?? []}
+        catalog={reportsCatalog}
+        reportScope={reportsScope}
+        issuerDisplayName={reportsIssuerName}
+        recipientDisplayName={reportsRecipientName}
         busy={busy}
         onClose={() => setReportsOpen(false)}
       />

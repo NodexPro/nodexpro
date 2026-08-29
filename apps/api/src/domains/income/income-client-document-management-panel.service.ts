@@ -32,6 +32,7 @@ import type {
   IncomeWorkspacePermissions,
 } from './income.types.js';
 import {
+  buildIncomeClientDocumentReportCatalog,
   endCustomerPopulationKey,
   groupEndCustomerRowsByParent,
   mergeEndCustomersWithDocumentStats,
@@ -265,6 +266,8 @@ function buildIssuerCustomerGroupActions(
         open_reports_panel: true,
         client_id: clientId,
         report_scope: 'issuer',
+        /** Backend-owned catalog; FE must render as returned (includes דוח הכנסות). */
+        available_reports: buildIncomeClientDocumentReportCatalog('issuer'),
       },
       enabled: perms.view,
       disabled_reason: perms.view ? null : 'אין הרשאת צפייה',
@@ -335,6 +338,8 @@ function buildEndCustomerRowActions(params: {
       client_id: representedClientId,
       income_customer_id: incomeCustomerId,
       report_scope: 'recipient',
+      /** Backend-owned catalog; no דוח הכנסות at recipient scope. */
+      available_reports: buildIncomeClientDocumentReportCatalog('recipient'),
     },
     enabled: weParity ? perms.view : false,
     disabled_reason: weParity

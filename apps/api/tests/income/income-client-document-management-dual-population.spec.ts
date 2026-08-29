@@ -166,7 +166,9 @@ test('end-customer WE rows omit issuer settings/customers; /m/income keeps disab
   assert.match(groupFn, /open_document_branding_studio:\s*true/);
   assert.match(groupFn, /open_end_customers_panel:\s*true/);
   assert.match(groupFn, /report_scope: 'issuer'/);
+  assert.match(groupFn, /available_reports: buildIncomeClientDocumentReportCatalog\('issuer'\)/);
   assert.match(endFn, /report_scope: 'recipient'/);
+  assert.match(endFn, /available_reports: buildIncomeClientDocumentReportCatalog\('recipient'\)/);
   assert.match(panelSource, /actions: buildIssuerCustomerGroupActions/);
 });
 

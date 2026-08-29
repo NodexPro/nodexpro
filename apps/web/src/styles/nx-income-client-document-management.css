@@ -327,6 +327,13 @@
   gap: 10px;
 }
 
+.nx-income-cdm-reports-scope {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #4b5563;
+}
+
 .nx-income-cdm-report-row {
   display: flex;
   align-items: center;
