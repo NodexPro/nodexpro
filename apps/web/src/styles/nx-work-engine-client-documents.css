@@ -532,7 +532,8 @@
 .nx-we-invoices-cdm__head {
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-start;
+  /* Center population mode selector across full dual-panel workspace. */
+  justify-content: center;
   gap: 8px;
   /* Compact toolbar only (population mode selector) — no page hero title. */
   padding: 6px 8px;
