@@ -592,6 +592,8 @@
 
 .nx-we-invoices-cdm-populations--both {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* Drop residual 4px side padding so panels use full workspace width. */
+  padding-inline: 1px;
 }
 
 .nx-we-invoices-cdm-populations--single {
@@ -1095,6 +1097,51 @@
 .nx-we-invoices-cdm-populations--both .nx-we-invoices-cdm-population .nx-income-cdm__action svg {
   width: 15px;
   height: 15px;
+}
+
+/*
+ * office_client_customers + שניהם only: tighten לא שולם + מסמך אחרון.
+ * Typography matches recipient names (12px / 700). Shrink-wrap to content —
+ * no further cube/button/name scaling.
+ */
+.nx-we-invoices-cdm-populations--both
+  .nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  th:nth-child(3),
+.nx-we-invoices-cdm-populations--both
+  .nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  td:nth-child(3) {
+  width: 1%;
+  min-width: 0;
+  max-width: none;
+  padding-inline: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.nx-we-invoices-cdm-populations--both
+  .nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  th:nth-child(4),
+.nx-we-invoices-cdm-populations--both
+  .nx-we-invoices-cdm-population[data-section-key='office_client_customers']
+  .nx-income-cdm__table
+  td:nth-child(4) {
+  width: 1%;
+  min-width: 0;
+  max-width: none;
+  padding-inline: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 @media (max-width: 1100px) {

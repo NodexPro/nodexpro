@@ -120,6 +120,20 @@
   box-sizing: border-box;
 }
 
+/*
+ * שניהם only: reclaim nearly all .nx-we-queue horizontal padding (24px/side),
+ * leaving ~1px safe gap from the content edge / side navigation.
+ * Does not overlap the sidebar. Single-population modes keep the 2px gutter above.
+ */
+.nx-we-queue--with-workspace-tabs:has(.nx-we-invoices-cdm-populations--both) {
+  padding-inline: 1px;
+}
+
+.nx-we-queue--with-workspace-tabs:has(.nx-we-invoices-cdm-populations--both) .nx-we-invoices-tab {
+  margin-inline: 0;
+  width: 100%;
+}
+
 .nx-we-invoices-tab .nx-income-cdm {
   margin-block: 4px 8px;
 }
