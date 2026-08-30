@@ -81,12 +81,9 @@ test('TAX-K2F contract: allowed_actions, locked types, no graph/reverse/latest i
   assert.doesNotMatch(panel, /publication.?ready|blocking relationship/i);
 });
 
-test('TAX-K2F contract: no K2G command/UI leakage', () => {
+test('TAX-K2F contract: no K3+/Trainer leakage', () => {
   const panel = readRepo(PANEL);
-  assert.doesNotMatch(panel, /onCommand\('activate_tax_rule_version'/);
-  assert.doesNotMatch(panel, /onCommand\('retire_tax_rule_version'/);
-  assert.doesNotMatch(panel, /onCommand\('close_tax_rule_version_effective_to'/);
-  assert.doesNotMatch(panel, /onCommand\('supersede_tax_rule_version'/);
+  assert.doesNotMatch(panel, /Tax Knowledge Trainer|tax_knowledge_trainer|interpretation|strategy|calculation|work.?engine|impact resolver/i);
 });
 
 test('TAX-K2F contract: Tax Knowledge migrations and backend production files unchanged', () => {

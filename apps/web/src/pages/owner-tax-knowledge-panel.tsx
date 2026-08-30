@@ -14,6 +14,7 @@ import type {
   TaxKnowledgeRelationship,
   TaxKnowledgeRule,
   TaxKnowledgeSource,
+  TaxKnowledgeSupersessionPair,
   TaxKnowledgeVersion,
   UnknownRecord,
 } from './owner-legal-control-types';
@@ -61,6 +62,18 @@ function asNullableString(value: unknown): string | null {
   return typeof value === 'string' ? value : String(value);
 }
 
+function parseSupersessionPairs(raw: unknown): TaxKnowledgeSupersessionPair[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      new_tax_rule_version_id: asString(row.new_tax_rule_version_id).trim(),
+      old_tax_rule_version_id: asString(row.old_tax_rule_version_id).trim(),
+    }))
+    .filter((pair) => pair.new_tax_rule_version_id !== '' && pair.old_tax_rule_version_id !== '');
+}
+
 function parseAllowedActions(raw: unknown): TaxKnowledgeAllowedAction[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -74,12 +87,34 @@ function parseAllowedActions(raw: unknown): TaxKnowledgeAllowedAction[] {
           if (typeof val === 'string') payload[key] = val;
         }
       }
+      const candidates = parseSupersessionPairs(row.candidates);
       return {
         action_key: asString(row.action_key),
         enabled: row.enabled !== false,
         payload,
+        ...(candidates.length ? { candidates } : {}),
       };
     });
+}
+
+/** Presentation of the backend action DTO only. Does not scan sibling versions. */
+function supersedePairsFromAction(action: TaxKnowledgeAllowedAction | null): TaxKnowledgeSupersessionPair[] {
+  if (!action) return [];
+  if (action.candidates && action.candidates.length) return action.candidates;
+  const neu = (action.payload.new_tax_rule_version_id ?? '').trim();
+  const old = (action.payload.old_tax_rule_version_id ?? '').trim();
+  if (neu && old) return [{ new_tax_rule_version_id: neu, old_tax_rule_version_id: old }];
+  return [];
+}
+
+function versionPresentationLabel(versionId: string, rules: TaxKnowledgeRule[]): string {
+  for (const rule of rules) {
+    const version = rule.versions.find((row) => row.id === versionId);
+    if (version) {
+      return `${rule.rule_code} · version_no ${version.version_no} · ${version.status}`;
+    }
+  }
+  return versionId;
 }
 
 function parseCountries(raw: unknown): TaxKnowledgeCountry[] {
@@ -327,6 +362,12 @@ const K2C_SOURCE_ACTION_KEYS = [
 const K2C_RULE_ACTION_KEYS = ['update_tax_rule_metadata'] as const;
 const K2D_RULE_ACTION_KEYS = ['create_tax_rule_version'] as const;
 const K2D_VERSION_ACTION_KEYS = ['update_tax_rule_version_draft'] as const;
+const K2G_VERSION_ACTION_KEYS = [
+  'activate_tax_rule_version',
+  'retire_tax_rule_version',
+  'close_tax_rule_version_effective_to',
+  'supersede_tax_rule_version',
+] as const;
 
 function catalogAction(
   actions: TaxKnowledgeAllowedAction[],
@@ -381,6 +422,10 @@ type DialogKind =
   | 'unbind_tax_rule_version_legal_value'
   | 'create_tax_rule_relationship'
   | 'delete_tax_rule_relationship'
+  | 'activate_tax_rule_version'
+  | 'retire_tax_rule_version'
+  | 'close_tax_rule_version_effective_to'
+  | 'supersede_tax_rule_version'
   | null;
 
 export function OwnerTaxKnowledgePanel({
@@ -452,6 +497,8 @@ export function OwnerTaxKnowledgePanel({
     relationship_type: TAX_KNOWLEDGE_RELATIONSHIP_TYPES[0] as string,
     owner_note: '',
   });
+  const [closeEffectiveTo, setCloseEffectiveTo] = useState('');
+  const [supersedeCandidateIndex, setSupersedeCandidateIndex] = useState(-1);
 
   const selectedSource = taxKnowledge.sources.find((row) => row.id && row.id === selectedSourceId) ?? null;
   const selectedRule = taxKnowledge.rules.find((row) => row.id && row.id === selectedRuleId) ?? null;
@@ -473,6 +520,11 @@ export function OwnerTaxKnowledgePanel({
     selectedVersion?.legal_value_bindings.find((row) => row.id && row.id === pendingBindingId) ?? null;
   const pendingRelationship =
     selectedVersion?.relationships.find((row) => row.id && row.id === pendingRelationshipId) ?? null;
+  const supersedeAction = enabledAction(
+    selectedVersion?.allowed_actions ?? [],
+    'supersede_tax_rule_version',
+  );
+  const supersedePairs = supersedePairsFromAction(supersedeAction);
   const targetVersionsForRelationship = selectedVersion
     ? taxKnowledge.rules.flatMap((rule) =>
         rule.versions
@@ -568,6 +620,14 @@ export function OwnerTaxKnowledgePanel({
         effective_to: (selectedVersion.effective_to ?? '').slice(0, 10),
         payload_json: JSON.stringify(selectedVersion.payload_json ?? {}, null, 2),
       });
+    }
+    if (dialogKind === 'close_tax_rule_version_effective_to' && selectedVersion) {
+      setCloseEffectiveTo((selectedVersion.effective_to ?? '').slice(0, 10));
+    }
+    if (dialogKind === 'supersede_tax_rule_version') {
+      const action = enabledAction(selectedVersion?.allowed_actions ?? [], 'supersede_tax_rule_version');
+      const pairs = supersedePairsFromAction(action);
+      setSupersedeCandidateIndex(pairs.length === 1 ? 0 : -1);
     }
   }, [dialogKind, selectedSource, selectedRule, selectedVersion]);
 
@@ -783,6 +843,58 @@ export function OwnerTaxKnowledgePanel({
         }
         await onCommand('delete_tax_rule_relationship', {
           tax_rule_relationship_id: pendingRelationship.id,
+        });
+      } else if (dialogKind === 'activate_tax_rule_version') {
+        if (!enabledAction(selectedVersion?.allowed_actions ?? [], 'activate_tax_rule_version') || !selectedVersion) {
+          return;
+        }
+        await onCommand('activate_tax_rule_version', { tax_rule_version_id: selectedVersion.id });
+      } else if (dialogKind === 'retire_tax_rule_version') {
+        if (!enabledAction(selectedVersion?.allowed_actions ?? [], 'retire_tax_rule_version') || !selectedVersion) {
+          return;
+        }
+        const retirePayload: UnknownRecord = { tax_rule_version_id: selectedVersion.id };
+        const reason = retireReason.trim();
+        if (reason) retirePayload.reason = reason;
+        await onCommand('retire_tax_rule_version', retirePayload);
+      } else if (dialogKind === 'close_tax_rule_version_effective_to') {
+        if (
+          !enabledAction(selectedVersion?.allowed_actions ?? [], 'close_tax_rule_version_effective_to') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        const effectiveTo = closeEffectiveTo.trim();
+        if (!effectiveTo) {
+          setFormError('effective_to is required.');
+          return;
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveTo)) {
+          setFormError('effective_to must be YYYY-MM-DD.');
+          return;
+        }
+        await onCommand('close_tax_rule_version_effective_to', {
+          tax_rule_version_id: selectedVersion.id,
+          effective_to: effectiveTo,
+        });
+      } else if (dialogKind === 'supersede_tax_rule_version') {
+        if (
+          !enabledAction(selectedVersion?.allowed_actions ?? [], 'supersede_tax_rule_version') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        const pairs = supersedePairsFromAction(
+          enabledAction(selectedVersion.allowed_actions, 'supersede_tax_rule_version'),
+        );
+        const pair = pairs.length === 1 ? pairs[0] : pairs[supersedeCandidateIndex];
+        if (!pair) {
+          setFormError('Select a supersession pair.');
+          return;
+        }
+        await onCommand('supersede_tax_rule_version', {
+          new_tax_rule_version_id: pair.new_tax_rule_version_id,
+          old_tax_rule_version_id: pair.old_tax_rule_version_id,
         });
       } else {
         return;
@@ -1295,6 +1407,30 @@ export function OwnerTaxKnowledgePanel({
                           </button>
                         ) : null}
                       </div>
+                      {K2G_VERSION_ACTION_KEYS.some((actionKey) =>
+                        enabledAction(selectedVersion.allowed_actions, actionKey),
+                      ) ? (
+                        <div style={{ marginTop: 14 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Lifecycle</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {K2G_VERSION_ACTION_KEYS.map((actionKey) => {
+                              const action = enabledAction(selectedVersion.allowed_actions, actionKey);
+                              if (!action) return null;
+                              return (
+                                <button
+                                  key={actionKey}
+                                  type="button"
+                                  className="nx-btn nx-btn-taxes-compact"
+                                  disabled={busy}
+                                  onClick={() => setDialogKind(actionKey)}
+                                >
+                                  {actionLabel(actionKey)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : selectedRule.versions.length ? (
                     <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>
@@ -1353,6 +1489,12 @@ export function OwnerTaxKnowledgePanel({
                                 ? ` · version_no ${selectedVersion.version_no}`
                                 : dialogKind === 'delete_tax_rule_relationship' && pendingRelationship
                                   ? ` · ${pendingRelationship.relationship_type}`
+                              : (dialogKind === 'activate_tax_rule_version' ||
+                                    dialogKind === 'retire_tax_rule_version' ||
+                                    dialogKind === 'close_tax_rule_version_effective_to' ||
+                                    dialogKind === 'supersede_tax_rule_version') &&
+                                  selectedVersion
+                                ? ` · version_no ${selectedVersion.version_no}`
                       : dialogKind.startsWith('create_')
                         ? ` · country ${selectedCountryCode || '—'}`
                         : selectedSource && dialogKind.includes('source')
@@ -1699,6 +1841,76 @@ export function OwnerTaxKnowledgePanel({
                   </label>
                 </div>
               ) : null}
+              {dialogKind === 'activate_tax_rule_version' && selectedVersion && selectedRule ? (
+                <p style={{ fontSize: 14, margin: 0 }}>
+                  {selectedRule.rule_code} · version_no {selectedVersion.version_no} · {selectedVersion.status}
+                </p>
+              ) : null}
+              {dialogKind === 'retire_tax_rule_version' && selectedVersion && selectedRule ? (
+                <div className="nx-form-grid">
+                  <p style={{ fontSize: 14, margin: 0 }}>
+                    {selectedRule.rule_code} · version_no {selectedVersion.version_no} · {selectedVersion.status}
+                  </p>
+                  <label className="nx-field">
+                    <span className="nx-field-label">reason</span>
+                    <textarea
+                      className="nx-textarea"
+                      rows={3}
+                      value={retireReason}
+                      onChange={(e) => setRetireReason(e.target.value)}
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {dialogKind === 'close_tax_rule_version_effective_to' ? (
+                <div className="nx-form-grid">
+                  <label className="nx-field">
+                    <span className="nx-field-label">effective_to</span>
+                    <input
+                      className="nx-input"
+                      type="date"
+                      value={closeEffectiveTo}
+                      onChange={(e) => setCloseEffectiveTo(e.target.value)}
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {dialogKind === 'supersede_tax_rule_version' ? (
+                supersedePairs.length === 1 ? (
+                  <p style={{ fontSize: 14, margin: 0 }}>
+                    {versionPresentationLabel(supersedePairs[0].old_tax_rule_version_id, taxKnowledge.rules)}
+                    {' → '}
+                    {versionPresentationLabel(supersedePairs[0].new_tax_rule_version_id, taxKnowledge.rules)}
+                  </p>
+                ) : supersedePairs.length > 1 ? (
+                  <div className="nx-form-grid">
+                    <label className="nx-field">
+                      <span className="nx-field-label">candidate</span>
+                      <select
+                        className="nx-select"
+                        value={supersedeCandidateIndex < 0 ? '' : String(supersedeCandidateIndex)}
+                        onChange={(e) =>
+                          setSupersedeCandidateIndex(e.target.value === '' ? -1 : Number(e.target.value))
+                        }
+                      >
+                        <option value="">Select pair</option>
+                        {supersedePairs.map((pair, index) => (
+                          <option
+                            key={`${pair.old_tax_rule_version_id}-${pair.new_tax_rule_version_id}`}
+                            value={String(index)}
+                          >
+                            {versionPresentationLabel(pair.old_tax_rule_version_id, taxKnowledge.rules)}
+                            {' → '}
+                            {versionPresentationLabel(pair.new_tax_rule_version_id, taxKnowledge.rules)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 14, margin: 0 }}>No backend supersession pair is available.</p>
+                )
+              ) : null}
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer" style={{ justifyContent: 'center' }}>
               <button
@@ -1721,7 +1933,10 @@ export function OwnerTaxKnowledgePanel({
                       dialogKind === 'retire_tax_source' ||
                       dialogKind === 'unpin_tax_rule_version_source' ||
                       dialogKind === 'unbind_tax_rule_version_legal_value' ||
-                      dialogKind === 'delete_tax_rule_relationship'
+                      dialogKind === 'delete_tax_rule_relationship' ||
+                      dialogKind === 'activate_tax_rule_version' ||
+                      dialogKind === 'retire_tax_rule_version' ||
+                      dialogKind === 'supersede_tax_rule_version'
                     ? 'Confirm'
                     : 'Save'}
               </button>

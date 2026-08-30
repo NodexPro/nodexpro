@@ -70,12 +70,9 @@ test('TAX-K2E contract: allowed_actions eligibility and no frontend domain infer
   assert.doesNotMatch(panel, /missing source|publication.?ready/i);
 });
 
-test('TAX-K2E contract: no K2G command/UI leakage', () => {
+test('TAX-K2E contract: no K3+/Trainer leakage', () => {
   const panel = readRepo(PANEL);
-  assert.doesNotMatch(panel, /onCommand\('activate_tax_rule_version'/);
-  assert.doesNotMatch(panel, /onCommand\('retire_tax_rule_version'/);
-  assert.doesNotMatch(panel, /onCommand\('close_tax_rule_version_effective_to'/);
-  assert.doesNotMatch(panel, /onCommand\('supersede_tax_rule_version'/);
+  assert.doesNotMatch(panel, /Tax Knowledge Trainer|tax_knowledge_trainer|interpretation|strategy|calculation|work.?engine|impact resolver/i);
 });
 
 test('TAX-K2E contract: Tax Knowledge migrations and backend production files unchanged', () => {

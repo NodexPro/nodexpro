@@ -64,12 +64,10 @@ test('TAX-K2C contract: allowed_actions eligibility, no status inference, no hin
   assert.doesNotMatch(panel, /selectedSourceObject|keptSource|cachedSource/);
 });
 
-test('TAX-K2C contract: no K2E+ command/UI leakage', () => {
+test('TAX-K2C contract: no K3+/Trainer leakage', () => {
   const panel = readRepo(PANEL);
-  assert.doesNotMatch(panel, /onCommand\('activate_tax_rule_version'/);
-  assert.doesNotMatch(panel, /onCommand\('retire_tax_rule_version'/);
-  assert.doesNotMatch(panel, /onCommand\('supersede_tax_rule_version'/);
   assert.doesNotMatch(panel, /latest.?version|superseded_by_version_id/i);
+  assert.doesNotMatch(panel, /Tax Knowledge Trainer|tax_knowledge_trainer|interpretation|strategy|calculation|work.?engine|impact resolver/i);
 });
 
 test('TAX-K2C contract: Tax Knowledge migrations and backend production files unchanged', () => {
