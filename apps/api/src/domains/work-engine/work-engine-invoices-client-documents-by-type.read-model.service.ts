@@ -39,6 +39,7 @@ import {
   officeClientDocumentsOrFilter,
 } from '../income/income-client-document-management-panel.pure.js';
 import { customerDisplayFromSnapshot } from '../income/income-work-engine-bridge.pure.js';
+import { documentsByTypeSelectedYearBounds } from './work-engine-invoices-client-documents-by-type-year.pure.js';
 import {
   paymentTermsKeyFromUnknown,
   resolveIncomeDueDateFromDocument,
@@ -327,6 +328,55 @@ async function loadSourceDraftDueDateContext(
   return out;
 }
 
+/** Lightweight year discovery — date column only; no full-row hydrate / enrichment. */
+async function loadIssuedAvailableYears(params: {
+  orgId: string;
+  representedClientId: string;
+  incomeCustomerId: string | null;
+  documentType: IncomeDocumentType;
+}): Promise<number[]> {
+  if (!params.incomeCustomerId) return [];
+
+  const preliminaryType = isIncomeConversionSourceType(params.documentType);
+  let query = supabaseAdmin
+    .from('income_documents')
+    .select('issue_date, represented_client_id, issuer_business_id, acting_mode')
+    .eq('organization_id', params.orgId)
+    .or(excludeSelfModeActingFilter())
+    .eq('document_type', params.documentType)
+    .or(officeClientDocumentsOrFilter(params.representedClientId))
+    .eq('income_customer_id', params.incomeCustomerId)
+    .limit(5000);
+
+  if (preliminaryType) {
+    query = query.in('document_status', ['issued', 'cancelled_future']);
+  } else {
+    query = query.eq('document_status', 'issued');
+  }
+
+  const { data, error } = await query;
+  throwIfSupabaseError(error, 'loadDocumentsByTypeIssuedAvailableYears');
+
+  const years = new Set<number>();
+  for (const raw of data ?? []) {
+    if (
+      !belongsToOfficeClientRow(
+        raw as {
+          represented_client_id: string | null;
+          issuer_business_id: string;
+          acting_mode: string;
+        },
+        params.representedClientId,
+      )
+    ) {
+      continue;
+    }
+    const year = issueYearFromIso((raw as { issue_date: string | null }).issue_date);
+    if (year != null) years.add(year);
+  }
+  return [...years].sort((a, b) => b - a);
+}
+
 async function loadIssuedDocumentCandidates(params: {
   ctx: RequestContext;
   orgId: string;
@@ -334,14 +384,16 @@ async function loadIssuedDocumentCandidates(params: {
   /** End-customer scope. When null, office-client cube scope (Office→client) — empty until modeled. */
   incomeCustomerId: string | null;
   documentType: IncomeDocumentType;
+  selectedYear: number;
   canView: boolean;
   permissions: IncomeWorkspacePermissions;
-}): Promise<Array<WorkEngineInvoicesClientDocumentsByTypeRow & { year: number | null }>> {
+}): Promise<WorkEngineInvoicesClientDocumentsByTypeRow[]> {
   // Office→Core-client documents are not classifiable yet; match panel_stats emptiness.
   if (!params.incomeCustomerId) {
     return [];
   }
 
+  const { startInclusive, endExclusive } = documentsByTypeSelectedYearBounds(params.selectedYear);
   const preliminaryType = isIncomeConversionSourceType(params.documentType);
   let query = supabaseAdmin
     .from('income_documents')
@@ -353,6 +405,8 @@ async function loadIssuedDocumentCandidates(params: {
     .eq('document_type', params.documentType)
     .or(officeClientDocumentsOrFilter(params.representedClientId))
     .eq('income_customer_id', params.incomeCustomerId)
+    .gte('issue_date', startInclusive)
+    .lt('issue_date', endExclusive)
     .order('issue_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(5000);
@@ -462,7 +516,6 @@ async function loadIssuedDocumentCandidates(params: {
       preliminary_lifecycle_state: string | null;
       preliminary_closed_by_downstream_document_id: string | null;
     };
-    const year = issueYearFromIso(doc.issue_date);
     const sourceDraft = doc.source_draft_id ? sourceDraftDueById.get(doc.source_draft_id) : undefined;
     const paymentTerms: IncomeCustomerPaymentTermsKey | null =
       paymentTermsKeyFromUnknown(sourceDraft?.payment_terms_json) ??
@@ -726,22 +779,66 @@ async function loadIssuedDocumentCandidates(params: {
       linked_document,
       row_visual_state,
       allowed_actions: allowedActions,
-      year,
     };
   });
+}
+
+/** Lightweight year discovery for drafts — timestamps only; no enrichment. */
+async function loadDraftAvailableYears(params: {
+  orgId: string;
+  representedClientId: string;
+  incomeCustomerId: string | null;
+}): Promise<number[]> {
+  if (!params.incomeCustomerId) return [];
+
+  const { data, error } = await supabaseAdmin
+    .from('income_document_drafts')
+    .select(
+      'updated_at, created_at, represented_client_id, issuer_business_id, acting_mode',
+    )
+    .eq('organization_id', params.orgId)
+    .or(excludeSelfModeActingFilter())
+    .eq('status', 'draft')
+    .not('user_saved_at', 'is', null)
+    .or(officeClientDocumentsOrFilter(params.representedClientId))
+    .eq('income_customer_id', params.incomeCustomerId)
+    .limit(5000);
+  throwIfSupabaseError(error, 'loadDocumentsByTypeDraftAvailableYears');
+
+  const years = new Set<number>();
+  for (const raw of data ?? []) {
+    if (
+      !belongsToOfficeClientRow(
+        raw as {
+          represented_client_id: string | null;
+          issuer_business_id: string;
+          acting_mode: string;
+        },
+        params.representedClientId,
+      )
+    ) {
+      continue;
+    }
+    const draft = raw as { updated_at: string | null; created_at: string | null };
+    const year = yearFromTimestamp(draft.updated_at || draft.created_at);
+    if (year != null) years.add(year);
+  }
+  return [...years].sort((a, b) => b - a);
 }
 
 async function loadDraftCandidates(params: {
   orgId: string;
   representedClientId: string;
   incomeCustomerId: string | null;
+  selectedYear: number;
   canEdit: boolean;
   customerNames: Map<string, string>;
-}): Promise<Array<WorkEngineInvoicesClientDocumentsByTypeRow & { year: number | null }>> {
+}): Promise<WorkEngineInvoicesClientDocumentsByTypeRow[]> {
   if (!params.incomeCustomerId) {
     return [];
   }
 
+  const { startInclusive, endExclusive } = documentsByTypeSelectedYearBounds(params.selectedYear);
   const { data, error } = await supabaseAdmin
     .from('income_document_drafts')
     .select(
@@ -753,6 +850,8 @@ async function loadDraftCandidates(params: {
     .not('user_saved_at', 'is', null)
     .or(officeClientDocumentsOrFilter(params.representedClientId))
     .eq('income_customer_id', params.incomeCustomerId)
+    .gte('updated_at', startInclusive)
+    .lt('updated_at', endExclusive)
     .order('updated_at', { ascending: false })
     .limit(5000);
   throwIfSupabaseError(error, 'loadDocumentsByTypeDrafts');
@@ -779,9 +878,6 @@ async function loadDraftCandidates(params: {
       updated_at: string;
       created_at: string | null;
     };
-
-    const activityAt = draft.updated_at || draft.created_at;
-    const year = yearFromTimestamp(activityAt);
 
     let customerDisplay: string | null = null;
     if (draft.income_customer_id) {
@@ -832,28 +928,8 @@ async function loadDraftCandidates(params: {
       linked_document: null,
       row_visual_state: null,
       allowed_actions: canEditDraft ? ['edit_draft'] : [],
-      year,
     };
   });
-}
-
-function resolveAvailableYears(
-  candidates: Array<{ year: number | null }>,
-): number[] {
-  const years = new Set<number>();
-  for (const candidate of candidates) {
-    if (candidate.year != null) years.add(candidate.year);
-  }
-  return [...years].sort((a, b) => b - a);
-}
-
-function filterCandidatesByYear(
-  candidates: Array<WorkEngineInvoicesClientDocumentsByTypeRow & { year: number | null }>,
-  selectedYear: number,
-): WorkEngineInvoicesClientDocumentsByTypeRow[] {
-  return candidates
-    .filter((candidate) => candidate.year === selectedYear)
-    .map(({ year: _ignored, ...row }) => row);
 }
 
 export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(params: {
@@ -887,34 +963,43 @@ export async function buildWorkEngineInvoicesClientDocumentsByTypeAggregate(para
   let selectedYear = new Date().getFullYear();
 
   if (isDraftMode) {
-    const customerNames = await loadCustomerNames(orgId, representedClientId);
-    const candidates = await loadDraftCandidates({
+    availableYears = await loadDraftAvailableYears({
       orgId,
       representedClientId,
       incomeCustomerId,
+    });
+    selectedYear = resolveSelectedYear(availableYears, params.year ?? null);
+    const customerNames = await loadCustomerNames(orgId, representedClientId);
+    rows = await loadDraftCandidates({
+      orgId,
+      representedClientId,
+      incomeCustomerId,
+      selectedYear,
       canEdit: perms.edit,
       customerNames,
     });
-    availableYears = resolveAvailableYears(candidates);
-    selectedYear = resolveSelectedYear(availableYears, params.year ?? null);
-    rows = filterCandidatesByYear(candidates, selectedYear);
   } else {
     const issuedType = documentTypeKey as IncomeDocumentType;
     if (!ISSUED_DOCUMENT_TYPES.includes(issuedType)) {
       throw badRequest('document_type_key is invalid for issued documents');
     }
-    const candidates = await loadIssuedDocumentCandidates({
+    availableYears = await loadIssuedAvailableYears({
+      orgId,
+      representedClientId,
+      incomeCustomerId,
+      documentType: issuedType,
+    });
+    selectedYear = resolveSelectedYear(availableYears, params.year ?? null);
+    rows = await loadIssuedDocumentCandidates({
       ctx: params.ctx,
       orgId,
       representedClientId,
       incomeCustomerId,
       documentType: issuedType,
+      selectedYear,
       canView: perms.view,
       permissions: perms,
     });
-    availableYears = resolveAvailableYears(candidates);
-    selectedYear = resolveSelectedYear(availableYears, params.year ?? null);
-    rows = filterCandidatesByYear(candidates, selectedYear);
   }
   const allowedActions = ['view_invoices_client_documents_by_type'];
   if (isDraftMode && perms.edit) allowedActions.push('edit_income_document_draft');

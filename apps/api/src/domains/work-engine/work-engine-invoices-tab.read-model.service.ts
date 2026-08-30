@@ -147,6 +147,10 @@ async function loadInvoicesTabBranding(params: {
 
 export async function buildWorkEngineInvoicesTabAggregate(params: {
   ctx: RequestContext;
+  pagination?: {
+    office_clients?: { limit?: unknown; offset?: unknown };
+    office_client_customers?: { limit?: unknown; offset?: unknown };
+  };
 }): Promise<WorkEngineInvoicesTabAggregate> {
   const orgId = params.ctx.organizationId!;
   if (!orgId) throw forbidden('Organization context required');
@@ -170,6 +174,7 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
       newDocumentInsteadOfMore: true,
       omitDraftDocumentTypeCounter: true,
       includeClientQuickCard: true,
+      pagination: params.pagination,
     }),
     loadInvoicesTabBranding({ ctx: params.ctx }),
     buildWorkEngineInvoicesDocumentCreationEntrypoint(params.ctx),

@@ -720,6 +720,14 @@
 }
 
 /* Keep data rows readable on tinted panels. */
+
+.nx-we-invoices-cdm-population__pager {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
 .nx-we-invoices-cdm-population .nx-income-cdm__table-wrap {
   overflow-x: auto;
   background: #fff;

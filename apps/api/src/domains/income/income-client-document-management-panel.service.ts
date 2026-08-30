@@ -5,17 +5,21 @@
  * (original − posted allocations − issued Credit Note totals). No FE arithmetic.
  *
  * Dual populations (invoices tab foundation):
- * - office_clients_section: ALL eligible Core office clients (left-join document stats;
+ * - office_clients_section: paginated eligible Core office clients (left-join document stats;
  *   zero counters when no docs). Population is not document-derived.
  *   Office→Core-client document counters stay empty until recipient linkage exists;
  *   office_representative docs are Client→recipient (never Office→client).
- * - office_client_customers_section: ALL active income_customers under those clients
- *   (left-join end-customer document stats by represented_client + income_customer_id).
+ * - office_client_customers_section: paginated active income_customers under eligible
+ *   (non-archived) office clients — independent of the office_clients page.
  * `rows` remains office_clients_section.rows for backward compatibility.
+ *
+ * P4.1: each section exposes backend-owned page.{limit,offset,has_more} (limit+1).
+ * Row document counters remain population/global RPC truth — never page-local.
  */
 
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import {
   INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
@@ -33,10 +37,12 @@ import type {
 } from './income.types.js';
 import {
   buildIncomeClientDocumentReportCatalog,
+  clampCdmPopulationPagination,
   endCustomerPopulationKey,
   groupEndCustomerRowsByParent,
   mergeEndCustomersWithDocumentStats,
   mergeOfficeClientsWithDocumentStats,
+  takeCdmPopulationPage,
   zeroEndCustomerDocumentStat,
   zeroOfficeClientDocumentStat,
 } from './income-client-document-management-panel.pure.js';
@@ -594,6 +600,7 @@ function statusLabelFromStat(stat: PanelStatRow): string {
 function emptySection(
   section_key: IncomeClientDocumentManagementSection['section_key'],
   title: string,
+  page = clampCdmPopulationPagination(undefined, undefined),
 ): IncomeClientDocumentManagementSection {
   return {
     section_key,
@@ -601,7 +608,7 @@ function emptySection(
     total_count: 0,
     rows: [],
     groups: section_key === 'office_client_customers' ? [] : null,
-    page: { limit: null, offset: 0, has_more: false },
+    page: { limit: page.limit, offset: page.offset, has_more: false },
     header_actions: [],
     empty_state: {
       visible: true,
@@ -856,34 +863,83 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
    * (batched identity + DocFlow invite state). Must stay false for /m/income.
    */
   includeClientQuickCard?: boolean;
+  /**
+   * P4.1 — independent backend pagination per population section.
+   * Defaults/max owned by clampCdmPopulationPagination.
+   */
+  pagination?: {
+    office_clients?: { limit?: unknown; offset?: unknown };
+    office_client_customers?: { limit?: unknown; offset?: unknown };
+  };
 }): Promise<IncomeClientDocumentManagementPanel> {
   const orgId = params.ctx.organizationId!;
   const visible = params.perms.issue_on_behalf;
   const aggregateStartMs = Date.now();
   const includeClientQuickCard = params.includeClientQuickCard === true;
+  const officePageReq = clampCdmPopulationPagination(
+    params.pagination?.office_clients?.limit,
+    params.pagination?.office_clients?.offset,
+  );
+  const customersPageReq = clampCdmPopulationPagination(
+    params.pagination?.office_client_customers?.limit,
+    params.pagination?.office_client_customers?.offset,
+  );
 
   if (!visible) {
-    return emptyPanel(false);
+    const empty = emptyPanel(false);
+    logAggregatePayloadBreakdown(
+      INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
+      empty as unknown as Record<string, unknown>,
+      {
+        correlation_id: params.ctx.correlationId ?? null,
+        organization_id: orgId,
+        duration_ms: Date.now() - aggregateStartMs,
+      },
+    );
+    return empty;
   }
 
   let stepStart = aggregateStartMs;
-  const [statsRes, endCustomerStatsRes, selfCounts, officeClientsRes] = await Promise.all([
-    supabaseAdmin.rpc('income_client_document_management_panel_stats', {
-      p_org_id: orgId,
-    }),
-    supabaseAdmin.rpc('income_client_document_management_end_customer_stats', {
-      p_org_id: orgId,
-    }),
-    countSelfModeRows(orgId),
-    /** Canonical ALL eligible office clients (Core clients), not document-derived. */
-    supabaseAdmin
-      .from('clients')
-      .select('id, display_name, tax_id, email, phone')
-      .eq('organization_id', orgId)
-      .eq('is_archived', false)
-      .order('display_name', { ascending: true })
-      .limit(500),
-  ]);
+  const officeRangeEnd = officePageReq.offset + officePageReq.limit; // inclusive → limit+1 rows
+  const customersRangeEnd = customersPageReq.offset + customersPageReq.limit;
+
+  const [statsRes, endCustomerStatsRes, selfCounts, officeClientsRes, canonicalCustomersRes] =
+    await Promise.all([
+      supabaseAdmin.rpc('income_client_document_management_panel_stats', {
+        p_org_id: orgId,
+      }),
+      supabaseAdmin.rpc('income_client_document_management_end_customer_stats', {
+        p_org_id: orgId,
+      }),
+      countSelfModeRows(orgId),
+      /** Paginated eligible office clients — stable order display_name, id. */
+      supabaseAdmin
+        .from('clients')
+        .select('id, display_name, tax_id, email, phone')
+        .eq('organization_id', orgId)
+        .eq('is_archived', false)
+        .order('display_name', { ascending: true })
+        .order('id', { ascending: true })
+        .range(officePageReq.offset, officeRangeEnd),
+      /**
+       * Independent customer population page (not scoped to the office_clients page).
+       * Inner-join non-archived office clients; order parent name then customer name, id.
+       */
+      supabaseAdmin
+        .from('income_customers')
+        .select(
+          'id, display_name, tax_id, email, phone, represented_client_id, clients!inner(id, display_name, is_archived, organization_id)',
+        )
+        .eq('organization_id', orgId)
+        .eq('status', 'active')
+        .eq('is_one_time', false)
+        .eq('clients.organization_id', orgId)
+        .eq('clients.is_archived', false)
+        .order('display_name', { foreignTable: 'clients', ascending: true })
+        .order('display_name', { ascending: true })
+        .order('id', { ascending: true })
+        .range(customersPageReq.offset, customersRangeEnd),
+    ]);
   throwIfSupabaseError(statsRes.error, 'incomeClientDocumentManagementPanelStats', {
     migrationHint: '167_income_client_panel_stats_office_to_client_scope.sql',
   });
@@ -891,17 +947,40 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     migrationHint: '165_income_client_document_management_end_customer_stats.sql',
   });
   throwIfSupabaseError(officeClientsRes.error, 'loadOfficeClientsForDocumentManagementPanel');
-  stepStart = logPanelTiming('rpc_office_and_end_customer_stats_and_clients', stepStart);
+  throwIfSupabaseError(canonicalCustomersRes.error, 'loadCanonicalEndCustomersForDocumentManagementPanel');
+  stepStart = logPanelTiming('rpc_office_and_end_customer_stats_and_paged_populations', stepStart);
 
   const stats = (statsRes.data ?? []) as PanelStatRow[];
   const endCustomerStats = (endCustomerStatsRes.data ?? []) as EndCustomerStatRow[];
-  const officeClients = (officeClientsRes.data ?? []) as Array<{
+  const officeClientsFetched = (officeClientsRes.data ?? []) as Array<{
     id: string;
     display_name: string;
     tax_id: string | null;
     email: string | null;
     phone?: string | null;
   }>;
+  const { page: officeClients, has_more: officeClientsHasMore } = takeCdmPopulationPage(
+    officeClientsFetched,
+    officePageReq.limit,
+  );
+
+  type CustomerJoined = {
+    id: string;
+    display_name: string;
+    tax_id: string | null;
+    email: string | null;
+    phone?: string | null;
+    represented_client_id: string;
+    clients:
+      | { id: string; display_name: string; is_archived: boolean; organization_id: string }
+      | Array<{ id: string; display_name: string; is_archived: boolean; organization_id: string }>
+      | null;
+  };
+  const customersFetched = (canonicalCustomersRes.data ?? []) as CustomerJoined[];
+  const { page: canonicalCustomersPage, has_more: customersHasMore } = takeCdmPopulationPage(
+    customersFetched,
+    customersPageReq.limit,
+  );
 
   const officeClientIds = officeClients.map((c) => String(c.id)).filter(Boolean);
 
@@ -922,6 +1001,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
 
   const clientMetaById = new Map<string, OfficeClientMeta>();
   const customerMetaById = new Map<string, EndCustomerMeta>();
+  const parentDisplayById = new Map<string, string>();
 
   for (const client of officeClients) {
     clientMetaById.set(client.id, {
@@ -934,41 +1014,50 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     });
   }
 
-  /**
-   * Canonical end-customer population: ALL active saved income_customers under
-   * eligible office clients (not document-derived). Batched; no N+1.
-   */
-  const [canonicalCustomersRes] = await Promise.all([
-    officeClientIds.length > 0
-      ? supabaseAdmin
-          .from('income_customers')
-          .select('id, display_name, tax_id, email, phone, represented_client_id')
-          .eq('organization_id', orgId)
-          .eq('status', 'active')
-          .eq('is_one_time', false)
-          .in('represented_client_id', officeClientIds)
-          .order('display_name', { ascending: true })
-          .limit(5000)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-  throwIfSupabaseError(canonicalCustomersRes.error, 'loadCanonicalEndCustomersForDocumentManagementPanel');
-
-  const canonicalCustomers = (canonicalCustomersRes.data ?? []) as Array<{
-    id: string;
-    display_name: string;
-    tax_id: string | null;
-    email: string | null;
-    phone?: string | null;
-    represented_client_id: string;
-  }>;
-
-  for (const customer of canonicalCustomers) {
+  const canonicalCustomers = canonicalCustomersPage.map((customer) => {
+    const parentRaw = customer.clients;
+    const parent = Array.isArray(parentRaw) ? parentRaw[0] ?? null : parentRaw;
+    const representedClientId = String(customer.represented_client_id ?? '').trim();
+    const parentLabel = parent ? String(parent.display_name ?? '').trim() : '';
+    if (representedClientId && parentLabel) {
+      parentDisplayById.set(representedClientId, parentLabel);
+    }
     customerMetaById.set(customer.id, {
       display_name: customer.display_name,
       tax_id: customer.tax_id,
       email: customer.email,
       phone: customer.phone ?? null,
     });
+    return {
+      id: String(customer.id),
+      display_name: customer.display_name,
+      tax_id: customer.tax_id,
+      email: customer.email,
+      phone: customer.phone ?? null,
+      represented_client_id: representedClientId,
+    };
+  });
+
+  /** Parents on the customers page may not be on the office_clients page — load names only. */
+  const missingParentIds = [
+    ...new Set(
+      canonicalCustomers
+        .map((c) => c.represented_client_id)
+        .filter((id) => id && !parentDisplayById.has(id) && !clientMetaById.has(id)),
+    ),
+  ];
+  if (missingParentIds.length > 0) {
+    const parentsRes = await supabaseAdmin
+      .from('clients')
+      .select('id, display_name')
+      .eq('organization_id', orgId)
+      .in('id', missingParentIds);
+    throwIfSupabaseError(parentsRes.error, 'loadParentOfficeClientsForCustomerPage');
+    for (const row of parentsRes.data ?? []) {
+      const parentId = String((row as { id?: string }).id ?? '');
+      const parentLabel = String((row as { display_name?: string }).display_name ?? '').trim();
+      if (parentId && parentLabel) parentDisplayById.set(parentId, parentLabel);
+    }
   }
   stepStart = logPanelTiming('load_client_and_customer_meta', stepStart);
 
@@ -1038,6 +1127,7 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
         entitlement.status === 'entitled' || entitlement.status === 'trial';
     }
 
+    /** Portal enrichment scoped to the returned office_clients page only (P4.1). */
     const [portalUsersRes, invitesRes] = await Promise.all([
       supabaseAdmin
         .from('client_portal_users')
@@ -1188,7 +1278,9 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
         },
         customerMeta,
         parentDisplayName:
-          clientMetaById.get(representedClientId)?.display_name ?? representedClientId,
+          clientMetaById.get(representedClientId)?.display_name ??
+          parentDisplayById.get(representedClientId) ??
+          representedClientId,
         perms: params.perms,
         includeRetainerAction: params.includeRetainerAction,
         workEngineInvoicesFunctionalParity: params.workEngineInvoicesFunctionalParity,
@@ -1228,16 +1320,23 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
   const office_clients_section: IncomeClientDocumentManagementSection = {
     section_key: 'office_clients',
     title: 'לקוחות המשרד',
+    /** Page row count only — not an expensive population COUNT(*). Row counters stay global RPC. */
     total_count: officeRows.length,
     rows: officeRows,
     groups: null,
-    page: { limit: null, offset: 0, has_more: false },
+    page: {
+      limit: officePageReq.limit,
+      offset: officePageReq.offset,
+      has_more: officeClientsHasMore,
+    },
     header_actions: officeClientsHeaderActions,
     empty_state: {
-      visible: officeRows.length === 0,
+      visible: officeRows.length === 0 && officePageReq.offset === 0,
       title: 'אין לקוחות במשרד',
       description:
-        officeRows.length === 0 && (selfCounts.issued > 0 || selfCounts.drafts > 0)
+        officeRows.length === 0 &&
+        officePageReq.offset === 0 &&
+        (selfCounts.issued > 0 || selfCounts.drafts > 0)
           ? 'מסמכים במצב עצמי (self) אינם מוצגים כאן. לקוחות המשרד מופיעים כאן לפי רשימת הלקוחות של הארגון.'
           : 'הוסף לקוח למשרד כדי לראות אותו כאן עם מוני מסמכים ופעולות.',
     },
@@ -1249,10 +1348,14 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
     total_count: endCustomerRows.length,
     rows: endCustomerRows,
     groups: endCustomerGroups,
-    page: { limit: null, offset: 0, has_more: false },
+    page: {
+      limit: customersPageReq.limit,
+      offset: customersPageReq.offset,
+      has_more: customersHasMore,
+    },
     header_actions: [],
     empty_state: {
-      visible: endCustomerRows.length === 0,
+      visible: endCustomerRows.length === 0 && customersPageReq.offset === 0,
       title: 'אין לקוחות קצה',
       description:
         'לקוחות קצה מופיעים כאן לפי רשימת הלקוחות של לקוחות המשרד (גם ללא מסמכים).',
@@ -1261,10 +1364,10 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
 
   logPanelTiming('TOTAL', aggregateStartMs);
   console.info(
-    `[income][client-document-panel][payload] office_clients=${officeRows.length} end_customers=${endCustomerRows.length}`,
+    `[income][client-document-panel][payload] office_clients=${officeRows.length}/${officePageReq.limit}@${officePageReq.offset} has_more=${officeClientsHasMore} end_customers=${endCustomerRows.length}/${customersPageReq.limit}@${customersPageReq.offset} has_more=${customersHasMore}`,
   );
 
-  return {
+  const response: IncomeClientDocumentManagementPanel = {
     aggregate_key: INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
     visible: true,
     title: 'ניהול מסמכים לפי לקוח',
@@ -1289,4 +1392,16 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
           : 'הוסף לקוח למשרד כדי להתחיל.',
     },
   };
+  // P4.4 — canonical slow-aggregate path when CDM is loaded independently
+  // (same helper + SLOW_AGGREGATE_THRESHOLD_MS as other hot aggregates).
+  logAggregatePayloadBreakdown(
+    INCOME_CLIENT_DOCUMENT_MANAGEMENT_PANEL_AGGREGATE_KEY,
+    response as unknown as Record<string, unknown>,
+    {
+      correlation_id: params.ctx.correlationId ?? null,
+      organization_id: orgId,
+      duration_ms: Date.now() - aggregateStartMs,
+    },
+  );
+  return response;
 }

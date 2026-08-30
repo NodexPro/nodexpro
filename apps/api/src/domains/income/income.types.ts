@@ -636,9 +636,10 @@ export interface IncomeClientDocumentManagementCustomerGroup {
 }
 
 export interface IncomeClientDocumentManagementSectionPage {
-  /** null = full batch returned (current scale strategy); reserved for future paging. */
-  limit: number | null;
+  /** Backend-owned page size (P4.1). Never null — FE must not invent limits. */
+  limit: number;
   offset: number;
+  /** Backend-owned continuation truth (limit+1 pattern). FE must not infer. */
   has_more: boolean;
 }
 

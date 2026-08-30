@@ -247,6 +247,12 @@ async function resolveEffectiveWorkspace(
 
 export async function buildIncomeWorkspaceContextAggregate(
   ctx: RequestContext,
+  options?: {
+    pagination?: {
+      office_clients?: { limit?: unknown; offset?: unknown };
+      office_client_customers?: { limit?: unknown; offset?: unknown };
+    };
+  },
 ): Promise<IncomeWorkspaceContextAggregate> {
   const orgId = ctx.organizationId;
   if (!orgId) throw forbidden('Organization context required');
@@ -324,6 +330,7 @@ export async function buildIncomeWorkspaceContextAggregate(
     client_document_management_panel: await buildIncomeClientDocumentManagementPanel({
       ctx,
       perms,
+      pagination: options?.pagination,
     }),
   };
 }

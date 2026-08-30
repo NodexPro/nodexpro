@@ -330,36 +330,50 @@ export type ReminderReviewCounts = {
 };
 
 export async function loadReminderReviewCounts(orgId: string): Promise<ReminderReviewCounts> {
-  const nowIso = new Date().toISOString();
-  const { data, error } = await supabaseAdmin
-    .from('work_reminder_candidates')
-    .select('status, snoozed_until, sla_context_snapshot')
-    .eq('org_id', orgId)
-    .in('status', ['pending_review', 'edited', 'snoozed', 'delivery_failed'])
-    .limit(5000);
-  if (error) throw error;
-
+  // P4.3: uncapped thin scan — pending/urgent/overdue must not silently truncate at 5000.
+  const pageSize = 1000;
+  const maxPages = 10_000;
   let pending_count = 0;
   let urgent_count = 0;
   let overdue_count = 0;
-  for (const row of data ?? []) {
-    const status = String(row.status);
-    if (status === 'snoozed') {
-      const until = row.snoozed_until ? new Date(String(row.snoozed_until)).getTime() : 0;
-      if (until > Date.now()) continue;
-    } else if (
-      status !== 'pending_review' &&
-      status !== 'edited' &&
-      status !== 'delivery_failed'
-    ) {
-      continue;
+  const nowMs = Date.now();
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await supabaseAdmin
+      .from('work_reminder_candidates')
+      .select('id, status, snoozed_until, sla_context_snapshot')
+      .eq('org_id', orgId)
+      .in('status', ['pending_review', 'edited', 'snoozed', 'delivery_failed'])
+      .order('id', { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    const rows = data ?? [];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const status = String(row.status);
+      if (status === 'snoozed') {
+        const until = row.snoozed_until ? new Date(String(row.snoozed_until)).getTime() : 0;
+        if (until > nowMs) continue;
+      } else if (
+        status !== 'pending_review' &&
+        status !== 'edited' &&
+        status !== 'delivery_failed'
+      ) {
+        continue;
+      }
+      pending_count += 1;
+      const snap = (row.sla_context_snapshot ?? {}) as Record<string, unknown>;
+      const sev = severityFromSlaSnapshot(snap);
+      if (sev.urgent) urgent_count += 1;
+      if (sev.overdue) overdue_count += 1;
     }
-    pending_count += 1;
-    const snap = (row.sla_context_snapshot ?? {}) as Record<string, unknown>;
-    const sev = severityFromSlaSnapshot(snap);
-    if (sev.urgent) urgent_count += 1;
-    if (sev.overdue) overdue_count += 1;
+
+    if (rows.length < pageSize) break;
   }
+
   return { pending_count, urgent_count, overdue_count };
 }
 

@@ -35,7 +35,18 @@ router.get(
   requirePermission(INCOME_PERMISSIONS.view),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const aggregate = await buildIncomeWorkspaceContextAggregate(req.context as RequestContext);
+      const aggregate = await buildIncomeWorkspaceContextAggregate(req.context as RequestContext, {
+        pagination: {
+          office_clients: {
+            limit: req.query.office_clients_limit,
+            offset: req.query.office_clients_offset,
+          },
+          office_client_customers: {
+            limit: req.query.office_client_customers_limit,
+            offset: req.query.office_client_customers_offset,
+          },
+        },
+      });
       return res.json(aggregate);
     } catch (e) {
       next(e);

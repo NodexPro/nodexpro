@@ -74,6 +74,10 @@ import {
 } from './work-engine-queue-invoice-attention.pure.js';
 import { RECURRING_FAILURE_WORK_TYPE } from './work-engine-invoice-retainer.pure.js';
 import { loadFailedOperationsSummary } from './work-engine-failed-operations.read.js';
+import {
+  loadWorkItemCountsByStateExact,
+  loadWorkItemFilterCatalogDimensionsExact,
+} from './work-engine-queue-summary-catalog.exact.js';
 
 /**
  * Stage 3B: the set of `work_events.processing_outcome` values that signal a
@@ -950,31 +954,16 @@ function workItemAllowedActions(state: WorkState): AllowedAction[] {
   ];
 }
 
-type CountsScanRow = { work_state: string };
-
 export async function buildWorkEngineFoundationAggregate(params: {
   orgId: string;
 }): Promise<Record<string, unknown>> {
   const { orgId } = params;
 
-  // Counts: bounded scan; Stage 2 has no rule worker, so cardinality is small.
-  const countsResp = await supabaseAdmin
-    .from('work_items')
-    .select('work_state')
-    .eq('org_id', orgId)
-    .limit(5000);
-  if (countsResp.error) throw countsResp.error;
-  const countsRows = (countsResp.data ?? []) as CountsScanRow[];
-
-  const counts: Record<string, number> = {};
-  for (const s of WORK_STATES) counts[s] = 0;
-  let totalActive = 0;
-  for (const r of countsRows) {
-    const st = r.work_state as WorkState;
-    counts[st] = (counts[st] ?? 0) + 1;
-    if (st !== 'done' && st !== 'archived') totalActive += 1;
-  }
-  const totalLoaded = countsRows.length;
+  // P4.3: exact per-state counts (head/exact) — not a capped 5000-row sample.
+  const stateCounts = await loadWorkItemCountsByStateExact(orgId);
+  const counts: Record<string, number> = { ...stateCounts.by_state };
+  const totalActive = stateCounts.total_active;
+  const totalLoaded = stateCounts.total_all;
 
   const recentResp = await supabaseAdmin
     .from('work_items')
@@ -2072,22 +2061,10 @@ export async function buildWorkEngineQueueAggregate(params: {
   const reminderReviewSummary = await loadReminderReviewCounts(orgId);
   const reminderBanner = buildReminderReviewBanner(reminderReviewSummary);
 
-  // ---- 1. Counts for summary cards (bounded scan).
-  const countsResp = await supabaseAdmin
-    .from('work_items')
-    .select('work_state')
-    .eq('org_id', orgId)
-    .limit(5000);
-  if (countsResp.error) throw countsResp.error;
-  const countsRows = (countsResp.data ?? []) as Array<{ work_state: string }>;
-  const counts: Record<string, number> = {};
-  for (const s of WORK_STATES) counts[s] = 0;
-  let totalActive = 0;
-  for (const r of countsRows) {
-    const st = r.work_state as WorkState;
-    counts[st] = (counts[st] ?? 0) + 1;
-    if (st !== 'done' && st !== 'archived') totalActive += 1;
-  }
+  // ---- 1. Counts for summary cards (P4.3: exact DB counts, not capped sample).
+  const stateCounts = await loadWorkItemCountsByStateExact(orgId);
+  const counts: Record<string, number> = { ...stateCounts.by_state };
+  const totalActive = stateCounts.total_active;
 
   // Pending-mapping counts (work_events with no work_item_id).
   const pendingCountResp = await supabaseAdmin
@@ -2143,32 +2120,15 @@ export async function buildWorkEngineQueueAggregate(params: {
     bucketReviewForMe = rfm.count ?? 0;
   }
 
-  // ---- 2. Filter option catalogs (backend-owned).
+  // ---- 2. Filter option catalogs (backend-owned, P4.3 uncapped thin scan).
   // Distinct values for module / assignee / reviewer / period_key come from
   // the work_items table for this org — they reflect actual data so the UI
-  // never invents filter options.
-  const distinctResp = await supabaseAdmin
-    .from('work_items')
-    .select('module_key, assigned_user_id, reviewer_user_id, period_key')
-    .eq('org_id', orgId)
-    .limit(5000);
-  if (distinctResp.error) throw distinctResp.error;
-  const distinctRows = (distinctResp.data ?? []) as Array<{
-    module_key: string | null;
-    assigned_user_id: string | null;
-    reviewer_user_id: string | null;
-    period_key: string | null;
-  }>;
-  const distinctModules = new Set<string>();
-  const distinctAssignees = new Set<string>();
-  const distinctReviewers = new Set<string>();
-  const distinctPeriods = new Set<string>();
-  for (const r of distinctRows) {
-    if (r.module_key) distinctModules.add(r.module_key);
-    if (r.assigned_user_id) distinctAssignees.add(r.assigned_user_id);
-    if (r.reviewer_user_id) distinctReviewers.add(r.reviewer_user_id);
-    if (r.period_key) distinctPeriods.add(r.period_key);
-  }
+  // never invents filter options. Not derived from a silent 5000-row sample.
+  const catalog = await loadWorkItemFilterCatalogDimensionsExact(orgId);
+  const distinctModules = new Set(catalog.modules);
+  const distinctAssignees = new Set(catalog.assignees);
+  const distinctReviewers = new Set(catalog.reviewers);
+  const distinctPeriods = new Set(catalog.period_keys);
 
   // ---- 3. Page query: apply filters, order by updated_at desc, paginate.
   let q = supabaseAdmin

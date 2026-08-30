@@ -317,6 +317,10 @@ function WorkEngineInvoicesTabPanel(props: {
   const [brandingBusy, setBrandingBusy] = useState(false);
   const [panelBusy, setPanelBusy] = useState(false);
   const [issuerWorkspace, setIssuerWorkspace] = useState<IncomeWorkspaceAggregate | null>(null);
+  const [cdmPagination, setCdmPagination] = useState({
+    office_clients_offset: 0,
+    office_client_customers_offset: 0,
+  });
   const wizardEntrypointRef = useRef<WorkEngineInvoicesTabAggregate['document_creation_entrypoint'] | null>(
     null,
   );
@@ -325,7 +329,10 @@ function WorkEngineInvoicesTabPanel(props: {
     setLoading(true);
     setError(null);
     try {
-      const agg = await fetchWorkEngineInvoicesTabAggregate();
+      const agg = await fetchWorkEngineInvoicesTabAggregate({
+        office_clients_offset: cdmPagination.office_clients_offset,
+        office_client_customers_offset: cdmPagination.office_client_customers_offset,
+      });
       setAggregate(agg);
       if (agg.workspace_tabs) onWorkspaceTabs(agg.workspace_tabs);
     } catch (e) {
@@ -333,7 +340,22 @@ function WorkEngineInvoicesTabPanel(props: {
     } finally {
       setLoading(false);
     }
-  }, [onWorkspaceTabs]);
+  }, [cdmPagination, onWorkspaceTabs]);
+
+  const handleRequestPopulationPage = useCallback(
+    (params: {
+      section_key: 'office_clients' | 'office_client_customers';
+      offset: number;
+      limit: number;
+    }) => {
+      setCdmPagination((prev) =>
+        params.section_key === 'office_clients'
+          ? { ...prev, office_clients_offset: params.offset }
+          : { ...prev, office_client_customers_offset: params.offset },
+      );
+    },
+    [],
+  );
 
   const handlePanelError = useCallback((message: string) => {
     setError(message);
@@ -393,6 +415,7 @@ function WorkEngineInvoicesTabPanel(props: {
   );
 
   const handleInvoicesTabRefresh = useCallback((invoicesTabAggregate: Record<string, unknown>) => {
+    setCdmPagination({ office_clients_offset: 0, office_client_customers_offset: 0 });
     setAggregate((prev) =>
       prev ? ({ ...prev, ...invoicesTabAggregate } as WorkEngineInvoicesTabAggregate) : prev,
     );
@@ -474,6 +497,7 @@ function WorkEngineInvoicesTabPanel(props: {
         }}
         onError={handlePanelError}
         onInvoicesTabRefresh={handleInvoicesTabRefresh}
+        onRequestPopulationPage={handleRequestPopulationPage}
         onEditDraft={async (draftId) => {
           setWizardBusy(true);
           try {

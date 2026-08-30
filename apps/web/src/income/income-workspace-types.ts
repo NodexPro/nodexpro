@@ -146,7 +146,7 @@ export interface IncomeClientDocumentManagementCustomerGroup {
 }
 
 export interface IncomeClientDocumentManagementSectionPage {
-  limit: number | null;
+  limit: number;
   offset: number;
   has_more: boolean;
 }
@@ -961,7 +961,7 @@ export interface IncomeClientIncomeLedgerCardAggregate {
 }
 
 /** Safe fallback when backend aggregate predates client_document_management_panel. */
-const EMPTY_CDM_SECTION_PAGE = { limit: null, offset: 0, has_more: false } as const;
+const EMPTY_CDM_SECTION_PAGE = { limit: 50, offset: 0, has_more: false } as const;
 
 function emptyOfficeClientsSection(
   rows: IncomeClientDocumentManagementRow[] = [],
@@ -1007,6 +1007,26 @@ function normalizeCdmRow(row: IncomeClientDocumentManagementRow): IncomeClientDo
   };
 }
 
+function normalizeCdmSectionPage(
+  page: IncomeClientDocumentManagementSectionPage | null | undefined,
+): IncomeClientDocumentManagementSectionPage {
+  const limitRaw = page?.limit;
+  const limit =
+    typeof limitRaw === 'number' && Number.isFinite(limitRaw) && limitRaw > 0
+      ? Math.floor(limitRaw)
+      : EMPTY_CDM_SECTION_PAGE.limit;
+  const offsetRaw = page?.offset;
+  const offset =
+    typeof offsetRaw === 'number' && Number.isFinite(offsetRaw) && offsetRaw >= 0
+      ? Math.floor(offsetRaw)
+      : EMPTY_CDM_SECTION_PAGE.offset;
+  return {
+    limit,
+    offset,
+    has_more: Boolean(page?.has_more),
+  };
+}
+
 function normalizeCdmSection(
   section: IncomeClientDocumentManagementSection | null | undefined,
   fallback: IncomeClientDocumentManagementSection,
@@ -1030,10 +1050,7 @@ function normalizeCdmSection(
     rows,
     groups,
     header_actions: Array.isArray(section.header_actions) ? section.header_actions : [],
-    page: {
-      ...EMPTY_CDM_SECTION_PAGE,
-      ...(section.page ?? {}),
-    },
+    page: normalizeCdmSectionPage(section.page),
     empty_state: {
       ...fallback.empty_state,
       ...(section.empty_state ?? {}),

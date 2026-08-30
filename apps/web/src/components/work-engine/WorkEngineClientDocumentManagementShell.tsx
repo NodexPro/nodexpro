@@ -78,6 +78,11 @@ type ShellProps = {
     draftId: string;
     workspaceAggregate: IncomeWorkspaceAggregate;
   }) => void | Promise<void>;
+  onRequestPopulationPage?: (params: {
+    section_key: 'office_clients' | 'office_client_customers';
+    offset: number;
+    limit: number;
+  }) => void;
 };
 
 export function WorkEngineClientDocumentManagementShell({
@@ -95,6 +100,7 @@ export function WorkEngineClientDocumentManagementShell({
   onEditDraft,
   onInvoicesTabRefresh,
   onOpenConvertedDraft,
+  onRequestPopulationPage,
 }: ShellProps) {
   const [endCustomersOpen, setEndCustomersOpen] = useState(false);
   const [endCustomersClientName, setEndCustomersClientName] = useState('');
@@ -460,6 +466,7 @@ export function WorkEngineClientDocumentManagementShell({
         populationNewDocumentActions={populationNewDocumentActions}
         onPopulationNewDocument={onPopulationNewDocument}
         onAction={(result) => void handlePanelAction(result)}
+        onRequestPopulationPage={onRequestPopulationPage}
         renderDocumentsCell={(row) => (
           <WorkEngineClientDocumentTypeCounters
             row={row}

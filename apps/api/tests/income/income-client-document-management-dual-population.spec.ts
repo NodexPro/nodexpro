@@ -484,5 +484,5 @@ test('mergeOfficeClientsWithDocumentStats includes clients missing from stats', 
 test('J — no FE population inference hooks added for office membership', () => {
   assert.doesNotMatch(panelSource, /shouldIncludeOfficeClient/);
   assert.doesNotMatch(panelSource, /classifyPopulation/);
-  assert.match(panelSource, /Canonical ALL eligible office clients/);
+  assert.match(panelSource, /Paginated eligible office clients/);
 });

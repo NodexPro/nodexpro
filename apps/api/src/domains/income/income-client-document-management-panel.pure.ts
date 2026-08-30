@@ -627,3 +627,45 @@ export function officeClientDocumentsOrFilter(officeClientId: string): string {
 export function excludeSelfModeActingFilter(): string {
   return 'acting_mode.eq.office_representative,acting_mode.is.null';
 }
+
+/** P4.1 — CDM population page defaults (matches WE queue / A/R list scale). */
+export const CDM_POPULATION_DEFAULT_LIMIT = 50;
+export const CDM_POPULATION_MAX_LIMIT = 100;
+
+export type CdmPopulationPagination = {
+  limit: number;
+  offset: number;
+};
+
+/**
+ * Clamp CDM section pagination. Backend owns defaults/max — callers cannot unbounded.
+ */
+export function clampCdmPopulationPagination(
+  rawLimit: unknown,
+  rawOffset: unknown,
+): CdmPopulationPagination {
+  let limit = Number(rawLimit ?? CDM_POPULATION_DEFAULT_LIMIT);
+  if (!Number.isFinite(limit) || limit <= 0) limit = CDM_POPULATION_DEFAULT_LIMIT;
+  if (limit > CDM_POPULATION_MAX_LIMIT) limit = CDM_POPULATION_MAX_LIMIT;
+  limit = Math.floor(limit);
+
+  let offset = Number(rawOffset ?? 0);
+  if (!Number.isFinite(offset) || offset < 0) offset = 0;
+  offset = Math.floor(offset);
+  return { limit, offset };
+}
+
+/**
+ * Prefer limit+1 fetch: return at most `limit` rows; has_more when one extra existed.
+ * Avoids COUNT(*) solely for has_more.
+ */
+export function takeCdmPopulationPage<T>(
+  fetched: T[],
+  limit: number,
+): { page: T[]; has_more: boolean } {
+  const has_more = fetched.length > limit;
+  return {
+    page: has_more ? fetched.slice(0, limit) : fetched,
+    has_more,
+  };
+}

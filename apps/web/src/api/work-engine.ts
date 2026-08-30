@@ -600,8 +600,31 @@ export type WorkEngineInvoicesTabAggregate = {
   client_document_management_panel?: IncomeClientDocumentManagementPanel;
 };
 
-export async function fetchWorkEngineInvoicesTabAggregate(): Promise<WorkEngineInvoicesTabAggregate> {
-  return apiJson<WorkEngineInvoicesTabAggregate>(WORK_ENGINE.aggregateInvoicesTab);
+export type WorkEngineInvoicesTabCdmPaginationQuery = {
+  office_clients_limit?: number;
+  office_clients_offset?: number;
+  office_client_customers_limit?: number;
+  office_client_customers_offset?: number;
+};
+
+export async function fetchWorkEngineInvoicesTabAggregate(
+  pagination?: WorkEngineInvoicesTabCdmPaginationQuery,
+): Promise<WorkEngineInvoicesTabAggregate> {
+  const qs = new URLSearchParams();
+  if (pagination?.office_clients_limit != null) {
+    qs.set('office_clients_limit', String(pagination.office_clients_limit));
+  }
+  if (pagination?.office_clients_offset != null) {
+    qs.set('office_clients_offset', String(pagination.office_clients_offset));
+  }
+  if (pagination?.office_client_customers_limit != null) {
+    qs.set('office_client_customers_limit', String(pagination.office_client_customers_limit));
+  }
+  if (pagination?.office_client_customers_offset != null) {
+    qs.set('office_client_customers_offset', String(pagination.office_client_customers_offset));
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return apiJson<WorkEngineInvoicesTabAggregate>(`${WORK_ENGINE.aggregateInvoicesTab}${suffix}`);
 }
 
 export async function fetchWorkEngineInvoicesClientDocumentsByTypeAggregate(params: {

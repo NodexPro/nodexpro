@@ -221,6 +221,15 @@ type PanelProps = {
   /** Backend-owned +מסמך actions per population section (WE invoices). */
   populationNewDocumentActions?: WorkEngineInvoicesPopulationNewDocumentAction[];
   onPopulationNewDocument?: (sectionKey: 'office_clients' | 'office_client_customers') => void;
+  /**
+   * P4.1 — request another aggregate page for one population.
+   * FE must pass backend page.offset + page.limit; must not infer has_more.
+   */
+  onRequestPopulationPage?: (params: {
+    section_key: 'office_clients' | 'office_client_customers';
+    offset: number;
+    limit: number;
+  }) => void;
 };
 
 type QuickCardOpenState = {
@@ -681,6 +690,7 @@ function PopulationSectionPanel({
   onToggleQuickCard,
   newDocumentAction,
   onNewDocument,
+  onRequestPopulationPage,
 }: {
   section: IncomeClientDocumentManagementSection;
   visualColumns: Array<{ key: VisualColumnKey; label: string }>;
@@ -692,9 +702,18 @@ function PopulationSectionPanel({
   onToggleQuickCard?: (row: IncomeClientDocumentManagementRow, anchorEl: HTMLElement) => void;
   newDocumentAction?: WorkEngineInvoicesPopulationNewDocumentAction | null;
   onNewDocument?: () => void;
+  onRequestPopulationPage?: PanelProps['onRequestPopulationPage'];
 }) {
   const showNewDocument = Boolean(newDocumentAction && onNewDocument);
   const headerActions = section.header_actions ?? [];
+  const page = section.page;
+  const showNextPage =
+    Boolean(onRequestPopulationPage) && page?.has_more === true && typeof page.limit === 'number';
+  const showPrevPage =
+    Boolean(onRequestPopulationPage) &&
+    typeof page?.offset === 'number' &&
+    page.offset > 0 &&
+    typeof page.limit === 'number';
 
   return (
     <div className="nx-we-invoices-cdm-population" data-section-key={section.section_key}>
@@ -758,6 +777,42 @@ function PopulationSectionPanel({
         quickCardOpenRowKey={quickCardOpenRowKey}
         onToggleQuickCard={onToggleQuickCard}
       />
+      {showPrevPage || showNextPage ? (
+        <div className="nx-we-invoices-cdm-population__pager">
+          {showPrevPage ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              disabled={busy}
+              onClick={() =>
+                onRequestPopulationPage?.({
+                  section_key: section.section_key,
+                  offset: Math.max(0, page.offset - page.limit),
+                  limit: page.limit,
+                })
+              }
+            >
+              הקודם
+            </button>
+          ) : null}
+          {showNextPage ? (
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              disabled={busy}
+              onClick={() =>
+                onRequestPopulationPage?.({
+                  section_key: section.section_key,
+                  offset: page.offset + page.limit,
+                  limit: page.limit,
+                })
+              }
+            >
+              הבא
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -774,6 +829,7 @@ export function IncomeClientDocumentManagementPanelView({
   onPopulationsDisplayModeChange,
   populationNewDocumentActions = [],
   onPopulationNewDocument,
+  onRequestPopulationPage,
 }: PanelProps) {
   const [quickCardOpen, setQuickCardOpen] = useState<QuickCardOpenState | null>(null);
 
@@ -867,6 +923,7 @@ export function IncomeClientDocumentManagementPanelView({
                       ? () => onPopulationNewDocument('office_clients')
                       : undefined
                   }
+                  onRequestPopulationPage={onRequestPopulationPage}
                 />
               ) : null}
               {visibility.showOfficeClientCustomers && customersSection ? (
@@ -889,6 +946,7 @@ export function IncomeClientDocumentManagementPanelView({
                       ? () => onPopulationNewDocument('office_client_customers')
                       : undefined
                   }
+                  onRequestPopulationPage={onRequestPopulationPage}
                 />
               ) : null}
             </div>
