@@ -225,6 +225,9 @@ function parseVersion(row: UnknownRecord): TaxKnowledgeVersion {
     payload_json: parsePayloadObject(row.payload_json),
     payload_checksum: asString(row.payload_checksum),
     supersedes_version_id: asNullableString(row.supersedes_version_id),
+    superseded_by_version_id: asNullableString(row.superseded_by_version_id),
+    retired_at: asNullableString(row.retired_at),
+    retired_reason: asNullableString(row.retired_reason),
     created_at: asString(row.created_at),
     sources: parseCitations(row.sources),
     legal_value_bindings: parseBindings(row.legal_value_bindings),
@@ -1195,6 +1198,21 @@ export function OwnerTaxKnowledgePanel({
                       <StateRow label="country_pack_ruleset_id" value={selectedVersion.country_pack_ruleset_id} />
                       <StateRow label="payload_checksum" value={selectedVersion.payload_checksum} />
                       <StateRow label="supersedes_version_id" value={selectedVersion.supersedes_version_id ?? ''} />
+                      {selectedVersion.superseded_by_version_id ? (
+                        <StateRow
+                          label="superseded_by"
+                          value={versionPresentationLabel(
+                            selectedVersion.superseded_by_version_id,
+                            taxKnowledge.rules,
+                          )}
+                        />
+                      ) : null}
+                      {selectedVersion.retired_at ? (
+                        <StateRow label="retired_at" value={selectedVersion.retired_at} />
+                      ) : null}
+                      {selectedVersion.retired_reason ? (
+                        <StateRow label="retired_reason" value={selectedVersion.retired_reason} />
+                      ) : null}
                       <StateRow label="created_at" value={selectedVersion.created_at} />
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
                         {K2D_VERSION_ACTION_KEYS.map((actionKey) => {

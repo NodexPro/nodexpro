@@ -81,10 +81,7 @@ test('TAX-K2E contract: Tax Knowledge migrations and backend production files un
     assert.equal(diff.trim(), '', `${file} must remain unchanged`);
   }
   const lockedBackend = [
-    'apps/api/src/domains/tax-knowledge/tax-knowledge-read-models.service.ts',
-    'apps/api/src/domains/tax-knowledge/tax-knowledge.types.ts',
     'apps/api/src/domains/tax-knowledge/tax-knowledge-checksum.pure.ts',
-    'apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts',
     'apps/api/src/routes/owner-country-pack.routes.ts',
   ];
   for (const file of lockedBackend) {

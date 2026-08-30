@@ -9,6 +9,7 @@ import { assertRulesetExists } from '../country-pack/ruleset.service.js';
 import { buildOwnerLegalControlPanelAggregate } from '../country-pack/country-pack-read-models.service.js';
 import { parseTaxRulePayloadJson, taxRulePayloadChecksum } from './tax-knowledge-checksum.pure.js';
 import {
+  TAX_KNOWLEDGE_ERROR_CODES,
   TAX_KNOWLEDGE_INITIAL_STATUS,
   TAX_RULE_KIND,
   TAX_RULE_RELATIONSHIP_TYPES,
@@ -100,25 +101,29 @@ function throwIfTaxRuleVersionLifecycleError(
   const code = String(error.code ?? '');
   const message = [error.message, error.details].filter(Boolean).join(' ');
   if (/cannot activate without at least one citation/i.test(message)) {
-    throw conflict('tax_rule_versions cannot activate without at least one citation to an active tax_source');
+    throw conflict(
+      'tax_rule_versions cannot activate without at least one citation to an active tax_source',
+      TAX_KNOWLEDGE_ERROR_CODES.ACTIVE_SOURCE_REQUIRED,
+    );
   }
   if (/cannot activate while a blocking relationship/i.test(message)) {
     throw conflict(
       'tax_rule_versions cannot activate while a blocking relationship points to a non-active tax_rule_version',
+      TAX_KNOWLEDGE_ERROR_CODES.RELATIONSHIP_TARGET_NOT_ACTIVE,
     );
   }
   if (/Invalid tax_rule_versions status transition/i.test(message)) {
-    throw conflict(message);
+    throw conflict(message, TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION);
   }
   if (
     /effective_to cannot be/i.test(message) ||
     /effective_to is frozen/i.test(message) ||
     /effective_to is null or effective_to >= effective_from/i.test(message)
   ) {
-    throw conflict(message);
+    throw conflict(message, TAX_KNOWLEDGE_ERROR_CODES.EFFECTIVE_TO_INVALID);
   }
   if (code === '23P01' || /exclusion constraint/i.test(message) || /no_active_overlap/i.test(message)) {
-    throw conflict('Active tax rule versions cannot overlap');
+    throw conflict('Active tax rule versions cannot overlap', TAX_KNOWLEDGE_ERROR_CODES.ACTIVE_WINDOW_OVERLAP);
   }
   if (/Tax rule version not found/i.test(message)) {
     throw notFound('Tax rule version not found');
@@ -127,16 +132,19 @@ function throwIfTaxRuleVersionLifecycleError(
     throw badRequest('new_tax_rule_version_id and old_tax_rule_version_id must be different');
   }
   if (/NEW version to be draft/i.test(message) || /OLD version to be active/i.test(message)) {
-    throw conflict(message);
+    throw conflict(message, TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION);
   }
   if (/same tax_rule/i.test(message) || /same country/i.test(message)) {
     throw badRequest(message);
   }
   if (/supersedes_version_id must be empty/i.test(message)) {
-    throw conflict(message);
+    throw conflict(message, TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION);
   }
   if (code === '23514') {
-    throw conflict(message || 'tax_rule_versions check constraint violated');
+    throw conflict(
+      message || 'tax_rule_versions check constraint violated',
+      TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
+    );
   }
   throw error;
 }
@@ -1007,7 +1015,10 @@ async function handleActivateTaxRuleVersion(
   const versionId = asUuid(payload.tax_rule_version_id, 'tax_rule_version_id');
   const version = await loadTaxRuleVersion(versionId);
   if (version.status !== TAX_KNOWLEDGE_INITIAL_STATUS) {
-    throw conflict('activate_tax_rule_version is only valid from draft to active');
+    throw conflict(
+      'activate_tax_rule_version is only valid from draft to active',
+      TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
+    );
   }
 
   const { data, error } = await supabaseAdmin
@@ -1018,7 +1029,12 @@ async function handleActivateTaxRuleVersion(
     .select('id, tax_rule_id, country_code, status, version_no, payload_checksum')
     .maybeSingle();
   throwIfTaxRuleVersionLifecycleError(error);
-  if (!data) throw conflict('activate_tax_rule_version is only valid from draft to active');
+  if (!data) {
+    throw conflict(
+      'activate_tax_rule_version is only valid from draft to active',
+      TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
+    );
+  }
 
   await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_ACTIVATED, 'tax_rule_version', versionId, {
     tax_rule_id: data.tax_rule_id,
@@ -1043,10 +1059,13 @@ async function handleRetireTaxRuleVersion(
   const versionId = asUuid(payload.tax_rule_version_id, 'tax_rule_version_id');
   const version = await loadTaxRuleVersion(versionId);
   if (version.status === 'retired') {
-    throw conflict('tax_rule_version is already retired');
+    throw conflict('tax_rule_version is already retired', TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION);
   }
   if (version.status !== 'draft' && version.status !== 'active' && version.status !== 'superseded') {
-    throw conflict('retire_tax_rule_version is only valid from draft, active, or superseded');
+    throw conflict(
+      'retire_tax_rule_version is only valid from draft, active, or superseded',
+      TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
+    );
   }
   const reason = asOptionalString(payload.reason, 'reason');
 
@@ -1062,7 +1081,12 @@ async function handleRetireTaxRuleVersion(
     .select('id, tax_rule_id, country_code, status')
     .maybeSingle();
   throwIfTaxRuleVersionLifecycleError(error);
-  if (!data) throw conflict('retire_tax_rule_version is only valid from draft, active, or superseded');
+  if (!data) {
+    throw conflict(
+      'retire_tax_rule_version is only valid from draft, active, or superseded',
+      TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
+    );
+  }
 
   await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_RETIRED, 'tax_rule_version', versionId, {
     tax_rule_id: data.tax_rule_id,
@@ -1087,16 +1111,25 @@ async function handleCloseTaxRuleVersionEffectiveTo(
   const effectiveTo = asDate(payload.effective_to, 'effective_to');
   const version = await loadTaxRuleVersion(versionId);
   if (version.status === 'superseded' || version.status === 'retired') {
-    throw conflict('tax_rule_versions.effective_to is frozen after supersession/retirement');
+    throw conflict(
+      'tax_rule_versions.effective_to is frozen after supersession/retirement',
+      TAX_KNOWLEDGE_ERROR_CODES.EFFECTIVE_TO_INVALID,
+    );
   }
   if (version.status !== 'active') {
-    throw conflict('close_tax_rule_version_effective_to is only valid while the version is active');
+    throw conflict(
+      'close_tax_rule_version_effective_to is only valid while the version is active',
+      TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
+    );
   }
   if (effectiveTo < version.effective_from) {
     throw badRequest('effective_to must be >= effective_from');
   }
   if (version.effective_to != null && effectiveTo > version.effective_to) {
-    throw conflict('tax_rule_versions.effective_to cannot be extended after leaving draft');
+    throw conflict(
+      'tax_rule_versions.effective_to cannot be extended after leaving draft',
+      TAX_KNOWLEDGE_ERROR_CODES.EFFECTIVE_TO_INVALID,
+    );
   }
 
   const { data, error } = await supabaseAdmin
@@ -1107,7 +1140,12 @@ async function handleCloseTaxRuleVersionEffectiveTo(
     .select('id, tax_rule_id, country_code, status, effective_from, effective_to')
     .maybeSingle();
   throwIfTaxRuleVersionLifecycleError(error);
-  if (!data) throw conflict('close_tax_rule_version_effective_to is only valid while the version is active');
+  if (!data) {
+    throw conflict(
+      'close_tax_rule_version_effective_to is only valid while the version is active',
+      TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
+    );
+  }
 
   await audit(ctx, AUDIT_ACTIONS.TAX_RULE_VERSION_EFFECTIVE_TO_CLOSED, 'tax_rule_version', versionId, {
     tax_rule_id: data.tax_rule_id,
@@ -1136,10 +1174,16 @@ async function handleSupersedeTaxRuleVersion(
   const neu = await loadTaxRuleVersion(newId);
   const old = await loadTaxRuleVersion(oldId);
   if (neu.status !== TAX_KNOWLEDGE_INITIAL_STATUS) {
-    throw conflict('supersede_tax_rule_version requires the NEW version to be draft');
+    throw conflict(
+      'supersede_tax_rule_version requires the NEW version to be draft',
+      TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
+    );
   }
   if (old.status !== 'active') {
-    throw conflict('supersede_tax_rule_version requires the OLD version to be active');
+    throw conflict(
+      'supersede_tax_rule_version requires the OLD version to be active',
+      TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
+    );
   }
   if (neu.tax_rule_id !== old.tax_rule_id) {
     throw badRequest('NEW and OLD tax rule versions must belong to the same tax_rule');
@@ -1148,7 +1192,10 @@ async function handleSupersedeTaxRuleVersion(
     throw badRequest('NEW and OLD tax rule versions must belong to the same country');
   }
   if (neu.supersedes_version_id != null && neu.supersedes_version_id !== old.id) {
-    throw conflict('NEW.supersedes_version_id must be empty or exactly the OLD version');
+    throw conflict(
+      'NEW.supersedes_version_id must be empty or exactly the OLD version',
+      TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
+    );
   }
 
   const { data, error } = await supabaseAdmin.rpc('tax_knowledge_supersede_tax_rule_version', {

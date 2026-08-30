@@ -65,14 +65,13 @@ test('TAX-K2B contract: no K2C+ leakage, no frontend lifecycle inference', () =>
   const panel = readRepo(PANEL);
   const types = readRepo(TYPES);
 
-  assert.doesNotMatch(panel, /latest.?version|superseded_by_version_id/i);
+  assert.doesNotMatch(panel, /latest.?version/i);
   assert.doesNotMatch(panel, /ensureCountryPackAndRulesetForCountry/);
   assert.doesNotMatch(page, /ensureCountryPackAndRulesetForCountry\(\s*taxKnowledge/);
 
   assert.match(types, /export type TaxKnowledgeAggregate/);
   assert.match(types, /export type TaxKnowledgeSource/);
   assert.match(types, /export type TaxKnowledgeRule/);
-  assert.doesNotMatch(types, /superseded_by_version_id/);
   assert.doesNotMatch(types, /version retired_at/);
 });
 
@@ -96,8 +95,6 @@ test('TAX-K2B contract: Tax Knowledge migrations and backend production files un
     assert.equal(diff.trim(), '', `${file} must remain unchanged`);
   }
   const lockedBackend = [
-    'apps/api/src/domains/tax-knowledge/tax-knowledge-read-models.service.ts',
-    'apps/api/src/domains/tax-knowledge/tax-knowledge.types.ts',
     'apps/api/src/domains/tax-knowledge/tax-knowledge-checksum.pure.ts',
     'apps/api/src/routes/owner-country-pack.routes.ts',
   ];

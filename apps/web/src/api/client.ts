@@ -28,6 +28,21 @@ export function userFacingApiMessage(e: unknown): string {
     ) {
       return 'Item was updated. Refreshing...';
     }
+    if (c === 'TAX_KNOWLEDGE_ACTIVE_SOURCE_REQUIRED') {
+      return 'לא ניתן להפעיל את גרסת הכלל: נדרש לפחות מקור פעיל אחד המקושר לגרסה.';
+    }
+    if (c === 'TAX_KNOWLEDGE_RELATIONSHIP_TARGET_NOT_ACTIVE') {
+      return 'לא ניתן להפעיל את גרסת הכלל: קיימת תלות מחייבת בגרסת כלל שאינה פעילה.';
+    }
+    if (c === 'TAX_KNOWLEDGE_ACTIVE_WINDOW_OVERLAP') {
+      return 'לא ניתן להפעיל את גרסת הכלל: טווח התוקף חופף לגרסה פעילה אחרת של אותו כלל.';
+    }
+    if (c === 'TAX_KNOWLEDGE_INVALID_LIFECYCLE_TRANSITION') {
+      return 'לא ניתן לבצע את פעולת מחזור החיים במצב הנוכחי של גרסת הכלל.';
+    }
+    if (c === 'TAX_KNOWLEDGE_EFFECTIVE_TO_INVALID') {
+      return 'לא ניתן לעדכן את תוקף גרסת הכלל לפי התאריך שנבחר.';
+    }
     if (c === 'VERSION_CONFLICT' || c === 'CONFLICT') {
       return 'המידע עודכן מאז שנפתח המסך. סגור ופתח מחדש את כרטיס הלקוח, או רענן את הרשימה, ונסה שוב.';
     }

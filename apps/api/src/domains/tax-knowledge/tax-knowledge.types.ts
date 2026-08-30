@@ -50,6 +50,18 @@ export type TaxRuleRelationshipType = (typeof TAX_RULE_RELATIONSHIP_TYPES)[numbe
 
 export const TAX_KNOWLEDGE_INITIAL_STATUS = 'draft' as const;
 
+/** Stable API error codes for Tax Knowledge publication/lifecycle failures. */
+export const TAX_KNOWLEDGE_ERROR_CODES = {
+  ACTIVE_SOURCE_REQUIRED: 'TAX_KNOWLEDGE_ACTIVE_SOURCE_REQUIRED',
+  RELATIONSHIP_TARGET_NOT_ACTIVE: 'TAX_KNOWLEDGE_RELATIONSHIP_TARGET_NOT_ACTIVE',
+  ACTIVE_WINDOW_OVERLAP: 'TAX_KNOWLEDGE_ACTIVE_WINDOW_OVERLAP',
+  INVALID_LIFECYCLE_TRANSITION: 'TAX_KNOWLEDGE_INVALID_LIFECYCLE_TRANSITION',
+  EFFECTIVE_TO_INVALID: 'TAX_KNOWLEDGE_EFFECTIVE_TO_INVALID',
+} as const;
+
+export type TaxKnowledgeErrorCode =
+  (typeof TAX_KNOWLEDGE_ERROR_CODES)[keyof typeof TAX_KNOWLEDGE_ERROR_CODES];
+
 export function isTaxKnowledgeCommand(command: string): command is TaxKnowledgeCommandName {
   return (TAX_KNOWLEDGE_COMMANDS as readonly string[]).includes(command);
 }
@@ -171,6 +183,9 @@ export type OwnerTaxRuleVersionDto = {
   payload_json: Record<string, unknown>;
   payload_checksum: string;
   supersedes_version_id: string | null;
+  superseded_by_version_id: string | null;
+  retired_at: string | null;
+  retired_reason: string | null;
   created_at: string;
   sources: OwnerTaxRuleVersionSourceDto[];
   legal_value_bindings: OwnerTaxRuleVersionLegalValueDto[];

@@ -74,7 +74,7 @@ test('TAX-K2F contract: allowed_actions, locked types, no graph/reverse/latest i
   assert.doesNotMatch(panel, /split\('\|'\)/);
   assert.doesNotMatch(panel, /status === ['"]draft['"]/);
   assert.doesNotMatch(panel, /if \(selectedVersion\.status/);
-  assert.doesNotMatch(panel, /latest.?version|superseded_by_version_id/i);
+  assert.doesNotMatch(panel, /latest.?version/i);
   assert.doesNotMatch(panel, /conflicts_with A|reverse.?edge|createReverse|paired command/i);
   assert.doesNotMatch(panel, /onCommand\('create_tax_rule_relationship'[\s\S]{0,400}onCommand\('create_tax_rule_relationship'/);
   assert.doesNotMatch(panel, /window\.confirm/);
@@ -92,10 +92,7 @@ test('TAX-K2F contract: Tax Knowledge migrations and backend production files un
     assert.equal(diff.trim(), '', `${file} must remain unchanged`);
   }
   const lockedBackend = [
-    'apps/api/src/domains/tax-knowledge/tax-knowledge-read-models.service.ts',
-    'apps/api/src/domains/tax-knowledge/tax-knowledge.types.ts',
     'apps/api/src/domains/tax-knowledge/tax-knowledge-checksum.pure.ts',
-    'apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts',
     'apps/api/src/routes/owner-country-pack.routes.ts',
   ];
   for (const file of lockedBackend) {

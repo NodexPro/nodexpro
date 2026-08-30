@@ -59,7 +59,7 @@ test('TAX-K2D contract: allowed_actions eligibility, ID selection, JSON syntax o
   assert.match(panel, /payload_json must be a JSON object/);
   assert.doesNotMatch(panel, /status === ['"]draft['"]/);
   assert.doesNotMatch(panel, /if \(selectedVersion\.status/);
-  assert.doesNotMatch(panel, /latest.?version|superseded_by_version_id/i);
+  assert.doesNotMatch(panel, /latest.?version/i);
   assert.doesNotMatch(panel, /taxRulePayloadChecksum|createHash|nextVersionNo|version_no \+ 1/);
   assert.doesNotMatch(panel, /ensureCountryPackAndRulesetForCountry/);
   assert.doesNotMatch(panel, /createPayload\.supersedes|supersedes_version_id: versionForm|field-label">supersedes_version_id/);
@@ -77,10 +77,7 @@ test('TAX-K2D contract: Tax Knowledge migrations and backend production files un
     assert.equal(diff.trim(), '', `${file} must remain unchanged`);
   }
   const lockedBackend = [
-    'apps/api/src/domains/tax-knowledge/tax-knowledge-read-models.service.ts',
-    'apps/api/src/domains/tax-knowledge/tax-knowledge.types.ts',
     'apps/api/src/domains/tax-knowledge/tax-knowledge-checksum.pure.ts',
-    'apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts',
     'apps/api/src/routes/owner-country-pack.routes.ts',
   ];
   for (const file of lockedBackend) {

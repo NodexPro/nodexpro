@@ -66,7 +66,7 @@ test('TAX-K2C contract: allowed_actions eligibility, no status inference, no hin
 
 test('TAX-K2C contract: no K3+/Trainer leakage', () => {
   const panel = readRepo(PANEL);
-  assert.doesNotMatch(panel, /latest.?version|superseded_by_version_id/i);
+  assert.doesNotMatch(panel, /latest.?version/i);
   assert.doesNotMatch(panel, /Tax Knowledge Trainer|tax_knowledge_trainer|interpretation|strategy|calculation|work.?engine|impact resolver/i);
 });
 
@@ -76,8 +76,6 @@ test('TAX-K2C contract: Tax Knowledge migrations and backend production files un
     assert.equal(diff.trim(), '', `${file} must remain unchanged`);
   }
   const lockedBackend = [
-    'apps/api/src/domains/tax-knowledge/tax-knowledge-read-models.service.ts',
-    'apps/api/src/domains/tax-knowledge/tax-knowledge.types.ts',
     'apps/api/src/domains/tax-knowledge/tax-knowledge-checksum.pure.ts',
     'apps/api/src/routes/owner-country-pack.routes.ts',
   ];

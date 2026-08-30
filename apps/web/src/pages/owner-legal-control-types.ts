@@ -116,6 +116,9 @@ export type TaxKnowledgeVersion = {
   payload_json: UnknownRecord;
   payload_checksum: string;
   supersedes_version_id: string | null;
+  superseded_by_version_id: string | null;
+  retired_at: string | null;
+  retired_reason: string | null;
   created_at: string;
   sources: TaxKnowledgeCitation[];
   legal_value_bindings: TaxKnowledgeLegalValueBinding[];

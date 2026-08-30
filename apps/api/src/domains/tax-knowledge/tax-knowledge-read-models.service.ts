@@ -21,7 +21,7 @@ const TAX_SOURCE_SELECT =
 const TAX_RULE_SELECT =
   'id, country_code, rule_code, title, rule_kind, status, usage_hint, owner_note, created_at, updated_at';
 const TAX_RULE_VERSION_SELECT =
-  'id, tax_rule_id, country_code, country_pack_id, country_pack_ruleset_id, version_no, status, effective_from, effective_to, payload_json, payload_checksum, supersedes_version_id, created_at';
+  'id, tax_rule_id, country_code, country_pack_id, country_pack_ruleset_id, version_no, status, effective_from, effective_to, payload_json, payload_checksum, supersedes_version_id, superseded_by_version_id, retired_at, retired_reason, created_at';
 
 function normalizeCountryCode(value: string | null | undefined): string | null {
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -275,6 +275,9 @@ function mapVersion(
     payload_json: payloadJson,
     payload_checksum: String(row.payload_checksum),
     supersedes_version_id: pairing.supersedes_version_id,
+    superseded_by_version_id: row.superseded_by_version_id == null ? null : String(row.superseded_by_version_id),
+    retired_at: row.retired_at == null ? null : String(row.retired_at),
+    retired_reason: row.retired_reason == null ? null : String(row.retired_reason),
     created_at: String(row.created_at),
     sources,
     legal_value_bindings: legalValueBindings,
