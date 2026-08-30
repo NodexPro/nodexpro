@@ -215,7 +215,8 @@
 
 .nx-landing__modules {
   position: relative;
-  padding: 56px 28px 80px;
+  /* Left 72px matches hero content inset. */
+  padding: 56px 28px 80px 72px;
   background-color: #020617;
   background-image: url('/nodexpro-space-background.png');
   background-repeat: repeat-y;
@@ -237,7 +238,8 @@
   position: relative;
   z-index: 1;
   max-width: 1180px;
-  margin: 0 auto;
+  /* Left-aligned with hero content (was margin: 0 auto → centered ~150–180px in). */
+  margin: 0;
 }
 
 .nx-landing__eyebrow {
