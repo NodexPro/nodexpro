@@ -110,7 +110,8 @@
   min-height: 100dvh;
   display: flex;
   align-items: center;
-  padding: 96px 28px 72px;
+  /* Left 72px ≈ header edge breathing room; content sits in the open left of the art. */
+  padding: 96px 28px 72px 72px;
   box-sizing: border-box;
   background-color: #020617;
   /* ?v= busts sticky browser cache of CSS backgrounds (same path as /nodexpro-hero.png). */
@@ -138,7 +139,8 @@
   max-width: 520px;
   width: min(100%, 520px);
   margin-inline-end: auto;
-  margin-inline-start: max(0px, calc((100% - 1180px) / 2));
+  /* Was centered to the 1180px column — pushed the cluster ~150–180px in on desktop. */
+  margin-inline-start: 0;
 }
 
 .nx-landing__hero-title {
