@@ -39,6 +39,19 @@ export const CRITICAL_WORK_ENGINE_COMMANDS = new Set([
   'escalate_work_item',
   'intake_work_event',
   'scheduler_run',
+  // P11.5.2 — collection / reminder operational commands
+  'approve_reminder_candidate',
+  'send_collection_reminder',
+  'approve_send_reminder_candidate',
+]);
+
+/**
+ * Critical Accounting Base commands — payment allocate/reverse only (P11.5.1).
+ * Not every AB command is critical.
+ */
+export const CRITICAL_ACCOUNTING_BASE_COMMANDS = new Set([
+  'record_and_allocate_income_payment',
+  'reverse_income_payment_allocation',
 ]);
 
 const SAFE_COMMAND_LOG_KEYS = new Set([
@@ -90,7 +103,7 @@ export function extractSafeErrorMessage(error: unknown): string {
 
 export type CommandObsParams = {
   correlation_id: string;
-  module: 'income' | 'work-engine' | 'scheduler';
+  module: 'income' | 'work-engine' | 'scheduler' | 'accounting-base';
   command: string;
   organization_id?: string | null;
   entity_type?: string;

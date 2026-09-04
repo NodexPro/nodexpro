@@ -7,7 +7,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
+  CRITICAL_ACCOUNTING_BASE_COMMANDS,
   CRITICAL_INCOME_COMMANDS,
+  CRITICAL_WORK_ENGINE_COMMANDS,
   emitSlowAggregateWarning,
   extractSafeErrorMessage,
   resolveCorrelationId,
@@ -19,6 +21,15 @@ const dir = dirname(fileURLToPath(import.meta.url));
 const indexSource = readFileSync(join(dir, '../../src/index.ts'), 'utf8');
 const correlationSource = readFileSync(join(dir, '../../src/middleware/correlation.ts'), 'utf8');
 const incomeRoutesSource = readFileSync(join(dir, '../../src/domains/income/income.routes.ts'), 'utf8');
+const abRoutesSource = readFileSync(
+  join(dir, '../../src/domains/accounting-base/accounting-base.routes.ts'),
+  'utf8',
+);
+const observabilitySource = readFileSync(join(dir, '../../src/shared/observability.ts'), 'utf8');
+const queueReadSource = readFileSync(
+  join(dir, '../../src/domains/work-engine/work-engine.read-models.service.ts'),
+  'utf8',
+);
 const issueSource = readFileSync(
   join(dir, '../../src/domains/income/income-document-issue.service.ts'),
   'utf8',
@@ -29,6 +40,10 @@ const schedulerSource = readFileSync(
 );
 const failedOpsPure = readFileSync(
   join(dir, '../../src/domains/work-engine/work-engine-failed-operations.pure.ts'),
+  'utf8',
+);
+const metricsSource = readFileSync(
+  join(dir, '../../src/shared/aggregate-payload-metrics.ts'),
   'utf8',
 );
 
@@ -170,4 +185,42 @@ test('P11.5 failed operations notes payment gap and includes PDF/delivery/AB/ret
 test('P11.5 extractSafeErrorMessage never invents secrets', () => {
   assert.equal(extractSafeErrorMessage(new Error('x')), 'x');
   assert.equal(extractSafeErrorMessage('y'), 'y');
+});
+
+test('P11.5.1 — AB allocate/reverse are critical and use withCriticalCommandObs', () => {
+  assert.ok(CRITICAL_ACCOUNTING_BASE_COMMANDS.has('record_and_allocate_income_payment'));
+  assert.ok(CRITICAL_ACCOUNTING_BASE_COMMANDS.has('reverse_income_payment_allocation'));
+  assert.equal(CRITICAL_ACCOUNTING_BASE_COMMANDS.size, 2);
+  assert.match(abRoutesSource, /CRITICAL_ACCOUNTING_BASE_COMMANDS/);
+  assert.match(abRoutesSource, /withCriticalCommandObs/);
+  assert.match(abRoutesSource, /module:\s*'accounting-base'/);
+  assert.match(abRoutesSource, /CRITICAL_ACCOUNTING_BASE_COMMANDS\.has\(type\)/);
+  // Safe allowlist — no body/payload dumps in obs helpers
+  assert.match(observabilitySource, /SAFE_COMMAND_LOG_KEYS/);
+  assert.doesNotMatch(abRoutesSource, /console\.(info|warn|error)\([^)]*payload/);
+});
+
+test('P11.5.2 — reminder approve/send are critical-observed; approve_send remains live', () => {
+  assert.ok(CRITICAL_WORK_ENGINE_COMMANDS.has('approve_reminder_candidate'));
+  assert.ok(CRITICAL_WORK_ENGINE_COMMANDS.has('send_collection_reminder'));
+  // Still allowed + handled in commands service — keep critical for live non-collection path
+  assert.ok(CRITICAL_WORK_ENGINE_COMMANDS.has('approve_send_reminder_candidate'));
+  const weRoutes = readFileSync(
+    join(dir, '../../src/domains/work-engine/work-engine.routes.ts'),
+    'utf8',
+  );
+  assert.match(weRoutes, /CRITICAL_WORK_ENGINE_COMMANDS\.has\(command\)/);
+  assert.match(weRoutes, /'approve_send_reminder_candidate'/);
+});
+
+test('P11.5.3 — WE queue aggregate uses canonical slow-aggregate helper + threshold', () => {
+  assert.match(
+    queueReadSource,
+    /logAggregatePayloadBreakdown\(\s*'work_engine_queue_aggregate'/,
+  );
+  assert.match(queueReadSource, /duration_ms:\s*Date\.now\(\) - aggregateStartMs/);
+  assert.match(queueReadSource, /correlation_id:\s*params\.correlationId/);
+  assert.match(metricsSource, /emitSlowAggregateWarning/);
+  assert.match(observabilitySource, /SLOW_AGGREGATE_THRESHOLD_MS/);
+  assert.ok(slowAggregateThresholdMs() > 0);
 });

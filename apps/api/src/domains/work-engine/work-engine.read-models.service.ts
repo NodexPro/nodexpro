@@ -8,6 +8,7 @@
 
 import { supabaseAdmin } from '../../db/client.js';
 import { hasPermission } from '../rbac/rbac.service.js';
+import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import type {
   AllowedAction,
   OverrideKind,
@@ -2053,7 +2054,10 @@ export async function buildWorkEngineQueueAggregate(params: {
   orgId: string;
   filters?: WorkEngineQueueFilters;
   viewer?: WorkEngineQueueViewerContext | null;
+  /** Optional request correlation for slow-aggregate diagnostics (P11.5.3). */
+  correlationId?: string | null;
 }): Promise<Record<string, unknown>> {
+  const aggregateStartMs = Date.now();
   const { orgId, viewer } = params;
   const f = parseWorkEngineQueueFilters(params.filters ?? {});
   const viewerId = viewer?.userId ?? null;
@@ -2560,7 +2564,7 @@ export async function buildWorkEngineQueueAggregate(params: {
   const escalation_workspace = buildEscalationWorkspace(escalationOwnerOptions);
 
   // ---- 7. Compose response.
-  return {
+  const response: Record<string, unknown> = {
     aggregate_key: 'work_engine_queue_aggregate',
     org_id: orgId,
     generated_at: new Date().toISOString(),
@@ -2694,4 +2698,11 @@ export async function buildWorkEngineQueueAggregate(params: {
       ],
     },
   };
+  // P11.5.3 — canonical slow-aggregate diagnostics (SLOW_AGGREGATE_THRESHOLD_MS).
+  logAggregatePayloadBreakdown('work_engine_queue_aggregate', response, {
+    correlation_id: params.correlationId ?? null,
+    organization_id: orgId,
+    duration_ms: Date.now() - aggregateStartMs,
+  });
+  return response;
 }

@@ -6,8 +6,14 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
+import { getRequestCorrelationId } from '../../middleware/correlation.js';
 import type { RequestContext } from '../../shared/context.js';
 import { getRequiredOrgId } from '../../shared/context.js';
+import {
+  CRITICAL_ACCOUNTING_BASE_COMMANDS,
+  resolveCorrelationId,
+  withCriticalCommandObs,
+} from '../../shared/observability.js';
 import { executeAccountingBaseCommand } from './accounting-base-commands.service.js';
 import {
   ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT,
@@ -88,7 +94,32 @@ router.post('/commands', async (req: Request, res: Response, next: NextFunction)
         },
       });
     }
-    const out = await executeAccountingBaseCommand(ctx, orgId, body);
+    // P11.5.1 — canonical critical command lifecycle (allocate/reverse only).
+    const correlation_id =
+      ctx.correlationId ?? getRequestCorrelationId(req) ?? resolveCorrelationId(null);
+    const payload = (body.payload ?? {}) as Record<string, unknown>;
+    const incomeDocumentId =
+      typeof payload.income_document_id === 'string' ? payload.income_document_id : null;
+    const out = await withCriticalCommandObs(
+      {
+        enabled: CRITICAL_ACCOUNTING_BASE_COMMANDS.has(type),
+        correlation_id,
+        module: 'accounting-base',
+        command: type,
+        organization_id: orgId,
+        income_document_id: incomeDocumentId,
+        entity_type: incomeDocumentId ? 'income_document' : undefined,
+        entity_id: incomeDocumentId,
+      },
+      () => executeAccountingBaseCommand(ctx, orgId, body),
+      (result) => ({
+        income_document_id:
+          result && typeof result === 'object' && 'income_document_id' in result
+            ? ((result as { income_document_id?: string | null }).income_document_id ??
+              incomeDocumentId)
+            : incomeDocumentId,
+      }),
+    );
     return res.json(out);
   } catch (e) {
     next(e);

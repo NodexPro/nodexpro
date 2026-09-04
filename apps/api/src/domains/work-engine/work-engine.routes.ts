@@ -199,6 +199,7 @@ officeRouter.get(
                 roleCode: ctx.membership.roleCode,
               }
             : undefined,
+        correlationId: ctx.correlationId ?? getRequestCorrelationId(req),
       });
       return res.json(aggregate);
     } catch (e) {

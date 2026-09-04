@@ -260,6 +260,7 @@ async function buildRefreshedForPayload(
         orgId,
         filters,
         viewer: viewer ?? undefined,
+        correlationId: ctx.correlationId ?? null,
       }),
     };
   }
