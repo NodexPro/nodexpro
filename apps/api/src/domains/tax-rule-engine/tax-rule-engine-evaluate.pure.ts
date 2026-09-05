@@ -4,6 +4,7 @@ import {
   type TaxRuleEnginePredicateResult,
 } from './tax-rule-engine-predicate.pure.js';
 import {
+  EVALUATION_AS_OF_FACT,
   TAX_RULE_ENGINE_AGGREGATE_KEY,
   isTaxRuleEngineBlockingType,
   isTaxRuleEngineTraceType,
@@ -16,6 +17,7 @@ import {
   type TaxRuleEngineEvaluationAggregate,
   type TaxRuleEngineFacts,
   type TaxRuleEngineLegalValueBinding,
+  type TaxRuleEnginePredicateReason,
   type TaxRuleEngineRelationshipEdge,
   type TaxRuleEngineRelationshipTrace,
   type TaxRuleEngineSourcePin,
@@ -54,30 +56,69 @@ function statementOf(payload: Record<string, unknown>): string | null {
   return typeof payload.statement === 'string' ? payload.statement : null;
 }
 
+function unsupportedReason(result: TaxRuleEnginePredicateResult): TaxRuleEngineClassificationReason {
+  return result.reason === 'type_mismatch' ? 'type_mismatch' : 'predicate_unsupported';
+}
+
 function classifyFromPredicates(
   exclude: TaxRuleEnginePredicateResult,
   applies: TaxRuleEnginePredicateResult,
-): { classification: TaxRuleEngineClassification; reason: TaxRuleEngineClassificationReason; missing_facts: string[] } {
+): {
+  classification: TaxRuleEngineClassification;
+  reason: TaxRuleEngineClassificationReason;
+  predicate_reason: TaxRuleEnginePredicateReason | null;
+  missing_facts: string[];
+} {
   if (exclude.kind === 'unsupported') {
-    return { classification: 'undetermined', reason: 'predicate_unsupported', missing_facts: [] };
+    return {
+      classification: 'undetermined',
+      reason: unsupportedReason(exclude),
+      predicate_reason: exclude.reason ?? 'predicate_unsupported',
+      missing_facts: [],
+    };
   }
   if (exclude.kind === 'missing') {
-    return { classification: 'undetermined', reason: 'missing_facts', missing_facts: exclude.missing_facts };
+    return {
+      classification: 'undetermined',
+      reason: 'missing_facts',
+      predicate_reason: 'missing_facts',
+      missing_facts: exclude.missing_facts,
+    };
   }
   if (exclude.kind === 'true') {
-    return { classification: 'not_applicable', reason: 'does_not_apply_if_true', missing_facts: [] };
+    return {
+      classification: 'not_applicable',
+      reason: 'does_not_apply_if_true',
+      predicate_reason: null,
+      missing_facts: [],
+    };
   }
 
   if (applies.kind === 'unsupported') {
-    return { classification: 'undetermined', reason: 'predicate_unsupported', missing_facts: [] };
+    return {
+      classification: 'undetermined',
+      reason: unsupportedReason(applies),
+      predicate_reason: applies.reason ?? 'predicate_unsupported',
+      missing_facts: [],
+    };
   }
   if (applies.kind === 'missing') {
-    return { classification: 'undetermined', reason: 'missing_facts', missing_facts: applies.missing_facts };
+    return {
+      classification: 'undetermined',
+      reason: 'missing_facts',
+      predicate_reason: 'missing_facts',
+      missing_facts: applies.missing_facts,
+    };
   }
   if (applies.kind === 'false') {
-    return { classification: 'not_applicable', reason: 'applies_if_false', missing_facts: [] };
+    return {
+      classification: 'not_applicable',
+      reason: 'applies_if_false',
+      predicate_reason: null,
+      missing_facts: [],
+    };
   }
-  return { classification: 'applicable', reason: 'applies_if_true', missing_facts: [] };
+  return { classification: 'applicable', reason: 'applies_if_true', predicate_reason: null, missing_facts: [] };
 }
 
 function classifyCandidate(
@@ -96,6 +137,7 @@ function classifyCandidate(
     statement: statementOf(candidate.payload_json),
     classification: classified.classification,
     classification_reason: classified.reason,
+    predicate_reason: classified.predicate_reason,
     missing_facts: uniqueSorted(classified.missing_facts),
     sources: sortSources(candidate.sources),
     legal_value_bindings: sortBindings(candidate.legal_value_bindings),
@@ -177,8 +219,12 @@ export function evaluateTaxRules(input: {
   candidates: TaxRuleEngineCandidate[];
   relationships: TaxRuleEngineRelationshipEdge[];
 }): TaxRuleEngineEvaluationAggregate {
+  const facts: TaxRuleEngineFacts = {
+    ...input.facts,
+    [EVALUATION_AS_OF_FACT]: input.as_of,
+  };
   const sameCountry = input.candidates.filter((row) => row.country_code === input.country_code);
-  const evaluated = sameCountry.map((row) => classifyCandidate(row, input.facts));
+  const evaluated = sameCountry.map((row) => classifyCandidate(row, facts));
   evaluated.sort(compareRules);
 
   const applicable = evaluated.filter((row) => row.classification === 'applicable');

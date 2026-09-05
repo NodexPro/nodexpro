@@ -8,6 +8,7 @@ import { assertPackBelongsToCountry } from '../country-pack/country-pack.service
 import { assertRulesetExists } from '../country-pack/ruleset.service.js';
 import { buildOwnerLegalControlPanelAggregate } from '../country-pack/country-pack-read-models.service.js';
 import { parseTaxRulePayloadJson, taxRulePayloadChecksum } from './tax-knowledge-checksum.pure.js';
+import { validateTaxRulePayloadPredicates } from '../tax-rule-engine/tax-rule-engine-predicate.pure.js';
 import {
   TAX_KNOWLEDGE_ERROR_CODES,
   TAX_KNOWLEDGE_INITIAL_STATUS,
@@ -1019,6 +1020,11 @@ async function handleActivateTaxRuleVersion(
       'activate_tax_rule_version is only valid from draft to active',
       TAX_KNOWLEDGE_ERROR_CODES.INVALID_LIFECYCLE_TRANSITION,
     );
+  }
+
+  const predicateCheck = validateTaxRulePayloadPredicates(version.payload_json ?? {});
+  if (!predicateCheck.ok) {
+    throw conflict(predicateCheck.message, TAX_KNOWLEDGE_ERROR_CODES.INVALID_PREDICATE);
   }
 
   const { data, error } = await supabaseAdmin

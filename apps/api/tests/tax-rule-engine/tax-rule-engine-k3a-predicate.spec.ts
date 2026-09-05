@@ -21,7 +21,9 @@ test('TAX-K3A pure: eq/neq/exists and numeric compare', () => {
   assert.equal(evaluateTaxRulePredicate({ fact: 'residency_status', op: 'eq', value: 'resident' }, facts).kind, 'true');
   assert.equal(evaluateTaxRulePredicate({ fact: 'residency_status', op: 'eq', value: 'non_resident' }, facts).kind, 'false');
   assert.equal(evaluateTaxRulePredicate({ fact: 'residency_status', op: 'neq', value: 'non_resident' }, facts).kind, 'true');
-  assert.equal(evaluateTaxRulePredicate({ fact: 'residency_status', op: 'eq', value: 1 }, facts).kind, 'false');
+  const typeMismatch = evaluateTaxRulePredicate({ fact: 'residency_status', op: 'eq', value: 1 }, facts);
+  assert.equal(typeMismatch.kind, 'unsupported');
+  assert.equal(typeMismatch.reason, 'type_mismatch');
   assert.equal(evaluateTaxRulePredicate({ fact: 'flagged', op: 'exists' }, facts).kind, 'true');
   assert.equal(evaluateTaxRulePredicate({ fact: 'empty', op: 'exists' }, facts).kind, 'false');
   assert.equal(evaluateTaxRulePredicate({ fact: 'annual_income', op: 'gte', value: 120000 }, facts).kind, 'true');

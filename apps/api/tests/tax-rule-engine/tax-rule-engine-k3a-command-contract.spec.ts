@@ -86,6 +86,7 @@ test('TAX-K3A contract: engine does not own authoring UI or TK allowed_actions',
   assert.match(types, /applicable: TaxRuleEngineEvaluatedRule/);
   assert.match(types, /not_applicable: TaxRuleEngineEvaluatedRule/);
   assert.match(types, /undetermined: TaxRuleEngineEvaluatedRule/);
+  assert.match(types, /type_mismatch/);
 });
 
 test('TAX-K3A contract: no new migration; 600–606 and 163 stay untouched', () => {
