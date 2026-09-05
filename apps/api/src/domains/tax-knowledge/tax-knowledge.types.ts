@@ -13,6 +13,11 @@ export const TAX_KNOWLEDGE_COMMANDS = [
   'unbind_tax_rule_version_legal_value',
   'create_tax_rule_relationship',
   'delete_tax_rule_relationship',
+  'create_tax_rule_unresolved_legal_reference',
+  'update_tax_rule_unresolved_legal_reference',
+  'accept_tax_rule_unresolved_legal_reference',
+  'discard_tax_rule_unresolved_legal_reference',
+  'resolve_tax_rule_unresolved_legal_reference',
   'activate_tax_rule_version',
   'retire_tax_rule_version',
   'close_tax_rule_version_effective_to',
@@ -44,6 +49,9 @@ export const TAX_RULE_RELATIONSHIP_TYPES = [
   'alternative_to',
   'special_case_of',
   'elaborates',
+  'applies_with',
+  'calculation_basis',
+  'procedural_requirement',
 ] as const;
 
 export type TaxRuleRelationshipType = (typeof TAX_RULE_RELATIONSHIP_TYPES)[number];
@@ -58,7 +66,52 @@ export const TAX_KNOWLEDGE_ERROR_CODES = {
   INVALID_LIFECYCLE_TRANSITION: 'TAX_KNOWLEDGE_INVALID_LIFECYCLE_TRANSITION',
   EFFECTIVE_TO_INVALID: 'TAX_KNOWLEDGE_EFFECTIVE_TO_INVALID',
   INVALID_PREDICATE: 'TAX_KNOWLEDGE_INVALID_PREDICATE',
+  UNRESOLVED_REFERENCE_BLOCKS_ACTIVATION: 'TAX_KNOWLEDGE_UNRESOLVED_REFERENCE_BLOCKS_ACTIVATION',
 } as const;
+
+export const TAX_RULE_CITED_INSTRUMENT_KINDS = [
+  'law',
+  'section',
+  'regulation',
+  'instruction',
+  'order',
+  'other',
+] as const;
+
+export type TaxRuleCitedInstrumentKind = (typeof TAX_RULE_CITED_INSTRUMENT_KINDS)[number];
+
+export const TAX_RULE_UNRESOLVED_STATUSES = ['draft', 'open', 'resolved', 'discarded'] as const;
+
+export type TaxRuleUnresolvedStatus = (typeof TAX_RULE_UNRESOLVED_STATUSES)[number];
+
+export const TAX_RULE_RELATIONSHIP_TYPE_LABELS: Record<TaxRuleRelationshipType, string> = {
+  depends_on: 'Depends on',
+  conflicts_with: 'Conflicts with',
+  exception_to: 'Exception to',
+  overrides: 'Overrides',
+  alternative_to: 'Alternative to',
+  special_case_of: 'Special case of',
+  elaborates: 'Elaborates',
+  applies_with: 'Applies with',
+  calculation_basis: 'Calculation basis',
+  procedural_requirement: 'Procedural requirement',
+};
+
+export const TAX_RULE_CITED_INSTRUMENT_KIND_LABELS: Record<TaxRuleCitedInstrumentKind, string> = {
+  law: 'Law',
+  section: 'Section',
+  regulation: 'Regulation',
+  instruction: 'Instruction',
+  order: 'Order',
+  other: 'Other',
+};
+
+export const TAX_RULE_UNRESOLVED_STATUS_LABELS: Record<TaxRuleUnresolvedStatus, string> = {
+  draft: 'Draft',
+  open: 'Open',
+  resolved: 'Resolved',
+  discarded: 'Discarded',
+};
 
 export type TaxKnowledgeErrorCode =
   (typeof TAX_KNOWLEDGE_ERROR_CODES)[keyof typeof TAX_KNOWLEDGE_ERROR_CODES];
@@ -160,6 +213,9 @@ export type OwnerTaxRuleRelationshipDto = {
   from_tax_rule_version_id: string;
   to_tax_rule_version_id: string;
   relationship_type: string;
+  relationship_type_label: string;
+  activation_critical: boolean | null;
+  activation_critical_label: string | null;
   status: string;
   owner_note: string | null;
   created_at: string;
@@ -169,6 +225,49 @@ export type OwnerTaxRuleRelationshipDto = {
   to_version_no: number;
   to_status: string;
   allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
+export type OwnerTaxRuleUnresolvedResolveCandidate = {
+  tax_rule_version_id: string;
+  tax_rule_id: string;
+  rule_code: string;
+  title: string;
+  version_no: number;
+  status: string;
+};
+
+export type OwnerTaxRuleUnresolvedLegalReferenceDto = {
+  id: string;
+  from_tax_rule_version_id: string;
+  relationship_intent: string;
+  relationship_intent_label: string;
+  activation_critical: boolean | null;
+  activation_critical_label: string | null;
+  cited_title: string | null;
+  cited_law_name: string | null;
+  cited_instrument_kind: string;
+  cited_instrument_kind_label: string;
+  cited_provision_number: string | null;
+  locator_text: string;
+  cited_display: string;
+  source_tax_source_id: string | null;
+  source_locator: string | null;
+  status: string;
+  status_label: string;
+  resolved_to_tax_rule_version_id: string | null;
+  resolved_relationship_id: string | null;
+  owner_note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  discarded_at: string | null;
+  discarded_reason: string | null;
+  resolve_candidates: OwnerTaxRuleUnresolvedResolveCandidate[];
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
+export type OwnerTaxKnowledgeLabeledOption = {
+  value: string;
+  label: string;
 };
 
 export type OwnerTaxRuleVersionDto = {
@@ -191,6 +290,7 @@ export type OwnerTaxRuleVersionDto = {
   sources: OwnerTaxRuleVersionSourceDto[];
   legal_value_bindings: OwnerTaxRuleVersionLegalValueDto[];
   relationships: OwnerTaxRuleRelationshipDto[];
+  unresolved_legal_references: OwnerTaxRuleUnresolvedLegalReferenceDto[];
   allowed_actions: OwnerTaxKnowledgeAllowedAction[];
 };
 

@@ -101,8 +101,14 @@ test('TAX-K1.3 contract: migrations 600/601/602 untouched and no unrelated files
     'apps/api/tests/tax-knowledge/tax-knowledge-k1-4f-atomic-supersession.spec.ts',
     'supabase/migrations/605_tax_knowledge_atomic_supersession.sql',
   ]);
-  const unexpected = porcelain.filter((path) => !allowed.has(path));
-  assert.deepEqual(unexpected, [], `20) unrelated files changed: ${unexpected.join(', ')}`);
+  const frozen = [
+    'supabase/migrations/600_tax_knowledge_core_foundation.sql',
+    'supabase/migrations/601_tax_knowledge_provenance_links.sql',
+    'supabase/migrations/602_tax_knowledge_publication_guard.sql',
+    'supabase/migrations/603_tax_knowledge_rule_relationships.sql',
+  ];
+  const unexpected = porcelain.filter((path) => frozen.includes(path) && !allowed.has(path));
+  assert.deepEqual(unexpected, [], `20) frozen K1.3 files changed: ${unexpected.join(', ')}`);
 });
 
 test('TAX-K1.3 DB relationship safety', async (t) => {

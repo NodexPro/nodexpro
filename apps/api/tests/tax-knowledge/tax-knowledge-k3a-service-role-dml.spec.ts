@@ -36,7 +36,10 @@ test('TAX-K3A contract: 606 exists and grants service_role DML only', () => {
 
   const sixHundreds = readdirSync(join(repoRoot, 'supabase/migrations'))
     .filter((name) => /^60[6-9]_/.test(name) || /^6[1-9]\d_/.test(name));
-  assert.deepEqual(sixHundreds, ['606_tax_knowledge_service_role_dml.sql']);
+  assert.deepEqual(sixHundreds, [
+    '606_tax_knowledge_service_role_dml.sql',
+    '607_tax_knowledge_legal_links_unresolved.sql',
+  ]);
 
   assert.match(sqlBody, /grant select,\s*insert,\s*update,\s*delete on table/i);
   assert.match(sqlBody, /to service_role/);

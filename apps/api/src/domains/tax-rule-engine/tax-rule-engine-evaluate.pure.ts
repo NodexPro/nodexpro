@@ -10,6 +10,8 @@ import {
   isTaxRuleEngineTraceType,
   type TaxRuleEngineBlocking,
   type TaxRuleEngineBlockingEffect,
+  type TaxRuleEngineBlockingLinkedRequirement,
+  type TaxRuleEngineCalculationLink,
   type TaxRuleEngineCandidate,
   type TaxRuleEngineClassification,
   type TaxRuleEngineClassificationReason,
@@ -17,11 +19,14 @@ import {
   type TaxRuleEngineEvaluationAggregate,
   type TaxRuleEngineFacts,
   type TaxRuleEngineLegalValueBinding,
+  type TaxRuleEngineLinkedRule,
   type TaxRuleEnginePredicateReason,
   type TaxRuleEngineRelationshipEdge,
   type TaxRuleEngineRelationshipTrace,
   type TaxRuleEngineSourcePin,
+  type TaxRuleEngineUnresolvedLegalReference,
 } from './tax-rule-engine.types.js';
+import { unresolvedRowBlocksActivation } from '../tax-knowledge/tax-knowledge-unresolved.pure.js';
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
@@ -173,13 +178,82 @@ function shouldBlock(
 function overlayRelationships(
   classifiedByVersionId: Map<string, TaxRuleEngineClassification>,
   relationships: TaxRuleEngineRelationshipEdge[],
-): { blocking: TaxRuleEngineBlocking[]; relationship_trace: TaxRuleEngineRelationshipTrace[] } {
+  unresolved: TaxRuleEngineUnresolvedLegalReference[],
+): {
+  blocking: TaxRuleEngineBlocking[];
+  relationship_trace: TaxRuleEngineRelationshipTrace[];
+  linked_rules: TaxRuleEngineLinkedRule[];
+  calculation_links: TaxRuleEngineCalculationLink[];
+  blocking_linked_requirements: TaxRuleEngineBlockingLinkedRequirement[];
+  unresolved_legal_references: TaxRuleEngineUnresolvedLegalReference[];
+} {
   const blocking: TaxRuleEngineBlocking[] = [];
   const relationshipTrace: TaxRuleEngineRelationshipTrace[] = [];
+  const linkedRules: TaxRuleEngineLinkedRule[] = [];
+  const calculationLinks: TaxRuleEngineCalculationLink[] = [];
+  const blockingLinked: TaxRuleEngineBlockingLinkedRequirement[] = [];
 
   for (const edge of relationships) {
     if (edge.status !== 'active') continue;
     if (!classifiedByVersionId.has(edge.from_tax_rule_version_id)) continue;
+
+    const from = classifiedByVersionId.get(edge.from_tax_rule_version_id);
+    const to = classifiedByVersionId.get(edge.to_tax_rule_version_id);
+    const toApplicable = to === 'applicable';
+
+    if (edge.relationship_type === 'applies_with') {
+      linkedRules.push({
+        relationship_id: edge.id,
+        relationship_type: 'applies_with',
+        from_tax_rule_version_id: edge.from_tax_rule_version_id,
+        to_tax_rule_version_id: edge.to_tax_rule_version_id,
+        effect: 'companion',
+      });
+      if (from === 'applicable' && to !== 'applicable') {
+        blockingLinked.push({
+          relationship_id: edge.id,
+          unresolved_legal_reference_id: null,
+          relationship_type: 'applies_with',
+          effect: 'unmet_companion',
+          from_tax_rule_version_id: edge.from_tax_rule_version_id,
+          to_tax_rule_version_id: edge.to_tax_rule_version_id,
+        });
+      }
+      continue;
+    }
+
+    if (edge.relationship_type === 'calculation_basis') {
+      calculationLinks.push({
+        relationship_id: edge.id,
+        from_tax_rule_version_id: edge.from_tax_rule_version_id,
+        to_tax_rule_version_id: edge.to_tax_rule_version_id,
+        relationship_type: 'calculation_basis',
+      });
+      continue;
+    }
+
+    if (edge.relationship_type === 'procedural_requirement') {
+      if (edge.activation_critical === false) {
+        linkedRules.push({
+          relationship_id: edge.id,
+          relationship_type: 'procedural_requirement',
+          from_tax_rule_version_id: edge.from_tax_rule_version_id,
+          to_tax_rule_version_id: edge.to_tax_rule_version_id,
+          effect: 'procedural_guidance',
+        });
+      } else if (from === 'applicable' && !toApplicable) {
+        blockingLinked.push({
+          relationship_id: edge.id,
+          unresolved_legal_reference_id: null,
+          relationship_type: 'procedural_requirement',
+          effect: 'unmet_procedure',
+          from_tax_rule_version_id: edge.from_tax_rule_version_id,
+          to_tax_rule_version_id: edge.to_tax_rule_version_id,
+        });
+      }
+      continue;
+    }
+
     if (!classifiedByVersionId.has(edge.to_tax_rule_version_id)) continue;
 
     if (isTaxRuleEngineTraceType(edge.relationship_type)) {
@@ -193,8 +267,6 @@ function overlayRelationships(
     }
 
     if (!isTaxRuleEngineBlockingType(edge.relationship_type)) continue;
-    const from = classifiedByVersionId.get(edge.from_tax_rule_version_id);
-    const to = classifiedByVersionId.get(edge.to_tax_rule_version_id);
     if (!from || !to) continue;
     if (!shouldBlock(edge.relationship_type, from, to)) continue;
 
@@ -207,9 +279,52 @@ function overlayRelationships(
     });
   }
 
+  const exposedUnresolved = unresolved
+    .filter((row) => row.status === 'open' && classifiedByVersionId.has(row.from_tax_rule_version_id))
+    .map((row) => ({ ...row }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  for (const row of exposedUnresolved) {
+    if (
+      unresolvedRowBlocksActivation({
+        status: row.status,
+        relationship_intent: row.relationship_intent,
+        activation_critical: row.activation_critical,
+      })
+    ) {
+      blockingLinked.push({
+        relationship_id: null,
+        unresolved_legal_reference_id: row.id,
+        relationship_type: row.relationship_intent,
+        effect:
+          row.relationship_intent === 'procedural_requirement'
+            ? 'unmet_procedure'
+            : row.relationship_intent === 'applies_with'
+              ? 'unmet_companion'
+              : 'unresolved_dependency',
+        from_tax_rule_version_id: row.from_tax_rule_version_id,
+        to_tax_rule_version_id: null,
+      });
+    }
+  }
+
   blocking.sort((a, b) => a.relationship_id.localeCompare(b.relationship_id));
   relationshipTrace.sort((a, b) => a.relationship_id.localeCompare(b.relationship_id));
-  return { blocking, relationship_trace: relationshipTrace };
+  linkedRules.sort((a, b) => a.relationship_id.localeCompare(b.relationship_id));
+  calculationLinks.sort((a, b) => a.relationship_id.localeCompare(b.relationship_id));
+  blockingLinked.sort((a, b) => {
+    const left = a.relationship_id ?? a.unresolved_legal_reference_id ?? '';
+    const right = b.relationship_id ?? b.unresolved_legal_reference_id ?? '';
+    return left.localeCompare(right);
+  });
+  return {
+    blocking,
+    relationship_trace: relationshipTrace,
+    linked_rules: linkedRules,
+    calculation_links: calculationLinks,
+    blocking_linked_requirements: blockingLinked,
+    unresolved_legal_references: exposedUnresolved,
+  };
 }
 
 export function evaluateTaxRules(input: {
@@ -218,6 +333,7 @@ export function evaluateTaxRules(input: {
   facts: TaxRuleEngineFacts;
   candidates: TaxRuleEngineCandidate[];
   relationships: TaxRuleEngineRelationshipEdge[];
+  unresolved_legal_references?: TaxRuleEngineUnresolvedLegalReference[];
 }): TaxRuleEngineEvaluationAggregate {
   const facts: TaxRuleEngineFacts = {
     ...input.facts,
@@ -234,7 +350,11 @@ export function evaluateTaxRules(input: {
   const classifiedByVersionId = new Map(
     evaluated.map((row) => [row.tax_rule_version_id, row.classification] as const),
   );
-  const overlay = overlayRelationships(classifiedByVersionId, input.relationships);
+  const overlay = overlayRelationships(
+    classifiedByVersionId,
+    input.relationships,
+    input.unresolved_legal_references ?? [],
+  );
 
   return {
     aggregate_key: TAX_RULE_ENGINE_AGGREGATE_KEY,
@@ -247,5 +367,9 @@ export function evaluateTaxRules(input: {
     missing_facts: uniqueSorted(undetermined.flatMap((row) => row.missing_facts)),
     blocking: overlay.blocking,
     relationship_trace: overlay.relationship_trace,
+    linked_rules: overlay.linked_rules,
+    unresolved_legal_references: overlay.unresolved_legal_references,
+    calculation_links: overlay.calculation_links,
+    blocking_linked_requirements: overlay.blocking_linked_requirements,
   };
 }

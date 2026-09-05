@@ -74,6 +74,11 @@ export type TaxRuleEngineBlockingEffect =
   | 'exception'
   | 'override';
 
+export type TaxRuleEngineLinkedRequirementEffect =
+  | 'unmet_companion'
+  | 'unmet_procedure'
+  | 'unresolved_dependency';
+
 export type TaxRuleEngineEvaluateInput = {
   country_code: string;
   as_of: string;
@@ -126,6 +131,43 @@ export type TaxRuleEngineRelationshipTrace = {
   to_tax_rule_version_id: string;
 };
 
+export type TaxRuleEngineLinkedRule = {
+  relationship_id: string;
+  relationship_type: string;
+  from_tax_rule_version_id: string;
+  to_tax_rule_version_id: string;
+  effect: 'companion' | 'procedural_guidance';
+};
+
+export type TaxRuleEngineCalculationLink = {
+  relationship_id: string;
+  from_tax_rule_version_id: string;
+  to_tax_rule_version_id: string;
+  relationship_type: 'calculation_basis';
+};
+
+export type TaxRuleEngineBlockingLinkedRequirement = {
+  relationship_id: string | null;
+  unresolved_legal_reference_id: string | null;
+  relationship_type: string;
+  effect: TaxRuleEngineLinkedRequirementEffect;
+  from_tax_rule_version_id: string;
+  to_tax_rule_version_id: string | null;
+};
+
+export type TaxRuleEngineUnresolvedLegalReference = {
+  id: string;
+  from_tax_rule_version_id: string;
+  relationship_intent: string;
+  activation_critical: boolean | null;
+  cited_title: string | null;
+  cited_law_name: string | null;
+  cited_instrument_kind: string;
+  cited_provision_number: string | null;
+  locator_text: string;
+  status: string;
+};
+
 export type TaxRuleEngineEvaluationAggregate = {
   aggregate_key: typeof TAX_RULE_ENGINE_AGGREGATE_KEY;
   country_code: string;
@@ -137,6 +179,10 @@ export type TaxRuleEngineEvaluationAggregate = {
   missing_facts: string[];
   blocking: TaxRuleEngineBlocking[];
   relationship_trace: TaxRuleEngineRelationshipTrace[];
+  linked_rules: TaxRuleEngineLinkedRule[];
+  unresolved_legal_references: TaxRuleEngineUnresolvedLegalReference[];
+  calculation_links: TaxRuleEngineCalculationLink[];
+  blocking_linked_requirements: TaxRuleEngineBlockingLinkedRequirement[];
 };
 
 export type TaxRuleEngineCommandResponse = {
@@ -166,6 +212,7 @@ export type TaxRuleEngineRelationshipEdge = {
   to_tax_rule_version_id: string;
   relationship_type: string;
   status: string;
+  activation_critical?: boolean | null;
 };
 
 const FORBIDDEN_EVALUATE_FIELDS = [

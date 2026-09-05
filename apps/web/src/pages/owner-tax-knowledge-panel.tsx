@@ -13,6 +13,7 @@ import type {
   TaxKnowledgeLegalValueBinding,
   TaxKnowledgeRelationship,
   TaxKnowledgeRule,
+  TaxKnowledgeUnresolvedLegalReference,
   TaxKnowledgeSource,
   TaxKnowledgeSupersessionPair,
   TaxKnowledgeVersion,
@@ -199,6 +200,10 @@ function parseRelationships(raw: unknown): TaxKnowledgeRelationship[] {
       from_tax_rule_version_id: asString(row.from_tax_rule_version_id),
       to_tax_rule_version_id: asString(row.to_tax_rule_version_id),
       relationship_type: asString(row.relationship_type),
+      relationship_type_label: asString(row.relationship_type_label) || asString(row.relationship_type),
+      activation_critical:
+        row.activation_critical === true ? true : row.activation_critical === false ? false : null,
+      activation_critical_label: asNullableString(row.activation_critical_label),
       status: asString(row.status),
       owner_note: asNullableString(row.owner_note),
       created_at: asString(row.created_at),
@@ -232,8 +237,43 @@ function parseVersion(row: UnknownRecord): TaxKnowledgeVersion {
     sources: parseCitations(row.sources),
     legal_value_bindings: parseBindings(row.legal_value_bindings),
     relationships: parseRelationships(row.relationships),
+    unresolved_legal_references: parseUnresolved(row.unresolved_legal_references),
     allowed_actions: parseAllowedActions(row.allowed_actions),
   };
+}
+
+function parseUnresolved(raw: unknown): TaxKnowledgeUnresolvedLegalReference[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      id: asString(row.id),
+      from_tax_rule_version_id: asString(row.from_tax_rule_version_id),
+      relationship_intent: asString(row.relationship_intent),
+      relationship_intent_label: asString(row.relationship_intent_label) || asString(row.relationship_intent),
+      activation_critical:
+        row.activation_critical === true ? true : row.activation_critical === false ? false : null,
+      activation_critical_label: asNullableString(row.activation_critical_label),
+      cited_display: asString(row.cited_display) || asString(row.locator_text),
+      locator_text: asString(row.locator_text),
+      status: asString(row.status),
+      status_label: asString(row.status_label) || asString(row.status),
+      resolve_candidates: Array.isArray(row.resolve_candidates)
+        ? row.resolve_candidates
+            .map((item) => asRecord(item))
+            .filter((item): item is UnknownRecord => item !== null)
+            .map((item) => ({
+              tax_rule_version_id: asString(item.tax_rule_version_id),
+              tax_rule_id: asString(item.tax_rule_id),
+              rule_code: asString(item.rule_code),
+              title: asString(item.title),
+              version_no: typeof item.version_no === 'number' ? item.version_no : Number(item.version_no) || 0,
+              status: asString(item.status),
+            }))
+        : [],
+      allowed_actions: parseAllowedActions(row.allowed_actions),
+    }));
 }
 
 function parseVersions(raw: unknown): TaxKnowledgeVersion[] {
@@ -498,6 +538,7 @@ export function OwnerTaxKnowledgePanel({
   const [relationshipForm, setRelationshipForm] = useState({
     to_tax_rule_version_id: '',
     relationship_type: TAX_KNOWLEDGE_RELATIONSHIP_TYPES[0] as string,
+    activation_critical: '',
     owner_note: '',
   });
   const [closeEffectiveTo, setCloseEffectiveTo] = useState('');
@@ -570,6 +611,7 @@ export function OwnerTaxKnowledgePanel({
       setRelationshipForm({
         to_tax_rule_version_id: '',
         relationship_type: TAX_KNOWLEDGE_RELATIONSHIP_TYPES[0] as string,
+        activation_critical: '',
         owner_note: '',
       });
     }
@@ -836,6 +878,13 @@ export function OwnerTaxKnowledgePanel({
           relationship_type: relationshipForm.relationship_type,
         };
         if (relationshipForm.owner_note.trim()) createRel.owner_note = relationshipForm.owner_note.trim();
+        if (relationshipForm.relationship_type === 'procedural_requirement') {
+          if (relationshipForm.activation_critical !== 'true' && relationshipForm.activation_critical !== 'false') {
+            setFormError('activation_critical is required for a procedural requirement.');
+            return;
+          }
+          createRel.activation_critical = relationshipForm.activation_critical === 'true';
+        }
         await onCommand('create_tax_rule_relationship', createRel);
       } else if (dialogKind === 'delete_tax_rule_relationship') {
         if (
@@ -1424,6 +1473,35 @@ export function OwnerTaxKnowledgePanel({
                             {actionLabel('create_tax_rule_relationship')}
                           </button>
                         ) : null}
+                        <div style={{ fontWeight: 700, fontSize: 13, margin: '14px 0 8px' }}>
+                          Unresolved legal references
+                        </div>
+                        {selectedVersion.unresolved_legal_references.length ? (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={TABLE_STYLE}>
+                              <thead>
+                                <tr>
+                                  <th style={TH_STYLE}>Meaning</th>
+                                  <th style={TH_STYLE}>Citation</th>
+                                  <th style={TH_STYLE}>Status</th>
+                                  <th style={TH_STYLE}>Criticality</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedVersion.unresolved_legal_references.map((row) => (
+                                  <tr key={row.id}>
+                                    <td style={TD_STYLE}>{row.relationship_intent_label}</td>
+                                    <td style={TD_STYLE}>{row.cited_display}</td>
+                                    <td style={TD_STYLE}>{row.status_label}</td>
+                                    <td style={TD_STYLE}>{row.activation_critical_label || '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>No unresolved legal references.</p>
+                        )}
                       </div>
                       {K2G_VERSION_ACTION_KEYS.some((actionKey) =>
                         enabledAction(selectedVersion.allowed_actions, actionKey),
@@ -1806,6 +1884,22 @@ export function OwnerTaxKnowledgePanel({
                       ))}
                     </select>
                   </label>
+                  {relationshipForm.relationship_type === 'procedural_requirement' ? (
+                    <label className="nx-field">
+                      <span className="nx-field-label">activation_critical</span>
+                      <select
+                        className="nx-select"
+                        value={relationshipForm.activation_critical}
+                        onChange={(e) =>
+                          setRelationshipForm((s) => ({ ...s, activation_critical: e.target.value }))
+                        }
+                      >
+                        <option value="">Select</option>
+                        <option value="true">Mandatory to apply the rule</option>
+                        <option value="false">Procedural guidance only</option>
+                      </select>
+                    </label>
+                  ) : null}
                   <label className="nx-field">
                     <span className="nx-field-label">to_tax_rule_version_id</span>
                     <select

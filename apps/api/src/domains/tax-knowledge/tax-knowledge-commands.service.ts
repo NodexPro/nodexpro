@@ -3,6 +3,11 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
+import {
+  parseActivationCritical,
+  unresolvedRowsBlockActivation,
+  isExpectedPreK3cSchemaAbsence,
+} from './tax-knowledge-unresolved.pure.js';
 import { assertCountryExists } from '../country-pack/country.service.js';
 import { assertPackBelongsToCountry } from '../country-pack/country-pack.service.js';
 import { assertRulesetExists } from '../country-pack/ruleset.service.js';
@@ -12,12 +17,14 @@ import { validateTaxRulePayloadPredicates } from '../tax-rule-engine/tax-rule-en
 import {
   TAX_KNOWLEDGE_ERROR_CODES,
   TAX_KNOWLEDGE_INITIAL_STATUS,
+  TAX_RULE_CITED_INSTRUMENT_KINDS,
   TAX_RULE_KIND,
   TAX_RULE_RELATIONSHIP_TYPES,
   TAX_SOURCE_PROVENANCE_TYPES,
   isTaxKnowledgeCommand,
   type TaxKnowledgeCommandName,
   type TaxKnowledgeCommandResponse,
+  type TaxRuleCitedInstrumentKind,
   type TaxRuleRelationshipType,
   type TaxSourceProvenanceType,
 } from './tax-knowledge.types.js';
@@ -111,6 +118,12 @@ function throwIfTaxRuleVersionLifecycleError(
     throw conflict(
       'tax_rule_versions cannot activate while a blocking relationship points to a non-active tax_rule_version',
       TAX_KNOWLEDGE_ERROR_CODES.RELATIONSHIP_TARGET_NOT_ACTIVE,
+    );
+  }
+  if (/TAX_KNOWLEDGE_UNRESOLVED_REFERENCE_BLOCKS_ACTIVATION/i.test(message)) {
+    throw conflict(
+      'tax_rule_versions cannot activate while an unresolved legal reference blocks publication',
+      TAX_KNOWLEDGE_ERROR_CODES.UNRESOLVED_REFERENCE_BLOCKS_ACTIVATION,
     );
   }
   if (/Invalid tax_rule_versions status transition/i.test(message)) {
@@ -289,9 +302,33 @@ function locatorKey(locator: string | null | undefined): string {
 function asRelationshipType(value: unknown): TaxRuleRelationshipType {
   const relationshipType = asString(value, 'relationship_type');
   if (!(TAX_RULE_RELATIONSHIP_TYPES as readonly string[]).includes(relationshipType)) {
-    throw badRequest('relationship_type must be one of the K1.3 allowed types');
+    throw badRequest('relationship_type must be one of the allowed tax rule relationship types');
   }
   return relationshipType as TaxRuleRelationshipType;
+}
+
+function asRelationshipIntent(value: unknown): TaxRuleRelationshipType {
+  const intent = asString(value, 'relationship_intent');
+  if (!(TAX_RULE_RELATIONSHIP_TYPES as readonly string[]).includes(intent)) {
+    throw badRequest('relationship_intent must be one of the allowed tax rule relationship types');
+  }
+  return intent as TaxRuleRelationshipType;
+}
+
+function asCitedInstrumentKind(value: unknown): TaxRuleCitedInstrumentKind {
+  const kind = asString(value, 'cited_instrument_kind');
+  if (!(TAX_RULE_CITED_INSTRUMENT_KINDS as readonly string[]).includes(kind)) {
+    throw badRequest('cited_instrument_kind is not supported');
+  }
+  return kind as TaxRuleCitedInstrumentKind;
+}
+
+function asActivationCritical(value: unknown, relationshipIntent: string, required: boolean): boolean | null {
+  try {
+    return parseActivationCritical(value, relationshipIntent, required);
+  } catch (error) {
+    throw badRequest(error instanceof Error ? error.message : 'activation_critical is invalid');
+  }
 }
 
 function assertCreateRelationshipPayload(payload: Record<string, unknown>): void {
@@ -930,6 +967,11 @@ async function handleCreateTaxRuleRelationship(
     throw badRequest('to_tax_rule_version_id must belong to the same country as from_tax_rule_version_id');
   }
   const ownerNote = asOptionalString(payload.owner_note, 'owner_note');
+  const activationCritical = asActivationCritical(
+    payload.activation_critical,
+    relationshipType,
+    relationshipType === 'procedural_requirement',
+  );
 
   const { data: existing, error: existingErr } = await supabaseAdmin
     .from('tax_rule_relationships')
@@ -941,16 +983,21 @@ async function handleCreateTaxRuleRelationship(
   if (existingErr) throw existingErr;
   if (existing) throw conflict('Tax rule relationship already exists');
 
+  const insertRow: Record<string, unknown> = {
+    from_tax_rule_version_id: fromId,
+    to_tax_rule_version_id: toId,
+    relationship_type: relationshipType,
+    country_code: from.country_code,
+    status: 'active',
+    owner_note: ownerNote,
+  };
+  if (activationCritical !== null) {
+    insertRow.activation_critical = activationCritical;
+  }
+
   const { data, error } = await supabaseAdmin
     .from('tax_rule_relationships')
-    .insert({
-      from_tax_rule_version_id: fromId,
-      to_tax_rule_version_id: toId,
-      relationship_type: relationshipType,
-      country_code: from.country_code,
-      status: 'active',
-      owner_note: ownerNote,
-    })
+    .insert(insertRow)
     .select('id, from_tax_rule_version_id, to_tax_rule_version_id, relationship_type')
     .single();
   throwIfTaxKnowledgeWriteError(error, 'Tax rule relationship already exists');
@@ -1009,6 +1056,337 @@ async function handleDeleteTaxRuleRelationship(
   };
 }
 
+function assertUnresolvedAuthoringPayload(payload: Record<string, unknown>, command: string): void {
+  for (const field of [
+    'organization_id',
+    'resolved_to_tax_rule_version_id',
+    'resolved_relationship_id',
+    'resolved_at',
+    'discarded_at',
+    'created_at',
+  ] as const) {
+    if (field in payload) {
+      throw badRequest(`${command} does not accept ${field}`);
+    }
+  }
+}
+
+async function loadUnresolvedReference(id: string): Promise<{
+  id: string;
+  country_code: string;
+  from_tax_rule_version_id: string;
+  relationship_intent: string;
+  activation_critical: boolean | null;
+  locator_text: string;
+  status: string;
+}> {
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_unresolved_legal_references')
+    .select(
+      'id, country_code, from_tax_rule_version_id, relationship_intent, activation_critical, locator_text, status',
+    )
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Unresolved legal reference not found');
+  return {
+    id: String(data.id),
+    country_code: String(data.country_code),
+    from_tax_rule_version_id: String(data.from_tax_rule_version_id),
+    relationship_intent: String(data.relationship_intent),
+    activation_critical:
+      data.activation_critical === true ? true : data.activation_critical === false ? false : null,
+    locator_text: String(data.locator_text),
+    status: String(data.status),
+  };
+}
+
+async function handleCreateTaxRuleUnresolvedLegalReference(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  assertUnresolvedAuthoringPayload(payload, 'create_tax_rule_unresolved_legal_reference');
+  const fromId = asUuid(payload.from_tax_rule_version_id, 'from_tax_rule_version_id');
+  const from = await loadTaxRuleVersion(fromId);
+  assertParentVersionDraft(from.status, 'create_tax_rule_unresolved_legal_reference');
+  const intent = asRelationshipIntent(payload.relationship_intent);
+  const locatorText = asString(payload.locator_text, 'locator_text');
+  const instrumentKind = asCitedInstrumentKind(payload.cited_instrument_kind);
+  const requestedStatus = payload.status === undefined || payload.status === null || payload.status === ''
+    ? 'open'
+    : asString(payload.status, 'status');
+  if (requestedStatus !== 'draft' && requestedStatus !== 'open') {
+    throw badRequest('create_tax_rule_unresolved_legal_reference inserts status draft or open only');
+  }
+  const activationCritical = asActivationCritical(
+    payload.activation_critical,
+    intent,
+    requestedStatus === 'open',
+  );
+  if (payload.source_tax_source_id !== undefined && payload.source_tax_source_id !== null && payload.source_tax_source_id !== '') {
+    const sourceId = asUuid(payload.source_tax_source_id, 'source_tax_source_id');
+    const { data: source, error: sourceErr } = await supabaseAdmin
+      .from('tax_sources')
+      .select('id, country_code')
+      .eq('id', sourceId)
+      .maybeSingle();
+    if (sourceErr) throw sourceErr;
+    if (!source) throw notFound('Tax source not found');
+    if (String(source.country_code) !== from.country_code) {
+      throw badRequest('source_tax_source_id must belong to the same country');
+    }
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_unresolved_legal_references')
+    .insert({
+      country_code: from.country_code,
+      from_tax_rule_version_id: fromId,
+      relationship_intent: intent,
+      activation_critical: activationCritical,
+      cited_title: asOptionalString(payload.cited_title, 'cited_title'),
+      cited_law_name: asOptionalString(payload.cited_law_name, 'cited_law_name'),
+      cited_instrument_kind: instrumentKind,
+      cited_provision_number: asOptionalString(payload.cited_provision_number, 'cited_provision_number'),
+      locator_text: locatorText,
+      source_tax_source_id: asOptionalUuid(payload.source_tax_source_id, 'source_tax_source_id'),
+      source_locator: asOptionalString(payload.source_locator, 'source_locator'),
+      status: requestedStatus,
+      owner_note: asOptionalString(payload.owner_note, 'owner_note'),
+    })
+    .select('id, from_tax_rule_version_id, relationship_intent, status')
+    .single();
+  throwIfTaxKnowledgeWriteError(error, 'Unresolved legal reference already exists');
+  if (!data) throw new Error('tax_rule_unresolved_legal_references insert returned no row');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_UNRESOLVED_LEGAL_REFERENCE_CREATED, 'tax_rule_unresolved_legal_reference', String(data.id), {
+    from_tax_rule_version_id: fromId,
+    relationship_intent: intent,
+    locator_text: locatorText,
+    status: requestedStatus,
+    country_code: from.country_code,
+    activation_critical: activationCritical,
+  });
+
+  return {
+    ok: true,
+    command: 'create_tax_rule_unresolved_legal_reference',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, from.country_code),
+  };
+}
+
+async function handleUpdateTaxRuleUnresolvedLegalReference(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  assertUnresolvedAuthoringPayload(payload, 'update_tax_rule_unresolved_legal_reference');
+  const id = asUuid(payload.tax_rule_unresolved_legal_reference_id, 'tax_rule_unresolved_legal_reference_id');
+  const row = await loadUnresolvedReference(id);
+  const from = await loadTaxRuleVersion(row.from_tax_rule_version_id);
+  assertParentVersionDraft(from.status, 'update_tax_rule_unresolved_legal_reference');
+  if (row.status !== 'draft' && row.status !== 'open') {
+    throw conflict('update_tax_rule_unresolved_legal_reference is only valid for draft or open references');
+  }
+  if (payload.relationship_intent !== undefined) {
+    throw badRequest('update_tax_rule_unresolved_legal_reference does not accept relationship_intent');
+  }
+  if (payload.status !== undefined) {
+    throw badRequest('update_tax_rule_unresolved_legal_reference does not accept status');
+  }
+
+  const patch: Record<string, unknown> = {};
+  if ('cited_title' in payload) patch.cited_title = asOptionalString(payload.cited_title, 'cited_title');
+  if ('cited_law_name' in payload) patch.cited_law_name = asOptionalString(payload.cited_law_name, 'cited_law_name');
+  if ('cited_instrument_kind' in payload) patch.cited_instrument_kind = asCitedInstrumentKind(payload.cited_instrument_kind);
+  if ('cited_provision_number' in payload) {
+    patch.cited_provision_number = asOptionalString(payload.cited_provision_number, 'cited_provision_number');
+  }
+  if ('locator_text' in payload) patch.locator_text = asString(payload.locator_text, 'locator_text');
+  if ('source_tax_source_id' in payload) {
+    patch.source_tax_source_id = asOptionalUuid(payload.source_tax_source_id, 'source_tax_source_id');
+  }
+  if ('source_locator' in payload) patch.source_locator = asOptionalString(payload.source_locator, 'source_locator');
+  if ('owner_note' in payload) patch.owner_note = asOptionalString(payload.owner_note, 'owner_note');
+  if ('activation_critical' in payload) {
+    patch.activation_critical = asActivationCritical(payload.activation_critical, row.relationship_intent, false);
+  }
+  if (!Object.keys(patch).length) {
+    throw badRequest('update_tax_rule_unresolved_legal_reference requires at least one field');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_unresolved_legal_references')
+    .update(patch)
+    .eq('id', id)
+    .select('id')
+    .maybeSingle();
+  throwIfTaxKnowledgeWriteError(error, 'Unresolved legal reference already exists');
+  if (!data) throw notFound('Unresolved legal reference not found');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_UNRESOLVED_LEGAL_REFERENCE_UPDATED, 'tax_rule_unresolved_legal_reference', id, {
+    from_tax_rule_version_id: row.from_tax_rule_version_id,
+    country_code: row.country_code,
+    relationship_intent: row.relationship_intent,
+  });
+
+  return {
+    ok: true,
+    command: 'update_tax_rule_unresolved_legal_reference',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, row.country_code),
+  };
+}
+
+async function handleAcceptTaxRuleUnresolvedLegalReference(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const id = asUuid(payload.tax_rule_unresolved_legal_reference_id, 'tax_rule_unresolved_legal_reference_id');
+  const row = await loadUnresolvedReference(id);
+  const from = await loadTaxRuleVersion(row.from_tax_rule_version_id);
+  assertParentVersionDraft(from.status, 'accept_tax_rule_unresolved_legal_reference');
+  if (row.status !== 'draft') {
+    throw conflict('accept_tax_rule_unresolved_legal_reference is only valid from draft to open');
+  }
+  const activationCritical = asActivationCritical(
+    payload.activation_critical !== undefined ? payload.activation_critical : row.activation_critical,
+    row.relationship_intent,
+    true,
+  );
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_unresolved_legal_references')
+    .update({ status: 'open', activation_critical: activationCritical })
+    .eq('id', id)
+    .eq('status', 'draft')
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw conflict('accept_tax_rule_unresolved_legal_reference is only valid from draft to open');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_UNRESOLVED_LEGAL_REFERENCE_ACCEPTED, 'tax_rule_unresolved_legal_reference', id, {
+    from_tax_rule_version_id: row.from_tax_rule_version_id,
+    country_code: row.country_code,
+    relationship_intent: row.relationship_intent,
+    activation_critical: activationCritical,
+  });
+
+  return {
+    ok: true,
+    command: 'accept_tax_rule_unresolved_legal_reference',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, row.country_code),
+  };
+}
+
+async function handleDiscardTaxRuleUnresolvedLegalReference(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const id = asUuid(payload.tax_rule_unresolved_legal_reference_id, 'tax_rule_unresolved_legal_reference_id');
+  const row = await loadUnresolvedReference(id);
+  const from = await loadTaxRuleVersion(row.from_tax_rule_version_id);
+  if (from.status === TAX_KNOWLEDGE_INITIAL_STATUS) {
+    if (row.status !== 'draft' && row.status !== 'open') {
+      throw conflict('discard_tax_rule_unresolved_legal_reference is only valid for draft or open references');
+    }
+  } else if (row.status !== 'open') {
+    throw conflict('discard_tax_rule_unresolved_legal_reference after activation is only valid for open references');
+  }
+
+  const discardedReason = asOptionalString(payload.discarded_reason, 'discarded_reason');
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_unresolved_legal_references')
+    .update({
+      status: 'discarded',
+      discarded_at: new Date().toISOString(),
+      discarded_reason: discardedReason,
+    })
+    .eq('id', id)
+    .in('status', from.status === TAX_KNOWLEDGE_INITIAL_STATUS ? ['draft', 'open'] : ['open'])
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Unresolved legal reference not found');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_UNRESOLVED_LEGAL_REFERENCE_DISCARDED, 'tax_rule_unresolved_legal_reference', id, {
+    from_tax_rule_version_id: row.from_tax_rule_version_id,
+    country_code: row.country_code,
+    relationship_intent: row.relationship_intent,
+    locator_text: row.locator_text,
+    discarded_reason: discardedReason,
+  });
+
+  return {
+    ok: true,
+    command: 'discard_tax_rule_unresolved_legal_reference',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, row.country_code),
+  };
+}
+
+async function handleResolveTaxRuleUnresolvedLegalReference(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const id = asUuid(payload.tax_rule_unresolved_legal_reference_id, 'tax_rule_unresolved_legal_reference_id');
+  const toId = asUuid(payload.to_tax_rule_version_id, 'to_tax_rule_version_id');
+  const row = await loadUnresolvedReference(id);
+  if (row.status !== 'open') {
+    throw conflict('resolve_tax_rule_unresolved_legal_reference is only valid for open references');
+  }
+  const to = await loadTaxRuleVersion(toId);
+  if (to.country_code !== row.country_code) {
+    throw badRequest('to_tax_rule_version_id must belong to the same country');
+  }
+  if (to.status !== 'active') {
+    throw conflict(
+      'to_tax_rule_version_id must be an active tax rule version',
+      TAX_KNOWLEDGE_ERROR_CODES.RELATIONSHIP_TARGET_NOT_ACTIVE,
+    );
+  }
+  if (to.id === row.from_tax_rule_version_id) {
+    throw badRequest('to_tax_rule_version_id must be different from from_tax_rule_version_id');
+  }
+
+  const { data, error } = await supabaseAdmin.rpc('tax_knowledge_resolve_unresolved_legal_reference', {
+    p_unresolved_id: id,
+    p_to_tax_rule_version_id: toId,
+  });
+  if (error) {
+    const message = [error.message, error.details].filter(Boolean).join(' ');
+    if (/must belong to the same country/i.test(message)) {
+      throw badRequest('to_tax_rule_version_id must belong to the same country');
+    }
+    if (/must be active/i.test(message)) {
+      throw conflict(message, TAX_KNOWLEDGE_ERROR_CODES.RELATIONSHIP_TARGET_NOT_ACTIVE);
+    }
+    if (/must be different/i.test(message)) {
+      throw badRequest('to_tax_rule_version_id must be different from from_tax_rule_version_id');
+    }
+    if (/must be open/i.test(message)) {
+      throw conflict(message);
+    }
+    if (/not found/i.test(message)) {
+      throw notFound(message);
+    }
+    throwIfTaxKnowledgeWriteError(error, 'Tax rule relationship already exists');
+  }
+  if (!data) throw new Error('tax_knowledge_resolve_unresolved_legal_reference returned no result');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_UNRESOLVED_LEGAL_REFERENCE_RESOLVED, 'tax_rule_unresolved_legal_reference', id, {
+    from_tax_rule_version_id: row.from_tax_rule_version_id,
+    to_tax_rule_version_id: toId,
+    relationship_intent: row.relationship_intent,
+    activation_critical: row.activation_critical,
+    locator_text: row.locator_text,
+    country_code: row.country_code,
+  });
+
+  return {
+    ok: true,
+    command: 'resolve_tax_rule_unresolved_legal_reference',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, row.country_code),
+  };
+}
+
 async function handleActivateTaxRuleVersion(
   ctx: RequestContext,
   payload: Record<string, unknown>,
@@ -1025,6 +1403,30 @@ async function handleActivateTaxRuleVersion(
   const predicateCheck = validateTaxRulePayloadPredicates(version.payload_json ?? {});
   if (!predicateCheck.ok) {
     throw conflict(predicateCheck.message, TAX_KNOWLEDGE_ERROR_CODES.INVALID_PREDICATE);
+  }
+
+  const { data: unresolvedRows, error: unresolvedErr } = await supabaseAdmin
+    .from('tax_rule_unresolved_legal_references')
+    .select('status, relationship_intent, activation_critical')
+    .eq('from_tax_rule_version_id', versionId);
+  if (unresolvedErr && !isExpectedPreK3cSchemaAbsence(unresolvedErr, 'undefined_table')) {
+    throw unresolvedErr;
+  }
+  if (
+    unresolvedRows
+    && unresolvedRowsBlockActivation(
+      unresolvedRows.map((row) => ({
+        status: String(row.status),
+        relationship_intent: String(row.relationship_intent),
+        activation_critical:
+          row.activation_critical === true ? true : row.activation_critical === false ? false : null,
+      })),
+    )
+  ) {
+    throw conflict(
+      'tax_rule_versions cannot activate while an unresolved legal reference blocks publication',
+      TAX_KNOWLEDGE_ERROR_CODES.UNRESOLVED_REFERENCE_BLOCKS_ACTIVATION,
+    );
   }
 
   const { data, error } = await supabaseAdmin
@@ -1267,6 +1669,16 @@ export async function executeTaxKnowledgeCommand(
       return handleCreateTaxRuleRelationship(ctx, payload);
     case 'delete_tax_rule_relationship':
       return handleDeleteTaxRuleRelationship(ctx, payload);
+    case 'create_tax_rule_unresolved_legal_reference':
+      return handleCreateTaxRuleUnresolvedLegalReference(ctx, payload);
+    case 'update_tax_rule_unresolved_legal_reference':
+      return handleUpdateTaxRuleUnresolvedLegalReference(ctx, payload);
+    case 'accept_tax_rule_unresolved_legal_reference':
+      return handleAcceptTaxRuleUnresolvedLegalReference(ctx, payload);
+    case 'discard_tax_rule_unresolved_legal_reference':
+      return handleDiscardTaxRuleUnresolvedLegalReference(ctx, payload);
+    case 'resolve_tax_rule_unresolved_legal_reference':
+      return handleResolveTaxRuleUnresolvedLegalReference(ctx, payload);
     case 'activate_tax_rule_version':
       return handleActivateTaxRuleVersion(ctx, payload);
     case 'retire_tax_rule_version':

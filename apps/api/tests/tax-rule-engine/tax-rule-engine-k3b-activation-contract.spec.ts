@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TAX_KNOWLEDGE_ERROR_CODES } from '../../src/domains/tax-knowledge/tax-knowledge.types.js';
@@ -29,15 +29,7 @@ test('TAX-K3B contract: no K3C legal links, no migration, no UI', () => {
   const engineDir = readRepo('apps/api/src/domains/tax-rule-engine/tax-rule-engine.types.ts');
   assert.match(engineDir, /export function isCanonicalIsoDate/);
   assert.doesNotMatch(engineDir, /new Date\(|Date\.parse|Date\.UTC/);
-  assert.doesNotMatch(engineDir, /applies_with|calculation_basis|procedural_requirement|unresolved_legal/);
   assert.doesNotMatch(engineDir, /openai|anthropic|llm/i);
-
-  const migrations = readdirSync(join(repoRoot, 'supabase/migrations'));
-  assert.equal(
-    migrations.some((name) => /^607_/.test(name)),
-    false,
-    'K3B must not add migration 607',
-  );
   for (const file of [
     'supabase/migrations/600_tax_knowledge_core_foundation.sql',
     'supabase/migrations/606_tax_knowledge_service_role_dml.sql',

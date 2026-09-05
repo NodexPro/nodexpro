@@ -11,7 +11,9 @@ import {
   type TaxRuleEngineLegalValueBinding,
   type TaxRuleEngineRelationshipEdge,
   type TaxRuleEngineSourcePin,
+  type TaxRuleEngineUnresolvedLegalReference,
 } from './tax-rule-engine.types.js';
+import { isExpectedPreK3cSchemaAbsence } from '../tax-knowledge/tax-knowledge-unresolved.pure.js';
 
 const VERSION_SELECT =
   'id, tax_rule_id, country_code, version_no, status, effective_from, effective_to, payload_json, payload_checksum';
@@ -22,6 +24,9 @@ const BINDING_SELECT = 'id, tax_rule_version_id, legal_value_id, country_code';
 const LEGAL_VALUE_SELECT = 'id, value_key, label';
 const RELATIONSHIP_SELECT =
   'id, from_tax_rule_version_id, to_tax_rule_version_id, relationship_type, status, country_code';
+const RELATIONSHIP_SELECT_K3C = `${RELATIONSHIP_SELECT}, activation_critical`;
+const UNRESOLVED_SELECT =
+  'id, from_tax_rule_version_id, relationship_intent, activation_critical, cited_title, cited_law_name, cited_instrument_kind, cited_provision_number, locator_text, status, country_code';
 
 function asRecord(row: unknown): Record<string, unknown> {
   return row && typeof row === 'object' ? (row as Record<string, unknown>) : {};
@@ -77,7 +82,7 @@ export async function buildTaxRuleEngineEvaluationAggregate(
     });
   }
 
-  const [ruleResult, citationResult, bindingResult, relationshipResult] = await Promise.all([
+  const [ruleResult, citationResult, bindingResult, relationshipResult, unresolvedResult] = await Promise.all([
     supabaseAdmin.from('tax_rules').select(RULE_SELECT).eq('country_code', input.country_code).in('id', ruleIds),
     supabaseAdmin
       .from('tax_rule_version_sources')
@@ -91,14 +96,35 @@ export async function buildTaxRuleEngineEvaluationAggregate(
       .in('tax_rule_version_id', versionIds),
     supabaseAdmin
       .from('tax_rule_relationships')
-      .select(RELATIONSHIP_SELECT)
+      .select(RELATIONSHIP_SELECT_K3C)
       .eq('country_code', input.country_code)
       .eq('status', 'active'),
+    supabaseAdmin
+      .from('tax_rule_unresolved_legal_references')
+      .select(UNRESOLVED_SELECT)
+      .eq('country_code', input.country_code)
+      .eq('status', 'open')
+      .in('from_tax_rule_version_id', versionIds),
   ]);
   if (ruleResult.error) throw ruleResult.error;
   if (citationResult.error) throw citationResult.error;
   if (bindingResult.error) throw bindingResult.error;
-  if (relationshipResult.error) throw relationshipResult.error;
+  let relationshipRows = relationshipResult.data;
+  if (relationshipResult.error) {
+    if (!isExpectedPreK3cSchemaAbsence(relationshipResult.error, 'undefined_column')) {
+      throw relationshipResult.error;
+    }
+    const retry = await supabaseAdmin
+      .from('tax_rule_relationships')
+      .select(RELATIONSHIP_SELECT)
+      .eq('country_code', input.country_code)
+      .eq('status', 'active');
+    if (retry.error) throw retry.error;
+    relationshipRows = retry.data;
+  }
+  if (unresolvedResult.error && !isExpectedPreK3cSchemaAbsence(unresolvedResult.error, 'undefined_table')) {
+    throw unresolvedResult.error;
+  }
 
   const ruleById = new Map<string, { rule_code: string }>();
   for (const row of ruleResult.data ?? []) {
@@ -208,20 +234,37 @@ export async function buildTaxRuleEngineEvaluationAggregate(
   });
 
   const versionIdSet = new Set(versionIds);
-  const relationships: TaxRuleEngineRelationshipEdge[] = (relationshipResult.data ?? [])
+  const relationships: TaxRuleEngineRelationshipEdge[] = (relationshipRows ?? [])
     .map((row) => asRecord(row))
     .filter((row) => asString(row, 'country_code') === input.country_code)
     .filter((row) => asString(row, 'status') === 'active')
-    .filter(
-      (row) =>
-        versionIdSet.has(asString(row, 'from_tax_rule_version_id')) &&
-        versionIdSet.has(asString(row, 'to_tax_rule_version_id')),
-    )
+    .filter((row) => versionIdSet.has(asString(row, 'from_tax_rule_version_id')))
     .map((row) => ({
       id: asString(row, 'id'),
       from_tax_rule_version_id: asString(row, 'from_tax_rule_version_id'),
       to_tax_rule_version_id: asString(row, 'to_tax_rule_version_id'),
       relationship_type: asString(row, 'relationship_type'),
+      status: asString(row, 'status'),
+      activation_critical:
+        row.activation_critical === true ? true : row.activation_critical === false ? false : null,
+    }));
+
+  const unresolved: TaxRuleEngineUnresolvedLegalReference[] = (unresolvedResult.data ?? [])
+    .map((row) => asRecord(row))
+    .filter((row) => asString(row, 'country_code') === input.country_code)
+    .filter((row) => asString(row, 'status') === 'open')
+    .filter((row) => versionIdSet.has(asString(row, 'from_tax_rule_version_id')))
+    .map((row) => ({
+      id: asString(row, 'id'),
+      from_tax_rule_version_id: asString(row, 'from_tax_rule_version_id'),
+      relationship_intent: asString(row, 'relationship_intent'),
+      activation_critical:
+        row.activation_critical === true ? true : row.activation_critical === false ? false : null,
+      cited_title: row.cited_title == null ? null : String(row.cited_title),
+      cited_law_name: row.cited_law_name == null ? null : String(row.cited_law_name),
+      cited_instrument_kind: asString(row, 'cited_instrument_kind'),
+      cited_provision_number: row.cited_provision_number == null ? null : String(row.cited_provision_number),
+      locator_text: asString(row, 'locator_text'),
       status: asString(row, 'status'),
     }));
 
@@ -231,5 +274,6 @@ export async function buildTaxRuleEngineEvaluationAggregate(
     facts: input.facts,
     candidates,
     relationships,
+    unresolved_legal_references: unresolved,
   });
 }

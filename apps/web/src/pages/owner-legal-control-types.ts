@@ -27,6 +27,11 @@ export type TaxKnowledgeCommandName =
   | 'unbind_tax_rule_version_legal_value'
   | 'create_tax_rule_relationship'
   | 'delete_tax_rule_relationship'
+  | 'create_tax_rule_unresolved_legal_reference'
+  | 'update_tax_rule_unresolved_legal_reference'
+  | 'accept_tax_rule_unresolved_legal_reference'
+  | 'discard_tax_rule_unresolved_legal_reference'
+  | 'resolve_tax_rule_unresolved_legal_reference'
   | 'activate_tax_rule_version'
   | 'retire_tax_rule_version'
   | 'close_tax_rule_version_effective_to'
@@ -85,6 +90,9 @@ export const TAX_KNOWLEDGE_RELATIONSHIP_TYPES = [
   'alternative_to',
   'special_case_of',
   'elaborates',
+  'applies_with',
+  'calculation_basis',
+  'procedural_requirement',
 ] as const;
 
 export type TaxKnowledgeRelationship = {
@@ -92,6 +100,9 @@ export type TaxKnowledgeRelationship = {
   from_tax_rule_version_id: string;
   to_tax_rule_version_id: string;
   relationship_type: string;
+  relationship_type_label?: string;
+  activation_critical?: boolean | null;
+  activation_critical_label?: string | null;
   status: string;
   owner_note: string | null;
   created_at: string;
@@ -100,6 +111,30 @@ export type TaxKnowledgeRelationship = {
   to_title: string;
   to_version_no: number;
   to_status: string;
+  allowed_actions: TaxKnowledgeAllowedAction[];
+};
+
+export type TaxKnowledgeUnresolvedResolveCandidate = {
+  tax_rule_version_id: string;
+  tax_rule_id: string;
+  rule_code: string;
+  title: string;
+  version_no: number;
+  status: string;
+};
+
+export type TaxKnowledgeUnresolvedLegalReference = {
+  id: string;
+  from_tax_rule_version_id: string;
+  relationship_intent: string;
+  relationship_intent_label: string;
+  activation_critical: boolean | null;
+  activation_critical_label: string | null;
+  cited_display: string;
+  locator_text: string;
+  status: string;
+  status_label: string;
+  resolve_candidates: TaxKnowledgeUnresolvedResolveCandidate[];
   allowed_actions: TaxKnowledgeAllowedAction[];
 };
 
@@ -123,6 +158,7 @@ export type TaxKnowledgeVersion = {
   sources: TaxKnowledgeCitation[];
   legal_value_bindings: TaxKnowledgeLegalValueBinding[];
   relationships: TaxKnowledgeRelationship[];
+  unresolved_legal_references: TaxKnowledgeUnresolvedLegalReference[];
   allowed_actions: TaxKnowledgeAllowedAction[];
 };
 
