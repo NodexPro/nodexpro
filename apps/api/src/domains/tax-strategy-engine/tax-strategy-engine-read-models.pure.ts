@@ -102,6 +102,8 @@ export type StrategyVersionPairingRow = {
   country_code: string;
   status: string;
   supersedes_version_id: string | null;
+  effective_from: string;
+  effective_to: string | null;
 };
 
 function action(
@@ -154,10 +156,9 @@ export function strategyIdentityAllowedActions(): OwnerTaxStrategyAllowedAction[
       title: 'string',
       effective_from: 'YYYY-MM-DD',
       effective_to: 'optional YYYY-MM-DD',
-      requires_professional_judgment: 'optional boolean',
+      requires_professional_judgment: 'boolean',
       exclusive_group_id: 'optional uuid',
-      authored_metadata_json: 'optional canonical JSON object',
-      supersedes_version_id: 'optional uuid',
+      authored_metadata_json: 'canonical JSON object',
     }),
   ];
 }
@@ -204,6 +205,13 @@ export function eligibleStrategySupersessionPairs(
   return pairs;
 }
 
+export function canCloseStrategyEffectiveTo(version: StrategyVersionPairingRow): boolean {
+  if (version.status !== 'active') return false;
+  if (!version.effective_from) return false;
+  if (version.effective_to == null || version.effective_to === '') return true;
+  return version.effective_to > version.effective_from;
+}
+
 export function strategyVersionAllowedActions(
   version: StrategyVersionPairingRow,
   siblings: StrategyVersionPairingRow[],
@@ -235,14 +243,13 @@ export function strategyVersionAllowedActions(
         requires_professional_judgment: 'optional boolean',
         exclusive_group_id: 'optional uuid or null',
         authored_metadata_json: 'optional canonical JSON object',
-        supersedes_version_id: 'optional uuid',
       }),
-      action('pin_tax_strategy_version_rule', true, {
+      action('pin_tax_strategy_rule', true, {
         tax_strategy_version_id: 'uuid',
         tax_rule_version_id: 'uuid',
         pin_role: 'required|prohibited',
       }),
-      action('pin_tax_strategy_version_calculation', true, {
+      action('pin_tax_strategy_calculation', true, {
         tax_strategy_version_id: 'uuid',
         calculation_definition_version_id: 'uuid',
       }),
@@ -251,19 +258,23 @@ export function strategyVersionAllowedActions(
       }),
       action('retire_tax_strategy_version', true, {
         tax_strategy_version_id: 'uuid',
-        reason: 'optional string',
+        retired_reason: 'optional string',
       }),
     );
   }
   if (active) {
+    if (canCloseStrategyEffectiveTo(version)) {
+      actions.push(
+        action('close_tax_strategy_version_effective_to', true, {
+          tax_strategy_version_id: 'uuid',
+          effective_to: 'YYYY-MM-DD',
+        }),
+      );
+    }
     actions.push(
-      action('close_tax_strategy_version_effective_to', true, {
-        tax_strategy_version_id: 'uuid',
-        effective_to: 'YYYY-MM-DD',
-      }),
       action('retire_tax_strategy_version', true, {
         tax_strategy_version_id: 'uuid',
-        reason: 'optional string',
+        retired_reason: 'optional string',
       }),
     );
   }
@@ -274,16 +285,18 @@ export function strategyVersionAllowedActions(
 }
 
 export function rulePinAllowedActions(parentDraft: boolean): OwnerTaxStrategyAllowedAction[] {
+  if (!parentDraft) return [];
   return [
-    action('unpin_tax_strategy_version_rule', parentDraft, {
+    action('unpin_tax_strategy_rule', true, {
       tax_strategy_version_rule_pin_id: 'uuid',
     }),
   ];
 }
 
 export function calculationPinAllowedActions(parentDraft: boolean): OwnerTaxStrategyAllowedAction[] {
+  if (!parentDraft) return [];
   return [
-    action('unpin_tax_strategy_version_calculation', parentDraft, {
+    action('unpin_tax_strategy_calculation', true, {
       tax_strategy_version_calculation_pin_id: 'uuid',
     }),
   ];
@@ -298,7 +311,7 @@ export function mapExclusiveGroup(row: Record<string, unknown>): OwnerTaxStrateg
     owner_note: asOptionalString(row.owner_note),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
-    allowed_actions: [],
+    allowed_actions: exclusiveGroupAllowedActions(),
   };
 }
 
@@ -310,7 +323,7 @@ export function mapRulePin(
     status?: string;
   } | undefined,
   rule: { rule_code?: string; title?: string } | undefined,
-  _parentDraft: boolean,
+  parentDraft: boolean,
 ): OwnerTaxStrategyRulePinDto {
   const pinRole = String(row.pin_role) === 'prohibited' ? 'prohibited' : 'required';
   return {
@@ -324,7 +337,7 @@ export function mapRulePin(
     status: ruleVersion?.status == null ? null : String(ruleVersion.status),
     pin_role: pinRole,
     created_at: String(row.created_at),
-    allowed_actions: [],
+    allowed_actions: rulePinAllowedActions(parentDraft),
   };
 }
 
@@ -336,7 +349,7 @@ export function mapCalculationPin(
     status?: string;
   } | undefined,
   definition: { calculation_code?: string; title?: string } | undefined,
-  _parentDraft: boolean,
+  parentDraft: boolean,
 ): OwnerTaxStrategyCalculationPinDto {
   return {
     id: String(row.id),
@@ -351,7 +364,7 @@ export function mapCalculationPin(
     version_no: calcVersion?.version_no == null ? null : Number(calcVersion.version_no),
     status: calcVersion?.status == null ? null : String(calcVersion.status),
     created_at: String(row.created_at),
-    allowed_actions: [],
+    allowed_actions: calculationPinAllowedActions(parentDraft),
   };
 }
 
@@ -360,7 +373,7 @@ export function mapStrategyVersion(
   exclusiveGroup: OwnerTaxStrategyExclusiveGroupDto | undefined,
   rulePins: OwnerTaxStrategyRulePinDto[],
   calculationPins: OwnerTaxStrategyCalculationPinDto[],
-  _siblings: StrategyVersionPairingRow[],
+  siblings: StrategyVersionPairingRow[],
 ): OwnerTaxStrategyVersionDto {
   const pairing: StrategyVersionPairingRow = {
     id: String(row.id),
@@ -368,6 +381,8 @@ export function mapStrategyVersion(
     country_code: String(row.country_code),
     status: String(row.status),
     supersedes_version_id: asOptionalString(row.supersedes_version_id),
+    effective_from: String(row.effective_from),
+    effective_to: asOptionalString(row.effective_to),
   };
   return {
     id: pairing.id,
@@ -392,7 +407,7 @@ export function mapStrategyVersion(
     created_at: String(row.created_at),
     rule_pins: rulePins,
     calculation_pins: calculationPins,
-    allowed_actions: [],
+    allowed_actions: strategyVersionAllowedActions(pairing, siblings),
   };
 }
 
@@ -409,7 +424,7 @@ export function mapStrategyIdentity(
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     versions,
-    allowed_actions: [],
+    allowed_actions: strategyIdentityAllowedActions(),
   };
 }
 
@@ -427,7 +442,7 @@ export function assembleStrategyEngineSlice(input: {
     exclusive_groups: input.exclusiveGroups,
     strategies: input.strategies,
     strategy_versions: input.strategyVersions,
-    allowed_actions: [],
+    allowed_actions: strategyCatalogAllowedActions(),
     warnings: input.warnings,
   };
 }
@@ -439,5 +454,7 @@ export function pairingRowFromVersion(row: Record<string, unknown>): StrategyVer
     country_code: String(row.country_code),
     status: String(row.status),
     supersedes_version_id: asOptionalString(row.supersedes_version_id),
+    effective_from: String(row.effective_from ?? ''),
+    effective_to: asOptionalString(row.effective_to),
   };
 }

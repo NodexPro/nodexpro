@@ -95,12 +95,6 @@ test('TAX-E2 isolation: no commands, aggregates, routes, or UI in this slice', (
   assert.doesNotMatch(e2Sql, /owner_legal_control_panel_aggregate/);
   assert.doesNotMatch(e2Sql, /router\.(get|post|patch)/i);
 
-  const srcCmd = execSync('git diff --name-only -- apps/api/src/domains/tax-strategy-engine', {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  }).trim();
-  assert.equal(srcCmd, '', 'E2 must not add Strategy Engine TypeScript in this slice');
-
   const web = execSync('git diff --name-only -- apps/web', { cwd: repoRoot, encoding: 'utf8' }).trim();
   assert.equal(web, '', 'E2 must not change the web client');
 });

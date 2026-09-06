@@ -53,3 +53,33 @@ export function canonicalizeTaxStrategyChecksumPayload(input: TaxStrategyChecksu
 export function taxStrategyChecksum(input: TaxStrategyChecksumInput): string {
   return createHash('sha256').update(canonicalizeTaxStrategyChecksumPayload(input), 'utf8').digest('hex');
 }
+
+export type TaxStrategyDraftChecksumState = {
+  country_code: string;
+  title: string;
+  requires_professional_judgment: boolean;
+  exclusive_group_id: string | null;
+  authored_metadata_json: Record<string, unknown>;
+  rule_pins: ReadonlyArray<{ pin_role: string; tax_rule_version_id: string }>;
+  calculation_pins: ReadonlyArray<{ calculation_definition_version_id: string }>;
+};
+
+/** Checksum from persisted draft pins + authored fields. Does not hash windows, status, or lineage. */
+export function taxStrategyChecksumFromDraftState(state: TaxStrategyDraftChecksumState): string {
+  return taxStrategyChecksum({
+    country_code: state.country_code,
+    title: state.title,
+    requires_professional_judgment: state.requires_professional_judgment,
+    exclusive_group_id: state.exclusive_group_id,
+    required_tax_rule_version_ids: state.rule_pins
+      .filter((pin) => pin.pin_role === 'required')
+      .map((pin) => pin.tax_rule_version_id),
+    prohibited_tax_rule_version_ids: state.rule_pins
+      .filter((pin) => pin.pin_role === 'prohibited')
+      .map((pin) => pin.tax_rule_version_id),
+    calculation_definition_version_ids: state.calculation_pins.map(
+      (pin) => pin.calculation_definition_version_id,
+    ),
+    authored_metadata_json: state.authored_metadata_json,
+  });
+}

@@ -38,6 +38,10 @@ import {
   executeTaxCalculationCommand,
   isTaxCalculationEngineCommand,
 } from '../domains/tax-calculation-engine/tax-calculation-engine-commands.service.js';
+import {
+  executeTaxStrategyEngineCommand,
+  isTaxStrategyEngineCommand,
+} from '../domains/tax-strategy-engine/owner-write/tax-strategy-engine-commands.service.js';
 
 const router = Router();
 
@@ -292,6 +296,15 @@ router.post('/command', async (req: Request, res: Response, next: NextFunction) 
 
     if (isTaxCalculationEngineCommand(commandName)) {
       const out = await executeTaxCalculationCommand(
+        ctx,
+        commandName,
+        payload as Record<string, unknown>,
+      );
+      return res.json(out);
+    }
+
+    if (isTaxStrategyEngineCommand(commandName)) {
+      const out = await executeTaxStrategyEngineCommand(
         ctx,
         commandName,
         payload as Record<string, unknown>,

@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   assembleStrategyEngineSlice,
+  canCloseStrategyEffectiveTo,
   eligibleStrategySupersessionPairs,
   mapCalculationPin,
   mapExclusiveGroup,
@@ -159,12 +160,27 @@ test('TAX-E3A mapping: identity, version, group, exact pins', () => {
   assert.equal(slice.selected_country_code, 'IL');
   assert.equal(slice.strategies[0]?.versions[0]?.rule_pins[0]?.id, rulePin.id);
   assert.equal('implemented_commands' in slice, false);
-  assert.deepEqual(slice.allowed_actions, []);
-  assert.deepEqual(identity.allowed_actions, []);
-  assert.deepEqual(version.allowed_actions, []);
-  assert.deepEqual(group.allowed_actions, []);
-  assert.deepEqual(rulePin.allowed_actions, []);
-  assert.deepEqual(calcPin.allowed_actions, []);
+  assert.deepEqual(
+    slice.allowed_actions.map((row) => row.action_key),
+    ['create_tax_strategy', 'create_tax_strategy_exclusive_group'],
+  );
+  assert.deepEqual(
+    identity.allowed_actions.map((row) => row.action_key),
+    ['update_tax_strategy_metadata', 'create_tax_strategy_version'],
+  );
+  assert.ok(version.allowed_actions.some((row) => row.action_key === 'update_tax_strategy_version_draft'));
+  assert.deepEqual(
+    group.allowed_actions.map((row) => row.action_key),
+    ['update_tax_strategy_exclusive_group'],
+  );
+  assert.deepEqual(
+    rulePin.allowed_actions.map((row) => row.action_key),
+    ['unpin_tax_strategy_rule'],
+  );
+  assert.deepEqual(
+    calcPin.allowed_actions.map((row) => row.action_key),
+    ['unpin_tax_strategy_calculation'],
+  );
 });
 
 test('TAX-E3A mapping: does not resolve another version', () => {
@@ -191,7 +207,7 @@ test('TAX-E3A mapping: does not resolve another version', () => {
   assert.doesNotMatch(service, /latest_version|resolveLatest|current_active/);
 });
 
-test('TAX-E3A allowed_actions: published slice is empty until E3B handlers exist', () => {
+test('TAX-E3A allowed_actions: published slice matches wired E3B handlers', () => {
   const src = readRepo('apps/api/src/domains/tax-strategy-engine/tax-strategy-engine-read-models.pure.ts');
   assert.doesNotMatch(src, /implemented_commands/);
   const service = readRepo(
@@ -235,6 +251,18 @@ test('TAX-E3A allowed_actions: published slice is empty until E3B handlers exist
     undefined,
     true,
   );
+  const publishedPin = mapRulePin(
+    {
+      id: 'pin-2',
+      tax_strategy_version_id: activeRow.id,
+      tax_rule_version_id: 'rv-2',
+      pin_role: 'required',
+      created_at: '2026-01-03T00:00:00.000Z',
+    },
+    undefined,
+    undefined,
+    false,
+  );
   const slice = assembleStrategyEngineSlice({
     selectedCountryCode: 'IL',
     countries: [],
@@ -244,13 +272,22 @@ test('TAX-E3A allowed_actions: published slice is empty until E3B handlers exist
     warnings: [],
   });
 
-  assert.deepEqual(slice.allowed_actions, []);
-  assert.deepEqual(identity.allowed_actions, []);
-  assert.deepEqual(group.allowed_actions, []);
-  assert.deepEqual(version.allowed_actions, []);
-  assert.deepEqual(unpin.allowed_actions, []);
-  assert.deepEqual(calcPin.allowed_actions, []);
-  assert.equal(slice.allowed_actions.some((row) => row.enabled), false);
+  assert.deepEqual(
+    slice.allowed_actions.map((row) => row.action_key),
+    ['create_tax_strategy', 'create_tax_strategy_exclusive_group'],
+  );
+  assert.deepEqual(
+    identity.allowed_actions.map((row) => row.action_key),
+    ['update_tax_strategy_metadata', 'create_tax_strategy_version'],
+  );
+  assert.deepEqual(
+    group.allowed_actions.map((row) => row.action_key),
+    ['update_tax_strategy_exclusive_group'],
+  );
+  assert.ok(version.allowed_actions.every((row) => row.enabled));
+  assert.deepEqual(unpin.allowed_actions.map((row) => row.action_key), ['unpin_tax_strategy_rule']);
+  assert.deepEqual(calcPin.allowed_actions.map((row) => row.action_key), ['unpin_tax_strategy_calculation']);
+  assert.deepEqual(publishedPin.allowed_actions, []);
 });
 
 test('TAX-E3A helper: draft / active / retired lifecycle stays internal', () => {
@@ -259,8 +296,8 @@ test('TAX-E3A helper: draft / active / retired lifecycle stays internal', () => 
   const draftActions = strategyVersionAllowedActions(pairingRowFromVersion(draftRow), siblings).map((row) => row.action_key);
   assert.deepEqual(draftActions, [
     'update_tax_strategy_version_draft',
-    'pin_tax_strategy_version_rule',
-    'pin_tax_strategy_version_calculation',
+    'pin_tax_strategy_rule',
+    'pin_tax_strategy_calculation',
     'activate_tax_strategy_version',
     'retire_tax_strategy_version',
     'supersede_tax_strategy_version',
@@ -275,6 +312,15 @@ test('TAX-E3A helper: draft / active / retired lifecycle stays internal', () => 
 
   const retiredActions = strategyVersionAllowedActions(pairingRowFromVersion(retiredRow), siblings);
   assert.deepEqual(retiredActions, []);
+
+  const closedActive = pairingRowFromVersion({ ...activeRow, effective_to: '2020-01-01' });
+  assert.equal(canCloseStrategyEffectiveTo(closedActive), false);
+  assert.equal(
+    strategyVersionAllowedActions(closedActive, siblings).some(
+      (row) => row.action_key === 'close_tax_strategy_version_effective_to',
+    ),
+    false,
+  );
 });
 
 test('TAX-E3A supersede candidates are exact ids only', () => {

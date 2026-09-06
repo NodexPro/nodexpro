@@ -9,10 +9,10 @@ export const TAX_STRATEGY_ENGINE_COMMANDS = [
   'retire_tax_strategy_version',
   'close_tax_strategy_version_effective_to',
   'supersede_tax_strategy_version',
-  'pin_tax_strategy_version_rule',
-  'unpin_tax_strategy_version_rule',
-  'pin_tax_strategy_version_calculation',
-  'unpin_tax_strategy_version_calculation',
+  'pin_tax_strategy_rule',
+  'unpin_tax_strategy_rule',
+  'pin_tax_strategy_calculation',
+  'unpin_tax_strategy_calculation',
 ] as const;
 
 export type TaxStrategyEngineCommandName = (typeof TAX_STRATEGY_ENGINE_COMMANDS)[number];
@@ -20,6 +20,15 @@ export type TaxStrategyEngineCommandName = (typeof TAX_STRATEGY_ENGINE_COMMANDS)
 export function isTaxStrategyEngineCommand(command: string): command is TaxStrategyEngineCommandName {
   return (TAX_STRATEGY_ENGINE_COMMANDS as readonly string[]).includes(command);
 }
+
+export type TaxStrategyEngineCommandResponse = {
+  ok: true;
+  command: TaxStrategyEngineCommandName;
+  refreshed: {
+    aggregate_key: 'owner_legal_control_panel_aggregate';
+    aggregate: Record<string, unknown>;
+  };
+};
 
 export const STRATEGY_ENGINE_SLICE_KEY = 'strategy_engine' as const;
 
