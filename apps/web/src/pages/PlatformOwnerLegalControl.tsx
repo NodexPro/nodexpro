@@ -13,12 +13,13 @@ import {
   labelFromActionKey,
   normalizeActions,
 } from './owner-legal-control-panel-actions';
-import type { OwnerCommandResponse, UnknownRecord } from './owner-legal-control-types';
+import { ownerLegalControlCountryQueryParams, type OwnerCommandResponse, type UnknownRecord } from './owner-legal-control-types';
 import {
   CommunicationPoliciesToolbar,
   OperationalReminderWorkflowWizard,
 } from './operational-reminder-owner-forms';
 import { OwnerTaxKnowledgePanel, parseTaxKnowledgeAggregate } from './owner-tax-knowledge-panel';
+import { OwnerStrategyEnginePanel, parseStrategyEngineAggregate } from './owner-strategy-engine-panel';
 
 function isForbidden(e: unknown): boolean {
   return e instanceof ApiError && (e.status === 401 || e.status === 403);
@@ -284,7 +285,11 @@ export function PlatformOwnerLegalControl() {
       if (commercialModuleKey.trim()) qs.set('commercial_module_key', commercialModuleKey.trim());
       if (commercialEntitlementStatus.trim()) qs.set('commercial_entitlement_status', commercialEntitlementStatus.trim());
       if (commercialActivationStatus.trim()) qs.set('commercial_activation_status', commercialActivationStatus.trim());
-      if (taxKnowledgeCountryQuery.trim()) qs.set('tax_knowledge_country_code', taxKnowledgeCountryQuery.trim());
+      const countryParams = ownerLegalControlCountryQueryParams(taxKnowledgeCountryQuery);
+      if (countryParams) {
+        qs.set('tax_knowledge_country_code', countryParams.tax_knowledge_country_code);
+        qs.set('strategy_engine_country_code', countryParams.strategy_engine_country_code);
+      }
 
       const path = `${OWNER.legalControl}?${qs.toString()}`;
       const p = (await apiJson(path)) as UnknownRecord;
@@ -569,6 +574,7 @@ export function PlatformOwnerLegalControl() {
   }, [panel]);
 
   const taxKnowledge = useMemo(() => parseTaxKnowledgeAggregate(panel?.tax_knowledge), [panel]);
+  const strategyEngine = useMemo(() => parseStrategyEngineAggregate(panel?.strategy_engine), [panel]);
 
   useEffect(() => {
     if (loading) return;
@@ -1079,6 +1085,8 @@ export function PlatformOwnerLegalControl() {
           await sendOwnerCommand(command, payload);
         }}
       />
+
+      <OwnerStrategyEnginePanel strategyEngine={strategyEngine} />
 
       <section style={{ marginTop: 18, padding: 12, border: '1px solid #c4b5fd', borderRadius: 8, background: '#faf5ff' }}>
         <h2 style={{ margin: 0 }}>Communication policies (Work Engine reminders)</h2>

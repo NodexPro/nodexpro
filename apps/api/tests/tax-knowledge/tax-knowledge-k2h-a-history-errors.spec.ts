@@ -130,6 +130,6 @@ test('TAX-K2H-A contract: no K3+/Trainer leakage, no new GET/PATCH', () => {
   const panel = readRepo(PANEL);
   const types = readRepo(TYPES);
   assert.doesNotMatch(panel, /Tax Knowledge Trainer|tax_knowledge_trainer|work.?engine|impact resolver/i);
-  assert.doesNotMatch(types, /TaxKnowledgeTrainer|tax_interpretation|tax_strategy/);
+  assert.doesNotMatch(types, /TaxKnowledgeTrainer|tax_interpretation/);
   assert.doesNotMatch(panel, /apiJson\(|fetch\(|method:\s*['"]PATCH['"]|method:\s*['"]GET['"]/);
 });

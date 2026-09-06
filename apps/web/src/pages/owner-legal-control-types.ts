@@ -245,3 +245,152 @@ export function emptyTaxKnowledgeAggregate(): TaxKnowledgeAggregate {
     warnings: [],
   };
 }
+
+/** Mirrors backend TaxStrategyEngineCommandName — typed on the DTO only. E3C1 does not surface these. */
+export const TAX_STRATEGY_ENGINE_COMMANDS = [
+  'create_tax_strategy',
+  'update_tax_strategy_metadata',
+  'create_tax_strategy_exclusive_group',
+  'update_tax_strategy_exclusive_group',
+  'create_tax_strategy_version',
+  'update_tax_strategy_version_draft',
+  'activate_tax_strategy_version',
+  'retire_tax_strategy_version',
+  'close_tax_strategy_version_effective_to',
+  'supersede_tax_strategy_version',
+  'pin_tax_strategy_rule',
+  'unpin_tax_strategy_rule',
+  'pin_tax_strategy_calculation',
+  'unpin_tax_strategy_calculation',
+] as const;
+
+export type TaxStrategyEngineCommandName = (typeof TAX_STRATEGY_ENGINE_COMMANDS)[number];
+
+export type OwnerTaxStrategySupersessionPair = {
+  new_tax_strategy_version_id: string;
+  old_tax_strategy_version_id: string;
+};
+
+export type OwnerTaxStrategyAllowedAction = {
+  action_key: TaxStrategyEngineCommandName | string;
+  enabled: boolean;
+  payload: Record<string, string>;
+  candidates?: OwnerTaxStrategySupersessionPair[];
+};
+
+export type OwnerTaxStrategyCountry = {
+  code: string;
+  name: string;
+  status: string;
+};
+
+export type OwnerTaxStrategyExclusiveGroup = {
+  id: string;
+  country_code: string;
+  group_code: string;
+  title: string;
+  owner_note: string | null;
+  created_at: string;
+  updated_at: string;
+  allowed_actions: OwnerTaxStrategyAllowedAction[];
+};
+
+export type OwnerTaxStrategyRulePin = {
+  id: string;
+  tax_strategy_version_id: string;
+  tax_rule_version_id: string;
+  tax_rule_id: string | null;
+  rule_code: string | null;
+  rule_title: string | null;
+  version_no: number | null;
+  status: string | null;
+  pin_role: string;
+  created_at: string;
+  allowed_actions: OwnerTaxStrategyAllowedAction[];
+};
+
+export type OwnerTaxStrategyCalculationPin = {
+  id: string;
+  tax_strategy_version_id: string;
+  calculation_definition_version_id: string;
+  tax_calculation_definition_id: string | null;
+  calculation_code: string | null;
+  calculation_title: string | null;
+  version_no: number | null;
+  status: string | null;
+  created_at: string;
+  allowed_actions: OwnerTaxStrategyAllowedAction[];
+};
+
+export type OwnerTaxStrategyVersion = {
+  id: string;
+  tax_strategy_id: string;
+  country_code: string;
+  version_no: number;
+  status: string;
+  effective_from: string;
+  effective_to: string | null;
+  title: string;
+  requires_professional_judgment: boolean;
+  exclusive_group_id: string | null;
+  exclusive_group_code: string | null;
+  exclusive_group_title: string | null;
+  authored_metadata_json: UnknownRecord;
+  strategy_checksum: string;
+  supersedes_version_id: string | null;
+  superseded_by_version_id: string | null;
+  activated_at: string | null;
+  retired_at: string | null;
+  retired_reason: string | null;
+  created_at: string;
+  rule_pins: OwnerTaxStrategyRulePin[];
+  calculation_pins: OwnerTaxStrategyCalculationPin[];
+  allowed_actions: OwnerTaxStrategyAllowedAction[];
+};
+
+export type OwnerTaxStrategy = {
+  id: string;
+  country_code: string;
+  strategy_code: string;
+  admin_label: string | null;
+  owner_note: string | null;
+  created_at: string;
+  updated_at: string;
+  versions: OwnerTaxStrategyVersion[];
+  allowed_actions: OwnerTaxStrategyAllowedAction[];
+};
+
+export type OwnerStrategyEngineAggregate = {
+  selected_country_code: string | null;
+  countries: OwnerTaxStrategyCountry[];
+  exclusive_groups: OwnerTaxStrategyExclusiveGroup[];
+  strategies: OwnerTaxStrategy[];
+  strategy_versions: OwnerTaxStrategyVersion[];
+  allowed_actions: OwnerTaxStrategyAllowedAction[];
+  warnings: string[];
+};
+
+export function emptyStrategyEngineAggregate(): OwnerStrategyEngineAggregate {
+  return {
+    selected_country_code: null,
+    countries: [],
+    exclusive_groups: [],
+    strategies: [],
+    strategy_versions: [],
+    allowed_actions: [],
+    warnings: [],
+  };
+}
+
+/** Same selected country drives both existing Owner Legal Control GET query parameters. */
+export function ownerLegalControlCountryQueryParams(countryCode: string): {
+  tax_knowledge_country_code: string;
+  strategy_engine_country_code: string;
+} | null {
+  const code = countryCode.trim();
+  if (!code) return null;
+  return {
+    tax_knowledge_country_code: code,
+    strategy_engine_country_code: code,
+  };
+}

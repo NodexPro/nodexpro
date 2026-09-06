@@ -125,7 +125,7 @@ test('TAX-K2G contract: no K3+/Trainer functionality leakage', () => {
   const panel = readRepo(PANEL);
   const types = readRepo(TYPES_TS);
   assert.doesNotMatch(panel, /Tax Knowledge Trainer|tax_knowledge_trainer|work.?engine|impact resolver/i);
-  assert.doesNotMatch(types, /TaxKnowledgeTrainer|tax_interpretation|tax_strategy/);
+  assert.doesNotMatch(types, /TaxKnowledgeTrainer|tax_interpretation/);
   assert.doesNotMatch(panel, /recursive impact|client facts|advisory logic/i);
 });
 
