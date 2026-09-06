@@ -1086,7 +1086,13 @@ export function PlatformOwnerLegalControl() {
         }}
       />
 
-      <OwnerStrategyEnginePanel strategyEngine={strategyEngine} />
+      <OwnerStrategyEnginePanel
+        strategyEngine={strategyEngine}
+        busy={commandBusy}
+        onCommand={async (command, payload) => {
+          await sendOwnerCommand(command, payload);
+        }}
+      />
 
       <section style={{ marginTop: 18, padding: 12, border: '1px solid #c4b5fd', borderRadius: 8, background: '#faf5ff' }}>
         <h2 style={{ margin: 0 }}>Communication policies (Work Engine reminders)</h2>

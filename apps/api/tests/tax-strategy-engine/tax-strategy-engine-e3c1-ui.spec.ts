@@ -49,21 +49,17 @@ test('TAX-E3C1: one country selection sends both existing GET query parameters',
   assert.match(page, /qs\.set\('tax_knowledge_country_code'/);
   assert.match(page, /qs\.set\('strategy_engine_country_code'/);
   assert.doesNotMatch(page, /strategyEngineCountryQuery|setStrategyEngineCountry|strategy_engine_country_query/);
-  assert.doesNotMatch(panel, /<select/);
-  assert.doesNotMatch(panel, /strategyEngineCountry|onSelectCountry/);
+  assert.doesNotMatch(panel, /strategyEngineCountry|onSelectCountry|Select country/);
 });
 
-test('TAX-E3C1: read-only catalog — no Strategy mutation buttons or raw JSON UI', () => {
+test('TAX-E3C1: catalog display remains human-readable with no raw JSON / pin authoring', () => {
   const page = readRepo(PAGE);
   const panel = readRepo(PANEL);
 
-  assert.doesNotMatch(panel, /onCommand\(/);
   assert.doesNotMatch(panel, /CommandActionModal/);
-  assert.doesNotMatch(panel, /create_tax_strategy|activate_tax_strategy_version|retire_tax_strategy_version/);
-  assert.doesNotMatch(panel, /supersede_tax_strategy_version|pin_tax_strategy_rule|unpin_tax_strategy|close_tax_strategy_version/);
-  assert.doesNotMatch(panel, />Create<|>Edit<|>Activate<|>Retire<|>Supersede<|>Pin<|>Unpin<|>Close window</);
+  assert.doesNotMatch(panel, /onCommand\('pin_tax_strategy|onCommand\('unpin_tax_strategy/);
+  assert.doesNotMatch(panel, /setDialogKind\('pin_tax_strategy|setDialogKind\('unpin_tax_strategy/);
   assert.doesNotMatch(panel, /JSON\.stringify/);
-  assert.doesNotMatch(panel, /<textarea/);
   assert.doesNotMatch(panel, /authored_metadata_json<\/textarea>|raw authored/i);
   assert.match(panel, /label="explanation"/);
   assert.match(panel, /label="benefits"/);

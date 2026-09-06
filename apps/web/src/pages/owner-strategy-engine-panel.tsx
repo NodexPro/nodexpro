@@ -323,6 +323,206 @@ export function strategyAuthoredMetadataDisplay(raw: UnknownRecord): StrategyAut
   };
 }
 
+export const E3C2_SURFACED_COMMANDS = [
+  'create_tax_strategy',
+  'update_tax_strategy_metadata',
+  'create_tax_strategy_exclusive_group',
+  'update_tax_strategy_exclusive_group',
+  'create_tax_strategy_version',
+  'update_tax_strategy_version_draft',
+  'activate_tax_strategy_version',
+  'retire_tax_strategy_version',
+  'close_tax_strategy_version_effective_to',
+  'supersede_tax_strategy_version',
+] as const;
+
+export type StrategyEngineDialogKind = (typeof E3C2_SURFACED_COMMANDS)[number] | null;
+
+export type StrategyVersionWriteForm = {
+  title: string;
+  effective_from: string;
+  effective_to: string;
+  requires_professional_judgment: boolean;
+  exclusive_group_id: string;
+  explanation: string;
+  benefits: string;
+  risks: string;
+  constraints: string;
+  costs_tradeoffs: string;
+  category: string;
+  domain: string;
+  tags: string;
+};
+
+export function enabledStrategyAction(
+  actions: OwnerTaxStrategyAllowedAction[],
+  actionKey: string,
+): OwnerTaxStrategyAllowedAction | null {
+  const found = actions.find((action) => action.action_key === actionKey) ?? null;
+  return found && found.enabled === true ? found : null;
+}
+
+export function newlineListToStrings(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function authoredListToNewline(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string').join('\n');
+  }
+  return typeof value === 'string' ? value : '';
+}
+
+export function buildStrategyAuthoredMetadataJson(form: StrategyVersionWriteForm): UnknownRecord {
+  return {
+    explanation: form.explanation,
+    benefits: newlineListToStrings(form.benefits),
+    risks: newlineListToStrings(form.risks),
+    constraints: newlineListToStrings(form.constraints),
+    costs_tradeoffs: newlineListToStrings(form.costs_tradeoffs),
+    category: form.category,
+    domain: form.domain,
+    tags: newlineListToStrings(form.tags),
+  };
+}
+
+export function versionFormFromAggregate(version: OwnerTaxStrategyVersion): StrategyVersionWriteForm {
+  const raw = version.authored_metadata_json;
+  return {
+    title: version.title,
+    effective_from: version.effective_from.slice(0, 10),
+    effective_to: (version.effective_to ?? '').slice(0, 10),
+    requires_professional_judgment: version.requires_professional_judgment === true,
+    exclusive_group_id: version.exclusive_group_id ?? '',
+    explanation: authoredString(raw.explanation),
+    benefits: authoredListToNewline(raw.benefits),
+    risks: authoredListToNewline(raw.risks),
+    constraints: authoredListToNewline(raw.constraints),
+    costs_tradeoffs: authoredListToNewline(raw.costs_tradeoffs),
+    category: authoredString(raw.category),
+    domain: authoredString(raw.domain),
+    tags: authoredListToNewline(raw.tags),
+  };
+}
+
+export function buildCreateTaxStrategyPayload(
+  countryCode: string,
+  form: { strategy_code: string; admin_label: string; owner_note: string },
+): UnknownRecord {
+  const payload: UnknownRecord = {
+    country_code: countryCode,
+    strategy_code: form.strategy_code.trim(),
+  };
+  if (form.admin_label.trim()) payload.admin_label = form.admin_label.trim();
+  if (form.owner_note.trim()) payload.owner_note = form.owner_note.trim();
+  return payload;
+}
+
+export function buildUpdateTaxStrategyMetadataPayload(
+  taxStrategyId: string,
+  form: { admin_label: string; owner_note: string },
+): UnknownRecord {
+  return {
+    tax_strategy_id: taxStrategyId,
+    admin_label: form.admin_label,
+    owner_note: form.owner_note,
+  };
+}
+
+export function buildCreateExclusiveGroupPayload(
+  countryCode: string,
+  form: { group_code: string; title: string; owner_note: string },
+): UnknownRecord {
+  const payload: UnknownRecord = {
+    country_code: countryCode,
+    group_code: form.group_code.trim(),
+    title: form.title.trim(),
+  };
+  if (form.owner_note.trim()) payload.owner_note = form.owner_note.trim();
+  return payload;
+}
+
+export function buildUpdateExclusiveGroupPayload(
+  groupId: string,
+  form: { title: string; owner_note: string },
+): UnknownRecord {
+  return {
+    tax_strategy_exclusive_group_id: groupId,
+    title: form.title,
+    owner_note: form.owner_note,
+  };
+}
+
+export function buildCreateTaxStrategyVersionPayload(
+  taxStrategyId: string,
+  form: StrategyVersionWriteForm,
+): UnknownRecord {
+  return {
+    tax_strategy_id: taxStrategyId,
+    title: form.title.trim(),
+    effective_from: form.effective_from.trim(),
+    effective_to: form.effective_to.trim(),
+    requires_professional_judgment: form.requires_professional_judgment,
+    exclusive_group_id: form.exclusive_group_id,
+    authored_metadata_json: buildStrategyAuthoredMetadataJson(form),
+  };
+}
+
+export function buildUpdateTaxStrategyVersionDraftPayload(
+  taxStrategyVersionId: string,
+  form: StrategyVersionWriteForm,
+): UnknownRecord {
+  return {
+    tax_strategy_version_id: taxStrategyVersionId,
+    title: form.title.trim(),
+    effective_from: form.effective_from.trim(),
+    effective_to: form.effective_to.trim(),
+    requires_professional_judgment: form.requires_professional_judgment,
+    exclusive_group_id: form.exclusive_group_id,
+    authored_metadata_json: buildStrategyAuthoredMetadataJson(form),
+  };
+}
+
+export function supersedePairsFromStrategyAction(
+  action: OwnerTaxStrategyAllowedAction | null,
+): OwnerTaxStrategySupersessionPair[] {
+  if (!action) return [];
+  if (action.candidates && action.candidates.length) return action.candidates;
+  const neu = (action.payload.new_tax_strategy_version_id ?? '').trim();
+  const old = (action.payload.old_tax_strategy_version_id ?? '').trim();
+  if (neu && old) return [{ new_tax_strategy_version_id: neu, old_tax_strategy_version_id: old }];
+  return [];
+}
+
+function actionLabel(actionKey: string): string {
+  return actionKey
+    .split('_')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+const EMPTY_IDENTITY_FORM = { strategy_code: '', admin_label: '', owner_note: '' };
+const EMPTY_GROUP_FORM = { group_code: '', title: '', owner_note: '' };
+const EMPTY_VERSION_FORM: StrategyVersionWriteForm = {
+  title: '',
+  effective_from: '',
+  effective_to: '',
+  requires_professional_judgment: false,
+  exclusive_group_id: '',
+  explanation: '',
+  benefits: '',
+  risks: '',
+  constraints: '',
+  costs_tradeoffs: '',
+  category: '',
+  domain: '',
+  tags: '',
+};
+
 function StateRow({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 8, fontSize: 13, padding: '3px 0' }}>
@@ -338,13 +538,45 @@ function schemaUnavailable(warnings: string[]): boolean {
   );
 }
 
+function ActionButton({
+  actions,
+  actionKey,
+  busy,
+  onClick,
+}: {
+  actions: OwnerTaxStrategyAllowedAction[];
+  actionKey: (typeof E3C2_SURFACED_COMMANDS)[number];
+  busy: boolean;
+  onClick: () => void;
+}) {
+  if (!enabledStrategyAction(actions, actionKey)) return null;
+  return (
+    <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={onClick}>
+      {actionLabel(actionKey)}
+    </button>
+  );
+}
+
 export function OwnerStrategyEnginePanel({
   strategyEngine,
+  busy,
+  onCommand,
 }: {
   strategyEngine: OwnerStrategyEngineAggregate;
+  busy: boolean;
+  onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
 }) {
   const [selectedStrategyId, setSelectedStrategyId] = useState('');
   const [selectedVersionId, setSelectedVersionId] = useState('');
+  const [pendingGroupId, setPendingGroupId] = useState('');
+  const [dialogKind, setDialogKind] = useState(null as StrategyEngineDialogKind);
+  const [formError, setFormError] = useState('');
+  const [identityForm, setIdentityForm] = useState(EMPTY_IDENTITY_FORM);
+  const [groupForm, setGroupForm] = useState(EMPTY_GROUP_FORM);
+  const [versionForm, setVersionForm] = useState(EMPTY_VERSION_FORM);
+  const [retiredReason, setRetiredReason] = useState('');
+  const [closeEffectiveTo, setCloseEffectiveTo] = useState('');
+  const [supersedeCandidateIndex, setSupersedeCandidateIndex] = useState(-1);
 
   const selectedCountryCode = strategyEngine.selected_country_code;
   const schemaNotApplied = schemaUnavailable(strategyEngine.warnings);
@@ -381,6 +613,202 @@ export function OwnerStrategyEnginePanel({
   const supersededBy = selectedVersion
     ? strategyVersionLineageLabel(selectedVersion.superseded_by_version_id, versionsInAggregate)
     : { kind: 'empty' as const };
+  const pendingGroup =
+    strategyEngine.exclusive_groups.find((row) => row.id && row.id === pendingGroupId) ?? null;
+  const supersedeAction = enabledStrategyAction(
+    selectedVersion?.allowed_actions ?? [],
+    'supersede_tax_strategy_version',
+  );
+  const supersedePairs = supersedePairsFromStrategyAction(supersedeAction);
+
+  useEffect(() => {
+    if (!dialogKind) return;
+    setFormError('');
+    if (dialogKind === 'create_tax_strategy') {
+      setIdentityForm(EMPTY_IDENTITY_FORM);
+    }
+    if (dialogKind === 'update_tax_strategy_metadata' && selectedStrategy) {
+      setIdentityForm({
+        strategy_code: selectedStrategy.strategy_code,
+        admin_label: selectedStrategy.admin_label ?? '',
+        owner_note: selectedStrategy.owner_note ?? '',
+      });
+    }
+    if (dialogKind === 'create_tax_strategy_exclusive_group') {
+      setGroupForm(EMPTY_GROUP_FORM);
+    }
+    if (dialogKind === 'update_tax_strategy_exclusive_group' && pendingGroup) {
+      setGroupForm({
+        group_code: pendingGroup.group_code,
+        title: pendingGroup.title,
+        owner_note: pendingGroup.owner_note ?? '',
+      });
+    }
+    if (dialogKind === 'create_tax_strategy_version') {
+      setVersionForm(EMPTY_VERSION_FORM);
+    }
+    if (dialogKind === 'update_tax_strategy_version_draft' && selectedVersion) {
+      setVersionForm(versionFormFromAggregate(selectedVersion));
+    }
+    if (dialogKind === 'retire_tax_strategy_version') {
+      setRetiredReason('');
+    }
+    if (dialogKind === 'close_tax_strategy_version_effective_to' && selectedVersion) {
+      setCloseEffectiveTo((selectedVersion.effective_to ?? '').slice(0, 10));
+    }
+    if (dialogKind === 'supersede_tax_strategy_version') {
+      const pairs = supersedePairsFromStrategyAction(
+        enabledStrategyAction(selectedVersion?.allowed_actions ?? [], 'supersede_tax_strategy_version'),
+      );
+      setSupersedeCandidateIndex(pairs.length === 1 ? 0 : -1);
+    }
+  }, [dialogKind, selectedStrategy, selectedVersion, pendingGroup]);
+
+  async function submitDialog(): Promise<void> {
+    setFormError('');
+    try {
+      if (dialogKind === 'create_tax_strategy') {
+        if (!enabledStrategyAction(strategyEngine.allowed_actions, 'create_tax_strategy')) return;
+        if (!selectedCountryCode) {
+          setFormError('Select a country first.');
+          return;
+        }
+        if (!identityForm.strategy_code.trim()) {
+          setFormError('strategy_code is required.');
+          return;
+        }
+        await onCommand('create_tax_strategy', buildCreateTaxStrategyPayload(selectedCountryCode, identityForm));
+      } else if (dialogKind === 'update_tax_strategy_metadata') {
+        if (
+          !enabledStrategyAction(selectedStrategy?.allowed_actions ?? [], 'update_tax_strategy_metadata') ||
+          !selectedStrategy
+        ) {
+          return;
+        }
+        await onCommand(
+          'update_tax_strategy_metadata',
+          buildUpdateTaxStrategyMetadataPayload(selectedStrategy.id, identityForm),
+        );
+      } else if (dialogKind === 'create_tax_strategy_exclusive_group') {
+        if (!enabledStrategyAction(strategyEngine.allowed_actions, 'create_tax_strategy_exclusive_group')) return;
+        if (!selectedCountryCode) {
+          setFormError('Select a country first.');
+          return;
+        }
+        if (!groupForm.group_code.trim() || !groupForm.title.trim()) {
+          setFormError('group_code and title are required.');
+          return;
+        }
+        await onCommand(
+          'create_tax_strategy_exclusive_group',
+          buildCreateExclusiveGroupPayload(selectedCountryCode, groupForm),
+        );
+      } else if (dialogKind === 'update_tax_strategy_exclusive_group') {
+        if (
+          !pendingGroup ||
+          !enabledStrategyAction(pendingGroup.allowed_actions, 'update_tax_strategy_exclusive_group')
+        ) {
+          return;
+        }
+        if (!groupForm.title.trim()) {
+          setFormError('title is required.');
+          return;
+        }
+        await onCommand(
+          'update_tax_strategy_exclusive_group',
+          buildUpdateExclusiveGroupPayload(pendingGroup.id, groupForm),
+        );
+      } else if (dialogKind === 'create_tax_strategy_version') {
+        if (
+          !enabledStrategyAction(selectedStrategy?.allowed_actions ?? [], 'create_tax_strategy_version') ||
+          !selectedStrategy
+        ) {
+          return;
+        }
+        if (!versionForm.title.trim() || !versionForm.effective_from.trim()) {
+          setFormError('title and effective_from are required.');
+          return;
+        }
+        await onCommand(
+          'create_tax_strategy_version',
+          buildCreateTaxStrategyVersionPayload(selectedStrategy.id, versionForm),
+        );
+      } else if (dialogKind === 'update_tax_strategy_version_draft') {
+        if (
+          !enabledStrategyAction(selectedVersion?.allowed_actions ?? [], 'update_tax_strategy_version_draft') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        if (!versionForm.title.trim() || !versionForm.effective_from.trim()) {
+          setFormError('title and effective_from are required.');
+          return;
+        }
+        await onCommand(
+          'update_tax_strategy_version_draft',
+          buildUpdateTaxStrategyVersionDraftPayload(selectedVersion.id, versionForm),
+        );
+      } else if (dialogKind === 'activate_tax_strategy_version') {
+        if (
+          !enabledStrategyAction(selectedVersion?.allowed_actions ?? [], 'activate_tax_strategy_version') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        await onCommand('activate_tax_strategy_version', { tax_strategy_version_id: selectedVersion.id });
+      } else if (dialogKind === 'retire_tax_strategy_version') {
+        if (
+          !enabledStrategyAction(selectedVersion?.allowed_actions ?? [], 'retire_tax_strategy_version') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        const retirePayload: UnknownRecord = { tax_strategy_version_id: selectedVersion.id };
+        if (retiredReason.trim()) retirePayload.retired_reason = retiredReason.trim();
+        await onCommand('retire_tax_strategy_version', retirePayload);
+      } else if (dialogKind === 'close_tax_strategy_version_effective_to') {
+        if (
+          !enabledStrategyAction(selectedVersion?.allowed_actions ?? [], 'close_tax_strategy_version_effective_to') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        if (!closeEffectiveTo.trim()) {
+          setFormError('effective_to is required.');
+          return;
+        }
+        await onCommand('close_tax_strategy_version_effective_to', {
+          tax_strategy_version_id: selectedVersion.id,
+          effective_to: closeEffectiveTo.trim(),
+        });
+      } else if (dialogKind === 'supersede_tax_strategy_version') {
+        if (
+          !enabledStrategyAction(selectedVersion?.allowed_actions ?? [], 'supersede_tax_strategy_version') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        const pairs = supersedePairsFromStrategyAction(
+          enabledStrategyAction(selectedVersion.allowed_actions, 'supersede_tax_strategy_version'),
+        );
+        const pair = pairs.length === 1 ? pairs[0] : pairs[supersedeCandidateIndex];
+        if (!pair) {
+          setFormError('Select a supersession pair.');
+          return;
+        }
+        await onCommand('supersede_tax_strategy_version', {
+          new_tax_strategy_version_id: pair.new_tax_strategy_version_id,
+          old_tax_strategy_version_id: pair.old_tax_strategy_version_id,
+        });
+      } else {
+        return;
+      }
+      setDialogKind(null);
+      setPendingGroupId('');
+    } catch (e) {
+      setFormError(e instanceof Error && e.message ? e.message : 'Command failed');
+    }
+  }
 
   return (
     <SectionCard
@@ -395,7 +823,8 @@ export function OwnerStrategyEnginePanel({
       <div>
         <h2 style={{ margin: 0, fontSize: 18 }}>Strategy Engine</h2>
         <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 13 }}>
-          Read-only catalog from the owner legal-control aggregate. Country follows the Tax Knowledge selection.
+          Country-scoped catalog from the owner legal-control aggregate. Commands only. Country follows the Tax
+          Knowledge selection.
         </p>
       </div>
 
@@ -445,6 +874,20 @@ export function OwnerStrategyEnginePanel({
 
       {selectedCountryCode && !schemaNotApplied ? (
         <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <ActionButton
+              actions={strategyEngine.allowed_actions}
+              actionKey="create_tax_strategy"
+              busy={busy}
+              onClick={() => setDialogKind('create_tax_strategy')}
+            />
+            <ActionButton
+              actions={strategyEngine.allowed_actions}
+              actionKey="create_tax_strategy_exclusive_group"
+              busy={busy}
+              onClick={() => setDialogKind('create_tax_strategy_exclusive_group')}
+            />
+          </div>
           <div>
             <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Exclusive groups</h3>
             {strategyEngine.exclusive_groups.length ? (
@@ -455,6 +898,7 @@ export function OwnerStrategyEnginePanel({
                       <th style={TH_STYLE}>group_code</th>
                       <th style={TH_STYLE}>title</th>
                       <th style={TH_STYLE}>owner_note</th>
+                      <th style={TH_STYLE}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -463,6 +907,17 @@ export function OwnerStrategyEnginePanel({
                         <td style={TD_STYLE}>{row.group_code || '—'}</td>
                         <td style={TD_STYLE}>{row.title || '—'}</td>
                         <td style={TD_STYLE}>{row.owner_note || '—'}</td>
+                        <td style={TD_STYLE}>
+                          <ActionButton
+                            actions={row.allowed_actions}
+                            actionKey="update_tax_strategy_exclusive_group"
+                            busy={busy}
+                            onClick={() => {
+                              setPendingGroupId(row.id);
+                              setDialogKind('update_tax_strategy_exclusive_group');
+                            }}
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -519,11 +974,47 @@ export function OwnerStrategyEnginePanel({
               authored={authored}
               supersedes={supersedes}
               supersededBy={supersededBy}
+              busy={busy}
+              onOpenDialog={setDialogKind}
             />
           ) : strategyEngine.strategies.length ? (
             <EmptyState title="No strategy selected" description="Select a strategy to display its versions." />
           ) : null}
         </div>
+      ) : null}
+
+      {dialogKind ? (
+        <StrategyEngineCommandDialog
+          dialogKind={dialogKind}
+          busy={busy}
+          formError={formError}
+          selectedCountryCode={selectedCountryCode}
+          selectedStrategy={selectedStrategy}
+          selectedVersion={selectedVersion}
+          pendingGroup={pendingGroup}
+          exclusiveGroups={strategyEngine.exclusive_groups}
+          identityForm={identityForm}
+          groupForm={groupForm}
+          versionForm={versionForm}
+          retiredReason={retiredReason}
+          closeEffectiveTo={closeEffectiveTo}
+          supersedePairs={supersedePairs}
+          supersedeCandidateIndex={supersedeCandidateIndex}
+          versionsInAggregate={versionsInAggregate}
+          onIdentityForm={setIdentityForm}
+          onGroupForm={setGroupForm}
+          onVersionForm={setVersionForm}
+          onRetiredReason={setRetiredReason}
+          onCloseEffectiveTo={setCloseEffectiveTo}
+          onSupersedeCandidateIndex={setSupersedeCandidateIndex}
+          onClose={() => {
+            if (!busy) {
+              setDialogKind(null);
+              setPendingGroupId('');
+            }
+          }}
+          onSubmit={() => void submitDialog()}
+        />
       ) : null}
     </SectionCard>
   );
@@ -542,6 +1033,8 @@ function SelectedStrategyDisplay({
   authored,
   supersedes,
   supersededBy,
+  busy,
+  onOpenDialog,
 }: {
   strategy: OwnerTaxStrategy;
   selectedVersion: OwnerTaxStrategyVersion | null;
@@ -550,6 +1043,8 @@ function SelectedStrategyDisplay({
   authored: StrategyAuthoredMetadataDisplay | null;
   supersedes: StrategyLineagePresentation;
   supersededBy: StrategyLineagePresentation;
+  busy: boolean;
+  onOpenDialog: (kind: StrategyEngineDialogKind) => void;
 }) {
   return (
     <div style={{ padding: 12, border: '1px solid #e5e7eb', borderRadius: 6, background: '#f9fafb' }}>
@@ -557,6 +1052,20 @@ function SelectedStrategyDisplay({
       <StateRow label="strategy_code" value={strategy.strategy_code} />
       <StateRow label="admin_label" value={strategy.admin_label ?? ''} />
       <StateRow label="owner_note" value={strategy.owner_note ?? ''} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+        <ActionButton
+          actions={strategy.allowed_actions}
+          actionKey="update_tax_strategy_metadata"
+          busy={busy}
+          onClick={() => onOpenDialog('update_tax_strategy_metadata')}
+        />
+        <ActionButton
+          actions={strategy.allowed_actions}
+          actionKey="create_tax_strategy_version"
+          busy={busy}
+          onClick={() => onOpenDialog('create_tax_strategy_version')}
+        />
+      </div>
 
       <h3 style={{ margin: '16px 0 8px', fontSize: 15 }}>Versions</h3>
       {strategy.versions.length ? (
@@ -601,6 +1110,8 @@ function SelectedStrategyDisplay({
           authored={authored}
           supersedes={supersedes}
           supersededBy={supersededBy}
+          busy={busy}
+          onOpenDialog={onOpenDialog}
         />
       ) : null}
     </div>
@@ -612,15 +1123,51 @@ function SelectedVersionDisplay({
   authored,
   supersedes,
   supersededBy,
+  busy,
+  onOpenDialog,
 }: {
   version: OwnerTaxStrategyVersion;
   authored: StrategyAuthoredMetadataDisplay;
   supersedes: StrategyLineagePresentation;
   supersededBy: StrategyLineagePresentation;
+  busy: boolean;
+  onOpenDialog: (kind: StrategyEngineDialogKind) => void;
 }) {
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Version</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+        <ActionButton
+          actions={version.allowed_actions}
+          actionKey="update_tax_strategy_version_draft"
+          busy={busy}
+          onClick={() => onOpenDialog('update_tax_strategy_version_draft')}
+        />
+        <ActionButton
+          actions={version.allowed_actions}
+          actionKey="activate_tax_strategy_version"
+          busy={busy}
+          onClick={() => onOpenDialog('activate_tax_strategy_version')}
+        />
+        <ActionButton
+          actions={version.allowed_actions}
+          actionKey="retire_tax_strategy_version"
+          busy={busy}
+          onClick={() => onOpenDialog('retire_tax_strategy_version')}
+        />
+        <ActionButton
+          actions={version.allowed_actions}
+          actionKey="close_tax_strategy_version_effective_to"
+          busy={busy}
+          onClick={() => onOpenDialog('close_tax_strategy_version_effective_to')}
+        />
+        <ActionButton
+          actions={version.allowed_actions}
+          actionKey="supersede_tax_strategy_version"
+          busy={busy}
+          onClick={() => onOpenDialog('supersede_tax_strategy_version')}
+        />
+      </div>
       <StateRow label="title" value={version.title} />
       <StateRow label="version" value={exactPinnedVersionLabel(version.version_no)} />
       <StateRow label="status" value={version.status} />
@@ -723,6 +1270,389 @@ function SelectedVersionDisplay({
           ) : null}
         </div>
       </details>
+    </div>
+  );
+}
+
+function candidateVersionLabel(
+  versionId: string,
+  versionsInAggregate: ReadonlyArray<StrategyVersionLineageRef>,
+): string {
+  const resolved = strategyVersionLineageLabel(versionId, versionsInAggregate);
+  return resolved.kind === 'resolved' ? resolved.label : versionId;
+}
+
+function StrategyVersionHumanFields({
+  form,
+  exclusiveGroups,
+  onChange,
+}: {
+  form: StrategyVersionWriteForm;
+  exclusiveGroups: OwnerTaxStrategyExclusiveGroup[];
+  onChange: (next: StrategyVersionWriteForm) => void;
+}) {
+  return (
+    <div className="nx-form-grid">
+      <label className="nx-field">
+        <span className="nx-field-label">title</span>
+        <input className="nx-input" value={form.title} onChange={(e) => onChange({ ...form, title: e.target.value })} />
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">effective_from</span>
+        <input
+          className="nx-input"
+          type="date"
+          value={form.effective_from}
+          onChange={(e) => onChange({ ...form, effective_from: e.target.value })}
+        />
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">effective_to</span>
+        <input
+          className="nx-input"
+          type="date"
+          value={form.effective_to}
+          onChange={(e) => onChange({ ...form, effective_to: e.target.value })}
+        />
+      </label>
+      <label className="nx-field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input
+          type="checkbox"
+          checked={form.requires_professional_judgment}
+          onChange={(e) => onChange({ ...form, requires_professional_judgment: e.target.checked })}
+        />
+        <span className="nx-field-label" style={{ margin: 0 }}>
+          requires_professional_judgment
+        </span>
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">exclusive_group_id</span>
+        <select
+          className="nx-select"
+          value={form.exclusive_group_id}
+          onChange={(e) => onChange({ ...form, exclusive_group_id: e.target.value })}
+        >
+          <option value="">None</option>
+          {exclusiveGroups.map((group) => (
+            <option key={group.id} value={group.id}>
+              {group.title || group.group_code}
+              {group.group_code ? ` (${group.group_code})` : ''}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">explanation</span>
+        <textarea
+          className="nx-textarea"
+          rows={3}
+          value={form.explanation}
+          onChange={(e) => onChange({ ...form, explanation: e.target.value })}
+        />
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">benefits (one per line)</span>
+        <textarea
+          className="nx-textarea"
+          rows={3}
+          value={form.benefits}
+          onChange={(e) => onChange({ ...form, benefits: e.target.value })}
+        />
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">risks (one per line)</span>
+        <textarea
+          className="nx-textarea"
+          rows={3}
+          value={form.risks}
+          onChange={(e) => onChange({ ...form, risks: e.target.value })}
+        />
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">constraints (one per line)</span>
+        <textarea
+          className="nx-textarea"
+          rows={3}
+          value={form.constraints}
+          onChange={(e) => onChange({ ...form, constraints: e.target.value })}
+        />
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">costs_tradeoffs (one per line)</span>
+        <textarea
+          className="nx-textarea"
+          rows={3}
+          value={form.costs_tradeoffs}
+          onChange={(e) => onChange({ ...form, costs_tradeoffs: e.target.value })}
+        />
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">category</span>
+        <input
+          className="nx-input"
+          value={form.category}
+          onChange={(e) => onChange({ ...form, category: e.target.value })}
+        />
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">domain</span>
+        <input className="nx-input" value={form.domain} onChange={(e) => onChange({ ...form, domain: e.target.value })} />
+      </label>
+      <label className="nx-field">
+        <span className="nx-field-label">tags (one per line)</span>
+        <textarea
+          className="nx-textarea"
+          rows={2}
+          value={form.tags}
+          onChange={(e) => onChange({ ...form, tags: e.target.value })}
+        />
+      </label>
+    </div>
+  );
+}
+
+function StrategyEngineCommandDialog({
+  dialogKind,
+  busy,
+  formError,
+  selectedCountryCode,
+  selectedStrategy,
+  selectedVersion,
+  pendingGroup,
+  exclusiveGroups,
+  identityForm,
+  groupForm,
+  versionForm,
+  retiredReason,
+  closeEffectiveTo,
+  supersedePairs,
+  supersedeCandidateIndex,
+  versionsInAggregate,
+  onIdentityForm,
+  onGroupForm,
+  onVersionForm,
+  onRetiredReason,
+  onCloseEffectiveTo,
+  onSupersedeCandidateIndex,
+  onClose,
+  onSubmit,
+}: {
+  dialogKind: NonNullable<StrategyEngineDialogKind>;
+  busy: boolean;
+  formError: string;
+  selectedCountryCode: string | null;
+  selectedStrategy: OwnerTaxStrategy | null;
+  selectedVersion: OwnerTaxStrategyVersion | null;
+  pendingGroup: OwnerTaxStrategyExclusiveGroup | null;
+  exclusiveGroups: OwnerTaxStrategyExclusiveGroup[];
+  identityForm: { strategy_code: string; admin_label: string; owner_note: string };
+  groupForm: { group_code: string; title: string; owner_note: string };
+  versionForm: StrategyVersionWriteForm;
+  retiredReason: string;
+  closeEffectiveTo: string;
+  supersedePairs: OwnerTaxStrategySupersessionPair[];
+  supersedeCandidateIndex: number;
+  versionsInAggregate: StrategyVersionLineageRef[];
+  onIdentityForm: (next: { strategy_code: string; admin_label: string; owner_note: string }) => void;
+  onGroupForm: (next: { group_code: string; title: string; owner_note: string }) => void;
+  onVersionForm: (next: StrategyVersionWriteForm) => void;
+  onRetiredReason: (next: string) => void;
+  onCloseEffectiveTo: (next: string) => void;
+  onSupersedeCandidateIndex: (next: number) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const confirmKind =
+    dialogKind === 'activate_tax_strategy_version' ||
+    dialogKind === 'retire_tax_strategy_version' ||
+    dialogKind === 'supersede_tax_strategy_version';
+  return (
+    <div
+      className="nx-modal-overlay"
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose();
+      }}
+    >
+      <div
+        className="nx-modal nx-accounting-editor-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={actionLabel(dialogKind)}
+        style={{
+          direction: 'ltr',
+          maxWidth:
+            dialogKind === 'create_tax_strategy_version' || dialogKind === 'update_tax_strategy_version_draft'
+              ? 640
+              : 560,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="nx-modal-header">
+          <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked" style={{ alignItems: 'flex-start' }}>
+            <h2 className="nx-modal-title" style={{ fontSize: 18 }}>
+              {actionLabel(dialogKind)}
+            </h2>
+            <span className="nx-modal-subtitle">
+              {dialogKind}
+              {dialogKind.startsWith('create_')
+                ? ` · country ${selectedCountryCode || '—'}`
+                : selectedStrategy && dialogKind.includes('strategy') && !dialogKind.includes('version')
+                  ? ` · ${selectedStrategy.strategy_code}`
+                  : selectedVersion
+                    ? ` · ${selectedVersion.title} — v${selectedVersion.version_no}`
+                    : pendingGroup
+                      ? ` · ${pendingGroup.group_code}`
+                      : ''}
+            </span>
+          </div>
+          <button type="button" className="nx-modal-close" onClick={onClose} disabled={busy} aria-label="Close">
+            ×
+          </button>
+        </div>
+        <div className="nx-modal-body" style={{ flex: '0 1 auto' }}>
+          {formError ? <p style={{ color: '#b91c1c', fontSize: 13, marginTop: 0 }}>{formError}</p> : null}
+          {dialogKind === 'create_tax_strategy' || dialogKind === 'update_tax_strategy_metadata' ? (
+            <div className="nx-form-grid">
+              {dialogKind === 'create_tax_strategy' ? (
+                <label className="nx-field">
+                  <span className="nx-field-label">strategy_code</span>
+                  <input
+                    className="nx-input"
+                    value={identityForm.strategy_code}
+                    onChange={(e) => onIdentityForm({ ...identityForm, strategy_code: e.target.value })}
+                  />
+                </label>
+              ) : null}
+              <label className="nx-field">
+                <span className="nx-field-label">admin_label</span>
+                <input
+                  className="nx-input"
+                  value={identityForm.admin_label}
+                  onChange={(e) => onIdentityForm({ ...identityForm, admin_label: e.target.value })}
+                />
+              </label>
+              <label className="nx-field">
+                <span className="nx-field-label">owner_note</span>
+                <textarea
+                  className="nx-textarea"
+                  rows={3}
+                  value={identityForm.owner_note}
+                  onChange={(e) => onIdentityForm({ ...identityForm, owner_note: e.target.value })}
+                />
+              </label>
+            </div>
+          ) : null}
+          {dialogKind === 'create_tax_strategy_exclusive_group' ||
+          dialogKind === 'update_tax_strategy_exclusive_group' ? (
+            <div className="nx-form-grid">
+              {dialogKind === 'create_tax_strategy_exclusive_group' ? (
+                <label className="nx-field">
+                  <span className="nx-field-label">group_code</span>
+                  <input
+                    className="nx-input"
+                    value={groupForm.group_code}
+                    onChange={(e) => onGroupForm({ ...groupForm, group_code: e.target.value })}
+                  />
+                </label>
+              ) : null}
+              <label className="nx-field">
+                <span className="nx-field-label">title</span>
+                <input
+                  className="nx-input"
+                  value={groupForm.title}
+                  onChange={(e) => onGroupForm({ ...groupForm, title: e.target.value })}
+                />
+              </label>
+              <label className="nx-field">
+                <span className="nx-field-label">owner_note</span>
+                <textarea
+                  className="nx-textarea"
+                  rows={3}
+                  value={groupForm.owner_note}
+                  onChange={(e) => onGroupForm({ ...groupForm, owner_note: e.target.value })}
+                />
+              </label>
+            </div>
+          ) : null}
+          {dialogKind === 'create_tax_strategy_version' || dialogKind === 'update_tax_strategy_version_draft' ? (
+            <StrategyVersionHumanFields form={versionForm} exclusiveGroups={exclusiveGroups} onChange={onVersionForm} />
+          ) : null}
+          {dialogKind === 'activate_tax_strategy_version' && selectedVersion ? (
+            <p style={{ fontSize: 14, margin: 0 }}>
+              {selectedVersion.title} — v{selectedVersion.version_no}
+            </p>
+          ) : null}
+          {dialogKind === 'retire_tax_strategy_version' ? (
+            <div className="nx-form-grid">
+              <label className="nx-field">
+                <span className="nx-field-label">retired_reason</span>
+                <textarea
+                  className="nx-textarea"
+                  rows={3}
+                  value={retiredReason}
+                  onChange={(e) => onRetiredReason(e.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
+          {dialogKind === 'close_tax_strategy_version_effective_to' ? (
+            <div className="nx-form-grid">
+              <label className="nx-field">
+                <span className="nx-field-label">effective_to</span>
+                <input
+                  className="nx-input"
+                  type="date"
+                  value={closeEffectiveTo}
+                  onChange={(e) => onCloseEffectiveTo(e.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
+          {dialogKind === 'supersede_tax_strategy_version' ? (
+            supersedePairs.length === 1 ? (
+              <p style={{ fontSize: 14, margin: 0 }}>
+                {candidateVersionLabel(supersedePairs[0].old_tax_strategy_version_id, versionsInAggregate)}
+                {' → '}
+                {candidateVersionLabel(supersedePairs[0].new_tax_strategy_version_id, versionsInAggregate)}
+              </p>
+            ) : supersedePairs.length > 1 ? (
+              <div className="nx-form-grid">
+                <label className="nx-field">
+                  <span className="nx-field-label">candidate</span>
+                  <select
+                    className="nx-select"
+                    value={supersedeCandidateIndex < 0 ? '' : String(supersedeCandidateIndex)}
+                    onChange={(e) => onSupersedeCandidateIndex(e.target.value === '' ? -1 : Number(e.target.value))}
+                  >
+                    <option value="">Select pair</option>
+                    {supersedePairs.map((pair, index) => (
+                      <option
+                        key={`${pair.old_tax_strategy_version_id}-${pair.new_tax_strategy_version_id}`}
+                        value={String(index)}
+                      >
+                        {candidateVersionLabel(pair.old_tax_strategy_version_id, versionsInAggregate)}
+                        {' → '}
+                        {candidateVersionLabel(pair.new_tax_strategy_version_id, versionsInAggregate)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : (
+              <p style={{ fontSize: 14, margin: 0 }}>No backend supersession pair is available.</p>
+            )
+          ) : null}
+        </div>
+        <div className="nx-modal-footer nx-tax-nested-modal-footer" style={{ justifyContent: 'center' }}>
+          <button type="button" className="nx-btn nx-btn-secondary nx-btn-taxes-compact" disabled={busy} onClick={onClose}>
+            Close
+          </button>
+          <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" disabled={busy} onClick={onSubmit}>
+            {busy ? '…' : confirmKind ? 'Confirm' : 'Save'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
