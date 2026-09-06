@@ -21,6 +21,8 @@ test('TAX-K4B 5/21: no applicability evaluation and no successor-pin resolver', 
   assert.equal(hasLatestPinResolver(), false);
   for (const file of k4bFiles()) {
     const text = readFileSync(file, 'utf8');
+    assert.doesNotMatch(text, /organization_id/);
+    assert.doesNotMatch(text, /client_id/);
     assert.doesNotMatch(text, /evaluateTaxRules/);
     assert.doesNotMatch(text, /evaluateAppliesIf/);
     assert.doesNotMatch(text, /evaluateTaxRulePredicate/);

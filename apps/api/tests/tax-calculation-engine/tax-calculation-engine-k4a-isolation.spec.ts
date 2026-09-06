@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   evaluateTaxCalculation,
@@ -16,6 +16,18 @@ function sourceFiles(): string[] {
     .map((name) => join(SOURCE_DIR, name));
 }
 
+function isCommandBoundaryValidationFile(file: string): boolean {
+  return basename(file) === 'tax-calculation-engine-calculate.pure.ts';
+}
+
+function assertTenantFieldsAreRejectionOnly(text: string, file: string): void {
+  assert.match(text, /'organization_id'/, `${file} must reject organization_id by literal`);
+  assert.match(text, /'client_id'/, `${file} must reject client_id by literal`);
+  assert.match(text, /does not accept/, `${file} must use command-boundary rejection`);
+  assert.doesNotMatch(text, /organization_id\s*[?:]/, `${file} must not model organization_id`);
+  assert.doesNotMatch(text, /client_id\s*[?:]/, `${file} must not model client_id`);
+}
+
 test('TAX-K4A 22: no latest-version resolver', () => {
   assert.equal(hasLatestVersionResolver(), false);
   mustBlockedMissingLatest();
@@ -24,7 +36,12 @@ test('TAX-K4A 22: no latest-version resolver', () => {
     assert.equal(text.includes('latest_version'), false, file);
     assert.equal(text.includes('resolveLatest'), false, file);
     assert.equal(/latest[-_ ]version/.test(text), false, file);
-    assert.doesNotMatch(text, /organization_id/);
+    if (isCommandBoundaryValidationFile(file)) {
+      assertTenantFieldsAreRejectionOnly(text, file);
+    } else {
+      assert.doesNotMatch(text, /organization_id/, file);
+      assert.doesNotMatch(text, /client_id/, file);
+    }
     assert.doesNotMatch(text, /\beval\s*\(/);
     assert.doesNotMatch(text, /new Function/);
     assert.doesNotMatch(text, /Math\.round/);

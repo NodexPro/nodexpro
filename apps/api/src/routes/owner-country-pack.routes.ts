@@ -34,6 +34,10 @@ import {
   executeTaxRuleEngineCommand,
   isTaxRuleEngineCommand,
 } from '../domains/tax-rule-engine/tax-rule-engine-commands.service.js';
+import {
+  executeTaxCalculationCommand,
+  isTaxCalculationEngineCommand,
+} from '../domains/tax-calculation-engine/tax-calculation-engine-commands.service.js';
 
 const router = Router();
 
@@ -277,6 +281,15 @@ router.post('/command', async (req: Request, res: Response, next: NextFunction) 
 
     if (isTaxRuleEngineCommand(commandName)) {
       const out = await executeTaxRuleEngineCommand(
+        ctx,
+        commandName,
+        payload as Record<string, unknown>,
+      );
+      return res.json(out);
+    }
+
+    if (isTaxCalculationEngineCommand(commandName)) {
+      const out = await executeTaxCalculationCommand(
         ctx,
         commandName,
         payload as Record<string, unknown>,
