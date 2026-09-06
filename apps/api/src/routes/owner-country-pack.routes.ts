@@ -93,6 +93,8 @@ router.get('/legal-control', async (req: Request, res: Response, next: NextFunct
       },
       tax_knowledge_country_code:
         typeof req.query.tax_knowledge_country_code === 'string' ? req.query.tax_knowledge_country_code : undefined,
+      strategy_engine_country_code:
+        typeof req.query.strategy_engine_country_code === 'string' ? req.query.strategy_engine_country_code : undefined,
     });
     return res.json(aggregate);
   } catch (e) {

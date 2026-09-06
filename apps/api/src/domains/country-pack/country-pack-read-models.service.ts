@@ -25,6 +25,7 @@ import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
 import { buildOwnerLegalValuesTableModel } from './owner-legal-values-table.pure.js';
 import { buildOwnerTaxKnowledgeAggregate } from '../tax-knowledge/tax-knowledge-read-models.service.js';
+import { buildOwnerStrategyEngineAggregate } from '../tax-strategy-engine/owner-read/tax-strategy-engine-read-models.service.js';
 type CommercialControlsQuery = {
   page: number;
   page_size: number;
@@ -820,6 +821,11 @@ const OWNER_LEGAL_CONTROL_AUDIT_ENTITY_TYPES = [
   'tax_rule_version_source',
   'tax_rule_version_legal_value',
   'tax_rule_relationship',
+  'tax_strategy',
+  'tax_strategy_exclusive_group',
+  'tax_strategy_version',
+  'tax_strategy_version_rule_pin',
+  'tax_strategy_version_calculation_pin',
 ] as const;
 
 type OwnerLegalControlAuditRow = {
@@ -1343,13 +1349,14 @@ async function fetchOwnerLegalControlPanelAuditSummary(): Promise<{ recent: Owne
 
 /**
  * Single read model for GET /api/v1/owner/legal-control.
- * Composes existing owner aggregates plus the Tax Knowledge slice (no dedicated TK GET).
+ * Composes existing owner aggregates plus Tax Knowledge and Strategy Engine slices (no dedicated GETs).
  */
 export async function buildOwnerLegalControlPanelAggregate(
   ctx: RequestContext,
   opts?: {
     commercial_controls?: Partial<CommercialControlsQuery>;
     tax_knowledge_country_code?: string | null;
+    strategy_engine_country_code?: string | null;
   }
 ): Promise<Record<string, unknown>> {
   assertPlatformOwner(ctx);
@@ -1419,11 +1426,20 @@ export async function buildOwnerLegalControlPanelAggregate(
   const lvWarnings = (legalValues.validation_warnings as string[] | undefined) ?? [];
   const prWarnings = (platformPricing.warnings as string[] | undefined) ?? [];
   const commWarnings = communicationPolicies.validation_errors;
-  const taxKnowledge = await buildOwnerTaxKnowledgeAggregate(ctx, {
-    country_code: opts?.tax_knowledge_country_code ?? null,
-    countries: (tables?.countries as Array<{ code?: string; name?: string; status?: string }> | undefined) ?? [],
-  });
+  const countryRows =
+    (tables?.countries as Array<{ code?: string; name?: string; status?: string }> | undefined) ?? [];
+  const [taxKnowledge, strategyEngine] = await Promise.all([
+    buildOwnerTaxKnowledgeAggregate(ctx, {
+      country_code: opts?.tax_knowledge_country_code ?? null,
+      countries: countryRows,
+    }),
+    buildOwnerStrategyEngineAggregate(ctx, {
+      country_code: opts?.strategy_engine_country_code ?? null,
+      countries: countryRows,
+    }),
+  ]);
   const tkWarnings = (taxKnowledge.warnings as string[] | undefined) ?? [];
+  const strategyWarnings = strategyEngine.warnings ?? [];
 
   return {
     aggregate_key: 'owner_legal_control_panel_aggregate',
@@ -1468,6 +1484,7 @@ export async function buildOwnerLegalControlPanelAggregate(
     docflow_request_templates: docflowRequestTemplates,
     commercial_controls: commercialControls,
     tax_knowledge: taxKnowledge,
+    strategy_engine: strategyEngine,
     docflow_communication_quick_actions: [
       {
         action_key: 'create_legal_value',
@@ -1511,12 +1528,14 @@ export async function buildOwnerLegalControlPanelAggregate(
       communication_policies: commWarnings,
       platform_pricing: prWarnings,
       tax_knowledge: tkWarnings,
-      combined: [...cpWarnings, ...lvWarnings, ...commWarnings, ...prWarnings, ...tkWarnings],
+      strategy_engine: strategyWarnings,
+      combined: [...cpWarnings, ...lvWarnings, ...commWarnings, ...prWarnings, ...tkWarnings, ...strategyWarnings],
     },
     available_actions: {
       country_pack_admin: countryPacksAdmin.actions ?? [],
       legal_values: legalValues.actions ?? [],
       tax_knowledge: taxKnowledge.allowed_actions ?? [],
+      strategy_engine: strategyEngine.allowed_actions ?? [],
       platform_pricing: platformPricing.actions ?? [],
       owner_email_provider_config: [
         {
