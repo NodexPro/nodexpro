@@ -48,6 +48,21 @@ export type OwnerTaxStrategyCalculationPinDto = {
   allowed_actions: OwnerTaxStrategyAllowedAction[];
 };
 
+export type OwnerTaxStrategyCalculationDefinitionVersionCatalogRow = {
+  id: string;
+  tax_calculation_definition_id: string;
+  calculation_code: string;
+  title: string;
+  version_no: number;
+  status: string;
+  effective_from: string;
+  effective_to: string | null;
+};
+
+export type OwnerTaxStrategyPinCatalog = {
+  calculation_definition_versions: OwnerTaxStrategyCalculationDefinitionVersionCatalogRow[];
+};
+
 export type OwnerTaxStrategyVersionDto = {
   id: string;
   tax_strategy_id: string;
@@ -92,6 +107,7 @@ export type OwnerStrategyEngineSlice = {
   exclusive_groups: OwnerTaxStrategyExclusiveGroupDto[];
   strategies: OwnerTaxStrategyDto[];
   strategy_versions: OwnerTaxStrategyVersionDto[];
+  pin_catalog: OwnerTaxStrategyPinCatalog;
   allowed_actions: OwnerTaxStrategyAllowedAction[];
   warnings: string[];
 };
@@ -341,6 +357,26 @@ export function mapRulePin(
   };
 }
 
+export function emptyStrategyPinCatalog(): OwnerTaxStrategyPinCatalog {
+  return { calculation_definition_versions: [] };
+}
+
+export function mapCalculationDefinitionVersionCatalogRow(
+  version: Record<string, unknown>,
+  definition: { calculation_code?: string; title?: string } | undefined,
+): OwnerTaxStrategyCalculationDefinitionVersionCatalogRow {
+  return {
+    id: String(version.id),
+    tax_calculation_definition_id: String(version.tax_calculation_definition_id),
+    calculation_code: definition?.calculation_code == null ? '' : String(definition.calculation_code),
+    title: definition?.title == null ? '' : String(definition.title),
+    version_no: Number(version.version_no),
+    status: String(version.status),
+    effective_from: String(version.effective_from ?? ''),
+    effective_to: asOptionalString(version.effective_to),
+  };
+}
+
 export function mapCalculationPin(
   row: Record<string, unknown>,
   calcVersion: {
@@ -434,6 +470,7 @@ export function assembleStrategyEngineSlice(input: {
   exclusiveGroups: OwnerTaxStrategyExclusiveGroupDto[];
   strategies: OwnerTaxStrategyDto[];
   strategyVersions: OwnerTaxStrategyVersionDto[];
+  pinCatalog?: OwnerTaxStrategyPinCatalog;
   warnings: string[];
 }): OwnerStrategyEngineSlice {
   return {
@@ -442,6 +479,7 @@ export function assembleStrategyEngineSlice(input: {
     exclusive_groups: input.exclusiveGroups,
     strategies: input.strategies,
     strategy_versions: input.strategyVersions,
+    pin_catalog: input.pinCatalog ?? emptyStrategyPinCatalog(),
     allowed_actions: strategyCatalogAllowedActions(),
     warnings: input.warnings,
   };

@@ -322,6 +322,21 @@ export type OwnerTaxStrategyCalculationPin = {
   allowed_actions: OwnerTaxStrategyAllowedAction[];
 };
 
+export type OwnerTaxStrategyCalculationDefinitionVersionCatalogRow = {
+  id: string;
+  tax_calculation_definition_id: string;
+  calculation_code: string;
+  title: string;
+  version_no: number;
+  status: string;
+  effective_from?: string;
+  effective_to?: string | null;
+};
+
+export type OwnerTaxStrategyPinCatalog = {
+  calculation_definition_versions: OwnerTaxStrategyCalculationDefinitionVersionCatalogRow[];
+};
+
 export type OwnerTaxStrategyVersion = {
   id: string;
   tax_strategy_id: string;
@@ -366,6 +381,7 @@ export type OwnerStrategyEngineAggregate = {
   exclusive_groups: OwnerTaxStrategyExclusiveGroup[];
   strategies: OwnerTaxStrategy[];
   strategy_versions: OwnerTaxStrategyVersion[];
+  pin_catalog: OwnerTaxStrategyPinCatalog;
   allowed_actions: OwnerTaxStrategyAllowedAction[];
   warnings: string[];
 };
@@ -377,6 +393,7 @@ export function emptyStrategyEngineAggregate(): OwnerStrategyEngineAggregate {
     exclusive_groups: [],
     strategies: [],
     strategy_versions: [],
+    pin_catalog: { calculation_definition_versions: [] },
     allowed_actions: [],
     warnings: [],
   };

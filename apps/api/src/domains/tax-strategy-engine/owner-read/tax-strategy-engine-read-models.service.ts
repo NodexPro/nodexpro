@@ -4,6 +4,8 @@ import { assertPlatformOwner } from '../../../shared/platform-owner.js';
 import { isSupabaseMissingTableError } from '../../../shared/supabase-errors.js';
 import {
   assembleStrategyEngineSlice,
+  emptyStrategyPinCatalog,
+  mapCalculationDefinitionVersionCatalogRow,
   mapCalculationPin,
   mapExclusiveGroup,
   mapRulePin,
@@ -11,6 +13,7 @@ import {
   mapStrategyVersion,
   pairingRowFromVersion,
   type OwnerStrategyEngineSlice,
+  type OwnerTaxStrategyCalculationDefinitionVersionCatalogRow,
   type OwnerTaxStrategyCalculationPinDto,
   type OwnerTaxStrategyCountryDto,
   type OwnerTaxStrategyExclusiveGroupDto,
@@ -27,6 +30,9 @@ const RULE_PIN_SELECT =
   'id, tax_strategy_version_id, country_code, tax_rule_version_id, pin_role, created_at';
 const CALC_PIN_SELECT =
   'id, tax_strategy_version_id, country_code, calculation_definition_version_id, created_at';
+const CALC_CATALOG_VERSION_SELECT =
+  'id, tax_calculation_definition_id, version_no, status, effective_from, effective_to';
+const CALC_CATALOG_DEFINITION_SELECT = 'id, calculation_code, title';
 
 export type OwnerStrategyEngineAggregateOpts = {
   country_code?: string | null;
@@ -65,6 +71,51 @@ function pushSchemaWarning(warnings: string[]): void {
   }
 }
 
+async function loadCalculationDefinitionVersionCatalog(
+  countryCode: string,
+): Promise<OwnerTaxStrategyCalculationDefinitionVersionCatalogRow[]> {
+  const { data: versions, error: versionError } = await supabaseAdmin
+    .from('tax_calculation_definition_versions')
+    .select(CALC_CATALOG_VERSION_SELECT)
+    .eq('country_code', countryCode)
+    .order('tax_calculation_definition_id', { ascending: true })
+    .order('version_no', { ascending: true });
+  if (versionError && isSupabaseMissingTableError(versionError, 'tax_calculation_definition_versions')) {
+    return [];
+  }
+  if (versionError) throw versionError;
+
+  const definitionIds = [
+    ...new Set((versions ?? []).map((row) => String((row as { tax_calculation_definition_id: string }).tax_calculation_definition_id))),
+  ];
+  const definitionById = new Map<string, { calculation_code: string; title: string }>();
+  if (definitionIds.length) {
+    const { data: definitions, error: definitionError } = await supabaseAdmin
+      .from('tax_calculation_definitions')
+      .select(CALC_CATALOG_DEFINITION_SELECT)
+      .eq('country_code', countryCode)
+      .in('id', definitionIds);
+    if (definitionError && isSupabaseMissingTableError(definitionError, 'tax_calculation_definitions')) {
+      return [];
+    }
+    if (definitionError) throw definitionError;
+    for (const row of definitions ?? []) {
+      definitionById.set(String(row.id), {
+        calculation_code: String(row.calculation_code),
+        title: String(row.title),
+      });
+    }
+  }
+
+  return (versions ?? []).map((raw) => {
+    const row = raw as Record<string, unknown>;
+    return mapCalculationDefinitionVersionCatalogRow(
+      row,
+      definitionById.get(String(row.tax_calculation_definition_id)),
+    );
+  });
+}
+
 /**
  * Country-scoped Strategy Engine slice for owner_legal_control_panel_aggregate.
  * Exact-version pins only. No latest-resolution. No evaluation.
@@ -86,6 +137,7 @@ export async function buildOwnerStrategyEngineAggregate(
       exclusiveGroups: [],
       strategies: [],
       strategyVersions: [],
+      pinCatalog: emptyStrategyPinCatalog(),
       warnings,
     });
   }
@@ -127,6 +179,7 @@ export async function buildOwnerStrategyEngineAggregate(
         exclusiveGroups: [],
         strategies: [],
         strategyVersions: [],
+        pinCatalog: emptyStrategyPinCatalog(),
         warnings,
       });
     }
@@ -279,12 +332,15 @@ export async function buildOwnerStrategyEngineAggregate(
     mapStrategyIdentity(row as Record<string, unknown>, versionsByStrategy.get(String((row as { id: string }).id)) ?? []),
   );
 
+  const calculationDefinitionVersions = await loadCalculationDefinitionVersionCatalog(selectedCountryCode);
+
   return assembleStrategyEngineSlice({
     selectedCountryCode,
     countries,
     exclusiveGroups,
     strategies,
     strategyVersions,
+    pinCatalog: { calculation_definition_versions: calculationDefinitionVersions },
     warnings,
   });
 }

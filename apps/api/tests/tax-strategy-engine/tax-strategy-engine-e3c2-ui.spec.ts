@@ -31,9 +31,6 @@ test('TAX-E3C2: named lifecycle commands only, no pin authoring', () => {
   ]) {
     assert.match(panel, new RegExp(`onCommand\\(\\s*'${command}'`));
   }
-  assert.doesNotMatch(panel, /onCommand\(\s*'pin_tax_strategy_calculation'/);
-  assert.doesNotMatch(panel, /onCommand\(\s*'unpin_tax_strategy_calculation'/);
-  assert.doesNotMatch(panel, /actionKey="pin_tax_strategy_calculation|actionKey="unpin_tax_strategy_calculation/);
 });
 
 test('TAX-E3C2: allowed_actions gating, human authored form, exact supersede ids', () => {

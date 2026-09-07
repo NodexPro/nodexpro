@@ -15,7 +15,7 @@ function readRepo(rel: string): string {
   return readFileSync(join(repoRoot, rel), 'utf8');
 }
 
-test('TAX-E3C3: rule pin/unpin named commands, no calc pin authoring', () => {
+test('TAX-E3C3: rule pin/unpin named commands remain intact', () => {
   const page = readRepo(PAGE);
   const panel = readRepo(PANEL);
 
@@ -24,10 +24,7 @@ test('TAX-E3C3: rule pin/unpin named commands, no calc pin authoring', () => {
   assert.match(panel, /onCommand\(\s*'unpin_tax_strategy_rule'/);
   assert.match(panel, /tax_strategy_version_rule_pin_id/);
   assert.match(panel, /label="Pin rule"/);
-  assert.match(panel, /label="Unpin"/);
-  assert.doesNotMatch(panel, /onCommand\(\s*'pin_tax_strategy_calculation'/);
-  assert.doesNotMatch(panel, /onCommand\(\s*'unpin_tax_strategy_calculation'/);
-  assert.doesNotMatch(panel, /actionKey="pin_tax_strategy_calculation|actionKey="unpin_tax_strategy_calculation/);
+  assert.match(panel, /taxKnowledgeRuleVersionPickerRows\(taxKnowledge\)/);
 });
 
 test('TAX-E3C3: picker from same-GET tax_knowledge, exact versions, no latest/UUID/JSON', () => {
