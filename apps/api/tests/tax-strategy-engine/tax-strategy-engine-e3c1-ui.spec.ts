@@ -57,8 +57,8 @@ test('TAX-E3C1: catalog display remains human-readable with no raw JSON / pin au
   const panel = readRepo(PANEL);
 
   assert.doesNotMatch(panel, /CommandActionModal/);
-  assert.doesNotMatch(panel, /onCommand\('pin_tax_strategy|onCommand\('unpin_tax_strategy/);
-  assert.doesNotMatch(panel, /setDialogKind\('pin_tax_strategy|setDialogKind\('unpin_tax_strategy/);
+  assert.doesNotMatch(panel, /onCommand\(\s*'pin_tax_strategy_calculation'|onCommand\(\s*'unpin_tax_strategy_calculation'/);
+  assert.doesNotMatch(panel, /setDialogKind\('pin_tax_strategy_calculation'|setDialogKind\('unpin_tax_strategy_calculation'/);
   assert.doesNotMatch(panel, /JSON\.stringify/);
   assert.doesNotMatch(panel, /authored_metadata_json<\/textarea>|raw authored/i);
   assert.match(panel, /label="explanation"/);

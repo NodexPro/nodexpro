@@ -11,6 +11,7 @@ import type {
   OwnerTaxStrategyRulePin,
   OwnerTaxStrategySupersessionPair,
   OwnerTaxStrategyVersion,
+  TaxKnowledgeAggregate,
   UnknownRecord,
 } from './owner-legal-control-types';
 import { emptyStrategyEngineAggregate } from './owner-legal-control-types';
@@ -336,7 +337,61 @@ export const E3C2_SURFACED_COMMANDS = [
   'supersede_tax_strategy_version',
 ] as const;
 
-export type StrategyEngineDialogKind = (typeof E3C2_SURFACED_COMMANDS)[number] | null;
+export const E3C3_SURFACED_COMMANDS = ['pin_tax_strategy_rule', 'unpin_tax_strategy_rule'] as const;
+
+export type StrategyEngineDialogKind =
+  | (typeof E3C2_SURFACED_COMMANDS)[number]
+  | (typeof E3C3_SURFACED_COMMANDS)[number]
+  | null;
+
+export type TaxKnowledgeRuleVersionPickerRow = {
+  tax_rule_version_id: string;
+  rule_id: string;
+  rule_code: string;
+  rule_title: string;
+  version_no: number;
+  status: string;
+};
+
+export function taxKnowledgeRuleVersionPickerRows(
+  taxKnowledge: TaxKnowledgeAggregate,
+): TaxKnowledgeRuleVersionPickerRow[] {
+  const rows: TaxKnowledgeRuleVersionPickerRow[] = [];
+  for (const rule of taxKnowledge.rules) {
+    for (const version of rule.versions) {
+      if (!version.id) continue;
+      rows.push({
+        tax_rule_version_id: version.id,
+        rule_id: rule.id,
+        rule_code: rule.rule_code,
+        rule_title: rule.title,
+        version_no: version.version_no,
+        status: version.status,
+      });
+    }
+  }
+  return rows;
+}
+
+export function taxKnowledgeRuleVersionPickerLabel(row: TaxKnowledgeRuleVersionPickerRow): string {
+  return `${row.rule_code} — ${row.rule_title} — v${row.version_no} (${row.status})`;
+}
+
+export function buildPinTaxStrategyRulePayload(
+  taxStrategyVersionId: string,
+  taxRuleVersionId: string,
+  pinRole: 'required' | 'prohibited',
+): UnknownRecord {
+  return {
+    tax_strategy_version_id: taxStrategyVersionId,
+    tax_rule_version_id: taxRuleVersionId,
+    pin_role: pinRole,
+  };
+}
+
+export function buildUnpinTaxStrategyRulePayload(pinId: string): UnknownRecord {
+  return { tax_strategy_version_rule_pin_id: pinId };
+}
 
 export type StrategyVersionWriteForm = {
   title: string;
@@ -543,26 +598,30 @@ function ActionButton({
   actionKey,
   busy,
   onClick,
+  label,
 }: {
   actions: OwnerTaxStrategyAllowedAction[];
-  actionKey: (typeof E3C2_SURFACED_COMMANDS)[number];
+  actionKey: (typeof E3C2_SURFACED_COMMANDS)[number] | (typeof E3C3_SURFACED_COMMANDS)[number];
   busy: boolean;
   onClick: () => void;
+  label?: string;
 }) {
   if (!enabledStrategyAction(actions, actionKey)) return null;
   return (
     <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={onClick}>
-      {actionLabel(actionKey)}
+      {label ?? actionLabel(actionKey)}
     </button>
   );
 }
 
 export function OwnerStrategyEnginePanel({
   strategyEngine,
+  taxKnowledge,
   busy,
   onCommand,
 }: {
   strategyEngine: OwnerStrategyEngineAggregate;
+  taxKnowledge: TaxKnowledgeAggregate;
   busy: boolean;
   onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
 }) {
@@ -577,6 +636,9 @@ export function OwnerStrategyEnginePanel({
   const [retiredReason, setRetiredReason] = useState('');
   const [closeEffectiveTo, setCloseEffectiveTo] = useState('');
   const [supersedeCandidateIndex, setSupersedeCandidateIndex] = useState(-1);
+  const [pendingPinId, setPendingPinId] = useState('');
+  const [pinRuleVersionId, setPinRuleVersionId] = useState('');
+  const [pinRole, setPinRole] = useState('');
 
   const selectedCountryCode = strategyEngine.selected_country_code;
   const schemaNotApplied = schemaUnavailable(strategyEngine.warnings);
@@ -615,6 +677,11 @@ export function OwnerStrategyEnginePanel({
     : { kind: 'empty' as const };
   const pendingGroup =
     strategyEngine.exclusive_groups.find((row) => row.id && row.id === pendingGroupId) ?? null;
+  const pendingPin = selectedVersion?.rule_pins.find((row) => row.id && row.id === pendingPinId) ?? null;
+  const ruleVersionPickerRows = useMemo(
+    () => taxKnowledgeRuleVersionPickerRows(taxKnowledge),
+    [taxKnowledge],
+  );
   const supersedeAction = enabledStrategyAction(
     selectedVersion?.allowed_actions ?? [],
     'supersede_tax_strategy_version',
@@ -661,6 +728,10 @@ export function OwnerStrategyEnginePanel({
         enabledStrategyAction(selectedVersion?.allowed_actions ?? [], 'supersede_tax_strategy_version'),
       );
       setSupersedeCandidateIndex(pairs.length === 1 ? 0 : -1);
+    }
+    if (dialogKind === 'pin_tax_strategy_rule') {
+      setPinRuleVersionId('');
+      setPinRole('');
     }
   }, [dialogKind, selectedStrategy, selectedVersion, pendingGroup]);
 
@@ -800,11 +871,35 @@ export function OwnerStrategyEnginePanel({
           new_tax_strategy_version_id: pair.new_tax_strategy_version_id,
           old_tax_strategy_version_id: pair.old_tax_strategy_version_id,
         });
+      } else if (dialogKind === 'pin_tax_strategy_rule') {
+        if (
+          !enabledStrategyAction(selectedVersion?.allowed_actions ?? [], 'pin_tax_strategy_rule') ||
+          !selectedVersion
+        ) {
+          return;
+        }
+        if (!pinRuleVersionId || (pinRole !== 'required' && pinRole !== 'prohibited')) {
+          setFormError('Rule version and role are required.');
+          return;
+        }
+        await onCommand(
+          'pin_tax_strategy_rule',
+          buildPinTaxStrategyRulePayload(selectedVersion.id, pinRuleVersionId, pinRole),
+        );
+      } else if (dialogKind === 'unpin_tax_strategy_rule') {
+        if (
+          !pendingPin ||
+          !enabledStrategyAction(pendingPin.allowed_actions, 'unpin_tax_strategy_rule')
+        ) {
+          return;
+        }
+        await onCommand('unpin_tax_strategy_rule', buildUnpinTaxStrategyRulePayload(pendingPin.id));
       } else {
         return;
       }
       setDialogKind(null);
       setPendingGroupId('');
+      setPendingPinId('');
     } catch (e) {
       setFormError(e instanceof Error && e.message ? e.message : 'Command failed');
     }
@@ -976,6 +1071,10 @@ export function OwnerStrategyEnginePanel({
               supersededBy={supersededBy}
               busy={busy}
               onOpenDialog={setDialogKind}
+              onOpenUnpin={(pinId) => {
+                setPendingPinId(pinId);
+                setDialogKind('unpin_tax_strategy_rule');
+              }}
             />
           ) : strategyEngine.strategies.length ? (
             <EmptyState title="No strategy selected" description="Select a strategy to display its versions." />
@@ -992,7 +1091,9 @@ export function OwnerStrategyEnginePanel({
           selectedStrategy={selectedStrategy}
           selectedVersion={selectedVersion}
           pendingGroup={pendingGroup}
+          pendingPin={pendingPin}
           exclusiveGroups={strategyEngine.exclusive_groups}
+          ruleVersionPickerRows={ruleVersionPickerRows}
           identityForm={identityForm}
           groupForm={groupForm}
           versionForm={versionForm}
@@ -1001,16 +1102,21 @@ export function OwnerStrategyEnginePanel({
           supersedePairs={supersedePairs}
           supersedeCandidateIndex={supersedeCandidateIndex}
           versionsInAggregate={versionsInAggregate}
+          pinRuleVersionId={pinRuleVersionId}
+          pinRole={pinRole}
           onIdentityForm={setIdentityForm}
           onGroupForm={setGroupForm}
           onVersionForm={setVersionForm}
           onRetiredReason={setRetiredReason}
           onCloseEffectiveTo={setCloseEffectiveTo}
           onSupersedeCandidateIndex={setSupersedeCandidateIndex}
+          onPinRuleVersionId={setPinRuleVersionId}
+          onPinRole={setPinRole}
           onClose={() => {
             if (!busy) {
               setDialogKind(null);
               setPendingGroupId('');
+              setPendingPinId('');
             }
           }}
           onSubmit={() => void submitDialog()}
@@ -1035,6 +1141,7 @@ function SelectedStrategyDisplay({
   supersededBy,
   busy,
   onOpenDialog,
+  onOpenUnpin,
 }: {
   strategy: OwnerTaxStrategy;
   selectedVersion: OwnerTaxStrategyVersion | null;
@@ -1045,6 +1152,7 @@ function SelectedStrategyDisplay({
   supersededBy: StrategyLineagePresentation;
   busy: boolean;
   onOpenDialog: (kind: StrategyEngineDialogKind) => void;
+  onOpenUnpin: (pinId: string) => void;
 }) {
   return (
     <div style={{ padding: 12, border: '1px solid #e5e7eb', borderRadius: 6, background: '#f9fafb' }}>
@@ -1112,6 +1220,7 @@ function SelectedStrategyDisplay({
           supersededBy={supersededBy}
           busy={busy}
           onOpenDialog={onOpenDialog}
+          onOpenUnpin={onOpenUnpin}
         />
       ) : null}
     </div>
@@ -1125,6 +1234,7 @@ function SelectedVersionDisplay({
   supersededBy,
   busy,
   onOpenDialog,
+  onOpenUnpin,
 }: {
   version: OwnerTaxStrategyVersion;
   authored: StrategyAuthoredMetadataDisplay;
@@ -1132,6 +1242,7 @@ function SelectedVersionDisplay({
   supersededBy: StrategyLineagePresentation;
   busy: boolean;
   onOpenDialog: (kind: StrategyEngineDialogKind) => void;
+  onOpenUnpin: (pinId: string) => void;
 }) {
   return (
     <div style={{ marginTop: 16 }}>
@@ -1167,6 +1278,13 @@ function SelectedVersionDisplay({
           busy={busy}
           onClick={() => onOpenDialog('supersede_tax_strategy_version')}
         />
+        <ActionButton
+          actions={version.allowed_actions}
+          actionKey="pin_tax_strategy_rule"
+          busy={busy}
+          label="Pin rule"
+          onClick={() => onOpenDialog('pin_tax_strategy_rule')}
+        />
       </div>
       <StateRow label="title" value={version.title} />
       <StateRow label="version" value={exactPinnedVersionLabel(version.version_no)} />
@@ -1201,6 +1319,7 @@ function SelectedVersionDisplay({
                 <th style={TH_STYLE}>version</th>
                 <th style={TH_STYLE}>pin_role</th>
                 <th style={TH_STYLE}>status</th>
+                <th style={TH_STYLE}></th>
               </tr>
             </thead>
             <tbody>
@@ -1211,6 +1330,15 @@ function SelectedVersionDisplay({
                   <td style={TD_STYLE}>{exactPinnedVersionLabel(pin.version_no) || '—'}</td>
                   <td style={TD_STYLE}>{pin.pin_role || '—'}</td>
                   <td style={TD_STYLE}>{pin.status || '—'}</td>
+                  <td style={TD_STYLE}>
+                    <ActionButton
+                      actions={pin.allowed_actions}
+                      actionKey="unpin_tax_strategy_rule"
+                      busy={busy}
+                      label="Unpin"
+                      onClick={() => pin.id && onOpenUnpin(pin.id)}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1272,6 +1400,39 @@ function SelectedVersionDisplay({
       </details>
     </div>
   );
+}
+
+function groupRuleVersionPickerRows(
+  rows: TaxKnowledgeRuleVersionPickerRow[],
+): Array<{
+  rule_id: string;
+  rule_code: string;
+  rule_title: string;
+  versions: TaxKnowledgeRuleVersionPickerRow[];
+}> {
+  const groups: Array<{
+    rule_id: string;
+    rule_code: string;
+    rule_title: string;
+    versions: TaxKnowledgeRuleVersionPickerRow[];
+  }> = [];
+  const indexByRule = new Map<string, number>();
+  for (const row of rows) {
+    const key = row.rule_id || row.rule_code;
+    let index = indexByRule.get(key);
+    if (index == null) {
+      index = groups.length;
+      indexByRule.set(key, index);
+      groups.push({
+        rule_id: key,
+        rule_code: row.rule_code,
+        rule_title: row.rule_title,
+        versions: [],
+      });
+    }
+    groups[index].versions.push(row);
+  }
+  return groups;
 }
 
 function candidateVersionLabel(
@@ -1419,7 +1580,9 @@ function StrategyEngineCommandDialog({
   selectedStrategy,
   selectedVersion,
   pendingGroup,
+  pendingPin,
   exclusiveGroups,
+  ruleVersionPickerRows,
   identityForm,
   groupForm,
   versionForm,
@@ -1428,12 +1591,16 @@ function StrategyEngineCommandDialog({
   supersedePairs,
   supersedeCandidateIndex,
   versionsInAggregate,
+  pinRuleVersionId,
+  pinRole,
   onIdentityForm,
   onGroupForm,
   onVersionForm,
   onRetiredReason,
   onCloseEffectiveTo,
   onSupersedeCandidateIndex,
+  onPinRuleVersionId,
+  onPinRole,
   onClose,
   onSubmit,
 }: {
@@ -1444,7 +1611,9 @@ function StrategyEngineCommandDialog({
   selectedStrategy: OwnerTaxStrategy | null;
   selectedVersion: OwnerTaxStrategyVersion | null;
   pendingGroup: OwnerTaxStrategyExclusiveGroup | null;
+  pendingPin: OwnerTaxStrategyRulePin | null;
   exclusiveGroups: OwnerTaxStrategyExclusiveGroup[];
+  ruleVersionPickerRows: TaxKnowledgeRuleVersionPickerRow[];
   identityForm: { strategy_code: string; admin_label: string; owner_note: string };
   groupForm: { group_code: string; title: string; owner_note: string };
   versionForm: StrategyVersionWriteForm;
@@ -1453,19 +1622,25 @@ function StrategyEngineCommandDialog({
   supersedePairs: OwnerTaxStrategySupersessionPair[];
   supersedeCandidateIndex: number;
   versionsInAggregate: StrategyVersionLineageRef[];
+  pinRuleVersionId: string;
+  pinRole: string;
   onIdentityForm: (next: { strategy_code: string; admin_label: string; owner_note: string }) => void;
   onGroupForm: (next: { group_code: string; title: string; owner_note: string }) => void;
   onVersionForm: (next: StrategyVersionWriteForm) => void;
   onRetiredReason: (next: string) => void;
   onCloseEffectiveTo: (next: string) => void;
   onSupersedeCandidateIndex: (next: number) => void;
+  onPinRuleVersionId: (next: string) => void;
+  onPinRole: (next: string) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
   const confirmKind =
     dialogKind === 'activate_tax_strategy_version' ||
     dialogKind === 'retire_tax_strategy_version' ||
-    dialogKind === 'supersede_tax_strategy_version';
+    dialogKind === 'supersede_tax_strategy_version' ||
+    dialogKind === 'unpin_tax_strategy_rule';
+  const pickerGroups = groupRuleVersionPickerRows(ruleVersionPickerRows);
   return (
     <div
       className="nx-modal-overlay"
@@ -1642,6 +1817,52 @@ function StrategyEngineCommandDialog({
             ) : (
               <p style={{ fontSize: 14, margin: 0 }}>No backend supersession pair is available.</p>
             )
+          ) : null}
+          {dialogKind === 'pin_tax_strategy_rule' ? (
+            ruleVersionPickerRows.length ? (
+              <div className="nx-form-grid">
+                <label className="nx-field">
+                  <span className="nx-field-label">Rule version</span>
+                  <select
+                    className="nx-select"
+                    value={pinRuleVersionId}
+                    onChange={(e) => onPinRuleVersionId(e.target.value)}
+                  >
+                    <option value="">Select rule version</option>
+                    {pickerGroups.map((group) => (
+                      <optgroup key={group.rule_id || group.rule_code} label={`${group.rule_code} — ${group.rule_title}`}>
+                        {group.versions.map((row) => (
+                          <option key={row.tax_rule_version_id} value={row.tax_rule_version_id}>
+                            {taxKnowledgeRuleVersionPickerLabel(row)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
+                <label className="nx-field">
+                  <span className="nx-field-label">Role</span>
+                  <select className="nx-select" value={pinRole} onChange={(e) => onPinRole(e.target.value)}>
+                    <option value="">Select role</option>
+                    <option value="required">Required</option>
+                    <option value="prohibited">Prohibited</option>
+                  </select>
+                </label>
+              </div>
+            ) : (
+              <EmptyState
+                title="No tax rule versions"
+                description="No tax rule versions are available for this country."
+              />
+            )
+          ) : null}
+          {dialogKind === 'unpin_tax_strategy_rule' && pendingPin ? (
+            <p style={{ fontSize: 14, margin: 0 }}>
+              {pendingPin.rule_title || pendingPin.rule_code || 'Rule pin'}
+              {pendingPin.rule_code ? ` · ${pendingPin.rule_code}` : ''}
+              {exactPinnedVersionLabel(pendingPin.version_no) ? ` · ${exactPinnedVersionLabel(pendingPin.version_no)}` : ''}
+              {pendingPin.pin_role ? ` · ${pendingPin.pin_role}` : ''}
+            </p>
           ) : null}
         </div>
         <div className="nx-modal-footer nx-tax-nested-modal-footer" style={{ justifyContent: 'center' }}>

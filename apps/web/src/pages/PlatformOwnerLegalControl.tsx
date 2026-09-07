@@ -1088,6 +1088,7 @@ export function PlatformOwnerLegalControl() {
 
       <OwnerStrategyEnginePanel
         strategyEngine={strategyEngine}
+        taxKnowledge={taxKnowledge}
         busy={commandBusy}
         onCommand={async (command, payload) => {
           await sendOwnerCommand(command, payload);
