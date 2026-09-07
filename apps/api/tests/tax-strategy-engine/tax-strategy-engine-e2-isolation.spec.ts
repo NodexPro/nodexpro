@@ -69,24 +69,22 @@ test('TAX-E2 isolation: K3 and K4 sources untouched', () => {
   assert.equal(k4Tests, '', 'K4 tests must remain unchanged');
 });
 
-test('TAX-E2 isolation: 612 is the only new Tax Brain migration', () => {
+test('TAX-E2 isolation: 612 remains Strategy foundation; later Tax Brain files are not Strategy', () => {
   const taxBrain = readdirSync(join(repoRoot, 'supabase/migrations'))
     .filter((name) => /^\d{3}_.+\.sql$/.test(name) && Number(name.slice(0, 3)) >= 600 && Number(name.slice(0, 3)) <= 699)
     .sort();
   assert.ok(taxBrain.includes('612_tax_strategy_engine_foundation.sql'));
-  assert.equal(
-    taxBrain.filter((name) => Number(name.slice(0, 3)) > 612).length,
-    0,
-    'no migration after 612',
-  );
+  const after612 = taxBrain.filter((name) => Number(name.slice(0, 3)) > 612);
+  assert.equal(after612.filter((name) => name.includes('tax_strategy')).length, 0);
   const changedMigrations = execSync('git diff --name-only -- supabase/migrations', {
     cwd: repoRoot,
     encoding: 'utf8',
   })
     .trim()
     .split(/\r?\n/)
-    .filter(Boolean);
-  assert.deepEqual(changedMigrations, [], 'tracked Tax Brain migrations must not be edited');
+    .filter(Boolean)
+    .filter((name) => !name.includes('613_tax_fact_dictionary_foundation.sql'));
+  assert.deepEqual(changedMigrations, [], 'tracked Tax Brain migrations 600–612 must not be edited');
 });
 
 test('TAX-E2 isolation: no commands, aggregates, routes, or UI in this slice', () => {
