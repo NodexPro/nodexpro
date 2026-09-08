@@ -26,6 +26,8 @@ import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request
 import { buildOwnerLegalValuesTableModel } from './owner-legal-values-table.pure.js';
 import { buildOwnerTaxKnowledgeAggregate } from '../tax-knowledge/tax-knowledge-read-models.service.js';
 import { buildOwnerStrategyEngineAggregate } from '../tax-strategy-engine/owner-read/tax-strategy-engine-read-models.service.js';
+import { buildOwnerFactDictionaryAggregate } from '../tax-fact-dictionary/tax-fact-dictionary-read-models.service.js';
+import { resolveOwnerLegalControlSelectedCountry } from './owner-legal-control-country.pure.js';
 type CommercialControlsQuery = {
   page: number;
   page_size: number;
@@ -826,6 +828,10 @@ const OWNER_LEGAL_CONTROL_AUDIT_ENTITY_TYPES = [
   'tax_strategy_version',
   'tax_strategy_version_rule_pin',
   'tax_strategy_version_calculation_pin',
+  'tax_fact_definition',
+  'tax_fact_definition_version',
+  'tax_fact_enum_option',
+  'tax_fact_presentation',
 ] as const;
 
 type OwnerLegalControlAuditRow = {
@@ -1428,18 +1434,27 @@ export async function buildOwnerLegalControlPanelAggregate(
   const commWarnings = communicationPolicies.validation_errors;
   const countryRows =
     (tables?.countries as Array<{ code?: string; name?: string; status?: string }> | undefined) ?? [];
-  const [taxKnowledge, strategyEngine] = await Promise.all([
+  const selectedCountryCode = resolveOwnerLegalControlSelectedCountry({
+    tax_knowledge_country_code: opts?.tax_knowledge_country_code,
+    strategy_engine_country_code: opts?.strategy_engine_country_code,
+  });
+  const [taxKnowledge, strategyEngine, factDictionary] = await Promise.all([
     buildOwnerTaxKnowledgeAggregate(ctx, {
-      country_code: opts?.tax_knowledge_country_code ?? null,
+      country_code: selectedCountryCode,
       countries: countryRows,
     }),
     buildOwnerStrategyEngineAggregate(ctx, {
-      country_code: opts?.strategy_engine_country_code ?? null,
+      country_code: selectedCountryCode,
+      countries: countryRows,
+    }),
+    buildOwnerFactDictionaryAggregate(ctx, {
+      country_code: selectedCountryCode,
       countries: countryRows,
     }),
   ]);
   const tkWarnings = (taxKnowledge.warnings as string[] | undefined) ?? [];
   const strategyWarnings = strategyEngine.warnings ?? [];
+  const factDictionaryWarnings = factDictionary.warnings ?? [];
 
   return {
     aggregate_key: 'owner_legal_control_panel_aggregate',
@@ -1485,6 +1500,7 @@ export async function buildOwnerLegalControlPanelAggregate(
     commercial_controls: commercialControls,
     tax_knowledge: taxKnowledge,
     strategy_engine: strategyEngine,
+    fact_dictionary: factDictionary,
     docflow_communication_quick_actions: [
       {
         action_key: 'create_legal_value',
@@ -1529,13 +1545,23 @@ export async function buildOwnerLegalControlPanelAggregate(
       platform_pricing: prWarnings,
       tax_knowledge: tkWarnings,
       strategy_engine: strategyWarnings,
-      combined: [...cpWarnings, ...lvWarnings, ...commWarnings, ...prWarnings, ...tkWarnings, ...strategyWarnings],
+      fact_dictionary: factDictionaryWarnings,
+      combined: [
+        ...cpWarnings,
+        ...lvWarnings,
+        ...commWarnings,
+        ...prWarnings,
+        ...tkWarnings,
+        ...strategyWarnings,
+        ...factDictionaryWarnings,
+      ],
     },
     available_actions: {
       country_pack_admin: countryPacksAdmin.actions ?? [],
       legal_values: legalValues.actions ?? [],
       tax_knowledge: taxKnowledge.allowed_actions ?? [],
       strategy_engine: strategyEngine.allowed_actions ?? [],
+      fact_dictionary: factDictionary.allowed_actions ?? [],
       platform_pricing: platformPricing.actions ?? [],
       owner_email_provider_config: [
         {

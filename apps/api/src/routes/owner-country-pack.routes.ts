@@ -42,6 +42,10 @@ import {
   executeTaxStrategyEngineCommand,
   isTaxStrategyEngineCommand,
 } from '../domains/tax-strategy-engine/owner-write/tax-strategy-engine-commands.service.js';
+import {
+  executeTaxFactDictionaryCommand,
+  isTaxFactDictionaryCommand,
+} from '../domains/tax-fact-dictionary/tax-fact-dictionary-commands.service.js';
 
 const router = Router();
 
@@ -305,6 +309,15 @@ router.post('/command', async (req: Request, res: Response, next: NextFunction) 
 
     if (isTaxStrategyEngineCommand(commandName)) {
       const out = await executeTaxStrategyEngineCommand(
+        ctx,
+        commandName,
+        payload as Record<string, unknown>,
+      );
+      return res.json(out);
+    }
+
+    if (isTaxFactDictionaryCommand(commandName)) {
+      const out = await executeTaxFactDictionaryCommand(
         ctx,
         commandName,
         payload as Record<string, unknown>,

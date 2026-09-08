@@ -188,6 +188,7 @@ async function refreshedOwnerLegalControlPanel(
     aggregate_key: 'owner_legal_control_panel_aggregate',
     aggregate: await buildOwnerLegalControlPanelAggregate(ctx, {
       tax_knowledge_country_code: countryCode,
+      strategy_engine_country_code: countryCode,
     }),
   };
 }
