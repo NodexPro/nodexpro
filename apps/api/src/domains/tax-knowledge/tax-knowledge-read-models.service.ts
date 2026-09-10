@@ -547,7 +547,7 @@ export async function buildOwnerTaxKnowledgeAggregate(
         .eq('country_code', selectedCountryCode)
         .order('created_at', { ascending: true });
       if (retry.error) throw relationshipResult.error;
-      relationshipRows = retry.data;
+      relationshipRows = (retry.data ?? []).map((row) => ({ ...row, activation_critical: null }));
     } else if (relationshipResult.error) {
       throw relationshipResult.error;
     }

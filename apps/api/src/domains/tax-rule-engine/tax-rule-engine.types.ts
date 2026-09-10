@@ -319,7 +319,7 @@ export function parseTaxRuleEngineFacts(value: unknown): TaxRuleEngineFacts {
       facts[key] = raw as string | boolean;
       continue;
     }
-    if (t === 'number') {
+    if (typeof raw === 'number') {
       if (!Number.isFinite(raw)) {
         throw badRequest(`facts.${key} must be a finite number`);
       }

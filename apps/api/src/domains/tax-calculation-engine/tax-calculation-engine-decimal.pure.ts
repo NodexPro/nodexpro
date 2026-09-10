@@ -1,4 +1,4 @@
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 import {
   TAX_CALCULATION_ENGINE_MAX_ROUNDING_SCALE,
   type TaxCalcRounding,
@@ -18,7 +18,7 @@ export type TaxDecimalInstance = InstanceType<typeof TaxDecimal>;
 const DECIMAL_RE = /^-?(0|[1-9]\d*)(\.\d+)?$/;
 const INTEGER_RE = /^-?(0|[1-9]\d*)$/;
 
-const ROUNDING_MODE_MAP: Record<TaxCalcRoundingMode, number> = {
+const ROUNDING_MODE_MAP: Record<TaxCalcRoundingMode, Decimal.Rounding> = {
   half_up: Decimal.ROUND_HALF_UP,
   half_even: Decimal.ROUND_HALF_EVEN,
   floor: Decimal.ROUND_FLOOR,

@@ -322,8 +322,8 @@ async function persistDraftChecksum(versionId: string): Promise<string> {
 }
 
 function validateSemanticDraft(input: {
-  value_type: string;
-  unit_code: string | null;
+  value_type: unknown;
+  unit_code: unknown;
   currency_policy: unknown;
   validation_json: unknown;
 }): {
@@ -749,8 +749,19 @@ async function handleRemoveEnumOption(
   };
 }
 
-function presentationPatch(payload: Record<string, unknown>, required: boolean): Record<string, unknown> {
-  const patch: Record<string, unknown> = {};
+type TaxFactPresentationPatch = {
+  country_code?: string | null;
+  locale?: string;
+  label?: string;
+  professional_question?: string;
+  client_question?: string | null;
+  help_text?: string | null;
+  aliases?: string[];
+  enum_option_labels?: Record<string, string>;
+};
+
+function presentationPatch(payload: Record<string, unknown>, required: boolean): TaxFactPresentationPatch {
+  const patch: TaxFactPresentationPatch = {};
   if (required || 'country_code' in payload) {
     const country = asOptionalCountryCode(payload.country_code);
     if (country) {

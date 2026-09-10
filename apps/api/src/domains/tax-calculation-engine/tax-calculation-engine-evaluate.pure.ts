@@ -147,7 +147,9 @@ function decimalOf(value: TaxCalcTypedValue, field: string): TaxDecimalInstance 
 }
 
 function sameFamily(left: TaxCalcTypedValue, right: TaxCalcTypedValue): boolean {
-  return left.type === right.type && (left.type !== 'money' || left.currency === right.currency);
+  return left.type === 'money' && right.type === 'money'
+    ? left.currency === right.currency
+    : left.type === right.type;
 }
 
 function currencyOf(value: TaxCalcTypedValue): string | undefined {

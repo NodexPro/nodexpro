@@ -313,6 +313,7 @@ function evaluateBetween(
   if (kind === 'mismatch' || inferredCompareKind(actual, bounds.to, declared) === 'mismatch') {
     return resultTypeMismatch();
   }
+  if (actual === null) return resultTypeMismatch();
   return actual >= bounds.from && actual <= bounds.to ? resultTrue() : resultFalse();
 }
 
@@ -374,10 +375,16 @@ function evaluateLeaf(node: Record<string, unknown>, facts: TaxRuleEngineFacts):
   }
 
   const expected = node.value;
-  if (INEQUALITY_OPS.has(op)) {
+  if (op === 'gt' || op === 'gte' || op === 'lt' || op === 'lte') {
     const kind = inferredCompareKind(actual, expected, declared);
     if (kind === 'mismatch') return resultTypeMismatch();
-    return compareOrdered(actual as string | number, expected as string | number, op) ? resultTrue() : resultFalse();
+    if (actual === null || (typeof actual !== 'number' && typeof actual !== 'string')) {
+      return resultTypeMismatch();
+    }
+    if (typeof expected !== 'number' && typeof expected !== 'string') {
+      return resultTypeMismatch();
+    }
+    return compareOrdered(actual, expected, op) ? resultTrue() : resultFalse();
   }
 
   if (actual !== null && expected !== null && jsonTypeOf(actual) !== jsonTypeOf(expected as TaxRuleEngineFactValue)) {

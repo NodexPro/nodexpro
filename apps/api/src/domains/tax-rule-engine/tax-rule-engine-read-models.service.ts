@@ -120,7 +120,7 @@ export async function buildTaxRuleEngineEvaluationAggregate(
       .eq('country_code', input.country_code)
       .eq('status', 'active');
     if (retry.error) throw retry.error;
-    relationshipRows = retry.data;
+    relationshipRows = (retry.data ?? []).map((row) => ({ ...row, activation_critical: null }));
   }
   if (unresolvedResult.error && !isExpectedPreK3cSchemaAbsence(unresolvedResult.error, 'undefined_table')) {
     throw unresolvedResult.error;
