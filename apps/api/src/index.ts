@@ -31,6 +31,7 @@ import { docflowRoutes } from './routes/docflow.routes.js';
 import { workEngineRoutes } from './domains/work-engine/work-engine.routes.js';
 import { incomeRoutes } from './domains/income/income.routes.js';
 import { accountingBaseRoutes } from './domains/accounting-base/accounting-base.routes.js';
+import { taxAdvisoryRoutes } from './domains/tax-advisory/tax-advisory.routes.js';
 import {
   logNodexproApiBoot,
   resolveApiDeployMarker,
@@ -175,6 +176,7 @@ app.use('/api/v1/docflow', docflowRoutes);
 app.use('/api/v1/work-engine', workEngineRoutes);
 app.use('/api/v1/income', incomeRoutes);
 app.use('/api/v1/accounting-base', accountingBaseRoutes);
+app.use('/api/v1/tax-advisory', taxAdvisoryRoutes);
 
 app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const correlation_id = getRequestCorrelationId(req);

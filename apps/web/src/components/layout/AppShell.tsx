@@ -5,6 +5,13 @@ import { useI18n } from '../../i18n/I18nProvider';
 import { TemplateLayout } from '../../templates/template-1/TemplateLayout';
 import { ReminderToasts } from '../ReminderToasts';
 import { DocflowFloatingWidget } from '../DocflowFloatingWidget';
+import {
+  BUSINESS_SETUP_BASE_PATH,
+  TAX_ADVISORY_MODULE_CODE,
+  inferTaxAdvisoryModuleCodeFromPath,
+  rewriteLegacyTaxAdvisoryPath,
+} from '../../modules/business-setup-routes';
+
 /** Modules catalog is visible when user can manage billing/modules. Must not depend on enabledModules/trial/purchased. */
 function canSeeModulesCatalog(permissions: string[]): boolean {
   return permissions.includes('modules:read') || permissions.includes('subscriptions:read');
@@ -48,13 +55,16 @@ export function AppShell() {
   }
 
   const fromLegacyNav =
-    me.navItems?.filter((n) => n.path.startsWith('/m/')).map((n) => ({ path: n.path, label: n.label, moduleCode: inferModuleCodeFromPath(n.path) })) ?? [];
+    me.navItems?.filter((n) => n.path.startsWith('/m/')).map((n) => {
+      const path = rewriteLegacyTaxAdvisoryPath(n.path) ?? n.path;
+      return { path, label: n.label, moduleCode: inferModuleCodeFromPath(path) };
+    }) ?? [];
   const fromEnabledFallback = buildModuleSubnavFromEnabled(me.enabledModules);
-  const fromBackendModuleNav = (me.moduleAppNavItems ?? []).map((n) => ({
-    path: n.path,
-    label: n.label,
-    moduleCode: inferModuleCodeFromPath(n.path),
-  }));
+  const fromBackendModuleNav = (me.moduleAppNavItems ?? []).map((n) => {
+    const path = rewriteLegacyTaxAdvisoryPath(n.path) ?? n.path;
+    const label = inferTaxAdvisoryModuleCodeFromPath(path) ? 'Business Setup' : n.label;
+    return { path, label, moduleCode: inferModuleCodeFromPath(path) };
+  });
   const enabledModulesSet = new Set((me.enabledModules ?? []).map((m) => m.toLowerCase()));
   const moduleChildrenRaw = mergeModuleSubnavItems(
     fromBackendModuleNav.length ? fromBackendModuleNav : fromLegacyNav,
@@ -114,6 +124,7 @@ export function AppShell() {
 function buildModuleSubnavFromEnabled(enabled: string[]): { path: string; label: string; moduleCode: string }[] {
   const map: Record<string, { path: string; label: string; moduleCode: string }> = {
     'client-operations': { path: '/m/client-operations', label: 'Nodex לקוחות', moduleCode: 'client-operations' },
+    'tax-advisory': { path: BUSINESS_SETUP_BASE_PATH, label: 'Business Setup', moduleCode: TAX_ADVISORY_MODULE_CODE },
     docflow: { path: '/m/docflow/invites', label: 'DocFlow Chat', moduleCode: 'docflow' },
     invoice: { path: '/m/income', label: 'הכנסות', moduleCode: 'invoice' },
   };
@@ -125,6 +136,7 @@ function buildModuleSubnavFromEnabled(enabled: string[]): { path: string; label:
 function inferModuleCodeFromPath(path: string): string | null {
   if (path.startsWith('/m/core')) return 'core';
   if (path.startsWith('/m/client-operations')) return 'client-operations';
+  if (inferTaxAdvisoryModuleCodeFromPath(path)) return TAX_ADVISORY_MODULE_CODE;
   if (path.startsWith('/m/docflow')) return 'docflow';
   if (path.startsWith('/m/income')) return 'invoice';
   return null;

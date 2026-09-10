@@ -5,6 +5,8 @@ import { AppSidebar } from './components/AppSidebar';
 import type { SidebarAccountBlockModel } from '../../types/session';
 import type { UiLanguageCode } from '../../types/session';
 
+import { isTaxAdvisoryModulePath } from '../../modules/business-setup-routes';
+
 import './tokens.css';
 
 export type Template1SidebarItem = { to: string; label: string; children?: { to: string; label: string }[] };
@@ -34,16 +36,17 @@ export function TemplateLayout({
 }) {
   const location = useLocation();
   const isClientOperationsModule = location.pathname.startsWith('/m/client-operations');
+  const isTaxAdvisoryModule = isTaxAdvisoryModulePath(location.pathname);
   const isIncomeModule = location.pathname.startsWith('/m/income');
   const isWorkEngineSection = location.pathname.startsWith('/work-engine/');
   const isWorkEngineQueuePage = location.pathname === '/work-engine/queue';
-  const pageMaxWidth = isClientOperationsModule || isIncomeModule || isWorkEngineSection ? 1600 : 1100;
+  const pageMaxWidth = isClientOperationsModule || isTaxAdvisoryModule || isIncomeModule || isWorkEngineSection ? 1600 : 1100;
 
   return (
     <div className="t1-appShell" style={{ display: 'flex', minHeight: '100vh' }}>
       <AppSidebar
         items={sidebarItems}
-        mode={isClientOperationsModule || isIncomeModule || isWorkEngineSection ? 'collapsedHover' : 'default'}
+        mode={isClientOperationsModule || isTaxAdvisoryModule || isIncomeModule || isWorkEngineSection ? 'collapsedHover' : 'default'}
         accountBlock={sidebarAccountBlock}
         accountBusy={accountBusy}
         onSelectOrganization={onSelectOrg}

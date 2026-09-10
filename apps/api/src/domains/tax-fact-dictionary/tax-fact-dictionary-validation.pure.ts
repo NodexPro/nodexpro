@@ -194,3 +194,111 @@ export function assertEnumOptionLabels(value: unknown): Record<string, string> {
   }
   return out;
 }
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_CURRENCY = /^[A-Z]{3}$/;
+
+export type TaxFactAnswerValueContext = {
+  value_type: TaxFactValueType;
+  enum_codes?: readonly string[];
+  currency_policy?: TaxFactCurrencyPolicy | null;
+};
+
+function rejectEmptyString(value: unknown): void {
+  if (value === '') {
+    throw badRequest('empty string is not a valid fact answer', 'EMPTY_STRING_REJECTED');
+  }
+}
+
+/**
+ * Canonical typed tenant answer for a Fact Dictionary version.
+ * Rejects JSON null, empty string, and implicit coercion. Preserves false and 0.
+ */
+export function assertTaxFactAnswerValue(value: unknown, ctx: TaxFactAnswerValueContext): unknown {
+  if (value === undefined) {
+    throw badRequest('value is required', 'FACT_VALUE_INVALID');
+  }
+  if (value === null) {
+    throw badRequest('null is not a valid fact answer', 'NULL_ANSWER_REJECTED');
+  }
+  rejectEmptyString(value);
+
+  switch (ctx.value_type) {
+    case 'boolean': {
+      if (typeof value !== 'boolean') {
+        throw badRequest('boolean facts require true or false', 'FACT_TYPE_MISMATCH');
+      }
+      return value;
+    }
+    case 'integer': {
+      if (typeof value !== 'number' || !Number.isInteger(value) || !Number.isFinite(value)) {
+        throw badRequest('integer facts require a finite integer', 'FACT_TYPE_MISMATCH');
+      }
+      return value;
+    }
+    case 'decimal':
+    case 'percentage': {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw badRequest(`${ctx.value_type} facts require a finite number`, 'FACT_TYPE_MISMATCH');
+      }
+      return value;
+    }
+    case 'date': {
+      if (typeof value !== 'string' || !ISO_DATE.test(value)) {
+        throw badRequest('date facts require YYYY-MM-DD', 'FACT_TYPE_MISMATCH');
+      }
+      return value;
+    }
+    case 'string': {
+      if (typeof value !== 'string') {
+        throw badRequest('string facts require a string', 'FACT_TYPE_MISMATCH');
+      }
+      if (value === '') {
+        throw badRequest('empty string is not a valid fact answer', 'EMPTY_STRING_REJECTED');
+      }
+      return value;
+    }
+    case 'enum': {
+      if (typeof value !== 'string') {
+        throw badRequest('enum facts require an option code', 'FACT_TYPE_MISMATCH');
+      }
+      if (value === '') {
+        throw badRequest('empty string is not a valid fact answer', 'EMPTY_STRING_REJECTED');
+      }
+      const codes = ctx.enum_codes ?? [];
+      if (!codes.includes(value)) {
+        throw badRequest('enum value is not an allowed option', 'FACT_TYPE_MISMATCH');
+      }
+      return value;
+    }
+    case 'money': {
+      if (!isPlainJsonObject(value)) {
+        throw badRequest('money facts require { amount, currency? }', 'FACT_TYPE_MISMATCH');
+      }
+      if (typeof value.amount !== 'number' || !Number.isFinite(value.amount)) {
+        throw badRequest('money.amount must be a finite number', 'FACT_TYPE_MISMATCH');
+      }
+      const policy = ctx.currency_policy;
+      const currencyRaw = value.currency;
+      if (policy?.required) {
+        if (typeof currencyRaw !== 'string' || !ISO_CURRENCY.test(currencyRaw)) {
+          throw badRequest('money.currency is required as ISO-4217', 'FACT_TYPE_MISMATCH');
+        }
+      } else if (currencyRaw !== undefined && currencyRaw !== null) {
+        if (typeof currencyRaw !== 'string' || !ISO_CURRENCY.test(currencyRaw)) {
+          throw badRequest('money.currency must be ISO-4217 when present', 'FACT_TYPE_MISMATCH');
+        }
+      }
+      if (typeof currencyRaw === 'string' && policy?.allowed_currencies?.length) {
+        if (!policy.allowed_currencies.includes(currencyRaw)) {
+          throw badRequest('money.currency is not allowed by the fact definition', 'FACT_TYPE_MISMATCH');
+        }
+      }
+      const out: Record<string, unknown> = { amount: value.amount };
+      if (typeof currencyRaw === 'string') out.currency = currencyRaw;
+      return out;
+    }
+    default:
+      throw badRequest('unsupported value_type', 'FACT_TYPE_MISMATCH');
+  }
+}

@@ -18,6 +18,9 @@ import { Billing } from './pages/Billing';
 import { ExampleModulePage } from './pages/ExampleModulePage';
 import { ClientOperationsRegistry } from './pages/ClientOperationsRegistry';
 import { ClientOperationsClientCase } from './pages/ClientOperationsClientCase';
+import { TaxAdvisoryClientPage } from './pages/TaxAdvisoryClientPage';
+import { BusinessSetupHomePage } from './pages/BusinessSetupHomePage';
+import { LegacyTaxAdvisoryRedirect } from './pages/LegacyTaxAdvisoryRedirect';
 import { Clients } from './pages/Clients';
 import { ClientCard } from './pages/ClientCard';
 import { Documents } from './pages/Documents';
@@ -146,6 +149,9 @@ function AppRoutes() {
         <Route path="m/income" element={<IncomeWorkspacePage />} />
         <Route path="m/client-operations" element={<ClientOperationsRegistry />} />
         <Route path="m/client-operations/clients/:clientId" element={<ClientOperationsClientCase />} />
+        <Route path="m/business-setup" element={<BusinessSetupHomePage />} />
+        <Route path="m/business-setup/clients/:clientId" element={<TaxAdvisoryClientPage />} />
+        <Route path="m/tax-advisory/*" element={<LegacyTaxAdvisoryRedirect />} />
         <Route path="work-engine/queue" element={<WorkEngineQueue />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { businessSetupClientPath } from '../modules/business-setup-routes';
 import { ApiError, apiJson } from '../api/client';
 import { docflowClientTabAggregate, moduleClientOperationsUpdateClientProfile } from '../api/endpoints';
 import logoSrc from '../templates/template-1/assets/nodexpro-logo.png';
@@ -873,6 +875,15 @@ export function ClientWorkspacePanel({
         )}
       </div>
       <div className="nx-workspace-header-divider" />
+
+      <div style={{ padding: '8px 16px 0', display: 'flex', justifyContent: 'flex-end' }}>
+        <Link
+          to={businessSetupClientPath(localWorkspace.client.id)}
+          className="nx-btn nx-btn-taxes-compact"
+        >
+          Business Setup
+        </Link>
+      </div>
 
       <div className="nx-workspace-tabs-bar" role="tablist" aria-label="Workspace tabs">
         {tabs.map((t) => (

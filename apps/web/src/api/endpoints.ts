@@ -112,6 +112,9 @@ export function moduleClientOperationsCase(
 }
 export const moduleClientOperationsUpdateClientProfile = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/profile/commands/update_profile`;
+
+export const taxAdvisoryClientWorkspace = (clientId: string) => `/tax-advisory/clients/${clientId}`;
+export const taxAdvisoryCommands = () => '/tax-advisory/commands';
 export const moduleClientOperationsFeesCommands = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/fees/commands`;
 export const moduleClientOperationsPayrollCommands = (clientId: string) =>
