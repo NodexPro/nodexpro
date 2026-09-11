@@ -484,6 +484,7 @@ export function OwnerTaxKnowledgePanel({
   busy,
   onSelectCountry,
   onCommand,
+  showCountryPicker = true,
 }: {
   taxKnowledge: TaxKnowledgeAggregate;
   countryPacks: unknown;
@@ -493,6 +494,7 @@ export function OwnerTaxKnowledgePanel({
   busy: boolean;
   onSelectCountry: (countryCode: string) => void;
   onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
+  showCountryPicker?: boolean;
 }) {
   const selectedCountryCode = taxKnowledge.selected_country_code;
   const selectValue = pendingCountryCode ?? selectedCountryCode ?? '';
@@ -981,6 +983,7 @@ export function OwnerTaxKnowledgePanel({
             Canonical legal sources and rules. Country-scoped. Commands only.
           </p>
         </div>
+        {showCountryPicker ? (
         <label className="nx-field" style={{ minWidth: 220 }}>
           <span className="nx-field-label">Country</span>
           <select
@@ -997,6 +1000,7 @@ export function OwnerTaxKnowledgePanel({
             ))}
           </select>
         </label>
+        ) : null}
       </div>
 
       {selectedCountryCode ? (

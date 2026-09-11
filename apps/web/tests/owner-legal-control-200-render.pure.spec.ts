@@ -488,7 +488,8 @@ test('current Legal Control 200 aggregate first-paint cannot white-screen', () =
 /**
  * Exact `commercial_controls` object from `buildOwnerCommercialControlsAggregate`
  * when `orgIdsAll.length === 0` (apps/api/src/domains/country-pack/country-pack-read-models.service.ts).
- * `filters.options` is omitted. First GET still renders Commercial Controls inside <details>.
+ * `filters.options` is omitted. Business Setup AI owner UI no longer mounts Commercial Controls;
+ * this helper remains the contract-safe reader if that slice is rendered elsewhere.
  */
 const serializerNoOrgsCommercialControls = {
   filters: {

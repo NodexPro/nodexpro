@@ -21,7 +21,8 @@ test('Legal Control failed aggregate does not render panel or fabricate empty le
   assert.match(page, /Legal data was not replaced with empty defaults/);
   assert.match(page, /ownerLegalControlWarningTexts/);
   assert.match(page, /OwnerLegalControlRenderBoundary/);
-  assert.match(page, /ownerLegalControlStatusBadgeLabel/);
+  assert.match(readRepo('apps/web/src/pages/owner-legal-values-panel.tsx'), /ownerLegalControlStatusBadgeLabel/);
+  assert.match(readRepo('apps/web/src/pages/owner-country-context-panel.tsx'), /ownerLegalControlStatusBadgeLabel/);
   assert.doesNotMatch(page, /setPanel\(\{\s*\}/);
   assert.doesNotMatch(page, /setPanel\(null\)/);
 

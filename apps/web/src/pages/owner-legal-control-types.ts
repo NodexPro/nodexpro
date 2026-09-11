@@ -399,6 +399,118 @@ export function emptyStrategyEngineAggregate(): OwnerStrategyEngineAggregate {
   };
 }
 
+/** Mirrors backend OwnerFactDictionarySlice — display/action_key only. */
+export type OwnerFactDictionaryCountry = {
+  code: string;
+  name: string;
+  status: string;
+};
+
+export type OwnerFactDictionaryLabeledOption = {
+  value: string;
+  label: string;
+};
+
+export type OwnerTaxFactDictionaryAllowedAction = {
+  action_key: string;
+  enabled: boolean;
+  payload: Record<string, string>;
+};
+
+export type OwnerTaxFactEnumOption = {
+  id: string;
+  tax_fact_definition_version_id: string;
+  code: string;
+  sort_order: number;
+  created_at: string;
+  allowed_actions: OwnerTaxFactDictionaryAllowedAction[];
+};
+
+export type OwnerTaxFactPresentation = {
+  id: string;
+  tax_fact_definition_id: string;
+  country_code: string | null;
+  locale: string;
+  label: string;
+  professional_question: string;
+  client_question: string | null;
+  help_text: string | null;
+  aliases: string[];
+  enum_option_labels: UnknownRecord;
+  created_at: string;
+  updated_at: string;
+  allowed_actions: OwnerTaxFactDictionaryAllowedAction[];
+};
+
+export type OwnerTaxFactDefinitionVersion = {
+  id: string;
+  tax_fact_definition_id: string;
+  country_code: string | null;
+  version_no: number;
+  status: string;
+  value_type: string;
+  unit_code: string | null;
+  currency_policy: UnknownRecord | null;
+  validation_json: UnknownRecord;
+  definition_checksum: string;
+  checksum_matches: boolean;
+  effective_from: string;
+  effective_to: string | null;
+  activated_at: string | null;
+  retired_at: string | null;
+  retired_reason: string | null;
+  created_at: string;
+  enum_options: OwnerTaxFactEnumOption[];
+  allowed_actions: OwnerTaxFactDictionaryAllowedAction[];
+};
+
+export type OwnerTaxFactDefinition = {
+  id: string;
+  fact_key: string;
+  country_code: string | null;
+  scope: 'global' | 'country';
+  status: string;
+  semantic_title: string;
+  owner_note: string | null;
+  retired_at: string | null;
+  retired_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  versions: OwnerTaxFactDefinitionVersion[];
+  presentations: OwnerTaxFactPresentation[];
+  allowed_actions: OwnerTaxFactDictionaryAllowedAction[];
+};
+
+export type OwnerFactDictionaryAggregate = {
+  selected_country_code: string | null;
+  selected_scope: 'global' | 'country';
+  countries: OwnerFactDictionaryCountry[];
+  definitions: OwnerTaxFactDefinition[];
+  definition_versions: OwnerTaxFactDefinitionVersion[];
+  enum_options: OwnerTaxFactEnumOption[];
+  presentations: OwnerTaxFactPresentation[];
+  allowed_actions: OwnerTaxFactDictionaryAllowedAction[];
+  implemented_commands: string[];
+  value_type_options: OwnerFactDictionaryLabeledOption[];
+  warnings: string[];
+};
+
+export function emptyFactDictionaryAggregate(): OwnerFactDictionaryAggregate {
+  return {
+    selected_country_code: null,
+    selected_scope: 'global',
+    countries: [],
+    definitions: [],
+    definition_versions: [],
+    enum_options: [],
+    presentations: [],
+    allowed_actions: [],
+    implemented_commands: [],
+    value_type_options: [],
+    warnings: [],
+  };
+}
+
 /** Same selected country drives both existing Owner Legal Control GET query parameters. */
 export function ownerLegalControlCountryQueryParams(countryCode: string): {
   tax_knowledge_country_code: string;
