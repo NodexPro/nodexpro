@@ -166,6 +166,85 @@
   padding: 16px;
 }
 
+.nx-bsai-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+.nx-bsai-table th,
+.nx-bsai-table td {
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  padding: 8px;
+  vertical-align: top;
+}
+
+.nx-bsai-table thead th {
+  border-bottom: 1px solid #ddd;
+  font-size: 13px;
+}
+
+.nx-bsai-table tr.is-selected {
+  background: #eff6ff;
+}
+
+.nx-bsai-select-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2563eb;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.nx-bsai-detail {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.nx-bsai-detail h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.nx-bsai-detail h4 {
+  margin: 14px 0 8px;
+  font-size: 13px;
+}
+
+.nx-bsai-subtable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+  background: #fff;
+}
+
+.nx-bsai-subtable th,
+.nx-bsai-subtable td {
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  padding: 6px 8px;
+  font-size: 13px;
+  vertical-align: top;
+}
+
+.nx-bsai-muted {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.nx-bsai-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 @media (max-width: 900px) {
   .nx-bsai-workspace {
     flex-direction: column;

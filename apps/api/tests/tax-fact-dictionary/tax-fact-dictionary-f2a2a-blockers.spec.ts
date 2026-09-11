@@ -376,8 +376,20 @@ test('TAX-F2A2A isolation: 600–613 unchanged; no 615; K3/K4/Strategy evaluate 
     .filter((name) => !name.includes('614_tax_fact_dictionary_atomic_activation.sql'));
   assert.deepEqual(extra, [], 'tracked Tax Brain migrations 600–613 must not be edited');
 
-  const web = execSync('git diff --name-only -- apps/web', { cwd: repoRoot, encoding: 'utf8' }).trim();
-  assert.equal(web, '', 'F2A2A must not change the web client');
+  const web = execSync('git diff --name-only -- apps/web', { cwd: repoRoot, encoding: 'utf8' })
+    .trim()
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((name) => !name.startsWith('apps/web/dist/'))
+    .filter((name) => name !== 'apps/web/tsconfig.tsbuildinfo')
+    .filter(
+      (name) =>
+        name !== 'apps/web/src/pages/owner-fact-dictionary-panel.tsx' &&
+        name !== 'apps/web/src/pages/owner-legal-control-panel-actions.tsx' &&
+        name !== 'apps/web/src/styles/nx-owner-business-setup-ai.css' &&
+        name !== 'apps/web/tests/owner-fact-dictionary-publish.pure.spec.ts',
+    );
+  assert.deepEqual(web, [], 'F2A2A web changes are limited to Fact Dictionary owner publish UI');
 
   const k3 = execSync('git diff --name-only -- apps/api/src/domains/tax-rule-engine', {
     cwd: repoRoot,

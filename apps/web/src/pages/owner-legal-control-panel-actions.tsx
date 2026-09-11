@@ -37,20 +37,31 @@ export function isPayloadFieldSchema(payload: unknown): payload is StringFieldMa
   return Object.values(payload as UnknownRecord).every((v) => typeof v === 'string');
 }
 
-function buildPayloadFromHints(form: StringFieldMap, hints: StringFieldMap): UnknownRecord {
+/** Coerce modal fields from backend payload *hints* only. No domain defaults. */
+export function buildOwnerCommandPayloadFromHints(form: StringFieldMap, hints: StringFieldMap): UnknownRecord {
   const out: UnknownRecord = {};
   for (const [key, hint] of Object.entries(hints)) {
     const raw = form[key];
     const v = typeof raw === 'string' ? raw.trim() : '';
-    if (!v) {
-      if (hint.toLowerCase().includes('optional')) continue;
+    const hl = hint.toLowerCase();
+    if (!v) continue;
+    if (v.toLowerCase() === 'null' && hl.includes('null')) {
+      out[key] = null;
       continue;
     }
-    const hl = hint.toLowerCase();
+    if (v.startsWith('{') || v.startsWith('[')) {
+      try {
+        out[key] = JSON.parse(v) as unknown;
+        continue;
+      } catch {
+        out[key] = v;
+        continue;
+      }
+    }
     // Hints like "number|percentage|…" or "VAT|Income Tax|…" are string enums, not numeric fields.
     if (hl.includes('|')) {
       out[key] = v;
-    } else if (hl.includes('number')) {
+    } else if (hl.includes('integer') || hl.includes('number')) {
       const n = Number(v);
       if (Number.isFinite(n)) out[key] = n;
     } else if (hl.includes('boolean')) {
@@ -60,6 +71,10 @@ function buildPayloadFromHints(form: StringFieldMap, hints: StringFieldMap): Unk
     }
   }
   return out;
+}
+
+function buildPayloadFromHints(form: StringFieldMap, hints: StringFieldMap): UnknownRecord {
+  return buildOwnerCommandPayloadFromHints(form, hints);
 }
 
 export const btnCompact: CSSProperties = {
