@@ -398,7 +398,7 @@ export function taxKnowledgeRuleVersionPickerRows(
   taxKnowledge: TaxKnowledgeAggregate,
 ): TaxKnowledgeRuleVersionPickerRow[] {
   const rows: TaxKnowledgeRuleVersionPickerRow[] = [];
-  for (const rule of taxKnowledge.rules) {
+  for (const rule of asList(taxKnowledge.rules)) {
     for (const version of Array.isArray(rule.versions) ? rule.versions : []) {
       if (!version.id) continue;
       rows.push({

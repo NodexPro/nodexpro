@@ -22,6 +22,7 @@ import { OwnerTaxKnowledgePanel, parseTaxKnowledgeAggregate } from './owner-tax-
 import { OwnerStrategyEnginePanel, parseStrategyEngineAggregate } from './owner-strategy-engine-panel';
 import {
   OwnerLegalControlRenderBoundary,
+  ownerLegalControlCommercialFilterLists,
   ownerLegalControlObjectLabel,
   ownerLegalControlStatusBadgeLabel,
   ownerLegalControlWarningTexts,
@@ -689,11 +690,10 @@ export function PlatformOwnerLegalControl() {
     return p && typeof p === 'object' && !Array.isArray(p) ? (p as UnknownRecord) : null;
   }, [commercialControls]);
 
-  const commercialFilterOptions = useMemo(() => {
-    const f = commercialControls?.filters;
-    const o = f && typeof f === 'object' && !Array.isArray(f) ? (f as UnknownRecord).options : null;
-    return o && typeof o === 'object' && !Array.isArray(o) ? (o as UnknownRecord) : null;
-  }, [commercialControls]);
+  const commercialFilterLists = useMemo(
+    () => ownerLegalControlCommercialFilterLists(commercialControls?.filters),
+    [commercialControls],
+  );
 
   function fmtOwnerDate(v: unknown): string {
     const s = safeText(v);
@@ -1928,10 +1928,7 @@ export function PlatformOwnerLegalControl() {
                   style={{ height: 36, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 10px', minWidth: 180 }}
                 >
                   <option value="">All modules</option>
-                  {(Array.isArray((commercialFilterOptions?.modules as unknown) ?? [])
-                    ? (commercialFilterOptions?.modules as UnknownRecord[])
-                    : []
-                  ).map((m) => {
+                  {commercialFilterLists.modules.map((m) => {
                     const key = safeText(m.module_key);
                     const name = safeText(m.module_name) || key;
                     return (
@@ -1953,10 +1950,7 @@ export function PlatformOwnerLegalControl() {
                   style={{ height: 36, borderRadius: 8, border: '1px solid #D1D5DB', padding: '0 10px', minWidth: 160 }}
                 >
                   <option value="">Any</option>
-                  {(Array.isArray((commercialFilterOptions?.entitlement_statuses as unknown) ?? [])
-                    ? (commercialFilterOptions?.entitlement_statuses as string[])
-                    : ['entitled', 'trial', 'not_entitled', 'expired']
-                  ).map((s) => (
+                  {commercialFilterLists.entitlement_statuses.map((s) => (
                     <option key={s} value={s}>
                       {entitlementLabel(s)}
                     </option>

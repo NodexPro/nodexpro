@@ -6,6 +6,8 @@ import { parseTaxKnowledgeAggregate, OwnerTaxKnowledgePanel } from '../src/pages
 import { parseStrategyEngineAggregate, OwnerStrategyEnginePanel } from '../src/pages/owner-strategy-engine-panel.tsx';
 import {
   OwnerLegalControlRenderBoundary,
+  asArray,
+  ownerLegalControlCommercialFilterLists,
   ownerLegalControlStatusBadgeLabel,
   ownerLegalControlWarningTexts,
   stringifyAggregateJson,
@@ -481,4 +483,159 @@ test('current Legal Control 200 aggregate first-paint cannot white-screen', () =
   assert.match(html, /Active/);
   assert.match(html, /no_enabled_packs/);
   assert.doesNotMatch(html, /\[object Object\]/);
+});
+
+/**
+ * Exact `commercial_controls` object from `buildOwnerCommercialControlsAggregate`
+ * when `orgIdsAll.length === 0` (apps/api/src/domains/country-pack/country-pack-read-models.service.ts).
+ * `filters.options` is omitted. First GET still renders Commercial Controls inside <details>.
+ */
+const serializerNoOrgsCommercialControls = {
+  filters: {
+    search: null as string | null,
+    module_key: null as string | null,
+    entitlement_status: null as string | null,
+    activation_status: null as string | null,
+  },
+  pagination: { page: 1, page_size: 20, total_count: 0, total_pages: 0 },
+  org_rows: [] as unknown[],
+};
+
+/** Same broken guard that PlatformOwnerLegalControl used for commercial filter <select>s. */
+function brokenCommercialFilterMap(options: { modules?: unknown } | null): unknown[] {
+  return (
+    Array.isArray((options?.modules as unknown) ?? [])
+      ? (options?.modules as unknown[])
+      : []
+  ).map((row) => row);
+}
+
+function renderCommercialFilterSelects(filters: unknown): string {
+  const lists = ownerLegalControlCommercialFilterLists(filters);
+  return renderToStaticMarkup(
+    createElement(
+      'div',
+      null,
+      createElement(
+        'select',
+        null,
+        createElement('option', { value: '' }, 'All modules'),
+        ...lists.modules.map((m) =>
+          createElement(
+            'option',
+            { key: String(m.module_key ?? ''), value: String(m.module_key ?? '') },
+            String(m.module_name ?? m.module_key ?? ''),
+          ),
+        ),
+      ),
+      createElement(
+        'select',
+        null,
+        createElement('option', { value: '' }, 'Any'),
+        ...lists.entitlement_statuses.map((s) => createElement('option', { key: s, value: s }, s)),
+      ),
+    ),
+  );
+}
+
+test('serializer no-orgs commercial_controls omits filters.options — that is the live .map throw', () => {
+  const filters = serializerNoOrgsCommercialControls.filters;
+  const options = (filters as { options?: unknown }).options;
+  assert.equal(options, undefined);
+
+  const commercialFilterOptions =
+    options && typeof options === 'object' && !Array.isArray(options)
+      ? (options as { modules?: unknown })
+      : null;
+
+  assert.throws(
+    () => brokenCommercialFilterMap(commercialFilterOptions),
+    (err: unknown) =>
+      err instanceof TypeError && /Cannot read properties of undefined \(reading 'map'\)/.test(err.message),
+  );
+});
+
+test('ownerLegalControlCommercialFilterLists reads optional filters.options from the serializer contract', () => {
+  const omitted = ownerLegalControlCommercialFilterLists(serializerNoOrgsCommercialControls.filters);
+  assert.deepEqual(omitted.modules, []);
+  assert.deepEqual(omitted.entitlement_statuses, []);
+  const html = renderCommercialFilterSelects(serializerNoOrgsCommercialControls.filters);
+  assert.match(html, /All modules/);
+  assert.match(html, /Any/);
+
+  const withOrgs = ownerLegalControlCommercialFilterLists(currentLegalControl200.commercial_controls.filters);
+  assert.equal(withOrgs.modules.length, 1);
+  assert.equal(withOrgs.modules[0].module_key, 'docflow');
+  assert.deepEqual(withOrgs.entitlement_statuses, ['entitled', 'trial', 'not_entitled', 'expired']);
+});
+
+test('asArray does not treat missing commercial filter modules as a present array', () => {
+  assert.deepEqual(asArray(undefined), []);
+  assert.deepEqual(asArray(null), []);
+  const present = [{ module_key: 'docflow' }];
+  assert.equal(asArray(present), present);
+});
+
+/**
+ * First GET has empty country query → `resolveOwnerLegalControlSelectedCountry` returns null.
+ * Serializer then returns empty TK/SE catalogs (not the synthetic IL-selected fixture).
+ */
+const serializerNullCountryKnowledge = {
+  selected_country_code: null as string | null,
+  countries: [{ code: 'IL', name: 'Israel', status: 'active' }],
+  sources: [] as unknown[],
+  rules: [] as unknown[],
+  rule_versions: [] as unknown[],
+  allowed_actions: [
+    { action_key: 'create_tax_source', enabled: true, payload: {} },
+    { action_key: 'create_tax_rule', enabled: true, payload: {} },
+  ],
+  implemented_commands: [] as string[],
+  relationship_type_options: [] as unknown[],
+  cited_instrument_kind_options: [] as unknown[],
+  activation_critical_options: [] as unknown[],
+  warnings: [] as string[],
+};
+
+const serializerNullCountryStrategy = {
+  selected_country_code: null as string | null,
+  countries: [{ code: 'IL', name: 'Israel', status: 'active' }],
+  exclusive_groups: [] as unknown[],
+  strategies: [] as unknown[],
+  strategy_versions: [] as unknown[],
+  pin_catalog: { calculation_definition_versions: [] as unknown[] },
+  allowed_actions: [] as unknown[],
+  warnings: [] as string[],
+};
+
+test('actual first-GET null-country knowledge/strategy slices render without .map throw', () => {
+  const taxKnowledge = parseTaxKnowledgeAggregate(serializerNullCountryKnowledge);
+  const strategyEngine = parseStrategyEngineAggregate(serializerNullCountryStrategy);
+  const html = renderToStaticMarkup(
+    createElement(
+      'div',
+      null,
+      createElement(OwnerTaxKnowledgePanel, {
+        taxKnowledge,
+        countryPacks: currentLegalControl200.country_packs,
+        rulesets: currentLegalControl200.rulesets,
+        legalValues: currentLegalControl200.legal_values,
+        pendingCountryCode: null,
+        busy: false,
+        onSelectCountry: () => undefined,
+        onCommand: async () => undefined,
+      }),
+      createElement(OwnerStrategyEnginePanel, {
+        strategyEngine,
+        taxKnowledge,
+        busy: false,
+        onCommand: async () => undefined,
+      }),
+    ),
+  );
+  const commercialHtml = renderCommercialFilterSelects(serializerNoOrgsCommercialControls.filters);
+  assert.match(html, /Tax Knowledge/);
+  assert.match(html, /Strategy Engine/);
+  assert.match(html, /No country selected/);
+  assert.match(commercialHtml, /All modules/);
 });

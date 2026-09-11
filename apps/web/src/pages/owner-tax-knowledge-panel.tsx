@@ -1286,7 +1286,7 @@ export function OwnerTaxKnowledgePanel({
                       </div>
                       <div style={{ marginTop: 14 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Provenance</div>
-                        {selectedVersion.sources.length ? (
+                        {asList(selectedVersion.sources).length ? (
                           <div style={{ overflowX: 'auto' }}>
                             <table style={TABLE_STYLE}>
                               <thead>
@@ -1349,7 +1349,7 @@ export function OwnerTaxKnowledgePanel({
                       </div>
                       <div style={{ marginTop: 14 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Legal value bindings</div>
-                        {selectedVersion.legal_value_bindings.length ? (
+                        {asList(selectedVersion.legal_value_bindings).length ? (
                           <div style={{ overflowX: 'auto' }}>
                             <table style={TABLE_STYLE}>
                               <thead>
@@ -1415,7 +1415,7 @@ export function OwnerTaxKnowledgePanel({
                       </div>
                       <div style={{ marginTop: 14 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Relationships</div>
-                        {selectedVersion.relationships.length ? (
+                        {asList(selectedVersion.relationships).length ? (
                           <div style={{ overflowX: 'auto' }}>
                             <table style={TABLE_STYLE}>
                               <thead>
@@ -1480,7 +1480,7 @@ export function OwnerTaxKnowledgePanel({
                         <div style={{ fontWeight: 700, fontSize: 13, margin: '14px 0 8px' }}>
                           Unresolved legal references
                         </div>
-                        {selectedVersion.unresolved_legal_references.length ? (
+                        {asList(selectedVersion.unresolved_legal_references).length ? (
                           <div style={{ overflowX: 'auto' }}>
                             <table style={TABLE_STYLE}>
                               <thead>

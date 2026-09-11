@@ -50,6 +50,24 @@ export function asArray<T = unknown>(value: unknown): T[] {
 }
 
 /**
+ * `buildOwnerCommercialControlsAggregate` omits `filters.options` when there are no orgs.
+ * When orgs exist, `options.modules` / `options.entitlement_statuses` are arrays.
+ * Do not use `Array.isArray(x ?? []) ? x : []` — that treats missing `x` as an array, then calls `x.map`.
+ */
+export function ownerLegalControlCommercialFilterLists(filters: unknown): {
+  modules: UnknownRecord[];
+  entitlement_statuses: string[];
+} {
+  const options = asRecord(asRecord(filters)?.options);
+  return {
+    modules: asArray<UnknownRecord>(options?.modules),
+    entitlement_statuses: asArray(options?.entitlement_statuses).filter(
+      (item): item is string => typeof item === 'string',
+    ),
+  };
+}
+
+/**
  * A successful Legal Control GET must not unmount the route into a blank page.
  * Shows the render exception; does not replace the aggregate with empty legal data.
  */
