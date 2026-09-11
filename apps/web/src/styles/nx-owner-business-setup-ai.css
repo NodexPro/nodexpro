@@ -245,6 +245,62 @@
   gap: 6px;
 }
 
+.nx-bsai-field input {
+  min-width: 220px;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+.nx-bsai-country-workspace {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.nx-bsai-country-workspace > summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.nx-bsai-country-workspace > .nx-bsai-panel {
+  margin-top: 12px;
+  border: none;
+  padding: 0;
+}
+
+.nx-bsai-add-country-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(17, 24, 39, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+}
+
+.nx-bsai-add-country-modal {
+  width: min(520px, 100%);
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+}
+
+.nx-bsai-add-country-modal .nx-bsai-field {
+  margin-top: 12px;
+}
+
 @media (max-width: 900px) {
   .nx-bsai-workspace {
     flex-direction: column;

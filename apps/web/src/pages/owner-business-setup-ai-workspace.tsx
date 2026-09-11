@@ -18,6 +18,8 @@ export function OwnerBusinessSetupAiWorkspace({
   countries,
   countryBusy,
   onSelectCountry,
+  addCountryControl,
+  countryWorkspace,
   warningCount,
   warningsOpen,
   onToggleWarnings,
@@ -31,6 +33,8 @@ export function OwnerBusinessSetupAiWorkspace({
   countries: OwnerBusinessSetupAiCountryOption[];
   countryBusy: boolean;
   onSelectCountry: (countryCode: string) => void;
+  addCountryControl?: ReactNode;
+  countryWorkspace?: ReactNode;
   warningCount: number;
   warningsOpen: boolean;
   onToggleWarnings: () => void;
@@ -64,7 +68,7 @@ export function OwnerBusinessSetupAiWorkspace({
         <div className="nx-bsai-toolbar">
           <div>
             <h2 className="nx-bsai-toolbar__title">Business Setup AI — Owner</h2>
-            <p className="nx-bsai-toolbar__subtitle">Tax knowledge, legal values, and strategy for Business Setup AI.</p>
+            <p className="nx-bsai-toolbar__subtitle">Canonical tax and law for the selected country.</p>
           </div>
           <div className="nx-bsai-toolbar__controls">
             <label className="nx-bsai-field">
@@ -82,6 +86,7 @@ export function OwnerBusinessSetupAiWorkspace({
                 ))}
               </select>
             </label>
+            {addCountryControl}
             <button
               type="button"
               className="nx-btn nx-btn-taxes-compact nx-bsai-warning-btn"
@@ -107,6 +112,7 @@ export function OwnerBusinessSetupAiWorkspace({
             )}
           </div>
         ) : null}
+        {countryWorkspace}
         {children}
       </div>
     </div>

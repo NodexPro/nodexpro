@@ -2,7 +2,6 @@ export const BUSINESS_SETUP_AI_OWNER_SECTION_IDS = [
   'tax-knowledge',
   'legal-values',
   'fact-dictionary',
-  'country-context',
   'strategy-engine',
 ] as const;
 
@@ -18,15 +17,14 @@ export const BUSINESS_SETUP_AI_OWNER_NAV: readonly BusinessSetupAiOwnerNavGroup[
   {
     group: 'TAX & LAW',
     items: [
-      { id: 'tax-knowledge', label: 'Tax Knowledge' },
+      { id: 'tax-knowledge', label: 'Laws & Sources' },
       { id: 'legal-values', label: 'Legal Values' },
-      { id: 'fact-dictionary', label: 'Fact Dictionary' },
-      { id: 'country-context', label: 'Country context' },
+      { id: 'fact-dictionary', label: 'Client Facts' },
     ],
   },
   {
     group: 'BUSINESS SETUP AI',
-    items: [{ id: 'strategy-engine', label: 'Strategy Engine' }],
+    items: [{ id: 'strategy-engine', label: 'Strategies' }],
   },
 ];
 
@@ -36,5 +34,6 @@ export function isBusinessSetupAiOwnerSectionId(value: string): value is Busines
 
 export function businessSetupAiOwnerSectionFromHash(hash: string): BusinessSetupAiOwnerSectionId {
   const id = hash.replace(/^#/, '').trim();
+  if (id === 'country-context') return 'tax-knowledge';
   return isBusinessSetupAiOwnerSectionId(id) ? id : 'tax-knowledge';
 }

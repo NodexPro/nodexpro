@@ -13,6 +13,7 @@ export function OwnerCountryContextPanel({
   countryPackActions,
   emptyRulesetCreateActions,
   busy,
+  selectedCountryCode,
   onOpenCommand,
   onToggleCountryPack,
 }: {
@@ -22,22 +23,32 @@ export function OwnerCountryContextPanel({
   countryPackActions: AggregateAction[];
   emptyRulesetCreateActions: AggregateAction[];
   busy: boolean;
+  selectedCountryCode?: string;
   onOpenCommand: (command: string, meta: AggregateAction, prefilled: UnknownRecord) => void;
   onToggleCountryPack: (row: UnknownRecord) => void;
 }) {
+  const scopedCode = safeText(selectedCountryCode).toUpperCase();
+  const scopedPacks = scopedCode
+    ? packs.filter((row) => safeText(row.country_code).toUpperCase() === scopedCode)
+    : packs;
+  const scopedPackIds = new Set(scopedPacks.map((row) => safeText(row.id)));
+  const scopedRulesets = scopedCode
+    ? rulesets.filter((row) => scopedPackIds.has(safeText(row.country_pack_id)))
+    : rulesets;
+  const scopedEmptyRulesetActions = scopedRulesets.length ? [] : emptyRulesetCreateActions;
   return (
     <section className="nx-bsai-panel">
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 18 }}>Country context</h2>
+          <h2 style={{ margin: 0, fontSize: 18 }}>Country workspace</h2>
           <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 13 }}>
-            Countries, country packs, and rulesets required for tax knowledge.
+            Empty country catalog shells, packs, and rulesets. Creating a country does not copy or publish law.
           </p>
         </div>
         <ActionToolbar
           actions={countryPackActions.filter((a) => {
             const key = String(a.action_key ?? '');
-            return key !== 'enable_country_pack' && key !== 'disable_country_pack';
+            return key !== 'enable_country_pack' && key !== 'disable_country_pack' && key !== 'create_country';
           })}
           disabled={busy}
           onPick={(cmd, meta, pre) => onOpenCommand(cmd, meta, pre)}
@@ -87,7 +98,7 @@ export function OwnerCountryContextPanel({
               </tr>
             </thead>
             <tbody>
-              {packs.map((row, idx) => {
+              {scopedPacks.map((row, idx) => {
                 const status = safeText(row.status).toLowerCase();
                 const enableAction = status === 'draft' || status === 'disabled';
                 const disableAction = status === 'active' || status === 'enabled';
@@ -118,7 +129,7 @@ export function OwnerCountryContextPanel({
                   </tr>
                 );
               })}
-              {!packs.length ? (
+              {!scopedPacks.length ? (
                 <tr>
                   <td colSpan={7} style={{ padding: 12, color: '#666' }}>
                     No country packs in the owner aggregate.
@@ -141,7 +152,7 @@ export function OwnerCountryContextPanel({
               </tr>
             </thead>
             <tbody>
-              {rulesets.map((row, idx) => (
+              {scopedRulesets.map((row, idx) => (
                 <tr key={`${String(row.id ?? '')}:${idx}`}>
                   <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.ruleset_code ?? '')}</td>
                   <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.country_pack_id ?? '')}</td>
@@ -151,13 +162,13 @@ export function OwnerCountryContextPanel({
                   <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{ownerLegalControlStatusBadgeLabel(row)}</td>
                 </tr>
               ))}
-              {!rulesets.length ? (
+              {!scopedRulesets.length ? (
                 <tr>
                   <td colSpan={6} style={{ padding: 12, background: '#fafafa' }}>
                     <div style={{ color: '#666', marginBottom: 8 }}>No rulesets</div>
                     <ActionToolbar
                       variant="compact"
-                      actions={emptyRulesetCreateActions}
+                      actions={scopedEmptyRulesetActions}
                       disabled={busy}
                       onPick={(cmd, meta, pre) => onOpenCommand(cmd, meta, pre)}
                     />

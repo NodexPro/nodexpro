@@ -21,6 +21,8 @@ import { OwnerBusinessSetupAiWorkspace } from './owner-business-setup-ai-workspa
 import { OwnerLegalValuesPanel } from './owner-legal-values-panel';
 import { OwnerCountryContextPanel } from './owner-country-context-panel';
 import { OwnerFactDictionaryPanel, parseFactDictionaryAggregate } from './owner-fact-dictionary-panel';
+import { OwnerAddCountryControl } from './owner-add-country-control';
+import { mergeOwnerCountrySelectorOptions } from './owner-iso-country-options';
 
 function isForbidden(e: unknown): boolean {
   return e instanceof ApiError && (e.status === 401 || e.status === 403);
@@ -182,18 +184,25 @@ export function PlatformOwnerLegalControl() {
     });
   }, [countryPackActions, countryPackTables.rulesets.length]);
 
-  const countryOptions = useMemo(() => {
-    const fromTaxKnowledge = taxKnowledge.countries
-      .map((row) => ({ code: row.code.trim(), name: row.name.trim() || row.code.trim() }))
-      .filter((row) => row.code);
-    if (fromTaxKnowledge.length) return fromTaxKnowledge;
-    return countryPackTables.countries
-      .map((row) => ({
-        code: safeText(row.code),
-        name: safeText(row.name) || safeText(row.code),
-      }))
-      .filter((row) => row.code);
-  }, [taxKnowledge.countries, countryPackTables.countries]);
+  const countryOptions = useMemo(
+    () =>
+      mergeOwnerCountrySelectorOptions(
+        taxKnowledge.countries.map((row) => ({
+          code: row.code.trim(),
+          name: row.name.trim() || row.code.trim(),
+        })),
+        countryPackTables.countries.map((row) => ({
+          code: safeText(row.code),
+          name: safeText(row.name) || safeText(row.code),
+        })),
+      ),
+    [taxKnowledge.countries, countryPackTables.countries],
+  );
+
+  const createCountryAction = useMemo(
+    () => countryPackActions.find((a) => String(a.action_key ?? '') === 'create_country') ?? null,
+    [countryPackActions],
+  );
 
   const selectedCountryCode = pendingTaxKnowledgeCountry ?? taxKnowledgeCountryQuery;
 
@@ -290,6 +299,32 @@ export function PlatformOwnerLegalControl() {
           setPendingTaxKnowledgeCountry(countryCode);
           setTaxKnowledgeCountryQuery(countryCode);
         }}
+        addCountryControl={
+          <OwnerAddCountryControl
+            action={createCountryAction}
+            existingCountryCodes={countryOptions.map((row) => row.code)}
+            busy={commandBusy}
+            onSubmit={async (command, payload) => {
+              await sendOwnerCommand(command, payload);
+            }}
+          />
+        }
+        countryWorkspace={
+          <details className="nx-bsai-country-workspace">
+            <summary>Country workspace</summary>
+            <OwnerCountryContextPanel
+              countries={countryPackTables.countries}
+              packs={countryPackTables.packs}
+              rulesets={countryPackTables.rulesets}
+              countryPackActions={countryPackActions}
+              emptyRulesetCreateActions={emptyRulesetCreateActions}
+              busy={commandBusy}
+              selectedCountryCode={selectedCountryCode}
+              onOpenCommand={openCommandModal}
+              onToggleCountryPack={(row) => void toggleCountryPack(row)}
+            />
+          </details>
+        }
         warningCount={panelWarningsCombined.length}
         warningsOpen={warningsOpen}
         onToggleWarnings={() => setWarningsOpen((open) => !open)}
@@ -329,19 +364,6 @@ export function PlatformOwnerLegalControl() {
             factDictionary={factDictionary}
             busy={commandBusy}
             onOpenCommand={openCommandModal}
-          />
-        ) : null}
-
-        {activeSection === 'country-context' ? (
-          <OwnerCountryContextPanel
-            countries={countryPackTables.countries}
-            packs={countryPackTables.packs}
-            rulesets={countryPackTables.rulesets}
-            countryPackActions={countryPackActions}
-            emptyRulesetCreateActions={emptyRulesetCreateActions}
-            busy={commandBusy}
-            onOpenCommand={openCommandModal}
-            onToggleCountryPack={(row) => void toggleCountryPack(row)}
           />
         ) : null}
 

@@ -67,6 +67,8 @@ test('Business Setup AI owner page unmounts unrelated commercial and DocFlow UI'
   assert.match(page, /OwnerFactDictionaryPanel/);
   assert.match(page, /OwnerCountryContextPanel/);
   assert.match(page, /OwnerStrategyEnginePanel/);
+  assert.match(page, /OwnerAddCountryControl/);
+  assert.match(page, /mergeOwnerCountrySelectorOptions/);
   assert.match(page, /OwnerBusinessSetupAiWorkspace/);
   assert.match(page, /OWNER\.legalControl/);
   assert.match(page, /OWNER\.command/);
@@ -74,6 +76,7 @@ test('Business Setup AI owner page unmounts unrelated commercial and DocFlow UI'
   assert.match(page, /ownerLegalControlCountryQueryParams\(taxKnowledgeCountryQuery\)/);
   assert.match(page, /qs\.set\('tax_knowledge_country_code'/);
   assert.match(page, /qs\.set\('strategy_engine_country_code'/);
+  assert.doesNotMatch(page, /activeSection === 'country-context'/);
 
   assert.doesNotMatch(page, /Commercial Controls/);
   assert.doesNotMatch(page, /commercial_page/);
@@ -91,14 +94,17 @@ test('Business Setup AI owner page unmounts unrelated commercial and DocFlow UI'
 
 test('Business Setup AI nav lists only implemented Tax & Law and Strategy Engine sections', () => {
   const labels = BUSINESS_SETUP_AI_OWNER_NAV.flatMap((group) => group.items.map((item) => item.label));
+  const ids = BUSINESS_SETUP_AI_OWNER_NAV.flatMap((group) => group.items.map((item) => item.id));
   assert.deepEqual(labels, [
-    'Tax Knowledge',
+    'Laws & Sources',
     'Legal Values',
-    'Fact Dictionary',
-    'Country context',
-    'Strategy Engine',
+    'Client Facts',
+    'Strategies',
   ]);
+  assert.deepEqual(ids, ['tax-knowledge', 'legal-values', 'fact-dictionary', 'strategy-engine']);
   assert.equal(businessSetupAiOwnerSectionFromHash('#strategy-engine'), 'strategy-engine');
+  assert.equal(businessSetupAiOwnerSectionFromHash('#fact-dictionary'), 'fact-dictionary');
+  assert.equal(businessSetupAiOwnerSectionFromHash('#country-context'), 'tax-knowledge');
   assert.equal(businessSetupAiOwnerSectionFromHash('#nope'), 'tax-knowledge');
 });
 
@@ -121,17 +127,19 @@ test('workspace chrome renders one active section, country context, compact warn
   );
   assert.match(html, /Business Setup AI/);
   assert.match(html, /TAX &amp; LAW/);
-  assert.match(html, /Tax Knowledge/);
+  assert.match(html, /Laws &amp; Sources/);
   assert.match(html, /Legal Values/);
-  assert.match(html, /Fact Dictionary/);
-  assert.match(html, /Country context/);
-  assert.match(html, /Strategy Engine/);
+  assert.match(html, /Client Facts/);
+  assert.doesNotMatch(html, /Country context/);
+  assert.match(html, /Strategies/);
   assert.match(html, /Tax Knowledge body/);
   assert.match(html, /IL — Israel/);
   assert.match(html, /Warnings/);
   assert.doesNotMatch(html, /no_enabled_packs/);
   assert.doesNotMatch(html, /Commercial Controls/);
   assert.doesNotMatch(html, /DocFlow/);
+  assert.doesNotMatch(html, /Add Country/);
+  assert.doesNotMatch(html, /Knowledge Trainer/);
 });
 
 test('opening warnings shows backend warning strings, not invented statuses', () => {
@@ -153,7 +161,7 @@ test('opening warnings shows backend warning strings, not invented statuses', ()
   );
   assert.match(html, /fact_dictionary_schema_not_applied/);
   assert.match(html, /Legal Values/);
-  assert.doesNotMatch(html, /aria-current="page"[^>]*>Tax Knowledge/);
+  assert.doesNotMatch(html, /aria-current="page"[^>]*>Laws &amp; Sources/);
 });
 
 test('required Business Setup AI sections still render from aggregate without white-screen', () => {
@@ -227,6 +235,7 @@ test('required Business Setup AI sections still render from aggregate without wh
           countryPackActions: [{ action_key: 'create_country', enabled: true }],
           emptyRulesetCreateActions: [],
           busy: false,
+          selectedCountryCode: 'IL',
           onOpenCommand: () => undefined,
           onToggleCountryPack: () => undefined,
         }),
@@ -243,7 +252,7 @@ test('required Business Setup AI sections still render from aggregate without wh
   assert.match(html, /Tax Knowledge/);
   assert.match(html, /Legal Values/);
   assert.match(html, /Fact Dictionary/);
-  assert.match(html, /Country context/);
+  assert.match(html, /Country workspace/);
   assert.match(html, /Strategy Engine/);
   assert.match(html, /il-core/);
   assert.match(html, /il_vat_rate/);
