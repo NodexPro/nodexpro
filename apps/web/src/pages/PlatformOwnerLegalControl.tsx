@@ -20,6 +20,13 @@ import {
 } from './operational-reminder-owner-forms';
 import { OwnerTaxKnowledgePanel, parseTaxKnowledgeAggregate } from './owner-tax-knowledge-panel';
 import { OwnerStrategyEnginePanel, parseStrategyEngineAggregate } from './owner-strategy-engine-panel';
+import {
+  OwnerLegalControlRenderBoundary,
+  ownerLegalControlObjectLabel,
+  ownerLegalControlStatusBadgeLabel,
+  ownerLegalControlWarningTexts,
+  stringifyAggregateJson,
+} from './owner-legal-control-render-safety';
 
 function isForbidden(e: unknown): boolean {
   return e instanceof ApiError && (e.status === 401 || e.status === 403);
@@ -568,10 +575,7 @@ export function PlatformOwnerLegalControl() {
     );
   }, [pricingActions]);
 
-  const panelWarningsCombined = useMemo(() => {
-    const w = panel?.warnings as { combined?: unknown[] } | undefined;
-    return Array.isArray(w?.combined) ? (w.combined as string[]) : [];
-  }, [panel]);
+  const panelWarningsCombined = useMemo(() => ownerLegalControlWarningTexts(panel), [panel]);
 
   const taxKnowledge = useMemo(() => parseTaxKnowledgeAggregate(panel?.tax_knowledge), [panel]);
   const strategyEngine = useMemo(() => parseStrategyEngineAggregate(panel?.strategy_engine), [panel]);
@@ -1075,6 +1079,7 @@ export function PlatformOwnerLegalControl() {
   }
 
   return (
+    <OwnerLegalControlRenderBoundary>
     <div style={{ padding: 20, maxWidth: 1400, margin: '0 auto' }}>
       <h1>Owner Legal Control Panel</h1>
       <p style={{ color: '#666' }}>Platform owner area. Not part of tenant workspace navigation.</p>
@@ -1181,9 +1186,7 @@ export function PlatformOwnerLegalControl() {
                     const channelLabels = Array.isArray(row.channel_labels)
                       ? (row.channel_labels as string[]).join(', ')
                       : JSON.stringify(row.default_channels ?? []);
-                    const actions = Array.isArray(row.allowed_actions)
-                      ? (row.allowed_actions as UnknownRecord[])
-                      : [];
+                    const actions = normalizeActions(row.allowed_actions) as UnknownRecord[];
                     return (
                     <tr key={String(row.row_key ?? row.version_id ?? row.value_key)}>
                       <td style={{ padding: 8, borderBottom: '1px solid #f3e8ff' }}>{String(row.country_code ?? '')}</td>
@@ -2521,7 +2524,7 @@ export function PlatformOwnerLegalControl() {
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.code ?? '')}</td>
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.name ?? '')}</td>
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
-                      {String((row.status_badge as { label?: string } | undefined)?.label ?? row.status ?? '')}
+                      {ownerLegalControlStatusBadgeLabel(row)}
                     </td>
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.default_timezone ?? '')}</td>
                   </tr>
@@ -2554,7 +2557,7 @@ export function PlatformOwnerLegalControl() {
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.framework_version ?? '')}</td>
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.code_version ?? '')}</td>
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
-                      {String((row.status_badge as { label?: string } | undefined)?.label ?? row.status ?? '')}
+                      {ownerLegalControlStatusBadgeLabel(row)}
                     </td>
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
                       {buttonLabel ? (
@@ -2594,7 +2597,7 @@ export function PlatformOwnerLegalControl() {
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.effective_from ?? '')}</td>
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.effective_to ?? 'open')}</td>
                     <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
-                      {String((row.status_badge as { label?: string } | undefined)?.label ?? row.status ?? '')}
+                      {ownerLegalControlStatusBadgeLabel(row)}
                     </td>
                   </tr>
                 ))}
@@ -2663,7 +2666,7 @@ export function PlatformOwnerLegalControl() {
                   <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.currency ?? '')}</td>
                   <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.billing_period ?? '')}</td>
                   <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
-                    {String((row.status_badge as { label?: string } | undefined)?.label ?? row.status ?? '')}
+                    {ownerLegalControlStatusBadgeLabel(row)}
                   </td>
                   <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
                     {pricingRowAction && pricingRowAction.action_key ? (
@@ -2728,13 +2731,13 @@ export function PlatformOwnerLegalControl() {
                     <tr key={`${String(row.id ?? row.pack_code ?? '')}:${idx}`}>
                       <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.pack_code ?? row.name ?? '')}</td>
                       <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
-                        {String((row.status_badge as { label?: string } | undefined)?.label ?? row.status ?? '')}
+                        {ownerLegalControlStatusBadgeLabel(row)}
                       </td>
                       <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
                         {String(row.active_ruleset_code ?? row.active_ruleset_id ?? '')}
                       </td>
                       <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
-                        {String((row.eligibility_badge as { label?: string } | undefined)?.label ?? row.eligibility ?? '')}
+                        {ownerLegalControlObjectLabel(row.eligibility_badge, row.eligibility)}
                       </td>
                     </tr>
                   ))}
@@ -2835,11 +2838,11 @@ export function PlatformOwnerLegalControl() {
                         <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.label ?? '')}</td>
                         <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.category ?? '')}</td>
                         <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.module_scope ?? '')}</td>
-                        <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{JSON.stringify(row.current_active_value ?? null)}</td>
+                        <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{stringifyAggregateJson(row.current_active_value)}</td>
                         <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{effective}</td>
                         <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.owner_note ?? '')}</td>
                         <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.usage_hint ?? '')}</td>
-                        <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String((row.status_badge as { label?: string } | undefined)?.label ?? row.status ?? '')}</td>
+                        <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{ownerLegalControlStatusBadgeLabel(row)}</td>
                         <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                             {legalActions.map((a) => {
@@ -3449,5 +3452,6 @@ export function PlatformOwnerLegalControl() {
         }}
       />
     </div>
+    </OwnerLegalControlRenderBoundary>
   );
 }

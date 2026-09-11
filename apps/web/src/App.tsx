@@ -36,6 +36,7 @@ import { ClientPortalInvite } from './pages/ClientPortalInvite';
 import { ClientPortalDocflow } from './pages/ClientPortalDocflow';
 import { PlatformOwnerLogin } from './pages/PlatformOwnerLogin';
 import { PlatformOwnerLegalControl } from './pages/PlatformOwnerLegalControl';
+import { OwnerLegalControlRenderBoundary } from './pages/owner-legal-control-render-safety';
 import { DocflowCommunicationReviewPage } from './pages/DocflowCommunicationReviewPage';
 import { DocflowInvitesManagementPage } from './pages/DocflowInvitesManagementPage';
 import { DocflowMessengerPage } from './pages/DocflowMessengerPage';
@@ -162,7 +163,14 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/platform-owner/login" element={<PlatformOwnerLogin />} />
-      <Route path="/platform-owner/legal-control" element={<PlatformOwnerLegalControl />} />
+      <Route
+        path="/platform-owner/legal-control"
+        element={
+          <OwnerLegalControlRenderBoundary>
+            <PlatformOwnerLegalControl />
+          </OwnerLegalControlRenderBoundary>
+        }
+      />
       <Route path="/register" element={<Register />} />
       <Route path="/invite/accept" element={<InviteAccept />} />
       <Route path="/invite/:token" element={<ClientPortalInvite />} />

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ApiError, userFacingApiMessage } from '../api/client';
 import type { AggregateAction } from './owner-legal-control-panel-actions';
-import { btnCompact, btnGhost, btnPrimary } from './owner-legal-control-panel-actions';
+import { btnCompact, btnGhost, btnPrimary, normalizeActions } from './owner-legal-control-panel-actions';
 import type { OwnerCommandResponse, UnknownRecord } from './owner-legal-control-types';
 
 type EditorOption = { code: string; label: string; token?: string };
@@ -404,7 +404,9 @@ export function CommunicationPoliciesToolbar({
   disabled: boolean;
   onOpenWorkflow: () => void;
 }) {
-  const workflowAction = actions.find((a) => safeText((a as UnknownRecord).smart_form) === 'reminder_workflow');
+  const workflowAction = normalizeActions(actions).find(
+    (a) => safeText((a as UnknownRecord).smart_form) === 'reminder_workflow',
+  );
   if (!workflowAction || workflowAction.enabled === false) return null;
   return (
     <button type="button" disabled={disabled} style={btnCompact} onClick={onOpenWorkflow}>
@@ -524,7 +526,7 @@ export function OperationalReminderWorkflowWizard({
     setRulesetId(firstRs?.id ?? '');
     setWorkflowType(editor?.workflow_types[0]?.code ?? 'waiting_client');
     setApprovalRequired(true);
-    setDefaultChannels(editor?.channels.slice(0, 2).map((c) => c.code) ?? ['docflow', 'email']);
+    setDefaultChannels(editor?.channels?.slice(0, 2).map((c) => c.code) ?? ['docflow', 'email']);
     setReminders([emptyReminder(editor)]);
   }, [open, mode, initialEditableForm]);
 

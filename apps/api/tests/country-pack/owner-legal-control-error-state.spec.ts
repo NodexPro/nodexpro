@@ -19,6 +19,9 @@ test('Legal Control failed aggregate does not render panel or fabricate empty le
   assert.match(page, /if \(error && !panel\)/);
   assert.match(page, /Legal Control could not be loaded from the server/);
   assert.match(page, /Legal data was not replaced with empty defaults/);
+  assert.match(page, /ownerLegalControlWarningTexts/);
+  assert.match(page, /OwnerLegalControlRenderBoundary/);
+  assert.match(page, /ownerLegalControlStatusBadgeLabel/);
   assert.doesNotMatch(page, /setPanel\(\{\s*\}/);
   assert.doesNotMatch(page, /setPanel\(null\)/);
 

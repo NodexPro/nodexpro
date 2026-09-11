@@ -47,6 +47,10 @@ function asRecord(value: unknown): UnknownRecord | null {
   return value as UnknownRecord;
 }
 
+function asList<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : value == null ? '' : String(value);
 }
@@ -293,12 +297,12 @@ export function strategyVersionsPresentInAggregate(
   slice: OwnerStrategyEngineAggregate,
 ): StrategyVersionLineageRef[] {
   const byId = new Map<string, StrategyVersionLineageRef>();
-  for (const version of slice.strategy_versions) {
+  for (const version of Array.isArray(slice.strategy_versions) ? slice.strategy_versions : []) {
     if (!version.id) continue;
     byId.set(version.id, { id: version.id, title: version.title, version_no: version.version_no });
   }
-  for (const strategy of slice.strategies) {
-    for (const version of strategy.versions) {
+  for (const strategy of Array.isArray(slice.strategies) ? slice.strategies : []) {
+    for (const version of Array.isArray(strategy.versions) ? strategy.versions : []) {
       if (!version.id) continue;
       byId.set(version.id, { id: version.id, title: version.title, version_no: version.version_no });
     }
@@ -395,7 +399,7 @@ export function taxKnowledgeRuleVersionPickerRows(
 ): TaxKnowledgeRuleVersionPickerRow[] {
   const rows: TaxKnowledgeRuleVersionPickerRow[] = [];
   for (const rule of taxKnowledge.rules) {
-    for (const version of rule.versions) {
+    for (const version of Array.isArray(rule.versions) ? rule.versions : []) {
       if (!version.id) continue;
       rows.push({
         tax_rule_version_id: version.id,
@@ -433,7 +437,10 @@ export function buildUnpinTaxStrategyRulePayload(pinId: string): UnknownRecord {
 export function strategyCalculationVersionPickerRows(
   pinCatalog: OwnerTaxStrategyPinCatalog,
 ): OwnerTaxStrategyCalculationDefinitionVersionCatalogRow[] {
-  return pinCatalog.calculation_definition_versions.filter((row) => Boolean(row.id));
+  return (Array.isArray(pinCatalog?.calculation_definition_versions)
+    ? pinCatalog.calculation_definition_versions
+    : []
+  ).filter((row) => Boolean(row.id));
 }
 
 export function strategyCalculationVersionPickerLabel(
@@ -651,7 +658,7 @@ function StateRow({ label, value }: { label: string; value: string }) {
 }
 
 function schemaUnavailable(warnings: string[]): boolean {
-  return warnings.some(
+  return asList(warnings).some(
     (warning) => warning === SCHEMA_NOT_APPLIED || /schema-not-applied|unavailable/i.test(warning),
   );
 }
@@ -716,26 +723,37 @@ export function OwnerStrategyEnginePanel({
   );
 
   useEffect(() => {
-    const ids = new Set(strategyEngine.strategies.map((row) => row.id).filter(Boolean));
+    const ids = new Set(
+      (Array.isArray(strategyEngine.strategies) ? strategyEngine.strategies : [])
+        .map((row) => row.id)
+        .filter(Boolean),
+    );
     setSelectedStrategyId((prev) => (prev && ids.has(prev) ? prev : ''));
   }, [strategyEngine]);
 
-  const selectedStrategy = strategyEngine.strategies.find((row) => row.id && row.id === selectedStrategyId) ?? null;
+  const selectedStrategy =
+    (Array.isArray(strategyEngine.strategies) ? strategyEngine.strategies : []).find(
+      (row) => row.id && row.id === selectedStrategyId,
+    ) ?? null;
 
   useEffect(() => {
     if (!selectedStrategy) {
       setSelectedVersionId('');
       return;
     }
-    const versionIds = new Set(selectedStrategy.versions.map((row) => row.id).filter(Boolean));
+    const versionIds = new Set(
+      (Array.isArray(selectedStrategy.versions) ? selectedStrategy.versions : [])
+        .map((row) => row.id)
+        .filter(Boolean),
+    );
     setSelectedVersionId((prev) => {
       if (prev && versionIds.has(prev)) return prev;
-      return selectedStrategy.versions[0]?.id ?? '';
+      return (Array.isArray(selectedStrategy.versions) ? selectedStrategy.versions : [])[0]?.id ?? '';
     });
   }, [selectedStrategy]);
 
   const selectedVersion =
-    selectedStrategy?.versions.find((row) => row.id && row.id === selectedVersionId) ?? null;
+    asList(selectedStrategy?.versions).find((row) => row.id && row.id === selectedVersionId) ?? null;
   const authored = selectedVersion ? strategyAuthoredMetadataDisplay(selectedVersion.authored_metadata_json) : null;
   const supersedes = selectedVersion
     ? strategyVersionLineageLabel(selectedVersion.supersedes_version_id, versionsInAggregate)
@@ -744,10 +762,10 @@ export function OwnerStrategyEnginePanel({
     ? strategyVersionLineageLabel(selectedVersion.superseded_by_version_id, versionsInAggregate)
     : { kind: 'empty' as const };
   const pendingGroup =
-    strategyEngine.exclusive_groups.find((row) => row.id && row.id === pendingGroupId) ?? null;
-  const pendingPin = selectedVersion?.rule_pins.find((row) => row.id && row.id === pendingPinId) ?? null;
+    asList(strategyEngine.exclusive_groups).find((row) => row.id && row.id === pendingGroupId) ?? null;
+  const pendingPin = asList(selectedVersion?.rule_pins).find((row) => row.id && row.id === pendingPinId) ?? null;
   const pendingCalcPin =
-    selectedVersion?.calculation_pins.find((row) => row.id && row.id === pendingCalcPinId) ?? null;
+    asList(selectedVersion?.calculation_pins).find((row) => row.id && row.id === pendingCalcPinId) ?? null;
   const ruleVersionPickerRows = useMemo(
     () => taxKnowledgeRuleVersionPickerRows(taxKnowledge),
     [taxKnowledge],
@@ -1033,7 +1051,7 @@ export function OwnerStrategyEnginePanel({
         </p>
       ) : null}
 
-      {strategyEngine.warnings.length ? (
+      {asList(strategyEngine.warnings).length ? (
         <div
           style={{
             marginTop: 12,
@@ -1046,7 +1064,7 @@ export function OwnerStrategyEnginePanel({
         >
           <strong>Strategy Engine warnings</strong>
           <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-            {strategyEngine.warnings.map((warning) => (
+            {asList(strategyEngine.warnings).map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
           </ul>
@@ -1089,7 +1107,7 @@ export function OwnerStrategyEnginePanel({
           </div>
           <div>
             <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Exclusive groups</h3>
-            {strategyEngine.exclusive_groups.length ? (
+            {asList(strategyEngine.exclusive_groups).length ? (
               <div style={{ overflowX: 'auto' }}>
                 <table style={TABLE_STYLE}>
                   <thead>
@@ -1101,7 +1119,7 @@ export function OwnerStrategyEnginePanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {strategyEngine.exclusive_groups.map((row) => (
+                    {asList(strategyEngine.exclusive_groups).map((row) => (
                       <tr key={row.id || row.group_code}>
                         <td style={TD_STYLE}>{row.group_code || '—'}</td>
                         <td style={TD_STYLE}>{row.title || '—'}</td>
@@ -1129,7 +1147,7 @@ export function OwnerStrategyEnginePanel({
 
           <div>
             <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Strategies</h3>
-            {strategyEngine.strategies.length ? (
+            {asList(strategyEngine.strategies).length ? (
               <div style={{ overflowX: 'auto' }}>
                 <table style={TABLE_STYLE}>
                   <thead>
@@ -1141,7 +1159,7 @@ export function OwnerStrategyEnginePanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {strategyEngine.strategies.map((row) => {
+                    {asList(strategyEngine.strategies).map((row) => {
                       const isSelected = Boolean(row.id) && row.id === selectedStrategyId;
                       return (
                         <tr
@@ -1151,7 +1169,7 @@ export function OwnerStrategyEnginePanel({
                         >
                           <td style={TD_STYLE}>{row.strategy_code || '—'}</td>
                           <td style={TD_STYLE}>{row.admin_label || '—'}</td>
-                          <td style={TD_STYLE}>{String(row.versions.length)}</td>
+                          <td style={TD_STYLE}>{String((Array.isArray(row.versions) ? row.versions : []).length)}</td>
                           <td style={TD_STYLE}>{row.owner_note || '—'}</td>
                         </tr>
                       );
@@ -1184,7 +1202,7 @@ export function OwnerStrategyEnginePanel({
                 setDialogKind('unpin_tax_strategy_calculation');
               }}
             />
-          ) : strategyEngine.strategies.length ? (
+          ) : asList(strategyEngine.strategies).length ? (
             <EmptyState title="No strategy selected" description="Select a strategy to display its versions." />
           ) : null}
         </div>
@@ -1291,7 +1309,7 @@ function SelectedStrategyDisplay({
       </div>
 
       <h3 style={{ margin: '16px 0 8px', fontSize: 15 }}>Versions</h3>
-      {strategy.versions.length ? (
+      {Array.isArray(strategy.versions) && strategy.versions.length ? (
         <div style={{ overflowX: 'auto' }}>
           <table style={TABLE_STYLE}>
             <thead>
@@ -1304,7 +1322,7 @@ function SelectedStrategyDisplay({
               </tr>
             </thead>
             <tbody>
-              {strategy.versions.map((row) => {
+              {(Array.isArray(strategy.versions) ? strategy.versions : []).map((row) => {
                 const isSelected = Boolean(row.id) && row.id === selectedVersionId;
                 return (
                   <tr
@@ -1434,7 +1452,7 @@ function SelectedVersionDisplay({
       <StateRow label="tags" value={authored.tags} />
 
       <h3 style={{ margin: '16px 0 8px', fontSize: 15 }}>Rule pins</h3>
-      {version.rule_pins.length ? (
+      {asList(version.rule_pins).length ? (
         <div style={{ overflowX: 'auto' }}>
           <table style={TABLE_STYLE}>
             <thead>
@@ -1448,7 +1466,7 @@ function SelectedVersionDisplay({
               </tr>
             </thead>
             <tbody>
-              {version.rule_pins.map((pin) => (
+              {(Array.isArray(version.rule_pins) ? version.rule_pins : []).map((pin) => (
                 <tr key={pin.id || pin.tax_rule_version_id}>
                   <td style={TD_STYLE}>{pin.rule_title || '—'}</td>
                   <td style={TD_STYLE}>{pin.rule_code || '—'}</td>
@@ -1474,7 +1492,7 @@ function SelectedVersionDisplay({
       )}
 
       <h3 style={{ margin: '16px 0 8px', fontSize: 15 }}>Calculation pins</h3>
-      {version.calculation_pins.length ? (
+      {asList(version.calculation_pins).length ? (
         <div style={{ overflowX: 'auto' }}>
           <table style={TABLE_STYLE}>
             <thead>
@@ -1487,7 +1505,7 @@ function SelectedVersionDisplay({
               </tr>
             </thead>
             <tbody>
-              {version.calculation_pins.map((pin) => (
+              {(Array.isArray(version.calculation_pins) ? version.calculation_pins : []).map((pin) => (
                 <tr key={pin.id || pin.calculation_definition_version_id}>
                   <td style={TD_STYLE}>{pin.calculation_title || '—'}</td>
                   <td style={TD_STYLE}>{pin.calculation_code || '—'}</td>
@@ -1662,7 +1680,7 @@ function StrategyVersionHumanFields({
           onChange={(e) => onChange({ ...form, exclusive_group_id: e.target.value })}
         >
           <option value="">None</option>
-          {exclusiveGroups.map((group) => (
+          {asList(exclusiveGroups).map((group) => (
             <option key={group.id} value={group.id}>
               {group.title || group.group_code}
               {group.group_code ? ` (${group.group_code})` : ''}

@@ -1,6 +1,6 @@
 import { getBackendActiveOrganizationId } from './org-context';
 
-const API_URL = import.meta.env.VITE_API_URL ?? '';
+const API_URL = import.meta.env?.VITE_API_URL ?? '';
 
 /** API error JSON `{ code, message, ...details }` — use `code` for secure-session / encryption flows */
 export class ApiError extends Error {

@@ -49,6 +49,10 @@ const TD_STYLE: CSSProperties = {
   verticalAlign: 'top',
 };
 
+function asList<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function asRecord(value: unknown): UnknownRecord | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as UnknownRecord;
@@ -110,7 +114,7 @@ function supersedePairsFromAction(action: TaxKnowledgeAllowedAction | null): Tax
 
 function versionPresentationLabel(versionId: string, rules: TaxKnowledgeRule[]): string {
   for (const rule of rules) {
-    const version = rule.versions.find((row) => row.id === versionId);
+    const version = asList(rule.versions).find((row) => row.id === versionId);
     if (version) {
       return `${rule.rule_code} · version_no ${version.version_no} · ${version.status}`;
     }
@@ -492,7 +496,7 @@ export function OwnerTaxKnowledgePanel({
 }) {
   const selectedCountryCode = taxKnowledge.selected_country_code;
   const selectValue = pendingCountryCode ?? selectedCountryCode ?? '';
-  const schemaNotApplied = taxKnowledge.warnings.includes(SCHEMA_NOT_APPLIED);
+  const schemaNotApplied = asList(taxKnowledge.warnings).includes(SCHEMA_NOT_APPLIED);
   const countryPacks = parseCountryPacks(countryPacksRaw);
   const rulesets = parseRulesets(rulesetsRaw);
   const legalValueRows = parseLegalValuePickerRows(legalValuesRaw);
@@ -544,34 +548,34 @@ export function OwnerTaxKnowledgePanel({
   const [closeEffectiveTo, setCloseEffectiveTo] = useState('');
   const [supersedeCandidateIndex, setSupersedeCandidateIndex] = useState(-1);
 
-  const selectedSource = taxKnowledge.sources.find((row) => row.id && row.id === selectedSourceId) ?? null;
-  const selectedRule = taxKnowledge.rules.find((row) => row.id && row.id === selectedRuleId) ?? null;
+  const selectedSource = asList(taxKnowledge.sources).find((row) => row.id && row.id === selectedSourceId) ?? null;
+  const selectedRule = asList(taxKnowledge.rules).find((row) => row.id && row.id === selectedRuleId) ?? null;
   const selectedVersion =
-    selectedRule?.versions.find((row) => row.id && row.id === selectedVersionId) ?? null;
+    asList(selectedRule?.versions).find((row) => row.id && row.id === selectedVersionId) ?? null;
   const packsForSelectedRule = selectedRule
     ? countryPacks.filter((row) => row.country_code === selectedRule.country_code)
     : [];
   const rulesetsForSelectedPack = rulesets.filter((row) => row.country_pack_id === versionForm.country_pack_id);
   const sourcesForSelectedVersion = selectedVersion
-    ? taxKnowledge.sources.filter((row) => row.country_code === selectedVersion.country_code)
+    ? asList(taxKnowledge.sources).filter((row) => row.country_code === selectedVersion.country_code)
     : [];
   const legalValuesForSelectedVersion = selectedVersion
     ? legalValueRows.filter((row) => row.country_code === selectedVersion.country_code)
     : [];
   const pendingCitation =
-    selectedVersion?.sources.find((row) => row.id && row.id === pendingCitationId) ?? null;
+    asList(selectedVersion?.sources).find((row) => row.id && row.id === pendingCitationId) ?? null;
   const pendingBinding =
-    selectedVersion?.legal_value_bindings.find((row) => row.id && row.id === pendingBindingId) ?? null;
+    asList(selectedVersion?.legal_value_bindings).find((row) => row.id && row.id === pendingBindingId) ?? null;
   const pendingRelationship =
-    selectedVersion?.relationships.find((row) => row.id && row.id === pendingRelationshipId) ?? null;
+    asList(selectedVersion?.relationships).find((row) => row.id && row.id === pendingRelationshipId) ?? null;
   const supersedeAction = enabledAction(
     selectedVersion?.allowed_actions ?? [],
     'supersede_tax_rule_version',
   );
   const supersedePairs = supersedePairsFromAction(supersedeAction);
   const targetVersionsForRelationship = selectedVersion
-    ? taxKnowledge.rules.flatMap((rule) =>
-        rule.versions
+    ? asList(taxKnowledge.rules).flatMap((rule) =>
+        asList(rule.versions)
           .filter(
             (version) =>
               Boolean(version.id) &&
@@ -583,16 +587,16 @@ export function OwnerTaxKnowledgePanel({
     : [];
 
   useEffect(() => {
-    if (selectedSourceId && !taxKnowledge.sources.some((row) => row.id === selectedSourceId)) {
+    if (selectedSourceId && !asList(taxKnowledge.sources).some((row) => row.id === selectedSourceId)) {
       setSelectedSourceId(null);
     }
-    if (selectedRuleId && !taxKnowledge.rules.some((row) => row.id === selectedRuleId)) {
+    if (selectedRuleId && !asList(taxKnowledge.rules).some((row) => row.id === selectedRuleId)) {
       setSelectedRuleId(null);
     }
   }, [taxKnowledge.sources, taxKnowledge.rules, selectedSourceId, selectedRuleId]);
 
   useEffect(() => {
-    if (selectedVersionId && !selectedRule?.versions.some((row) => row.id === selectedVersionId)) {
+    if (selectedVersionId && !asList(selectedRule?.versions).some((row) => row.id === selectedVersionId)) {
       setSelectedVersionId(null);
     }
   }, [selectedRule, selectedVersionId]);
@@ -986,7 +990,7 @@ export function OwnerTaxKnowledgePanel({
             onChange={(e) => onSelectCountry(e.target.value)}
           >
             <option value="">Select country</option>
-            {taxKnowledge.countries.map((country) => (
+            {asList(taxKnowledge.countries).map((country) => (
               <option key={country.code} value={country.code}>
                 {country.code} — {country.name}
               </option>
@@ -1001,7 +1005,7 @@ export function OwnerTaxKnowledgePanel({
         </p>
       ) : null}
 
-      {taxKnowledge.warnings.length ? (
+      {asList(taxKnowledge.warnings).length ? (
         <div
           style={{
             marginTop: 12,
@@ -1014,7 +1018,7 @@ export function OwnerTaxKnowledgePanel({
         >
           <strong>Tax Knowledge warnings</strong>
           <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-            {taxKnowledge.warnings.map((warning) => (
+            {asList(taxKnowledge.warnings).map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
           </ul>
@@ -1059,7 +1063,7 @@ export function OwnerTaxKnowledgePanel({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
           <div>
             <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Sources</h3>
-            {taxKnowledge.sources.length ? (
+            {asList(taxKnowledge.sources).length ? (
               <div style={{ overflowX: 'auto' }}>
                 <table style={TABLE_STYLE}>
                   <thead>
@@ -1072,7 +1076,7 @@ export function OwnerTaxKnowledgePanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {taxKnowledge.sources.map((row) => {
+                    {asList(taxKnowledge.sources).map((row) => {
                       const isSelected = Boolean(row.id) && row.id === selectedSourceId;
                       return (
                         <tr
@@ -1128,13 +1132,13 @@ export function OwnerTaxKnowledgePanel({
                   })}
                 </div>
               </div>
-            ) : taxKnowledge.sources.length ? (
+            ) : asList(taxKnowledge.sources).length ? (
               <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>Select a source to view details and actions.</p>
             ) : null}
           </div>
           <div>
             <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Rules</h3>
-            {taxKnowledge.rules.length ? (
+            {asList(taxKnowledge.rules).length ? (
               <div style={{ overflowX: 'auto' }}>
                 <table style={TABLE_STYLE}>
                   <thead>
@@ -1147,7 +1151,7 @@ export function OwnerTaxKnowledgePanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {taxKnowledge.rules.map((row) => {
+                    {asList(taxKnowledge.rules).map((row) => {
                       const isSelected = Boolean(row.id) && row.id === selectedRuleId;
                       return (
                         <tr
@@ -1159,7 +1163,7 @@ export function OwnerTaxKnowledgePanel({
                           <td style={TD_STYLE}>{row.title}</td>
                           <td style={TD_STYLE}>{row.rule_kind}</td>
                           <td style={TD_STYLE}>{row.status}</td>
-                          <td style={TD_STYLE}>{row.versions.length}</td>
+                          <td style={TD_STYLE}>{row.versions?.length ?? 0}</td>
                         </tr>
                       );
                     })}
@@ -1180,7 +1184,7 @@ export function OwnerTaxKnowledgePanel({
                 <StateRow label="owner_note" value={selectedRule.owner_note ?? ''} />
                 <StateRow label="created_at" value={selectedRule.created_at} />
                 <StateRow label="updated_at" value={selectedRule.updated_at} />
-                <StateRow label="versions" value={String(selectedRule.versions.length)} />
+                <StateRow label="versions" value={String(selectedRule.versions?.length ?? 0)} />
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
                   {[...K2C_RULE_ACTION_KEYS, ...K2D_RULE_ACTION_KEYS].map((actionKey) => {
                     const action = enabledAction(selectedRule.allowed_actions, actionKey);
@@ -1200,7 +1204,7 @@ export function OwnerTaxKnowledgePanel({
                 </div>
                 <div style={{ marginTop: 14 }}>
                   <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Versions</div>
-                  {selectedRule.versions.length ? (
+                  {asList(selectedRule.versions).length ? (
                     <div style={{ overflowX: 'auto' }}>
                       <table style={TABLE_STYLE}>
                         <thead>
@@ -1212,7 +1216,7 @@ export function OwnerTaxKnowledgePanel({
                           </tr>
                         </thead>
                         <tbody>
-                          {selectedRule.versions.map((row) => {
+                          {(Array.isArray(selectedRule.versions) ? selectedRule.versions : []).map((row) => {
                             const isSelected = Boolean(row.id) && row.id === selectedVersionId;
                             return (
                               <tr
@@ -1297,7 +1301,7 @@ export function OwnerTaxKnowledgePanel({
                                 </tr>
                               </thead>
                               <tbody>
-                                {selectedVersion.sources.map((citation) => {
+                                {asList(selectedVersion.sources).map((citation) => {
                                   const unpin = enabledAction(citation.allowed_actions, 'unpin_tax_rule_version_source');
                                   return (
                                     <tr key={citation.id || `${citation.tax_source_id}-${citation.locator ?? ''}`}>
@@ -1360,7 +1364,7 @@ export function OwnerTaxKnowledgePanel({
                                 </tr>
                               </thead>
                               <tbody>
-                                {selectedVersion.legal_value_bindings.map((binding) => {
+                                {asList(selectedVersion.legal_value_bindings).map((binding) => {
                                   const unbind = enabledAction(
                                     binding.allowed_actions,
                                     'unbind_tax_rule_version_legal_value',
@@ -1427,7 +1431,7 @@ export function OwnerTaxKnowledgePanel({
                                 </tr>
                               </thead>
                               <tbody>
-                                {selectedVersion.relationships.map((rel) => {
+                                {asList(selectedVersion.relationships).map((rel) => {
                                   const del = enabledAction(rel.allowed_actions, 'delete_tax_rule_relationship');
                                   return (
                                     <tr key={rel.id || `${rel.to_tax_rule_version_id}-${rel.relationship_type}`}>
@@ -1488,7 +1492,7 @@ export function OwnerTaxKnowledgePanel({
                                 </tr>
                               </thead>
                               <tbody>
-                                {selectedVersion.unresolved_legal_references.map((row) => (
+                                {asList(selectedVersion.unresolved_legal_references).map((row) => (
                                   <tr key={row.id}>
                                     <td style={TD_STYLE}>{row.relationship_intent_label}</td>
                                     <td style={TD_STYLE}>{row.cited_display}</td>
@@ -1528,14 +1532,14 @@ export function OwnerTaxKnowledgePanel({
                         </div>
                       ) : null}
                     </div>
-                  ) : selectedRule.versions.length ? (
+                  ) : asList(selectedRule.versions).length ? (
                     <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>
                       Select a version to view details and actions.
                     </p>
                   ) : null}
                 </div>
               </div>
-            ) : taxKnowledge.rules.length ? (
+            ) : asList(taxKnowledge.rules).length ? (
               <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>Select a rule to view details and actions.</p>
             ) : null}
           </div>
