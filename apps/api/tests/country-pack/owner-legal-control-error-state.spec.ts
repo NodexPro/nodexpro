@@ -25,5 +25,5 @@ test('Legal Control failed aggregate does not render panel or fabricate empty le
   assert.match(readModels, /throwIfOwnerLegalControlReadError\(oErr, 'ownerLegalControl\.organizations'\)/);
   assert.match(readModels, /throwIfOwnerLegalControlReadError\(plansError, 'ownerLegalControl\.module_plans'\)/);
   assert.match(readModels, /throwIfOwnerLegalControlReadError\(error, 'ownerLegalControl\.audit_log'\)/);
-  assert.match(readModels, /618_owner_legal_control_service_role_privileges\.sql/);
+  assert.match(readModels, /619_owner_legal_control_missing_read_objects\.sql/);
 });

@@ -67,7 +67,7 @@ function normalizeCommercialControlsQuery(input?: Partial<CommercialControlsQuer
 }
 
 const OWNER_LEGAL_CONTROL_PRIVILEGE_HINT =
-  'Apply supabase/migrations/618_owner_legal_control_service_role_privileges.sql';
+  'Apply supabase/migrations/619_owner_legal_control_missing_read_objects.sql (platform_settings, docflow_request_template_definitions, org_module_pricing_adjustments).';
 
 function throwIfOwnerLegalControlReadError(error: SupabaseErrorLike | null | undefined, context: string): void {
   throwIfSupabaseError(error, context, { migrationHint: OWNER_LEGAL_CONTROL_PRIVILEGE_HINT });
