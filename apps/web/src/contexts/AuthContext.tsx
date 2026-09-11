@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import {
+  isPasswordRecoveryActive,
+  isPasswordRecoveryLocation,
+  markPasswordRecovery,
+} from '../lib/password-recovery';
 import { apiJson } from '../api/client';
 import { AUTH } from '../api/endpoints';
 import { setBackendActiveOrganizationId } from '../api/org-context';
@@ -117,6 +122,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const ac = new AbortController();
     const load = async () => {
+      if (
+        isPasswordRecoveryActive() ||
+        isPasswordRecoveryLocation(window.location.search, window.location.hash)
+      ) {
+        markPasswordRecovery();
+        setBackendActiveOrganizationId(null);
+        setState({ status: 'unauthenticated' });
+        return;
+      }
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
         setBackendActiveOrganizationId(null);
@@ -131,6 +145,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        markPasswordRecovery();
+        setBackendActiveOrganizationId(null);
+        setState({ status: 'unauthenticated' });
+        return;
+      }
       if (event === 'SIGNED_OUT') {
         setBackendActiveOrganizationId(null);
         setState({ status: 'unauthenticated' });

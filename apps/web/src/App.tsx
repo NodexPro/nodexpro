@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { supabase } from './lib/supabase';
+import {
+  isPasswordRecoveryActive,
+  isPasswordRecoveryLocation,
+  markPasswordRecovery,
+} from './lib/password-recovery';
 import { AuthProvider } from './contexts/AuthContext';
 import { RequireAuth } from './components/guards/RequireAuth';
 import { RequireOrg } from './components/guards/RequireOrg';
@@ -116,9 +122,42 @@ function PwaUpdatePrompt() {
   );
 }
 
+function PasswordRecoveryGate() {
+  const location = useLocation();
+  const [, bump] = useState(0);
+
+  useEffect(() => {
+    if (isPasswordRecoveryLocation(location.search, location.hash)) {
+      markPasswordRecovery();
+      bump((n) => n + 1);
+    }
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        markPasswordRecovery();
+        bump((n) => n + 1);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [location.search, location.hash]);
+
+  if (isPasswordRecoveryActive() && location.pathname !== '/reset-password') {
+    return (
+      <Navigate
+        to={{ pathname: '/reset-password', search: location.search, hash: location.hash }}
+        replace
+      />
+    );
+  }
+  return null;
+}
+
 function AppRoutes() {
   return (
-    <Routes>
+    <>
+      <PasswordRecoveryGate />
+      <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
@@ -156,6 +195,7 @@ function AppRoutes() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }
 

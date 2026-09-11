@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseHostForDiagnostics, supabaseUrl } from '../lib/supabase';
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -19,9 +19,18 @@ export function ForgotPassword() {
         setLoading(false);
         return;
       }
+      if (!supabaseUrl) {
+        setError('Password reset is not configured (missing VITE_SUPABASE_URL).');
+        setLoading(false);
+        return;
+      }
       const redirectTo = `${window.location.origin}/reset-password`;
       const { error: resetErr } = await supabase.auth.resetPasswordForEmail(emailNorm, { redirectTo });
-      if (resetErr) throw new Error(resetErr.message);
+      if (resetErr) {
+        console.error('[forgot-password]', supabaseHostForDiagnostics(), resetErr);
+        const detail = [resetErr.message, resetErr.code].filter(Boolean).join(' · ');
+        throw new Error(`${detail || 'Password reset request failed'} (${supabaseHostForDiagnostics()})`);
+      }
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Request failed');

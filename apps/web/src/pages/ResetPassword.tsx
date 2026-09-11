@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import {
+  clearPasswordRecovery,
+  isPasswordRecoveryLocation,
+  markPasswordRecovery,
+  passwordRecoveryCallbackError,
+} from '../lib/password-recovery';
 
 /**
  * After reset link: Supabase redirects with hash (implicit) or ?code= (PKCE).
@@ -16,19 +22,26 @@ export function ResetPassword() {
 
   useEffect(() => {
     let cancelled = false;
-    const hash = window.location.hash;
+    const callbackError = passwordRecoveryCallbackError(window.location.search, window.location.hash);
+    if (callbackError) {
+      setError(callbackError);
+      setPhase('invalid');
+      return;
+    }
+
     const recoveryHint =
-      hash.includes('type=recovery') ||
-      hash.includes('type%3Drecovery') ||
+      isPasswordRecoveryLocation(window.location.search, window.location.hash) ||
       new URLSearchParams(window.location.search).has('code');
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       if (event === 'PASSWORD_RECOVERY') {
+        markPasswordRecovery();
         setPhase('ready');
         return;
       }
       if (event === 'SIGNED_IN' && session && recoveryHint) {
+        markPasswordRecovery();
         setPhase('ready');
       }
     });
@@ -37,6 +50,7 @@ export function ResetPassword() {
       void supabase.auth.getSession().then(({ data }) => {
         if (cancelled) return;
         if (data.session && recoveryHint) {
+          markPasswordRecovery();
           setPhase('ready');
         }
       });
@@ -74,7 +88,11 @@ export function ResetPassword() {
     setLoading(true);
     try {
       const { error: updErr } = await supabase.auth.updateUser({ password });
-      if (updErr) throw new Error(updErr.message);
+      if (updErr) {
+        console.error('[reset-password]', updErr);
+        throw new Error(updErr.message || updErr.code || 'Could not update password');
+      }
+      clearPasswordRecovery();
       await supabase.auth.signOut();
       navigate('/login', { replace: true, state: { passwordResetOk: true } });
     } catch (err) {
@@ -98,7 +116,7 @@ export function ResetPassword() {
       <div style={{ maxWidth: 400, margin: '80px auto', padding: 24 }}>
         <h1>Set new password</h1>
         <p style={{ color: '#b91c1c' }}>
-          This reset link is invalid or has expired. Request a new one from the sign-in page.
+          {error || 'This reset link is invalid or has expired. Request a new one from the sign-in page.'}
         </p>
         <p style={{ marginTop: 16 }}>
           <Link to="/forgot-password">Forgot password</Link>
