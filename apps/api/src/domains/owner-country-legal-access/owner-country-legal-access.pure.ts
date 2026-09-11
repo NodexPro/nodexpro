@@ -58,6 +58,7 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
 
   if (
     command === 'create_country' ||
+    command === 'update_country_localization' ||
     command === 'create_country_pack' ||
     command === 'enable_country_pack' ||
     command === 'disable_country_pack' ||

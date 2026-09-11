@@ -12,6 +12,8 @@ export type Country = {
   name: string;
   status: CountryStatus;
   default_timezone: string | null;
+  default_locale: string | null;
+  supported_locales: string[];
   created_at: string;
 };
 

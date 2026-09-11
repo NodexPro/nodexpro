@@ -119,21 +119,32 @@ export function parseVersion(row: UnknownRecord): OwnerTaxFactDefinitionVersion 
   };
 }
 
-export function parseDefinition(row: UnknownRecord): OwnerTaxFactDefinition {
+export function parseDefinition(row: UnknownRecord, defaultLocale?: string | null): OwnerTaxFactDefinition {
+  const presentations = asArray<UnknownRecord>(row.presentations).map(parsePresentation);
+  const semanticTitle = asString(row.semantic_title);
+  const explicitLabel = asString(row.display_label);
+  const loc = (defaultLocale ?? asString(row.display_locale)).trim().toLowerCase();
+  const lang = loc.slice(0, 2);
+  const matched =
+    presentations.find((item) => item.locale === loc) ??
+    (lang ? presentations.find((item) => item.locale === lang || item.locale.startsWith(`${lang}-`)) : undefined) ??
+    (presentations.length === 1 ? presentations[0] : undefined);
   return {
     id: asString(row.id),
     fact_key: asString(row.fact_key),
     country_code: asNullableString(row.country_code),
     scope: asString(row.scope) === 'country' ? 'country' : 'global',
     status: asString(row.status),
-    semantic_title: asString(row.semantic_title),
+    semantic_title: semanticTitle,
+    display_label: explicitLabel || matched?.label || semanticTitle,
+    display_locale: asNullableString(row.display_locale) ?? matched?.locale ?? null,
     owner_note: asNullableString(row.owner_note),
     retired_at: asNullableString(row.retired_at),
     retired_reason: asNullableString(row.retired_reason),
     created_at: asString(row.created_at),
     updated_at: asString(row.updated_at),
     versions: asArray<UnknownRecord>(row.versions).map(parseVersion),
-    presentations: asArray<UnknownRecord>(row.presentations).map(parsePresentation),
+    presentations,
     allowed_actions: parseAllowedActions(row.allowed_actions),
   };
 }
@@ -142,17 +153,28 @@ export function parseFactDictionaryAggregate(raw: unknown): OwnerFactDictionaryA
   const rec = asRecord(raw);
   if (!rec) return emptyFactDictionaryAggregate();
   const selectedScope = asString(rec.selected_scope) === 'country' ? 'country' : 'global';
-  const definitions = asArray<UnknownRecord>(rec.definitions).map(parseDefinition);
+  const locRaw = asRecord(rec.country_localization);
+  const countryLocalization = {
+    country_code: asNullableString(locRaw?.country_code) ?? asNullableString(rec.selected_country_code),
+    default_locale: asNullableString(locRaw?.default_locale),
+    supported_locales: asStringArray(locRaw?.supported_locales),
+  };
+  const definitions = asArray<UnknownRecord>(rec.definitions).map((row) =>
+    parseDefinition(row, countryLocalization.default_locale),
+  );
   const definitionVersions = definitions.flatMap((definition) => definition.versions);
   const enumOptions = definitionVersions.flatMap((version) => version.enum_options);
   const presentations = definitions.flatMap((definition) => definition.presentations);
   return {
     selected_country_code: asNullableString(rec.selected_country_code),
     selected_scope: selectedScope,
+    country_localization: countryLocalization,
     countries: asArray<UnknownRecord>(rec.countries).map((row) => ({
       code: asString(row.code),
       name: asString(row.name),
       status: asString(row.status),
+      default_locale: asNullableString(row.default_locale),
+      supported_locales: asStringArray(row.supported_locales),
     })),
     definitions,
     definition_versions: definitionVersions.length
@@ -328,7 +350,7 @@ export function OwnerFactDictionaryPanel({
         <div>
           <h2 style={{ margin: 0, fontSize: 18 }}>Fact Dictionary</h2>
           <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 13 }}>
-            Canonical fact definitions. Country follows the owner country context. Commands only.
+            Canonical client facts from the owner aggregate. Human labels follow the country default locale.
           </p>
         </div>
         <ActionToolbar
@@ -371,7 +393,7 @@ export function OwnerFactDictionaryPanel({
             <table className="nx-bsai-table">
               <thead>
                 <tr>
-                  {['Fact key', 'Title', 'Scope', 'Country', 'Status', 'Versions', 'Actions'].map((h) => (
+                  {['Label', 'Fact key', 'Scope', 'Country', 'Status', 'Versions', 'Actions'].map((h) => (
                     <th key={h}>{h}</th>
                   ))}
                 </tr>
@@ -381,10 +403,10 @@ export function OwnerFactDictionaryPanel({
                   <tr key={row.id} className={selectedDefinition?.id === row.id ? 'is-selected' : undefined}>
                     <td>
                       <button type="button" className="nx-bsai-select-btn" onClick={() => setSelectedDefinitionId(row.id)}>
-                        {row.fact_key}
+                        {row.display_label || row.semantic_title}
                       </button>
                     </td>
-                    <td>{row.semantic_title}</td>
+                    <td className="nx-bsai-muted">{row.fact_key}</td>
                     <td>{row.scope}</td>
                     <td>{row.country_code ?? 'global'}</td>
                     <td>{ownerLegalControlStatusBadgeLabel(row)}</td>
@@ -415,11 +437,13 @@ export function OwnerFactDictionaryPanel({
           {selectedDefinition ? (
             <div className="nx-bsai-detail">
               <h3>
-                {selectedDefinition.fact_key}
-                {selectedDefinition.semantic_title ? ` — ${selectedDefinition.semantic_title}` : ''}
+                {selectedDefinition.display_label || selectedDefinition.semantic_title}
               </h3>
               <p className="nx-bsai-muted">
-                Identity status: {ownerLegalControlStatusBadgeLabel(selectedDefinition)}. Scope:{' '}
+                Canonical key: {selectedDefinition.fact_key}
+                {selectedDefinition.display_locale ? ` · locale ${selectedDefinition.display_locale}` : ''}
+                {selectedDefinition.semantic_title ? ` · ${selectedDefinition.semantic_title}` : ''}. Identity status:{' '}
+                {ownerLegalControlStatusBadgeLabel(selectedDefinition)}. Scope:{' '}
                 {selectedDefinition.scope}. Country: {selectedDefinition.country_code ?? 'global'}.
               </p>
 

@@ -5,6 +5,8 @@ import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import { assertOwnerLegalCommandAccess } from '../owner-country-legal-access/owner-country-legal-access.service.js';
 import { isOwnerLegalValueCommand } from '../owner-country-legal-access/owner-country-legal-access.types.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
+import { isSupabaseMissingColumnError } from '../../shared/supabase-errors.js';
+import { normalizeCountryLocalization } from './country-localization.pure.js';
 import { assertCountryExists } from './country.service.js';
 import { getCountryPack } from './country-pack.service.js';
 import { assertNoOverlapRuleset, assertRulesetExists, resolveActiveRulesetByDate } from './ruleset.service.js';
@@ -39,6 +41,7 @@ import {
 
 type CountryPackCommandType =
   | 'create_country'
+  | 'update_country_localization'
   | 'create_country_pack'
   | 'enable_country_pack'
   | 'disable_country_pack'
@@ -480,18 +483,78 @@ async function handleCreateCountry(ctx: RequestContext, payload: Record<string, 
   const name = asString(payload.name, 'name');
   const status = asString(payload.status ?? 'active', 'status');
   const defaultTimezone = asOptionalString(payload.default_timezone);
+  const localization = normalizeCountryLocalization({
+    default_locale: payload.default_locale,
+    supported_locales: payload.supported_locales,
+  });
 
-  const { data, error } = await supabaseAdmin
-    .from('countries')
-    .insert({ code, name, status, default_timezone: defaultTimezone })
-    .select('*')
-    .single();
+  const insertRow: Record<string, unknown> = {
+    code,
+    name,
+    status,
+    default_timezone: defaultTimezone,
+    default_locale: localization.default_locale,
+    supported_locales: localization.supported_locales,
+  };
+
+  let { data, error } = await supabaseAdmin.from('countries').insert(insertRow).select('*').single();
+  if (error && isSupabaseMissingColumnError(error, 'default_locale')) {
+    const fallback = await supabaseAdmin
+      .from('countries')
+      .insert({ code, name, status, default_timezone: defaultTimezone })
+      .select('*')
+      .single();
+    data = fallback.data;
+    error = fallback.error;
+  }
   if (error) throw error;
+  if (!data) throw badRequest('Country insert returned no row');
 
-  await audit(ctx, AUDIT_ACTIONS.COUNTRY_CREATED, 'country', data.code, { code, status });
+  await audit(ctx, AUDIT_ACTIONS.COUNTRY_CREATED, 'country', data.code, {
+    code,
+    status,
+    default_locale: localization.default_locale,
+    supported_locales: localization.supported_locales,
+  });
   return {
     ok: true,
     command: 'create_country',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx),
+  };
+}
+
+async function handleUpdateCountryLocalization(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<CountryPackCommandResponse> {
+  const code = asString(payload.country_code ?? payload.code, 'country_code').toUpperCase();
+  await assertCountryExists(code);
+  const localization = normalizeCountryLocalization({
+    default_locale: payload.default_locale,
+    supported_locales: payload.supported_locales,
+    required: true,
+  });
+  const { error } = await supabaseAdmin
+    .from('countries')
+    .update({
+      default_locale: localization.default_locale,
+      supported_locales: localization.supported_locales,
+    })
+    .eq('code', code)
+    .select('code')
+    .single();
+  if (error && isSupabaseMissingColumnError(error, 'default_locale')) {
+    throw badRequest('Country localization schema is not applied');
+  }
+  if (error) throw error;
+  await audit(ctx, AUDIT_ACTIONS.COUNTRY_LOCALIZATION_UPDATED, 'country', code, {
+    country_code: code,
+    default_locale: localization.default_locale,
+    supported_locales: localization.supported_locales,
+  });
+  return {
+    ok: true,
+    command: 'update_country_localization',
     refreshed: await refreshedOwnerLegalControlPanel(ctx),
   };
 }
@@ -1641,6 +1704,8 @@ export async function executeCountryPackCommand(
   switch (command.command) {
     case 'create_country':
       return handleCreateCountry(ctx, command.payload);
+    case 'update_country_localization':
+      return handleUpdateCountryLocalization(ctx, command.payload);
     case 'create_country_pack':
       return handleCreateCountryPack(ctx, command.payload);
     case 'enable_country_pack':

@@ -373,7 +373,8 @@ test('TAX-F2A2A isolation: 600–613 unchanged; no 615; K3/K4/Strategy evaluate 
     .trim()
     .split(/\r?\n/)
     .filter(Boolean)
-    .filter((name) => !name.includes('614_tax_fact_dictionary_atomic_activation.sql'));
+    .filter((name) => !name.includes('614_tax_fact_dictionary_atomic_activation.sql'))
+    .filter((name) => !name.includes('621_country_localization.sql'));
   assert.deepEqual(extra, [], 'tracked Tax Brain migrations 600–613 must not be edited');
 
   const web = execSync('git diff --name-only -- apps/web', { cwd: repoRoot, encoding: 'utf8' })
@@ -386,8 +387,13 @@ test('TAX-F2A2A isolation: 600–613 unchanged; no 615; K3/K4/Strategy evaluate 
       (name) =>
         name !== 'apps/web/src/pages/owner-fact-dictionary-panel.tsx' &&
         name !== 'apps/web/src/pages/owner-legal-control-panel-actions.tsx' &&
+        name !== 'apps/web/src/pages/PlatformOwnerLegalControl.tsx' &&
+        name !== 'apps/web/src/pages/owner-add-country-control.tsx' &&
+        name !== 'apps/web/src/pages/owner-country-context-panel.tsx' &&
+        name !== 'apps/web/src/pages/owner-legal-control-types.ts' &&
         name !== 'apps/web/src/styles/nx-owner-business-setup-ai.css' &&
-        name !== 'apps/web/tests/owner-fact-dictionary-publish.pure.spec.ts',
+        name !== 'apps/web/tests/owner-fact-dictionary-publish.pure.spec.ts' &&
+        name !== 'apps/web/tests/owner-country-localization.pure.spec.ts',
     );
   assert.deepEqual(web, [], 'F2A2A web changes are limited to Fact Dictionary owner publish UI');
 

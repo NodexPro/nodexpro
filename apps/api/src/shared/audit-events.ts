@@ -173,6 +173,7 @@ export const AUDIT_ACTIONS = {
   OWNER_COUNTRY_LEGAL_ASSIGNMENT_SUSPENDED: 'owner_country_legal_access.assignment_suspended',
   OWNER_COUNTRY_LEGAL_ASSIGNMENT_REVOKED: 'owner_country_legal_access.assignment_revoked',
   COUNTRY_CREATED: 'country_created',
+  COUNTRY_LOCALIZATION_UPDATED: 'country_localization_updated',
   COUNTRY_PACK_CREATED: 'country_pack_created',
   COUNTRY_PACK_ENABLED: 'country_pack_enabled',
   COUNTRY_PACK_DISABLED: 'country_pack_disabled',

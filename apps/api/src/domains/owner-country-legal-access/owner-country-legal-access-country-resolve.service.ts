@@ -293,6 +293,13 @@ export async function resolveCountryForOwnerLegalCommand(
     );
   }
 
+  if (command === 'create_country') {
+    return normalizeOwnerLegalCountryCode(payload.code);
+  }
+  if (command === 'update_country_localization') {
+    return normalizeOwnerLegalCountryCode(payload.country_code ?? payload.code);
+  }
+
   return normalizeOwnerLegalCountryCode(payload.country_code);
 }
 

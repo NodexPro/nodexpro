@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { assertOwnerLegalReadAccess } from '../owner-country-legal-access/owner-country-legal-access.service.js';
-import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import { isSupabaseMissingTableError, isSupabaseMissingColumnError } from '../../shared/supabase-errors.js';
 import {
   assembleFactDictionarySlice,
   mapDefinition,
@@ -27,7 +27,13 @@ const PRESENTATION_SELECT =
 
 export type OwnerFactDictionaryAggregateOpts = {
   country_code?: string | null;
-  countries?: Array<{ code?: string; name?: string; status?: string }>;
+  countries?: Array<{
+    code?: string;
+    name?: string;
+    status?: string;
+    default_locale?: string | null;
+    supported_locales?: string[];
+  }>;
 };
 
 function normalizeCountryCode(value: string | null | undefined): string | null {
@@ -36,12 +42,22 @@ function normalizeCountryCode(value: string | null | undefined): string | null {
   return /^[A-Z]{2}$/.test(code) ? code : null;
 }
 
-function mapCountry(row: { code?: string; name?: string; status?: string }): OwnerFactDictionaryCountryDto | null {
+function mapCountry(row: {
+  code?: string;
+  name?: string;
+  status?: string;
+  default_locale?: string | null;
+  supported_locales?: string[];
+}): OwnerFactDictionaryCountryDto | null {
   if (typeof row.code !== 'string' || !row.code.trim()) return null;
   return {
     code: row.code,
     name: typeof row.name === 'string' ? row.name : row.code,
     status: typeof row.status === 'string' ? row.status : 'active',
+    default_locale: typeof row.default_locale === 'string' && row.default_locale.trim() ? row.default_locale : null,
+    supported_locales: Array.isArray(row.supported_locales)
+      ? row.supported_locales.filter((item): item is string => typeof item === 'string')
+      : [],
   };
 }
 
@@ -51,9 +67,17 @@ async function loadCountryCatalog(
   if (provided && provided.length) {
     return provided.map(mapCountry).filter((row): row is OwnerFactDictionaryCountryDto => row !== null);
   }
-  const { data, error } = await supabaseAdmin.from('countries').select('code, name, status').order('code');
-  if (error) throw error;
-  return (data ?? []).map(mapCountry).filter((row): row is OwnerFactDictionaryCountryDto => row !== null);
+  const result = await supabaseAdmin
+    .from('countries')
+    .select('code, name, status, default_locale, supported_locales')
+    .order('code');
+  if (result.error && isSupabaseMissingColumnError(result.error, 'default_locale')) {
+    const fallback = await supabaseAdmin.from('countries').select('code, name, status').order('code');
+    if (fallback.error) throw fallback.error;
+    return (fallback.data ?? []).map(mapCountry).filter((row): row is OwnerFactDictionaryCountryDto => row !== null);
+  }
+  if (result.error) throw result.error;
+  return (result.data ?? []).map(mapCountry).filter((row): row is OwnerFactDictionaryCountryDto => row !== null);
 }
 
 function pushSchemaWarning(warnings: string[]): void {
@@ -195,11 +219,15 @@ export async function buildOwnerFactDictionaryAggregate(
     presentationsByDefinition.set(definitionId, list);
   }
 
+  const selectedCountry = countries.find((row) => row.code === selectedCountryCode) ?? null;
+  const defaultLocale = selectedCountry?.default_locale ?? null;
+
   const definitions: OwnerTaxFactDefinitionDto[] = definitionRows.map((row) =>
     mapDefinition(
       row,
       versionsByDefinition.get(String(row.id)) ?? [],
       presentationsByDefinition.get(String(row.id)) ?? [],
+      defaultLocale,
     ),
   );
 

@@ -46,7 +46,9 @@ test('create_country inserts only an empty countries row and does not copy legal
   assert.ok(start >= 0 && end > start);
   const fn = src.slice(start, end);
   assert.match(fn, /\.from\('countries'\)/);
-  assert.match(fn, /\.insert\(\{ code, name, status, default_timezone: defaultTimezone \}\)/);
+  assert.match(fn, /\.insert\(insertRow\)/);
+  assert.match(fn, /default_timezone: defaultTimezone/);
+  assert.match(fn, /default_locale: localization.default_locale/);
   assert.doesNotMatch(fn, /\.from\('country_packs'\)/);
   assert.doesNotMatch(fn, /\.from\('country_pack_rulesets'\)/);
   assert.doesNotMatch(fn, /\.from\('country_legal/);

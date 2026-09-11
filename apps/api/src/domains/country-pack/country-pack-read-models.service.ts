@@ -1,7 +1,8 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AppError, forbidden, notFound } from '../../shared/errors.js';
-import { throwIfSupabaseError, type SupabaseErrorLike } from '../../shared/supabase-errors.js';
+import { throwIfSupabaseError, isSupabaseMissingColumnError, type SupabaseErrorLike } from '../../shared/supabase-errors.js';
+import { OWNER_COUNTRY_LOCALE_CATALOG } from './country-localization.pure.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import {
   actorAssignedCountryCodes,
@@ -424,8 +425,24 @@ export async function buildOwnerCountryPackAdminAggregate(ctx: RequestContext): 
   const actor = await requireOwnerLegalWorkspaceActor(ctx);
   const allowedCountries = actorAssignedCountryCodes(actor);
 
-  const [countries, packs, rulesets] = await Promise.all([
-    supabaseAdmin.from('countries').select('code, name, status, default_timezone, created_at').order('code'),
+  const countriesResult = await supabaseAdmin
+    .from('countries')
+    .select('code, name, status, default_timezone, default_locale, supported_locales, created_at')
+    .order('code');
+  let countryRowsRaw: Array<Record<string, unknown>> = [];
+  if (countriesResult.error && isSupabaseMissingColumnError(countriesResult.error, 'default_locale')) {
+    const fallback = await supabaseAdmin
+      .from('countries')
+      .select('code, name, status, default_timezone, created_at')
+      .order('code');
+    if (fallback.error) throw fallback.error;
+    countryRowsRaw = (fallback.data ?? []) as Array<Record<string, unknown>>;
+  } else if (countriesResult.error) {
+    throw countriesResult.error;
+  } else {
+    countryRowsRaw = (countriesResult.data ?? []) as Array<Record<string, unknown>>;
+  }
+  const [packs, rulesets] = await Promise.all([
     supabaseAdmin
       .from('country_packs')
       .select('id, country_code, pack_code, name, status, module_code, framework_version, code_version, created_at, updated_at')
@@ -435,15 +452,20 @@ export async function buildOwnerCountryPackAdminAggregate(ctx: RequestContext): 
       .select('id, country_pack_id, ruleset_code, ruleset_version, legal_basis_reference, effective_from, effective_to, status, updated_at')
       .order('updated_at', { ascending: false }),
   ]);
-  if (countries.error) throw countries.error;
   if (packs.error) throw packs.error;
   if (rulesets.error) throw rulesets.error;
 
   const warnings: string[] = [];
   const countryRows = filterCountryRows(
-    (countries.data ?? []).map((row) => ({
+    countryRowsRaw.map((row) => ({
       ...row,
-      status_badge: statusBadge(row.status),
+      code: row.code,
+      country_code: row.country_code,
+      default_locale: typeof row.default_locale === 'string' ? row.default_locale : null,
+      supported_locales: Array.isArray(row.supported_locales)
+        ? row.supported_locales.filter((item): item is string => typeof item === 'string')
+        : [],
+      status_badge: statusBadge(typeof row.status === 'string' ? row.status : ''),
     })),
     allowedCountries,
     'code',
@@ -479,8 +501,19 @@ export async function buildOwnerCountryPackAdminAggregate(ctx: RequestContext): 
     },
     warnings,
     errors: [],
+    locale_catalog: OWNER_COUNTRY_LOCALE_CATALOG.map((row) => ({ code: row.code, label: row.label })),
     actions: [
       { action_key: 'create_country', enabled: packActionsEnabled },
+      {
+        action_key: 'update_country_localization',
+        enabled: packActionsEnabled,
+        note: 'Sets country default_locale and supported_locales. Does not change canonical fact identity.',
+        payload: {
+          country_code: 'ISO 3166-1 alpha-2',
+          default_locale: 'xx or xx-yy',
+          supported_locales: 'string[] including default_locale',
+        },
+      },
       { action_key: 'create_country_pack', enabled: packActionsEnabled },
       {
         action_key: 'create_ruleset',

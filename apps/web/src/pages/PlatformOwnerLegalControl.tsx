@@ -188,6 +188,19 @@ export function PlatformOwnerLegalControl() {
     });
   }, [countryPackActions, countryPackTables.rulesets.length]);
 
+  const localeCatalog = useMemo(() => {
+    const raw = countryPacksAdmin?.locale_catalog;
+    if (!Array.isArray(raw)) return [] as Array<{ code: string; label: string }>;
+    return raw
+      .map((row) => {
+        if (!row || typeof row !== 'object') return null;
+        const code = safeText((row as UnknownRecord).code);
+        const label = safeText((row as UnknownRecord).label) || code;
+        return code ? { code, label } : null;
+      })
+      .filter((row): row is { code: string; label: string } => row !== null);
+  }, [countryPacksAdmin]);
+
   const countryOptions = useMemo(
     () =>
       mergeOwnerCountrySelectorOptions(
@@ -326,6 +339,7 @@ export function PlatformOwnerLegalControl() {
             action={createCountryAction}
             existingCountryCodes={countryOptions.map((row) => row.code)}
             busy={commandBusy}
+            localeCatalog={localeCatalog}
             onSubmit={async (command, payload) => {
               await sendOwnerCommand(command, payload);
             }}
@@ -342,8 +356,12 @@ export function PlatformOwnerLegalControl() {
               emptyRulesetCreateActions={emptyRulesetCreateActions}
               busy={commandBusy}
               selectedCountryCode={selectedCountryCode}
+              localeCatalog={localeCatalog}
               onOpenCommand={openCommandModal}
               onToggleCountryPack={(row) => void toggleCountryPack(row)}
+              onSaveLocalization={async (payload) => {
+                await sendOwnerCommand('update_country_localization', payload);
+              }}
             />
           </details>
         }

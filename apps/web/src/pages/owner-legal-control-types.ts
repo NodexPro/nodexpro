@@ -404,6 +404,8 @@ export type OwnerFactDictionaryCountry = {
   code: string;
   name: string;
   status: string;
+  default_locale?: string | null;
+  supported_locales?: string[];
 };
 
 export type OwnerFactDictionaryLabeledOption = {
@@ -471,6 +473,8 @@ export type OwnerTaxFactDefinition = {
   scope: 'global' | 'country';
   status: string;
   semantic_title: string;
+  display_label: string;
+  display_locale: string | null;
   owner_note: string | null;
   retired_at: string | null;
   retired_reason: string | null;
@@ -484,6 +488,11 @@ export type OwnerTaxFactDefinition = {
 export type OwnerFactDictionaryAggregate = {
   selected_country_code: string | null;
   selected_scope: 'global' | 'country';
+  country_localization: {
+    country_code: string | null;
+    default_locale: string | null;
+    supported_locales: string[];
+  };
   countries: OwnerFactDictionaryCountry[];
   definitions: OwnerTaxFactDefinition[];
   definition_versions: OwnerTaxFactDefinitionVersion[];
@@ -499,6 +508,7 @@ export function emptyFactDictionaryAggregate(): OwnerFactDictionaryAggregate {
   return {
     selected_country_code: null,
     selected_scope: 'global',
+    country_localization: { country_code: null, default_locale: null, supported_locales: [] },
     countries: [],
     definitions: [],
     definition_versions: [],

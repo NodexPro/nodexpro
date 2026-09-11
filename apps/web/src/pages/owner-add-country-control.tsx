@@ -7,11 +7,13 @@ export function OwnerAddCountryControl({
   action,
   existingCountryCodes,
   busy,
+  localeCatalog = [],
   onSubmit,
 }: {
   action: AggregateAction | null;
   existingCountryCodes: readonly string[];
   busy: boolean;
+  localeCatalog?: Array<{ code: string; label: string }>;
   onSubmit: (command: string, payload: UnknownRecord) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
@@ -19,6 +21,8 @@ export function OwnerAddCountryControl({
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [timezone, setTimezone] = useState('');
+  const [defaultLocale, setDefaultLocale] = useState('');
+  const [supportedLocales, setSupportedLocales] = useState<string[]>([]);
   const [localError, setLocalError] = useState('');
 
   const isoOptions = useMemo(() => ownerIsoRegionPickerOptions(existingCountryCodes), [existingCountryCodes]);
@@ -45,6 +49,12 @@ export function OwnerAddCountryControl({
     }
     const payload: UnknownRecord = { code: nextCode, name: nextName };
     if (timezone.trim()) payload.default_timezone = timezone.trim();
+    if (defaultLocale) {
+      payload.default_locale = defaultLocale;
+      payload.supported_locales = supportedLocales.includes(defaultLocale)
+        ? supportedLocales
+        : [defaultLocale, ...supportedLocales];
+    }
     try {
       await onSubmit(commandKey, payload);
       setOpen(false);
@@ -52,6 +62,8 @@ export function OwnerAddCountryControl({
       setCode('');
       setName('');
       setTimezone('');
+      setDefaultLocale('');
+      setSupportedLocales([]);
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : 'Request failed');
     }
@@ -119,6 +131,40 @@ export function OwnerAddCountryControl({
                 placeholder="IANA timezone, if known"
               />
             </label>
+            {localeCatalog.length ? (
+              <>
+                <label className="nx-bsai-field">
+                  Default language
+                  <select value={defaultLocale} onChange={(e) => setDefaultLocale(e.target.value)} disabled={busy}>
+                    <option value="">Optional — configure later</option>
+                    {localeCatalog.map((row) => (
+                      <option key={row.code} value={row.code}>
+                        {row.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="nx-bsai-access-checks">
+                  {localeCatalog.map((row) => (
+                    <label key={row.code} className="nx-bsai-access-check">
+                      <input
+                        type="checkbox"
+                        checked={supportedLocales.includes(row.code)}
+                        disabled={busy}
+                        onChange={() => {
+                          setSupportedLocales((current) =>
+                            current.includes(row.code)
+                              ? current.filter((item) => item !== row.code)
+                              : [...current, row.code],
+                          );
+                        }}
+                      />
+                      {row.label}
+                    </label>
+                  ))}
+                </div>
+              </>
+            ) : null}
             <p className="nx-bsai-muted">
               Country catalog status uses the backend default. An ISO row is not legally ready until packs, sources,
               and values are authored for that country.

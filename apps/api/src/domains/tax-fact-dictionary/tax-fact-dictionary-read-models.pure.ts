@@ -1,4 +1,5 @@
 import { taxFactDefinitionChecksum } from './tax-fact-dictionary-checksum.pure.js';
+import { pickPresentationForLocale } from '../country-pack/country-localization.pure.js';
 import {
   FACT_DICTIONARY_SLICE_KEY,
   TAX_FACT_DICTIONARY_COMMANDS,
@@ -13,6 +14,8 @@ export type OwnerFactDictionaryCountryDto = {
   code: string;
   name: string;
   status: string;
+  default_locale: string | null;
+  supported_locales: string[];
 };
 
 export type OwnerFactDictionaryLabeledOption = {
@@ -74,6 +77,8 @@ export type OwnerTaxFactDefinitionDto = {
   scope: 'global' | 'country';
   status: string;
   semantic_title: string;
+  display_label: string;
+  display_locale: string | null;
   owner_note: string | null;
   retired_at: string | null;
   retired_reason: string | null;
@@ -87,6 +92,11 @@ export type OwnerTaxFactDefinitionDto = {
 export type OwnerFactDictionarySlice = {
   selected_country_code: string | null;
   selected_scope: 'global' | 'country';
+  country_localization: {
+    country_code: string | null;
+    default_locale: string | null;
+    supported_locales: string[];
+  };
   countries: OwnerFactDictionaryCountryDto[];
   definitions: OwnerTaxFactDefinitionDto[];
   definition_versions: OwnerTaxFactDefinitionVersionDto[];
@@ -385,15 +395,20 @@ export function mapDefinition(
   row: Record<string, unknown>,
   versions: OwnerTaxFactDefinitionVersionDto[],
   presentations: OwnerTaxFactPresentationDto[],
+  defaultLocale?: string | null,
 ): OwnerTaxFactDefinitionDto {
   const countryCode = asOptionalString(row.country_code);
+  const semanticTitle = String(row.semantic_title);
+  const display = pickPresentationForLocale(presentations, defaultLocale ?? null);
   return {
     id: String(row.id),
     fact_key: String(row.fact_key),
     country_code: countryCode,
     scope: countryCode ? 'country' : 'global',
     status: String(row.status),
-    semantic_title: String(row.semantic_title),
+    semantic_title: semanticTitle,
+    display_label: display?.label ?? semanticTitle,
+    display_locale: display?.locale ?? null,
     owner_note: asOptionalString(row.owner_note),
     retired_at: asOptionalString(row.retired_at),
     retired_reason: asOptionalString(row.retired_reason),
@@ -411,10 +426,16 @@ export function assembleFactDictionarySlice(input: {
   definitions: OwnerTaxFactDefinitionDto[];
   warnings: string[];
 }): OwnerFactDictionarySlice {
+  const selected = input.countries.find((row) => row.code === input.selected_country_code) ?? null;
   const definitionVersions = input.definitions.flatMap((definition) => definition.versions);
   return {
     selected_country_code: input.selected_country_code,
     selected_scope: input.selected_country_code ? 'country' : 'global',
+    country_localization: {
+      country_code: input.selected_country_code,
+      default_locale: selected?.default_locale ?? null,
+      supported_locales: selected?.supported_locales ?? [],
+    },
     countries: input.countries,
     definitions: input.definitions,
     definition_versions: definitionVersions,
