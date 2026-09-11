@@ -1054,6 +1054,26 @@ export function PlatformOwnerLegalControl() {
     );
   }
 
+  if (error && !panel) {
+    return (
+      <div style={{ padding: 24, maxWidth: 720 }}>
+        <h1>Owner Legal Control Panel</h1>
+        <p>Legal Control could not be loaded from the server. Legal data was not replaced with empty defaults.</p>
+        <p style={{ color: '#a94442', marginTop: 10 }}>{error}</p>
+        <button
+          type="button"
+          className="nx-btn nx-btn-taxes-compact"
+          style={{ marginTop: 12 }}
+          onClick={() => {
+            void loadCore();
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: 20, maxWidth: 1400, margin: '0 auto' }}>
       <h1>Owner Legal Control Panel</h1>

@@ -91,7 +91,13 @@ export function throwIfSupabaseError(
     throw schemaDriftAppError(context, error, options?.migrationHint);
   }
   if (code === '42501') {
-    throw new AppError(403, `${context}: database permission denied`, 'DB_PERMISSION', details);
+    const hint = [error.hint, options?.migrationHint].filter(Boolean).join(' ');
+    throw new AppError(
+      503,
+      hint ? `${context}: ${message}. ${hint}` : `${context}: ${message}`,
+      'DB_PERMISSION',
+      { ...details, migration_hint: options?.migrationHint },
+    );
   }
   if (message.includes('income_documents business fields are immutable after issue')) {
     throw new AppError(409, `${context}: ${message}`, 'INCOME_DOCUMENT_IMMUTABLE_AFTER_ISSUE', details);

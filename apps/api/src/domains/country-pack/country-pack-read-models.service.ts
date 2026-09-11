@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
-import { forbidden, notFound } from '../../shared/errors.js';
+import { AppError, forbidden, notFound } from '../../shared/errors.js';
+import { throwIfSupabaseError, type SupabaseErrorLike } from '../../shared/supabase-errors.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import { resolveCountryContext } from './country-pack-resolver.service.js';
 import {
@@ -65,6 +66,13 @@ function normalizeCommercialControlsQuery(input?: Partial<CommercialControlsQuer
   return { page, page_size: pageSize, search, module_key, entitlement_status, activation_status };
 }
 
+const OWNER_LEGAL_CONTROL_PRIVILEGE_HINT =
+  'Apply supabase/migrations/618_owner_legal_control_service_role_privileges.sql';
+
+function throwIfOwnerLegalControlReadError(error: SupabaseErrorLike | null | undefined, context: string): void {
+  throwIfSupabaseError(error, context, { migrationHint: OWNER_LEGAL_CONTROL_PRIVILEGE_HINT });
+}
+
 async function buildOwnerCommercialControlsAggregate(queryInput?: Partial<CommercialControlsQuery>): Promise<Record<string, unknown>> {
   const q0 = normalizeCommercialControlsQuery(queryInput);
   const excludedNamePrefix = /^(cc-sync-|cc-bad-|dbg-)/i;
@@ -81,7 +89,7 @@ async function buildOwnerCommercialControlsAggregate(queryInput?: Partial<Commer
     orgQuery = orgQuery.ilike('name', `%${q0.search}%`);
   }
   const { data: orgs, error: oErr } = await orgQuery;
-  if (oErr) throw oErr;
+  throwIfOwnerLegalControlReadError(oErr, 'ownerLegalControl.organizations');
 
   const orgIdsAll = (orgs ?? []).map((o) => String((o as any).id)).filter(Boolean);
   if (!orgIdsAll.length) {
@@ -598,7 +606,7 @@ export async function buildOwnerPlatformPricingAggregate(ctx: RequestContext): P
     .select('id, module_id, code, name, billing_period, currency, price_amount, is_active, sort_order, updated_at')
     .order('module_id', { ascending: true })
     .order('sort_order', { ascending: true });
-  if (plansError) throw plansError;
+  throwIfOwnerLegalControlReadError(plansError, 'ownerLegalControl.module_plans');
 
   const { data: allModules, error: allModsError } = await supabaseAdmin
     .from('modules')
@@ -1349,7 +1357,7 @@ async function fetchOwnerLegalControlPanelAuditSummary(): Promise<{ recent: Owne
     .in('entity_type', [...OWNER_LEGAL_CONTROL_AUDIT_ENTITY_TYPES])
     .order('created_at', { ascending: false })
     .limit(50);
-  if (error) throw error;
+  throwIfOwnerLegalControlReadError(error, 'ownerLegalControl.audit_log');
   return { recent: (data ?? []) as OwnerLegalControlAuditRow[] };
 }
 
@@ -1367,15 +1375,23 @@ export async function buildOwnerLegalControlPanelAggregate(
 ): Promise<Record<string, unknown>> {
   assertPlatformOwner(ctx);
 
-  const [
-    countryPacksAdmin,
-    legalValues,
-    platformPricing,
-    emailProviderConfig,
-    auditSummary,
-    docflowRequestTemplates,
-    commercialControls,
-  ] = await Promise.all([
+  let countryPacksAdmin: Record<string, unknown>;
+  let legalValues: Record<string, unknown>;
+  let platformPricing: Record<string, unknown>;
+  let emailProviderConfig: Awaited<ReturnType<typeof buildOwnerEmailProviderConfigAggregate>>;
+  let auditSummary: { recent: OwnerLegalControlAuditRow[] };
+  let docflowRequestTemplates: Awaited<ReturnType<typeof fetchDocflowRequestTemplatesForOwner>>;
+  let commercialControls: Record<string, unknown>;
+  try {
+    [
+      countryPacksAdmin,
+      legalValues,
+      platformPricing,
+      emailProviderConfig,
+      auditSummary,
+      docflowRequestTemplates,
+      commercialControls,
+    ] = await Promise.all([
       buildOwnerCountryPackAdminAggregate(ctx),
       buildOwnerLegalValuesAggregate(ctx),
       buildOwnerPlatformPricingAggregate(ctx),
@@ -1384,6 +1400,11 @@ export async function buildOwnerLegalControlPanelAggregate(
       fetchDocflowRequestTemplatesForOwner(),
       buildOwnerCommercialControlsAggregate(opts?.commercial_controls),
     ]);
+  } catch (e) {
+    if (e instanceof AppError) throw e;
+    throwIfOwnerLegalControlReadError(e as SupabaseErrorLike, 'buildOwnerLegalControlPanelAggregate');
+    throw e;
+  }
 
   const tables = countryPacksAdmin.tables as
     | { countries?: unknown[]; country_packs?: unknown[]; rulesets?: unknown[] }
@@ -1438,20 +1459,29 @@ export async function buildOwnerLegalControlPanelAggregate(
     tax_knowledge_country_code: opts?.tax_knowledge_country_code,
     strategy_engine_country_code: opts?.strategy_engine_country_code,
   });
-  const [taxKnowledge, strategyEngine, factDictionary] = await Promise.all([
-    buildOwnerTaxKnowledgeAggregate(ctx, {
-      country_code: selectedCountryCode,
-      countries: countryRows,
-    }),
-    buildOwnerStrategyEngineAggregate(ctx, {
-      country_code: selectedCountryCode,
-      countries: countryRows,
-    }),
-    buildOwnerFactDictionaryAggregate(ctx, {
-      country_code: selectedCountryCode,
-      countries: countryRows,
-    }),
-  ]);
+  let taxKnowledge: Awaited<ReturnType<typeof buildOwnerTaxKnowledgeAggregate>>;
+  let strategyEngine: Awaited<ReturnType<typeof buildOwnerStrategyEngineAggregate>>;
+  let factDictionary: Awaited<ReturnType<typeof buildOwnerFactDictionaryAggregate>>;
+  try {
+    [taxKnowledge, strategyEngine, factDictionary] = await Promise.all([
+      buildOwnerTaxKnowledgeAggregate(ctx, {
+        country_code: selectedCountryCode,
+        countries: countryRows,
+      }),
+      buildOwnerStrategyEngineAggregate(ctx, {
+        country_code: selectedCountryCode,
+        countries: countryRows,
+      }),
+      buildOwnerFactDictionaryAggregate(ctx, {
+        country_code: selectedCountryCode,
+        countries: countryRows,
+      }),
+    ]);
+  } catch (e) {
+    if (e instanceof AppError) throw e;
+    throwIfOwnerLegalControlReadError(e as SupabaseErrorLike, 'buildOwnerLegalControlPanelAggregate.knowledge');
+    throw e;
+  }
   const tkWarnings = (taxKnowledge.warnings as string[] | undefined) ?? [];
   const strategyWarnings = strategyEngine.warnings ?? [];
   const factDictionaryWarnings = factDictionary.warnings ?? [];
