@@ -2,8 +2,16 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import type { RequestContext } from '../shared/context.js';
-import { badRequest } from '../shared/errors.js';
+import { badRequest, forbidden } from '../shared/errors.js';
 import { assertPlatformOwner } from '../shared/platform-owner.js';
+import {
+  executeOwnerCountryLegalAccessCommand,
+} from '../domains/owner-country-legal-access/owner-country-legal-access-commands.service.js';
+import {
+  isOwnerCountryLegalAccessAdminCommand,
+  isOwnerLegalValueCommand,
+} from '../domains/owner-country-legal-access/owner-country-legal-access.types.js';
+import { loadOwnerLegalActor } from '../domains/owner-country-legal-access/owner-country-legal-access.service.js';
 import { AUDIT_ACTIONS, writeAudit } from '../shared/audit-events.js';
 import { executeCountryPackCommand } from '../domains/country-pack/country-pack-commands.service.js';
 import {
@@ -70,11 +78,30 @@ async function assertOwnerOrAuditFailure(ctx: RequestContext, req: Request): Pro
   }
 }
 
-/** Read model: current session is allowed platform owner (backend decision only). */
+async function assertOwnerLegalWorkspaceOrAuditFailure(ctx: RequestContext, req: Request): Promise<void> {
+  const actor = await loadOwnerLegalActor(ctx);
+  if (actor) return;
+  await writeAudit({
+    organizationId: null,
+    actorUserId: ctx.user.id,
+    entityType: 'owner_country_pack_api',
+    action: AUDIT_ACTIONS.OWNER_SECURITY_CHECK_FAILED,
+    payload: {
+      method: req.method,
+      path: req.path,
+      reason: 'owner_legal_workspace_required',
+    },
+    ipAddress: req.ip ?? null,
+    userAgent: req.headers['user-agent'] ?? null,
+  });
+  throw forbidden('Owner legal workspace access required', 'OWNER_LEGAL_ACCESS_REQUIRED');
+}
+
+/** Read model: current session is allowed platform owner or country legal maintainer (backend decision only). */
 router.get('/session', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctx = req.context as RequestContext;
-    await assertOwnerOrAuditFailure(ctx, req);
+    await assertOwnerLegalWorkspaceOrAuditFailure(ctx, req);
     return res.json({
       aggregate_key: 'platform_owner_session_aggregate',
       allowed: true,
@@ -89,7 +116,7 @@ router.use(authMiddleware);
 router.get('/legal-control', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctx = req.context as RequestContext;
-    await assertOwnerOrAuditFailure(ctx, req);
+    await assertOwnerLegalWorkspaceOrAuditFailure(ctx, req);
     const aggregate = await buildOwnerLegalControlPanelAggregate(ctx, {
       commercial_controls: {
         page: Number(req.query.commercial_page ?? 1) || 1,
@@ -271,13 +298,41 @@ router.get('/invoice-document-builder', async (req: Request, res: Response, next
 router.post('/command', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctx = req.context as RequestContext;
-    await assertOwnerOrAuditFailure(ctx, req);
 
     const commandName = typeof req.body?.command === 'string' ? req.body.command.trim() : '';
     const payload = req.body?.payload;
     if (!commandName) throw badRequest('command is required');
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw badRequest('payload must be an object');
+    }
+
+    if (commandName === 'request_country_legal_access') {
+      const out = await executeOwnerCountryLegalAccessCommand(
+        ctx,
+        commandName,
+        payload as Record<string, unknown>,
+      );
+      return res.json(out);
+    }
+
+    if (isOwnerCountryLegalAccessAdminCommand(commandName)) {
+      await assertOwnerOrAuditFailure(ctx, req);
+      const out = await executeOwnerCountryLegalAccessCommand(
+        ctx,
+        commandName,
+        payload as Record<string, unknown>,
+      );
+      return res.json(out);
+    }
+
+    const countryLegalCommand =
+      isTaxKnowledgeCommand(commandName) ||
+      isTaxStrategyEngineCommand(commandName) ||
+      isTaxFactDictionaryCommand(commandName) ||
+      isOwnerLegalValueCommand(commandName);
+
+    if (!countryLegalCommand) {
+      await assertOwnerOrAuditFailure(ctx, req);
     }
 
     if (isTaxKnowledgeCommand(commandName)) {

@@ -163,6 +163,6 @@ test('professional AppShell and session nav never include owner workspace links'
   assert.doesNotMatch(navBlock, /platform-owner|legal-control/);
   assert.doesNotMatch(shell, /platform-owner|legal-control|Country Pack|Knowledge Trainer/);
   assert.match(page, /Access denied/);
-  assert.match(page, /This page is available only for platform owner/);
+  assert.match(page, /This page is available only for platform owner or assigned country legal maintainers/);
   assert.match(page, /isForbidden/);
 });

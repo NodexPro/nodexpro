@@ -3,6 +3,18 @@ import type { RequestContext } from '../../shared/context.js';
 import { AppError, forbidden, notFound } from '../../shared/errors.js';
 import { throwIfSupabaseError, type SupabaseErrorLike } from '../../shared/supabase-errors.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
+import {
+  actorAssignedCountryCodes,
+  actorCapabilitiesForCountry,
+  filterCountryRows,
+  requireOwnerLegalWorkspaceActor,
+} from '../owner-country-legal-access/owner-country-legal-access.service.js';
+import {
+  actorPanelFields,
+  buildOwnerCountryLegalAccessAdminSlice,
+} from '../owner-country-legal-access/owner-country-legal-access-read-models.service.js';
+import { OWNER_LEGAL_ACCESS_ERROR_CODES } from '../owner-country-legal-access/owner-country-legal-access.types.js';
+import { maskActionsForCapabilities } from '../owner-country-legal-access/owner-country-legal-access.pure.js';
 import { resolveCountryContext } from './country-pack-resolver.service.js';
 import {
   assertValidDocflowCommunicationOwnerPayload,
@@ -409,7 +421,8 @@ function statusBadge(status: string): { code: string; label: string; tone: 'ok' 
 }
 
 export async function buildOwnerCountryPackAdminAggregate(ctx: RequestContext): Promise<Record<string, unknown>> {
-  assertPlatformOwner(ctx);
+  const actor = await requireOwnerLegalWorkspaceActor(ctx);
+  const allowedCountries = actorAssignedCountryCodes(actor);
 
   const [countries, packs, rulesets] = await Promise.all([
     supabaseAdmin.from('countries').select('code, name, status, default_timezone, created_at').order('code'),
@@ -427,37 +440,51 @@ export async function buildOwnerCountryPackAdminAggregate(ctx: RequestContext): 
   if (rulesets.error) throw rulesets.error;
 
   const warnings: string[] = [];
-  const enabledPacks = (packs.data ?? []).filter((p) => p.status === 'enabled').length;
-  const activeRulesets = (rulesets.data ?? []).filter((r) => r.status === 'active').length;
+  const countryRows = filterCountryRows(
+    (countries.data ?? []).map((row) => ({
+      ...row,
+      status_badge: statusBadge(row.status),
+    })),
+    allowedCountries,
+    'code',
+  );
+  const packRows = filterCountryRows(
+    (packs.data ?? []).map((row) => ({
+      ...row,
+      status_badge: statusBadge(row.status),
+    })),
+    allowedCountries,
+  );
+  const packIds = new Set(packRows.map((row) => String(row.id)));
+  const rulesetRows = (rulesets.data ?? [])
+    .filter((row) => !allowedCountries || packIds.has(String(row.country_pack_id)))
+    .map((row) => ({
+      ...row,
+      status_badge: statusBadge(row.status),
+      effective_window: `${row.effective_from} -> ${row.effective_to ?? 'open'}`,
+    }));
+  const enabledPacks = packRows.filter((p) => p.status === 'enabled').length;
+  const activeRulesets = rulesetRows.filter((r) => r.status === 'active').length;
   if (enabledPacks === 0) warnings.push('no_enabled_packs');
   if (activeRulesets === 0) warnings.push('no_active_rulesets');
+  const packActionsEnabled = actor.kind === 'platform_owner';
 
   return {
     aggregate_key: 'owner_country_pack_admin_aggregate',
     status: { packs_enabled: enabledPacks, rulesets_active: activeRulesets },
     tables: {
-      countries: (countries.data ?? []).map((row) => ({
-        ...row,
-        status_badge: statusBadge(row.status),
-      })),
-      country_packs: (packs.data ?? []).map((row) => ({
-        ...row,
-        status_badge: statusBadge(row.status),
-      })),
-      rulesets: (rulesets.data ?? []).map((row) => ({
-        ...row,
-        status_badge: statusBadge(row.status),
-        effective_window: `${row.effective_from} -> ${row.effective_to ?? 'open'}`,
-      })),
+      countries: countryRows,
+      country_packs: packRows,
+      rulesets: rulesetRows,
     },
     warnings,
     errors: [],
     actions: [
-      { action_key: 'create_country', enabled: true },
-      { action_key: 'create_country_pack', enabled: true },
+      { action_key: 'create_country', enabled: packActionsEnabled },
+      { action_key: 'create_country_pack', enabled: packActionsEnabled },
       {
         action_key: 'create_ruleset',
-        enabled: true,
+        enabled: packActionsEnabled,
         note:
           'country_pack_id: copy from Country Packs table (id). effective_from / effective_to: YYYY-MM-DD. DB status: draft | active | deprecated | disabled.',
         payload: {
@@ -471,16 +498,17 @@ export async function buildOwnerCountryPackAdminAggregate(ctx: RequestContext): 
           checksum: 'optional string',
         },
       },
-      { action_key: 'enable_country_pack', enabled: true },
-      { action_key: 'disable_country_pack', enabled: true },
-      { action_key: 'activate_ruleset', enabled: true },
-      { action_key: 'deactivate_ruleset', enabled: true },
+      { action_key: 'enable_country_pack', enabled: packActionsEnabled },
+      { action_key: 'disable_country_pack', enabled: packActionsEnabled },
+      { action_key: 'activate_ruleset', enabled: packActionsEnabled },
+      { action_key: 'deactivate_ruleset', enabled: packActionsEnabled },
     ],
   };
 }
 
 export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promise<Record<string, unknown>> {
-  assertPlatformOwner(ctx);
+  const actor = await requireOwnerLegalWorkspaceActor(ctx);
+  const allowedCountries = actorAssignedCountryCodes(actor);
 
   const [values, versions, countries, packs, rulesets] = await Promise.all([
     supabaseAdmin
@@ -507,10 +535,27 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
   if (packs.error) throw packs.error;
   if (rulesets.error) throw rulesets.error;
 
+  const filteredPacks = filterCountryRows(
+    (packs.data ?? []) as Array<{ id?: string; country_code?: string; name?: string; status?: string }>,
+    allowedCountries,
+  );
+  const allowedPackIds = new Set(filteredPacks.map((row) => String(row.id ?? '')));
   const countryCatalog = {
-    countries: countries.data ?? [],
-    country_packs: packs.data ?? [],
-    rulesets: rulesets.data ?? [],
+    countries: filterCountryRows(
+      (countries.data ?? []) as Array<{ code?: string; name?: string }>,
+      allowedCountries,
+      'code',
+    ),
+    country_packs: filteredPacks,
+    rulesets: ((rulesets.data ?? []) as Array<{
+      id?: string;
+      country_pack_id?: string;
+      ruleset_code?: string;
+      ruleset_version?: string;
+      effective_from?: string;
+      effective_to?: string | null;
+      status?: string;
+    }>).filter((row) => !allowedCountries || allowedPackIds.has(String(row.country_pack_id ?? ''))),
   };
 
   const byLegalValueId = new Map<string, Array<Record<string, unknown>>>();
@@ -540,14 +585,19 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
     };
   });
 
-  const rows = allRows.filter((r) => !isOperationalCommunicationLegalValueRow(r as Record<string, unknown>));
-  const operationalCommunicationTable = allRows.filter((r) =>
+  const scopedRows = filterCountryRows(allRows as Array<{ country_code?: unknown }>, allowedCountries);
+  const rows = scopedRows.filter((r) => !isOperationalCommunicationLegalValueRow(r as Record<string, unknown>));
+  const operationalCommunicationTable = scopedRows.filter((r) =>
     isOperationalCommunicationLegalValueRow(r as Record<string, unknown>),
   );
+  const unionCaps =
+    actor.kind === 'platform_owner'
+      ? null
+      : [...new Set(Object.values(actor.capabilitiesByCountry).flat())];
   const globalActions = [
     {
       action_key: 'create_legal_value',
-      enabled: true,
+      enabled: actor.kind === 'platform_owner' || (unionCaps?.includes('legal_values.manage') ?? false),
       note:
         'country_code: IL, US, … (must exist in countries). category: VAT | Income Tax | National Insurance | Credit Points | Pricing | Reports | Calendar | Modules | Operational Communication Policies (use Communication policies section for reminders). value_type: number | percentage | boolean | string | json | money | date.',
       payload: {
@@ -563,14 +613,14 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
         owner_note: 'optional string',
       },
     },
-    { action_key: 'update_legal_value_metadata', enabled: true },
-    { action_key: 'create_legal_value_version', enabled: true },
-    { action_key: 'update_legal_value_version', enabled: true },
-    { action_key: 'activate_legal_value_version', enabled: true },
-    { action_key: 'deactivate_legal_value_version', enabled: true },
-    { action_key: 'update_owner_note', enabled: true },
-    { action_key: 'update_usage_hint', enabled: true },
-    { action_key: 'update_module_scope', enabled: true },
+    { action_key: 'update_legal_value_metadata', enabled: actor.kind === 'platform_owner' || (unionCaps?.includes('legal_values.manage') ?? false) },
+    { action_key: 'create_legal_value_version', enabled: actor.kind === 'platform_owner' || (unionCaps?.includes('legal_values.manage') ?? false) },
+    { action_key: 'update_legal_value_version', enabled: actor.kind === 'platform_owner' || (unionCaps?.includes('legal_values.manage') ?? false) },
+    { action_key: 'activate_legal_value_version', enabled: actor.kind === 'platform_owner' || (unionCaps?.includes('legal_knowledge.activate') ?? false) },
+    { action_key: 'deactivate_legal_value_version', enabled: actor.kind === 'platform_owner' || (unionCaps?.includes('legal_knowledge.activate') ?? false) },
+    { action_key: 'update_owner_note', enabled: actor.kind === 'platform_owner' || (unionCaps?.includes('legal_values.manage') ?? false) },
+    { action_key: 'update_usage_hint', enabled: actor.kind === 'platform_owner' || (unionCaps?.includes('legal_values.manage') ?? false) },
+    { action_key: 'update_module_scope', enabled: actor.kind === 'platform_owner' },
   ];
   const legalValuesTable = buildOwnerLegalValuesTableModel(
     rows as Array<Record<string, unknown>>,
@@ -1373,33 +1423,56 @@ export async function buildOwnerLegalControlPanelAggregate(
     strategy_engine_country_code?: string | null;
   }
 ): Promise<Record<string, unknown>> {
-  assertPlatformOwner(ctx);
+  const actor = await requireOwnerLegalWorkspaceActor(ctx);
+  const allowedCountries = actorAssignedCountryCodes(actor);
+  const selectedCountryCode = resolveOwnerLegalControlSelectedCountry({
+    tax_knowledge_country_code: opts?.tax_knowledge_country_code,
+    strategy_engine_country_code: opts?.strategy_engine_country_code,
+  });
+  if (selectedCountryCode && allowedCountries && !allowedCountries.includes(selectedCountryCode)) {
+    throw forbidden(
+      'Country legal access is not granted for this country',
+      OWNER_LEGAL_ACCESS_ERROR_CODES.COUNTRY_FORBIDDEN,
+    );
+  }
+
+  const isPlatformOwner = actor.kind === 'platform_owner';
 
   let countryPacksAdmin: Record<string, unknown>;
   let legalValues: Record<string, unknown>;
-  let platformPricing: Record<string, unknown>;
-  let emailProviderConfig: Awaited<ReturnType<typeof buildOwnerEmailProviderConfigAggregate>>;
-  let auditSummary: { recent: OwnerLegalControlAuditRow[] };
-  let docflowRequestTemplates: Awaited<ReturnType<typeof fetchDocflowRequestTemplatesForOwner>>;
-  let commercialControls: Record<string, unknown>;
+  let platformPricing: Record<string, unknown> | null = null;
+  let emailProviderConfig: Awaited<ReturnType<typeof buildOwnerEmailProviderConfigAggregate>> | null = null;
+  let auditSummary: { recent: OwnerLegalControlAuditRow[] } = { recent: [] };
+  let docflowRequestTemplates: Awaited<ReturnType<typeof fetchDocflowRequestTemplatesForOwner>> | null = null;
+  let commercialControls: Record<string, unknown> | null = null;
+  let countryLegalAccess: Record<string, unknown> | null = null;
   try {
-    [
-      countryPacksAdmin,
-      legalValues,
-      platformPricing,
-      emailProviderConfig,
-      auditSummary,
-      docflowRequestTemplates,
-      commercialControls,
-    ] = await Promise.all([
-      buildOwnerCountryPackAdminAggregate(ctx),
-      buildOwnerLegalValuesAggregate(ctx),
-      buildOwnerPlatformPricingAggregate(ctx),
-      buildOwnerEmailProviderConfigAggregate(),
-      fetchOwnerLegalControlPanelAuditSummary(),
-      fetchDocflowRequestTemplatesForOwner(),
-      buildOwnerCommercialControlsAggregate(opts?.commercial_controls),
-    ]);
+    if (isPlatformOwner) {
+      [
+        countryPacksAdmin,
+        legalValues,
+        platformPricing,
+        emailProviderConfig,
+        auditSummary,
+        docflowRequestTemplates,
+        commercialControls,
+        countryLegalAccess,
+      ] = await Promise.all([
+        buildOwnerCountryPackAdminAggregate(ctx),
+        buildOwnerLegalValuesAggregate(ctx),
+        buildOwnerPlatformPricingAggregate(ctx),
+        buildOwnerEmailProviderConfigAggregate(),
+        fetchOwnerLegalControlPanelAuditSummary(),
+        fetchDocflowRequestTemplatesForOwner(),
+        buildOwnerCommercialControlsAggregate(opts?.commercial_controls),
+        buildOwnerCountryLegalAccessAdminSlice(),
+      ]);
+    } else {
+      [countryPacksAdmin, legalValues] = await Promise.all([
+        buildOwnerCountryPackAdminAggregate(ctx),
+        buildOwnerLegalValuesAggregate(ctx),
+      ]);
+    }
   } catch (e) {
     if (e instanceof AppError) throw e;
     throwIfOwnerLegalControlReadError(e as SupabaseErrorLike, 'buildOwnerLegalControlPanelAggregate');
@@ -1451,14 +1524,10 @@ export async function buildOwnerLegalControlPanelAggregate(
 
   const cpWarnings = (countryPacksAdmin.warnings as string[] | undefined) ?? [];
   const lvWarnings = (legalValues.validation_warnings as string[] | undefined) ?? [];
-  const prWarnings = (platformPricing.warnings as string[] | undefined) ?? [];
+  const prWarnings = (platformPricing?.warnings as string[] | undefined) ?? [];
   const commWarnings = communicationPolicies.validation_errors;
   const countryRows =
     (tables?.countries as Array<{ code?: string; name?: string; status?: string }> | undefined) ?? [];
-  const selectedCountryCode = resolveOwnerLegalControlSelectedCountry({
-    tax_knowledge_country_code: opts?.tax_knowledge_country_code,
-    strategy_engine_country_code: opts?.strategy_engine_country_code,
-  });
   let taxKnowledge: Awaited<ReturnType<typeof buildOwnerTaxKnowledgeAggregate>>;
   let strategyEngine: Awaited<ReturnType<typeof buildOwnerStrategyEngineAggregate>>;
   let factDictionary: Awaited<ReturnType<typeof buildOwnerFactDictionaryAggregate>>;
@@ -1485,10 +1554,42 @@ export async function buildOwnerLegalControlPanelAggregate(
   const tkWarnings = (taxKnowledge.warnings as string[] | undefined) ?? [];
   const strategyWarnings = strategyEngine.warnings ?? [];
   const factDictionaryWarnings = factDictionary.warnings ?? [];
+  const selectedCaps = actorCapabilitiesForCountry(actor, selectedCountryCode);
+  if (!isPlatformOwner) {
+    taxKnowledge = {
+      ...taxKnowledge,
+      allowed_actions: maskActionsForCapabilities(
+        (Array.isArray(taxKnowledge.allowed_actions)
+          ? taxKnowledge.allowed_actions
+          : []) as Array<{ action_key?: unknown; enabled?: unknown }>,
+        selectedCaps,
+        false,
+      ),
+    };
+    strategyEngine = {
+      ...strategyEngine,
+      allowed_actions: maskActionsForCapabilities(
+        strategyEngine.allowed_actions ?? [],
+        selectedCaps,
+        false,
+      ),
+    };
+    factDictionary = {
+      ...factDictionary,
+      allowed_actions: maskActionsForCapabilities(
+        factDictionary.allowed_actions ?? [],
+        selectedCaps,
+        false,
+      ),
+    };
+  }
 
   return {
     aggregate_key: 'owner_legal_control_panel_aggregate',
-    owner_panel_sections: [
+    ...actorPanelFields(actor),
+    country_legal_access: isPlatformOwner ? countryLegalAccess : null,
+    owner_panel_sections: isPlatformOwner
+      ? [
       {
         section_key: 'system',
         label: 'System',
@@ -1507,14 +1608,15 @@ export async function buildOwnerLegalControlPanelAggregate(
         enabled: true,
         lazy: true,
       },
-    ],
+    ]
+      : [],
     country_packs_admin: countryPacksAdmin,
     legal_values: {
       ...legalValues,
       legal_values_table: legalValuesTableModel,
     },
-    platform_pricing: platformPricing,
-    owner_email_provider_config_aggregate: emailProviderConfig,
+    platform_pricing: isPlatformOwner ? platformPricing : null,
+    owner_email_provider_config_aggregate: isPlatformOwner ? emailProviderConfig : null,
     countries: tables?.countries ?? [],
     country_packs: tables?.country_packs ?? [],
     rulesets: tables?.rulesets ?? [],
@@ -1526,15 +1628,15 @@ export async function buildOwnerLegalControlPanelAggregate(
     }),
     communication_policies: communicationPolicies,
     docflow_communication_templates: docflowCommunicationTemplates,
-    docflow_request_templates: docflowRequestTemplates,
-    commercial_controls: commercialControls,
+    docflow_request_templates: isPlatformOwner ? docflowRequestTemplates : [],
+    commercial_controls: isPlatformOwner ? commercialControls : null,
     tax_knowledge: taxKnowledge,
     strategy_engine: strategyEngine,
     fact_dictionary: factDictionary,
     docflow_communication_quick_actions: [
       {
         action_key: 'create_legal_value',
-        enabled: true,
+        enabled: isPlatformOwner || selectedCaps.includes('legal_values.manage'),
         button_label: 'New DocFlow communication legal value',
         note: 'Creates a legal value row. value_type=json, category=Modules, module_scope=docflow. Then add a version with docflow_communication payload.',
         payload: {
@@ -1551,7 +1653,7 @@ export async function buildOwnerLegalControlPanelAggregate(
       },
       {
         action_key: 'create_legal_value_version',
-        enabled: true,
+        enabled: isPlatformOwner || selectedCaps.includes('legal_values.manage'),
         button_label: 'New legal value version',
         note:
           'country_pack_ruleset_id from rulesets table. value_payload_json must match docflow_communication schema (type, message_template, …).',
@@ -1567,7 +1669,7 @@ export async function buildOwnerLegalControlPanelAggregate(
         },
       },
     ],
-    pricing: platformPricing.table ?? {},
+    pricing: platformPricing?.table ?? {},
     warnings: {
       country_pack_admin: cpWarnings,
       legal_values: lvWarnings,
@@ -1592,8 +1694,9 @@ export async function buildOwnerLegalControlPanelAggregate(
       tax_knowledge: taxKnowledge.allowed_actions ?? [],
       strategy_engine: strategyEngine.allowed_actions ?? [],
       fact_dictionary: factDictionary.allowed_actions ?? [],
-      platform_pricing: platformPricing.actions ?? [],
-      owner_email_provider_config: [
+      platform_pricing: isPlatformOwner ? platformPricing?.actions ?? [] : [],
+      owner_email_provider_config: isPlatformOwner && emailProviderConfig
+        ? [
         {
           action_key: 'save_email_provider_config',
           enabled: emailProviderConfig.allowed_actions.save_email_provider_config.enabled,
@@ -1630,8 +1733,10 @@ export async function buildOwnerLegalControlPanelAggregate(
             app_public_url: 'https://app.yourdomain.com',
           },
         },
-      ],
-      docflow_request_templates: [
+      ]
+        : [],
+      docflow_request_templates: isPlatformOwner
+        ? [
         {
           action_key: 'save_request_template_definition',
           enabled: true,
@@ -1651,8 +1756,10 @@ export async function buildOwnerLegalControlPanelAggregate(
           note: null,
           payload: { template_definition_id: 'uuid' },
         },
-      ],
-      commercial_controls: [
+      ]
+        : [],
+      commercial_controls: isPlatformOwner
+        ? [
         {
           action_key: 'extend_org_module_trial',
           enabled: true,
@@ -1689,7 +1796,8 @@ export async function buildOwnerLegalControlPanelAggregate(
           note: null,
           payload: { pricing_adjustment_id: 'uuid', reason: 'optional string' },
         },
-      ],
+      ]
+        : [],
     },
     audit_summary: auditSummary,
   };

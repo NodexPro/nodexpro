@@ -107,7 +107,7 @@ test('TAX-K1.4E contract: dispatcher recognizes implemented lifecycle commands o
     assert.match(commandsSrc, new RegExp(`case '${command}'`));
   }
   assert.match(commandsSrc, /case 'supersede_tax_rule_version'/);
-  assert.match(commandsSrc, /assertPlatformOwner\(ctx\)/);
+  assert.match(commandsSrc, /assertOwnerLegalCommandAccess\(ctx, command, payload\)/);
   assert.doesNotMatch(commandsSrc, /organization_id:/);
   assert.doesNotMatch(commandsSrc, /resolveCountryContext\(/);
   assert.match(commandsSrc, /handleActivateTaxRuleVersion[\s\S]*\.update\(\{ status: 'active' \}\)/);

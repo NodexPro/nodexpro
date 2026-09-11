@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../../../db/client.js';
 import type { RequestContext } from '../../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../../shared/audit-events.js';
-import { assertPlatformOwner } from '../../../shared/platform-owner.js';
+import { assertOwnerLegalCommandAccess } from '../../owner-country-legal-access/owner-country-legal-access.service.js';
 import { badRequest, conflict, notFound } from '../../../shared/errors.js';
 import { assertCountryExists } from '../../country-pack/country.service.js';
 import { buildOwnerLegalControlPanelAggregate } from '../../country-pack/country-pack-read-models.service.js';
@@ -1121,7 +1121,7 @@ export async function executeTaxStrategyEngineCommand(
   command: string,
   payload: Record<string, unknown>,
 ): Promise<TaxStrategyEngineCommandResponse> {
-  assertPlatformOwner(ctx);
+  await assertOwnerLegalCommandAccess(ctx, command, payload);
 
   if (!isTaxStrategyEngineCommand(command)) {
     throw badRequest(`Unsupported tax-strategy-engine command: ${command || 'unknown'}`);

@@ -92,7 +92,7 @@ test('TAX-K1.4C contract: dispatcher recognizes all four new commands', () => {
   for (const command of NEW_COMMANDS) {
     assert.match(commandsSrc, new RegExp(`case '${command}'`));
   }
-  assert.match(commandsSrc, /assertPlatformOwner\(ctx\)/);
+  assert.match(commandsSrc, /assertOwnerLegalCommandAccess\(ctx, command, payload\)/);
   assert.match(commandsSrc, /assertParentVersionDraft/);
   assert.match(commandsSrc, /normalizeCitationLocator/);
   assert.doesNotMatch(commandsSrc, /legal_value_version_id:/);

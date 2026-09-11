@@ -14,9 +14,12 @@ import { OwnerTaxKnowledgePanel, parseTaxKnowledgeAggregate } from './owner-tax-
 import { OwnerStrategyEnginePanel, parseStrategyEngineAggregate } from './owner-strategy-engine-panel';
 import { OwnerLegalControlRenderBoundary, ownerLegalControlWarningTexts } from './owner-legal-control-render-safety';
 import {
+  BUSINESS_SETUP_AI_OWNER_NAV,
   businessSetupAiOwnerSectionFromHash,
+  parseOwnerWorkspaceNavigation,
   type BusinessSetupAiOwnerSectionId,
 } from './owner-business-setup-ai-nav';
+import { OwnerAccessExpertsPanel, OwnerLegalAccessRequestForm } from './owner-access-experts-panel';
 import { OwnerBusinessSetupAiWorkspace } from './owner-business-setup-ai-workspace';
 import { OwnerLegalValuesPanel } from './owner-legal-values-panel';
 import { OwnerCountryContextPanel } from './owner-country-context-panel';
@@ -47,6 +50,7 @@ export function PlatformOwnerLegalControl() {
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [accessDeniedReason, setAccessDeniedReason] = useState('');
+  const [accessRequestSubmitted, setAccessRequestSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [panel, setPanel] = useState(null as UnknownRecord | null);
   const [taxKnowledgeCountryQuery, setTaxKnowledgeCountryQuery] = useState('');
@@ -203,6 +207,11 @@ export function PlatformOwnerLegalControl() {
     () => countryPackActions.find((a) => String(a.action_key ?? '') === 'create_country') ?? null,
     [countryPackActions],
   );
+  const navGroups = useMemo(
+    () => parseOwnerWorkspaceNavigation(panel?.owner_workspace_navigation) ?? BUSINESS_SETUP_AI_OWNER_NAV,
+    [panel],
+  );
+  const canShowAccessExperts = navGroups.some((group) => group.items.some((item) => item.id === 'access-experts'));
 
   const selectedCountryCode = pendingTaxKnowledgeCountry ?? taxKnowledgeCountryQuery;
 
@@ -257,11 +266,23 @@ export function PlatformOwnerLegalControl() {
     return (
       <div style={{ padding: 24 }}>
         <h1>Access denied</h1>
-        <p>This page is available only for platform owner.</p>
+        <p>This page is available only for platform owner or assigned country legal maintainers.</p>
         {accessDeniedReason ? (
           <p style={{ color: '#a94442', marginTop: 10 }}>
             {accessDeniedReason}
           </p>
+        ) : null}
+        {auth.status === 'authenticated' && accessRequestSubmitted ? (
+          <p>Request submitted. No access is granted until Platform Owner approval.</p>
+        ) : null}
+        {auth.status === 'authenticated' && !accessRequestSubmitted ? (
+          <OwnerLegalAccessRequestForm
+            busy={commandBusy}
+            onSubmit={async (payload) => {
+              await sendOwnerCommand('request_country_legal_access', payload);
+              setAccessRequestSubmitted(true);
+            }}
+          />
         ) : null}
       </div>
     );
@@ -290,7 +311,7 @@ export function PlatformOwnerLegalControl() {
   return (
     <OwnerLegalControlRenderBoundary>
       <OwnerBusinessSetupAiWorkspace
-        activeSection={activeSection}
+        activeSection={canShowAccessExperts ? activeSection : activeSection === 'access-experts' ? 'tax-knowledge' : activeSection}
         onSelectSection={selectSection}
         countryCode={selectedCountryCode}
         countries={countryOptions}
@@ -299,6 +320,7 @@ export function PlatformOwnerLegalControl() {
           setPendingTaxKnowledgeCountry(countryCode);
           setTaxKnowledgeCountryQuery(countryCode);
         }}
+        navGroups={navGroups}
         addCountryControl={
           <OwnerAddCountryControl
             action={createCountryAction}
@@ -371,6 +393,17 @@ export function PlatformOwnerLegalControl() {
           <OwnerStrategyEnginePanel
             strategyEngine={strategyEngine}
             taxKnowledge={taxKnowledge}
+            busy={commandBusy}
+            onCommand={async (command, payload) => {
+              await sendOwnerCommand(command, payload);
+            }}
+          />
+        ) : null}
+
+        {activeSection === 'access-experts' && canShowAccessExperts ? (
+          <OwnerAccessExpertsPanel
+            access={panel?.country_legal_access}
+            countries={countryOptions}
             busy={commandBusy}
             onCommand={async (command, payload) => {
               await sendOwnerCommand(command, payload);

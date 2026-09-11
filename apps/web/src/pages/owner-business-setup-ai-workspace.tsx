@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   BUSINESS_SETUP_AI_OWNER_NAV,
+  type BusinessSetupAiOwnerNavGroup,
   type BusinessSetupAiOwnerSectionId,
 } from './owner-business-setup-ai-nav';
 import '../styles/nx-modal.css';
@@ -26,6 +27,7 @@ export function OwnerBusinessSetupAiWorkspace({
   warnings,
   error,
   children,
+  navGroups = BUSINESS_SETUP_AI_OWNER_NAV,
 }: {
   activeSection: BusinessSetupAiOwnerSectionId;
   onSelectSection: (id: BusinessSetupAiOwnerSectionId) => void;
@@ -41,13 +43,14 @@ export function OwnerBusinessSetupAiWorkspace({
   warnings: string[];
   error: string;
   children: ReactNode;
+  navGroups?: readonly BusinessSetupAiOwnerNavGroup[];
 }) {
   return (
     <div className="nx-bsai-workspace">
       <aside className="nx-bsai-sidebar">
         <p className="nx-bsai-sidebar__eyebrow">Owner</p>
         <h1 className="nx-bsai-sidebar__title">Business Setup AI</h1>
-        {BUSINESS_SETUP_AI_OWNER_NAV.map((group) => (
+        {navGroups.map((group) => (
           <div key={group.group} className="nx-bsai-nav-group">
             <p className="nx-bsai-nav-group__label">{group.group}</p>
             {group.items.map((item) => (

@@ -178,7 +178,7 @@ test('TAX-F2A2 11-15: Owner-only commands on existing bus, no dedicated GET, no 
     'apps/api/src/domains/tax-fact-dictionary/tax-fact-dictionary-commands.service.ts',
   );
   assert.match(commandsSrc, /export async function executeTaxFactDictionaryCommand/);
-  assert.match(commandsSrc, /assertPlatformOwner\(ctx\)/);
+  assert.match(commandsSrc, /assertOwnerLegalCommandAccess\(ctx, command, payload\)/);
   for (const command of F2A2_COMMANDS) {
     assert.match(commandsSrc, new RegExp(`case '${command}':`));
   }

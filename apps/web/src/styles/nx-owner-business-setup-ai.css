@@ -311,3 +311,66 @@
     flex-basis: auto;
   }
 }
+
+.nx-bsai-access h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.nx-bsai-access-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.nx-bsai-access-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.nx-bsai-access-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #f3f4f6;
+  text-align: left;
+}
+
+.nx-bsai-access-row--button {
+  width: 100%;
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  cursor: pointer;
+}
+
+.nx-bsai-access-row--button.is-active {
+  background: #eff6ff;
+}
+
+.nx-bsai-access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.nx-bsai-access-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.nx-bsai-access-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}

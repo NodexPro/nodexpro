@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
-import { assertPlatformOwner } from '../../shared/platform-owner.js';
+import { assertOwnerLegalReadAccess } from '../owner-country-legal-access/owner-country-legal-access.service.js';
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import {
   TAX_KNOWLEDGE_COMMANDS,
@@ -441,7 +441,7 @@ export async function buildOwnerTaxKnowledgeAggregate(
   ctx: RequestContext,
   opts?: OwnerTaxKnowledgeAggregateOpts,
 ): Promise<Record<string, unknown>> {
-  assertPlatformOwner(ctx);
+  await assertOwnerLegalReadAccess(ctx, opts?.country_code);
 
   const countries = await loadCountryCatalog(opts?.countries);
   const selectedCountryCode = normalizeCountryCode(opts?.country_code);

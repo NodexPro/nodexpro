@@ -101,7 +101,7 @@ test('TAX-K1.4B contract: dispatcher recognizes all six new commands', () => {
   for (const command of NEW_COMMANDS) {
     assert.match(commandsSrc, new RegExp(`case '${command}'`));
   }
-  assert.match(commandsSrc, /assertPlatformOwner\(ctx\)/);
+  assert.match(commandsSrc, /assertOwnerLegalCommandAccess\(ctx, command, payload\)/);
   assert.doesNotMatch(commandsSrc, /resolveCountryContext\(/);
   assert.doesNotMatch(commandsSrc, /organization_id:/);
 
@@ -204,7 +204,8 @@ test('TAX-K1.4B commands require Platform Owner', async (t) => {
           err.statusCode === 403 &&
           (err.code === 'PLATFORM_OWNER_REQUIRED' ||
             err.code === 'PLATFORM_OWNER_NOT_CONFIGURED' ||
-            err.code === 'PLATFORM_OWNER_TENANT_CONTEXT_FORBIDDEN'),
+            err.code === 'PLATFORM_OWNER_TENANT_CONTEXT_FORBIDDEN' ||
+            err.code === 'OWNER_LEGAL_ACCESS_REQUIRED'),
       );
     });
   }

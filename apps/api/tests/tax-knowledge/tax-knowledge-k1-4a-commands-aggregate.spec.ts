@@ -87,7 +87,7 @@ test('TAX-K1.4A contract: dispatcher recognizes implemented commands', () => {
 
 test('TAX-K1.4A contract: platform owner, no tenant org, no dedicated GET, no PATCH', () => {
   const commandsSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts');
-  assert.match(commandsSrc, /assertPlatformOwner\(ctx\)/);
+  assert.match(commandsSrc, /assertOwnerLegalCommandAccess\(ctx, command, payload\)/);
   assert.match(commandsSrc, /organizationId:\s*null/);
   assert.doesNotMatch(commandsSrc, /organization_id:/);
   assert.doesNotMatch(commandsSrc, /resolveCountryContext/);
@@ -189,9 +189,10 @@ test('TAX-K1.4A commands require Platform Owner and reject invalid country / unk
       (err: unknown) =>
         err instanceof AppError &&
         err.statusCode === 403 &&
-        (err.code === 'PLATFORM_OWNER_REQUIRED' ||
+        (          err.code === 'PLATFORM_OWNER_REQUIRED' ||
           err.code === 'PLATFORM_OWNER_NOT_CONFIGURED' ||
-          err.code === 'PLATFORM_OWNER_TENANT_CONTEXT_FORBIDDEN'),
+          err.code === 'PLATFORM_OWNER_TENANT_CONTEXT_FORBIDDEN' ||
+          err.code === 'OWNER_LEGAL_ACCESS_REQUIRED'),
     );
   });
 
@@ -206,9 +207,10 @@ test('TAX-K1.4A commands require Platform Owner and reject invalid country / unk
       (err: unknown) =>
         err instanceof AppError &&
         err.statusCode === 403 &&
-        (err.code === 'PLATFORM_OWNER_REQUIRED' ||
+        (          err.code === 'PLATFORM_OWNER_REQUIRED' ||
           err.code === 'PLATFORM_OWNER_NOT_CONFIGURED' ||
-          err.code === 'PLATFORM_OWNER_TENANT_CONTEXT_FORBIDDEN'),
+          err.code === 'PLATFORM_OWNER_TENANT_CONTEXT_FORBIDDEN' ||
+          err.code === 'OWNER_LEGAL_ACCESS_REQUIRED'),
     );
   });
 

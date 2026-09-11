@@ -43,6 +43,16 @@ export function assertPlatformOwner(ctx: RequestContext): PlatformOwnerIdentity 
   return ownerIdentity;
 }
 
+/** Same success conditions as assertPlatformOwner, without throwing. Do not use for commercial owner APIs. */
+export function isPlatformOwnerContext(ctx: RequestContext): boolean {
+  const ownerIdentity = getConfiguredPlatformOwnerIdentity();
+  if (!ownerIdentity) return false;
+  const requestEmail = ctx.user.email.trim().toLowerCase();
+  if (!requestEmail || requestEmail !== ownerIdentity.email) return false;
+  if (ctx.membership?.roleCode) return false;
+  return true;
+}
+
 export function hasConfiguredPlatformOwnerCredentials(): boolean {
   const ownerIdentity = getConfiguredPlatformOwnerIdentity();
   if (!ownerIdentity) return false;

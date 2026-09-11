@@ -136,7 +136,7 @@ test('TAX-K1.4D contract: dispatcher recognizes both relationship commands', () 
   for (const command of NEW_COMMANDS) {
     assert.match(commandsSrc, new RegExp(`case '${command}'`));
   }
-  assert.match(commandsSrc, /assertPlatformOwner\(ctx\)/);
+  assert.match(commandsSrc, /assertOwnerLegalCommandAccess\(ctx, command, payload\)/);
   assert.match(commandsSrc, /assertParentVersionDraft\(from\.status, 'create_tax_rule_relationship'\)/);
   assert.match(commandsSrc, /assertParentVersionDraft\(from\.status, 'delete_tax_rule_relationship'\)/);
   assert.match(commandsSrc, /country_code: from\.country_code/);

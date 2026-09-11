@@ -105,7 +105,7 @@ test('TAX-K1.4F contract: dispatcher, owner, atomic RPC, no GET/PATCH/frontend/o
 
   const commandsSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts');
   assert.match(commandsSrc, /case 'supersede_tax_rule_version'/);
-  assert.match(commandsSrc, /assertPlatformOwner\(ctx\)/);
+  assert.match(commandsSrc, /assertOwnerLegalCommandAccess\(ctx, command, payload\)/);
   assert.doesNotMatch(commandsSrc, /organization_id:/);
   assert.doesNotMatch(commandsSrc, /resolveCountryContext\(/);
 

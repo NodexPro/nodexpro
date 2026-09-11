@@ -69,7 +69,7 @@ test('TAX-E3B contract: every command is recognized on the Strategy Engine dispa
     'apps/api/src/domains/tax-strategy-engine/owner-write/tax-strategy-engine-commands.service.ts',
   );
   assert.match(commandsSrc, /export async function executeTaxStrategyEngineCommand/);
-  assert.match(commandsSrc, /assertPlatformOwner\(ctx\)/);
+  assert.match(commandsSrc, /assertOwnerLegalCommandAccess\(ctx, command, payload\)/);
   for (const command of E3B_COMMANDS) {
     assert.match(commandsSrc, new RegExp(`case '${command}':`));
   }

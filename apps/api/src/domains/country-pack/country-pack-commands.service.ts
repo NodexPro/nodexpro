@@ -2,6 +2,8 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
+import { assertOwnerLegalCommandAccess } from '../owner-country-legal-access/owner-country-legal-access.service.js';
+import { isOwnerLegalValueCommand } from '../owner-country-legal-access/owner-country-legal-access.types.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
 import { assertCountryExists } from './country.service.js';
 import { getCountryPack } from './country-pack.service.js';
@@ -1623,13 +1625,17 @@ export async function executeCountryPackCommand(
   ctx: RequestContext,
   command: CountryPackCommand
 ): Promise<CountryPackCommandResponse> {
-  try {
-    assertPlatformOwner(ctx);
-  } catch (error) {
-    await audit(ctx, AUDIT_ACTIONS.OWNER_SECURITY_CHECK_FAILED, 'country_pack_command', null, {
-      attempted_command: command.command,
-    });
-    throw error;
+  if (isOwnerLegalValueCommand(command.command)) {
+    await assertOwnerLegalCommandAccess(ctx, command.command, command.payload);
+  } else {
+    try {
+      assertPlatformOwner(ctx);
+    } catch (error) {
+      await audit(ctx, AUDIT_ACTIONS.OWNER_SECURITY_CHECK_FAILED, 'country_pack_command', null, {
+        attempted_command: command.command,
+      });
+      throw error;
+    }
   }
 
   switch (command.command) {
