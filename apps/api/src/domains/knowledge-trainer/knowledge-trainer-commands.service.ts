@@ -13,6 +13,7 @@ import {
   isKnownProvenanceType,
   safeAuditExcerpt,
 } from './knowledge-trainer.pure.js';
+import { persistStructureCandidatesForJob } from './knowledge-trainer-structure.service.js';
 import {
   createOwnerLegalMaterialSignedUrl,
   decodeLegalTrainingUpload,
@@ -315,6 +316,33 @@ async function handleRetryPage(
   };
 }
 
+async function handleRebuildStructure(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<KnowledgeTrainerCommandResponse> {
+  const document = await loadDocument(asUuid(payload.legal_ingestion_document_id, 'legal_ingestion_document_id'));
+  const job = await loadLatestJob(String(document.id));
+  if (['uploaded', 'queued', 'extracting'].includes(String(job.status))) {
+    throw conflict('Wait until page extraction finishes before rebuilding structure');
+  }
+  const result = await persistStructureCandidatesForJob(String(job.id), { replaceStaging: true });
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_STRUCTURE_REBUILT, 'legal_ingestion_job', String(job.id), {
+    country_code: document.country_code,
+    document_id: document.id,
+    reused_existing_pages: true,
+    reuploaded: false,
+    reextracted: false,
+    preserved_accepted: result?.preserved_accepted ?? 0,
+    candidates_found: result?.analysis.candidates_found ?? 0,
+    toc_index_rejected: result?.analysis.toc_index_rejected ?? 0,
+  });
+  return {
+    ok: true,
+    command: 'rebuild_legal_structure_candidates',
+    refreshed: await refreshed(ctx, String(document.country_code), String(document.id)),
+  };
+}
+
 async function handleUpdateCandidate(
   ctx: RequestContext,
   payload: Record<string, unknown>,
@@ -488,6 +516,8 @@ export async function executeKnowledgeTrainerCommand(
       return handleStartExtraction(ctx, payload);
     case 'retry_legal_document_page':
       return handleRetryPage(ctx, payload);
+    case 'rebuild_legal_structure_candidates':
+      return handleRebuildStructure(ctx, payload);
     case 'update_legal_extraction_candidate':
       return handleUpdateCandidate(ctx, payload);
     case 'accept_legal_structure_candidate':

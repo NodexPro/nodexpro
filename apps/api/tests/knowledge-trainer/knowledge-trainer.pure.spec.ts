@@ -2,14 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assertV1PdfUpload,
+  detectStructureCandidates,
   extractStructureCandidatesFromPages,
   hasParentCycle,
+  isTocOrIndexPage,
   orderedPagesFromFutureInputs,
   pageHasUsableEmbeddedText,
   parseNumericIdentifier,
   sha256Hex,
   summarizeJobProgress,
   trainerInputOptions,
+  usableKindCatalog,
   validateStructureCandidates,
   workerMustNotWriteCanonicalLaw,
 } from '../../src/domains/knowledge-trainer/knowledge-trainer.pure.js';
@@ -148,11 +151,203 @@ test('worker isolation forbids canonical legal tables', () => {
 
 test('upload/accept are not activate; reject is review; edit is draft_edit', () => {
   assert.equal(capabilityRequiredForOwnerCommand('upload_legal_training_document'), 'legal_sources.manage');
+  assert.equal(capabilityRequiredForOwnerCommand('rebuild_legal_structure_candidates'), 'legal_sources.manage');
   assert.equal(capabilityRequiredForOwnerCommand('accept_legal_structure_candidate'), 'legal_sources.manage');
   assert.equal(capabilityRequiredForOwnerCommand('update_legal_extraction_candidate'), 'legal_knowledge.draft_edit');
   assert.equal(capabilityRequiredForOwnerCommand('reject_legal_extraction_candidate'), 'legal_knowledge.review');
   assert.equal(capabilityRequiredForOwnerCommand('activate_tax_source'), 'legal_knowledge.activate');
   assert.notEqual(capabilityRequiredForOwnerCommand('upload_legal_training_document'), 'legal_knowledge.activate');
+});
+
+test('TOC line with multiple Go tokens is not a canonical-quality candidate', () => {
+  const detected = detectStructureCandidates(
+    [
+      {
+        page_no: 2,
+        text: 'פרק שני: ניכויים וקיזוזים Go 78 סימן א\': ניכויי הוצאות Go 78 17 סעיף הניכויים המותרים Go 81',
+      },
+    ],
+    catalog,
+  );
+  assert.equal(detected.drafts.some((row) => (row.title || '').includes('Go')), false);
+  assert.ok(detected.analysis.toc_index_rejected > 0);
+  assert.equal(detected.drafts.every((row) => row.confidence < 0.85 || row.candidate_status !== 'proposed' || !row.title?.includes('Go')), true);
+});
+
+test('index page does not explode into false structure nodes', () => {
+  const toc =
+    'תוכן ענינים חלק א\': פרשנות Go 35 1 סעיף הגדרות Go 35 חלק ב\': הטלת המס Go 39 פרק ראשון: המקור Go 39';
+  assert.equal(isTocOrIndexPage(toc, catalog.map((row) => row.label)), true);
+  const drafts = extractStructureCandidatesFromPages([{ page_no: 1, text: toc }], catalog);
+  assert.equal(drafts.length, 0);
+});
+
+test('clean חלק heading creates one candidate', () => {
+  const drafts = extractStructureCandidatesFromPages([{ page_no: 12, text: 'חלק א — פרשנות' }], catalog);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].kind_label, 'חלק');
+  assert.equal(drafts[0].node_number, 'א');
+  assert.equal(drafts[0].title, 'פרשנות');
+});
+
+test('clean פרק heading creates one candidate', () => {
+  const drafts = extractStructureCandidatesFromPages([{ page_no: 16, text: 'פרק ראשון: המקור' }], catalog);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].kind_label, 'פרק');
+  assert.equal(drafts[0].node_number, 'ראשון');
+  assert.equal(drafts[0].title, 'המקור');
+});
+
+test('clean סימן heading creates one candidate', () => {
+  const drafts = extractStructureCandidatesFromPages([{ page_no: 61, text: 'סימן א: ניכויי הוצאות' }], catalog);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].kind_label, 'סימן');
+  assert.equal(drafts[0].node_number, 'א');
+});
+
+test('clean סעיף heading creates one candidate', () => {
+  const drafts = extractStructureCandidatesFromPages([{ page_no: 12, text: 'סעיף 1 הגדרות' }], catalog);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].kind_label, 'סעיף');
+  assert.equal(drafts[0].node_number, '1');
+});
+
+test('subsection candidate requires סעיף context', () => {
+  const lonely = extractStructureCandidatesFromPages([{ page_no: 20, text: 'הגדרה כללית (א) קרן השתלמות' }], catalog);
+  assert.equal(lonely.some((row) => row.kind_label === 'סעיף קטן'), false);
+  const withSeif = extractStructureCandidatesFromPages([{ page_no: 20, text: 'סעיף 9 פטור (א) קרן' }], catalog);
+  assert.ok(withSeif.some((row) => row.kind_label === 'סעיף קטן' && row.candidate_status === 'needs_review'));
+});
+
+test('long merged line is rejected or downgraded', () => {
+  const validated = validateStructureCandidates(
+    [
+      {
+        candidate_kind: 'structure',
+        candidate_status: 'proposed',
+        kind_label: 'פרק',
+        node_number: 'שני',
+        title: 'הניכויים המותרים Go 78 סימן א ניכויי הוצאות Go 81 סעיף 17',
+        parent_index: null,
+        page_start: 2,
+        page_end: 2,
+        excerpt: 'פרק שני הניכויים המותרים Go 78 סימן א ניכויי הוצאות Go 81',
+        confidence: 0.9,
+        validation_warnings: [],
+      },
+    ],
+    { country_code: 'IL', tax_source_id: 'src', existing_nodes: [] },
+  );
+  assert.ok(validated[0].validation_warnings.includes('toc_or_merged_heading'));
+  assert.ok(validated[0].confidence < 0.5);
+});
+
+test('duplicate candidate is suppressed', () => {
+  const drafts = extractStructureCandidatesFromPages(
+    [
+      { page_no: 1, text: 'חלק א פרשנות' },
+      { page_no: 1, text: 'חלק א פרשנות' },
+    ],
+    catalog,
+  );
+  assert.equal(drafts.filter((row) => row.kind_label === 'חלק' && row.node_number === 'א').length, 1);
+});
+
+test('ambiguous parent gets warning and does not invent a parent', () => {
+  const drafts = extractStructureCandidatesFromPages([{ page_no: 28, text: 'פרק שני: המקום' }], catalog);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].parent_index, null);
+  assert.ok(drafts[0].validation_warnings.includes('unresolved_parent'));
+  assert.equal(drafts.some((row) => row.kind_label === 'חלק'), false);
+});
+
+test('hierarchy cycle is broken rather than persisted', () => {
+  const cyclic = validateStructureCandidates(
+    [
+      {
+        candidate_kind: 'structure',
+        candidate_status: 'proposed',
+        kind_label: 'פרק',
+        node_number: 'א',
+        title: 'A',
+        parent_index: 1,
+        page_start: 1,
+        page_end: 1,
+        excerpt: 'פרק א A',
+        confidence: 0.9,
+        validation_warnings: [],
+      },
+      {
+        candidate_kind: 'structure',
+        candidate_status: 'proposed',
+        kind_label: 'חלק',
+        node_number: 'א',
+        title: 'B',
+        parent_index: 0,
+        page_start: 1,
+        page_end: 1,
+        excerpt: 'חלק א B',
+        confidence: 0.9,
+        validation_warnings: [],
+      },
+    ],
+    { country_code: 'IL', tax_source_id: 'src', existing_nodes: [] },
+  );
+  assert.equal(hasParentCycle(0, new Map(cyclic.map((row, index) => [index, row.parent_index]))), false);
+});
+
+test('cross-reference plus amendment year is not a סעיף candidate', () => {
+  const drafts = extractStructureCandidatesFromPages(
+    [{ page_no: 49, text: 'מכוח סעיף 2012 תשע"ב- ( 190 תיקון מס\' ) סכומים ששולמו' }],
+    catalog,
+  );
+  assert.equal(drafts.some((row) => row.kind_label === 'סעיף' && row.node_number === '2012'), false);
+});
+
+test('trailing לפי סעיף after a reversed number is not a heading', () => {
+  const drafts = extractStructureCandidatesFromPages(
+    [{ page_no: 22, text: 'חוק מס עזבון, תש"ט- א. 125 עליהם לפי סעיף' }],
+    catalog,
+  );
+  assert.equal(drafts.some((row) => row.node_number === '125א' || row.node_number === '125'), false);
+});
+
+test('RTL body heading ". 1" with bracket title creates one סעיף', () => {
+  const drafts = extractStructureCandidatesFromPages(
+    [{ page_no: 12, text: 'חלק א\': פרשנות [ 2 ] הגדרות בפקודה זו -. 1 "אדם" - לרבות חברה' }],
+    catalog,
+  );
+  const seif = drafts.find((row) => row.kind_label === 'סעיף' && row.node_number === '1');
+  assert.ok(seif);
+  assert.equal(seif?.title, 'הגדרות');
+  assert.equal(drafts.filter((row) => row.kind_label === 'חלק').length, 1);
+});
+
+test('LTR 1. and 1א. headings create סעיף candidates', () => {
+  const drafts = extractStructureCandidatesFromPages(
+    [{ page_no: 12, text: '[ 2 ] הגדרות 1. אדם\n[ 3 ] הכנסה 1א. מקור' }],
+    catalog,
+  );
+  assert.ok(drafts.some((row) => row.kind_label === 'סעיף' && row.node_number === '1'));
+  assert.ok(drafts.some((row) => row.kind_label === 'סעיף' && row.node_number === '1א'));
+});
+
+test('mid-sentence חלק with paren leftovers is not a heading', () => {
+  const drafts = extractStructureCandidatesFromPages(
+    [{ page_no: 96, text: 'לא יחולו על חברת בית. 104 הוראות חלק ה\' ( ח ) ז, לא יחולו על חברת בית.' }],
+    catalog,
+  );
+  assert.equal(drafts.some((row) => row.kind_label === 'חלק'), false);
+});
+
+test('compound catalog label does not make חלק an unresolved child', () => {
+  const dirty = [{ id: '0', label: 'חלק א' }, ...catalog];
+  assert.deepEqual(usableKindCatalog(dirty).map((row) => row.label), catalog.map((row) => row.label));
+  const drafts = extractStructureCandidatesFromPages([{ page_no: 12, text: 'חלק א — פרשנות' }], dirty);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].kind_label, 'חלק');
+  assert.equal(drafts[0].parent_index, null);
+  assert.equal(drafts[0].validation_warnings.includes('unresolved_parent'), false);
 });
 
 test('Photos and Text stay unavailable in V1 input options', () => {

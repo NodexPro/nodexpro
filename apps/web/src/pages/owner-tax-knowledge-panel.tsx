@@ -613,6 +613,17 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
                 )
             : [],
           can_open_original: selected.can_open_original === true,
+          structure_analysis: asRecord(selected.structure_analysis)
+            ? {
+                candidates_found: Number(asRecord(selected.structure_analysis)?.candidates_found) || 0,
+                toc_index_rejected: Number(asRecord(selected.structure_analysis)?.toc_index_rejected) || 0,
+                low_confidence_count: Number(asRecord(selected.structure_analysis)?.low_confidence_count) || 0,
+                unresolved_parent_count: Number(asRecord(selected.structure_analysis)?.unresolved_parent_count) || 0,
+                ocr_pages_untouched: Number(asRecord(selected.structure_analysis)?.ocr_pages_untouched) || 0,
+                ocr_gap_warning: asRecord(selected.structure_analysis)?.ocr_gap_warning === true,
+              }
+            : null,
+          can_rebuild_structure: selected.can_rebuild_structure === true,
         }
       : null,
     allowed_actions: parseAllowedActions(raw.allowed_actions),

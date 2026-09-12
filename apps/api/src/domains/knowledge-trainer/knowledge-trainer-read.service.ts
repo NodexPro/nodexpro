@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
-import { jobStatusLabel, trainerInputOptions } from './knowledge-trainer.pure.js';
+import { decodeStructureAnalysis, emptyStructureAnalysis, jobStatusLabel, trainerInputOptions } from './knowledge-trainer.pure.js';
 import type {
   KnowledgeTrainerCandidateDto,
   KnowledgeTrainerDocumentSummaryDto,
@@ -63,7 +63,7 @@ export async function buildKnowledgeTrainerSlice(
     ? await supabaseAdmin
         .from('legal_ingestion_jobs')
         .select(
-          'id, document_id, status, page_count, extracted_page_count, needs_ocr_page_count, failed_page_count, structure_candidate_count, created_at',
+          'id, document_id, status, page_count, extracted_page_count, needs_ocr_page_count, failed_page_count, structure_candidate_count, last_error, created_at',
         )
         .in('document_id', documentIds)
         .order('created_at', { ascending: false })
@@ -165,6 +165,20 @@ export async function buildKnowledgeTrainerSlice(
         };
       }),
       can_open_original: true,
+      structure_analysis: decodeStructureAnalysis(
+        typeof selectedJob.last_error === 'string' ? selectedJob.last_error : null,
+      ) ?? {
+        ...emptyStructureAnalysis(),
+        candidates_found: selectedSummary.structure_candidate_count,
+        ocr_pages_untouched: selectedSummary.needs_ocr_page_count,
+        ocr_gap_warning: selectedSummary.needs_ocr_page_count > 0,
+        low_confidence_count: (candidates ?? []).filter((row) => Number(row.confidence ?? 1) < 0.55).length,
+        unresolved_parent_count: (candidates ?? []).filter((row) =>
+          Array.isArray(row.validation_warnings) &&
+          row.validation_warnings.map((item) => String(item)).includes('unresolved_parent'),
+        ).length,
+      },
+      can_rebuild_structure: !['uploaded', 'queued', 'extracting'].includes(selectedSummary.job_status),
     };
   }
 
@@ -188,6 +202,9 @@ export async function buildKnowledgeTrainerSlice(
       action('retry_legal_document_page', true, {
         legal_ingestion_document_id: 'uuid',
         page_no: 'integer',
+      }),
+      action('rebuild_legal_structure_candidates', Boolean(selected && !['uploaded', 'queued', 'extracting'].includes(selected.job_status)), {
+        legal_ingestion_document_id: 'uuid',
       }),
       action('update_legal_extraction_candidate', true, {
         legal_ingestion_candidate_id: 'uuid',

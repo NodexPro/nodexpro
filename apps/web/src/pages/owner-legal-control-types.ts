@@ -379,6 +379,15 @@ export type OwnerKnowledgeTrainerSlice = {
     selected_page: { page_no: number; text: string | null; status: string } | null;
     candidates: OwnerKnowledgeTrainerCandidate[];
     can_open_original: boolean;
+    structure_analysis: {
+      candidates_found: number;
+      toc_index_rejected: number;
+      low_confidence_count: number;
+      unresolved_parent_count: number;
+      ocr_pages_untouched: number;
+      ocr_gap_warning: boolean;
+    } | null;
+    can_rebuild_structure: boolean;
   } | null;
   allowed_actions: TaxKnowledgeAllowedAction[];
 };

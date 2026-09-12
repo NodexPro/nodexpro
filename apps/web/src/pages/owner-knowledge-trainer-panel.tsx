@@ -288,6 +288,33 @@ function TrainerReview({
       <div>Needs OCR: {document.needs_ocr_page_count}</div>
       <div>Failed: {document.failed_page_count}</div>
       <div>Structure candidates: {document.structure_candidate_count}</div>
+      {document.structure_analysis ? (
+        <div style={{ fontSize: 13, color: '#374151', display: 'grid', gap: 4 }}>
+          <div>Candidates found: {document.structure_analysis.candidates_found}</div>
+          <div>Rejected as table of contents / index: {document.structure_analysis.toc_index_rejected}</div>
+          <div>Low confidence: {document.structure_analysis.low_confidence_count}</div>
+          <div>Unresolved parent: {document.structure_analysis.unresolved_parent_count}</div>
+          {document.structure_analysis.ocr_gap_warning ? (
+            <div>Some pages still need OCR; hierarchy may be incomplete.</div>
+          ) : null}
+        </div>
+      ) : null}
+      {document.can_rebuild_structure ? (
+        <div>
+          <button
+            type="button"
+            className="nx-btn nx-btn-taxes-compact"
+            disabled={busy || processing}
+            onClick={() =>
+              void onCommand('rebuild_legal_structure_candidates', {
+                legal_ingestion_document_id: document.id,
+              }).catch((err) => setError(userFacingApiMessage(err)))
+            }
+          >
+            Rebuild structure candidates
+          </button>
+        </div>
+      ) : null}
       {processing ? <div style={{ color: '#6b7280' }}>Processing…</div> : null}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

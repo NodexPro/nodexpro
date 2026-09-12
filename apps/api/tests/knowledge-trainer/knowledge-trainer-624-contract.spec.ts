@@ -47,6 +47,7 @@ test('TAX-624 previous Legal Library migrations remain present and unchanged in 
 
 test('Trainer commands are a separate family and do not replace create_tax_legal_node', () => {
   assert.equal(isKnowledgeTrainerCommand('accept_legal_structure_candidate'), true);
+  assert.equal(isKnowledgeTrainerCommand('rebuild_legal_structure_candidates'), true);
   assert.equal(isKnowledgeTrainerCommand('create_tax_legal_node'), false);
   assert.equal(isTaxKnowledgeCommand('create_tax_legal_node'), true);
   assert.equal(isTaxKnowledgeCommand('accept_legal_structure_candidate'), false);
@@ -62,6 +63,18 @@ test('Accept reuses canonical Legal Library command; worker never writes canonic
   assert.doesNotMatch(worker, /activate_/);
   assert.match(worker, /workerMustNotWriteCanonicalLaw/);
   assert.doesNotMatch(worker, /openai|anthropic|gemini/i);
+  const persist = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-structure.service.ts');
+  assert.match(persist, /replaceStaging/);
+  assert.match(persist, /accepted_tax_legal_node_id/);
+  assert.match(persist, /candidate_kind === 'structure'/);
+  assert.match(persist, /preserved_accepted/);
+  assert.match(persist, /page_text/);
+  assert.doesNotMatch(persist, /from\('tax_legal_nodes'\)\s*\.insert/);
+  assert.doesNotMatch(persist, /from\('tax_legal_nodes'\)\s*\.delete/);
+  assert.doesNotMatch(persist, /from\('legal_ingestion_pages'\)\s*\.update/);
+  assert.doesNotMatch(persist, /from\('legal_ingestion_pages'\)\s*\.insert/);
+  assert.doesNotMatch(persist, /storeOwnerLegalMaterial/);
+  assert.doesNotMatch(readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-commands.service.ts'), /handleRebuildStructure[\s\S]*storeOwnerLegalMaterial/);
 });
 
 test('Dedicated worker package exists and leases pages', () => {
@@ -87,6 +100,7 @@ test('Owner UI keeps manual authoring beside Upload material', () => {
   assert.match(trainerUi, /Accept Draft/);
   assert.match(trainerUi, /Reject/);
   assert.match(trainerUi, /Edit Draft/);
+  assert.match(trainerUi, /Rebuild structure candidates/);
   assert.doesNotMatch(trainerUi, /openai|anthropic|gemini/i);
 });
 

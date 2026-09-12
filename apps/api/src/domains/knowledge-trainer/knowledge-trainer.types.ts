@@ -4,6 +4,7 @@ export const KNOWLEDGE_TRAINER_COMMANDS = [
   'upload_legal_training_document',
   'start_legal_document_extraction',
   'retry_legal_document_page',
+  'rebuild_legal_structure_candidates',
   'update_legal_extraction_candidate',
   'accept_legal_structure_candidate',
   'reject_legal_extraction_candidate',
@@ -117,6 +118,15 @@ export type StructureCandidateDraft = {
   validation_warnings: string[];
 };
 
+export type StructureDetectionAnalysis = {
+  candidates_found: number;
+  toc_index_rejected: number;
+  low_confidence_count: number;
+  unresolved_parent_count: number;
+  ocr_pages_untouched: number;
+  ocr_gap_warning: boolean;
+};
+
 export type KnowledgeTrainerInputOptionDto = {
   input_type: LegalIngestionInputType;
   available: boolean;
@@ -186,6 +196,8 @@ export type KnowledgeTrainerSliceDto = {
     selected_page: { page_no: number; text: string | null; status: LegalIngestionPageStatus } | null;
     candidates: KnowledgeTrainerCandidateDto[];
     can_open_original: boolean;
+    structure_analysis: StructureDetectionAnalysis | null;
+    can_rebuild_structure: boolean;
   } | null;
   allowed_actions: Array<{
     action_key: string;

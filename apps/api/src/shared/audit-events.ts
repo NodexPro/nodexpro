@@ -227,6 +227,7 @@ export const AUDIT_ACTIONS = {
   LEGAL_TRAINING_DOCUMENT_UPLOADED: 'legal_training_document_uploaded',
   LEGAL_TRAINING_EXTRACTION_STARTED: 'legal_training_extraction_started',
   LEGAL_TRAINING_PAGE_RETRIED: 'legal_training_page_retried',
+  LEGAL_TRAINING_STRUCTURE_REBUILT: 'legal_training_structure_rebuilt',
   LEGAL_TRAINING_CANDIDATE_EDITED: 'legal_training_candidate_edited',
   LEGAL_TRAINING_CANDIDATE_ACCEPTED: 'legal_training_candidate_accepted',
   LEGAL_TRAINING_CANDIDATE_REJECTED: 'legal_training_candidate_rejected',

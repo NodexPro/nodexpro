@@ -10,6 +10,7 @@ import {
   type KnowledgeTrainerInputOptionDto,
   type LegalIngestionInputType,
   type StructureCandidateDraft,
+  type StructureDetectionAnalysis,
   type StructureKindCatalogItem,
 } from './knowledge-trainer.types.js';
 
@@ -119,13 +120,26 @@ function normalizeHeadingText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function kindPattern(labels: string[]): string {
   return labels
     .slice()
     .sort((a, b) => b.length - a.length)
-    .map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .map((label) => escapeRegExp(label))
     .join('|');
 }
+
+/** Linguistic ordinal forms for identifiers — not statute content. */
+const ORDINAL_ID = 'ראשון|שנייה|שני|שלישי|רביעי|חמישי|שישי|ששי|שביעי|שמיני|תשיעי|עשירי';
+const LETTER_ID = "[א-ת](?:['׳\"]?)";
+const NUMERIC_ID = '\\d+[א-ת]?';
+const STRUCTURE_ID = `(?:${ORDINAL_ID}|${LETTER_ID}|${NUMERIC_ID})`;
+
+const GO_TOKEN_RE = /\bGo\s+\d+\b/gi;
+const TOC_LABEL_RE = /תוכן\s*ענינים|תוכן\s*העניינים|מפתח\s*עניינים/i;
 
 export function parseNumericIdentifier(value: string | null | undefined): number | null {
   if (!value) return null;
@@ -134,62 +148,462 @@ export function parseNumericIdentifier(value: string | null | undefined): number
   return null;
 }
 
+export function countNavigationGoTokens(text: string): number {
+  return text.match(GO_TOKEN_RE)?.length ?? 0;
+}
+
+export function isTocOrIndexPage(text: string, catalogLabels: string[]): boolean {
+  const goCount = countNavigationGoTokens(text);
+  if (TOC_LABEL_RE.test(text)) return true;
+  if (goCount >= 8) return true;
+  if (goCount >= 2) {
+    const kindHits = catalogLabels.reduce((sum, label) => {
+      const re = new RegExp(escapeRegExp(label), 'g');
+      return sum + (text.match(re)?.length ?? 0);
+    }, 0);
+    if (kindHits >= 8) return true;
+  }
+  return false;
+}
+
+function countKindMentions(text: string, labels: string[]): number {
+  return labels.reduce((sum, label) => {
+    const re = new RegExp(escapeRegExp(label), 'g');
+    return sum + (text.match(re)?.length ?? 0);
+  }, 0);
+}
+
+/** Drop catalog rows that are already a kind + identifier (e.g. "חלק א"), not a kind. */
+export function usableKindCatalog(catalog: StructureKindCatalogItem[]): StructureKindCatalogItem[] {
+  const labels = catalog.map((item) => item.label.trim()).filter(Boolean);
+  return catalog.filter((item) => {
+    const label = item.label.trim();
+    if (!label) return false;
+    return !labels.some(
+      (other) =>
+        other !== label &&
+        other.length < label.length &&
+        new RegExp(`^${escapeRegExp(other)}\\s+${STRUCTURE_ID}$`).test(label),
+    );
+  });
+}
+
+function isPlausibleIdentifier(value: string): boolean {
+  const token = value.trim();
+  if (!token || token.length > 12) return false;
+  return new RegExp(`^(?:${STRUCTURE_ID})$`).test(token);
+}
+
+function isYearLikeIdentifier(value: string): boolean {
+  return /^(?:19|20)\d{2}$/.test(value.trim());
+}
+
+function looksLikeCrossReferenceAfter(after: string): boolean {
+  const window = after.slice(0, 48);
+  return /(?:^|\s)(?:לחוק|לפקודה|לפי|או\s+פרק|לפרק|לסימן|לסעיף)/.test(window);
+}
+
+function looksLikeCrossReferenceBefore(before: string): boolean {
+  const tail = before.slice(-48);
+  return /(?:^|[\s,;])(?:לפי|מכוח|כאמור|על\s+פי|כהגדרת\S*|כמשמעות\S*|לענין|בהתאם|בסעיפים|לסעיפים|סעיפים|הוראות)\s*$/.test(
+    tail,
+  );
+}
+
+function looksLikeAmendmentAfter(after: string): boolean {
+  return /^\s*\d{0,4}\s*תש/.test(after) || /^\s*\(\s*\d+\s*תיקון/.test(after);
+}
+
+function looksLikeTrailingCrossRef(after: string): boolean {
+  return /(?:לפי|כאמור|על\s+פי|בהתאם|מכוח)\s+(?:ב)?סעי/.test(after.slice(0, 24));
+}
+
+function titleLooksMerged(title: string, labels: string[]): boolean {
+  if (countNavigationGoTokens(title) >= 2) return true;
+  if ((title.match(/\bGo\s+\d+/gi) || []).length >= 1 && countKindMentions(title, labels) >= 2) return true;
+  return countKindMentions(title, labels) >= 2;
+}
+
+function cleanOfficialTitle(title: string): string {
+  let value = normalizeHeadingText(title);
+  value = value.replace(/^\d{4}\s+תש[\u0590-\u05FF"׳'\-–]*.*$/u, '');
+  value = value.replace(/\s+\d{4}\s+תש[\u0590-\u05FF"׳'\-–]*.*$/u, '');
+  value = value.replace(/\s+\(\s*\d+\s*תיקון.*$/u, '');
+  value = value.replace(/(?:\s+ל){2,}$/g, '');
+  return value.replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
+function containerTitleIsPlausible(kindLabel: string, title: string): boolean {
+  if (/סעיף/.test(kindLabel)) return true;
+  if (!title || title.length < 2) return false;
+  if (/^\(|^,\s*|^\d{4}/.test(title)) return false;
+  if (/לא יחולו|, והוראות/.test(title)) return false;
+  return /[א-ת]{2,}/.test(title);
+}
+
+function cutTitle(raw: string, labels: string[]): string {
+  let title = normalizeHeadingText(raw);
+  const nextKind = title.search(new RegExp(`(?:^|\\s)(?:${kindPattern(labels)})\\s+${STRUCTURE_ID}`));
+  if (nextKind > 0) title = title.slice(0, nextKind);
+  const bracket = title.search(/\s\[/);
+  if (bracket > 0) title = title.slice(0, bracket);
+  const goAt = title.search(/\bGo\s+\d+/i);
+  if (goAt >= 0) title = title.slice(0, goAt);
+  title = title.replace(/[:'—\-–]+$/g, '').trim();
+  return cleanOfficialTitle(title);
+}
+
+function titleFromLookback(before: string): string | null {
+  const bracket = before.match(/\[\s*\d+\s*\]\s+([א-ת]{2,24})(?=\s|$)/);
+  if (bracket?.[1]) return cleanOfficialTitle(bracket[1]);
+  return null;
+}
+
+type RawHeading = {
+  kind_label: string;
+  node_number: string | null;
+  title: string | null;
+  excerpt: string;
+  page_no: number;
+  offset: number;
+  confidence: number;
+  warnings: string[];
+  rank: number;
+};
+
+function rankForKind(label: string, catalog: StructureKindCatalogItem[]): number {
+  const index = catalog.findIndex((item) => item.label === label);
+  if (/תוספת/.test(label)) return 0;
+  return index >= 0 ? index : catalog.length;
+}
+
+function alreadyHasHeading(headings: RawHeading[], kindLabel: string, nodeNumber: string, pageNo: number): boolean {
+  return headings.some(
+    (row) => row.kind_label === kindLabel && row.node_number === nodeNumber && row.page_no === pageNo,
+  );
+}
+
+function pushHeading(headings: RawHeading[], heading: RawHeading): void {
+  if (!heading.node_number || alreadyHasHeading(headings, heading.kind_label, heading.node_number, heading.page_no)) {
+    return;
+  }
+  headings.push(heading);
+}
+
+function scanHeadingsOnPage(
+  page: ExtractedPageText,
+  catalog: StructureKindCatalogItem[],
+  labels: string[],
+): { headings: RawHeading[]; tocRejected: number } {
+  const text = page.text ?? '';
+  if (!text.trim()) return { headings: [], tocRejected: 0 };
+  if (isTocOrIndexPage(text, labels)) {
+    const rejected = Math.max(countKindMentions(text, labels), countNavigationGoTokens(text));
+    return { headings: [], tocRejected: rejected };
+  }
+
+  const headings: RawHeading[] = [];
+  let tocRejected = 0;
+  const kindRe = new RegExp(`(?<![א-תA-Za-z0-9])(${kindPattern(labels)})\\s+(${STRUCTURE_ID})(?=\\s|[:'—\\-–]|$)`, 'g');
+  let match: RegExpExecArray | null;
+  while ((match = kindRe.exec(text))) {
+    const kindLabel = match[1];
+    const nodeNumber = match[2].replace(/[.:]$/, '');
+    if (!isPlausibleIdentifier(nodeNumber)) continue;
+    const before = text.slice(0, match.index);
+    const after = text.slice(match.index + match[0].length);
+    if (looksLikeCrossReferenceAfter(after) || looksLikeCrossReferenceBefore(before)) continue;
+    if (isYearLikeIdentifier(nodeNumber) && looksLikeAmendmentAfter(after)) continue;
+    if (/\bGo\s+\d+/i.test(after.slice(0, 80))) {
+      tocRejected += 1;
+      continue;
+    }
+    const title = cutTitle(after.replace(/^\s*[:'—\-–]\s*/, ' '), labels);
+    if (titleLooksMerged(title, labels) || countNavigationGoTokens(`${kindLabel} ${nodeNumber} ${title}`) >= 1) {
+      continue;
+    }
+    if (title.length > 70) continue;
+    if (!containerTitleIsPlausible(kindLabel, title)) continue;
+    const excerpt = normalizeHeadingText(`${kindLabel} ${nodeNumber}${title ? ` ${title}` : ''}`).slice(0, 200);
+    const strong = /[:'—]/.test(match[0] + after.slice(0, 3)) && title.length > 0 && title.length <= 40;
+    pushHeading(headings, {
+      kind_label: kindLabel,
+      node_number: nodeNumber,
+      title: title || null,
+      excerpt,
+      page_no: page.page_no,
+      offset: match.index,
+      confidence: strong ? 0.9 : title ? 0.68 : 0.5,
+      warnings: [],
+      rank: rankForKind(kindLabel, catalog),
+    });
+  }
+
+  const seifLabel = labels.find((label) => label === 'סעיף') ?? labels.find((label) => /סעיף/.test(label) && !/קטן/.test(label));
+  if (seifLabel) {
+    const seifRe = new RegExp(`(?<![א-תA-Za-z0-9])${escapeRegExp(seifLabel)}\\s+(${NUMERIC_ID})(?=\\s|[:'—\\-–]|$)`, 'g');
+    let seifMatch: RegExpExecArray | null;
+    while ((seifMatch = seifRe.exec(text))) {
+      const nodeNumber = seifMatch[1];
+      const before = text.slice(0, seifMatch.index);
+      const after = text.slice(seifMatch.index + seifMatch[0].length);
+      if (looksLikeCrossReferenceAfter(after) || looksLikeCrossReferenceBefore(before)) continue;
+      if (isYearLikeIdentifier(nodeNumber) && looksLikeAmendmentAfter(after)) continue;
+      if (/\bGo\s+\d+/i.test(after.slice(0, 80))) continue;
+      const title = cutTitle(after.replace(/^\s*[:'—\-–]\s*/, ' '), labels);
+      if (titleLooksMerged(title, labels) || title.length > 70) continue;
+      pushHeading(headings, {
+        kind_label: seifLabel,
+        node_number: nodeNumber,
+        title: title || null,
+        excerpt: normalizeHeadingText(`${seifLabel} ${nodeNumber}${title ? ` ${title}` : ''}`).slice(0, 200),
+        page_no: page.page_no,
+        offset: seifMatch.index,
+        confidence: title ? 0.68 : 0.5,
+        warnings: [],
+        rank: rankForKind(seifLabel, catalog),
+      });
+    }
+
+    const letterDotRe = /(?<![א-תA-Za-z0-9])([א-ת])\.\s+(\d{1,3})(?=\s|$)/g;
+    let letterDot: RegExpExecArray | null;
+    while ((letterDot = letterDotRe.exec(text))) {
+      const before = text.slice(0, letterDot.index);
+      const after = text.slice(letterDot.index + letterDot[0].length);
+      if (/סעיף\s*קטן|בסעיף|לפי\s+סעיף|מכוח\s+סעיף/.test(before.slice(-24))) continue;
+      if (looksLikeCrossReferenceBefore(before) || looksLikeTrailingCrossRef(after)) continue;
+      const nodeNumber = `${letterDot[2]}${letterDot[1]}`;
+      if (!isPlausibleIdentifier(nodeNumber) || isYearLikeIdentifier(letterDot[2])) continue;
+      const title = titleFromLookback(before);
+      pushHeading(headings, {
+        kind_label: seifLabel,
+        node_number: nodeNumber,
+        title,
+        excerpt: normalizeHeadingText(`${seifLabel} ${nodeNumber}${title ? ` ${title}` : ''}`).slice(0, 200),
+        page_no: page.page_no,
+        offset: letterDot.index,
+        confidence: title ? 0.68 : 0.55,
+        warnings: title ? [] : ['bare_numbered_heading'],
+        rank: rankForKind(seifLabel, catalog),
+      });
+    }
+
+    const rtlDotRe = /(?<![א-תA-Za-z0-9])\.\s+(\d{1,3})(?=\s|$)/g;
+    let rtlDot: RegExpExecArray | null;
+    while ((rtlDot = rtlDotRe.exec(text))) {
+      const before = text.slice(0, rtlDot.index);
+      const after = text.slice(rtlDot.index + rtlDot[0].length);
+      if (looksLikeCrossReferenceBefore(before) || looksLikeCrossReferenceAfter(after) || looksLikeTrailingCrossRef(after)) continue;
+      if (/בסעיף|לפי\s+סעיף|מכוח\s+סעיף/.test(before.slice(-24))) continue;
+      const nodeNumber = rtlDot[1];
+      if (!isPlausibleIdentifier(nodeNumber) || isYearLikeIdentifier(nodeNumber)) continue;
+      const title = titleFromLookback(before);
+      pushHeading(headings, {
+        kind_label: seifLabel,
+        node_number: nodeNumber,
+        title,
+        excerpt: normalizeHeadingText(`${seifLabel} ${nodeNumber}${title ? ` ${title}` : ''}`).slice(0, 200),
+        page_no: page.page_no,
+        offset: rtlDot.index,
+        confidence: title ? 0.72 : 0.55,
+        warnings: title ? [] : ['bare_numbered_heading'],
+        rank: rankForKind(seifLabel, catalog),
+      });
+    }
+
+    const ltrDotRe = /(?<![א-תA-Za-z0-9.])(\d{1,3}[א-ת]?)\.(?=\s|$)/g;
+    let ltrDot: RegExpExecArray | null;
+    while ((ltrDot = ltrDotRe.exec(text))) {
+      const before = text.slice(0, ltrDot.index);
+      const after = text.slice(ltrDot.index + ltrDot[0].length);
+      if (looksLikeCrossReferenceBefore(before) || looksLikeTrailingCrossRef(after)) continue;
+      const nodeNumber = ltrDot[1];
+      if (!isPlausibleIdentifier(nodeNumber) || isYearLikeIdentifier(nodeNumber)) continue;
+      const title = titleFromLookback(before) ?? cutTitle(text.slice(ltrDot.index + ltrDot[0].length).replace(/^\s*[:'—\-–]\s*/, ' '), labels);
+      const official = title && title.length <= 40 && !titleLooksMerged(title, labels) ? title : titleFromLookback(before);
+      pushHeading(headings, {
+        kind_label: seifLabel,
+        node_number: nodeNumber,
+        title: official || null,
+        excerpt: normalizeHeadingText(`${seifLabel} ${nodeNumber}${official ? ` ${official}` : ''}`).slice(0, 200),
+        page_no: page.page_no,
+        offset: ltrDot.index,
+        confidence: official ? 0.72 : 0.55,
+        warnings: official ? [] : ['bare_numbered_heading'],
+        rank: rankForKind(seifLabel, catalog),
+      });
+    }
+  }
+
+  const katanLabel = labels.find((label) => /קטן/.test(label));
+  if (katanLabel && seifLabel) {
+    const seifs = headings.filter((row) => row.kind_label === seifLabel).sort((a, b) => a.offset - b.offset);
+    for (const seif of seifs) {
+      const next = headings.find((row) => row.offset > seif.offset && row.kind_label !== katanLabel);
+      const regionEnd = Math.min(seif.offset + 220, next ? next.offset : text.length);
+      const region = text.slice(seif.offset, regionEnd);
+      const parenRe = /[\(（]\s*([א-ת]|\d+)\s*[\)）]/g;
+      let paren: RegExpExecArray | null;
+      let taken = 0;
+      while ((paren = parenRe.exec(region)) && taken < 6) {
+        const around = region.slice(Math.max(0, paren.index - 16), paren.index + 24);
+        if (/תיקון|פסקה/.test(around)) continue;
+        pushHeading(headings, {
+          kind_label: katanLabel,
+          node_number: paren[1],
+          title: null,
+          excerpt: normalizeHeadingText(`(${paren[1]})`).slice(0, 80),
+          page_no: page.page_no,
+          offset: seif.offset + paren.index,
+          confidence: 0.4,
+          warnings: ['subsection_needs_context'],
+          rank: rankForKind(katanLabel, catalog),
+        });
+        taken += 1;
+      }
+    }
+  }
+
+  headings.sort((a, b) => a.offset - b.offset);
+  return { headings, tocRejected };
+}
+
+function attachParents(raw: RawHeading[]): StructureCandidateDraft[] {
+  const stack: Array<{ index: number; rank: number; kind_label: string }> = [];
+  const drafts: StructureCandidateDraft[] = [];
+  for (const heading of raw) {
+    while (stack.length && stack[stack.length - 1].rank >= heading.rank) {
+      stack.pop();
+    }
+    const parent = stack.length ? stack[stack.length - 1] : null;
+    const warnings = [...heading.warnings];
+    let parentIndex: number | null = parent ? parent.index : null;
+    if (!parent && heading.rank > 0) {
+      warnings.push('unresolved_parent');
+      parentIndex = null;
+    }
+    let confidence = heading.confidence;
+    let status: StructureCandidateDraft['candidate_status'] = confidence >= 0.85 ? 'proposed' : confidence >= 0.55 ? 'proposed' : 'needs_review';
+    if (confidence < 0.55) status = 'needs_review';
+    if (warnings.includes('subsection_needs_context') || warnings.includes('unresolved_parent')) {
+      status = 'needs_review';
+      confidence = Math.min(confidence, 0.45);
+    }
+    const draft: StructureCandidateDraft = {
+      candidate_kind: 'structure',
+      candidate_status: status,
+      kind_label: heading.kind_label,
+      node_number: heading.node_number,
+      title: heading.title,
+      parent_index: parentIndex,
+      page_start: heading.page_no,
+      page_end: heading.page_no,
+      excerpt: heading.excerpt,
+      confidence,
+      validation_warnings: warnings,
+    };
+    const dup = drafts.some(
+      (other) =>
+        other.kind_label === draft.kind_label &&
+        other.node_number === draft.node_number &&
+        other.parent_index === draft.parent_index &&
+        other.title === draft.title,
+    );
+    if (dup) continue;
+    drafts.push(draft);
+    stack.push({ index: drafts.length - 1, rank: heading.rank, kind_label: heading.kind_label });
+  }
+  for (let i = 0; i < drafts.length - 1; i += 1) {
+    if (drafts[i + 1].page_start > drafts[i].page_start) {
+      drafts[i].page_end = drafts[i + 1].page_start;
+    }
+  }
+  return drafts;
+}
+
+export const STRUCTURE_ANALYSIS_PREFIX = 'v2-analysis:';
+
+export function encodeStructureAnalysis(analysis: StructureDetectionAnalysis): string {
+  return `${STRUCTURE_ANALYSIS_PREFIX}${JSON.stringify(analysis)}`;
+}
+
+export function decodeStructureAnalysis(raw: string | null | undefined): StructureDetectionAnalysis | null {
+  if (!raw || !raw.startsWith(STRUCTURE_ANALYSIS_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(raw.slice(STRUCTURE_ANALYSIS_PREFIX.length)) as StructureDetectionAnalysis;
+    return {
+      candidates_found: Number(parsed.candidates_found) || 0,
+      toc_index_rejected: Number(parsed.toc_index_rejected) || 0,
+      low_confidence_count: Number(parsed.low_confidence_count) || 0,
+      unresolved_parent_count: Number(parsed.unresolved_parent_count) || 0,
+      ocr_pages_untouched: Number(parsed.ocr_pages_untouched) || 0,
+      ocr_gap_warning: parsed.ocr_gap_warning === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function emptyStructureAnalysis(): StructureDetectionAnalysis {
+  return {
+    candidates_found: 0,
+    toc_index_rejected: 0,
+    low_confidence_count: 0,
+    unresolved_parent_count: 0,
+    ocr_pages_untouched: 0,
+    ocr_gap_warning: false,
+  };
+}
+
+export function detectStructureCandidates(
+  pages: ExtractedPageText[],
+  catalog: StructureKindCatalogItem[],
+  opts?: { ocr_page_count?: number },
+): { drafts: StructureCandidateDraft[]; analysis: StructureDetectionAnalysis } {
+  const usable = usableKindCatalog(catalog);
+  const labels = usable.map((item) => item.label.trim()).filter(Boolean);
+  if (!labels.length) {
+    return { drafts: [], analysis: { ...emptyStructureAnalysis(), ocr_pages_untouched: opts?.ocr_page_count ?? 0 } };
+  }
+  const collected: RawHeading[] = [];
+  let tocRejected = 0;
+  for (const page of pages) {
+    const { headings, tocRejected: pageRejected } = scanHeadingsOnPage(page, usable, labels);
+    tocRejected += pageRejected;
+    collected.push(...headings);
+  }
+  collected.sort((a, b) => a.page_no - b.page_no || a.offset - b.offset);
+  const drafts = attachParents(collected);
+  const ocrPages = opts?.ocr_page_count ?? 0;
+  const analysis: StructureDetectionAnalysis = {
+    candidates_found: drafts.length,
+    toc_index_rejected: tocRejected,
+    low_confidence_count: drafts.filter((row) => row.confidence < 0.55).length,
+    unresolved_parent_count: drafts.filter((row) => row.validation_warnings.includes('unresolved_parent')).length,
+    ocr_pages_untouched: ocrPages,
+    ocr_gap_warning: ocrPages > 0,
+  };
+  if (analysis.ocr_gap_warning) {
+    for (const draft of drafts) {
+      if (!draft.validation_warnings.includes('ocr_pages_may_affect_hierarchy')) {
+        draft.validation_warnings.push('ocr_pages_may_affect_hierarchy');
+        draft.candidate_status = 'needs_review';
+      }
+    }
+  }
+  return { drafts, analysis };
+}
+
 /**
  * Deterministic structure headings from extracted page text.
- * Kind labels come from the country catalog — never a frontend hardcoded list.
- * Parentage follows document order, not a universal hierarchy.
+ * Kind labels come from the country catalog — never hardcoded statute titles or numbers.
+ * Parentage follows document order and catalog rank, not a universal forced sequence.
  */
 export function extractStructureCandidatesFromPages(
   pages: ExtractedPageText[],
   catalog: StructureKindCatalogItem[],
 ): StructureCandidateDraft[] {
-  const labels = catalog.map((item) => item.label.trim()).filter(Boolean);
-  if (!labels.length) return [];
-  const pattern = new RegExp(`(?:^|\\n)\\s*(${kindPattern(labels)})\\s+([^\\n]{0,240})`, 'g');
-  const found: StructureCandidateDraft[] = [];
-  const stack: Array<{ index: number; kind_label: string }> = [];
-
-  for (const page of pages) {
-    const text = page.text ?? '';
-    pattern.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(text))) {
-      const kindLabel = match[1];
-      const rest = normalizeHeadingText(match[2] ?? '');
-      const numberMatch = rest.match(/^(\S+)(?:\s+[—\-–:]?\s*(.*))?$/);
-      const nodeNumber = numberMatch?.[1] ? numberMatch[1].replace(/[.:]$/, '') : null;
-      const title = numberMatch?.[2] ? normalizeHeadingText(numberMatch[2]) : null;
-      const excerpt = normalizeHeadingText(`${kindLabel} ${rest}`).slice(0, 400);
-
-      let existingKindAt = -1;
-      for (let stackIndex = stack.length - 1; stackIndex >= 0; stackIndex -= 1) {
-        if (stack[stackIndex].kind_label === kindLabel) {
-          existingKindAt = stackIndex;
-          break;
-        }
-      }
-      if (existingKindAt >= 0) {
-        stack.splice(existingKindAt);
-      }
-      const parent = stack.length ? stack[stack.length - 1] : null;
-      const draft: StructureCandidateDraft = {
-        candidate_kind: 'structure',
-        candidate_status: 'proposed',
-        kind_label: kindLabel,
-        node_number: nodeNumber,
-        title,
-        parent_index: parent ? parent.index : null,
-        page_start: page.page_no,
-        page_end: page.page_no,
-        excerpt,
-        confidence: title ? 0.72 : 0.55,
-        validation_warnings: [],
-      };
-      found.push(draft);
-      stack.push({ index: found.length - 1, kind_label: kindLabel });
-    }
-  }
-  return found;
+  return detectStructureCandidates(pages, catalog).drafts;
 }
 
 export function validateStructureCandidates(
@@ -220,12 +634,21 @@ export function validateStructureCandidates(
     const draft = out[i];
     if (draft.parent_index != null) {
       if (draft.parent_index < 0 || draft.parent_index >= out.length || draft.parent_index === i) {
+        draft.parent_index = null;
+        parentByIndex.set(i, null);
         draft.validation_warnings.push('invalid_parent_candidate');
         draft.candidate_status = 'needs_review';
       } else if (hasParentCycle(i, parentByIndex)) {
+        draft.parent_index = null;
+        parentByIndex.set(i, null);
         draft.validation_warnings.push('hierarchy_cycle');
         draft.candidate_status = 'needs_review';
       }
+    }
+    if ((draft.title && draft.title.length > 70) || countNavigationGoTokens(draft.excerpt) >= 2) {
+      draft.validation_warnings.push('toc_or_merged_heading');
+      draft.candidate_status = 'needs_review';
+      draft.confidence = Math.min(draft.confidence, 0.35);
     }
 
     const siblings = out.filter(

@@ -89,7 +89,11 @@ export async function resolveCountryForOwnerLegalCommand(
     }
     throw badRequest('tax_source_id is required');
   }
-  if (command === 'start_legal_document_extraction' || command === 'retry_legal_document_page') {
+  if (
+    command === 'start_legal_document_extraction' ||
+    command === 'retry_legal_document_page' ||
+    command === 'rebuild_legal_structure_candidates'
+  ) {
     const id = optionalUuid(payload.legal_ingestion_document_id);
     if (!id) throw badRequest('legal_ingestion_document_id is required');
     return assertPayloadCountryAgrees(

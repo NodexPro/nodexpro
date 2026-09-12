@@ -1,12 +1,8 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
-import {
-  extractStructureCandidatesFromPages,
-  summarizeJobProgress,
-  validateStructureCandidates,
-  workerMustNotWriteCanonicalLaw,
-} from './knowledge-trainer.pure.js';
+import { summarizeJobProgress, workerMustNotWriteCanonicalLaw } from './knowledge-trainer.pure.js';
 import { countPdfPages, extractEmbeddedPdfPageText } from './knowledge-trainer-pdf.service.js';
+import { persistStructureCandidatesForJob } from './knowledge-trainer-structure.service.js';
 import { downloadOwnerLegalMaterial } from './knowledge-trainer-storage.service.js';
 import { WORKER_FORBIDDEN_CANONICAL_TABLES } from './knowledge-trainer.types.js';
 
@@ -208,141 +204,7 @@ async function refreshJobProgressAndMaybeFinalize(jobId: string): Promise<void> 
     { column: 'id', value: jobId },
   );
   if (progress.job_status === 'extracting') return;
-  await finalizeStructureCandidates(jobId);
-}
-
-async function finalizeStructureCandidates(jobId: string): Promise<void> {
-  const { data: jobState } = await supabaseAdmin
-    .from('legal_ingestion_jobs')
-    .select('structure_candidate_count')
-    .eq('id', jobId)
-    .maybeSingle();
-  if (Number(jobState?.structure_candidate_count ?? 0) > 0) return;
-
-  const { data: existing } = await supabaseAdmin
-    .from('legal_ingestion_candidates')
-    .select('id')
-    .eq('job_id', jobId)
-    .limit(1);
-  if (existing?.length) {
-    assertWorkerTableAllowed('legal_ingestion_candidates');
-    await supabaseAdmin
-      .from('legal_ingestion_candidates')
-      .update({ parent_candidate_id: null })
-      .eq('job_id', jobId);
-    await supabaseAdmin.from('legal_ingestion_candidates').delete().eq('job_id', jobId);
-  }
-
-  const { data: job } = await supabaseAdmin
-    .from('legal_ingestion_jobs')
-    .select('id, document_id, country_code, tax_source_id')
-    .eq('id', jobId)
-    .maybeSingle();
-  if (!job) return;
-
-  const { data: pages } = await supabaseAdmin
-    .from('legal_ingestion_pages')
-    .select('page_no, page_text, status')
-    .eq('job_id', jobId)
-    .order('page_no', { ascending: true });
-
-  const { data: kinds } = await supabaseAdmin
-    .from('tax_legal_node_kinds')
-    .select('id, label')
-    .eq('country_code', job.country_code)
-    .order('sort_order', { ascending: true });
-
-  const { data: nodes } = await supabaseAdmin
-    .from('tax_legal_nodes')
-    .select('id, tax_source_id, country_code, node_number, title, tax_legal_node_kind_id')
-    .eq('tax_source_id', job.tax_source_id);
-
-  const kindById = new Map((kinds ?? []).map((row) => [String(row.id), String(row.label)]));
-  const existingNodes = (nodes ?? []).map((row) => ({
-    id: String(row.id),
-    tax_source_id: String(row.tax_source_id),
-    country_code: String(row.country_code),
-    kind_label: kindById.get(String(row.tax_legal_node_kind_id)) ?? '',
-    node_number: row.node_number == null ? null : String(row.node_number),
-    title: String(row.title ?? ''),
-  }));
-
-  const extractedPages = (pages ?? [])
-    .filter((page) => page.status === 'extracted' && typeof page.page_text === 'string')
-    .map((page) => ({ page_no: Number(page.page_no), text: String(page.page_text) }));
-
-  const drafts = validateStructureCandidates(
-    extractStructureCandidatesFromPages(
-      extractedPages,
-      (kinds ?? []).map((row) => ({ id: String(row.id), label: String(row.label) })),
-    ),
-    {
-      country_code: String(job.country_code),
-      tax_source_id: String(job.tax_source_id),
-      existing_nodes: existingNodes,
-    },
-  );
-
-  if (drafts.length) {
-    const inserted: Array<{ id: string }> = [];
-    for (const [index, draft] of drafts.entries()) {
-      const parentId = draft.parent_index != null ? inserted[draft.parent_index]?.id ?? null : null;
-      const match = existingNodes.find(
-        (node) =>
-          node.kind_label === draft.kind_label &&
-          node.node_number &&
-          node.node_number === draft.node_number,
-      );
-      const { data, error } = await supabaseAdmin
-        .from('legal_ingestion_candidates')
-        .insert({
-          job_id: job.id,
-          document_id: job.document_id,
-          country_code: job.country_code,
-          tax_source_id: job.tax_source_id,
-          candidate_kind: 'structure',
-          candidate_status: draft.candidate_status,
-          kind_label: draft.kind_label,
-          node_number: draft.node_number,
-          title: draft.title,
-          parent_candidate_id: parentId,
-          page_start: draft.page_start,
-          page_end: draft.page_end,
-          excerpt: draft.excerpt,
-          confidence: draft.confidence,
-          validation_warnings: draft.validation_warnings,
-          matched_tax_legal_node_id: match?.id ?? null,
-          sort_order: index,
-        })
-        .select('id')
-        .single();
-      if (error || !data) throw error ?? new Error('Failed to persist structure candidate');
-      inserted.push({ id: String(data.id) });
-    }
-  }
-
-  const warningCount = drafts.reduce((sum, draft) => sum + draft.validation_warnings.length, 0);
-  const needsReview = drafts.some((draft) => draft.candidate_status === 'needs_review') || warningCount > 0;
-  const { data: jobNow } = await supabaseAdmin
-    .from('legal_ingestion_jobs')
-    .select('status, needs_ocr_page_count, failed_page_count')
-    .eq('id', jobId)
-    .maybeSingle();
-  const nextStatus =
-    jobNow?.status === 'extraction_failed' || jobNow?.status === 'partially_extracted'
-      ? jobNow.status
-      : needsReview || Number(jobNow?.needs_ocr_page_count ?? 0) > 0
-        ? 'needs_review'
-        : 'ready_for_review';
-  await trainerUpdate(
-    'legal_ingestion_jobs',
-    {
-      structure_candidate_count: drafts.length,
-      warning_count: warningCount,
-      status: nextStatus,
-    },
-    { column: 'id', value: jobId },
-  );
+  await persistStructureCandidatesForJob(jobId, { replaceStaging: false });
 }
 
 export async function runKnowledgeTrainerWorkerTick(workerId: string): Promise<{ prepared: number; processed: boolean }> {
