@@ -3,8 +3,15 @@ import assert from 'node:assert/strict';
 import {
   assembleLegalLibrary,
   generateLegalMachineCode,
+  legalNodeDisplayTitle,
   slugifyLegalCodeFragment,
 } from '../../src/domains/tax-knowledge/tax-knowledge-library.pure.js';
+
+test('legal node display title is human structure first, not machine codes', () => {
+  assert.equal(legalNodeDisplayTitle('חלק', 'א', 'פרשנות'), 'חלק א — פרשנות');
+  assert.equal(legalNodeDisplayTitle('סעיף', '1', 'הגדרות'), 'סעיף 1 — הגדרות');
+  assert.equal(legalNodeDisplayTitle('תוספת', '', 'תוספת ראשונה'), 'תוספת — תוספת ראשונה');
+});
 
 test('Hebrew titles do not produce latin slugs; backend still generates a machine code', () => {
   assert.equal(slugifyLegalCodeFragment('מס הכנסה'), '');

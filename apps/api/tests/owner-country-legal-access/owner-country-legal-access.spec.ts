@@ -133,8 +133,11 @@ test('11 platform owner retains all-country authority', () => {
   assert.equal(evaluateOwnerLegalCommandAccess(owner, 'create_tax_source', 'DE').ok, true);
   assert.equal(evaluateOwnerLegalCommandAccess(owner, 'activate_tax_rule_version', 'IL').ok, true);
   assert.equal(evaluateOwnerLegalCommandAccess(owner, 'create_country', 'IL').ok, true);
+  assert.equal(evaluateOwnerLegalCommandAccess(owner, 'disable_country', 'XA').ok, true);
+  assert.equal(evaluateOwnerLegalCommandAccess(owner, 'enable_country', 'XA').ok, true);
   assert.equal(evaluateOwnerLegalCommandAccess(owner, 'update_country_localization', 'IL').ok, true);
   assert.equal(evaluateOwnerLegalCommandAccess(ilEditor, 'create_country', 'IL').ok, false);
+  assert.equal(evaluateOwnerLegalCommandAccess(ilEditor, 'disable_country', 'XA').ok, false);
   assert.equal(evaluateOwnerLegalCommandAccess(ilEditor, 'update_country_localization', 'IL').ok, false);
 });
 

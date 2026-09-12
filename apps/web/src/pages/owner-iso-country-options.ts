@@ -1,10 +1,15 @@
 export type OwnerCountryOption = {
   code: string;
   name: string;
+  status?: string;
 };
 
 function normalizeCode(value: string): string {
   return value.trim().toUpperCase();
+}
+
+function normalizeStatus(value: string | undefined): string {
+  return (value ?? '').trim().toLowerCase();
 }
 
 /** Union of backend country lists. Does not invent countries. */
@@ -17,13 +22,25 @@ export function mergeOwnerCountrySelectorOptions(
       const code = normalizeCode(row.code);
       if (!code) continue;
       const name = row.name.trim() || code;
+      const status = normalizeStatus(row.status) || undefined;
       const prev = map.get(code);
+      const nextStatus = status ?? prev?.status;
+      const next: OwnerCountryOption = nextStatus ? { code, name, status: nextStatus } : { code, name };
       if (!prev || (prev.name === prev.code && name !== code)) {
-        map.set(code, { code, name });
+        map.set(code, next);
+      } else {
+        map.set(code, nextStatus ? { ...prev, status: nextStatus } : prev);
       }
     }
   }
   return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
+}
+
+/** Normal Owner selector: backend country status only. Never filter by name. */
+export function activeOwnerCountrySelectorOptions(
+  list: ReadonlyArray<OwnerCountryOption>,
+): OwnerCountryOption[] {
+  return list.filter((row) => (row.status ?? 'active').trim().toLowerCase() === 'active');
 }
 
 function displayNameOf(code: string): string {

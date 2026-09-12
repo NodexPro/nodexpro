@@ -26,7 +26,7 @@ import { OwnerLegalValuesPanel } from './owner-legal-values-panel';
 import { OwnerCountryContextPanel } from './owner-country-context-panel';
 import { OwnerFactDictionaryPanel, parseFactDictionaryAggregate } from './owner-fact-dictionary-panel';
 import { OwnerAddCountryControl } from './owner-add-country-control';
-import { mergeOwnerCountrySelectorOptions } from './owner-iso-country-options';
+import { activeOwnerCountrySelectorOptions, mergeOwnerCountrySelectorOptions } from './owner-iso-country-options';
 
 function isForbidden(e: unknown): boolean {
   return e instanceof ApiError && (e.status === 401 || e.status === 403);
@@ -190,19 +190,25 @@ export function PlatformOwnerLegalControl() {
       .filter((row): row is { code: string; label: string } => row !== null);
   }, [countryPacksAdmin]);
 
-  const countryOptions = useMemo(
+  const backendCountryOptions = useMemo(
     () =>
       mergeOwnerCountrySelectorOptions(
         taxKnowledge.countries.map((row) => ({
           code: row.code.trim(),
           name: row.name.trim() || row.code.trim(),
+          status: row.status,
         })),
         countryPackTables.countries.map((row) => ({
           code: safeText(row.code),
           name: safeText(row.name) || safeText(row.code),
+          status: safeText(row.status),
         })),
       ),
     [taxKnowledge.countries, countryPackTables.countries],
+  );
+  const countryOptions = useMemo(
+    () => activeOwnerCountrySelectorOptions(backendCountryOptions),
+    [backendCountryOptions],
   );
 
   const createCountryAction = useMemo(
@@ -216,6 +222,16 @@ export function PlatformOwnerLegalControl() {
   const canShowAccessExperts = navGroups.some((group) => group.items.some((item) => item.id === 'access-experts'));
 
   const selectedCountryCode = pendingTaxKnowledgeCountry ?? taxKnowledgeCountryQuery;
+
+  useEffect(() => {
+    if (!countryOptions.length) return;
+    const current = selectedCountryCode.trim().toUpperCase();
+    if (current && countryOptions.some((row) => row.code === current)) return;
+    const fallback = countryOptions[0]?.code ?? '';
+    if (!fallback || fallback === taxKnowledgeCountryQuery) return;
+    setPendingTaxKnowledgeCountry(null);
+    setTaxKnowledgeCountryQuery(fallback);
+  }, [countryOptions, selectedCountryCode, taxKnowledgeCountryQuery]);
 
   function normalizeCreateRulesetModal(
     command: string,
@@ -326,7 +342,7 @@ export function PlatformOwnerLegalControl() {
         addCountryControl={
           <OwnerAddCountryControl
             action={createCountryAction}
-            existingCountryCodes={countryOptions.map((row) => row.code)}
+            existingCountryCodes={backendCountryOptions.map((row) => row.code)}
             busy={commandBusy}
             localeCatalog={localeCatalog}
             onSubmit={async (command, payload) => {
@@ -350,6 +366,9 @@ export function PlatformOwnerLegalControl() {
               onToggleCountryPack={(row) => void toggleCountryPack(row)}
               onSaveLocalization={async (payload) => {
                 await sendOwnerCommand('update_country_localization', payload);
+              }}
+              onSetCountryStatus={async (command, countryCode) => {
+                await sendOwnerCommand(command, { country_code: countryCode });
               }}
             />
           </details>

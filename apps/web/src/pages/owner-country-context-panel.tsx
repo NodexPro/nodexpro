@@ -19,6 +19,7 @@ export function OwnerCountryContextPanel({
   onOpenCommand,
   onToggleCountryPack,
   onSaveLocalization,
+  onSetCountryStatus,
 }: {
   countries: UnknownRecord[];
   packs: UnknownRecord[];
@@ -31,6 +32,7 @@ export function OwnerCountryContextPanel({
   onOpenCommand: (command: string, meta: AggregateAction, prefilled: UnknownRecord) => void;
   onToggleCountryPack: (row: UnknownRecord) => void;
   onSaveLocalization?: (payload: UnknownRecord) => Promise<void>;
+  onSetCountryStatus?: (command: 'disable_country' | 'enable_country', countryCode: string) => Promise<void>;
 }) {
   const scopedCode = safeText(selectedCountryCode).toUpperCase();
   const scopedPacks = scopedCode
@@ -42,6 +44,8 @@ export function OwnerCountryContextPanel({
     : rulesets;
   const scopedEmptyRulesetActions = scopedRulesets.length ? [] : emptyRulesetCreateActions;
   const localizationAction = countryPackActions.find((row) => String(row.action_key ?? '') === 'update_country_localization');
+  const disableCountryAction = countryPackActions.find((row) => String(row.action_key ?? '') === 'disable_country');
+  const enableCountryAction = countryPackActions.find((row) => String(row.action_key ?? '') === 'enable_country');
   const [editingCode, setEditingCode] = useState('');
   const [editDefault, setEditDefault] = useState('');
   const [editSupported, setEditSupported] = useState<string[]>([]);
@@ -81,6 +85,8 @@ export function OwnerCountryContextPanel({
               key !== 'enable_country_pack' &&
               key !== 'disable_country_pack' &&
               key !== 'create_country' &&
+              key !== 'disable_country' &&
+              key !== 'enable_country' &&
               key !== 'update_country_localization'
             );
           })}
@@ -93,7 +99,7 @@ export function OwnerCountryContextPanel({
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
             <thead>
               <tr>
-                {['Country', 'Name', 'Status', 'Timezone', 'Default language', 'Supported'].map((h) => (
+                {['Country', 'Name', 'Status', 'Timezone', 'Default language', 'Supported', 'Actions'].map((h) => (
                   <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
                     {h}
                   </th>
@@ -101,7 +107,12 @@ export function OwnerCountryContextPanel({
               </tr>
             </thead>
             <tbody>
-              {countries.map((row, idx) => (
+              {countries.map((row, idx) => {
+                const code = safeText(row.code).toUpperCase();
+                const status = safeText(row.status).toLowerCase();
+                const canDisable = Boolean(onSetCountryStatus && disableCountryAction?.enabled !== false && status === 'active' && code);
+                const canEnable = Boolean(onSetCountryStatus && enableCountryAction?.enabled !== false && status === 'disabled' && code);
+                return (
                 <tr key={`${String(row.code ?? '')}:${idx}`}>
                   <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.code ?? '')}</td>
                   <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>{String(row.name ?? '')}</td>
@@ -123,11 +134,35 @@ export function OwnerCountryContextPanel({
                       </button>
                     ) : null}
                   </td>
+                  <td style={{ borderBottom: '1px solid #eee', padding: 8 }}>
+                    {canDisable ? (
+                      <button
+                        type="button"
+                        className="nx-btn nx-btn-taxes-compact"
+                        disabled={busy}
+                        onClick={() => void onSetCountryStatus?.('disable_country', code)}
+                      >
+                        Disable
+                      </button>
+                    ) : canEnable ? (
+                      <button
+                        type="button"
+                        className="nx-btn nx-btn-taxes-compact"
+                        disabled={busy}
+                        onClick={() => void onSetCountryStatus?.('enable_country', code)}
+                      >
+                        Enable
+                      </button>
+                    ) : (
+                      <span style={{ color: '#6b7280', fontSize: 12 }}>—</span>
+                    )}
+                  </td>
                 </tr>
-              ))}
+                );
+              })}
               {!countries.length ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: 12, color: '#666' }}>
+                  <td colSpan={7} style={{ padding: 12, color: '#666' }}>
                     No countries in the owner aggregate.
                   </td>
                 </tr>

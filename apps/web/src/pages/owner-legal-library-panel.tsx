@@ -3,6 +3,11 @@ import { userFacingApiMessage } from '../api/client';
 import { EmptyState } from '../templates/template-1/components/EmptyState';
 import { SectionCard } from '../templates/template-1/components/SectionCard';
 import { OwnerTaxKnowledgePanel } from './owner-tax-knowledge-panel';
+import {
+  findLegalLibrarySource,
+  flattenLegalLibraryNodes,
+  legalStructureItemPreview,
+} from './owner-legal-library-form';
 import type {
   OwnerLegalLibraryNode,
   OwnerLegalLibrarySource,
@@ -387,6 +392,18 @@ export function OwnerLegalLibraryPanel({
     }
   };
 
+  const allSources = [
+    ...library.domains.flatMap((domain) => domain.sources),
+    ...library.unassigned_sources,
+  ];
+  const structureParentSource = findLegalLibrarySource(allSources, nodeSourceId);
+  const structureParentNodes = structureParentSource ? flattenLegalLibraryNodes(structureParentSource.nodes) : [];
+  const structureParentSourceLabel = structureParentSource?.title
+    ? `${structureParentSource.title} (source)`
+    : 'This legal source';
+  const selectedKindLabel = nodeKinds.find((kind) => kind.id === nodeKindId)?.label ?? '';
+  const structureItemPreview = legalStructureItemPreview(selectedKindLabel, nodeNumber, nodeTitle);
+
   const dialogTitle =
     dialogKind === 'create_tax_domain'
       ? 'Add Tax Domain'
@@ -639,13 +656,31 @@ export function OwnerLegalLibraryPanel({
                       </label>
                     ) : null}
                     <label className="nx-field">
-                      <span className="nx-field-label">Number</span>
+                      <span className="nx-field-label">Number / identifier</span>
                       <input className="nx-input" value={nodeNumber} onChange={(e) => setNodeNumber(e.target.value)} dir="auto" />
                     </label>
                     <label className="nx-field">
-                      <span className="nx-field-label">Title</span>
+                      <span className="nx-field-label">Official title</span>
                       <input className="nx-input" value={nodeTitle} onChange={(e) => setNodeTitle(e.target.value)} dir="auto" required />
                     </label>
+                    {dialogKind === 'create_tax_legal_node' ? (
+                      <label className="nx-field">
+                        <span className="nx-field-label">Parent</span>
+                        <select className="nx-select" value={nodeParentId} onChange={(e) => setNodeParentId(e.target.value)}>
+                          <option value="">{structureParentSourceLabel}</option>
+                          {structureParentNodes.map((node) => (
+                            <option key={node.id} value={node.id}>
+                              {node.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {dialogKind === 'create_tax_legal_node' && structureItemPreview ? (
+                      <p dir="auto" style={{ margin: 0, fontSize: 13, color: '#374151' }}>
+                        Result: {structureItemPreview}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
                 {dialogKind === 'create_tax_rule' ? (

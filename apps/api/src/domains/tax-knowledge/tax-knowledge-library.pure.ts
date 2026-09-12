@@ -91,6 +91,14 @@ export function slugifyLegalCodeFragment(title: string): string {
  * Backend-generated stable machine identifier.
  * Owner UX must not invent UUID / domain_code / source_code / rule_code / kind_code / node_code.
  */
+/** Human structure label: "חלק א — <official title>". Codes are never part of this. */
+export function legalNodeDisplayTitle(kindLabel: string, nodeNumber: string | null, title: string): string {
+  const head = [kindLabel, nodeNumber].filter((part) => part && part.trim()).join(' ').trim();
+  const official = title.trim();
+  if (head && official) return `${head} — ${official}`;
+  return head || official;
+}
+
 export function generateLegalMachineCode(prefix: string, title: string, uniqueSuffix: string): string {
   const slug = slugifyLegalCodeFragment(title);
   const tail = uniqueSuffix.replace(/[^a-z0-9]/gi, '').slice(0, 12).toLowerCase();

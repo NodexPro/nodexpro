@@ -55,6 +55,8 @@ import {
 
 type CountryPackCommandType =
   | 'create_country'
+  | 'disable_country'
+  | 'enable_country'
   | 'update_country_localization'
   | 'create_country_pack'
   | 'enable_country_pack'
@@ -589,6 +591,31 @@ async function handleUpdateCountryLocalization(
   return {
     ok: true,
     command: 'update_country_localization',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx),
+  };
+}
+
+async function handleSetCountryStatus(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+  status: 'active' | 'disabled',
+  command: 'enable_country' | 'disable_country',
+  auditAction: string,
+): Promise<CountryPackCommandResponse> {
+  const code = asString(payload.country_code ?? payload.code, 'country_code').toUpperCase();
+  await assertCountryExists(code);
+  const { data, error } = await supabaseAdmin
+    .from('countries')
+    .update({ status })
+    .eq('code', code)
+    .select('code, status')
+    .single();
+  if (error) throw error;
+  if (!data) throw badRequest('Country status update returned no row');
+  await audit(ctx, auditAction, 'country', code, { country_code: code, status });
+  return {
+    ok: true,
+    command,
     refreshed: await refreshedOwnerLegalControlPanel(ctx),
   };
 }
@@ -1945,6 +1972,10 @@ export async function executeCountryPackCommand(
   switch (command.command) {
     case 'create_country':
       return handleCreateCountry(ctx, command.payload);
+    case 'disable_country':
+      return handleSetCountryStatus(ctx, command.payload, 'disabled', 'disable_country', AUDIT_ACTIONS.COUNTRY_DISABLED);
+    case 'enable_country':
+      return handleSetCountryStatus(ctx, command.payload, 'active', 'enable_country', AUDIT_ACTIONS.COUNTRY_ENABLED);
     case 'update_country_localization':
       return handleUpdateCountryLocalization(ctx, command.payload);
     case 'create_country_pack':

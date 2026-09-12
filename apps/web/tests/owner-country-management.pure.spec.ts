@@ -9,6 +9,7 @@ import { OwnerAddCountryControl } from '../src/pages/owner-add-country-control.t
 import { OwnerBusinessSetupAiWorkspace } from '../src/pages/owner-business-setup-ai-workspace.tsx';
 import { OwnerCountryContextPanel } from '../src/pages/owner-country-context-panel.tsx';
 import {
+  activeOwnerCountrySelectorOptions,
   mergeOwnerCountrySelectorOptions,
   ownerIsoRegionPickerOptions,
 } from '../src/pages/owner-iso-country-options.ts';
@@ -19,6 +20,32 @@ const repoRoot = join(dir, '../../..');
 function readRepo(rel: string): string {
   return readFileSync(join(repoRoot, rel), 'utf8');
 }
+
+test('normal Owner selector keeps only backend-active countries and never filters by name', () => {
+  const merged = mergeOwnerCountrySelectorOptions(
+    [
+      { code: 'IL', name: 'Israel', status: 'active' },
+      { code: 'XA', name: 'cp-verify-1788852378508-9njqb-country', status: 'disabled' },
+      { code: 'XB', name: 'cp-verify-still-active-if-status-says-so', status: 'active' },
+    ],
+    [{ code: 'US', name: 'United States', status: 'active' }],
+  );
+  const active = activeOwnerCountrySelectorOptions(merged);
+  assert.deepEqual(
+    active.map((row) => row.code),
+    ['IL', 'US', 'XB'],
+  );
+  assert.equal(active.some((row) => row.code === 'XA'), false);
+  assert.equal(
+    active.some((row) => row.name.startsWith('cp-verify-still-active')),
+    true,
+  );
+  const selector = readRepo('apps/web/src/pages/PlatformOwnerLegalControl.tsx');
+  const options = readRepo('apps/web/src/pages/owner-iso-country-options.ts');
+  assert.match(selector, /activeOwnerCountrySelectorOptions/);
+  assert.doesNotMatch(selector, /startsWith\(['"]cp-verify/);
+  assert.doesNotMatch(options, /startsWith\(['"]cp-verify/);
+});
 
 test('global country selector options are a union of backend lists only', () => {
   const merged = mergeOwnerCountrySelectorOptions(
@@ -99,6 +126,32 @@ test('workspace country selector does not invent countries absent from the aggre
   assert.match(html, /\+ Add Country/);
   assert.doesNotMatch(html, /DE —/);
   assert.doesNotMatch(html, /Country context/);
+});
+
+test('country workspace diagnostics still list disabled countries', () => {
+  const html = renderToStaticMarkup(
+    createElement(OwnerCountryContextPanel, {
+      countries: [
+        { code: 'IL', name: 'Israel', status: 'active' },
+        { code: 'XA', name: 'cp-verify-1788852378508-9njqb-country', status: 'disabled' },
+      ],
+      packs: [],
+      rulesets: [],
+      countryPackActions: [
+        { action_key: 'disable_country', enabled: true },
+        { action_key: 'enable_country', enabled: true },
+      ],
+      emptyRulesetCreateActions: [],
+      busy: false,
+      selectedCountryCode: 'IL',
+      onOpenCommand: () => undefined,
+      onToggleCountryPack: () => undefined,
+      onSetCountryStatus: async () => undefined,
+    }),
+  );
+  assert.match(html, /cp-verify-1788852378508-9njqb-country/);
+  assert.match(html, /Enable/);
+  assert.doesNotMatch(html, /startsWith/);
 });
 
 test('country workspace hides unrelated country packs when a country is selected', () => {

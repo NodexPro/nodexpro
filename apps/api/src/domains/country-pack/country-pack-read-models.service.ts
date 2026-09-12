@@ -515,6 +515,18 @@ export async function buildOwnerCountryPackAdminAggregate(ctx: RequestContext): 
     actions: [
       { action_key: 'create_country', enabled: packActionsEnabled },
       {
+        action_key: 'disable_country',
+        enabled: packActionsEnabled,
+        note: 'Sets countries.status to disabled. The country remains referentially intact and is omitted from the active Owner selector.',
+        payload: { country_code: 'ISO 3166-1 alpha-2' },
+      },
+      {
+        action_key: 'enable_country',
+        enabled: packActionsEnabled,
+        note: 'Sets countries.status to active so the country returns to the Owner selector.',
+        payload: { country_code: 'ISO 3166-1 alpha-2' },
+      },
+      {
         action_key: 'update_country_localization',
         enabled: packActionsEnabled,
         note: 'Sets country default_locale and supported_locales. Does not change canonical fact identity.',

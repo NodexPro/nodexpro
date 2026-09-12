@@ -57,6 +57,21 @@ test('create_country inserts only an empty countries row and does not copy legal
   assert.match(fn, /refreshedOwnerLegalControlPanel\(ctx\)/);
 });
 
+test('disable_country only flips countries.status and does not delete law or country rows', () => {
+  const src = readRepo('apps/api/src/domains/country-pack/country-pack-commands.service.ts');
+  const start = src.indexOf('async function handleSetCountryStatus');
+  const end = src.indexOf('async function handleCreateCountryPack');
+  assert.ok(start >= 0 && end > start);
+  const fn = src.slice(start, end);
+  assert.match(fn, /\.from\('countries'\)/);
+  assert.match(fn, /\.update\(\{ status \}\)/);
+  assert.doesNotMatch(fn, /\.delete\(/);
+  assert.doesNotMatch(fn, /\.from\('country_packs'\)/);
+  assert.doesNotMatch(fn, /\.from\('tax_/);
+  assert.doesNotMatch(fn, /\.from\('country_legal/);
+  assert.match(fn, /refreshedOwnerLegalControlPanel\(ctx\)/);
+});
+
 test('create_country and owner legal-control reads require platform owner, not tenant professionals', async (t) => {
   const commands = readRepo('apps/api/src/domains/country-pack/country-pack-commands.service.ts');
   const routes = readRepo('apps/api/src/routes/owner-country-pack.routes.ts');

@@ -357,7 +357,7 @@ export async function resolveCountryForOwnerLegalCommand(
   if (command === 'create_country') {
     return normalizeOwnerLegalCountryCode(payload.code);
   }
-  if (command === 'update_country_localization') {
+  if (command === 'disable_country' || command === 'enable_country' || command === 'update_country_localization') {
     return normalizeOwnerLegalCountryCode(payload.country_code ?? payload.code);
   }
 

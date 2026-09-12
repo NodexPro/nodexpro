@@ -39,6 +39,7 @@ import { isExpectedPreK3cSchemaAbsence } from './tax-knowledge-unresolved.pure.j
 import {
   LEGAL_LIBRARY_SCHEMA_NOT_APPLIED,
   assembleLegalLibrary,
+  legalNodeDisplayTitle,
   type LegalLibraryDomainRow,
   type LegalLibraryLinkedRuleView,
   type LegalLibraryNodeRow,
@@ -426,9 +427,6 @@ function provenanceLabel(value: string): string {
   return TAX_SOURCE_PROVENANCE_TYPE_LABELS[value as TaxSourceProvenanceType] ?? value;
 }
 
-function legalNodeDisplayTitle(kindLabel: string, nodeNumber: string | null, title: string): string {
-  return [kindLabel, nodeNumber, title].filter((part) => part && part.trim()).join(' ').trim();
-}
 
 function emptyLegalLibrarySlice(schemaApplied: boolean): OwnerLegalLibrarySliceDto {
   return {
