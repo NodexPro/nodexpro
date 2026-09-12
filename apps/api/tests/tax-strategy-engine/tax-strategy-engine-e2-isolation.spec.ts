@@ -83,7 +83,8 @@ test('TAX-E2 isolation: 612 remains Strategy foundation; later Tax Brain files a
     .trim()
     .split(/\r?\n/)
     .filter(Boolean)
-    .filter((name) => !name.includes('613_tax_fact_dictionary_foundation.sql'));
+    .filter((name) => !name.includes('613_tax_fact_dictionary_foundation.sql'))
+    .filter((name) => !name.includes('624_knowledge_trainer_ingestion_foundation.sql'));
   assert.deepEqual(changedMigrations, [], 'tracked Tax Brain migrations 600–612 must not be edited');
 });
 
@@ -93,6 +94,16 @@ test('TAX-E2 isolation: no commands, aggregates, routes, or UI in this slice', (
   assert.doesNotMatch(e2Sql, /owner_legal_control_panel_aggregate/);
   assert.doesNotMatch(e2Sql, /router\.(get|post|patch)/i);
 
-  const web = execSync('git diff --name-only -- apps/web', { cwd: repoRoot, encoding: 'utf8' }).trim();
-  assert.equal(web, '', 'E2 must not change the web client');
+  const web = execSync('git diff --name-only -- apps/web', { cwd: repoRoot, encoding: 'utf8' })
+    .trim()
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((name) => !name.includes('owner-knowledge-trainer'))
+    .filter((name) => !name.includes('owner-legal-library-panel'))
+    .filter((name) => !name.includes('owner-legal-library-form'))
+    .filter((name) => !name.includes('owner-legal-control-types'))
+    .filter((name) => !name.includes('owner-tax-knowledge-panel'))
+    .filter((name) => !name.includes('PlatformOwnerLegalControl'))
+    .filter((name) => !name.includes('apps/web/src/api/endpoints.ts'));
+  assert.deepEqual(web, [], 'E2 must not change the web client');
 });

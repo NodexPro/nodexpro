@@ -8,6 +8,7 @@ import {
   flattenLegalLibraryNodes,
   legalStructureItemPreview,
 } from './owner-legal-library-form';
+import { OwnerKnowledgeTrainerPanel } from './owner-knowledge-trainer-panel';
 import type {
   OwnerLegalLibraryNode,
   OwnerLegalLibrarySource,
@@ -183,6 +184,8 @@ function SourceBlock({
   onLinkRule,
   onUnlink,
   onEditNode,
+  onUpload,
+  trainerAvailable,
   busy,
 }: {
   source: OwnerLegalLibrarySource;
@@ -192,6 +195,8 @@ function SourceBlock({
   onLinkRule: (node: OwnerLegalLibraryNode) => void;
   onUnlink: (linkId: string, title: string) => void;
   onEditNode: (node: OwnerLegalLibraryNode) => void;
+  onUpload: (source: OwnerLegalLibrarySource) => void;
+  trainerAvailable: boolean;
   busy: boolean;
 }) {
   const addNode = enabledAction(source.allowed_actions, 'create_tax_legal_node');
@@ -218,6 +223,15 @@ function SourceBlock({
             Add Structure Item
           </button>
         ) : null}
+        <button
+          type="button"
+          className="nx-btn nx-btn-taxes-compact"
+          disabled={busy || !trainerAvailable}
+          title={trainerAvailable ? 'Upload legal material' : 'Coming later'}
+          onClick={() => onUpload(source)}
+        >
+          {trainerAvailable ? 'Upload material' : 'Upload material — Coming later'}
+        </button>
       </div>
       <LegalNodeTree
         nodes={source.nodes}
@@ -241,6 +255,8 @@ export function OwnerLegalLibraryPanel({
   busy,
   onSelectCountry,
   onCommand,
+  onUpload,
+  onReload,
 }: {
   taxKnowledge: TaxKnowledgeAggregate;
   countryPacks: unknown;
@@ -250,6 +266,8 @@ export function OwnerLegalLibraryPanel({
   busy: boolean;
   onSelectCountry: (countryCode: string) => void;
   onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
+  onUpload: (payload: UnknownRecord) => Promise<void>;
+  onReload: () => void;
 }) {
   const library = taxKnowledge.legal_library;
   const selectedCountry = taxKnowledge.selected_country_code;
@@ -282,6 +300,7 @@ export function OwnerLegalLibraryPanel({
   const [unlinkTitle, setUnlinkTitle] = useState('');
   const [editDomainId, setEditDomainId] = useState('');
   const [editNodeId, setEditNodeId] = useState('');
+  const [uploadSource, setUploadSource] = useState(null as OwnerLegalLibrarySource | null);
 
   const closeDialog = () => {
     setDialogKind(null);
@@ -454,9 +473,6 @@ export function OwnerLegalLibraryPanel({
                   Add Structure Type
                 </button>
               ) : null}
-              <button type="button" className="nx-btn nx-btn-taxes-compact" disabled title="Coming later">
-                Upload material — Coming later
-              </button>
             </div>
             {library.domains.length === 0 ? (
               <EmptyState title="No tax domains yet." description="Add a tax domain to start this country's legal library." />
@@ -521,6 +537,8 @@ export function OwnerLegalLibraryPanel({
                           onLinkRule={openLinkRule}
                           onUnlink={openUnlink}
                           onEditNode={openEditNode}
+                          onUpload={setUploadSource}
+                          trainerAvailable={library.trainer_upload.available === true}
                           busy={busy}
                         />
                       ))}
@@ -554,6 +572,8 @@ export function OwnerLegalLibraryPanel({
               onLinkRule={openLinkRule}
               onUnlink={openUnlink}
               onEditNode={openEditNode}
+              onUpload={setUploadSource}
+              trainerAvailable={library.trainer_upload.available === true}
               busy={busy}
             />
           ))}
@@ -578,6 +598,16 @@ export function OwnerLegalLibraryPanel({
           ) : null}
         </SectionCard>
       ) : null}
+
+      <OwnerKnowledgeTrainerPanel
+        taxKnowledge={taxKnowledge}
+        uploadSource={uploadSource}
+        busy={busy}
+        onCloseUpload={() => setUploadSource(null)}
+        onCommand={onCommand}
+        onUpload={onUpload}
+        onReload={onReload}
+      />
 
       <details>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Technical registry</summary>

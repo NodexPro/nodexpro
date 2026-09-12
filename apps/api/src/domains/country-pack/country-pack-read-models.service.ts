@@ -39,6 +39,10 @@ import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
 import { buildOwnerLegalValuesTableModel } from './owner-legal-values-table.pure.js';
 import { buildOwnerTaxKnowledgeAggregate } from '../tax-knowledge/tax-knowledge-read-models.service.js';
+import {
+  buildKnowledgeTrainerSlice,
+  emptyKnowledgeTrainerSlice,
+} from '../knowledge-trainer/knowledge-trainer-read.service.js';
 import { buildOwnerStrategyEngineAggregate } from '../tax-strategy-engine/owner-read/tax-strategy-engine-read-models.service.js';
 import { buildOwnerFactDictionaryAggregate } from '../tax-fact-dictionary/tax-fact-dictionary-read-models.service.js';
 import { resolveOwnerLegalControlSelectedCountry } from './owner-legal-control-country.pure.js';
@@ -1521,6 +1525,9 @@ export async function buildOwnerLegalControlPanelAggregate(
     commercial_controls?: Partial<CommercialControlsQuery>;
     tax_knowledge_country_code?: string | null;
     strategy_engine_country_code?: string | null;
+    tax_knowledge_trainer_document_id?: string | null;
+    tax_knowledge_trainer_page_no?: number | null;
+    tax_knowledge_trainer_tax_source_id?: string | null;
   }
 ): Promise<Record<string, unknown>> {
   const actor = await requireOwnerLegalWorkspaceActor(ctx);
@@ -1683,6 +1690,22 @@ export async function buildOwnerLegalControlPanelAggregate(
       ),
     };
   }
+
+  const trainerSlice = selectedCountryCode
+    ? await buildKnowledgeTrainerSlice(selectedCountryCode, {
+        document_id: opts?.tax_knowledge_trainer_document_id,
+        page_no: opts?.tax_knowledge_trainer_page_no,
+        tax_source_id: opts?.tax_knowledge_trainer_tax_source_id,
+      })
+    : emptyKnowledgeTrainerSlice(false);
+  const legalLibrary = (taxKnowledge.legal_library ?? {}) as Record<string, unknown>;
+  taxKnowledge = {
+    ...taxKnowledge,
+    legal_library: {
+      ...legalLibrary,
+      trainer_upload: trainerSlice,
+    },
+  };
 
   const library = (taxKnowledge.legal_library ?? {}) as {
     domains?: Array<{

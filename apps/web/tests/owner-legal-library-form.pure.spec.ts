@@ -27,9 +27,9 @@ test('Add Structure Item form uses backend kind catalog and a parent picker', ()
   assert.match(panel, /Parent/);
   assert.match(panel, /nodeKinds\.map/);
   assert.match(panel, /structureParentNodes/);
-  assert.match(panel, /Upload material — Coming later/);
+  assert.match(panel, /Upload material/);
+  assert.match(panel, /Add Structure Item/);
   assert.doesNotMatch(panel, /startsWith\(['"]cp-verify/);
-  assert.doesNotMatch(panel, /Knowledge Trainer|OCR|pdf extraction/i);
 });
 
 test('flattenLegalLibraryNodes walks existing source nodes only', () => {

@@ -105,6 +105,7 @@ test('TAX-E1 31: migrations 600–611 untouched', () => {
   })
     .trim()
     .split(/\r?\n/)
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((name) => !name.includes('624_knowledge_trainer_ingestion_foundation.sql'));
   assert.deepEqual(extra, []);
 });

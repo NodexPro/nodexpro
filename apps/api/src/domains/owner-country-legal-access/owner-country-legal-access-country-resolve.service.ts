@@ -75,6 +75,40 @@ export async function resolveCountryForOwnerLegalCommand(
     if (!id) throw badRequest('tax_source_id is required');
     return assertPayloadCountryAgrees(await loadCountryFromRow('tax_sources', id, 'Tax source not found'), payload);
   }
+  if (command === 'upload_legal_training_document') {
+    const sourceId = optionalUuid(payload.tax_source_id);
+    const documentId = optionalUuid(payload.legal_ingestion_document_id);
+    if (sourceId) {
+      return assertPayloadCountryAgrees(await loadCountryFromRow('tax_sources', sourceId, 'Tax source not found'), payload);
+    }
+    if (documentId) {
+      return assertPayloadCountryAgrees(
+        await loadCountryFromRow('legal_ingestion_documents', documentId, 'Legal training document not found'),
+        payload,
+      );
+    }
+    throw badRequest('tax_source_id is required');
+  }
+  if (command === 'start_legal_document_extraction' || command === 'retry_legal_document_page') {
+    const id = optionalUuid(payload.legal_ingestion_document_id);
+    if (!id) throw badRequest('legal_ingestion_document_id is required');
+    return assertPayloadCountryAgrees(
+      await loadCountryFromRow('legal_ingestion_documents', id, 'Legal training document not found'),
+      payload,
+    );
+  }
+  if (
+    command === 'update_legal_extraction_candidate' ||
+    command === 'accept_legal_structure_candidate' ||
+    command === 'reject_legal_extraction_candidate'
+  ) {
+    const id = optionalUuid(payload.legal_ingestion_candidate_id);
+    if (!id) throw badRequest('legal_ingestion_candidate_id is required');
+    return assertPayloadCountryAgrees(
+      await loadCountryFromRow('legal_ingestion_candidates', id, 'Extraction candidate not found'),
+      payload,
+    );
+  }
   if (command === 'update_tax_legal_node_metadata') {
     const id = optionalUuid(payload.tax_legal_node_id);
     if (!id) throw badRequest('tax_legal_node_id is required');

@@ -366,6 +366,8 @@ export const OWNER = {
   pricing: '/owner/pricing',
   emailProviderConfig: () => '/owner/email-provider-config',
   command: '/owner/command',
+  legalTrainingUpload: '/owner/legal-training/upload',
+  legalTrainingDocumentFile: (id: string) => `/owner/legal-training/documents/${encodeURIComponent(id)}/file`,
   countrySettings: (organizationId: string) => `/owner/country-settings/${organizationId}`,
   countryDiagnostics: (organizationId: string) => `/owner/country-diagnostics/${organizationId}`,
   activeRulesetContext: (organizationId: string, date?: string) =>

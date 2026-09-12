@@ -22,7 +22,14 @@ import type {
   TaxKnowledgeVersion,
   UnknownRecord,
 } from './owner-legal-control-types';
-import { TAX_KNOWLEDGE_RELATIONSHIP_TYPES, emptyLegalLibrarySlice } from './owner-legal-control-types';
+import {
+  TAX_KNOWLEDGE_RELATIONSHIP_TYPES,
+  emptyKnowledgeTrainerSlice,
+  emptyLegalLibrarySlice,
+  type OwnerKnowledgeTrainerCandidate,
+  type OwnerKnowledgeTrainerDocument,
+  type OwnerKnowledgeTrainerSlice,
+} from './owner-legal-control-types';
 
 import { emptyTaxKnowledgeAggregate } from './owner-legal-control-types';
 import '../styles/nx-modal.css';
@@ -503,10 +510,112 @@ export function parseLegalLibrary(raw: unknown): OwnerLegalLibrarySlice {
       : [],
     provenance_type_options: parseLabeledOptions(rec.provenance_type_options),
     allowed_actions: parseAllowedActions(rec.allowed_actions),
-    trainer_upload: {
-      available: trainer?.available === true,
-      status_label: asString(trainer?.status_label) || 'Coming later',
-    },
+    trainer_upload: parseKnowledgeTrainer(trainer),
+  };
+}
+
+function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainerSlice {
+  const empty = emptyKnowledgeTrainerSlice();
+  if (!raw) return empty;
+  const selected = asRecord(raw.selected_document);
+  return {
+    available: raw.available === true,
+    status_label: asString(raw.status_label) || empty.status_label,
+    malware_scanning: asString(raw.malware_scanning) || 'not_implemented',
+    input_options: Array.isArray(raw.input_options)
+      ? raw.input_options
+          .map((row) => asRecord(row))
+          .filter((row): row is UnknownRecord => row !== null)
+          .map((row) => ({
+            input_type: asString(row.input_type),
+            available: row.available === true,
+            label: asString(row.label) || asString(row.input_type),
+            status_label: asString(row.status_label),
+          }))
+      : empty.input_options,
+    documents: Array.isArray(raw.documents)
+      ? raw.documents
+          .map((row) => asRecord(row))
+          .filter((row): row is UnknownRecord => row !== null)
+          .map(
+            (row): OwnerKnowledgeTrainerDocument => ({
+              id: asString(row.id),
+              tax_source_id: asString(row.tax_source_id),
+              original_filename: asString(row.original_filename),
+              input_type: asString(row.input_type),
+              provenance_type: asString(row.provenance_type),
+              page_count: Number(row.page_count) || 0,
+              extracted_page_count: Number(row.extracted_page_count) || 0,
+              needs_ocr_page_count: Number(row.needs_ocr_page_count) || 0,
+              failed_page_count: Number(row.failed_page_count) || 0,
+              structure_candidate_count: Number(row.structure_candidate_count) || 0,
+              job_status: asString(row.job_status),
+              job_status_label: asString(row.job_status_label) || asString(row.job_status),
+            }),
+          )
+      : [],
+    selected_document: selected
+      ? {
+          id: asString(selected.id),
+          original_filename: asString(selected.original_filename),
+          job_status: asString(selected.job_status),
+          job_status_label: asString(selected.job_status_label) || asString(selected.job_status),
+          page_count: Number(selected.page_count) || 0,
+          extracted_page_count: Number(selected.extracted_page_count) || 0,
+          needs_ocr_page_count: Number(selected.needs_ocr_page_count) || 0,
+          failed_page_count: Number(selected.failed_page_count) || 0,
+          structure_candidate_count: Number(selected.structure_candidate_count) || 0,
+          pages: Array.isArray(selected.pages)
+            ? selected.pages
+                .map((row) => asRecord(row))
+                .filter((row): row is UnknownRecord => row !== null)
+                .map((row) => ({
+                  page_no: Number(row.page_no) || 0,
+                  status: asString(row.status),
+                  has_text: row.has_text === true,
+                }))
+            : [],
+          selected_page: asRecord(selected.selected_page)
+            ? {
+                page_no: Number(asRecord(selected.selected_page)?.page_no) || 0,
+                text:
+                  typeof asRecord(selected.selected_page)?.text === 'string'
+                    ? String(asRecord(selected.selected_page)?.text)
+                    : null,
+                status: asString(asRecord(selected.selected_page)?.status),
+              }
+            : null,
+          candidates: Array.isArray(selected.candidates)
+            ? selected.candidates
+                .map((row) => asRecord(row))
+                .filter((row): row is UnknownRecord => row !== null)
+                .map(
+                  (row): OwnerKnowledgeTrainerCandidate => ({
+                    id: asString(row.id),
+                    candidate_kind: asString(row.candidate_kind),
+                    candidate_status: asString(row.candidate_status),
+                    kind_label: asNullableString(row.kind_label),
+                    node_number: asNullableString(row.node_number),
+                    title: asNullableString(row.title),
+                    parent_candidate_id: asNullableString(row.parent_candidate_id),
+                    parent_tax_legal_node_id: asNullableString(row.parent_tax_legal_node_id),
+                    page_start: row.page_start == null ? null : Number(row.page_start) || null,
+                    page_end: row.page_end == null ? null : Number(row.page_end) || null,
+                    excerpt: asNullableString(row.excerpt),
+                    confidence: row.confidence == null ? null : Number(row.confidence),
+                    validation_warnings: Array.isArray(row.validation_warnings)
+                      ? row.validation_warnings.map((item) => String(item))
+                      : [],
+                    matched_tax_legal_node_id: asNullableString(row.matched_tax_legal_node_id),
+                    accepted_tax_legal_node_id: asNullableString(row.accepted_tax_legal_node_id),
+                    possible_existing_match: row.possible_existing_match === true,
+                  }),
+                )
+            : [],
+          can_open_original: selected.can_open_original === true,
+        }
+      : null,
+    allowed_actions: parseAllowedActions(raw.allowed_actions),
   };
 }
 

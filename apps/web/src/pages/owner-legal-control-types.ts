@@ -315,7 +315,72 @@ export type OwnerLegalLibrarySlice = {
   node_kinds: OwnerLegalLibraryNodeKind[];
   provenance_type_options: Array<{ value: string; label: string }>;
   allowed_actions: TaxKnowledgeAllowedAction[];
-  trainer_upload: { available: boolean; status_label: string };
+  trainer_upload: OwnerKnowledgeTrainerSlice;
+};
+
+export type OwnerKnowledgeTrainerInputOption = {
+  input_type: string;
+  available: boolean;
+  label: string;
+  status_label: string;
+};
+
+export type OwnerKnowledgeTrainerDocument = {
+  id: string;
+  tax_source_id: string;
+  original_filename: string;
+  input_type: string;
+  provenance_type: string;
+  page_count: number;
+  extracted_page_count: number;
+  needs_ocr_page_count: number;
+  failed_page_count: number;
+  structure_candidate_count: number;
+  job_status: string;
+  job_status_label: string;
+};
+
+export type OwnerKnowledgeTrainerCandidate = {
+  id: string;
+  candidate_kind: string;
+  candidate_status: string;
+  kind_label: string | null;
+  node_number: string | null;
+  title: string | null;
+  parent_candidate_id: string | null;
+  parent_tax_legal_node_id: string | null;
+  page_start: number | null;
+  page_end: number | null;
+  excerpt: string | null;
+  confidence: number | null;
+  validation_warnings: string[];
+  matched_tax_legal_node_id: string | null;
+  accepted_tax_legal_node_id: string | null;
+  possible_existing_match: boolean;
+};
+
+export type OwnerKnowledgeTrainerSlice = {
+  available: boolean;
+  status_label: string;
+  malware_scanning: 'not_implemented' | string;
+  input_options: OwnerKnowledgeTrainerInputOption[];
+  documents: OwnerKnowledgeTrainerDocument[];
+  selected_document: {
+    id: string;
+    original_filename: string;
+    job_status: string;
+    job_status_label: string;
+    page_count: number;
+    extracted_page_count: number;
+    needs_ocr_page_count: number;
+    failed_page_count: number;
+    structure_candidate_count: number;
+    pages: Array<{ page_no: number; status: string; has_text: boolean }>;
+    selected_page: { page_no: number; text: string | null; status: string } | null;
+    candidates: OwnerKnowledgeTrainerCandidate[];
+    can_open_original: boolean;
+  } | null;
+  allowed_actions: TaxKnowledgeAllowedAction[];
 };
 
 export type TaxKnowledgeAggregate = {
@@ -339,7 +404,23 @@ export function emptyLegalLibrarySlice(): OwnerLegalLibrarySlice {
     node_kinds: [],
     provenance_type_options: [],
     allowed_actions: [],
-    trainer_upload: { available: false, status_label: 'Coming later' },
+    trainer_upload: emptyKnowledgeTrainerSlice(),
+  };
+}
+
+export function emptyKnowledgeTrainerSlice(): OwnerKnowledgeTrainerSlice {
+  return {
+    available: false,
+    status_label: 'Coming later',
+    malware_scanning: 'not_implemented',
+    input_options: [
+      { input_type: 'pdf', available: false, label: 'PDF', status_label: 'Coming later' },
+      { input_type: 'image', available: false, label: 'Photos', status_label: 'Coming next' },
+      { input_type: 'text', available: false, label: 'Text', status_label: 'Coming next' },
+    ],
+    documents: [],
+    selected_document: null,
+    allowed_actions: [],
   };
 }
 

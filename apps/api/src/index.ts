@@ -26,6 +26,7 @@ import {
 import { writeAudit, AUDIT_ACTIONS } from './shared/audit-events.js';
 import { clientOperationsModuleRouter } from './domains/client-operations/client-operations.routes.js';
 import { ownerCountryPackRoutes } from './routes/owner-country-pack.routes.js';
+import { ownerKnowledgeTrainerRoutes } from './routes/owner-knowledge-trainer.routes.js';
 import { ownerPasswordRecoveryRoutes } from './routes/owner-password-recovery.routes.js';
 import { docflowRoutes } from './routes/docflow.routes.js';
 import { workEngineRoutes } from './domains/work-engine/work-engine.routes.js';
@@ -128,7 +129,14 @@ const corsOptions: cors.CorsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-app.use(express.json({ limit: '15mb' }));
+const defaultJsonParser = express.json({ limit: '15mb' });
+const ownerLegalTrainingJsonParser = express.json({ limit: '70mb' });
+app.use((req, res, next) => {
+  if (req.originalUrl.startsWith('/api/v1/owner/legal-training/upload')) {
+    return ownerLegalTrainingJsonParser(req, res, next);
+  }
+  return defaultJsonParser(req, res, next);
+});
 
 app.get('/api/v1/health', async (_req, res) => {
   // Safe deploy + minimal DB connectivity probe (no secrets, no aggregate work).
@@ -171,6 +179,7 @@ app.use('/api/v1/modules', modulesRoutes);
 app.use('/api/v1/m/example', exampleModuleRouter);
 app.use('/api/v1/m/client-operations', clientOperationsModuleRouter);
 app.use('/api/v1/owner/password-recovery', ownerPasswordRecoveryRoutes);
+app.use('/api/v1/owner', ownerKnowledgeTrainerRoutes);
 app.use('/api/v1/owner', ownerCountryPackRoutes);
 app.use('/api/v1/docflow', docflowRoutes);
 app.use('/api/v1/work-engine', workEngineRoutes);

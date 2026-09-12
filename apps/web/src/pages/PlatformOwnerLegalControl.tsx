@@ -55,6 +55,7 @@ export function PlatformOwnerLegalControl() {
   const [error, setError] = useState('');
   const [panel, setPanel] = useState(null as UnknownRecord | null);
   const [taxKnowledgeCountryQuery, setTaxKnowledgeCountryQuery] = useState('');
+  const [trainerDocumentQuery, setTrainerDocumentQuery] = useState('');
   const [pendingTaxKnowledgeCountry, setPendingTaxKnowledgeCountry] = useState(null as string | null);
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandModal, setCommandModal] = useState(null as CommandModalState | null);
@@ -69,11 +70,13 @@ export function PlatformOwnerLegalControl() {
     }
   }, [auth.status, navigate]);
 
-  async function loadCore(): Promise<void> {
-    setLoading(true);
-    setError('');
-    setAccessDenied(false);
-    setAccessDeniedReason('');
+  async function loadCore(opts?: { silent?: boolean }): Promise<void> {
+    if (!opts?.silent) {
+      setLoading(true);
+      setError('');
+      setAccessDenied(false);
+      setAccessDeniedReason('');
+    }
     try {
       const qs = new URLSearchParams();
       const countryParams = ownerLegalControlCountryQueryParams(taxKnowledgeCountryQuery);
@@ -81,6 +84,7 @@ export function PlatformOwnerLegalControl() {
         qs.set('tax_knowledge_country_code', countryParams.tax_knowledge_country_code);
         qs.set('strategy_engine_country_code', countryParams.strategy_engine_country_code);
       }
+      if (trainerDocumentQuery) qs.set('tax_knowledge_trainer_document_id', trainerDocumentQuery);
 
       const path = qs.toString() ? `${OWNER.legalControl}?${qs.toString()}` : OWNER.legalControl;
       const p = (await apiJson(path)) as UnknownRecord;
@@ -102,7 +106,7 @@ export function PlatformOwnerLegalControl() {
       void loadCore();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.status, taxKnowledgeCountryQuery]);
+  }, [auth.status, taxKnowledgeCountryQuery, trainerDocumentQuery]);
 
   async function sendOwnerCommand(command: string, payload: UnknownRecord): Promise<OwnerCommandResponse> {
     setCommandBusy(true);
@@ -393,6 +397,34 @@ export function PlatformOwnerLegalControl() {
             }}
             onCommand={async (command, payload) => {
               await sendOwnerCommand(command, payload);
+            }}
+            onUpload={async (payload) => {
+              setCommandBusy(true);
+              setError('');
+              try {
+                const out = (await apiJson(OWNER.legalTrainingUpload, {
+                  method: 'POST',
+                  body: JSON.stringify({ payload }),
+                })) as OwnerCommandResponse;
+                if (out.refreshed.aggregate_key === 'owner_legal_control_panel_aggregate') {
+                  setPanel(out.refreshed.aggregate);
+                }
+                const selected = (out.refreshed.aggregate as UnknownRecord | undefined)?.tax_knowledge as
+                  | UnknownRecord
+                  | undefined;
+                const library = selected?.legal_library as UnknownRecord | undefined;
+                const trainer = library?.trainer_upload as UnknownRecord | undefined;
+                const selectedDocument = trainer?.selected_document as UnknownRecord | undefined;
+                if (typeof selectedDocument?.id === 'string') setTrainerDocumentQuery(selectedDocument.id);
+              } catch (e) {
+                setError(userFacingApiMessage(e));
+                throw e;
+              } finally {
+                setCommandBusy(false);
+              }
+            }}
+            onReload={() => {
+              void loadCore({ silent: true });
             }}
           />
         ) : null}

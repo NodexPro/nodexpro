@@ -109,7 +109,11 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'update_tax_legal_node_metadata' ||
     command.startsWith('create_tax_source') ||
     command.startsWith('update_tax_source') ||
-    command === 'retire_tax_source'
+    command === 'retire_tax_source' ||
+    command === 'upload_legal_training_document' ||
+    command === 'start_legal_document_extraction' ||
+    command === 'retry_legal_document_page' ||
+    command === 'accept_legal_structure_candidate'
   ) {
     return 'legal_sources.manage';
   }
@@ -137,7 +141,8 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
   if (
     command.includes('accept_tax_rule_unresolved') ||
     command.includes('discard_tax_rule_unresolved') ||
-    command.includes('resolve_tax_rule_unresolved')
+    command.includes('resolve_tax_rule_unresolved') ||
+    command === 'reject_legal_extraction_candidate'
   ) {
     return 'legal_knowledge.review';
   }
@@ -148,6 +153,7 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command.startsWith('unpin_tax_rule') ||
     command.startsWith('bind_tax_rule') ||
     command.startsWith('unbind_tax_rule') ||
+    command === 'update_legal_extraction_candidate' ||
     command === 'link_tax_rule_legal_node' ||
     command === 'unlink_tax_rule_legal_node' ||
     command.includes('tax_rule_relationship') ||

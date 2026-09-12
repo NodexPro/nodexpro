@@ -303,6 +303,7 @@ test('TAX-F2A1 18: Tax Brain 613 remains foundation; later files are not 613 edi
     .trim()
     .split(/\r?\n/)
     .filter(Boolean)
-    .filter((name) => !name.includes('614_tax_fact_dictionary_atomic_activation.sql'));
+    .filter((name) => !name.includes('614_tax_fact_dictionary_atomic_activation.sql'))
+    .filter((name) => !name.includes('624_knowledge_trainer_ingestion_foundation.sql'));
   assert.deepEqual(changedTracked, [], 'tracked Tax Brain migrations 600–613 must not be edited');
 });

@@ -134,7 +134,8 @@ test('TAX-E3B isolation: no 613, 612 untouched, no new endpoint, no tenant field
   })
     .trim()
     .split(/\r?\n/)
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((name) => !name.includes('624_knowledge_trainer_ingestion_foundation.sql'));
   assert.deepEqual(extra, []);
 
   const routes = readRepo('apps/api/src/routes/owner-country-pack.routes.ts');
