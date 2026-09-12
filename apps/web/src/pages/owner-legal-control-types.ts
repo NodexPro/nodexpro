@@ -35,7 +35,14 @@ export type TaxKnowledgeCommandName =
   | 'activate_tax_rule_version'
   | 'retire_tax_rule_version'
   | 'close_tax_rule_version_effective_to'
-  | 'supersede_tax_rule_version';
+  | 'supersede_tax_rule_version'
+  | 'create_tax_domain'
+  | 'update_tax_domain_metadata'
+  | 'create_tax_legal_node_kind'
+  | 'create_tax_legal_node'
+  | 'update_tax_legal_node_metadata'
+  | 'link_tax_rule_legal_node'
+  | 'unlink_tax_rule_legal_node';
 
 export type TaxKnowledgeSupersessionPair = {
   new_tax_rule_version_id: string;
@@ -165,6 +172,7 @@ export type TaxKnowledgeVersion = {
 export type TaxKnowledgeSource = {
   id: string;
   country_code: string;
+  tax_domain_id: string | null;
   source_code: string;
   title: string;
   provenance_type: string;
@@ -222,16 +230,118 @@ export type OwnerLegalValueRow = {
   status: string;
 };
 
+export type OwnerLegalLibraryLinkedRule = {
+  link_id: string;
+  tax_rule_id: string;
+  tax_legal_node_id: string;
+  title: string;
+  rule_code: string;
+  status: string;
+  version_count: number;
+  allowed_actions: TaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibraryNode = {
+  id: string;
+  tax_source_id: string;
+  parent_node_id: string | null;
+  tax_legal_node_kind_id: string;
+  kind_label: string;
+  node_code: string;
+  node_number: string | null;
+  title: string;
+  display_title: string;
+  sort_order: number;
+  status: string;
+  owner_note: string | null;
+  created_at: string;
+  updated_at: string;
+  linked_rules: OwnerLegalLibraryLinkedRule[];
+  children: OwnerLegalLibraryNode[];
+  allowed_actions: TaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibrarySource = {
+  id: string;
+  tax_domain_id: string | null;
+  title: string;
+  provenance_type: string;
+  provenance_type_label: string;
+  status: string;
+  issuer: string | null;
+  source_code: string;
+  nodes: OwnerLegalLibraryNode[];
+  allowed_actions: TaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibraryDomain = {
+  id: string;
+  domain_code: string;
+  title: string;
+  status: string;
+  owner_note: string | null;
+  sort_order: number;
+  sources: OwnerLegalLibrarySource[];
+  allowed_actions: TaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibraryNodeKind = {
+  id: string;
+  country_code: string;
+  kind_code: string;
+  label: string;
+  status: string;
+  owner_note: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  allowed_actions: TaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibraryUnassignedRule = {
+  id: string;
+  title: string;
+  rule_code: string;
+  status: string;
+  version_count: number;
+  allowed_actions: TaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibrarySlice = {
+  schema_applied: boolean;
+  domains: OwnerLegalLibraryDomain[];
+  unassigned_sources: OwnerLegalLibrarySource[];
+  unassigned_rules: OwnerLegalLibraryUnassignedRule[];
+  node_kinds: OwnerLegalLibraryNodeKind[];
+  provenance_type_options: Array<{ value: string; label: string }>;
+  allowed_actions: TaxKnowledgeAllowedAction[];
+  trainer_upload: { available: boolean; status_label: string };
+};
+
 export type TaxKnowledgeAggregate = {
   selected_country_code: string | null;
   countries: TaxKnowledgeCountry[];
   sources: TaxKnowledgeSource[];
   rules: TaxKnowledgeRule[];
   rule_versions: TaxKnowledgeVersion[];
+  legal_library: OwnerLegalLibrarySlice;
   allowed_actions: TaxKnowledgeAllowedAction[];
   implemented_commands: string[];
   warnings: string[];
 };
+
+export function emptyLegalLibrarySlice(): OwnerLegalLibrarySlice {
+  return {
+    schema_applied: false,
+    domains: [],
+    unassigned_sources: [],
+    unassigned_rules: [],
+    node_kinds: [],
+    provenance_type_options: [],
+    allowed_actions: [],
+    trainer_upload: { available: false, status_label: 'Coming later' },
+  };
+}
 
 export function emptyTaxKnowledgeAggregate(): TaxKnowledgeAggregate {
   return {
@@ -240,6 +350,7 @@ export function emptyTaxKnowledgeAggregate(): TaxKnowledgeAggregate {
     sources: [],
     rules: [],
     rule_versions: [],
+    legal_library: emptyLegalLibrarySlice(),
     allowed_actions: [],
     implemented_commands: [],
     warnings: [],

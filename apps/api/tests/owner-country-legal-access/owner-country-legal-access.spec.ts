@@ -97,6 +97,10 @@ test('6 view-only cannot edit', () => {
   assert.equal(evaluateOwnerLegalCommandAccess(ilView, 'create_tax_source', 'IL').ok, false);
   assert.equal(evaluateOwnerLegalCommandAccess(ilView, 'update_tax_rule_version_draft', 'IL').ok, false);
   assert.equal(capabilityRequiredForOwnerCommand('update_tax_rule_version_draft'), 'legal_knowledge.draft_edit');
+  assert.equal(capabilityRequiredForOwnerCommand('create_tax_domain'), 'legal_sources.manage');
+  assert.equal(capabilityRequiredForOwnerCommand('create_tax_legal_node'), 'legal_sources.manage');
+  assert.equal(capabilityRequiredForOwnerCommand('link_tax_rule_legal_node'), 'legal_knowledge.draft_edit');
+  assert.equal(evaluateOwnerLegalCommandAccess(ilEditor, 'create_tax_domain', 'IL').ok, false);
 });
 
 test('7-8 draft editor cannot activate; activate is country-exact', () => {

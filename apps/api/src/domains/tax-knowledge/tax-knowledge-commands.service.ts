@@ -13,7 +13,9 @@ import { assertPackBelongsToCountry } from '../country-pack/country-pack.service
 import { assertRulesetExists } from '../country-pack/ruleset.service.js';
 import { buildOwnerLegalControlPanelAggregate } from '../country-pack/country-pack-read-models.service.js';
 import { parseTaxRulePayloadJson, taxRulePayloadChecksum } from './tax-knowledge-checksum.pure.js';
+import { generateLegalMachineCode } from './tax-knowledge-library.pure.js';
 import { validateTaxRulePayloadPredicates } from '../tax-rule-engine/tax-rule-engine-predicate.pure.js';
+import { randomBytes } from 'node:crypto';
 import {
   TAX_KNOWLEDGE_ERROR_CODES,
   TAX_KNOWLEDGE_INITIAL_STATUS,
@@ -193,20 +195,110 @@ async function refreshedOwnerLegalControlPanel(
   };
 }
 
+async function insertWithGeneratedCode<T extends Record<string, unknown>>(
+  table: string,
+  title: string,
+  prefix: string,
+  explicitCode: string | null,
+  buildRow: (code: string) => Record<string, unknown>,
+  select: string,
+  conflictMessage: string,
+): Promise<T> {
+  const attempts = explicitCode ? [explicitCode] : Array.from({ length: 6 }, () =>
+    generateLegalMachineCode(prefix, title, randomBytes(6).toString('hex')),
+  );
+  let lastError: { code?: string; message?: string } | null = null;
+  for (const code of attempts) {
+    const { data, error } = await supabaseAdmin.from(table).insert(buildRow(code)).select(select).single();
+    if (!error && data) return data as unknown as T;
+    lastError = error;
+    if (error && String(error.code) === '23505' && !explicitCode) continue;
+    throwIfTaxKnowledgeWriteError(error, conflictMessage);
+  }
+  throwIfTaxKnowledgeWriteError(lastError, conflictMessage);
+  throw conflict(conflictMessage);
+}
+
+async function loadTaxDomain(id: string): Promise<{
+  id: string;
+  country_code: string;
+  domain_code: string;
+  status: string;
+}> {
+  const { data, error } = await supabaseAdmin
+    .from('tax_domains')
+    .select('id, country_code, domain_code, status')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Tax domain not found');
+  return data as { id: string; country_code: string; domain_code: string; status: string };
+}
+
+async function loadTaxLegalNodeKind(id: string): Promise<{
+  id: string;
+  country_code: string;
+  kind_code: string;
+  label: string;
+}> {
+  const { data, error } = await supabaseAdmin
+    .from('tax_legal_node_kinds')
+    .select('id, country_code, kind_code, label')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Legal node kind not found');
+  return data as { id: string; country_code: string; kind_code: string; label: string };
+}
+
+async function loadTaxLegalNode(id: string): Promise<{
+  id: string;
+  country_code: string;
+  tax_source_id: string;
+  node_code: string;
+  status: string;
+}> {
+  const { data, error } = await supabaseAdmin
+    .from('tax_legal_nodes')
+    .select('id, country_code, tax_source_id, node_code, status')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Legal node not found');
+  return data as {
+    id: string;
+    country_code: string;
+    tax_source_id: string;
+    node_code: string;
+    status: string;
+  };
+}
+
 async function loadTaxSource(id: string): Promise<{
   id: string;
   country_code: string;
   source_code: string;
   status: string;
+  tax_domain_id: string | null;
 }> {
   const { data, error } = await supabaseAdmin
     .from('tax_sources')
-    .select('id, country_code, source_code, status')
+    .select('id, country_code, source_code, status, tax_domain_id')
     .eq('id', id)
     .maybeSingle();
+  if (error && /tax_domain_id/i.test(String(error.message ?? ''))) {
+    const retry = await supabaseAdmin
+      .from('tax_sources')
+      .select('id, country_code, source_code, status')
+      .eq('id', id)
+      .maybeSingle();
+    if (retry.error) throw retry.error;
+    if (!retry.data) throw notFound('Tax source not found');
+    return { ...(retry.data as { id: string; country_code: string; source_code: string; status: string }), tax_domain_id: null };
+  }
   if (error) throw error;
   if (!data) throw notFound('Tax source not found');
-  return data as { id: string; country_code: string; source_code: string; status: string };
+  return data as { id: string; country_code: string; source_code: string; status: string; tax_domain_id: string | null };
 }
 
 async function loadTaxRule(id: string): Promise<{
@@ -368,23 +460,39 @@ async function nextVersionNo(taxRuleId: string): Promise<number> {
   return (typeof current === 'number' ? current : 0) + 1;
 }
 
+async function resolveOptionalTaxDomainId(
+  countryCode: string,
+  value: unknown,
+): Promise<string | null> {
+  const domainId = asOptionalUuid(value, 'tax_domain_id');
+  if (!domainId) return null;
+  const domain = await loadTaxDomain(domainId);
+  if (domain.country_code !== countryCode) {
+    throw badRequest('tax_domain_id must belong to the same country');
+  }
+  return domain.id;
+}
+
 async function handleCreateTaxSource(
   ctx: RequestContext,
   payload: Record<string, unknown>,
 ): Promise<TaxKnowledgeCommandResponse> {
   const countryCode = asCountryCode(payload.country_code);
   await assertCountryExists(countryCode);
-  const sourceCode = asString(payload.source_code, 'source_code');
   const title = asString(payload.title, 'title');
   const provenanceType = asString(payload.provenance_type, 'provenance_type');
   if (!(TAX_SOURCE_PROVENANCE_TYPES as readonly string[]).includes(provenanceType)) {
     throw badRequest('provenance_type is not a supported tax source provenance type');
   }
   assertDraftCreateStatus(payload.status, 'create_tax_source');
+  const taxDomainId = await resolveOptionalTaxDomainId(countryCode, payload.tax_domain_id);
 
-  const { data, error } = await supabaseAdmin
-    .from('tax_sources')
-    .insert({
+  const data = await insertWithGeneratedCode<{ id: string; country_code: string; source_code: string; status: string }>(
+    'tax_sources',
+    title,
+    'src',
+    asOptionalString(payload.source_code, 'source_code'),
+    (sourceCode) => ({
       country_code: countryCode,
       source_code: sourceCode,
       title,
@@ -395,16 +503,17 @@ async function handleCreateTaxSource(
       published_on: asOptionalDate(payload.published_on, 'published_on'),
       status: TAX_KNOWLEDGE_INITIAL_STATUS,
       owner_note: asOptionalString(payload.owner_note, 'owner_note'),
-    })
-    .select('id, country_code, source_code, status')
-    .single();
-  throwIfTaxKnowledgeWriteError(error, 'Tax source already exists for this country and source_code');
-  if (!data) throw new Error('tax_sources insert returned no row');
+      ...(taxDomainId ? { tax_domain_id: taxDomainId } : {}),
+    }),
+    'id, country_code, source_code, status',
+    'Tax source already exists for this country and source_code',
+  );
 
   await audit(ctx, AUDIT_ACTIONS.TAX_SOURCE_CREATED, 'tax_source', String(data.id), {
     country_code: countryCode,
     source_code: data.source_code,
     status: data.status,
+    tax_domain_id: taxDomainId,
   });
 
   return {
@@ -420,17 +529,32 @@ async function handleCreateTaxRule(
 ): Promise<TaxKnowledgeCommandResponse> {
   const countryCode = asCountryCode(payload.country_code);
   await assertCountryExists(countryCode);
-  const ruleCode = asString(payload.rule_code, 'rule_code');
   const title = asString(payload.title, 'title');
   const ruleKind = asString(payload.rule_kind ?? TAX_RULE_KIND, 'rule_kind');
   if (ruleKind !== TAX_RULE_KIND) {
     throw badRequest(`rule_kind must be '${TAX_RULE_KIND}'`);
   }
   assertDraftCreateStatus(payload.status, 'create_tax_rule');
+  const legalNodeId = asOptionalUuid(payload.tax_legal_node_id, 'tax_legal_node_id');
+  if (legalNodeId) {
+    const node = await loadTaxLegalNode(legalNodeId);
+    if (node.country_code !== countryCode) {
+      throw badRequest('tax_legal_node_id must belong to the same country');
+    }
+  }
 
-  const { data, error } = await supabaseAdmin
-    .from('tax_rules')
-    .insert({
+  const data = await insertWithGeneratedCode<{
+    id: string;
+    country_code: string;
+    rule_code: string;
+    rule_kind: string;
+    status: string;
+  }>(
+    'tax_rules',
+    title,
+    'rule',
+    asOptionalString(payload.rule_code, 'rule_code'),
+    (ruleCode) => ({
       country_code: countryCode,
       rule_code: ruleCode,
       title,
@@ -438,17 +562,26 @@ async function handleCreateTaxRule(
       status: TAX_KNOWLEDGE_INITIAL_STATUS,
       usage_hint: asOptionalString(payload.usage_hint, 'usage_hint'),
       owner_note: asOptionalString(payload.owner_note, 'owner_note'),
-    })
-    .select('id, country_code, rule_code, rule_kind, status')
-    .single();
-  throwIfTaxKnowledgeWriteError(error, 'Tax rule already exists for this country and rule_code');
-  if (!data) throw new Error('tax_rules insert returned no row');
+    }),
+    'id, country_code, rule_code, rule_kind, status',
+    'Tax rule already exists for this country and rule_code',
+  );
+
+  if (legalNodeId) {
+    const { error: linkError } = await supabaseAdmin.from('tax_rule_legal_nodes').insert({
+      country_code: countryCode,
+      tax_rule_id: data.id,
+      tax_legal_node_id: legalNodeId,
+    });
+    throwIfTaxKnowledgeWriteError(linkError, 'Tax rule is already linked to this legal node');
+  }
 
   await audit(ctx, AUDIT_ACTIONS.TAX_RULE_CREATED, 'tax_rule', String(data.id), {
     country_code: countryCode,
     rule_code: data.rule_code,
     rule_kind: data.rule_kind,
     status: data.status,
+    tax_legal_node_id: legalNodeId,
   });
 
   return {
@@ -697,6 +830,9 @@ async function handleUpdateTaxSourceMetadata(
     patch.published_on = asOptionalDate(payload.published_on, 'published_on');
   }
   if (payload.owner_note !== undefined) patch.owner_note = asOptionalString(payload.owner_note, 'owner_note');
+  if ('tax_domain_id' in payload) {
+    patch.tax_domain_id = await resolveOptionalTaxDomainId(source.country_code, payload.tax_domain_id);
+  }
   if (!Object.keys(patch).length) {
     throw badRequest('update_tax_source_metadata requires at least one metadata field');
   }
@@ -1630,6 +1766,320 @@ async function handleSupersedeTaxRuleVersion(
   };
 }
 
+function asOptionalSortOrder(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(n)) throw badRequest('sort_order must be an integer');
+  return n;
+}
+
+async function handleCreateTaxDomain(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const countryCode = asCountryCode(payload.country_code);
+  await assertCountryExists(countryCode);
+  const title = asString(payload.title, 'title');
+  assertDraftCreateStatus(payload.status, 'create_tax_domain');
+  const sortOrder = asOptionalSortOrder(payload.sort_order) ?? 0;
+
+  const data = await insertWithGeneratedCode<{ id: string; domain_code: string; status: string }>(
+    'tax_domains',
+    title,
+    'dom',
+    null,
+    (domainCode) => ({
+      country_code: countryCode,
+      domain_code: domainCode,
+      title,
+      status: TAX_KNOWLEDGE_INITIAL_STATUS,
+      owner_note: asOptionalString(payload.owner_note, 'owner_note'),
+      sort_order: sortOrder,
+    }),
+    'id, domain_code, status',
+    'Tax domain already exists for this country',
+  );
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_DOMAIN_CREATED, 'tax_domain', String(data.id), {
+    country_code: countryCode,
+    domain_code: data.domain_code,
+    status: data.status,
+  });
+
+  return {
+    ok: true,
+    command: 'create_tax_domain',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, countryCode),
+  };
+}
+
+async function handleUpdateTaxDomainMetadata(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const domainId = asUuid(payload.tax_domain_id, 'tax_domain_id');
+  const domain = await loadTaxDomain(domainId);
+  if ('country_code' in payload || 'domain_code' in payload || 'status' in payload) {
+    throw badRequest('country_code, domain_code, and status cannot be changed via update_tax_domain_metadata');
+  }
+  const patch: Record<string, unknown> = {};
+  if (payload.title !== undefined) patch.title = asString(payload.title, 'title');
+  if (payload.owner_note !== undefined) patch.owner_note = asOptionalString(payload.owner_note, 'owner_note');
+  if (payload.sort_order !== undefined) patch.sort_order = asOptionalSortOrder(payload.sort_order) ?? 0;
+  if (!Object.keys(patch).length) {
+    throw badRequest('update_tax_domain_metadata requires at least one metadata field');
+  }
+  const { data, error } = await supabaseAdmin
+    .from('tax_domains')
+    .update(patch)
+    .eq('id', domainId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Tax domain not found');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_DOMAIN_METADATA_UPDATED, 'tax_domain', domainId, {
+    country_code: domain.country_code,
+    domain_code: domain.domain_code,
+    fields: Object.keys(patch),
+  });
+
+  return {
+    ok: true,
+    command: 'update_tax_domain_metadata',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, domain.country_code),
+  };
+}
+
+async function handleCreateTaxLegalNodeKind(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const countryCode = asCountryCode(payload.country_code);
+  await assertCountryExists(countryCode);
+  const label = asString(payload.label, 'label');
+  assertDraftCreateStatus(payload.status, 'create_tax_legal_node_kind');
+  const sortOrder = asOptionalSortOrder(payload.sort_order) ?? 0;
+
+  const data = await insertWithGeneratedCode<{ id: string; kind_code: string }>(
+    'tax_legal_node_kinds',
+    label,
+    'kind',
+    null,
+    (kindCode) => ({
+      country_code: countryCode,
+      kind_code: kindCode,
+      label,
+      status: TAX_KNOWLEDGE_INITIAL_STATUS,
+      owner_note: asOptionalString(payload.owner_note, 'owner_note'),
+      sort_order: sortOrder,
+    }),
+    'id, kind_code',
+    'Legal node kind already exists for this country and label',
+  );
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_LEGAL_NODE_KIND_CREATED, 'tax_legal_node_kind', String(data.id), {
+    country_code: countryCode,
+    kind_code: data.kind_code,
+    label,
+  });
+
+  return {
+    ok: true,
+    command: 'create_tax_legal_node_kind',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, countryCode),
+  };
+}
+
+async function handleCreateTaxLegalNode(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const sourceId = asUuid(payload.tax_source_id, 'tax_source_id');
+  const source = await loadTaxSource(sourceId);
+  const countryCode = source.country_code;
+  const kindId = asUuid(payload.tax_legal_node_kind_id, 'tax_legal_node_kind_id');
+  const kind = await loadTaxLegalNodeKind(kindId);
+  if (kind.country_code !== countryCode) {
+    throw badRequest('tax_legal_node_kind_id must belong to the same country');
+  }
+  const parentNodeId = asOptionalUuid(payload.parent_node_id, 'parent_node_id');
+  if (parentNodeId) {
+    const parent = await loadTaxLegalNode(parentNodeId);
+    if (parent.tax_source_id !== sourceId || parent.country_code !== countryCode) {
+      throw badRequest('parent_node_id must belong to the same legal source');
+    }
+  }
+  const title = asString(payload.title, 'title');
+  assertDraftCreateStatus(payload.status, 'create_tax_legal_node');
+  const sortOrder = asOptionalSortOrder(payload.sort_order) ?? 0;
+
+  const data = await insertWithGeneratedCode<{ id: string; node_code: string; status: string }>(
+    'tax_legal_nodes',
+    title,
+    'node',
+    null,
+    (nodeCode) => ({
+      country_code: countryCode,
+      tax_source_id: sourceId,
+      parent_node_id: parentNodeId,
+      tax_legal_node_kind_id: kindId,
+      node_code: nodeCode,
+      node_number: asOptionalString(payload.node_number, 'node_number'),
+      title,
+      status: TAX_KNOWLEDGE_INITIAL_STATUS,
+      owner_note: asOptionalString(payload.owner_note, 'owner_note'),
+      sort_order: sortOrder,
+    }),
+    'id, node_code, status',
+    'Legal node already exists for this source',
+  );
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_LEGAL_NODE_CREATED, 'tax_legal_node', String(data.id), {
+    country_code: countryCode,
+    tax_source_id: sourceId,
+    parent_node_id: parentNodeId,
+    tax_legal_node_kind_id: kindId,
+    node_code: data.node_code,
+    status: data.status,
+  });
+
+  return {
+    ok: true,
+    command: 'create_tax_legal_node',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, countryCode),
+  };
+}
+
+async function handleUpdateTaxLegalNodeMetadata(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const nodeId = asUuid(payload.tax_legal_node_id, 'tax_legal_node_id');
+  const node = await loadTaxLegalNode(nodeId);
+  if (
+    'country_code' in payload ||
+    'node_code' in payload ||
+    'tax_source_id' in payload ||
+    'status' in payload
+  ) {
+    throw badRequest(
+      'country_code, node_code, tax_source_id, and status cannot be changed via update_tax_legal_node_metadata',
+    );
+  }
+  const patch: Record<string, unknown> = {};
+  if (payload.title !== undefined) patch.title = asString(payload.title, 'title');
+  if (payload.node_number !== undefined) patch.node_number = asOptionalString(payload.node_number, 'node_number');
+  if (payload.owner_note !== undefined) patch.owner_note = asOptionalString(payload.owner_note, 'owner_note');
+  if (payload.sort_order !== undefined) patch.sort_order = asOptionalSortOrder(payload.sort_order) ?? 0;
+  if (payload.tax_legal_node_kind_id !== undefined) {
+    const kind = await loadTaxLegalNodeKind(asUuid(payload.tax_legal_node_kind_id, 'tax_legal_node_kind_id'));
+    if (kind.country_code !== node.country_code) {
+      throw badRequest('tax_legal_node_kind_id must belong to the same country');
+    }
+    patch.tax_legal_node_kind_id = kind.id;
+  }
+  if (payload.parent_node_id !== undefined) {
+    const parentNodeId = asOptionalUuid(payload.parent_node_id, 'parent_node_id');
+    if (parentNodeId) {
+      const parent = await loadTaxLegalNode(parentNodeId);
+      if (parent.tax_source_id !== node.tax_source_id || parent.country_code !== node.country_code) {
+        throw badRequest('parent_node_id must belong to the same legal source');
+      }
+    }
+    patch.parent_node_id = parentNodeId;
+  }
+  if (!Object.keys(patch).length) {
+    throw badRequest('update_tax_legal_node_metadata requires at least one metadata field');
+  }
+  const { data, error } = await supabaseAdmin
+    .from('tax_legal_nodes')
+    .update(patch)
+    .eq('id', nodeId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Legal node not found');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_LEGAL_NODE_METADATA_UPDATED, 'tax_legal_node', nodeId, {
+    country_code: node.country_code,
+    node_code: node.node_code,
+    fields: Object.keys(patch),
+  });
+
+  return {
+    ok: true,
+    command: 'update_tax_legal_node_metadata',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, node.country_code),
+  };
+}
+
+async function handleLinkTaxRuleLegalNode(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const taxRuleId = asUuid(payload.tax_rule_id, 'tax_rule_id');
+  const taxLegalNodeId = asUuid(payload.tax_legal_node_id, 'tax_legal_node_id');
+  const rule = await loadTaxRule(taxRuleId);
+  const node = await loadTaxLegalNode(taxLegalNodeId);
+  if (rule.country_code !== node.country_code) {
+    throw badRequest('tax_rule and tax_legal_node must belong to the same country');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_legal_nodes')
+    .insert({
+      country_code: rule.country_code,
+      tax_rule_id: taxRuleId,
+      tax_legal_node_id: taxLegalNodeId,
+    })
+    .select('id')
+    .single();
+  throwIfTaxKnowledgeWriteError(error, 'Tax rule is already linked to this legal node');
+  if (!data) throw new Error('tax_rule_legal_nodes insert returned no row');
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_LEGAL_NODE_LINKED, 'tax_rule_legal_node', String(data.id), {
+    country_code: rule.country_code,
+    tax_rule_id: taxRuleId,
+    tax_legal_node_id: taxLegalNodeId,
+  });
+
+  return {
+    ok: true,
+    command: 'link_tax_rule_legal_node',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, rule.country_code),
+  };
+}
+
+async function handleUnlinkTaxRuleLegalNode(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeCommandResponse> {
+  const linkId = asUuid(payload.tax_rule_legal_node_id, 'tax_rule_legal_node_id');
+  const { data: existing, error: loadError } = await supabaseAdmin
+    .from('tax_rule_legal_nodes')
+    .select('id, country_code, tax_rule_id, tax_legal_node_id')
+    .eq('id', linkId)
+    .maybeSingle();
+  if (loadError) throw loadError;
+  if (!existing) throw notFound('Tax rule legal node link not found');
+
+  const { error } = await supabaseAdmin.from('tax_rule_legal_nodes').delete().eq('id', linkId);
+  if (error) throw error;
+
+  await audit(ctx, AUDIT_ACTIONS.TAX_RULE_LEGAL_NODE_UNLINKED, 'tax_rule_legal_node', linkId, {
+    country_code: existing.country_code,
+    tax_rule_id: existing.tax_rule_id,
+    tax_legal_node_id: existing.tax_legal_node_id,
+  });
+
+  return {
+    ok: true,
+    command: 'unlink_tax_rule_legal_node',
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, String(existing.country_code)),
+  };
+}
+
 export async function executeTaxKnowledgeCommand(
   ctx: RequestContext,
   command: string,
@@ -1688,6 +2138,20 @@ export async function executeTaxKnowledgeCommand(
       return handleCloseTaxRuleVersionEffectiveTo(ctx, payload);
     case 'supersede_tax_rule_version':
       return handleSupersedeTaxRuleVersion(ctx, payload);
+    case 'create_tax_domain':
+      return handleCreateTaxDomain(ctx, payload);
+    case 'update_tax_domain_metadata':
+      return handleUpdateTaxDomainMetadata(ctx, payload);
+    case 'create_tax_legal_node_kind':
+      return handleCreateTaxLegalNodeKind(ctx, payload);
+    case 'create_tax_legal_node':
+      return handleCreateTaxLegalNode(ctx, payload);
+    case 'update_tax_legal_node_metadata':
+      return handleUpdateTaxLegalNodeMetadata(ctx, payload);
+    case 'link_tax_rule_legal_node':
+      return handleLinkTaxRuleLegalNode(ctx, payload);
+    case 'unlink_tax_rule_legal_node':
+      return handleUnlinkTaxRuleLegalNode(ctx, payload);
     default:
       throw badRequest(`Unsupported tax-knowledge command: ${command}`);
   }

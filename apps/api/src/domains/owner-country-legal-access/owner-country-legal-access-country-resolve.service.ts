@@ -57,8 +57,41 @@ export async function resolveCountryForOwnerLegalCommand(
   command: string,
   payload: Record<string, unknown>,
 ): Promise<string | null> {
-  if (command === 'create_tax_source' || command === 'create_tax_rule') {
+  if (
+    command === 'create_tax_source' ||
+    command === 'create_tax_rule' ||
+    command === 'create_tax_domain' ||
+    command === 'create_tax_legal_node_kind'
+  ) {
     return normalizeOwnerLegalCountryCode(payload.country_code);
+  }
+  if (command === 'update_tax_domain_metadata') {
+    const id = optionalUuid(payload.tax_domain_id);
+    if (!id) throw badRequest('tax_domain_id is required');
+    return assertPayloadCountryAgrees(await loadCountryFromRow('tax_domains', id, 'Tax domain not found'), payload);
+  }
+  if (command === 'create_tax_legal_node') {
+    const id = optionalUuid(payload.tax_source_id);
+    if (!id) throw badRequest('tax_source_id is required');
+    return assertPayloadCountryAgrees(await loadCountryFromRow('tax_sources', id, 'Tax source not found'), payload);
+  }
+  if (command === 'update_tax_legal_node_metadata') {
+    const id = optionalUuid(payload.tax_legal_node_id);
+    if (!id) throw badRequest('tax_legal_node_id is required');
+    return assertPayloadCountryAgrees(await loadCountryFromRow('tax_legal_nodes', id, 'Legal node not found'), payload);
+  }
+  if (command === 'link_tax_rule_legal_node') {
+    const id = optionalUuid(payload.tax_rule_id);
+    if (!id) throw badRequest('tax_rule_id is required');
+    return assertPayloadCountryAgrees(await loadCountryFromRow('tax_rules', id, 'Tax rule not found'), payload);
+  }
+  if (command === 'unlink_tax_rule_legal_node') {
+    const id = optionalUuid(payload.tax_rule_legal_node_id);
+    if (!id) throw badRequest('tax_rule_legal_node_id is required');
+    return assertPayloadCountryAgrees(
+      await loadCountryFromRow('tax_rule_legal_nodes', id, 'Tax rule legal node link not found'),
+      payload,
+    );
   }
   if (command === 'create_tax_rule_version') {
     const id = optionalUuid(payload.tax_rule_id);

@@ -22,6 +22,13 @@ export const TAX_KNOWLEDGE_COMMANDS = [
   'retire_tax_rule_version',
   'close_tax_rule_version_effective_to',
   'supersede_tax_rule_version',
+  'create_tax_domain',
+  'update_tax_domain_metadata',
+  'create_tax_legal_node_kind',
+  'create_tax_legal_node',
+  'update_tax_legal_node_metadata',
+  'link_tax_rule_legal_node',
+  'unlink_tax_rule_legal_node',
 ] as const;
 
 export type TaxKnowledgeCommandName = (typeof TAX_KNOWLEDGE_COMMANDS)[number];
@@ -38,6 +45,17 @@ export const TAX_SOURCE_PROVENANCE_TYPES = [
 ] as const;
 
 export type TaxSourceProvenanceType = (typeof TAX_SOURCE_PROVENANCE_TYPES)[number];
+
+export const TAX_SOURCE_PROVENANCE_TYPE_LABELS: Record<TaxSourceProvenanceType, string> = {
+  official_law: 'Law',
+  regulation: 'Regulation',
+  circular: 'Circular',
+  official_guidance: 'Official Guidance',
+  case_law_citation: 'Court Decision',
+  textbook: 'Textbook',
+  professional_material: 'Professional material',
+  other: 'Other',
+};
 
 export const TAX_RULE_KIND = 'legal_rule' as const;
 
@@ -151,6 +169,7 @@ export type OwnerTaxKnowledgeCountryDto = {
 export type OwnerTaxSourceDto = {
   id: string;
   country_code: string;
+  tax_domain_id: string | null;
   source_code: string;
   title: string;
   provenance_type: string;
@@ -165,6 +184,96 @@ export type OwnerTaxSourceDto = {
   created_at: string;
   updated_at: string;
   allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibraryAllowedAction = OwnerTaxKnowledgeAllowedAction;
+
+export type OwnerLegalLibraryLinkedRuleDto = {
+  link_id: string;
+  tax_rule_id: string;
+  tax_legal_node_id: string;
+  title: string;
+  rule_code: string;
+  status: string;
+  version_count: number;
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibraryNodeDto = {
+  id: string;
+  tax_source_id: string;
+  parent_node_id: string | null;
+  tax_legal_node_kind_id: string;
+  kind_label: string;
+  node_code: string;
+  node_number: string | null;
+  title: string;
+  display_title: string;
+  sort_order: number;
+  status: string;
+  owner_note: string | null;
+  created_at: string;
+  updated_at: string;
+  linked_rules: OwnerLegalLibraryLinkedRuleDto[];
+  children: OwnerLegalLibraryNodeDto[];
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibrarySourceDto = {
+  id: string;
+  tax_domain_id: string | null;
+  title: string;
+  provenance_type: string;
+  provenance_type_label: string;
+  status: string;
+  issuer: string | null;
+  source_code: string;
+  nodes: OwnerLegalLibraryNodeDto[];
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibraryDomainDto = {
+  id: string;
+  domain_code: string;
+  title: string;
+  status: string;
+  owner_note: string | null;
+  sort_order: number;
+  sources: OwnerLegalLibrarySourceDto[];
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibraryNodeKindDto = {
+  id: string;
+  country_code: string;
+  kind_code: string;
+  label: string;
+  status: string;
+  owner_note: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibraryUnassignedRuleDto = {
+  id: string;
+  title: string;
+  rule_code: string;
+  status: string;
+  version_count: number;
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+};
+
+export type OwnerLegalLibrarySliceDto = {
+  schema_applied: boolean;
+  domains: OwnerLegalLibraryDomainDto[];
+  unassigned_sources: OwnerLegalLibrarySourceDto[];
+  unassigned_rules: OwnerLegalLibraryUnassignedRuleDto[];
+  node_kinds: OwnerLegalLibraryNodeKindDto[];
+  provenance_type_options: OwnerTaxKnowledgeLabeledOption[];
+  allowed_actions: OwnerTaxKnowledgeAllowedAction[];
+  trainer_upload: { available: false; status_label: 'Coming later' };
 };
 
 export type OwnerTaxRuleDto = {

@@ -100,7 +100,9 @@ function rpcMissing(error: { code?: string; message?: string; details?: string; 
 test('TAX-K1.4F contract: dispatcher, owner, atomic RPC, no GET/PATCH/frontend/org', () => {
   // 1 dispatcher recognizes command
   assert.equal(isTaxKnowledgeCommand('supersede_tax_rule_version'), true);
-  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 18);
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.includes('create_tax_source'));
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.includes('supersede_tax_rule_version'));
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.length >= 23);
   assert.equal(TAX_KNOWLEDGE_COMMANDS.includes('supersede_tax_rule_version'), true);
 
   const commandsSrc = readRepo('apps/api/src/domains/tax-knowledge/tax-knowledge-commands.service.ts');

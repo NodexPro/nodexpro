@@ -99,7 +99,16 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     return 'legal_knowledge.activate';
   }
 
-  if (command.startsWith('create_tax_source') || command.startsWith('update_tax_source') || command === 'retire_tax_source') {
+  if (
+    command === 'create_tax_domain' ||
+    command === 'update_tax_domain_metadata' ||
+    command === 'create_tax_legal_node_kind' ||
+    command === 'create_tax_legal_node' ||
+    command === 'update_tax_legal_node_metadata' ||
+    command.startsWith('create_tax_source') ||
+    command.startsWith('update_tax_source') ||
+    command === 'retire_tax_source'
+  ) {
     return 'legal_sources.manage';
   }
 
@@ -134,6 +143,8 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command.startsWith('unpin_tax_rule') ||
     command.startsWith('bind_tax_rule') ||
     command.startsWith('unbind_tax_rule') ||
+    command === 'link_tax_rule_legal_node' ||
+    command === 'unlink_tax_rule_legal_node' ||
     command.includes('tax_rule_relationship') ||
     command.includes('unresolved_legal_reference') ||
     command === 'retire_tax_rule_version' ||
@@ -178,9 +189,9 @@ export function buildOwnerWorkspaceNavigation(kind: 'platform_owner' | 'country_
   const taxAndLaw = {
     group: 'TAX & LAW',
     items: [
-      { id: 'tax-knowledge', label: 'Laws & Sources' },
+      { id: 'tax-knowledge', label: 'Legal Library' },
       { id: 'legal-values', label: 'Legal Values' },
-      { id: 'fact-dictionary', label: 'Client Facts' },
+      { id: 'fact-dictionary', label: 'Fact Dictionary' },
     ],
   };
   const businessSetup = {

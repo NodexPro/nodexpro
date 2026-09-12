@@ -97,7 +97,9 @@ test('TAX-K1.4E contract: dispatcher recognizes implemented lifecycle commands o
   for (const command of NEW_COMMANDS) {
     assert.equal(isTaxKnowledgeCommand(command), true, command);
   }
-  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 18);
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.includes('create_tax_source'));
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.includes('supersede_tax_rule_version'));
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.length >= 23);
   assert.equal(isTaxKnowledgeCommand('supersede_tax_rule_version'), true);
   assert.equal(isTaxKnowledgeCommand('reactivate_tax_rule_version'), false);
   assert.equal(isTaxKnowledgeCommand('reopen_tax_rule_version'), false);

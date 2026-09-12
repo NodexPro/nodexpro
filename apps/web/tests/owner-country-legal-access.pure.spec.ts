@@ -98,7 +98,7 @@ test('Access & Experts renders from owner aggregate only', () => {
 test('backend navigation parser does not invent Access & Experts', () => {
   assert.equal(parseOwnerWorkspaceNavigation(null), null);
   const parsed = parseOwnerWorkspaceNavigation([
-    { group: 'TAX & LAW', items: [{ id: 'tax-knowledge', label: 'Laws & Sources' }] },
+    { group: 'TAX & LAW', items: [{ id: 'tax-knowledge', label: 'Legal Library' }] },
   ]);
   assert.equal(parsed?.[0].items.some((item) => item.id === 'access-experts'), false);
 });

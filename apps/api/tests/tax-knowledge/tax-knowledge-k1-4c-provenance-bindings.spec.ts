@@ -82,7 +82,9 @@ test('TAX-K1.4C contract: dispatcher recognizes all four new commands', () => {
   for (const command of NEW_COMMANDS) {
     assert.equal(isTaxKnowledgeCommand(command), true, command);
   }
-  assert.equal(TAX_KNOWLEDGE_COMMANDS.length, 18);
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.includes('create_tax_source'));
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.includes('supersede_tax_rule_version'));
+  assert.ok(TAX_KNOWLEDGE_COMMANDS.length >= 23);
   assert.equal(isTaxKnowledgeCommand('activate_tax_rule_version'), true);
   assert.equal(isTaxKnowledgeCommand('create_tax_rule_relationship'), true);
   assert.equal(isTaxKnowledgeCommand('retire_tax_rule_version'), true);

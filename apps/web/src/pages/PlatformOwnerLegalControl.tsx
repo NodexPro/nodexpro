@@ -10,7 +10,8 @@ import {
   type OwnerCommandResponse,
   type UnknownRecord,
 } from './owner-legal-control-types';
-import { OwnerTaxKnowledgePanel, parseTaxKnowledgeAggregate } from './owner-tax-knowledge-panel';
+import { OwnerLegalLibraryPanel } from './owner-legal-library-panel';
+import { parseTaxKnowledgeAggregate } from './owner-tax-knowledge-panel';
 import { OwnerStrategyEnginePanel, parseStrategyEngineAggregate } from './owner-strategy-engine-panel';
 import { OwnerLegalControlRenderBoundary, ownerLegalControlWarningTexts } from './owner-legal-control-render-safety';
 import {
@@ -372,14 +373,13 @@ export function PlatformOwnerLegalControl() {
         error={error}
       >
         {activeSection === 'tax-knowledge' ? (
-          <OwnerTaxKnowledgePanel
+          <OwnerLegalLibraryPanel
             taxKnowledge={taxKnowledge}
             countryPacks={panel?.country_packs}
             rulesets={panel?.rulesets}
             legalValues={panel?.legal_values}
             pendingCountryCode={pendingTaxKnowledgeCountry}
             busy={commandBusy}
-            showCountryPicker={false}
             onSelectCountry={(countryCode) => {
               setPendingTaxKnowledgeCountry(countryCode);
               setTaxKnowledgeCountryQuery(countryCode);

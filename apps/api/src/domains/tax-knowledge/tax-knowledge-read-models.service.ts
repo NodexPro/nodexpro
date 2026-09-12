@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { assertOwnerLegalReadAccess } from '../owner-country-legal-access/owner-country-legal-access.service.js';
-import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import {
   TAX_KNOWLEDGE_COMMANDS,
   TAX_RULE_CITED_INSTRUMENT_KIND_LABELS,
@@ -9,6 +9,14 @@ import {
   TAX_RULE_RELATIONSHIP_TYPE_LABELS,
   TAX_RULE_RELATIONSHIP_TYPES,
   TAX_RULE_UNRESOLVED_STATUS_LABELS,
+  TAX_SOURCE_PROVENANCE_TYPE_LABELS,
+  TAX_SOURCE_PROVENANCE_TYPES,
+  type OwnerLegalLibraryDomainDto,
+  type OwnerLegalLibraryNodeDto,
+  type OwnerLegalLibraryNodeKindDto,
+  type OwnerLegalLibrarySliceDto,
+  type OwnerLegalLibrarySourceDto,
+  type OwnerLegalLibraryUnassignedRuleDto,
   type OwnerTaxKnowledgeAggregateOpts,
   type OwnerTaxKnowledgeAllowedAction,
   type OwnerTaxKnowledgeLabeledOption,
@@ -25,10 +33,22 @@ import {
   type TaxRuleCitedInstrumentKind,
   type TaxRuleRelationshipType,
   type TaxRuleUnresolvedStatus,
+  type TaxSourceProvenanceType,
 } from './tax-knowledge.types.js';
 import { isExpectedPreK3cSchemaAbsence } from './tax-knowledge-unresolved.pure.js';
+import {
+  LEGAL_LIBRARY_SCHEMA_NOT_APPLIED,
+  assembleLegalLibrary,
+  type LegalLibraryDomainRow,
+  type LegalLibraryLinkedRuleView,
+  type LegalLibraryNodeRow,
+  type LegalLibraryRuleRow,
+  type LegalLibrarySourceRow,
+} from './tax-knowledge-library.pure.js';
 
 const TAX_SOURCE_SELECT =
+  'id, country_code, tax_domain_id, source_code, title, provenance_type, issuer, citation_ref, source_url, published_on, status, owner_note, retired_at, retired_reason, created_at, updated_at';
+const TAX_SOURCE_SELECT_LEGACY =
   'id, country_code, source_code, title, provenance_type, issuer, citation_ref, source_url, published_on, status, owner_note, retired_at, retired_reason, created_at, updated_at';
 const TAX_RULE_SELECT =
   'id, country_code, rule_code, title, rule_kind, status, usage_hint, owner_note, created_at, updated_at';
@@ -138,6 +158,7 @@ function sourceAllowedActions(status: string): OwnerTaxKnowledgeAllowedAction[] 
     source_url: 'optional string',
     published_on: 'optional YYYY-MM-DD',
     owner_note: 'optional string',
+    tax_domain_id: 'optional uuid',
   });
   const activate = action('activate_tax_source', status === 'draft', { tax_source_id: 'uuid' });
   const retire = action('retire_tax_source', status === 'draft' || status === 'active', {
@@ -319,6 +340,7 @@ function mapSource(row: Record<string, unknown>): OwnerTaxSourceDto {
   return {
     id: String(row.id),
     country_code: String(row.country_code),
+    tax_domain_id: row.tax_domain_id == null ? null : String(row.tax_domain_id),
     source_code: String(row.source_code),
     title: String(row.title),
     provenance_type: String(row.provenance_type),
@@ -393,11 +415,201 @@ function mapRule(row: Record<string, unknown>, versions: OwnerTaxRuleVersionDto[
   };
 }
 
-function catalogAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
+function labeledProvenanceOptions(): OwnerTaxKnowledgeLabeledOption[] {
+  return TAX_SOURCE_PROVENANCE_TYPES.map((value) => ({
+    value,
+    label: TAX_SOURCE_PROVENANCE_TYPE_LABELS[value],
+  }));
+}
+
+function provenanceLabel(value: string): string {
+  return TAX_SOURCE_PROVENANCE_TYPE_LABELS[value as TaxSourceProvenanceType] ?? value;
+}
+
+function legalNodeDisplayTitle(kindLabel: string, nodeNumber: string | null, title: string): string {
+  return [kindLabel, nodeNumber, title].filter((part) => part && part.trim()).join(' ').trim();
+}
+
+function emptyLegalLibrarySlice(schemaApplied: boolean): OwnerLegalLibrarySliceDto {
+  return {
+    schema_applied: schemaApplied,
+    domains: [],
+    unassigned_sources: [],
+    unassigned_rules: [],
+    node_kinds: [],
+    provenance_type_options: labeledProvenanceOptions(),
+    allowed_actions: libraryCatalogActions(),
+    trainer_upload: { available: false, status_label: 'Coming later' },
+  };
+}
+
+function libraryCatalogActions(): OwnerTaxKnowledgeAllowedAction[] {
   return [
+    action('create_tax_domain', true, {
+      country_code: 'ISO 3166-1 alpha-2',
+      title: 'string',
+      owner_note: 'optional string',
+    }),
+    action('create_tax_legal_node_kind', true, {
+      country_code: 'ISO 3166-1 alpha-2',
+      label: 'string',
+      owner_note: 'optional string',
+    }),
     action('create_tax_source', true, {
       country_code: 'ISO 3166-1 alpha-2',
-      source_code: 'string unique per country',
+      title: 'string',
+      provenance_type:
+        'official_law|regulation|circular|official_guidance|case_law_citation|textbook|professional_material|other',
+      tax_domain_id: 'optional uuid',
+      issuer: 'optional string',
+      owner_note: 'optional string',
+    }),
+    action('create_tax_legal_node', true, {
+      tax_source_id: 'uuid',
+      tax_legal_node_kind_id: 'uuid',
+      title: 'string',
+      parent_node_id: 'optional uuid',
+      node_number: 'optional string',
+      owner_note: 'optional string',
+    }),
+    action('create_tax_rule', true, {
+      country_code: 'ISO 3166-1 alpha-2',
+      title: 'string',
+      tax_legal_node_id: 'optional uuid',
+      usage_hint: 'optional string',
+      owner_note: 'optional string',
+    }),
+    action('link_tax_rule_legal_node', true, {
+      tax_rule_id: 'uuid',
+      tax_legal_node_id: 'uuid',
+    }),
+  ];
+}
+
+function domainAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
+  return [
+    action('update_tax_domain_metadata', true, {
+      tax_domain_id: 'uuid',
+      title: 'optional string',
+      owner_note: 'optional string',
+    }),
+    action('create_tax_source', true, {
+      country_code: 'ISO 3166-1 alpha-2',
+      title: 'string',
+      provenance_type:
+        'official_law|regulation|circular|official_guidance|case_law_citation|textbook|professional_material|other',
+      tax_domain_id: 'uuid',
+    }),
+  ];
+}
+
+function nodeKindAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
+  return [];
+}
+
+function librarySourceAllowedActions(status: string): OwnerTaxKnowledgeAllowedAction[] {
+  return [
+    ...sourceAllowedActions(status),
+    action('create_tax_legal_node', true, {
+      tax_source_id: 'uuid',
+      tax_legal_node_kind_id: 'uuid',
+      title: 'string',
+      parent_node_id: 'optional uuid',
+      node_number: 'optional string',
+    }),
+  ];
+}
+
+function libraryNodeAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
+  return [
+    action('update_tax_legal_node_metadata', true, {
+      tax_legal_node_id: 'uuid',
+      title: 'optional string',
+      node_number: 'optional string',
+      owner_note: 'optional string',
+    }),
+    action('create_tax_legal_node', true, {
+      tax_source_id: 'uuid',
+      parent_node_id: 'uuid',
+      tax_legal_node_kind_id: 'uuid',
+      title: 'string',
+      node_number: 'optional string',
+    }),
+    action('create_tax_rule', true, {
+      country_code: 'ISO 3166-1 alpha-2',
+      title: 'string',
+      tax_legal_node_id: 'uuid',
+    }),
+    action('link_tax_rule_legal_node', true, {
+      tax_rule_id: 'uuid',
+      tax_legal_node_id: 'uuid',
+    }),
+  ];
+}
+
+function linkedRuleAllowedActions(linkId: string): OwnerTaxKnowledgeAllowedAction[] {
+  return [
+    action('unlink_tax_rule_legal_node', true, {
+      tax_rule_legal_node_id: linkId,
+    }),
+  ];
+}
+
+function mapLibraryNode(
+  node: LegalLibraryNodeRow & { linked_rules: LegalLibraryLinkedRuleView[]; children: unknown[] },
+): OwnerLegalLibraryNodeDto {
+  const nested = node as LegalLibraryNodeRow & {
+    linked_rules: LegalLibraryLinkedRuleView[];
+    children: Array<LegalLibraryNodeRow & { linked_rules: LegalLibraryLinkedRuleView[]; children: unknown[] }>;
+  };
+  return {
+    id: nested.id,
+    tax_source_id: nested.tax_source_id,
+    parent_node_id: nested.parent_node_id,
+    tax_legal_node_kind_id: nested.tax_legal_node_kind_id,
+    kind_label: nested.kind_label,
+    node_code: nested.node_code,
+    node_number: nested.node_number,
+    title: nested.title,
+    display_title: legalNodeDisplayTitle(nested.kind_label, nested.node_number, nested.title),
+    sort_order: nested.sort_order,
+    status: nested.status,
+    owner_note: nested.owner_note,
+    created_at: nested.created_at,
+    updated_at: nested.updated_at,
+    linked_rules: nested.linked_rules.map((rule) => ({
+      ...rule,
+      allowed_actions: linkedRuleAllowedActions(rule.link_id),
+    })),
+    children: nested.children.map((child) => mapLibraryNode(child as typeof nested)),
+    allowed_actions: libraryNodeAllowedActions(),
+  };
+}
+
+function mapLibrarySource(
+  source: LegalLibrarySourceRow & { nodes: ReturnType<typeof assembleLegalLibrary>['unassigned_sources'][number]['nodes'] },
+  allowed: OwnerTaxKnowledgeAllowedAction[],
+): OwnerLegalLibrarySourceDto {
+  return {
+    id: source.id,
+    tax_domain_id: source.tax_domain_id,
+    title: source.title,
+    provenance_type: source.provenance_type,
+    provenance_type_label: provenanceLabel(source.provenance_type),
+    status: source.status,
+    issuer: source.issuer,
+    source_code: source.source_code,
+    nodes: source.nodes.map((node) => mapLibraryNode(node)),
+    allowed_actions: allowed,
+  };
+}
+
+function catalogAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
+  return [
+    ...libraryCatalogActions(),
+    action('create_tax_source', true, {
+      country_code: 'ISO 3166-1 alpha-2',
+      source_code: 'optional string unique per country; backend generates if omitted',
       title: 'string',
       provenance_type:
         'official_law|regulation|circular|official_guidance|case_law_citation|textbook|professional_material|other',
@@ -406,14 +618,16 @@ function catalogAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
       source_url: 'optional string',
       published_on: 'optional YYYY-MM-DD',
       owner_note: 'optional string',
+      tax_domain_id: 'optional uuid',
     }),
     action('create_tax_rule', true, {
       country_code: 'ISO 3166-1 alpha-2',
-      rule_code: 'string unique per country',
+      rule_code: 'optional string unique per country; backend generates if omitted',
       title: 'string',
       rule_kind: 'legal_rule',
       usage_hint: 'optional string',
       owner_note: 'optional string',
+      tax_legal_node_id: 'optional uuid',
     }),
   ];
 }
@@ -495,6 +709,17 @@ export async function buildOwnerTaxKnowledgeAggregate(
 
     if (sourceResult.error && isSupabaseMissingTableError(sourceResult.error, 'tax_sources')) {
       warnings.push('tax_knowledge_schema_not_applied');
+    } else if (
+      sourceResult.error &&
+      isSupabaseMissingColumnError(sourceResult.error, 'tax_domain_id')
+    ) {
+      const retry = await supabaseAdmin
+        .from('tax_sources')
+        .select(TAX_SOURCE_SELECT_LEGACY)
+        .eq('country_code', selectedCountryCode)
+        .order('updated_at', { ascending: false });
+      if (retry.error) throw retry.error;
+      sources = (retry.data ?? []).map((row) => mapSource(row as Record<string, unknown>));
     } else if (sourceResult.error) {
       throw sourceResult.error;
     } else {
@@ -797,12 +1022,17 @@ export async function buildOwnerTaxKnowledgeAggregate(
     }
   }
 
+  const legalLibrary = selectedCountryCode
+    ? await loadLegalLibrarySlice(selectedCountryCode, sources, rules, warnings)
+    : emptyLegalLibrarySlice(false);
+
   return {
     selected_country_code: selectedCountryCode,
     countries,
     sources,
     rules,
     rule_versions: ruleVersions,
+    legal_library: legalLibrary,
     allowed_actions: catalogAllowedActions(),
     implemented_commands: [...TAX_KNOWLEDGE_COMMANDS],
     relationship_type_options: labeledRelationshipOptions(),
@@ -812,5 +1042,155 @@ export async function buildOwnerTaxKnowledgeAggregate(
       { value: 'false', label: 'Procedural guidance only' },
     ],
     warnings,
+  };
+}
+
+async function loadLegalLibrarySlice(
+  countryCode: string,
+  sources: OwnerTaxSourceDto[],
+  rules: OwnerTaxRuleDto[],
+  warnings: string[],
+): Promise<OwnerLegalLibrarySliceDto> {
+  const [domainResult, kindResult, nodeResult, linkResult] = await Promise.all([
+    supabaseAdmin
+      .from('tax_domains')
+      .select('id, country_code, domain_code, title, status, owner_note, sort_order, created_at, updated_at')
+      .eq('country_code', countryCode)
+      .order('sort_order', { ascending: true }),
+    supabaseAdmin
+      .from('tax_legal_node_kinds')
+      .select('id, country_code, kind_code, label, status, owner_note, sort_order, created_at, updated_at')
+      .eq('country_code', countryCode)
+      .order('sort_order', { ascending: true }),
+    supabaseAdmin
+      .from('tax_legal_nodes')
+      .select(
+        'id, country_code, tax_source_id, parent_node_id, tax_legal_node_kind_id, node_code, node_number, title, status, owner_note, sort_order, created_at, updated_at',
+      )
+      .eq('country_code', countryCode)
+      .order('sort_order', { ascending: true }),
+    supabaseAdmin
+      .from('tax_rule_legal_nodes')
+      .select('id, tax_rule_id, tax_legal_node_id, country_code')
+      .eq('country_code', countryCode),
+  ]);
+
+  if (domainResult.error && isSupabaseMissingTableError(domainResult.error, 'tax_domains')) {
+    warnings.push(LEGAL_LIBRARY_SCHEMA_NOT_APPLIED);
+    return emptyLegalLibrarySlice(false);
+  }
+  if (domainResult.error) throw domainResult.error;
+  if (kindResult.error && isSupabaseMissingTableError(kindResult.error, 'tax_legal_node_kinds')) {
+    warnings.push(LEGAL_LIBRARY_SCHEMA_NOT_APPLIED);
+    return emptyLegalLibrarySlice(false);
+  }
+  if (kindResult.error) throw kindResult.error;
+  if (nodeResult.error && isSupabaseMissingTableError(nodeResult.error, 'tax_legal_nodes')) {
+    warnings.push(LEGAL_LIBRARY_SCHEMA_NOT_APPLIED);
+    return emptyLegalLibrarySlice(false);
+  }
+  if (nodeResult.error) throw nodeResult.error;
+  if (linkResult.error && isSupabaseMissingTableError(linkResult.error, 'tax_rule_legal_nodes')) {
+    warnings.push(LEGAL_LIBRARY_SCHEMA_NOT_APPLIED);
+    return emptyLegalLibrarySlice(false);
+  }
+  if (linkResult.error) throw linkResult.error;
+
+  const kindById = new Map(
+    (kindResult.data ?? []).map((row) => [String(row.id), String(row.label)]),
+  );
+  const domainRows: LegalLibraryDomainRow[] = (domainResult.data ?? []).map((row) => ({
+    id: String(row.id),
+    domain_code: String(row.domain_code),
+    title: String(row.title),
+    status: String(row.status),
+    owner_note: row.owner_note == null ? null : String(row.owner_note),
+    sort_order: typeof row.sort_order === 'number' ? row.sort_order : Number(row.sort_order) || 0,
+  }));
+  const sourceRows: LegalLibrarySourceRow[] = sources.map((source) => ({
+    id: source.id,
+    tax_domain_id: source.tax_domain_id,
+    title: source.title,
+    provenance_type: source.provenance_type,
+    status: source.status,
+    issuer: source.issuer,
+    source_code: source.source_code,
+  }));
+  const nodeRows: LegalLibraryNodeRow[] = (nodeResult.data ?? []).map((row) => ({
+    id: String(row.id),
+    tax_source_id: String(row.tax_source_id),
+    parent_node_id: row.parent_node_id == null ? null : String(row.parent_node_id),
+    tax_legal_node_kind_id: String(row.tax_legal_node_kind_id),
+    kind_label: kindById.get(String(row.tax_legal_node_kind_id)) ?? '',
+    node_code: String(row.node_code),
+    node_number: row.node_number == null ? null : String(row.node_number),
+    title: String(row.title),
+    sort_order: typeof row.sort_order === 'number' ? row.sort_order : Number(row.sort_order) || 0,
+    status: String(row.status),
+    owner_note: row.owner_note == null ? null : String(row.owner_note),
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  }));
+  const ruleRows: LegalLibraryRuleRow[] = rules.map((rule) => ({
+    id: rule.id,
+    title: rule.title,
+    rule_code: rule.rule_code,
+    status: rule.status,
+    version_count: rule.versions.length,
+  }));
+  const assembled = assembleLegalLibrary({
+    domains: domainRows,
+    sources: sourceRows,
+    nodes: nodeRows,
+    rules: ruleRows,
+    links: (linkResult.data ?? []).map((row) => ({
+      id: String(row.id),
+      tax_rule_id: String(row.tax_rule_id),
+      tax_legal_node_id: String(row.tax_legal_node_id),
+    })),
+  });
+
+  const nodeKinds: OwnerLegalLibraryNodeKindDto[] = (kindResult.data ?? []).map((row) => ({
+    id: String(row.id),
+    country_code: String(row.country_code),
+    kind_code: String(row.kind_code),
+    label: String(row.label),
+    status: String(row.status),
+    owner_note: row.owner_note == null ? null : String(row.owner_note),
+    sort_order: typeof row.sort_order === 'number' ? row.sort_order : Number(row.sort_order) || 0,
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+    allowed_actions: nodeKindAllowedActions(),
+  }));
+
+  const domains: OwnerLegalLibraryDomainDto[] = assembled.domains.map((domain) => ({
+    ...domain,
+    sources: domain.sources.map((source) =>
+      mapLibrarySource(source, librarySourceAllowedActions(source.status)),
+    ),
+    allowed_actions: domainAllowedActions(),
+  }));
+  const unassigned_sources: OwnerLegalLibrarySourceDto[] = assembled.unassigned_sources.map((source) =>
+    mapLibrarySource(source, librarySourceAllowedActions(source.status)),
+  );
+  const unassigned_rules: OwnerLegalLibraryUnassignedRuleDto[] = assembled.unassigned_rules.map((rule) => ({
+    ...rule,
+    allowed_actions: [
+      action('link_tax_rule_legal_node', true, {
+        tax_rule_id: rule.id,
+        tax_legal_node_id: 'uuid',
+      }),
+    ],
+  }));
+
+  return {
+    schema_applied: true,
+    domains,
+    unassigned_sources,
+    unassigned_rules,
+    node_kinds: nodeKinds,
+    provenance_type_options: labeledProvenanceOptions(),
+    allowed_actions: libraryCatalogActions(),
+    trainer_upload: { available: false, status_label: 'Coming later' },
   };
 }

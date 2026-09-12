@@ -62,7 +62,7 @@ test('Business Setup AI owner page unmounts unrelated commercial and DocFlow UI'
   const page = readRepo(PAGE);
   const nav = readRepo(NAV);
 
-  assert.match(page, /OwnerTaxKnowledgePanel/);
+  assert.match(page, /OwnerLegalLibraryPanel/);
   assert.match(page, /OwnerLegalValuesPanel/);
   assert.match(page, /OwnerFactDictionaryPanel/);
   assert.match(page, /OwnerCountryContextPanel/);
@@ -96,9 +96,9 @@ test('Business Setup AI nav lists only implemented Tax & Law and Strategy Engine
   const labels = BUSINESS_SETUP_AI_OWNER_NAV.flatMap((group) => group.items.map((item) => item.label));
   const ids = BUSINESS_SETUP_AI_OWNER_NAV.flatMap((group) => group.items.map((item) => item.id));
   assert.deepEqual(labels, [
-    'Laws & Sources',
+    'Legal Library',
     'Legal Values',
-    'Client Facts',
+    'Fact Dictionary',
     'Strategies',
   ]);
   assert.deepEqual(ids, ['tax-knowledge', 'legal-values', 'fact-dictionary', 'strategy-engine']);
@@ -127,9 +127,9 @@ test('workspace chrome renders one active section, country context, compact warn
   );
   assert.match(html, /Business Setup AI/);
   assert.match(html, /TAX &amp; LAW/);
-  assert.match(html, /Laws &amp; Sources/);
+  assert.match(html, /Legal Library/);
   assert.match(html, /Legal Values/);
-  assert.match(html, /Client Facts/);
+  assert.match(html, /Fact Dictionary/);
   assert.doesNotMatch(html, /Country context/);
   assert.match(html, /Strategies/);
   assert.match(html, /Tax Knowledge body/);
@@ -161,7 +161,7 @@ test('opening warnings shows backend warning strings, not invented statuses', ()
   );
   assert.match(html, /fact_dictionary_schema_not_applied/);
   assert.match(html, /Legal Values/);
-  assert.doesNotMatch(html, /aria-current="page"[^>]*>Laws &amp; Sources/);
+  assert.doesNotMatch(html, /aria-current="page"[^>]*>Legal Library/);
 });
 
 test('required Business Setup AI sections still render from aggregate without white-screen', () => {

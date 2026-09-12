@@ -4,6 +4,9 @@ import { EmptyState } from '../templates/template-1/components/EmptyState';
 import { SectionCard } from '../templates/template-1/components/SectionCard';
 import type {
   OwnerCountryPackRow,
+  OwnerLegalLibraryNode,
+  OwnerLegalLibrarySlice,
+  OwnerLegalLibrarySource,
   OwnerLegalValueRow,
   OwnerRulesetRow,
   TaxKnowledgeAggregate,
@@ -19,7 +22,7 @@ import type {
   TaxKnowledgeVersion,
   UnknownRecord,
 } from './owner-legal-control-types';
-import { TAX_KNOWLEDGE_RELATIONSHIP_TYPES } from './owner-legal-control-types';
+import { TAX_KNOWLEDGE_RELATIONSHIP_TYPES, emptyLegalLibrarySlice } from './owner-legal-control-types';
 
 import { emptyTaxKnowledgeAggregate } from './owner-legal-control-types';
 import '../styles/nx-modal.css';
@@ -336,6 +339,7 @@ function parseSources(raw: unknown): TaxKnowledgeSource[] {
     .map((row) => ({
       id: asString(row.id),
       country_code: asString(row.country_code),
+      tax_domain_id: asNullableString(row.tax_domain_id),
       source_code: asString(row.source_code),
       title: asString(row.title),
       provenance_type: asString(row.provenance_type),
@@ -374,6 +378,138 @@ function parseRules(raw: unknown): TaxKnowledgeRule[] {
     }));
 }
 
+function parseLabeledOptions(raw: unknown): Array<{ value: string; label: string }> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      value: asString(row.value),
+      label: asString(row.label) || asString(row.value),
+    }))
+    .filter((row) => row.value);
+}
+
+function parseLibraryNodes(raw: unknown): OwnerLegalLibraryNode[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      id: asString(row.id),
+      tax_source_id: asString(row.tax_source_id),
+      parent_node_id: asNullableString(row.parent_node_id),
+      tax_legal_node_kind_id: asString(row.tax_legal_node_kind_id),
+      kind_label: asString(row.kind_label),
+      node_code: asString(row.node_code),
+      node_number: asNullableString(row.node_number),
+      title: asString(row.title),
+      display_title: asString(row.display_title) || asString(row.title),
+      sort_order: typeof row.sort_order === 'number' ? row.sort_order : Number(row.sort_order) || 0,
+      status: asString(row.status),
+      owner_note: asNullableString(row.owner_note),
+      created_at: asString(row.created_at),
+      updated_at: asString(row.updated_at),
+      linked_rules: Array.isArray(row.linked_rules)
+        ? row.linked_rules
+            .map((link) => asRecord(link))
+            .filter((link): link is UnknownRecord => link !== null)
+            .map((link) => ({
+              link_id: asString(link.link_id),
+              tax_rule_id: asString(link.tax_rule_id),
+              tax_legal_node_id: asString(link.tax_legal_node_id),
+              title: asString(link.title),
+              rule_code: asString(link.rule_code),
+              status: asString(link.status),
+              version_count: typeof link.version_count === 'number' ? link.version_count : Number(link.version_count) || 0,
+              allowed_actions: parseAllowedActions(link.allowed_actions),
+            }))
+        : [],
+      children: parseLibraryNodes(row.children),
+      allowed_actions: parseAllowedActions(row.allowed_actions),
+    }));
+}
+
+function parseLibrarySources(raw: unknown): OwnerLegalLibrarySource[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      id: asString(row.id),
+      tax_domain_id: asNullableString(row.tax_domain_id),
+      title: asString(row.title),
+      provenance_type: asString(row.provenance_type),
+      provenance_type_label: asString(row.provenance_type_label) || asString(row.provenance_type),
+      status: asString(row.status),
+      issuer: asNullableString(row.issuer),
+      source_code: asString(row.source_code),
+      nodes: parseLibraryNodes(row.nodes),
+      allowed_actions: parseAllowedActions(row.allowed_actions),
+    }));
+}
+
+export function parseLegalLibrary(raw: unknown): OwnerLegalLibrarySlice {
+  const rec = asRecord(raw);
+  if (!rec) return emptyLegalLibrarySlice();
+  const trainer = asRecord(rec.trainer_upload);
+  return {
+    schema_applied: rec.schema_applied === true,
+    domains: Array.isArray(rec.domains)
+      ? rec.domains
+          .map((row) => asRecord(row))
+          .filter((row): row is UnknownRecord => row !== null)
+          .map((row) => ({
+            id: asString(row.id),
+            domain_code: asString(row.domain_code),
+            title: asString(row.title),
+            status: asString(row.status),
+            owner_note: asNullableString(row.owner_note),
+            sort_order: typeof row.sort_order === 'number' ? row.sort_order : Number(row.sort_order) || 0,
+            sources: parseLibrarySources(row.sources),
+            allowed_actions: parseAllowedActions(row.allowed_actions),
+          }))
+      : [],
+    unassigned_sources: parseLibrarySources(rec.unassigned_sources),
+    unassigned_rules: Array.isArray(rec.unassigned_rules)
+      ? rec.unassigned_rules
+          .map((row) => asRecord(row))
+          .filter((row): row is UnknownRecord => row !== null)
+          .map((row) => ({
+            id: asString(row.id),
+            title: asString(row.title),
+            rule_code: asString(row.rule_code),
+            status: asString(row.status),
+            version_count: typeof row.version_count === 'number' ? row.version_count : Number(row.version_count) || 0,
+            allowed_actions: parseAllowedActions(row.allowed_actions),
+          }))
+      : [],
+    node_kinds: Array.isArray(rec.node_kinds)
+      ? rec.node_kinds
+          .map((row) => asRecord(row))
+          .filter((row): row is UnknownRecord => row !== null)
+          .map((row) => ({
+            id: asString(row.id),
+            country_code: asString(row.country_code),
+            kind_code: asString(row.kind_code),
+            label: asString(row.label),
+            status: asString(row.status),
+            owner_note: asNullableString(row.owner_note),
+            sort_order: typeof row.sort_order === 'number' ? row.sort_order : Number(row.sort_order) || 0,
+            created_at: asString(row.created_at),
+            updated_at: asString(row.updated_at),
+            allowed_actions: parseAllowedActions(row.allowed_actions),
+          }))
+      : [],
+    provenance_type_options: parseLabeledOptions(rec.provenance_type_options),
+    allowed_actions: parseAllowedActions(rec.allowed_actions),
+    trainer_upload: {
+      available: trainer?.available === true,
+      status_label: asString(trainer?.status_label) || 'Coming later',
+    },
+  };
+}
+
 export function parseTaxKnowledgeAggregate(raw: unknown): TaxKnowledgeAggregate {
   const rec = asRecord(raw);
   if (!rec) return emptyTaxKnowledgeAggregate();
@@ -390,6 +526,7 @@ export function parseTaxKnowledgeAggregate(raw: unknown): TaxKnowledgeAggregate 
     sources: parseSources(rec.sources),
     rules: parseRules(rec.rules),
     rule_versions: parseVersions(rec.rule_versions),
+    legal_library: parseLegalLibrary(rec.legal_library),
     allowed_actions: parseAllowedActions(rec.allowed_actions),
     implemented_commands: Array.isArray(rec.implemented_commands)
       ? rec.implemented_commands.filter((item): item is string => typeof item === 'string')
