@@ -103,6 +103,8 @@ test('TAX-622 aggregate includes legal_library inside tax knowledge; no hidden G
 test('TAX-622 Owner UI is human-first and does not hardcode IL hierarchy', () => {
   const panel = readRepo('apps/web/src/pages/owner-legal-library-panel.tsx');
   assert.match(panel, /Add Tax Domain/);
+  assert.match(panel, /No tax domains yet/);
+  assert.match(panel, /No unassigned records/);
   assert.match(panel, /Add Structure Item/);
   assert.match(panel, /Technical details/);
   assert.match(panel, /Unassigned \/ Technical/);

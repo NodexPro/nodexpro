@@ -248,6 +248,8 @@ export function OwnerLegalLibraryPanel({
 }) {
   const library = taxKnowledge.legal_library;
   const selectedCountry = taxKnowledge.selected_country_code;
+  const selectedCountryName =
+    taxKnowledge.countries.find((country) => country.code === selectedCountry)?.name || selectedCountry;
   const schemaMissing =
     !library.schema_applied || taxKnowledge.warnings.includes(LIBRARY_SCHEMA_NOT_APPLIED);
   const createDomain = enabledAction(library.allowed_actions, 'create_tax_domain');
@@ -419,6 +421,11 @@ export function OwnerLegalLibraryPanel({
           />
         ) : (
           <div style={{ display: 'grid', gap: 16 }}>
+            {selectedCountryName ? (
+              <div dir="auto" style={{ fontSize: 16, fontWeight: 600 }}>
+                {selectedCountryName}
+              </div>
+            ) : null}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {createDomain ? (
                 <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={openCreateDomain}>
@@ -434,7 +441,9 @@ export function OwnerLegalLibraryPanel({
                 Upload material — Coming later
               </button>
             </div>
-            {nodeKinds.length ? (
+            {library.domains.length === 0 ? (
+              <EmptyState title="No tax domains yet." description="Add a tax domain to start this country's legal library." />
+            ) : nodeKinds.length ? (
               <p style={{ margin: 0, fontSize: 13, color: '#4b5563' }}>
                 Structure types: {nodeKinds.map((kind) => kind.label).join(' · ')}
               </p>
@@ -507,13 +516,17 @@ export function OwnerLegalLibraryPanel({
         )}
       </SectionCard>
 
-      {!schemaMissing && selectedCountry && (library.unassigned_sources.length || library.unassigned_rules.length) ? (
+      {!schemaMissing && selectedCountry ? (
         <SectionCard>
           <h2 style={{ margin: 0, fontSize: 18 }}>Unassigned / Technical</h2>
+          {library.unassigned_sources.length || library.unassigned_rules.length ? (
           <p style={{ marginTop: 0, fontSize: 13, color: '#4b5563' }}>
             Existing sources and rules that are not assigned to a tax domain or legal node. They are preserved and are
             not auto-assigned.
           </p>
+          ) : (
+            <EmptyState title="No unassigned records." description="Sources and rules appear here only when they are not yet placed in the legal library." />
+          )}
           {library.unassigned_sources.map((source) => (
             <SourceBlock
               key={source.id}
