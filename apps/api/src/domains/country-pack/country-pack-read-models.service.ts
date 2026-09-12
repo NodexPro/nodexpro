@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AppError, forbidden, notFound } from '../../shared/errors.js';
-import { throwIfSupabaseError, isSupabaseMissingColumnError, type SupabaseErrorLike } from '../../shared/supabase-errors.js';
+import { throwIfSupabaseError, isSupabaseMissingColumnError, isSupabaseMissingTableError, type SupabaseErrorLike } from '../../shared/supabase-errors.js';
 import { OWNER_COUNTRY_LOCALE_CATALOG } from './country-localization.pure.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import {
@@ -42,6 +42,16 @@ import { buildOwnerTaxKnowledgeAggregate } from '../tax-knowledge/tax-knowledge-
 import { buildOwnerStrategyEngineAggregate } from '../tax-strategy-engine/owner-read/tax-strategy-engine-read-models.service.js';
 import { buildOwnerFactDictionaryAggregate } from '../tax-fact-dictionary/tax-fact-dictionary-read-models.service.js';
 import { resolveOwnerLegalControlSelectedCountry } from './owner-legal-control-country.pure.js';
+import {
+  LEGAL_VALUE_AUTHOR_COMMAND,
+  LEGAL_VALUE_AUTHORITY_SCHEMA_NOT_APPLIED,
+  LEGAL_VALUE_CATEGORIES,
+  LEGAL_VALUE_VALUE_TYPES,
+} from './legal-value-authority.pure.js';
+import {
+  buildLegalBasisPickerOptions,
+  buildLegalValueWorkspaceCards,
+} from './legal-value-workspace.pure.js';
 type CommercialControlsQuery = {
   page: number;
   page_size: number;
@@ -568,6 +578,26 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
   if (packs.error) throw packs.error;
   if (rulesets.error) throw rulesets.error;
 
+  const authoritiesResult = await supabaseAdmin
+    .from('country_legal_value_version_authorities')
+    .select('id, country_legal_value_version_id, country_code, tax_rule_version_id');
+  let authoritySchemaApplied = true;
+  if (authoritiesResult.error && isSupabaseMissingTableError(authoritiesResult.error, 'country_legal_value_version_authorities')) {
+    authoritySchemaApplied = false;
+  } else if (authoritiesResult.error) {
+    throw authoritiesResult.error;
+  }
+  const authoritiesByVersion = new Map<string, Array<Record<string, unknown>>>();
+  for (const pin of authoritySchemaApplied ? authoritiesResult.data ?? [] : []) {
+    const list = authoritiesByVersion.get(String(pin.country_legal_value_version_id)) ?? [];
+    list.push({
+      id: pin.id,
+      tax_rule_version_id: pin.tax_rule_version_id,
+      country_code: pin.country_code,
+    });
+    authoritiesByVersion.set(String(pin.country_legal_value_version_id), list);
+  }
+
   const filteredPacks = filterCountryRows(
     (packs.data ?? []) as Array<{ id?: string; country_code?: string; name?: string; status?: string }>,
     allowedCountries,
@@ -596,6 +626,7 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
     const list = byLegalValueId.get(v.legal_value_id) ?? [];
     list.push({
       ...v,
+      authorities: authoritiesByVersion.get(String(v.id)) ?? [],
       status_badge: statusBadge(v.status),
       effective_window: `${v.effective_from} -> ${v.effective_to ?? 'open'}`,
     });
@@ -627,10 +658,28 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
     actor.kind === 'platform_owner'
       ? null
       : [...new Set(Object.values(actor.capabilitiesByCountry).flat())];
+  const canManageValues = actor.kind === 'platform_owner' || (unionCaps?.includes('legal_values.manage') ?? false);
   const globalActions = [
     {
+      action_key: LEGAL_VALUE_AUTHOR_COMMAND,
+      enabled: canManageValues,
+      button_label: 'Add Legal Value',
+      note: 'Owner authoring command. Backend generates value_key. Requires tax_rule_version_ids from Legal Library.',
+      payload: {
+        country_code: 'ISO 3166-1 alpha-2',
+        label: 'string',
+        category: 'VAT|Income Tax|National Insurance|Credit Points|Pricing|Reports|Calendar|Modules',
+        value_type: 'number|percentage|boolean|string|json|money|date',
+        initial_value: 'number|string|boolean|object',
+        effective_from: 'YYYY-MM-DD',
+        effective_to: 'optional YYYY-MM-DD',
+        tax_rule_version_ids: 'uuid[]',
+        owner_note: 'optional string',
+      },
+    },
+    {
       action_key: 'create_legal_value',
-      enabled: actor.kind === 'platform_owner' || (unionCaps?.includes('legal_values.manage') ?? false),
+      enabled: canManageValues,
       note:
         'country_code: IL, US, … (must exist in countries). category: VAT | Income Tax | National Insurance | Credit Points | Pricing | Reports | Calendar | Modules | Operational Communication Policies (use Communication policies section for reminders). value_type: number | percentage | boolean | string | json | money | date.',
       payload: {
@@ -672,6 +721,12 @@ export async function buildOwnerLegalValuesAggregate(ctx: RequestContext): Promi
       .filter((r) => !(r as { versions: unknown[] }).versions.length)
       .map((r) => `missing_versions_for_${(r as { value_key: string }).value_key}`),
     actions: globalActions,
+    authority_schema_applied: authoritySchemaApplied,
+    warnings: authoritySchemaApplied ? [] : [LEGAL_VALUE_AUTHORITY_SCHEMA_NOT_APPLIED],
+    catalog: {
+      value_types: LEGAL_VALUE_VALUE_TYPES.map((value) => ({ value, label: value })),
+      categories: LEGAL_VALUE_CATEGORIES.map((value) => ({ value, label: value })),
+    },
   };
 }
 
@@ -1617,6 +1672,103 @@ export async function buildOwnerLegalControlPanelAggregate(
     };
   }
 
+  const library = (taxKnowledge.legal_library ?? {}) as {
+    domains?: Array<{
+      id: string;
+      title: string;
+      sources: Array<{
+        id: string;
+        title: string;
+        nodes: Array<{
+          id: string;
+          title: string;
+          kind_label?: string;
+          node_number?: string | null;
+          linked_rules: Array<{ tax_rule_id: string; title: string }>;
+          children?: unknown[];
+        }>;
+      }>;
+    }>;
+  };
+  const pickerOptions = buildLegalBasisPickerOptions({
+    domains: library.domains ?? [],
+    rules: ((taxKnowledge.rules as Array<{
+      id: string;
+      title: string;
+      versions: Array<{ id: string; version_no?: number; status: string }>;
+    }>) ?? []),
+  });
+  const pickerByVersion = new Map(pickerOptions.map((option) => [option.tax_rule_version_id, option]));
+  const legalTableRows = (legalValues.table as Array<Record<string, unknown>> | undefined) ?? [];
+  for (const row of legalTableRows) {
+    const versions = Array.isArray(row.versions) ? (row.versions as Array<Record<string, unknown>>) : [];
+    for (const version of versions) {
+      const pins = Array.isArray(version.authorities) ? (version.authorities as Array<Record<string, unknown>>) : [];
+      for (const pin of pins) {
+        const option = pickerByVersion.get(String(pin.tax_rule_version_id ?? ''));
+        pin.path_label = option?.label ?? null;
+        pin.domain_id = option?.domain_id ?? null;
+        pin.source_id = option?.source_id ?? null;
+      }
+    }
+  }
+  const countryNameByCode = Object.fromEntries(
+    ((taxKnowledge.countries as Array<{ code?: string; name?: string }>) ?? []).map((country) => [
+      String(country.code ?? ''),
+      String(country.name ?? country.code ?? ''),
+    ]),
+  );
+  const selectedLegalRows = selectedCountryCode
+    ? legalTableRows.filter((row) => String(row.country_code ?? '') === selectedCountryCode)
+    : legalTableRows;
+  const canManageSelected =
+    isPlatformOwner || actorCapabilitiesForCountry(actor, selectedCountryCode).includes('legal_values.manage');
+  const canActivateSelected =
+    isPlatformOwner || actorCapabilitiesForCountry(actor, selectedCountryCode).includes('legal_knowledge.activate');
+  const legalValuesWorkspace = {
+    schema_applied: legalValues.authority_schema_applied !== false,
+    selected_country_code: selectedCountryCode,
+    empty_state: {
+      title: 'No legal values yet.',
+      description:
+        "Add the first legal value after its legal basis exists in the Legal Library.",
+    },
+    cards: buildLegalValueWorkspaceCards(
+      selectedLegalRows,
+      countryNameByCode,
+      new Date().toISOString().slice(0, 10),
+      {
+        kind: actor.kind,
+        canManage: canManageSelected,
+        canActivate: canActivateSelected,
+      },
+    ),
+    picker_options: pickerOptions,
+    catalog: legalValues.catalog ?? {
+      value_types: LEGAL_VALUE_VALUE_TYPES.map((value) => ({ value, label: value })),
+      categories: LEGAL_VALUE_CATEGORIES.map((value) => ({ value, label: value })),
+    },
+    allowed_actions: [
+      {
+        action_key: LEGAL_VALUE_AUTHOR_COMMAND,
+        enabled: canManageSelected,
+        button_label: 'Add Legal Value',
+      },
+    ],
+    filter_options: {
+      domains: (library.domains ?? []).map((domain) => ({ id: domain.id, label: domain.title })),
+      sources: (library.domains ?? []).flatMap((domain) =>
+        domain.sources.map((source) => ({ id: source.id, label: source.title, domain_id: domain.id })),
+      ),
+      statuses: [
+        { value: 'active', label: 'Active' },
+        { value: 'draft', label: 'Draft' },
+        { value: 'disabled', label: 'Disabled' },
+      ],
+    },
+    warnings: Array.isArray(legalValues.warnings) ? legalValues.warnings : [],
+  };
+
   return {
     aggregate_key: 'owner_legal_control_panel_aggregate',
     ...actorPanelFields(actor),
@@ -1647,6 +1799,7 @@ export async function buildOwnerLegalControlPanelAggregate(
     legal_values: {
       ...legalValues,
       legal_values_table: legalValuesTableModel,
+      workspace: legalValuesWorkspace,
     },
     platform_pricing: isPlatformOwner ? platformPricing : null,
     owner_email_provider_config_aggregate: isPlatformOwner ? emailProviderConfig : null,

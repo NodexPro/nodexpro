@@ -115,6 +115,9 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
   if (
     command.startsWith('create_legal_value') ||
     command.startsWith('update_legal_value') ||
+    command === 'author_country_legal_value' ||
+    command.startsWith('pin_legal_value') ||
+    command.startsWith('unpin_legal_value') ||
     command === 'update_owner_note' ||
     command === 'update_usage_hint'
   ) {

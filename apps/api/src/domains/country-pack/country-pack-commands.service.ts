@@ -5,7 +5,7 @@ import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import { assertOwnerLegalCommandAccess } from '../owner-country-legal-access/owner-country-legal-access.service.js';
 import { isOwnerLegalValueCommand } from '../owner-country-legal-access/owner-country-legal-access.types.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
-import { isSupabaseMissingColumnError } from '../../shared/supabase-errors.js';
+import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import { normalizeCountryLocalization } from './country-localization.pure.js';
 import { assertCountryExists } from './country.service.js';
 import { getCountryPack } from './country-pack.service.js';
@@ -38,6 +38,20 @@ import {
   handleDisableOperationalReminderWorkflow,
   handleEnableOperationalReminderWorkflow,
 } from './operational-communication-owner-commands.service.js';
+import { randomUUID } from 'node:crypto';
+import {
+  LEGAL_VALUE_AUTHOR_COMMAND,
+  LEGAL_VALUE_CATEGORIES,
+  LEGAL_VALUE_VALUE_TYPES,
+  PIN_LEGAL_VALUE_VERSION_AUTHORITY,
+  TAX_BRAIN_LEGAL_VALUE_MODULE_SCOPE,
+  UNPIN_LEGAL_VALUE_VERSION_AUTHORITY,
+  assembleAuthorValuePayload,
+  assertCountriesMatch,
+  assertDraftLegalValueVersion,
+  assertLegalValueVersionPayloadMutable,
+  generateLegalValueKey,
+} from './legal-value-authority.pure.js';
 
 type CountryPackCommandType =
   | 'create_country'
@@ -53,11 +67,14 @@ type CountryPackCommandType =
   | 'change_active_ruleset_for_organization'
   | 'update_organization_country_settings'
   | 'create_legal_value'
+  | 'author_country_legal_value'
   | 'update_legal_value_metadata'
   | 'create_legal_value_version'
   | 'update_legal_value_version'
   | 'activate_legal_value_version'
   | 'deactivate_legal_value_version'
+  | 'pin_legal_value_version_authority'
+  | 'unpin_legal_value_version_authority'
   | 'update_owner_note'
   | 'update_usage_hint'
   | 'update_module_scope'
@@ -120,9 +137,13 @@ function commercialControlsContextFromPayload(payload: Record<string, unknown>):
 
 async function refreshedOwnerLegalControlPanel(ctx: RequestContext, payload?: Record<string, unknown>): Promise<CountryPackCommandResponse['refreshed']> {
   const commercial = payload ? commercialControlsContextFromPayload(payload) : null;
+  const countryCode = typeof payload?.country_code === 'string' ? payload.country_code : undefined;
   return {
     aggregate_key: 'owner_legal_control_panel_aggregate',
-    aggregate: await buildOwnerLegalControlPanelAggregate(ctx, commercial ? { commercial_controls: commercial } : undefined),
+    aggregate: await buildOwnerLegalControlPanelAggregate(ctx, {
+      ...(commercial ? { commercial_controls: commercial } : {}),
+      ...(countryCode ? { tax_knowledge_country_code: countryCode } : {}),
+    }),
   };
 }
 
@@ -146,6 +167,19 @@ function asDate(value: unknown, field: string): string {
     throw badRequest(`${field} must be YYYY-MM-DD`);
   }
   return v;
+}
+
+function asUuid(value: unknown, field: string): string {
+  const v = asString(value, field);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)) {
+    throw badRequest(`${field} must be a uuid`);
+  }
+  return v;
+}
+
+function asUuidList(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || !value.length) throw badRequest(`${field} is required`);
+  return [...new Set(value.map((item) => asUuid(item, field)))];
 }
 
 function asIsoDateTime(value: unknown, field: string): string {
@@ -1006,10 +1040,207 @@ async function handleCreateLegalValueVersion(ctx: RequestContext, payload: Recor
     legal_value_id: legalValue.id,
     ruleset_id: rulesetId,
   });
+  if (payload.tax_rule_version_ids !== undefined) {
+    await pinLegalValueVersionAuthorities(ctx, {
+      countryCode,
+      legalValueVersionId: String(data.id),
+      taxRuleVersionIds: asUuidList(payload.tax_rule_version_ids, 'tax_rule_version_ids'),
+    });
+  }
   return {
     ok: true,
     command: 'create_legal_value_version',
     refreshed: await refreshedOwnerLegalControlPanel(ctx),
+  };
+}
+
+async function loadTaxRuleVersionCountry(taxRuleVersionId: string): Promise<{ id: string; country_code: string; status: string }> {
+  const { data, error } = await supabaseAdmin
+    .from('tax_rule_versions')
+    .select('id, country_code, status')
+    .eq('id', taxRuleVersionId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Tax rule version not found');
+  return data as { id: string; country_code: string; status: string };
+}
+
+async function pinLegalValueVersionAuthorities(
+  ctx: RequestContext,
+  params: { countryCode: string; legalValueVersionId: string; taxRuleVersionIds: string[] },
+): Promise<void> {
+  for (const taxRuleVersionId of params.taxRuleVersionIds) {
+    const ruleVersion = await loadTaxRuleVersionCountry(taxRuleVersionId);
+    assertCountriesMatch(
+      params.countryCode,
+      ruleVersion.country_code,
+      'tax_rule_version_id must belong to the same country as the legal value',
+    );
+    const { data, error } = await supabaseAdmin
+      .from('country_legal_value_version_authorities')
+      .insert({
+        country_legal_value_version_id: params.legalValueVersionId,
+        country_code: params.countryCode,
+        tax_rule_version_id: taxRuleVersionId,
+      })
+      .select('id')
+      .single();
+    if (error) {
+      if (isSupabaseMissingTableError(error, 'country_legal_value_version_authorities')) {
+        throw badRequest('Legal Value authority schema is not applied');
+      }
+      throw error;
+    }
+    await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_AUTHORITY_PINNED, 'country_legal_value_version_authority', String(data.id), {
+      country_legal_value_version_id: params.legalValueVersionId,
+      tax_rule_version_id: taxRuleVersionId,
+    });
+  }
+}
+
+async function handleAuthorCountryLegalValue(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<CountryPackCommandResponse> {
+  const countryCode = asString(payload.country_code, 'country_code').toUpperCase();
+  await assertCountryExists(countryCode);
+  const label = asString(payload.label, 'label');
+  const valueType = asString(payload.value_type, 'value_type');
+  if (!(LEGAL_VALUE_VALUE_TYPES as readonly string[]).includes(valueType)) {
+    throw badRequest('value_type is not a canonical legal value type');
+  }
+  const category = asString(payload.category, 'category');
+  if (!(LEGAL_VALUE_CATEGORIES as readonly string[]).includes(category)) {
+    throw badRequest('category is not a canonical legal value category');
+  }
+  const taxRuleVersionIds = asUuidList(payload.tax_rule_version_ids, 'tax_rule_version_ids');
+  const effectiveFrom = asDate(payload.effective_from, 'effective_from');
+  const effectiveTo = asOptionalString(payload.effective_to);
+  const id = randomUUID();
+  const valueKey = generateLegalValueKey(label, id);
+  const valuePayloadJson = assembleAuthorValuePayload(valueType, payload.initial_value ?? payload.value_payload_json);
+  const { data: legalValue, error: createError } = await supabaseAdmin
+    .from('country_legal_values')
+    .insert({
+      id,
+      country_code: countryCode,
+      value_key: valueKey,
+      label,
+      category,
+      module_scope: asOptionalString(payload.module_scope) ?? TAX_BRAIN_LEGAL_VALUE_MODULE_SCOPE,
+      owner_note: asOptionalString(payload.owner_note),
+      value_type: valueType,
+      status: 'draft',
+    })
+    .select('*')
+    .single();
+  if (createError) throw createError;
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_CREATED, 'country_legal_value', legalValue.id, {
+    country_code: countryCode,
+    value_key: valueKey,
+    command: LEGAL_VALUE_AUTHOR_COMMAND,
+  });
+  const rulesetId = await resolveRulesetIdForCreateLegalValueVersion(payload, countryCode, effectiveFrom);
+  const { data: version, error: versionError } = await supabaseAdmin
+    .from('country_legal_value_versions')
+    .insert({
+      legal_value_id: legalValue.id,
+      country_pack_ruleset_id: rulesetId,
+      value_payload_json: valuePayloadJson,
+      effective_from: effectiveFrom,
+      effective_to: effectiveTo,
+      status: 'draft',
+    })
+    .select('*')
+    .single();
+  if (versionError) throw versionError;
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_CREATED, 'country_legal_value_version', version.id, {
+    legal_value_id: legalValue.id,
+    ruleset_id: rulesetId,
+  });
+  await pinLegalValueVersionAuthorities(ctx, {
+    countryCode,
+    legalValueVersionId: String(version.id),
+    taxRuleVersionIds,
+  });
+  return {
+    ok: true,
+    command: LEGAL_VALUE_AUTHOR_COMMAND,
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, payload),
+  };
+}
+
+async function handlePinLegalValueVersionAuthority(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<CountryPackCommandResponse> {
+  const versionId = asUuid(payload.legal_value_version_id, 'legal_value_version_id');
+  const taxRuleVersionId = asUuid(payload.tax_rule_version_id, 'tax_rule_version_id');
+  const { data: version, error } = await supabaseAdmin
+    .from('country_legal_value_versions')
+    .select('id, status, legal_value_id')
+    .eq('id', versionId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!version) throw notFound('Legal value version not found');
+  assertDraftLegalValueVersion(String(version.status), PIN_LEGAL_VALUE_VERSION_AUTHORITY);
+  const legalValue = await supabaseAdmin
+    .from('country_legal_values')
+    .select('id, country_code')
+    .eq('id', version.legal_value_id)
+    .maybeSingle();
+  if (legalValue.error) throw legalValue.error;
+  if (!legalValue.data) throw notFound('Legal value not found');
+  await pinLegalValueVersionAuthorities(ctx, {
+    countryCode: String(legalValue.data.country_code),
+    legalValueVersionId: versionId,
+    taxRuleVersionIds: [taxRuleVersionId],
+  });
+  return {
+    ok: true,
+    command: PIN_LEGAL_VALUE_VERSION_AUTHORITY,
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, payload),
+  };
+}
+
+async function handleUnpinLegalValueVersionAuthority(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<CountryPackCommandResponse> {
+  const pinId = asUuid(payload.country_legal_value_version_authority_id, 'country_legal_value_version_authority_id');
+  const { data: pin, error } = await supabaseAdmin
+    .from('country_legal_value_version_authorities')
+    .select('id, country_legal_value_version_id, tax_rule_version_id')
+    .eq('id', pinId)
+    .maybeSingle();
+  if (error) {
+    if (isSupabaseMissingTableError(error, 'country_legal_value_version_authorities')) {
+      throw badRequest('Legal Value authority schema is not applied');
+    }
+    throw error;
+  }
+  if (!pin) throw notFound('Legal value version authority not found');
+  const { data: version, error: versionError } = await supabaseAdmin
+    .from('country_legal_value_versions')
+    .select('id, status')
+    .eq('id', pin.country_legal_value_version_id)
+    .maybeSingle();
+  if (versionError) throw versionError;
+  if (!version) throw notFound('Legal value version not found');
+  assertDraftLegalValueVersion(String(version.status), UNPIN_LEGAL_VALUE_VERSION_AUTHORITY);
+  const { error: deleteError } = await supabaseAdmin
+    .from('country_legal_value_version_authorities')
+    .delete()
+    .eq('id', pinId);
+  if (deleteError) throw deleteError;
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_AUTHORITY_UNPINNED, 'country_legal_value_version_authority', pinId, {
+    country_legal_value_version_id: pin.country_legal_value_version_id,
+    tax_rule_version_id: pin.tax_rule_version_id,
+  });
+  return {
+    ok: true,
+    command: UNPIN_LEGAL_VALUE_VERSION_AUTHORITY,
+    refreshed: await refreshedOwnerLegalControlPanel(ctx, payload),
   };
 }
 
@@ -1022,6 +1253,22 @@ async function handleUpdateLegalValueVersion(ctx: RequestContext, payload: Recor
     .maybeSingle();
   if (currentError) throw currentError;
   if (!current) throw notFound('Legal value version not found');
+  if (payload.status !== undefined) {
+    throw badRequest('status cannot be changed here; use activate_legal_value_version or deactivate_legal_value_version');
+  }
+  const { data: lvRow } = await supabaseAdmin
+    .from('country_legal_values')
+    .select('category, module_scope, value_type, value_key')
+    .eq('id', current.legal_value_id)
+    .maybeSingle();
+  const payloadChanging =
+    payload.value_payload_json !== undefined ||
+    payload.effective_from !== undefined ||
+    payload.country_pack_ruleset_id !== undefined ||
+    Boolean(lvRow && ownerEditorInputPresent(String(lvRow.value_key), String(lvRow.value_type), payload));
+  if (payloadChanging) {
+    assertLegalValueVersionPayloadMutable(String(current.status));
+  }
   const patch: Record<string, unknown> = {};
   const effectiveFrom = payload.effective_from ? asDate(payload.effective_from, 'effective_from') : current.effective_from;
   const effectiveTo = payload.effective_to !== undefined ? asOptionalString(payload.effective_to) : current.effective_to;
@@ -1031,11 +1278,6 @@ async function handleUpdateLegalValueVersion(ctx: RequestContext, payload: Recor
     effectiveTo,
     excludeVersionId: versionId,
   });
-  const { data: lvRow } = await supabaseAdmin
-    .from('country_legal_values')
-    .select('category, module_scope, value_type, value_key')
-    .eq('id', current.legal_value_id)
-    .maybeSingle();
   if (
     lvRow &&
     (payload.value_payload_json !== undefined ||
@@ -1056,7 +1298,6 @@ async function handleUpdateLegalValueVersion(ctx: RequestContext, payload: Recor
   }
   if (payload.effective_from !== undefined) patch.effective_from = effectiveFrom;
   if (payload.effective_to !== undefined) patch.effective_to = effectiveTo;
-  if (payload.status !== undefined) patch.status = asString(payload.status, 'status');
   if (payload.country_pack_ruleset_id !== undefined) {
     const rulesetId = asString(payload.country_pack_ruleset_id, 'country_pack_ruleset_id');
     await assertRulesetExists(rulesetId);
@@ -1752,6 +1993,8 @@ export async function executeCountryPackCommand(
       return handleUpdateOrganizationCountrySettings(ctx, command.payload);
     case 'create_legal_value':
       return handleCreateLegalValue(ctx, command.payload);
+    case 'author_country_legal_value':
+      return handleAuthorCountryLegalValue(ctx, command.payload);
     case 'update_legal_value_metadata':
       return handleUpdateLegalValueMetadata(ctx, command.payload);
     case 'create_legal_value_version':
@@ -1774,6 +2017,10 @@ export async function executeCountryPackCommand(
         'deactivate_legal_value_version',
         AUDIT_ACTIONS.LEGAL_VALUE_VERSION_DEACTIVATED
       );
+    case 'pin_legal_value_version_authority':
+      return handlePinLegalValueVersionAuthority(ctx, command.payload);
+    case 'unpin_legal_value_version_authority':
+      return handleUnpinLegalValueVersionAuthority(ctx, command.payload);
     case 'update_owner_note':
       return updateLegalValueMetadataField(
         ctx,

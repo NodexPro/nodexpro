@@ -303,12 +303,40 @@ export async function resolveCountryForOwnerLegalCommand(
 
   if (
     command === 'create_legal_value' ||
+    command === 'author_country_legal_value' ||
     command === 'update_legal_value_metadata' ||
     command === 'create_legal_value_version' ||
     command === 'update_owner_note' ||
     command === 'update_usage_hint'
   ) {
     return normalizeOwnerLegalCountryCode(payload.country_code);
+  }
+  if (command === 'pin_legal_value_version_authority') {
+    const id = optionalUuid(payload.legal_value_version_id);
+    if (!id) throw badRequest('legal_value_version_id is required');
+    const { data, error } = await supabaseAdmin
+      .from('country_legal_value_versions')
+      .select('id, legal_value_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw notFound('Legal value version not found');
+    return assertPayloadCountryAgrees(
+      await loadCountryFromRow('country_legal_values', String(data.legal_value_id), 'Legal value not found'),
+      payload,
+    );
+  }
+  if (command === 'unpin_legal_value_version_authority') {
+    const id = optionalUuid(payload.country_legal_value_version_authority_id);
+    if (!id) throw badRequest('country_legal_value_version_authority_id is required');
+    return assertPayloadCountryAgrees(
+      await loadCountryFromRow(
+        'country_legal_value_version_authorities',
+        id,
+        'Legal value version authority not found',
+      ),
+      payload,
+    );
   }
   if (command === 'update_legal_value_version' || command === 'activate_legal_value_version' || command === 'deactivate_legal_value_version') {
     const id = optionalUuid(payload.legal_value_version_id);

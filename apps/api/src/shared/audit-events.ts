@@ -190,6 +190,8 @@ export const AUDIT_ACTIONS = {
   LEGAL_VALUE_VERSION_UPDATED: 'legal_value_version_updated',
   LEGAL_VALUE_VERSION_ACTIVATED: 'legal_value_version_activated',
   LEGAL_VALUE_VERSION_DEACTIVATED: 'legal_value_version_deactivated',
+  LEGAL_VALUE_VERSION_AUTHORITY_PINNED: 'legal_value_version_authority_pinned',
+  LEGAL_VALUE_VERSION_AUTHORITY_UNPINNED: 'legal_value_version_authority_unpinned',
   TAX_SOURCE_CREATED: 'tax_source_created',
   TAX_RULE_CREATED: 'tax_rule_created',
   TAX_RULE_VERSION_CREATED: 'tax_rule_version_created',

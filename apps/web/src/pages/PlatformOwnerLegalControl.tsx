@@ -146,10 +146,6 @@ export function PlatformOwnerLegalControl() {
     () => normalizeActions(panel?.available_actions ? (panel.available_actions as UnknownRecord).country_pack_admin : []),
     [panel],
   );
-  const legalActions = useMemo(
-    () => normalizeActions(panel?.available_actions ? (panel.available_actions as UnknownRecord).legal_values : []),
-    [panel],
-  );
   const panelWarningsCombined = useMemo(() => ownerLegalControlWarningTexts(panel), [panel]);
   const taxKnowledge = useMemo(() => parseTaxKnowledgeAggregate(panel?.tax_knowledge), [panel]);
   const strategyEngine = useMemo(() => parseStrategyEngineAggregate(panel?.strategy_engine), [panel]);
@@ -172,14 +168,6 @@ export function PlatformOwnerLegalControl() {
       rulesets: Array.isArray(tables.rulesets) ? (tables.rulesets as UnknownRecord[]) : [],
     };
   }, [countryPacksAdmin]);
-
-  const legalRows = useMemo(() => {
-    const tax = panel?.legal_tax_values as UnknownRecord | undefined;
-    if (tax && Array.isArray(tax.table)) return tax.table as UnknownRecord[];
-    const table = legalValues?.table;
-    const rows = Array.isArray(table) ? (table as UnknownRecord[]) : [];
-    return rows.filter((r) => String(r.category ?? '') !== 'Operational Communication Policies');
-  }, [legalValues, panel]);
 
   const emptyRulesetCreateActions = useMemo(() => {
     if (countryPackTables.rulesets.length > 0) return [];
@@ -392,10 +380,16 @@ export function PlatformOwnerLegalControl() {
 
         {activeSection === 'legal-values' ? (
           <OwnerLegalValuesPanel
-            rows={legalRows}
-            actions={legalActions}
+            workspace={(legalValues?.workspace as UnknownRecord | undefined) ?? null}
+            taxKnowledge={taxKnowledge}
             busy={commandBusy}
-            onOpenCommand={openCommandModal}
+            onSelectCountry={(countryCode) => {
+              setPendingTaxKnowledgeCountry(countryCode);
+              setTaxKnowledgeCountryQuery(countryCode);
+            }}
+            onCommand={async (command, payload) => {
+              await sendOwnerCommand(command, payload);
+            }}
           />
         ) : null}
 

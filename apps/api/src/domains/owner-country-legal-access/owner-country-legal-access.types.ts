@@ -61,11 +61,14 @@ export const OWNER_COUNTRY_LEGAL_CAPABILITY_LABELS: Record<OwnerCountryLegalCapa
 
 export const OWNER_COUNTRY_LEGAL_VALUE_COMMANDS = [
   'create_legal_value',
+  'author_country_legal_value',
   'update_legal_value_metadata',
   'create_legal_value_version',
   'update_legal_value_version',
   'activate_legal_value_version',
   'deactivate_legal_value_version',
+  'pin_legal_value_version_authority',
+  'unpin_legal_value_version_authority',
   'update_owner_note',
   'update_usage_hint',
 ] as const;
