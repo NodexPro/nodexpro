@@ -128,10 +128,17 @@ async function loadLatestJob(documentId: string) {
 
 async function loadCandidate(candidateId: string) {
   const selectWithIds =
-    'id, job_id, document_id, country_code, tax_source_id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, parent_candidate_id, parent_tax_legal_node_id, accepted_tax_legal_node_id, structure_run_id';
+    'id, job_id, document_id, country_code, tax_source_id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, parent_candidate_id, parent_tax_legal_node_id, accepted_tax_legal_node_id, structure_run_id';
   const selectLegacy =
     'id, job_id, document_id, country_code, tax_source_id, candidate_kind, candidate_status, kind_label, node_number, title, parent_candidate_id, parent_tax_legal_node_id, accepted_tax_legal_node_id';
   let result = await supabaseAdmin.from('legal_ingestion_candidates').select(selectWithIds).eq('id', candidateId).maybeSingle();
+  if (result.error && isSupabaseMissingColumnError(result.error, 'printed_marker')) {
+    result = await supabaseAdmin
+      .from('legal_ingestion_candidates')
+      .select(selectWithIds.replace(', printed_marker', ''))
+      .eq('id', candidateId)
+      .maybeSingle();
+  }
   if (result.error && isSupabaseMissingColumnError(result.error, 'source_display_identifier')) {
     result = await supabaseAdmin.from('legal_ingestion_candidates').select(selectLegacy).eq('id', candidateId).maybeSingle();
   }
@@ -533,6 +540,7 @@ async function handleUpdateCandidate(
       patch.identifier_base_number = null;
       patch.identifier_letter_suffix = null;
       patch.identifier_nested_components = [];
+      if (payload.printed_marker === undefined) patch.printed_marker = null;
     } else {
       const parsed = parseLegalIdentifier(raw);
       if (!parsed) throw badRequest('source_display_identifier is not a valid exact legal identifier');
@@ -541,7 +549,14 @@ async function handleUpdateCandidate(
       patch.identifier_base_number = parsed.base_number;
       patch.identifier_letter_suffix = parsed.letter_suffix;
       patch.identifier_nested_components = parsed.nested_components;
+      if (payload.printed_marker === undefined) patch.printed_marker = parsed.printed_marker;
     }
+  }
+  if (payload.printed_marker !== undefined) {
+    patch.printed_marker =
+      typeof payload.printed_marker === 'string' && payload.printed_marker.trim()
+        ? payload.printed_marker.trim()
+        : null;
   }
   if (payload.title !== undefined) {
     patch.title = typeof payload.title === 'string' && payload.title.trim() ? payload.title.trim() : null;
@@ -556,7 +571,12 @@ async function handleUpdateCandidate(
   if (patch.parent_candidate_id && patch.parent_candidate_id === candidate.id) {
     throw badRequest('Candidate cannot be its own parent');
   }
-  const { error } = await supabaseAdmin.from('legal_ingestion_candidates').update(patch).eq('id', candidate.id);
+  let { error } = await supabaseAdmin.from('legal_ingestion_candidates').update(patch).eq('id', candidate.id);
+  if (error && isSupabaseMissingColumnError(error, 'printed_marker') && 'printed_marker' in patch) {
+    const { printed_marker: _printed, ...withoutPrinted } = patch;
+    void _printed;
+    ({ error } = await supabaseAdmin.from('legal_ingestion_candidates').update(withoutPrinted).eq('id', candidate.id));
+  }
   if (error) throw error;
   await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_CANDIDATE_EDITED, 'legal_ingestion_candidate', String(candidate.id), {
     country_code: candidate.country_code,
@@ -618,6 +638,7 @@ async function handleAcceptCandidate(
     identifier_nested_components: Array.isArray(candidate.identifier_nested_components)
       ? candidate.identifier_nested_components
       : [],
+    printed_marker: candidate.printed_marker == null ? null : String(candidate.printed_marker),
   });
   await executeTaxKnowledgeCommand(ctx, 'create_tax_legal_node', {
     tax_source_id: candidate.tax_source_id,

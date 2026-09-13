@@ -4,6 +4,7 @@ export type LegalIdentifier = {
   nested_components: string[];
   source_display_identifier: string;
   normalized_machine_identifier: string;
+  printed_marker: string | null;
 };
 
 export type LegalIdentifierFields = {
@@ -12,6 +13,7 @@ export type LegalIdentifierFields = {
   identifier_base_number: string | null;
   identifier_letter_suffix: string | null;
   identifier_nested_components: string[];
+  printed_marker: string | null;
 };
 
 export type CanonicalLegalIdentity = {
@@ -51,6 +53,36 @@ export function parseNestedComponentValues(raw: unknown): string[] {
   return out;
 }
 
+export function normalizePrintedMarker(raw: string | null | undefined): string | null {
+  const value = raw?.trim() || null;
+  return value || null;
+}
+
+export function derivePrintedMarker(identifier: Pick<
+  LegalIdentifier,
+  'base_number' | 'letter_suffix' | 'nested_components' | 'source_display_identifier'
+>): string | null {
+  if (identifier.nested_components.length) {
+    return `(${identifier.nested_components[identifier.nested_components.length - 1]})`;
+  }
+  if (identifier.letter_suffix) {
+    return `${identifier.base_number}${identifier.letter_suffix}`;
+  }
+  const compact = identifier.source_display_identifier.replace(/\s+/g, '');
+  if (/^\d{1,4}[א-ת]?\.$/u.test(compact)) return compact;
+  return null;
+}
+
+function withDerivedPrintedMarker(
+  identifier: Omit<LegalIdentifier, 'printed_marker'>,
+  printedMarker?: string | null,
+): LegalIdentifier {
+  return {
+    ...identifier,
+    printed_marker: normalizePrintedMarker(printedMarker) ?? derivePrintedMarker(identifier),
+  };
+}
+
 export function parseLegalIdentifier(raw: string): LegalIdentifier | null {
   const source = raw.trim();
   if (!source) return null;
@@ -66,22 +98,22 @@ export function parseLegalIdentifier(raw: string): LegalIdentifier | null {
       if (!part[1]) return null;
       nested.push(part[1]);
     }
-    return {
+    return withDerivedPrintedMarker({
       base_number: baseNumber,
       letter_suffix: letterSuffix,
       nested_components: nested,
       source_display_identifier: source,
       normalized_machine_identifier: reconstructLegalMachineIdentifier(baseNumber, letterSuffix, nested),
-    };
+    });
   }
   if (/[()]/.test(compact)) return null;
-  return {
+  return withDerivedPrintedMarker({
     base_number: compact,
     letter_suffix: null,
     nested_components: [],
     source_display_identifier: source,
     normalized_machine_identifier: compact,
-  };
+  });
 }
 
 export function legalIdentifierFromFields(fields: {
@@ -90,12 +122,16 @@ export function legalIdentifierFromFields(fields: {
   identifier_base_number?: string | null;
   identifier_letter_suffix?: string | null;
   identifier_nested_components?: unknown;
+  printed_marker?: string | null;
 }): LegalIdentifier | null {
   const source = fields.source_display_identifier?.trim() || null;
   const machine = fields.normalized_machine_identifier?.trim() || null;
   const base = fields.identifier_base_number?.trim() || null;
   const letter = fields.identifier_letter_suffix?.trim() || null;
   const nested = parseNestedComponentValues(fields.identifier_nested_components);
+  const storedPrinted = Object.prototype.hasOwnProperty.call(fields, 'printed_marker')
+    ? normalizePrintedMarker(fields.printed_marker)
+    : undefined;
   if (source && machine && base) {
     return {
       base_number: base,
@@ -103,9 +139,15 @@ export function legalIdentifierFromFields(fields: {
       nested_components: nested,
       source_display_identifier: source,
       normalized_machine_identifier: machine,
+      printed_marker: storedPrinted === undefined ? null : storedPrinted,
     };
   }
-  if (source) return parseLegalIdentifier(source);
+  if (source) {
+    const parsed = parseLegalIdentifier(source);
+    if (!parsed) return null;
+    if (storedPrinted !== undefined) return { ...parsed, printed_marker: storedPrinted };
+    return parsed;
+  }
   return null;
 }
 
@@ -117,6 +159,7 @@ export function legalIdentifierFields(parsed: LegalIdentifier | null): LegalIden
       identifier_base_number: null,
       identifier_letter_suffix: null,
       identifier_nested_components: [],
+      printed_marker: null,
     };
   }
   return {
@@ -125,6 +168,7 @@ export function legalIdentifierFields(parsed: LegalIdentifier | null): LegalIden
     identifier_base_number: parsed.base_number,
     identifier_letter_suffix: parsed.letter_suffix,
     identifier_nested_components: parsed.nested_components,
+    printed_marker: parsed.printed_marker,
   };
 }
 

@@ -126,6 +126,7 @@ export type StructureCandidateDraft = {
   identifier_base_number?: string | null;
   identifier_letter_suffix?: string | null;
   identifier_nested_components?: string[];
+  printed_marker?: string | null;
   title: string | null;
   parent_index: number | null;
   page_start: number;
@@ -202,6 +203,7 @@ export type KnowledgeTrainerCandidateDto = {
   identifier_base_number?: string | null;
   identifier_letter_suffix?: string | null;
   identifier_nested_components?: string[];
+  printed_marker?: string | null;
   display_identifier: string | null;
   display_label: string;
   parent_display_identifier: string | null;

@@ -9,6 +9,8 @@ import {
   legalStructureItemPreview,
 } from './owner-legal-library-form';
 import { OwnerKnowledgeTrainerPanel } from './owner-knowledge-trainer-panel';
+import { legalIdentifierPresentation } from '../lib/legal-identifier-presentation';
+import { LegalIdentifierText } from '../lib/legal-identifier-text';
 import type {
   OwnerLegalLibraryNode,
   OwnerLegalLibrarySource,
@@ -89,8 +91,10 @@ function LegalNodeTree({
           <div key={node.id}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 180 }}>
-                <div dir="auto" style={{ fontWeight: 600, fontSize: 14 }}>
-                  {node.display_title || node.title}
+                <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                  <span dir="auto">{node.kind_label}</span>
+                  <LegalIdentifierText value={node.display_identifier || node.source_display_identifier} empty="" />
+                  {node.title ? <span dir="auto">— {node.title}</span> : null}
                 </div>
                 <div style={{ fontSize: 12, color: '#6b7280' }}>{node.status}</div>
                 <TechnicalDetails
@@ -289,6 +293,7 @@ export function OwnerLegalLibraryPanel({
   const [sourceDomainId, setSourceDomainId] = useState('');
   const [nodeTitle, setNodeTitle] = useState('');
   const [nodeNumber, setNodeNumber] = useState('');
+  const [printedMarker, setPrintedMarker] = useState('');
   const [nodeKindId, setNodeKindId] = useState('');
   const [nodeSourceId, setNodeSourceId] = useState('');
   const [nodeParentId, setNodeParentId] = useState('');
@@ -326,6 +331,7 @@ export function OwnerLegalLibraryPanel({
     setNodeParentId(parent?.id ?? '');
     setNodeTitle('');
     setNodeNumber('');
+    setPrintedMarker('');
     setNodeKindId(nodeKinds[0]?.id ?? '');
     setDialogKind('create_tax_legal_node');
   };
@@ -353,6 +359,7 @@ export function OwnerLegalLibraryPanel({
     setEditNodeId(node.id);
     setNodeTitle(node.title);
     setNodeNumber(node.source_display_identifier ?? node.display_identifier ?? '');
+    setPrintedMarker(node.printed_marker ?? '');
     setDialogKind('update_tax_legal_node_metadata');
   };
 
@@ -384,6 +391,7 @@ export function OwnerLegalLibraryPanel({
         };
         if (nodeParentId) payload.parent_node_id = nodeParentId;
         if (nodeNumber.trim()) payload.source_display_identifier = nodeNumber.trim();
+        if (printedMarker.trim()) payload.printed_marker = printedMarker.trim();
         await onCommand('create_tax_legal_node', payload);
       } else if (dialogKind === 'create_tax_rule') {
         await onCommand('create_tax_rule', {
@@ -403,6 +411,7 @@ export function OwnerLegalLibraryPanel({
       } else if (dialogKind === 'update_tax_legal_node_metadata') {
         const payload: UnknownRecord = { tax_legal_node_id: editNodeId, title: nodeTitle.trim() };
         payload.source_display_identifier = nodeNumber.trim() || null;
+        payload.printed_marker = printedMarker.trim() || null;
         await onCommand('update_tax_legal_node_metadata', payload);
       }
       closeDialog();
@@ -687,7 +696,24 @@ export function OwnerLegalLibraryPanel({
                     ) : null}
                     <label className="nx-field">
                       <span className="nx-field-label">Legal identifier</span>
-                      <input className="nx-input" value={nodeNumber} onChange={(e) => setNodeNumber(e.target.value)} dir="auto" />
+                      <input
+                        className="nx-input"
+                        value={nodeNumber}
+                        onChange={(e) => setNodeNumber(e.target.value)}
+                        dir={legalIdentifierPresentation(nodeNumber || '1').dir}
+                        style={{ unicodeBidi: 'isolate' }}
+                      />
+                    </label>
+                    <label className="nx-field">
+                      <span className="nx-field-label">Printed marker</span>
+                      <input
+                        className="nx-input"
+                        value={printedMarker}
+                        onChange={(e) => setPrintedMarker(e.target.value)}
+                        dir={legalIdentifierPresentation(printedMarker || '(1)').dir}
+                        style={{ unicodeBidi: 'isolate' }}
+                        placeholder="Optional. Derived from the legal identifier when omitted."
+                      />
                     </label>
                     <label className="nx-field">
                       <span className="nx-field-label">Official title</span>

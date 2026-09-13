@@ -254,6 +254,7 @@ export type OwnerLegalLibraryNode = {
   identifier_base_number: string | null;
   identifier_letter_suffix: string | null;
   identifier_nested_components: string[];
+  printed_marker: string | null;
   display_identifier: string | null;
   title: string;
   display_title: string;
@@ -364,6 +365,7 @@ export type OwnerKnowledgeTrainerCandidate = {
   identifier_base_number: string | null;
   identifier_letter_suffix: string | null;
   identifier_nested_components: string[];
+  printed_marker: string | null;
   display_identifier: string | null;
   display_label: string;
   parent_display_identifier: string | null;

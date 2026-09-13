@@ -50,9 +50,12 @@ test('Knowledge Trainer V1 UI is additive and does not hide manual structure aut
   assert.match(trainer, /aria-labelledby="trainer-expand-review-title"/);
   assert.doesNotMatch(trainer, /Accept all|Bulk accept|accept_all|auto.accept|auto_activate/i);
   assert.match(trainer, /Legal identifier/);
+  assert.match(trainer, /Printed marker/);
+  assert.match(trainer, /LegalIdentifierText/);
   assert.match(trainer, /source_display_identifier/);
   assert.match(trainer, /display_label/);
   assert.doesNotMatch(trainer, /parseLegalIdentifier/);
+  assert.doesNotMatch(trainer, /\.reverse\(/);
   assert.doesNotMatch(trainer, /node_number \|\| ''\} \{row\.title/);
 });
 

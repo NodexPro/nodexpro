@@ -4,9 +4,11 @@ import { detectStructureCandidatesFromLayout } from '../../src/domains/knowledge
 import {
   composeChildIdentifier,
   extractNestedStructureMarker,
+  extractParenthesizedMarkersFromTokens,
   extractTrailingStructuralMarkers,
   kindLabelForNestedDepth,
   lineLooksLikeNestedCitationNoise,
+  recomposeParenthesizedInner,
   resolveNestedParent,
 } from '../../src/domains/knowledge-trainer/knowledge-trainer-nested.pure.js';
 
@@ -122,4 +124,70 @@ test('catalog owns nested kinds; frontend-like hardcoding is not required', () =
   assert.equal(kindLabelForNestedDepth(2, catalog), 'פסקה');
   assert.equal(kindLabelForNestedDepth(3, catalog), 'תת-פסקה');
   assert.equal(kindLabelForNestedDepth(2, catalog.slice(0, 4)), 'סעיף קטן');
+  assert.equal(
+    kindLabelForNestedDepth(3, [...catalog, { id: '7', label: 'פסקת משנה' }]),
+    'פסקת משנה',
+  );
+});
+
+test('split tokens ( 1 ט ) recompose to ט1 and stay distinct from (ט)(1)', () => {
+  assert.equal(recomposeParenthesizedInner('1 ט'), 'ט1');
+  assert.equal(recomposeParenthesizedInner('ט 1'), 'ט1');
+  assert.equal(extractNestedStructureMarker('( 1 ט )')?.component, 'ט1');
+  assert.deepEqual(
+    extractTrailingStructuralMarkers('הכנסה לפי סעיף קטן זה ( 1 ט )').map((row) => row.component),
+    [],
+  );
+  assert.deepEqual(extractTrailingStructuralMarkers('הכנסה חייבת במס ( 1 ט )').map((row) => row.component), ['ט1']);
+  assert.deepEqual(extractTrailingStructuralMarkers('הכנסה חייבת במס ( ט ) ( 1 )').map((row) => row.component), [
+    '1',
+    'ט',
+  ]);
+  const mixed = extractParenthesizedMarkersFromTokens([
+    { s: '(', x: 10, y: 200, w: 4, h: 12 },
+    { s: '1', x: 16, y: 200, w: 6, h: 12 },
+    { s: 'ט', x: 24, y: 200, w: 8, h: 12 },
+    { s: ')', x: 34, y: 200, w: 4, h: 12 },
+  ]);
+  assert.deepEqual(mixed, [{ component: 'ט1', printed_marker: '(ט1)' }]);
+  const separate = extractParenthesizedMarkersFromTokens([
+    { s: '(', x: 10, y: 200, w: 4, h: 12 },
+    { s: 'ט', x: 16, y: 200, w: 8, h: 12 },
+    { s: ')', x: 26, y: 200, w: 4, h: 12 },
+    { s: '(', x: 40, y: 200, w: 4, h: 12 },
+    { s: '1', x: 46, y: 200, w: 6, h: 12 },
+    { s: ')', x: 54, y: 200, w: 4, h: 12 },
+  ]);
+  assert.deepEqual(separate, [
+    { component: 'ט', printed_marker: '(ט)' },
+    { component: '1', printed_marker: '(1)' },
+  ]);
+  assert.equal(composeChildIdentifier('3', 'ט1')?.source_display_identifier, '3(ט1)');
+  assert.equal(composeChildIdentifier('3(ט)', '1')?.source_display_identifier, '3(ט)(1)');
+  assert.notEqual(
+    composeChildIdentifier('3', 'ט1')?.normalized_machine_identifier,
+    composeChildIdentifier('3(ט)', '1')?.normalized_machine_identifier,
+  );
+});
+
+test('layout detector reconstructs 3(ט1) from split mixed tokens', () => {
+  const detected = detectStructureCandidatesFromLayout(
+    [
+      page([
+        item('3.', 720, { eol: true }),
+        item('הכנסה', 700, { eol: true }),
+        item('הכנסה חייבת במס ( 1 ט )', 680, { x: 40, eol: true }),
+        item('(ט)', 640, { x: 40, eol: true }),
+        item('(1)', 620, { x: 80, eol: true }),
+      ]),
+    ],
+    catalog,
+  );
+  const byId = new Map(detected.drafts.map((row) => [row.source_display_identifier ?? '', row]));
+  assert.equal(byId.get('3(ט1)')?.printed_marker, '(ט1)');
+  assert.equal(byId.get('3(ט)')?.printed_marker, '(ט)');
+  assert.equal(byId.get('3(ט)(1)')?.printed_marker, '(1)');
+  assert.ok(byId.get('3(ט1)'));
+  assert.ok(byId.get('3(ט)(1)'));
+  assert.notEqual(byId.get('3(ט1)')?.normalized_machine_identifier, byId.get('3(ט)(1)')?.normalized_machine_identifier);
 });

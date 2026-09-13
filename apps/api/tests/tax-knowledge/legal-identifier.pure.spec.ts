@@ -104,6 +104,7 @@ test('accept payload copies identifier fields without inventing values', () => {
     identifier_base_number: '4',
     identifier_letter_suffix: 'א',
     identifier_nested_components: ['א', '1'],
+    printed_marker: '(1)',
   });
   assert.deepEqual(identifierPayloadForCanonicalCreate({
     source_display_identifier: null,
@@ -111,12 +112,14 @@ test('accept payload copies identifier fields without inventing values', () => {
     identifier_base_number: null,
     identifier_letter_suffix: null,
     identifier_nested_components: [],
+    printed_marker: null,
   }), {
     source_display_identifier: null,
     normalized_machine_identifier: null,
     identifier_base_number: null,
     identifier_letter_suffix: null,
     identifier_nested_components: [],
+    printed_marker: null,
   });
 });
 
@@ -134,4 +137,47 @@ test('legacy display falls back to node_number without inventing nested citation
   assert.equal(displayLegalIdentifier(null, null), null);
   assert.equal(parseLegalIdentifier(''), null);
   assert.equal(parseLegalIdentifier('(1)'), null);
+});
+
+test('printed_marker is stored separately from the full identifier and is not identity', () => {
+  const seifKatan = parseLegalIdentifier('1(א)');
+  const paragraph = parseLegalIdentifier('1(א)(1)');
+  const letterSeif = parseLegalIdentifier('4א');
+  const tetOne = parseLegalIdentifier('3(ט1)');
+  const tetThenOne = parseLegalIdentifier('3(ט)(1)');
+  assert.equal(seifKatan?.printed_marker, '(א)');
+  assert.equal(seifKatan?.source_display_identifier, '1(א)');
+  assert.equal(paragraph?.printed_marker, '(1)');
+  assert.equal(letterSeif?.printed_marker, '4א');
+  assert.equal(tetOne?.printed_marker, '(ט1)');
+  assert.equal(tetThenOne?.printed_marker, '(1)');
+  assert.notEqual(tetOne?.normalized_machine_identifier, tetThenOne?.normalized_machine_identifier);
+  const left = {
+    country_code: 'IL',
+    tax_source_id: 'src',
+    parent_id: 'p',
+    kind_id: 'k',
+    normalized_machine_identifier: '1(א)',
+  };
+  assert.equal(sameCanonicalLegalIdentity(left, { ...left }), true);
+  assert.equal(
+    sameStagingLegalIdentity(
+      { job_id: 'job', parent_id: 'p', kind_label: 'סעיף קטן', normalized_machine_identifier: '1(א)' },
+      { job_id: 'job', parent_id: 'p', kind_label: 'סעיף קטן', normalized_machine_identifier: '1(א)' },
+    ),
+    true,
+  );
+});
+
+test('legacy null printed_marker remains valid on stored identifier fields', () => {
+  const stored = identifierPayloadForCanonicalCreate({
+    source_display_identifier: '1(א)',
+    normalized_machine_identifier: '1(א)',
+    identifier_base_number: '1',
+    identifier_letter_suffix: null,
+    identifier_nested_components: ['א'],
+    printed_marker: null,
+  });
+  assert.equal(stored.printed_marker, null);
+  assert.equal(stored.source_display_identifier, '1(א)');
 });

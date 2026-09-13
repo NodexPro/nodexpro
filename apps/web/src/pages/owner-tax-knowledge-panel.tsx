@@ -423,6 +423,7 @@ function parseLibraryNodes(raw: unknown): OwnerLegalLibraryNode[] {
       identifier_nested_components: Array.isArray(row.identifier_nested_components)
         ? row.identifier_nested_components.map((item) => String(item))
         : [],
+      printed_marker: asNullableString(row.printed_marker),
       display_identifier: asNullableString(row.display_identifier) || asNullableString(row.source_display_identifier),
       title: asString(row.title),
       display_title: asString(row.display_title) || asString(row.title),
@@ -728,6 +729,7 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
                     identifier_nested_components: Array.isArray(row.identifier_nested_components)
                       ? row.identifier_nested_components.map((item) => String(item))
                       : [],
+                    printed_marker: asNullableString(row.printed_marker),
                     display_identifier: asNullableString(row.display_identifier),
                     display_label: asString(row.display_label),
                     parent_display_identifier: asNullableString(row.parent_display_identifier),

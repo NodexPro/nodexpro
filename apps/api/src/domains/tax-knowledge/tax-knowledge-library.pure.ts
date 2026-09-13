@@ -35,6 +35,7 @@ export type LegalLibraryNodeRow = {
   identifier_base_number?: string | null;
   identifier_letter_suffix?: string | null;
   identifier_nested_components?: string[];
+  printed_marker?: string | null;
   title: string;
   sort_order: number;
   status: string;

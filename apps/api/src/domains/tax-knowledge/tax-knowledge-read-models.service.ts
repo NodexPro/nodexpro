@@ -469,6 +469,7 @@ function libraryCatalogActions(): OwnerTaxKnowledgeAllowedAction[] {
       parent_node_id: 'optional uuid',
       node_number: 'optional string',
       source_display_identifier: 'optional exact legal identifier',
+      printed_marker: 'optional printed local marker',
       owner_note: 'optional string',
     }),
     action('create_tax_rule', true, {
@@ -516,6 +517,7 @@ function librarySourceAllowedActions(status: string): OwnerTaxKnowledgeAllowedAc
       parent_node_id: 'optional uuid',
       node_number: 'optional string',
       source_display_identifier: 'optional exact legal identifier',
+      printed_marker: 'optional printed local marker',
     }),
   ];
 }
@@ -527,6 +529,7 @@ function libraryNodeAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
       title: 'optional string',
       node_number: 'optional string',
       source_display_identifier: 'optional exact legal identifier',
+      printed_marker: 'optional printed local marker',
       owner_note: 'optional string',
     }),
     action('create_tax_legal_node', true, {
@@ -536,6 +539,7 @@ function libraryNodeAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
       title: 'string',
       node_number: 'optional string',
       source_display_identifier: 'optional exact legal identifier',
+      printed_marker: 'optional printed local marker',
     }),
     action('create_tax_rule', true, {
       country_code: 'ISO 3166-1 alpha-2',
@@ -577,6 +581,7 @@ function mapLibraryNode(
     identifier_base_number: nested.identifier_base_number ?? null,
     identifier_letter_suffix: nested.identifier_letter_suffix ?? null,
     identifier_nested_components: nested.identifier_nested_components ?? [],
+    printed_marker: nested.printed_marker ?? null,
     display_identifier: nested.source_display_identifier ?? nested.node_number,
     title: nested.title,
     display_title: legalNodeDisplayTitle(
@@ -1077,7 +1082,7 @@ async function loadLegalLibrarySlice(
     supabaseAdmin
       .from('tax_legal_nodes')
       .select(
-        'id, country_code, tax_source_id, parent_node_id, tax_legal_node_kind_id, node_code, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, status, owner_note, sort_order, created_at, updated_at',
+        'id, country_code, tax_source_id, parent_node_id, tax_legal_node_kind_id, node_code, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, status, owner_note, sort_order, created_at, updated_at',
       )
       .eq('country_code', countryCode)
       .order('sort_order', { ascending: true }),
@@ -1102,7 +1107,15 @@ async function loadLegalLibrarySlice(
     return emptyLegalLibrarySlice(false);
   }
   const nodeResult =
-    nodeQuery.error && isSupabaseMissingColumnError(nodeQuery.error, 'source_display_identifier')
+    nodeQuery.error && isSupabaseMissingColumnError(nodeQuery.error, 'printed_marker')
+      ? await supabaseAdmin
+          .from('tax_legal_nodes')
+          .select(
+            'id, country_code, tax_source_id, parent_node_id, tax_legal_node_kind_id, node_code, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, status, owner_note, sort_order, created_at, updated_at',
+          )
+          .eq('country_code', countryCode)
+          .order('sort_order', { ascending: true })
+      : nodeQuery.error && isSupabaseMissingColumnError(nodeQuery.error, 'source_display_identifier')
       ? await supabaseAdmin
           .from('tax_legal_nodes')
           .select(
@@ -1157,6 +1170,7 @@ async function loadLegalLibrarySlice(
     identifier_nested_components: Array.isArray(row.identifier_nested_components)
       ? row.identifier_nested_components.map((item) => String(item))
       : [],
+    printed_marker: row.printed_marker == null ? null : String(row.printed_marker),
     title: String(row.title),
     sort_order: typeof row.sort_order === 'number' ? row.sort_order : Number(row.sort_order) || 0,
     status: String(row.status),

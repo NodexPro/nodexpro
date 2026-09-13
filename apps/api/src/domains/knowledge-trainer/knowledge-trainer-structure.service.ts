@@ -263,6 +263,7 @@ export async function persistStructureCandidatesForJob(
         identifier_base_number: draft.identifier_base_number ?? null,
         identifier_letter_suffix: draft.identifier_letter_suffix ?? null,
         identifier_nested_components: draft.identifier_nested_components ?? [],
+        printed_marker: draft.printed_marker ?? null,
         title: draft.title,
         parent_candidate_id: draft.parent_candidate_id,
         page_start: draft.page_start,
@@ -278,6 +279,15 @@ export async function persistStructureCandidatesForJob(
     let persisted = 0;
     for (const chunk of chunkInOrder(rows)) {
       let inserted = await supabaseAdmin.from('legal_ingestion_candidates').insert(chunk);
+      if (inserted.error && isSupabaseMissingColumnError(inserted.error, 'printed_marker')) {
+        inserted = await supabaseAdmin.from('legal_ingestion_candidates').insert(
+          chunk.map((row) => {
+            const { printed_marker: _printed, ...withoutPrinted } = row;
+            void _printed;
+            return withoutPrinted;
+          }),
+        );
+      }
       if (inserted.error && isSupabaseMissingColumnError(inserted.error, 'source_display_identifier')) {
         inserted = await supabaseAdmin.from('legal_ingestion_candidates').insert(
           chunk.map((row) => {

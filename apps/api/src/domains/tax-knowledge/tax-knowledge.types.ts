@@ -212,6 +212,7 @@ export type OwnerLegalLibraryNodeDto = {
   identifier_base_number: string | null;
   identifier_letter_suffix: string | null;
   identifier_nested_components: string[];
+  printed_marker: string | null;
   display_identifier: string | null;
   title: string;
   display_title: string;

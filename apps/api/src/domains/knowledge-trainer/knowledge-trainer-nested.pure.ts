@@ -13,8 +13,8 @@ type StoredTextItem = { s: string; y: number; fs: number };
 const HEBREW_LETTERS = 'אבגדהוזחטיכלמנסעפצקרשת';
 const NESTED_COMPONENT_RE = /^([0-9]{1,2}[א-ת]?|[א-ת]{1,2}[0-9]{0,2})$/u;
 const ISOLATED_MARKER_RE = /^\(\s*([^()]+)\s*\)$/u;
-const TRAILING_MARKER_RUN_RE = /((?:\s*\(\s*(?:[0-9]{1,2}[א-ת]?|[א-ת]{1,2}[0-9]{0,2})\s*\))+)\s*$/u;
-const PAREN_COMPONENT_RE = /\(\s*([0-9]{1,2}[א-ת]?|[א-ת]{1,2}[0-9]{0,2})\s*\)/gu;
+const TRAILING_MARKER_RUN_RE = /((?:\s*\(\s*[^()]+\s*\))+)\s*$/u;
+const PAREN_GROUP_RE = /\(\s*([^()]+)\s*\)/gu;
 
 export type NestedMarkerClass = 'number' | 'letter';
 
@@ -53,12 +53,122 @@ export function numberContinuesSequence(previous: string, incoming: string): boo
   return Number(incoming) > Number(previous);
 }
 
+export function recomposeParenthesizedInner(inner: string): string | null {
+  const pieces = inner
+    .trim()
+    .split(/\s+/)
+    .map((part) => part.replace(/\s+/g, ''))
+    .filter(Boolean);
+  if (!pieces.length) return null;
+  const hasHebrew = pieces.some((part) => /[א-ת]/u.test(part));
+  const hasDigit = pieces.some((part) => /[0-9]/.test(part));
+  let ordered = pieces;
+  if (hasHebrew && hasDigit) {
+    const firstHebrew = pieces.findIndex((part) => /[א-ת]/u.test(part));
+    const firstDigit = pieces.findIndex((part) => /[0-9]/.test(part));
+    if (firstDigit >= 0 && firstHebrew > firstDigit) ordered = pieces.slice().reverse();
+  } else if (hasHebrew && pieces.length > 1) {
+    ordered = pieces.slice().reverse();
+  }
+  const component = ordered.join('');
+  return isValidNestedComponent(component) ? component : null;
+}
+
+export function printedMarkerForNestedComponent(component: string): string {
+  return `(${component})`;
+}
+
 export function parseIsolatedNestedMarker(text: string): string | null {
-  const compact = text.replace(/\s+/g, '');
-  const match = compact.match(ISOLATED_MARKER_RE);
+  const match = text.trim().match(ISOLATED_MARKER_RE);
   if (!match) return null;
-  const inner = match[1];
-  return isValidNestedComponent(inner) ? inner : null;
+  return recomposeParenthesizedInner(match[1] ?? '');
+}
+
+function collectParenthesizedComponents(text: string): string[] {
+  const markers: string[] = [];
+  const finder = new RegExp(PAREN_GROUP_RE.source, 'gu');
+  let match: RegExpExecArray | null;
+  while ((match = finder.exec(text))) {
+    const component = recomposeParenthesizedInner(match[1] ?? '');
+    if (component) markers.push(component);
+  }
+  return markers;
+}
+
+export type LayoutParenToken = {
+  s: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+function sameMarkerLine(left: LayoutParenToken, right: LayoutParenToken): boolean {
+  const tol = Math.max(2, Math.max(left.h, right.h, 8) * 0.45);
+  return Math.abs(left.y - right.y) <= tol;
+}
+
+function isOpenParenToken(text: string): boolean {
+  return /^\(\s*[^)]*$/.test(text.trim());
+}
+
+function isCloseParenToken(text: string): boolean {
+  return /^[^(\[]*\)\s*$/.test(text.trim());
+}
+
+export function extractParenthesizedMarkersFromTokens(
+  items: LayoutParenToken[],
+): Array<{ component: string; printed_marker: string }> {
+  const lines: LayoutParenToken[][] = [];
+  const sorted = items.slice().sort((a, b) => b.y - a.y || a.x - b.x);
+  for (const item of sorted) {
+    const line = lines.find((row) => row.every((other) => sameMarkerLine(other, item)));
+    if (line) line.push(item);
+    else lines.push([item]);
+  }
+  const out: Array<{ component: string; printed_marker: string }> = [];
+  for (const line of lines) {
+    const ltr = line.slice().sort((a, b) => a.x - b.x);
+    let index = 0;
+    while (index < ltr.length) {
+      const current = ltr[index];
+      const selfGroups = collectParenthesizedComponents(current.s);
+      if (selfGroups.length && /\)/.test(current.s) && /\(/.test(current.s)) {
+        for (const component of selfGroups) {
+          out.push({ component, printed_marker: printedMarkerForNestedComponent(component) });
+        }
+        index += 1;
+        continue;
+      }
+      if (!isOpenParenToken(current.s)) {
+        index += 1;
+        continue;
+      }
+      let closeIndex = -1;
+      for (let look = index + 1; look < ltr.length; look += 1) {
+        if (isOpenParenToken(ltr[look].s) && !isCloseParenToken(ltr[look].s)) break;
+        if (isCloseParenToken(ltr[look].s)) {
+          closeIndex = look;
+          break;
+        }
+      }
+      if (closeIndex < 0) {
+        index += 1;
+        continue;
+      }
+      const innerText = [
+        current.s.replace(/^\(\s*/, ''),
+        ...ltr.slice(index + 1, closeIndex).map((item) => item.s),
+        ltr[closeIndex].s.replace(/\s*\)$/, ''),
+      ]
+        .join(' ')
+        .replace(/[()]/g, ' ');
+      const component = recomposeParenthesizedInner(innerText);
+      if (component) out.push({ component, printed_marker: printedMarkerForNestedComponent(component) });
+      index = closeIndex + 1;
+    }
+  }
+  return out;
 }
 
 export function lineLooksLikeNestedCitationNoise(text: string): boolean {
@@ -85,13 +195,7 @@ export function extractTrailingStructuralMarkers(text: string): NestedStructureM
 
   const tail = trimmed.match(TRAILING_MARKER_RUN_RE);
   if (!tail) return [];
-  const markers: string[] = [];
-  let match: RegExpExecArray | null;
-  const finder = new RegExp(PAREN_COMPONENT_RE.source, 'gu');
-  while ((match = finder.exec(tail[1]))) {
-    const component = match[1].replace(/\s+/g, '');
-    if (isValidNestedComponent(component)) markers.push(component);
-  }
+  const markers = collectParenthesizedComponents(tail[1]);
   if (!markers.length) return [];
   const body = trimmed.slice(0, trimmed.length - tail[1].length).replace(/[;:,.\-–—]+$/g, '').trim();
   if (/פסקאות/.test(body) && markers.length > 1) {
@@ -109,14 +213,7 @@ export function extractTrailingStructuralMarkers(text: string): NestedStructureM
 
 export function extractParenMarkersOnHeadingLine(text: string): string[] {
   if (/תיקון\s*מס/.test(text) || /\[\s*\(\s*\d+\s*\)/.test(text)) return [];
-  const markers: string[] = [];
-  const finder = new RegExp(PAREN_COMPONENT_RE.source, 'gu');
-  let match: RegExpExecArray | null;
-  while ((match = finder.exec(text))) {
-    const component = match[1].replace(/\s+/g, '');
-    if (isValidNestedComponent(component)) markers.push(component);
-  }
-  return markers;
+  return collectParenthesizedComponents(text);
 }
 
 export function extractNestedStructureMarker(text: string): NestedStructureMarker | null {
@@ -165,7 +262,10 @@ export function nestedKindLabelsFromCatalog(catalog: StructureKindCatalogItem[])
   return {
     depth1: labels.find((label) => label === 'סעיף קטן') ?? labels.find((label) => /קטן/.test(label)) ?? null,
     depth2: labels.find((label) => label === 'פסקה') ?? null,
-    depth3: labels.find((label) => label === 'תת-פסקה' || label === 'תת פסקה') ?? null,
+    depth3:
+      labels.find((label) => label === 'פסקת משנה') ??
+      labels.find((label) => label === 'תת-פסקה' || label === 'תת פסקה') ??
+      null,
   };
 }
 
@@ -228,8 +328,17 @@ export function composeChildIdentifier(parentDisplay: string, component: string)
 export function applyExactIdentifierToDraft(
   draft: StructureCandidateDraft,
   identifier: LegalIdentifier | null,
+  sourcePrintedMarker?: string | null,
 ): StructureCandidateDraft {
-  const fields = legalIdentifierFields(identifier);
+  const fields = legalIdentifierFields(
+    identifier
+      ? {
+          ...identifier,
+          printed_marker:
+            sourcePrintedMarker?.trim() || identifier.printed_marker,
+        }
+      : null,
+  );
   return {
     ...draft,
     source_display_identifier: fields.source_display_identifier,
@@ -237,6 +346,7 @@ export function applyExactIdentifierToDraft(
     identifier_base_number: fields.identifier_base_number,
     identifier_letter_suffix: fields.identifier_letter_suffix,
     identifier_nested_components: fields.identifier_nested_components,
+    printed_marker: fields.printed_marker,
   };
 }
 

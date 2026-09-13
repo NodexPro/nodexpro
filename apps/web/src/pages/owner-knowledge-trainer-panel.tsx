@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { userFacingApiMessage } from '../api/client';
+import { legalIdentifierPresentation } from '../lib/legal-identifier-presentation';
+import { LegalIdentifierText } from '../lib/legal-identifier-text';
 import { originalFileAccessNeedsRefresh, shouldPollKnowledgeTrainerProgress } from './owner-knowledge-trainer-progress';
 import type {
   OwnerKnowledgeTrainerCandidate,
@@ -231,6 +233,7 @@ function TrainerReview({
   const [editing, setEditing] = useState(false);
   const [kindLabel, setKindLabel] = useState('');
   const [nodeNumber, setNodeNumber] = useState('');
+  const [printedMarker, setPrintedMarker] = useState('');
   const [title, setTitle] = useState('');
   const [parentCandidateId, setParentCandidateId] = useState('');
   const [error, setError] = useState('');
@@ -277,6 +280,7 @@ function TrainerReview({
     if (!candidate) return;
     setKindLabel(candidate.kind_label ?? '');
     setNodeNumber(candidate.source_display_identifier ?? candidate.display_identifier ?? '');
+    setPrintedMarker(candidate.printed_marker ?? '');
     setTitle(candidate.title ?? '');
     setParentCandidateId(candidate.parent_candidate_id ?? '');
     setEditing(false);
@@ -334,6 +338,7 @@ function TrainerReview({
         legal_ingestion_candidate_id: candidate.id,
         kind_label: kindLabel,
         source_display_identifier: nodeNumber.trim() || null,
+        printed_marker: printedMarker.trim() || null,
         title,
         parent_candidate_id: parentCandidateId || null,
       });
@@ -510,11 +515,13 @@ function TrainerReview({
               editing={editing}
               kindLabel={kindLabel}
               nodeNumber={nodeNumber}
+              printedMarker={printedMarker}
               title={title}
               parentCandidateId={parentCandidateId}
               busy={busy}
               onKindLabel={setKindLabel}
               onNodeNumber={setNodeNumber}
+              onPrintedMarker={setPrintedMarker}
               onTitle={setTitle}
               onParent={setParentCandidateId}
               onEdit={() => setEditing(true)}
@@ -556,6 +563,7 @@ function TrainerReview({
               editing={editing}
               kindLabel={kindLabel}
               nodeNumber={nodeNumber}
+              printedMarker={printedMarker}
               title={title}
               parentCandidateId={parentCandidateId}
               busy={busy}
@@ -566,6 +574,7 @@ function TrainerReview({
               onSelect={setCandidateId}
               onKindLabel={setKindLabel}
               onNodeNumber={setNodeNumber}
+              onPrintedMarker={setPrintedMarker}
               onTitle={setTitle}
               onParent={setParentCandidateId}
               onEdit={() => setEditing(true)}
@@ -596,11 +605,13 @@ function CandidateEditor({
   editing,
   kindLabel,
   nodeNumber,
+  printedMarker,
   title,
   parentCandidateId,
   busy,
   onKindLabel,
   onNodeNumber,
+  onPrintedMarker,
   onTitle,
   onParent,
   onEdit,
@@ -615,11 +626,13 @@ function CandidateEditor({
   editing: boolean;
   kindLabel: string;
   nodeNumber: string;
+  printedMarker: string;
   title: string;
   parentCandidateId: string;
   busy: boolean;
   onKindLabel: (value: string) => void;
   onNodeNumber: (value: string) => void;
+  onPrintedMarker: (value: string) => void;
   onTitle: (value: string) => void;
   onParent: (value: string) => void;
   onEdit: () => void;
@@ -657,9 +670,29 @@ function CandidateEditor({
       <label>
         Legal identifier
         {editing ? (
-          <input className="nx-input" value={nodeNumber} onChange={(event) => onNodeNumber(event.target.value)} dir="auto" />
+          <input
+            className="nx-input"
+            value={nodeNumber}
+            onChange={(event) => onNodeNumber(event.target.value)}
+            dir={legalIdentifierPresentation(nodeNumber || '1').dir}
+            style={{ unicodeBidi: 'isolate' }}
+          />
         ) : (
-          <div dir="auto">{candidate.source_display_identifier || candidate.display_identifier || '—'}</div>
+          <LegalIdentifierText value={candidate.source_display_identifier || candidate.display_identifier} />
+        )}
+      </label>
+      <label>
+        Printed marker
+        {editing ? (
+          <input
+            className="nx-input"
+            value={printedMarker}
+            onChange={(event) => onPrintedMarker(event.target.value)}
+            dir={legalIdentifierPresentation(printedMarker || '(1)').dir}
+            style={{ unicodeBidi: 'isolate' }}
+          />
+        ) : (
+          <LegalIdentifierText value={candidate.printed_marker} />
         )}
       </label>
       <label>
@@ -683,6 +716,8 @@ function CandidateEditor({
                 </option>
               ))}
           </select>
+        ) : candidate.parent_display_identifier ? (
+          <LegalIdentifierText value={candidate.parent_display_identifier} />
         ) : (
           <div dir="auto">{candidate.parent_label || 'None'}</div>
         )}
@@ -841,6 +876,7 @@ function ExpandedReviewModal({
   editing,
   kindLabel,
   nodeNumber,
+  printedMarker,
   title,
   parentCandidateId,
   busy,
@@ -851,6 +887,7 @@ function ExpandedReviewModal({
   onSelect,
   onKindLabel,
   onNodeNumber,
+  onPrintedMarker,
   onTitle,
   onParent,
   onEdit,
@@ -873,6 +910,7 @@ function ExpandedReviewModal({
   editing: boolean;
   kindLabel: string;
   nodeNumber: string;
+  printedMarker: string;
   title: string;
   parentCandidateId: string;
   busy: boolean;
@@ -883,6 +921,7 @@ function ExpandedReviewModal({
   onSelect: (id: string) => void;
   onKindLabel: (value: string) => void;
   onNodeNumber: (value: string) => void;
+  onPrintedMarker: (value: string) => void;
   onTitle: (value: string) => void;
   onParent: (value: string) => void;
   onEdit: () => void;
@@ -952,11 +991,13 @@ function ExpandedReviewModal({
               editing={editing}
               kindLabel={kindLabel}
               nodeNumber={nodeNumber}
+              printedMarker={printedMarker}
               title={title}
               parentCandidateId={parentCandidateId}
               busy={busy}
               onKindLabel={onKindLabel}
               onNodeNumber={onNodeNumber}
+              onPrintedMarker={onPrintedMarker}
               onTitle={onTitle}
               onParent={onParent}
               onEdit={onEdit}
@@ -986,7 +1027,7 @@ function candidateMatchesFilter(candidate: OwnerKnowledgeTrainerCandidate, filte
 }
 
 function candidateSearchText(candidate: OwnerKnowledgeTrainerCandidate): string {
-  return [candidate.display_label, candidate.source_display_identifier, candidate.display_identifier, candidate.kind_label, candidate.title, candidate.hierarchy_path, candidate.parent_label]
+  return [candidate.display_label, candidate.source_display_identifier, candidate.display_identifier, candidate.printed_marker, candidate.kind_label, candidate.title, candidate.hierarchy_path, candidate.parent_label]
     .filter(Boolean)
     .join(' ')
     .toLowerCase();

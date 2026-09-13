@@ -4,6 +4,7 @@ import {
   composeChildIdentifier,
   extractNestedStructureMarker,
   extractParenMarkersOnHeadingLine,
+  extractParenthesizedMarkersFromTokens,
   extractTrailingStructuralMarkers,
   identifierForTopLevelDraft,
   isolatedItemIsStructuralMarker,
@@ -427,7 +428,12 @@ function collectNestedMarkersOnLine(
     if (title.length > 80) continue;
     return [{ component, title: title.slice(0, 60) || null, isolated: true }];
   }
-  return [];
+  const fromTokens = extractParenthesizedMarkersFromTokens(lineItems);
+  return fromTokens.map((marker) => ({
+    component: marker.component,
+    title: null,
+    isolated: fromTokens.length === 1,
+  }));
 }
 
 function titleFromNearbyHeadingLines(previousLines: Array<string | undefined>): string | null {
@@ -443,10 +449,10 @@ function matchCatalogOnLine(
   lineText: string,
   catalog: StructureKindCatalogItem[],
   previousLines: Array<string | undefined> = [],
-): Array<{ kind_label: string; node_number: string; title: string | null }> {
+): Array<{ kind_label: string; node_number: string; title: string | null; printed_marker: string | null }> {
   const labels = usableKindCatalog(catalog).map((item) => item.label.trim()).filter(Boolean);
   if (!labels.length) return [];
-  const out: Array<{ kind_label: string; node_number: string; title: string | null }> = [];
+  const out: Array<{ kind_label: string; node_number: string; title: string | null; printed_marker: string | null }> = [];
   const trimmed = lineText.trim();
   const containerKinds = labels
     .filter((label) => /^(חלק|פרק|סימן|תוספת)$/.test(label))
@@ -458,7 +464,7 @@ function matchCatalogOnLine(
     const container = trimmed.match(containerRe);
     if (container) {
       const title = container[3].trim().slice(0, 60) || null;
-      out.push({ kind_label: container[1], node_number: container[2], title });
+      out.push({ kind_label: container[1], node_number: container[2], title, printed_marker: container[2] });
     }
   }
   const seif = seifLabelFromCatalog(labels);
@@ -468,6 +474,7 @@ function matchCatalogOnLine(
       kind_label: seif,
       node_number: explicitSeif[1],
       title: explicitSeif[2].trim().slice(0, 60) || null,
+      printed_marker: /^סעיף\s+[0-9]{1,3}[א-ת]?\./.test(trimmed) ? `${explicitSeif[1]}.` : null,
     });
   }
   const ltrNumbered = trimmed.match(/^([0-9]{1,3}[א-ת]?)\.(?:\s+|$)(.*)$/);
@@ -476,6 +483,7 @@ function matchCatalogOnLine(
       kind_label: seif,
       node_number: ltrNumbered[1],
       title: ltrNumbered[2].trim().slice(0, 60) || titleFromNearbyHeadingLines(previousLines),
+      printed_marker: `${ltrNumbered[1]}.`,
     });
   }
   const lookbackTitle = titleFromCurrentRtlLine(trimmed) ?? titleFromNearbyHeadingLines(previousLines);
@@ -485,6 +493,7 @@ function matchCatalogOnLine(
       kind_label: seif,
       node_number: rtlNumber,
       title: lookbackTitle,
+      printed_marker: null,
     });
   }
   return out;
@@ -505,6 +514,7 @@ export function detectStructureCandidatesFromLayout(
     confidence: number;
     warnings: string[];
     component?: string;
+    printed_marker?: string | null;
   };
   const events: LayoutEvent[] = [];
   let tocRejected = 0;
@@ -536,6 +546,7 @@ export function detectStructureCandidatesFromLayout(
             confidence: 0.52,
             warnings: ['layout_needs_owner_review'],
             component: marker.component,
+            printed_marker: `(${marker.component})`,
           });
         });
         return;
@@ -554,6 +565,7 @@ export function detectStructureCandidatesFromLayout(
             offset,
             confidence: isolated ? 0.86 : 0.52,
             warnings: isolated ? [] : ['layout_needs_owner_review'],
+            printed_marker: hit.printed_marker,
           });
         }
         const headingMarkers = extractParenMarkersOnHeadingLine(line.text);
@@ -568,6 +580,7 @@ export function detectStructureCandidatesFromLayout(
             confidence: 0.72,
             warnings: ['layout_needs_owner_review'],
             component,
+            printed_marker: `(${component})`,
           });
         });
         return;
@@ -585,6 +598,7 @@ export function detectStructureCandidatesFromLayout(
           confidence: marker.isolated ? 0.8 : 0.58,
           warnings: marker.isolated ? [] : ['layout_needs_owner_review'],
           component: marker.component,
+          printed_marker: `(${marker.component})`,
         });
       });
     });
@@ -637,6 +651,7 @@ function buildLayoutDraftsFromEvents(
     confidence: number;
     warnings: string[];
     component?: string;
+    printed_marker?: string | null;
   }>,
   catalog: StructureKindCatalogItem[],
 ): StructureCandidateDraft[] {
@@ -667,6 +682,7 @@ function buildLayoutDraftsFromEvents(
         validation_warnings: warnings,
       },
       identifier,
+      event.printed_marker,
     );
     drafts.push(draft);
     return drafts.length - 1;

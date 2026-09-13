@@ -3,6 +3,7 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { assertOwnerLegalCommandAccess } from '../owner-country-legal-access/owner-country-legal-access.service.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
+import { isSupabaseMissingColumnError } from '../../shared/supabase-errors.js';
 import {
   parseActivationCritical,
   unresolvedRowsBlockActivation,
@@ -114,19 +115,25 @@ function throwIfTaxKnowledgeWriteError(
 }
 
 function resolveLegalIdentifierFromPayload(payload: Record<string, unknown>): LegalIdentifier | null {
+  const printed = Object.prototype.hasOwnProperty.call(payload, 'printed_marker')
+    ? asOptionalString(payload.printed_marker, 'printed_marker')
+    : undefined;
   const stored = legalIdentifierFromFields({
     source_display_identifier: asOptionalString(payload.source_display_identifier, 'source_display_identifier'),
     normalized_machine_identifier: asOptionalString(payload.normalized_machine_identifier, 'normalized_machine_identifier'),
     identifier_base_number: asOptionalString(payload.identifier_base_number, 'identifier_base_number'),
     identifier_letter_suffix: asOptionalString(payload.identifier_letter_suffix, 'identifier_letter_suffix'),
     identifier_nested_components: payload.identifier_nested_components,
+    ...(printed !== undefined ? { printed_marker: printed } : {}),
   });
-  if (stored) return stored;
+  if (stored) {
+    return printed !== undefined ? { ...stored, printed_marker: printed } : stored;
+  }
   const human = asOptionalString(payload.source_display_identifier, 'source_display_identifier');
   if (!human) return null;
   const parsed = parseLegalIdentifier(human);
   if (!parsed) throw badRequest('source_display_identifier is not a valid exact legal identifier');
-  return parsed;
+  return printed !== undefined ? { ...parsed, printed_marker: printed } : parsed;
 }
 
 function throwIfTaxRuleVersionLifecycleError(
@@ -234,7 +241,13 @@ async function insertWithGeneratedCode<T extends Record<string, unknown>>(
   );
   let lastError: { code?: string; message?: string } | null = null;
   for (const code of attempts) {
-    const { data, error } = await supabaseAdmin.from(table).insert(buildRow(code)).select(select).single();
+    const row = buildRow(code);
+    let { data, error } = await supabaseAdmin.from(table).insert(row).select(select).single();
+    if (error && isSupabaseMissingColumnError(error, 'printed_marker') && 'printed_marker' in row) {
+      const { printed_marker: _printed, ...withoutPrinted } = row;
+      void _printed;
+      ({ data, error } = await supabaseAdmin.from(table).insert(withoutPrinted).select(select).single());
+    }
     if (!error && data) return data as unknown as T;
     lastError = error;
     if (error && /legal_identity|normalized_machine_identifier/i.test(String(error.message ?? ''))) {
@@ -2006,9 +2019,20 @@ async function handleUpdateTaxLegalNodeMetadata(
     payload.normalized_machine_identifier !== undefined ||
     payload.identifier_base_number !== undefined ||
     payload.identifier_letter_suffix !== undefined ||
-    payload.identifier_nested_components !== undefined
+    payload.identifier_nested_components !== undefined ||
+    payload.printed_marker !== undefined
   ) {
-    Object.assign(patch, legalIdentifierFields(resolveLegalIdentifierFromPayload(payload)));
+    if (
+      payload.source_display_identifier !== undefined ||
+      payload.normalized_machine_identifier !== undefined ||
+      payload.identifier_base_number !== undefined ||
+      payload.identifier_letter_suffix !== undefined ||
+      payload.identifier_nested_components !== undefined
+    ) {
+      Object.assign(patch, legalIdentifierFields(resolveLegalIdentifierFromPayload(payload)));
+    } else {
+      patch.printed_marker = asOptionalString(payload.printed_marker, 'printed_marker');
+    }
   }
   if (payload.owner_note !== undefined) patch.owner_note = asOptionalString(payload.owner_note, 'owner_note');
   if (payload.sort_order !== undefined) patch.sort_order = asOptionalSortOrder(payload.sort_order) ?? 0;
@@ -2032,12 +2056,22 @@ async function handleUpdateTaxLegalNodeMetadata(
   if (!Object.keys(patch).length) {
     throw badRequest('update_tax_legal_node_metadata requires at least one metadata field');
   }
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from('tax_legal_nodes')
     .update(patch)
     .eq('id', nodeId)
     .select('id')
     .maybeSingle();
+  if (error && isSupabaseMissingColumnError(error, 'printed_marker') && 'printed_marker' in patch) {
+    const { printed_marker: _printed, ...withoutPrinted } = patch;
+    void _printed;
+    ({ data, error } = await supabaseAdmin
+      .from('tax_legal_nodes')
+      .update(withoutPrinted)
+      .eq('id', nodeId)
+      .select('id')
+      .maybeSingle());
+  }
   if (error) throw error;
   if (!data) throw notFound('Legal node not found');
 

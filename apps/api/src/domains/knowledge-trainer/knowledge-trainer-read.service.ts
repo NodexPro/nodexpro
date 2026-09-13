@@ -168,7 +168,7 @@ export async function buildKnowledgeTrainerSlice(
     const activeRunId =
       selectedJob.active_structure_run_id == null ? null : String(selectedJob.active_structure_run_id);
     const candidateSelect =
-      'id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order, structure_run_id';
+      'id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order, structure_run_id';
     const candidateSelectLegacy =
       'id, candidate_kind, candidate_status, kind_label, node_number, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order';
     const selectedJobId = String(selectedJob.id);
@@ -198,7 +198,9 @@ export async function buildKnowledgeTrainerSlice(
           return query;
         });
       } catch (error) {
-        if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'source_display_identifier')) {
+        if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'printed_marker')) {
+          candidates = await loadCandidatesBy(candidateSelect.replace(', printed_marker', ''));
+        } else if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'source_display_identifier')) {
           candidates = await loadCandidatesBy(candidateSelectLegacy);
         } else if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'structure_run_id')) {
           candidates = await loadCandidatesBy(candidateSelect.replace(', structure_run_id', ''));
@@ -300,6 +302,7 @@ export async function buildKnowledgeTrainerSlice(
           identifier_nested_components: Array.isArray(row.identifier_nested_components)
             ? row.identifier_nested_components.map((item) => String(item))
             : [],
+          printed_marker: row.printed_marker == null ? null : String(row.printed_marker),
           title: row.title == null ? null : String(row.title),
           parent_candidate_id: row.parent_candidate_id == null ? null : String(row.parent_candidate_id),
           parent_tax_legal_node_id: row.parent_tax_legal_node_id == null ? null : String(row.parent_tax_legal_node_id),
@@ -447,6 +450,7 @@ export async function buildKnowledgeTrainerSlice(
         kind_label: 'optional string',
         node_number: 'optional string',
         source_display_identifier: 'optional exact legal identifier',
+        printed_marker: 'optional printed local marker',
         title: 'optional string',
         parent_candidate_id: 'optional uuid',
         parent_tax_legal_node_id: 'optional uuid',

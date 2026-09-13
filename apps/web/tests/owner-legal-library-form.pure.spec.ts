@@ -28,6 +28,9 @@ test('Legal Library displays backend identifier and does not reconstruct parenth
   assert.doesNotMatch(panel, /parseLegalIdentifier/);
   assert.doesNotMatch(panel, /nodeNumber\.trim\(\) \+ ['"`]\(/);
   assert.doesNotMatch(panel, /identifier_nested_components/);
+  assert.match(panel, /Printed marker/);
+  assert.match(panel, /LegalIdentifierText/);
+  assert.doesNotMatch(panel, /\.reverse\(/);
 });
 
 test('Add Structure Item form uses backend kind catalog and a parent picker', () => {
@@ -57,6 +60,7 @@ test('flattenLegalLibraryNodes walks existing source nodes only', () => {
       identifier_base_number: null,
       identifier_letter_suffix: null,
       identifier_nested_components: [],
+      printed_marker: null,
       display_identifier: 'א',
       title: 'פרשנות',
       display_title: 'חלק א — פרשנות',
