@@ -1350,21 +1350,50 @@
   flex: 0 1 auto;
 }
 
+.nx-modal-overlay.nx-trainer-review-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  padding: 16px;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
+}
+
 .nx-modal.nx-trainer-review-modal {
-  width: min(96vw, 1600px);
-  max-height: 96vh;
+  position: relative;
+  width: calc(100vw - 32px);
+  height: calc(100vh - 32px);
+  max-width: none;
+  max-height: none;
   border-radius: 8px;
   direction: ltr;
+  overflow: hidden;
+}
+
+@media (min-width: 1100px) {
+  .nx-modal-overlay.nx-trainer-review-overlay {
+    padding: 24px;
+  }
+
+  .nx-modal.nx-trainer-review-modal {
+    width: calc(100vw - 48px);
+    height: calc(100vh - 48px);
+  }
 }
 
 .nx-trainer-review-modal .nx-modal-header {
   padding: 12px 16px;
 }
 
+.nx-trainer-review-modal .nx-modal-title-wrap-stacked {
+  align-items: flex-start;
+}
+
 .nx-trainer-review-modal-body {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.75fr);
+  grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr);
   gap: 16px;
   min-height: 0;
   overflow: hidden;
@@ -1387,7 +1416,8 @@
 .nx-trainer-review-pdf pre {
   flex: 1 1 auto;
   width: 100%;
-  min-height: calc(96vh - 160px);
+  min-height: 0;
+  height: 100%;
   border: 1px solid #e5e7eb;
   background: #f9fafb;
 }
@@ -1405,12 +1435,11 @@
 @media (max-width: 900px) {
   .nx-trainer-review-modal-body {
     grid-template-columns: 1fr;
-    overflow: auto;
+    overflow: hidden;
   }
 
-  .nx-trainer-review-pdf iframe,
-  .nx-trainer-review-pdf pre {
-    min-height: 50vh;
+  .nx-trainer-review-pdf {
+    min-height: 42vh;
   }
 }
 

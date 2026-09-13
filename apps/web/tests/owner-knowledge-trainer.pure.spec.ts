@@ -14,6 +14,7 @@ function readRepo(rel: string): string {
 test('Knowledge Trainer V1 UI is additive and does not hide manual structure authoring', () => {
   const library = readRepo('apps/web/src/pages/owner-legal-library-panel.tsx');
   const trainer = readRepo('apps/web/src/pages/owner-knowledge-trainer-panel.tsx');
+  const css = readRepo('apps/web/src/styles/nx-modal.css');
   assert.match(library, /Add Tax Domain/);
   assert.match(library, /Add Legal Source/);
   assert.match(library, /Add Structure Item/);
@@ -39,5 +40,13 @@ test('Knowledge Trainer V1 UI is additive and does not hide manual structure aut
   assert.match(trainer, /layout evidence status/);
   assert.match(trainer, /CandidatePicker/);
   assert.match(trainer, /ExpandedReviewModal/);
+  assert.match(trainer, /createPortal/);
+  assert.match(trainer, /nx-trainer-review-overlay/);
+  assert.match(trainer, /window\.document\.body\.style\.overflow = 'hidden'/);
+  assert.match(css, /position:\s*fixed/);
+  assert.match(css, /calc\(100vw - 32px\)/);
+  assert.match(css, /calc\(100vh - 32px\)/);
+  assert.doesNotMatch(css, /min-height:\s*calc\(96vh/);
+  assert.match(trainer, /aria-labelledby="trainer-expand-review-title"/);
   assert.doesNotMatch(trainer, /Accept all|Bulk accept|accept_all|auto.accept|auto_activate/i);
 });

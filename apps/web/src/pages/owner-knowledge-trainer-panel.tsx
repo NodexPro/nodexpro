@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { OWNER } from '../api/endpoints';
 import type {
   OwnerKnowledgeTrainerCandidate,
   OwnerKnowledgeTrainerSlice,
   OwnerLegalLibrarySource,
+  OwnerStructureReviewFilter,
   OwnerStructureReviewSummary,
   TaxKnowledgeAggregate,
   UnknownRecord,
@@ -285,11 +287,16 @@ function TrainerReview({
 
   useEffect(() => {
     if (!expanded) return;
+    const previousOverflow = window.document.body.style.overflow;
+    window.document.body.style.overflow = 'hidden';
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setExpanded(false);
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
   }, [expanded]);
 
   useEffect(() => {
@@ -396,21 +403,7 @@ function TrainerReview({
           </button>
         ) : null}
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {document.review_filters.map((filter) => (
-          <button
-            key={filter.key}
-            type="button"
-            className="nx-btn nx-btn-taxes-compact"
-            disabled={busy}
-            aria-pressed={filterKey === filter.key}
-            onClick={() => setFilterKey(filter.key)}
-            style={filterKey === filter.key ? { outline: '2px solid #2563eb' } : undefined}
-          >
-            {filter.label || REVIEW_FILTER_LABELS[filter.key]} ({filter.count})
-          </button>
-        ))}
-      </div>
+      <ReviewFilters filters={document.review_filters} filterKey={filterKey} busy={busy} onFilter={setFilterKey} />
       <label>
         Search by סעיף number or title
         <input
@@ -522,51 +515,54 @@ function TrainerReview({
           {error ? <div style={{ color: '#b91c1c', fontSize: 13, marginTop: 8 }}>{error}</div> : null}
         </div>
       </div>
-      {expanded && candidate ? (
-        <ExpandedReviewModal
-          documentTitle={document.original_filename}
-          layoutPage={
-            document.layout_readiness?.pages.find((page) => page.page_no === candidate.page_start) ?? null
-          }
-          filterLabel={
-            document.review_filters.find((row) => row.key === filterKey)?.label ||
-            REVIEW_FILTER_LABELS[filterKey] ||
-            filterKey
-          }
-          search={search}
-          pdfSrc={pdfSrc}
-          fallbackText={document.selected_page?.text || 'No extracted text for this page.'}
-          visibleCandidates={visibleCandidates}
-          candidate={candidate}
-          allCandidates={document.candidates}
-          kinds={taxKnowledge.legal_library.node_kinds.map((kind) => kind.label)}
-          editing={editing}
-          kindLabel={kindLabel}
-          nodeNumber={nodeNumber}
-          title={title}
-          parentCandidateId={parentCandidateId}
-          busy={busy}
-          error={error}
-          onClose={() => setExpanded(false)}
-          onSelect={setCandidateId}
-          onKindLabel={setKindLabel}
-          onNodeNumber={setNodeNumber}
-          onTitle={setTitle}
-          onParent={setParentCandidateId}
-          onEdit={() => setEditing(true)}
-          onSave={() => void saveEdit()}
-          onAccept={() =>
-            void onCommand('accept_legal_structure_candidate', {
-              legal_ingestion_candidate_id: candidate.id,
-            }).catch((err) => setError(userFacingApiMessage(err)))
-          }
-          onReject={() =>
-            void onCommand('reject_legal_extraction_candidate', {
-              legal_ingestion_candidate_id: candidate.id,
-            }).catch((err) => setError(userFacingApiMessage(err)))
-          }
-        />
-      ) : null}
+      {expanded && candidate
+        ? createPortal(
+            <ExpandedReviewModal
+              documentTitle={document.original_filename}
+              reviewSummary={document.review_summary}
+              reviewFilters={document.review_filters}
+              filterKey={filterKey}
+              search={search}
+              layoutPage={
+                document.layout_readiness?.pages.find((page) => page.page_no === candidate.page_start) ?? null
+              }
+              pdfSrc={pdfSrc}
+              fallbackText={document.selected_page?.text || 'No extracted text for this page.'}
+              visibleCandidates={visibleCandidates}
+              candidate={candidate}
+              allCandidates={document.candidates}
+              kinds={taxKnowledge.legal_library.node_kinds.map((kind) => kind.label)}
+              editing={editing}
+              kindLabel={kindLabel}
+              nodeNumber={nodeNumber}
+              title={title}
+              parentCandidateId={parentCandidateId}
+              busy={busy}
+              error={error}
+              onFilter={setFilterKey}
+              onSearch={setSearch}
+              onClose={() => setExpanded(false)}
+              onSelect={setCandidateId}
+              onKindLabel={setKindLabel}
+              onNodeNumber={setNodeNumber}
+              onTitle={setTitle}
+              onParent={setParentCandidateId}
+              onEdit={() => setEditing(true)}
+              onSave={() => void saveEdit()}
+              onAccept={() =>
+                void onCommand('accept_legal_structure_candidate', {
+                  legal_ingestion_candidate_id: candidate.id,
+                }).catch((err) => setError(userFacingApiMessage(err)))
+              }
+              onReject={() =>
+                void onCommand('reject_legal_extraction_candidate', {
+                  legal_ingestion_candidate_id: candidate.id,
+                }).catch((err) => setError(userFacingApiMessage(err)))
+              }
+            />,
+            window.document.body,
+          )
+        : null}
     </section>
   );
 }
@@ -729,6 +725,36 @@ function CandidateEditor({
   );
 }
 
+function ReviewFilters({
+  filters,
+  filterKey,
+  busy,
+  onFilter,
+}: {
+  filters: OwnerStructureReviewFilter[];
+  filterKey: string;
+  busy: boolean;
+  onFilter: (key: string) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {filters.map((filter) => (
+        <button
+          key={filter.key}
+          type="button"
+          className="nx-btn nx-btn-taxes-compact"
+          disabled={busy}
+          aria-pressed={filterKey === filter.key}
+          onClick={() => onFilter(filter.key)}
+          style={filterKey === filter.key ? { outline: '2px solid #2563eb' } : undefined}
+        >
+          {filter.label || REVIEW_FILTER_LABELS[filter.key]} ({filter.count})
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ReviewSummary({ summary }: { summary: OwnerStructureReviewSummary }) {
   const kinds = Object.entries(summary.by_kind);
   return (
@@ -780,9 +806,11 @@ function CandidatePicker({
 
 function ExpandedReviewModal({
   documentTitle,
-  layoutPage,
-  filterLabel,
+  reviewSummary,
+  reviewFilters,
+  filterKey,
   search,
+  layoutPage,
   pdfSrc,
   fallbackText,
   visibleCandidates,
@@ -796,6 +824,8 @@ function ExpandedReviewModal({
   parentCandidateId,
   busy,
   error,
+  onFilter,
+  onSearch,
   onClose,
   onSelect,
   onKindLabel,
@@ -808,9 +838,11 @@ function ExpandedReviewModal({
   onReject,
 }: {
   documentTitle: string;
-  layoutPage: { page_no: number; layout_status: string; item_count: number } | null;
-  filterLabel: string;
+  reviewSummary: OwnerStructureReviewSummary;
+  reviewFilters: OwnerStructureReviewFilter[];
+  filterKey: string;
   search: string;
+  layoutPage: { page_no: number; layout_status: string; item_count: number } | null;
   pdfSrc: string;
   fallbackText: string;
   visibleCandidates: OwnerKnowledgeTrainerCandidate[];
@@ -824,6 +856,8 @@ function ExpandedReviewModal({
   parentCandidateId: string;
   busy: boolean;
   error: string;
+  onFilter: (key: string) => void;
+  onSearch: (value: string) => void;
   onClose: () => void;
   onSelect: (id: string) => void;
   onKindLabel: (value: string) => void;
@@ -836,19 +870,32 @@ function ExpandedReviewModal({
   onReject: () => void;
 }) {
   return (
-    <div className="nx-modal-backdrop" role="presentation" onClick={onClose}>
+    <div
+      className="nx-modal-overlay nx-trainer-review-overlay"
+      role="presentation"
+      onClick={() => {
+        if (!editing) onClose();
+      }}
+    >
       <div
         className="nx-modal nx-trainer-review-modal"
         role="dialog"
+        aria-modal="true"
         aria-labelledby="trainer-expand-review-title"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="nx-modal-header">
-          <h2 id="trainer-expand-review-title" style={{ margin: 0, fontSize: 18 }}>
-            Expand review
-          </h2>
-          <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={onClose}>
-            Close
+          <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked" style={{ alignItems: 'flex-start', minWidth: 0 }}>
+            <h2 id="trainer-expand-review-title" className="nx-modal-title" style={{ fontSize: 18 }}>
+              {documentTitle}
+            </h2>
+            <span className="nx-modal-subtitle">
+              Review: {reviewSummary.all} all · {reviewSummary.high_confidence} high confidence ·{' '}
+              {reviewSummary.needs_owner_review} needs review
+            </span>
+          </div>
+          <button type="button" className="nx-modal-close" onClick={onClose} aria-label="Close">
+            ×
           </button>
         </div>
         <div className="nx-modal-body nx-trainer-review-modal-body">
@@ -865,12 +912,16 @@ function ExpandedReviewModal({
           </div>
           <div className="nx-trainer-review-draft">
             <div style={{ fontWeight: 600, marginBottom: 6 }}>Draft structure</div>
-            <div style={{ fontSize: 13, color: '#4b5563', marginBottom: 8 }}>
-              {documentTitle}
-              <br />
-              Filter: {filterLabel}
-              {search.trim() ? ` · search “${search.trim()}”` : ''}
-            </div>
+            <ReviewFilters filters={reviewFilters} filterKey={filterKey} busy={busy} onFilter={onFilter} />
+            <label>
+              Search by סעיף number or title
+              <input
+                className="nx-input"
+                value={search}
+                onChange={(event) => onSearch(event.target.value)}
+                placeholder="1 / הגדרות / חלק א"
+              />
+            </label>
             <CandidatePicker candidates={visibleCandidates} selectedId={candidate.id} onSelect={onSelect} />
             <CandidateEditor
               candidate={candidate}

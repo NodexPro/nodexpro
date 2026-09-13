@@ -140,6 +140,8 @@ test('Owner UI keeps manual authoring beside Upload material', () => {
   assert.match(trainerUi, /Existing document reused/);
   assert.match(trainerUi, /item count/);
   assert.match(trainerUi, /layout evidence status/);
+  assert.match(trainerUi, /createPortal/);
+  assert.match(trainerUi, /nx-trainer-review-overlay/);
 });
 
 test('Professional users stay on the existing Owner legal workspace gate', () => {
