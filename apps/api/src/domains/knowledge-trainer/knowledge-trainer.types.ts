@@ -82,6 +82,7 @@ export const WORKER_ALLOWED_TABLES = [
   'legal_ingestion_jobs',
   'legal_ingestion_pages',
   'legal_ingestion_candidates',
+  'legal_ingestion_structure_runs',
 ] as const;
 
 export const WORKER_FORBIDDEN_CANONICAL_TABLES = [
@@ -255,6 +256,19 @@ export type StructureLayoutEvidenceDto = {
   status_label: string;
 };
 
+export type StructureRunReadDto = {
+  schema_applied: boolean;
+  active_run_id: string | null;
+  active_status: string | null;
+  detector_version: string | null;
+  visible_candidate_count: number;
+  building_run_id: string | null;
+  building_status_label: string | null;
+  last_failed_run_id: string | null;
+  last_failed_reason: string | null;
+  status_label: string;
+};
+
 export type TrainerLayoutReadinessDto = {
   readiness: 'not_extracted' | 'processing' | 'ready' | 'partial';
   readiness_label: string;
@@ -301,6 +315,7 @@ export type KnowledgeTrainerSliceDto = {
     ocr_page_numbers: number[];
     layout_evidence: StructureLayoutEvidenceDto;
     layout_readiness: TrainerLayoutReadinessDto;
+    structure_run: StructureRunReadDto;
   } | null;
   allowed_actions: Array<{
     action_key: string;

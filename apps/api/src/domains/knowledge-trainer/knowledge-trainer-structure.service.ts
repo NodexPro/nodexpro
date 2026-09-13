@@ -1,10 +1,18 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import { fetchAllPaged } from './knowledge-trainer-pagination.js';
 import {
   detectStructureCandidatesFromLayout,
   parseStoredPageLayout,
-  stagingStructureIdsToReplace,
 } from './knowledge-trainer-layout.pure.js';
+import {
+  assignDraftIds,
+  canActivateStructureRun,
+  chunkInOrder,
+  detectorVersionForRebuild,
+  shouldSkipNonReplacePersist,
+  validateStructureRunCandidates,
+} from './knowledge-trainer-structure-run.pure.js';
 import {
   detectStructureCandidates,
   encodeStructureAnalysis,
@@ -14,20 +22,53 @@ import {
 } from './knowledge-trainer.pure.js';
 import type { StructureDetectionAnalysis } from './knowledge-trainer.types.js';
 
+const STRUCTURE_RUN_SCHEMA_HINT =
+  'Knowledge Trainer structure-run schema is not applied. Migration 627 is required on DEV.';
+
 function assertWorkerTableAllowed(table: string): void {
   if (workerMustNotWriteCanonicalLaw(table)) {
     throw new Error(`Knowledge Trainer worker cannot write canonical table ${table}`);
   }
 }
 
+async function structureRunSchemaAvailable(): Promise<boolean> {
+  const probe = await supabaseAdmin.from('legal_ingestion_structure_runs').select('id').limit(1);
+  if (probe.error && (isSupabaseMissingTableError(probe.error) || isSupabaseMissingColumnError(probe.error))) {
+    return false;
+  }
+  if (probe.error) throw probe.error;
+  return true;
+}
+
+async function failBuildingRun(runId: string, reason: string): Promise<void> {
+  const { error } = await supabaseAdmin.rpc('legal_ingestion_fail_structure_run', {
+    p_run_id: runId,
+    p_failure_reason: reason,
+  });
+  if (error) throw error;
+}
+
 export async function persistStructureCandidatesForJob(
   jobId: string,
-  opts: { replaceStaging: boolean; useLayout?: boolean },
-): Promise<{ analysis: StructureDetectionAnalysis; preserved_accepted: number } | null> {
+  opts: { replaceStaging: boolean; useLayout?: boolean; createdBy?: string | null },
+): Promise<{
+  analysis: StructureDetectionAnalysis;
+  preserved_accepted: number;
+  structure_run_id: string | null;
+  previous_active_run_id: string | null;
+} | null> {
+  const schemaApplied = await structureRunSchemaAvailable();
+  if (!schemaApplied) {
+    if (opts.replaceStaging) {
+      throw new Error(STRUCTURE_RUN_SCHEMA_HINT);
+    }
+    return null;
+  }
+
   const { data: job, error: jobError } = await supabaseAdmin
     .from('legal_ingestion_jobs')
     .select(
-      'id, document_id, country_code, tax_source_id, status, structure_candidate_count, needs_ocr_page_count, failed_page_count, last_error',
+      'id, document_id, country_code, tax_source_id, status, structure_candidate_count, needs_ocr_page_count, failed_page_count, last_error, active_structure_run_id',
     )
     .eq('id', jobId)
     .maybeSingle();
@@ -37,55 +78,65 @@ export async function persistStructureCandidatesForJob(
   }
   if (!job) return null;
 
-  const { data: existingCandidates, error: existingError } = await supabaseAdmin
-    .from('legal_ingestion_candidates')
-    .select('id, candidate_kind, candidate_status, accepted_tax_legal_node_id')
-    .eq('job_id', jobId);
-  if (existingError) throw existingError;
-
-  const accepted = (existingCandidates ?? []).filter(
-    (row) =>
-      row.candidate_kind === 'structure' &&
-      (row.candidate_status === 'accepted' || row.accepted_tax_legal_node_id),
+  const existingCandidates = await fetchAllPaged<{
+    id: string;
+    candidate_kind: string;
+    candidate_status: string;
+    accepted_tax_legal_node_id: string | null;
+    structure_run_id: string | null;
+  }>((from, to) =>
+    supabaseAdmin
+      .from('legal_ingestion_candidates')
+      .select('id, candidate_kind, candidate_status, accepted_tax_legal_node_id, structure_run_id')
+      .eq('job_id', jobId)
+      .order('sort_order', { ascending: true })
+      .range(from, to),
   );
-  if (!opts.replaceStaging && ((existingCandidates ?? []).length > 0 || Number(job.structure_candidate_count ?? 0) > 0)) {
+
+  if (
+    shouldSkipNonReplacePersist({
+      replace_staging: opts.replaceStaging,
+      active_structure_run_id: job.active_structure_run_id == null ? null : String(job.active_structure_run_id),
+      existing_candidate_count: existingCandidates.length,
+    })
+  ) {
     return null;
   }
 
-  const stagingIds = stagingStructureIdsToReplace(
-    (existingCandidates ?? []).map((row) => ({
-      id: String(row.id),
-      candidate_kind: String(row.candidate_kind),
-      candidate_status: String(row.candidate_status),
-      accepted_tax_legal_node_id: row.accepted_tax_legal_node_id == null ? null : String(row.accepted_tax_legal_node_id),
-    })),
-  );
-  if (stagingIds.length) {
-    assertWorkerTableAllowed('legal_ingestion_candidates');
-    const chunkSize = 80;
-    for (let offset = 0; offset < stagingIds.length; offset += chunkSize) {
-      const chunk = stagingIds.slice(offset, offset + chunkSize);
-      const { error: unlinkError } = await supabaseAdmin
-        .from('legal_ingestion_candidates')
-        .update({ parent_candidate_id: null })
-        .in('id', chunk);
-      if (unlinkError) throw unlinkError;
-    }
-    for (let offset = 0; offset < stagingIds.length; offset += chunkSize) {
-      const chunk = stagingIds.slice(offset, offset + chunkSize);
-      const { error: deleteError } = await supabaseAdmin.from('legal_ingestion_candidates').delete().in('id', chunk);
-      if (deleteError) throw deleteError;
-    }
+  const previousActiveId = job.active_structure_run_id == null ? null : String(job.active_structure_run_id);
+  const preservedAccepted = existingCandidates.filter(
+    (row) =>
+      row.candidate_kind === 'structure' &&
+      (row.candidate_status === 'accepted' || row.accepted_tax_legal_node_id) &&
+      (previousActiveId ? row.structure_run_id === previousActiveId : true),
+  ).length;
+
+  const { data: buildingExisting, error: buildingError } = await supabaseAdmin
+    .from('legal_ingestion_structure_runs')
+    .select('id')
+    .eq('job_id', jobId)
+    .eq('status', 'building')
+    .maybeSingle();
+  if (buildingError) throw buildingError;
+  if (buildingExisting?.id) {
+    await failBuildingRun(String(buildingExisting.id), 'replaced_by_new_rebuild');
   }
 
-  const { data: pages, error: pageError } = await supabaseAdmin
-    .from('legal_ingestion_pages')
-    .select('page_no, page_text, status, page_text_items')
-    .eq('job_id', jobId)
-    .order('page_no', { ascending: true });
-  if (pageError) throw pageError;
+  const pages = await fetchAllPaged<{
+    page_no: number;
+    page_text: string | null;
+    status: string;
+    page_text_items: unknown;
+  }>((from, to) =>
+    supabaseAdmin
+      .from('legal_ingestion_pages')
+      .select('page_no, page_text, status, page_text_items')
+      .eq('job_id', jobId)
+      .order('page_no', { ascending: true })
+      .range(from, to),
+  );
 
-  const extractedPages = (pages ?? [])
+  const extractedPages = pages
     .filter((page) => page.status === 'extracted' && typeof page.page_text === 'string')
     .map((page) => ({
       page_no: Number(page.page_no),
@@ -100,21 +151,31 @@ export async function persistStructureCandidatesForJob(
     .order('sort_order', { ascending: true });
   if (kindError) throw kindError;
 
-  let nodeQuery: { data: Array<Record<string, unknown>> | null; error: { message?: string; code?: string } | null } = await supabaseAdmin
-    .from('tax_legal_nodes')
-    .select('id, tax_source_id, country_code, parent_node_id, node_number, normalized_machine_identifier, title, tax_legal_node_kind_id')
-    .eq('tax_source_id', job.tax_source_id);
-  if (nodeQuery.error && isSupabaseMissingColumnError(nodeQuery.error, 'normalized_machine_identifier')) {
-    nodeQuery = await supabaseAdmin
+  const existingNodes = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+    supabaseAdmin
       .from('tax_legal_nodes')
-      .select('id, tax_source_id, country_code, parent_node_id, node_number, title, tax_legal_node_kind_id')
-      .eq('tax_source_id', job.tax_source_id);
-  }
-  const { data: nodes, error: nodeError } = nodeQuery;
-  if (nodeError) throw nodeError;
+      .select(
+        'id, tax_source_id, country_code, parent_node_id, node_number, normalized_machine_identifier, title, tax_legal_node_kind_id',
+      )
+      .eq('tax_source_id', job.tax_source_id)
+      .order('id', { ascending: true })
+      .range(from, to),
+  ).catch(async (error: unknown) => {
+    if (error && isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'normalized_machine_identifier')) {
+      return fetchAllPaged<Record<string, unknown>>((from, to) =>
+        supabaseAdmin
+          .from('tax_legal_nodes')
+          .select('id, tax_source_id, country_code, parent_node_id, node_number, title, tax_legal_node_kind_id')
+          .eq('tax_source_id', job.tax_source_id)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+    }
+    throw error;
+  });
 
   const kindById = new Map((kinds ?? []).map((row) => [String(row.id), String(row.label)]));
-  const existingNodes = (nodes ?? []).map((row) => ({
+  const nodes = existingNodes.map((row) => ({
     id: String(row.id),
     tax_source_id: String(row.tax_source_id),
     country_code: String(row.country_code),
@@ -144,90 +205,183 @@ export async function persistStructureCandidatesForJob(
   const drafts = validateStructureCandidates(detected.drafts, {
     country_code: String(job.country_code),
     tax_source_id: String(job.tax_source_id),
-    existing_nodes: existingNodes,
+    existing_nodes: nodes,
   });
+  const assigned = assignDraftIds(drafts);
 
-  const inserted: Array<{ id: string }> = [];
-  for (const [index, draft] of drafts.entries()) {
-    const parentId = draft.parent_index != null ? inserted[draft.parent_index]?.id ?? null : null;
-    const parentDraft = draft.parent_index != null ? drafts[draft.parent_index] ?? null : null;
-    const match = existingNodes.find((node) => {
-      if (node.kind_label !== draft.kind_label) return false;
-      const draftRoot = draft.parent_index == null;
-      const nodeRoot = node.parent_node_id == null;
-      if (draftRoot !== nodeRoot) return false;
-      if (!draftRoot) {
-        const parentNode = existingNodes.find((candidate) => candidate.id === node.parent_node_id) ?? null;
-        if (parentDraft && parentNode && !sameParentIdentity(parentDraft, parentNode)) return false;
-      }
-      if (draft.normalized_machine_identifier && node.normalized_machine_identifier) {
-        return draft.normalized_machine_identifier === node.normalized_machine_identifier;
-      }
-      return Boolean(node.node_number) && node.node_number === draft.node_number;
-    });
-    assertWorkerTableAllowed('legal_ingestion_candidates');
-    const row = {
+  assertWorkerTableAllowed('legal_ingestion_structure_runs');
+  const { data: createdRun, error: runError } = await supabaseAdmin
+    .from('legal_ingestion_structure_runs')
+    .insert({
       job_id: job.id,
       document_id: job.document_id,
       country_code: job.country_code,
       tax_source_id: job.tax_source_id,
-      candidate_kind: 'structure' as const,
-      candidate_status: draft.candidate_status,
-      kind_label: draft.kind_label,
-      node_number: draft.node_number,
-      source_display_identifier: draft.source_display_identifier ?? null,
-      normalized_machine_identifier: draft.normalized_machine_identifier ?? null,
-      identifier_base_number: draft.identifier_base_number ?? null,
-      identifier_letter_suffix: draft.identifier_letter_suffix ?? null,
-      identifier_nested_components: draft.identifier_nested_components ?? [],
-      title: draft.title,
-      parent_candidate_id: parentId,
-      page_start: draft.page_start,
-      page_end: draft.page_end,
-      excerpt: draft.excerpt,
-      confidence: draft.confidence,
-      validation_warnings: draft.validation_warnings,
-      matched_tax_legal_node_id: match?.id ?? null,
-      sort_order: accepted.length + index,
-    };
-    let insertedRow = await supabaseAdmin.from('legal_ingestion_candidates').insert(row).select('id').single();
-    if (insertedRow.error && isSupabaseMissingColumnError(insertedRow.error, 'source_display_identifier')) {
-      const { source_display_identifier: _a, normalized_machine_identifier: _b, identifier_base_number: _c, identifier_letter_suffix: _d, identifier_nested_components: _e, ...legacy } = row;
-      void _a;
-      void _b;
-      void _c;
-      void _d;
-      void _e;
-      insertedRow = await supabaseAdmin.from('legal_ingestion_candidates').insert(legacy).select('id').single();
-    }
-    const { data, error } = insertedRow;
-    if (error || !data) throw error ?? new Error('Failed to persist structure candidate');
-    inserted.push({ id: String(data.id) });
-  }
-
-  const warningCount = drafts.reduce((sum, draft) => sum + draft.validation_warnings.length, 0);
-  const needsReview =
-    drafts.some((draft) => draft.candidate_status === 'needs_review') ||
-    warningCount > 0 ||
-    detected.analysis.ocr_gap_warning;
-  const nextStatus =
-    job.status === 'extraction_failed' || job.status === 'partially_extracted'
-      ? job.status
-      : needsReview || Number(job.needs_ocr_page_count ?? 0) > 0
-        ? 'needs_review'
-        : 'ready_for_review';
-
-  assertWorkerTableAllowed('legal_ingestion_jobs');
-  const { error: jobUpdateError } = await supabaseAdmin
-    .from('legal_ingestion_jobs')
-    .update({
-      structure_candidate_count: drafts.length,
-      warning_count: warningCount,
-      status: nextStatus,
-      last_error: job.status === 'extraction_failed' ? job.last_error : encodeStructureAnalysis(detected.analysis),
+      status: 'building',
+      detector_version: detectorVersionForRebuild(Boolean(opts.useLayout)),
+      layout_used: Boolean(opts.useLayout),
+      expected_candidate_count: assigned.length,
+      persisted_candidate_count: 0,
+      created_by: opts.createdBy ?? null,
     })
-    .eq('id', jobId);
-  if (jobUpdateError) throw jobUpdateError;
+    .select('id')
+    .single();
+  if (runError || !createdRun) throw runError ?? new Error('Failed to create structure run');
+  const runId = String(createdRun.id);
 
-  return { analysis: detected.analysis, preserved_accepted: accepted.length };
+  try {
+    assertWorkerTableAllowed('legal_ingestion_candidates');
+    const rows = assigned.map((draft, index) => {
+      const parentDraft = draft.parent_index != null ? drafts[draft.parent_index] ?? null : null;
+      const match = nodes.find((node) => {
+        if (node.kind_label !== draft.kind_label) return false;
+        const draftRoot = draft.parent_index == null;
+        const nodeRoot = node.parent_node_id == null;
+        if (draftRoot !== nodeRoot) return false;
+        if (!draftRoot) {
+          const parentNode = nodes.find((candidate) => candidate.id === node.parent_node_id) ?? null;
+          if (parentDraft && parentNode && !sameParentIdentity(parentDraft, parentNode)) return false;
+        }
+        if (draft.normalized_machine_identifier && node.normalized_machine_identifier) {
+          return draft.normalized_machine_identifier === node.normalized_machine_identifier;
+        }
+        return Boolean(node.node_number) && node.node_number === draft.node_number;
+      });
+      return {
+        id: draft.id,
+        job_id: job.id,
+        document_id: job.document_id,
+        country_code: job.country_code,
+        tax_source_id: job.tax_source_id,
+        structure_run_id: runId,
+        candidate_kind: 'structure' as const,
+        candidate_status: draft.candidate_status,
+        kind_label: draft.kind_label,
+        node_number: draft.node_number,
+        source_display_identifier: draft.source_display_identifier ?? null,
+        normalized_machine_identifier: draft.normalized_machine_identifier ?? null,
+        identifier_base_number: draft.identifier_base_number ?? null,
+        identifier_letter_suffix: draft.identifier_letter_suffix ?? null,
+        identifier_nested_components: draft.identifier_nested_components ?? [],
+        title: draft.title,
+        parent_candidate_id: draft.parent_candidate_id,
+        page_start: draft.page_start,
+        page_end: draft.page_end,
+        excerpt: draft.excerpt,
+        confidence: draft.confidence,
+        validation_warnings: draft.validation_warnings,
+        matched_tax_legal_node_id: match?.id ?? null,
+        sort_order: index,
+      };
+    });
+
+    let persisted = 0;
+    for (const chunk of chunkInOrder(rows)) {
+      let inserted = await supabaseAdmin.from('legal_ingestion_candidates').insert(chunk);
+      if (inserted.error && isSupabaseMissingColumnError(inserted.error, 'source_display_identifier')) {
+        inserted = await supabaseAdmin.from('legal_ingestion_candidates').insert(
+          chunk.map((row) => {
+            const {
+              source_display_identifier: _a,
+              normalized_machine_identifier: _b,
+              identifier_base_number: _c,
+              identifier_letter_suffix: _d,
+              identifier_nested_components: _e,
+              ...legacy
+            } = row;
+            void _a;
+            void _b;
+            void _c;
+            void _d;
+            void _e;
+            return legacy;
+          }),
+        );
+      }
+      if (inserted.error) throw inserted.error;
+      persisted += chunk.length;
+      const { error: progressError } = await supabaseAdmin
+        .from('legal_ingestion_structure_runs')
+        .update({ persisted_candidate_count: persisted })
+        .eq('id', runId)
+        .eq('status', 'building');
+      if (progressError) throw progressError;
+    }
+
+    const persistedRows = await fetchAllPaged<{
+      id: string;
+      structure_run_id: string;
+      parent_candidate_id: string | null;
+      source_display_identifier: string | null;
+      normalized_machine_identifier: string | null;
+      identifier_base_number: string | null;
+      identifier_nested_components: unknown;
+    }>((from, to) =>
+      supabaseAdmin
+        .from('legal_ingestion_candidates')
+        .select(
+          'id, structure_run_id, parent_candidate_id, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_nested_components',
+        )
+        .eq('structure_run_id', runId)
+        .order('sort_order', { ascending: true })
+        .range(from, to),
+    );
+    const validation = validateStructureRunCandidates(
+      persistedRows.map((row) => ({
+        id: String(row.id),
+        structure_run_id: String(row.structure_run_id),
+        parent_candidate_id: row.parent_candidate_id == null ? null : String(row.parent_candidate_id),
+        source_display_identifier: row.source_display_identifier,
+        normalized_machine_identifier: row.normalized_machine_identifier,
+        identifier_base_number: row.identifier_base_number,
+        identifier_nested_components: Array.isArray(row.identifier_nested_components)
+          ? row.identifier_nested_components.map((item) => String(item))
+          : [],
+      })),
+      assigned.length,
+      runId,
+    );
+    if (!canActivateStructureRun({ status: 'building', validation })) {
+      throw new Error(
+        `Structure run validation failed: persisted=${validation.persisted_count} expected=${validation.expected_count} orphans=${validation.orphan_parents} self=${validation.self_parents}`,
+      );
+    }
+
+    const warningCount = drafts.reduce((sum, draft) => sum + draft.validation_warnings.length, 0);
+    const needsReview =
+      drafts.some((draft) => draft.candidate_status === 'needs_review') ||
+      warningCount > 0 ||
+      detected.analysis.ocr_gap_warning;
+    const nextStatus =
+      job.status === 'extraction_failed' || job.status === 'partially_extracted'
+        ? job.status
+        : needsReview || Number(job.needs_ocr_page_count ?? 0) > 0
+          ? 'needs_review'
+          : 'ready_for_review';
+
+    assertWorkerTableAllowed('legal_ingestion_jobs');
+    const { error: cutoverError } = await supabaseAdmin.rpc('legal_ingestion_activate_structure_run', {
+      p_job_id: jobId,
+      p_run_id: runId,
+      p_expected_count: assigned.length,
+      p_warning_count: warningCount,
+      p_job_status: nextStatus,
+      p_last_error: job.status === 'extraction_failed' ? job.last_error : encodeStructureAnalysis(detected.analysis),
+    });
+    if (cutoverError) throw cutoverError;
+
+    return {
+      analysis: detected.analysis,
+      preserved_accepted: preservedAccepted,
+      structure_run_id: runId,
+      previous_active_run_id: previousActiveId,
+    };
+  } catch (error) {
+    try {
+      await failBuildingRun(runId, error instanceof Error ? error.message : 'structure_run_persist_failed');
+    } catch {
+      // Keep the original persist failure. The run stays building if fail RPC also fails.
+    }
+    throw error;
+  }
 }

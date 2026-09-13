@@ -357,6 +357,12 @@ function TrainerReview({
       <div>Needs OCR: {document.needs_ocr_page_count}</div>
       <div>Failed: {document.failed_page_count}</div>
       <div>Structure candidates: {document.structure_candidate_count}</div>
+      {document.structure_run?.status_label ? (
+        <div>Structure run: {document.structure_run.status_label}</div>
+      ) : null}
+      {document.structure_run?.building_status_label ? (
+        <div>{document.structure_run.building_status_label}</div>
+      ) : null}
       {document.structure_analysis ? (
         <div style={{ fontSize: 13, color: '#374151', display: 'grid', gap: 4 }}>
           <div>Candidates found: {document.structure_analysis.candidates_found}</div>

@@ -418,6 +418,19 @@ export type OwnerStructureLayoutEvidence = {
   status_label: string;
 };
 
+export type OwnerStructureRun = {
+  schema_applied: boolean;
+  active_run_id: string | null;
+  active_status: string | null;
+  detector_version: string | null;
+  visible_candidate_count: number;
+  building_run_id: string | null;
+  building_status_label: string | null;
+  last_failed_run_id: string | null;
+  last_failed_reason: string | null;
+  status_label: string;
+};
+
 export type OwnerTrainerLayoutReadiness = {
   readiness: string;
   readiness_label: string;
@@ -471,6 +484,7 @@ export type OwnerKnowledgeTrainerSlice = {
     ocr_page_numbers: number[];
     layout_evidence: OwnerStructureLayoutEvidence;
     layout_readiness: OwnerTrainerLayoutReadiness;
+    structure_run: OwnerStructureRun | null;
   } | null;
   allowed_actions: TaxKnowledgeAllowedAction[];
 };

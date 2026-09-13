@@ -1,7 +1,9 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import { summarizeLayoutReadiness } from './knowledge-trainer-layout.pure.js';
+import { fetchAllPaged } from './knowledge-trainer-pagination.js';
 import { attachStructureReviewModel, describeStoredLayoutEvidence } from './knowledge-trainer-review.pure.js';
+import { structureRunStatusLabel } from './knowledge-trainer-structure-run.pure.js';
 import { createOwnerLegalMaterialSignedUrl } from './knowledge-trainer-storage.service.js';
 import {
   buildOriginalFileAccess,
@@ -20,6 +22,7 @@ import type {
   KnowledgeTrainerSliceDto,
   LegalIngestionJobStatus,
   LegalIngestionPageStatus,
+  StructureRunReadDto,
 } from './knowledge-trainer.types.js';
 
 export type KnowledgeTrainerReadOpts = {
@@ -72,15 +75,29 @@ export async function buildKnowledgeTrainerSlice(
   }
 
   const documentIds = (documents ?? []).map((row) => String(row.id));
-  const { data: jobs } = documentIds.length
-    ? await supabaseAdmin
-        .from('legal_ingestion_jobs')
-        .select(
-          'id, document_id, status, page_count, extracted_page_count, needs_ocr_page_count, failed_page_count, structure_candidate_count, last_error, created_at',
-        )
-        .in('document_id', documentIds)
-        .order('created_at', { ascending: false })
-    : { data: [] as Array<Record<string, unknown>> };
+  const jobSelectWithRun =
+    'id, document_id, status, page_count, extracted_page_count, needs_ocr_page_count, failed_page_count, structure_candidate_count, last_error, created_at, active_structure_run_id';
+  const jobSelectLegacy =
+    'id, document_id, status, page_count, extracted_page_count, needs_ocr_page_count, failed_page_count, structure_candidate_count, last_error, created_at';
+  let jobsResult: { data: Array<Record<string, unknown>> | null; error: { message?: string; code?: string } | null } =
+    documentIds.length
+      ? await supabaseAdmin
+          .from('legal_ingestion_jobs')
+          .select(jobSelectWithRun)
+          .in('document_id', documentIds)
+          .order('created_at', { ascending: false })
+      : { data: [], error: null };
+  if (jobsResult.error && isSupabaseMissingColumnError(jobsResult.error, 'active_structure_run_id')) {
+    jobsResult = documentIds.length
+      ? await supabaseAdmin
+          .from('legal_ingestion_jobs')
+          .select(jobSelectLegacy)
+          .in('document_id', documentIds)
+          .order('created_at', { ascending: false })
+      : { data: [], error: null };
+  }
+  if (jobsResult.error) throw jobsResult.error;
+  const jobs = jobsResult.data;
 
   const jobRows = jobs ?? [];
   const latestJobByDocument = new Map<string, (typeof jobRows)[number]>();
@@ -91,6 +108,9 @@ export async function buildKnowledgeTrainerSlice(
 
   const summaries: KnowledgeTrainerDocumentSummaryDto[] = (documents ?? []).map((row) => {
     const job = latestJobByDocument.get(String(row.id));
+    const runSchema = Boolean(job && Object.prototype.hasOwnProperty.call(job, 'active_structure_run_id'));
+    const visibleCount =
+      runSchema && !job?.active_structure_run_id ? 0 : Number(job?.structure_candidate_count ?? 0);
     return {
       id: String(row.id),
       tax_source_id: String(row.tax_source_id),
@@ -101,7 +121,7 @@ export async function buildKnowledgeTrainerSlice(
       extracted_page_count: Number(job?.extracted_page_count ?? 0),
       needs_ocr_page_count: Number(job?.needs_ocr_page_count ?? 0),
       failed_page_count: Number(job?.failed_page_count ?? 0),
-      structure_candidate_count: Number(job?.structure_candidate_count ?? 0),
+      structure_candidate_count: visibleCount,
       job_status: String(job?.status ?? 'uploaded') as LegalIngestionJobStatus,
       job_status_label: jobStatusLabel(String(job?.status ?? 'uploaded')),
       duplicate_of_existing: false,
@@ -117,45 +137,76 @@ export async function buildKnowledgeTrainerSlice(
 
   let selected: KnowledgeTrainerSliceDto['selected_document'] = null;
   if (selectedSummary && selectedJob) {
-    const pagesWithLayout = await supabaseAdmin
-      .from('legal_ingestion_pages')
-      .select('page_no, status, layout_status, layout_item_count')
-      .eq('job_id', selectedJob.id)
-      .order('page_no', { ascending: true });
-    const pagesFallback =
-      pagesWithLayout.error && isSupabaseMissingColumnError(pagesWithLayout.error)
-        ? await supabaseAdmin
-            .from('legal_ingestion_pages')
-            .select('page_no, status')
-            .eq('job_id', selectedJob.id)
-            .order('page_no', { ascending: true })
-        : pagesWithLayout;
-    if (pagesFallback.error) throw pagesFallback.error;
-    const pages = (pagesFallback.data ?? []) as Array<{
+    let pages: Array<{
       page_no: number;
       status: string;
       page_text?: string | null;
       layout_status?: string | null;
       layout_item_count?: number | null;
     }>;
+    try {
+      pages = await fetchAllPaged((from, to) =>
+        supabaseAdmin
+          .from('legal_ingestion_pages')
+          .select('page_no, status, layout_status, layout_item_count')
+          .eq('job_id', selectedJob.id)
+          .order('page_no', { ascending: true })
+          .range(from, to),
+      );
+    } catch (error) {
+      if (!isSupabaseMissingColumnError(error as { message?: string; code?: string })) throw error;
+      pages = await fetchAllPaged((from, to) =>
+        supabaseAdmin
+          .from('legal_ingestion_pages')
+          .select('page_no, status')
+          .eq('job_id', selectedJob.id)
+          .order('page_no', { ascending: true })
+          .range(from, to),
+      );
+    }
+    const structureRunSchemaApplied = Object.prototype.hasOwnProperty.call(selectedJob, 'active_structure_run_id');
+    const activeRunId =
+      selectedJob.active_structure_run_id == null ? null : String(selectedJob.active_structure_run_id);
     const candidateSelect =
-      'id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order';
+      'id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order, structure_run_id';
     const candidateSelectLegacy =
       'id, candidate_kind, candidate_status, kind_label, node_number, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order';
-    let candidateQuery: { data: Array<Record<string, unknown>> | null; error: { message?: string; code?: string } | null } = await supabaseAdmin
-      .from('legal_ingestion_candidates')
-      .select(candidateSelect)
-      .eq('job_id', selectedJob.id)
-      .order('sort_order', { ascending: true });
-    if (candidateQuery.error && isSupabaseMissingColumnError(candidateQuery.error, 'source_display_identifier')) {
-      candidateQuery = await supabaseAdmin
-        .from('legal_ingestion_candidates')
-        .select(candidateSelectLegacy)
-        .eq('job_id', selectedJob.id)
-        .order('sort_order', { ascending: true });
+    const selectedJobId = String(selectedJob.id);
+    async function loadCandidatesBy(columns: string): Promise<Array<Record<string, unknown>>> {
+      return fetchAllPaged<Record<string, unknown>>((from, to) =>
+        supabaseAdmin
+          .from('legal_ingestion_candidates')
+          .select(columns)
+          .eq('job_id', selectedJobId)
+          .order('sort_order', { ascending: true })
+          .range(from, to) as PromiseLike<{ data: Array<Record<string, unknown>> | null; error: { message?: string; code?: string } | null }>,
+      );
     }
-    if (candidateQuery.error) throw candidateQuery.error;
-    const candidates = candidateQuery.data;
+    let candidates: Array<Record<string, unknown>> = [];
+    if (structureRunSchemaApplied && !activeRunId) {
+      candidates = [];
+    } else {
+      try {
+        candidates = await fetchAllPaged((from, to) => {
+          let query = supabaseAdmin
+            .from('legal_ingestion_candidates')
+            .select(candidateSelect)
+            .eq('job_id', selectedJob.id)
+            .order('sort_order', { ascending: true })
+            .range(from, to);
+          if (activeRunId) query = query.eq('structure_run_id', activeRunId);
+          return query;
+        });
+      } catch (error) {
+        if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'source_display_identifier')) {
+          candidates = await loadCandidatesBy(candidateSelectLegacy);
+        } else if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'structure_run_id')) {
+          candidates = await loadCandidatesBy(candidateSelect.replace(', structure_run_id', ''));
+        } else {
+          throw error;
+        }
+      }
+    }
 
     const pageNo = opts?.page_no && opts.page_no > 0 ? opts.page_no : pages?.[0] ? Number(pages[0].page_no) : null;
     const selectedPageMeta = pages?.find((page) => Number(page.page_no) === pageNo) ?? null;
@@ -184,6 +235,51 @@ export async function buildKnowledgeTrainerSlice(
       .select('id, label')
       .eq('country_code', countryCode)
       .order('sort_order', { ascending: true });
+    let buildingRun: { id: string } | null = null;
+    let lastFailed: { id: string; failure_reason: string | null } | null = null;
+    let activeRunMeta: { detector_version: string | null; status: string | null } | null = null;
+    if (structureRunSchemaApplied) {
+      const { data: runRows, error: runError } = await supabaseAdmin
+        .from('legal_ingestion_structure_runs')
+        .select('id, status, detector_version, failure_reason, started_at')
+        .eq('job_id', selectedJob.id)
+        .in('status', ['building', 'ready', 'failed'])
+        .order('started_at', { ascending: false });
+      if (runError && !isSupabaseMissingTableError(runError)) throw runError;
+      for (const row of runRows ?? []) {
+        if (String(row.status) === 'building' && !buildingRun) buildingRun = { id: String(row.id) };
+        if (String(row.status) === 'failed' && !lastFailed) {
+          lastFailed = {
+            id: String(row.id),
+            failure_reason: row.failure_reason == null ? null : String(row.failure_reason),
+          };
+        }
+        if (activeRunId && String(row.id) === activeRunId) {
+          activeRunMeta = {
+            detector_version: row.detector_version == null ? null : String(row.detector_version),
+            status: String(row.status),
+          };
+        }
+      }
+    }
+    const structureRun: StructureRunReadDto = {
+      schema_applied: structureRunSchemaApplied,
+      active_run_id: activeRunId,
+      active_status: activeRunMeta?.status ?? (activeRunId ? 'ready' : null),
+      detector_version: activeRunMeta?.detector_version ?? null,
+      visible_candidate_count: candidates?.length ?? 0,
+      building_run_id: buildingRun?.id ?? null,
+      building_status_label: buildingRun
+        ? 'Building. Not visible until atomic cutover.'
+        : null,
+      last_failed_run_id: lastFailed?.id ?? null,
+      last_failed_reason: lastFailed?.failure_reason ?? null,
+      status_label: structureRunStatusLabel({
+        schema_applied: structureRunSchemaApplied,
+        active_run_id: activeRunId,
+        building_run_id: buildingRun?.id ?? null,
+      }),
+    };
     const baseCandidates = (candidates ?? []).map((row) => {
         const warnings = Array.isArray(row.validation_warnings)
           ? row.validation_warnings.map((item) => String(item))
@@ -276,7 +372,7 @@ export async function buildKnowledgeTrainerSlice(
       extracted_page_count: selectedSummary.extracted_page_count,
       needs_ocr_page_count: selectedSummary.needs_ocr_page_count,
       failed_page_count: selectedSummary.failed_page_count,
-      structure_candidate_count: selectedSummary.structure_candidate_count,
+      structure_candidate_count: structureRunSchemaApplied && !activeRunId ? 0 : selectedSummary.structure_candidate_count,
       pages: (pages ?? []).map((page) => ({
         page_no: Number(page.page_no),
         status: String(page.status) as LegalIngestionPageStatus,
@@ -298,6 +394,7 @@ export async function buildKnowledgeTrainerSlice(
       review_filters: reviewed.review_filters,
       structure_tree: reviewed.structure_tree,
       ocr_page_numbers: ocrPageNumbers,
+      structure_run: structureRun,
       layout_evidence: describeStoredLayoutEvidence(pages ?? []),
       layout_readiness: {
         ...layoutSummary,

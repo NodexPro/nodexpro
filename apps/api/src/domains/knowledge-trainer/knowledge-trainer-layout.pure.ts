@@ -1,3 +1,18 @@
+import { parseLegalIdentifier } from '../tax-knowledge/legal-identifier.pure.js';
+import {
+  applyExactIdentifierToDraft,
+  composeChildIdentifier,
+  extractNestedStructureMarker,
+  extractParenMarkersOnHeadingLine,
+  extractTrailingStructuralMarkers,
+  identifierForTopLevelDraft,
+  isolatedItemIsStructuralMarker,
+  kindLabelForNestedDepth,
+  resolveNestedParent,
+  titleFromFollowingLine,
+  type NestedKindDepth,
+  type NestedStackEntry,
+} from './knowledge-trainer-nested.pure.js';
 import {
   detectStructureCandidates,
   isYearLikeIdentifier,
@@ -387,7 +402,32 @@ function titleFromPreviousHeadingLine(prev?: string): string | null {
 }
 
 function seifLabelFromCatalog(labels: string[]): string | undefined {
-  return labels.find((label) => label === 'סעיף') ?? labels.find((label) => /סעיף/.test(label) && !/קטן/.test(label));
+  return labels.find((label) => label === 'סעיף') ?? labels.find((label) => /סעיף/.test(label) && !/קטן|פסקה/.test(label));
+}
+
+function isSeifKindLabel(label: string): boolean {
+  return label === 'סעיף' || (/סעיף/.test(label) && !/קטן|פסקה/.test(label));
+}
+
+function collectNestedMarkersOnLine(
+  line: LayoutLine,
+  items: StoredTextItem[],
+  profile: PageLayoutProfile,
+): Array<{ component: string; title: string | null; isolated: boolean }> {
+  const trailing = extractTrailingStructuralMarkers(line.text);
+  if (trailing.length) return trailing;
+  const fromText = extractNestedStructureMarker(line.text);
+  if (fromText) return [fromText];
+  const lineItems = items.filter((item) => line.itemIndexes.includes(item.i));
+  for (const item of lineItems) {
+    const neighbors = lineItems.filter((other) => other.i !== item.i);
+    const component = isolatedItemIsStructuralMarker(item, neighbors, profile);
+    if (!component) continue;
+    const title = neighbors.map((other) => other.s).join(' ').replace(/\s+/g, ' ').trim();
+    if (title.length > 80) continue;
+    return [{ component, title: title.slice(0, 60) || null, isolated: true }];
+  }
+  return [];
 }
 
 function titleFromNearbyHeadingLines(previousLines: Array<string | undefined>): string | null {
@@ -455,7 +495,8 @@ export function detectStructureCandidatesFromLayout(
   catalog: StructureKindCatalogItem[],
   opts?: { ocr_page_count?: number },
 ): { drafts: StructureCandidateDraft[]; analysis: StructureDetectionAnalysis } {
-  const headings: Array<{
+  type LayoutEvent = {
+    kind: 'heading' | 'nested';
     kind_label: string;
     node_number: string;
     title: string | null;
@@ -463,7 +504,9 @@ export function detectStructureCandidatesFromLayout(
     offset: number;
     confidence: number;
     warnings: string[];
-  }> = [];
+    component?: string;
+  };
+  const events: LayoutEvent[] = [];
   let tocRejected = 0;
   const layoutPages = pages.filter((page) => page.layout?.items.length);
   for (const page of pages) {
@@ -472,28 +515,78 @@ export function detectStructureCandidatesFromLayout(
     const lines = groupTextItemsIntoLines(layout.items);
     const profile = buildPageLayoutProfile(lines, layout.h);
     lines.forEach((line, index) => {
+      const offset = page.page_no * 10000 + index;
       const verdict = evaluateLineHeadingEvidence(line, { prev: lines[index - 1], next: lines[index + 1] }, profile);
-      if (verdict === 'header_or_footer') return;
-      if (verdict === 'amendment_or_gazette' || verdict === 'running_citation') {
+      const trailing = extractTrailingStructuralMarkers(line.text);
+      if (verdict === 'header_or_footer' && !trailing.length) return;
+      if (lineLooksLikeAmendmentOrGazette(line.text) || lineLooksLikeRunningCitation(line.text)) {
         tocRejected += 1;
         return;
       }
-      if (verdict === 'insufficient_evidence') return;
+      if (verdict === 'amendment_or_gazette' || verdict === 'running_citation') {
+        tocRejected += 1;
+        trailing.forEach((marker, markerIndex) => {
+          events.push({
+            kind: 'nested',
+            kind_label: '',
+            node_number: marker.component,
+            title: marker.title,
+            page_no: page.page_no,
+            offset: offset + markerIndex,
+            confidence: 0.52,
+            warnings: ['layout_needs_owner_review'],
+            component: marker.component,
+          });
+        });
+        return;
+      }
       const nearby = [lines[index - 1]?.text, lines[index - 2]?.text, lines[index - 3]?.text];
       const matches = matchCatalogOnLine(line.text, catalog, nearby);
-      if (!matches.length) return;
-      const isolated = verdict === 'isolated_heading';
-      for (const hit of matches) {
-        headings.push({
-          kind_label: hit.kind_label,
-          node_number: hit.node_number,
-          title: hit.title,
-          page_no: page.page_no,
-          offset: page.page_no * 10000 + index,
-          confidence: isolated ? 0.86 : 0.52,
-          warnings: isolated ? [] : ['layout_needs_owner_review'],
+      if (matches.length) {
+        const isolated = verdict === 'isolated_heading';
+        for (const hit of matches) {
+          events.push({
+            kind: 'heading',
+            kind_label: hit.kind_label,
+            node_number: hit.node_number,
+            title: hit.title,
+            page_no: page.page_no,
+            offset,
+            confidence: isolated ? 0.86 : 0.52,
+            warnings: isolated ? [] : ['layout_needs_owner_review'],
+          });
+        }
+        const headingMarkers = extractParenMarkersOnHeadingLine(line.text);
+        headingMarkers.forEach((component, markerIndex) => {
+          events.push({
+            kind: 'nested',
+            kind_label: '',
+            node_number: component,
+            title: null,
+            page_no: page.page_no,
+            offset: offset + markerIndex + 1,
+            confidence: 0.72,
+            warnings: ['layout_needs_owner_review'],
+            component,
+          });
         });
+        return;
       }
+      const markers = trailing.length ? trailing : collectNestedMarkersOnLine(line, layout.items, profile);
+      if (!markers.length) return;
+      markers.forEach((marker, markerIndex) => {
+        events.push({
+          kind: 'nested',
+          kind_label: '',
+          node_number: marker.component,
+          title: marker.title ?? titleFromFollowingLine(lines[index + 1]),
+          page_no: page.page_no,
+          offset: offset + markerIndex,
+          confidence: marker.isolated ? 0.8 : 0.58,
+          warnings: marker.isolated ? [] : ['layout_needs_owner_review'],
+          component: marker.component,
+        });
+      });
     });
   }
 
@@ -506,26 +599,18 @@ export function detectStructureCandidatesFromLayout(
       )
     : { drafts: [], analysis: { candidates_found: 0, toc_index_rejected: 0, low_confidence_count: 0, unresolved_parent_count: 0, ocr_pages_untouched: opts?.ocr_page_count ?? 0, ocr_gap_warning: (opts?.ocr_page_count ?? 0) > 0, layout_used: false } };
 
-  const layoutDrafts: StructureCandidateDraft[] = headings.map((row) => ({
-    candidate_kind: 'structure',
-    candidate_status: row.confidence >= 0.85 ? 'proposed' : 'needs_review',
-    kind_label: row.kind_label,
-    node_number: row.node_number,
-    title: row.title,
-    parent_index: null,
-    page_start: row.page_no,
-    page_end: row.page_no,
-    excerpt: `${row.kind_label} ${row.node_number}${row.title ? ` ${row.title}` : ''}`.slice(0, 200),
-    confidence: row.confidence,
-    validation_warnings: row.warnings,
-  }));
-
-  const fallbackDrafts = fallback.drafts.map((draft) => ({
-    ...draft,
-    confidence: Math.min(draft.confidence, 0.5),
-    candidate_status: 'needs_review' as const,
-    validation_warnings: [...draft.validation_warnings, 'layout_evidence_missing'],
-  }));
+  const layoutDrafts = attachLayoutParents(buildLayoutDraftsFromEvents(events, catalog), catalog);
+  const fallbackDrafts = fallback.drafts.map((draft) =>
+    applyExactIdentifierToDraft(
+      {
+        ...draft,
+        confidence: Math.min(draft.confidence, 0.5),
+        candidate_status: 'needs_review' as const,
+        validation_warnings: [...draft.validation_warnings, 'layout_evidence_missing'],
+      },
+      identifierForTopLevelDraft(draft),
+    ),
+  );
 
   const merged = [...layoutDrafts, ...fallbackDrafts].sort((a, b) => a.page_start - b.page_start);
   const analysis: StructureDetectionAnalysis = {
@@ -538,7 +623,99 @@ export function detectStructureCandidatesFromLayout(
     layout_used: layoutPages.length > 0,
     layout_pages_used: layoutPages.length,
   };
-  return { drafts: attachLayoutParents(merged, catalog), analysis };
+  return { drafts: merged, analysis };
+}
+
+function buildLayoutDraftsFromEvents(
+  events: Array<{
+    kind: 'heading' | 'nested';
+    kind_label: string;
+    node_number: string;
+    title: string | null;
+    page_no: number;
+    offset: number;
+    confidence: number;
+    warnings: string[];
+    component?: string;
+  }>,
+  catalog: StructureKindCatalogItem[],
+): StructureCandidateDraft[] {
+  const drafts: StructureCandidateDraft[] = [];
+  const nestedStack: NestedStackEntry[] = [];
+  let currentSeif: { index: number; display: string } | null = null;
+
+  const pushDraft = (
+    event: (typeof events)[number],
+    kindLabel: string,
+    identifier: ReturnType<typeof identifierForTopLevelDraft>,
+    parentIndex: number | null,
+    extraWarnings: string[] = [],
+  ) => {
+    const warnings = [...event.warnings, ...extraWarnings];
+    const draft = applyExactIdentifierToDraft(
+      {
+        candidate_kind: 'structure',
+        candidate_status: event.confidence >= 0.85 ? 'proposed' : event.confidence >= 0.75 ? 'proposed' : 'needs_review',
+        kind_label: kindLabel,
+        node_number: event.node_number,
+        title: event.title,
+        parent_index: parentIndex,
+        page_start: event.page_no,
+        page_end: event.page_no,
+        excerpt: `${kindLabel} ${identifier?.source_display_identifier ?? event.node_number}${event.title ? ` ${event.title}` : ''}`.slice(0, 200),
+        confidence: event.confidence,
+        validation_warnings: warnings,
+      },
+      identifier,
+    );
+    drafts.push(draft);
+    return drafts.length - 1;
+  };
+
+  for (const event of events) {
+    if (event.kind === 'heading') {
+      const index = pushDraft(event, event.kind_label, parseLegalIdentifier(event.node_number), null);
+      if (isSeifKindLabel(event.kind_label)) {
+        currentSeif = {
+          index,
+          display: drafts[index].source_display_identifier ?? event.node_number,
+        };
+        nestedStack.length = 0;
+      } else if (!/קטן|פסקה/.test(event.kind_label)) {
+        currentSeif = null;
+        nestedStack.length = 0;
+      }
+      continue;
+    }
+
+    if (!currentSeif || !event.component) continue;
+    const resolved = resolveNestedParent(nestedStack, event.component);
+    const parent = resolved.parent;
+    const parentDisplay = parent?.display ?? currentSeif.display;
+    const parentIndex = parent?.index ?? currentSeif.index;
+    const identifier = composeChildIdentifier(parentDisplay, event.component);
+    if (!identifier) continue;
+    const depth = ((parent?.depth ?? 0) + 1) as NestedKindDepth;
+    const kindLabel = kindLabelForNestedDepth(depth > 3 ? 3 : depth, catalog);
+    if (!kindLabel) {
+      continue;
+    }
+    const index = pushDraft(
+      { ...event, node_number: event.component },
+      kindLabel,
+      identifier,
+      parentIndex,
+    );
+    nestedStack.push({
+      index,
+      component: event.component,
+      markerClass: /^[0-9]+$/.test(event.component) ? 'number' : 'letter',
+      depth: depth > 3 ? 3 : depth,
+      display: identifier.source_display_identifier,
+    });
+  }
+
+  return drafts;
 }
 
 function attachLayoutParents(
@@ -554,7 +731,7 @@ function attachLayoutParents(
   return drafts.map((draft, index) => {
     const currentRank = rank(draft.kind_label);
     while (stack.length && stack[stack.length - 1].rank >= currentRank) stack.pop();
-    const parent = stack.length ? stack[stack.length - 1].index : null;
+    const parent = draft.parent_index != null ? draft.parent_index : stack.length ? stack[stack.length - 1].index : null;
     stack.push({ index, rank: currentRank });
     return { ...draft, parent_index: parent };
   });

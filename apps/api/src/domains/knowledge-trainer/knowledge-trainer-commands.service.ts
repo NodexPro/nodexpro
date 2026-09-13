@@ -52,6 +52,9 @@ function throwIfTrainerSchemaMissing(error: unknown): void {
   if (error && isSupabaseMissingColumnError(error as { code?: string; message?: string })) {
     throw badRequest('Knowledge Trainer layout schema is not applied. Migration 625 is required on DEV.');
   }
+  if (error instanceof Error && error.message.includes('Migration 627')) {
+    throw badRequest(error.message);
+  }
 }
 
 async function audit(
@@ -125,17 +128,43 @@ async function loadLatestJob(documentId: string) {
 
 async function loadCandidate(candidateId: string) {
   const selectWithIds =
-    'id, job_id, document_id, country_code, tax_source_id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, parent_candidate_id, parent_tax_legal_node_id, accepted_tax_legal_node_id';
+    'id, job_id, document_id, country_code, tax_source_id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, parent_candidate_id, parent_tax_legal_node_id, accepted_tax_legal_node_id, structure_run_id';
   const selectLegacy =
     'id, job_id, document_id, country_code, tax_source_id, candidate_kind, candidate_status, kind_label, node_number, title, parent_candidate_id, parent_tax_legal_node_id, accepted_tax_legal_node_id';
   let result = await supabaseAdmin.from('legal_ingestion_candidates').select(selectWithIds).eq('id', candidateId).maybeSingle();
   if (result.error && isSupabaseMissingColumnError(result.error, 'source_display_identifier')) {
     result = await supabaseAdmin.from('legal_ingestion_candidates').select(selectLegacy).eq('id', candidateId).maybeSingle();
   }
+  if (result.error && isSupabaseMissingColumnError(result.error, 'structure_run_id')) {
+    result = await supabaseAdmin
+      .from('legal_ingestion_candidates')
+      .select(selectWithIds.replace(', structure_run_id', ''))
+      .eq('id', candidateId)
+      .maybeSingle();
+  }
   throwIfTrainerSchemaMissing(result.error);
   if (result.error) throw result.error;
   if (!result.data) throw notFound('Extraction candidate not found');
   return result.data;
+}
+
+async function assertCandidateOnActiveRun(candidate: {
+  job_id: unknown;
+  structure_run_id?: unknown;
+}): Promise<void> {
+  const { data, error } = await supabaseAdmin
+    .from('legal_ingestion_jobs')
+    .select('active_structure_run_id')
+    .eq('id', String(candidate.job_id))
+    .maybeSingle();
+  if (error && isSupabaseMissingColumnError(error, 'active_structure_run_id')) return;
+  if (error) throw error;
+  const active = data?.active_structure_run_id == null ? null : String(data.active_structure_run_id);
+  if (!active) throw conflict('No active complete structure run');
+  const runId = candidate.structure_run_id == null ? null : String(candidate.structure_run_id);
+  if (runId && runId !== active) {
+    throw conflict('Candidate is not on the active structure run');
+  }
 }
 
 async function handleUpload(
@@ -333,7 +362,16 @@ async function handleRebuildStructure(
   if (['uploaded', 'queued', 'extracting'].includes(String(job.status))) {
     throw conflict('Wait until page extraction finishes before rebuilding structure');
   }
-  const result = await persistStructureCandidatesForJob(String(job.id), { replaceStaging: true });
+  let result;
+  try {
+    result = await persistStructureCandidatesForJob(String(job.id), {
+      replaceStaging: true,
+      createdBy: ctx.user.id,
+    });
+  } catch (error) {
+    throwIfTrainerSchemaMissing(error);
+    throw error;
+  }
   await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_STRUCTURE_REBUILT, 'legal_ingestion_job', String(job.id), {
     country_code: document.country_code,
     document_id: document.id,
@@ -343,7 +381,18 @@ async function handleRebuildStructure(
     preserved_accepted: result?.preserved_accepted ?? 0,
     candidates_found: result?.analysis.candidates_found ?? 0,
     toc_index_rejected: result?.analysis.toc_index_rejected ?? 0,
+    structure_run_id: result?.structure_run_id ?? null,
+    previous_active_run_id: result?.previous_active_run_id ?? null,
   });
+  if (result?.structure_run_id) {
+    await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_STRUCTURE_RUN_ACTIVATED, 'legal_ingestion_structure_run', result.structure_run_id, {
+      country_code: document.country_code,
+      document_id: document.id,
+      job_id: job.id,
+      previous_active_run_id: result.previous_active_run_id,
+      candidates_found: result.analysis.candidates_found,
+    });
+  }
   return {
     ok: true,
     command: 'rebuild_legal_structure_candidates',
@@ -420,7 +469,17 @@ async function handleRebuildWithLayout(
   throwIfTrainerSchemaMissing(error);
   if (error) throw error;
   if (!readyPages?.length) throw conflict('Extract layout evidence before rebuilding with layout');
-  const result = await persistStructureCandidatesForJob(String(job.id), { replaceStaging: true, useLayout: true });
+  let result;
+  try {
+    result = await persistStructureCandidatesForJob(String(job.id), {
+      replaceStaging: true,
+      useLayout: true,
+      createdBy: ctx.user.id,
+    });
+  } catch (error) {
+    throwIfTrainerSchemaMissing(error);
+    throw error;
+  }
   await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_STRUCTURE_REBUILT_WITH_LAYOUT, 'legal_ingestion_job', String(job.id), {
     country_code: document.country_code,
     document_id: document.id,
@@ -429,7 +488,19 @@ async function handleRebuildWithLayout(
     layout_used: true,
     preserved_accepted: result?.preserved_accepted ?? 0,
     candidates_found: result?.analysis.candidates_found ?? 0,
+    structure_run_id: result?.structure_run_id ?? null,
+    previous_active_run_id: result?.previous_active_run_id ?? null,
   });
+  if (result?.structure_run_id) {
+    await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_STRUCTURE_RUN_ACTIVATED, 'legal_ingestion_structure_run', result.structure_run_id, {
+      country_code: document.country_code,
+      document_id: document.id,
+      job_id: job.id,
+      previous_active_run_id: result.previous_active_run_id,
+      candidates_found: result.analysis.candidates_found,
+      layout_used: true,
+    });
+  }
   return {
     ok: true,
     command: 'rebuild_legal_structure_with_layout',
@@ -442,6 +513,7 @@ async function handleUpdateCandidate(
   payload: Record<string, unknown>,
 ): Promise<KnowledgeTrainerCommandResponse> {
   const candidate = await loadCandidate(asUuid(payload.legal_ingestion_candidate_id, 'legal_ingestion_candidate_id'));
+  await assertCandidateOnActiveRun(candidate);
   if (candidate.candidate_status === 'accepted' || candidate.candidate_status === 'rejected') {
     throw conflict('Accepted or rejected candidates cannot be edited');
   }
@@ -503,6 +575,7 @@ async function handleAcceptCandidate(
   payload: Record<string, unknown>,
 ): Promise<KnowledgeTrainerCommandResponse> {
   const candidate = await loadCandidate(asUuid(payload.legal_ingestion_candidate_id, 'legal_ingestion_candidate_id'));
+  await assertCandidateOnActiveRun(candidate);
   if (candidate.candidate_kind !== 'structure') {
     throw badRequest('V1 can accept structure candidates only');
   }
@@ -604,6 +677,7 @@ async function handleRejectCandidate(
   payload: Record<string, unknown>,
 ): Promise<KnowledgeTrainerCommandResponse> {
   const candidate = await loadCandidate(asUuid(payload.legal_ingestion_candidate_id, 'legal_ingestion_candidate_id'));
+  await assertCandidateOnActiveRun(candidate);
   if (candidate.candidate_status === 'accepted') {
     throw conflict('Accepted candidates cannot be rejected');
   }

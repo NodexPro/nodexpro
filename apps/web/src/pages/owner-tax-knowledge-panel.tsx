@@ -783,6 +783,20 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
             : [],
           layout_evidence: parseLayoutEvidence(asRecord(selected.layout_evidence)),
           layout_readiness: parseLayoutReadiness(asRecord(selected.layout_readiness)),
+          structure_run: asRecord(selected.structure_run)
+            ? {
+                schema_applied: asRecord(selected.structure_run)?.schema_applied === true,
+                active_run_id: asNullableString(asRecord(selected.structure_run)?.active_run_id),
+                active_status: asNullableString(asRecord(selected.structure_run)?.active_status),
+                detector_version: asNullableString(asRecord(selected.structure_run)?.detector_version),
+                visible_candidate_count: Number(asRecord(selected.structure_run)?.visible_candidate_count) || 0,
+                building_run_id: asNullableString(asRecord(selected.structure_run)?.building_run_id),
+                building_status_label: asNullableString(asRecord(selected.structure_run)?.building_status_label),
+                last_failed_run_id: asNullableString(asRecord(selected.structure_run)?.last_failed_run_id),
+                last_failed_reason: asNullableString(asRecord(selected.structure_run)?.last_failed_reason),
+                status_label: asString(asRecord(selected.structure_run)?.status_label),
+              }
+            : null,
         }
       : null,
     allowed_actions: parseAllowedActions(raw.allowed_actions),
