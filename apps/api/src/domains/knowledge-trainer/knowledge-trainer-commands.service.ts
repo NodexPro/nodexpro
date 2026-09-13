@@ -11,6 +11,7 @@ import { queueLayoutUpdatesByPageStatus } from './knowledge-trainer-layout.pure.
 import {
   assertCountryAgrees,
   assertV1PdfUpload,
+  buildOriginalFileAccess,
   isKnownProvenanceType,
   safeAuditExcerpt,
 } from './knowledge-trainer.pure.js';
@@ -22,6 +23,7 @@ import {
 } from './knowledge-trainer-storage.service.js';
 import {
   MALWARE_SCAN_STATUS_V1,
+  OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
   OWNER_LEGAL_MATERIALS_BUCKET,
   isKnowledgeTrainerCommand,
   type KnowledgeTrainerCommandName,
@@ -626,7 +628,7 @@ export async function executeKnowledgeTrainerCommand(
 export async function openLegalTrainingDocumentFile(
   ctx: RequestContext,
   documentId: string,
-): Promise<{ filename: string; signed_url: string; expires_in_sec: number }> {
+): Promise<{ filename: string; signed_url: string; expires_at: string; expires_in_sec: number }> {
   await assertOwnerLegalCommandAccess(ctx, 'upload_legal_training_document', {
     legal_ingestion_document_id: documentId,
   });
@@ -635,15 +637,21 @@ export async function openLegalTrainingDocumentFile(
   const signedUrl = await createOwnerLegalMaterialSignedUrl(
     String(document.storage_bucket || OWNER_LEGAL_MATERIALS_BUCKET),
     String(document.storage_key),
-    120,
+    OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
   );
   await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_DOCUMENT_OPENED, 'legal_ingestion_document', documentId, {
     country_code: document.country_code,
   });
+  const access = buildOriginalFileAccess(
+    String(document.original_filename),
+    signedUrl,
+    OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
+  );
   return {
-    filename: String(document.original_filename),
-    signed_url: signedUrl,
-    expires_in_sec: 120,
+    filename: access.filename,
+    signed_url: access.url,
+    expires_at: access.expires_at,
+    expires_in_sec: access.expires_in_sec,
   };
 }
 

@@ -62,6 +62,15 @@ export type LegalIngestionCandidateStatus = (typeof LEGAL_INGESTION_CANDIDATE_ST
 
 export const OWNER_LEGAL_MATERIALS_BUCKET = 'owner-legal-materials';
 export const OWNER_LEGAL_MATERIALS_MAX_BYTES = 50 * 1024 * 1024;
+export const OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC = 1800;
+export const OWNER_LEGAL_MATERIAL_SIGNED_URL_REFRESH_SKEW_SEC = 90;
+
+export type OriginalFileAccessDto = {
+  filename: string;
+  url: string;
+  expires_at: string;
+  expires_in_sec: number;
+};
 export const V1_ENABLED_INPUT_TYPE: LegalIngestionInputType = 'pdf';
 export const V1_PDF_MIME = 'application/pdf';
 export const MALWARE_SCAN_STATUS_V1 = 'not_implemented' as const;
@@ -270,6 +279,7 @@ export type KnowledgeTrainerSliceDto = {
     selected_page: { page_no: number; text: string | null; status: LegalIngestionPageStatus } | null;
     candidates: KnowledgeTrainerCandidateDto[];
     can_open_original: boolean;
+    original_file_access: OriginalFileAccessDto | null;
     structure_analysis: StructureDetectionAnalysis | null;
     can_rebuild_structure: boolean;
     review_summary: StructureReviewSummaryDto;

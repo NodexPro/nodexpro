@@ -3,11 +3,14 @@ import {
   KNOWLEDGE_TRAINER_PROVENANCE_TYPES,
   LEGAL_INGESTION_CANDIDATE_KINDS,
   LEGAL_INGESTION_INPUT_TYPES,
+  OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
+  OWNER_LEGAL_MATERIAL_SIGNED_URL_REFRESH_SKEW_SEC,
   OWNER_LEGAL_MATERIALS_MAX_BYTES,
   V1_ENABLED_INPUT_TYPE,
   V1_PDF_MIME,
   type ExtractedPageText,
   type KnowledgeTrainerInputOptionDto,
+  type OriginalFileAccessDto,
   type LegalIngestionInputType,
   type StructureCandidateDraft,
   type StructureDetectionAnalysis,
@@ -798,4 +801,29 @@ export function assertCountryAgrees(entityCountry: string, payloadCountry: unkno
 export function safeAuditExcerpt(value: string | null | undefined, max = 80): string | null {
   if (!value) return null;
   return value.replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+export function buildOriginalFileAccess(
+  filename: string,
+  url: string,
+  expiresInSec = OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
+  nowMs = Date.now(),
+): OriginalFileAccessDto {
+  return {
+    filename,
+    url,
+    expires_in_sec: expiresInSec,
+    expires_at: new Date(nowMs + expiresInSec * 1000).toISOString(),
+  };
+}
+
+export function originalFileAccessNeedsRefresh(
+  access: { url?: string | null; expires_at?: string | null } | null | undefined,
+  nowMs = Date.now(),
+  refreshSkewSec = OWNER_LEGAL_MATERIAL_SIGNED_URL_REFRESH_SKEW_SEC,
+): boolean {
+  if (!access?.url || !access.expires_at) return true;
+  const expires = Date.parse(access.expires_at);
+  if (!Number.isFinite(expires)) return true;
+  return expires - nowMs <= refreshSkewSec * 1000;
 }

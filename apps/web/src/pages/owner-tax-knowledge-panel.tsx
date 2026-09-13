@@ -34,6 +34,7 @@ import {
   type OwnerStructureReviewTreeNode,
   type OwnerKnowledgeTrainerDocument,
   type OwnerKnowledgeTrainerSlice,
+  type OwnerOriginalFileAccess,
 } from './owner-legal-control-types';
 
 import { emptyTaxKnowledgeAggregate } from './owner-legal-control-types';
@@ -606,6 +607,19 @@ function parseLayoutEvidence(raw: UnknownRecord | null): OwnerStructureLayoutEvi
   };
 }
 
+function parseOriginalFileAccess(raw: UnknownRecord | null): OwnerOriginalFileAccess | null {
+  if (!raw) return null;
+  const url = asString(raw.url);
+  const expiresAt = asString(raw.expires_at);
+  if (!url || !expiresAt) return null;
+  return {
+    filename: asString(raw.filename),
+    url,
+    expires_at: expiresAt,
+    expires_in_sec: Number(raw.expires_in_sec) || 0,
+  };
+}
+
 function parseReviewTree(raw: unknown): OwnerStructureReviewTreeNode[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -730,6 +744,7 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
                 )
             : [],
           can_open_original: selected.can_open_original === true,
+          original_file_access: parseOriginalFileAccess(asRecord(selected.original_file_access)),
           structure_analysis: asRecord(selected.structure_analysis)
             ? {
                 candidates_found: Number(asRecord(selected.structure_analysis)?.candidates_found) || 0,

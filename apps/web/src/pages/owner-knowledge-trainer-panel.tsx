@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { apiJson, userFacingApiMessage } from '../api/client';
-import { OWNER } from '../api/endpoints';
-import { shouldPollKnowledgeTrainerProgress } from './owner-knowledge-trainer-progress';
+import { userFacingApiMessage } from '../api/client';
+import { originalFileAccessNeedsRefresh, shouldPollKnowledgeTrainerProgress } from './owner-knowledge-trainer-progress';
 import type {
   OwnerKnowledgeTrainerCandidate,
   OwnerKnowledgeTrainerSlice,
@@ -235,8 +234,10 @@ function TrainerReview({
   const [title, setTitle] = useState('');
   const [parentCandidateId, setParentCandidateId] = useState('');
   const [error, setError] = useState('');
-  const [pageUrl, setPageUrl] = useState('');
   const [expanded, setExpanded] = useState(false);
+  const fileAccess = document.original_file_access;
+  const pageUrl = fileAccess?.url ?? '';
+  const missingFileRefreshFor = useRef<string | null>(null);
 
   const candidateById = useMemo(() => {
     const map = new Map<string, OwnerKnowledgeTrainerCandidate>();
@@ -302,21 +303,28 @@ function TrainerReview({
   }, [expanded]);
 
   useEffect(() => {
-    let cancelled = false;
     if (!document.can_open_original) return;
-    void apiJson(OWNER.legalTrainingDocumentFile(document.id))
-      .then((out) => {
-        if (!cancelled && out && typeof out === 'object' && 'signed_url' in out) {
-          setPageUrl(String((out as { signed_url: string }).signed_url));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setPageUrl('');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [document.can_open_original, document.id]);
+    if (fileAccess && !originalFileAccessNeedsRefresh(fileAccess)) {
+      missingFileRefreshFor.current = null;
+      return;
+    }
+    if (!fileAccess && missingFileRefreshFor.current === document.id) return;
+    if (!fileAccess) missingFileRefreshFor.current = document.id;
+    onReload();
+  }, [document.can_open_original, document.id, fileAccess?.url, fileAccess?.expires_at, onReload]);
+
+  useEffect(() => {
+    if (!document.can_open_original) return;
+    const timer = window.setInterval(() => {
+      if (originalFileAccessNeedsRefresh(fileAccess)) onReload();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [document.can_open_original, document.id, fileAccess?.url, fileAccess?.expires_at, onReload]);
+
+  useEffect(() => {
+    if (!expanded || !document.can_open_original) return;
+    if (originalFileAccessNeedsRefresh(fileAccess)) onReload();
+  }, [expanded, document.can_open_original, document.id, fileAccess?.url, fileAccess?.expires_at, onReload]);
 
   const saveEdit = async () => {
     if (!candidate) return;

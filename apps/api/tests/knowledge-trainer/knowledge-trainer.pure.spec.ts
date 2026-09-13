@@ -15,7 +15,10 @@ import {
   usableKindCatalog,
   validateStructureCandidates,
   workerMustNotWriteCanonicalLaw,
+  buildOriginalFileAccess,
+  originalFileAccessNeedsRefresh,
 } from '../../src/domains/knowledge-trainer/knowledge-trainer.pure.js';
+import { OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC } from '../../src/domains/knowledge-trainer/knowledge-trainer.types.js';
 import { capabilityRequiredForOwnerCommand } from '../../src/domains/owner-country-legal-access/owner-country-legal-access.pure.js';
 
 const catalog = [
@@ -364,4 +367,16 @@ test('Photos and Text stay unavailable in V1 input options', () => {
   assert.equal(options.find((row) => row.input_type === 'image')?.available, false);
   assert.equal(options.find((row) => row.input_type === 'text')?.available, false);
   assert.equal(options.find((row) => row.input_type === 'image')?.status_label, 'Coming next');
+});
+
+test('original file access is ephemeral and refresh is based on expires_at', () => {
+  const now = Date.parse('2026-09-13T09:00:00.000Z');
+  const access = buildOriginalFileAccess('ordinance.pdf', 'https://example.test/sign?token=new', 1800, now);
+  assert.equal(access.expires_in_sec, 1800);
+  assert.equal(access.expires_at, '2026-09-13T09:30:00.000Z');
+  assert.equal(originalFileAccessNeedsRefresh(access, now), false);
+  assert.equal(originalFileAccessNeedsRefresh(access, now + 1710 * 1000), true);
+  assert.equal(originalFileAccessNeedsRefresh(access, now + 1801 * 1000), true);
+  assert.equal(originalFileAccessNeedsRefresh(null, now), true);
+  assert.equal(OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC, 1800);
 });

@@ -147,6 +147,21 @@ test('Owner UI keeps manual authoring beside Upload material', () => {
   assert.match(trainerUi, /nx-trainer-review-overlay/);
 });
 
+test('Original PDF access is minted on the aggregate and is not stored as document truth', () => {
+  const read = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-read.service.ts');
+  const types = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer.types.ts');
+  const persist = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-structure.service.ts');
+  const commands = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-commands.service.ts');
+  assert.match(types, /original_file_access/);
+  assert.match(types, /OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC = 1800/);
+  assert.match(read, /createOwnerLegalMaterialSignedUrl/);
+  assert.match(read, /original_file_access: originalFileAccess/);
+  assert.match(read, /storage_key/);
+  assert.doesNotMatch(read, /legal_ingestion_documents'\)\s*\.update\(/);
+  assert.doesNotMatch(persist, /signed_url/);
+  assert.match(commands, /OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC/);
+});
+
 test('Professional users stay on the existing Owner legal workspace gate', () => {
   const routes = readRepo('apps/api/src/routes/owner-knowledge-trainer.routes.ts');
   assert.match(routes, /OWNER_LEGAL_ACCESS_REQUIRED/);

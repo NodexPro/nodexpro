@@ -7,6 +7,7 @@ import {
   sha256Hex,
 } from './knowledge-trainer.pure.js';
 import {
+  OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
   OWNER_LEGAL_MATERIALS_BUCKET,
   OWNER_LEGAL_MATERIALS_MAX_BYTES,
 } from './knowledge-trainer.types.js';
@@ -63,7 +64,7 @@ export async function downloadOwnerLegalMaterial(bucket: string, key: string): P
 export async function createOwnerLegalMaterialSignedUrl(
   bucket: string,
   key: string,
-  expiresSec = 120,
+  expiresSec = OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
 ): Promise<string> {
   if (bucket !== OWNER_LEGAL_MATERIALS_BUCKET) {
     throw new Error('Unexpected legal material bucket');

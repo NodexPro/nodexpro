@@ -340,6 +340,13 @@ export type OwnerKnowledgeTrainerDocument = {
   job_status_label: string;
 };
 
+export type OwnerOriginalFileAccess = {
+  filename: string;
+  url: string;
+  expires_at: string;
+  expires_in_sec: number;
+};
+
 export type OwnerKnowledgeTrainerCandidate = {
   id: string;
   candidate_kind: string;
@@ -433,6 +440,7 @@ export type OwnerKnowledgeTrainerSlice = {
     selected_page: { page_no: number; text: string | null; status: string } | null;
     candidates: OwnerKnowledgeTrainerCandidate[];
     can_open_original: boolean;
+    original_file_access: OwnerOriginalFileAccess | null;
     structure_analysis: {
       candidates_found: number;
       toc_index_rejected: number;

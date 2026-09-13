@@ -65,3 +65,32 @@ test('Trainer polls only while backend aggregate says processing and does not ho
   assert.match(trainer, /shouldPollKnowledgeTrainerProgress/);
   assert.match(trainer, /document\.id, onReload/);
 });
+
+test('Expand review uses aggregate original_file_access and refreshes before expiry', async () => {
+  const { originalFileAccessNeedsRefresh } = await import('../src/pages/owner-knowledge-trainer-progress.ts');
+  const now = Date.parse('2026-09-13T09:00:00.000Z');
+  assert.equal(
+    originalFileAccessNeedsRefresh(
+      { url: 'https://example.test/sign', expires_at: '2026-09-13T09:30:00.000Z' },
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    originalFileAccessNeedsRefresh(
+      { url: 'https://example.test/sign', expires_at: '2026-09-13T09:01:00.000Z' },
+      now,
+    ),
+    true,
+  );
+  assert.equal(originalFileAccessNeedsRefresh(null, now), true);
+  const trainer = readRepo('apps/web/src/pages/owner-knowledge-trainer-panel.tsx');
+  const parse = readRepo('apps/web/src/pages/owner-tax-knowledge-panel.tsx');
+  assert.match(trainer, /original_file_access/);
+  assert.match(trainer, /originalFileAccessNeedsRefresh/);
+  assert.match(trainer, /#page=/);
+  assert.doesNotMatch(trainer, /legalTrainingDocumentFile/);
+  assert.doesNotMatch(trainer, /setPageUrl/);
+  assert.match(parse, /parseOriginalFileAccess/);
+  assert.match(parse, /original_file_access/);
+});

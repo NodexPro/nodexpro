@@ -2,7 +2,18 @@ import { supabaseAdmin } from '../../db/client.js';
 import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import { summarizeLayoutReadiness } from './knowledge-trainer-layout.pure.js';
 import { attachStructureReviewModel, describeStoredLayoutEvidence } from './knowledge-trainer-review.pure.js';
-import { decodeStructureAnalysis, emptyStructureAnalysis, jobStatusLabel, trainerInputOptions } from './knowledge-trainer.pure.js';
+import { createOwnerLegalMaterialSignedUrl } from './knowledge-trainer-storage.service.js';
+import {
+  buildOriginalFileAccess,
+  decodeStructureAnalysis,
+  emptyStructureAnalysis,
+  jobStatusLabel,
+  trainerInputOptions,
+} from './knowledge-trainer.pure.js';
+import {
+  OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
+  OWNER_LEGAL_MATERIALS_BUCKET,
+} from './knowledge-trainer.types.js';
 import type {
   KnowledgeTrainerCandidateDto,
   KnowledgeTrainerDocumentSummaryDto,
@@ -51,7 +62,7 @@ export async function buildKnowledgeTrainerSlice(
 ): Promise<KnowledgeTrainerSliceDto> {
   const { data: documents, error } = await supabaseAdmin
     .from('legal_ingestion_documents')
-    .select('id, tax_source_id, original_filename, input_type, provenance_type, created_at')
+    .select('id, tax_source_id, original_filename, input_type, provenance_type, created_at, storage_bucket, storage_key')
     .eq('country_code', countryCode)
     .order('created_at', { ascending: false })
     .limit(40);
@@ -213,6 +224,28 @@ export async function buildKnowledgeTrainerSlice(
     });
     const canExtract =
       Boolean(selectedSummary) && !['uploaded', 'queued', 'extracting'].includes(selectedSummary.job_status);
+    const selectedRow = (documents ?? []).find((row) => String(row.id) === selectedSummary.id);
+    const storageKey = String((selectedRow as { storage_key?: string | null } | undefined)?.storage_key ?? '');
+    const storageBucket = String(
+      (selectedRow as { storage_bucket?: string | null } | undefined)?.storage_bucket || OWNER_LEGAL_MATERIALS_BUCKET,
+    );
+    let originalFileAccess = null;
+    if (storageKey) {
+      try {
+        const url = await createOwnerLegalMaterialSignedUrl(
+          storageBucket,
+          storageKey,
+          OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
+        );
+        originalFileAccess = buildOriginalFileAccess(
+          selectedSummary.original_filename,
+          url,
+          OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
+        );
+      } catch {
+        originalFileAccess = null;
+      }
+    }
     selected = {
       id: selectedSummary.id,
       original_filename: selectedSummary.original_filename,
@@ -236,7 +269,8 @@ export async function buildKnowledgeTrainerSlice(
           }
         : null,
       candidates: reviewed.candidates,
-      can_open_original: true,
+      can_open_original: Boolean(storageKey),
+      original_file_access: originalFileAccess,
       structure_analysis: structureAnalysis,
       can_rebuild_structure: canExtract,
       review_summary: reviewed.review_summary,
