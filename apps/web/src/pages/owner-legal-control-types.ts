@@ -389,6 +389,14 @@ export type OwnerStructureReviewSummary = {
   by_kind: Record<string, number>;
 };
 
+export type OwnerStructureLayoutEvidence = {
+  heading_isolation_available: boolean;
+  pdfjs_item_geometry_stored: boolean;
+  stored_as: string;
+  line_breaks_observed: number;
+  status_label: string;
+};
+
 export type OwnerKnowledgeTrainerSlice = {
   available: boolean;
   status_label: string;
@@ -422,6 +430,7 @@ export type OwnerKnowledgeTrainerSlice = {
     review_filters: OwnerStructureReviewFilter[];
     structure_tree: OwnerStructureReviewTreeNode[];
     ocr_page_numbers: number[];
+    layout_evidence: OwnerStructureLayoutEvidence;
   } | null;
   allowed_actions: TaxKnowledgeAllowedAction[];
 };

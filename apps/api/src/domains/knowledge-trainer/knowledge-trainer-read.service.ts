@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
-import { attachStructureReviewModel } from './knowledge-trainer-review.pure.js';
+import { attachStructureReviewModel, describeStoredLayoutEvidence } from './knowledge-trainer-review.pure.js';
 import { decodeStructureAnalysis, emptyStructureAnalysis, jobStatusLabel, trainerInputOptions } from './knowledge-trainer.pure.js';
 import type {
   KnowledgeTrainerCandidateDto,
@@ -198,6 +198,7 @@ export async function buildKnowledgeTrainerSlice(
       review_filters: reviewed.review_filters,
       structure_tree: reviewed.structure_tree,
       ocr_page_numbers: ocrPageNumbers,
+      layout_evidence: describeStoredLayoutEvidence(pages ?? []),
     };
   }
 

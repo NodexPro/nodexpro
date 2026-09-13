@@ -7,6 +7,7 @@ import {
 import type {
   KnowledgeTrainerCandidateDto,
   StructureKindCatalogItem,
+  StructureLayoutEvidenceDto,
   StructureReviewClass,
   StructureReviewFilterDto,
   StructureReviewSummaryDto,
@@ -35,6 +36,25 @@ export type StructureReviewContext = {
   catalog: StructureKindCatalogItem[];
   ocr_pages: number[];
 };
+
+export function describeStoredLayoutEvidence(
+  pages: Array<{ page_text?: string | null }>,
+): StructureLayoutEvidenceDto {
+  let lineBreaks = 0;
+  for (const page of pages) {
+    if (typeof page.page_text === 'string') {
+      lineBreaks += (page.page_text.match(/\n/g) || []).length;
+    }
+  }
+  return {
+    heading_isolation_available: false,
+    pdfjs_item_geometry_stored: false,
+    stored_as: lineBreaks > 0 ? 'multiline_page_text' : 'flattened_page_text',
+    line_breaks_observed: lineBreaks,
+    status_label:
+      'Heading isolation is not available. Stored page text does not keep font size, coordinates, or line geometry.',
+  };
+}
 
 export function emptyStructureReviewSummary(): StructureReviewSummaryDto {
   return {

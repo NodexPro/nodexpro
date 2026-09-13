@@ -221,6 +221,14 @@ export type StructureReviewSummaryDto = {
   by_kind: Record<string, number>;
 };
 
+export type StructureLayoutEvidenceDto = {
+  heading_isolation_available: boolean;
+  pdfjs_item_geometry_stored: boolean;
+  stored_as: 'flattened_page_text' | 'multiline_page_text';
+  line_breaks_observed: number;
+  status_label: string;
+};
+
 export type KnowledgeTrainerSliceDto = {
   available: boolean;
   schema_applied: boolean;
@@ -248,6 +256,7 @@ export type KnowledgeTrainerSliceDto = {
     review_filters: StructureReviewFilterDto[];
     structure_tree: StructureReviewTreeNodeDto[];
     ocr_page_numbers: number[];
+    layout_evidence: StructureLayoutEvidenceDto;
   } | null;
   allowed_actions: Array<{
     action_key: string;

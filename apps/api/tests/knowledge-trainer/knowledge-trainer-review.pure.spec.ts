@@ -4,6 +4,7 @@ import {
   attachStructureReviewModel,
   buildStructureReviewTree,
   candidateMatchesReviewFilter,
+  describeStoredLayoutEvidence,
   pageRangeOverlapsOcr,
 } from '../../src/domains/knowledge-trainer/knowledge-trainer-review.pure.js';
 import type { KnowledgeTrainerCandidateDto } from '../../src/domains/knowledge-trainer/knowledge-trainer.types.js';
@@ -248,6 +249,14 @@ test('review filters are backend counts and high confidence is not an accept act
   assert.equal(model.review_filters[4].count, 1);
   assert.equal(candidateMatchesReviewFilter(model.candidates[0], 'high_confidence'), true);
   assert.equal(model.candidates[0].candidate_status !== 'accepted', true);
+});
+
+test('stored page text cannot isolate headings without pdf.js geometry', () => {
+  const flattened = describeStoredLayoutEvidence([{ page_text: '. 39 ו- 38 בהם התנאים האמורים בסעיף יחול' }]);
+  assert.equal(flattened.heading_isolation_available, false);
+  assert.equal(flattened.pdfjs_item_geometry_stored, false);
+  assert.equal(flattened.stored_as, 'flattened_page_text');
+  assert.equal(flattened.line_breaks_observed, 0);
 });
 
 test('tree preserves source order parents and pageRangeOverlapsOcr is inclusive', () => {

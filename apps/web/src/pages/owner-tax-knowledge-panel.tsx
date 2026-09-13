@@ -27,6 +27,7 @@ import {
   emptyKnowledgeTrainerSlice,
   emptyLegalLibrarySlice,
   type OwnerKnowledgeTrainerCandidate,
+  type OwnerStructureLayoutEvidence,
   type OwnerStructureReviewFilter,
   type OwnerStructureReviewSummary,
   type OwnerStructureReviewTreeNode,
@@ -564,6 +565,18 @@ function parseReviewFilters(raw: unknown): OwnerStructureReviewFilter[] {
     }));
 }
 
+function parseLayoutEvidence(raw: UnknownRecord | null): OwnerStructureLayoutEvidence {
+  return {
+    heading_isolation_available: raw?.heading_isolation_available === true,
+    pdfjs_item_geometry_stored: raw?.pdfjs_item_geometry_stored === true,
+    stored_as: asString(raw?.stored_as) || 'flattened_page_text',
+    line_breaks_observed: Number(raw?.line_breaks_observed) || 0,
+    status_label:
+      asString(raw?.status_label) ||
+      'Heading isolation is not available. Stored page text does not keep font size, coordinates, or line geometry.',
+  };
+}
+
 function parseReviewTree(raw: unknown): OwnerStructureReviewTreeNode[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -705,6 +718,7 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
           ocr_page_numbers: Array.isArray(selected.ocr_page_numbers)
             ? selected.ocr_page_numbers.map((item) => Number(item)).filter((item) => item > 0)
             : [],
+          layout_evidence: parseLayoutEvidence(asRecord(selected.layout_evidence)),
         }
       : null,
     allowed_actions: parseAllowedActions(raw.allowed_actions),

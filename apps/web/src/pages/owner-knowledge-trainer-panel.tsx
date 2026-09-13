@@ -6,7 +6,6 @@ import type {
   OwnerKnowledgeTrainerSlice,
   OwnerLegalLibrarySource,
   OwnerStructureReviewSummary,
-  OwnerStructureReviewTreeNode,
   TaxKnowledgeAggregate,
   UnknownRecord,
 } from './owner-legal-control-types';
@@ -231,6 +230,7 @@ function TrainerReview({
   const [parentCandidateId, setParentCandidateId] = useState('');
   const [error, setError] = useState('');
   const [pageUrl, setPageUrl] = useState('');
+  const [expanded, setExpanded] = useState(false);
 
   const candidateById = useMemo(() => {
     const map = new Map<string, OwnerKnowledgeTrainerCandidate>();
@@ -243,9 +243,14 @@ function TrainerReview({
     [candidateById, candidateId, document.candidates],
   );
 
-  const visibleTree = useMemo(
-    () => filterReviewTree(document.structure_tree, candidateById, filterKey, search),
-    [document.structure_tree, candidateById, filterKey, search],
+  const visibleCandidates = useMemo(
+    () =>
+      document.candidates.filter((row) => {
+        if (!candidateMatchesFilter(row, filterKey)) return false;
+        const query = search.trim().toLowerCase();
+        return !query || candidateSearchText(row).includes(query);
+      }),
+    [document.candidates, filterKey, search],
   );
 
   const pdfSrc = useMemo(() => {
@@ -269,6 +274,21 @@ function TrainerReview({
     setParentCandidateId(candidate.parent_candidate_id ?? '');
     setEditing(false);
   }, [candidate]);
+
+  useEffect(() => {
+    if (!visibleCandidates.length) return;
+    if (visibleCandidates.some((row) => row.id === candidateId)) return;
+    setCandidateId(visibleCandidates[0].id);
+  }, [visibleCandidates, candidateId]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expanded]);
 
   useEffect(() => {
     let cancelled = false;
@@ -334,6 +354,9 @@ function TrainerReview({
         </div>
       ) : null}
       <ReviewSummary summary={document.review_summary} />
+      {document.layout_evidence?.status_label ? (
+        <div style={{ fontSize: 13, color: '#92400e' }}>{document.layout_evidence.status_label}</div>
+      ) : null}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {document.review_filters.map((filter) => (
           <button
@@ -384,7 +407,7 @@ function TrainerReview({
               key={pdfSrc}
               title="Original legal material"
               src={pdfSrc}
-              style={{ width: '100%', minHeight: 360, border: '1px solid #e5e7eb' }}
+              style={{ width: '100%', minHeight: 280, border: '1px solid #e5e7eb' }}
             />
           ) : (
             <pre
@@ -406,10 +429,20 @@ function TrainerReview({
           </div>
         </div>
         <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Draft structure</div>
-          <StructureReviewTree
-            nodes={visibleTree}
-            candidateById={candidateById}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+            <div style={{ fontWeight: 600 }}>Draft structure</div>
+            <button
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              disabled={!candidate}
+              onClick={() => setExpanded(true)}
+              aria-label="Expand review"
+            >
+              🔍 Expand review
+            </button>
+          </div>
+          <CandidatePicker
+            candidates={visibleCandidates}
             selectedId={candidate?.id ?? ''}
             onSelect={setCandidateId}
           />
@@ -447,6 +480,48 @@ function TrainerReview({
           {error ? <div style={{ color: '#b91c1c', fontSize: 13, marginTop: 8 }}>{error}</div> : null}
         </div>
       </div>
+      {expanded && candidate ? (
+        <ExpandedReviewModal
+          documentTitle={document.original_filename}
+          filterLabel={
+            document.review_filters.find((row) => row.key === filterKey)?.label ||
+            REVIEW_FILTER_LABELS[filterKey] ||
+            filterKey
+          }
+          search={search}
+          pdfSrc={pdfSrc}
+          fallbackText={document.selected_page?.text || 'No extracted text for this page.'}
+          visibleCandidates={visibleCandidates}
+          candidate={candidate}
+          allCandidates={document.candidates}
+          kinds={taxKnowledge.legal_library.node_kinds.map((kind) => kind.label)}
+          editing={editing}
+          kindLabel={kindLabel}
+          nodeNumber={nodeNumber}
+          title={title}
+          parentCandidateId={parentCandidateId}
+          busy={busy}
+          error={error}
+          onClose={() => setExpanded(false)}
+          onSelect={setCandidateId}
+          onKindLabel={setKindLabel}
+          onNodeNumber={setNodeNumber}
+          onTitle={setTitle}
+          onParent={setParentCandidateId}
+          onEdit={() => setEditing(true)}
+          onSave={() => void saveEdit()}
+          onAccept={() =>
+            void onCommand('accept_legal_structure_candidate', {
+              legal_ingestion_candidate_id: candidate.id,
+            }).catch((err) => setError(userFacingApiMessage(err)))
+          }
+          onReject={() =>
+            void onCommand('reject_legal_extraction_candidate', {
+              legal_ingestion_candidate_id: candidate.id,
+            }).catch((err) => setError(userFacingApiMessage(err)))
+          }
+        />
+      ) : null}
     </section>
   );
 }
@@ -548,10 +623,13 @@ function CandidateEditor({
           <div dir="auto">{candidate.parent_label || 'None'}</div>
         )}
       </label>
-      <div style={{ fontSize: 12, color: '#6b7280' }}>
-        Page {candidate.page_start ?? '—'}
+      <div>Page range</div>
+      <div style={{ fontSize: 13 }}>
+        {candidate.page_start ?? '—'}
         {candidate.page_end && candidate.page_end !== candidate.page_start ? `–${candidate.page_end}` : ''}
-        {candidate.confidence != null ? ` · confidence ${candidate.confidence}` : ''}
+      </div>
+      <div style={{ fontSize: 12, color: '#6b7280' }}>
+        Confidence {candidate.confidence != null ? candidate.confidence : '—'}
         {candidate.possible_existing_match ? ' · possible existing match' : ''}
       </div>
       {(candidate.display_warnings.length ? candidate.display_warnings : candidate.validation_warnings).length ? (
@@ -620,121 +698,150 @@ function ReviewSummary({ summary }: { summary: OwnerStructureReviewSummary }) {
   );
 }
 
-function StructureReviewTree({
-  nodes,
-  candidateById,
+function CandidatePicker({
+  candidates,
   selectedId,
   onSelect,
 }: {
-  nodes: OwnerStructureReviewTreeNode[];
-  candidateById: Map<string, OwnerKnowledgeTrainerCandidate>;
+  candidates: OwnerKnowledgeTrainerCandidate[];
   selectedId: string;
   onSelect: (id: string) => void;
 }) {
-  if (!nodes.length) {
+  if (!candidates.length) {
     return <div style={{ color: '#6b7280', fontSize: 13 }}>No candidates match this filter.</div>;
   }
   return (
-    <div
-      style={{
-        maxHeight: 320,
-        overflow: 'auto',
-        border: '1px solid #e5e7eb',
-        borderRadius: 6,
-        padding: 8,
-        background: '#fff',
-      }}
-    >
-      {nodes.map((node) => (
-        <TreeNodeRow
-          key={node.candidate_id}
-          node={node}
-          depth={0}
-          candidateById={candidateById}
-          selectedId={selectedId}
-          onSelect={onSelect}
-        />
-      ))}
-    </div>
+    <label>
+      Candidate
+      <select className="nx-input" value={selectedId} onChange={(event) => onSelect(event.target.value)}>
+        {candidates.map((row, index) => (
+          <option key={row.id} value={row.id}>
+            {index + 1}. {row.kind_label || ''} {row.node_number || ''} {row.title || ''} · p.
+            {row.page_start ?? '—'} · {row.review_class_label || row.review_class}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
-function TreeNodeRow({
-  node,
-  depth,
-  candidateById,
-  selectedId,
+function ExpandedReviewModal({
+  documentTitle,
+  filterLabel,
+  search,
+  pdfSrc,
+  fallbackText,
+  visibleCandidates,
+  candidate,
+  allCandidates,
+  kinds,
+  editing,
+  kindLabel,
+  nodeNumber,
+  title,
+  parentCandidateId,
+  busy,
+  error,
+  onClose,
   onSelect,
+  onKindLabel,
+  onNodeNumber,
+  onTitle,
+  onParent,
+  onEdit,
+  onSave,
+  onAccept,
+  onReject,
 }: {
-  node: OwnerStructureReviewTreeNode;
-  depth: number;
-  candidateById: Map<string, OwnerKnowledgeTrainerCandidate>;
-  selectedId: string;
+  documentTitle: string;
+  filterLabel: string;
+  search: string;
+  pdfSrc: string;
+  fallbackText: string;
+  visibleCandidates: OwnerKnowledgeTrainerCandidate[];
+  candidate: OwnerKnowledgeTrainerCandidate;
+  allCandidates: OwnerKnowledgeTrainerCandidate[];
+  kinds: string[];
+  editing: boolean;
+  kindLabel: string;
+  nodeNumber: string;
+  title: string;
+  parentCandidateId: string;
+  busy: boolean;
+  error: string;
+  onClose: () => void;
   onSelect: (id: string) => void;
+  onKindLabel: (value: string) => void;
+  onNodeNumber: (value: string) => void;
+  onTitle: (value: string) => void;
+  onParent: (value: string) => void;
+  onEdit: () => void;
+  onSave: () => void;
+  onAccept: () => void;
+  onReject: () => void;
 }) {
-  const candidate = candidateById.get(node.candidate_id);
-  const selected = node.candidate_id === selectedId;
-  const label = candidate
-    ? [candidate.kind_label, candidate.node_number, candidate.title].filter(Boolean).join(' ')
-    : node.candidate_id;
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => onSelect(node.candidate_id)}
-        style={{
-          display: 'block',
-          width: '100%',
-          textAlign: 'start',
-          padding: '6px 8px',
-          marginInlineStart: depth * 14,
-          border: 'none',
-          borderRadius: 6,
-          background: selected ? '#dbeafe' : 'transparent',
-          cursor: 'pointer',
-          fontSize: 13,
-          lineHeight: 1.3,
-        }}
+    <div className="nx-modal-backdrop" role="presentation" onClick={onClose}>
+      <div
+        className="nx-modal nx-trainer-review-modal"
+        role="dialog"
+        aria-labelledby="trainer-expand-review-title"
+        onClick={(event) => event.stopPropagation()}
       >
-        <span dir="auto">{label || '—'}</span>
-        <span style={{ color: '#6b7280', marginInlineStart: 8 }}>
-          {candidate?.review_class_label || ''}
-          {candidate?.page_start ? ` · p.${candidate.page_start}` : ''}
-        </span>
-      </button>
-      {node.children.map((child) => (
-        <TreeNodeRow
-          key={child.candidate_id}
-          node={child}
-          depth={depth + 1}
-          candidateById={candidateById}
-          selectedId={selectedId}
-          onSelect={onSelect}
-        />
-      ))}
+        <div className="nx-modal-header">
+          <h2 id="trainer-expand-review-title" style={{ margin: 0, fontSize: 18 }}>
+            Expand review
+          </h2>
+          <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="nx-modal-body nx-trainer-review-modal-body">
+          <div className="nx-trainer-review-pdf">
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Original source</div>
+            {pdfSrc ? (
+              <iframe key={pdfSrc} title="Original legal material expanded" src={pdfSrc} />
+            ) : (
+              <pre dir="auto">{fallbackText}</pre>
+            )}
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+              {candidate.page_start ? `Original PDF page ${candidate.page_start}` : 'Page —'}
+            </div>
+          </div>
+          <div className="nx-trainer-review-draft">
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Draft structure</div>
+            <div style={{ fontSize: 13, color: '#4b5563', marginBottom: 8 }}>
+              {documentTitle}
+              <br />
+              Filter: {filterLabel}
+              {search.trim() ? ` · search “${search.trim()}”` : ''}
+            </div>
+            <CandidatePicker candidates={visibleCandidates} selectedId={candidate.id} onSelect={onSelect} />
+            <CandidateEditor
+              candidate={candidate}
+              candidates={allCandidates}
+              kinds={kinds}
+              editing={editing}
+              kindLabel={kindLabel}
+              nodeNumber={nodeNumber}
+              title={title}
+              parentCandidateId={parentCandidateId}
+              busy={busy}
+              onKindLabel={onKindLabel}
+              onNodeNumber={onNodeNumber}
+              onTitle={onTitle}
+              onParent={onParent}
+              onEdit={onEdit}
+              onSave={onSave}
+              onAccept={onAccept}
+              onReject={onReject}
+            />
+            {error ? <div style={{ color: '#b91c1c', fontSize: 13, marginTop: 8 }}>{error}</div> : null}
+          </div>
+        </div>
+      </div>
     </div>
   );
-}
-
-function filterReviewTree(
-  nodes: OwnerStructureReviewTreeNode[],
-  candidateById: Map<string, OwnerKnowledgeTrainerCandidate>,
-  filterKey: string,
-  search: string,
-): OwnerStructureReviewTreeNode[] {
-  const query = search.trim().toLowerCase();
-  const keep = (node: OwnerStructureReviewTreeNode): OwnerStructureReviewTreeNode | null => {
-    const children = node.children.map(keep).filter((row): row is OwnerStructureReviewTreeNode => row !== null);
-    const candidate = candidateById.get(node.candidate_id);
-    if (!candidate) return children.length ? { candidate_id: node.candidate_id, children } : null;
-    const matchesFilter = candidateMatchesFilter(candidate, filterKey);
-    const matchesSearch = !query || candidateSearchText(candidate).includes(query);
-    if ((matchesFilter && matchesSearch) || children.length) {
-      return { candidate_id: node.candidate_id, children };
-    }
-    return null;
-  };
-  return nodes.map(keep).filter((row): row is OwnerStructureReviewTreeNode => row !== null);
 }
 
 function candidateMatchesFilter(candidate: OwnerKnowledgeTrainerCandidate, filterKey: string): boolean {

@@ -77,6 +77,13 @@ test('Accept reuses canonical Legal Library command; worker never writes canonic
   assert.doesNotMatch(readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-commands.service.ts'), /handleRebuildStructure[\s\S]*storeOwnerLegalMaterial/);
 });
 
+test('PDF extraction currently stores flattened item.str only', () => {
+  const pdf = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-pdf.service.ts');
+  assert.match(pdf, /item\.str/);
+  assert.match(pdf, /\.join\(' '\)/);
+  assert.doesNotMatch(pdf, /transform|hasEOL|fontName/);
+});
+
 test('Structure review classes are read-time and never auto-accept or auto-activate', () => {
   const review = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-review.pure.ts');
   const read = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-read.service.ts');
