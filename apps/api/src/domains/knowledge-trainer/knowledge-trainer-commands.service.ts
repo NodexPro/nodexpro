@@ -7,7 +7,7 @@ import { assertOwnerLegalCommandAccess } from '../owner-country-legal-access/own
 import { buildOwnerLegalControlPanelAggregate } from '../country-pack/country-pack-read-models.service.js';
 import { executeTaxKnowledgeCommand } from '../tax-knowledge/tax-knowledge-commands.service.js';
 import { TAX_SOURCE_PROVENANCE_TYPES } from '../tax-knowledge/tax-knowledge.types.js';
-import { queueLayoutStatusForPage } from './knowledge-trainer-layout.pure.js';
+import { queueLayoutUpdatesByPageStatus } from './knowledge-trainer-layout.pure.js';
 import {
   assertCountryAgrees,
   assertV1PdfUpload,
@@ -363,13 +363,27 @@ async function handleReextractLayout(
     .eq('job_id', job.id);
   throwIfTrainerSchemaMissing(error);
   if (error) throw error;
-  for (const page of pages ?? []) {
-    const next = queueLayoutStatusForPage(String(page.status), page.layout_status == null ? null : String(page.layout_status));
-    const { error: updateError } = await supabaseAdmin
+  const queued = queueLayoutUpdatesByPageStatus(
+    (pages ?? []).map((page) => ({
+      id: String(page.id),
+      status: String(page.status),
+      layout_status: page.layout_status == null ? null : String(page.layout_status),
+    })),
+  );
+  const layoutQueuePatch = { layout_error: null, lease_owner: null, lease_expires_at: null };
+  if (queued.pendingIds.length) {
+    const { error: pendingError } = await supabaseAdmin
       .from('legal_ingestion_pages')
-      .update({ layout_status: next, layout_error: null, lease_owner: null, lease_expires_at: null })
-      .eq('id', page.id);
-    if (updateError) throw updateError;
+      .update({ ...layoutQueuePatch, layout_status: 'pending' })
+      .in('id', queued.pendingIds);
+    if (pendingError) throw pendingError;
+  }
+  if (queued.skippedIds.length) {
+    const { error: skippedError } = await supabaseAdmin
+      .from('legal_ingestion_pages')
+      .update({ ...layoutQueuePatch, layout_status: 'skipped_needs_ocr' })
+      .in('id', queued.skippedIds);
+    if (skippedError) throw skippedError;
   }
   await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_LAYOUT_EXTRACTION_STARTED, 'legal_ingestion_job', String(job.id), {
     country_code: document.country_code,

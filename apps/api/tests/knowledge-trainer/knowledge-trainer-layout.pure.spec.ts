@@ -16,6 +16,7 @@ import {
   lineLooksLikeAmendmentOrGazette,
   lineLooksLikeRunningCitation,
   queueLayoutStatusForPage,
+  queueLayoutUpdatesByPageStatus,
   stagingStructureIdsToReplace,
   summarizeLayoutReadiness,
 } from '../../src/domains/knowledge-trainer/knowledge-trainer-layout.pure.js';
@@ -154,6 +155,80 @@ test('layout detector keeps standalone heading and rejects citation/amendment/ga
   assert.ok(seif && chelek);
   assert.equal(seif.parent_index, numbered.drafts.indexOf(chelek));
   assert.equal(numbered.analysis.layout_used, true);
+
+  const ordinanceShape = detectStructureCandidatesFromLayout(
+    [
+      {
+        page_no: 12,
+        text: 'flattened לפי סעיף 39 חלק ממנו',
+        layout: {
+          v: 1,
+          h: 841,
+          items: [
+            item({ s: "חלק א': פרשנות", y: 691, fs: 12, i: 0, eol: true }),
+            item({ s: '[ 2 ] הגדרות', y: 672, fs: 13.5, i: 1, eol: true }),
+            item({ s: 'בפקודה זו - . 1', y: 653, fs: 16, i: 2, eol: true }),
+            item({ s: 'חלק ממנו', y: 500, fs: 13, i: 3, eol: true }),
+            item({ s: 'פרק ראשון: המקור', y: 400, fs: 12, i: 4, eol: true }),
+          ],
+        },
+      },
+    ],
+    catalog,
+  );
+  assert.equal(ordinanceShape.drafts.some((row) => row.kind_label === 'חלק' && row.node_number === "א'" && row.title === 'פרשנות'), true);
+  assert.equal(ordinanceShape.drafts.some((row) => row.kind_label === 'סעיף' && row.node_number === '1' && row.title === 'הגדרות'), true);
+  assert.equal(ordinanceShape.drafts.some((row) => row.kind_label === 'פרק' && /ראשון/.test(row.node_number) && /מקור/.test(row.title || '')), true);
+  assert.equal(ordinanceShape.drafts.some((row) => row.kind_label === 'חלק' && row.node_number === 'מ'), false);
+
+  const rtlBodyStart = detectStructureCandidatesFromLayout(
+    [
+      {
+        page_no: 16,
+        text: 'flattened לפי סעיף 39',
+        layout: {
+          v: 1,
+          h: 841,
+          items: [
+            item({ s: "2002 תשס\"ב- ( 132 תיקון מס' ) [ ( 1 ) 5 ] מקורות הכנסה", y: 80, fs: 13, i: 0, eol: true }),
+            item({ s: 'מס הכנסה יהא משתלם, בכפוף להוראות פקודה זו, לכל שנת מס, בשיעורים . 2', y: 60, fs: 16, i: 1, eol: true }),
+          ],
+        },
+      },
+    ],
+    catalog,
+  );
+  assert.equal(
+    rtlBodyStart.drafts.some((row) => row.kind_label === 'סעיף' && row.node_number === '2' && /מקורות/.test(row.title || '')),
+    true,
+  );
+});
+
+test('amendment application and gazette-neighbor lines are not structural headings', () => {
+  assert.equal(lineLooksLikeAmendmentOrGazette('סעיף 39 יחול'), true);
+  assert.equal(lineLooksLikeAmendmentOrGazette('סעיף 105י יחול'), true);
+  assert.equal(lineLooksLikeAmendmentOrGazette('סעיף 197 יחול תיקון 1984'), true);
+  const { drafts } = detectStructureCandidatesFromLayout(
+    [
+      {
+        page_no: 304,
+        text: 'flattened סעיף 39 יחול סעיף 256 עמ 514',
+        layout: {
+          v: 1,
+          h: 841,
+          items: [
+            item({ s: "תיקון מס' 197", y: 420, fs: 10, i: 0, eol: true }),
+            item({ s: 'סעיף 256', y: 400, fs: 10, i: 1, eol: true }),
+            item({ s: "עמ' 514", y: 380, fs: 10, i: 2, eol: true }),
+            item({ s: 'סעיף 39 יחול', y: 360, fs: 10, i: 3, eol: true }),
+            item({ s: 'סעיף 272 יחול', y: 340, fs: 10, i: 4, eol: true }),
+          ],
+        },
+      },
+    ],
+    catalog,
+  );
+  assert.equal(drafts.some((row) => ['39', '256', '272', '197', '514'].includes(String(row.node_number))), false);
 });
 
 test('layout claim resumes after expired lease and is not for needs_ocr', () => {
@@ -211,6 +286,23 @@ test('layout persist must not write page_text or status; readiness is additive',
   assert.equal(summary.ready_count, 1);
   assert.equal(summary.skipped_ocr_count, 1);
   assert.equal(summary.high_confidence_trusted, false);
+  const processing = summarizeLayoutReadiness([
+    { status: 'extracted', layout_status: 'pending' },
+    { status: 'extracted', layout_status: 'ready' },
+  ]);
+  assert.equal(processing.readiness, 'processing');
+  const failedOnly = summarizeLayoutReadiness([
+    { status: 'extracted', layout_status: 'ready' },
+    { status: 'extracted', layout_status: 'failed' },
+  ]);
+  assert.equal(failedOnly.readiness, 'partial');
+  assert.equal(failedOnly.failed_count, 1);
+  const queued = queueLayoutUpdatesByPageStatus([
+    { id: 'p1', status: 'extracted', layout_status: 'not_extracted' },
+    { id: 'p2', status: 'needs_ocr', layout_status: 'not_extracted' },
+  ]);
+  assert.deepEqual(queued.pendingIds, ['p1']);
+  assert.deepEqual(queued.skippedIds, ['p2']);
 });
 
 test('TAX-625 is additive and 620-624 remain', () => {

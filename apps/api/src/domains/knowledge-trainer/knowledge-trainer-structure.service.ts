@@ -61,9 +61,20 @@ export async function persistStructureCandidatesForJob(
   );
   if (stagingIds.length) {
     assertWorkerTableAllowed('legal_ingestion_candidates');
-    await supabaseAdmin.from('legal_ingestion_candidates').update({ parent_candidate_id: null }).in('id', stagingIds);
-    const { error: deleteError } = await supabaseAdmin.from('legal_ingestion_candidates').delete().in('id', stagingIds);
-    if (deleteError) throw deleteError;
+    const chunkSize = 80;
+    for (let offset = 0; offset < stagingIds.length; offset += chunkSize) {
+      const chunk = stagingIds.slice(offset, offset + chunkSize);
+      const { error: unlinkError } = await supabaseAdmin
+        .from('legal_ingestion_candidates')
+        .update({ parent_candidate_id: null })
+        .in('id', chunk);
+      if (unlinkError) throw unlinkError;
+    }
+    for (let offset = 0; offset < stagingIds.length; offset += chunkSize) {
+      const chunk = stagingIds.slice(offset, offset + chunkSize);
+      const { error: deleteError } = await supabaseAdmin.from('legal_ingestion_candidates').delete().in('id', chunk);
+      if (deleteError) throw deleteError;
+    }
   }
 
   const { data: pages, error: pageError } = await supabaseAdmin

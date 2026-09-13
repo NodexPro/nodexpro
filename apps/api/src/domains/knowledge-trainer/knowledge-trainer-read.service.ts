@@ -108,14 +108,14 @@ export async function buildKnowledgeTrainerSlice(
   if (selectedSummary && selectedJob) {
     const pagesWithLayout = await supabaseAdmin
       .from('legal_ingestion_pages')
-      .select('page_no, status, page_text, layout_status, layout_item_count')
+      .select('page_no, status, layout_status, layout_item_count')
       .eq('job_id', selectedJob.id)
       .order('page_no', { ascending: true });
     const pagesFallback =
       pagesWithLayout.error && isSupabaseMissingColumnError(pagesWithLayout.error)
         ? await supabaseAdmin
             .from('legal_ingestion_pages')
-            .select('page_no, status, page_text')
+            .select('page_no, status')
             .eq('job_id', selectedJob.id)
             .order('page_no', { ascending: true })
         : pagesWithLayout;
@@ -123,7 +123,7 @@ export async function buildKnowledgeTrainerSlice(
     const pages = (pagesFallback.data ?? []) as Array<{
       page_no: number;
       status: string;
-      page_text: string | null;
+      page_text?: string | null;
       layout_status?: string | null;
       layout_item_count?: number | null;
     }>;
@@ -136,7 +136,23 @@ export async function buildKnowledgeTrainerSlice(
       .order('sort_order', { ascending: true });
 
     const pageNo = opts?.page_no && opts.page_no > 0 ? opts.page_no : pages?.[0] ? Number(pages[0].page_no) : null;
-    const selectedPage = pages?.find((page) => Number(page.page_no) === pageNo) ?? null;
+    const selectedPageMeta = pages?.find((page) => Number(page.page_no) === pageNo) ?? null;
+    const selectedPageText = pageNo
+      ? await supabaseAdmin
+          .from('legal_ingestion_pages')
+          .select('page_no, page_text, status')
+          .eq('job_id', selectedJob.id)
+          .eq('page_no', pageNo)
+          .maybeSingle()
+      : { data: null, error: null };
+    if (selectedPageText.error) throw selectedPageText.error;
+    const selectedPage = selectedPageText.data
+      ? {
+          page_no: Number(selectedPageText.data.page_no),
+          page_text: selectedPageText.data.page_text == null ? null : String(selectedPageText.data.page_text),
+          status: String(selectedPageText.data.status),
+        }
+      : selectedPageMeta;
     const ocrPageNumbers = (pages ?? [])
       .filter((page) => String(page.status) === 'needs_ocr')
       .map((page) => Number(page.page_no))
@@ -210,7 +226,7 @@ export async function buildKnowledgeTrainerSlice(
       pages: (pages ?? []).map((page) => ({
         page_no: Number(page.page_no),
         status: String(page.status) as LegalIngestionPageStatus,
-        has_text: Boolean(page.page_text),
+        has_text: String(page.status) === 'extracted',
       })),
       selected_page: selectedPage
         ? {

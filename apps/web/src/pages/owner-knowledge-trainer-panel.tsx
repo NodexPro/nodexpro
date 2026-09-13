@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { OWNER } from '../api/endpoints';
+import { shouldPollKnowledgeTrainerProgress } from './owner-knowledge-trainer-progress';
 import type {
   OwnerKnowledgeTrainerCandidate,
   OwnerKnowledgeTrainerSlice,
@@ -221,9 +222,10 @@ function TrainerReview({
 }) {
   const document = trainer.selected_document;
   if (!document) return null;
-  const processing =
-    ['uploaded', 'queued', 'extracting'].includes(document.job_status) ||
-    document.layout_readiness?.readiness === 'processing';
+  const processing = shouldPollKnowledgeTrainerProgress({
+    job_status: document.job_status,
+    layout_readiness: document.layout_readiness?.readiness,
+  });
   const [candidateId, setCandidateId] = useState(document.candidates[0]?.id ?? '');
   const [filterKey, setFilterKey] = useState(document.review_filters[0]?.key || 'all');
   const [search, setSearch] = useState('');
@@ -268,7 +270,7 @@ function TrainerReview({
     if (!processing) return;
     const timer = window.setInterval(() => onReload(), 4000);
     return () => window.clearInterval(timer);
-  }, [processing, onReload]);
+  }, [processing, document.id, onReload]);
 
   useEffect(() => {
     if (!candidate) return;
@@ -368,7 +370,12 @@ function TrainerReview({
           Layout evidence: <strong>{document.layout_readiness?.readiness_label || 'Not extracted'}</strong>
         </div>
         <div>{document.layout_readiness?.reuse_document_label || 'Existing document reused. No re-upload required.'}</div>
-        {document.layout_readiness?.high_confidence_trusted ? null : (
+        {document.structure_analysis?.layout_used ? (
+          <div>Layout used on this structure rebuild: yes</div>
+        ) : null}
+        {document.layout_readiness?.high_confidence_trusted ? (
+          <div>High confidence is layout-backed. It is not accepted law.</div>
+        ) : (
           <div style={{ color: '#92400e' }}>High confidence is not trusted until structure is rebuilt with layout.</div>
         )}
         {document.layout_evidence?.status_label ? <div>{document.layout_evidence.status_label}</div> : null}

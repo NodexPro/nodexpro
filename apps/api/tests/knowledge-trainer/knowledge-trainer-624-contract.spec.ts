@@ -73,7 +73,10 @@ test('Accept reuses canonical Legal Library command; worker never writes canonic
   assert.match(persist, /page_text/);
   assert.match(persist, /useLayout/);
   assert.match(persist, /stagingStructureIdsToReplace/);
+  assert.match(persist, /chunkSize/);
   assert.match(persist, /detectStructureCandidatesFromLayout/);
+  assert.match(commands, /queueLayoutUpdatesByPageStatus/);
+  assert.doesNotMatch(commands, /for \(const page of pages \?\? \[\]\)/);
   assert.doesNotMatch(persist, /from\('tax_legal_nodes'\)\s*\.insert/);
   assert.doesNotMatch(persist, /from\('tax_legal_nodes'\)\s*\.delete/);
   assert.doesNotMatch(persist, /from\('legal_ingestion_pages'\)\s*\.update/);

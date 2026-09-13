@@ -50,3 +50,18 @@ test('Knowledge Trainer V1 UI is additive and does not hide manual structure aut
   assert.match(trainer, /aria-labelledby="trainer-expand-review-title"/);
   assert.doesNotMatch(trainer, /Accept all|Bulk accept|accept_all|auto.accept|auto_activate/i);
 });
+
+test('Trainer polls only while backend aggregate says processing and does not hold commandBusy', async () => {
+  const { shouldPollKnowledgeTrainerProgress } = await import('../src/pages/owner-knowledge-trainer-progress.ts');
+  assert.equal(shouldPollKnowledgeTrainerProgress({ job_status: 'needs_review', layout_readiness: 'processing' }), true);
+  assert.equal(shouldPollKnowledgeTrainerProgress({ job_status: 'extracting', layout_readiness: 'not_extracted' }), true);
+  assert.equal(shouldPollKnowledgeTrainerProgress({ job_status: 'needs_review', layout_readiness: 'ready' }), false);
+  assert.equal(shouldPollKnowledgeTrainerProgress({ job_status: 'needs_review', layout_readiness: 'partial' }), false);
+  assert.equal(shouldPollKnowledgeTrainerProgress({ job_status: 'needs_review', layout_readiness: 'failed' }), false);
+  const panel = readRepo('apps/web/src/pages/PlatformOwnerLegalControl.tsx');
+  const trainer = readRepo('apps/web/src/pages/owner-knowledge-trainer-panel.tsx');
+  assert.match(panel, /finally \{\s*setCommandBusy\(false\);/s);
+  assert.match(panel, /reloadTrainerSilently/);
+  assert.match(trainer, /shouldPollKnowledgeTrainerProgress/);
+  assert.match(trainer, /document\.id, onReload/);
+});

@@ -1,5 +1,6 @@
 import {
   detectStructureCandidates,
+  isYearLikeIdentifier,
   usableKindCatalog,
 } from './knowledge-trainer.pure.js';
 import type {
@@ -181,11 +182,28 @@ export function buildPageLayoutProfile(lines: LayoutLine[], pageHeight: number):
 export function lineLooksLikeRunningCitation(text: string): boolean {
   return /(?:לפי|מכוח|כאמור|בהתאם|על\s+פי|לענין)\s+(?:ל)?(?:ב)?סעיף/.test(text) ||
     /(?:בסעיף|לסעיף)\s+\S/.test(text) ||
-    /סעיפים\s+\d/.test(text);
+    /סעיפים\s+\d/.test(text) ||
+    /ר'\s*סעיף/.test(text);
 }
 
 export function lineLooksLikeAmendmentOrGazette(text: string): boolean {
-  return /תיקון\s*מס/.test(text) || /עמ['׳"]?\s*\d+/.test(text) || /ס["”]?ח\s/.test(text);
+  const hasYear = /(?:^|\s)(?:19|20)\d{2}(?:\s|$|[.,;:])/.test(text);
+  const hasAmendmentContext = /תיקון|ס["”]?ח|עמ['׳"]?/.test(text);
+  return (
+    /תיקון\s*מס/.test(text) ||
+    /עמ['׳"]?\s*\d+/.test(text) ||
+    /ס["”]?ח\s/.test(text) ||
+    /סעיף\s+\S+\s+יחול(?:\s|$|[.,;:])/.test(text) ||
+    /תחילתו\s+ביום/.test(text) ||
+    (hasYear && hasAmendmentContext)
+  );
+}
+
+const HEBREW_ORDINALS = 'ראשון|שני|שלישי|רביעי|חמישי|ששי|שביעי|שמיני|תשיעי|עשירי';
+const CONTAINER_NUMBER = `(?:${HEBREW_ORDINALS}|[א-ת]['׳']|[0-9]{1,3})`;
+
+export function lineLooksLikeOfficialContainerHeading(text: string): boolean {
+  return new RegExp(`^(?:חלק|פרק|סימן|תוספת)\\s+${CONTAINER_NUMBER}\\s*[:'׳]`).test(text.trim());
 }
 
 export function evaluateLineHeadingEvidence(
@@ -193,8 +211,32 @@ export function evaluateLineHeadingEvidence(
   neighbors: { prev?: LayoutLine; next?: LayoutLine },
   profile: PageLayoutProfile,
 ): HeadingLayoutVerdict {
-  if (line.y >= profile.header_y || line.y <= profile.footer_y) return 'header_or_footer';
+  if (
+    (line.y >= profile.header_y || line.y <= profile.footer_y) &&
+    !titleFromPreviousHeadingLine(neighbors.prev?.text)
+  ) {
+    return 'header_or_footer';
+  }
+  if (
+    profile.median_font_size > 0 &&
+    line.fontSize > 0 &&
+    line.fontSize <= profile.median_font_size * 0.78 &&
+    line.y <= profile.page_height * 0.22
+  ) {
+    return 'header_or_footer';
+  }
+  if (lineLooksLikeOfficialContainerHeading(line.text) && line.text.length <= 56) {
+    return 'isolated_heading';
+  }
   if (lineLooksLikeAmendmentOrGazette(line.text)) return 'amendment_or_gazette';
+  if (
+    neighbors.prev &&
+    neighbors.next &&
+    lineLooksLikeAmendmentOrGazette(neighbors.prev.text) &&
+    lineLooksLikeAmendmentOrGazette(neighbors.next.text)
+  ) {
+    return 'amendment_or_gazette';
+  }
   if (lineLooksLikeRunningCitation(line.text)) return 'running_citation';
   const gapAbove = neighbors.prev ? Math.abs(neighbors.prev.y - line.y) : profile.median_font_size * 3;
   const gapBelow = neighbors.next ? Math.abs(line.y - neighbors.next.y) : profile.median_font_size * 3;
@@ -233,16 +275,16 @@ export function summarizeLayoutReadiness(
 } {
   const extracted = pages.filter((page) => page.status === 'extracted');
   const ready = extracted.filter((page) => page.layout_status === 'ready');
-  const pending = extracted.filter((page) =>
-    ['pending', 'extracting', 'failed'].includes(String(page.layout_status)),
+  const inFlight = extracted.filter((page) =>
+    ['pending', 'extracting'].includes(String(page.layout_status)),
   );
   const skipped = pages.filter((page) => page.status === 'needs_ocr' || page.layout_status === 'skipped_needs_ocr').length;
   const failed = extracted.filter((page) => page.layout_status === 'failed').length;
   const itemCount = pages.reduce((sum, page) => sum + (Number(page.layout_item_count) || 0), 0);
   let readiness: 'not_extracted' | 'processing' | 'ready' | 'partial' = 'not_extracted';
   if (ready.length && ready.length === extracted.length) readiness = 'ready';
-  else if (pending.length) readiness = 'processing';
-  else if (ready.length) readiness = 'partial';
+  else if (inFlight.length) readiness = 'processing';
+  else if (ready.length || failed) readiness = 'partial';
   const labels = {
     not_extracted: 'Not extracted',
     processing: `Processing ${ready.length} / ${extracted.length || 0}`,
@@ -265,32 +307,89 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function titleFromPreviousHeadingLine(prev?: string): string | null {
+  if (!prev) return null;
+  const bracketTitle = prev.match(/\]\s+([א-ת][^0-9[\]]{1,50})$/);
+  if (bracketTitle?.[1] && !lineLooksLikeRunningCitation(bracketTitle[1])) {
+    return bracketTitle[1].trim().slice(0, 60);
+  }
+  const afterAmendment = prev.replace(/^.*תיקון\s*מס['׳"]?\s*\)\s*/, '').trim();
+  if (
+    afterAmendment &&
+    afterAmendment !== prev.trim() &&
+    afterAmendment.length <= 50 &&
+    /[א-ת]{2,}/.test(afterAmendment) &&
+    !/תיקון|תש["׳]/.test(afterAmendment)
+  ) {
+    return afterAmendment.slice(0, 60);
+  }
+  const cleaned = prev.replace(/^\s*\[\s*[^\]]+\]\s*/, '').trim();
+  if (cleaned.length < 2 || cleaned.length > 40) return null;
+  if (/^(?:19|20)\d{2}\s+תש/.test(cleaned)) return null;
+  if (lineLooksLikeAmendmentOrGazette(cleaned) || lineLooksLikeRunningCitation(cleaned)) return null;
+  if (!/[א-ת]{2,}/.test(cleaned)) return null;
+  return cleaned.slice(0, 60);
+}
+
+function seifLabelFromCatalog(labels: string[]): string | undefined {
+  return labels.find((label) => label === 'סעיף') ?? labels.find((label) => /סעיף/.test(label) && !/קטן/.test(label));
+}
+
 function matchCatalogOnLine(
   lineText: string,
   catalog: StructureKindCatalogItem[],
+  previousLineText?: string,
 ): Array<{ kind_label: string; node_number: string; title: string | null }> {
   const labels = usableKindCatalog(catalog).map((item) => item.label.trim()).filter(Boolean);
   if (!labels.length) return [];
   const out: Array<{ kind_label: string; node_number: string; title: string | null }> = [];
-  const kindRe = new RegExp(
-    `(${labels.map(escapeRegExp).sort((a, b) => b.length - a.length).join('|')})\\s+([0-9]{1,4}[א-ת]?|[א-ת]'?|ראשון|שני|שלישי|רביעי|חמישי|ששי|שביעי|שמיני|תשיעי|עשירי)`,
-    'g',
-  );
-  let match: RegExpExecArray | null;
-  while ((match = kindRe.exec(lineText))) {
-    const after = lineText.slice(match.index + match[0].length).replace(/^\s*[:.\-–—]\s*/, '').trim();
+  const trimmed = lineText.trim();
+  const containerKinds = labels
+    .filter((label) => /^(חלק|פרק|סימן|תוספת)$/.test(label))
+    .sort((a, b) => b.length - a.length);
+  if (containerKinds.length) {
+    const containerRe = new RegExp(
+      `^(${containerKinds.map(escapeRegExp).join('|')})\\s+(${HEBREW_ORDINALS}|[א-ת]['׳']|[0-9]{1,3})(?:\\s*[:'׳.\\-–—]\\s*|\\s+|$)(.*)$`,
+    );
+    const container = trimmed.match(containerRe);
+    if (container) {
+      const title = container[3].trim().slice(0, 60) || null;
+      out.push({ kind_label: container[1], node_number: container[2], title });
+    }
+  }
+  const seif = seifLabelFromCatalog(labels);
+  const explicitSeif = trimmed.match(new RegExp(`^סעיף\\s+([0-9]{1,3}[א-ת]?)(?:\\s*[:.\\-–—]\\s*|\\s+|$)(.*)$`));
+  if (seif && explicitSeif && !isYearLikeIdentifier(explicitSeif[1])) {
     out.push({
-      kind_label: match[1],
-      node_number: match[2],
-      title: after.slice(0, 60) || null,
+      kind_label: seif,
+      node_number: explicitSeif[1],
+      title: explicitSeif[2].trim().slice(0, 60) || null,
     });
   }
-  const numbered = lineText.match(/^\s*(?:(\d{1,3}[א-ת]?)\.|\\.\s+(\d{1,3}))(?:\s+|$)(.*)$/);
-  if (numbered) {
-    const nodeNumber = numbered[1] || numbered[2];
-    const seif = labels.find((label) => label === 'סעיף') ?? labels.find((label) => /סעיף/.test(label) && !/קטן/.test(label));
-    if (seif && nodeNumber) {
-      out.push({ kind_label: seif, node_number: nodeNumber, title: (numbered[3] || '').slice(0, 60) || null });
+  const ltrNumbered = trimmed.match(/^([0-9]{1,3}[א-ת]?)\.(?:\s+|$)(.*)$/);
+  if (seif && ltrNumbered && !isYearLikeIdentifier(ltrNumbered[1])) {
+    out.push({
+      kind_label: seif,
+      node_number: ltrNumbered[1],
+      title: ltrNumbered[2].trim().slice(0, 60) || titleFromPreviousHeadingLine(previousLineText),
+    });
+  }
+  const lookbackTitle = titleFromPreviousHeadingLine(previousLineText);
+  const rtlAleph = trimmed.match(/(?:^|\s)א\.\s+([0-9]{1,3})\s*$/);
+  const rtlNumbered = trimmed.match(/(?<!\d)\.\s+([0-9]{1,3}[א-ת]?)\s*$/);
+  if (seif && lookbackTitle && !lineLooksLikeRunningCitation(trimmed)) {
+    if (rtlAleph && !isYearLikeIdentifier(rtlAleph[1])) {
+      out.push({
+        kind_label: seif,
+        node_number: `${rtlAleph[1]}א`,
+        title: lookbackTitle,
+      });
+    } else if (rtlNumbered && !isYearLikeIdentifier(rtlNumbered[1])) {
+      out.push({
+        kind_label: seif,
+        node_number: rtlNumbered[1],
+        title: lookbackTitle,
+      });
     }
   }
   return out;
@@ -325,7 +424,7 @@ export function detectStructureCandidatesFromLayout(
         return;
       }
       if (verdict === 'insufficient_evidence') return;
-      const matches = matchCatalogOnLine(line.text, catalog);
+      const matches = matchCatalogOnLine(line.text, catalog, lines[index - 1]?.text);
       if (!matches.length) return;
       const isolated = verdict === 'isolated_heading';
       for (const hit of matches) {
@@ -409,6 +508,19 @@ export function queueLayoutStatusForPage(status: string, currentLayout: string |
   if (status === 'needs_ocr') return 'skipped_needs_ocr';
   if (status === 'extracted') return 'pending';
   return (currentLayout as PageLayoutStatus) || 'not_extracted';
+}
+
+export function queueLayoutUpdatesByPageStatus(
+  pages: Array<{ id: string; status: string; layout_status?: string | null }>,
+): { pendingIds: string[]; skippedIds: string[] } {
+  const pendingIds: string[] = [];
+  const skippedIds: string[] = [];
+  for (const page of pages) {
+    const next = queueLayoutStatusForPage(page.status, page.layout_status);
+    if (next === 'pending') pendingIds.push(page.id);
+    if (next === 'skipped_needs_ocr') skippedIds.push(page.id);
+  }
+  return { pendingIds, skippedIds };
 }
 
 export function layoutPersistPreservesPageText(update: Record<string, unknown>): boolean {

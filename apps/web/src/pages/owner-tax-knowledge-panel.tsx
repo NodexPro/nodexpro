@@ -738,6 +738,7 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
                 unresolved_parent_count: Number(asRecord(selected.structure_analysis)?.unresolved_parent_count) || 0,
                 ocr_pages_untouched: Number(asRecord(selected.structure_analysis)?.ocr_pages_untouched) || 0,
                 ocr_gap_warning: asRecord(selected.structure_analysis)?.ocr_gap_warning === true,
+                layout_used: asRecord(selected.structure_analysis)?.layout_used === true,
               }
             : null,
           can_rebuild_structure: selected.can_rebuild_structure === true,

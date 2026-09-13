@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiJson, ApiError, userFacingApiMessage } from '../api/client';
 import { OWNER } from '../api/endpoints';
@@ -70,7 +70,7 @@ export function PlatformOwnerLegalControl() {
     }
   }, [auth.status, navigate]);
 
-  async function loadCore(opts?: { silent?: boolean }): Promise<void> {
+  const loadCore = useCallback(async (opts?: { silent?: boolean }): Promise<void> => {
     if (!opts?.silent) {
       setLoading(true);
       setError('');
@@ -99,16 +99,19 @@ export function PlatformOwnerLegalControl() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [taxKnowledgeCountryQuery, trainerDocumentQuery]);
 
   useEffect(() => {
     if (auth.status === 'authenticated') {
       void loadCore();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.status, taxKnowledgeCountryQuery, trainerDocumentQuery]);
+  }, [auth.status, loadCore]);
 
-  async function sendOwnerCommand(command: string, payload: UnknownRecord): Promise<OwnerCommandResponse> {
+  const reloadTrainerSilently = useCallback(() => {
+    void loadCore({ silent: true });
+  }, [loadCore]);
+
+  const sendOwnerCommand = useCallback(async (command: string, payload: UnknownRecord): Promise<OwnerCommandResponse> => {
     setCommandBusy(true);
     setError('');
     try {
@@ -116,8 +119,13 @@ export function PlatformOwnerLegalControl() {
         method: 'POST',
         body: JSON.stringify({ command, payload }),
       })) as OwnerCommandResponse;
-      const refreshed = out.refreshed.aggregate;
-      if (out.refreshed.aggregate_key === 'owner_legal_control_panel_aggregate') setPanel(refreshed);
+      try {
+        if (out.refreshed?.aggregate_key === 'owner_legal_control_panel_aggregate') {
+          setPanel(out.refreshed.aggregate);
+        }
+      } catch (refreshError) {
+        setError(userFacingApiMessage(refreshError));
+      }
       return out;
     } catch (e) {
       setError(userFacingApiMessage(e));
@@ -125,7 +133,7 @@ export function PlatformOwnerLegalControl() {
     } finally {
       setCommandBusy(false);
     }
-  }
+  }, []);
 
   async function toggleCountryPack(row: UnknownRecord): Promise<void> {
     const status = safeText(row.status).toLowerCase();
@@ -423,9 +431,7 @@ export function PlatformOwnerLegalControl() {
                 setCommandBusy(false);
               }
             }}
-            onReload={() => {
-              void loadCore({ silent: true });
-            }}
+            onReload={reloadTrainerSilently}
           />
         ) : null}
 

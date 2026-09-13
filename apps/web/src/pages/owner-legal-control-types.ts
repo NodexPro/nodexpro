@@ -438,9 +438,10 @@ export type OwnerKnowledgeTrainerSlice = {
       toc_index_rejected: number;
       low_confidence_count: number;
       unresolved_parent_count: number;
-      ocr_pages_untouched: number;
-      ocr_gap_warning: boolean;
-    } | null;
+            ocr_pages_untouched: number;
+            ocr_gap_warning: boolean;
+            layout_used?: boolean;
+          } | null;
     can_rebuild_structure: boolean;
     review_summary: OwnerStructureReviewSummary;
     review_filters: OwnerStructureReviewFilter[];
