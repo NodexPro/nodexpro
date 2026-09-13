@@ -13,8 +13,11 @@ import {
   groupTextItemsIntoLines,
   layoutItemsEquivalent,
   layoutPersistPreservesPageText,
+  isAmendmentDebris,
+  isAmendmentYearStamp,
   lineLooksLikeAmendmentOrGazette,
   lineLooksLikeRunningCitation,
+  parseRtlSectionNumber,
   queueLayoutStatusForPage,
   queueLayoutUpdatesByPageStatus,
   stagingStructureIdsToReplace,
@@ -202,6 +205,98 @@ test('layout detector keeps standalone heading and rejects citation/amendment/ga
     rtlBodyStart.drafts.some((row) => row.kind_label === 'סעיף' && row.node_number === '2' && /מקורות/.test(row.title || '')),
     true,
   );
+});
+
+test('RTL letter-suffix seif skips year-stamp lookback and does not keep leftover years as titles', () => {
+  assert.equal(parseRtlSectionNumber('השתכרות או רווח ( א ) א. 2'), '2א');
+  assert.equal(parseRtlSectionNumber('לענין סעיף זה – ( א ) א. 3'), '3א');
+  assert.equal(parseRtlSectionNumber('סכום שהגיע לידי אדם ( א ) . 3'), '3');
+  assert.equal(parseRtlSectionNumber('הכנסה מסוימת ( ב ) ב. 4'), '4ב');
+  assert.equal(parseRtlSectionNumber('. ( בוטל ) יא. 105'), null);
+  assert.equal(parseRtlSectionNumber('. ( בוטל ) טז. 105'), null);
+  assert.equal(parseRtlSectionNumber('. ( בוטל ) ב. 11'), '11ב');
+  assert.equal(isAmendmentYearStamp('1968 תשכ"ח-'), true);
+  assert.equal(isAmendmentYearStamp("2004 תשס\"ד- ( 138 תיקון מס' ) 1968 תשכ\"ח-"), true);
+  assert.equal(isAmendmentYearStamp('הכנסות אחרות'), false);
+  assert.equal(isAmendmentYearStamp('תשלומים'), false);
+  assert.equal(isAmendmentDebris('2003 תשס"ג- ( 134 מס\''), true);
+  assert.equal(isAmendmentDebris('מקום הפקת ההכנסה'), false);
+  assert.equal(lineLooksLikeRunningCitation('לענין סעיף 39'), true);
+  assert.equal(lineLooksLikeRunningCitation('לענין סעיף זה – ( א ) א. 3'), false);
+  assert.equal(lineLooksLikeRunningCitation('לפי סעיף 39'), true);
+
+  const { drafts } = detectStructureCandidatesFromLayout(
+    [
+      {
+        page_no: 17,
+        text: 'flattened לפי סעיף 39',
+        layout: {
+          v: 1,
+          h: 841,
+          items: [
+            item({ s: "חלק ב': הטלת המס", y: 700, fs: 12, i: 0, eol: true }),
+            item({ s: 'פרק ראשון: המקור', y: 680, fs: 12, i: 1, eol: true }),
+            item({ s: "( 134 תיקון מס' ) השתכרות או רווח מהימורים מהגרלות או מפרסים", y: 110, fs: 13, i: 2, eol: true }),
+            item({ s: '2003 תשס"ג-', y: 98, fs: 10, i: 3, eol: true }),
+            item({
+              s: 'השתכרות או רווח של אדם תושב ישראל שהופקו או שנצמחו בישראל ( א ) א. 2',
+              y: 79,
+              fs: 16,
+              i: 4,
+              eol: true,
+            }),
+            item({
+              s: "( 13 תיקון מס' ) 1965 תשכ\"ה- ( 6 תיקון מס' ) [ ( 2 ) 5 ] הכנסות אחרות",
+              y: 620,
+              fs: 13,
+              i: 5,
+              eol: true,
+            }),
+            item({ s: '2004 תשס"ד- ( 138 תיקון מס\' ) 1968 תשכ"ח-', y: 600, fs: 10, i: 6, eol: true }),
+            item({ s: 'סכום שהגיע לידי אדם תושב ישראל ממקורות אחרים ( א ) . 3', y: 560, fs: 16, i: 7, eol: true }),
+            item({ s: "1978 תשל\"ח- ( 32 תיקון מס' ) הכנסה מאזור", y: 500, fs: 13, i: 8, eol: true }),
+            item({ s: 'לענין סעיף זה – ( א ) א. 3', y: 480, fs: 16, i: 9, eol: true }),
+            item({ s: "1990 תש\"ן- ( 81 תיקון מס' )", y: 460, fs: 10, i: 10, eol: true }),
+            item({ s: "תיקון ) 2002 תשס\"ב- ( 132 תיקון מס' ) מקום הפקת ההכנסה", y: 320, fs: 13, i: 11, eol: true }),
+            item({ s: '2003 תשס"ג- ( 134 מס\'', y: 303, fs: 13, i: 12, eol: true }),
+            item({ s: '[2]', y: 285, fs: 13, i: 13, eol: true }),
+            item({
+              s: 'המקום שבו הופקה או נצמחה הכנסה השתכרות או רווח ( א ) א. 4',
+              y: 270,
+              fs: 16,
+              i: 14,
+              eol: true,
+            }),
+            item({ s: '. ( בוטל ) יא. 105', y: 240, fs: 16, i: 15, eol: true }),
+            item({ s: '. ( בוטל ) יב. 105', y: 220, fs: 16, i: 16, eol: true }),
+            item({ s: '( ג 75 סעיף )', y: 200, fs: 12, i: 17, eol: true }),
+            item({ s: '– לפי חוקי הולנד FOUNDATION . 1', y: 180, fs: 13, i: 18, eol: true }),
+            item({ s: '. ( בוטל ) ב. 11', y: 160, fs: 16, i: 19, eol: true }),
+          ],
+        },
+      },
+    ],
+    catalog,
+  );
+  const seif2a = drafts.find((row) => row.kind_label === 'סעיף' && row.node_number === '2א');
+  const seif3 = drafts.find((row) => row.kind_label === 'סעיף' && row.node_number === '3');
+  const seif3a = drafts.find((row) => row.kind_label === 'סעיף' && row.node_number === '3א');
+  assert.ok(seif2a);
+  assert.match(String(seif2a.title), /הימורים|מפרסים/);
+  assert.ok(seif3);
+  assert.match(String(seif3.title), /הכנסות אחרות/);
+  assert.equal(/1968|תשכ/.test(String(seif3.title)), false);
+  assert.ok(seif3a);
+  assert.match(String(seif3a.title), /הכנסה מאזור/);
+  const seif4a = drafts.find((row) => row.kind_label === 'סעיף' && row.node_number === '4א');
+  assert.ok(seif4a);
+  assert.match(String(seif4a.title), /מקום הפקת ההכנסה/);
+  assert.equal(/(?:19|20)\d{2}|תשס/.test(String(seif4a.title)), false);
+  assert.equal(drafts.some((row) => row.node_number === '105'), false);
+  assert.equal(drafts.some((row) => row.node_number === '1' && /FOUNDATION|75/.test(String(row.title))), false);
+  const seif11b = drafts.find((row) => row.kind_label === 'סעיף' && row.node_number === '11ב');
+  assert.ok(seif11b);
+  assert.match(String(seif11b.title), /בוטל/);
 });
 
 test('amendment application and gazette-neighbor lines are not structural headings', () => {
