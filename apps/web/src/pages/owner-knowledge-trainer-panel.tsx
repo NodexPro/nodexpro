@@ -5,10 +5,20 @@ import type {
   OwnerKnowledgeTrainerCandidate,
   OwnerKnowledgeTrainerSlice,
   OwnerLegalLibrarySource,
+  OwnerStructureReviewSummary,
+  OwnerStructureReviewTreeNode,
   TaxKnowledgeAggregate,
   UnknownRecord,
 } from './owner-legal-control-types';
 import '../styles/nx-modal.css';
+
+const REVIEW_FILTER_LABELS: Record<string, string> = {
+  all: 'All',
+  high_confidence: 'High confidence',
+  needs_review: 'Needs review',
+  ocr_affected: 'OCR affected',
+  rejected: 'Rejected',
+};
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -212,6 +222,8 @@ function TrainerReview({
   if (!document) return null;
   const processing = ['uploaded', 'queued', 'extracting'].includes(document.job_status);
   const [candidateId, setCandidateId] = useState(document.candidates[0]?.id ?? '');
+  const [filterKey, setFilterKey] = useState(document.review_filters[0]?.key || 'all');
+  const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(false);
   const [kindLabel, setKindLabel] = useState('');
   const [nodeNumber, setNodeNumber] = useState('');
@@ -220,10 +232,28 @@ function TrainerReview({
   const [error, setError] = useState('');
   const [pageUrl, setPageUrl] = useState('');
 
+  const candidateById = useMemo(() => {
+    const map = new Map<string, OwnerKnowledgeTrainerCandidate>();
+    for (const row of document.candidates) map.set(row.id, row);
+    return map;
+  }, [document.candidates]);
+
   const candidate = useMemo(
-    () => document.candidates.find((row) => row.id === candidateId) ?? document.candidates[0] ?? null,
-    [document.candidates, candidateId],
+    () => candidateById.get(candidateId) ?? document.candidates[0] ?? null,
+    [candidateById, candidateId, document.candidates],
   );
+
+  const visibleTree = useMemo(
+    () => filterReviewTree(document.structure_tree, candidateById, filterKey, search),
+    [document.structure_tree, candidateById, filterKey, search],
+  );
+
+  const pdfSrc = useMemo(() => {
+    if (!pageUrl) return '';
+    const base = pageUrl.split('#')[0];
+    const page = candidate?.page_start;
+    return page && page > 0 ? `${base}#page=${page}` : base;
+  }, [pageUrl, candidate?.page_start]);
 
   useEffect(() => {
     if (!processing) return;
@@ -295,10 +325,39 @@ function TrainerReview({
           <div>Low confidence: {document.structure_analysis.low_confidence_count}</div>
           <div>Unresolved parent: {document.structure_analysis.unresolved_parent_count}</div>
           {document.structure_analysis.ocr_gap_warning ? (
-            <div>Some pages still need OCR; hierarchy may be incomplete.</div>
+            <div>
+              Some pages still need OCR
+              {document.ocr_page_numbers.length ? ` (${document.ocr_page_numbers.join(', ')})` : ''}; hierarchy near
+              those pages may be incomplete.
+            </div>
           ) : null}
         </div>
       ) : null}
+      <ReviewSummary summary={document.review_summary} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {document.review_filters.map((filter) => (
+          <button
+            key={filter.key}
+            type="button"
+            className="nx-btn nx-btn-taxes-compact"
+            disabled={busy}
+            aria-pressed={filterKey === filter.key}
+            onClick={() => setFilterKey(filter.key)}
+            style={filterKey === filter.key ? { outline: '2px solid #2563eb' } : undefined}
+          >
+            {filter.label || REVIEW_FILTER_LABELS[filter.key]} ({filter.count})
+          </button>
+        ))}
+      </div>
+      <label>
+        Search by סעיף number or title
+        <input
+          className="nx-input"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="1 / הגדרות / חלק א"
+        />
+      </label>
       {document.can_rebuild_structure ? (
         <div>
           <button
@@ -320,8 +379,13 @@ function TrainerReview({
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Original source</div>
-          {pageUrl ? (
-            <iframe title="Original legal material" src={pageUrl} style={{ width: '100%', minHeight: 360, border: '1px solid #e5e7eb' }} />
+          {pdfSrc ? (
+            <iframe
+              key={pdfSrc}
+              title="Original legal material"
+              src={pdfSrc}
+              style={{ width: '100%', minHeight: 360, border: '1px solid #e5e7eb' }}
+            />
           ) : (
             <pre
               dir="auto"
@@ -336,12 +400,19 @@ function TrainerReview({
               {document.selected_page?.text || 'No extracted text for this page.'}
             </pre>
           )}
-          {document.selected_page ? (
-            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Page {document.selected_page.page_no}</div>
-          ) : null}
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+            {candidate?.page_start ? `Original PDF page ${candidate.page_start}` : null}
+            {document.selected_page && !pdfSrc ? ` · extracted page ${document.selected_page.page_no}` : null}
+          </div>
         </div>
         <div>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Draft structure</div>
+          <StructureReviewTree
+            nodes={visibleTree}
+            candidateById={candidateById}
+            selectedId={candidate?.id ?? ''}
+            onSelect={setCandidateId}
+          />
           {candidate ? (
             <CandidateEditor
               candidate={candidate}
@@ -357,7 +428,6 @@ function TrainerReview({
               onNodeNumber={setNodeNumber}
               onTitle={setTitle}
               onParent={setParentCandidateId}
-              onSelectCandidate={setCandidateId}
               onEdit={() => setEditing(true)}
               onSave={() => void saveEdit()}
               onAccept={() =>
@@ -395,7 +465,6 @@ function CandidateEditor({
   onNodeNumber,
   onTitle,
   onParent,
-  onSelectCandidate,
   onEdit,
   onSave,
   onAccept,
@@ -414,7 +483,6 @@ function CandidateEditor({
   onNodeNumber: (value: string) => void;
   onTitle: (value: string) => void;
   onParent: (value: string) => void;
-  onSelectCandidate: (id: string) => void;
   onEdit: () => void;
   onSave: () => void;
   onAccept: () => void;
@@ -422,15 +490,16 @@ function CandidateEditor({
 }) {
   const locked = candidate.candidate_status === 'accepted' || candidate.candidate_status === 'rejected';
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      {candidates.length > 1 ? (
-        <select className="nx-input" value={candidate.id} onChange={(event) => onSelectCandidate(event.target.value)}>
-          {candidates.map((row, index) => (
-            <option key={row.id} value={row.id}>
-              {index + 1}. {row.kind_label} {row.node_number || ''} {row.title || ''}
-            </option>
-          ))}
-        </select>
+    <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+      <div style={{ fontSize: 13, color: '#1f2937' }}>
+        Review class: <strong>{candidate.review_class_label || candidate.review_class || '—'}</strong>
+        {candidate.ocr_affected ? ' · OCR affected' : ''}
+        {candidate.hierarchy_valid ? '' : ' · hierarchy needs review'}
+      </div>
+      {candidate.hierarchy_path ? (
+        <div dir="auto" style={{ fontSize: 12, color: '#6b7280' }}>
+          {candidate.hierarchy_path}
+        </div>
       ) : null}
       <label>
         Type
@@ -476,19 +545,19 @@ function CandidateEditor({
               ))}
           </select>
         ) : (
-          <div dir="auto">
-            {candidates.find((row) => row.id === candidate.parent_candidate_id)?.title ||
-              (candidate.parent_candidate_id ? 'Selected parent' : 'None')}
-          </div>
+          <div dir="auto">{candidate.parent_label || 'None'}</div>
         )}
       </label>
       <div style={{ fontSize: 12, color: '#6b7280' }}>
         Page {candidate.page_start ?? '—'}
+        {candidate.page_end && candidate.page_end !== candidate.page_start ? `–${candidate.page_end}` : ''}
         {candidate.confidence != null ? ` · confidence ${candidate.confidence}` : ''}
         {candidate.possible_existing_match ? ' · possible existing match' : ''}
       </div>
-      {candidate.validation_warnings.length ? (
-        <div style={{ fontSize: 12, color: '#92400e' }}>{candidate.validation_warnings.join(' · ')}</div>
+      {(candidate.display_warnings.length ? candidate.display_warnings : candidate.validation_warnings).length ? (
+        <div style={{ fontSize: 12, color: '#92400e' }}>
+          Warnings: {(candidate.display_warnings.length ? candidate.display_warnings : candidate.validation_warnings).join(' · ')}
+        </div>
       ) : null}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {editing ? (
@@ -527,4 +596,163 @@ function CandidateEditor({
       </details>
     </div>
   );
+}
+
+function ReviewSummary({ summary }: { summary: OwnerStructureReviewSummary }) {
+  const kinds = Object.entries(summary.by_kind);
+  return (
+    <div style={{ fontSize: 13, color: '#374151', display: 'grid', gap: 4 }}>
+      <div>
+        Review: {summary.all} all · {summary.high_confidence} high confidence · {summary.needs_owner_review} needs
+        review · {summary.ocr_affected} OCR affected · {summary.rejected_technical} rejected technical
+        {summary.already_accepted ? ` · ${summary.already_accepted} accepted` : ''}
+        {summary.already_rejected ? ` · ${summary.already_rejected} rejected` : ''}
+      </div>
+      {kinds.length ? (
+        <div dir="auto">
+          By type:{' '}
+          {kinds
+            .map(([kind, count]) => `${kind} ${count}`)
+            .join(' · ')}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StructureReviewTree({
+  nodes,
+  candidateById,
+  selectedId,
+  onSelect,
+}: {
+  nodes: OwnerStructureReviewTreeNode[];
+  candidateById: Map<string, OwnerKnowledgeTrainerCandidate>;
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  if (!nodes.length) {
+    return <div style={{ color: '#6b7280', fontSize: 13 }}>No candidates match this filter.</div>;
+  }
+  return (
+    <div
+      style={{
+        maxHeight: 320,
+        overflow: 'auto',
+        border: '1px solid #e5e7eb',
+        borderRadius: 6,
+        padding: 8,
+        background: '#fff',
+      }}
+    >
+      {nodes.map((node) => (
+        <TreeNodeRow
+          key={node.candidate_id}
+          node={node}
+          depth={0}
+          candidateById={candidateById}
+          selectedId={selectedId}
+          onSelect={onSelect}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TreeNodeRow({
+  node,
+  depth,
+  candidateById,
+  selectedId,
+  onSelect,
+}: {
+  node: OwnerStructureReviewTreeNode;
+  depth: number;
+  candidateById: Map<string, OwnerKnowledgeTrainerCandidate>;
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const candidate = candidateById.get(node.candidate_id);
+  const selected = node.candidate_id === selectedId;
+  const label = candidate
+    ? [candidate.kind_label, candidate.node_number, candidate.title].filter(Boolean).join(' ')
+    : node.candidate_id;
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => onSelect(node.candidate_id)}
+        style={{
+          display: 'block',
+          width: '100%',
+          textAlign: 'start',
+          padding: '6px 8px',
+          marginInlineStart: depth * 14,
+          border: 'none',
+          borderRadius: 6,
+          background: selected ? '#dbeafe' : 'transparent',
+          cursor: 'pointer',
+          fontSize: 13,
+          lineHeight: 1.3,
+        }}
+      >
+        <span dir="auto">{label || '—'}</span>
+        <span style={{ color: '#6b7280', marginInlineStart: 8 }}>
+          {candidate?.review_class_label || ''}
+          {candidate?.page_start ? ` · p.${candidate.page_start}` : ''}
+        </span>
+      </button>
+      {node.children.map((child) => (
+        <TreeNodeRow
+          key={child.candidate_id}
+          node={child}
+          depth={depth + 1}
+          candidateById={candidateById}
+          selectedId={selectedId}
+          onSelect={onSelect}
+        />
+      ))}
+    </div>
+  );
+}
+
+function filterReviewTree(
+  nodes: OwnerStructureReviewTreeNode[],
+  candidateById: Map<string, OwnerKnowledgeTrainerCandidate>,
+  filterKey: string,
+  search: string,
+): OwnerStructureReviewTreeNode[] {
+  const query = search.trim().toLowerCase();
+  const keep = (node: OwnerStructureReviewTreeNode): OwnerStructureReviewTreeNode | null => {
+    const children = node.children.map(keep).filter((row): row is OwnerStructureReviewTreeNode => row !== null);
+    const candidate = candidateById.get(node.candidate_id);
+    if (!candidate) return children.length ? { candidate_id: node.candidate_id, children } : null;
+    const matchesFilter = candidateMatchesFilter(candidate, filterKey);
+    const matchesSearch = !query || candidateSearchText(candidate).includes(query);
+    if ((matchesFilter && matchesSearch) || children.length) {
+      return { candidate_id: node.candidate_id, children };
+    }
+    return null;
+  };
+  return nodes.map(keep).filter((row): row is OwnerStructureReviewTreeNode => row !== null);
+}
+
+function candidateMatchesFilter(candidate: OwnerKnowledgeTrainerCandidate, filterKey: string): boolean {
+  if (filterKey === 'all' || !filterKey) return true;
+  if (filterKey === 'high_confidence') {
+    return candidate.review_class === 'high_confidence' && candidate.candidate_status !== 'rejected';
+  }
+  if (filterKey === 'needs_review') return candidate.review_class === 'needs_owner_review';
+  if (filterKey === 'ocr_affected') return candidate.ocr_affected === true;
+  if (filterKey === 'rejected') {
+    return candidate.review_class === 'rejected_technical' || candidate.candidate_status === 'rejected';
+  }
+  return true;
+}
+
+function candidateSearchText(candidate: OwnerKnowledgeTrainerCandidate): string {
+  return [candidate.kind_label, candidate.node_number, candidate.title, candidate.hierarchy_path, candidate.parent_label]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
 }

@@ -194,7 +194,7 @@ function isPlausibleIdentifier(value: string): boolean {
   return new RegExp(`^(?:${STRUCTURE_ID})$`).test(token);
 }
 
-function isYearLikeIdentifier(value: string): boolean {
+export function isYearLikeIdentifier(value: string): boolean {
   return /^(?:19|20)\d{2}$/.test(value.trim());
 }
 

@@ -26,4 +26,10 @@ test('Knowledge Trainer V1 UI is additive and does not hide manual structure aut
   assert.match(trainer, /Original source/);
   assert.match(trainer, /Draft structure/);
   assert.match(trainer, /Rebuild structure candidates/);
+  assert.match(trainer, /High confidence/);
+  assert.match(trainer, /Needs review/);
+  assert.match(trainer, /OCR affected/);
+  assert.match(trainer, /#page=/);
+  assert.match(trainer, /Search by/);
+  assert.doesNotMatch(trainer, /Accept all|Bulk accept|accept_all|auto.accept|auto_activate/i);
 });

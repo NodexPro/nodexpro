@@ -77,6 +77,17 @@ test('Accept reuses canonical Legal Library command; worker never writes canonic
   assert.doesNotMatch(readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-commands.service.ts'), /handleRebuildStructure[\s\S]*storeOwnerLegalMaterial/);
 });
 
+test('Structure review classes are read-time and never auto-accept or auto-activate', () => {
+  const review = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-review.pure.ts');
+  const read = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-read.service.ts');
+  const commands = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-commands.service.ts');
+  assert.match(read, /attachStructureReviewModel/);
+  assert.doesNotMatch(review, /candidate_status:\s*'accepted'/);
+  assert.doesNotMatch(review, /activate_/);
+  assert.doesNotMatch(review, /from\('tax_legal_nodes'\)/);
+  assert.doesNotMatch(commands, /accept_all|bulk_accept|auto_accept/i);
+});
+
 test('Dedicated worker package exists and leases pages', () => {
   assert.equal(existsSync(join(repoRoot, 'apps/knowledge-trainer-worker/package.json')), true);
   assert.equal(existsSync(join(repoRoot, 'apps/knowledge-trainer-worker/src/index.ts')), true);

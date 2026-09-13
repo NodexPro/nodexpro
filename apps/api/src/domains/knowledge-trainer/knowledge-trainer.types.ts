@@ -156,6 +156,22 @@ export type KnowledgeTrainerPageSummaryDto = {
   has_text: boolean;
 };
 
+export const STRUCTURE_REVIEW_CLASSES = [
+  'high_confidence',
+  'needs_owner_review',
+  'rejected_technical',
+] as const;
+export type StructureReviewClass = (typeof STRUCTURE_REVIEW_CLASSES)[number];
+
+export const STRUCTURE_REVIEW_FILTER_KEYS = [
+  'all',
+  'high_confidence',
+  'needs_review',
+  'ocr_affected',
+  'rejected',
+] as const;
+export type StructureReviewFilterKey = (typeof STRUCTURE_REVIEW_FILTER_KEYS)[number];
+
 export type KnowledgeTrainerCandidateDto = {
   id: string;
   candidate_kind: LegalIngestionCandidateKind;
@@ -173,6 +189,36 @@ export type KnowledgeTrainerCandidateDto = {
   matched_tax_legal_node_id: string | null;
   accepted_tax_legal_node_id: string | null;
   possible_existing_match: boolean;
+  review_class: StructureReviewClass;
+  review_class_label: string;
+  ocr_affected: boolean;
+  review_warnings: string[];
+  display_warnings: string[];
+  parent_label: string | null;
+  hierarchy_path: string;
+  hierarchy_valid: boolean;
+};
+
+export type StructureReviewTreeNodeDto = {
+  candidate_id: string;
+  children: StructureReviewTreeNodeDto[];
+};
+
+export type StructureReviewFilterDto = {
+  key: StructureReviewFilterKey;
+  label: string;
+  count: number;
+};
+
+export type StructureReviewSummaryDto = {
+  all: number;
+  high_confidence: number;
+  needs_owner_review: number;
+  ocr_affected: number;
+  rejected_technical: number;
+  already_rejected: number;
+  already_accepted: number;
+  by_kind: Record<string, number>;
 };
 
 export type KnowledgeTrainerSliceDto = {
@@ -198,6 +244,10 @@ export type KnowledgeTrainerSliceDto = {
     can_open_original: boolean;
     structure_analysis: StructureDetectionAnalysis | null;
     can_rebuild_structure: boolean;
+    review_summary: StructureReviewSummaryDto;
+    review_filters: StructureReviewFilterDto[];
+    structure_tree: StructureReviewTreeNodeDto[];
+    ocr_page_numbers: number[];
   } | null;
   allowed_actions: Array<{
     action_key: string;

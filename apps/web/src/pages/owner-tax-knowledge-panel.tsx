@@ -27,6 +27,9 @@ import {
   emptyKnowledgeTrainerSlice,
   emptyLegalLibrarySlice,
   type OwnerKnowledgeTrainerCandidate,
+  type OwnerStructureReviewFilter,
+  type OwnerStructureReviewSummary,
+  type OwnerStructureReviewTreeNode,
   type OwnerKnowledgeTrainerDocument,
   type OwnerKnowledgeTrainerSlice,
 } from './owner-legal-control-types';
@@ -514,6 +517,64 @@ export function parseLegalLibrary(raw: unknown): OwnerLegalLibrarySlice {
   };
 }
 
+function emptyReviewSummary(): OwnerStructureReviewSummary {
+  return {
+    all: 0,
+    high_confidence: 0,
+    needs_owner_review: 0,
+    ocr_affected: 0,
+    rejected_technical: 0,
+    already_rejected: 0,
+    already_accepted: 0,
+    by_kind: {},
+  };
+}
+
+function parseReviewSummary(raw: UnknownRecord | null): OwnerStructureReviewSummary {
+  const empty = emptyReviewSummary();
+  if (!raw) return empty;
+  const byKindRaw = asRecord(raw.by_kind);
+  const byKind: Record<string, number> = {};
+  if (byKindRaw) {
+    for (const [key, value] of Object.entries(byKindRaw)) {
+      byKind[key] = Number(value) || 0;
+    }
+  }
+  return {
+    all: Number(raw.all) || 0,
+    high_confidence: Number(raw.high_confidence) || 0,
+    needs_owner_review: Number(raw.needs_owner_review) || 0,
+    ocr_affected: Number(raw.ocr_affected) || 0,
+    rejected_technical: Number(raw.rejected_technical) || 0,
+    already_rejected: Number(raw.already_rejected) || 0,
+    already_accepted: Number(raw.already_accepted) || 0,
+    by_kind: byKind,
+  };
+}
+
+function parseReviewFilters(raw: unknown): OwnerStructureReviewFilter[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      key: asString(row.key),
+      label: asString(row.label) || asString(row.key),
+      count: Number(row.count) || 0,
+    }));
+}
+
+function parseReviewTree(raw: unknown): OwnerStructureReviewTreeNode[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      candidate_id: asString(row.candidate_id),
+      children: parseReviewTree(row.children),
+    }));
+}
+
 function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainerSlice {
   const empty = emptyKnowledgeTrainerSlice();
   if (!raw) return empty;
@@ -609,6 +670,20 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
                     matched_tax_legal_node_id: asNullableString(row.matched_tax_legal_node_id),
                     accepted_tax_legal_node_id: asNullableString(row.accepted_tax_legal_node_id),
                     possible_existing_match: row.possible_existing_match === true,
+                    review_class: asString(row.review_class),
+                    review_class_label: asString(row.review_class_label),
+                    ocr_affected: row.ocr_affected === true,
+                    review_warnings: Array.isArray(row.review_warnings)
+                      ? row.review_warnings.map((item) => String(item))
+                      : [],
+                    display_warnings: Array.isArray(row.display_warnings)
+                      ? row.display_warnings.map((item) => String(item))
+                      : Array.isArray(row.validation_warnings)
+                        ? row.validation_warnings.map((item) => String(item))
+                        : [],
+                    parent_label: asNullableString(row.parent_label),
+                    hierarchy_path: asString(row.hierarchy_path),
+                    hierarchy_valid: row.hierarchy_valid === true,
                   }),
                 )
             : [],
@@ -624,6 +699,12 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
               }
             : null,
           can_rebuild_structure: selected.can_rebuild_structure === true,
+          review_summary: parseReviewSummary(asRecord(selected.review_summary)),
+          review_filters: parseReviewFilters(selected.review_filters),
+          structure_tree: parseReviewTree(selected.structure_tree),
+          ocr_page_numbers: Array.isArray(selected.ocr_page_numbers)
+            ? selected.ocr_page_numbers.map((item) => Number(item)).filter((item) => item > 0)
+            : [],
         }
       : null,
     allowed_actions: parseAllowedActions(raw.allowed_actions),

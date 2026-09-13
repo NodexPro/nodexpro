@@ -357,6 +357,36 @@ export type OwnerKnowledgeTrainerCandidate = {
   matched_tax_legal_node_id: string | null;
   accepted_tax_legal_node_id: string | null;
   possible_existing_match: boolean;
+  review_class: string;
+  review_class_label: string;
+  ocr_affected: boolean;
+  review_warnings: string[];
+  display_warnings: string[];
+  parent_label: string | null;
+  hierarchy_path: string;
+  hierarchy_valid: boolean;
+};
+
+export type OwnerStructureReviewTreeNode = {
+  candidate_id: string;
+  children: OwnerStructureReviewTreeNode[];
+};
+
+export type OwnerStructureReviewFilter = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+export type OwnerStructureReviewSummary = {
+  all: number;
+  high_confidence: number;
+  needs_owner_review: number;
+  ocr_affected: number;
+  rejected_technical: number;
+  already_rejected: number;
+  already_accepted: number;
+  by_kind: Record<string, number>;
 };
 
 export type OwnerKnowledgeTrainerSlice = {
@@ -388,6 +418,10 @@ export type OwnerKnowledgeTrainerSlice = {
       ocr_gap_warning: boolean;
     } | null;
     can_rebuild_structure: boolean;
+    review_summary: OwnerStructureReviewSummary;
+    review_filters: OwnerStructureReviewFilter[];
+    structure_tree: OwnerStructureReviewTreeNode[];
+    ocr_page_numbers: number[];
   } | null;
   allowed_actions: TaxKnowledgeAllowedAction[];
 };

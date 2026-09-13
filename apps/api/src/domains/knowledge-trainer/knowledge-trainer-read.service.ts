@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import { attachStructureReviewModel } from './knowledge-trainer-review.pure.js';
 import { decodeStructureAnalysis, emptyStructureAnalysis, jobStatusLabel, trainerInputOptions } from './knowledge-trainer.pure.js';
 import type {
   KnowledgeTrainerCandidateDto,
@@ -119,6 +120,42 @@ export async function buildKnowledgeTrainerSlice(
 
     const pageNo = opts?.page_no && opts.page_no > 0 ? opts.page_no : pages?.[0] ? Number(pages[0].page_no) : null;
     const selectedPage = pages?.find((page) => Number(page.page_no) === pageNo) ?? null;
+    const ocrPageNumbers = (pages ?? [])
+      .filter((page) => String(page.status) === 'needs_ocr')
+      .map((page) => Number(page.page_no))
+      .filter((page) => page > 0);
+    const { data: kinds } = await supabaseAdmin
+      .from('tax_legal_node_kinds')
+      .select('id, label')
+      .eq('country_code', countryCode)
+      .order('sort_order', { ascending: true });
+    const baseCandidates = (candidates ?? []).map((row) => {
+        const warnings = Array.isArray(row.validation_warnings)
+          ? row.validation_warnings.map((item) => String(item))
+          : [];
+        return {
+          id: String(row.id),
+          candidate_kind: row.candidate_kind as KnowledgeTrainerCandidateDto['candidate_kind'],
+          candidate_status: row.candidate_status as KnowledgeTrainerCandidateDto['candidate_status'],
+          kind_label: row.kind_label == null ? null : String(row.kind_label),
+          node_number: row.node_number == null ? null : String(row.node_number),
+          title: row.title == null ? null : String(row.title),
+          parent_candidate_id: row.parent_candidate_id == null ? null : String(row.parent_candidate_id),
+          parent_tax_legal_node_id: row.parent_tax_legal_node_id == null ? null : String(row.parent_tax_legal_node_id),
+          page_start: row.page_start == null ? null : Number(row.page_start),
+          page_end: row.page_end == null ? null : Number(row.page_end),
+          excerpt: row.excerpt == null ? null : String(row.excerpt),
+          confidence: row.confidence == null ? null : Number(row.confidence),
+          validation_warnings: warnings,
+          matched_tax_legal_node_id: row.matched_tax_legal_node_id == null ? null : String(row.matched_tax_legal_node_id),
+          accepted_tax_legal_node_id: row.accepted_tax_legal_node_id == null ? null : String(row.accepted_tax_legal_node_id),
+          possible_existing_match: Boolean(row.matched_tax_legal_node_id),
+        };
+      });
+    const reviewed = attachStructureReviewModel(baseCandidates, {
+      catalog: (kinds ?? []).map((row) => ({ id: String(row.id), label: String(row.label) })),
+      ocr_pages: ocrPageNumbers,
+    });
     selected = {
       id: selectedSummary.id,
       original_filename: selectedSummary.original_filename,
@@ -141,29 +178,7 @@ export async function buildKnowledgeTrainerSlice(
             status: String(selectedPage.status) as LegalIngestionPageStatus,
           }
         : null,
-      candidates: (candidates ?? []).map((row): KnowledgeTrainerCandidateDto => {
-        const warnings = Array.isArray(row.validation_warnings)
-          ? row.validation_warnings.map((item) => String(item))
-          : [];
-        return {
-          id: String(row.id),
-          candidate_kind: row.candidate_kind as KnowledgeTrainerCandidateDto['candidate_kind'],
-          candidate_status: row.candidate_status as KnowledgeTrainerCandidateDto['candidate_status'],
-          kind_label: row.kind_label == null ? null : String(row.kind_label),
-          node_number: row.node_number == null ? null : String(row.node_number),
-          title: row.title == null ? null : String(row.title),
-          parent_candidate_id: row.parent_candidate_id == null ? null : String(row.parent_candidate_id),
-          parent_tax_legal_node_id: row.parent_tax_legal_node_id == null ? null : String(row.parent_tax_legal_node_id),
-          page_start: row.page_start == null ? null : Number(row.page_start),
-          page_end: row.page_end == null ? null : Number(row.page_end),
-          excerpt: row.excerpt == null ? null : String(row.excerpt),
-          confidence: row.confidence == null ? null : Number(row.confidence),
-          validation_warnings: warnings,
-          matched_tax_legal_node_id: row.matched_tax_legal_node_id == null ? null : String(row.matched_tax_legal_node_id),
-          accepted_tax_legal_node_id: row.accepted_tax_legal_node_id == null ? null : String(row.accepted_tax_legal_node_id),
-          possible_existing_match: Boolean(row.matched_tax_legal_node_id),
-        };
-      }),
+      candidates: reviewed.candidates,
       can_open_original: true,
       structure_analysis: decodeStructureAnalysis(
         typeof selectedJob.last_error === 'string' ? selectedJob.last_error : null,
@@ -179,6 +194,10 @@ export async function buildKnowledgeTrainerSlice(
         ).length,
       },
       can_rebuild_structure: !['uploaded', 'queued', 'extracting'].includes(selectedSummary.job_status),
+      review_summary: reviewed.review_summary,
+      review_filters: reviewed.review_filters,
+      structure_tree: reviewed.structure_tree,
+      ocr_page_numbers: ocrPageNumbers,
     };
   }
 
