@@ -35,16 +35,35 @@ const IMPLAUSIBLE_SEIF_SPAN = 15;
 export type StructureReviewContext = {
   catalog: StructureKindCatalogItem[];
   ocr_pages: number[];
+  layout_used?: boolean;
 };
 
 export function describeStoredLayoutEvidence(
-  pages: Array<{ page_text?: string | null }>,
+  pages: Array<{
+    page_text?: string | null;
+    page_text_items?: unknown;
+    layout_status?: string | null;
+    layout_item_count?: number | null;
+  }>,
 ): StructureLayoutEvidenceDto {
   let lineBreaks = 0;
+  let itemPages = 0;
   for (const page of pages) {
     if (typeof page.page_text === 'string') {
       lineBreaks += (page.page_text.match(/\n/g) || []).length;
     }
+    if (page.page_text_items || page.layout_status === 'ready' || Number(page.layout_item_count) > 0) {
+      itemPages += 1;
+    }
+  }
+  if (itemPages > 0) {
+    return {
+      heading_isolation_available: true,
+      pdfjs_item_geometry_stored: true,
+      stored_as: 'page_text_items',
+      line_breaks_observed: lineBreaks,
+      status_label: 'Layout evidence is stored separately from page_text. High confidence is trusted only after a layout rebuild.',
+    };
   }
   return {
     heading_isolation_available: false,
@@ -240,9 +259,12 @@ function classifyOne(
 
   const reviewClass: StructureReviewClass = technical
     ? 'rejected_technical'
-    : needsOwner
+    : needsOwner || ctx.layout_used !== true
       ? 'needs_owner_review'
       : 'high_confidence';
+  if (reviewClass === 'needs_owner_review' && !technical && ctx.layout_used !== true) {
+    reviewWarnings.push('high_confidence_untrusted_until_layout_rebuild');
+  }
 
   const displayWarnings = uniqueStrings([
     ...persisted.filter((warning) => warning !== GLOBAL_OCR_WARNING || ocrAffected),

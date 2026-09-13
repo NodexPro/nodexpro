@@ -538,6 +538,8 @@ export function decodeStructureAnalysis(raw: string | null | undefined): Structu
       unresolved_parent_count: Number(parsed.unresolved_parent_count) || 0,
       ocr_pages_untouched: Number(parsed.ocr_pages_untouched) || 0,
       ocr_gap_warning: parsed.ocr_gap_warning === true,
+      layout_used: parsed.layout_used === true,
+      layout_pages_used: Number(parsed.layout_pages_used) || 0,
     };
   } catch {
     return null;
@@ -552,6 +554,8 @@ export function emptyStructureAnalysis(): StructureDetectionAnalysis {
     unresolved_parent_count: 0,
     ocr_pages_untouched: 0,
     ocr_gap_warning: false,
+    layout_used: false,
+    layout_pages_used: 0,
   };
 }
 
@@ -582,6 +586,8 @@ export function detectStructureCandidates(
     unresolved_parent_count: drafts.filter((row) => row.validation_warnings.includes('unresolved_parent')).length,
     ocr_pages_untouched: ocrPages,
     ocr_gap_warning: ocrPages > 0,
+    layout_used: false,
+    layout_pages_used: 0,
   };
   if (analysis.ocr_gap_warning) {
     for (const draft of drafts) {

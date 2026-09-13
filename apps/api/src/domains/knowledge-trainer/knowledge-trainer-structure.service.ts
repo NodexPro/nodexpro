@@ -1,6 +1,11 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import {
+  detectStructureCandidatesFromLayout,
+  parseStoredPageLayout,
+  stagingStructureIdsToReplace,
+} from './knowledge-trainer-layout.pure.js';
+import {
   detectStructureCandidates,
   encodeStructureAnalysis,
   validateStructureCandidates,
@@ -16,7 +21,7 @@ function assertWorkerTableAllowed(table: string): void {
 
 export async function persistStructureCandidatesForJob(
   jobId: string,
-  opts: { replaceStaging: boolean },
+  opts: { replaceStaging: boolean; useLayout?: boolean },
 ): Promise<{ analysis: StructureDetectionAnalysis; preserved_accepted: number } | null> {
   const { data: job, error: jobError } = await supabaseAdmin
     .from('legal_ingestion_jobs')
@@ -46,13 +51,14 @@ export async function persistStructureCandidatesForJob(
     return null;
   }
 
-  const stagingIds = (existingCandidates ?? [])
-    .filter(
-      (row) =>
-        row.candidate_kind === 'structure' &&
-        !accepted.some((keep) => keep.id === row.id),
-    )
-    .map((row) => String(row.id));
+  const stagingIds = stagingStructureIdsToReplace(
+    (existingCandidates ?? []).map((row) => ({
+      id: String(row.id),
+      candidate_kind: String(row.candidate_kind),
+      candidate_status: String(row.candidate_status),
+      accepted_tax_legal_node_id: row.accepted_tax_legal_node_id == null ? null : String(row.accepted_tax_legal_node_id),
+    })),
+  );
   if (stagingIds.length) {
     assertWorkerTableAllowed('legal_ingestion_candidates');
     await supabaseAdmin.from('legal_ingestion_candidates').update({ parent_candidate_id: null }).in('id', stagingIds);
@@ -62,14 +68,18 @@ export async function persistStructureCandidatesForJob(
 
   const { data: pages, error: pageError } = await supabaseAdmin
     .from('legal_ingestion_pages')
-    .select('page_no, page_text, status')
+    .select('page_no, page_text, status, page_text_items')
     .eq('job_id', jobId)
     .order('page_no', { ascending: true });
   if (pageError) throw pageError;
 
   const extractedPages = (pages ?? [])
     .filter((page) => page.status === 'extracted' && typeof page.page_text === 'string')
-    .map((page) => ({ page_no: Number(page.page_no), text: String(page.page_text) }));
+    .map((page) => ({
+      page_no: Number(page.page_no),
+      text: String(page.page_text),
+      layout: parseStoredPageLayout(page.page_text_items),
+    }));
 
   const { data: kinds, error: kindError } = await supabaseAdmin
     .from('tax_legal_node_kinds')
@@ -94,12 +104,21 @@ export async function persistStructureCandidatesForJob(
     title: String(row.title ?? ''),
   }));
 
-  const detected = detectStructureCandidates(extractedPages, (kinds ?? []).map((row) => ({
+  const catalog = (kinds ?? []).map((row) => ({
     id: String(row.id),
     label: String(row.label),
-  })), {
-    ocr_page_count: Number(job.needs_ocr_page_count ?? 0),
-  });
+  }));
+  const detected = opts.useLayout
+    ? detectStructureCandidatesFromLayout(extractedPages, catalog, {
+        ocr_page_count: Number(job.needs_ocr_page_count ?? 0),
+      })
+    : detectStructureCandidates(
+        extractedPages.map((page) => ({ page_no: page.page_no, text: page.text })),
+        catalog,
+        {
+          ocr_page_count: Number(job.needs_ocr_page_count ?? 0),
+        },
+      );
   const drafts = validateStructureCandidates(detected.drafts, {
     country_code: String(job.country_code),
     tax_source_id: String(job.tax_source_id),

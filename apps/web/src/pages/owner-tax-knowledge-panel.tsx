@@ -28,6 +28,7 @@ import {
   emptyLegalLibrarySlice,
   type OwnerKnowledgeTrainerCandidate,
   type OwnerStructureLayoutEvidence,
+  type OwnerTrainerLayoutReadiness,
   type OwnerStructureReviewFilter,
   type OwnerStructureReviewSummary,
   type OwnerStructureReviewTreeNode,
@@ -565,6 +566,34 @@ function parseReviewFilters(raw: unknown): OwnerStructureReviewFilter[] {
     }));
 }
 
+function parseLayoutReadiness(raw: UnknownRecord | null): OwnerTrainerLayoutReadiness {
+  return {
+    readiness: asString(raw?.readiness) || 'not_extracted',
+    readiness_label: asString(raw?.readiness_label) || 'Not extracted',
+    eligible_count: Number(raw?.eligible_count) || 0,
+    ready_count: Number(raw?.ready_count) || 0,
+    skipped_ocr_count: Number(raw?.skipped_ocr_count) || 0,
+    failed_count: Number(raw?.failed_count) || 0,
+    item_count: Number(raw?.item_count) || 0,
+    high_confidence_trusted: raw?.high_confidence_trusted === true,
+    reupload_required: false,
+    reuse_document_label:
+      asString(raw?.reuse_document_label) || 'Existing document reused. No re-upload required.',
+    can_extract_layout: raw?.can_extract_layout === true,
+    can_rebuild_with_layout: raw?.can_rebuild_with_layout === true,
+    pages: Array.isArray(raw?.pages)
+      ? raw.pages
+          .map((row) => asRecord(row))
+          .filter((row): row is UnknownRecord => row !== null)
+          .map((row) => ({
+            page_no: Number(row.page_no) || 0,
+            layout_status: asString(row.layout_status) || 'not_extracted',
+            item_count: Number(row.item_count) || 0,
+          }))
+      : [],
+  };
+}
+
 function parseLayoutEvidence(raw: UnknownRecord | null): OwnerStructureLayoutEvidence {
   return {
     heading_isolation_available: raw?.heading_isolation_available === true,
@@ -719,6 +748,7 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
             ? selected.ocr_page_numbers.map((item) => Number(item)).filter((item) => item > 0)
             : [],
           layout_evidence: parseLayoutEvidence(asRecord(selected.layout_evidence)),
+          layout_readiness: parseLayoutReadiness(asRecord(selected.layout_readiness)),
         }
       : null,
     allowed_actions: parseAllowedActions(raw.allowed_actions),

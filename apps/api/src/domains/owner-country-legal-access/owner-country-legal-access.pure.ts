@@ -114,6 +114,8 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'start_legal_document_extraction' ||
     command === 'retry_legal_document_page' ||
     command === 'rebuild_legal_structure_candidates' ||
+    command === 'reextract_legal_document_layout' ||
+    command === 'rebuild_legal_structure_with_layout' ||
     command === 'accept_legal_structure_candidate'
   ) {
     return 'legal_sources.manage';

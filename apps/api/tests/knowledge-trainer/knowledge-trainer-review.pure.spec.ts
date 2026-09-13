@@ -44,8 +44,9 @@ function base(
 function classify(
   rows: ReturnType<typeof base>[],
   ocrPages: number[] = [],
+  layoutUsed = true,
 ) {
-  return attachStructureReviewModel(rows, { catalog, ocr_pages: ocrPages });
+  return attachStructureReviewModel(rows, { catalog, ocr_pages: ocrPages, layout_used: layoutUsed });
 }
 
 test('clean containers and titled sections are high confidence, not accepted', () => {
@@ -251,12 +252,34 @@ test('review filters are backend counts and high confidence is not an accept act
   assert.equal(model.candidates[0].candidate_status !== 'accepted', true);
 });
 
+test('flattened high confidence is not trusted until layout rebuild', () => {
+  const model = classify(
+    [
+      base({
+        id: 'chelek',
+        kind_label: 'חלק',
+        node_number: "א'",
+        title: 'פרשנות',
+        parent_candidate_id: null,
+        confidence: 0.9,
+      }),
+    ],
+    [],
+    false,
+  );
+  assert.equal(model.candidates[0].review_class, 'needs_owner_review');
+  assert.ok(model.candidates[0].review_warnings.includes('high_confidence_untrusted_until_layout_rebuild'));
+});
+
 test('stored page text cannot isolate headings without pdf.js geometry', () => {
   const flattened = describeStoredLayoutEvidence([{ page_text: '. 39 ו- 38 בהם התנאים האמורים בסעיף יחול' }]);
   assert.equal(flattened.heading_isolation_available, false);
   assert.equal(flattened.pdfjs_item_geometry_stored, false);
   assert.equal(flattened.stored_as, 'flattened_page_text');
   assert.equal(flattened.line_breaks_observed, 0);
+  const ready = describeStoredLayoutEvidence([{ page_text: 'same flattened text', layout_status: 'ready', layout_item_count: 12 }]);
+  assert.equal(ready.pdfjs_item_geometry_stored, true);
+  assert.equal(ready.stored_as, 'page_text_items');
 });
 
 test('tree preserves source order parents and pageRangeOverlapsOcr is inclusive', () => {

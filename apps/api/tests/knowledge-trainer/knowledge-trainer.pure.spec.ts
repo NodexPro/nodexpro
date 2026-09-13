@@ -152,11 +152,19 @@ test('worker isolation forbids canonical legal tables', () => {
 test('upload/accept are not activate; reject is review; edit is draft_edit', () => {
   assert.equal(capabilityRequiredForOwnerCommand('upload_legal_training_document'), 'legal_sources.manage');
   assert.equal(capabilityRequiredForOwnerCommand('rebuild_legal_structure_candidates'), 'legal_sources.manage');
+  assert.equal(capabilityRequiredForOwnerCommand('reextract_legal_document_layout'), 'legal_sources.manage');
+  assert.equal(capabilityRequiredForOwnerCommand('rebuild_legal_structure_with_layout'), 'legal_sources.manage');
   assert.equal(capabilityRequiredForOwnerCommand('accept_legal_structure_candidate'), 'legal_sources.manage');
   assert.equal(capabilityRequiredForOwnerCommand('update_legal_extraction_candidate'), 'legal_knowledge.draft_edit');
   assert.equal(capabilityRequiredForOwnerCommand('reject_legal_extraction_candidate'), 'legal_knowledge.review');
   assert.equal(capabilityRequiredForOwnerCommand('activate_tax_source'), 'legal_knowledge.activate');
   assert.notEqual(capabilityRequiredForOwnerCommand('upload_legal_training_document'), 'legal_knowledge.activate');
+});
+
+test('flattened detector never marks layout_used', () => {
+  const detected = detectStructureCandidates([{ page_no: 1, text: 'חלק א פרשנות\nסעיף 1 הגדרות' }], catalog);
+  assert.equal(detected.analysis.layout_used, false);
+  assert.equal(detected.drafts.some((row) => row.candidate_status === 'accepted'), false);
 });
 
 test('TOC line with multiple Go tokens is not a canonical-quality candidate', () => {

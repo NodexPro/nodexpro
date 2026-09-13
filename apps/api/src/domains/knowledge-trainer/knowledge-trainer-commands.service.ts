@@ -2,11 +2,12 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, conflict, forbidden, notFound } from '../../shared/errors.js';
-import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import { assertOwnerLegalCommandAccess } from '../owner-country-legal-access/owner-country-legal-access.service.js';
 import { buildOwnerLegalControlPanelAggregate } from '../country-pack/country-pack-read-models.service.js';
 import { executeTaxKnowledgeCommand } from '../tax-knowledge/tax-knowledge-commands.service.js';
 import { TAX_SOURCE_PROVENANCE_TYPES } from '../tax-knowledge/tax-knowledge.types.js';
+import { queueLayoutStatusForPage } from './knowledge-trainer-layout.pure.js';
 import {
   assertCountryAgrees,
   assertV1PdfUpload,
@@ -44,6 +45,9 @@ function asOptionalUuid(value: unknown, field: string): string | null {
 function throwIfTrainerSchemaMissing(error: unknown): void {
   if (error && isSupabaseMissingTableError(error)) {
     throw badRequest('Knowledge Trainer schema is not applied. Migration 624 is required on DEV.');
+  }
+  if (error && isSupabaseMissingColumnError(error as { code?: string; message?: string })) {
+    throw badRequest('Knowledge Trainer layout schema is not applied. Migration 625 is required on DEV.');
   }
 }
 
@@ -343,6 +347,78 @@ async function handleRebuildStructure(
   };
 }
 
+async function handleReextractLayout(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<KnowledgeTrainerCommandResponse> {
+  const document = await loadDocument(asUuid(payload.legal_ingestion_document_id, 'legal_ingestion_document_id'));
+  if (!document.storage_key) throw notFound('Original material is not stored');
+  const job = await loadLatestJob(String(document.id));
+  if (['uploaded', 'queued', 'extracting'].includes(String(job.status))) {
+    throw conflict('Wait until page extraction finishes before extracting layout');
+  }
+  const { data: pages, error } = await supabaseAdmin
+    .from('legal_ingestion_pages')
+    .select('id, status, layout_status')
+    .eq('job_id', job.id);
+  throwIfTrainerSchemaMissing(error);
+  if (error) throw error;
+  for (const page of pages ?? []) {
+    const next = queueLayoutStatusForPage(String(page.status), page.layout_status == null ? null : String(page.layout_status));
+    const { error: updateError } = await supabaseAdmin
+      .from('legal_ingestion_pages')
+      .update({ layout_status: next, layout_error: null, lease_owner: null, lease_expires_at: null })
+      .eq('id', page.id);
+    if (updateError) throw updateError;
+  }
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_LAYOUT_EXTRACTION_STARTED, 'legal_ingestion_job', String(job.id), {
+    country_code: document.country_code,
+    document_id: document.id,
+    reused_existing_document: true,
+    reupload_required: false,
+  });
+  return {
+    ok: true,
+    command: 'reextract_legal_document_layout',
+    refreshed: await refreshed(ctx, String(document.country_code), String(document.id)),
+  };
+}
+
+async function handleRebuildWithLayout(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<KnowledgeTrainerCommandResponse> {
+  const document = await loadDocument(asUuid(payload.legal_ingestion_document_id, 'legal_ingestion_document_id'));
+  const job = await loadLatestJob(String(document.id));
+  if (['uploaded', 'queued', 'extracting'].includes(String(job.status))) {
+    throw conflict('Wait until page extraction finishes before rebuilding structure');
+  }
+  const { data: readyPages, error } = await supabaseAdmin
+    .from('legal_ingestion_pages')
+    .select('id')
+    .eq('job_id', job.id)
+    .eq('layout_status', 'ready')
+    .limit(1);
+  throwIfTrainerSchemaMissing(error);
+  if (error) throw error;
+  if (!readyPages?.length) throw conflict('Extract layout evidence before rebuilding with layout');
+  const result = await persistStructureCandidatesForJob(String(job.id), { replaceStaging: true, useLayout: true });
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_STRUCTURE_REBUILT_WITH_LAYOUT, 'legal_ingestion_job', String(job.id), {
+    country_code: document.country_code,
+    document_id: document.id,
+    reused_existing_pages: true,
+    reuploaded: false,
+    layout_used: true,
+    preserved_accepted: result?.preserved_accepted ?? 0,
+    candidates_found: result?.analysis.candidates_found ?? 0,
+  });
+  return {
+    ok: true,
+    command: 'rebuild_legal_structure_with_layout',
+    refreshed: await refreshed(ctx, String(document.country_code), String(document.id)),
+  };
+}
+
 async function handleUpdateCandidate(
   ctx: RequestContext,
   payload: Record<string, unknown>,
@@ -518,6 +594,10 @@ export async function executeKnowledgeTrainerCommand(
       return handleRetryPage(ctx, payload);
     case 'rebuild_legal_structure_candidates':
       return handleRebuildStructure(ctx, payload);
+    case 'reextract_legal_document_layout':
+      return handleReextractLayout(ctx, payload);
+    case 'rebuild_legal_structure_with_layout':
+      return handleRebuildWithLayout(ctx, payload);
     case 'update_legal_extraction_candidate':
       return handleUpdateCandidate(ctx, payload);
     case 'accept_legal_structure_candidate':

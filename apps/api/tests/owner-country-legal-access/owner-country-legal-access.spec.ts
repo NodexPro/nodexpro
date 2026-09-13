@@ -76,6 +76,15 @@ test('1-2 professional users cannot access owner admin commands or reuse tenant 
   );
 });
 
+test('professional users remain denied for Trainer layout commands', () => {
+  assert.equal(evaluateOwnerLegalCommandAccess(none, 'reextract_legal_document_layout', 'IL').ok, false);
+  assert.equal(evaluateOwnerLegalCommandAccess(none, 'rebuild_legal_structure_with_layout', 'IL').ok, false);
+  assert.equal(evaluateOwnerLegalCommandAccess(ilEditor, 'reextract_legal_document_layout', 'IL').ok, false);
+  assert.equal(evaluateOwnerLegalCommandAccess(ilEditor, 'rebuild_legal_structure_with_layout', 'IL').ok, false);
+  assert.equal(evaluateOwnerLegalCommandAccess(owner, 'reextract_legal_document_layout', 'IL').ok, true);
+  assert.equal(capabilityRequiredForOwnerCommand('reextract_legal_document_layout'), 'legal_sources.manage');
+});
+
 test('3 pending request grants zero access', () => {
   assert.deepEqual(evaluateOwnerLegalCommandAccess(none, 'create_tax_source', 'IL'), {
     ok: false,

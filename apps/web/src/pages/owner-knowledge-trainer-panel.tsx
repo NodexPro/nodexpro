@@ -219,7 +219,9 @@ function TrainerReview({
 }) {
   const document = trainer.selected_document;
   if (!document) return null;
-  const processing = ['uploaded', 'queued', 'extracting'].includes(document.job_status);
+  const processing =
+    ['uploaded', 'queued', 'extracting'].includes(document.job_status) ||
+    document.layout_readiness?.readiness === 'processing';
   const [candidateId, setCandidateId] = useState(document.candidates[0]?.id ?? '');
   const [filterKey, setFilterKey] = useState(document.review_filters[0]?.key || 'all');
   const [search, setSearch] = useState('');
@@ -354,9 +356,46 @@ function TrainerReview({
         </div>
       ) : null}
       <ReviewSummary summary={document.review_summary} />
-      {document.layout_evidence?.status_label ? (
-        <div style={{ fontSize: 13, color: '#92400e' }}>{document.layout_evidence.status_label}</div>
-      ) : null}
+      <div style={{ fontSize: 13, color: '#374151', display: 'grid', gap: 4 }}>
+        <div>
+          Layout evidence: <strong>{document.layout_readiness?.readiness_label || 'Not extracted'}</strong>
+        </div>
+        <div>{document.layout_readiness?.reuse_document_label || 'Existing document reused. No re-upload required.'}</div>
+        {document.layout_readiness?.high_confidence_trusted ? null : (
+          <div style={{ color: '#92400e' }}>High confidence is not trusted until structure is rebuilt with layout.</div>
+        )}
+        {document.layout_evidence?.status_label ? <div>{document.layout_evidence.status_label}</div> : null}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {document.layout_readiness?.can_extract_layout ? (
+          <button
+            type="button"
+            className="nx-btn nx-btn-taxes-compact"
+            disabled={busy || document.layout_readiness.readiness === 'processing'}
+            onClick={() =>
+              void onCommand('reextract_legal_document_layout', {
+                legal_ingestion_document_id: document.id,
+              }).catch((err) => setError(userFacingApiMessage(err)))
+            }
+          >
+            Extract layout evidence
+          </button>
+        ) : null}
+        {document.layout_readiness?.can_rebuild_with_layout ? (
+          <button
+            type="button"
+            className="nx-btn nx-btn-taxes-compact"
+            disabled={busy || document.layout_readiness.readiness === 'processing'}
+            onClick={() =>
+              void onCommand('rebuild_legal_structure_with_layout', {
+                legal_ingestion_document_id: document.id,
+              }).catch((err) => setError(userFacingApiMessage(err)))
+            }
+          >
+            Rebuild structure with layout
+          </button>
+        ) : null}
+      </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {document.review_filters.map((filter) => (
           <button
@@ -449,6 +488,9 @@ function TrainerReview({
           {candidate ? (
             <CandidateEditor
               candidate={candidate}
+              layoutPage={
+                document.layout_readiness?.pages.find((page) => page.page_no === candidate.page_start) ?? null
+              }
               candidates={document.candidates}
               kinds={taxKnowledge.legal_library.node_kinds.map((kind) => kind.label)}
               editing={editing}
@@ -483,6 +525,9 @@ function TrainerReview({
       {expanded && candidate ? (
         <ExpandedReviewModal
           documentTitle={document.original_filename}
+          layoutPage={
+            document.layout_readiness?.pages.find((page) => page.page_no === candidate.page_start) ?? null
+          }
           filterLabel={
             document.review_filters.find((row) => row.key === filterKey)?.label ||
             REVIEW_FILTER_LABELS[filterKey] ||
@@ -528,6 +573,7 @@ function TrainerReview({
 
 function CandidateEditor({
   candidate,
+  layoutPage,
   candidates,
   kinds,
   editing,
@@ -546,6 +592,7 @@ function CandidateEditor({
   onReject,
 }: {
   candidate: OwnerKnowledgeTrainerCandidate;
+  layoutPage: { page_no: number; layout_status: string; item_count: number } | null;
   candidates: OwnerKnowledgeTrainerCandidate[];
   kinds: string[];
   editing: boolean;
@@ -670,6 +717,12 @@ function CandidateEditor({
           status: {candidate.candidate_status}
           <br />
           kind: {candidate.candidate_kind}
+          <br />
+          layout page: {layoutPage?.page_no ?? candidate.page_start ?? '—'}
+          <br />
+          item count: {layoutPage?.item_count ?? '—'}
+          <br />
+          layout evidence status: {layoutPage?.layout_status ?? 'not_extracted'}
         </div>
       </details>
     </div>
@@ -727,6 +780,7 @@ function CandidatePicker({
 
 function ExpandedReviewModal({
   documentTitle,
+  layoutPage,
   filterLabel,
   search,
   pdfSrc,
@@ -754,6 +808,7 @@ function ExpandedReviewModal({
   onReject,
 }: {
   documentTitle: string;
+  layoutPage: { page_no: number; layout_status: string; item_count: number } | null;
   filterLabel: string;
   search: string;
   pdfSrc: string;
@@ -819,6 +874,7 @@ function ExpandedReviewModal({
             <CandidatePicker candidates={visibleCandidates} selectedId={candidate.id} onSelect={onSelect} />
             <CandidateEditor
               candidate={candidate}
+              layoutPage={layoutPage}
               candidates={allCandidates}
               kinds={kinds}
               editing={editing}

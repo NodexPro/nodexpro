@@ -48,6 +48,8 @@ test('TAX-624 previous Legal Library migrations remain present and unchanged in 
 test('Trainer commands are a separate family and do not replace create_tax_legal_node', () => {
   assert.equal(isKnowledgeTrainerCommand('accept_legal_structure_candidate'), true);
   assert.equal(isKnowledgeTrainerCommand('rebuild_legal_structure_candidates'), true);
+  assert.equal(isKnowledgeTrainerCommand('reextract_legal_document_layout'), true);
+  assert.equal(isKnowledgeTrainerCommand('rebuild_legal_structure_with_layout'), true);
   assert.equal(isKnowledgeTrainerCommand('create_tax_legal_node'), false);
   assert.equal(isTaxKnowledgeCommand('create_tax_legal_node'), true);
   assert.equal(isTaxKnowledgeCommand('accept_legal_structure_candidate'), false);
@@ -69,6 +71,9 @@ test('Accept reuses canonical Legal Library command; worker never writes canonic
   assert.match(persist, /candidate_kind === 'structure'/);
   assert.match(persist, /preserved_accepted/);
   assert.match(persist, /page_text/);
+  assert.match(persist, /useLayout/);
+  assert.match(persist, /stagingStructureIdsToReplace/);
+  assert.match(persist, /detectStructureCandidatesFromLayout/);
   assert.doesNotMatch(persist, /from\('tax_legal_nodes'\)\s*\.insert/);
   assert.doesNotMatch(persist, /from\('tax_legal_nodes'\)\s*\.delete/);
   assert.doesNotMatch(persist, /from\('legal_ingestion_pages'\)\s*\.update/);
@@ -77,11 +82,21 @@ test('Accept reuses canonical Legal Library command; worker never writes canonic
   assert.doesNotMatch(readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-commands.service.ts'), /handleRebuildStructure[\s\S]*storeOwnerLegalMaterial/);
 });
 
-test('PDF extraction currently stores flattened item.str only', () => {
+test('PDF text extract stays flattened; layout items are a separate additive path', () => {
   const pdf = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-pdf.service.ts');
-  assert.match(pdf, /item\.str/);
+  assert.match(pdf, /extractEmbeddedPdfPageText/);
+  assert.match(pdf, /extractEmbeddedPdfPageLayout/);
   assert.match(pdf, /\.join\(' '\)/);
-  assert.doesNotMatch(pdf, /transform|hasEOL|fontName/);
+  assert.match(pdf, /compactPdfJsTextItems/);
+  const worker = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-worker.runtime.ts');
+  assert.match(worker, /legal_ingestion_claim_layout_page/);
+  assert.match(worker, /layoutPersistPreservesPageText/);
+  assert.match(worker, /claimAndProcessOneLayoutPage/);
+  assert.doesNotMatch(worker, /from\('tax_legal_nodes'\)\s*\.insert/);
+  const sql625 = readRepo('supabase/migrations/625_knowledge_trainer_page_layout_evidence.sql');
+  assert.match(sql625, /Do not apply to production/);
+  assert.match(sql625, /jgxezhjctrgfbmmkqqhn/);
+  assert.match(sql625, /layout_status in \('pending', 'failed', 'extracting'\)/);
 });
 
 test('Structure review classes are read-time and never auto-accept or auto-activate', () => {
@@ -120,6 +135,11 @@ test('Owner UI keeps manual authoring beside Upload material', () => {
   assert.match(trainerUi, /Edit Draft/);
   assert.match(trainerUi, /Rebuild structure candidates/);
   assert.doesNotMatch(trainerUi, /openai|anthropic|gemini/i);
+  assert.match(trainerUi, /Extract layout evidence/);
+  assert.match(trainerUi, /Rebuild structure with layout/);
+  assert.match(trainerUi, /Existing document reused/);
+  assert.match(trainerUi, /item count/);
+  assert.match(trainerUi, /layout evidence status/);
 });
 
 test('Professional users stay on the existing Owner legal workspace gate', () => {

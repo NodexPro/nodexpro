@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
-import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import { summarizeLayoutReadiness } from './knowledge-trainer-layout.pure.js';
 import { attachStructureReviewModel, describeStoredLayoutEvidence } from './knowledge-trainer-review.pure.js';
 import { decodeStructureAnalysis, emptyStructureAnalysis, jobStatusLabel, trainerInputOptions } from './knowledge-trainer.pure.js';
 import type {
@@ -105,11 +106,27 @@ export async function buildKnowledgeTrainerSlice(
 
   let selected: KnowledgeTrainerSliceDto['selected_document'] = null;
   if (selectedSummary && selectedJob) {
-    const { data: pages } = await supabaseAdmin
+    const pagesWithLayout = await supabaseAdmin
       .from('legal_ingestion_pages')
-      .select('page_no, status, page_text')
+      .select('page_no, status, page_text, layout_status, layout_item_count')
       .eq('job_id', selectedJob.id)
       .order('page_no', { ascending: true });
+    const pagesFallback =
+      pagesWithLayout.error && isSupabaseMissingColumnError(pagesWithLayout.error)
+        ? await supabaseAdmin
+            .from('legal_ingestion_pages')
+            .select('page_no, status, page_text')
+            .eq('job_id', selectedJob.id)
+            .order('page_no', { ascending: true })
+        : pagesWithLayout;
+    if (pagesFallback.error) throw pagesFallback.error;
+    const pages = (pagesFallback.data ?? []) as Array<{
+      page_no: number;
+      status: string;
+      page_text: string | null;
+      layout_status?: string | null;
+      layout_item_count?: number | null;
+    }>;
     const { data: candidates } = await supabaseAdmin
       .from('legal_ingestion_candidates')
       .select(
@@ -152,10 +169,34 @@ export async function buildKnowledgeTrainerSlice(
           possible_existing_match: Boolean(row.matched_tax_legal_node_id),
         };
       });
+    const structureAnalysis = decodeStructureAnalysis(
+      typeof selectedJob.last_error === 'string' ? selectedJob.last_error : null,
+    ) ?? {
+      ...emptyStructureAnalysis(),
+      candidates_found: selectedSummary.structure_candidate_count,
+      ocr_pages_untouched: selectedSummary.needs_ocr_page_count,
+      ocr_gap_warning: selectedSummary.needs_ocr_page_count > 0,
+      low_confidence_count: (candidates ?? []).filter((row) => Number(row.confidence ?? 1) < 0.55).length,
+      unresolved_parent_count: (candidates ?? []).filter(
+        (row) =>
+          Array.isArray(row.validation_warnings) &&
+          row.validation_warnings.map((item) => String(item)).includes('unresolved_parent'),
+      ).length,
+    };
+    const layoutSummary = summarizeLayoutReadiness(
+      (pages ?? []).map((page) => ({
+        status: String(page.status),
+        layout_status: page.layout_status == null ? null : String(page.layout_status),
+        layout_item_count: Number(page.layout_item_count ?? 0),
+      })),
+    );
     const reviewed = attachStructureReviewModel(baseCandidates, {
       catalog: (kinds ?? []).map((row) => ({ id: String(row.id), label: String(row.label) })),
       ocr_pages: ocrPageNumbers,
+      layout_used: structureAnalysis.layout_used === true,
     });
+    const canExtract =
+      Boolean(selectedSummary) && !['uploaded', 'queued', 'extracting'].includes(selectedSummary.job_status);
     selected = {
       id: selectedSummary.id,
       original_filename: selectedSummary.original_filename,
@@ -180,25 +221,26 @@ export async function buildKnowledgeTrainerSlice(
         : null,
       candidates: reviewed.candidates,
       can_open_original: true,
-      structure_analysis: decodeStructureAnalysis(
-        typeof selectedJob.last_error === 'string' ? selectedJob.last_error : null,
-      ) ?? {
-        ...emptyStructureAnalysis(),
-        candidates_found: selectedSummary.structure_candidate_count,
-        ocr_pages_untouched: selectedSummary.needs_ocr_page_count,
-        ocr_gap_warning: selectedSummary.needs_ocr_page_count > 0,
-        low_confidence_count: (candidates ?? []).filter((row) => Number(row.confidence ?? 1) < 0.55).length,
-        unresolved_parent_count: (candidates ?? []).filter((row) =>
-          Array.isArray(row.validation_warnings) &&
-          row.validation_warnings.map((item) => String(item)).includes('unresolved_parent'),
-        ).length,
-      },
-      can_rebuild_structure: !['uploaded', 'queued', 'extracting'].includes(selectedSummary.job_status),
+      structure_analysis: structureAnalysis,
+      can_rebuild_structure: canExtract,
       review_summary: reviewed.review_summary,
       review_filters: reviewed.review_filters,
       structure_tree: reviewed.structure_tree,
       ocr_page_numbers: ocrPageNumbers,
       layout_evidence: describeStoredLayoutEvidence(pages ?? []),
+      layout_readiness: {
+        ...layoutSummary,
+        high_confidence_trusted: structureAnalysis.layout_used === true,
+        reupload_required: false,
+        reuse_document_label: 'Existing document reused. No re-upload required.',
+        can_extract_layout: canExtract,
+        can_rebuild_with_layout: canExtract && layoutSummary.readiness === 'ready',
+        pages: (pages ?? []).map((page) => ({
+          page_no: Number(page.page_no),
+          layout_status: page.layout_status == null ? 'not_extracted' : String(page.layout_status),
+          item_count: Number(page.layout_item_count ?? 0),
+        })),
+      },
     };
   }
 
@@ -224,6 +266,12 @@ export async function buildKnowledgeTrainerSlice(
         page_no: 'integer',
       }),
       action('rebuild_legal_structure_candidates', Boolean(selected && !['uploaded', 'queued', 'extracting'].includes(selected.job_status)), {
+        legal_ingestion_document_id: 'uuid',
+      }),
+      action('reextract_legal_document_layout', Boolean(selected?.layout_readiness.can_extract_layout), {
+        legal_ingestion_document_id: 'uuid',
+      }),
+      action('rebuild_legal_structure_with_layout', Boolean(selected?.layout_readiness.can_rebuild_with_layout), {
         legal_ingestion_document_id: 'uuid',
       }),
       action('update_legal_extraction_candidate', true, {

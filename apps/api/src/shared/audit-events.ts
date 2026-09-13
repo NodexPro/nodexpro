@@ -228,6 +228,8 @@ export const AUDIT_ACTIONS = {
   LEGAL_TRAINING_EXTRACTION_STARTED: 'legal_training_extraction_started',
   LEGAL_TRAINING_PAGE_RETRIED: 'legal_training_page_retried',
   LEGAL_TRAINING_STRUCTURE_REBUILT: 'legal_training_structure_rebuilt',
+  LEGAL_TRAINING_LAYOUT_EXTRACTION_STARTED: 'legal_training_layout_extraction_started',
+  LEGAL_TRAINING_STRUCTURE_REBUILT_WITH_LAYOUT: 'legal_training_structure_rebuilt_with_layout',
   LEGAL_TRAINING_CANDIDATE_EDITED: 'legal_training_candidate_edited',
   LEGAL_TRAINING_CANDIDATE_ACCEPTED: 'legal_training_candidate_accepted',
   LEGAL_TRAINING_CANDIDATE_REJECTED: 'legal_training_candidate_rejected',

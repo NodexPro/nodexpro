@@ -397,6 +397,22 @@ export type OwnerStructureLayoutEvidence = {
   status_label: string;
 };
 
+export type OwnerTrainerLayoutReadiness = {
+  readiness: string;
+  readiness_label: string;
+  eligible_count: number;
+  ready_count: number;
+  skipped_ocr_count: number;
+  failed_count: number;
+  item_count: number;
+  high_confidence_trusted: boolean;
+  reupload_required: boolean;
+  reuse_document_label: string;
+  can_extract_layout: boolean;
+  can_rebuild_with_layout: boolean;
+  pages: Array<{ page_no: number; layout_status: string; item_count: number }>;
+};
+
 export type OwnerKnowledgeTrainerSlice = {
   available: boolean;
   status_label: string;
@@ -431,6 +447,7 @@ export type OwnerKnowledgeTrainerSlice = {
     structure_tree: OwnerStructureReviewTreeNode[];
     ocr_page_numbers: number[];
     layout_evidence: OwnerStructureLayoutEvidence;
+    layout_readiness: OwnerTrainerLayoutReadiness;
   } | null;
   allowed_actions: TaxKnowledgeAllowedAction[];
 };

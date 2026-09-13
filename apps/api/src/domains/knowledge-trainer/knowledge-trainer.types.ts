@@ -5,6 +5,8 @@ export const KNOWLEDGE_TRAINER_COMMANDS = [
   'start_legal_document_extraction',
   'retry_legal_document_page',
   'rebuild_legal_structure_candidates',
+  'reextract_legal_document_layout',
+  'rebuild_legal_structure_with_layout',
   'update_legal_extraction_candidate',
   'accept_legal_structure_candidate',
   'reject_legal_extraction_candidate',
@@ -125,6 +127,8 @@ export type StructureDetectionAnalysis = {
   unresolved_parent_count: number;
   ocr_pages_untouched: number;
   ocr_gap_warning: boolean;
+  layout_used?: boolean;
+  layout_pages_used?: number;
 };
 
 export type KnowledgeTrainerInputOptionDto = {
@@ -224,9 +228,25 @@ export type StructureReviewSummaryDto = {
 export type StructureLayoutEvidenceDto = {
   heading_isolation_available: boolean;
   pdfjs_item_geometry_stored: boolean;
-  stored_as: 'flattened_page_text' | 'multiline_page_text';
+  stored_as: 'flattened_page_text' | 'multiline_page_text' | 'page_text_items';
   line_breaks_observed: number;
   status_label: string;
+};
+
+export type TrainerLayoutReadinessDto = {
+  readiness: 'not_extracted' | 'processing' | 'ready' | 'partial';
+  readiness_label: string;
+  eligible_count: number;
+  ready_count: number;
+  skipped_ocr_count: number;
+  failed_count: number;
+  item_count: number;
+  high_confidence_trusted: boolean;
+  reupload_required: false;
+  reuse_document_label: string;
+  can_extract_layout: boolean;
+  can_rebuild_with_layout: boolean;
+  pages: Array<{ page_no: number; layout_status: string; item_count: number }>;
 };
 
 export type KnowledgeTrainerSliceDto = {
@@ -257,6 +277,7 @@ export type KnowledgeTrainerSliceDto = {
     structure_tree: StructureReviewTreeNodeDto[];
     ocr_page_numbers: number[];
     layout_evidence: StructureLayoutEvidenceDto;
+    layout_readiness: TrainerLayoutReadinessDto;
   } | null;
   allowed_actions: Array<{
     action_key: string;

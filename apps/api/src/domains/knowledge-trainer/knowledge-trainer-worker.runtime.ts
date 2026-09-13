@@ -1,7 +1,8 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import { summarizeJobProgress, workerMustNotWriteCanonicalLaw } from './knowledge-trainer.pure.js';
-import { countPdfPages, extractEmbeddedPdfPageText } from './knowledge-trainer-pdf.service.js';
+import { layoutPersistPreservesPageText } from './knowledge-trainer-layout.pure.js';
+import { countPdfPages, extractEmbeddedPdfPageLayout, extractEmbeddedPdfPageText } from './knowledge-trainer-pdf.service.js';
 import { persistStructureCandidatesForJob } from './knowledge-trainer-structure.service.js';
 import { downloadOwnerLegalMaterial } from './knowledge-trainer-storage.service.js';
 import { WORKER_FORBIDDEN_CANONICAL_TABLES } from './knowledge-trainer.types.js';
@@ -184,6 +185,61 @@ export async function claimAndProcessOnePage(workerId: string): Promise<boolean>
   return true;
 }
 
+export async function claimAndProcessOneLayoutPage(workerId: string): Promise<boolean> {
+  if (!workerId.trim()) throw new Error('worker id is required');
+  const { data, error } = await supabaseAdmin.rpc('legal_ingestion_claim_layout_page', {
+    p_worker_id: workerId,
+    p_lease_seconds: LEASE_SECONDS,
+  });
+  if (error) {
+    if (
+      isSupabaseMissingTableError(error) ||
+      String(error.message ?? '').includes('legal_ingestion_claim_layout_page')
+    ) {
+      return false;
+    }
+    throw error;
+  }
+  const page = (Array.isArray(data) ? data[0] : data) as IngestionPageRow | null;
+  if (!page?.id) return false;
+
+  try {
+    const { data: document, error: docError } = await supabaseAdmin
+      .from('legal_ingestion_documents')
+      .select('storage_bucket, storage_key')
+      .eq('id', page.document_id)
+      .maybeSingle();
+    if (docError || !document?.storage_key) throw new Error('Document storage is missing');
+    const bytes = await downloadOwnerLegalMaterial(String(document.storage_bucket), String(document.storage_key));
+    const layout = await extractEmbeddedPdfPageLayout(bytes, page.page_no);
+    const update = {
+      page_text_items: layout,
+      layout_status: 'ready',
+      layout_item_count: layout.items.length,
+      layout_error: null,
+      lease_owner: null,
+      lease_expires_at: null,
+    };
+    if (!layoutPersistPreservesPageText(update)) {
+      throw new Error('Layout persist must not write page_text or status');
+    }
+    await trainerUpdate('legal_ingestion_pages', update, { column: 'id', value: page.id });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message.slice(0, 240) : 'Layout extraction failed';
+    await trainerUpdate(
+      'legal_ingestion_pages',
+      {
+        layout_status: 'failed',
+        layout_error: message,
+        lease_owner: null,
+        lease_expires_at: null,
+      },
+      { column: 'id', value: page.id },
+    );
+  }
+  return true;
+}
+
 async function refreshJobProgressAndMaybeFinalize(jobId: string): Promise<void> {
   const { data: pages, error } = await supabaseAdmin
     .from('legal_ingestion_pages')
@@ -214,6 +270,8 @@ export async function runKnowledgeTrainerWorkerTick(workerId: string): Promise<{
     }
   }
   const prepared = await prepareQueuedIngestionJobs();
-  const processed = await claimAndProcessOnePage(workerId);
-  return { prepared, processed };
+  const processedText = await claimAndProcessOnePage(workerId);
+  if (processedText) return { prepared, processed: true };
+  const processedLayout = await claimAndProcessOneLayoutPage(workerId);
+  return { prepared, processed: processedLayout };
 }
