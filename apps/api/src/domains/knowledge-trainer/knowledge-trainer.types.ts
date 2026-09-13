@@ -120,6 +120,11 @@ export type StructureCandidateDraft = {
   candidate_status: LegalIngestionCandidateStatus;
   kind_label: string;
   node_number: string | null;
+  source_display_identifier?: string | null;
+  normalized_machine_identifier?: string | null;
+  identifier_base_number?: string | null;
+  identifier_letter_suffix?: string | null;
+  identifier_nested_components?: string[];
   title: string | null;
   parent_index: number | null;
   page_start: number;
@@ -191,6 +196,14 @@ export type KnowledgeTrainerCandidateDto = {
   candidate_status: LegalIngestionCandidateStatus;
   kind_label: string | null;
   node_number: string | null;
+  source_display_identifier?: string | null;
+  normalized_machine_identifier?: string | null;
+  identifier_base_number?: string | null;
+  identifier_letter_suffix?: string | null;
+  identifier_nested_components?: string[];
+  display_identifier: string | null;
+  display_label: string;
+  parent_display_identifier: string | null;
   title: string | null;
   parent_candidate_id: string | null;
   parent_tax_legal_node_id: string | null;

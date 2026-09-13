@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '../../db/client.js';
-import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import {
   detectStructureCandidatesFromLayout,
   parseStoredPageLayout,
@@ -8,6 +8,7 @@ import {
 import {
   detectStructureCandidates,
   encodeStructureAnalysis,
+  sameParentIdentity,
   validateStructureCandidates,
   workerMustNotWriteCanonicalLaw,
 } from './knowledge-trainer.pure.js';
@@ -99,10 +100,17 @@ export async function persistStructureCandidatesForJob(
     .order('sort_order', { ascending: true });
   if (kindError) throw kindError;
 
-  const { data: nodes, error: nodeError } = await supabaseAdmin
+  let nodeQuery: { data: Array<Record<string, unknown>> | null; error: { message?: string; code?: string } | null } = await supabaseAdmin
     .from('tax_legal_nodes')
-    .select('id, tax_source_id, country_code, node_number, title, tax_legal_node_kind_id')
+    .select('id, tax_source_id, country_code, parent_node_id, node_number, normalized_machine_identifier, title, tax_legal_node_kind_id')
     .eq('tax_source_id', job.tax_source_id);
+  if (nodeQuery.error && isSupabaseMissingColumnError(nodeQuery.error, 'normalized_machine_identifier')) {
+    nodeQuery = await supabaseAdmin
+      .from('tax_legal_nodes')
+      .select('id, tax_source_id, country_code, parent_node_id, node_number, title, tax_legal_node_kind_id')
+      .eq('tax_source_id', job.tax_source_id);
+  }
+  const { data: nodes, error: nodeError } = nodeQuery;
   if (nodeError) throw nodeError;
 
   const kindById = new Map((kinds ?? []).map((row) => [String(row.id), String(row.label)]));
@@ -112,6 +120,9 @@ export async function persistStructureCandidatesForJob(
     country_code: String(row.country_code),
     kind_label: kindById.get(String(row.tax_legal_node_kind_id)) ?? '',
     node_number: row.node_number == null ? null : String(row.node_number),
+    parent_node_id: row.parent_node_id == null ? null : String(row.parent_node_id),
+    normalized_machine_identifier:
+      row.normalized_machine_identifier == null ? null : String(row.normalized_machine_identifier),
     title: String(row.title ?? ''),
   }));
 
@@ -139,36 +150,57 @@ export async function persistStructureCandidatesForJob(
   const inserted: Array<{ id: string }> = [];
   for (const [index, draft] of drafts.entries()) {
     const parentId = draft.parent_index != null ? inserted[draft.parent_index]?.id ?? null : null;
-    const match = existingNodes.find(
-      (node) =>
-        node.kind_label === draft.kind_label &&
-        node.node_number &&
-        node.node_number === draft.node_number,
-    );
+    const parentDraft = draft.parent_index != null ? drafts[draft.parent_index] ?? null : null;
+    const match = existingNodes.find((node) => {
+      if (node.kind_label !== draft.kind_label) return false;
+      const draftRoot = draft.parent_index == null;
+      const nodeRoot = node.parent_node_id == null;
+      if (draftRoot !== nodeRoot) return false;
+      if (!draftRoot) {
+        const parentNode = existingNodes.find((candidate) => candidate.id === node.parent_node_id) ?? null;
+        if (parentDraft && parentNode && !sameParentIdentity(parentDraft, parentNode)) return false;
+      }
+      if (draft.normalized_machine_identifier && node.normalized_machine_identifier) {
+        return draft.normalized_machine_identifier === node.normalized_machine_identifier;
+      }
+      return Boolean(node.node_number) && node.node_number === draft.node_number;
+    });
     assertWorkerTableAllowed('legal_ingestion_candidates');
-    const { data, error } = await supabaseAdmin
-      .from('legal_ingestion_candidates')
-      .insert({
-        job_id: job.id,
-        document_id: job.document_id,
-        country_code: job.country_code,
-        tax_source_id: job.tax_source_id,
-        candidate_kind: 'structure',
-        candidate_status: draft.candidate_status,
-        kind_label: draft.kind_label,
-        node_number: draft.node_number,
-        title: draft.title,
-        parent_candidate_id: parentId,
-        page_start: draft.page_start,
-        page_end: draft.page_end,
-        excerpt: draft.excerpt,
-        confidence: draft.confidence,
-        validation_warnings: draft.validation_warnings,
-        matched_tax_legal_node_id: match?.id ?? null,
-        sort_order: accepted.length + index,
-      })
-      .select('id')
-      .single();
+    const row = {
+      job_id: job.id,
+      document_id: job.document_id,
+      country_code: job.country_code,
+      tax_source_id: job.tax_source_id,
+      candidate_kind: 'structure' as const,
+      candidate_status: draft.candidate_status,
+      kind_label: draft.kind_label,
+      node_number: draft.node_number,
+      source_display_identifier: draft.source_display_identifier ?? null,
+      normalized_machine_identifier: draft.normalized_machine_identifier ?? null,
+      identifier_base_number: draft.identifier_base_number ?? null,
+      identifier_letter_suffix: draft.identifier_letter_suffix ?? null,
+      identifier_nested_components: draft.identifier_nested_components ?? [],
+      title: draft.title,
+      parent_candidate_id: parentId,
+      page_start: draft.page_start,
+      page_end: draft.page_end,
+      excerpt: draft.excerpt,
+      confidence: draft.confidence,
+      validation_warnings: draft.validation_warnings,
+      matched_tax_legal_node_id: match?.id ?? null,
+      sort_order: accepted.length + index,
+    };
+    let insertedRow = await supabaseAdmin.from('legal_ingestion_candidates').insert(row).select('id').single();
+    if (insertedRow.error && isSupabaseMissingColumnError(insertedRow.error, 'source_display_identifier')) {
+      const { source_display_identifier: _a, normalized_machine_identifier: _b, identifier_base_number: _c, identifier_letter_suffix: _d, identifier_nested_components: _e, ...legacy } = row;
+      void _a;
+      void _b;
+      void _c;
+      void _d;
+      void _e;
+      insertedRow = await supabaseAdmin.from('legal_ingestion_candidates').insert(legacy).select('id').single();
+    }
+    const { data, error } = insertedRow;
     if (error || !data) throw error ?? new Error('Failed to persist structure candidate');
     inserted.push({ id: String(data.id) });
   }

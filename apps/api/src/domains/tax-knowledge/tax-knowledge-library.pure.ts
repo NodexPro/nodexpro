@@ -30,6 +30,11 @@ export type LegalLibraryNodeRow = {
   kind_label: string;
   node_code: string;
   node_number: string | null;
+  source_display_identifier?: string | null;
+  normalized_machine_identifier?: string | null;
+  identifier_base_number?: string | null;
+  identifier_letter_suffix?: string | null;
+  identifier_nested_components?: string[];
   title: string;
   sort_order: number;
   status: string;

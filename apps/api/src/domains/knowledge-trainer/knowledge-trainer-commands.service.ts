@@ -5,6 +5,7 @@ import { badRequest, conflict, forbidden, notFound } from '../../shared/errors.j
 import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import { assertOwnerLegalCommandAccess } from '../owner-country-legal-access/owner-country-legal-access.service.js';
 import { buildOwnerLegalControlPanelAggregate } from '../country-pack/country-pack-read-models.service.js';
+import { identifierPayloadForCanonicalCreate, parseLegalIdentifier } from '../tax-knowledge/legal-identifier.pure.js';
 import { executeTaxKnowledgeCommand } from '../tax-knowledge/tax-knowledge-commands.service.js';
 import { TAX_SOURCE_PROVENANCE_TYPES } from '../tax-knowledge/tax-knowledge.types.js';
 import { queueLayoutUpdatesByPageStatus } from './knowledge-trainer-layout.pure.js';
@@ -123,17 +124,18 @@ async function loadLatestJob(documentId: string) {
 }
 
 async function loadCandidate(candidateId: string) {
-  const { data, error } = await supabaseAdmin
-    .from('legal_ingestion_candidates')
-    .select(
-      'id, job_id, document_id, country_code, tax_source_id, candidate_kind, candidate_status, kind_label, node_number, title, parent_candidate_id, parent_tax_legal_node_id, accepted_tax_legal_node_id',
-    )
-    .eq('id', candidateId)
-    .maybeSingle();
-  throwIfTrainerSchemaMissing(error);
-  if (error) throw error;
-  if (!data) throw notFound('Extraction candidate not found');
-  return data;
+  const selectWithIds =
+    'id, job_id, document_id, country_code, tax_source_id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, parent_candidate_id, parent_tax_legal_node_id, accepted_tax_legal_node_id';
+  const selectLegacy =
+    'id, job_id, document_id, country_code, tax_source_id, candidate_kind, candidate_status, kind_label, node_number, title, parent_candidate_id, parent_tax_legal_node_id, accepted_tax_legal_node_id';
+  let result = await supabaseAdmin.from('legal_ingestion_candidates').select(selectWithIds).eq('id', candidateId).maybeSingle();
+  if (result.error && isSupabaseMissingColumnError(result.error, 'source_display_identifier')) {
+    result = await supabaseAdmin.from('legal_ingestion_candidates').select(selectLegacy).eq('id', candidateId).maybeSingle();
+  }
+  throwIfTrainerSchemaMissing(result.error);
+  if (result.error) throw result.error;
+  if (!result.data) throw notFound('Extraction candidate not found');
+  return result.data;
 }
 
 async function handleUpload(
@@ -451,6 +453,24 @@ async function handleUpdateCandidate(
   if (payload.node_number !== undefined) {
     patch.node_number = typeof payload.node_number === 'string' && payload.node_number.trim() ? payload.node_number.trim() : null;
   }
+  if (payload.source_display_identifier !== undefined) {
+    const raw = typeof payload.source_display_identifier === 'string' ? payload.source_display_identifier.trim() : '';
+    if (!raw) {
+      patch.source_display_identifier = null;
+      patch.normalized_machine_identifier = null;
+      patch.identifier_base_number = null;
+      patch.identifier_letter_suffix = null;
+      patch.identifier_nested_components = [];
+    } else {
+      const parsed = parseLegalIdentifier(raw);
+      if (!parsed) throw badRequest('source_display_identifier is not a valid exact legal identifier');
+      patch.source_display_identifier = parsed.source_display_identifier;
+      patch.normalized_machine_identifier = parsed.normalized_machine_identifier;
+      patch.identifier_base_number = parsed.base_number;
+      patch.identifier_letter_suffix = parsed.letter_suffix;
+      patch.identifier_nested_components = parsed.nested_components;
+    }
+  }
   if (payload.title !== undefined) {
     patch.title = typeof payload.title === 'string' && payload.title.trim() ? payload.title.trim() : null;
   }
@@ -516,12 +536,23 @@ async function handleAcceptCandidate(
   }
 
   const title = candidate.title || candidate.kind_label;
+  const identifier = identifierPayloadForCanonicalCreate({
+    source_display_identifier: candidate.source_display_identifier == null ? null : String(candidate.source_display_identifier),
+    normalized_machine_identifier:
+      candidate.normalized_machine_identifier == null ? null : String(candidate.normalized_machine_identifier),
+    identifier_base_number: candidate.identifier_base_number == null ? null : String(candidate.identifier_base_number),
+    identifier_letter_suffix: candidate.identifier_letter_suffix == null ? null : String(candidate.identifier_letter_suffix),
+    identifier_nested_components: Array.isArray(candidate.identifier_nested_components)
+      ? candidate.identifier_nested_components
+      : [],
+  });
   await executeTaxKnowledgeCommand(ctx, 'create_tax_legal_node', {
     tax_source_id: candidate.tax_source_id,
     tax_legal_node_kind_id: kind.id,
     title,
     node_number: candidate.node_number,
     parent_node_id: parentNodeId,
+    ...identifier,
   });
   const { data: createdNode, error: createdError } = await supabaseAdmin
     .from('tax_legal_nodes')

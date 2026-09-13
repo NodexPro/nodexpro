@@ -416,6 +416,14 @@ function parseLibraryNodes(raw: unknown): OwnerLegalLibraryNode[] {
       kind_label: asString(row.kind_label),
       node_code: asString(row.node_code),
       node_number: asNullableString(row.node_number),
+      source_display_identifier: asNullableString(row.source_display_identifier),
+      normalized_machine_identifier: asNullableString(row.normalized_machine_identifier),
+      identifier_base_number: asNullableString(row.identifier_base_number),
+      identifier_letter_suffix: asNullableString(row.identifier_letter_suffix),
+      identifier_nested_components: Array.isArray(row.identifier_nested_components)
+        ? row.identifier_nested_components.map((item) => String(item))
+        : [],
+      display_identifier: asNullableString(row.display_identifier) || asNullableString(row.source_display_identifier),
       title: asString(row.title),
       display_title: asString(row.display_title) || asString(row.title),
       sort_order: typeof row.sort_order === 'number' ? row.sort_order : Number(row.sort_order) || 0,
@@ -713,6 +721,16 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
                     candidate_status: asString(row.candidate_status),
                     kind_label: asNullableString(row.kind_label),
                     node_number: asNullableString(row.node_number),
+                    source_display_identifier: asNullableString(row.source_display_identifier),
+                    normalized_machine_identifier: asNullableString(row.normalized_machine_identifier),
+                    identifier_base_number: asNullableString(row.identifier_base_number),
+                    identifier_letter_suffix: asNullableString(row.identifier_letter_suffix),
+                    identifier_nested_components: Array.isArray(row.identifier_nested_components)
+                      ? row.identifier_nested_components.map((item) => String(item))
+                      : [],
+                    display_identifier: asNullableString(row.display_identifier),
+                    display_label: asString(row.display_label),
+                    parent_display_identifier: asNullableString(row.parent_display_identifier),
                     title: asNullableString(row.title),
                     parent_candidate_id: asNullableString(row.parent_candidate_id),
                     parent_tax_legal_node_id: asNullableString(row.parent_tax_legal_node_id),

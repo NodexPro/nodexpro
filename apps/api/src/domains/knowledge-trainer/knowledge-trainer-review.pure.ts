@@ -90,10 +90,17 @@ export function emptyStructureReviewSummary(): StructureReviewSummaryDto {
 
 export function candidateDisplayLabel(candidate: {
   kind_label: string | null;
-  node_number: string | null;
+  node_number?: string | null;
+  source_display_identifier?: string | null;
+  display_identifier?: string | null;
   title: string | null;
 }): string {
-  return [candidate.kind_label, candidate.node_number, candidate.title].filter(Boolean).join(' ').trim();
+  const identifier =
+    candidate.source_display_identifier?.trim() ||
+    candidate.display_identifier?.trim() ||
+    candidate.node_number?.trim() ||
+    null;
+  return [candidate.kind_label, identifier, candidate.title].filter(Boolean).join(' ').trim();
 }
 
 export function catalogRankForLabel(label: string | null, catalog: StructureKindCatalogItem[]): number {
@@ -145,6 +152,9 @@ export function attachStructureReviewModel(
     | 'parent_label'
     | 'hierarchy_path'
     | 'hierarchy_valid'
+    | 'display_identifier'
+    | 'display_label'
+    | 'parent_display_identifier'
   >>,
   ctx: StructureReviewContext,
 ): {
@@ -174,6 +184,9 @@ function classifyOne(
     | 'parent_label'
     | 'hierarchy_path'
     | 'hierarchy_valid'
+    | 'display_identifier'
+    | 'display_label'
+    | 'parent_display_identifier'
   >,
   byId: Map<string, (typeof candidate)>,
   ctx: StructureReviewContext,
@@ -278,6 +291,10 @@ function classifyOne(
     ocr_affected: ocrAffected,
     review_warnings: uniqueStrings(reviewWarnings),
     display_warnings: displayWarnings,
+    display_identifier:
+      candidate.source_display_identifier?.trim() || candidate.node_number?.trim() || null,
+    display_label: candidateDisplayLabel(candidate),
+    parent_display_identifier: parent?.source_display_identifier ?? parent?.node_number ?? null,
     parent_label: parent ? candidateDisplayLabel(parent) : null,
     hierarchy_path: buildHierarchyPath(candidate, byId),
     hierarchy_valid: hierarchyValid,
@@ -285,8 +302,27 @@ function classifyOne(
 }
 
 function buildHierarchyPath(
-  candidate: { id: string; parent_candidate_id: string | null; kind_label: string | null; node_number: string | null; title: string | null },
-  byId: Map<string, { id: string; parent_candidate_id: string | null; kind_label: string | null; node_number: string | null; title: string | null }>,
+  candidate: {
+    id: string;
+    parent_candidate_id: string | null;
+    kind_label: string | null;
+    node_number?: string | null;
+    source_display_identifier?: string | null;
+    display_identifier?: string | null;
+    title: string | null;
+  },
+  byId: Map<
+    string,
+    {
+      id: string;
+      parent_candidate_id: string | null;
+      kind_label: string | null;
+      node_number?: string | null;
+      source_display_identifier?: string | null;
+      display_identifier?: string | null;
+      title: string | null;
+    }
+  >,
 ): string {
   const parts: string[] = [];
   const seen = new Set<string>();

@@ -138,13 +138,24 @@ export async function buildKnowledgeTrainerSlice(
       layout_status?: string | null;
       layout_item_count?: number | null;
     }>;
-    const { data: candidates } = await supabaseAdmin
+    const candidateSelect =
+      'id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order';
+    const candidateSelectLegacy =
+      'id, candidate_kind, candidate_status, kind_label, node_number, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order';
+    let candidateQuery: { data: Array<Record<string, unknown>> | null; error: { message?: string; code?: string } | null } = await supabaseAdmin
       .from('legal_ingestion_candidates')
-      .select(
-        'id, candidate_kind, candidate_status, kind_label, node_number, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order',
-      )
+      .select(candidateSelect)
       .eq('job_id', selectedJob.id)
       .order('sort_order', { ascending: true });
+    if (candidateQuery.error && isSupabaseMissingColumnError(candidateQuery.error, 'source_display_identifier')) {
+      candidateQuery = await supabaseAdmin
+        .from('legal_ingestion_candidates')
+        .select(candidateSelectLegacy)
+        .eq('job_id', selectedJob.id)
+        .order('sort_order', { ascending: true });
+    }
+    if (candidateQuery.error) throw candidateQuery.error;
+    const candidates = candidateQuery.data;
 
     const pageNo = opts?.page_no && opts.page_no > 0 ? opts.page_no : pages?.[0] ? Number(pages[0].page_no) : null;
     const selectedPageMeta = pages?.find((page) => Number(page.page_no) === pageNo) ?? null;
@@ -183,6 +194,16 @@ export async function buildKnowledgeTrainerSlice(
           candidate_status: row.candidate_status as KnowledgeTrainerCandidateDto['candidate_status'],
           kind_label: row.kind_label == null ? null : String(row.kind_label),
           node_number: row.node_number == null ? null : String(row.node_number),
+          source_display_identifier:
+            row.source_display_identifier == null ? null : String(row.source_display_identifier),
+          normalized_machine_identifier:
+            row.normalized_machine_identifier == null ? null : String(row.normalized_machine_identifier),
+          identifier_base_number: row.identifier_base_number == null ? null : String(row.identifier_base_number),
+          identifier_letter_suffix:
+            row.identifier_letter_suffix == null ? null : String(row.identifier_letter_suffix),
+          identifier_nested_components: Array.isArray(row.identifier_nested_components)
+            ? row.identifier_nested_components.map((item) => String(item))
+            : [],
           title: row.title == null ? null : String(row.title),
           parent_candidate_id: row.parent_candidate_id == null ? null : String(row.parent_candidate_id),
           parent_tax_legal_node_id: row.parent_tax_legal_node_id == null ? null : String(row.parent_tax_legal_node_id),
@@ -328,6 +349,7 @@ export async function buildKnowledgeTrainerSlice(
         legal_ingestion_candidate_id: 'uuid',
         kind_label: 'optional string',
         node_number: 'optional string',
+        source_display_identifier: 'optional exact legal identifier',
         title: 'optional string',
         parent_candidate_id: 'optional uuid',
         parent_tax_legal_node_id: 'optional uuid',

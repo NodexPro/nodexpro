@@ -352,7 +352,7 @@ export function OwnerLegalLibraryPanel({
   const openEditNode = (node: OwnerLegalLibraryNode) => {
     setEditNodeId(node.id);
     setNodeTitle(node.title);
-    setNodeNumber(node.node_number ?? '');
+    setNodeNumber(node.source_display_identifier ?? node.display_identifier ?? '');
     setDialogKind('update_tax_legal_node_metadata');
   };
 
@@ -383,7 +383,7 @@ export function OwnerLegalLibraryPanel({
           title: nodeTitle.trim(),
         };
         if (nodeParentId) payload.parent_node_id = nodeParentId;
-        if (nodeNumber.trim()) payload.node_number = nodeNumber.trim();
+        if (nodeNumber.trim()) payload.source_display_identifier = nodeNumber.trim();
         await onCommand('create_tax_legal_node', payload);
       } else if (dialogKind === 'create_tax_rule') {
         await onCommand('create_tax_rule', {
@@ -402,7 +402,7 @@ export function OwnerLegalLibraryPanel({
         await onCommand('update_tax_domain_metadata', { tax_domain_id: editDomainId, title: domainTitle.trim() });
       } else if (dialogKind === 'update_tax_legal_node_metadata') {
         const payload: UnknownRecord = { tax_legal_node_id: editNodeId, title: nodeTitle.trim() };
-        payload.node_number = nodeNumber.trim();
+        payload.source_display_identifier = nodeNumber.trim() || null;
         await onCommand('update_tax_legal_node_metadata', payload);
       }
       closeDialog();
@@ -686,7 +686,7 @@ export function OwnerLegalLibraryPanel({
                       </label>
                     ) : null}
                     <label className="nx-field">
-                      <span className="nx-field-label">Number / identifier</span>
+                      <span className="nx-field-label">Legal identifier</span>
                       <input className="nx-input" value={nodeNumber} onChange={(e) => setNodeNumber(e.target.value)} dir="auto" />
                     </label>
                     <label className="nx-field">

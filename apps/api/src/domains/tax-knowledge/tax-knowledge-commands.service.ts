@@ -13,6 +13,12 @@ import { assertPackBelongsToCountry } from '../country-pack/country-pack.service
 import { assertRulesetExists } from '../country-pack/ruleset.service.js';
 import { buildOwnerLegalControlPanelAggregate } from '../country-pack/country-pack-read-models.service.js';
 import { parseTaxRulePayloadJson, taxRulePayloadChecksum } from './tax-knowledge-checksum.pure.js';
+import {
+  legalIdentifierFields,
+  legalIdentifierFromFields,
+  parseLegalIdentifier,
+  type LegalIdentifier,
+} from './legal-identifier.pure.js';
 import { generateLegalMachineCode } from './tax-knowledge-library.pure.js';
 import { validateTaxRulePayloadPredicates } from '../tax-rule-engine/tax-rule-engine-predicate.pure.js';
 import { randomBytes } from 'node:crypto';
@@ -98,10 +104,29 @@ function throwIfTaxKnowledgeWriteError(
   if (!error) return;
   const code = String(error.code ?? '');
   const message = String(error.message ?? '');
+  if (/legal_identity|normalized_machine_identifier/i.test(message)) {
+    throw conflict('A legal node with this exact identifier already exists under the same parent');
+  }
   if (code === '23505' || /monotonic per tax_rule_id/i.test(message)) {
     throw conflict(uniqueMessage);
   }
   throw error;
+}
+
+function resolveLegalIdentifierFromPayload(payload: Record<string, unknown>): LegalIdentifier | null {
+  const stored = legalIdentifierFromFields({
+    source_display_identifier: asOptionalString(payload.source_display_identifier, 'source_display_identifier'),
+    normalized_machine_identifier: asOptionalString(payload.normalized_machine_identifier, 'normalized_machine_identifier'),
+    identifier_base_number: asOptionalString(payload.identifier_base_number, 'identifier_base_number'),
+    identifier_letter_suffix: asOptionalString(payload.identifier_letter_suffix, 'identifier_letter_suffix'),
+    identifier_nested_components: payload.identifier_nested_components,
+  });
+  if (stored) return stored;
+  const human = asOptionalString(payload.source_display_identifier, 'source_display_identifier');
+  if (!human) return null;
+  const parsed = parseLegalIdentifier(human);
+  if (!parsed) throw badRequest('source_display_identifier is not a valid exact legal identifier');
+  return parsed;
 }
 
 function throwIfTaxRuleVersionLifecycleError(
@@ -212,6 +237,9 @@ async function insertWithGeneratedCode<T extends Record<string, unknown>>(
     const { data, error } = await supabaseAdmin.from(table).insert(buildRow(code)).select(select).single();
     if (!error && data) return data as unknown as T;
     lastError = error;
+    if (error && /legal_identity|normalized_machine_identifier/i.test(String(error.message ?? ''))) {
+      throwIfTaxKnowledgeWriteError(error, conflictMessage);
+    }
     if (error && String(error.code) === '23505' && !explicitCode) continue;
     throwIfTaxKnowledgeWriteError(error, conflictMessage);
   }
@@ -1913,6 +1941,8 @@ async function handleCreateTaxLegalNode(
   const title = asString(payload.title, 'title');
   assertDraftCreateStatus(payload.status, 'create_tax_legal_node');
   const sortOrder = asOptionalSortOrder(payload.sort_order) ?? 0;
+  const identifier = resolveLegalIdentifierFromPayload(payload);
+  const identifierFields = legalIdentifierFields(identifier);
 
   const data = await insertWithGeneratedCode<{ id: string; node_code: string; status: string }>(
     'tax_legal_nodes',
@@ -1926,6 +1956,7 @@ async function handleCreateTaxLegalNode(
       tax_legal_node_kind_id: kindId,
       node_code: nodeCode,
       node_number: asOptionalString(payload.node_number, 'node_number'),
+      ...identifierFields,
       title,
       status: TAX_KNOWLEDGE_INITIAL_STATUS,
       owner_note: asOptionalString(payload.owner_note, 'owner_note'),
@@ -1970,6 +2001,15 @@ async function handleUpdateTaxLegalNodeMetadata(
   const patch: Record<string, unknown> = {};
   if (payload.title !== undefined) patch.title = asString(payload.title, 'title');
   if (payload.node_number !== undefined) patch.node_number = asOptionalString(payload.node_number, 'node_number');
+  if (
+    payload.source_display_identifier !== undefined ||
+    payload.normalized_machine_identifier !== undefined ||
+    payload.identifier_base_number !== undefined ||
+    payload.identifier_letter_suffix !== undefined ||
+    payload.identifier_nested_components !== undefined
+  ) {
+    Object.assign(patch, legalIdentifierFields(resolveLegalIdentifierFromPayload(payload)));
+  }
   if (payload.owner_note !== undefined) patch.owner_note = asOptionalString(payload.owner_note, 'owner_note');
   if (payload.sort_order !== undefined) patch.sort_order = asOptionalSortOrder(payload.sort_order) ?? 0;
   if (payload.tax_legal_node_kind_id !== undefined) {

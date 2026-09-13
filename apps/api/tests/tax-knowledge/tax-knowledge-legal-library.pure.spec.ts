@@ -11,6 +11,7 @@ test('legal node display title is human structure first, not machine codes', () 
   assert.equal(legalNodeDisplayTitle('חלק', 'א', 'פרשנות'), 'חלק א — פרשנות');
   assert.equal(legalNodeDisplayTitle('סעיף', '1', 'הגדרות'), 'סעיף 1 — הגדרות');
   assert.equal(legalNodeDisplayTitle('תוספת', '', 'תוספת ראשונה'), 'תוספת — תוספת ראשונה');
+  assert.equal(legalNodeDisplayTitle('סעיף', '4א(א)(1)', 'מקום'), 'סעיף 4א(א)(1) — מקום');
 });
 
 test('Hebrew titles do not produce latin slugs; backend still generates a machine code', () => {

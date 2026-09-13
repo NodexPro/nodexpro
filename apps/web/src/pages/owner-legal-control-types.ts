@@ -249,6 +249,12 @@ export type OwnerLegalLibraryNode = {
   kind_label: string;
   node_code: string;
   node_number: string | null;
+  source_display_identifier: string | null;
+  normalized_machine_identifier: string | null;
+  identifier_base_number: string | null;
+  identifier_letter_suffix: string | null;
+  identifier_nested_components: string[];
+  display_identifier: string | null;
   title: string;
   display_title: string;
   sort_order: number;
@@ -353,6 +359,14 @@ export type OwnerKnowledgeTrainerCandidate = {
   candidate_status: string;
   kind_label: string | null;
   node_number: string | null;
+  source_display_identifier: string | null;
+  normalized_machine_identifier: string | null;
+  identifier_base_number: string | null;
+  identifier_letter_suffix: string | null;
+  identifier_nested_components: string[];
+  display_identifier: string | null;
+  display_label: string;
+  parent_display_identifier: string | null;
   title: string | null;
   parent_candidate_id: string | null;
   parent_tax_legal_node_id: string | null;

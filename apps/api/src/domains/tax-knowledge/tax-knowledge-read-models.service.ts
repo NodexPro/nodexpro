@@ -468,6 +468,7 @@ function libraryCatalogActions(): OwnerTaxKnowledgeAllowedAction[] {
       title: 'string',
       parent_node_id: 'optional uuid',
       node_number: 'optional string',
+      source_display_identifier: 'optional exact legal identifier',
       owner_note: 'optional string',
     }),
     action('create_tax_rule', true, {
@@ -514,6 +515,7 @@ function librarySourceAllowedActions(status: string): OwnerTaxKnowledgeAllowedAc
       title: 'string',
       parent_node_id: 'optional uuid',
       node_number: 'optional string',
+      source_display_identifier: 'optional exact legal identifier',
     }),
   ];
 }
@@ -524,6 +526,7 @@ function libraryNodeAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
       tax_legal_node_id: 'uuid',
       title: 'optional string',
       node_number: 'optional string',
+      source_display_identifier: 'optional exact legal identifier',
       owner_note: 'optional string',
     }),
     action('create_tax_legal_node', true, {
@@ -532,6 +535,7 @@ function libraryNodeAllowedActions(): OwnerTaxKnowledgeAllowedAction[] {
       tax_legal_node_kind_id: 'uuid',
       title: 'string',
       node_number: 'optional string',
+      source_display_identifier: 'optional exact legal identifier',
     }),
     action('create_tax_rule', true, {
       country_code: 'ISO 3166-1 alpha-2',
@@ -568,8 +572,18 @@ function mapLibraryNode(
     kind_label: nested.kind_label,
     node_code: nested.node_code,
     node_number: nested.node_number,
+    source_display_identifier: nested.source_display_identifier ?? null,
+    normalized_machine_identifier: nested.normalized_machine_identifier ?? null,
+    identifier_base_number: nested.identifier_base_number ?? null,
+    identifier_letter_suffix: nested.identifier_letter_suffix ?? null,
+    identifier_nested_components: nested.identifier_nested_components ?? [],
+    display_identifier: nested.source_display_identifier ?? nested.node_number,
     title: nested.title,
-    display_title: legalNodeDisplayTitle(nested.kind_label, nested.node_number, nested.title),
+    display_title: legalNodeDisplayTitle(
+      nested.kind_label,
+      nested.source_display_identifier ?? nested.node_number,
+      nested.title,
+    ),
     sort_order: nested.sort_order,
     status: nested.status,
     owner_note: nested.owner_note,
@@ -1049,7 +1063,7 @@ async function loadLegalLibrarySlice(
   rules: OwnerTaxRuleDto[],
   warnings: string[],
 ): Promise<OwnerLegalLibrarySliceDto> {
-  const [domainResult, kindResult, nodeResult, linkResult] = await Promise.all([
+  const [domainResult, kindResult, nodeQuery, linkResult] = await Promise.all([
     supabaseAdmin
       .from('tax_domains')
       .select('id, country_code, domain_code, title, status, owner_note, sort_order, created_at, updated_at')
@@ -1063,7 +1077,7 @@ async function loadLegalLibrarySlice(
     supabaseAdmin
       .from('tax_legal_nodes')
       .select(
-        'id, country_code, tax_source_id, parent_node_id, tax_legal_node_kind_id, node_code, node_number, title, status, owner_note, sort_order, created_at, updated_at',
+        'id, country_code, tax_source_id, parent_node_id, tax_legal_node_kind_id, node_code, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, title, status, owner_note, sort_order, created_at, updated_at',
       )
       .eq('country_code', countryCode)
       .order('sort_order', { ascending: true }),
@@ -1083,10 +1097,20 @@ async function loadLegalLibrarySlice(
     return emptyLegalLibrarySlice(false);
   }
   if (kindResult.error) throw kindResult.error;
-  if (nodeResult.error && isSupabaseMissingTableError(nodeResult.error, 'tax_legal_nodes')) {
+  if (nodeQuery.error && isSupabaseMissingTableError(nodeQuery.error, 'tax_legal_nodes')) {
     warnings.push(LEGAL_LIBRARY_SCHEMA_NOT_APPLIED);
     return emptyLegalLibrarySlice(false);
   }
+  const nodeResult =
+    nodeQuery.error && isSupabaseMissingColumnError(nodeQuery.error, 'source_display_identifier')
+      ? await supabaseAdmin
+          .from('tax_legal_nodes')
+          .select(
+            'id, country_code, tax_source_id, parent_node_id, tax_legal_node_kind_id, node_code, node_number, title, status, owner_note, sort_order, created_at, updated_at',
+          )
+          .eq('country_code', countryCode)
+          .order('sort_order', { ascending: true })
+      : nodeQuery;
   if (nodeResult.error) throw nodeResult.error;
   if (linkResult.error && isSupabaseMissingTableError(linkResult.error, 'tax_rule_legal_nodes')) {
     warnings.push(LEGAL_LIBRARY_SCHEMA_NOT_APPLIED);
@@ -1114,7 +1138,9 @@ async function loadLegalLibrarySlice(
     issuer: source.issuer,
     source_code: source.source_code,
   }));
-  const nodeRows: LegalLibraryNodeRow[] = (nodeResult.data ?? []).map((row) => ({
+  const nodeRows: LegalLibraryNodeRow[] = (nodeResult.data ?? []).map((raw) => {
+    const row = raw as Record<string, unknown>;
+    return {
     id: String(row.id),
     tax_source_id: String(row.tax_source_id),
     parent_node_id: row.parent_node_id == null ? null : String(row.parent_node_id),
@@ -1122,13 +1148,23 @@ async function loadLegalLibrarySlice(
     kind_label: kindById.get(String(row.tax_legal_node_kind_id)) ?? '',
     node_code: String(row.node_code),
     node_number: row.node_number == null ? null : String(row.node_number),
+    source_display_identifier:
+      row.source_display_identifier == null ? null : String(row.source_display_identifier),
+    normalized_machine_identifier:
+      row.normalized_machine_identifier == null ? null : String(row.normalized_machine_identifier),
+    identifier_base_number: row.identifier_base_number == null ? null : String(row.identifier_base_number),
+    identifier_letter_suffix: row.identifier_letter_suffix == null ? null : String(row.identifier_letter_suffix),
+    identifier_nested_components: Array.isArray(row.identifier_nested_components)
+      ? row.identifier_nested_components.map((item) => String(item))
+      : [],
     title: String(row.title),
     sort_order: typeof row.sort_order === 'number' ? row.sort_order : Number(row.sort_order) || 0,
     status: String(row.status),
     owner_note: row.owner_note == null ? null : String(row.owner_note),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
-  }));
+  };
+  });
   const ruleRows: LegalLibraryRuleRow[] = rules.map((rule) => ({
     id: rule.id,
     title: rule.title,

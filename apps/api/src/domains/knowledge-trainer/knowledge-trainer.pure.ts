@@ -626,6 +626,8 @@ export function validateStructureCandidates(
       country_code: string;
       kind_label: string;
       node_number: string | null;
+      parent_node_id?: string | null;
+      normalized_machine_identifier?: string | null;
       title: string;
     }>;
   },
@@ -665,9 +667,14 @@ export function validateStructureCandidates(
         otherIndex !== i &&
         other.kind_label === draft.kind_label &&
         other.parent_index === draft.parent_index &&
-        other.node_number &&
-        draft.node_number &&
-        other.node_number === draft.node_number,
+        ((draft.normalized_machine_identifier &&
+          other.normalized_machine_identifier &&
+          draft.normalized_machine_identifier === other.normalized_machine_identifier) ||
+          (!draft.normalized_machine_identifier &&
+            !other.normalized_machine_identifier &&
+            other.node_number &&
+            draft.node_number &&
+            other.node_number === draft.node_number)),
     );
     if (siblings.length) {
       draft.validation_warnings.push('duplicate_sibling_identifier');
@@ -687,14 +694,22 @@ export function validateStructureCandidates(
       draft.candidate_status = 'needs_review';
     }
 
-    const existing = context.existing_nodes.find(
-      (node) =>
-        node.tax_source_id === context.tax_source_id &&
-        node.country_code === context.country_code &&
-        node.kind_label === draft.kind_label &&
-        Boolean(node.node_number) &&
-        node.node_number === draft.node_number,
-    );
+    const existing = context.existing_nodes.find((node) => {
+      if (node.tax_source_id !== context.tax_source_id || node.country_code !== context.country_code) return false;
+      if (node.kind_label !== draft.kind_label) return false;
+      const draftRoot = draft.parent_index == null;
+      const nodeRoot = node.parent_node_id == null;
+      if (draftRoot !== nodeRoot) return false;
+      if (!draftRoot && draft.parent_index != null) {
+        const parentDraft = out[draft.parent_index];
+        const parentNode = context.existing_nodes.find((row) => row.id === node.parent_node_id) ?? null;
+        if (parentDraft && parentNode && !sameParentIdentity(parentDraft, parentNode)) return false;
+      }
+      if (draft.normalized_machine_identifier && node.normalized_machine_identifier) {
+        return draft.normalized_machine_identifier === node.normalized_machine_identifier;
+      }
+      return Boolean(node.node_number) && node.node_number === draft.node_number;
+    });
     if (existing) {
       draft.validation_warnings.push('possible_existing_canonical_node');
       draft.candidate_status = 'needs_review';
@@ -722,6 +737,17 @@ export function validateStructureCandidates(
   }
 
   return out;
+}
+
+export function sameParentIdentity(
+  parentDraft: Pick<StructureCandidateDraft, 'kind_label' | 'node_number' | 'normalized_machine_identifier'>,
+  parentNode: { kind_label: string; node_number: string | null; normalized_machine_identifier?: string | null },
+): boolean {
+  if (parentDraft.kind_label !== parentNode.kind_label) return false;
+  if (parentDraft.normalized_machine_identifier && parentNode.normalized_machine_identifier) {
+    return parentDraft.normalized_machine_identifier === parentNode.normalized_machine_identifier;
+  }
+  return Boolean(parentDraft.node_number) && parentDraft.node_number === parentNode.node_number;
 }
 
 export function hasParentCycle(start: number, parentByIndex: Map<number, number | null>): boolean {

@@ -276,7 +276,7 @@ function TrainerReview({
   useEffect(() => {
     if (!candidate) return;
     setKindLabel(candidate.kind_label ?? '');
-    setNodeNumber(candidate.node_number ?? '');
+    setNodeNumber(candidate.source_display_identifier ?? candidate.display_identifier ?? '');
     setTitle(candidate.title ?? '');
     setParentCandidateId(candidate.parent_candidate_id ?? '');
     setEditing(false);
@@ -333,7 +333,7 @@ function TrainerReview({
       await onCommand('update_legal_extraction_candidate', {
         legal_ingestion_candidate_id: candidate.id,
         kind_label: kindLabel,
-        node_number: nodeNumber,
+        source_display_identifier: nodeNumber.trim() || null,
         title,
         parent_candidate_id: parentCandidateId || null,
       });
@@ -649,11 +649,11 @@ function CandidateEditor({
         )}
       </label>
       <label>
-        Number
+        Legal identifier
         {editing ? (
-          <input className="nx-input" value={nodeNumber} onChange={(event) => onNodeNumber(event.target.value)} />
+          <input className="nx-input" value={nodeNumber} onChange={(event) => onNodeNumber(event.target.value)} dir="auto" />
         ) : (
-          <div dir="auto">{candidate.node_number || '—'}</div>
+          <div dir="auto">{candidate.source_display_identifier || candidate.display_identifier || '—'}</div>
         )}
       </label>
       <label>
@@ -673,7 +673,7 @@ function CandidateEditor({
               .filter((row) => row.id !== candidate.id)
               .map((row) => (
                 <option key={row.id} value={row.id}>
-                  {row.kind_label} {row.node_number || ''} {row.title || ''}
+                  {row.display_label || row.source_display_identifier || row.kind_label}
                 </option>
               ))}
           </select>
@@ -810,7 +810,7 @@ function CandidatePicker({
       <select className="nx-input" value={selectedId} onChange={(event) => onSelect(event.target.value)}>
         {candidates.map((row, index) => (
           <option key={row.id} value={row.id}>
-            {index + 1}. {row.kind_label || ''} {row.node_number || ''} {row.title || ''} · p.
+            {index + 1}. {row.display_label || row.source_display_identifier || row.kind_label || ''} · p.
             {row.page_start ?? '—'} · {row.review_class_label || row.review_class}
           </option>
         ))}
@@ -980,7 +980,7 @@ function candidateMatchesFilter(candidate: OwnerKnowledgeTrainerCandidate, filte
 }
 
 function candidateSearchText(candidate: OwnerKnowledgeTrainerCandidate): string {
-  return [candidate.kind_label, candidate.node_number, candidate.title, candidate.hierarchy_path, candidate.parent_label]
+  return [candidate.display_label, candidate.source_display_identifier, candidate.display_identifier, candidate.kind_label, candidate.title, candidate.hierarchy_path, candidate.parent_label]
     .filter(Boolean)
     .join(' ')
     .toLowerCase();

@@ -117,6 +117,90 @@ test('hierarchy cycle and duplicate sibling are review warnings, not canonical w
   assert.ok(dups.every((row) => row.validation_warnings.includes('duplicate_sibling_identifier')));
 });
 
+test('identical child identifiers under different parents are allowed; same parent is not', () => {
+  const child = (parent: number, title: string) => ({
+    candidate_kind: 'structure' as const,
+    candidate_status: 'proposed' as const,
+    kind_label: 'סעיף קטן',
+    node_number: '1',
+    normalized_machine_identifier: '1',
+    source_display_identifier: '1',
+    title,
+    parent_index: parent,
+    page_start: 1,
+    page_end: 1,
+    excerpt: '(1)',
+    confidence: 0.9,
+    validation_warnings: [] as string[],
+  });
+  const allowed = validateStructureCandidates(
+    [
+      {
+        candidate_kind: 'structure',
+        candidate_status: 'proposed',
+        kind_label: 'סעיף',
+        node_number: '2',
+        normalized_machine_identifier: '2',
+        source_display_identifier: '2',
+        title: 'A',
+        parent_index: null,
+        page_start: 1,
+        page_end: 1,
+        excerpt: 'סעיף 2',
+        confidence: 0.9,
+        validation_warnings: [],
+      },
+      {
+        candidate_kind: 'structure',
+        candidate_status: 'proposed',
+        kind_label: 'סעיף',
+        node_number: '3',
+        normalized_machine_identifier: '3',
+        source_display_identifier: '3',
+        title: 'B',
+        parent_index: null,
+        page_start: 1,
+        page_end: 1,
+        excerpt: 'סעיף 3',
+        confidence: 0.9,
+        validation_warnings: [],
+      },
+      child(0, 'under 2'),
+      child(1, 'under 3'),
+    ],
+    { country_code: 'IL', tax_source_id: 'src', existing_nodes: [] },
+  );
+  assert.equal(allowed.filter((row) => row.validation_warnings.includes('duplicate_sibling_identifier')).length, 0);
+
+  const rejected = validateStructureCandidates(
+    [
+      {
+        candidate_kind: 'structure',
+        candidate_status: 'proposed',
+        kind_label: 'סעיף',
+        node_number: '2',
+        normalized_machine_identifier: '2',
+        source_display_identifier: '2',
+        title: 'A',
+        parent_index: null,
+        page_start: 1,
+        page_end: 1,
+        excerpt: 'סעיף 2',
+        confidence: 0.9,
+        validation_warnings: [],
+      },
+      child(0, 'first'),
+      child(0, 'second'),
+    ],
+    { country_code: 'IL', tax_source_id: 'src', existing_nodes: [] },
+  );
+  assert.ok(
+    rejected
+      .filter((row) => row.kind_label === 'סעיף קטן')
+      .every((row) => row.validation_warnings.includes('duplicate_sibling_identifier')),
+  );
+});
+
 test('future photo and pasted-text batches map onto the same ordered page model', () => {
   const photos = orderedPagesFromFutureInputs({
     input_type: 'image',
