@@ -141,21 +141,80 @@ function isRootCapableKind(label: string | null, catalog: StructureKindCatalogIt
   return catalogRankForLabel(label, catalog) === 0;
 }
 
+type ReviewCandidateInput = Omit<
+  KnowledgeTrainerCandidateDto,
+  | 'review_class'
+  | 'review_class_label'
+  | 'ocr_affected'
+  | 'review_warnings'
+  | 'display_warnings'
+  | 'parent_label'
+  | 'hierarchy_path'
+  | 'hierarchy_valid'
+  | 'display_identifier'
+  | 'display_label'
+  | 'parent_display_identifier'
+>;
+
+/** Same-parent identity conflict: parent + kind + normalized_machine_identifier. */
+export function siblingIdentityKey(candidate: {
+  parent_candidate_id: string | null;
+  kind_label: string | null;
+  normalized_machine_identifier?: string | null;
+}): string | null {
+  const machine = candidate.normalized_machine_identifier?.trim() || '';
+  if (!machine) return null;
+  const parent = candidate.parent_candidate_id ?? 'root';
+  const kind = (candidate.kind_label ?? '').trim() || 'unknown';
+  return `${parent}|${kind}|${machine}`;
+}
+
+/**
+ * Suspicious same-parent printed-marker clash for fine-grained kinds only.
+ * Scoped to parent+kind so bare "(1)" is never globally unique.
+ */
+export function siblingPrintedMarkerKey(candidate: {
+  parent_candidate_id: string | null;
+  kind_label: string | null;
+  printed_marker?: string | null;
+}): string | null {
+  if (!isFineGrainedStructureKind(candidate.kind_label)) return null;
+  const marker = candidate.printed_marker?.trim() || '';
+  if (!marker) return null;
+  const parent = candidate.parent_candidate_id ?? 'root';
+  const kind = (candidate.kind_label ?? '').trim() || 'unknown';
+  return `${parent}|${kind}|printed:${marker}`;
+}
+
+export function findDuplicateSiblingCandidateIds(candidates: ReviewCandidateInput[]): Set<string> {
+  const identityBuckets = new Map<string, string[]>();
+  const printedBuckets = new Map<string, string[]>();
+  for (const row of candidates) {
+    const identity = siblingIdentityKey(row);
+    if (identity) {
+      const list = identityBuckets.get(identity) ?? [];
+      list.push(row.id);
+      identityBuckets.set(identity, list);
+    }
+    const printed = siblingPrintedMarkerKey(row);
+    if (printed) {
+      const list = printedBuckets.get(printed) ?? [];
+      list.push(row.id);
+      printedBuckets.set(printed, list);
+    }
+  }
+  const dupes = new Set<string>();
+  for (const ids of identityBuckets.values()) {
+    if (ids.length > 1) for (const id of ids) dupes.add(id);
+  }
+  for (const ids of printedBuckets.values()) {
+    if (ids.length > 1) for (const id of ids) dupes.add(id);
+  }
+  return dupes;
+}
+
 export function attachStructureReviewModel(
-  candidates: Array<Omit<
-    KnowledgeTrainerCandidateDto,
-    | 'review_class'
-    | 'review_class_label'
-    | 'ocr_affected'
-    | 'review_warnings'
-    | 'display_warnings'
-    | 'parent_label'
-    | 'hierarchy_path'
-    | 'hierarchy_valid'
-    | 'display_identifier'
-    | 'display_label'
-    | 'parent_display_identifier'
-  >>,
+  candidates: ReviewCandidateInput[],
   ctx: StructureReviewContext,
 ): {
   candidates: KnowledgeTrainerCandidateDto[];
@@ -164,7 +223,8 @@ export function attachStructureReviewModel(
   structure_tree: StructureReviewTreeNodeDto[];
 } {
   const byId = new Map(candidates.map((row) => [row.id, row]));
-  const classified = candidates.map((row) => classifyOne(row, byId, ctx));
+  const duplicateSiblingIds = findDuplicateSiblingCandidateIds(candidates);
+  const classified = candidates.map((row) => classifyOne(row, byId, ctx, duplicateSiblingIds));
   return {
     candidates: classified,
     review_summary: summarizeStructureReview(classified),
@@ -174,22 +234,10 @@ export function attachStructureReviewModel(
 }
 
 function classifyOne(
-  candidate: Omit<
-    KnowledgeTrainerCandidateDto,
-    | 'review_class'
-    | 'review_class_label'
-    | 'ocr_affected'
-    | 'review_warnings'
-    | 'display_warnings'
-    | 'parent_label'
-    | 'hierarchy_path'
-    | 'hierarchy_valid'
-    | 'display_identifier'
-    | 'display_label'
-    | 'parent_display_identifier'
-  >,
-  byId: Map<string, (typeof candidate)>,
+  candidate: ReviewCandidateInput,
+  byId: Map<string, ReviewCandidateInput>,
   ctx: StructureReviewContext,
+  duplicateSiblingIds: Set<string>,
 ): KnowledgeTrainerCandidateDto {
   const parent = candidate.parent_candidate_id ? byId.get(candidate.parent_candidate_id) ?? null : null;
   const reviewWarnings: string[] = [];
@@ -241,8 +289,26 @@ function classifyOne(
     reviewWarnings.push('hierarchy_rank_mismatch');
   }
 
-  if (isFineGrainedStructureKind(candidate.kind_label)) {
-    reviewWarnings.push('subsection_or_paragraph_needs_owner_review');
+  const fineGrained = isFineGrainedStructureKind(candidate.kind_label);
+  const exactId =
+    candidate.normalized_machine_identifier?.trim() ||
+    candidate.source_display_identifier?.trim() ||
+    '';
+  if (fineGrained && !exactId) {
+    reviewWarnings.push('missing_exact_legal_identifier');
+  }
+  if (fineGrained && !candidate.parent_candidate_id) {
+    reviewWarnings.push('fine_grained_missing_parent');
+  }
+  if (fineGrained && !candidate.printed_marker?.trim()) {
+    reviewWarnings.push('fine_grained_missing_printed_marker');
+  }
+
+  const duplicateSibling =
+    duplicateSiblingIds.has(candidate.id) ||
+    candidate.validation_warnings.includes('duplicate_sibling_identifier');
+  if (duplicateSiblingIds.has(candidate.id) && !candidate.validation_warnings.includes('duplicate_sibling_identifier')) {
+    reviewWarnings.push('duplicate_sibling_identifier');
   }
 
   const persisted = candidate.validation_warnings;
@@ -252,14 +318,16 @@ function classifyOne(
     reviewWarnings.includes('amendment_year_identifier') ||
     reviewWarnings.includes('navigation_or_toc_artifact');
 
+  // Evidence-based Needs review. Depth alone (סעיף קטן / פסקה / תת-פסקה) is not enough.
   const needsOwner =
     !technical &&
     (ocrAffected ||
-      isFineGrainedStructureKind(candidate.kind_label) ||
       (candidate.confidence != null && candidate.confidence < 0.55) ||
+      persisted.includes('layout_needs_owner_review') ||
       persisted.includes('sequence_anomaly') ||
-      persisted.includes('duplicate_sibling_identifier') ||
+      duplicateSibling ||
       persisted.includes('duplicate_candidate') ||
+      persisted.includes('duplicate_identity_resolved') ||
       persisted.includes('unresolved_parent') ||
       persisted.includes('invalid_parent_candidate') ||
       persisted.includes('hierarchy_cycle') ||
@@ -268,6 +336,9 @@ function classifyOne(
       reviewWarnings.includes('suspicious_container_title') ||
       reviewWarnings.includes('page_range_implausible') ||
       reviewWarnings.includes('hierarchy_rank_mismatch') ||
+      reviewWarnings.includes('missing_exact_legal_identifier') ||
+      reviewWarnings.includes('fine_grained_missing_parent') ||
+      reviewWarnings.includes('fine_grained_missing_printed_marker') ||
       !hierarchyValid);
 
   const reviewClass: StructureReviewClass = technical

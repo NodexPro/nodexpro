@@ -362,6 +362,35 @@ function TrainerReview({
       <div>Needs OCR: {document.needs_ocr_page_count}</div>
       <div>Failed: {document.failed_page_count}</div>
       <div>Structure candidates: {document.structure_candidate_count}</div>
+      <div>
+        Source notes: {document.source_note_summary?.all ?? document.source_notes?.length ?? 0}
+        {document.source_note_summary ? (
+          <span>
+            {' '}
+            (apparatus {document.source_note_summary.apparatus_zone}, body {document.source_note_summary.body_line},
+            footer {document.source_note_summary.footer_line}; linked {document.source_note_summary.linked}, missing
+            anchor {document.source_note_summary.missing_anchor})
+          </span>
+        ) : null}
+      </div>
+      {(document.source_notes?.length || document.unresolved_source_note_anchors?.length) ? (
+        <div style={{ fontSize: 12, maxHeight: 240, overflow: 'auto', display: 'grid', gap: 6 }}>
+          {(document.source_notes ?? []).map((note) => (
+            <div key={note.id} dir="auto">
+              p.{note.source_page} · {note.classification} · {note.origin_zone} · {note.inline_link_status}
+              {note.printed_marker ? ` · ${note.printed_marker}` : ''}
+              {' — '}
+              {note.note_text}
+            </div>
+          ))}
+          {(document.unresolved_source_note_anchors ?? []).map((anchor) => (
+            <div key={anchor.id}>
+              unresolved marker p.{anchor.source_page} · {anchor.printed_marker} · items {anchor.source_item_start}–
+              {anchor.source_item_end}
+            </div>
+          ))}
+        </div>
+      ) : null}
       {document.structure_run?.status_label ? (
         <div>Structure run: {document.structure_run.status_label}</div>
       ) : null}
@@ -726,6 +755,12 @@ function CandidateEditor({
       <div style={{ fontSize: 13 }}>
         {candidate.page_start ?? '—'}
         {candidate.page_end && candidate.page_end !== candidate.page_start ? `–${candidate.page_end}` : ''}
+      </div>
+      <div>Source span</div>
+      <div style={{ fontSize: 13 }}>
+        {candidate.source_page != null
+          ? `page ${candidate.source_page} · items ${candidate.source_item_start ?? '—'}–${candidate.source_item_end ?? '—'} · line ${candidate.source_line_index ?? '—'}`
+          : 'Not persisted on this run'}
       </div>
       <div style={{ fontSize: 12, color: '#6b7280' }}>
         Confidence {candidate.confidence != null ? candidate.confidence : '—'}

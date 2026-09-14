@@ -667,18 +667,30 @@ export function validateStructureCandidates(
         otherIndex !== i &&
         other.kind_label === draft.kind_label &&
         other.parent_index === draft.parent_index &&
-        ((draft.normalized_machine_identifier &&
-          other.normalized_machine_identifier &&
-          draft.normalized_machine_identifier === other.normalized_machine_identifier) ||
-          (!draft.normalized_machine_identifier &&
-            !other.normalized_machine_identifier &&
-            other.node_number &&
-            draft.node_number &&
-            other.node_number === draft.node_number)),
+        Boolean(draft.normalized_machine_identifier?.trim()) &&
+        Boolean(other.normalized_machine_identifier?.trim()) &&
+        draft.normalized_machine_identifier === other.normalized_machine_identifier,
     );
     if (siblings.length) {
       draft.validation_warnings.push('duplicate_sibling_identifier');
       draft.candidate_status = 'needs_review';
+    }
+
+    const printedMarker = draft.printed_marker?.trim() || '';
+    if (printedMarker && /קטן|פסקה/.test(draft.kind_label ?? '')) {
+      const printedSiblings = out.filter(
+        (other, otherIndex) =>
+          otherIndex !== i &&
+          other.kind_label === draft.kind_label &&
+          other.parent_index === draft.parent_index &&
+          (other.printed_marker?.trim() || '') === printedMarker,
+      );
+      if (printedSiblings.length) {
+        if (!draft.validation_warnings.includes('duplicate_sibling_identifier')) {
+          draft.validation_warnings.push('duplicate_sibling_identifier');
+        }
+        draft.candidate_status = 'needs_review';
+      }
     }
 
     const exactDup = out.some(

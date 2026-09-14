@@ -26,6 +26,7 @@ import {
   MALWARE_SCAN_STATUS_V1,
   OWNER_LEGAL_MATERIAL_SIGNED_URL_EXPIRES_SEC,
   OWNER_LEGAL_MATERIALS_BUCKET,
+  SOURCE_SPAN_IMMUTABLE_FIELDS,
   isKnowledgeTrainerCommand,
   type KnowledgeTrainerCommandName,
   type KnowledgeTrainerCommandResponse,
@@ -390,6 +391,7 @@ async function handleRebuildStructure(
     toc_index_rejected: result?.analysis.toc_index_rejected ?? 0,
     structure_run_id: result?.structure_run_id ?? null,
     previous_active_run_id: result?.previous_active_run_id ?? null,
+    source_note_count: result?.source_note_count ?? 0,
   });
   if (result?.structure_run_id) {
     await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_STRUCTURE_RUN_ACTIVATED, 'legal_ingestion_structure_run', result.structure_run_id, {
@@ -497,6 +499,7 @@ async function handleRebuildWithLayout(
     candidates_found: result?.analysis.candidates_found ?? 0,
     structure_run_id: result?.structure_run_id ?? null,
     previous_active_run_id: result?.previous_active_run_id ?? null,
+    source_note_count: result?.source_note_count ?? 0,
   });
   if (result?.structure_run_id) {
     await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_STRUCTURE_RUN_ACTIVATED, 'legal_ingestion_structure_run', result.structure_run_id, {
@@ -525,6 +528,9 @@ async function handleUpdateCandidate(
     throw conflict('Accepted or rejected candidates cannot be edited');
   }
   const patch: Record<string, unknown> = {};
+  if (SOURCE_SPAN_IMMUTABLE_FIELDS.some((field) => payload[field] !== undefined)) {
+    throw badRequest('Original source span evidence is immutable');
+  }
   if (payload.kind_label !== undefined) {
     if (typeof payload.kind_label !== 'string' || !payload.kind_label.trim()) throw badRequest('kind_label is required');
     patch.kind_label = payload.kind_label.trim();

@@ -140,6 +140,10 @@ test('layout detector keeps standalone heading and rejects citation/amendment/ga
   assert.equal(drafts.some((row) => row.node_number === '256'), false);
   assert.equal(drafts.some((row) => row.node_number === '514'), false);
   assert.equal(drafts[0]?.parent_index == null || typeof drafts[0].parent_index === 'number', true);
+  const heading = drafts.find((row) => row.kind_label === 'סעיף' && row.node_number === '1');
+  assert.ok(heading);
+  assert.equal(heading.source_page, heading.page_start);
+  assert.equal(heading.source_item_start, 0);
 
   const numbered = detectStructureCandidatesFromLayout(
     [
@@ -223,6 +227,8 @@ test('RTL letter-suffix seif skips year-stamp lookback and does not keep leftove
   assert.equal(isAmendmentDebris('מקום הפקת ההכנסה'), false);
   assert.equal(lineLooksLikeRunningCitation('לענין סעיף 39'), true);
   assert.equal(lineLooksLikeRunningCitation('לענין סעיף זה – ( א ) א. 3'), false);
+  assert.equal(lineLooksLikeRunningCitation('בסעיף קטן זה – ( 1 ) ( 1 ט )'), false);
+  assert.equal(lineLooksLikeRunningCitation('בסעיף 3(ט1)'), true);
   assert.equal(lineLooksLikeRunningCitation('לפי סעיף 39'), true);
 
   const { drafts } = detectStructureCandidatesFromLayout(

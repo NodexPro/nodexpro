@@ -94,7 +94,7 @@ test('untitled sequential סעיף stays high confidence when parent and numberi
   assert.equal(model.candidates[1].review_class, 'high_confidence');
 });
 
-test('סעיף קטן is needs owner review, not rejected technical', () => {
+test('clean layout-backed nested markers can be high confidence', () => {
   const model = classify([
     base({
       id: 'chelek',
@@ -103,8 +103,51 @@ test('סעיף קטן is needs owner review, not rejected technical', () => {
       title: 'פרשנות',
       parent_candidate_id: null,
       confidence: 0.9,
+      source_display_identifier: "א'",
+      normalized_machine_identifier: "א'",
     }),
-    base({ id: 'seif', kind_label: 'סעיף', node_number: '1', title: 'הגדרות', parent_candidate_id: 'chelek' }),
+    base({
+      id: 'seif',
+      kind_label: 'סעיף',
+      node_number: '1',
+      title: 'הגדרות',
+      parent_candidate_id: 'chelek',
+      source_display_identifier: '1',
+      normalized_machine_identifier: '1',
+    }),
+    base({
+      id: 'katan',
+      kind_label: 'סעיף קטן',
+      node_number: 'א',
+      title: null,
+      parent_candidate_id: 'seif',
+      confidence: 0.8,
+      source_display_identifier: '1(א)',
+      normalized_machine_identifier: '1(א)',
+      printed_marker: '(א)',
+      validation_warnings: [],
+    }),
+  ]);
+  assert.equal(model.candidates[2].review_class, 'high_confidence');
+  assert.equal(
+    model.candidates[2].review_warnings.includes('subsection_or_paragraph_needs_owner_review'),
+    false,
+  );
+});
+
+test('weak nested evidence stays needs owner review without depth-only penalty label', () => {
+  const model = classify([
+    base({
+      id: 'chelek',
+      kind_label: 'חלק',
+      node_number: "א'",
+      title: 'פרשנות',
+      parent_candidate_id: null,
+      confidence: 0.9,
+      source_display_identifier: "א'",
+      normalized_machine_identifier: "א'",
+    }),
+    base({ id: 'seif', kind_label: 'סעיף', node_number: '1', title: 'הגדרות', parent_candidate_id: 'chelek', source_display_identifier: '1', normalized_machine_identifier: '1' }),
     base({
       id: 'katan',
       kind_label: 'סעיף קטן',
@@ -112,11 +155,103 @@ test('סעיף קטן is needs owner review, not rejected technical', () => {
       title: null,
       parent_candidate_id: 'seif',
       confidence: 0.4,
-      validation_warnings: ['subsection_needs_context'],
+      source_display_identifier: '1(א)',
+      normalized_machine_identifier: '1(א)',
+      printed_marker: '(א)',
+      validation_warnings: ['subsection_needs_context', 'layout_needs_owner_review'],
     }),
   ]);
   assert.equal(model.candidates[2].review_class, 'needs_owner_review');
-  assert.ok(model.candidates[2].review_warnings.includes('subsection_or_paragraph_needs_owner_review'));
+  assert.equal(
+    model.candidates[2].review_warnings.includes('subsection_or_paragraph_needs_owner_review'),
+    false,
+  );
+});
+
+test('same-parent duplicate normalized identity cannot be high confidence', () => {
+  const model = classify([
+    base({
+      id: 'seif',
+      kind_label: 'סעיף',
+      node_number: '2',
+      title: 'מקורות',
+      parent_candidate_id: null,
+      source_display_identifier: '2',
+      normalized_machine_identifier: '2',
+      confidence: 0.9,
+    }),
+    base({
+      id: 'a',
+      kind_label: 'סעיף קטן',
+      node_number: '1',
+      title: null,
+      parent_candidate_id: 'seif',
+      confidence: 0.8,
+      source_display_identifier: '2(1)',
+      normalized_machine_identifier: '2(1)',
+      printed_marker: '(1)',
+    }),
+    base({
+      id: 'b',
+      kind_label: 'סעיף קטן',
+      node_number: '1',
+      title: 'duplicate',
+      parent_candidate_id: 'seif',
+      confidence: 0.8,
+      source_display_identifier: '2(1)',
+      normalized_machine_identifier: '2(1)',
+      printed_marker: '(1)',
+    }),
+  ]);
+  assert.equal(model.candidates[1].review_class, 'needs_owner_review');
+  assert.equal(model.candidates[2].review_class, 'needs_owner_review');
+  assert.ok(model.candidates[1].review_warnings.includes('duplicate_sibling_identifier'));
+  assert.ok(model.candidates[2].review_warnings.includes('duplicate_sibling_identifier'));
+});
+
+test('identical leaf markers under different parents are not sibling conflicts', () => {
+  const model = classify([
+    base({
+      id: 's2',
+      kind_label: 'סעיף',
+      node_number: '2',
+      parent_candidate_id: null,
+      source_display_identifier: '2',
+      normalized_machine_identifier: '2',
+      confidence: 0.9,
+    }),
+    base({
+      id: 's3',
+      kind_label: 'סעיף',
+      node_number: '3',
+      parent_candidate_id: null,
+      source_display_identifier: '3',
+      normalized_machine_identifier: '3',
+      confidence: 0.9,
+    }),
+    base({
+      id: 'a',
+      kind_label: 'סעיף קטן',
+      node_number: '1',
+      parent_candidate_id: 's2',
+      confidence: 0.8,
+      source_display_identifier: '2(1)',
+      normalized_machine_identifier: '2(1)',
+      printed_marker: '(1)',
+    }),
+    base({
+      id: 'b',
+      kind_label: 'סעיף קטן',
+      node_number: '1',
+      parent_candidate_id: 's3',
+      confidence: 0.8,
+      source_display_identifier: '3(1)',
+      normalized_machine_identifier: '3(1)',
+      printed_marker: '(1)',
+    }),
+  ]);
+  assert.equal(model.candidates[2].review_class, 'high_confidence');
+  assert.equal(model.candidates[3].review_class, 'high_confidence');
 });
 
 test('amendment years and Go tokens are rejected technical', () => {
@@ -225,6 +360,8 @@ test('review filters are backend counts and high confidence is not an accept act
       title: 'פרשנות',
       parent_candidate_id: null,
       confidence: 0.9,
+      source_display_identifier: "א'",
+      normalized_machine_identifier: "א'",
     }),
     base({
       id: 'katan',
@@ -233,6 +370,10 @@ test('review filters are backend counts and high confidence is not an accept act
       title: null,
       parent_candidate_id: 'chelek',
       confidence: 0.4,
+      source_display_identifier: "א'(א)",
+      normalized_machine_identifier: "א'(א)",
+      printed_marker: '(א)',
+      validation_warnings: ['layout_needs_owner_review'],
     }),
     base({
       id: 'year',

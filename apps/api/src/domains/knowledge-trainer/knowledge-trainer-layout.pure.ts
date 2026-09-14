@@ -1,14 +1,25 @@
 import { parseLegalIdentifier } from '../tax-knowledge/legal-identifier.pure.js';
 import {
   applyExactIdentifierToDraft,
+  collapseSameSourceOccurrenceDrafts,
   composeChildIdentifier,
+  dropSameParentIdentityDuplicates,
+  extractLocativeSeifKatanMarker,
   extractNestedStructureMarker,
   extractParenMarkersOnHeadingLine,
-  extractParenthesizedMarkersFromTokens,
   extractTrailingStructuralMarkers,
   identifierForTopLevelDraft,
   isolatedItemIsStructuralMarker,
+  isMixedSeifKatanComponent,
   kindLabelForNestedDepth,
+  lineCitesExternalLegalProvision,
+  lineLooksLikeDefiningNestedStructure,
+  lineLooksLikeDenseCitationParagraph,
+  lineLooksLikeLegalApparatus,
+  lineLooksLikeLeadingParenHeading,
+  lineLooksLikeNestedBackReference,
+  lineLooksLikeNewSeifKatanBoundary,
+  lineLooksLikeQuotedDefinitionTerm,
   resolveNestedParent,
   titleFromFollowingLine,
   type NestedKindDepth,
@@ -74,6 +85,15 @@ export type LayoutLine = {
   fontSize: number;
   itemIndexes: number[];
 };
+
+export function bboxFromLine(line: LayoutLine): { x: number; y: number; w: number; h: number } {
+  return {
+    x: roundLayout(line.x),
+    y: roundLayout(line.y),
+    w: roundLayout(line.width),
+    h: roundLayout(line.height),
+  };
+}
 
 export type PageLayoutProfile = {
   page_height: number;
@@ -196,10 +216,49 @@ export function buildPageLayoutProfile(lines: LayoutLine[], pageHeight: number):
 }
 
 export function lineLooksLikeRunningCitation(text: string): boolean {
-  return /(?:לפי|מכוח|כאמור|בהתאם|על\s+פי|לענין)\s+(?:ל)?(?:ב)?סעיף(?!\s+זה)/.test(text) ||
-    /(?:בסעיף|לסעיף)\s+\S/.test(text) ||
-    /סעיפים\s+\d/.test(text) ||
-    /ר'\s*סעיף/.test(text);
+  return lineCitesExternalLegalProvision(text);
+}
+
+export function pageLooksLikeLegalApparatusZone(
+  lines: LayoutLine[],
+  profile: PageLayoutProfile,
+): boolean {
+  const count = lines.length;
+  if (!count) return false;
+  const apparatus = lines.filter((line) => lineLooksLikeLegalApparatus(line.text)).length;
+  const gazette = lines.filter((line) => /ס["”]?ח|עמ['׳"]?|ה["”]?ח|י["”]?פ/.test(line.text)).length;
+  const year = lines.filter((line) => /(?:19|20)\d{2}/.test(line.text)).length;
+  const transition = lines.filter((line) =>
+    /הוראות\s+מעבר|יום\s+התחילה|כנוסחו|לענין\s+תחולה/.test(line.text),
+  ).length;
+  const items = lines.reduce((sum, line) => sum + line.itemIndexes.length, 0);
+  const itemsPerLine = items / count;
+  // Amendment/history/footnote pages in this ordinance use smaller type than body.
+  // Do not flag ordinary body pages that merely contain a few תיקון stamps,
+  // and do not flag mixed pages that still have a meaningful share of body-size type.
+  const smallType = profile.median_font_size > 0 && profile.median_font_size <= 11.6;
+  const largeLines = lines.filter((line) => line.fontSize >= 12.5).length;
+  const mostlyApparatusType = smallType && largeLines / count < 0.2;
+  if (!mostlyApparatusType) return false;
+  if (apparatus / count >= 0.18 || gazette / count >= 0.15 || year / count >= 0.35 || itemsPerLine >= 8) {
+    return true;
+  }
+  if (gazette / count >= 0.3 && year / count >= 0.3) return true;
+  if (apparatus / count >= 0.4 && year / count >= 0.25) return true;
+  if (transition / count >= 0.2 && (apparatus / count >= 0.12 || year / count >= 0.2)) return true;
+  return false;
+}
+
+function titleLooksLikeTransitionOrApparatus(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return (
+    /הוראות\s+מעבר/.test(text) ||
+    /יום\s+התחילה/.test(text) ||
+    /כנוסחו/.test(text) ||
+    /לענין\s+תחולה/.test(text) ||
+    /תיקון\s*מס/.test(text) ||
+    lineLooksLikeLegalApparatus(text)
+  );
 }
 
 const HEBREW_YEAR_STAMP = /תש[א-ת]{0,2}["״׳'][א-ת]?-?/;
@@ -252,11 +311,21 @@ export function lineLooksLikeAmendmentOrGazette(text: string): boolean {
   );
 }
 
-const HEBREW_ORDINALS = 'ראשון|שני|שלישי|רביעי|חמישי|ששי|שביעי|שמיני|תשיעי|עשירי';
-const CONTAINER_NUMBER = `(?:${HEBREW_ORDINALS}|[א-ת]['׳']|[0-9]{1,3})`;
+const HEBREW_ORDINALS =
+  'ראשון|ראשונה|שני|שניה|שנייה|שלישי|שלישית|רביעי|רביעית|חמישי|חמישית|ששי|שישי|שישית|שביעי|שביעית|שמיני|שמינית|תשיעי|תשיעית|עשירי|עשירית';
+const CONTAINER_NUMBER = `(?:ה?(?:${HEBREW_ORDINALS})|[א-ת]['׳']|[0-9]{1,3})`;
 
 export function lineLooksLikeOfficialContainerHeading(text: string): boolean {
-  return new RegExp(`^(?:חלק|פרק|סימן|תוספת)\\s+${CONTAINER_NUMBER}\\s*[:'׳]`).test(text.trim());
+  return new RegExp(
+    `^(?:ה)?(?:חלק|פרק|סימן|תוספת)\\s+${CONTAINER_NUMBER}(?:\\s*[:'׳.\\-–—]\\s*|\\s+|$)`,
+  ).test(text.trim());
+}
+
+export function lineLooksLikeCombinedScheduleRunningHeader(text: string): boolean {
+  const trimmed = text.trim().replace(/^[0-9]{1,3}\s+/, '');
+  return new RegExp(
+    `^(?:ה)?תוספת\\s+${CONTAINER_NUMBER}\\s+(?:חלק\\s+)?[א-ת]['׳']$`,
+  ).test(trimmed);
 }
 
 export function evaluateLineHeadingEvidence(
@@ -264,25 +333,42 @@ export function evaluateLineHeadingEvidence(
   neighbors: { prev?: LayoutLine; next?: LayoutLine },
   profile: PageLayoutProfile,
 ): HeadingLayoutVerdict {
+  const officialContainer = lineLooksLikeOfficialContainerHeading(line.text);
+  if (lineLooksLikeCombinedScheduleRunningHeader(line.text)) {
+    return 'header_or_footer';
+  }
+  // Running headers at the top of the page stay suppressed. Schedule titles
+  // printed near the bottom (small type / footer band) must still count.
   if (
-    (line.y >= profile.header_y || line.y <= profile.footer_y) &&
+    line.y >= profile.header_y &&
     !titleFromPreviousHeadingLine(neighbors.prev?.text) &&
     !parseRtlSectionNumber(line.text)
   ) {
     return 'header_or_footer';
   }
   if (
-    profile.median_font_size > 0 &&
-    line.fontSize > 0 &&
-    line.fontSize <= profile.median_font_size * 0.78 &&
-    line.y <= profile.page_height * 0.22
+    line.y <= profile.footer_y &&
+    !officialContainer &&
+    !titleFromPreviousHeadingLine(neighbors.prev?.text) &&
+    !parseRtlSectionNumber(line.text)
   ) {
     return 'header_or_footer';
   }
-  if (lineLooksLikeOfficialContainerHeading(line.text) && line.text.length <= 56) {
+  if (officialContainer && line.text.length <= 80) {
     return 'isolated_heading';
   }
-  if (lineLooksLikeAmendmentOrGazette(line.text)) return 'amendment_or_gazette';
+  if (
+    profile.median_font_size > 0 &&
+    line.fontSize > 0 &&
+    line.fontSize <= profile.median_font_size * 0.78 &&
+    line.y <= profile.page_height * 0.22 &&
+    !officialContainer
+  ) {
+    return 'header_or_footer';
+  }
+  if (lineLooksLikeAmendmentOrGazette(line.text) || lineLooksLikeLegalApparatus(line.text)) {
+    return 'amendment_or_gazette';
+  }
   if (
     neighbors.prev &&
     neighbors.next &&
@@ -366,6 +452,7 @@ function titleLooksLikeCitationOrDebris(text: string): boolean {
   return (
     isAmendmentYearStamp(text) ||
     isAmendmentDebris(text) ||
+    titleLooksLikeTransitionOrApparatus(text) ||
     /\(\s*[^)]*סעיף\s*\)/.test(text) ||
     /[;،,]$/.test(text.trim()) ||
     lineLooksLikeAmendmentOrGazette(text) ||
@@ -414,11 +501,43 @@ function collectNestedMarkersOnLine(
   line: LayoutLine,
   items: StoredTextItem[],
   profile: PageLayoutProfile,
-): Array<{ component: string; title: string | null; isolated: boolean }> {
+): Array<{ component: string; title: string | null; isolated: boolean; attachToSeif?: boolean; preferSeifKatan?: boolean }> {
+  const locative = extractLocativeSeifKatanMarker(line.text);
+  if (locative) {
+    return [{ component: locative.component, title: null, isolated: true, attachToSeif: true }];
+  }
+  const trimmed = line.text.trim();
+  if (/^\(\s*[^()]+\s*\)/.test(trimmed)) {
+    const leading = extractNestedStructureMarker(line.text);
+    if (leading) {
+      return [
+        {
+          ...leading,
+          attachToSeif: isMixedSeifKatanComponent(leading.component),
+          preferSeifKatan: lineLooksLikeNewSeifKatanBoundary(line.text),
+        },
+      ];
+    }
+  }
   const trailing = extractTrailingStructuralMarkers(line.text);
-  if (trailing.length) return trailing;
+  if (trailing.length) {
+    const boundary = lineLooksLikeNewSeifKatanBoundary(line.text);
+    return trailing.map((marker, index) => ({
+      ...marker,
+      attachToSeif: index === 0 && isMixedSeifKatanComponent(marker.component),
+      preferSeifKatan: boundary && /^[א-ת]+$/.test(marker.component),
+    }));
+  }
   const fromText = extractNestedStructureMarker(line.text);
-  if (fromText) return [fromText];
+  if (fromText) {
+    return [
+      {
+        ...fromText,
+        attachToSeif: isMixedSeifKatanComponent(fromText.component),
+        preferSeifKatan: lineLooksLikeNewSeifKatanBoundary(line.text),
+      },
+    ];
+  }
   const lineItems = items.filter((item) => line.itemIndexes.includes(item.i));
   for (const item of lineItems) {
     const neighbors = lineItems.filter((other) => other.i !== item.i);
@@ -426,14 +545,16 @@ function collectNestedMarkersOnLine(
     if (!component) continue;
     const title = neighbors.map((other) => other.s).join(' ').replace(/\s+/g, ' ').trim();
     if (title.length > 80) continue;
-    return [{ component, title: title.slice(0, 60) || null, isolated: true }];
+    return [
+      {
+        component,
+        title: title.slice(0, 60) || null,
+        isolated: true,
+        attachToSeif: isMixedSeifKatanComponent(component),
+      },
+    ];
   }
-  const fromTokens = extractParenthesizedMarkersFromTokens(lineItems);
-  return fromTokens.map((marker) => ({
-    component: marker.component,
-    title: null,
-    isolated: fromTokens.length === 1,
-  }));
+  return [];
 }
 
 function titleFromNearbyHeadingLines(previousLines: Array<string | undefined>): string | null {
@@ -459,11 +580,15 @@ function matchCatalogOnLine(
     .sort((a, b) => b.length - a.length);
   if (containerKinds.length) {
     const containerRe = new RegExp(
-      `^(${containerKinds.map(escapeRegExp).join('|')})\\s+(${HEBREW_ORDINALS}|[א-ת]['׳']|[0-9]{1,3})(?:\\s*[:'׳.\\-–—]\\s*|\\s+|$)(.*)$`,
+      `^(?:ה)?(${containerKinds.map(escapeRegExp).join('|')})\\s+(${CONTAINER_NUMBER})(?:\\s*[:'׳.\\-–—]\\s*|\\s+|$)(.*)$`,
     );
     const container = trimmed.match(containerRe);
-    if (container) {
-      const title = container[3].trim().slice(0, 60) || null;
+    if (container && !lineLooksLikeCombinedScheduleRunningHeader(trimmed)) {
+      const remainder = container[3].trim();
+      const title =
+        /^[א-ת]['׳']$/.test(remainder) || /^(חלק|פרק|סימן)\s/.test(remainder)
+          ? null
+          : remainder.slice(0, 60) || null;
       out.push({ kind_label: container[1], node_number: container[2], title, printed_marker: container[2] });
     }
   }
@@ -488,7 +613,14 @@ function matchCatalogOnLine(
   }
   const lookbackTitle = titleFromCurrentRtlLine(trimmed) ?? titleFromNearbyHeadingLines(previousLines);
   const rtlNumber = parseRtlSectionNumber(trimmed);
-  if (seif && lookbackTitle && rtlNumber && !lineLooksLikeRunningCitation(trimmed)) {
+  if (
+    seif &&
+    lookbackTitle &&
+    rtlNumber &&
+    !lineLooksLikeRunningCitation(trimmed) &&
+    !titleLooksLikeTransitionOrApparatus(lookbackTitle) &&
+    !lineLooksLikeLegalApparatus(trimmed)
+  ) {
     out.push({
       kind_label: seif,
       node_number: rtlNumber,
@@ -510,50 +642,68 @@ export function detectStructureCandidatesFromLayout(
     node_number: string;
     title: string | null;
     page_no: number;
+    line_index: number;
+    item_start: number | null;
+    item_end: number | null;
+    bbox?: { x: number; y: number; w: number; h: number };
     offset: number;
     confidence: number;
     warnings: string[];
     component?: string;
     printed_marker?: string | null;
+    attachToSeif?: boolean;
+    preferSeifKatan?: boolean;
   };
   const events: LayoutEvent[] = [];
   let tocRejected = 0;
+  let definitionLocalMode = false;
   const layoutPages = pages.filter((page) => page.layout?.items.length);
   for (const page of pages) {
     const layout = page.layout;
     if (!layout?.items.length) continue;
     const lines = groupTextItemsIntoLines(layout.items);
     const profile = buildPageLayoutProfile(lines, layout.h);
+    const apparatusZone = pageLooksLikeLegalApparatusZone(lines, profile);
     lines.forEach((line, index) => {
       const offset = page.page_no * 10000 + index;
+      const itemStart = line.itemIndexes[0] ?? null;
+      const itemEnd = line.itemIndexes[line.itemIndexes.length - 1] ?? null;
       const verdict = evaluateLineHeadingEvidence(line, { prev: lines[index - 1], next: lines[index + 1] }, profile);
-      const trailing = extractTrailingStructuralMarkers(line.text);
-      if (verdict === 'header_or_footer' && !trailing.length) return;
-      if (lineLooksLikeAmendmentOrGazette(line.text) || lineLooksLikeRunningCitation(line.text)) {
+      const definingNested = lineLooksLikeDefiningNestedStructure(line.text);
+      const citationOrApparatus =
+        lineLooksLikeAmendmentOrGazette(line.text) ||
+        lineLooksLikeRunningCitation(line.text) ||
+        lineLooksLikeLegalApparatus(line.text) ||
+        lineLooksLikeDenseCitationParagraph(line.text) ||
+        lineLooksLikeNestedBackReference(line.text);
+      if (
+        verdict === 'header_or_footer' &&
+        !definingNested &&
+        !extractLocativeSeifKatanMarker(line.text) &&
+        !(
+          lineLooksLikeOfficialContainerHeading(line.text) &&
+          line.y < profile.header_y &&
+          !lineLooksLikeCombinedScheduleRunningHeader(line.text)
+        )
+      ) {
+        return;
+      }
+      if ((verdict === 'amendment_or_gazette' || verdict === 'running_citation') && !definingNested) {
         tocRejected += 1;
         return;
       }
-      if (verdict === 'amendment_or_gazette' || verdict === 'running_citation') {
+      // Small-type apparatus pages (amendment history / gazette / footnotes) do not
+      // DEFINE ordinance body structure. Even "בסעיף זה" there is local to the
+      // amendment block and must not attach under a prior body סעיף.
+      if (apparatusZone) {
         tocRejected += 1;
-        trailing.forEach((marker, markerIndex) => {
-          events.push({
-            kind: 'nested',
-            kind_label: '',
-            node_number: marker.component,
-            title: marker.title,
-            page_no: page.page_no,
-            offset: offset + markerIndex,
-            confidence: 0.52,
-            warnings: ['layout_needs_owner_review'],
-            component: marker.component,
-            printed_marker: `(${marker.component})`,
-          });
-        });
         return;
       }
+      if (lineLooksLikeQuotedDefinitionTerm(line.text)) definitionLocalMode = true;
       const nearby = [lines[index - 1]?.text, lines[index - 2]?.text, lines[index - 3]?.text];
       const matches = matchCatalogOnLine(line.text, catalog, nearby);
       if (matches.length) {
+        if (matches.some((hit) => isSeifKindLabel(hit.kind_label))) definitionLocalMode = false;
         const isolated = verdict === 'isolated_heading';
         for (const hit of matches) {
           events.push({
@@ -562,31 +712,68 @@ export function detectStructureCandidatesFromLayout(
             node_number: hit.node_number,
             title: hit.title,
             page_no: page.page_no,
+            line_index: index,
+            item_start: itemStart,
+            item_end: itemEnd,
+            bbox: bboxFromLine(line),
             offset,
             confidence: isolated ? 0.86 : 0.52,
             warnings: isolated ? [] : ['layout_needs_owner_review'],
             printed_marker: hit.printed_marker,
           });
         }
-        const headingMarkers = extractParenMarkersOnHeadingLine(line.text);
-        headingMarkers.forEach((component, markerIndex) => {
-          events.push({
-            kind: 'nested',
-            kind_label: '',
-            node_number: component,
-            title: null,
-            page_no: page.page_no,
-            offset: offset + markerIndex + 1,
-            confidence: 0.72,
-            warnings: ['layout_needs_owner_review'],
-            component,
-            printed_marker: `(${component})`,
+        if (!citationOrApparatus) {
+          const headingMarkers = extractParenMarkersOnHeadingLine(line.text);
+          headingMarkers.forEach((component, markerIndex) => {
+              events.push({
+              kind: 'nested',
+              kind_label: '',
+              node_number: component,
+              title: null,
+              page_no: page.page_no,
+              line_index: index,
+              item_start: itemStart,
+              item_end: itemEnd,
+              bbox: bboxFromLine(line),
+              offset: offset + markerIndex + 1,
+              confidence: 0.72,
+              warnings: ['layout_needs_owner_review'],
+              component,
+              printed_marker: `(${component})`,
+            });
           });
-        });
+        }
         return;
       }
-      const markers = trailing.length ? trailing : collectNestedMarkersOnLine(line, layout.items, profile);
-      if (!markers.length) return;
+      const markers = collectNestedMarkersOnLine(line, layout.items, profile);
+      if (!markers.length) {
+        if (citationOrApparatus && !definingNested) tocRejected += 1;
+        return;
+      }
+      const leadingParenHeading = lineLooksLikeLeadingParenHeading(line.text);
+      if (
+        leadingParenHeading ||
+        markers.some((marker) => /^[א-ת]/.test(marker.component) || marker.attachToSeif || marker.preferSeifKatan)
+      ) {
+        definitionLocalMode = false;
+      }
+      if (
+        definitionLocalMode &&
+        markers.every((marker) => /^[0-9]+$/.test(marker.component)) &&
+        !leadingParenHeading
+      ) {
+        tocRejected += 1;
+        return;
+      }
+      const keepDespiteCitation =
+        markers.some((marker) => marker.attachToSeif) ||
+        /^\(\s*[^()]+\s*\)/.test(line.text.trim()) ||
+        (markers.some((marker) => /^[א-ת]/.test(marker.component)) &&
+          markers.some((marker) => /^[0-9]/.test(marker.component)));
+      if (!definingNested && (citationOrApparatus || lineCitesExternalLegalProvision(line.text)) && !keepDespiteCitation) {
+        tocRejected += 1;
+        return;
+      }
       markers.forEach((marker, markerIndex) => {
         events.push({
           kind: 'nested',
@@ -594,11 +781,17 @@ export function detectStructureCandidatesFromLayout(
           node_number: marker.component,
           title: marker.title ?? titleFromFollowingLine(lines[index + 1]),
           page_no: page.page_no,
+          line_index: index,
+          item_start: itemStart,
+          item_end: itemEnd,
+          bbox: bboxFromLine(line),
           offset: offset + markerIndex,
           confidence: marker.isolated ? 0.8 : 0.58,
           warnings: marker.isolated ? [] : ['layout_needs_owner_review'],
           component: marker.component,
           printed_marker: `(${marker.component})`,
+          attachToSeif: marker.attachToSeif === true,
+          preferSeifKatan: marker.preferSeifKatan === true,
         });
       });
     });
@@ -613,7 +806,10 @@ export function detectStructureCandidatesFromLayout(
       )
     : { drafts: [], analysis: { candidates_found: 0, toc_index_rejected: 0, low_confidence_count: 0, unresolved_parent_count: 0, ocr_pages_untouched: opts?.ocr_page_count ?? 0, ocr_gap_warning: (opts?.ocr_page_count ?? 0) > 0, layout_used: false } };
 
-  const layoutDrafts = attachLayoutParents(buildLayoutDraftsFromEvents(events, catalog), catalog);
+  const collapsedEvents = collapseLayoutEvents(events);
+  const layoutDrafts = attachLayoutParents(buildLayoutDraftsFromEvents(collapsedEvents.events, catalog), catalog);
+  const collapsedDrafts = collapseSameSourceOccurrenceDrafts(layoutDrafts);
+  const uniqueDrafts = dropSameParentIdentityDuplicates(collapsedDrafts.drafts);
   const fallbackDrafts = fallback.drafts.map((draft) =>
     applyExactIdentifierToDraft(
       {
@@ -626,7 +822,7 @@ export function detectStructureCandidatesFromLayout(
     ),
   );
 
-  const merged = [...layoutDrafts, ...fallbackDrafts].sort((a, b) => a.page_start - b.page_start);
+  const merged = [...uniqueDrafts.drafts, ...fallbackDrafts].sort((a, b) => a.page_start - b.page_start);
   const analysis: StructureDetectionAnalysis = {
     candidates_found: merged.length,
     toc_index_rejected: tocRejected + (fallback.analysis.toc_index_rejected || 0),
@@ -636,8 +832,42 @@ export function detectStructureCandidatesFromLayout(
     ocr_gap_warning: (opts?.ocr_page_count ?? 0) > 0,
     layout_used: layoutPages.length > 0,
     layout_pages_used: layoutPages.length,
+    source_occurrences_collapsed: collapsedEvents.collapsed + collapsedDrafts.collapsed + uniqueDrafts.dropped,
   };
   return { drafts: merged, analysis };
+}
+
+function collapseLayoutEvents<T extends {
+  kind: 'heading' | 'nested';
+  kind_label: string;
+  node_number: string;
+  title: string | null;
+  page_no: number;
+  line_index: number;
+  confidence: number;
+  warnings: string[];
+  component?: string;
+}>(events: T[]): { events: T[]; collapsed: number } {
+  const best = new Map<string, T>();
+  let collapsed = 0;
+  for (const event of events) {
+    const key =
+      event.kind === 'heading'
+        ? `h|${event.page_no}|${event.line_index}|${event.kind_label}|${event.node_number}`
+        : `n|${event.page_no}|${event.line_index}|${event.component ?? event.node_number}`;
+    const current = best.get(key);
+    if (!current) {
+      best.set(key, event);
+      continue;
+    }
+    collapsed += 1;
+    const currentScore = current.confidence * 100 - current.warnings.length * 6 + (current.title ? 10 : 0);
+    const nextScore = event.confidence * 100 - event.warnings.length * 6 + (event.title ? 10 : 0);
+    if (nextScore > currentScore) best.set(key, event);
+  }
+  if (!collapsed) return { events, collapsed };
+  const kept = new Set(best.values());
+  return { events: events.filter((event) => kept.has(event)), collapsed };
 }
 
 function buildLayoutDraftsFromEvents(
@@ -647,11 +877,17 @@ function buildLayoutDraftsFromEvents(
     node_number: string;
     title: string | null;
     page_no: number;
+    line_index?: number;
+    item_start?: number | null;
+    item_end?: number | null;
+    bbox?: { x: number; y: number; w: number; h: number };
     offset: number;
     confidence: number;
     warnings: string[];
     component?: string;
     printed_marker?: string | null;
+    attachToSeif?: boolean;
+    preferSeifKatan?: boolean;
   }>,
   catalog: StructureKindCatalogItem[],
 ): StructureCandidateDraft[] {
@@ -680,6 +916,11 @@ function buildLayoutDraftsFromEvents(
         excerpt: `${kindLabel} ${identifier?.source_display_identifier ?? event.node_number}${event.title ? ` ${event.title}` : ''}`.slice(0, 200),
         confidence: event.confidence,
         validation_warnings: warnings,
+        source_page: event.page_no,
+        source_line_index: event.line_index,
+        source_item_start: event.item_start ?? undefined,
+        source_item_end: event.item_end ?? undefined,
+        source_bbox: event.bbox,
       },
       identifier,
       event.printed_marker,
@@ -705,7 +946,15 @@ function buildLayoutDraftsFromEvents(
     }
 
     if (!currentSeif || !event.component) continue;
-    const resolved = resolveNestedParent(nestedStack, event.component);
+    const mixed = isMixedSeifKatanComponent(event.component);
+    if (event.attachToSeif || mixed) {
+      nestedStack.length = 0;
+    }
+    const resolved =
+      event.attachToSeif || mixed
+        ? { action: 'child' as const, parent: null }
+        : resolveNestedParent(nestedStack, event.component, { preferSeifKatan: event.preferSeifKatan === true });
+    if (resolved.action === 'skip') continue;
     const parent = resolved.parent;
     const parentDisplay = parent?.display ?? currentSeif.display;
     const parentIndex = parent?.index ?? currentSeif.index;
@@ -713,7 +962,27 @@ function buildLayoutDraftsFromEvents(
     if (!identifier) continue;
     const depth = ((parent?.depth ?? 0) + 1) as NestedKindDepth;
     const kindLabel = kindLabelForNestedDepth(depth > 3 ? 3 : depth, catalog);
-    if (!kindLabel) {
+    if (!kindLabel) continue;
+    const already = drafts.some(
+      (draft) =>
+        draft.parent_index === parentIndex &&
+        draft.kind_label === kindLabel &&
+        draft.normalized_machine_identifier === identifier.normalized_machine_identifier,
+    );
+    const stackEntry = {
+      component: event.component,
+      markerClass: (/^[0-9]+$/.test(event.component) ? 'number' : 'letter') as NestedStackEntry['markerClass'],
+      depth: (depth > 3 ? 3 : depth) as NestedKindDepth,
+      display: identifier.source_display_identifier,
+    };
+    if (already) {
+      const existingIndex = drafts.findIndex(
+        (draft) =>
+          draft.parent_index === parentIndex &&
+          draft.kind_label === kindLabel &&
+          draft.normalized_machine_identifier === identifier.normalized_machine_identifier,
+      );
+      if (existingIndex >= 0) nestedStack.push({ index: existingIndex, ...stackEntry });
       continue;
     }
     const index = pushDraft(
@@ -722,13 +991,7 @@ function buildLayoutDraftsFromEvents(
       identifier,
       parentIndex,
     );
-    nestedStack.push({
-      index,
-      component: event.component,
-      markerClass: /^[0-9]+$/.test(event.component) ? 'number' : 'letter',
-      depth: depth > 3 ? 3 : depth,
-      display: identifier.source_display_identifier,
-    });
+    nestedStack.push({ index, ...stackEntry });
   }
 
   return drafts;
@@ -740,8 +1003,12 @@ function attachLayoutParents(
 ): StructureCandidateDraft[] {
   const usable = usableKindCatalog(catalog);
   const rank = (label: string) => {
+    if (/תוספת/.test(label)) return 0;
+    if (/^חלק$/.test(label) || label === 'חלק') return 1;
     const index = usable.findIndex((item) => item.label === label);
-    return index >= 0 ? index : usable.length;
+    if (index < 0) return usable.length + 2;
+    if (/תוספת/.test(usable[0]?.label ?? '')) return index;
+    return index + 1;
   };
   const stack: Array<{ index: number; rank: number }> = [];
   return drafts.map((draft, index) => {

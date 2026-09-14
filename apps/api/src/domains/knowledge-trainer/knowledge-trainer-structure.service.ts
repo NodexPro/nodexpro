@@ -5,6 +5,7 @@ import {
   detectStructureCandidatesFromLayout,
   parseStoredPageLayout,
 } from './knowledge-trainer-layout.pure.js';
+import { detectSourceNotesFromLayout } from './knowledge-trainer-source-notes.pure.js';
 import {
   assignDraftIds,
   canActivateStructureRun,
@@ -20,7 +21,8 @@ import {
   validateStructureCandidates,
   workerMustNotWriteCanonicalLaw,
 } from './knowledge-trainer.pure.js';
-import type { StructureDetectionAnalysis } from './knowledge-trainer.types.js';
+import type { SourceNoteAnchorDraft, SourceNoteDraft, StructureDetectionAnalysis } from './knowledge-trainer.types.js';
+import { randomUUID } from 'node:crypto';
 
 const STRUCTURE_RUN_SCHEMA_HINT =
   'Knowledge Trainer structure-run schema is not applied. Migration 627 is required on DEV.';
@@ -40,6 +42,120 @@ async function structureRunSchemaAvailable(): Promise<boolean> {
   return true;
 }
 
+async function sourceEvidenceSchemaAvailable(): Promise<boolean> {
+  const probe = await supabaseAdmin.from('legal_ingestion_source_notes').select('id').limit(1);
+  if (probe.error && (isSupabaseMissingTableError(probe.error) || isSupabaseMissingColumnError(probe.error))) {
+    return false;
+  }
+  if (probe.error) throw probe.error;
+  return true;
+}
+
+function withoutSourceSpanColumns<T extends Record<string, unknown>>(row: T): Record<string, unknown> {
+  const {
+    source_page: _page,
+    source_item_start: _start,
+    source_item_end: _end,
+    source_line_index: _line,
+    source_bbox: _bbox,
+    ...rest
+  } = row;
+  void _page;
+  void _start;
+  void _end;
+  void _line;
+  void _bbox;
+  return rest;
+}
+
+async function persistSourceEvidenceForRun(input: {
+  runId: string;
+  job: { id: unknown; document_id: unknown; country_code: unknown; tax_source_id: unknown };
+  createdBy: string | null;
+  notes: SourceNoteDraft[];
+  unresolvedAnchors: SourceNoteAnchorDraft[];
+}): Promise<number> {
+  assertWorkerTableAllowed('legal_ingestion_source_notes');
+  const noteRows = input.notes.map((note, index) => ({
+    id: randomUUID(),
+    draft: note,
+    sort_order: index,
+  }));
+  const inserts = noteRows.map((row) => ({
+    id: row.id,
+    structure_run_id: input.runId,
+    job_id: input.job.id,
+    document_id: input.job.document_id,
+    country_code: input.job.country_code,
+    tax_source_id: input.job.tax_source_id,
+    source_page: row.draft.source_page,
+    source_item_start: row.draft.source_item_start,
+    source_item_end: row.draft.source_item_end,
+    source_line_index: row.draft.source_line_index,
+    source_bbox: row.draft.source_bbox,
+    printed_marker: row.draft.printed_marker,
+    note_text: row.draft.note_text,
+    classification: row.draft.classification,
+    origin_zone: row.draft.origin_zone,
+    review_status: row.draft.review_status,
+    inline_link_status: row.draft.inline_link_status,
+    confidence: row.draft.confidence,
+    validation_warnings: row.draft.validation_warnings,
+    sort_order: row.sort_order,
+    created_by: input.createdBy,
+  }));
+  for (const chunk of chunkInOrder(inserts)) {
+    const inserted = await supabaseAdmin.from('legal_ingestion_source_notes').insert(chunk);
+    if (inserted.error) throw inserted.error;
+  }
+  const anchors = [
+    ...noteRows.flatMap((row) =>
+      row.draft.anchors.map((anchor) => ({
+        id: randomUUID(),
+        structure_run_id: input.runId,
+        source_note_id: row.id,
+        job_id: input.job.id,
+        document_id: input.job.document_id,
+        country_code: input.job.country_code,
+        tax_source_id: input.job.tax_source_id,
+        source_page: anchor.source_page,
+        source_item_start: anchor.source_item_start,
+        source_item_end: anchor.source_item_end,
+        source_line_index: anchor.source_line_index,
+        source_bbox: anchor.source_bbox,
+        printed_marker: anchor.printed_marker,
+        link_status: anchor.link_status,
+        confidence: anchor.confidence,
+      })),
+    ),
+    ...input.unresolvedAnchors.map((anchor) => ({
+      id: randomUUID(),
+      structure_run_id: input.runId,
+      source_note_id: null,
+      job_id: input.job.id,
+      document_id: input.job.document_id,
+      country_code: input.job.country_code,
+      tax_source_id: input.job.tax_source_id,
+      source_page: anchor.source_page,
+      source_item_start: anchor.source_item_start,
+      source_item_end: anchor.source_item_end,
+      source_line_index: anchor.source_line_index,
+      source_bbox: anchor.source_bbox,
+      printed_marker: anchor.printed_marker,
+      link_status: 'unresolved' as const,
+      confidence: anchor.confidence,
+    })),
+  ];
+  if (anchors.length) {
+    assertWorkerTableAllowed('legal_ingestion_source_note_anchors');
+    for (const chunk of chunkInOrder(anchors)) {
+      const inserted = await supabaseAdmin.from('legal_ingestion_source_note_anchors').insert(chunk);
+      if (inserted.error) throw inserted.error;
+    }
+  }
+  return noteRows.length;
+}
+
 async function failBuildingRun(runId: string, reason: string): Promise<void> {
   const { error } = await supabaseAdmin.rpc('legal_ingestion_fail_structure_run', {
     p_run_id: runId,
@@ -56,6 +172,7 @@ export async function persistStructureCandidatesForJob(
   preserved_accepted: number;
   structure_run_id: string | null;
   previous_active_run_id: string | null;
+  source_note_count: number;
 } | null> {
   const schemaApplied = await structureRunSchemaAvailable();
   if (!schemaApplied) {
@@ -268,6 +385,11 @@ export async function persistStructureCandidatesForJob(
         parent_candidate_id: draft.parent_candidate_id,
         page_start: draft.page_start,
         page_end: draft.page_end,
+        source_page: draft.source_page ?? draft.page_start,
+        source_item_start: draft.source_item_start ?? null,
+        source_item_end: draft.source_item_end ?? null,
+        source_line_index: draft.source_line_index ?? null,
+        source_bbox: draft.source_bbox ?? null,
         excerpt: draft.excerpt,
         confidence: draft.confidence,
         validation_warnings: draft.validation_warnings,
@@ -306,6 +428,11 @@ export async function persistStructureCandidatesForJob(
             void _e;
             return legacy;
           }),
+        );
+      }
+      if (inserted.error && isSupabaseMissingColumnError(inserted.error, 'source_page')) {
+        inserted = await supabaseAdmin.from('legal_ingestion_candidates').insert(
+          chunk.map((row) => withoutSourceSpanColumns(row as Record<string, unknown>)),
         );
       }
       if (inserted.error) throw inserted.error;
@@ -357,6 +484,21 @@ export async function persistStructureCandidatesForJob(
       );
     }
 
+    const sourceNotes =
+      opts.useLayout && (await sourceEvidenceSchemaAvailable())
+        ? detectSourceNotesFromLayout(extractedPages)
+        : { notes: [], unresolved_anchors: [] };
+    let sourceNoteCount = 0;
+    if (sourceNotes.notes.length || sourceNotes.unresolved_anchors.length) {
+      sourceNoteCount = await persistSourceEvidenceForRun({
+        runId,
+        job,
+        createdBy: opts.createdBy ?? null,
+        notes: sourceNotes.notes,
+        unresolvedAnchors: sourceNotes.unresolved_anchors,
+      });
+    }
+
     const warningCount = drafts.reduce((sum, draft) => sum + draft.validation_warnings.length, 0);
     const needsReview =
       drafts.some((draft) => draft.candidate_status === 'needs_review') ||
@@ -385,6 +527,7 @@ export async function persistStructureCandidatesForJob(
       preserved_accepted: preservedAccepted,
       structure_run_id: runId,
       previous_active_run_id: previousActiveId,
+      source_note_count: sourceNoteCount,
     };
   } catch (error) {
     try {

@@ -374,6 +374,11 @@ export type OwnerKnowledgeTrainerCandidate = {
   parent_tax_legal_node_id: string | null;
   page_start: number | null;
   page_end: number | null;
+  source_page: number | null;
+  source_item_start: number | null;
+  source_item_end: number | null;
+  source_line_index: number | null;
+  source_bbox: { x: number; y: number; w: number; h: number } | null;
   excerpt: string | null;
   confidence: number | null;
   validation_warnings: string[];
@@ -449,6 +454,47 @@ export type OwnerTrainerLayoutReadiness = {
   pages: Array<{ page_no: number; layout_status: string; item_count: number }>;
 };
 
+export type OwnerSourceNoteAnchor = {
+  id: string;
+  printed_marker: string;
+  source_page: number;
+  source_item_start: number | null;
+  source_item_end: number | null;
+  source_line_index: number | null;
+  source_bbox: { x: number; y: number; w: number; h: number } | null;
+  link_status: string;
+  confidence: number | null;
+};
+
+export type OwnerSourceNote = {
+  id: string;
+  source_page: number;
+  source_item_start: number | null;
+  source_item_end: number | null;
+  source_line_index: number | null;
+  source_bbox: { x: number; y: number; w: number; h: number } | null;
+  printed_marker: string | null;
+  note_text: string;
+  classification: string;
+  origin_zone: string;
+  review_status: string;
+  inline_link_status: string;
+  confidence: number | null;
+  validation_warnings: string[];
+  anchors: OwnerSourceNoteAnchor[];
+};
+
+export type OwnerSourceNoteSummary = {
+  all: number;
+  apparatus_zone: number;
+  body_line: number;
+  footer_line: number;
+  missing_anchor: number;
+  linked: number;
+  unresolved: number;
+  by_classification: Record<string, number>;
+};
+
 export type OwnerKnowledgeTrainerSlice = {
   available: boolean;
   status_label: string;
@@ -468,6 +514,9 @@ export type OwnerKnowledgeTrainerSlice = {
     pages: Array<{ page_no: number; status: string; has_text: boolean }>;
     selected_page: { page_no: number; text: string | null; status: string } | null;
     candidates: OwnerKnowledgeTrainerCandidate[];
+    source_notes: OwnerSourceNote[];
+    source_note_summary: OwnerSourceNoteSummary;
+    unresolved_source_note_anchors: OwnerSourceNoteAnchor[];
     can_open_original: boolean;
     original_file_access: OwnerOriginalFileAccess | null;
     structure_analysis: {

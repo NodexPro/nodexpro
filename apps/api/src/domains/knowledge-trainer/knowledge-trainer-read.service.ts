@@ -3,6 +3,7 @@ import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../..
 import { summarizeLayoutReadiness } from './knowledge-trainer-layout.pure.js';
 import { fetchAllPaged } from './knowledge-trainer-pagination.js';
 import { attachStructureReviewModel, describeStoredLayoutEvidence } from './knowledge-trainer-review.pure.js';
+import { emptySourceNoteSummary, parseSourceBBox, summarizeSourceNotes } from './knowledge-trainer-source-notes.pure.js';
 import { structureRunStatusLabel } from './knowledge-trainer-structure-run.pure.js';
 import { createOwnerLegalMaterialSignedUrl } from './knowledge-trainer-storage.service.js';
 import {
@@ -20,8 +21,14 @@ import type {
   KnowledgeTrainerCandidateDto,
   KnowledgeTrainerDocumentSummaryDto,
   KnowledgeTrainerSliceDto,
+  KnowledgeTrainerSourceNoteAnchorDto,
+  KnowledgeTrainerSourceNoteDto,
   LegalIngestionJobStatus,
   LegalIngestionPageStatus,
+  SourceNoteClassification,
+  SourceNoteInlineLinkStatus,
+  SourceNoteOriginZone,
+  SourceNoteReviewStatus,
   StructureRunReadDto,
 } from './knowledge-trainer.types.js';
 
@@ -168,7 +175,7 @@ export async function buildKnowledgeTrainerSlice(
     const activeRunId =
       selectedJob.active_structure_run_id == null ? null : String(selectedJob.active_structure_run_id);
     const candidateSelect =
-      'id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order, structure_run_id';
+      'id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, source_page, source_item_start, source_item_end, source_line_index, source_bbox, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order, structure_run_id';
     const candidateSelectLegacy =
       'id, candidate_kind, candidate_status, kind_label, node_number, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order';
     const selectedJobId = String(selectedJob.id);
@@ -200,6 +207,10 @@ export async function buildKnowledgeTrainerSlice(
       } catch (error) {
         if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'printed_marker')) {
           candidates = await loadCandidatesBy(candidateSelect.replace(', printed_marker', ''));
+        } else if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'source_page')) {
+          candidates = await loadCandidatesBy(
+            candidateSelect.replace(', source_page, source_item_start, source_item_end, source_line_index, source_bbox', ''),
+          );
         } else if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'source_display_identifier')) {
           candidates = await loadCandidatesBy(candidateSelectLegacy);
         } else if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'structure_run_id')) {
@@ -308,6 +319,11 @@ export async function buildKnowledgeTrainerSlice(
           parent_tax_legal_node_id: row.parent_tax_legal_node_id == null ? null : String(row.parent_tax_legal_node_id),
           page_start: row.page_start == null ? null : Number(row.page_start),
           page_end: row.page_end == null ? null : Number(row.page_end),
+          source_page: row.source_page == null ? null : Number(row.source_page),
+          source_item_start: row.source_item_start == null ? null : Number(row.source_item_start),
+          source_item_end: row.source_item_end == null ? null : Number(row.source_item_end),
+          source_line_index: row.source_line_index == null ? null : Number(row.source_line_index),
+          source_bbox: parseSourceBBox(row.source_bbox),
           excerpt: row.excerpt == null ? null : String(row.excerpt),
           confidence: row.confidence == null ? null : Number(row.confidence),
           validation_warnings: warnings,
@@ -366,6 +382,7 @@ export async function buildKnowledgeTrainerSlice(
         originalFileAccess = null;
       }
     }
+    const sourceEvidence = await loadSourceNotesForActiveRun(activeRunId);
     selected = {
       id: selectedSummary.id,
       original_filename: selectedSummary.original_filename,
@@ -389,6 +406,9 @@ export async function buildKnowledgeTrainerSlice(
           }
         : null,
       candidates: reviewed.candidates,
+      source_notes: sourceEvidence.notes,
+      source_note_summary: sourceEvidence.summary,
+      unresolved_source_note_anchors: sourceEvidence.unresolved_anchors,
       can_open_original: Boolean(storageKey),
       original_file_access: originalFileAccess,
       structure_analysis: structureAnalysis,
@@ -463,4 +483,98 @@ export async function buildKnowledgeTrainerSlice(
       }),
     ],
   };
+}
+
+function mapSourceNoteAnchor(row: Record<string, unknown>): KnowledgeTrainerSourceNoteAnchorDto {
+  return {
+    id: String(row.id),
+    printed_marker: String(row.printed_marker ?? ''),
+    source_page: Number(row.source_page),
+    source_item_start: row.source_item_start == null ? null : Number(row.source_item_start),
+    source_item_end: row.source_item_end == null ? null : Number(row.source_item_end),
+    source_line_index: row.source_line_index == null ? null : Number(row.source_line_index),
+    source_bbox: parseSourceBBox(row.source_bbox),
+    link_status: row.link_status === 'linked' ? 'linked' : 'unresolved',
+    confidence: row.confidence == null ? null : Number(row.confidence),
+  };
+}
+
+async function loadSourceNotesForActiveRun(activeRunId: string | null): Promise<{
+  notes: KnowledgeTrainerSourceNoteDto[];
+  unresolved_anchors: KnowledgeTrainerSourceNoteAnchorDto[];
+  summary: ReturnType<typeof summarizeSourceNotes>;
+}> {
+  const empty = {
+    notes: [] as KnowledgeTrainerSourceNoteDto[],
+    unresolved_anchors: [] as KnowledgeTrainerSourceNoteAnchorDto[],
+    summary: emptySourceNoteSummary(),
+  };
+  if (!activeRunId) return empty;
+  try {
+    const noteRows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+      supabaseAdmin
+        .from('legal_ingestion_source_notes')
+        .select(
+          'id, source_page, source_item_start, source_item_end, source_line_index, source_bbox, printed_marker, note_text, classification, origin_zone, review_status, inline_link_status, confidence, validation_warnings, sort_order',
+        )
+        .eq('structure_run_id', activeRunId)
+        .order('sort_order', { ascending: true })
+        .range(from, to),
+    );
+    const anchorRows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+      supabaseAdmin
+        .from('legal_ingestion_source_note_anchors')
+        .select(
+          'id, source_note_id, source_page, source_item_start, source_item_end, source_line_index, source_bbox, printed_marker, link_status, confidence',
+        )
+        .eq('structure_run_id', activeRunId)
+        .order('source_page', { ascending: true })
+        .range(from, to),
+    );
+    const anchorsByNote = new Map<string, KnowledgeTrainerSourceNoteAnchorDto[]>();
+    const unresolved: KnowledgeTrainerSourceNoteAnchorDto[] = [];
+    for (const row of anchorRows) {
+      const mapped = mapSourceNoteAnchor(row);
+      const noteId = row.source_note_id == null ? null : String(row.source_note_id);
+      if (!noteId) {
+        unresolved.push(mapped);
+        continue;
+      }
+      const list = anchorsByNote.get(noteId) ?? [];
+      list.push(mapped);
+      anchorsByNote.set(noteId, list);
+    }
+    const notes: KnowledgeTrainerSourceNoteDto[] = noteRows.map((row) => ({
+      id: String(row.id),
+      source_page: Number(row.source_page),
+      source_item_start: row.source_item_start == null ? null : Number(row.source_item_start),
+      source_item_end: row.source_item_end == null ? null : Number(row.source_item_end),
+      source_line_index: row.source_line_index == null ? null : Number(row.source_line_index),
+      source_bbox: parseSourceBBox(row.source_bbox),
+      printed_marker: row.printed_marker == null ? null : String(row.printed_marker),
+      note_text: String(row.note_text ?? ''),
+      classification: String(row.classification) as SourceNoteClassification,
+      origin_zone: String(row.origin_zone) as SourceNoteOriginZone,
+      review_status: String(row.review_status) as SourceNoteReviewStatus,
+      inline_link_status: String(row.inline_link_status) as SourceNoteInlineLinkStatus,
+      confidence: row.confidence == null ? null : Number(row.confidence),
+      validation_warnings: Array.isArray(row.validation_warnings)
+        ? row.validation_warnings.map((item) => String(item))
+        : [],
+      anchors: anchorsByNote.get(String(row.id)) ?? [],
+    }));
+    return {
+      notes,
+      unresolved_anchors: unresolved,
+      summary: summarizeSourceNotes(notes),
+    };
+  } catch (error) {
+    if (
+      isSupabaseMissingTableError(error as { message?: string; code?: string }) ||
+      isSupabaseMissingColumnError(error as { message?: string; code?: string })
+    ) {
+      return empty;
+    }
+    throw error;
+  }
 }

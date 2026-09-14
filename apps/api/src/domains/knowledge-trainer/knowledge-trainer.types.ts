@@ -83,7 +83,43 @@ export const WORKER_ALLOWED_TABLES = [
   'legal_ingestion_pages',
   'legal_ingestion_candidates',
   'legal_ingestion_structure_runs',
+  'legal_ingestion_source_notes',
+  'legal_ingestion_source_note_anchors',
 ] as const;
+
+export const SOURCE_NOTE_CLASSIFICATIONS = [
+  'unknown',
+  'legal_reference_candidate',
+  'amendment_history',
+  'publication_citation',
+  'editorial_note',
+  'other',
+] as const;
+export type SourceNoteClassification = (typeof SOURCE_NOTE_CLASSIFICATIONS)[number];
+
+export const SOURCE_NOTE_ORIGIN_ZONES = ['apparatus_zone', 'body_line', 'footer_line'] as const;
+export type SourceNoteOriginZone = (typeof SOURCE_NOTE_ORIGIN_ZONES)[number];
+
+export const SOURCE_NOTE_REVIEW_STATUSES = ['needs_review', 'unresolved'] as const;
+export type SourceNoteReviewStatus = (typeof SOURCE_NOTE_REVIEW_STATUSES)[number];
+
+export const SOURCE_NOTE_INLINE_LINK_STATUSES = ['linked', 'unresolved', 'missing_anchor'] as const;
+export type SourceNoteInlineLinkStatus = (typeof SOURCE_NOTE_INLINE_LINK_STATUSES)[number];
+
+export const SOURCE_SPAN_IMMUTABLE_FIELDS = [
+  'source_page',
+  'source_item_start',
+  'source_item_end',
+  'source_line_index',
+  'source_bbox',
+] as const;
+
+export type SourceBBox = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
 
 export const WORKER_FORBIDDEN_CANONICAL_TABLES = [
   'tax_domains',
@@ -134,6 +170,39 @@ export type StructureCandidateDraft = {
   excerpt: string;
   confidence: number;
   validation_warnings: string[];
+  source_page?: number;
+  source_line_index?: number;
+  source_item_start?: number;
+  source_item_end?: number;
+  source_bbox?: SourceBBox;
+};
+
+export type SourceNoteAnchorDraft = {
+  printed_marker: string;
+  source_page: number;
+  source_item_start: number | null;
+  source_item_end: number | null;
+  source_line_index: number | null;
+  source_bbox: SourceBBox | null;
+  link_status: 'linked' | 'unresolved';
+  confidence: number;
+};
+
+export type SourceNoteDraft = {
+  source_page: number;
+  source_item_start: number | null;
+  source_item_end: number | null;
+  source_line_index: number | null;
+  source_bbox: SourceBBox | null;
+  printed_marker: string | null;
+  note_text: string;
+  classification: SourceNoteClassification;
+  origin_zone: SourceNoteOriginZone;
+  review_status: SourceNoteReviewStatus;
+  inline_link_status: SourceNoteInlineLinkStatus;
+  confidence: number;
+  validation_warnings: string[];
+  anchors: SourceNoteAnchorDraft[];
 };
 
 export type StructureDetectionAnalysis = {
@@ -145,6 +214,7 @@ export type StructureDetectionAnalysis = {
   ocr_gap_warning: boolean;
   layout_used?: boolean;
   layout_pages_used?: number;
+  source_occurrences_collapsed?: number;
 };
 
 export type KnowledgeTrainerInputOptionDto = {
@@ -212,6 +282,11 @@ export type KnowledgeTrainerCandidateDto = {
   parent_tax_legal_node_id: string | null;
   page_start: number | null;
   page_end: number | null;
+  source_page?: number | null;
+  source_item_start?: number | null;
+  source_item_end?: number | null;
+  source_line_index?: number | null;
+  source_bbox?: SourceBBox | null;
   excerpt: string | null;
   confidence: number | null;
   validation_warnings: string[];
@@ -287,6 +362,47 @@ export type TrainerLayoutReadinessDto = {
   pages: Array<{ page_no: number; layout_status: string; item_count: number }>;
 };
 
+export type KnowledgeTrainerSourceNoteAnchorDto = {
+  id: string;
+  printed_marker: string;
+  source_page: number;
+  source_item_start: number | null;
+  source_item_end: number | null;
+  source_line_index: number | null;
+  source_bbox: SourceBBox | null;
+  link_status: 'linked' | 'unresolved';
+  confidence: number | null;
+};
+
+export type KnowledgeTrainerSourceNoteDto = {
+  id: string;
+  source_page: number;
+  source_item_start: number | null;
+  source_item_end: number | null;
+  source_line_index: number | null;
+  source_bbox: SourceBBox | null;
+  printed_marker: string | null;
+  note_text: string;
+  classification: SourceNoteClassification;
+  origin_zone: SourceNoteOriginZone;
+  review_status: SourceNoteReviewStatus;
+  inline_link_status: SourceNoteInlineLinkStatus;
+  confidence: number | null;
+  validation_warnings: string[];
+  anchors: KnowledgeTrainerSourceNoteAnchorDto[];
+};
+
+export type KnowledgeTrainerSourceNoteSummaryDto = {
+  all: number;
+  apparatus_zone: number;
+  body_line: number;
+  footer_line: number;
+  missing_anchor: number;
+  linked: number;
+  unresolved: number;
+  by_classification: Record<SourceNoteClassification, number>;
+};
+
 export type KnowledgeTrainerSliceDto = {
   available: boolean;
   schema_applied: boolean;
@@ -307,6 +423,9 @@ export type KnowledgeTrainerSliceDto = {
     pages: KnowledgeTrainerPageSummaryDto[];
     selected_page: { page_no: number; text: string | null; status: LegalIngestionPageStatus } | null;
     candidates: KnowledgeTrainerCandidateDto[];
+    source_notes: KnowledgeTrainerSourceNoteDto[];
+    source_note_summary: KnowledgeTrainerSourceNoteSummaryDto;
+    unresolved_source_note_anchors: KnowledgeTrainerSourceNoteAnchorDto[];
     can_open_original: boolean;
     original_file_access: OriginalFileAccessDto | null;
     structure_analysis: StructureDetectionAnalysis | null;

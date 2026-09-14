@@ -35,6 +35,9 @@ import {
   type OwnerKnowledgeTrainerDocument,
   type OwnerKnowledgeTrainerSlice,
   type OwnerOriginalFileAccess,
+  type OwnerSourceNote,
+  type OwnerSourceNoteAnchor,
+  type OwnerSourceNoteSummary,
 } from './owner-legal-control-types';
 
 import { emptyTaxKnowledgeAggregate } from './owner-legal-control-types';
@@ -616,6 +619,75 @@ function parseLayoutEvidence(raw: UnknownRecord | null): OwnerStructureLayoutEvi
   };
 }
 
+function parseSourceBbox(raw: unknown): { x: number; y: number; w: number; h: number } | null {
+  const rec = asRecord(raw);
+  if (!rec || rec.x == null || rec.y == null || rec.w == null || rec.h == null) return null;
+  return {
+    x: Number(rec.x) || 0,
+    y: Number(rec.y) || 0,
+    w: Number(rec.w) || 0,
+    h: Number(rec.h) || 0,
+  };
+}
+
+function parseSourceNoteAnchors(raw: unknown): OwnerSourceNoteAnchor[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      id: asString(row.id),
+      printed_marker: asString(row.printed_marker),
+      source_page: Number(row.source_page) || 0,
+      source_item_start: row.source_item_start == null ? null : Number(row.source_item_start),
+      source_item_end: row.source_item_end == null ? null : Number(row.source_item_end),
+      source_line_index: row.source_line_index == null ? null : Number(row.source_line_index),
+      source_bbox: parseSourceBbox(row.source_bbox),
+      link_status: asString(row.link_status),
+      confidence: row.confidence == null ? null : Number(row.confidence),
+    }));
+}
+
+function parseSourceNotes(raw: unknown): OwnerSourceNote[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      id: asString(row.id),
+      source_page: Number(row.source_page) || 0,
+      source_item_start: row.source_item_start == null ? null : Number(row.source_item_start),
+      source_item_end: row.source_item_end == null ? null : Number(row.source_item_end),
+      source_line_index: row.source_line_index == null ? null : Number(row.source_line_index),
+      source_bbox: parseSourceBbox(row.source_bbox),
+      printed_marker: asNullableString(row.printed_marker),
+      note_text: asString(row.note_text),
+      classification: asString(row.classification),
+      origin_zone: asString(row.origin_zone),
+      review_status: asString(row.review_status),
+      inline_link_status: asString(row.inline_link_status),
+      confidence: row.confidence == null ? null : Number(row.confidence),
+      validation_warnings: Array.isArray(row.validation_warnings)
+        ? row.validation_warnings.map((item) => String(item))
+        : [],
+      anchors: parseSourceNoteAnchors(row.anchors),
+    }));
+}
+
+function parseSourceNoteSummary(raw: UnknownRecord | null): OwnerSourceNoteSummary {
+  const by = asRecord(raw?.by_classification) ?? {};
+  return {
+    all: Number(raw?.all) || 0,
+    apparatus_zone: Number(raw?.apparatus_zone) || 0,
+    body_line: Number(raw?.body_line) || 0,
+    footer_line: Number(raw?.footer_line) || 0,
+    missing_anchor: Number(raw?.missing_anchor) || 0,
+    linked: Number(raw?.linked) || 0,
+    unresolved: Number(raw?.unresolved) || 0,
+    by_classification: Object.fromEntries(Object.entries(by).map(([key, value]) => [key, Number(value) || 0])),
+  };
+}
+
 function parseOriginalFileAccess(raw: UnknownRecord | null): OwnerOriginalFileAccess | null {
   if (!raw) return null;
   const url = asString(raw.url);
@@ -738,6 +810,11 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
                     parent_tax_legal_node_id: asNullableString(row.parent_tax_legal_node_id),
                     page_start: row.page_start == null ? null : Number(row.page_start) || null,
                     page_end: row.page_end == null ? null : Number(row.page_end) || null,
+                    source_page: row.source_page == null ? null : Number(row.source_page) || null,
+                    source_item_start: row.source_item_start == null ? null : Number(row.source_item_start),
+                    source_item_end: row.source_item_end == null ? null : Number(row.source_item_end),
+                    source_line_index: row.source_line_index == null ? null : Number(row.source_line_index),
+                    source_bbox: parseSourceBbox(row.source_bbox),
                     excerpt: asNullableString(row.excerpt),
                     confidence: row.confidence == null ? null : Number(row.confidence),
                     validation_warnings: Array.isArray(row.validation_warnings)
@@ -763,6 +840,9 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
                   }),
                 )
             : [],
+          source_notes: parseSourceNotes(selected.source_notes),
+          source_note_summary: parseSourceNoteSummary(asRecord(selected.source_note_summary)),
+          unresolved_source_note_anchors: parseSourceNoteAnchors(selected.unresolved_source_note_anchors),
           can_open_original: selected.can_open_original === true,
           original_file_access: parseOriginalFileAccess(asRecord(selected.original_file_access)),
           structure_analysis: asRecord(selected.structure_analysis)
