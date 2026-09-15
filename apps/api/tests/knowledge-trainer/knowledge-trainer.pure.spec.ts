@@ -230,9 +230,10 @@ test('312-page progress is page-checkpointed and not one HTTP batch', () => {
   assert.equal(afterFail.job_status, 'partially_extracted');
 });
 
-test('worker isolation forbids canonical legal tables', () => {
+test('worker isolation forbids canonical legal tables and Owner drafts', () => {
   assert.equal(workerMustNotWriteCanonicalLaw('tax_legal_nodes'), true);
   assert.equal(workerMustNotWriteCanonicalLaw('tax_domains'), true);
+  assert.equal(workerMustNotWriteCanonicalLaw('legal_ingestion_legal_text_drafts'), true);
   assert.equal(workerMustNotWriteCanonicalLaw('legal_ingestion_pages'), false);
 });
 
@@ -244,6 +245,13 @@ test('upload/accept are not activate; reject is review; edit is draft_edit', () 
   assert.equal(capabilityRequiredForOwnerCommand('accept_legal_structure_candidate'), 'legal_sources.manage');
   assert.equal(capabilityRequiredForOwnerCommand('update_legal_extraction_candidate'), 'legal_knowledge.draft_edit');
   assert.equal(capabilityRequiredForOwnerCommand('reject_legal_extraction_candidate'), 'legal_knowledge.review');
+  assert.equal(capabilityRequiredForOwnerCommand('create_legal_text_draft_from_candidate'), 'legal_knowledge.draft_create');
+  assert.equal(capabilityRequiredForOwnerCommand('update_legal_text_draft_text'), 'legal_knowledge.draft_edit');
+  assert.equal(capabilityRequiredForOwnerCommand('update_legal_text_draft_identity'), 'legal_knowledge.draft_edit');
+  assert.equal(capabilityRequiredForOwnerCommand('reparent_legal_text_draft'), 'legal_knowledge.draft_edit');
+  assert.equal(capabilityRequiredForOwnerCommand('set_legal_text_draft_boundary'), 'legal_knowledge.draft_edit');
+  assert.equal(capabilityRequiredForOwnerCommand('reset_legal_text_draft_to_source'), 'legal_knowledge.draft_edit');
+  assert.equal(capabilityRequiredForOwnerCommand('set_legal_text_draft_review_status'), 'legal_knowledge.review');
   assert.equal(capabilityRequiredForOwnerCommand('activate_tax_source'), 'legal_knowledge.activate');
   assert.notEqual(capabilityRequiredForOwnerCommand('upload_legal_training_document'), 'legal_knowledge.activate');
 });

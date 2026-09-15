@@ -824,6 +824,7 @@ export function workerMustNotWriteCanonicalLaw(table: string): boolean {
     'country_legal_values',
     'country_legal_value_versions',
     'tax_fact_definitions',
+    'legal_ingestion_legal_text_drafts',
   ].includes(table);
 }
 

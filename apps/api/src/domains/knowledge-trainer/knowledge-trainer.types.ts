@@ -10,6 +10,13 @@ export const KNOWLEDGE_TRAINER_COMMANDS = [
   'update_legal_extraction_candidate',
   'accept_legal_structure_candidate',
   'reject_legal_extraction_candidate',
+  'create_legal_text_draft_from_candidate',
+  'update_legal_text_draft_text',
+  'update_legal_text_draft_identity',
+  'reparent_legal_text_draft',
+  'set_legal_text_draft_boundary',
+  'reset_legal_text_draft_to_source',
+  'set_legal_text_draft_review_status',
 ] as const;
 
 export type KnowledgeTrainerCommandName = (typeof KNOWLEDGE_TRAINER_COMMANDS)[number];
@@ -403,6 +410,38 @@ export type KnowledgeTrainerSourceNoteSummaryDto = {
   by_classification: Record<SourceNoteClassification, number>;
 };
 
+export type KnowledgeTrainerLegalTextDraftDto = {
+  id: string;
+  kind_label: string | null;
+  display_identifier: string | null;
+  display_label: string;
+  printed_marker: string | null;
+  title: string | null;
+  parent_draft_id: string | null;
+  parent_display_label: string | null;
+  original_source_text: string;
+  draft_legal_text: string;
+  text_boundary_status: 'certain' | 'uncertain' | 'owner_defined';
+  review_status: 'draft' | 'needs_review' | 'ready';
+  source_page_start: number | null;
+  source_page_end: number | null;
+  provenance: {
+    structure_run_id: string | null;
+    source_candidate_id: string | null;
+  };
+  source_notes: KnowledgeTrainerSourceNoteDto[];
+  unresolved_source_note_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KnowledgeTrainerLegalTextDraftSummaryDto = {
+  all: number;
+  draft: number;
+  needs_review: number;
+  ready: number;
+};
+
 export type KnowledgeTrainerSliceDto = {
   available: boolean;
   schema_applied: boolean;
@@ -437,6 +476,8 @@ export type KnowledgeTrainerSliceDto = {
     layout_evidence: StructureLayoutEvidenceDto;
     layout_readiness: TrainerLayoutReadinessDto;
     structure_run: StructureRunReadDto;
+    legal_text_drafts: KnowledgeTrainerLegalTextDraftDto[];
+    legal_text_draft_summary: KnowledgeTrainerLegalTextDraftSummaryDto;
   } | null;
   allowed_actions: Array<{
     action_key: string;

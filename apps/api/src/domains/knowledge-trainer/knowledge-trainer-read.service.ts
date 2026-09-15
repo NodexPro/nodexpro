@@ -2,6 +2,10 @@ import { supabaseAdmin } from '../../db/client.js';
 import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import { summarizeLayoutReadiness } from './knowledge-trainer-layout.pure.js';
 import { fetchAllPaged } from './knowledge-trainer-pagination.js';
+import {
+  displayDraftLabel,
+  notesOverlappingDraftSpan,
+} from './knowledge-trainer-legal-text-draft.pure.js';
 import { attachStructureReviewModel, describeStoredLayoutEvidence } from './knowledge-trainer-review.pure.js';
 import { emptySourceNoteSummary, parseSourceBBox, summarizeSourceNotes } from './knowledge-trainer-source-notes.pure.js';
 import { structureRunStatusLabel } from './knowledge-trainer-structure-run.pure.js';
@@ -20,6 +24,8 @@ import {
 import type {
   KnowledgeTrainerCandidateDto,
   KnowledgeTrainerDocumentSummaryDto,
+  KnowledgeTrainerLegalTextDraftDto,
+  KnowledgeTrainerLegalTextDraftSummaryDto,
   KnowledgeTrainerSliceDto,
   KnowledgeTrainerSourceNoteAnchorDto,
   KnowledgeTrainerSourceNoteDto,
@@ -418,6 +424,7 @@ export async function buildKnowledgeTrainerSlice(
       structure_tree: reviewed.structure_tree,
       ocr_page_numbers: ocrPageNumbers,
       structure_run: structureRun,
+      ...mapLegalTextDraftSlice(await loadLegalTextDraftsForDocument(selectedSummary.id, sourceEvidence.notes)),
       layout_evidence: describeStoredLayoutEvidence(pages ?? []),
       layout_readiness: {
         ...layoutSummary,
@@ -480,6 +487,40 @@ export async function buildKnowledgeTrainerSlice(
       }),
       action('reject_legal_extraction_candidate', true, {
         legal_ingestion_candidate_id: 'uuid',
+      }),
+      action('create_legal_text_draft_from_candidate', Boolean(selected), {
+        legal_ingestion_document_id: 'uuid',
+        legal_ingestion_candidate_id: 'uuid',
+      }),
+      action('update_legal_text_draft_text', true, {
+        legal_text_draft_id: 'uuid',
+        draft_legal_text: 'string',
+      }),
+      action('update_legal_text_draft_identity', true, {
+        legal_text_draft_id: 'uuid',
+        legal_identifier: 'optional exact legal identifier',
+        printed_marker: 'optional printed local marker',
+        kind_label: 'optional string',
+        title: 'optional string',
+      }),
+      action('reparent_legal_text_draft', true, {
+        legal_text_draft_id: 'uuid',
+        new_parent_draft_id: 'uuid or null',
+      }),
+      action('set_legal_text_draft_boundary', true, {
+        legal_text_draft_id: 'uuid',
+        owner_source_page_start: 'integer',
+        owner_source_page_end: 'optional integer',
+        owner_source_item_start: 'optional integer',
+        owner_source_item_end: 'optional integer',
+        reset_from_boundary: 'optional boolean',
+      }),
+      action('reset_legal_text_draft_to_source', true, {
+        legal_text_draft_id: 'uuid',
+      }),
+      action('set_legal_text_draft_review_status', true, {
+        legal_text_draft_id: 'uuid',
+        review_status: 'draft | needs_review | ready',
       }),
     ],
   };
@@ -574,6 +615,229 @@ async function loadSourceNotesForActiveRun(activeRunId: string | null): Promise<
       isSupabaseMissingColumnError(error as { message?: string; code?: string })
     ) {
       return empty;
+    }
+    throw error;
+  }
+}
+
+const LEGAL_TEXT_DRAFT_READ_SELECT =
+  'id, kind_label, source_display_identifier, printed_marker, title, parent_draft_id, original_source_text, draft_legal_text, text_boundary_status, review_status, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, structure_run_id, source_candidate_id, created_at, updated_at';
+
+function emptyLegalTextDraftSummary(): KnowledgeTrainerLegalTextDraftSummaryDto {
+  return { all: 0, draft: 0, needs_review: 0, ready: 0 };
+}
+
+function asDraftBoundary(value: unknown): KnowledgeTrainerLegalTextDraftDto['text_boundary_status'] {
+  if (value === 'certain' || value === 'uncertain' || value === 'owner_defined') return value;
+  return 'uncertain';
+}
+
+function asDraftReview(value: unknown): KnowledgeTrainerLegalTextDraftDto['review_status'] {
+  if (value === 'draft' || value === 'needs_review' || value === 'ready') return value;
+  return 'draft';
+}
+
+function mapLegalTextDraftSlice(input: {
+  drafts: KnowledgeTrainerLegalTextDraftDto[];
+  summary: KnowledgeTrainerLegalTextDraftSummaryDto;
+}): {
+  legal_text_drafts: KnowledgeTrainerLegalTextDraftDto[];
+  legal_text_draft_summary: KnowledgeTrainerLegalTextDraftSummaryDto;
+} {
+  return {
+    legal_text_drafts: input.drafts,
+    legal_text_draft_summary: input.summary,
+  };
+}
+
+async function loadLegalTextDraftsForDocument(
+  documentId: string,
+  fallbackNotes: KnowledgeTrainerSourceNoteDto[],
+): Promise<{
+  drafts: KnowledgeTrainerLegalTextDraftDto[];
+  summary: KnowledgeTrainerLegalTextDraftSummaryDto;
+}> {
+  const empty = { drafts: [] as KnowledgeTrainerLegalTextDraftDto[], summary: emptyLegalTextDraftSummary() };
+  let rows: Record<string, unknown>[];
+  try {
+    rows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+      supabaseAdmin
+        .from('legal_ingestion_legal_text_drafts')
+        .select(LEGAL_TEXT_DRAFT_READ_SELECT)
+        .eq('document_id', documentId)
+        .order('created_at', { ascending: true })
+        .range(from, to),
+    );
+  } catch (error) {
+    if (
+      isSupabaseMissingTableError(error as { message?: string; code?: string }) ||
+      isSupabaseMissingColumnError(error as { message?: string; code?: string })
+    ) {
+      return empty;
+    }
+    throw error;
+  }
+
+  const notesByRun = await loadSourceNotesForDocument(documentId, fallbackNotes);
+  const byId = new Map(rows.map((row) => [String(row.id), row]));
+  const drafts: KnowledgeTrainerLegalTextDraftDto[] = rows.map((row) => {
+    const id = String(row.id);
+    const parentId = row.parent_draft_id == null ? null : String(row.parent_draft_id);
+    const parent = parentId ? byId.get(parentId) : null;
+    const boundary = asDraftBoundary(row.text_boundary_status);
+    const ownerDefined = boundary === 'owner_defined' && row.owner_source_page_start != null;
+    const pageStart = ownerDefined
+      ? Number(row.owner_source_page_start)
+      : row.original_source_page_start == null
+        ? null
+        : Number(row.original_source_page_start);
+    const pageEnd = ownerDefined
+      ? Number(row.owner_source_page_end ?? row.owner_source_page_start)
+      : row.original_source_page_end == null
+        ? null
+        : Number(row.original_source_page_end);
+    const itemStart = ownerDefined
+      ? row.owner_source_item_start == null
+        ? null
+        : Number(row.owner_source_item_start)
+      : row.original_source_item_start == null
+        ? null
+        : Number(row.original_source_item_start);
+    const itemEnd = ownerDefined
+      ? row.owner_source_item_end == null
+        ? null
+        : Number(row.owner_source_item_end)
+      : row.original_source_item_end == null
+        ? null
+        : Number(row.original_source_item_end);
+    const runId = row.structure_run_id == null ? null : String(row.structure_run_id);
+    const scopedNotes = runId ? notesByRun.filter((note) => note.structure_run_id === runId) : notesByRun;
+    const overlappingIds = new Set(
+      notesOverlappingDraftSpan(
+        scopedNotes.map((note) => ({
+          id: note.id,
+          source_page: note.source_page,
+          source_item_start: note.source_item_start,
+          source_item_end: note.source_item_end,
+          inline_link_status: note.inline_link_status,
+        })),
+        { page_start: pageStart, page_end: pageEnd, item_start: itemStart, item_end: itemEnd },
+      ).map((note) => note.id),
+    );
+    const sourceNotes = scopedNotes
+      .filter((note) => overlappingIds.has(note.id))
+      .map(({ structure_run_id: _run, ...note }) => note);
+    const unresolvedCount = sourceNotes.filter(
+      (note) => note.inline_link_status !== 'linked' || note.anchors.some((anchor) => anchor.link_status !== 'linked'),
+    ).length;
+    const kind = row.kind_label == null ? null : String(row.kind_label);
+    const displayIdentifier = row.source_display_identifier == null ? null : String(row.source_display_identifier);
+    const title = row.title == null ? null : String(row.title);
+    return {
+      id,
+      kind_label: kind,
+      display_identifier: displayIdentifier,
+      display_label: displayDraftLabel({
+        kind_label: kind,
+        source_display_identifier: displayIdentifier,
+        title,
+      }),
+      printed_marker: row.printed_marker == null ? null : String(row.printed_marker),
+      title,
+      parent_draft_id: parentId,
+      parent_display_label: parent
+        ? displayDraftLabel({
+            kind_label: parent.kind_label == null ? null : String(parent.kind_label),
+            source_display_identifier:
+              parent.source_display_identifier == null ? null : String(parent.source_display_identifier),
+            title: parent.title == null ? null : String(parent.title),
+          })
+        : null,
+      original_source_text: String(row.original_source_text ?? ''),
+      draft_legal_text: String(row.draft_legal_text ?? ''),
+      text_boundary_status: boundary,
+      review_status: asDraftReview(row.review_status),
+      source_page_start: pageStart,
+      source_page_end: pageEnd,
+      provenance: {
+        structure_run_id: runId,
+        source_candidate_id: row.source_candidate_id == null ? null : String(row.source_candidate_id),
+      },
+      source_notes: sourceNotes,
+      unresolved_source_note_count: unresolvedCount,
+      created_at: String(row.created_at ?? ''),
+      updated_at: String(row.updated_at ?? ''),
+    };
+  });
+  const summary = emptyLegalTextDraftSummary();
+  summary.all = drafts.length;
+  for (const draft of drafts) {
+    summary[draft.review_status] += 1;
+  }
+  return { drafts, summary };
+}
+
+type SourceNoteWithRun = KnowledgeTrainerSourceNoteDto & { structure_run_id: string | null };
+
+async function loadSourceNotesForDocument(
+  documentId: string,
+  fallbackNotes: KnowledgeTrainerSourceNoteDto[],
+): Promise<SourceNoteWithRun[]> {
+  try {
+    const noteRows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+      supabaseAdmin
+        .from('legal_ingestion_source_notes')
+        .select(
+          'id, structure_run_id, source_page, source_item_start, source_item_end, source_line_index, source_bbox, printed_marker, note_text, classification, origin_zone, review_status, inline_link_status, confidence, validation_warnings, sort_order',
+        )
+        .eq('document_id', documentId)
+        .order('sort_order', { ascending: true })
+        .range(from, to),
+    );
+    const anchorRows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+      supabaseAdmin
+        .from('legal_ingestion_source_note_anchors')
+        .select(
+          'id, source_note_id, source_page, source_item_start, source_item_end, source_line_index, source_bbox, printed_marker, link_status, confidence',
+        )
+        .eq('document_id', documentId)
+        .order('source_page', { ascending: true })
+        .range(from, to),
+    );
+    const anchorsByNote = new Map<string, KnowledgeTrainerSourceNoteAnchorDto[]>();
+    for (const row of anchorRows) {
+      const noteId = row.source_note_id == null ? null : String(row.source_note_id);
+      if (!noteId) continue;
+      const list = anchorsByNote.get(noteId) ?? [];
+      list.push(mapSourceNoteAnchor(row));
+      anchorsByNote.set(noteId, list);
+    }
+    return noteRows.map((row) => ({
+      id: String(row.id),
+      structure_run_id: row.structure_run_id == null ? null : String(row.structure_run_id),
+      source_page: Number(row.source_page),
+      source_item_start: row.source_item_start == null ? null : Number(row.source_item_start),
+      source_item_end: row.source_item_end == null ? null : Number(row.source_item_end),
+      source_line_index: row.source_line_index == null ? null : Number(row.source_line_index),
+      source_bbox: parseSourceBBox(row.source_bbox),
+      printed_marker: row.printed_marker == null ? null : String(row.printed_marker),
+      note_text: String(row.note_text ?? ''),
+      classification: String(row.classification) as SourceNoteClassification,
+      origin_zone: String(row.origin_zone) as SourceNoteOriginZone,
+      review_status: String(row.review_status) as SourceNoteReviewStatus,
+      inline_link_status: String(row.inline_link_status) as SourceNoteInlineLinkStatus,
+      confidence: row.confidence == null ? null : Number(row.confidence),
+      validation_warnings: Array.isArray(row.validation_warnings)
+        ? row.validation_warnings.map((item) => String(item))
+        : [],
+      anchors: anchorsByNote.get(String(row.id)) ?? [],
+    }));
+  } catch (error) {
+    if (
+      isSupabaseMissingTableError(error as { message?: string; code?: string }) ||
+      isSupabaseMissingColumnError(error as { message?: string; code?: string })
+    ) {
+      return fallbackNotes.map((note) => ({ ...note, structure_run_id: null }));
     }
     throw error;
   }

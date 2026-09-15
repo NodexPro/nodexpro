@@ -137,7 +137,14 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     return 'fact_dictionary.manage';
   }
 
-  if (command === 'create_tax_rule' || command === 'create_tax_rule_version' || command === 'create_tax_strategy' || command === 'create_tax_strategy_version' || command === 'create_tax_strategy_exclusive_group') {
+  if (
+    command === 'create_tax_rule' ||
+    command === 'create_tax_rule_version' ||
+    command === 'create_tax_strategy' ||
+    command === 'create_tax_strategy_version' ||
+    command === 'create_tax_strategy_exclusive_group' ||
+    command === 'create_legal_text_draft_from_candidate'
+  ) {
     return 'legal_knowledge.draft_create';
   }
 
@@ -145,7 +152,8 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command.includes('accept_tax_rule_unresolved') ||
     command.includes('discard_tax_rule_unresolved') ||
     command.includes('resolve_tax_rule_unresolved') ||
-    command === 'reject_legal_extraction_candidate'
+    command === 'reject_legal_extraction_candidate' ||
+    command === 'set_legal_text_draft_review_status'
   ) {
     return 'legal_knowledge.review';
   }
@@ -157,6 +165,11 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command.startsWith('bind_tax_rule') ||
     command.startsWith('unbind_tax_rule') ||
     command === 'update_legal_extraction_candidate' ||
+    command === 'update_legal_text_draft_text' ||
+    command === 'update_legal_text_draft_identity' ||
+    command === 'reparent_legal_text_draft' ||
+    command === 'set_legal_text_draft_boundary' ||
+    command === 'reset_legal_text_draft_to_source' ||
     command === 'link_tax_rule_legal_node' ||
     command === 'unlink_tax_rule_legal_node' ||
     command.includes('tax_rule_relationship') ||

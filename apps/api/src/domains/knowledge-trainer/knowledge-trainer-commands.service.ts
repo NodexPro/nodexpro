@@ -18,6 +18,15 @@ import {
 } from './knowledge-trainer.pure.js';
 import { persistStructureCandidatesForJob } from './knowledge-trainer-structure.service.js';
 import {
+  createLegalTextDraftFromCandidate,
+  reparentLegalTextDraft,
+  resetLegalTextDraftToSource,
+  setLegalTextDraftBoundary,
+  setLegalTextDraftReviewStatus,
+  updateLegalTextDraftIdentity,
+  updateLegalTextDraftText,
+} from './knowledge-trainer-legal-text-draft.service.js';
+import {
   createOwnerLegalMaterialSignedUrl,
   decodeLegalTrainingUpload,
   storeOwnerLegalMaterial,
@@ -752,9 +761,38 @@ export async function executeKnowledgeTrainerCommand(
       return handleAcceptCandidate(ctx, payload);
     case 'reject_legal_extraction_candidate':
       return handleRejectCandidate(ctx, payload);
+    case 'create_legal_text_draft_from_candidate':
+      return handleLegalTextDraftCommand(ctx, 'create_legal_text_draft_from_candidate', payload, createLegalTextDraftFromCandidate);
+    case 'update_legal_text_draft_text':
+      return handleLegalTextDraftCommand(ctx, 'update_legal_text_draft_text', payload, updateLegalTextDraftText);
+    case 'update_legal_text_draft_identity':
+      return handleLegalTextDraftCommand(ctx, 'update_legal_text_draft_identity', payload, updateLegalTextDraftIdentity);
+    case 'reparent_legal_text_draft':
+      return handleLegalTextDraftCommand(ctx, 'reparent_legal_text_draft', payload, reparentLegalTextDraft);
+    case 'set_legal_text_draft_boundary':
+      return handleLegalTextDraftCommand(ctx, 'set_legal_text_draft_boundary', payload, setLegalTextDraftBoundary);
+    case 'reset_legal_text_draft_to_source':
+      return handleLegalTextDraftCommand(ctx, 'reset_legal_text_draft_to_source', payload, resetLegalTextDraftToSource);
+    case 'set_legal_text_draft_review_status':
+      return handleLegalTextDraftCommand(ctx, 'set_legal_text_draft_review_status', payload, setLegalTextDraftReviewStatus);
     default:
       throw badRequest(`Unsupported knowledge-trainer command: ${command}`);
   }
+}
+
+async function handleLegalTextDraftCommand(
+  ctx: RequestContext,
+  command: KnowledgeTrainerCommandName,
+  payload: Record<string, unknown>,
+  run: typeof createLegalTextDraftFromCandidate,
+): Promise<KnowledgeTrainerCommandResponse> {
+  const result = await run(ctx, payload);
+  return {
+    ok: true,
+    command,
+    duplicate: result.duplicate,
+    refreshed: await refreshed(ctx, result.country_code, result.document_id),
+  };
 }
 
 export async function openLegalTrainingDocumentFile(

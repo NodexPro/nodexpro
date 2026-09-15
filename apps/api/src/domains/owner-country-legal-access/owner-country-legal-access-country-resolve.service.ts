@@ -106,12 +106,28 @@ export async function resolveCountryForOwnerLegalCommand(
   if (
     command === 'update_legal_extraction_candidate' ||
     command === 'accept_legal_structure_candidate' ||
-    command === 'reject_legal_extraction_candidate'
+    command === 'reject_legal_extraction_candidate' ||
+    command === 'create_legal_text_draft_from_candidate'
   ) {
-    const id = optionalUuid(payload.legal_ingestion_candidate_id);
+    const id = optionalUuid(payload.legal_ingestion_candidate_id) ?? optionalUuid(payload.candidate_id);
     if (!id) throw badRequest('legal_ingestion_candidate_id is required');
     return assertPayloadCountryAgrees(
       await loadCountryFromRow('legal_ingestion_candidates', id, 'Extraction candidate not found'),
+      payload,
+    );
+  }
+  if (
+    command === 'update_legal_text_draft_text' ||
+    command === 'update_legal_text_draft_identity' ||
+    command === 'reparent_legal_text_draft' ||
+    command === 'set_legal_text_draft_boundary' ||
+    command === 'reset_legal_text_draft_to_source' ||
+    command === 'set_legal_text_draft_review_status'
+  ) {
+    const id = optionalUuid(payload.legal_text_draft_id) ?? optionalUuid(payload.draft_id);
+    if (!id) throw badRequest('legal_text_draft_id is required');
+    return assertPayloadCountryAgrees(
+      await loadCountryFromRow('legal_ingestion_legal_text_drafts', id, 'Legal text draft not found'),
       payload,
     );
   }
