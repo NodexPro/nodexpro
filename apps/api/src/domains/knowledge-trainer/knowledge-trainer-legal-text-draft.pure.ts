@@ -443,22 +443,56 @@ function tryRecoverHeading(
   return { cursor: null, status: 'missing' };
 }
 
+export function headingIdsRequiredForCapture(
+  current: DraftStructureCandidate,
+  ordered: DraftStructureCandidate[],
+): Set<string> {
+  const byId = new Map(ordered.map((row) => [row.id, row]));
+  const ids = new Set<string>();
+  const addAncestorChain = (startId: string | null | undefined) => {
+    let walk = startId ?? null;
+    while (walk) {
+      if (ids.has(walk)) break;
+      ids.add(walk);
+      walk = byId.get(walk)?.parent_candidate_id ?? null;
+    }
+  };
+  addAncestorChain(current.id);
+  const firstDescendant = firstDescendantBoundaryCandidate(ordered, current.id);
+  if (firstDescendant) addAncestorChain(firstDescendant.id);
+  const addNextNonDescendant = (id: string) => {
+    const next = nextNonDescendantBoundaryCandidate(ordered, id);
+    if (next) addAncestorChain(next.id);
+  };
+  addNextNonDescendant(current.id);
+  let ancestor = current.parent_candidate_id;
+  while (ancestor) {
+    addNextNonDescendant(ancestor);
+    ancestor = byId.get(ancestor)?.parent_candidate_id ?? null;
+  }
+  return ids;
+}
+
 export function resolveAllHeadingCursors(
   ordered: DraftStructureCandidate[],
   pages: DraftPageEvidence[],
+  limitToIds?: ReadonlySet<string>,
 ): Map<string, HeadingResolution> {
   const indexedPages = indexDraftPages(pages);
   const out = new Map<string, HeadingResolution>();
+  const recover = limitToIds
+    ? ordered.filter((row) => limitToIds.has(row.id))
+    : ordered;
   for (const row of ordered) {
     const persisted = persistedStartCursor(row);
     if (persisted) out.set(row.id, { cursor: persisted, status: 'persisted' });
   }
   let changed = true;
   let guard = 0;
-  while (changed && guard < ordered.length + 2) {
+  while (changed && guard < recover.length + 2) {
     changed = false;
     guard += 1;
-    for (const row of ordered) {
+    for (const row of recover) {
       if (out.has(row.id)) continue;
       const resolution = tryRecoverHeading(row, ordered, indexedPages, out);
       if (resolution.status === 'recovered' || resolution.status === 'ocr_gap') {
@@ -467,7 +501,7 @@ export function resolveAllHeadingCursors(
       }
     }
   }
-  for (const row of ordered) {
+  for (const row of recover) {
     if (out.has(row.id)) continue;
     out.set(row.id, tryRecoverHeading(row, ordered, indexedPages, out));
   }
@@ -571,7 +605,9 @@ export function captureExclusiveSourceBody(
   pages: DraftPageEvidence[],
   resolutions?: Map<string, HeadingResolution>,
 ): CapturedSourceBody {
-  const resolved = resolutions ?? resolveAllHeadingCursors(ordered, pages);
+  const resolved =
+    resolutions ??
+    resolveAllHeadingCursors(ordered, pages, headingIdsRequiredForCapture(current, ordered));
   const heading = resolved.get(current.id) ?? tryRecoverHeading(
     current,
     ordered,

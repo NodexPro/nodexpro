@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   candidateStartCursor,
   captureExclusiveSourceBody,
+  headingIdsRequiredForCapture,
   nextNonDescendantBoundaryCandidate,
   notesOverlappingDraftSpan,
   type DraftPageEvidence,
@@ -76,6 +77,10 @@ test('new Draft stores own source and subtree source separately; draft initializ
   assert.doesNotMatch(src, /draft_legal_text: captured\.subtree_text/);
   assert.match(types(), /original_subtree_text: string \| null/);
   assert.match(readSrc(), /subtree_source_notes/);
+  assert.match(
+    readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-legal-text-draft.pure.ts'),
+    /headingIdsRequiredForCapture\(current, ordered\)/,
+  );
 });
 
 test('parent editable Draft does not duplicate child text; subtree includes descendants and ends at next non-descendant', () => {
@@ -94,6 +99,44 @@ test('parent editable Draft does not duplicate child text; subtree includes desc
   assert.doesNotMatch(captured.subtree_text, /דיבידנד/);
   assert.equal(nextNonDescendantBoundaryCandidate(ordered, '2-2')?.id, '2-3');
   assert.notEqual(captured.text, captured.subtree_text);
+});
+
+test('heading recovery for create is scoped to the capture chain, not all 1839 candidates', () => {
+  const root = candidate('root', 0, { source_page: null, source_item_start: null, kind_label: 'חלק', source_display_identifier: "ב'" });
+  const current = candidate('seif-2', 1, {
+    parent_candidate_id: 'root',
+    source_page: null,
+    source_item_start: null,
+    kind_label: 'סעיף',
+    source_display_identifier: '2',
+    title: 'מקורות הכנסה',
+  });
+  const child = candidate('2-1', 2, { parent_candidate_id: 'seif-2', source_item_start: 4 });
+  const nnd = candidate('seif-2a', 3, { parent_candidate_id: 'root', source_item_start: 8 });
+  const extras = Array.from({ length: 400 }, (_, index) =>
+    candidate(`extra-${index}`, 4 + index, {
+      parent_candidate_id: 'root',
+      source_page: null,
+      source_item_start: null,
+      page_start: 1,
+      page_end: 80,
+      kind_label: 'סעיף',
+      source_display_identifier: String(index + 3),
+    }),
+  );
+  const ordered = [root, current, child, nnd, ...extras];
+  const needed = headingIdsRequiredForCapture(current, ordered);
+  assert.equal(needed.has('root'), true);
+  assert.equal(needed.has('seif-2'), true);
+  assert.equal(needed.has('2-1'), true);
+  assert.equal(needed.has('seif-2a'), true);
+  assert.equal(needed.has('extra-0'), false);
+  assert.ok(needed.size < 8);
+  const captured = captureExclusiveSourceBody(current, ordered, [
+    itemsPage(1, ['חלק', "ב'", 'סעיף', '2', 'מקורות', 'הכנסה', '(1)', 'עסק', 'סעיף', '2א']),
+  ]);
+  assert.notEqual(captured.item_start, 0);
+  assert.equal(captured.heading_status, 'recovered');
 });
 
 test('leaf own/subtree may be identical; null spans recover heading; ambiguous and item-0 stay uncertain', () => {
