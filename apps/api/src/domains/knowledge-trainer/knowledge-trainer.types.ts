@@ -420,17 +420,26 @@ export type KnowledgeTrainerLegalTextDraftDto = {
   parent_draft_id: string | null;
   parent_display_label: string | null;
   original_source_text: string;
+  original_subtree_text: string | null;
   draft_legal_text: string;
   text_boundary_status: 'certain' | 'uncertain' | 'owner_defined';
   review_status: 'draft' | 'needs_review' | 'ready';
   source_page_start: number | null;
   source_page_end: number | null;
+  source_item_start: number | null;
+  source_item_end: number | null;
+  subtree_page_start: number | null;
+  subtree_page_end: number | null;
+  subtree_item_start: number | null;
+  subtree_item_end: number | null;
   provenance: {
     structure_run_id: string | null;
     source_candidate_id: string | null;
   };
   source_notes: KnowledgeTrainerSourceNoteDto[];
   unresolved_source_note_count: number;
+  subtree_source_notes: KnowledgeTrainerSourceNoteDto[];
+  subtree_unresolved_source_note_count: number;
   created_at: string;
   updated_at: string;
 };

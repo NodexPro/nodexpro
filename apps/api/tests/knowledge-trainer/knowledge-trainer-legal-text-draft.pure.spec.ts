@@ -2,14 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLegalIdentifier } from '../../src/domains/tax-knowledge/legal-identifier.pure.js';
 import {
+  candidateStartCursor,
   captureExclusiveSourceBody,
   captureOwnerDefinedSourceBody,
+  compareLayoutCursors,
   createDraftRequiresParentFirst,
   displayDraftLabel,
   draftIdentityKey,
   draftWouldCycle,
   findDraftIdentityConflict,
+  firstDescendantBoundaryCandidate,
   hierarchyRankCompatible,
+  nextNonDescendantBoundaryCandidate,
   notesOverlappingDraftSpan,
   reparentScopeError,
   validateDraftReady,
@@ -25,15 +29,30 @@ const catalog = [
   { id: '5', label: 'פסקה' },
 ];
 
-function itemsPage(pageNo: number, texts: string[]): DraftPageEvidence {
+function itemsPage(
+  pageNo: number,
+  texts: string[],
+  extra: { status?: string; yForIndex?: (index: number) => number } = {},
+): DraftPageEvidence {
   return {
     page_no: pageNo,
-    status: 'extracted',
+    status: extra.status ?? 'extracted',
     page_text: texts.join(' '),
     page_text_items: {
       v: 1,
       h: 800,
-      items: texts.map((s, i) => ({ i, s, x: 0, y: 700 - i, w: 10, h: 10, fn: '', fs: 10, eol: false, d: '' })),
+      items: texts.map((s, i) => ({
+        i,
+        s,
+        x: i * 12,
+        y: extra.yForIndex ? extra.yForIndex(i) : 700 - i,
+        w: 10,
+        h: 10,
+        fn: '',
+        fs: 10,
+        eol: false,
+        d: '',
+      })),
     },
   };
 }
@@ -214,3 +233,233 @@ test('owner-defined capture uses persisted items only', () => {
 test('display label is backend-owned and does not expose nested JSON', () => {
   assert.equal(displayDraftLabel({ kind_label: 'סעיף', source_display_identifier: '4א(א)(1)', title: 'ניכוי' }), 'סעיף 4א(א)(1) ניכוי');
 });
+
+test('null TAX-629 source spans never imply item 0', () => {
+  const heading = candidate('seif-2', 0, {
+    source_page: null,
+    source_item_start: null,
+    source_item_end: null,
+    page_start: 16,
+    page_end: 16,
+    kind_label: 'סעיף',
+    source_display_identifier: '2',
+    title: 'מקורות הכנסה',
+  });
+  assert.equal(candidateStartCursor(heading), null);
+  const captured = captureExclusiveSourceBody(heading, [heading], []);
+  assert.equal(captured.item_start, null);
+  assert.notEqual(captured.item_start, 0);
+  assert.equal(captured.boundary_status, 'uncertain');
+});
+
+test('split printed marker ( 1 ) recovers with the line title, not a bare 1', () => {
+  const child = candidate('2-1', 0, {
+    source_page: null,
+    source_item_start: null,
+    page_start: 17,
+    page_end: 17,
+    kind_label: 'פסקה',
+    source_display_identifier: '2(1)',
+    printed_marker: '(1)',
+    title: 'השתכרות או ריווח',
+  });
+  const pages = [
+    itemsPage(17, ['השתכרות או ריווח', ' ', '(', '1', ')', 'מעסק'], {
+      yForIndex: () => 400,
+    }),
+  ];
+  const captured = captureExclusiveSourceBody(child, [child], pages);
+  assert.equal(captured.heading_status, 'recovered');
+  assert.equal(captured.item_start, 0);
+  assert.match(captured.text, /השתכרות/);
+  assert.doesNotMatch(captured.text, /^1 /);
+});
+
+test('heading cursor recovers from page_text_items, not page item 0', () => {
+  const seif2 = candidate('seif-2', 0, {
+    source_page: null,
+    source_item_start: null,
+    source_item_end: null,
+    page_start: 16,
+    page_end: 16,
+    kind_label: 'סעיף',
+    source_display_identifier: '2',
+    title: 'מקורות הכנסה',
+  });
+  const child = candidate('2-1', 1, {
+    parent_candidate_id: 'seif-2',
+    source_page: null,
+    source_item_start: null,
+    page_start: 16,
+    page_end: 16,
+    kind_label: 'פסקה',
+    source_display_identifier: '2(1)',
+    printed_marker: '(1)',
+    title: 'משכורת',
+  });
+  const pages = [
+    itemsPage(16, ['פנקסים', 'קבילים', 'מילון', 'סעיף', '2', 'מקורות', 'הכנסה', '(1)', 'משכורת'], {
+      yForIndex: (i) => (i < 3 ? 700 : i < 7 ? 400 : 200),
+    }),
+  ];
+  const captured = captureExclusiveSourceBody(seif2, [seif2, child], pages);
+  assert.equal(captured.heading_status, 'recovered');
+  assert.equal(captured.item_start, 3);
+  assert.notEqual(captured.item_start, 0);
+  assert.match(captured.text, /מקורות/);
+  assert.doesNotMatch(captured.text, /פנקסים/);
+  assert.doesNotMatch(captured.text, /משכורת/);
+  const childBody = captureExclusiveSourceBody(child, [seif2, child], pages);
+  assert.equal(childBody.item_start, 7);
+  assert.match(childBody.text, /משכורת/);
+});
+
+test('ambiguous heading occurrence stays uncertain and is never guessed', () => {
+  const child = candidate('2-1', 0, {
+    source_page: null,
+    source_item_start: null,
+    page_start: 17,
+    page_end: 17,
+    kind_label: 'פסקה',
+    source_display_identifier: '2(1)',
+    printed_marker: '(1)',
+    title: null,
+  });
+  const pages = [itemsPage(17, ['(1)', 'עסק', '(1)', 'משכורת'], { yForIndex: (i) => (i < 2 ? 500 : 200) })];
+  const captured = captureExclusiveSourceBody(child, [child], pages);
+  assert.equal(captured.heading_status, 'ambiguous');
+  assert.equal(captured.boundary_status, 'uncertain');
+  assert.equal(captured.item_start, null);
+  assert.equal(captured.text, '');
+});
+
+test('next direct descendant is not the parent exclusive boundary', () => {
+  const parent = candidate('2-2', 0, { source_item_start: 0 });
+  const child = candidate('2-2-a', 1, { parent_candidate_id: '2-2', source_item_start: 4 });
+  const grandchild = candidate('2-2-a-1', 2, { parent_candidate_id: '2-2-a', source_item_start: 6 });
+  const sibling = candidate('2-3', 3, { source_item_start: 8 });
+  const ordered = [parent, child, grandchild, sibling];
+  assert.equal(firstDescendantBoundaryCandidate(ordered, '2-2')?.id, '2-2-a');
+  assert.equal(nextNonDescendantBoundaryCandidate(ordered, '2-2')?.id, '2-3');
+  assert.notEqual(nextNonDescendantBoundaryCandidate(ordered, '2-2')?.id, '2-2-a');
+});
+
+test('next grandchild is not the ancestor exclusive boundary', () => {
+  const parent = candidate('seif-2', 0, { source_item_start: 0 });
+  const child = candidate('2-2', 1, { parent_candidate_id: 'seif-2', source_item_start: 2 });
+  const grandchild = candidate('2-2-a', 2, { parent_candidate_id: '2-2', source_item_start: 4 });
+  const sibling = candidate('2-3', 3, { parent_candidate_id: 'seif-2', source_item_start: 8 });
+  const ordered = [parent, child, grandchild, sibling];
+  assert.notEqual(nextNonDescendantBoundaryCandidate(ordered, 'seif-2')?.id, '2-2-a');
+  assert.equal(nextNonDescendantBoundaryCandidate(ordered, 'seif-2'), null);
+  assert.equal(nextNonDescendantBoundaryCandidate(ordered, '2-2')?.id, '2-3');
+});
+
+test('next sibling is the exclusive boundary', () => {
+  const seif = candidate('seif-2', 0, { source_item_start: 0 });
+  const one = candidate('2-1', 1, { parent_candidate_id: 'seif-2', source_item_start: 4 });
+  const two = candidate('2-2', 2, { parent_candidate_id: 'seif-2', source_item_start: 8 });
+  assert.equal(nextNonDescendantBoundaryCandidate([seif, one, two], '2-1')?.id, '2-2');
+});
+
+test("next ancestor sibling is the exclusive boundary after a node's subtree", () => {
+  const two = candidate('2-2', 0, { source_item_start: 0 });
+  const alef = candidate('2-2-a', 1, { parent_candidate_id: '2-2', source_item_start: 2 });
+  const bet = candidate('2-2-b', 2, { parent_candidate_id: '2-2', source_item_start: 4 });
+  const three = candidate('2-3', 3, { source_item_start: 6 });
+  const ordered = [two, alef, bet, three];
+  assert.equal(nextNonDescendantBoundaryCandidate(ordered, '2-2-b')?.id, '2-3');
+  assert.equal(nextNonDescendantBoundaryCandidate(ordered, '2-2')?.id, '2-3');
+  const pages = [itemsPage(1, ['(2)', 'ריווח', '(א)', 'עסק', '(ב)', 'משלח', '(3)', 'דיבידנד'])];
+  const parentBody = captureExclusiveSourceBody(two, ordered, pages);
+  assert.match(parentBody.text, /ריווח/);
+  assert.doesNotMatch(parentBody.text, /עסק/);
+  assert.doesNotMatch(parentBody.text, /דיבידנד/);
+  assert.match(parentBody.subtree_text, /עסק/);
+  assert.match(parentBody.subtree_text, /משלח/);
+  assert.doesNotMatch(parentBody.subtree_text, /דיבידנד/);
+  assert.equal(parentBody.next_non_descendant_id, '2-3');
+  assert.equal(parentBody.first_descendant_id, '2-2-a');
+});
+
+test('source order uses layout evidence, not identifier lexical sorting', () => {
+  const parent = candidate('p', 0, { source_item_start: 0 });
+  const two = candidate('two', 1, {
+    parent_candidate_id: 'p',
+    source_item_start: 4,
+    source_display_identifier: '2(2)',
+  });
+  const ten = candidate('ten', 2, {
+    parent_candidate_id: 'p',
+    source_item_start: 8,
+    source_display_identifier: '2(10)',
+  });
+  const orderedByEvidence = [parent, two, ten];
+  const lexicalChildren = ['2(2)', '2(10)'].sort((a, b) => a.localeCompare(b));
+  assert.equal(nextNonDescendantBoundaryCandidate(orderedByEvidence, 'two')?.id, 'ten');
+  assert.deepEqual(lexicalChildren, ['2(10)', '2(2)']);
+  assert.ok(compareLayoutCursors({ page: 1, item: 4, certain: true }, { page: 1, item: 8, certain: true }) < 0);
+});
+
+test('OCR gap on the heading page stays uncertain and does not fabricate source', () => {
+  const heading = candidate('seif-2', 0, {
+    source_page: null,
+    source_item_start: null,
+    page_start: 16,
+    page_end: 16,
+    kind_label: 'סעיף',
+    source_display_identifier: '2',
+    title: 'מקורות הכנסה',
+  });
+  const pages = [
+    {
+      page_no: 16,
+      status: 'needs_ocr',
+      page_text: 'סעיף 2 מקורות הכנסה invented',
+      page_text_items: { v: 1, h: 800, items: [] },
+    },
+  ];
+  const captured = captureExclusiveSourceBody(heading, [heading], pages);
+  assert.equal(captured.heading_status, 'ocr_gap');
+  assert.equal(captured.boundary_status, 'uncertain');
+  assert.equal(captured.text, '');
+  assert.doesNotMatch(captured.text, /invented/);
+});
+
+test('parent own text does not duplicate descendant bodies; subtree region is reported separately', () => {
+  const two = candidate('2-2', 0, {
+    source_item_start: 0,
+    kind_label: 'פסקה',
+    source_display_identifier: '2(2)',
+    printed_marker: '(2)',
+  });
+  const alef = candidate('2-2-a', 1, {
+    parent_candidate_id: '2-2',
+    source_item_start: 3,
+    kind_label: 'פסקה',
+    source_display_identifier: '2(2)(א)',
+    printed_marker: '(א)',
+  });
+  const bet = candidate('2-2-b', 2, {
+    parent_candidate_id: '2-2',
+    source_item_start: 6,
+    kind_label: 'פסקה',
+    source_display_identifier: '2(2)(ב)',
+    printed_marker: '(ב)',
+  });
+  const three = candidate('2-3', 3, {
+    source_item_start: 9,
+    kind_label: 'פסקה',
+    source_display_identifier: '2(3)',
+    printed_marker: '(3)',
+  });
+  const ordered = [two, alef, bet, three];
+  const pages = [itemsPage(1, ['(2)', 'ריווח', 'מעבודה', '(א)', 'עסק', 'חקלאות', '(ב)', 'משלח', 'יד', '(3)', 'דיבידנד'])];
+  const parentBody = captureExclusiveSourceBody(two, ordered, pages);
+  const alefBody = captureExclusiveSourceBody(alef, ordered, pages);
+  assert.doesNotMatch(parentBody.text, /חקלאות/);
+  assert.match(alefBody.text, /חקלאות/);
+  assert.match(parentBody.subtree_text, /חקלאות/);
+  assert.notEqual(parentBody.text, parentBody.subtree_text);
+});
+

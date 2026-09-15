@@ -621,7 +621,7 @@ async function loadSourceNotesForActiveRun(activeRunId: string | null): Promise<
 }
 
 const LEGAL_TEXT_DRAFT_READ_SELECT =
-  'id, kind_label, source_display_identifier, printed_marker, title, parent_draft_id, original_source_text, draft_legal_text, text_boundary_status, review_status, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, structure_run_id, source_candidate_id, created_at, updated_at';
+  'id, kind_label, source_display_identifier, printed_marker, title, parent_draft_id, original_source_text, original_subtree_text, draft_legal_text, text_boundary_status, review_status, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, original_subtree_page_start, original_subtree_page_end, original_subtree_item_start, original_subtree_item_end, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, structure_run_id, source_candidate_id, created_at, updated_at';
 
 function emptyLegalTextDraftSummary(): KnowledgeTrainerLegalTextDraftSummaryDto {
   return { all: 0, draft: 0, needs_review: 0, ready: 0 };
@@ -712,22 +712,43 @@ async function loadLegalTextDraftsForDocument(
         : Number(row.original_source_item_end);
     const runId = row.structure_run_id == null ? null : String(row.structure_run_id);
     const scopedNotes = runId ? notesByRun.filter((note) => note.structure_run_id === runId) : notesByRun;
+    const noteEvidence = scopedNotes.map((note) => ({
+      id: note.id,
+      source_page: note.source_page,
+      source_item_start: note.source_item_start,
+      source_item_end: note.source_item_end,
+      inline_link_status: note.inline_link_status,
+    }));
     const overlappingIds = new Set(
-      notesOverlappingDraftSpan(
-        scopedNotes.map((note) => ({
-          id: note.id,
-          source_page: note.source_page,
-          source_item_start: note.source_item_start,
-          source_item_end: note.source_item_end,
-          inline_link_status: note.inline_link_status,
-        })),
-        { page_start: pageStart, page_end: pageEnd, item_start: itemStart, item_end: itemEnd },
-      ).map((note) => note.id),
+      notesOverlappingDraftSpan(noteEvidence, {
+        page_start: pageStart,
+        page_end: pageEnd,
+        item_start: itemStart,
+        item_end: itemEnd,
+      }).map((note) => note.id),
     );
     const sourceNotes = scopedNotes
       .filter((note) => overlappingIds.has(note.id))
       .map(({ structure_run_id: _run, ...note }) => note);
     const unresolvedCount = sourceNotes.filter(
+      (note) => note.inline_link_status !== 'linked' || note.anchors.some((anchor) => anchor.link_status !== 'linked'),
+    ).length;
+    const subtreePageStart = row.original_subtree_page_start == null ? null : Number(row.original_subtree_page_start);
+    const subtreePageEnd = row.original_subtree_page_end == null ? null : Number(row.original_subtree_page_end);
+    const subtreeItemStart = row.original_subtree_item_start == null ? null : Number(row.original_subtree_item_start);
+    const subtreeItemEnd = row.original_subtree_item_end == null ? null : Number(row.original_subtree_item_end);
+    const subtreeOverlappingIds = new Set(
+      notesOverlappingDraftSpan(noteEvidence, {
+        page_start: subtreePageStart,
+        page_end: subtreePageEnd,
+        item_start: subtreeItemStart,
+        item_end: subtreeItemEnd,
+      }).map((note) => note.id),
+    );
+    const subtreeSourceNotes = scopedNotes
+      .filter((note) => subtreeOverlappingIds.has(note.id))
+      .map(({ structure_run_id: _run, ...note }) => note);
+    const subtreeUnresolvedCount = subtreeSourceNotes.filter(
       (note) => note.inline_link_status !== 'linked' || note.anchors.some((anchor) => anchor.link_status !== 'linked'),
     ).length;
     const kind = row.kind_label == null ? null : String(row.kind_label);
@@ -754,17 +775,26 @@ async function loadLegalTextDraftsForDocument(
           })
         : null,
       original_source_text: String(row.original_source_text ?? ''),
+      original_subtree_text: row.original_subtree_text == null ? null : String(row.original_subtree_text),
       draft_legal_text: String(row.draft_legal_text ?? ''),
       text_boundary_status: boundary,
       review_status: asDraftReview(row.review_status),
       source_page_start: pageStart,
       source_page_end: pageEnd,
+      source_item_start: itemStart,
+      source_item_end: itemEnd,
+      subtree_page_start: subtreePageStart,
+      subtree_page_end: subtreePageEnd,
+      subtree_item_start: subtreeItemStart,
+      subtree_item_end: subtreeItemEnd,
       provenance: {
         structure_run_id: runId,
         source_candidate_id: row.source_candidate_id == null ? null : String(row.source_candidate_id),
       },
       source_notes: sourceNotes,
       unresolved_source_note_count: unresolvedCount,
+      subtree_source_notes: subtreeSourceNotes,
+      subtree_unresolved_source_note_count: subtreeUnresolvedCount,
       created_at: String(row.created_at ?? ''),
       updated_at: String(row.updated_at ?? ''),
     };

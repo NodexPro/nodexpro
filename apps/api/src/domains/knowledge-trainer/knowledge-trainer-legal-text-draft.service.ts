@@ -48,6 +48,33 @@ function throwIfDraftSchemaMissing(error: unknown): void {
   }
 }
 
+function optionalNumber(value: unknown): number | null {
+  return value == null || value === '' ? null : Number(value);
+}
+
+function optionalText(value: unknown): string | null {
+  return value == null ? null : String(value);
+}
+
+function asDraftStructureCandidate(row: Record<string, unknown>): DraftStructureCandidate {
+  return {
+    id: String(row.id),
+    sort_order: Number(row.sort_order ?? 0),
+    parent_candidate_id: row.parent_candidate_id == null ? null : String(row.parent_candidate_id),
+    source_page: optionalNumber(row.source_page),
+    source_item_start: optionalNumber(row.source_item_start),
+    source_item_end: optionalNumber(row.source_item_end),
+    source_line_index: optionalNumber(row.source_line_index),
+    page_start: optionalNumber(row.page_start),
+    page_end: optionalNumber(row.page_end),
+    kind_label: optionalText(row.kind_label),
+    source_display_identifier: optionalText(row.source_display_identifier),
+    normalized_machine_identifier: optionalText(row.normalized_machine_identifier),
+    printed_marker: optionalText(row.printed_marker),
+    title: optionalText(row.title),
+  };
+}
+
 async function audit(
   ctx: RequestContext,
   action: string,
@@ -65,7 +92,7 @@ async function audit(
 }
 
 const DRAFT_SELECT =
-  'id, country_code, document_id, job_id, tax_source_id, structure_run_id, source_candidate_id, kind_label, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, parent_draft_id, original_source_text, draft_legal_text, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, original_source_line_start, original_source_line_end, original_source_bbox, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, owner_source_line_start, owner_source_line_end, owner_source_bbox, text_boundary_status, review_status, created_by, updated_by, created_at, updated_at';
+  'id, country_code, document_id, job_id, tax_source_id, structure_run_id, source_candidate_id, kind_label, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, parent_draft_id, original_source_text, draft_legal_text, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, original_source_line_start, original_source_line_end, original_source_bbox, original_subtree_text, original_subtree_page_start, original_subtree_page_end, original_subtree_item_start, original_subtree_item_end, original_subtree_line_start, original_subtree_line_end, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, owner_source_line_start, owner_source_line_end, owner_source_bbox, text_boundary_status, review_status, created_by, updated_by, created_at, updated_at';
 
 async function loadDraft(draftId: string) {
   const { data, error } = await supabaseAdmin
@@ -223,35 +250,17 @@ export async function createLegalTextDraftFromCandidate(
     supabaseAdmin
       .from('legal_ingestion_candidates')
       .select(
-        'id, sort_order, parent_candidate_id, source_page, source_item_start, source_item_end, source_line_index, page_start, page_end',
+        'id, sort_order, parent_candidate_id, source_page, source_item_start, source_item_end, source_line_index, page_start, page_end, kind_label, source_display_identifier, normalized_machine_identifier, printed_marker, title',
       )
       .eq('structure_run_id', String(candidate.structure_run_id))
       .eq('candidate_kind', 'structure')
       .order('sort_order', { ascending: true })
       .range(from, to),
   );
-  const ordered: DraftStructureCandidate[] = runCandidates.map((row) => ({
-    id: String(row.id),
-    sort_order: Number(row.sort_order ?? 0),
-    parent_candidate_id: row.parent_candidate_id == null ? null : String(row.parent_candidate_id),
-    source_page: row.source_page == null ? null : Number(row.source_page),
-    source_item_start: row.source_item_start == null ? null : Number(row.source_item_start),
-    source_item_end: row.source_item_end == null ? null : Number(row.source_item_end),
-    source_line_index: row.source_line_index == null ? null : Number(row.source_line_index),
-    page_start: row.page_start == null ? null : Number(row.page_start),
-    page_end: row.page_end == null ? null : Number(row.page_end),
-  }));
-  const current = ordered.find((row) => row.id === candidateId) ?? {
-    id: String(candidate.id),
-    sort_order: Number(candidate.sort_order ?? 0),
-    parent_candidate_id: parentCandidateId,
-    source_page: candidate.source_page == null ? null : Number(candidate.source_page),
-    source_item_start: candidate.source_item_start == null ? null : Number(candidate.source_item_start),
-    source_item_end: candidate.source_item_end == null ? null : Number(candidate.source_item_end),
-    source_line_index: candidate.source_line_index == null ? null : Number(candidate.source_line_index),
-    page_start: candidate.page_start == null ? null : Number(candidate.page_start),
-    page_end: candidate.page_end == null ? null : Number(candidate.page_end),
-  };
+  const ordered: DraftStructureCandidate[] = runCandidates.map((row) => asDraftStructureCandidate(row));
+  const current =
+    ordered.find((row) => row.id === candidateId) ??
+    asDraftStructureCandidate({ ...candidate, parent_candidate_id: parentCandidateId });
   const pages = await loadPagesForJob(String(candidate.job_id));
   const captured = captureExclusiveSourceBody(current, ordered, pages);
   const reviewStatus = captured.boundary_status === 'uncertain' ? 'needs_review' : 'draft';
@@ -285,6 +294,13 @@ export async function createLegalTextDraftFromCandidate(
     original_source_line_start: captured.line_start,
     original_source_line_end: captured.line_end,
     original_source_bbox: parseSourceBBox(candidate.source_bbox),
+    original_subtree_text: captured.subtree_text,
+    original_subtree_page_start: captured.page_start,
+    original_subtree_page_end: captured.subtree_page_end,
+    original_subtree_item_start: captured.item_start,
+    original_subtree_item_end: captured.subtree_item_end,
+    original_subtree_line_start: captured.subtree_line_start,
+    original_subtree_line_end: captured.subtree_line_end,
     text_boundary_status: captured.boundary_status,
     review_status: reviewStatus,
     created_by: ctx.user.id,
