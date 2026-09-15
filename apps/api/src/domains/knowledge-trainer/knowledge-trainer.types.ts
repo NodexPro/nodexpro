@@ -11,6 +11,7 @@ export const KNOWLEDGE_TRAINER_COMMANDS = [
   'accept_legal_structure_candidate',
   'reject_legal_extraction_candidate',
   'create_legal_text_draft_from_candidate',
+  'prepare_legal_text_drafts_for_structure',
   'update_legal_text_draft_text',
   'update_legal_text_draft_identity',
   'reparent_legal_text_draft',
@@ -143,6 +144,10 @@ export type KnowledgeTrainerCommandResponse = {
   ok: true;
   command: KnowledgeTrainerCommandName;
   duplicate?: boolean;
+  created_count?: number;
+  skipped_existing_count?: number;
+  remaining_count?: number;
+  uncertain_count?: number;
   refreshed: {
     aggregate_key: 'owner_legal_control_panel_aggregate';
     aggregate: Record<string, unknown>;
@@ -481,11 +486,29 @@ export type KnowledgeTrainerDraftCreateFrontierItemDto = {
   display_label: string;
 };
 
+export type KnowledgeTrainerLegalTextReviewState = 'not_prepared' | 'needs_review' | 'draft' | 'reviewed';
+
+export type KnowledgeTrainerLegalTextReviewNodeDto = {
+  id: string;
+  draft_id: string | null;
+  source_candidate_id: string | null;
+  parent_id: string | null;
+  kind_label: string | null;
+  display_identifier: string | null;
+  printed_marker: string | null;
+  title: string | null;
+  review_state: KnowledgeTrainerLegalTextReviewState;
+  review_state_label: string;
+};
+
 export type KnowledgeTrainerLegalTextDraftSummaryDto = {
   all: number;
   draft: number;
   needs_review: number;
   ready: number;
+  reviewed: number;
+  not_prepared: number;
+  structure_candidates: number;
 };
 
 export type KnowledgeTrainerSliceDto = {
@@ -526,6 +549,8 @@ export type KnowledgeTrainerSliceDto = {
     selected_legal_text_draft: KnowledgeTrainerLegalTextDraftDto | null;
     legal_text_draft_create_frontier: KnowledgeTrainerDraftCreateFrontierItemDto[];
     legal_text_draft_summary: KnowledgeTrainerLegalTextDraftSummaryDto;
+    legal_text_review_tree: KnowledgeTrainerLegalTextReviewNodeDto[];
+    selected_legal_text_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
   } | null;
   allowed_actions: Array<{
     action_key: string;

@@ -15,8 +15,12 @@ import {
   hierarchyRankCompatible,
   nextNonDescendantBoundaryCandidate,
   notesOverlappingDraftSpan,
+  parentFirstMissingCandidates,
   reparentScopeError,
   validateDraftReady,
+  buildLegalTextReviewNodes,
+  legalTextReviewStateFromDraft,
+  legalTextReviewStateLabel,
   type DraftPageEvidence,
   type DraftStructureCandidate,
 } from '../../src/domains/knowledge-trainer/knowledge-trainer-legal-text-draft.pure.js';
@@ -462,4 +466,50 @@ test('parent own text does not duplicate descendant bodies; subtree region is re
   assert.match(parentBody.subtree_text, /חקלאות/);
   assert.notEqual(parentBody.text, parentBody.subtree_text);
 });
+
+test('TAX-634 review tree overlays drafts onto the document structure only', () => {
+  const nodes = buildLegalTextReviewNodes(
+    [
+      { id: 'chelek', parent_candidate_id: null, candidate_kind: 'structure', kind_label: 'חלק', source_display_identifier: "חלק ב'", title: 'הכנסה', sort_order: 0 },
+      { id: 'seif', parent_candidate_id: 'chelek', candidate_kind: 'structure', kind_label: 'סעיף', source_display_identifier: '2', title: null, sort_order: 1 },
+      { id: 'note', parent_candidate_id: null, candidate_kind: 'reference', kind_label: 'הערה', sort_order: 2 },
+    ],
+    [
+      {
+        id: 'draft-seif',
+        source_candidate_id: 'seif',
+        parent_draft_id: null,
+        review_status: 'ready',
+        kind_label: 'סעיף',
+        display_identifier: '2',
+        printed_marker: '2.',
+        title: 'הכנסה',
+      },
+    ],
+  );
+  assert.equal(nodes.length, 2);
+  assert.equal(nodes[0]?.review_state, 'not_prepared');
+  assert.equal(nodes[0]?.id, 'chelek');
+  assert.equal(nodes[1]?.id, 'draft-seif');
+  assert.equal(nodes[1]?.review_state, 'reviewed');
+  assert.equal(nodes[1]?.parent_id, 'chelek');
+  assert.equal(legalTextReviewStateFromDraft('ready'), 'reviewed');
+  assert.match(legalTextReviewStateLabel('reviewed'), /נבדק/);
+});
+
+test('TAX-634 parent-first missing candidates skip existing drafts and wait for parents', () => {
+  const missing = parentFirstMissingCandidates(
+    [
+      { id: 'root', parent_candidate_id: null, candidate_kind: 'structure', sort_order: 0 },
+      { id: 'child', parent_candidate_id: 'root', candidate_kind: 'structure', sort_order: 1 },
+      { id: 'grand', parent_candidate_id: 'child', candidate_kind: 'structure', sort_order: 2 },
+    ],
+    new Set(['root']),
+  );
+  assert.deepEqual(
+    missing.map((row) => row.id),
+    ['child', 'grand'],
+  );
+});
+
 

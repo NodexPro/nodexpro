@@ -5,6 +5,11 @@ export type StringFieldMap = Record<string, string>;
 export type OwnerCommandResponse = {
   ok: true;
   command: string;
+  duplicate?: boolean;
+  created_count?: number;
+  skipped_existing_count?: number;
+  remaining_count?: number;
+  uncertain_count?: number;
   refreshed: {
     aggregate_key: 'owner_legal_control_panel_aggregate' | 'organization_country_settings_aggregate';
     aggregate: UnknownRecord;
@@ -548,6 +553,22 @@ export type OwnerLegalTextDraftCounts = {
   draft: number;
   needs_review: number;
   ready: number;
+  reviewed: number;
+  not_prepared: number;
+  structure_candidates: number;
+};
+
+export type OwnerLegalTextReviewNode = {
+  id: string;
+  draft_id: string | null;
+  source_candidate_id: string | null;
+  parent_id: string | null;
+  kind_label: string | null;
+  display_identifier: string | null;
+  printed_marker: string | null;
+  title: string | null;
+  review_state: string;
+  review_state_label: string;
 };
 
 export type OwnerKnowledgeTrainerSlice = {
@@ -595,6 +616,8 @@ export type OwnerKnowledgeTrainerSlice = {
     selected_legal_text_draft: OwnerLegalTextDraft | null;
     legal_text_draft_create_frontier: OwnerLegalTextDraftCreateFrontierItem[];
     legal_text_draft_summary: OwnerLegalTextDraftCounts;
+    legal_text_review_tree: OwnerLegalTextReviewNode[];
+    selected_legal_text_review_node: OwnerLegalTextReviewNode | null;
   } | null;
   allowed_actions: TaxKnowledgeAllowedAction[];
 };

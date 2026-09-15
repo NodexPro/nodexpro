@@ -143,7 +143,8 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'create_tax_strategy' ||
     command === 'create_tax_strategy_version' ||
     command === 'create_tax_strategy_exclusive_group' ||
-    command === 'create_legal_text_draft_from_candidate'
+    command === 'create_legal_text_draft_from_candidate' ||
+    command === 'prepare_legal_text_drafts_for_structure'
   ) {
     return 'legal_knowledge.draft_create';
   }

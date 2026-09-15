@@ -19,6 +19,7 @@ import {
 import { persistStructureCandidatesForJob } from './knowledge-trainer-structure.service.js';
 import {
   createLegalTextDraftFromCandidate,
+  prepareLegalTextDraftsForStructure,
   reparentLegalTextDraft,
   resetLegalTextDraftToSource,
   setLegalTextDraftBoundary,
@@ -765,6 +766,8 @@ export async function executeKnowledgeTrainerCommand(
       return handleRejectCandidate(ctx, payload);
     case 'create_legal_text_draft_from_candidate':
       return handleLegalTextDraftCommand(ctx, 'create_legal_text_draft_from_candidate', payload, createLegalTextDraftFromCandidate);
+    case 'prepare_legal_text_drafts_for_structure':
+      return handleLegalTextDraftCommand(ctx, 'prepare_legal_text_drafts_for_structure', payload, prepareLegalTextDraftsForStructure);
     case 'update_legal_text_draft_text':
       return handleLegalTextDraftCommand(ctx, 'update_legal_text_draft_text', payload, updateLegalTextDraftText);
     case 'update_legal_text_draft_identity':
@@ -793,7 +796,11 @@ async function handleLegalTextDraftCommand(
     ok: true,
     command,
     duplicate: result.duplicate,
-    refreshed: await refreshed(ctx, result.country_code, result.document_id, result.draft_id),
+    created_count: result.created_count,
+    skipped_existing_count: result.skipped_existing_count,
+    remaining_count: result.remaining_count,
+    uncertain_count: result.uncertain_count,
+    refreshed: await refreshed(ctx, result.country_code, result.document_id, result.draft_id || null),
   };
 }
 

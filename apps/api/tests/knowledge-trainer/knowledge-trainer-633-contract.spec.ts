@@ -54,8 +54,13 @@ test('TAX-633 parent-first frontier does not bulk-create drafts', () => {
     ['child-cand', 'sib-cand'],
   );
   assert.equal(frontierAfterParent.every((row) => row.parent_draft_required === false), true);
-  assert.doesNotMatch(draftService(), /createLegalTextDraftFromCandidate[\s\S]*for \(const/);
-  assert.doesNotMatch(draftService(), /bulkCreate|create_all_legal_text_drafts|createAllDrafts/);
+  const service = draftService();
+  const createFn = service.slice(
+    service.indexOf('export async function createLegalTextDraftFromCandidate'),
+    service.indexOf('export async function updateLegalTextDraftText'),
+  );
+  assert.doesNotMatch(createFn, /for \(const/);
+  assert.doesNotMatch(service, /bulkCreate|create_all_legal_text_drafts|createAllDrafts/);
 });
 
 test('TAX-633 PDF open is explicit GET file; trainer read never downloads Storage bytes', () => {

@@ -38,6 +38,7 @@ import {
   type OwnerLegalTextDraftCreateFrontierItem,
   type OwnerLegalTextDraftCounts,
   type OwnerLegalTextDraftListItem,
+  type OwnerLegalTextReviewNode,
   type OwnerOriginalFileAccess,
   type OwnerSourceNote,
   type OwnerSourceNoteAnchor,
@@ -783,7 +784,29 @@ function parseLegalTextDraftSummary(raw: UnknownRecord | null): OwnerLegalTextDr
     draft: Number(raw?.draft) || 0,
     needs_review: Number(raw?.needs_review) || 0,
     ready: Number(raw?.ready) || 0,
+    reviewed: Number(raw?.reviewed ?? raw?.ready) || 0,
+    not_prepared: Number(raw?.not_prepared) || 0,
+    structure_candidates: Number(raw?.structure_candidates) || 0,
   };
+}
+
+function parseLegalTextReviewTree(raw: unknown): OwnerLegalTextReviewNode[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      id: asString(row.id),
+      draft_id: asNullableString(row.draft_id),
+      source_candidate_id: asNullableString(row.source_candidate_id),
+      parent_id: asNullableString(row.parent_id),
+      kind_label: asNullableString(row.kind_label),
+      display_identifier: asNullableString(row.display_identifier),
+      printed_marker: asNullableString(row.printed_marker),
+      title: asNullableString(row.title),
+      review_state: asString(row.review_state),
+      review_state_label: asString(row.review_state_label),
+    }));
 }
 
 function parseReviewTree(raw: unknown): OwnerStructureReviewTreeNode[] {
@@ -968,6 +991,8 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
           selected_legal_text_draft: parseLegalTextDraftDetail(asRecord(selected.selected_legal_text_draft)),
           legal_text_draft_create_frontier: parseDraftCreateFrontier(selected.legal_text_draft_create_frontier),
           legal_text_draft_summary: parseLegalTextDraftSummary(asRecord(selected.legal_text_draft_summary)),
+          legal_text_review_tree: parseLegalTextReviewTree(selected.legal_text_review_tree),
+          selected_legal_text_review_node: parseLegalTextReviewTree([selected.selected_legal_text_review_node])[0] ?? null,
         }
       : null,
     allowed_actions: parseAllowedActions(raw.allowed_actions),

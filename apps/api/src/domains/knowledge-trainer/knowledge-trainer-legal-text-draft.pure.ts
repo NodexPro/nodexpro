@@ -870,3 +870,138 @@ export function draftCreateFrontier(
   }
   return out;
 }
+
+export const LEGAL_TEXT_REVIEW_STATES = ['not_prepared', 'needs_review', 'draft', 'reviewed'] as const;
+export type LegalTextReviewState = (typeof LEGAL_TEXT_REVIEW_STATES)[number];
+
+export function legalTextReviewStateFromDraft(
+  reviewStatus: string | null | undefined,
+): Exclude<LegalTextReviewState, 'not_prepared'> {
+  if (reviewStatus === 'ready') return 'reviewed';
+  if (reviewStatus === 'needs_review') return 'needs_review';
+  return 'draft';
+}
+
+export function legalTextReviewStateLabel(state: LegalTextReviewState): string {
+  if (state === 'not_prepared') return 'Not prepared / טרם הוכן';
+  if (state === 'needs_review') return 'Needs review / דורש בדיקה';
+  if (state === 'reviewed') return 'Reviewed / נבדק';
+  return 'Draft / טיוטה';
+}
+
+export type LegalTextReviewCandidate = {
+  id: string;
+  parent_candidate_id: string | null;
+  candidate_kind?: string | null;
+  kind_label?: string | null;
+  source_display_identifier?: string | null;
+  printed_marker?: string | null;
+  title?: string | null;
+  sort_order?: number;
+};
+
+export type LegalTextReviewDraft = {
+  id: string;
+  source_candidate_id: string | null;
+  parent_draft_id: string | null;
+  review_status: string;
+  kind_label: string | null;
+  display_identifier: string | null;
+  printed_marker: string | null;
+  title: string | null;
+};
+
+export type LegalTextReviewNode = {
+  id: string;
+  draft_id: string | null;
+  source_candidate_id: string | null;
+  parent_id: string | null;
+  kind_label: string | null;
+  display_identifier: string | null;
+  printed_marker: string | null;
+  title: string | null;
+  review_state: LegalTextReviewState;
+  review_state_label: string;
+};
+
+/** Document-scoped law tree: structure candidates overlayed with existing Owner Drafts. */
+export function buildLegalTextReviewNodes(
+  candidates: LegalTextReviewCandidate[],
+  drafts: LegalTextReviewDraft[],
+): LegalTextReviewNode[] {
+  const draftByCandidate = new Map<string, LegalTextReviewDraft>();
+  for (const draft of drafts) {
+    if (!draft.source_candidate_id) continue;
+    draftByCandidate.set(draft.source_candidate_id, draft);
+  }
+  const structure = candidates
+    .filter((row) => !row.candidate_kind || row.candidate_kind === 'structure')
+    .slice()
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const nodeIdByCandidate = new Map<string, string>();
+  for (const candidate of structure) {
+    const draft = draftByCandidate.get(candidate.id);
+    nodeIdByCandidate.set(candidate.id, draft?.id ?? candidate.id);
+  }
+  return structure.map((candidate) => {
+    const draft = draftByCandidate.get(candidate.id) ?? null;
+    const parentCandidateId = candidate.parent_candidate_id;
+    const review_state: LegalTextReviewState = draft
+      ? legalTextReviewStateFromDraft(draft.review_status)
+      : 'not_prepared';
+    const kind = (draft?.kind_label ?? candidate.kind_label)?.trim() || null;
+    const ident = (draft?.display_identifier ?? candidate.source_display_identifier)?.trim() || null;
+    const marker = (draft?.printed_marker ?? candidate.printed_marker)?.trim() || null;
+    const title = (draft?.title ?? candidate.title)?.trim() || null;
+    return {
+      id: nodeIdByCandidate.get(candidate.id) ?? candidate.id,
+      draft_id: draft?.id ?? null,
+      source_candidate_id: candidate.id,
+      parent_id: parentCandidateId ? nodeIdByCandidate.get(parentCandidateId) ?? parentCandidateId : null,
+      kind_label: kind,
+      display_identifier: ident,
+      printed_marker: marker,
+      title,
+      review_state,
+      review_state_label: legalTextReviewStateLabel(review_state),
+    };
+  });
+}
+
+export type ParentFirstCandidate = {
+  id: string;
+  parent_candidate_id: string | null;
+  candidate_kind?: string | null;
+  sort_order: number;
+};
+
+/** Missing structure candidates in parent-first order. Never invents ancestors. */
+export function parentFirstMissingCandidates<T extends ParentFirstCandidate>(
+  candidates: T[],
+  existingSourceCandidateIds: ReadonlySet<string>,
+): T[] {
+  const structure = candidates
+    .filter((row) => !row.candidate_kind || row.candidate_kind === 'structure')
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order);
+  const known = new Set(structure.map((row) => row.id));
+  const remaining = new Set(structure.map((row) => row.id).filter((id) => !existingSourceCandidateIds.has(id)));
+  const ready = new Set(existingSourceCandidateIds);
+  const out: T[] = [];
+  let guard = 0;
+  while (remaining.size && guard < structure.length + 2) {
+    guard += 1;
+    let progressed = false;
+    for (const row of structure) {
+      if (!remaining.has(row.id)) continue;
+      const parentId = row.parent_candidate_id;
+      if (parentId && known.has(parentId) && !ready.has(parentId)) continue;
+      out.push(row);
+      remaining.delete(row.id);
+      ready.add(row.id);
+      progressed = true;
+    }
+    if (!progressed) break;
+  }
+  return out;
+}

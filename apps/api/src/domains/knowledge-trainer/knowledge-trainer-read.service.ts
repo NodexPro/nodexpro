@@ -3,6 +3,7 @@ import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../..
 import { summarizeLayoutReadiness } from './knowledge-trainer-layout.pure.js';
 import { fetchAllPaged } from './knowledge-trainer-pagination.js';
 import {
+  buildLegalTextReviewNodes,
   displayDraftLabel,
   draftCreateFrontier,
   notesOverlappingDraftSpan,
@@ -29,6 +30,7 @@ import type {
   KnowledgeTrainerLegalTextDraftDto,
   KnowledgeTrainerLegalTextDraftListItemDto,
   KnowledgeTrainerLegalTextDraftSummaryDto,
+  KnowledgeTrainerLegalTextReviewNodeDto,
   KnowledgeTrainerSliceDto,
   KnowledgeTrainerSourceNoteAnchorDto,
   KnowledgeTrainerSourceNoteDto,
@@ -501,6 +503,9 @@ export async function buildKnowledgeTrainerSlice(
         legal_ingestion_document_id: 'uuid',
         legal_ingestion_candidate_id: 'uuid',
       }),
+      action('prepare_legal_text_drafts_for_structure', Boolean(selected && selected.structure_candidate_count > 0), {
+        legal_ingestion_document_id: 'uuid',
+      }),
       action('update_legal_text_draft_text', true, {
         legal_text_draft_id: 'uuid',
         draft_legal_text: 'string',
@@ -637,7 +642,7 @@ const LEGAL_TEXT_DRAFT_LIST_SELECT =
 const LEGAL_TEXT_DRAFT_DETAIL_SELECT = `${LEGAL_TEXT_DRAFT_LIST_SELECT}, original_source_text, original_subtree_text, draft_legal_text`;
 
 function emptyLegalTextDraftSummary(): KnowledgeTrainerLegalTextDraftSummaryDto {
-  return { all: 0, draft: 0, needs_review: 0, ready: 0 };
+  return { all: 0, draft: 0, needs_review: 0, ready: 0, reviewed: 0, not_prepared: 0, structure_candidates: 0 };
 }
 
 function asDraftBoundary(value: unknown): KnowledgeTrainerLegalTextDraftDto['text_boundary_status'] {
@@ -810,18 +815,39 @@ function mapLegalTextDraftSlice(input: {
   selected: KnowledgeTrainerLegalTextDraftDto | null;
   frontier: KnowledgeTrainerDraftCreateFrontierItemDto[];
   summary: KnowledgeTrainerLegalTextDraftSummaryDto;
+  review_tree: KnowledgeTrainerLegalTextReviewNodeDto[];
+  selected_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
 }): {
   legal_text_drafts: KnowledgeTrainerLegalTextDraftListItemDto[];
   selected_legal_text_draft: KnowledgeTrainerLegalTextDraftDto | null;
   legal_text_draft_create_frontier: KnowledgeTrainerDraftCreateFrontierItemDto[];
   legal_text_draft_summary: KnowledgeTrainerLegalTextDraftSummaryDto;
+  legal_text_review_tree: KnowledgeTrainerLegalTextReviewNodeDto[];
+  selected_legal_text_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
 } {
   return {
     legal_text_drafts: input.drafts,
     selected_legal_text_draft: input.selected,
     legal_text_draft_create_frontier: input.frontier,
     legal_text_draft_summary: input.summary,
+    legal_text_review_tree: input.review_tree,
+    selected_legal_text_review_node: input.selected_review_node,
   };
+}
+
+function pickSelectedReviewNode(
+  nodes: KnowledgeTrainerLegalTextReviewNodeDto[],
+  requested?: string | null,
+): KnowledgeTrainerLegalTextReviewNodeDto | null {
+  if (requested) {
+    return (
+      nodes.find((row) => row.id === requested) ??
+      nodes.find((row) => row.draft_id === requested) ??
+      nodes.find((row) => row.source_candidate_id === requested) ??
+      null
+    );
+  }
+  return nodes.find((row) => row.draft_id) ?? nodes[0] ?? null;
 }
 
 function pickSelectedDraftId(
@@ -845,12 +871,16 @@ async function loadLegalTextDraftsForDocument(
   selected: KnowledgeTrainerLegalTextDraftDto | null;
   frontier: KnowledgeTrainerDraftCreateFrontierItemDto[];
   summary: KnowledgeTrainerLegalTextDraftSummaryDto;
+  review_tree: KnowledgeTrainerLegalTextReviewNodeDto[];
+  selected_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
 }> {
   const empty = {
     drafts: [] as KnowledgeTrainerLegalTextDraftListItemDto[],
     selected: null,
     frontier: [] as KnowledgeTrainerDraftCreateFrontierItemDto[],
     summary: emptyLegalTextDraftSummary(),
+    review_tree: [] as KnowledgeTrainerLegalTextReviewNodeDto[],
+    selected_review_node: null,
   };
   let rows: Record<string, unknown>[];
   try {
@@ -875,11 +905,41 @@ async function loadLegalTextDraftsForDocument(
   const notesByRun = await loadSourceNotesForDocument(documentId, fallbackNotes);
   const byId = new Map(rows.map((row) => [String(row.id), row]));
   const drafts = rows.map((row) => mapDraftListItem(row, byId, notesByRun));
+  const review_tree = buildLegalTextReviewNodes(
+    (opts?.candidates ?? []).map((row, index) => ({
+      id: row.id,
+      parent_candidate_id: row.parent_candidate_id,
+      candidate_kind: row.candidate_kind,
+      kind_label: row.kind_label,
+      source_display_identifier: row.source_display_identifier ?? row.display_identifier,
+      printed_marker: row.printed_marker ?? null,
+      title: row.title,
+      sort_order: index,
+    })),
+    drafts.map((row) => ({
+      id: row.id,
+      source_candidate_id: row.provenance.source_candidate_id,
+      parent_draft_id: row.parent_draft_id,
+      review_status: row.review_status,
+      kind_label: row.kind_label,
+      display_identifier: row.display_identifier,
+      printed_marker: row.printed_marker,
+      title: row.title,
+    })),
+  );
+  const selected_review_node = pickSelectedReviewNode(review_tree, opts?.selectedDraftId);
   const summary = emptyLegalTextDraftSummary();
   summary.all = drafts.length;
   for (const draft of drafts) summary[draft.review_status] += 1;
+  summary.reviewed = summary.ready;
+  summary.structure_candidates = review_tree.length;
+  summary.not_prepared = review_tree.filter((row) => row.review_state === 'not_prepared').length;
 
-  const selectedId = pickSelectedDraftId(rows, opts?.selectedDraftId);
+  const selectedId =
+    selected_review_node?.draft_id ??
+    (opts?.selectedDraftId && rows.some((row) => String(row.id) === opts.selectedDraftId)
+      ? opts.selectedDraftId
+      : null);
   let selected: KnowledgeTrainerLegalTextDraftDto | null = null;
   if (selectedId) {
     const { data, error } = await supabaseAdmin
@@ -906,7 +966,7 @@ async function loadLegalTextDraftsForDocument(
     })),
   );
 
-  return { drafts, selected, frontier, summary };
+  return { drafts, selected, frontier, summary, review_tree, selected_review_node };
 }
 
 async function loadSourceNotesForDocument(

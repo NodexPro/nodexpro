@@ -46,6 +46,7 @@ function safeText(v: unknown): string {
 
 const LEGAL_TEXT_DRAFT_COMMANDS = new Set([
   'create_legal_text_draft_from_candidate',
+  'prepare_legal_text_drafts_for_structure',
   'update_legal_text_draft_text',
   'update_legal_text_draft_identity',
   'reparent_legal_text_draft',

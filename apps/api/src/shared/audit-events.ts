@@ -244,6 +244,7 @@ export const AUDIT_ACTIONS = {
   LEGAL_TRAINING_LEGAL_TEXT_DRAFT_BOUNDARY_SET: 'legal_training_legal_text_draft_boundary_set',
   LEGAL_TRAINING_LEGAL_TEXT_DRAFT_RESET_TO_SOURCE: 'legal_training_legal_text_draft_reset_to_source',
   LEGAL_TRAINING_LEGAL_TEXT_DRAFT_REVIEW_STATUS_SET: 'legal_training_legal_text_draft_review_status_set',
+  LEGAL_TRAINING_LEGAL_TEXT_DRAFTS_PREPARED: 'legal_training_legal_text_drafts_prepared',
   TAX_STRATEGY_CREATED: 'tax_strategy_created',
   TAX_STRATEGY_METADATA_UPDATED: 'tax_strategy_metadata_updated',
   TAX_STRATEGY_EXCLUSIVE_GROUP_CREATED: 'tax_strategy_exclusive_group_created',

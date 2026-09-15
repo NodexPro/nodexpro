@@ -244,9 +244,7 @@ function TrainerReview({
   const [parentCandidateId, setParentCandidateId] = useState('');
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
-  const [workspace, setWorkspace] = useState<'draft' | 'structure'>(
-    (document.legal_text_drafts ?? []).length ? 'draft' : 'structure',
-  );
+  const [workspace, setWorkspace] = useState<'draft' | 'structure'>('draft');
   const fileAccess = document.original_file_access;
   const pageUrl = fileAccess?.url ?? '';
   const missingFileRefreshFor = useRef<string | null>(null);
@@ -370,6 +368,8 @@ function TrainerReview({
       <div>
         Document: <strong>{document.original_filename}</strong>
       </div>
+      {workspace === 'structure' ? (
+        <>
       <div>Pages: {document.page_count || '—'}</div>
       <div>Status: {document.job_status_label}</div>
       <div>
@@ -417,6 +417,8 @@ function TrainerReview({
           </span>
         ) : null}
       </div>
+        </>
+      ) : null}
       <div className="nx-trainer-workspace-tabs">
         <button
           type="button"
@@ -440,11 +442,17 @@ function TrainerReview({
           documentId={document.id}
           drafts={document.legal_text_drafts ?? []}
           selected={document.selected_legal_text_draft}
+          selectedNode={document.selected_legal_text_review_node}
+          reviewTree={document.legal_text_review_tree ?? []}
           frontier={document.legal_text_draft_create_frontier ?? []}
+          summary={document.legal_text_draft_summary}
           kindLabels={taxKnowledge.legal_library.node_kinds.map((kind) => kind.label)}
           canOpenOriginal={document.can_open_original}
+          canPrepare={(trainer.allowed_actions ?? []).some(
+            (row) => row.action_key === 'prepare_legal_text_drafts_for_structure' && row.enabled,
+          )}
           busy={busy}
-          onSelectDraft={(draftId) => onSelectLegalTextDraft(document.id, draftId)}
+          onSelectNode={(nodeId) => onSelectLegalTextDraft(document.id, nodeId)}
           onCommand={onCommand}
         />
       ) : null}

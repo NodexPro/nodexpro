@@ -308,6 +308,8 @@ export function OwnerLegalLibraryPanel({
   const [editDomainId, setEditDomainId] = useState('');
   const [editNodeId, setEditNodeId] = useState('');
   const [uploadSource, setUploadSource] = useState(null as OwnerLegalLibrarySource | null);
+  const [showCanonicalLibrary, setShowCanonicalLibrary] = useState(false);
+  const draftWorkspaceOpen = Boolean(library.trainer_upload.selected_document);
 
   const closeDialog = () => {
     setDialogKind(null);
@@ -457,6 +459,20 @@ export function OwnerLegalLibraryPanel({
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+      {draftWorkspaceOpen ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+          <button
+            type="button"
+            className="nx-btn nx-btn-taxes-compact"
+            onClick={() => setShowCanonicalLibrary((open) => !open)}
+          >
+            {showCanonicalLibrary
+              ? 'Hide legal library inventory'
+              : 'Show legal library (canonical / test inventory)'}
+          </button>
+        </div>
+      ) : null}
+      {!draftWorkspaceOpen || showCanonicalLibrary ? (
       <SectionCard>
         <h2 style={{ margin: 0, fontSize: 18 }}>Legal Library</h2>
         {!selectedCountry ? (
@@ -560,9 +576,10 @@ export function OwnerLegalLibraryPanel({
             </div>
           </div>
         )}
-      </SectionCard>
+        </SectionCard>
+      ) : null}
 
-      {!schemaMissing && selectedCountry ? (
+      {(!draftWorkspaceOpen || showCanonicalLibrary) && !schemaMissing && selectedCountry ? (
         <SectionCard>
           <h2 style={{ margin: 0, fontSize: 18 }}>Unassigned / Technical</h2>
           {library.unassigned_sources.length || library.unassigned_rules.length ? (
@@ -621,6 +638,7 @@ export function OwnerLegalLibraryPanel({
         onSelectLegalTextDraft={onSelectLegalTextDraft}
       />
 
+      {!draftWorkspaceOpen || showCanonicalLibrary ? (
       <details>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Technical registry</summary>
         <div style={{ marginTop: 12 }}>
@@ -637,6 +655,7 @@ export function OwnerLegalLibraryPanel({
           />
         </div>
       </details>
+      ) : null}
 
       {dialogKind ? (
         <div className="nx-modal-overlay" role="presentation" onClick={closeDialog}>

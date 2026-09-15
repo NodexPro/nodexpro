@@ -208,7 +208,10 @@ test('future structure rebuild cannot own or reset Owner drafts', () => {
     typesSrc,
     /WORKER_ALLOWED_TABLES = \[[\s\S]*legal_ingestion_legal_text_drafts/,
   );
-  const updateText = draftService().slice(draftService().indexOf('export async function updateLegalTextDraftText'));
+  const updateText = draftService().slice(
+    draftService().indexOf('export async function updateLegalTextDraftText'),
+    draftService().indexOf('export async function updateLegalTextDraftIdentity'),
+  );
   assert.doesNotMatch(updateText, /active_structure_run_id/);
 });
 

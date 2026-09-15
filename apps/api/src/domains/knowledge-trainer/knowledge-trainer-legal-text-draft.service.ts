@@ -14,8 +14,10 @@ import {
   findDraftIdentityConflict,
   hierarchyRankCompatible,
   isLegalTextDraftReviewStatus,
+  parentFirstMissingCandidates,
   persistableMonotonicIndex,
   reparentScopeError,
+  resolveAllHeadingCursors,
   validateDraftReady,
   type DraftPageEvidence,
   type DraftStructureCandidate,
@@ -29,6 +31,10 @@ export type LegalTextDraftCommandResult = {
   document_id: string;
   draft_id: string;
   duplicate?: boolean;
+  created_count?: number;
+  skipped_existing_count?: number;
+  remaining_count?: number;
+  uncertain_count?: number;
 };
 
 function asUuid(value: unknown, field: string): string {
@@ -646,6 +652,210 @@ export async function setLegalTextDraftReviewStatus(
     review_status: payload.review_status,
   });
   return { country_code: String(draft.country_code), document_id: String(draft.document_id), draft_id: draftId };
+}
+
+const PREPARE_TIME_BUDGET_MS = 22_000;
+const PREPARE_INSERT_CHUNK = 25;
+const PREPARE_CANDIDATE_SELECT =
+  'id, job_id, document_id, country_code, tax_source_id, candidate_kind, kind_label, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, parent_candidate_id, structure_run_id, sort_order, page_start, page_end, source_page, source_item_start, source_item_end, source_line_index, source_bbox';
+
+/**
+ * Parent-first create of missing Owner Drafts for the active READY structure run.
+ * Skips existing source_candidate_id rows. Never updates Owner edits. Never downloads PDF.
+ */
+export async function prepareLegalTextDraftsForStructure(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<LegalTextDraftCommandResult> {
+  const documentId = asUuid(payload.legal_ingestion_document_id ?? payload.document_id, 'legal_ingestion_document_id');
+  const { data: document, error: documentError } = await supabaseAdmin
+    .from('legal_ingestion_documents')
+    .select('id, country_code, tax_source_id')
+    .eq('id', documentId)
+    .maybeSingle();
+  if (documentError) throw documentError;
+  if (!document) throw notFound('Legal training document not found');
+
+  const { data: job, error: jobError } = await supabaseAdmin
+    .from('legal_ingestion_jobs')
+    .select('id, document_id, country_code, active_structure_run_id')
+    .eq('document_id', documentId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (jobError) throw jobError;
+  if (!job) throw conflict('No extraction job for this document');
+  const activeRunId = job.active_structure_run_id == null ? null : String(job.active_structure_run_id);
+  if (!activeRunId) throw conflict('No active complete structure run');
+  const { data: run, error: runError } = await supabaseAdmin
+    .from('legal_ingestion_structure_runs')
+    .select('id, status')
+    .eq('id', activeRunId)
+    .maybeSingle();
+  if (runError) throw runError;
+  if (!run || String(run.status) !== 'ready') throw conflict('Active structure run is not READY');
+
+  const runCandidates = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+    supabaseAdmin
+      .from('legal_ingestion_candidates')
+      .select(PREPARE_CANDIDATE_SELECT)
+      .eq('structure_run_id', activeRunId)
+      .eq('candidate_kind', 'structure')
+      .order('sort_order', { ascending: true })
+      .range(from, to),
+  );
+  const existingRows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+    supabaseAdmin
+      .from('legal_ingestion_legal_text_drafts')
+      .select('id, source_candidate_id')
+      .eq('document_id', documentId)
+      .order('created_at', { ascending: true })
+      .range(from, to),
+  );
+  const draftIdByCandidate = new Map<string, string>();
+  for (const row of existingRows) {
+    if (row.source_candidate_id == null) continue;
+    draftIdByCandidate.set(String(row.source_candidate_id), String(row.id));
+  }
+  const skippedExisting = draftIdByCandidate.size;
+  const candidateById = new Map(runCandidates.map((row) => [String(row.id), row]));
+  const missing = parentFirstMissingCandidates(
+    runCandidates.map((row) => ({
+      id: String(row.id),
+      parent_candidate_id: row.parent_candidate_id == null ? null : String(row.parent_candidate_id),
+      candidate_kind: row.candidate_kind == null ? null : String(row.candidate_kind),
+      sort_order: Number(row.sort_order ?? 0),
+    })),
+    new Set(draftIdByCandidate.keys()),
+  );
+  const pages = await loadPagesForJob(String(job.id));
+  const ordered: DraftStructureCandidate[] = runCandidates.map((row) => asDraftStructureCandidate(row));
+  const orderedById = new Map(ordered.map((row) => [row.id, row]));
+  const resolutions = resolveAllHeadingCursors(ordered, pages);
+  const started = Date.now();
+  const pendingInserts: Record<string, unknown>[] = [];
+  const pendingCandidateIds = new Set<string>();
+  let createdCount = 0;
+  let uncertainCount = 0;
+  let lastDraftId = existingRows[0] ? String(existingRows[0].id) : '';
+
+  const applyInserted = (data: Array<{ id: unknown; source_candidate_id?: unknown }> | null) => {
+    for (const row of data ?? []) {
+      createdCount += 1;
+      lastDraftId = String(row.id);
+      if (row.source_candidate_id) draftIdByCandidate.set(String(row.source_candidate_id), String(row.id));
+    }
+  };
+
+  const flush = async () => {
+    if (!pendingInserts.length) return;
+    const chunk = pendingInserts.splice(0, pendingInserts.length);
+    pendingCandidateIds.clear();
+    const { data, error } = await supabaseAdmin
+      .from('legal_ingestion_legal_text_drafts')
+      .insert(chunk)
+      .select('id, source_candidate_id');
+    throwIfDraftSchemaMissing(error);
+    if (error && String(error.code) === '23505') {
+      for (const row of chunk) {
+        const sourceCandidateId = String(row.source_candidate_id);
+        if (draftIdByCandidate.has(sourceCandidateId)) continue;
+        const one = await supabaseAdmin
+          .from('legal_ingestion_legal_text_drafts')
+          .insert(row)
+          .select('id, source_candidate_id')
+          .maybeSingle();
+        throwIfDraftSchemaMissing(one.error);
+        if (one.error && String(one.error.code) === '23505') continue;
+        if (one.error) throw one.error;
+        if (one.data) applyInserted([one.data]);
+      }
+      return;
+    }
+    if (error) throw error;
+    applyInserted(data);
+  };
+
+  for (const missingRow of missing) {
+    if (Date.now() - started > PREPARE_TIME_BUDGET_MS) break;
+    const parentCandidateId = missingRow.parent_candidate_id;
+    if (parentCandidateId && pendingCandidateIds.has(parentCandidateId)) await flush();
+    const parentDraftId = parentCandidateId ? draftIdByCandidate.get(parentCandidateId) ?? null : null;
+    if (createDraftRequiresParentFirst(parentCandidateId, parentDraftId)) continue;
+    const current = orderedById.get(missingRow.id);
+    const candidate = candidateById.get(missingRow.id);
+    if (!current || !candidate) continue;
+    const captured = captureExclusiveSourceBody(current, ordered, pages, resolutions);
+    const reviewStatus = captured.boundary_status === 'uncertain' ? 'needs_review' : 'draft';
+    if (captured.boundary_status === 'uncertain') uncertainCount += 1;
+    const nested = Array.isArray(candidate.identifier_nested_components)
+      ? candidate.identifier_nested_components.map((item) => String(item))
+      : [];
+    pendingInserts.push({
+      country_code: String(candidate.country_code ?? document.country_code),
+      document_id: documentId,
+      job_id: String(candidate.job_id ?? job.id),
+      tax_source_id: String(candidate.tax_source_id ?? document.tax_source_id),
+      structure_run_id: activeRunId,
+      source_candidate_id: missingRow.id,
+      kind_label: String(candidate.kind_label ?? '').trim() || 'סעיף',
+      source_display_identifier:
+        candidate.source_display_identifier == null ? null : String(candidate.source_display_identifier),
+      normalized_machine_identifier:
+        candidate.normalized_machine_identifier == null ? null : String(candidate.normalized_machine_identifier),
+      identifier_base_number: candidate.identifier_base_number == null ? null : String(candidate.identifier_base_number),
+      identifier_letter_suffix:
+        candidate.identifier_letter_suffix == null ? null : String(candidate.identifier_letter_suffix),
+      identifier_nested_components: nested,
+      printed_marker: candidate.printed_marker == null ? null : String(candidate.printed_marker),
+      title: candidate.title == null ? null : String(candidate.title),
+      parent_draft_id: parentDraftId,
+      original_source_text: captured.text,
+      draft_legal_text: captured.text,
+      original_source_page_start: captured.page_start,
+      original_source_page_end: captured.page_end,
+      original_source_item_start: captured.item_start,
+      original_source_item_end: persistableMonotonicIndex(captured.item_start, captured.item_end),
+      original_source_line_start: captured.line_start,
+      original_source_line_end: persistableMonotonicIndex(captured.line_start, captured.line_end),
+      original_source_bbox: parseSourceBBox(candidate.source_bbox),
+      original_subtree_text: captured.subtree_text,
+      original_subtree_page_start: captured.page_start,
+      original_subtree_page_end: captured.subtree_page_end,
+      original_subtree_item_start: captured.item_start,
+      original_subtree_item_end: persistableMonotonicIndex(captured.item_start, captured.subtree_item_end),
+      original_subtree_line_start: captured.subtree_line_start,
+      original_subtree_line_end: persistableMonotonicIndex(captured.subtree_line_start, captured.subtree_line_end),
+      text_boundary_status: captured.boundary_status,
+      review_status: reviewStatus,
+      created_by: ctx.user.id,
+      updated_by: ctx.user.id,
+    });
+    pendingCandidateIds.add(missingRow.id);
+    if (pendingInserts.length >= PREPARE_INSERT_CHUNK) await flush();
+  }
+  await flush();
+
+  const remaining = Math.max(0, missing.length - createdCount);
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_LEGAL_TEXT_DRAFTS_PREPARED, documentId, {
+    country_code: document.country_code,
+    document_id: documentId,
+    structure_run_id: activeRunId,
+    created_count: createdCount,
+    skipped_existing_count: skippedExisting,
+    remaining_count: remaining,
+    uncertain_count: uncertainCount,
+  });
+  if (!lastDraftId) lastDraftId = [...draftIdByCandidate.values()][0] ?? '';
+  return {
+    country_code: String(document.country_code),
+    document_id: documentId,
+    draft_id: lastDraftId,
+    created_count: createdCount,
+    skipped_existing_count: skippedExisting,
+    remaining_count: remaining,
+    uncertain_count: uncertainCount,
+  };
 }
 
 export { loadDraftsForDocument };

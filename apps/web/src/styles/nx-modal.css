@@ -2868,11 +2868,47 @@
   background: #fff;
 }
 
-.nx-legal-draft-pdf {
-  width: 100%;
-  min-height: 360px;
+.nx-legal-draft-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13;
+  color: #374151;
+}
+
+.nx-legal-draft-review-flag {
+  font-size: 13;
+  color: #111827;
+}
+
+.nx-legal-draft-status.is-not_prepared {
+  color: #6b7280;
+}
+
+.nx-legal-draft-status.is-needs_review {
+  color: #92400e;
+}
+
+.nx-legal-draft-status.is-draft {
+  color: #1d4ed8;
+}
+
+.nx-legal-draft-status.is-reviewed {
+  color: #166534;
+}
+
+.nx-legal-draft-advanced {
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.nx-legal-draft-advanced summary {
+  cursor: pointer;
+  font-weight: 600;
 }
 
 .nx-legal-draft-review .nx-btn,
