@@ -410,6 +410,29 @@ export type KnowledgeTrainerSourceNoteSummaryDto = {
   by_classification: Record<SourceNoteClassification, number>;
 };
 
+export type KnowledgeTrainerLegalTextDraftListItemDto = {
+  id: string;
+  kind_label: string | null;
+  display_identifier: string | null;
+  display_label: string;
+  printed_marker: string | null;
+  title: string | null;
+  parent_draft_id: string | null;
+  parent_display_label: string | null;
+  text_boundary_status: 'certain' | 'uncertain' | 'owner_defined';
+  review_status: 'draft' | 'needs_review' | 'ready';
+  source_page_start: number | null;
+  source_page_end: number | null;
+  unresolved_source_note_count: number;
+  subtree_unresolved_source_note_count: number;
+  provenance: {
+    structure_run_id: string | null;
+    source_candidate_id: string | null;
+  };
+  created_at: string;
+  updated_at: string;
+};
+
 export type KnowledgeTrainerLegalTextDraftDto = {
   id: string;
   kind_label: string | null;
@@ -432,6 +455,10 @@ export type KnowledgeTrainerLegalTextDraftDto = {
   subtree_page_end: number | null;
   subtree_item_start: number | null;
   subtree_item_end: number | null;
+  owner_source_page_start: number | null;
+  owner_source_page_end: number | null;
+  owner_source_item_start: number | null;
+  owner_source_item_end: number | null;
   provenance: {
     structure_run_id: string | null;
     source_candidate_id: string | null;
@@ -442,6 +469,16 @@ export type KnowledgeTrainerLegalTextDraftDto = {
   subtree_unresolved_source_note_count: number;
   created_at: string;
   updated_at: string;
+};
+
+export type KnowledgeTrainerDraftCreateFrontierItemDto = {
+  candidate_id: string;
+  parent_candidate_id: string | null;
+  parent_draft_id: string | null;
+  parent_draft_required: boolean;
+  kind_label: string | null;
+  display_identifier: string | null;
+  display_label: string;
 };
 
 export type KnowledgeTrainerLegalTextDraftSummaryDto = {
@@ -485,7 +522,9 @@ export type KnowledgeTrainerSliceDto = {
     layout_evidence: StructureLayoutEvidenceDto;
     layout_readiness: TrainerLayoutReadinessDto;
     structure_run: StructureRunReadDto;
-    legal_text_drafts: KnowledgeTrainerLegalTextDraftDto[];
+    legal_text_drafts: KnowledgeTrainerLegalTextDraftListItemDto[];
+    selected_legal_text_draft: KnowledgeTrainerLegalTextDraftDto | null;
+    legal_text_draft_create_frontier: KnowledgeTrainerDraftCreateFrontierItemDto[];
     legal_text_draft_summary: KnowledgeTrainerLegalTextDraftSummaryDto;
   } | null;
   allowed_actions: Array<{

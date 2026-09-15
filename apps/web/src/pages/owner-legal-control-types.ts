@@ -495,6 +495,61 @@ export type OwnerSourceNoteSummary = {
   by_classification: Record<string, number>;
 };
 
+export type OwnerLegalTextDraftListItem = {
+  id: string;
+  kind_label: string | null;
+  display_identifier: string | null;
+  display_label: string;
+  printed_marker: string | null;
+  title: string | null;
+  parent_draft_id: string | null;
+  parent_display_label: string | null;
+  text_boundary_status: string;
+  review_status: string;
+  source_page_start: number | null;
+  source_page_end: number | null;
+  unresolved_source_note_count: number;
+  subtree_unresolved_source_note_count: number;
+  provenance: { structure_run_id: string | null; source_candidate_id: string | null };
+  created_at: string;
+  updated_at: string;
+};
+
+export type OwnerLegalTextDraft = OwnerLegalTextDraftListItem & {
+  original_source_text: string;
+  original_subtree_text: string | null;
+  draft_legal_text: string;
+  source_item_start: number | null;
+  source_item_end: number | null;
+  subtree_page_start: number | null;
+  subtree_page_end: number | null;
+  subtree_item_start: number | null;
+  subtree_item_end: number | null;
+  owner_source_page_start: number | null;
+  owner_source_page_end: number | null;
+  owner_source_item_start: number | null;
+  owner_source_item_end: number | null;
+  source_notes: OwnerSourceNote[];
+  subtree_source_notes: OwnerSourceNote[];
+};
+
+export type OwnerLegalTextDraftCreateFrontierItem = {
+  candidate_id: string;
+  parent_candidate_id: string | null;
+  parent_draft_id: string | null;
+  parent_draft_required: boolean;
+  kind_label: string | null;
+  display_identifier: string | null;
+  display_label: string;
+};
+
+export type OwnerLegalTextDraftCounts = {
+  all: number;
+  draft: number;
+  needs_review: number;
+  ready: number;
+};
+
 export type OwnerKnowledgeTrainerSlice = {
   available: boolean;
   status_label: string;
@@ -536,6 +591,10 @@ export type OwnerKnowledgeTrainerSlice = {
     layout_evidence: OwnerStructureLayoutEvidence;
     layout_readiness: OwnerTrainerLayoutReadiness;
     structure_run: OwnerStructureRun | null;
+    legal_text_drafts: OwnerLegalTextDraftListItem[];
+    selected_legal_text_draft: OwnerLegalTextDraft | null;
+    legal_text_draft_create_frontier: OwnerLegalTextDraftCreateFrontierItem[];
+    legal_text_draft_summary: OwnerLegalTextDraftCounts;
   } | null;
   allowed_actions: TaxKnowledgeAllowedAction[];
 };

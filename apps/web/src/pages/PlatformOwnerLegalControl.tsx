@@ -44,6 +44,39 @@ function safeText(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+const LEGAL_TEXT_DRAFT_COMMANDS = new Set([
+  'create_legal_text_draft_from_candidate',
+  'update_legal_text_draft_text',
+  'update_legal_text_draft_identity',
+  'reparent_legal_text_draft',
+  'set_legal_text_draft_boundary',
+  'reset_legal_text_draft_to_source',
+  'set_legal_text_draft_review_status',
+]);
+
+function trainerSelectionFromAggregate(aggregate: unknown): { documentId: string; draftId: string } {
+  const rec = aggregate && typeof aggregate === 'object' ? (aggregate as UnknownRecord) : null;
+  const taxKnowledge = rec?.tax_knowledge && typeof rec.tax_knowledge === 'object' ? (rec.tax_knowledge as UnknownRecord) : null;
+  const library =
+    taxKnowledge?.legal_library && typeof taxKnowledge.legal_library === 'object'
+      ? (taxKnowledge.legal_library as UnknownRecord)
+      : null;
+  const trainer =
+    library?.trainer_upload && typeof library.trainer_upload === 'object' ? (library.trainer_upload as UnknownRecord) : null;
+  const document =
+    trainer?.selected_document && typeof trainer.selected_document === 'object'
+      ? (trainer.selected_document as UnknownRecord)
+      : null;
+  const draft =
+    document?.selected_legal_text_draft && typeof document.selected_legal_text_draft === 'object'
+      ? (document.selected_legal_text_draft as UnknownRecord)
+      : null;
+  return {
+    documentId: typeof document?.id === 'string' ? document.id : '',
+    draftId: typeof draft?.id === 'string' ? draft.id : '',
+  };
+}
+
 export function PlatformOwnerLegalControl() {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -56,6 +89,7 @@ export function PlatformOwnerLegalControl() {
   const [panel, setPanel] = useState(null as UnknownRecord | null);
   const [taxKnowledgeCountryQuery, setTaxKnowledgeCountryQuery] = useState('');
   const [trainerDocumentQuery, setTrainerDocumentQuery] = useState('');
+  const [trainerDraftQuery, setTrainerDraftQuery] = useState('');
   const [pendingTaxKnowledgeCountry, setPendingTaxKnowledgeCountry] = useState(null as string | null);
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandModal, setCommandModal] = useState(null as CommandModalState | null);
@@ -85,6 +119,7 @@ export function PlatformOwnerLegalControl() {
         qs.set('strategy_engine_country_code', countryParams.strategy_engine_country_code);
       }
       if (trainerDocumentQuery) qs.set('tax_knowledge_trainer_document_id', trainerDocumentQuery);
+      if (trainerDraftQuery) qs.set('tax_knowledge_trainer_legal_text_draft_id', trainerDraftQuery);
 
       const path = qs.toString() ? `${OWNER.legalControl}?${qs.toString()}` : OWNER.legalControl;
       const p = (await apiJson(path)) as UnknownRecord;
@@ -99,7 +134,7 @@ export function PlatformOwnerLegalControl() {
     } finally {
       setLoading(false);
     }
-  }, [taxKnowledgeCountryQuery, trainerDocumentQuery]);
+  }, [taxKnowledgeCountryQuery, trainerDocumentQuery, trainerDraftQuery]);
 
   useEffect(() => {
     if (auth.status === 'authenticated') {
@@ -122,6 +157,11 @@ export function PlatformOwnerLegalControl() {
       try {
         if (out.refreshed?.aggregate_key === 'owner_legal_control_panel_aggregate') {
           setPanel(out.refreshed.aggregate);
+          if (LEGAL_TEXT_DRAFT_COMMANDS.has(command)) {
+            const selected = trainerSelectionFromAggregate(out.refreshed.aggregate);
+            if (selected.documentId) setTrainerDocumentQuery(selected.documentId);
+            if (selected.draftId) setTrainerDraftQuery(selected.draftId);
+          }
         }
       } catch (refreshError) {
         setError(userFacingApiMessage(refreshError));
@@ -432,6 +472,10 @@ export function PlatformOwnerLegalControl() {
               }
             }}
             onReload={reloadTrainerSilently}
+            onSelectLegalTextDraft={(documentId, draftId) => {
+              setTrainerDocumentQuery(documentId);
+              setTrainerDraftQuery(draftId);
+            }}
           />
         ) : null}
 

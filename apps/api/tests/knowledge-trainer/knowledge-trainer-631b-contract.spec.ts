@@ -18,7 +18,6 @@ const draftService = () => readRepo('apps/api/src/domains/knowledge-trainer/know
 const persist = () => readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-structure.service.ts');
 const worker = () => readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-worker.runtime.ts');
 const commands = () => readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-commands.service.ts');
-const webPanel = () => readRepo('apps/web/src/pages/owner-knowledge-trainer-panel.tsx');
 
 test('TAX-631B never invents page_start item 0 as a legal-text boundary', () => {
   const pure = draftPure();
@@ -62,7 +61,7 @@ test('original_source_text remains immutable after create; reset cannot rewrite 
   assert.doesNotMatch(fnBody('setLegalTextDraftBoundary', 'resetLegalTextDraftToSource'), /original_source_text:/);
 });
 
-test('TAX-631B does not write canonical law, rebuild candidates, run worker, or touch UI/PROD migrations', () => {
+test('TAX-631B does not write canonical law, rebuild candidates, run worker, or add 631/632 migrations', () => {
   assert.doesNotMatch(draftService(), /from\('tax_legal_nodes'\)\s*\.insert/);
   assert.doesNotMatch(draftService(), /from\('tax_rules'\)/);
   assert.doesNotMatch(draftService(), /persistStructureCandidatesForJob/);
@@ -70,7 +69,6 @@ test('TAX-631B does not write canonical law, rebuild candidates, run worker, or 
   assert.doesNotMatch(commands(), /runKnowledgeTrainerWorkerTick/);
   assert.doesNotMatch(persist(), /legal_ingestion_legal_text_drafts/);
   assert.doesNotMatch(worker(), /legal_ingestion_legal_text_drafts/);
-  assert.doesNotMatch(webPanel(), /create_legal_text_draft_from_candidate/);
   for (const rel of [
     'supabase/migrations/620_owner_country_legal_access.sql',
     'supabase/migrations/629_legal_ingestion_source_evidence.sql',

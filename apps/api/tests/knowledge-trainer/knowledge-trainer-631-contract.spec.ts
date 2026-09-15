@@ -231,7 +231,7 @@ test('source notes are exposed as evidence, not copied into drafts or canonical 
   assert.doesNotMatch(service, /accepted_tax_legal_node_id/);
 });
 
-test('TAX-631 does not rebuild, start worker, write canonical law, or touch 620-630 / UI / PROD', () => {
+test('TAX-631 does not rebuild, start worker, write canonical law, or add a 631 migration', () => {
   for (const rel of [
     'supabase/migrations/620_owner_country_legal_access.sql',
     'supabase/migrations/621_country_localization.sql',
@@ -248,8 +248,6 @@ test('TAX-631 does not rebuild, start worker, write canonical law, or touch 620-
     assert.equal(existsSync(join(repoRoot, rel)), true);
   }
   assert.equal(existsSync(join(repoRoot, 'supabase/migrations/631_legal_text_draft_commands.sql')), false);
-  const webPanel = readRepo('apps/web/src/pages/owner-knowledge-trainer-panel.tsx');
-  assert.doesNotMatch(webPanel, /create_legal_text_draft_from_candidate/);
   assert.doesNotMatch(commands(), /runKnowledgeTrainerWorkerTick/);
   assert.doesNotMatch(draftService(), /persistStructureCandidatesForJob/);
 });

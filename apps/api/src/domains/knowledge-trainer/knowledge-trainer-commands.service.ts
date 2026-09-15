@@ -88,6 +88,7 @@ async function refreshed(
   ctx: RequestContext,
   countryCode: string,
   documentId?: string | null,
+  legalTextDraftId?: string | null,
 ): Promise<KnowledgeTrainerCommandResponse['refreshed']> {
   return {
     aggregate_key: 'owner_legal_control_panel_aggregate',
@@ -95,6 +96,7 @@ async function refreshed(
       tax_knowledge_country_code: countryCode,
       strategy_engine_country_code: countryCode,
       tax_knowledge_trainer_document_id: documentId ?? undefined,
+      tax_knowledge_trainer_legal_text_draft_id: legalTextDraftId ?? undefined,
     }),
   };
 }
@@ -791,7 +793,7 @@ async function handleLegalTextDraftCommand(
     ok: true,
     command,
     duplicate: result.duplicate,
-    refreshed: await refreshed(ctx, result.country_code, result.document_id),
+    refreshed: await refreshed(ctx, result.country_code, result.document_id, result.draft_id),
   };
 }
 

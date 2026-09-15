@@ -101,6 +101,9 @@ export function userFacingApiMessage(e: unknown): string {
     ) {
       return m;
     }
+    if (c === 'PARENT_DRAFT_REQUIRED') {
+      return 'Create the parent Owner Draft first.';
+    }
     if (e.status === 409) {
       return 'קונפליקט גרסה או עדכון במקביל. רענן את הנתונים ונסה שוב.';
     }

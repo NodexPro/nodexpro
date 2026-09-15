@@ -2744,3 +2744,157 @@
     align-self: center;
   }
 }
+
+.nx-legal-draft-review {
+  display: grid;
+  gap: 12px;
+}
+
+.nx-legal-draft-review-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.nx-legal-draft-review-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1.2fr) minmax(280px, 1.1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.nx-legal-draft-tree,
+.nx-legal-draft-source,
+.nx-legal-draft-editor {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nx-legal-draft-tree-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.nx-legal-draft-tree-list .nx-legal-draft-tree-list {
+  margin-inline-start: 14px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid #e5e7eb;
+}
+
+.nx-legal-draft-tree-item {
+  display: block;
+  width: 100%;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nx-legal-draft-tree-item.is-selected {
+  background: #eef2ff;
+  font-weight: 600;
+}
+
+.nx-legal-draft-status {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.nx-legal-draft-readonly {
+  white-space: pre-wrap;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 10px;
+  min-height: 120px;
+  max-height: 360px;
+  overflow: auto;
+  font-size: 13px;
+  margin: 0;
+}
+
+.nx-legal-draft-textarea {
+  min-height: 180px;
+  resize: vertical;
+}
+
+.nx-legal-draft-banner {
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nx-legal-draft-frontier {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.nx-legal-draft-boundary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.nx-legal-draft-notes {
+  display: grid;
+  gap: 8px;
+}
+
+.nx-legal-draft-note {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.nx-legal-draft-pdf {
+  width: 100%;
+  min-height: 360px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.nx-legal-draft-review .nx-btn,
+.nx-trainer-workspace-tabs .nx-btn {
+  border-radius: 6px;
+  min-width: 96px;
+  height: auto;
+  min-height: 0;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nx-trainer-workspace-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 1100px) {
+  .nx-legal-draft-review-grid {
+    grid-template-columns: 1fr;
+  }
+}

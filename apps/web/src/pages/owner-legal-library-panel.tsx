@@ -261,6 +261,7 @@ export function OwnerLegalLibraryPanel({
   onCommand,
   onUpload,
   onReload,
+  onSelectLegalTextDraft,
 }: {
   taxKnowledge: TaxKnowledgeAggregate;
   countryPacks: unknown;
@@ -272,6 +273,7 @@ export function OwnerLegalLibraryPanel({
   onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
   onUpload: (payload: UnknownRecord) => Promise<void>;
   onReload: () => void;
+  onSelectLegalTextDraft: (documentId: string, draftId: string) => void;
 }) {
   const library = taxKnowledge.legal_library;
   const selectedCountry = taxKnowledge.selected_country_code;
@@ -616,6 +618,7 @@ export function OwnerLegalLibraryPanel({
         onCommand={onCommand}
         onUpload={onUpload}
         onReload={onReload}
+        onSelectLegalTextDraft={onSelectLegalTextDraft}
       />
 
       <details>

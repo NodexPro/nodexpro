@@ -4,6 +4,7 @@ import { summarizeLayoutReadiness } from './knowledge-trainer-layout.pure.js';
 import { fetchAllPaged } from './knowledge-trainer-pagination.js';
 import {
   displayDraftLabel,
+  draftCreateFrontier,
   notesOverlappingDraftSpan,
 } from './knowledge-trainer-legal-text-draft.pure.js';
 import { attachStructureReviewModel, describeStoredLayoutEvidence } from './knowledge-trainer-review.pure.js';
@@ -24,7 +25,9 @@ import {
 import type {
   KnowledgeTrainerCandidateDto,
   KnowledgeTrainerDocumentSummaryDto,
+  KnowledgeTrainerDraftCreateFrontierItemDto,
   KnowledgeTrainerLegalTextDraftDto,
+  KnowledgeTrainerLegalTextDraftListItemDto,
   KnowledgeTrainerLegalTextDraftSummaryDto,
   KnowledgeTrainerSliceDto,
   KnowledgeTrainerSourceNoteAnchorDto,
@@ -42,6 +45,7 @@ export type KnowledgeTrainerReadOpts = {
   document_id?: string | null;
   page_no?: number | null;
   tax_source_id?: string | null;
+  legal_text_draft_id?: string | null;
 };
 
 function action(actionKey: string, enabled: boolean, required: Record<string, string>) {
@@ -424,7 +428,12 @@ export async function buildKnowledgeTrainerSlice(
       structure_tree: reviewed.structure_tree,
       ocr_page_numbers: ocrPageNumbers,
       structure_run: structureRun,
-      ...mapLegalTextDraftSlice(await loadLegalTextDraftsForDocument(selectedSummary.id, sourceEvidence.notes)),
+      ...mapLegalTextDraftSlice(
+        await loadLegalTextDraftsForDocument(selectedSummary.id, sourceEvidence.notes, {
+          selectedDraftId: opts?.legal_text_draft_id,
+          candidates: reviewed.candidates,
+        }),
+      ),
       layout_evidence: describeStoredLayoutEvidence(pages ?? []),
       layout_readiness: {
         ...layoutSummary,
@@ -620,8 +629,12 @@ async function loadSourceNotesForActiveRun(activeRunId: string | null): Promise<
   }
 }
 
-const LEGAL_TEXT_DRAFT_READ_SELECT =
-  'id, kind_label, source_display_identifier, printed_marker, title, parent_draft_id, original_source_text, original_subtree_text, draft_legal_text, text_boundary_status, review_status, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, original_subtree_page_start, original_subtree_page_end, original_subtree_item_start, original_subtree_item_end, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, structure_run_id, source_candidate_id, created_at, updated_at';
+type SourceNoteWithRun = KnowledgeTrainerSourceNoteDto & { structure_run_id: string | null };
+
+const LEGAL_TEXT_DRAFT_LIST_SELECT =
+  'id, kind_label, source_display_identifier, printed_marker, title, parent_draft_id, text_boundary_status, review_status, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, original_subtree_page_start, original_subtree_page_end, original_subtree_item_start, original_subtree_item_end, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, structure_run_id, source_candidate_id, created_at, updated_at';
+
+const LEGAL_TEXT_DRAFT_DETAIL_SELECT = `${LEGAL_TEXT_DRAFT_LIST_SELECT}, original_source_text, original_subtree_text, draft_legal_text`;
 
 function emptyLegalTextDraftSummary(): KnowledgeTrainerLegalTextDraftSummaryDto {
   return { all: 0, draft: 0, needs_review: 0, ready: 0 };
@@ -637,33 +650,214 @@ function asDraftReview(value: unknown): KnowledgeTrainerLegalTextDraftDto['revie
   return 'draft';
 }
 
+function optionalInt(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function draftNoteSpan(row: Record<string, unknown>): {
+  pageStart: number | null;
+  pageEnd: number | null;
+  itemStart: number | null;
+  itemEnd: number | null;
+  subtreePageStart: number | null;
+  subtreePageEnd: number | null;
+  subtreeItemStart: number | null;
+  subtreeItemEnd: number | null;
+} {
+  const boundary = asDraftBoundary(row.text_boundary_status);
+  const ownerDefined = boundary === 'owner_defined' && row.owner_source_page_start != null;
+  return {
+    pageStart: ownerDefined ? Number(row.owner_source_page_start) : optionalInt(row.original_source_page_start),
+    pageEnd: ownerDefined
+      ? Number(row.owner_source_page_end ?? row.owner_source_page_start)
+      : optionalInt(row.original_source_page_end),
+    itemStart: ownerDefined ? optionalInt(row.owner_source_item_start) : optionalInt(row.original_source_item_start),
+    itemEnd: ownerDefined ? optionalInt(row.owner_source_item_end) : optionalInt(row.original_source_item_end),
+    subtreePageStart: optionalInt(row.original_subtree_page_start),
+    subtreePageEnd: optionalInt(row.original_subtree_page_end),
+    subtreeItemStart: optionalInt(row.original_subtree_item_start),
+    subtreeItemEnd: optionalInt(row.original_subtree_item_end),
+  };
+}
+
+function draftNotesForSpan(
+  scopedNotes: SourceNoteWithRun[],
+  span: { page_start: number | null; page_end: number | null; item_start: number | null; item_end: number | null },
+): KnowledgeTrainerSourceNoteDto[] {
+  const noteEvidence = scopedNotes.map((note) => ({
+    id: note.id,
+    source_page: note.source_page,
+    source_item_start: note.source_item_start,
+    source_item_end: note.source_item_end,
+    inline_link_status: note.inline_link_status,
+  }));
+  const overlappingIds = new Set(notesOverlappingDraftSpan(noteEvidence, span).map((note) => note.id));
+  return scopedNotes.filter((note) => overlappingIds.has(note.id)).map(({ structure_run_id: _run, ...note }) => note);
+}
+
+function unresolvedNoteCount(notes: KnowledgeTrainerSourceNoteDto[]): number {
+  return notes.filter(
+    (note) => note.inline_link_status !== 'linked' || note.anchors.some((anchor) => anchor.link_status !== 'linked'),
+  ).length;
+}
+
+function mapDraftListItem(
+  row: Record<string, unknown>,
+  byId: Map<string, Record<string, unknown>>,
+  notesByRun: SourceNoteWithRun[],
+): KnowledgeTrainerLegalTextDraftListItemDto {
+  const id = String(row.id);
+  const parentId = row.parent_draft_id == null ? null : String(row.parent_draft_id);
+  const parent = parentId ? byId.get(parentId) : null;
+  const span = draftNoteSpan(row);
+  const runId = row.structure_run_id == null ? null : String(row.structure_run_id);
+  const scopedNotes = runId ? notesByRun.filter((note) => note.structure_run_id === runId) : notesByRun;
+  const sourceNotes = draftNotesForSpan(scopedNotes, {
+    page_start: span.pageStart,
+    page_end: span.pageEnd,
+    item_start: span.itemStart,
+    item_end: span.itemEnd,
+  });
+  const subtreeNotes = draftNotesForSpan(scopedNotes, {
+    page_start: span.subtreePageStart,
+    page_end: span.subtreePageEnd,
+    item_start: span.subtreeItemStart,
+    item_end: span.subtreeItemEnd,
+  });
+  const kind = row.kind_label == null ? null : String(row.kind_label);
+  const displayIdentifier = row.source_display_identifier == null ? null : String(row.source_display_identifier);
+  const title = row.title == null ? null : String(row.title);
+  return {
+    id,
+    kind_label: kind,
+    display_identifier: displayIdentifier,
+    display_label: displayDraftLabel({
+      kind_label: kind,
+      source_display_identifier: displayIdentifier,
+      title,
+    }),
+    printed_marker: row.printed_marker == null ? null : String(row.printed_marker),
+    title,
+    parent_draft_id: parentId,
+    parent_display_label: parent
+      ? displayDraftLabel({
+          kind_label: parent.kind_label == null ? null : String(parent.kind_label),
+          source_display_identifier:
+            parent.source_display_identifier == null ? null : String(parent.source_display_identifier),
+          title: parent.title == null ? null : String(parent.title),
+        })
+      : null,
+    text_boundary_status: asDraftBoundary(row.text_boundary_status),
+    review_status: asDraftReview(row.review_status),
+    source_page_start: span.pageStart,
+    source_page_end: span.pageEnd,
+    unresolved_source_note_count: unresolvedNoteCount(sourceNotes),
+    subtree_unresolved_source_note_count: unresolvedNoteCount(subtreeNotes),
+    provenance: {
+      structure_run_id: runId,
+      source_candidate_id: row.source_candidate_id == null ? null : String(row.source_candidate_id),
+    },
+    created_at: String(row.created_at ?? ''),
+    updated_at: String(row.updated_at ?? ''),
+  };
+}
+
+function mapDraftDetail(
+  row: Record<string, unknown>,
+  byId: Map<string, Record<string, unknown>>,
+  notesByRun: SourceNoteWithRun[],
+): KnowledgeTrainerLegalTextDraftDto {
+  const list = mapDraftListItem(row, byId, notesByRun);
+  const span = draftNoteSpan(row);
+  const runId = row.structure_run_id == null ? null : String(row.structure_run_id);
+  const scopedNotes = runId ? notesByRun.filter((note) => note.structure_run_id === runId) : notesByRun;
+  const sourceNotes = draftNotesForSpan(scopedNotes, {
+    page_start: span.pageStart,
+    page_end: span.pageEnd,
+    item_start: span.itemStart,
+    item_end: span.itemEnd,
+  });
+  const subtreeNotes = draftNotesForSpan(scopedNotes, {
+    page_start: span.subtreePageStart,
+    page_end: span.subtreePageEnd,
+    item_start: span.subtreeItemStart,
+    item_end: span.subtreeItemEnd,
+  });
+  return {
+    ...list,
+    original_source_text: String(row.original_source_text ?? ''),
+    original_subtree_text: row.original_subtree_text == null ? null : String(row.original_subtree_text),
+    draft_legal_text: String(row.draft_legal_text ?? ''),
+    source_item_start: span.itemStart,
+    source_item_end: span.itemEnd,
+    subtree_page_start: span.subtreePageStart,
+    subtree_page_end: span.subtreePageEnd,
+    subtree_item_start: span.subtreeItemStart,
+    subtree_item_end: span.subtreeItemEnd,
+    owner_source_page_start: optionalInt(row.owner_source_page_start),
+    owner_source_page_end: optionalInt(row.owner_source_page_end),
+    owner_source_item_start: optionalInt(row.owner_source_item_start),
+    owner_source_item_end: optionalInt(row.owner_source_item_end),
+    source_notes: sourceNotes,
+    subtree_source_notes: subtreeNotes,
+  };
+}
+
 function mapLegalTextDraftSlice(input: {
-  drafts: KnowledgeTrainerLegalTextDraftDto[];
+  drafts: KnowledgeTrainerLegalTextDraftListItemDto[];
+  selected: KnowledgeTrainerLegalTextDraftDto | null;
+  frontier: KnowledgeTrainerDraftCreateFrontierItemDto[];
   summary: KnowledgeTrainerLegalTextDraftSummaryDto;
 }): {
-  legal_text_drafts: KnowledgeTrainerLegalTextDraftDto[];
+  legal_text_drafts: KnowledgeTrainerLegalTextDraftListItemDto[];
+  selected_legal_text_draft: KnowledgeTrainerLegalTextDraftDto | null;
+  legal_text_draft_create_frontier: KnowledgeTrainerDraftCreateFrontierItemDto[];
   legal_text_draft_summary: KnowledgeTrainerLegalTextDraftSummaryDto;
 } {
   return {
     legal_text_drafts: input.drafts,
+    selected_legal_text_draft: input.selected,
+    legal_text_draft_create_frontier: input.frontier,
     legal_text_draft_summary: input.summary,
   };
+}
+
+function pickSelectedDraftId(
+  rows: Record<string, unknown>[],
+  requested?: string | null,
+): string | null {
+  if (requested && rows.some((row) => String(row.id) === requested)) return requested;
+  const root = rows.find((row) => row.parent_draft_id == null);
+  return root ? String(root.id) : rows[0] ? String(rows[0].id) : null;
 }
 
 async function loadLegalTextDraftsForDocument(
   documentId: string,
   fallbackNotes: KnowledgeTrainerSourceNoteDto[],
+  opts?: {
+    selectedDraftId?: string | null;
+    candidates?: KnowledgeTrainerCandidateDto[];
+  },
 ): Promise<{
-  drafts: KnowledgeTrainerLegalTextDraftDto[];
+  drafts: KnowledgeTrainerLegalTextDraftListItemDto[];
+  selected: KnowledgeTrainerLegalTextDraftDto | null;
+  frontier: KnowledgeTrainerDraftCreateFrontierItemDto[];
   summary: KnowledgeTrainerLegalTextDraftSummaryDto;
 }> {
-  const empty = { drafts: [] as KnowledgeTrainerLegalTextDraftDto[], summary: emptyLegalTextDraftSummary() };
+  const empty = {
+    drafts: [] as KnowledgeTrainerLegalTextDraftListItemDto[],
+    selected: null,
+    frontier: [] as KnowledgeTrainerDraftCreateFrontierItemDto[],
+    summary: emptyLegalTextDraftSummary(),
+  };
   let rows: Record<string, unknown>[];
   try {
     rows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
       supabaseAdmin
         .from('legal_ingestion_legal_text_drafts')
-        .select(LEGAL_TEXT_DRAFT_READ_SELECT)
+        .select(LEGAL_TEXT_DRAFT_LIST_SELECT)
         .eq('document_id', documentId)
         .order('created_at', { ascending: true })
         .range(from, to),
@@ -680,134 +874,40 @@ async function loadLegalTextDraftsForDocument(
 
   const notesByRun = await loadSourceNotesForDocument(documentId, fallbackNotes);
   const byId = new Map(rows.map((row) => [String(row.id), row]));
-  const drafts: KnowledgeTrainerLegalTextDraftDto[] = rows.map((row) => {
-    const id = String(row.id);
-    const parentId = row.parent_draft_id == null ? null : String(row.parent_draft_id);
-    const parent = parentId ? byId.get(parentId) : null;
-    const boundary = asDraftBoundary(row.text_boundary_status);
-    const ownerDefined = boundary === 'owner_defined' && row.owner_source_page_start != null;
-    const pageStart = ownerDefined
-      ? Number(row.owner_source_page_start)
-      : row.original_source_page_start == null
-        ? null
-        : Number(row.original_source_page_start);
-    const pageEnd = ownerDefined
-      ? Number(row.owner_source_page_end ?? row.owner_source_page_start)
-      : row.original_source_page_end == null
-        ? null
-        : Number(row.original_source_page_end);
-    const itemStart = ownerDefined
-      ? row.owner_source_item_start == null
-        ? null
-        : Number(row.owner_source_item_start)
-      : row.original_source_item_start == null
-        ? null
-        : Number(row.original_source_item_start);
-    const itemEnd = ownerDefined
-      ? row.owner_source_item_end == null
-        ? null
-        : Number(row.owner_source_item_end)
-      : row.original_source_item_end == null
-        ? null
-        : Number(row.original_source_item_end);
-    const runId = row.structure_run_id == null ? null : String(row.structure_run_id);
-    const scopedNotes = runId ? notesByRun.filter((note) => note.structure_run_id === runId) : notesByRun;
-    const noteEvidence = scopedNotes.map((note) => ({
-      id: note.id,
-      source_page: note.source_page,
-      source_item_start: note.source_item_start,
-      source_item_end: note.source_item_end,
-      inline_link_status: note.inline_link_status,
-    }));
-    const overlappingIds = new Set(
-      notesOverlappingDraftSpan(noteEvidence, {
-        page_start: pageStart,
-        page_end: pageEnd,
-        item_start: itemStart,
-        item_end: itemEnd,
-      }).map((note) => note.id),
-    );
-    const sourceNotes = scopedNotes
-      .filter((note) => overlappingIds.has(note.id))
-      .map(({ structure_run_id: _run, ...note }) => note);
-    const unresolvedCount = sourceNotes.filter(
-      (note) => note.inline_link_status !== 'linked' || note.anchors.some((anchor) => anchor.link_status !== 'linked'),
-    ).length;
-    const subtreePageStart = row.original_subtree_page_start == null ? null : Number(row.original_subtree_page_start);
-    const subtreePageEnd = row.original_subtree_page_end == null ? null : Number(row.original_subtree_page_end);
-    const subtreeItemStart = row.original_subtree_item_start == null ? null : Number(row.original_subtree_item_start);
-    const subtreeItemEnd = row.original_subtree_item_end == null ? null : Number(row.original_subtree_item_end);
-    const subtreeOverlappingIds = new Set(
-      notesOverlappingDraftSpan(noteEvidence, {
-        page_start: subtreePageStart,
-        page_end: subtreePageEnd,
-        item_start: subtreeItemStart,
-        item_end: subtreeItemEnd,
-      }).map((note) => note.id),
-    );
-    const subtreeSourceNotes = scopedNotes
-      .filter((note) => subtreeOverlappingIds.has(note.id))
-      .map(({ structure_run_id: _run, ...note }) => note);
-    const subtreeUnresolvedCount = subtreeSourceNotes.filter(
-      (note) => note.inline_link_status !== 'linked' || note.anchors.some((anchor) => anchor.link_status !== 'linked'),
-    ).length;
-    const kind = row.kind_label == null ? null : String(row.kind_label);
-    const displayIdentifier = row.source_display_identifier == null ? null : String(row.source_display_identifier);
-    const title = row.title == null ? null : String(row.title);
-    return {
-      id,
-      kind_label: kind,
-      display_identifier: displayIdentifier,
-      display_label: displayDraftLabel({
-        kind_label: kind,
-        source_display_identifier: displayIdentifier,
-        title,
-      }),
-      printed_marker: row.printed_marker == null ? null : String(row.printed_marker),
-      title,
-      parent_draft_id: parentId,
-      parent_display_label: parent
-        ? displayDraftLabel({
-            kind_label: parent.kind_label == null ? null : String(parent.kind_label),
-            source_display_identifier:
-              parent.source_display_identifier == null ? null : String(parent.source_display_identifier),
-            title: parent.title == null ? null : String(parent.title),
-          })
-        : null,
-      original_source_text: String(row.original_source_text ?? ''),
-      original_subtree_text: row.original_subtree_text == null ? null : String(row.original_subtree_text),
-      draft_legal_text: String(row.draft_legal_text ?? ''),
-      text_boundary_status: boundary,
-      review_status: asDraftReview(row.review_status),
-      source_page_start: pageStart,
-      source_page_end: pageEnd,
-      source_item_start: itemStart,
-      source_item_end: itemEnd,
-      subtree_page_start: subtreePageStart,
-      subtree_page_end: subtreePageEnd,
-      subtree_item_start: subtreeItemStart,
-      subtree_item_end: subtreeItemEnd,
-      provenance: {
-        structure_run_id: runId,
-        source_candidate_id: row.source_candidate_id == null ? null : String(row.source_candidate_id),
-      },
-      source_notes: sourceNotes,
-      unresolved_source_note_count: unresolvedCount,
-      subtree_source_notes: subtreeSourceNotes,
-      subtree_unresolved_source_note_count: subtreeUnresolvedCount,
-      created_at: String(row.created_at ?? ''),
-      updated_at: String(row.updated_at ?? ''),
-    };
-  });
+  const drafts = rows.map((row) => mapDraftListItem(row, byId, notesByRun));
   const summary = emptyLegalTextDraftSummary();
   summary.all = drafts.length;
-  for (const draft of drafts) {
-    summary[draft.review_status] += 1;
-  }
-  return { drafts, summary };
-}
+  for (const draft of drafts) summary[draft.review_status] += 1;
 
-type SourceNoteWithRun = KnowledgeTrainerSourceNoteDto & { structure_run_id: string | null };
+  const selectedId = pickSelectedDraftId(rows, opts?.selectedDraftId);
+  let selected: KnowledgeTrainerLegalTextDraftDto | null = null;
+  if (selectedId) {
+    const { data, error } = await supabaseAdmin
+      .from('legal_ingestion_legal_text_drafts')
+      .select(LEGAL_TEXT_DRAFT_DETAIL_SELECT)
+      .eq('id', selectedId)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) selected = mapDraftDetail(data as Record<string, unknown>, byId, notesByRun);
+  }
+
+  const frontier = draftCreateFrontier(
+    (opts?.candidates ?? []).map((row) => ({
+      id: row.id,
+      parent_candidate_id: row.parent_candidate_id,
+      candidate_kind: row.candidate_kind,
+      kind_label: row.kind_label,
+      source_display_identifier: row.source_display_identifier ?? row.display_identifier,
+      title: row.title,
+    })),
+    rows.map((row) => ({
+      id: String(row.id),
+      source_candidate_id: row.source_candidate_id == null ? null : String(row.source_candidate_id),
+    })),
+  );
+
+  return { drafts, selected, frontier, summary };
+}
 
 async function loadSourceNotesForDocument(
   documentId: string,

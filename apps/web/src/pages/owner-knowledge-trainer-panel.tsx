@@ -13,6 +13,7 @@ import type {
   TaxKnowledgeAggregate,
   UnknownRecord,
 } from './owner-legal-control-types';
+import { OwnerLegalTextDraftReview } from './owner-legal-text-draft-review';
 import '../styles/nx-modal.css';
 
 const REVIEW_FILTER_LABELS: Record<string, string> = {
@@ -44,6 +45,7 @@ export function OwnerKnowledgeTrainerPanel({
   onCommand,
   onUpload,
   onReload,
+  onSelectLegalTextDraft,
 }: {
   taxKnowledge: TaxKnowledgeAggregate;
   uploadSource: OwnerLegalLibrarySource | null;
@@ -52,6 +54,7 @@ export function OwnerKnowledgeTrainerPanel({
   onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
   onUpload: (payload: UnknownRecord) => Promise<void>;
   onReload: () => void;
+  onSelectLegalTextDraft: (documentId: string, draftId: string) => void;
 }) {
   const trainer = taxKnowledge.legal_library.trainer_upload;
   const selectedCountry = taxKnowledge.selected_country_code;
@@ -80,6 +83,7 @@ export function OwnerKnowledgeTrainerPanel({
           busy={busy}
           onCommand={onCommand}
           onReload={onReload}
+          onSelectLegalTextDraft={onSelectLegalTextDraft}
         />
       ) : null}
     </div>
@@ -214,12 +218,14 @@ function TrainerReview({
   busy,
   onCommand,
   onReload,
+  onSelectLegalTextDraft,
 }: {
   taxKnowledge: TaxKnowledgeAggregate;
   trainer: OwnerKnowledgeTrainerSlice;
   busy: boolean;
   onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
   onReload: () => void;
+  onSelectLegalTextDraft: (documentId: string, draftId: string) => void;
 }) {
   const document = trainer.selected_document;
   if (!document) return null;
@@ -238,6 +244,9 @@ function TrainerReview({
   const [parentCandidateId, setParentCandidateId] = useState('');
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
+  const [workspace, setWorkspace] = useState<'draft' | 'structure'>(
+    (document.legal_text_drafts ?? []).length ? 'draft' : 'structure',
+  );
   const fileAccess = document.original_file_access;
   const pageUrl = fileAccess?.url ?? '';
   const missingFileRefreshFor = useRef<string | null>(null);
@@ -307,6 +316,7 @@ function TrainerReview({
   }, [expanded]);
 
   useEffect(() => {
+    if (workspace !== 'structure') return;
     if (!document.can_open_original) return;
     if (fileAccess && !originalFileAccessNeedsRefresh(fileAccess)) {
       missingFileRefreshFor.current = null;
@@ -315,20 +325,26 @@ function TrainerReview({
     if (!fileAccess && missingFileRefreshFor.current === document.id) return;
     if (!fileAccess) missingFileRefreshFor.current = document.id;
     onReload();
-  }, [document.can_open_original, document.id, fileAccess?.url, fileAccess?.expires_at, onReload]);
+  }, [workspace, document.can_open_original, document.id, fileAccess?.url, fileAccess?.expires_at, onReload]);
 
   useEffect(() => {
+    if (workspace !== 'structure') return;
     if (!document.can_open_original) return;
     const timer = window.setInterval(() => {
       if (originalFileAccessNeedsRefresh(fileAccess)) onReload();
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [document.can_open_original, document.id, fileAccess?.url, fileAccess?.expires_at, onReload]);
+  }, [workspace, document.can_open_original, document.id, fileAccess?.url, fileAccess?.expires_at, onReload]);
 
   useEffect(() => {
-    if (!expanded || !document.can_open_original) return;
+    if (workspace !== 'structure' || !expanded || !document.can_open_original) return;
     if (originalFileAccessNeedsRefresh(fileAccess)) onReload();
-  }, [expanded, document.can_open_original, document.id, fileAccess?.url, fileAccess?.expires_at, onReload]);
+  }, [workspace, expanded, document.can_open_original, document.id, fileAccess?.url, fileAccess?.expires_at, onReload]);
+
+  useEffect(() => {
+    if (workspace !== 'draft') return;
+    setExpanded(false);
+  }, [workspace]);
 
   const saveEdit = async () => {
     if (!candidate) return;
@@ -391,6 +407,49 @@ function TrainerReview({
           ))}
         </div>
       ) : null}
+      <div>
+        Owner Drafts: {document.legal_text_draft_summary?.all ?? (document.legal_text_drafts ?? []).length}
+        {document.legal_text_draft_summary ? (
+          <span>
+            {' '}
+            (draft {document.legal_text_draft_summary.draft}, needs review {document.legal_text_draft_summary.needs_review},
+            ready {document.legal_text_draft_summary.ready})
+          </span>
+        ) : null}
+      </div>
+      <div className="nx-trainer-workspace-tabs">
+        <button
+          type="button"
+          className="nx-btn nx-btn-taxes-compact"
+          aria-pressed={workspace === 'draft'}
+          onClick={() => setWorkspace('draft')}
+        >
+          Owner Legal Draft
+        </button>
+        <button
+          type="button"
+          className="nx-btn nx-btn-taxes-compact"
+          aria-pressed={workspace === 'structure'}
+          onClick={() => setWorkspace('structure')}
+        >
+          Structure
+        </button>
+      </div>
+      {workspace === 'draft' ? (
+        <OwnerLegalTextDraftReview
+          documentId={document.id}
+          drafts={document.legal_text_drafts ?? []}
+          selected={document.selected_legal_text_draft}
+          frontier={document.legal_text_draft_create_frontier ?? []}
+          kindLabels={taxKnowledge.legal_library.node_kinds.map((kind) => kind.label)}
+          canOpenOriginal={document.can_open_original}
+          busy={busy}
+          onSelectDraft={(draftId) => onSelectLegalTextDraft(document.id, draftId)}
+          onCommand={onCommand}
+        />
+      ) : null}
+      {workspace === 'structure' ? (
+        <>
       {document.structure_run?.status_label ? (
         <div>Structure run: {document.structure_run.status_label}</div>
       ) : null}
@@ -534,6 +593,7 @@ function TrainerReview({
             onSelect={setCandidateId}
           />
           {candidate ? (
+            <>
             <CandidateEditor
               candidate={candidate}
               layoutPage={
@@ -566,6 +626,41 @@ function TrainerReview({
                 }).catch((err) => setError(userFacingApiMessage(err)))
               }
             />
+            {(() => {
+              const matchingDraft = (document.legal_text_drafts ?? []).find(
+                (row) => row.provenance.source_candidate_id === candidate.id,
+              );
+              return matchingDraft ? (
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-taxes-compact"
+                  disabled={busy}
+                  onClick={() => {
+                    setWorkspace('draft');
+                    onSelectLegalTextDraft(document.id, matchingDraft.id);
+                  }}
+                >
+                  Review Owner Draft
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-taxes-compact"
+                  disabled={busy}
+                  onClick={() =>
+                    void onCommand('create_legal_text_draft_from_candidate', {
+                      legal_ingestion_document_id: document.id,
+                      legal_ingestion_candidate_id: candidate.id,
+                    })
+                      .then(() => setWorkspace('draft'))
+                      .catch((err) => setError(userFacingApiMessage(err)))
+                  }
+                >
+                  Create Owner Draft
+                </button>
+              );
+            })()}
+            </>
           ) : (
             <div style={{ color: '#6b7280' }}>No structure candidates yet.</div>
           )}
@@ -622,6 +717,8 @@ function TrainerReview({
             window.document.body,
           )
         : null}
+        </>
+      ) : null}
     </section>
   );
 }

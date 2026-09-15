@@ -809,3 +809,64 @@ export function createDraftRequiresParentFirst(
 ): boolean {
   return Boolean(parentCandidateId) && !parentDraftId;
 }
+
+export type DraftCreateFrontierCandidate = {
+  id: string;
+  parent_candidate_id: string | null;
+  candidate_kind?: string | null;
+  kind_label?: string | null;
+  source_display_identifier?: string | null;
+  title?: string | null;
+};
+
+export type DraftCreateFrontierDraft = {
+  id: string;
+  source_candidate_id: string | null;
+};
+
+export type DraftCreateFrontierItem = {
+  candidate_id: string;
+  parent_candidate_id: string | null;
+  parent_draft_id: string | null;
+  parent_draft_required: boolean;
+  kind_label: string | null;
+  display_identifier: string | null;
+  display_label: string;
+};
+
+/** Next parent-first candidates that may become Owner Drafts. Does not auto-create. */
+export function draftCreateFrontier(
+  candidates: DraftCreateFrontierCandidate[],
+  drafts: DraftCreateFrontierDraft[],
+): DraftCreateFrontierItem[] {
+  const draftByCandidate = new Map<string, string>();
+  for (const draft of drafts) {
+    if (!draft.source_candidate_id) continue;
+    draftByCandidate.set(draft.source_candidate_id, draft.id);
+  }
+  const out: DraftCreateFrontierItem[] = [];
+  for (const candidate of candidates) {
+    if (candidate.candidate_kind && candidate.candidate_kind !== 'structure') continue;
+    if (draftByCandidate.has(candidate.id)) continue;
+    const parentCandidateId = candidate.parent_candidate_id;
+    const parentDraftId = parentCandidateId ? draftByCandidate.get(parentCandidateId) ?? null : null;
+    if (createDraftRequiresParentFirst(parentCandidateId, parentDraftId)) continue;
+    const kind = candidate.kind_label?.trim() || null;
+    const ident = candidate.source_display_identifier?.trim() || null;
+    const title = candidate.title?.trim() || null;
+    out.push({
+      candidate_id: candidate.id,
+      parent_candidate_id: parentCandidateId,
+      parent_draft_id: parentDraftId,
+      parent_draft_required: false,
+      kind_label: kind,
+      display_identifier: ident,
+      display_label: displayDraftLabel({
+        kind_label: kind,
+        source_display_identifier: ident,
+        title,
+      }),
+    });
+  }
+  return out;
+}

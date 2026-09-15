@@ -34,6 +34,10 @@ import {
   type OwnerStructureReviewTreeNode,
   type OwnerKnowledgeTrainerDocument,
   type OwnerKnowledgeTrainerSlice,
+  type OwnerLegalTextDraft,
+  type OwnerLegalTextDraftCreateFrontierItem,
+  type OwnerLegalTextDraftCounts,
+  type OwnerLegalTextDraftListItem,
   type OwnerOriginalFileAccess,
   type OwnerSourceNote,
   type OwnerSourceNoteAnchor,
@@ -701,6 +705,87 @@ function parseOriginalFileAccess(raw: UnknownRecord | null): OwnerOriginalFileAc
   };
 }
 
+function parseLegalTextDraftListItem(row: UnknownRecord): OwnerLegalTextDraftListItem {
+  const provenance = asRecord(row.provenance);
+  return {
+    id: asString(row.id),
+    kind_label: asNullableString(row.kind_label),
+    display_identifier: asNullableString(row.display_identifier),
+    display_label: asString(row.display_label),
+    printed_marker: asNullableString(row.printed_marker),
+    title: asNullableString(row.title),
+    parent_draft_id: asNullableString(row.parent_draft_id),
+    parent_display_label: asNullableString(row.parent_display_label),
+    text_boundary_status: asString(row.text_boundary_status),
+    review_status: asString(row.review_status),
+    source_page_start: row.source_page_start == null ? null : Number(row.source_page_start),
+    source_page_end: row.source_page_end == null ? null : Number(row.source_page_end),
+    unresolved_source_note_count: Number(row.unresolved_source_note_count) || 0,
+    subtree_unresolved_source_note_count: Number(row.subtree_unresolved_source_note_count) || 0,
+    provenance: {
+      structure_run_id: asNullableString(provenance?.structure_run_id),
+      source_candidate_id: asNullableString(provenance?.source_candidate_id),
+    },
+    created_at: asString(row.created_at),
+    updated_at: asString(row.updated_at),
+  };
+}
+
+function parseLegalTextDraftList(raw: unknown): OwnerLegalTextDraftListItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map(parseLegalTextDraftListItem);
+}
+
+function parseLegalTextDraftDetail(raw: UnknownRecord | null): OwnerLegalTextDraft | null {
+  if (!raw?.id) return null;
+  return {
+    ...parseLegalTextDraftListItem(raw),
+    original_source_text: asString(raw.original_source_text),
+    original_subtree_text: raw.original_subtree_text == null ? null : asString(raw.original_subtree_text),
+    draft_legal_text: asString(raw.draft_legal_text),
+    source_item_start: raw.source_item_start == null ? null : Number(raw.source_item_start),
+    source_item_end: raw.source_item_end == null ? null : Number(raw.source_item_end),
+    subtree_page_start: raw.subtree_page_start == null ? null : Number(raw.subtree_page_start),
+    subtree_page_end: raw.subtree_page_end == null ? null : Number(raw.subtree_page_end),
+    subtree_item_start: raw.subtree_item_start == null ? null : Number(raw.subtree_item_start),
+    subtree_item_end: raw.subtree_item_end == null ? null : Number(raw.subtree_item_end),
+    owner_source_page_start: raw.owner_source_page_start == null ? null : Number(raw.owner_source_page_start),
+    owner_source_page_end: raw.owner_source_page_end == null ? null : Number(raw.owner_source_page_end),
+    owner_source_item_start: raw.owner_source_item_start == null ? null : Number(raw.owner_source_item_start),
+    owner_source_item_end: raw.owner_source_item_end == null ? null : Number(raw.owner_source_item_end),
+    source_notes: parseSourceNotes(raw.source_notes),
+    subtree_source_notes: parseSourceNotes(raw.subtree_source_notes),
+  };
+}
+
+function parseDraftCreateFrontier(raw: unknown): OwnerLegalTextDraftCreateFrontierItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      candidate_id: asString(row.candidate_id),
+      parent_candidate_id: asNullableString(row.parent_candidate_id),
+      parent_draft_id: asNullableString(row.parent_draft_id),
+      parent_draft_required: row.parent_draft_required === true,
+      kind_label: asNullableString(row.kind_label),
+      display_identifier: asNullableString(row.display_identifier),
+      display_label: asString(row.display_label),
+    }));
+}
+
+function parseLegalTextDraftSummary(raw: UnknownRecord | null): OwnerLegalTextDraftCounts {
+  return {
+    all: Number(raw?.all) || 0,
+    draft: Number(raw?.draft) || 0,
+    needs_review: Number(raw?.needs_review) || 0,
+    ready: Number(raw?.ready) || 0,
+  };
+}
+
 function parseReviewTree(raw: unknown): OwnerStructureReviewTreeNode[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -879,6 +964,10 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
                 status_label: asString(asRecord(selected.structure_run)?.status_label),
               }
             : null,
+          legal_text_drafts: parseLegalTextDraftList(selected.legal_text_drafts),
+          selected_legal_text_draft: parseLegalTextDraftDetail(asRecord(selected.selected_legal_text_draft)),
+          legal_text_draft_create_frontier: parseDraftCreateFrontier(selected.legal_text_draft_create_frontier),
+          legal_text_draft_summary: parseLegalTextDraftSummary(asRecord(selected.legal_text_draft_summary)),
         }
       : null,
     allowed_actions: parseAllowedActions(raw.allowed_actions),
