@@ -127,6 +127,21 @@ test('Dedicated worker package exists and leases pages', () => {
   assert.match(sql, /lease_expires_at/);
 });
 
+test('Worker PDF source is job-scoped cache, not a per-page Storage download', () => {
+  const worker = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-worker.runtime.ts');
+  const index = readRepo('apps/knowledge-trainer-worker/src/index.ts');
+  assert.equal(existsSync(join(repoRoot, '.cursor/rules/knowledge-trainer-pdf-source.mdc')), true);
+  assert.match(worker, /createWorkerPdfSourceCache/);
+  assert.match(worker, /getWorkerPdfBytes/);
+  assert.match(worker, /countPdfPages\(bytes\)/);
+  assert.match(worker, /extractEmbeddedPdfPageText\(bytes, page\.page_no\)/);
+  assert.match(worker, /extractEmbeddedPdfPageLayout\(bytes, page\.page_no\)/);
+  assert.doesNotMatch(worker, /downloadOwnerLegalMaterial\(/);
+  assert.doesNotMatch(worker, /storage\.download/);
+  assert.doesNotMatch(worker, /catch[\s\S]{0,800}downloadOwnerLegalMaterial/);
+  assert.match(index, /disposeKnowledgeTrainerWorkerPdfSource/);
+});
+
 test('Owner UI keeps manual authoring beside Upload material', () => {
   const panel = readRepo('apps/web/src/pages/owner-legal-library-panel.tsx');
   assert.match(panel, /Add Tax Domain/);

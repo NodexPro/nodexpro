@@ -7,7 +7,7 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 loadEnv({ path: resolve(here, '../../api/.env') });
 loadEnv();
 
-const { runKnowledgeTrainerWorkerTick } = await import(
+const { disposeKnowledgeTrainerWorkerPdfSource, runKnowledgeTrainerWorkerTick } = await import(
   '../../api/src/domains/knowledge-trainer/knowledge-trainer-worker.runtime.ts'
 );
 
@@ -29,5 +29,19 @@ async function loop(): Promise<void> {
     }
   }
 }
+
+function shutdown(): void {
+  disposeKnowledgeTrainerWorkerPdfSource();
+}
+
+process.on('beforeExit', shutdown);
+process.on('SIGINT', () => {
+  shutdown();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  shutdown();
+  process.exit(0);
+});
 
 void loop();

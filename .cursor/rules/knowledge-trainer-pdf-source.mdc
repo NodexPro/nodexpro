@@ -1,0 +1,31 @@
+---
+description: Knowledge Trainer may download a source PDF from Storage at most once per worker execution
+globs: apps/api/src/domains/knowledge-trainer/**/*.ts,apps/knowledge-trainer-worker/**/*.ts,apps/api/tests/knowledge-trainer/**/*.ts
+alwaysApply: false
+---
+
+# Knowledge Trainer source PDF — one download per execution
+
+A durable source document may be downloaded from remote Storage **at most once per worker execution** for the same immutable source identity (`documentId` + `storage_bucket` + `storage_key` + content hash).
+
+Page-level processing MUST consume an already-acquired source handle from `knowledge-trainer-pdf-source.ts`.
+
+## Required flow
+
+Remote Storage → job-scoped PDF source (temp file) → count pages / text / layout / retries / future OCR / future source-evidence processing.
+
+## Forbidden
+
+- `storage.download` / `downloadOwnerLegalMaterial()` inside page processors
+- Per-page full-source fetch (text, layout, OCR, source notes, legal-text, retries)
+- Silent fallback: `cache failed → storage.download()` in a page processor
+
+A cache miss may cause **one** acquisition through the source abstraction. It must not restore per-page Storage downloads.
+
+## Allowed remote owners
+
+- `knowledge-trainer-pdf-source.ts` — execution cache
+- `knowledge-trainer-storage.service.ts` — `downloadOwnerLegalMaterial` used **only** as the cache download adapter
+- Owner UI signed URLs are not worker extraction
+
+Durable truth stays `storage_bucket` + `storage_key`. Temp files are never domain truth, Postgres, aggregates, or frontend.

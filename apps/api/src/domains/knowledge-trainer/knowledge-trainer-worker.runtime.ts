@@ -4,10 +4,42 @@ import { summarizeJobProgress, workerMustNotWriteCanonicalLaw } from './knowledg
 import { layoutPersistPreservesPageText } from './knowledge-trainer-layout.pure.js';
 import { countPdfPages, extractEmbeddedPdfPageLayout, extractEmbeddedPdfPageText } from './knowledge-trainer-pdf.service.js';
 import { persistStructureCandidatesForJob } from './knowledge-trainer-structure.service.js';
+import {
+  createWorkerPdfSourceCache,
+  type WorkerPdfSourceIdentity,
+} from './knowledge-trainer-pdf-source.js';
 import { downloadOwnerLegalMaterial } from './knowledge-trainer-storage.service.js';
 import { WORKER_FORBIDDEN_CANONICAL_TABLES } from './knowledge-trainer.types.js';
 
 const LEASE_SECONDS = 120;
+
+/** Remote Storage download adapter. Page processors must not call this. */
+const workerPdfSource = createWorkerPdfSourceCache({
+  download: downloadOwnerLegalMaterial,
+});
+
+function pdfIdentity(document: {
+  id: unknown;
+  storage_bucket: unknown;
+  storage_key: unknown;
+  content_sha256?: unknown;
+}): WorkerPdfSourceIdentity {
+  return {
+    documentId: String(document.id),
+    bucket: String(document.storage_bucket),
+    key: String(document.storage_key),
+    contentSha256: document.content_sha256 == null ? null : String(document.content_sha256),
+  };
+}
+
+async function getWorkerPdfBytes(identity: WorkerPdfSourceIdentity): Promise<Buffer> {
+  // Fail closed: no Storage fallback. Retries reuse the same source abstraction.
+  return workerPdfSource.getBytes(identity);
+}
+
+export function disposeKnowledgeTrainerWorkerPdfSource(): void {
+  workerPdfSource.dispose();
+}
 
 type IngestionPageRow = {
   id: string;
@@ -69,7 +101,7 @@ export async function prepareQueuedIngestionJobs(limit = 2): Promise<number> {
 
     const { data: document, error: docError } = await supabaseAdmin
       .from('legal_ingestion_documents')
-      .select('id, storage_bucket, storage_key, input_type')
+      .select('id, storage_bucket, storage_key, content_sha256, input_type')
       .eq('id', job.document_id)
       .maybeSingle();
     if (docError || !document?.storage_key) {
@@ -89,7 +121,7 @@ export async function prepareQueuedIngestionJobs(limit = 2): Promise<number> {
       continue;
     }
 
-    const bytes = await downloadOwnerLegalMaterial(String(document.storage_bucket), String(document.storage_key));
+    const bytes = await getWorkerPdfBytes(pdfIdentity(document));
     const pageCount = await countPdfPages(bytes);
     if (pageCount < 1) {
       await trainerUpdate(
@@ -147,11 +179,11 @@ export async function claimAndProcessOnePage(workerId: string): Promise<boolean>
   try {
     const { data: document, error: docError } = await supabaseAdmin
       .from('legal_ingestion_documents')
-      .select('storage_bucket, storage_key')
+      .select('id, storage_bucket, storage_key, content_sha256')
       .eq('id', page.document_id)
       .maybeSingle();
     if (docError || !document?.storage_key) throw new Error('Document storage is missing');
-    const bytes = await downloadOwnerLegalMaterial(String(document.storage_bucket), String(document.storage_key));
+    const bytes = await getWorkerPdfBytes(pdfIdentity(document));
     const extracted = await extractEmbeddedPdfPageText(bytes, page.page_no);
     await trainerUpdate(
       'legal_ingestion_pages',
@@ -206,11 +238,11 @@ export async function claimAndProcessOneLayoutPage(workerId: string): Promise<bo
   try {
     const { data: document, error: docError } = await supabaseAdmin
       .from('legal_ingestion_documents')
-      .select('storage_bucket, storage_key')
+      .select('id, storage_bucket, storage_key, content_sha256')
       .eq('id', page.document_id)
       .maybeSingle();
     if (docError || !document?.storage_key) throw new Error('Document storage is missing');
-    const bytes = await downloadOwnerLegalMaterial(String(document.storage_bucket), String(document.storage_key));
+    const bytes = await getWorkerPdfBytes(pdfIdentity(document));
     const layout = await extractEmbeddedPdfPageLayout(bytes, page.page_no);
     const update = {
       page_text_items: layout,
