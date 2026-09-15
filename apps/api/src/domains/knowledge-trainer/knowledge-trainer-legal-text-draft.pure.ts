@@ -582,6 +582,11 @@ function emptyCapture(
   };
 }
 
+export function persistableMonotonicIndex(start: number | null, end: number | null): number | null {
+  if (start == null || end == null) return end;
+  return end >= start ? end : null;
+}
+
 function spanEnd(
   start: SourceCursor,
   until: SourceCursor | null,
@@ -593,9 +598,21 @@ function spanEnd(
       item_end: null,
     };
   }
+  if (until.page === start.page) {
+    return {
+      page_end: until.page,
+      item_end: Math.max(until.item - 1, start.item),
+    };
+  }
+  if (until.item <= 0) {
+    return {
+      page_end: Math.max(until.page - 1, start.page),
+      item_end: null,
+    };
+  }
   return {
     page_end: until.page,
-    item_end: until.page === start.page ? Math.max(until.item - 1, start.item) : until.item,
+    item_end: persistableMonotonicIndex(start.item, until.item - 1),
   };
 }
 

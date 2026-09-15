@@ -9,6 +9,7 @@ import {
   headingIdsRequiredForCapture,
   nextNonDescendantBoundaryCandidate,
   notesOverlappingDraftSpan,
+  persistableMonotonicIndex,
   type DraftPageEvidence,
   type DraftStructureCandidate,
 } from '../../src/domains/knowledge-trainer/knowledge-trainer-legal-text-draft.pure.js';
@@ -73,7 +74,7 @@ test('new Draft stores own source and subtree source separately; draft initializ
   assert.match(src, /original_subtree_page_start: captured\.page_start/);
   assert.match(src, /original_subtree_page_end: captured\.subtree_page_end/);
   assert.match(src, /original_subtree_item_start: captured\.item_start/);
-  assert.match(src, /original_subtree_item_end: captured\.subtree_item_end/);
+  assert.match(src, /original_subtree_item_end: persistableMonotonicIndex\(captured\.item_start, captured\.subtree_item_end\)/);
   assert.doesNotMatch(src, /draft_legal_text: captured\.subtree_text/);
   assert.match(types(), /original_subtree_text: string \| null/);
   assert.match(readSrc(), /subtree_source_notes/);
@@ -99,6 +100,32 @@ test('parent editable Draft does not duplicate child text; subtree includes desc
   assert.doesNotMatch(captured.subtree_text, /דיבידנד/);
   assert.equal(nextNonDescendantBoundaryCandidate(ordered, '2-2')?.id, '2-3');
   assert.notEqual(captured.text, captured.subtree_text);
+});
+
+test('cross-page exclusive ends do not persist inverted item indexes that would fail TAX-632 checks', () => {
+  assert.equal(persistableMonotonicIndex(215, 103), null);
+  assert.equal(persistableMonotonicIndex(235, 0), null);
+  assert.equal(persistableMonotonicIndex(28, 80), 80);
+  const src = service();
+  assert.match(src, /persistableMonotonicIndex\(captured\.item_start, captured\.item_end\)/);
+  assert.match(src, /persistableMonotonicIndex\(captured\.item_start, captured\.subtree_item_end\)/);
+  const parent = candidate('seif-2', 0, { source_page: 16, source_item_start: 2, page_start: 16, page_end: 17 });
+  const child = candidate('2-1', 1, {
+    parent_candidate_id: 'seif-2',
+    source_page: 17,
+    source_item_start: 0,
+    page_start: 17,
+    page_end: 17,
+  });
+  const captured = captureExclusiveSourceBody(parent, [parent, child], [
+    itemsPage(16, ['סעיף', '2', 'מקורות', 'הכנסה']),
+    itemsPage(17, ['(1)', 'עסק']),
+  ]);
+  assert.equal(captured.page_end, 16);
+  assert.equal(persistableMonotonicIndex(captured.item_start, captured.item_end), captured.item_end);
+  assert.match(captured.text, /מקורות/);
+  assert.doesNotMatch(captured.text, /עסק/);
+  assert.match(captured.subtree_text, /עסק/);
 });
 
 test('heading recovery for create is scoped to the capture chain, not all 1839 candidates', () => {
