@@ -11,6 +11,12 @@ import {
   draftCreateFrontier,
   notesOverlappingDraftSpan,
 } from './knowledge-trainer-legal-text-draft.pure.js';
+import {
+  allowedTaxKnowledgeProposalReviewStatuses,
+  pickSelectedTaxKnowledgeProposal,
+  taxKnowledgeProposalAllowedActions,
+  taxKnowledgeProposalStatusLabel,
+} from './knowledge-trainer-tax-knowledge-proposal.pure.js';
 import { attachStructureReviewModel, describeStoredLayoutEvidence } from './knowledge-trainer-review.pure.js';
 import { emptySourceNoteSummary, parseSourceBBox, summarizeSourceNotes } from './knowledge-trainer-source-notes.pure.js';
 import { structureRunStatusLabel } from './knowledge-trainer-structure-run.pure.js';
@@ -39,6 +45,9 @@ import type {
   KnowledgeTrainerSliceDto,
   KnowledgeTrainerSourceNoteAnchorDto,
   KnowledgeTrainerSourceNoteDto,
+  KnowledgeTrainerTaxKnowledgeProposalDetailDto,
+  KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto,
+  KnowledgeTrainerTaxKnowledgeProposalSliceDto,
   LegalIngestionJobStatus,
   LegalIngestionPageStatus,
   SourceNoteClassification,
@@ -53,6 +62,7 @@ export type KnowledgeTrainerReadOpts = {
   page_no?: number | null;
   tax_source_id?: string | null;
   legal_text_draft_id?: string | null;
+  tax_knowledge_proposal_id?: string | null;
 };
 
 function action(actionKey: string, enabled: boolean, required: Record<string, string>) {
@@ -439,6 +449,7 @@ export async function buildKnowledgeTrainerSlice(
       ...mapLegalTextDraftSlice(
         await loadLegalTextDraftsForDocument(selectedSummary.id, sourceEvidence.notes, {
           selectedDraftId: opts?.legal_text_draft_id,
+          selectedProposalId: opts?.tax_knowledge_proposal_id,
           candidates: reviewed.candidates,
         }),
       ),
@@ -458,6 +469,11 @@ export async function buildKnowledgeTrainerSlice(
       },
     };
   }
+
+  const proposalActions = taxKnowledgeProposalAllowedActions({
+    hasSelectedDraft: Boolean(selected?.selected_legal_text_draft),
+    selectedProposalStatus: selected?.tax_knowledge_proposals.selected?.status ?? null,
+  });
 
   return {
     available: true,
@@ -558,6 +574,20 @@ export async function buildKnowledgeTrainerSlice(
       action('retract_owner_structure_completeness', Boolean(selected), {
         legal_ingestion_document_id: 'uuid',
         branch_draft_id: 'optional uuid; omit for whole document',
+      }),
+      action('create_tax_knowledge_proposal', proposalActions.create_tax_knowledge_proposal, {
+        legal_text_draft_id: 'uuid',
+        creation_origin: 'ai_proposal | owner_corrected',
+        proposal_json: 'object',
+        supersedes_proposal_id: 'optional uuid; same Owner Draft only',
+      }),
+      action('set_tax_knowledge_proposal_review_status', proposalActions.set_tax_knowledge_proposal_review_status, {
+        tax_knowledge_proposal_id: 'uuid',
+        status: 'needs_review | owner_approved | rejected',
+      }),
+      action('create_corrected_tax_knowledge_proposal', proposalActions.create_corrected_tax_knowledge_proposal, {
+        source_tax_knowledge_proposal_id: 'uuid',
+        proposal_json: 'object',
       }),
     ],
   };
@@ -843,6 +873,7 @@ function mapLegalTextDraftSlice(input: {
   selected_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
   search_index: KnowledgeTrainerLegalTextSearchIndexItemDto[];
   completeness: KnowledgeTrainerLegalTextCompletenessDto;
+  tax_knowledge_proposals: KnowledgeTrainerTaxKnowledgeProposalSliceDto;
 }): {
   legal_text_drafts: KnowledgeTrainerLegalTextDraftListItemDto[];
   selected_legal_text_draft: KnowledgeTrainerLegalTextDraftDto | null;
@@ -852,6 +883,7 @@ function mapLegalTextDraftSlice(input: {
   selected_legal_text_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
   legal_text_search_index: KnowledgeTrainerLegalTextSearchIndexItemDto[];
   legal_text_completeness: KnowledgeTrainerLegalTextCompletenessDto;
+  tax_knowledge_proposals: KnowledgeTrainerTaxKnowledgeProposalSliceDto;
 } {
   return {
     legal_text_drafts: input.drafts,
@@ -862,6 +894,7 @@ function mapLegalTextDraftSlice(input: {
     selected_legal_text_review_node: input.selected_review_node,
     legal_text_search_index: input.search_index,
     legal_text_completeness: input.completeness,
+    tax_knowledge_proposals: input.tax_knowledge_proposals,
   };
 }
 
@@ -889,11 +922,108 @@ function pickSelectedDraftId(
   return root ? String(root.id) : rows[0] ? String(rows[0].id) : null;
 }
 
+function emptyTaxKnowledgeProposalSlice(): KnowledgeTrainerTaxKnowledgeProposalSliceDto {
+  return { latest: null, selected: null, history: [] };
+}
+
+const PROPOSAL_HISTORY_SELECT =
+  'id, legal_text_draft_id, revision_no, creation_origin, status, supersedes_proposal_id, created_at, published_tax_rule_id, published_tax_rule_version_id, published_tax_legal_node_id';
+
+function mapProposalHistoryItem(row: Record<string, unknown>): KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto {
+  const status = String(row.status) as KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto['status'];
+  return {
+    id: String(row.id),
+    revision_no: Number(row.revision_no),
+    creation_origin: String(row.creation_origin) as KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto['creation_origin'],
+    status,
+    status_label: taxKnowledgeProposalStatusLabel(status),
+    supersedes_proposal_id: row.supersedes_proposal_id == null ? null : String(row.supersedes_proposal_id),
+    created_at: String(row.created_at),
+    publication_trace: {
+      published_tax_rule_id: row.published_tax_rule_id == null ? null : String(row.published_tax_rule_id),
+      published_tax_rule_version_id:
+        row.published_tax_rule_version_id == null ? null : String(row.published_tax_rule_version_id),
+      published_tax_legal_node_id:
+        row.published_tax_legal_node_id == null ? null : String(row.published_tax_legal_node_id),
+    },
+  };
+}
+
+async function loadTaxKnowledgeProposalsForSelectedDraft(
+  draftId: string | null,
+  requestedProposalId?: string | null,
+): Promise<KnowledgeTrainerTaxKnowledgeProposalSliceDto> {
+  if (!draftId) return emptyTaxKnowledgeProposalSlice();
+  let rows: Record<string, unknown>[];
+  try {
+    rows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+      supabaseAdmin
+        .from('legal_ingestion_tax_knowledge_proposals')
+        .select(PROPOSAL_HISTORY_SELECT)
+        .eq('legal_text_draft_id', draftId)
+        .order('revision_no', { ascending: true })
+        .range(from, to),
+    );
+  } catch (error) {
+    if (
+      isSupabaseMissingTableError(error as { message?: string; code?: string }) ||
+      isSupabaseMissingColumnError(error as { message?: string; code?: string })
+    ) {
+      return emptyTaxKnowledgeProposalSlice();
+    }
+    throw error;
+  }
+  const history = rows.map(mapProposalHistoryItem);
+  const latest = pickSelectedTaxKnowledgeProposal(history, null);
+  const selectedMeta = pickSelectedTaxKnowledgeProposal(history, requestedProposalId);
+  if (!selectedMeta) {
+    return { latest, selected: null, history };
+  }
+  const { data, error } = await supabaseAdmin
+    .from('legal_ingestion_tax_knowledge_proposals')
+    .select(`${PROPOSAL_HISTORY_SELECT}, proposal_json`)
+    .eq('id', selectedMeta.id)
+    .eq('legal_text_draft_id', draftId)
+    .maybeSingle();
+  if (error) throw error;
+    const json = data ? proposalJsonFromRow(data as Record<string, unknown>) : {};
+  const next = allowedTaxKnowledgeProposalReviewStatuses(selectedMeta.status);
+  const actions = taxKnowledgeProposalAllowedActions({
+    hasSelectedDraft: true,
+    selectedProposalStatus: selectedMeta.status,
+  });
+  const selected: KnowledgeTrainerTaxKnowledgeProposalDetailDto = {
+    ...selectedMeta,
+    legal_text_draft_id: draftId,
+    proposal_json: json,
+    allowed_next_statuses: next,
+    allowed_actions: [
+      {
+        action_key: 'set_tax_knowledge_proposal_review_status',
+        enabled: actions.set_tax_knowledge_proposal_review_status,
+        required_fields: { tax_knowledge_proposal_id: 'uuid', status: next.join(' | ') || 'none' },
+      },
+      {
+        action_key: 'create_corrected_tax_knowledge_proposal',
+        enabled: actions.create_corrected_tax_knowledge_proposal,
+        required_fields: { source_tax_knowledge_proposal_id: 'uuid', proposal_json: 'object' },
+      },
+    ],
+  };
+  return { latest, selected, history };
+}
+
+function proposalJsonFromRow(row: Record<string, unknown>): Record<string, unknown> {
+  const value = row.proposal_json;
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
 async function loadLegalTextDraftsForDocument(
   documentId: string,
   fallbackNotes: KnowledgeTrainerSourceNoteDto[],
   opts?: {
     selectedDraftId?: string | null;
+    selectedProposalId?: string | null;
     candidates?: KnowledgeTrainerCandidateDto[];
   },
 ): Promise<{
@@ -905,6 +1035,7 @@ async function loadLegalTextDraftsForDocument(
   selected_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
   search_index: KnowledgeTrainerLegalTextSearchIndexItemDto[];
   completeness: KnowledgeTrainerLegalTextCompletenessDto;
+  tax_knowledge_proposals: KnowledgeTrainerTaxKnowledgeProposalSliceDto;
 }> {
   const emptyCompleteness: KnowledgeTrainerLegalTextCompletenessDto = {
     document_confirmed: false,
@@ -912,6 +1043,7 @@ async function loadLegalTextDraftsForDocument(
     selected_branch_confirmed: false,
     selected_branch_confirmed_at: null,
   };
+  const emptyProposals = emptyTaxKnowledgeProposalSlice();
   const empty = {
     drafts: [] as KnowledgeTrainerLegalTextDraftListItemDto[],
     selected: null,
@@ -921,6 +1053,7 @@ async function loadLegalTextDraftsForDocument(
     selected_review_node: null,
     search_index: [] as KnowledgeTrainerLegalTextSearchIndexItemDto[],
     completeness: emptyCompleteness,
+    tax_knowledge_proposals: emptyProposals,
   };
   let rows: Record<string, unknown>[];
   try {
@@ -1049,6 +1182,10 @@ async function loadLegalTextDraftsForDocument(
     selected_branch_confirmed: Boolean(branchCompleteness),
     selected_branch_confirmed_at: branchCompleteness?.confirmed_at ?? null,
   };
+  const tax_knowledge_proposals = await loadTaxKnowledgeProposalsForSelectedDraft(
+    selected_review_node?.draft_id ?? selected?.id ?? null,
+    opts?.selectedProposalId,
+  );
 
   return {
     drafts,
@@ -1059,6 +1196,7 @@ async function loadLegalTextDraftsForDocument(
     selected_review_node,
     search_index: buildLegalTextSearchIndex(review_tree_with_completeness),
     completeness,
+    tax_knowledge_proposals,
   };
 }
 

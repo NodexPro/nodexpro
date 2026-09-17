@@ -145,7 +145,8 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'create_tax_strategy_exclusive_group' ||
     command === 'create_legal_text_draft_from_candidate' ||
     command === 'prepare_legal_text_drafts_for_structure' ||
-    command === 'create_manual_legal_text_draft'
+    command === 'create_manual_legal_text_draft' ||
+    command === 'create_tax_knowledge_proposal'
   ) {
     return 'legal_knowledge.draft_create';
   }
@@ -157,7 +158,8 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'reject_legal_extraction_candidate' ||
     command === 'set_legal_text_draft_review_status' ||
     command === 'confirm_owner_structure_completeness' ||
-    command === 'retract_owner_structure_completeness'
+    command === 'retract_owner_structure_completeness' ||
+    command === 'set_tax_knowledge_proposal_review_status'
   ) {
     return 'legal_knowledge.review';
   }
@@ -174,6 +176,7 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'reparent_legal_text_draft' ||
     command === 'set_legal_text_draft_boundary' ||
     command === 'reset_legal_text_draft_to_source' ||
+    command === 'create_corrected_tax_knowledge_proposal' ||
     command === 'link_tax_rule_legal_node' ||
     command === 'unlink_tax_rule_legal_node' ||
     command.includes('tax_rule_relationship') ||

@@ -1529,6 +1529,7 @@ export async function buildOwnerLegalControlPanelAggregate(
     tax_knowledge_trainer_page_no?: number | null;
     tax_knowledge_trainer_tax_source_id?: string | null;
     tax_knowledge_trainer_legal_text_draft_id?: string | null;
+    tax_knowledge_trainer_proposal_id?: string | null;
   }
 ): Promise<Record<string, unknown>> {
   const actor = await requireOwnerLegalWorkspaceActor(ctx);
@@ -1698,6 +1699,7 @@ export async function buildOwnerLegalControlPanelAggregate(
         page_no: opts?.tax_knowledge_trainer_page_no,
         tax_source_id: opts?.tax_knowledge_trainer_tax_source_id,
         legal_text_draft_id: opts?.tax_knowledge_trainer_legal_text_draft_id,
+        tax_knowledge_proposal_id: opts?.tax_knowledge_trainer_proposal_id,
       })
     : emptyKnowledgeTrainerSlice(false);
   const legalLibrary = (taxKnowledge.legal_library ?? {}) as Record<string, unknown>;
@@ -1705,7 +1707,14 @@ export async function buildOwnerLegalControlPanelAggregate(
     ...taxKnowledge,
     legal_library: {
       ...legalLibrary,
-      trainer_upload: trainerSlice,
+      trainer_upload: {
+        ...trainerSlice,
+        allowed_actions: maskActionsForCapabilities(
+          trainerSlice.allowed_actions,
+          selectedCaps,
+          isPlatformOwner,
+        ),
+      },
     },
   };
 

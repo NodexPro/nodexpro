@@ -31,6 +31,11 @@ import {
   updateLegalTextDraftText,
 } from './knowledge-trainer-legal-text-draft.service.js';
 import {
+  createCorrectedTaxKnowledgeProposal,
+  createTaxKnowledgeProposal,
+  setTaxKnowledgeProposalReviewStatus,
+} from './knowledge-trainer-tax-knowledge-proposal.service.js';
+import {
   createOwnerLegalMaterialSignedUrl,
   decodeLegalTrainingUpload,
   storeOwnerLegalMaterial,
@@ -93,6 +98,7 @@ async function refreshed(
   countryCode: string,
   documentId?: string | null,
   legalTextDraftId?: string | null,
+  taxKnowledgeProposalId?: string | null,
 ): Promise<KnowledgeTrainerCommandResponse['refreshed']> {
   return {
     aggregate_key: 'owner_legal_control_panel_aggregate',
@@ -101,6 +107,7 @@ async function refreshed(
       strategy_engine_country_code: countryCode,
       tax_knowledge_trainer_document_id: documentId ?? undefined,
       tax_knowledge_trainer_legal_text_draft_id: legalTextDraftId ?? undefined,
+      tax_knowledge_trainer_proposal_id: taxKnowledgeProposalId ?? undefined,
     }),
   };
 }
@@ -789,6 +796,12 @@ export async function executeKnowledgeTrainerCommand(
       return handleLegalTextDraftCommand(ctx, 'confirm_owner_structure_completeness', payload, confirmOwnerStructureCompleteness);
     case 'retract_owner_structure_completeness':
       return handleLegalTextDraftCommand(ctx, 'retract_owner_structure_completeness', payload, retractOwnerStructureCompleteness);
+    case 'create_tax_knowledge_proposal':
+      return handleTaxKnowledgeProposalCommand(ctx, 'create_tax_knowledge_proposal', payload, createTaxKnowledgeProposal);
+    case 'set_tax_knowledge_proposal_review_status':
+      return handleTaxKnowledgeProposalCommand(ctx, 'set_tax_knowledge_proposal_review_status', payload, setTaxKnowledgeProposalReviewStatus);
+    case 'create_corrected_tax_knowledge_proposal':
+      return handleTaxKnowledgeProposalCommand(ctx, 'create_corrected_tax_knowledge_proposal', payload, createCorrectedTaxKnowledgeProposal);
     default:
       throw badRequest(`Unsupported knowledge-trainer command: ${command}`);
   }
@@ -810,6 +823,26 @@ async function handleLegalTextDraftCommand(
     remaining_count: result.remaining_count,
     uncertain_count: result.uncertain_count,
     refreshed: await refreshed(ctx, result.country_code, result.document_id, result.draft_id || null),
+  };
+}
+
+async function handleTaxKnowledgeProposalCommand(
+  ctx: RequestContext,
+  command: KnowledgeTrainerCommandName,
+  payload: Record<string, unknown>,
+  run: typeof createTaxKnowledgeProposal,
+): Promise<KnowledgeTrainerCommandResponse> {
+  const result = await run(ctx, payload);
+  return {
+    ok: true,
+    command,
+    refreshed: await refreshed(
+      ctx,
+      result.country_code,
+      result.document_id,
+      result.draft_id,
+      result.proposal_id,
+    ),
   };
 }
 

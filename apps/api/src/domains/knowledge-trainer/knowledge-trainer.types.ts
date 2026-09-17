@@ -21,6 +21,9 @@ export const KNOWLEDGE_TRAINER_COMMANDS = [
   'create_manual_legal_text_draft',
   'confirm_owner_structure_completeness',
   'retract_owner_structure_completeness',
+  'create_tax_knowledge_proposal',
+  'set_tax_knowledge_proposal_review_status',
+  'create_corrected_tax_knowledge_proposal',
 ] as const;
 
 export type KnowledgeTrainerCommandName = (typeof KNOWLEDGE_TRAINER_COMMANDS)[number];
@@ -536,6 +539,38 @@ export type KnowledgeTrainerLegalTextCompletenessDto = {
   selected_branch_confirmed_at: string | null;
 };
 
+export type KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto = {
+  id: string;
+  revision_no: number;
+  creation_origin: 'ai_proposal' | 'owner_corrected';
+  status: 'proposed' | 'needs_review' | 'owner_approved' | 'rejected' | 'published_to_canonical_draft';
+  status_label: string;
+  supersedes_proposal_id: string | null;
+  created_at: string;
+  publication_trace: {
+    published_tax_rule_id: string | null;
+    published_tax_rule_version_id: string | null;
+    published_tax_legal_node_id: string | null;
+  };
+};
+
+export type KnowledgeTrainerTaxKnowledgeProposalDetailDto = KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto & {
+  legal_text_draft_id: string;
+  proposal_json: Record<string, unknown>;
+  allowed_next_statuses: KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto['status'][];
+  allowed_actions: Array<{
+    action_key: string;
+    enabled: boolean;
+    required_fields: Record<string, string>;
+  }>;
+};
+
+export type KnowledgeTrainerTaxKnowledgeProposalSliceDto = {
+  latest: KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto | null;
+  selected: KnowledgeTrainerTaxKnowledgeProposalDetailDto | null;
+  history: KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto[];
+};
+
 export type KnowledgeTrainerLegalTextDraftSummaryDto = {
   all: number;
   draft: number;
@@ -588,6 +623,7 @@ export type KnowledgeTrainerSliceDto = {
     selected_legal_text_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
     legal_text_search_index: KnowledgeTrainerLegalTextSearchIndexItemDto[];
     legal_text_completeness: KnowledgeTrainerLegalTextCompletenessDto;
+    tax_knowledge_proposals: KnowledgeTrainerTaxKnowledgeProposalSliceDto;
   } | null;
   allowed_actions: Array<{
     action_key: string;

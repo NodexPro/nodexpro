@@ -126,12 +126,31 @@ export async function resolveCountryForOwnerLegalCommand(
     command === 'reparent_legal_text_draft' ||
     command === 'set_legal_text_draft_boundary' ||
     command === 'reset_legal_text_draft_to_source' ||
-    command === 'set_legal_text_draft_review_status'
+    command === 'set_legal_text_draft_review_status' ||
+    command === 'create_tax_knowledge_proposal'
   ) {
     const id = optionalUuid(payload.legal_text_draft_id) ?? optionalUuid(payload.draft_id);
     if (!id) throw badRequest('legal_text_draft_id is required');
     return assertPayloadCountryAgrees(
       await loadCountryFromRow('legal_ingestion_legal_text_drafts', id, 'Legal text draft not found'),
+      payload,
+    );
+  }
+  if (
+    command === 'set_tax_knowledge_proposal_review_status' ||
+    command === 'create_corrected_tax_knowledge_proposal'
+  ) {
+    const id =
+      optionalUuid(payload.source_tax_knowledge_proposal_id) ??
+      optionalUuid(payload.tax_knowledge_proposal_id) ??
+      optionalUuid(payload.proposal_id);
+    if (!id) throw badRequest('tax_knowledge_proposal_id is required');
+    return assertPayloadCountryAgrees(
+      await loadCountryFromRow(
+        'legal_ingestion_tax_knowledge_proposals',
+        id,
+        'Tax knowledge proposal not found',
+      ),
       payload,
     );
   }

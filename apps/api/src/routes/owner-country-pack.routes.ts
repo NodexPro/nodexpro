@@ -138,6 +138,10 @@ router.get('/legal-control', async (req: Request, res: Response, next: NextFunct
         typeof req.query.tax_knowledge_trainer_legal_text_draft_id === 'string'
           ? req.query.tax_knowledge_trainer_legal_text_draft_id
           : undefined,
+      tax_knowledge_trainer_proposal_id:
+        typeof req.query.tax_knowledge_trainer_proposal_id === 'string'
+          ? req.query.tax_knowledge_trainer_proposal_id
+          : undefined,
     });
     return res.json(aggregate);
   } catch (e) {
