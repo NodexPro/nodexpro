@@ -18,6 +18,9 @@ export const KNOWLEDGE_TRAINER_COMMANDS = [
   'set_legal_text_draft_boundary',
   'reset_legal_text_draft_to_source',
   'set_legal_text_draft_review_status',
+  'create_manual_legal_text_draft',
+  'confirm_owner_structure_completeness',
+  'retract_owner_structure_completeness',
 ] as const;
 
 export type KnowledgeTrainerCommandName = (typeof KNOWLEDGE_TRAINER_COMMANDS)[number];
@@ -304,6 +307,7 @@ export type KnowledgeTrainerCandidateDto = {
   validation_warnings: string[];
   matched_tax_legal_node_id: string | null;
   accepted_tax_legal_node_id: string | null;
+  sort_order?: number;
   possible_existing_match: boolean;
   review_class: StructureReviewClass;
   review_class_label: string;
@@ -434,6 +438,7 @@ export type KnowledgeTrainerLegalTextDraftListItemDto = {
     structure_run_id: string | null;
     source_candidate_id: string | null;
   };
+  creation_origin: 'detector' | 'owner_manual';
   created_at: string;
   updated_at: string;
 };
@@ -468,6 +473,7 @@ export type KnowledgeTrainerLegalTextDraftDto = {
     structure_run_id: string | null;
     source_candidate_id: string | null;
   };
+  creation_origin: 'detector' | 'owner_manual';
   source_notes: KnowledgeTrainerSourceNoteDto[];
   unresolved_source_note_count: number;
   subtree_source_notes: KnowledgeTrainerSourceNoteDto[];
@@ -499,6 +505,35 @@ export type KnowledgeTrainerLegalTextReviewNodeDto = {
   title: string | null;
   review_state: KnowledgeTrainerLegalTextReviewState;
   review_state_label: string;
+  creation_origin: 'detector' | 'owner_manual';
+  manually_added: boolean;
+  search_label: string | null;
+  ancestor_ids: string[];
+  child_count: number;
+  depth: number;
+  default_expanded: boolean;
+  tree_sort_key: number;
+  review_progress: {
+    all: number;
+    reviewed: number;
+    needs_review: number;
+    draft: number;
+    not_prepared: number;
+  };
+  structure_completeness_confirmed: boolean;
+};
+
+export type KnowledgeTrainerLegalTextSearchIndexItemDto = {
+  node_id: string;
+  search_label: string;
+  ancestor_ids: string[];
+};
+
+export type KnowledgeTrainerLegalTextCompletenessDto = {
+  document_confirmed: boolean;
+  document_confirmed_at: string | null;
+  selected_branch_confirmed: boolean;
+  selected_branch_confirmed_at: string | null;
 };
 
 export type KnowledgeTrainerLegalTextDraftSummaryDto = {
@@ -551,6 +586,8 @@ export type KnowledgeTrainerSliceDto = {
     legal_text_draft_summary: KnowledgeTrainerLegalTextDraftSummaryDto;
     legal_text_review_tree: KnowledgeTrainerLegalTextReviewNodeDto[];
     selected_legal_text_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
+    legal_text_search_index: KnowledgeTrainerLegalTextSearchIndexItemDto[];
+    legal_text_completeness: KnowledgeTrainerLegalTextCompletenessDto;
   } | null;
   allowed_actions: Array<{
     action_key: string;

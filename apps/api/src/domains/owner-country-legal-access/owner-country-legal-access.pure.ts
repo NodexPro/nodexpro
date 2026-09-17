@@ -144,7 +144,8 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'create_tax_strategy_version' ||
     command === 'create_tax_strategy_exclusive_group' ||
     command === 'create_legal_text_draft_from_candidate' ||
-    command === 'prepare_legal_text_drafts_for_structure'
+    command === 'prepare_legal_text_drafts_for_structure' ||
+    command === 'create_manual_legal_text_draft'
   ) {
     return 'legal_knowledge.draft_create';
   }
@@ -154,7 +155,9 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command.includes('discard_tax_rule_unresolved') ||
     command.includes('resolve_tax_rule_unresolved') ||
     command === 'reject_legal_extraction_candidate' ||
-    command === 'set_legal_text_draft_review_status'
+    command === 'set_legal_text_draft_review_status' ||
+    command === 'confirm_owner_structure_completeness' ||
+    command === 'retract_owner_structure_completeness'
   ) {
     return 'legal_knowledge.review';
   }

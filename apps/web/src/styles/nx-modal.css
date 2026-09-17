@@ -2775,6 +2775,75 @@
   min-width: 0;
 }
 
+.nx-legal-draft-tree {
+  max-height: 70vh;
+  overflow: auto;
+  align-content: start;
+}
+
+.nx-legal-draft-tree-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.nx-legal-draft-tree-toggle,
+.nx-legal-draft-tree-toggle-spacer {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 22px;
+  color: #4b5563;
+}
+
+.nx-legal-draft-tree-toggle-spacer {
+  cursor: default;
+}
+
+.nx-legal-draft-search-hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.nx-legal-draft-branch-progress,
+.nx-legal-draft-detail-loading,
+.nx-legal-draft-completeness-flag {
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.nx-legal-draft-manual-badge {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nx-legal-draft-manual-inline,
+.nx-legal-draft-completeness-inline {
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.nx-legal-draft-add-missing,
+.nx-legal-draft-add-form,
+.nx-legal-draft-completeness-actions {
+  display: grid;
+  gap: 8px;
+}
+
 .nx-legal-draft-tree-list {
   list-style: none;
   margin: 0;

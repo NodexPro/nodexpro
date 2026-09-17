@@ -39,6 +39,9 @@ import {
   type OwnerLegalTextDraftCounts,
   type OwnerLegalTextDraftListItem,
   type OwnerLegalTextReviewNode,
+  type OwnerLegalTextReviewProgress,
+  type OwnerLegalTextSearchIndexItem,
+  type OwnerLegalTextCompleteness,
   type OwnerOriginalFileAccess,
   type OwnerSourceNote,
   type OwnerSourceNoteAnchor,
@@ -727,6 +730,7 @@ function parseLegalTextDraftListItem(row: UnknownRecord): OwnerLegalTextDraftLis
       structure_run_id: asNullableString(provenance?.structure_run_id),
       source_candidate_id: asNullableString(provenance?.source_candidate_id),
     },
+    creation_origin: asString(row.creation_origin) === 'owner_manual' ? 'owner_manual' : 'detector',
     created_at: asString(row.created_at),
     updated_at: asString(row.updated_at),
   };
@@ -790,6 +794,16 @@ function parseLegalTextDraftSummary(raw: UnknownRecord | null): OwnerLegalTextDr
   };
 }
 
+function parseLegalTextReviewProgress(raw: UnknownRecord | null): OwnerLegalTextReviewProgress {
+  return {
+    all: Number(raw?.all) || 0,
+    reviewed: Number(raw?.reviewed) || 0,
+    needs_review: Number(raw?.needs_review) || 0,
+    draft: Number(raw?.draft) || 0,
+    not_prepared: Number(raw?.not_prepared) || 0,
+  };
+}
+
 function parseLegalTextReviewTree(raw: unknown): OwnerLegalTextReviewNode[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -806,7 +820,43 @@ function parseLegalTextReviewTree(raw: unknown): OwnerLegalTextReviewNode[] {
       title: asNullableString(row.title),
       review_state: asString(row.review_state),
       review_state_label: asString(row.review_state_label),
+      creation_origin: asString(row.creation_origin) === 'owner_manual' ? 'owner_manual' : 'detector',
+      manually_added: row.manually_added === true || asString(row.creation_origin) === 'owner_manual',
+      search_label: asNullableString(row.search_label),
+      ancestor_ids: Array.isArray(row.ancestor_ids)
+        ? row.ancestor_ids.filter((id): id is string => typeof id === 'string')
+        : [],
+      child_count: Number(row.child_count) || 0,
+      depth: Number(row.depth) || 0,
+      default_expanded: row.default_expanded === true,
+      tree_sort_key: Number(row.tree_sort_key) || 0,
+      review_progress: parseLegalTextReviewProgress(asRecord(row.review_progress)),
+      structure_completeness_confirmed: row.structure_completeness_confirmed === true,
     }));
+}
+
+function parseLegalTextSearchIndex(raw: unknown): OwnerLegalTextSearchIndexItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      node_id: asString(row.node_id),
+      search_label: asString(row.search_label),
+      ancestor_ids: Array.isArray(row.ancestor_ids)
+        ? row.ancestor_ids.filter((id): id is string => typeof id === 'string')
+        : [],
+    }))
+    .filter((row) => row.node_id && row.search_label);
+}
+
+function parseLegalTextCompleteness(raw: UnknownRecord | null): OwnerLegalTextCompleteness {
+  return {
+    document_confirmed: raw?.document_confirmed === true,
+    document_confirmed_at: asNullableString(raw?.document_confirmed_at),
+    selected_branch_confirmed: raw?.selected_branch_confirmed === true,
+    selected_branch_confirmed_at: asNullableString(raw?.selected_branch_confirmed_at),
+  };
 }
 
 function parseReviewTree(raw: unknown): OwnerStructureReviewTreeNode[] {
@@ -993,6 +1043,8 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
           legal_text_draft_summary: parseLegalTextDraftSummary(asRecord(selected.legal_text_draft_summary)),
           legal_text_review_tree: parseLegalTextReviewTree(selected.legal_text_review_tree),
           selected_legal_text_review_node: parseLegalTextReviewTree([selected.selected_legal_text_review_node])[0] ?? null,
+          legal_text_search_index: parseLegalTextSearchIndex(selected.legal_text_search_index),
+          legal_text_completeness: parseLegalTextCompleteness(asRecord(selected.legal_text_completeness)),
         }
       : null,
     allowed_actions: parseAllowedActions(raw.allowed_actions),

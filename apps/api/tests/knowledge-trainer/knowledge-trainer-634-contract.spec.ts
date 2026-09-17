@@ -19,7 +19,9 @@ test('TAX-634 named prepare command is parent-first, idempotent, and returns ref
   const access = readRepo('apps/api/src/domains/owner-country-legal-access/owner-country-legal-access.pure.ts');
   const resolve = readRepo('apps/api/src/domains/owner-country-legal-access/owner-country-legal-access-country-resolve.service.ts');
   const read = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-read.service.ts');
-  const prepareFn = service.slice(service.indexOf('export async function prepareLegalTextDraftsForStructure'));
+  const prepareStart = service.indexOf('export async function prepareLegalTextDraftsForStructure');
+  const prepareEnd = service.indexOf('export async function createManualLegalTextDraft');
+  const prepareFn = service.slice(prepareStart, prepareEnd > prepareStart ? prepareEnd : undefined);
 
   assert.match(types, /'prepare_legal_text_drafts_for_structure'/);
   assert.match(commands, /case 'prepare_legal_text_drafts_for_structure':/);

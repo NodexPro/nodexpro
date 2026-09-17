@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiJson, ApiError, userFacingApiMessage } from '../api/client';
 import { OWNER } from '../api/endpoints';
@@ -53,6 +53,9 @@ const LEGAL_TEXT_DRAFT_COMMANDS = new Set([
   'set_legal_text_draft_boundary',
   'reset_legal_text_draft_to_source',
   'set_legal_text_draft_review_status',
+  'create_manual_legal_text_draft',
+  'confirm_owner_structure_completeness',
+  'retract_owner_structure_completeness',
 ]);
 
 function trainerSelectionFromAggregate(aggregate: unknown): { documentId: string; draftId: string } {
@@ -83,6 +86,8 @@ export function PlatformOwnerLegalControl() {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const hasLoadedPanel = useRef(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [accessDeniedReason, setAccessDeniedReason] = useState('');
   const [accessRequestSubmitted, setAccessRequestSubmitted] = useState(false);
@@ -106,11 +111,14 @@ export function PlatformOwnerLegalControl() {
   }, [auth.status, navigate]);
 
   const loadCore = useCallback(async (opts?: { silent?: boolean }): Promise<void> => {
-    if (!opts?.silent) {
+    const silent = Boolean(opts?.silent);
+    if (!silent) {
       setLoading(true);
       setError('');
       setAccessDenied(false);
       setAccessDeniedReason('');
+    } else {
+      setDetailLoading(true);
     }
     try {
       const qs = new URLSearchParams();
@@ -125,6 +133,7 @@ export function PlatformOwnerLegalControl() {
       const path = qs.toString() ? `${OWNER.legalControl}?${qs.toString()}` : OWNER.legalControl;
       const p = (await apiJson(path)) as UnknownRecord;
       setPanel(p);
+      hasLoadedPanel.current = true;
     } catch (e) {
       if (isForbidden(e)) {
         setAccessDenied(true);
@@ -134,12 +143,13 @@ export function PlatformOwnerLegalControl() {
       }
     } finally {
       setLoading(false);
+      setDetailLoading(false);
     }
   }, [taxKnowledgeCountryQuery, trainerDocumentQuery, trainerDraftQuery]);
 
   useEffect(() => {
     if (auth.status === 'authenticated') {
-      void loadCore();
+      void loadCore({ silent: hasLoadedPanel.current });
     }
   }, [auth.status, loadCore]);
 
@@ -329,7 +339,7 @@ export function PlatformOwnerLegalControl() {
     }
   }
 
-  if (auth.status === 'loading' || loading) {
+  if ((auth.status === 'loading' || loading) && !panel) {
     return <div style={{ padding: 24 }}>Loading owner panel...</div>;
   }
 
@@ -473,6 +483,7 @@ export function PlatformOwnerLegalControl() {
               }
             }}
             onReload={reloadTrainerSilently}
+            detailLoading={detailLoading}
             onSelectLegalTextDraft={(documentId, draftId) => {
               setTrainerDocumentQuery(documentId);
               setTrainerDraftQuery(draftId);

@@ -95,7 +95,10 @@ export async function resolveCountryForOwnerLegalCommand(
     command === 'rebuild_legal_structure_candidates' ||
     command === 'reextract_legal_document_layout' ||
     command === 'rebuild_legal_structure_with_layout' ||
-    command === 'prepare_legal_text_drafts_for_structure'
+    command === 'prepare_legal_text_drafts_for_structure' ||
+    command === 'create_manual_legal_text_draft' ||
+    command === 'confirm_owner_structure_completeness' ||
+    command === 'retract_owner_structure_completeness'
   ) {
     const id = optionalUuid(payload.legal_ingestion_document_id);
     if (!id) throw badRequest('legal_ingestion_document_id is required');

@@ -37,3 +37,25 @@ export function nestLegalTextReviewNodes<T extends { id: string; parent_id: stri
     (byParent.get(parentId) ?? []).map((row) => ({ ...row, children: walk(row.id) }));
   return walk(null);
 }
+
+export function matchLegalTextSearchIndex<T extends { search_label: string }>(
+  index: T[],
+  query: string,
+): T[] {
+  const q = query.trim();
+  if (!q) return [];
+  const exact = index.filter((row) => row.search_label === q);
+  if (exact.length) return exact;
+  return index.filter((row) => row.search_label.includes(q));
+}
+
+export function mergeExpandedIds(
+  current: ReadonlySet<string>,
+  ancestorIds: readonly string[],
+  defaultExpandedIds: readonly string[] = [],
+): Set<string> {
+  const next = new Set(current);
+  for (const id of ancestorIds) next.add(id);
+  for (const id of defaultExpandedIds) next.add(id);
+  return next;
+}

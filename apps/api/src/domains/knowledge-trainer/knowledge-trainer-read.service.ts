@@ -3,7 +3,10 @@ import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../..
 import { summarizeLayoutReadiness } from './knowledge-trainer-layout.pure.js';
 import { fetchAllPaged } from './knowledge-trainer-pagination.js';
 import {
+  attachStructureCompleteness,
   buildLegalTextReviewNodes,
+  buildLegalTextSearchIndex,
+  creationOriginFromDraft,
   displayDraftLabel,
   draftCreateFrontier,
   notesOverlappingDraftSpan,
@@ -31,6 +34,8 @@ import type {
   KnowledgeTrainerLegalTextDraftListItemDto,
   KnowledgeTrainerLegalTextDraftSummaryDto,
   KnowledgeTrainerLegalTextReviewNodeDto,
+  KnowledgeTrainerLegalTextSearchIndexItemDto,
+  KnowledgeTrainerLegalTextCompletenessDto,
   KnowledgeTrainerSliceDto,
   KnowledgeTrainerSourceNoteAnchorDto,
   KnowledgeTrainerSourceNoteDto,
@@ -341,6 +346,7 @@ export async function buildKnowledgeTrainerSlice(
           validation_warnings: warnings,
           matched_tax_legal_node_id: row.matched_tax_legal_node_id == null ? null : String(row.matched_tax_legal_node_id),
           accepted_tax_legal_node_id: row.accepted_tax_legal_node_id == null ? null : String(row.accepted_tax_legal_node_id),
+          sort_order: Number(row.sort_order ?? 0),
           possible_existing_match: Boolean(row.matched_tax_legal_node_id),
         };
       });
@@ -536,6 +542,23 @@ export async function buildKnowledgeTrainerSlice(
         legal_text_draft_id: 'uuid',
         review_status: 'draft | needs_review | ready',
       }),
+      action('create_manual_legal_text_draft', Boolean(selected), {
+        legal_ingestion_document_id: 'uuid',
+        kind_label: 'string',
+        legal_identifier: 'exact legal identifier',
+        printed_marker: 'optional printed local marker',
+        title: 'optional string',
+        parent_draft_id: 'optional uuid',
+        draft_legal_text: 'string',
+      }),
+      action('confirm_owner_structure_completeness', Boolean(selected), {
+        legal_ingestion_document_id: 'uuid',
+        branch_draft_id: 'optional uuid; omit for whole document',
+      }),
+      action('retract_owner_structure_completeness', Boolean(selected), {
+        legal_ingestion_document_id: 'uuid',
+        branch_draft_id: 'optional uuid; omit for whole document',
+      }),
     ],
   };
 }
@@ -637,7 +660,7 @@ async function loadSourceNotesForActiveRun(activeRunId: string | null): Promise<
 type SourceNoteWithRun = KnowledgeTrainerSourceNoteDto & { structure_run_id: string | null };
 
 const LEGAL_TEXT_DRAFT_LIST_SELECT =
-  'id, kind_label, source_display_identifier, printed_marker, title, parent_draft_id, text_boundary_status, review_status, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, original_subtree_page_start, original_subtree_page_end, original_subtree_item_start, original_subtree_item_end, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, structure_run_id, source_candidate_id, created_at, updated_at';
+  'id, kind_label, source_display_identifier, normalized_machine_identifier, printed_marker, title, parent_draft_id, text_boundary_status, review_status, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, original_subtree_page_start, original_subtree_page_end, original_subtree_item_start, original_subtree_item_end, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, structure_run_id, source_candidate_id, creation_origin, owner_sort_key, created_at, updated_at';
 
 const LEGAL_TEXT_DRAFT_DETAIL_SELECT = `${LEGAL_TEXT_DRAFT_LIST_SELECT}, original_source_text, original_subtree_text, draft_legal_text`;
 
@@ -764,6 +787,7 @@ function mapDraftListItem(
       structure_run_id: runId,
       source_candidate_id: row.source_candidate_id == null ? null : String(row.source_candidate_id),
     },
+    creation_origin: creationOriginFromDraft(row.creation_origin == null ? null : String(row.creation_origin)),
     created_at: String(row.created_at ?? ''),
     updated_at: String(row.updated_at ?? ''),
   };
@@ -817,6 +841,8 @@ function mapLegalTextDraftSlice(input: {
   summary: KnowledgeTrainerLegalTextDraftSummaryDto;
   review_tree: KnowledgeTrainerLegalTextReviewNodeDto[];
   selected_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
+  search_index: KnowledgeTrainerLegalTextSearchIndexItemDto[];
+  completeness: KnowledgeTrainerLegalTextCompletenessDto;
 }): {
   legal_text_drafts: KnowledgeTrainerLegalTextDraftListItemDto[];
   selected_legal_text_draft: KnowledgeTrainerLegalTextDraftDto | null;
@@ -824,6 +850,8 @@ function mapLegalTextDraftSlice(input: {
   legal_text_draft_summary: KnowledgeTrainerLegalTextDraftSummaryDto;
   legal_text_review_tree: KnowledgeTrainerLegalTextReviewNodeDto[];
   selected_legal_text_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
+  legal_text_search_index: KnowledgeTrainerLegalTextSearchIndexItemDto[];
+  legal_text_completeness: KnowledgeTrainerLegalTextCompletenessDto;
 } {
   return {
     legal_text_drafts: input.drafts,
@@ -832,6 +860,8 @@ function mapLegalTextDraftSlice(input: {
     legal_text_draft_summary: input.summary,
     legal_text_review_tree: input.review_tree,
     selected_legal_text_review_node: input.selected_review_node,
+    legal_text_search_index: input.search_index,
+    legal_text_completeness: input.completeness,
   };
 }
 
@@ -873,7 +903,15 @@ async function loadLegalTextDraftsForDocument(
   summary: KnowledgeTrainerLegalTextDraftSummaryDto;
   review_tree: KnowledgeTrainerLegalTextReviewNodeDto[];
   selected_review_node: KnowledgeTrainerLegalTextReviewNodeDto | null;
+  search_index: KnowledgeTrainerLegalTextSearchIndexItemDto[];
+  completeness: KnowledgeTrainerLegalTextCompletenessDto;
 }> {
+  const emptyCompleteness: KnowledgeTrainerLegalTextCompletenessDto = {
+    document_confirmed: false,
+    document_confirmed_at: null,
+    selected_branch_confirmed: false,
+    selected_branch_confirmed_at: null,
+  };
   const empty = {
     drafts: [] as KnowledgeTrainerLegalTextDraftListItemDto[],
     selected: null,
@@ -881,6 +919,8 @@ async function loadLegalTextDraftsForDocument(
     summary: emptyLegalTextDraftSummary(),
     review_tree: [] as KnowledgeTrainerLegalTextReviewNodeDto[],
     selected_review_node: null,
+    search_index: [] as KnowledgeTrainerLegalTextSearchIndexItemDto[],
+    completeness: emptyCompleteness,
   };
   let rows: Record<string, unknown>[];
   try {
@@ -914,9 +954,9 @@ async function loadLegalTextDraftsForDocument(
       source_display_identifier: row.source_display_identifier ?? row.display_identifier,
       printed_marker: row.printed_marker ?? null,
       title: row.title,
-      sort_order: index,
+      sort_order: row.sort_order ?? index,
     })),
-    drafts.map((row) => ({
+    drafts.map((row, index) => ({
       id: row.id,
       source_candidate_id: row.provenance.source_candidate_id,
       parent_draft_id: row.parent_draft_id,
@@ -925,9 +965,15 @@ async function loadLegalTextDraftsForDocument(
       display_identifier: row.display_identifier,
       printed_marker: row.printed_marker,
       title: row.title,
+      creation_origin: row.creation_origin,
+      owner_sort_key: optionalInt(rows[index]?.owner_sort_key),
+      normalized_machine_identifier:
+        rows[index]?.normalized_machine_identifier == null
+          ? null
+          : String(rows[index]?.normalized_machine_identifier),
     })),
   );
-  const selected_review_node = pickSelectedReviewNode(review_tree, opts?.selectedDraftId);
+  let selected_review_node = pickSelectedReviewNode(review_tree, opts?.selectedDraftId);
   const summary = emptyLegalTextDraftSummary();
   summary.all = drafts.length;
   for (const draft of drafts) summary[draft.review_status] += 1;
@@ -966,7 +1012,54 @@ async function loadLegalTextDraftsForDocument(
     })),
   );
 
-  return { drafts, selected, frontier, summary, review_tree, selected_review_node };
+  let completenessRows: Array<{ branch_draft_id: string | null; confirmed_at: string | null }> = [];
+  try {
+    const loaded = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+      supabaseAdmin
+        .from('legal_ingestion_owner_completeness')
+        .select('branch_draft_id, confirmed_at')
+        .eq('document_id', documentId)
+        .order('confirmed_at', { ascending: false })
+        .range(from, to),
+    );
+    completenessRows = loaded.map((row) => ({
+      branch_draft_id: row.branch_draft_id == null ? null : String(row.branch_draft_id),
+      confirmed_at: row.confirmed_at == null ? null : String(row.confirmed_at),
+    }));
+  } catch (error) {
+    if (
+      !isSupabaseMissingTableError(error as { message?: string; code?: string }) &&
+      !isSupabaseMissingColumnError(error as { message?: string; code?: string })
+    ) {
+      throw error;
+    }
+  }
+  const confirmedBranchIds = new Set(
+    completenessRows.filter((row) => row.branch_draft_id).map((row) => String(row.branch_draft_id)),
+  );
+  const review_tree_with_completeness = attachStructureCompleteness(review_tree, confirmedBranchIds);
+  selected_review_node = pickSelectedReviewNode(review_tree_with_completeness, opts?.selectedDraftId);
+  const documentCompleteness = completenessRows.find((row) => row.branch_draft_id == null) ?? null;
+  const branchCompleteness = selected_review_node?.draft_id
+    ? completenessRows.find((row) => row.branch_draft_id === selected_review_node.draft_id) ?? null
+    : null;
+  const completeness: KnowledgeTrainerLegalTextCompletenessDto = {
+    document_confirmed: Boolean(documentCompleteness),
+    document_confirmed_at: documentCompleteness?.confirmed_at ?? null,
+    selected_branch_confirmed: Boolean(branchCompleteness),
+    selected_branch_confirmed_at: branchCompleteness?.confirmed_at ?? null,
+  };
+
+  return {
+    drafts,
+    selected,
+    frontier,
+    summary,
+    review_tree: review_tree_with_completeness,
+    selected_review_node,
+    search_index: buildLegalTextSearchIndex(review_tree_with_completeness),
+    completeness,
+  };
 }
 
 async function loadSourceNotesForDocument(

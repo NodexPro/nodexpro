@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { nestLegalTextDrafts, nestLegalTextReviewNodes } from '../src/pages/owner-legal-text-draft-review.pure.ts';
+import { nestLegalTextDrafts, nestLegalTextReviewNodes, matchLegalTextSearchIndex, mergeExpandedIds } from '../src/pages/owner-legal-text-draft-review.pure.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(dir, '../../..');
@@ -118,5 +118,65 @@ test('TAX-634 Owner Draft workspace is a human legal-review screen', () => {
   assert.match(library, /draftWorkspaceOpen/);
   assert.match(trainer, /legal_text_review_tree/);
   assert.match(trainer, /useState<'draft' \| 'structure'>\('draft'\)/);
+});
+
+test('TAX-635A collapsible tree, identifier search, manual missing item, and completeness stay dumb', () => {
+  const ui = readRepo('apps/web/src/pages/owner-legal-text-draft-review.tsx');
+  const panel = readRepo('apps/web/src/pages/PlatformOwnerLegalControl.tsx');
+  const trainer = readRepo('apps/web/src/pages/owner-knowledge-trainer-panel.tsx');
+  const css = readRepo('apps/web/src/styles/nx-modal.css');
+
+  assert.match(ui, /expanded && hasChildren/);
+  assert.match(ui, /Go to identifier/);
+  assert.match(ui, /matchLegalTextSearchIndex/);
+  assert.match(ui, /\+ Add missing item/);
+  assert.match(ui, /create_manual_legal_text_draft/);
+  assert.match(ui, /Manually added \/ נוסף ידנית/);
+  assert.match(ui, /confirm_owner_structure_completeness/);
+  assert.match(ui, /retract_owner_structure_completeness/);
+  assert.match(ui, /Draft reviewed/);
+  assert.match(ui, /Structure completeness confirmed/);
+  assert.match(ui, /I checked this branch against the original source for missing items/);
+  assert.match(ui, /Confirm whole document is complete/);
+  assert.match(ui, /Loading section/);
+  assert.match(ui, /treeScrollTopRef/);
+  assert.doesNotMatch(ui, /parseLegalIdentifier/);
+  assert.doesNotMatch(ui, /owner_sort_key/);
+  assert.doesNotMatch(ui, /method:\s*['"]PATCH['"]/);
+  assert.doesNotMatch(ui, /accept_legal_structure_candidate|activate_tax_legal_node/);
+
+  assert.match(panel, /create_manual_legal_text_draft/);
+  assert.match(panel, /\(auth\.status === 'loading' \|\| loading\) && !panel/);
+  assert.match(panel, /silent: hasLoadedPanel\.current/);
+  assert.match(panel, /detailLoading/);
+  assert.match(trainer, /legal_text_search_index/);
+  assert.match(css, /nx-legal-draft-tree-toggle/);
+});
+
+test('TAX-635A identifier search uses backend search_label only', () => {
+  const hits = matchLegalTextSearchIndex(
+    [
+      { node_id: 'two', search_label: '2', ancestor_ids: [] },
+      { node_id: 'two-two', search_label: '2(2)', ancestor_ids: ['perek', 'seif'] },
+      { node_id: 'two-two-alef', search_label: '2(2)(א)', ancestor_ids: ['perek', 'seif', 'two-two'] },
+      { node_id: 'tet', search_label: '3(ט)', ancestor_ids: ['seif3'] },
+      { node_id: 'tet1', search_label: '3(ט1)', ancestor_ids: ['seif3'] },
+    ],
+    '2(2)',
+  );
+  assert.deepEqual(
+    hits.map((row) => row.node_id),
+    ['two-two'],
+  );
+  assert.deepEqual(
+    matchLegalTextSearchIndex([{ node_id: 'tet', search_label: '3(ט)', ancestor_ids: [] }], '3(ט)').map(
+      (row) => row.node_id,
+    ),
+    ['tet'],
+  );
+  const expanded = mergeExpandedIds(new Set(['unrelated']), ['perek', 'seif']);
+  assert.equal(expanded.has('unrelated'), true);
+  assert.equal(expanded.has('perek'), true);
+  assert.equal(expanded.has('seif'), true);
 });
 

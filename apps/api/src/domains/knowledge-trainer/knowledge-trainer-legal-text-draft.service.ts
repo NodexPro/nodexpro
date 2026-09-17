@@ -16,6 +16,7 @@ import {
   isLegalTextDraftReviewStatus,
   parentFirstMissingCandidates,
   persistableMonotonicIndex,
+  placeOwnerSortKey,
   reparentScopeError,
   resolveAllHeadingCursors,
   validateDraftReady,
@@ -99,7 +100,7 @@ async function audit(
 }
 
 const DRAFT_SELECT =
-  'id, country_code, document_id, job_id, tax_source_id, structure_run_id, source_candidate_id, kind_label, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, parent_draft_id, original_source_text, draft_legal_text, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, original_source_line_start, original_source_line_end, original_source_bbox, original_subtree_text, original_subtree_page_start, original_subtree_page_end, original_subtree_item_start, original_subtree_item_end, original_subtree_line_start, original_subtree_line_end, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, owner_source_line_start, owner_source_line_end, owner_source_bbox, text_boundary_status, review_status, created_by, updated_by, created_at, updated_at';
+  'id, country_code, document_id, job_id, tax_source_id, structure_run_id, source_candidate_id, creation_origin, owner_sort_key, kind_label, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, parent_draft_id, original_source_text, draft_legal_text, original_source_page_start, original_source_page_end, original_source_item_start, original_source_item_end, original_source_line_start, original_source_line_end, original_source_bbox, original_subtree_text, original_subtree_page_start, original_subtree_page_end, original_subtree_item_start, original_subtree_item_end, original_subtree_line_start, original_subtree_line_end, owner_source_page_start, owner_source_page_end, owner_source_item_start, owner_source_item_end, owner_source_line_start, owner_source_line_end, owner_source_bbox, text_boundary_status, review_status, created_by, updated_by, created_at, updated_at';
 
 async function loadDraft(draftId: string) {
   const { data, error } = await supabaseAdmin
@@ -855,6 +856,256 @@ export async function prepareLegalTextDraftsForStructure(
     skipped_existing_count: skippedExisting,
     remaining_count: remaining,
     uncertain_count: uncertainCount,
+  };
+}
+
+export async function createManualLegalTextDraft(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<LegalTextDraftCommandResult> {
+  const documentId = asUuid(payload.legal_ingestion_document_id ?? payload.document_id, 'legal_ingestion_document_id');
+  const kindLabel = typeof payload.kind_label === 'string' ? payload.kind_label.trim() : '';
+  if (!kindLabel) throw badRequest('kind_label is required');
+  const rawIdentifier =
+    typeof payload.legal_identifier === 'string'
+      ? payload.legal_identifier
+      : typeof payload.source_display_identifier === 'string'
+        ? payload.source_display_identifier
+        : '';
+  if (!rawIdentifier.trim()) throw badRequest('legal_identifier is required');
+  const parsed = parseLegalIdentifier(rawIdentifier);
+  if (!parsed) throw badRequest('legal_identifier is not a valid exact legal identifier');
+  const parentDraftId = asOptionalUuid(payload.parent_draft_id ?? payload.parent_id, 'parent_draft_id');
+  const draftText = typeof payload.draft_legal_text === 'string' ? payload.draft_legal_text : '';
+  const printedMarker =
+    typeof payload.printed_marker === 'string' && payload.printed_marker.trim()
+      ? payload.printed_marker.trim()
+      : parsed.printed_marker;
+  const title = typeof payload.title === 'string' && payload.title.trim() ? payload.title.trim() : null;
+
+  const { data: document, error: documentError } = await supabaseAdmin
+    .from('legal_ingestion_documents')
+    .select('id, country_code, tax_source_id')
+    .eq('id', documentId)
+    .maybeSingle();
+  if (documentError) throw documentError;
+  if (!document) throw notFound('Legal training document not found');
+
+  const { data: job, error: jobError } = await supabaseAdmin
+    .from('legal_ingestion_jobs')
+    .select('id, document_id, country_code, tax_source_id, active_structure_run_id')
+    .eq('document_id', documentId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (jobError) throw jobError;
+  if (!job) throw conflict('No extraction job for this document');
+
+  let parentDraft: Record<string, unknown> | null = null;
+  if (parentDraftId) {
+    parentDraft = await loadDraft(parentDraftId);
+    if (String(parentDraft.document_id) !== documentId) {
+      throw badRequest('parent_draft_id must belong to this document');
+    }
+  }
+
+  const siblings = await loadDraftsForDocument(documentId);
+  const identityConflict = findDraftIdentityConflict(
+    {
+      id: 'new',
+      parent_draft_id: parentDraftId,
+      kind_label: kindLabel,
+      normalized_machine_identifier: parsed.normalized_machine_identifier,
+    },
+    siblings.map((row) => ({
+      id: String(row.id),
+      parent_draft_id: row.parent_draft_id == null ? null : String(row.parent_draft_id),
+      kind_label: row.kind_label == null ? null : String(row.kind_label),
+      normalized_machine_identifier:
+        row.normalized_machine_identifier == null ? null : String(row.normalized_machine_identifier),
+    })),
+  );
+  if (identityConflict) throw conflict('Exact legal identifier already exists under this parent');
+
+  const activeRunId = job.active_structure_run_id == null ? null : String(job.active_structure_run_id);
+  const parentCandidateId =
+    parentDraft?.source_candidate_id == null ? null : String(parentDraft.source_candidate_id);
+  const neighborRows: Array<{ sort_key: number; normalized_machine_identifier: string | null; display_identifier: string | null }> = [];
+  if (activeRunId) {
+    const runCandidates = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+      supabaseAdmin
+        .from('legal_ingestion_candidates')
+        .select('id, sort_order, parent_candidate_id, normalized_machine_identifier, source_display_identifier')
+        .eq('structure_run_id', activeRunId)
+        .eq('candidate_kind', 'structure')
+        .order('sort_order', { ascending: true })
+        .range(from, to),
+    );
+    for (const row of runCandidates) {
+      const rowParent = row.parent_candidate_id == null ? null : String(row.parent_candidate_id);
+      if (parentCandidateId) {
+        if (rowParent !== parentCandidateId) continue;
+      } else if (rowParent) {
+        continue;
+      }
+      neighborRows.push({
+        sort_key: Number(row.sort_order ?? 0),
+        normalized_machine_identifier:
+          row.normalized_machine_identifier == null ? null : String(row.normalized_machine_identifier),
+        display_identifier: row.source_display_identifier == null ? null : String(row.source_display_identifier),
+      });
+    }
+  }
+  for (const row of siblings) {
+    if (String(row.parent_draft_id ?? '') !== String(parentDraftId ?? '')) continue;
+    if (row.owner_sort_key == null) continue;
+    neighborRows.push({
+      sort_key: Number(row.owner_sort_key),
+      normalized_machine_identifier:
+        row.normalized_machine_identifier == null ? null : String(row.normalized_machine_identifier),
+      display_identifier: row.source_display_identifier == null ? null : String(row.source_display_identifier),
+    });
+  }
+  const ownerSortKey = placeOwnerSortKey(neighborRows, parsed.normalized_machine_identifier);
+
+  const insert = {
+    country_code: String(document.country_code),
+    document_id: documentId,
+    job_id: String(job.id),
+    tax_source_id: String(document.tax_source_id),
+    structure_run_id: null,
+    source_candidate_id: null,
+    creation_origin: 'owner_manual',
+    owner_sort_key: ownerSortKey,
+    kind_label: kindLabel,
+    ...identifierFieldsFromParsed(parsed, printedMarker),
+    title,
+    parent_draft_id: parentDraftId,
+    original_source_text: '',
+    draft_legal_text: draftText,
+    original_source_page_start: null,
+    original_source_page_end: null,
+    original_source_item_start: null,
+    original_source_item_end: null,
+    original_source_line_start: null,
+    original_source_line_end: null,
+    original_source_bbox: null,
+    original_subtree_text: null,
+    text_boundary_status: 'uncertain',
+    review_status: 'needs_review',
+    created_by: ctx.user.id,
+    updated_by: ctx.user.id,
+  };
+
+  const { data: created, error: insertError } = await supabaseAdmin
+    .from('legal_ingestion_legal_text_drafts')
+    .insert(insert)
+    .select('id')
+    .maybeSingle();
+  throwIfDraftSchemaMissing(insertError);
+  if (insertError) throw insertError;
+  if (!created) throw conflict('Could not create manual Owner Draft');
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_MANUAL_LEGAL_TEXT_DRAFT_CREATED, String(created.id), {
+    country_code: document.country_code,
+    document_id: documentId,
+    parent_draft_id: parentDraftId,
+    owner_sort_key: ownerSortKey,
+    creation_origin: 'owner_manual',
+  });
+  return {
+    country_code: String(document.country_code),
+    document_id: documentId,
+    draft_id: String(created.id),
+  };
+}
+
+async function loadCompletenessDocument(documentId: string): Promise<{ id: string; country_code: string }> {
+  const { data: document, error } = await supabaseAdmin
+    .from('legal_ingestion_documents')
+    .select('id, country_code')
+    .eq('id', documentId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!document) throw notFound('Legal training document not found');
+  return { id: String(document.id), country_code: String(document.country_code) };
+}
+
+export async function confirmOwnerStructureCompleteness(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<LegalTextDraftCommandResult> {
+  const documentId = asUuid(payload.legal_ingestion_document_id ?? payload.document_id, 'legal_ingestion_document_id');
+  const branchDraftId = asOptionalUuid(payload.branch_draft_id, 'branch_draft_id');
+  const refreshDraftId =
+    branchDraftId || asOptionalUuid(payload.legal_text_draft_id, 'legal_text_draft_id') || '';
+  const document = await loadCompletenessDocument(documentId);
+  if (branchDraftId) {
+    const draft = await loadDraft(branchDraftId);
+    if (String(draft.document_id) !== documentId) throw badRequest('branch_draft_id must belong to this document');
+  }
+  const query = supabaseAdmin
+    .from('legal_ingestion_owner_completeness')
+    .select('id')
+    .eq('document_id', documentId);
+  const existing = branchDraftId
+    ? await query.eq('branch_draft_id', branchDraftId).maybeSingle()
+    : await query.is('branch_draft_id', null).maybeSingle();
+  if (existing.error && isSupabaseMissingTableError(existing.error)) {
+    throw badRequest('Knowledge Trainer owner completeness schema is not applied. Migration 635 is required on DEV.');
+  }
+  if (existing.error) throw existing.error;
+  const row = {
+    country_code: document.country_code,
+    document_id: documentId,
+    branch_draft_id: branchDraftId,
+    confirmed_by: ctx.user.id,
+    confirmed_at: new Date().toISOString(),
+  };
+  if (existing.data) {
+    const { error } = await supabaseAdmin.from('legal_ingestion_owner_completeness').update(row).eq('id', existing.data.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabaseAdmin.from('legal_ingestion_owner_completeness').insert(row);
+    if (error) throw error;
+  }
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_OWNER_STRUCTURE_COMPLETENESS_CONFIRMED, branchDraftId || documentId, {
+    country_code: document.country_code,
+    document_id: documentId,
+    branch_draft_id: branchDraftId,
+  });
+  return {
+    country_code: document.country_code,
+    document_id: documentId,
+    draft_id: refreshDraftId,
+  };
+}
+
+export async function retractOwnerStructureCompleteness(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<LegalTextDraftCommandResult> {
+  const documentId = asUuid(payload.legal_ingestion_document_id ?? payload.document_id, 'legal_ingestion_document_id');
+  const branchDraftId = asOptionalUuid(payload.branch_draft_id, 'branch_draft_id');
+  const refreshDraftId =
+    branchDraftId || asOptionalUuid(payload.legal_text_draft_id, 'legal_text_draft_id') || '';
+  const document = await loadCompletenessDocument(documentId);
+  const query = supabaseAdmin.from('legal_ingestion_owner_completeness').delete().eq('document_id', documentId);
+  const { error } = branchDraftId
+    ? await query.eq('branch_draft_id', branchDraftId)
+    : await query.is('branch_draft_id', null);
+  if (error && isSupabaseMissingTableError(error)) {
+    throw badRequest('Knowledge Trainer owner completeness schema is not applied. Migration 635 is required on DEV.');
+  }
+  if (error) throw error;
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_OWNER_STRUCTURE_COMPLETENESS_RETRACTED, branchDraftId || documentId, {
+    country_code: document.country_code,
+    document_id: documentId,
+    branch_draft_id: branchDraftId,
+  });
+  return {
+    country_code: document.country_code,
+    document_id: documentId,
+    draft_id: refreshDraftId,
   };
 }
 

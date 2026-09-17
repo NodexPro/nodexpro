@@ -516,6 +516,7 @@ export type OwnerLegalTextDraftListItem = {
   unresolved_source_note_count: number;
   subtree_unresolved_source_note_count: number;
   provenance: { structure_run_id: string | null; source_candidate_id: string | null };
+  creation_origin: 'detector' | 'owner_manual';
   created_at: string;
   updated_at: string;
 };
@@ -558,6 +559,14 @@ export type OwnerLegalTextDraftCounts = {
   structure_candidates: number;
 };
 
+export type OwnerLegalTextReviewProgress = {
+  all: number;
+  reviewed: number;
+  needs_review: number;
+  draft: number;
+  not_prepared: number;
+};
+
 export type OwnerLegalTextReviewNode = {
   id: string;
   draft_id: string | null;
@@ -569,6 +578,29 @@ export type OwnerLegalTextReviewNode = {
   title: string | null;
   review_state: string;
   review_state_label: string;
+  creation_origin: 'detector' | 'owner_manual';
+  manually_added: boolean;
+  search_label: string | null;
+  ancestor_ids: string[];
+  child_count: number;
+  depth: number;
+  default_expanded: boolean;
+  tree_sort_key: number;
+  review_progress: OwnerLegalTextReviewProgress;
+  structure_completeness_confirmed: boolean;
+};
+
+export type OwnerLegalTextSearchIndexItem = {
+  node_id: string;
+  search_label: string;
+  ancestor_ids: string[];
+};
+
+export type OwnerLegalTextCompleteness = {
+  document_confirmed: boolean;
+  document_confirmed_at: string | null;
+  selected_branch_confirmed: boolean;
+  selected_branch_confirmed_at: string | null;
 };
 
 export type OwnerKnowledgeTrainerSlice = {
@@ -618,6 +650,8 @@ export type OwnerKnowledgeTrainerSlice = {
     legal_text_draft_summary: OwnerLegalTextDraftCounts;
     legal_text_review_tree: OwnerLegalTextReviewNode[];
     selected_legal_text_review_node: OwnerLegalTextReviewNode | null;
+    legal_text_search_index: OwnerLegalTextSearchIndexItem[];
+    legal_text_completeness: OwnerLegalTextCompleteness;
   } | null;
   allowed_actions: TaxKnowledgeAllowedAction[];
 };

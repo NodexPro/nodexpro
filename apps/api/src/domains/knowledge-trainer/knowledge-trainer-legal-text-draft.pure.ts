@@ -1,3 +1,4 @@
+import { parseLegalIdentifier } from '../tax-knowledge/legal-identifier.pure.js';
 import { catalogRankForLabel, isFineGrainedStructureKind } from './knowledge-trainer-review.pure.js';
 import {
   buildPageLayoutProfile,
@@ -909,6 +910,17 @@ export type LegalTextReviewDraft = {
   display_identifier: string | null;
   printed_marker: string | null;
   title: string | null;
+  creation_origin?: string | null;
+  owner_sort_key?: number | null;
+  normalized_machine_identifier?: string | null;
+};
+
+export type LegalTextReviewProgress = {
+  all: number;
+  reviewed: number;
+  needs_review: number;
+  draft: number;
+  not_prepared: number;
 };
 
 export type LegalTextReviewNode = {
@@ -922,50 +934,265 @@ export type LegalTextReviewNode = {
   title: string | null;
   review_state: LegalTextReviewState;
   review_state_label: string;
+  creation_origin: 'detector' | 'owner_manual';
+  manually_added: boolean;
+  search_label: string | null;
+  ancestor_ids: string[];
+  child_count: number;
+  depth: number;
+  default_expanded: boolean;
+  tree_sort_key: number;
+  review_progress: LegalTextReviewProgress;
+  structure_completeness_confirmed: boolean;
 };
 
-/** Document-scoped law tree: structure candidates overlayed with existing Owner Drafts. */
+export type LegalTextSearchIndexItem = {
+  node_id: string;
+  search_label: string;
+  ancestor_ids: string[];
+};
+
+export type OwnerSortNeighbor = {
+  sort_key: number;
+  normalized_machine_identifier: string | null;
+  display_identifier?: string | null;
+};
+
+function emptyReviewProgress(): LegalTextReviewProgress {
+  return { all: 0, reviewed: 0, needs_review: 0, draft: 0, not_prepared: 0 };
+}
+
+function compareIdentifierToken(a: string, b: string): number {
+  const aNum = /^\d+$/.test(a) ? Number(a) : NaN;
+  const bNum = /^\d+$/.test(b) ? Number(b) : NaN;
+  if (Number.isFinite(aNum) && Number.isFinite(bNum) && aNum !== bNum) return aNum - bNum;
+  return a.localeCompare(b, 'he');
+}
+
+export function compareLegalIdentifierOrder(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): number {
+  const parsedLeft = left?.trim() ? parseLegalIdentifier(left) : null;
+  const parsedRight = right?.trim() ? parseLegalIdentifier(right) : null;
+  if (!parsedLeft && !parsedRight) return 0;
+  if (!parsedLeft) return 1;
+  if (!parsedRight) return -1;
+  const base = compareIdentifierToken(parsedLeft.base_number, parsedRight.base_number);
+  if (base !== 0) return base;
+  const letter = compareIdentifierToken(parsedLeft.letter_suffix ?? '', parsedRight.letter_suffix ?? '');
+  if (letter !== 0) return letter;
+  const max = Math.max(parsedLeft.nested_components.length, parsedRight.nested_components.length);
+  for (let i = 0; i < max; i += 1) {
+    const l = parsedLeft.nested_components[i];
+    const r = parsedRight.nested_components[i];
+    if (l == null && r == null) continue;
+    if (l == null) return -1;
+    if (r == null) return 1;
+    const nested = compareIdentifierToken(l, r);
+    if (nested !== 0) return nested;
+  }
+  return 0;
+}
+
+export function placeOwnerSortKey(siblings: OwnerSortNeighbor[], newIdentifier: string): number {
+  const sorted = siblings
+    .slice()
+    .sort((a, b) => a.sort_key - b.sort_key);
+  const identFor = (row: OwnerSortNeighbor) => row.normalized_machine_identifier || row.display_identifier || '';
+  let prev: OwnerSortNeighbor | null = null;
+  let next: OwnerSortNeighbor | null = null;
+  for (const row of sorted) {
+    if (compareLegalIdentifierOrder(identFor(row), newIdentifier) < 0) prev = row;
+    else if (!next) next = row;
+  }
+  if (prev && next && next.sort_key > prev.sort_key) {
+    return (Number(prev.sort_key) + Number(next.sort_key)) / 2;
+  }
+  if (prev) return Number(prev.sort_key) + 1;
+  if (next) return Number(next.sort_key) - 1;
+  return 0;
+}
+
+export function creationOriginFromDraft(value: string | null | undefined): 'detector' | 'owner_manual' {
+  return value === 'owner_manual' ? 'owner_manual' : 'detector';
+}
+
+function reviewNodeFromParts(input: {
+  id: string;
+  draft_id: string | null;
+  source_candidate_id: string | null;
+  parent_id: string | null;
+  kind_label: string | null;
+  display_identifier: string | null;
+  printed_marker: string | null;
+  title: string | null;
+  review_state: LegalTextReviewState;
+  creation_origin: 'detector' | 'owner_manual';
+  tree_sort_key: number;
+}): LegalTextReviewNode {
+  const ident = input.display_identifier?.trim() || null;
+  const marker = input.printed_marker?.trim() || null;
+  return {
+    ...input,
+    kind_label: input.kind_label?.trim() || null,
+    display_identifier: ident,
+    printed_marker: marker,
+    title: input.title?.trim() || null,
+    review_state_label: legalTextReviewStateLabel(input.review_state),
+    manually_added: input.creation_origin === 'owner_manual',
+    search_label: ident || marker,
+    ancestor_ids: [],
+    child_count: 0,
+    depth: 0,
+    default_expanded: false,
+    review_progress: emptyReviewProgress(),
+    structure_completeness_confirmed: false,
+  };
+}
+
+function finalizeReviewTree(nodes: LegalTextReviewNode[]): LegalTextReviewNode[] {
+  const byId = new Map(nodes.map((row) => [row.id, row]));
+  const children = new Map<string | null, LegalTextReviewNode[]>();
+  const ordered = nodes.slice().sort((a, b) => a.tree_sort_key - b.tree_sort_key || a.id.localeCompare(b.id));
+  for (const row of ordered) {
+    const parentId = row.parent_id && byId.has(row.parent_id) ? row.parent_id : null;
+    row.parent_id = parentId;
+    const list = children.get(parentId) ?? [];
+    list.push(row);
+    children.set(parentId, list);
+  }
+  for (const row of ordered) {
+    const ancestors: string[] = [];
+    let walk = row.parent_id;
+    while (walk && byId.has(walk) && !ancestors.includes(walk)) {
+      ancestors.unshift(walk);
+      walk = byId.get(walk)?.parent_id ?? null;
+    }
+    row.ancestor_ids = ancestors;
+    row.depth = ancestors.length;
+    row.child_count = (children.get(row.id) ?? []).length;
+    row.default_expanded = false;
+  }
+  const progressMemo = new Map<string, LegalTextReviewProgress>();
+  const progressFor = (id: string): LegalTextReviewProgress => {
+    const cached = progressMemo.get(id);
+    if (cached) return cached;
+    const node = byId.get(id);
+    const out = emptyReviewProgress();
+    if (!node) return out;
+    out.all = 1;
+    out[node.review_state] += 1;
+    for (const child of children.get(id) ?? []) {
+      const childProgress = progressFor(child.id);
+      out.all += childProgress.all;
+      out.reviewed += childProgress.reviewed;
+      out.needs_review += childProgress.needs_review;
+      out.draft += childProgress.draft;
+      out.not_prepared += childProgress.not_prepared;
+    }
+    progressMemo.set(id, out);
+    return out;
+  };
+  for (const row of ordered) row.review_progress = progressFor(row.id);
+  return ordered;
+}
+
+export function attachStructureCompleteness(
+  nodes: LegalTextReviewNode[],
+  confirmedBranchDraftIds: ReadonlySet<string>,
+): LegalTextReviewNode[] {
+  return nodes.map((row) => ({
+    ...row,
+    structure_completeness_confirmed: Boolean(row.draft_id && confirmedBranchDraftIds.has(row.draft_id)),
+  }));
+}
+
+export function buildLegalTextSearchIndex(nodes: LegalTextReviewNode[]): LegalTextSearchIndexItem[] {
+  return nodes
+    .filter((row) => row.search_label)
+    .map((row) => ({
+      node_id: row.id,
+      search_label: row.search_label as string,
+      ancestor_ids: row.ancestor_ids,
+    }));
+}
+
+/** Document-scoped law tree: structure candidates overlayed with Owner Drafts, plus manual missing items. */
 export function buildLegalTextReviewNodes(
   candidates: LegalTextReviewCandidate[],
   drafts: LegalTextReviewDraft[],
 ): LegalTextReviewNode[] {
-  const draftByCandidate = new Map<string, LegalTextReviewDraft>();
-  for (const draft of drafts) {
-    if (!draft.source_candidate_id) continue;
-    draftByCandidate.set(draft.source_candidate_id, draft);
-  }
   const structure = candidates
     .filter((row) => !row.candidate_kind || row.candidate_kind === 'structure')
     .slice()
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const structureIds = new Set(structure.map((row) => row.id));
+  const draftByCandidate = new Map<string, LegalTextReviewDraft>();
+  const extraDrafts: LegalTextReviewDraft[] = [];
+  for (const draft of drafts) {
+    const origin = creationOriginFromDraft(draft.creation_origin);
+    if (
+      origin === 'owner_manual' ||
+      !draft.source_candidate_id ||
+      !structureIds.has(draft.source_candidate_id)
+    ) {
+      extraDrafts.push(draft);
+      continue;
+    }
+    draftByCandidate.set(draft.source_candidate_id, draft);
+  }
   const nodeIdByCandidate = new Map<string, string>();
   for (const candidate of structure) {
     const draft = draftByCandidate.get(candidate.id);
     nodeIdByCandidate.set(candidate.id, draft?.id ?? candidate.id);
   }
-  return structure.map((candidate) => {
+  const overlayedCandidateIds = new Set(structure.map((row) => row.id));
+  const nodes: LegalTextReviewNode[] = structure.map((candidate) => {
     const draft = draftByCandidate.get(candidate.id) ?? null;
     const parentCandidateId = candidate.parent_candidate_id;
     const review_state: LegalTextReviewState = draft
       ? legalTextReviewStateFromDraft(draft.review_status)
       : 'not_prepared';
-    const kind = (draft?.kind_label ?? candidate.kind_label)?.trim() || null;
-    const ident = (draft?.display_identifier ?? candidate.source_display_identifier)?.trim() || null;
-    const marker = (draft?.printed_marker ?? candidate.printed_marker)?.trim() || null;
-    const title = (draft?.title ?? candidate.title)?.trim() || null;
-    return {
+    return reviewNodeFromParts({
       id: nodeIdByCandidate.get(candidate.id) ?? candidate.id,
       draft_id: draft?.id ?? null,
       source_candidate_id: candidate.id,
       parent_id: parentCandidateId ? nodeIdByCandidate.get(parentCandidateId) ?? parentCandidateId : null,
-      kind_label: kind,
-      display_identifier: ident,
-      printed_marker: marker,
-      title,
+      kind_label: (draft?.kind_label ?? candidate.kind_label)?.trim() || null,
+      display_identifier: (draft?.display_identifier ?? candidate.source_display_identifier)?.trim() || null,
+      printed_marker: (draft?.printed_marker ?? candidate.printed_marker)?.trim() || null,
+      title: (draft?.title ?? candidate.title)?.trim() || null,
       review_state,
-      review_state_label: legalTextReviewStateLabel(review_state),
-    };
+      creation_origin: creationOriginFromDraft(draft?.creation_origin),
+      tree_sort_key: Number(candidate.sort_order ?? 0),
+    });
   });
+  const usedDraftIds = new Set(nodes.map((row) => row.draft_id).filter(Boolean));
+  for (const draft of extraDrafts) {
+    if (usedDraftIds.has(draft.id)) continue;
+    if (draft.source_candidate_id && overlayedCandidateIds.has(draft.source_candidate_id) && draftByCandidate.has(draft.source_candidate_id)) {
+      continue;
+    }
+    usedDraftIds.add(draft.id);
+    const origin = creationOriginFromDraft(draft.creation_origin);
+    nodes.push(
+      reviewNodeFromParts({
+        id: draft.id,
+        draft_id: draft.id,
+        source_candidate_id: null,
+        parent_id: draft.parent_draft_id,
+        kind_label: draft.kind_label,
+        display_identifier: draft.display_identifier,
+        printed_marker: draft.printed_marker,
+        title: draft.title,
+        review_state: legalTextReviewStateFromDraft(draft.review_status),
+        creation_origin: origin,
+        tree_sort_key: draft.owner_sort_key == null ? Number.MAX_SAFE_INTEGER : Number(draft.owner_sort_key),
+      }),
+    );
+  }
+  return finalizeReviewTree(nodes);
 }
 
 export type ParentFirstCandidate = {

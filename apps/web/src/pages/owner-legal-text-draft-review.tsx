@@ -1,14 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { OWNER } from '../api/endpoints';
 import { LegalIdentifierText } from '../lib/legal-identifier-text';
-import { nestLegalTextReviewNodes } from './owner-legal-text-draft-review.pure';
+import {
+  matchLegalTextSearchIndex,
+  mergeExpandedIds,
+  nestLegalTextReviewNodes,
+} from './owner-legal-text-draft-review.pure';
 import type {
+  OwnerLegalTextCompleteness,
   OwnerLegalTextDraft,
   OwnerLegalTextDraftCreateFrontierItem,
   OwnerLegalTextDraftCounts,
   OwnerLegalTextDraftListItem,
   OwnerLegalTextReviewNode,
+  OwnerLegalTextSearchIndexItem,
   OwnerSourceNote,
   UnknownRecord,
 } from './owner-legal-control-types';
@@ -19,12 +25,17 @@ export function OwnerLegalTextDraftReview({
   selected,
   selectedNode,
   reviewTree,
+  searchIndex,
+  completeness,
   frontier,
   summary,
   kindLabels,
   canOpenOriginal,
   canPrepare,
+  canCreateManual,
+  canConfirmCompleteness,
   busy,
+  detailLoading,
   onSelectNode,
   onCommand,
 }: {
@@ -33,12 +44,17 @@ export function OwnerLegalTextDraftReview({
   selected: OwnerLegalTextDraft | null;
   selectedNode: OwnerLegalTextReviewNode | null;
   reviewTree: OwnerLegalTextReviewNode[];
+  searchIndex: OwnerLegalTextSearchIndexItem[];
+  completeness: OwnerLegalTextCompleteness | undefined;
   frontier: OwnerLegalTextDraftCreateFrontierItem[];
   summary: OwnerLegalTextDraftCounts;
   kindLabels: string[];
   canOpenOriginal: boolean;
   canPrepare: boolean;
+  canCreateManual: boolean;
+  canConfirmCompleteness: boolean;
   busy: boolean;
+  detailLoading: boolean;
   onSelectNode: (nodeId: string) => void;
   onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
 }) {
@@ -48,6 +64,18 @@ export function OwnerLegalTextDraftReview({
   const [pdfUrl, setPdfUrl] = useState('');
   const [subtreeOpen, setSubtreeOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedIds, setExpandedIds] = useState(() =>
+    mergeExpandedIds(
+      new Set(),
+      selectedNode?.ancestor_ids ?? [],
+      reviewTree.filter((row) => row.default_expanded).map((row) => row.id),
+    ),
+  );
+  const treeScrollRef = useRef<HTMLDivElement>(null);
+  const treeScrollTopRef = useRef(0);
+  const pendingScrollNodeId = useRef<string | null>(null);
 
   const [kindLabel, setKindLabel] = useState('');
   const [legalIdentifier, setLegalIdentifier] = useState('');
@@ -60,6 +88,12 @@ export function OwnerLegalTextDraftReview({
   const [itemStart, setItemStart] = useState('');
   const [itemEnd, setItemEnd] = useState('');
   const [resetFromBoundary, setResetFromBoundary] = useState(false);
+  const [addKind, setAddKind] = useState('');
+  const [addIdentifier, setAddIdentifier] = useState('');
+  const [addMarker, setAddMarker] = useState('');
+  const [addTitle, setAddTitle] = useState('');
+  const [addParentId, setAddParentId] = useState('');
+  const [addDraftText, setAddDraftText] = useState('');
 
   useEffect(() => {
     if (!selected) {
@@ -101,12 +135,53 @@ export function OwnerLegalTextDraftReview({
     setSubtreeOpen(false);
   }, [selected, selectedNode]);
 
+  useEffect(() => {
+    setExpandedIds((prev) =>
+      mergeExpandedIds(
+        prev,
+        selectedNode?.ancestor_ids ?? [],
+        reviewTree.filter((row) => row.default_expanded).map((row) => row.id),
+      ),
+    );
+  }, [selectedNode?.id, selectedNode?.ancestor_ids, reviewTree]);
+
+  useLayoutEffect(() => {
+    const el = treeScrollRef.current;
+    if (!el) return;
+    if (pendingScrollNodeId.current) {
+      const target = el.querySelector(`[data-tree-node-id="${pendingScrollNodeId.current}"]`);
+      pendingScrollNodeId.current = null;
+      target?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    el.scrollTop = treeScrollTopRef.current;
+  }, [reviewTree, expandedIds, selectedNode?.id]);
+
+  const searchHits = useMemo(() => matchLegalTextSearchIndex(searchIndex, searchQuery), [searchIndex, searchQuery]);
+
+  const goToSearchHit = (hit: OwnerLegalTextSearchIndexItem) => {
+    pendingScrollNodeId.current = hit.node_id;
+    setExpandedIds((prev) => mergeExpandedIds(prev, hit.ancestor_ids));
+    onSelectNode(hit.node_id);
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const run = async (command: string, payload: UnknownRecord) => {
     setError('');
     try {
       await onCommand(command, payload);
+      return true;
     } catch (err) {
       setError(userFacingApiMessage(err));
+      return false;
     }
   };
 
@@ -124,6 +199,16 @@ export function OwnerLegalTextDraftReview({
 
   const remaining = summary.not_prepared;
   const reviewLabel = selectedNode?.review_state_label || (selected ? 'Draft / טיוטה' : 'Not prepared / טרם הוכן');
+  const progress = selectedNode?.review_progress;
+  const branchDraftId = selected?.id ?? selectedNode?.draft_id ?? '';
+  const manuallyAdded =
+    selected?.creation_origin === 'owner_manual' || selectedNode?.creation_origin === 'owner_manual';
+  const completenessDto = completeness ?? {
+    document_confirmed: false,
+    document_confirmed_at: null,
+    selected_branch_confirmed: false,
+    selected_branch_confirmed_at: null,
+  };
 
   return (
     <section className="nx-legal-draft-review" dir="rtl">
@@ -169,25 +254,225 @@ export function OwnerLegalTextDraftReview({
       {pdfOpen && pdfUrl ? <iframe title="Original legal PDF" src={pdfUrl} className="nx-legal-draft-pdf" /> : null}
 
       <div className="nx-legal-draft-review-grid">
-        <aside className="nx-legal-draft-tree">
+        <aside
+          className="nx-legal-draft-tree"
+          ref={treeScrollRef}
+          onScroll={(event) => {
+            treeScrollTopRef.current = event.currentTarget.scrollTop;
+          }}
+        >
           <div style={{ fontWeight: 600 }}>Law tree</div>
           <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>Where am I in the law?</p>
+          <label className="nx-field">
+            <span className="nx-field-label">Go to identifier</span>
+            <input
+              className="nx-input"
+              dir="ltr"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="2 / 2(2) / 3(ט)"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && searchHits[0]) {
+                  event.preventDefault();
+                  goToSearchHit(searchHits[0]);
+                }
+              }}
+            />
+          </label>
+          {searchQuery.trim() ? (
+            <ul className="nx-legal-draft-search-hits">
+              {searchHits.length ? (
+                searchHits.slice(0, 20).map((hit) => (
+                  <li key={hit.node_id}>
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn-taxes-compact"
+                      onClick={() => goToSearchHit(hit)}
+                    >
+                      <LegalIdentifierText value={hit.search_label} />
+                    </button>
+                  </li>
+                ))
+              ) : (
+                <li style={{ fontSize: 12, color: '#6b7280' }}>No matching identifier</li>
+              )}
+            </ul>
+          ) : null}
+          {progress ? (
+            <div className="nx-legal-draft-branch-progress">
+              Reviewed {progress.reviewed} / {progress.all}
+              {progress.needs_review ? ` · Needs review ${progress.needs_review}` : ''}
+              {progress.not_prepared ? ` · Not prepared ${progress.not_prepared}` : ''}
+              {progress.draft ? ` · Draft ${progress.draft}` : ''}
+            </div>
+          ) : null}
+          {canConfirmCompleteness ? (
+            <div className="nx-legal-draft-completeness-actions">
+              <div style={{ fontSize: 12 }}>
+                Structure completeness confirmed:{' '}
+                {completenessDto.document_confirmed ? 'whole document yes' : 'whole document no'}
+              </div>
+              {completenessDto.document_confirmed ? (
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-taxes-compact"
+                  disabled={busy}
+                  onClick={() =>
+                    void run('retract_owner_structure_completeness', {
+                      legal_ingestion_document_id: documentId,
+                      legal_text_draft_id: (selected?.id ?? branchDraftId) || null,
+                    })
+                  }
+                >
+                  Retract document completeness
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-taxes-compact"
+                  disabled={busy}
+                  onClick={() =>
+                    void run('confirm_owner_structure_completeness', {
+                      legal_ingestion_document_id: documentId,
+                      legal_text_draft_id: (selected?.id ?? branchDraftId) || null,
+                    })
+                  }
+                >
+                  Confirm whole document is complete
+                </button>
+              )}
+            </div>
+          ) : null}
           {tree.length ? (
-            <DraftTree nodes={tree} selectedId={selectedNode?.id ?? selected?.id ?? ''} onSelect={onSelectNode} />
+            <DraftTree
+              nodes={tree}
+              selectedId={selectedNode?.id ?? selected?.id ?? ''}
+              expandedIds={expandedIds}
+              onToggle={toggleExpanded}
+              onSelect={onSelectNode}
+            />
           ) : (
             <div style={{ fontSize: 13, color: '#6b7280' }}>No structure for this document yet.</div>
           )}
+          {canCreateManual ? (
+            <div className="nx-legal-draft-add-missing">
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                disabled={busy}
+                onClick={() => {
+                  setAddOpen((open) => !open);
+                  setAddKind(selectedNode?.kind_label || kindLabels[0] || '');
+                  setAddIdentifier('');
+                  setAddMarker('');
+                  setAddTitle('');
+                  setAddParentId(selected?.id ?? selectedNode?.draft_id ?? '');
+                  setAddDraftText('');
+                }}
+              >
+                + Add missing item
+              </button>
+              {addOpen ? (
+                <div className="nx-legal-draft-add-form">
+                  <label className="nx-field">
+                    <span className="nx-field-label">Kind</span>
+                    <select className="nx-input" value={addKind} onChange={(event) => setAddKind(event.target.value)} disabled={busy}>
+                      {kindOptions(kindLabels, addKind).map((label) => (
+                        <option key={label} value={label}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">Legal identifier</span>
+                    <input
+                      className="nx-input"
+                      dir="ltr"
+                      value={addIdentifier}
+                      onChange={(event) => setAddIdentifier(event.target.value)}
+                      disabled={busy}
+                      placeholder="2(5)"
+                    />
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">Printed marker (optional)</span>
+                    <input
+                      className="nx-input"
+                      dir="ltr"
+                      value={addMarker}
+                      onChange={(event) => setAddMarker(event.target.value)}
+                      disabled={busy}
+                    />
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">Title (optional)</span>
+                    <input className="nx-input" dir="auto" value={addTitle} onChange={(event) => setAddTitle(event.target.value)} disabled={busy} />
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">Parent</span>
+                    <select className="nx-input" value={addParentId} onChange={(event) => setAddParentId(event.target.value)} disabled={busy}>
+                      <option value="">None</option>
+                      {drafts.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.display_label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="nx-field">
+                    <span className="nx-field-label">Draft legal text</span>
+                    <textarea
+                      className="nx-input nx-legal-draft-textarea"
+                      dir="auto"
+                      value={addDraftText}
+                      onChange={(event) => setAddDraftText(event.target.value)}
+                      disabled={busy}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="nx-btn nx-btn-taxes-compact"
+                    disabled={busy || !addKind || !addIdentifier.trim()}
+                    onClick={() =>
+                      void run('create_manual_legal_text_draft', {
+                        legal_ingestion_document_id: documentId,
+                        kind_label: addKind,
+                        legal_identifier: addIdentifier,
+                        printed_marker: addMarker || null,
+                        title: addTitle || null,
+                        parent_draft_id: addParentId || null,
+                        draft_legal_text: addDraftText,
+                      }).then((ok) => {
+                        if (ok) setAddOpen(false);
+                      })
+                    }
+                  >
+                    Create missing item
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </aside>
 
         <section className="nx-legal-draft-source">
           <div style={{ fontWeight: 600 }}>Original source — read only</div>
           <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>What did the original source say?</p>
+          {detailLoading ? <div className="nx-legal-draft-detail-loading">Loading section…</div> : null}
           {!selectedNode ? (
             <p style={{ fontSize: 13, color: '#6b7280' }}>Select a section in the law tree.</p>
           ) : !selected ? (
             <p style={{ fontSize: 13, color: '#6b7280' }}>
               This section is not prepared yet. Use Prepare drafts for this law.
             </p>
+          ) : manuallyAdded ? (
+            <>
+              <div className="nx-legal-draft-manual-badge">Manually added / נוסף ידנית</div>
+              <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
+                No original source provenance. Manual text is stored only in the Owner Draft.
+              </p>
+            </>
           ) : (
             <>
               {!selected.original_source_text.trim() || selected.text_boundary_status === 'uncertain' ? (
@@ -224,8 +509,26 @@ export function OwnerLegalTextDraftReview({
             <p style={{ fontSize: 13, color: '#6b7280' }}>Prepare drafts before editing this section.</p>
           ) : (
             <>
+              {manuallyAdded ? <div className="nx-legal-draft-manual-badge">Manually added / נוסף ידנית</div> : null}
+              {detailLoading ? <div className="nx-legal-draft-detail-loading">Loading section…</div> : null}
               <div className="nx-legal-draft-review-flag">
-                Have I reviewed this node? <strong>{reviewLabel}</strong>
+                Have I reviewed this node? Draft reviewed: <strong>{reviewLabel}</strong>
+              </div>
+              <div className="nx-legal-draft-completeness-flag">
+                Structure completeness confirmed:{' '}
+                <strong>
+                  {completenessDto.selected_branch_confirmed
+                    ? 'Yes — this branch was checked against the original source for missing items'
+                    : 'No'}
+                </strong>
+              </div>
+              <div className="nx-legal-draft-completeness-flag">
+                Whole-document completeness:{' '}
+                <strong>
+                  {completenessDto.document_confirmed
+                    ? 'Yes — this document was checked against the original source for missing items'
+                    : 'No'}
+                </strong>
               </div>
               <label className="nx-field">
                 <span className="nx-field-label">Type</span>
@@ -301,6 +604,7 @@ export function OwnerLegalTextDraftReview({
                 >
                   Save
                 </button>
+                {!manuallyAdded ? (
                 <button
                   type="button"
                   className="nx-btn nx-btn-taxes-compact"
@@ -309,6 +613,7 @@ export function OwnerLegalTextDraftReview({
                 >
                   Reset text from original
                 </button>
+                ) : null}
                 <button
                   type="button"
                   className="nx-btn nx-btn-taxes-compact"
@@ -341,7 +646,8 @@ export function OwnerLegalTextDraftReview({
               </div>
               <p style={{ margin: 0, fontSize: 12, color: '#4b5563' }}>
                 Reviewed / נבדק means the Owner checked this Draft against source. It does not mean canonical,
-                published, accepted, or active.
+                published, accepted, or active. Structure completeness is a separate confirmation that this branch was
+                checked against the original source for missing items.
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 <button
@@ -371,6 +677,74 @@ export function OwnerLegalTextDraftReview({
                   Needs review / דורש בדיקה
                 </button>
               </div>
+              {canConfirmCompleteness ? (
+                <div className="nx-legal-draft-completeness-actions">
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>Structure completeness</div>
+                  <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+                    I checked this branch against the original source for missing items. This is not Draft reviewed.
+                  </p>
+                  {completenessDto.selected_branch_confirmed ? (
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn-taxes-compact"
+                      disabled={busy || !branchDraftId}
+                      onClick={() =>
+                        void run('retract_owner_structure_completeness', {
+                          legal_ingestion_document_id: documentId,
+                          branch_draft_id: branchDraftId,
+                          legal_text_draft_id: selected.id,
+                        })
+                      }
+                    >
+                      Retract branch completeness
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn-taxes-compact"
+                      disabled={busy || !branchDraftId}
+                      onClick={() =>
+                        void run('confirm_owner_structure_completeness', {
+                          legal_ingestion_document_id: documentId,
+                          branch_draft_id: branchDraftId,
+                          legal_text_draft_id: selected.id,
+                        })
+                      }
+                    >
+                      Confirm this branch is complete
+                    </button>
+                  )}
+                  {completenessDto.document_confirmed ? (
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn-taxes-compact"
+                      disabled={busy}
+                      onClick={() =>
+                        void run('retract_owner_structure_completeness', {
+                          legal_ingestion_document_id: documentId,
+                          legal_text_draft_id: selected.id,
+                        })
+                      }
+                    >
+                      Retract document completeness
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn-taxes-compact"
+                      disabled={busy}
+                      onClick={() =>
+                        void run('confirm_owner_structure_completeness', {
+                          legal_ingestion_document_id: documentId,
+                          legal_text_draft_id: selected.id,
+                        })
+                      }
+                    >
+                      Confirm whole document is complete
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </>
           )}
         </section>
@@ -389,6 +763,8 @@ export function OwnerLegalTextDraftReview({
           <>
             <div style={{ fontSize: 12, color: '#4b5563' }}>
               Draft id: {selected.id}
+              <br />
+              Creation origin: {selected.creation_origin}
               <br />
               Source candidate: {selected.provenance.source_candidate_id || '—'}
               <br />
@@ -493,32 +869,68 @@ function kindOptions(labels: string[], current: string): string[] {
 function DraftTree({
   nodes,
   selectedId,
+  expandedIds,
+  onToggle,
   onSelect,
 }: {
   nodes: ReturnType<typeof nestLegalTextReviewNodes<OwnerLegalTextReviewNode>>;
   selectedId: string;
+  expandedIds: ReadonlySet<string>;
+  onToggle: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
   return (
     <ul className="nx-legal-draft-tree-list">
-      {nodes.map((node) => (
-        <li key={node.id}>
-          <button
-            type="button"
-            className={node.id === selectedId ? 'nx-legal-draft-tree-item is-selected' : 'nx-legal-draft-tree-item'}
-            onClick={() => onSelect(node.id)}
-          >
-            {node.kind_label ? <span>{node.kind_label} </span> : null}
-            <LegalIdentifierText value={node.display_identifier} />
-            {node.printed_marker && node.printed_marker !== node.display_identifier ? (
-              <span> {node.printed_marker}</span>
+      {nodes.map((node) => {
+        const expanded = expandedIds.has(node.id);
+        const hasChildren = node.children.length > 0;
+        return (
+          <li key={node.id}>
+            <div className="nx-legal-draft-tree-row">
+              {hasChildren ? (
+                <button
+                  type="button"
+                  className="nx-legal-draft-tree-toggle"
+                  aria-expanded={expanded}
+                  aria-label={expanded ? 'Collapse' : 'Expand'}
+                  onClick={() => onToggle(node.id)}
+                >
+                  {expanded ? '▾' : '▸'}
+                </button>
+              ) : (
+                <span className="nx-legal-draft-tree-toggle-spacer" />
+              )}
+              <button
+                type="button"
+                data-tree-node-id={node.id}
+                className={node.id === selectedId ? 'nx-legal-draft-tree-item is-selected' : 'nx-legal-draft-tree-item'}
+                onClick={() => onSelect(node.id)}
+              >
+                {node.kind_label ? <span>{node.kind_label} </span> : null}
+                <LegalIdentifierText value={node.display_identifier} />
+                {node.printed_marker && node.printed_marker !== node.display_identifier ? (
+                  <span> {node.printed_marker}</span>
+                ) : null}
+                {node.title ? <span> {node.title}</span> : null}
+                {node.manually_added ? <span className="nx-legal-draft-manual-inline"> נוסף ידנית</span> : null}
+                <span className={`nx-legal-draft-status is-${node.review_state}`}> {node.review_state_label}</span>
+                {node.structure_completeness_confirmed ? (
+                  <span className="nx-legal-draft-completeness-inline"> structure complete</span>
+                ) : null}
+              </button>
+            </div>
+            {expanded && hasChildren ? (
+              <DraftTree
+                nodes={node.children}
+                selectedId={selectedId}
+                expandedIds={expandedIds}
+                onToggle={onToggle}
+                onSelect={onSelect}
+              />
             ) : null}
-            {node.title ? <span> {node.title}</span> : null}
-            <span className={`nx-legal-draft-status is-${node.review_state}`}> {node.review_state_label}</span>
-          </button>
-          {node.children.length ? <DraftTree nodes={node.children} selectedId={selectedId} onSelect={onSelect} /> : null}
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -18,10 +18,13 @@ import {
 } from './knowledge-trainer.pure.js';
 import { persistStructureCandidatesForJob } from './knowledge-trainer-structure.service.js';
 import {
+  confirmOwnerStructureCompleteness,
   createLegalTextDraftFromCandidate,
+  createManualLegalTextDraft,
   prepareLegalTextDraftsForStructure,
   reparentLegalTextDraft,
   resetLegalTextDraftToSource,
+  retractOwnerStructureCompleteness,
   setLegalTextDraftBoundary,
   setLegalTextDraftReviewStatus,
   updateLegalTextDraftIdentity,
@@ -780,6 +783,12 @@ export async function executeKnowledgeTrainerCommand(
       return handleLegalTextDraftCommand(ctx, 'reset_legal_text_draft_to_source', payload, resetLegalTextDraftToSource);
     case 'set_legal_text_draft_review_status':
       return handleLegalTextDraftCommand(ctx, 'set_legal_text_draft_review_status', payload, setLegalTextDraftReviewStatus);
+    case 'create_manual_legal_text_draft':
+      return handleLegalTextDraftCommand(ctx, 'create_manual_legal_text_draft', payload, createManualLegalTextDraft);
+    case 'confirm_owner_structure_completeness':
+      return handleLegalTextDraftCommand(ctx, 'confirm_owner_structure_completeness', payload, confirmOwnerStructureCompleteness);
+    case 'retract_owner_structure_completeness':
+      return handleLegalTextDraftCommand(ctx, 'retract_owner_structure_completeness', payload, retractOwnerStructureCompleteness);
     default:
       throw badRequest(`Unsupported knowledge-trainer command: ${command}`);
   }

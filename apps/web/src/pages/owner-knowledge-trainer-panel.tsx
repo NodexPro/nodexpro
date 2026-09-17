@@ -46,6 +46,7 @@ export function OwnerKnowledgeTrainerPanel({
   onUpload,
   onReload,
   onSelectLegalTextDraft,
+  detailLoading,
 }: {
   taxKnowledge: TaxKnowledgeAggregate;
   uploadSource: OwnerLegalLibrarySource | null;
@@ -55,6 +56,7 @@ export function OwnerKnowledgeTrainerPanel({
   onUpload: (payload: UnknownRecord) => Promise<void>;
   onReload: () => void;
   onSelectLegalTextDraft: (documentId: string, draftId: string) => void;
+  detailLoading?: boolean;
 }) {
   const trainer = taxKnowledge.legal_library.trainer_upload;
   const selectedCountry = taxKnowledge.selected_country_code;
@@ -84,6 +86,7 @@ export function OwnerKnowledgeTrainerPanel({
           onCommand={onCommand}
           onReload={onReload}
           onSelectLegalTextDraft={onSelectLegalTextDraft}
+          detailLoading={detailLoading}
         />
       ) : null}
     </div>
@@ -219,6 +222,7 @@ function TrainerReview({
   onCommand,
   onReload,
   onSelectLegalTextDraft,
+  detailLoading,
 }: {
   taxKnowledge: TaxKnowledgeAggregate;
   trainer: OwnerKnowledgeTrainerSlice;
@@ -226,6 +230,7 @@ function TrainerReview({
   onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
   onReload: () => void;
   onSelectLegalTextDraft: (documentId: string, draftId: string) => void;
+  detailLoading?: boolean;
 }) {
   const document = trainer.selected_document;
   if (!document) return null;
@@ -444,6 +449,8 @@ function TrainerReview({
           selected={document.selected_legal_text_draft}
           selectedNode={document.selected_legal_text_review_node}
           reviewTree={document.legal_text_review_tree ?? []}
+          searchIndex={document.legal_text_search_index ?? []}
+          completeness={document.legal_text_completeness}
           frontier={document.legal_text_draft_create_frontier ?? []}
           summary={document.legal_text_draft_summary}
           kindLabels={taxKnowledge.legal_library.node_kinds.map((kind) => kind.label)}
@@ -451,7 +458,14 @@ function TrainerReview({
           canPrepare={(trainer.allowed_actions ?? []).some(
             (row) => row.action_key === 'prepare_legal_text_drafts_for_structure' && row.enabled,
           )}
+          canCreateManual={(trainer.allowed_actions ?? []).some(
+            (row) => row.action_key === 'create_manual_legal_text_draft' && row.enabled,
+          )}
+          canConfirmCompleteness={(trainer.allowed_actions ?? []).some(
+            (row) => row.action_key === 'confirm_owner_structure_completeness' && row.enabled,
+          )}
           busy={busy}
+          detailLoading={Boolean(detailLoading)}
           onSelectNode={(nodeId) => onSelectLegalTextDraft(document.id, nodeId)}
           onCommand={onCommand}
         />
