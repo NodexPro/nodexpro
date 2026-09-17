@@ -25,3 +25,15 @@ export {
   type AiGatewayTelemetry,
 } from './ai-gateway.types.js';
 export { redactSecretsFromString, assertSafeTelemetryPayload } from './ai-gateway.redaction.js';
+export {
+  AI_ADAPTER_REGISTRY,
+  AI_ADAPTER_TYPE_OPENAI_COMPATIBLE,
+  getAiAdapterRegistryEntry,
+  isRegisteredAiAdapterType,
+  listAiAdapterRegistry,
+} from './ai-gateway.adapters.js';
+export {
+  assertSafeAiGatewayBaseUrl,
+  inspectAiGatewayBaseUrl,
+  aiGatewayBaseUrlSafeDisplay,
+} from './ai-gateway.endpoint-policy.js';

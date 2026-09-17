@@ -54,6 +54,11 @@ import {
   executeTaxFactDictionaryCommand,
   isTaxFactDictionaryCommand,
 } from '../domains/tax-fact-dictionary/tax-fact-dictionary-commands.service.js';
+import { buildOwnerAiGatewayAggregate } from '../domains/ai-gateway-control-plane/ai-gateway-control-plane-read.service.js';
+import {
+  executeAiGatewayControlPlaneCommand,
+  isAiGatewayControlPlaneCommand,
+} from '../domains/ai-gateway-control-plane/ai-gateway-control-plane-commands.service.js';
 
 const router = Router();
 
@@ -191,6 +196,17 @@ router.get('/email-provider-config', async (req: Request, res: Response, next: N
       aggregate_key: 'owner_email_provider_config_aggregate',
       ...aggregate,
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/ai-gateway', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const aggregate = await buildOwnerAiGatewayAggregate(ctx);
+    return res.json(aggregate);
   } catch (e) {
     next(e);
   }
@@ -394,6 +410,15 @@ router.post('/command', async (req: Request, res: Response, next: NextFunction) 
 
     if (isOwnerInvoiceLayoutCommand(commandName)) {
       const out = await executeOwnerInvoiceLayoutCommand(
+        ctx,
+        commandName,
+        payload as Record<string, unknown>,
+      );
+      return res.json(out);
+    }
+
+    if (isAiGatewayControlPlaneCommand(commandName)) {
+      const out = await executeAiGatewayControlPlaneCommand(
         ctx,
         commandName,
         payload as Record<string, unknown>,

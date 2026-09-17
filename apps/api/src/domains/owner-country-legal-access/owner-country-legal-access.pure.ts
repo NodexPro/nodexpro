@@ -79,6 +79,7 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'calculate_tax' ||
     command.startsWith('save_email') ||
     command.startsWith('save_platform') ||
+    command.includes('ai_provider') ||
     command.startsWith('save_request_template') ||
     command.startsWith('archive_request_template') ||
     command.startsWith('extend_org_module') ||
