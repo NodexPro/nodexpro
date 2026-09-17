@@ -6,6 +6,7 @@ export const AI_GATEWAY_CONTROL_PLANE_COMMANDS = [
   'enable_ai_provider',
   'disable_ai_provider',
   'set_ai_provider_routing',
+  'test_ai_provider_connection',
 ] as const;
 
 export type AiGatewayControlPlaneCommandName = (typeof AI_GATEWAY_CONTROL_PLANE_COMMANDS)[number];
@@ -76,7 +77,9 @@ export type OwnerAiGatewayProviderCard = {
   last_failure_category: string | null;
   last_test_at: string | null;
   last_test_outcome: string | null;
+  connection_test_summary: string;
   eligible_for_routing: boolean;
+  can_enable: boolean;
 };
 
 export type OwnerAiGatewayAggregate = {

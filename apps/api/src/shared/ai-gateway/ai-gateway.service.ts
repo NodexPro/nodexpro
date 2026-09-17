@@ -4,6 +4,7 @@ import {
   AI_GATEWAY_RETRY_BACKOFF_MS,
   type AiGatewayCompleteStructuredJsonInput,
   type AiGatewayCompleteStructuredJsonResult,
+  type AiGatewayResolvedConfig,
   type AiGatewayTelemetry,
 } from './ai-gateway.types.js';
 import { AI_ERROR_CODES, AiGatewayError, aiGatewayError, type AiErrorCode } from './ai-gateway.errors.js';
@@ -24,10 +25,12 @@ import {
 
 export type AiGatewayDeps = {
   env?: AiGatewayEnv;
+  invocationConfig?: AiGatewayResolvedConfig;
   transport?: AiProviderTransport;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   log?: (event: string, payload: Record<string, unknown>) => void;
+  maxAttempts?: number;
 };
 
 const PURPOSE_RE = /^[a-z][a-z0-9_]{1,79}$/;
@@ -94,9 +97,10 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
     const started = now();
     validateRequest(input);
 
+    const maxAttempts = deps.maxAttempts ?? AI_GATEWAY_MAX_ATTEMPTS;
     let config;
     try {
-      config = resolveAiGatewayInvocationConfig(deps.env);
+      config = deps.invocationConfig ?? resolveAiGatewayInvocationConfig(deps.env);
     } catch (error) {
       const telemetry = buildAiGatewayTelemetry({
         request: input,
@@ -114,7 +118,7 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
     let attempt = 0;
     let lastRetryable: 'rate_limited' | 'provider_unavailable' | null = null;
 
-    while (attempt < AI_GATEWAY_MAX_ATTEMPTS) {
+    while (attempt < maxAttempts) {
       attempt += 1;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -128,7 +132,7 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
         const response = await transport(providerRequest);
         if (response.status === 429 || AI_RETRYABLE_STATUS_CODES.has(response.status)) {
           lastRetryable = response.status === 429 ? 'rate_limited' : 'provider_unavailable';
-          if (attempt < AI_GATEWAY_MAX_ATTEMPTS) {
+          if (attempt < maxAttempts) {
             const waitMs = Math.min(
               response.retryAfterMs ?? AI_GATEWAY_RETRY_BACKOFF_MS,
               AI_GATEWAY_RETRY_AFTER_CAP_MS,

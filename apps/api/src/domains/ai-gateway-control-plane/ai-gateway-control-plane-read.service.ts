@@ -90,6 +90,19 @@ export async function loadAiGatewayProvider(id: string): Promise<AiGatewayContro
   return mapProviderRow(data as Record<string, unknown>);
 }
 
+export async function loadAiGatewayProviderCiphertext(id: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from(PROVIDER_TABLE)
+    .select('credential_ciphertext')
+    .eq('id', id)
+    .maybeSingle();
+  throwIfSchemaMissing(error);
+  if (error) throw error;
+  const value = data && (data as { credential_ciphertext?: unknown }).credential_ciphertext;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  return value;
+}
+
 export async function buildOwnerAiGatewayAggregate(ctx: RequestContext): Promise<OwnerAiGatewayAggregate> {
   assertPlatformOwner(ctx);
   const [providers, routing] = await Promise.all([loadAiGatewayProviders(), loadAiGatewayRouting()]);
@@ -152,9 +165,19 @@ export async function buildOwnerAiGatewayAggregate(ctx: RequestContext): Promise
         payload: { ai_provider_id: 'uuid' },
       },
       {
+        action_key: 'test_ai_provider_connection',
+        enabled: cards.some((card) => card.credential_configured),
+        reason: cards.some((card) => card.credential_configured)
+          ? null
+          : 'Configure a credential before testing.',
+        payload: { ai_provider_id: 'uuid' },
+      },
+      {
         action_key: 'enable_ai_provider',
-        enabled: false,
-        reason: 'Connection test has not passed for the current configuration.',
+        enabled: cards.some((card) => card.can_enable),
+        reason: cards.some((card) => card.can_enable)
+          ? null
+          : 'Connection test has not passed for the current configuration.',
         payload: { ai_provider_id: 'uuid' },
       },
       {

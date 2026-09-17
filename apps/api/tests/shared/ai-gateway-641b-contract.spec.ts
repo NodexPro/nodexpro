@@ -33,6 +33,7 @@ test('TAX-641B Owner aggregate and commands are Platform Owner only and return r
   assert.match(commands, /enable_ai_provider/);
   assert.match(commands, /disable_ai_provider/);
   assert.match(commands, /set_ai_provider_routing/);
+  assert.match(commands, /test_ai_provider_connection/);
   assert.match(commands, /assertPlatformOwner/);
   assert.match(commands, /encryptJson/);
   assert.match(commands, /removeProviderFromRouting/);
@@ -54,7 +55,7 @@ test('TAX-641B Owner aggregate and commands are Platform Owner only and return r
   assert.equal(capabilityRequiredForOwnerCommand('enable_ai_provider'), 'platform_owner_only');
 });
 
-test('TAX-641B does not add UI, test connection, failover, circuit breaker, B2, or a migration', () => {
+test('TAX-641B does not add UI, failover, circuit breaker, B2, or a migration', () => {
   const commands = readRepo(
     'apps/api/src/domains/ai-gateway-control-plane/ai-gateway-control-plane-commands.service.ts',
   );
@@ -63,8 +64,6 @@ test('TAX-641B does not add UI, test connection, failover, circuit breaker, B2, 
     'apps/api/src/domains/knowledge-trainer/knowledge-trainer-generate-tax-knowledge-proposal.service.ts',
   );
   assert.equal(existsSync(join(repoRoot, 'supabase/migrations/642_ai_gateway_control_plane_commands.sql')), false);
-  assert.doesNotMatch(commands, /test_ai_provider_connection/);
-  assert.doesNotMatch(commands, /completeStructuredJson/);
   assert.doesNotMatch(commands, /fetch\(/);
   assert.doesNotMatch(read, /circuit_open/);
   assert.doesNotMatch(commands, /legal_ingestion_tax_knowledge_proposals/);

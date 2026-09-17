@@ -207,8 +207,9 @@ test('credentials encrypt with AES-256-GCM and are not treated as configured whe
 
 test('AI Gateway commands are Platform Owner only; tenant context is denied', () => {
   assert.equal(isAiGatewayControlPlaneCommand('create_ai_provider'), true);
-  assert.equal(isAiGatewayControlPlaneCommand('test_ai_provider_connection'), false);
+  assert.equal(isAiGatewayControlPlaneCommand('test_ai_provider_connection'), true);
   assert.equal(capabilityRequiredForOwnerCommand('create_ai_provider'), 'platform_owner_only');
+  assert.equal(capabilityRequiredForOwnerCommand('test_ai_provider_connection'), 'platform_owner_only');
   assert.equal(capabilityRequiredForOwnerCommand('set_ai_provider_routing'), 'platform_owner_only');
   const none = { kind: 'none' as const, capabilitiesByCountry: {} };
   const editor = {

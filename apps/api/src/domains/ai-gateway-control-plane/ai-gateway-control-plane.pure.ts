@@ -174,7 +174,7 @@ export function deriveAiProviderHealth(
   return { status: 'healthy', reason: 'Ready for routing after a successful connection test.' };
 }
 
-function humanFailure(category: string | null): string {
+export function humanFailure(category: string | null): string {
   switch (category) {
     case 'timeout':
       return 'The last check timed out.';
@@ -193,6 +193,19 @@ function humanFailure(category: string | null): string {
     default:
       return 'The last check failed.';
   }
+}
+
+export function connectionTestSummary(row: Pick<
+  AiGatewayControlPlaneProviderRow,
+  'last_test_at' | 'last_test_outcome' | 'last_success_at' | 'last_failure_at' | 'last_failure_category'
+>): string {
+  if (!row.last_test_at) return 'Not tested yet.';
+  const successNewer =
+    row.last_test_outcome === 'passed' &&
+    Boolean(row.last_success_at) &&
+    (!row.last_failure_at || (row.last_success_at as string) >= row.last_failure_at);
+  if (successNewer) return 'Tested successfully';
+  return `Test failed: ${humanFailure(row.last_failure_category)}`;
 }
 
 export function toProviderCard(
@@ -224,7 +237,9 @@ export function toProviderCard(
     last_failure_category: row.last_failure_category,
     last_test_at: row.last_test_at,
     last_test_outcome: row.last_test_outcome,
+    connection_test_summary: connectionTestSummary(row),
     eligible_for_routing: row.enabled && enablement.ok,
+    can_enable: !row.enabled && enablement.ok,
   };
 }
 

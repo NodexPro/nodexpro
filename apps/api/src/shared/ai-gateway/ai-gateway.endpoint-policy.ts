@@ -121,6 +121,16 @@ function isBlockedHostname(hostname: string): boolean {
   return false;
 }
 
+export function isBlockedResolvedAddress(address: string): boolean {
+  const trimmed = address.trim().toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
+  if (!trimmed) return true;
+  const ipv4 = parseIpv4(trimmed);
+  if (ipv4) return isBlockedIpv4(ipv4);
+  const ipv6 = expandIpv6(trimmed);
+  if (ipv6) return isBlockedIpv6(ipv6);
+  return true;
+}
+
 export function inspectAiGatewayBaseUrl(raw: string | null | undefined): AiGatewayEndpointPolicyResult {
   if (raw == null || !String(raw).trim()) {
     return { ok: true, normalized: '', hostname: '' };

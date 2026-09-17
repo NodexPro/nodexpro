@@ -259,6 +259,7 @@ export const AUDIT_ACTIONS = {
   AI_PROVIDER_ENABLED: 'ai_provider_enabled',
   AI_PROVIDER_DISABLED: 'ai_provider_disabled',
   AI_PROVIDER_ROUTING_CHANGED: 'ai_provider_routing_changed',
+  AI_PROVIDER_CONNECTION_TESTED: 'ai_provider_connection_tested',
   TAX_STRATEGY_CREATED: 'tax_strategy_created',
   TAX_STRATEGY_METADATA_UPDATED: 'tax_strategy_metadata_updated',
   TAX_STRATEGY_EXCLUSIVE_GROUP_CREATED: 'tax_strategy_exclusive_group_created',

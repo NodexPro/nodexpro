@@ -36,4 +36,13 @@ export {
   assertSafeAiGatewayBaseUrl,
   inspectAiGatewayBaseUrl,
   aiGatewayBaseUrlSafeDisplay,
+  isBlockedResolvedAddress,
 } from './ai-gateway.endpoint-policy.js';
+export {
+  fetchAiProviderTransportHardened,
+  resolveSafeAiGatewayAddress,
+  resolveRedirectUrl,
+  pickSafeResolvedAddress,
+  AI_GATEWAY_MAX_REDIRECTS,
+} from './ai-gateway.runtime-ssrf.js';
+export { fetchAiProviderTransport } from './providers/ai-provider.types.js';

@@ -37,18 +37,8 @@ export function parseRetryAfterMs(header: string | null | undefined, capMs: numb
 export async function fetchAiProviderTransport(
   request: AiProviderTransportRequest,
 ): Promise<AiProviderTransportResponse> {
-  const response = await fetch(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body: request.body,
-    signal: request.signal,
-  });
-  const bodyText = await response.text();
-  return {
-    status: response.status,
-    bodyText,
-    retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after'), request.timeoutMs),
-  };
+  const { fetchAiProviderTransportHardened } = await import('../ai-gateway.runtime-ssrf.js');
+  return fetchAiProviderTransportHardened(request);
 }
 
 export function isAbortError(error: unknown): boolean {

@@ -69,7 +69,11 @@ export function validateJsonAgainstSchema(
     return { ok: true };
   }
   if (expectedType === 'string') {
-    return typeof value === 'string' ? { ok: true } : { ok: false, reason: 'expected_string' };
+    if (typeof value !== 'string') return { ok: false, reason: 'expected_string' };
+    if (Array.isArray(schema.enum) && !schema.enum.includes(value)) {
+      return { ok: false, reason: 'enum_mismatch' };
+    }
+    return { ok: true };
   }
   if (expectedType === 'number' || expectedType === 'integer') {
     if (typeof value !== 'number' || !Number.isFinite(value)) return { ok: false, reason: 'expected_number' };

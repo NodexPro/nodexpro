@@ -8,6 +8,7 @@ export const AI_ERROR_CODES = {
   AI_RATE_LIMITED: 'AI_RATE_LIMITED',
   AI_MALFORMED_OUTPUT: 'AI_MALFORMED_OUTPUT',
   AI_STRUCTURED_OUTPUT_INVALID: 'AI_STRUCTURED_OUTPUT_INVALID',
+  AI_ENDPOINT_BLOCKED: 'AI_ENDPOINT_BLOCKED',
 } as const;
 
 export type AiErrorCode = (typeof AI_ERROR_CODES)[keyof typeof AI_ERROR_CODES];
@@ -19,6 +20,7 @@ const CODE_TO_OUTCOME: Record<AiErrorCode, Exclude<AiGatewayOutcome, 'success'>>
   AI_RATE_LIMITED: 'rate_limited',
   AI_MALFORMED_OUTPUT: 'malformed_output',
   AI_STRUCTURED_OUTPUT_INVALID: 'structured_output_invalid',
+  AI_ENDPOINT_BLOCKED: 'provider_unavailable',
 };
 
 const CODE_TO_STATUS: Record<AiErrorCode, number> = {
@@ -28,6 +30,7 @@ const CODE_TO_STATUS: Record<AiErrorCode, number> = {
   AI_RATE_LIMITED: 429,
   AI_MALFORMED_OUTPUT: 502,
   AI_STRUCTURED_OUTPUT_INVALID: 502,
+  AI_ENDPOINT_BLOCKED: 400,
 };
 
 const SAFE_MESSAGES: Record<AiErrorCode, string> = {
@@ -37,6 +40,7 @@ const SAFE_MESSAGES: Record<AiErrorCode, string> = {
   AI_RATE_LIMITED: 'AI provider rate limited the request.',
   AI_MALFORMED_OUTPUT: 'AI returned malformed structured output.',
   AI_STRUCTURED_OUTPUT_INVALID: 'AI structured output did not match the requested schema.',
+  AI_ENDPOINT_BLOCKED: 'Endpoint is not allowed.',
 };
 
 export class AiGatewayError extends AppError {

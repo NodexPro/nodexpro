@@ -17,6 +17,7 @@ import {
   sanitizeAiGatewayAuditPayload,
 } from './ai-gateway-control-plane.pure.js';
 import { buildOwnerAiGatewayAggregate, loadAiGatewayProvider } from './ai-gateway-control-plane-read.service.js';
+import { testAiProviderConnection } from './ai-gateway-control-plane-connection-test.service.js';
 import {
   isAiGatewayControlPlaneCommand,
   type AiGatewayControlPlaneCommandName,
@@ -118,6 +119,12 @@ export async function executeAiGatewayControlPlaneCommand(
       return disableAiProvider(ctx, payload);
     case 'set_ai_provider_routing':
       return setAiProviderRouting(ctx, payload);
+    case 'test_ai_provider_connection':
+      return testAiProviderConnection(ctx, payload, {
+        audit,
+        refreshed,
+        throwIfSchemaMissing,
+      });
     default:
       throw badRequest(`Unsupported AI Gateway command: ${command}`);
   }
