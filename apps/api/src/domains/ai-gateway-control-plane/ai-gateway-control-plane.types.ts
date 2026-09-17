@@ -80,6 +80,7 @@ export type OwnerAiGatewayProviderCard = {
   connection_test_summary: string;
   eligible_for_routing: boolean;
   can_enable: boolean;
+  circuit_state: 'closed' | 'open' | 'half_open' | null;
 };
 
 export type OwnerAiGatewayAggregate = {

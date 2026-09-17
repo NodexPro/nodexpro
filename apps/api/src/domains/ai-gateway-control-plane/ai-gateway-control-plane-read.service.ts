@@ -5,6 +5,7 @@ import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import { supabaseAdmin } from '../../db/client.js';
 import { listAiAdapterRegistry } from '../../shared/ai-gateway/ai-gateway.adapters.js';
 import { loadAiGatewayPublicConfig } from '../../shared/ai-gateway/ai-gateway.config.js';
+import { processAiGatewayCircuitBreaker } from '../../shared/ai-gateway/ai-gateway.circuit.js';
 import {
   deriveOverallGatewayStatus,
   sortProvidersForAggregate,
@@ -108,7 +109,9 @@ export async function buildOwnerAiGatewayAggregate(ctx: RequestContext): Promise
   const [providers, routing] = await Promise.all([loadAiGatewayProviders(), loadAiGatewayRouting()]);
   const routingByProvider = new Map(routing.map((row) => [row.provider_id, row.position]));
   const ordered = sortProvidersForAggregate(providers, routing);
-  const cards = ordered.map((row) => toProviderCard(row, routingByProvider));
+  const cards = ordered.map((row) =>
+    toProviderCard(row, routingByProvider, processAiGatewayCircuitBreaker.snapshot(row.id)?.state ?? null),
+  );
   const overall = deriveOverallGatewayStatus(cards);
   const env = loadAiGatewayPublicConfig();
   return {

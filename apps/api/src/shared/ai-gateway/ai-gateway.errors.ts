@@ -13,6 +13,19 @@ export const AI_ERROR_CODES = {
 
 export type AiErrorCode = (typeof AI_ERROR_CODES)[keyof typeof AI_ERROR_CODES];
 
+export const AI_FAILOVER_ERROR_CODES: readonly AiErrorCode[] = [
+  AI_ERROR_CODES.AI_TIMEOUT,
+  AI_ERROR_CODES.AI_RATE_LIMITED,
+  AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE,
+  AI_ERROR_CODES.AI_MALFORMED_OUTPUT,
+  AI_ERROR_CODES.AI_STRUCTURED_OUTPUT_INVALID,
+  AI_ERROR_CODES.AI_ENDPOINT_BLOCKED,
+];
+
+export function isAiGatewayFailoverErrorCode(code: string): code is AiErrorCode {
+  return (AI_FAILOVER_ERROR_CODES as readonly string[]).includes(code);
+}
+
 const CODE_TO_OUTCOME: Record<AiErrorCode, Exclude<AiGatewayOutcome, 'success'>> = {
   AI_NOT_CONFIGURED: 'not_configured',
   AI_PROVIDER_UNAVAILABLE: 'provider_unavailable',

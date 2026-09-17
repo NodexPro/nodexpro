@@ -142,6 +142,7 @@ export function routingRole(position: number | null): string {
 
 export function deriveAiProviderHealth(
   row: AiGatewayControlPlaneProviderRow,
+  circuitState?: 'closed' | 'open' | 'half_open' | null,
 ): { status: AiGatewayProviderHealthStatus; reason: string } {
   const adapter = getAiAdapterRegistryEntry(row.adapter_type);
   if (!adapter) {
@@ -162,6 +163,12 @@ export function deriveAiProviderHealth(
   const enablement = evaluateAiProviderEnablement(row);
   if (!enablement.ok) {
     return { status: 'unavailable', reason: enablement.reason };
+  }
+  if (circuitState === 'open') {
+    return { status: 'unavailable', reason: 'Circuit is open in this API process.' };
+  }
+  if (circuitState === 'half_open') {
+    return { status: 'degraded', reason: 'Circuit is half-open in this API process.' };
   }
   if (row.last_failure_at && (!row.last_success_at || row.last_failure_at > row.last_success_at)) {
     if (row.last_failure_category === 'timeout' || row.last_failure_category === 'rate_limited') {
@@ -211,10 +218,11 @@ export function connectionTestSummary(row: Pick<
 export function toProviderCard(
   row: AiGatewayControlPlaneProviderRow,
   routingByProvider: Map<string, number>,
+  circuitState?: 'closed' | 'open' | 'half_open' | null,
 ): OwnerAiGatewayProviderCard {
   const adapter = getAiAdapterRegistryEntry(row.adapter_type);
   const position = routingByProvider.get(row.id) ?? null;
-  const health = deriveAiProviderHealth(row);
+  const health = deriveAiProviderHealth(row, circuitState);
   const enablement = evaluateAiProviderEnablement(row);
   return {
     id: row.id,
@@ -240,6 +248,7 @@ export function toProviderCard(
     connection_test_summary: connectionTestSummary(row),
     eligible_for_routing: row.enabled && enablement.ok,
     can_enable: !row.enabled && enablement.ok,
+    circuit_state: circuitState ?? null,
   };
 }
 

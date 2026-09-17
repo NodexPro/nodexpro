@@ -242,7 +242,7 @@ test('TAX-641C audit sanitizer and throttle keep secrets and raw bodies out', ()
   assert.equal(aiProviderConnectionTestThrottle(id, null, t0 + 21_000).throttled, false);
 });
 
-test('TAX-641C instance probe does not use env bootstrap or fallback routing', () => {
+test('TAX-641C instance probe does not use env bootstrap or fallback routing', async () => {
   const probe = readRepo(
     'apps/api/src/domains/ai-gateway-control-plane/ai-gateway-control-plane-connection-test.service.ts',
   );
@@ -255,6 +255,9 @@ test('TAX-641C instance probe does not use env bootstrap or fallback routing', (
   const gateway = createAiGateway({
     invocationConfig: testConfig,
     maxAttempts: 1,
+    resolveOwnerRoutes: async () => {
+      throw new Error('test connection must not load owner routing');
+    },
     transport: async () => ({
       status: 200,
       bodyText: openaiMessage('{"status":"ok"}'),
@@ -262,4 +265,8 @@ test('TAX-641C instance probe does not use env bootstrap or fallback routing', (
     }),
   });
   assert.equal(typeof gateway.completeStructuredJson, 'function');
+  const result = await gateway.completeStructuredJson(buildAiProviderConnectionTestRequest());
+  assert.equal(result.outcome, 'success');
+  assert.equal(result.telemetry.routing_source, 'pinned');
+  assert.equal(result.telemetry.failover_occurred, false);
 });

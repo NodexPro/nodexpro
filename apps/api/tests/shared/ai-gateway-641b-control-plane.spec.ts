@@ -168,6 +168,7 @@ test('disabled and uncertified providers are not eligible for routing', () => {
   const card = toProviderCard(row({ enabled: true, credential_configured: true }), new Map([[PROVIDER_ID, 1]]));
   assert.equal(card.eligible_for_routing, false);
   assert.equal(card.credential_configured, true);
+  assert.equal(card.circuit_state, null);
   assert.equal('credential_ciphertext' in card, false);
   const overall = deriveOverallGatewayStatus([card]);
   assert.equal(overall.status, 'unavailable');

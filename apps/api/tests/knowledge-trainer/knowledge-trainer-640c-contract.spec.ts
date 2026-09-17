@@ -52,6 +52,11 @@ test('TAX-640C generate command is Owner-only, one-draft, and uses the shared ga
   assert.doesNotMatch(generate, /activate_tax_rule_version/);
   assert.doesNotMatch(generate, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(generate, /\bfetch\s*\(/);
+  assert.doesNotMatch(generate, /ai_gateway_routing/);
+  assert.doesNotMatch(generate, /resolveOwnerRoutes/);
+  assert.doesNotMatch(generate, /TAX_KNOWLEDGE_AI_/);
+  assert.doesNotMatch(generate, /circuitBreaker/);
+  assert.doesNotMatch(generate, /test_ai_provider_connection/);
   assert.doesNotMatch(context, /\bfetch\s*\(/);
 });
 

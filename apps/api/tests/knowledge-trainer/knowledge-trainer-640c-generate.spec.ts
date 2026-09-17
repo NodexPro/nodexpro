@@ -117,23 +117,35 @@ function closed(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function gatewayResult(json: Record<string, unknown>) {
+function gatewayResult(
+  json: Record<string, unknown>,
+  overrides: { provider?: string; model?: string } = {},
+) {
+  const provider = overrides.provider ?? 'openai';
+  const model = overrides.model ?? 'gpt-4.1-mini';
   return {
     json,
-    provider: 'openai',
-    model: 'gpt-4.1-mini',
+    provider,
+    model,
     latency_ms: 11,
     outcome: 'success' as const,
     telemetry: {
       purpose: TAX_KNOWLEDGE_PROPOSAL_EXTRACT_PURPOSE,
-      provider: 'openai',
-      model: 'gpt-4.1-mini',
+      provider,
+      model,
+      provider_id: null,
+      routing_position: null,
+      routing_source: 'env' as const,
       prompt_contract_version: 'tax_knowledge_proposal_extract_v1',
       output_contract: 'tax_knowledge_proposal_v1',
       output_schema_version: 1,
       latency_ms: 11,
       outcome: 'success' as const,
       attempt_count: 1,
+      providers_attempted: 1,
+      failover_occurred: false,
+      failure_category: null,
+      circuit_state: null,
       untrusted_source_text: true,
     },
   };
@@ -308,6 +320,7 @@ test('TAX-639 invalid output and provider failure store zero B2 rows', async () 
   assert.ok(invalid.error instanceof AppError);
   assert.equal(invalid.error.code, 'TAX_KNOWLEDGE_PROPOSAL_INVALID');
   assert.equal(invalid.inserts.length, 0);
+  assert.equal(invalid.gatewayCalls.length, 1);
 
   const failed = await runGenerate({
     json: closed(),
@@ -368,4 +381,16 @@ test('context digest is stable across two mocked generations', async () => {
   const secondDigest = (second.inserts[0]?.generation_metadata_json as { input_context_digest: string }).input_context_digest;
   assert.equal(firstDigest, secondDigest);
   assert.match(firstDigest, /^[0-9a-f]{64}$/);
+});
+
+test('generation metadata records the actual provider/model returned by the gateway', async () => {
+  const out = await runGenerate({
+    json: closed(),
+    complete: async () => gatewayResult(closed(), { provider: 'openai', model: 'gpt-4.1' }),
+  });
+  assert.equal(out.error, null);
+  const metadata = out.inserts[0]?.generation_metadata_json as Record<string, unknown>;
+  assert.equal(metadata.provider, 'openai');
+  assert.equal(metadata.model, 'gpt-4.1');
+  assert.equal(out.gatewayCalls.length, 1);
 });
