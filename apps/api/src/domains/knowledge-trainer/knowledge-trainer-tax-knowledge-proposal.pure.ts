@@ -92,9 +92,11 @@ export function pickSelectedTaxKnowledgeProposal<T extends { id: string; revisio
 
 export function taxKnowledgeProposalAllowedActions(input: {
   hasSelectedDraft: boolean;
+  selectedDraftReviewStatus?: string | null;
   selectedProposalStatus: string | null;
 }): {
   create_tax_knowledge_proposal: boolean;
+  generate_tax_knowledge_proposal: boolean;
   set_tax_knowledge_proposal_review_status: boolean;
   create_corrected_tax_knowledge_proposal: boolean;
 } {
@@ -103,6 +105,7 @@ export function taxKnowledgeProposalAllowedActions(input: {
     : [];
   return {
     create_tax_knowledge_proposal: input.hasSelectedDraft,
+    generate_tax_knowledge_proposal: input.hasSelectedDraft && input.selectedDraftReviewStatus === 'ready',
     set_tax_knowledge_proposal_review_status: next.length > 0,
     create_corrected_tax_knowledge_proposal: Boolean(input.selectedProposalStatus),
   };

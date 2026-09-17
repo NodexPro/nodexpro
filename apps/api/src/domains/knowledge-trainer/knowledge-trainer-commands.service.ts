@@ -35,6 +35,7 @@ import {
   createTaxKnowledgeProposal,
   setTaxKnowledgeProposalReviewStatus,
 } from './knowledge-trainer-tax-knowledge-proposal.service.js';
+import { generateTaxKnowledgeProposal } from './knowledge-trainer-generate-tax-knowledge-proposal.service.js';
 import {
   createOwnerLegalMaterialSignedUrl,
   decodeLegalTrainingUpload,
@@ -798,6 +799,8 @@ export async function executeKnowledgeTrainerCommand(
       return handleLegalTextDraftCommand(ctx, 'retract_owner_structure_completeness', payload, retractOwnerStructureCompleteness);
     case 'create_tax_knowledge_proposal':
       return handleTaxKnowledgeProposalCommand(ctx, 'create_tax_knowledge_proposal', payload, createTaxKnowledgeProposal);
+    case 'generate_tax_knowledge_proposal':
+      return handleTaxKnowledgeProposalCommand(ctx, 'generate_tax_knowledge_proposal', payload, generateTaxKnowledgeProposal);
     case 'set_tax_knowledge_proposal_review_status':
       return handleTaxKnowledgeProposalCommand(ctx, 'set_tax_knowledge_proposal_review_status', payload, setTaxKnowledgeProposalReviewStatus);
     case 'create_corrected_tax_knowledge_proposal':

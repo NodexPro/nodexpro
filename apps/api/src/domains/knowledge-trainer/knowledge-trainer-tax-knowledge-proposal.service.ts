@@ -106,7 +106,7 @@ async function loadDraft(draftId: string) {
   return data;
 }
 
-async function validateProposalJsonForDraft(
+export async function validateProposalJsonForDraft(
   proposalJson: Record<string, unknown>,
   draft: {
     id: string;
@@ -150,6 +150,12 @@ async function nextRevisionNo(draftId: string): Promise<number> {
   return nextProposalRevisionNo(data?.[0]?.revision_no == null ? null : Number(data[0].revision_no));
 }
 
+export async function insertProposedTaxKnowledgeProposalRow(
+  row: Record<string, unknown>,
+): Promise<{ id: string; revision_no: number }> {
+  return insertProposalSnapshot(row);
+}
+
 async function insertProposalSnapshot(row: Record<string, unknown>): Promise<{ id: string; revision_no: number }> {
   const draftId = String(row.legal_text_draft_id);
   let lastError: { code?: string; message?: string } | null = null;
@@ -180,8 +186,11 @@ export async function createTaxKnowledgeProposal(
 ): Promise<TaxKnowledgeProposalCommandResult> {
   assertNoTrustedProvenance(payload);
   const draftId = asUuid(payload.legal_text_draft_id ?? payload.draft_id, 'legal_text_draft_id');
+  if (payload.creation_origin === 'ai_proposal') {
+    throw badRequest('AI proposals must be created with generate_tax_knowledge_proposal');
+  }
   if (!isTaxKnowledgeProposalCreationOrigin(payload.creation_origin)) {
-    throw badRequest('creation_origin must be ai_proposal or owner_corrected');
+    throw badRequest('creation_origin must be owner_corrected');
   }
   const proposalJson = parseProposalJson(payload.proposal_json);
   const supersedesId = asOptionalUuid(payload.supersedes_proposal_id, 'supersedes_proposal_id');

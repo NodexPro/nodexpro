@@ -152,7 +152,6 @@ test('TAX-640A freezes generation_metadata_json without weakening TAX-636 histor
 
 test('TAX-640A SQL does not implement gateway, AI calls, commands, UI, F2B/F2C, or activation', () => {
   const sql = readRepo(sqlRel);
-  const types = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer.types.ts');
   const service = readRepo(
     'apps/api/src/domains/knowledge-trainer/knowledge-trainer-tax-knowledge-proposal.service.ts',
   );
@@ -165,7 +164,6 @@ test('TAX-640A SQL does not implement gateway, AI calls, commands, UI, F2B/F2C, 
   assert.doesNotMatch(sql, /create_tax_knowledge_proposal/);
   assert.doesNotMatch(sql, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(sql, /tax_advisory_scenarios/);
-  assert.doesNotMatch(types, /generate_tax_knowledge_proposal/);
   assert.doesNotMatch(service, /openai|anthropic|prompt_template/i);
   assert.doesNotMatch(service, /generation_metadata_json/);
   assert.doesNotMatch(worker, /generation_metadata_json/);

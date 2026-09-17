@@ -249,6 +249,7 @@ export const AUDIT_ACTIONS = {
   LEGAL_TRAINING_OWNER_STRUCTURE_COMPLETENESS_CONFIRMED: 'legal_training_owner_structure_completeness_confirmed',
   LEGAL_TRAINING_OWNER_STRUCTURE_COMPLETENESS_RETRACTED: 'legal_training_owner_structure_completeness_retracted',
   LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_CREATED: 'legal_training_tax_knowledge_proposal_created',
+  LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_GENERATED: 'legal_training_tax_knowledge_proposal_generated',
   LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_REVIEW_STATUS_SET: 'legal_training_tax_knowledge_proposal_review_status_set',
   LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_CORRECTED: 'legal_training_tax_knowledge_proposal_corrected',
   TAX_STRATEGY_CREATED: 'tax_strategy_created',

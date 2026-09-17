@@ -127,7 +127,8 @@ export async function resolveCountryForOwnerLegalCommand(
     command === 'set_legal_text_draft_boundary' ||
     command === 'reset_legal_text_draft_to_source' ||
     command === 'set_legal_text_draft_review_status' ||
-    command === 'create_tax_knowledge_proposal'
+    command === 'create_tax_knowledge_proposal' ||
+    command === 'generate_tax_knowledge_proposal'
   ) {
     const id = optionalUuid(payload.legal_text_draft_id) ?? optionalUuid(payload.draft_id);
     if (!id) throw badRequest('legal_text_draft_id is required');

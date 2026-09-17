@@ -23,6 +23,7 @@ export const KNOWLEDGE_TRAINER_COMMANDS = [
   'confirm_owner_structure_completeness',
   'retract_owner_structure_completeness',
   'create_tax_knowledge_proposal',
+  'generate_tax_knowledge_proposal',
   'set_tax_knowledge_proposal_review_status',
   'create_corrected_tax_knowledge_proposal',
 ] as const;

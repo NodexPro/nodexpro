@@ -18,19 +18,20 @@ function listTsFiles(relDir: string): string[] {
     .map((name) => join(relDir, name).replace(/\\/g, '/'));
 }
 
-test('TAX-640B keeps Knowledge Trainer disconnected from the AI gateway', () => {
+test('TAX-640B provider HTTP stays inside the adapter; Trainer uses only the shared gateway index', () => {
   const trainerFiles = [
     ...listTsFiles('apps/api/src/domains/knowledge-trainer'),
     'apps/api/src/routes/owner-knowledge-trainer.routes.ts',
-    'apps/api/src/domains/knowledge-trainer/knowledge-trainer.types.ts',
   ];
   for (const rel of trainerFiles) {
     const text = readRepo(rel);
-    assert.doesNotMatch(text, /shared\/ai-gateway/);
-    assert.doesNotMatch(text, /completeStructuredJson/);
-    assert.doesNotMatch(text, /createAiGateway/);
-    assert.doesNotMatch(text, /generate_tax_knowledge_proposal/);
-    assert.doesNotMatch(text, /openai|anthropic|prompt_template/i);
+    assert.doesNotMatch(text, /shared\/ai-gateway\/providers/);
+    assert.doesNotMatch(text, /fetchAiProviderTransport/);
+    assert.doesNotMatch(text, /from 'openai'|from '@anthropic-ai\/sdk'/);
+    if (!rel.endsWith('knowledge-trainer-generate-tax-knowledge-proposal.service.ts')) {
+      assert.doesNotMatch(text, /completeStructuredJson/);
+      assert.doesNotMatch(text, /shared\/ai-gateway/);
+    }
   }
 });
 

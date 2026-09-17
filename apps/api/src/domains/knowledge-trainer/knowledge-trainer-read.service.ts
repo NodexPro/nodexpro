@@ -478,6 +478,7 @@ export async function buildKnowledgeTrainerSlice(
 
   const proposalActions = taxKnowledgeProposalAllowedActions({
     hasSelectedDraft: Boolean(selected?.selected_legal_text_draft),
+    selectedDraftReviewStatus: selected?.selected_legal_text_draft?.review_status ?? null,
     selectedProposalStatus: selected?.tax_knowledge_proposals.selected?.status ?? null,
   });
 
@@ -583,9 +584,12 @@ export async function buildKnowledgeTrainerSlice(
       }),
       action('create_tax_knowledge_proposal', proposalActions.create_tax_knowledge_proposal, {
         legal_text_draft_id: 'uuid',
-        creation_origin: 'ai_proposal | owner_corrected',
+        creation_origin: 'owner_corrected',
         proposal_json: 'object',
         supersedes_proposal_id: 'optional uuid; same Owner Draft only',
+      }),
+      action('generate_tax_knowledge_proposal', proposalActions.generate_tax_knowledge_proposal, {
+        legal_text_draft_id: 'uuid',
       }),
       action('set_tax_knowledge_proposal_review_status', proposalActions.set_tax_knowledge_proposal_review_status, {
         tax_knowledge_proposal_id: 'uuid',
