@@ -1,4 +1,5 @@
 import { TAX_SOURCE_PROVENANCE_TYPES } from '../tax-knowledge/tax-knowledge.types.js';
+import type { TaxKnowledgeProposalV1ValidationSummary } from './tax-knowledge-proposal-v1.types.js';
 
 export const KNOWLEDGE_TRAINER_COMMANDS = [
   'upload_legal_training_document',
@@ -557,6 +558,7 @@ export type KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto = {
 export type KnowledgeTrainerTaxKnowledgeProposalDetailDto = KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto & {
   legal_text_draft_id: string;
   proposal_json: Record<string, unknown>;
+  validation: TaxKnowledgeProposalV1ValidationSummary | null;
   allowed_next_statuses: KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto['status'][];
   allowed_actions: Array<{
     action_key: string;

@@ -17,6 +17,12 @@ import {
   taxKnowledgeProposalAllowedActions,
   taxKnowledgeProposalStatusLabel,
 } from './knowledge-trainer-tax-knowledge-proposal.pure.js';
+import { validateTaxKnowledgeProposalV1AgainstStore } from './tax-knowledge-proposal-v1-catalog.service.js';
+import {
+  canOwnerApproveTaxKnowledgeProposal,
+  emptyTaxKnowledgeProposalValidationResult,
+  summarizeTaxKnowledgeProposalValidation,
+} from './tax-knowledge-proposal-v1.pure.js';
 import { attachStructureReviewModel, describeStoredLayoutEvidence } from './knowledge-trainer-review.pure.js';
 import { emptySourceNoteSummary, parseSourceBBox, summarizeSourceNotes } from './knowledge-trainer-source-notes.pure.js';
 import { structureRunStatusLabel } from './knowledge-trainer-structure-run.pure.js';
@@ -986,8 +992,41 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
     .eq('legal_text_draft_id', draftId)
     .maybeSingle();
   if (error) throw error;
-    const json = data ? proposalJsonFromRow(data as Record<string, unknown>) : {};
-  const next = allowedTaxKnowledgeProposalReviewStatuses(selectedMeta.status);
+  const json = data ? proposalJsonFromRow(data as Record<string, unknown>) : {};
+  const { data: draftRow, error: draftError } = await supabaseAdmin
+    .from('legal_ingestion_legal_text_drafts')
+    .select('id, country_code, tax_source_id, draft_legal_text')
+    .eq('id', draftId)
+    .maybeSingle();
+  if (draftError) throw draftError;
+  let validationSummary = summarizeTaxKnowledgeProposalValidation(emptyTaxKnowledgeProposalValidationResult());
+  try {
+    const validation = await validateTaxKnowledgeProposalV1AgainstStore({
+      proposal_json: json,
+      context: {
+        country_code: String(draftRow?.country_code ?? ''),
+        tax_source_id: String(draftRow?.tax_source_id ?? ''),
+        legal_text_draft_id: draftId,
+        draft_legal_text: String(draftRow?.draft_legal_text ?? ''),
+      },
+    });
+    validationSummary = summarizeTaxKnowledgeProposalValidation(validation);
+  } catch {
+    validationSummary = summarizeTaxKnowledgeProposalValidation({
+      ...emptyTaxKnowledgeProposalValidationResult(String(draftRow?.draft_legal_text ?? '')),
+      errors: [
+        {
+          path: 'proposal_json',
+          code: 'validation_unavailable',
+          message: 'Deterministic proposal validation could not load catalog bindings',
+        },
+      ],
+    });
+  }
+  const ownerApprovalAllowed = canOwnerApproveTaxKnowledgeProposal(validationSummary);
+  const next = allowedTaxKnowledgeProposalReviewStatuses(selectedMeta.status).filter(
+    (status) => status !== 'owner_approved' || ownerApprovalAllowed,
+  );
   const actions = taxKnowledgeProposalAllowedActions({
     hasSelectedDraft: true,
     selectedProposalStatus: selectedMeta.status,
@@ -996,11 +1035,12 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
     ...selectedMeta,
     legal_text_draft_id: draftId,
     proposal_json: json,
+    validation: validationSummary,
     allowed_next_statuses: next,
     allowed_actions: [
       {
         action_key: 'set_tax_knowledge_proposal_review_status',
-        enabled: actions.set_tax_knowledge_proposal_review_status,
+        enabled: actions.set_tax_knowledge_proposal_review_status && next.length > 0,
         required_fields: { tax_knowledge_proposal_id: 'uuid', status: next.join(' | ') || 'none' },
       },
       {

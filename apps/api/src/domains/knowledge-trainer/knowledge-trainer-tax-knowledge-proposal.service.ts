@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { badRequest, conflict, notFound } from '../../shared/errors.js';
+import { AppError, badRequest, conflict, notFound } from '../../shared/errors.js';
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import {
   TAX_KNOWLEDGE_PROPOSAL_TRUSTED_PROVENANCE_FIELDS,
@@ -12,6 +12,9 @@ import {
   nextProposalRevisionNo,
   proposalJsonIsObject,
 } from './knowledge-trainer-tax-knowledge-proposal.pure.js';
+import { validateTaxKnowledgeProposalV1AgainstStore } from './tax-knowledge-proposal-v1-catalog.service.js';
+import { canOwnerApproveTaxKnowledgeProposal } from './tax-knowledge-proposal-v1.pure.js';
+import type { TaxKnowledgeProposalV1ValidationResult } from './tax-knowledge-proposal-v1.types.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REVISION_INSERT_ATTEMPTS = 8;
@@ -76,15 +79,51 @@ async function audit(
 const PROPOSAL_SELECT =
   'id, country_code, document_id, tax_source_id, legal_text_draft_id, structure_run_id, creation_origin, status, revision_no, supersedes_proposal_id, created_at';
 
+function throwIfProposalContractInvalid(
+  result: TaxKnowledgeProposalV1ValidationResult,
+  message: string,
+  code: string,
+): void {
+  if (result.valid_schema) return;
+  throw new AppError(400, message, code, {
+    valid_schema: result.valid_schema,
+    publication_eligible: result.publication_eligible,
+    owner_approval_allowed: result.owner_approval_allowed,
+    errors: result.errors,
+    warnings: result.warnings,
+    blocking_uncertainties: result.blocking_uncertainties,
+  });
+}
+
 async function loadDraft(draftId: string) {
   const { data, error } = await supabaseAdmin
     .from('legal_ingestion_legal_text_drafts')
-    .select('id, country_code, document_id, tax_source_id, structure_run_id')
+    .select('id, country_code, document_id, tax_source_id, structure_run_id, draft_legal_text')
     .eq('id', draftId)
     .maybeSingle();
   if (error) throw error;
   if (!data) throw notFound('Legal text draft not found');
   return data;
+}
+
+async function validateProposalJsonForDraft(
+  proposalJson: Record<string, unknown>,
+  draft: {
+    id: string;
+    country_code: string;
+    tax_source_id: string;
+    draft_legal_text: string | null;
+  },
+): Promise<TaxKnowledgeProposalV1ValidationResult> {
+  return validateTaxKnowledgeProposalV1AgainstStore({
+    proposal_json: proposalJson,
+    context: {
+      country_code: String(draft.country_code),
+      tax_source_id: String(draft.tax_source_id),
+      legal_text_draft_id: String(draft.id),
+      draft_legal_text: String(draft.draft_legal_text ?? ''),
+    },
+  });
 }
 
 async function loadProposal(proposalId: string) {
@@ -147,6 +186,12 @@ export async function createTaxKnowledgeProposal(
   const proposalJson = parseProposalJson(payload.proposal_json);
   const supersedesId = asOptionalUuid(payload.supersedes_proposal_id, 'supersedes_proposal_id');
   const draft = await loadDraft(draftId);
+  const validation = await validateProposalJsonForDraft(proposalJson, draft);
+  throwIfProposalContractInvalid(
+    validation,
+    'proposal_json failed tax_knowledge_proposal_v1 validation',
+    'TAX_KNOWLEDGE_PROPOSAL_INVALID',
+  );
   if (supersedesId) {
     const prior = await loadProposal(supersedesId);
     if (String(prior.legal_text_draft_id) !== draftId) {
@@ -203,6 +248,31 @@ export async function setTaxKnowledgeProposalReviewStatus(
   if (!canSetTaxKnowledgeProposalReviewStatus(String(current.status), payload.status)) {
     throw conflict(`Invalid proposal status transition: ${String(current.status)} → ${payload.status}`);
   }
+  if (payload.status === 'owner_approved') {
+    const [{ data: proposalRow, error: proposalError }, draft] = await Promise.all([
+      supabaseAdmin.from(PROPOSAL_TABLE).select('proposal_json').eq('id', proposalId).maybeSingle(),
+      loadDraft(String(current.legal_text_draft_id)),
+    ]);
+    throwIfProposalSchemaMissing(proposalError);
+    if (proposalError) throw proposalError;
+    const proposalJson = parseProposalJson(proposalRow?.proposal_json);
+    const validation = await validateProposalJsonForDraft(proposalJson, draft);
+    if (!canOwnerApproveTaxKnowledgeProposal(validation)) {
+      throw new AppError(
+        409,
+        'owner_approved requires a valid tax_knowledge_proposal_v1 contract with no blocks_rule_publication uncertainty',
+        'TAX_KNOWLEDGE_PROPOSAL_NOT_APPROVABLE',
+        {
+          valid_schema: validation.valid_schema,
+          publication_eligible: validation.publication_eligible,
+          owner_approval_allowed: validation.owner_approval_allowed,
+          errors: validation.errors,
+          warnings: validation.warnings,
+          blocking_uncertainties: validation.blocking_uncertainties,
+        },
+      );
+    }
+  }
   const { error } = await supabaseAdmin
     .from(PROPOSAL_TABLE)
     .update({ status: payload.status, updated_by: ctx.user.id })
@@ -246,6 +316,12 @@ export async function createCorrectedTaxKnowledgeProposal(
     throw badRequest('corrected proposal must stay on the same Owner Draft');
   }
   const draft = await loadDraft(sourceDraftId);
+  const validation = await validateProposalJsonForDraft(proposalJson, draft);
+  throwIfProposalContractInvalid(
+    validation,
+    'corrected proposal_json failed tax_knowledge_proposal_v1 validation',
+    'TAX_KNOWLEDGE_PROPOSAL_INVALID',
+  );
 
   const created = await insertProposalSnapshot({
     country_code: draft.country_code,
