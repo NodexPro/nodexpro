@@ -73,7 +73,7 @@ test('Business Setup AI owner page unmounts unrelated commercial and DocFlow UI'
   assert.match(page, /OwnerBusinessSetupAiWorkspace/);
   assert.match(page, /OWNER\.legalControl/);
   assert.match(page, /OWNER\.command/);
-  assert.match(page, /setPanel\(refreshed\)/);
+  assert.match(page, /setPanel\(out\.refreshed\.aggregate\)/);
   assert.match(page, /ownerLegalControlCountryQueryParams\(taxKnowledgeCountryQuery\)/);
   assert.match(page, /qs\.set\('tax_knowledge_country_code'/);
   assert.match(page, /qs\.set\('strategy_engine_country_code'/);

@@ -196,7 +196,7 @@ test('Add Country UI dispatches create_country only and does not invent a pack',
   assert.doesNotMatch(add, /create_country_pack/);
   assert.doesNotMatch(add, /status:/);
   assert.match(page, /OwnerAddCountryControl/);
-  assert.match(page, /setPanel\(refreshed\)/);
+  assert.match(page, /setPanel\(out\.refreshed\.aggregate\)/);
   assert.doesNotMatch(page, /create_country[\s\S]{0,200}create_country_pack/);
   assert.doesNotMatch(page, /localCountries|setCountries\(/);
 });
@@ -213,8 +213,8 @@ test('professional AppShell and session nav never include owner workspace links'
   const navBlockEnd = auth.indexOf('moduleAppNavItems.sort');
   assert.ok(navBlockStart >= 0 && navBlockEnd > navBlockStart);
   const navBlock = auth.slice(navBlockStart, navBlockEnd);
-  assert.doesNotMatch(navBlock, /platform-owner|legal-control/);
-  assert.doesNotMatch(shell, /platform-owner|legal-control|Country Pack|Knowledge Trainer/);
+  assert.doesNotMatch(navBlock, /platform-owner|legal-control|ai-gateway/);
+  assert.doesNotMatch(shell, /platform-owner|legal-control|Country Pack|Knowledge Trainer|ai-gateway|AI Gateway/);
   assert.match(page, /Access denied/);
   assert.match(page, /This page is available only for platform owner or assigned country legal maintainers/);
   assert.match(page, /isForbidden/);

@@ -28,6 +28,7 @@ export function OwnerBusinessSetupAiWorkspace({
   error,
   children,
   navGroups = BUSINESS_SETUP_AI_OWNER_NAV,
+  hideCountryChrome = false,
 }: {
   activeSection: BusinessSetupAiOwnerSectionId;
   onSelectSection: (id: BusinessSetupAiOwnerSectionId) => void;
@@ -44,6 +45,7 @@ export function OwnerBusinessSetupAiWorkspace({
   error: string;
   children: ReactNode;
   navGroups?: readonly BusinessSetupAiOwnerNavGroup[];
+  hideCountryChrome?: boolean;
 }) {
   return (
     <div className="nx-bsai-workspace">
@@ -71,25 +73,33 @@ export function OwnerBusinessSetupAiWorkspace({
         <div className="nx-bsai-toolbar">
           <div>
             <h2 className="nx-bsai-toolbar__title">Business Setup AI — Owner</h2>
-            <p className="nx-bsai-toolbar__subtitle">Canonical tax and law for the selected country.</p>
+            <p className="nx-bsai-toolbar__subtitle">
+              {hideCountryChrome
+                ? 'Platform Owner administration.'
+                : 'Canonical tax and law for the selected country.'}
+            </p>
           </div>
           <div className="nx-bsai-toolbar__controls">
-            <label className="nx-bsai-field">
-              Country
-              <select
-                value={countryCode}
-                disabled={countryBusy}
-                onChange={(e) => onSelectCountry(e.target.value)}
-              >
-                <option value="">Select country</option>
-                {countries.map((country) => (
-                  <option key={country.code} value={country.code}>
-                    {country.code} — {country.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {addCountryControl}
+            {hideCountryChrome ? null : (
+              <>
+                <label className="nx-bsai-field">
+                  Country
+                  <select
+                    value={countryCode}
+                    disabled={countryBusy}
+                    onChange={(e) => onSelectCountry(e.target.value)}
+                  >
+                    <option value="">Select country</option>
+                    {countries.map((country) => (
+                      <option key={country.code} value={country.code}>
+                        {country.code} — {country.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {addCountryControl}
+              </>
+            )}
             <button
               type="button"
               className="nx-btn nx-btn-taxes-compact nx-bsai-warning-btn"
@@ -115,7 +125,7 @@ export function OwnerBusinessSetupAiWorkspace({
             )}
           </div>
         ) : null}
-        {countryWorkspace}
+        {hideCountryChrome ? null : countryWorkspace}
         {children}
       </div>
     </div>

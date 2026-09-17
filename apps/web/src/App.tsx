@@ -171,6 +171,14 @@ function AppRoutes() {
           </OwnerLegalControlRenderBoundary>
         }
       />
+      <Route
+        path="/platform-owner/ai-gateway"
+        element={
+          <OwnerLegalControlRenderBoundary>
+            <PlatformOwnerLegalControl />
+          </OwnerLegalControlRenderBoundary>
+        }
+      />
       <Route path="/register" element={<Register />} />
       <Route path="/invite/accept" element={<InviteAccept />} />
       <Route path="/invite/:token" element={<ClientPortalInvite />} />

@@ -12,6 +12,7 @@ import {
   evaluateOwnerLegalCommandAccess,
   normalizeGrantedCapabilities,
   normalizeOwnerLegalEmail,
+  buildOwnerWorkspaceNavigation,
 } from '../../src/domains/owner-country-legal-access/owner-country-legal-access.pure.js';
 import { isOwnerCountryLegalAccessAdminCommand } from '../../src/domains/owner-country-legal-access/owner-country-legal-access.types.js';
 
@@ -224,4 +225,20 @@ test('schema is owner-side and does not reuse tenant RBAC', () => {
   assert.doesNotMatch(migration, /create table.*user_invitations/i);
   assert.doesNotMatch(migration, /insert into auth\.users/i);
   assert.match(migration, /revoke all on table public.owner_country_legal_assignments from anon, authenticated/i);
+});
+
+test('platform owner administration navigation includes AI Gateway; maintainers do not', () => {
+  const ownerNav = buildOwnerWorkspaceNavigation('platform_owner');
+  const admin = ownerNav.find((group) => group.group === 'ADMINISTRATION');
+  assert.ok(admin);
+  assert.deepEqual(
+    admin.items.map((item) => item.id),
+    ['access-experts', 'ai-gateway'],
+  );
+  assert.equal(admin.items.some((item) => item.label === 'AI Gateway'), true);
+  const maintainerNav = buildOwnerWorkspaceNavigation('country_legal_maintainer');
+  assert.equal(
+    maintainerNav.some((group) => group.items.some((item) => item.id === 'ai-gateway')),
+    false,
+  );
 });

@@ -23,8 +23,8 @@ test('15 professional navigation hides owner administration', () => {
   const navBlockStart = auth.indexOf('const navItems');
   const navBlockEnd = auth.indexOf('moduleAppNavItems.sort');
   const navBlock = auth.slice(navBlockStart, navBlockEnd);
-  assert.doesNotMatch(navBlock, /platform-owner|legal-control|Access & Experts|access-experts/);
-  assert.doesNotMatch(shell, /platform-owner|legal-control|Access & Experts|access-experts/);
+  assert.doesNotMatch(navBlock, /platform-owner|legal-control|Access & Experts|access-experts|ai-gateway|AI Gateway/);
+  assert.doesNotMatch(shell, /platform-owner|legal-control|Access & Experts|access-experts|ai-gateway|AI Gateway/);
   assert.match(app, /path="\/platform-owner\/legal-control"/);
   assert.match(page, /canShowAccessExperts/);
   assert.match(page, /OwnerAccessExpertsPanel/);

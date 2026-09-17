@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { apiJson, ApiError, userFacingApiMessage } from '../api/client';
 import { OWNER } from '../api/endpoints';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,6 +21,7 @@ import {
   type BusinessSetupAiOwnerSectionId,
 } from './owner-business-setup-ai-nav';
 import { OwnerAccessExpertsPanel, OwnerLegalAccessRequestForm } from './owner-access-experts-panel';
+import { OwnerAiGatewayPanel } from './owner-ai-gateway-panel';
 import { OwnerBusinessSetupAiWorkspace } from './owner-business-setup-ai-workspace';
 import { OwnerLegalValuesPanel } from './owner-legal-values-panel';
 import { OwnerCountryContextPanel } from './owner-country-context-panel';
@@ -84,6 +85,7 @@ function trainerSelectionFromAggregate(aggregate: unknown): { documentId: string
 export function PlatformOwnerLegalControl() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -100,15 +102,21 @@ export function PlatformOwnerLegalControl() {
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandModal, setCommandModal] = useState(null as CommandModalState | null);
   const [warningsOpen, setWarningsOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<BusinessSetupAiOwnerSectionId>(() =>
-    typeof window === 'undefined' ? 'tax-knowledge' : businessSetupAiOwnerSectionFromHash(window.location.hash),
-  );
+  const [activeSection, setActiveSection] = useState<BusinessSetupAiOwnerSectionId>(() => {
+    if (typeof window === 'undefined') return 'tax-knowledge';
+    if (window.location.pathname === '/platform-owner/ai-gateway') return 'ai-gateway';
+    return businessSetupAiOwnerSectionFromHash(window.location.hash);
+  });
 
   useEffect(() => {
     if (auth.status === 'unauthenticated') {
-      navigate('/platform-owner/login?redirect=/platform-owner/legal-control', { replace: true });
+      const redirect =
+        location.pathname === '/platform-owner/ai-gateway'
+          ? '/platform-owner/ai-gateway'
+          : '/platform-owner/legal-control';
+      navigate(`/platform-owner/login?redirect=${encodeURIComponent(redirect)}`, { replace: true });
     }
-  }, [auth.status, navigate]);
+  }, [auth.status, location.pathname, navigate]);
 
   const loadCore = useCallback(async (opts?: { silent?: boolean }): Promise<void> => {
     const silent = Boolean(opts?.silent);
@@ -283,6 +291,17 @@ export function PlatformOwnerLegalControl() {
     [panel],
   );
   const canShowAccessExperts = navGroups.some((group) => group.items.some((item) => item.id === 'access-experts'));
+  const canShowAiGateway = navGroups.some((group) => group.items.some((item) => item.id === 'ai-gateway'));
+
+  useEffect(() => {
+    if (location.pathname === '/platform-owner/ai-gateway') {
+      setActiveSection('ai-gateway');
+      return;
+    }
+    if (location.pathname === '/platform-owner/legal-control') {
+      setActiveSection(businessSetupAiOwnerSectionFromHash(location.hash));
+    }
+  }, [location.hash, location.pathname]);
 
   const selectedCountryCode = pendingTaxKnowledgeCountry ?? taxKnowledgeCountryQuery;
 
@@ -334,9 +353,11 @@ export function PlatformOwnerLegalControl() {
 
   function selectSection(id: BusinessSetupAiOwnerSectionId): void {
     setActiveSection(id);
-    if (typeof window !== 'undefined') {
-      window.history.replaceState(null, '', `#${id}`);
+    if (id === 'ai-gateway') {
+      navigate('/platform-owner/ai-gateway');
+      return;
     }
+    navigate(`/platform-owner/legal-control#${id}`);
   }
 
   if ((auth.status === 'loading' || loading) && !panel) {
@@ -392,8 +413,15 @@ export function PlatformOwnerLegalControl() {
   return (
     <OwnerLegalControlRenderBoundary>
       <OwnerBusinessSetupAiWorkspace
-        activeSection={canShowAccessExperts ? activeSection : activeSection === 'access-experts' ? 'tax-knowledge' : activeSection}
+        activeSection={
+          activeSection === 'ai-gateway' && !canShowAiGateway
+            ? 'tax-knowledge'
+            : activeSection === 'access-experts' && !canShowAccessExperts
+              ? 'tax-knowledge'
+              : activeSection
+        }
         onSelectSection={selectSection}
+        hideCountryChrome={activeSection === 'ai-gateway'}
         countryCode={selectedCountryCode}
         countries={countryOptions}
         countryBusy={commandBusy}
@@ -535,6 +563,8 @@ export function PlatformOwnerLegalControl() {
             }}
           />
         ) : null}
+
+        {activeSection === 'ai-gateway' ? <OwnerAiGatewayPanel /> : null}
 
         <CommandActionModal
           open={!!commandModal}

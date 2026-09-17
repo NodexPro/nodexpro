@@ -4,6 +4,7 @@ export const BUSINESS_SETUP_AI_OWNER_SECTION_IDS = [
   'fact-dictionary',
   'strategy-engine',
   'access-experts',
+  'ai-gateway',
 ] as const;
 
 export type BusinessSetupAiOwnerSectionId = (typeof BUSINESS_SETUP_AI_OWNER_SECTION_IDS)[number];

@@ -240,7 +240,10 @@ export function buildOwnerWorkspaceNavigation(kind: 'platform_owner' | 'country_
     businessSetup,
     {
       group: 'ADMINISTRATION',
-      items: [{ id: 'access-experts', label: 'Access & Experts' }],
+      items: [
+        { id: 'access-experts', label: 'Access & Experts' },
+        { id: 'ai-gateway', label: 'AI Gateway' },
+      ],
     },
   ];
 }

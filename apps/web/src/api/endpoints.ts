@@ -361,6 +361,8 @@ export const OWNER = {
   passwordRecoveryComplete: '/owner/password-recovery/complete',
   /** Single aggregate for Platform Owner Legal Control screen */
   legalControl: '/owner/legal-control',
+  /** Single aggregate for Platform Owner AI Gateway Control Center */
+  aiGateway: '/owner/ai-gateway',
   countryPacks: '/owner/country-packs',
   legalValues: '/owner/legal-values',
   pricing: '/owner/pricing',
