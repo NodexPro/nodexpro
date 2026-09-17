@@ -23,6 +23,7 @@ import {
   ENCRYPTION_NOT_CONFIGURED_CODE,
   getClientDataEncryptionEnvDiagnostic,
 } from './shared/field-encryption.js';
+import { logAiGatewayBootDiagnostic } from './shared/ai-gateway/index.js';
 import { writeAudit, AUDIT_ACTIONS } from './shared/audit-events.js';
 import { clientOperationsModuleRouter } from './domains/client-operations/client-operations.routes.js';
 import { ownerCountryPackRoutes } from './routes/owner-country-pack.routes.js';
@@ -220,6 +221,7 @@ app.listen(config.port, () => {
   console.log(
     `[api] CLIENT_DATA_ENCRYPTION_KEY: env_set=${enc.env_set ? 'yes' : 'no'}, decoded_bytes=${len}, aes256_ok=${enc.valid_for_aes256 ? 'yes' : 'no'}`
   );
+  logAiGatewayBootDiagnostic();
   void logPdfEngineStartupProbe();
   logModuleLoaded();
 });

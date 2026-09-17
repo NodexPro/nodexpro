@@ -1,3 +1,5 @@
+import { loadAiGatewayPublicConfig } from './shared/ai-gateway/ai-gateway.config.js';
+
 const nodeEnv = process.env.NODE_ENV ?? 'development';
 
 export const config = {
@@ -14,6 +16,8 @@ export const config = {
     passwordHash: process.env.PLATFORM_OWNER_PASSWORD_HASH?.trim() ?? null,
     accessKeyHash: process.env.PLATFORM_OWNER_ACCESS_KEY_HASH?.trim() ?? null,
   },
+  /** Public AI gateway pin only. Never includes TAX_KNOWLEDGE_AI_API_KEY. */
+  aiGateway: loadAiGatewayPublicConfig(),
 } as const;
 
 if (!config.supabaseUrl || !config.supabaseServiceRoleKey) {
