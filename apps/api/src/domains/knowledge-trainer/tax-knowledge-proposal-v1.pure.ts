@@ -8,20 +8,36 @@ import { parseActivationCritical } from '../tax-knowledge/tax-knowledge-unresolv
 import { FACT_KEY_SNAKE_CASE, RESERVED_FACT_KEY } from '../tax-fact-dictionary/tax-fact-dictionary.types.js';
 import {
   TAX_KNOWLEDGE_PROPOSAL_APPLICABILITY_STATUSES,
+  TAX_KNOWLEDGE_PROPOSAL_CALC_KEYS as CALC_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_CALC_OUTPUT_TYPES,
+  TAX_KNOWLEDGE_PROPOSAL_CITATION_KEYS as CITATION_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_CITED_INSTRUMENT_KINDS,
   TAX_KNOWLEDGE_PROPOSAL_CONTRACT,
+  TAX_KNOWLEDGE_PROPOSAL_ENDPOINT_KEYS as ENDPOINT_KEYS,
+  TAX_KNOWLEDGE_PROPOSAL_EVIDENCE_KEYS as EVIDENCE_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_EVIDENCE_QUOTE_ROLES,
+  TAX_KNOWLEDGE_PROPOSAL_EVIDENCE_SOURCE_ROLE,
   TAX_KNOWLEDGE_PROPOSAL_EXTRACTION_OUTCOMES,
   TAX_KNOWLEDGE_PROPOSAL_FACT_DICTIONARY_STATUSES,
+  TAX_KNOWLEDGE_PROPOSAL_FACT_KEYS as FACT_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_FACT_ROLES,
   TAX_KNOWLEDGE_PROPOSAL_FORBIDDEN_IDENTITY_KEYS,
+  TAX_KNOWLEDGE_PROPOSAL_LEGAL_VALUE_KEYS as LEGAL_VALUE_KEYS,
+  TAX_KNOWLEDGE_PROPOSAL_LOCATOR_KEYS as LOCATOR_KEYS,
+  TAX_KNOWLEDGE_PROPOSAL_NODE_KEYS as NODE_KEYS,
+  TAX_KNOWLEDGE_PROPOSAL_PARENT_KEYS as PARENT_KEYS,
+  TAX_KNOWLEDGE_PROPOSAL_QUOTE_KEYS as QUOTE_KEYS,
+  TAX_KNOWLEDGE_PROPOSAL_RELATIONSHIP_KEYS as REL_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_RELATIONSHIP_TYPES,
+  TAX_KNOWLEDGE_PROPOSAL_RULE_KEYS as RULE_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_SCHEMA_VERSION,
   TAX_KNOWLEDGE_PROPOSAL_STATUTORY_LITERAL_KEYS,
+  TAX_KNOWLEDGE_PROPOSAL_SUBJECT_KEYS as SUBJECT_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_TOP_LEVEL_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_UNCERTAINTY_CODES,
+  TAX_KNOWLEDGE_PROPOSAL_UNCERTAINTY_KEYS as UNCERTAINTY_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_UNCERTAINTY_SEVERITIES,
+  TAX_KNOWLEDGE_PROPOSAL_UNRESOLVED_KEYS as UNRESOLVED_KEYS,
   type TaxKnowledgeProposalApplicabilityStatus,
   type TaxKnowledgeProposalCatalogFact,
   type TaxKnowledgeProposalEvidenceQuoteRole,
@@ -66,69 +82,6 @@ const PROSE_KEYS = new Set([
   'node_number',
   'detail',
 ]);
-
-const NODE_KEYS = [
-  'proposal_node_key',
-  'existing_tax_legal_node_id',
-  'source_display_identifier',
-  'tax_legal_node_kind_id',
-  'kind_label',
-  'parent',
-  'title',
-  'node_number',
-  'printed_marker',
-] as const;
-
-const RULE_KEYS = [
-  'proposal_rule_key',
-  'title',
-  'rule_kind',
-  'existing_tax_rule_id',
-  'usage_hint',
-  'owner_note',
-  'statement',
-  'applies_if',
-  'does_not_apply_if',
-  'applicability_status',
-  'notes',
-  'effective_from',
-  'effective_to',
-  'legal_node_keys',
-  'existing_tax_legal_node_ids',
-  'legal_value_keys',
-  'calculation_keys',
-] as const;
-
-const REL_KEYS = ['from', 'to', 'relationship_type', 'activation_critical', 'unresolved'] as const;
-const ENDPOINT_KEYS = ['kind', 'key', 'tax_rule_version_id'] as const;
-const UNRESOLVED_KEYS = [
-  'cited_instrument_kind',
-  'locator_text',
-  'cited_title',
-  'cited_law_name',
-  'cited_provision_number',
-  'source_tax_source_id',
-  'source_locator',
-] as const;
-const CALC_KEYS = [
-  'proposal_calc_key',
-  'required',
-  'title',
-  'pin_rule_keys',
-  'input_fact_keys',
-  'legal_value_keys',
-  'output_type',
-  'expression',
-] as const;
-const FACT_KEYS = ['fact_key', 'role', 'dictionary_status', 'existing_tax_fact_definition_id'] as const;
-const LEGAL_VALUE_KEYS = ['value_key', 'existing_legal_value_id'] as const;
-const EVIDENCE_KEYS = ['source_role', 'quotes', 'citations', 'legal_locator'] as const;
-const QUOTE_KEYS = ['role', 'text', 'start', 'end'] as const;
-const CITATION_KEYS = ['tax_source_id', 'locator'] as const;
-const LOCATOR_KEYS = ['source_display_identifier', 'normalized_machine_identifier'] as const;
-const UNCERTAINTY_KEYS = ['code', 'severity', 'subject', 'message', 'detail'] as const;
-const SUBJECT_KEYS = ['kind', 'key'] as const;
-const PARENT_KEYS = ['kind', 'key', 'tax_legal_node_id'] as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -1327,7 +1280,7 @@ export function validateTaxKnowledgeProposalV1(input: {
 
   if (evidence) {
     rejectUnknownKeys(evidence, EVIDENCE_KEYS, 'evidence', errors);
-    if (evidence.source_role !== undefined && evidence.source_role !== 'reviewed_owner_draft') {
+    if (evidence.source_role !== undefined && evidence.source_role !== TAX_KNOWLEDGE_PROPOSAL_EVIDENCE_SOURCE_ROLE) {
       pushIssue(errors, 'evidence.source_role', 'evidence', 'source_role must be reviewed_owner_draft');
     }
     const quotes = asObjectArray(evidence.quotes ?? [], 'evidence.quotes', errors);

@@ -18,6 +18,106 @@ export const TAX_KNOWLEDGE_PROPOSAL_TOP_LEVEL_KEYS = [
   'uncertainties',
 ] as const;
 
+export const TAX_KNOWLEDGE_PROPOSAL_NODE_KEYS = [
+  'proposal_node_key',
+  'existing_tax_legal_node_id',
+  'source_display_identifier',
+  'tax_legal_node_kind_id',
+  'kind_label',
+  'parent',
+  'title',
+  'node_number',
+  'printed_marker',
+] as const;
+
+export const TAX_KNOWLEDGE_PROPOSAL_RULE_KEYS = [
+  'proposal_rule_key',
+  'title',
+  'rule_kind',
+  'existing_tax_rule_id',
+  'usage_hint',
+  'owner_note',
+  'statement',
+  'applies_if',
+  'does_not_apply_if',
+  'applicability_status',
+  'notes',
+  'effective_from',
+  'effective_to',
+  'legal_node_keys',
+  'existing_tax_legal_node_ids',
+  'legal_value_keys',
+  'calculation_keys',
+] as const;
+
+export const TAX_KNOWLEDGE_PROPOSAL_RELATIONSHIP_KEYS = [
+  'from',
+  'to',
+  'relationship_type',
+  'activation_critical',
+  'unresolved',
+] as const;
+
+export const TAX_KNOWLEDGE_PROPOSAL_ENDPOINT_KEYS = ['kind', 'key', 'tax_rule_version_id'] as const;
+
+export const TAX_KNOWLEDGE_PROPOSAL_UNRESOLVED_KEYS = [
+  'cited_instrument_kind',
+  'locator_text',
+  'cited_title',
+  'cited_law_name',
+  'cited_provision_number',
+  'source_tax_source_id',
+  'source_locator',
+] as const;
+
+export const TAX_KNOWLEDGE_PROPOSAL_CALC_KEYS = [
+  'proposal_calc_key',
+  'required',
+  'title',
+  'pin_rule_keys',
+  'input_fact_keys',
+  'legal_value_keys',
+  'output_type',
+  'expression',
+] as const;
+
+export const TAX_KNOWLEDGE_PROPOSAL_FACT_KEYS = [
+  'fact_key',
+  'role',
+  'dictionary_status',
+  'existing_tax_fact_definition_id',
+] as const;
+
+export const TAX_KNOWLEDGE_PROPOSAL_LEGAL_VALUE_KEYS = ['value_key', 'existing_legal_value_id'] as const;
+
+export const TAX_KNOWLEDGE_PROPOSAL_EVIDENCE_KEYS = ['source_role', 'quotes', 'citations', 'legal_locator'] as const;
+export const TAX_KNOWLEDGE_PROPOSAL_QUOTE_KEYS = ['role', 'text', 'start', 'end'] as const;
+export const TAX_KNOWLEDGE_PROPOSAL_CITATION_KEYS = ['tax_source_id', 'locator'] as const;
+export const TAX_KNOWLEDGE_PROPOSAL_LOCATOR_KEYS = [
+  'source_display_identifier',
+  'normalized_machine_identifier',
+] as const;
+export const TAX_KNOWLEDGE_PROPOSAL_UNCERTAINTY_KEYS = ['code', 'severity', 'subject', 'message', 'detail'] as const;
+export const TAX_KNOWLEDGE_PROPOSAL_SUBJECT_KEYS = ['kind', 'key'] as const;
+export const TAX_KNOWLEDGE_PROPOSAL_PARENT_KEYS = ['kind', 'key', 'tax_legal_node_id'] as const;
+
+export const TAX_KNOWLEDGE_PROPOSAL_PARENT_KINDS = ['proposal_node', 'existing'] as const;
+export const TAX_KNOWLEDGE_PROPOSAL_RELATIONSHIP_ENDPOINT_KINDS = [
+  'proposal_rule',
+  'existing_rule_version',
+] as const;
+export const TAX_KNOWLEDGE_PROPOSAL_UNRESOLVED_ENDPOINT_KIND = 'unresolved' as const;
+export const TAX_KNOWLEDGE_PROPOSAL_UNCERTAINTY_SUBJECT_KINDS = [
+  'proposal',
+  'rule',
+  'node',
+  'calculation',
+  'fact',
+  'legal_value',
+  'relationship',
+] as const;
+export const TAX_KNOWLEDGE_PROPOSAL_EVIDENCE_SOURCE_ROLE = 'reviewed_owner_draft' as const;
+
 export const TAX_KNOWLEDGE_PROPOSAL_EXTRACTION_OUTCOMES = ['rules', 'no_rules', 'cannot_determine'] as const;
 export type TaxKnowledgeProposalExtractionOutcome =
   (typeof TAX_KNOWLEDGE_PROPOSAL_EXTRACTION_OUTCOMES)[number];
