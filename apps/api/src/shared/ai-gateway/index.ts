@@ -57,6 +57,7 @@ export {
   resolveSafeAiGatewayAddress,
   resolveRedirectUrl,
   pickSafeResolvedAddress,
+  createPinnedDnsLookup,
   AI_GATEWAY_MAX_REDIRECTS,
 } from './ai-gateway.runtime-ssrf.js';
 export { fetchAiProviderTransport } from './providers/ai-provider.types.js';

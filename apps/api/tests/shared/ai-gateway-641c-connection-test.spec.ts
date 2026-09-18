@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import https from 'node:https';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AI_ERROR_CODES, AiGatewayError } from '../../src/shared/ai-gateway/ai-gateway.errors.js';
@@ -12,6 +13,7 @@ import {
 } from '../../src/shared/ai-gateway/ai-gateway.provider-error.js';
 import { createAiGateway } from '../../src/shared/ai-gateway/ai-gateway.service.js';
 import {
+  createPinnedDnsLookup,
   fetchAiProviderTransportHardened,
   resolveRedirectUrl,
   resolveSafeAiGatewayAddress,
@@ -124,6 +126,52 @@ test('TAX-641C runtime SSRF rejects private DNS and private redirects without a 
   );
   assert.equal(requests.length, 1);
   assert.equal(inspectAiGatewayBaseUrl('https://127.0.0.1/v1').ok, false);
+});
+
+test('pinned DNS lookup supports Node 22 lookup { all: true } without ERR_INVALID_IP_ADDRESS', async () => {
+  const pin = { address: '203.0.113.10', family: 4 as const };
+  const lookup = createPinnedDnsLookup(pin);
+
+  const allAddresses = await new Promise<unknown>((resolve, reject) => {
+    lookup('api.openai.com', { all: true, hints: 0 }, (err, addresses) => {
+      if (err) reject(err);
+      else resolve(addresses);
+    });
+  });
+  assert.deepEqual(allAddresses, [{ address: '203.0.113.10', family: 4 }]);
+  assert.equal(Array.isArray(allAddresses), true);
+  assert.equal((allAddresses as { address: string }[])[0]?.address, '203.0.113.10');
+
+  const one = await new Promise<{ address: string; family: number }>((resolve, reject) => {
+    lookup('api.openai.com', { family: 4 }, (err, address, family) => {
+      if (err) reject(err);
+      else resolve({ address: address as string, family: family as number });
+    });
+  });
+  assert.equal(one.address, '203.0.113.10');
+  assert.equal(one.family, 4);
+
+  const error = await new Promise<NodeJS.ErrnoException>((resolve, reject) => {
+    const req = https.request(
+      {
+        protocol: 'https:',
+        hostname: 'api.openai.com',
+        servername: 'api.openai.com',
+        port: 1,
+        path: '/',
+        method: 'GET',
+        lookup: createPinnedDnsLookup({ address: '127.0.0.1', family: 4 }),
+      },
+      (res) => {
+        res.resume();
+        reject(new Error(`unexpected HTTP ${res.statusCode}`));
+      },
+    );
+    req.on('error', (err) => resolve(err as NodeJS.ErrnoException));
+    req.end();
+  });
+  assert.notEqual(error.code, 'ERR_INVALID_IP_ADDRESS');
+  assert.notEqual(error.message, 'Invalid IP address: undefined');
 });
 
 test('TAX-641C mocked provider outcomes are sanitized and do not certify failures', async () => {

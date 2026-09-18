@@ -1,5 +1,7 @@
 import dns from 'node:dns/promises';
+import type { LookupAddress, LookupOptions } from 'node:dns';
 import https from 'node:https';
+import type { LookupFunction } from 'node:net';
 import { AI_ERROR_CODES, aiGatewayError } from './ai-gateway.errors.js';
 import {
   inspectAiGatewayBaseUrl,
@@ -54,6 +56,34 @@ function blockedEndpointError(reason?: string) {
   return aiGatewayError(AI_ERROR_CODES.AI_ENDPOINT_BLOCKED, {
     message: reason ?? 'Endpoint is not allowed.',
   });
+}
+
+/**
+ * Node 22 `autoSelectFamily` calls lookup with `{ all: true }` and expects
+ * `LookupAddress[]`. Passing a bare IP string yields ERR_INVALID_IP_ADDRESS.
+ * Always pin to the single pre-checked address — never unpinned DNS.
+ */
+export function createPinnedDnsLookup(pin: AiGatewayResolvedAddress): LookupFunction {
+  const pinned: LookupAddress = { address: pin.address, family: pin.family };
+  return ((
+    _hostname: string,
+    options: LookupOptions | ((err: NodeJS.ErrnoException | null, address: string, family: number) => void),
+    callback?: (
+      err: NodeJS.ErrnoException | null,
+      address: string | LookupAddress[],
+      family?: number,
+    ) => void,
+  ) => {
+    const cb = (typeof options === 'function' ? options : callback) as
+      | ((err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void)
+      | undefined;
+    if (typeof cb !== 'function') return;
+    if (typeof options === 'object' && options?.all === true) {
+      cb(null, [pinned]);
+      return;
+    }
+    cb(null, pinned.address, pinned.family);
+  }) as LookupFunction;
 }
 
 export function pickSafeResolvedAddress(addresses: AiGatewayResolvedAddress[]): AiGatewayResolvedAddress {
@@ -138,9 +168,7 @@ export async function defaultAiGatewayPinnedHttpsRequest(input: {
         path: `${input.url.pathname}${input.url.search}`,
         method: input.method,
         headers,
-        lookup: (_hostname, _options, callback) => {
-          callback(null, input.address, input.family);
-        },
+        lookup: createPinnedDnsLookup({ address: input.address, family: input.family }),
       },
       (res) => {
         const chunks: Buffer[] = [];
