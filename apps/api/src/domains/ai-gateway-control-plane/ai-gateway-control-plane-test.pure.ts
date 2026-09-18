@@ -1,5 +1,11 @@
 import { AppError } from '../../shared/errors.js';
 import { AI_ERROR_CODES, AiGatewayError } from '../../shared/ai-gateway/ai-gateway.errors.js';
+import {
+  extractSafeProviderErrorHint,
+  isAuthProviderErrorCode,
+  isModelProviderErrorCode,
+} from '../../shared/ai-gateway/ai-gateway.provider-error.js';
+import { assertSafeTelemetryPayload } from '../../shared/ai-gateway/ai-gateway.redaction.js';
 import type { AiGatewayCompleteStructuredJsonInput } from '../../shared/ai-gateway/ai-gateway.types.js';
 
 export const AI_PROVIDER_TEST_TIMEOUT_MS = 15_000;
@@ -52,6 +58,7 @@ export function connectionTestContainsForbiddenData(request: AiGatewayCompleteSt
 export type StoredAiProviderFailureCategory =
   | 'not_configured'
   | 'provider_unavailable'
+  | 'model_unavailable'
   | 'timeout'
   | 'rate_limited'
   | 'malformed_output'
@@ -124,11 +131,22 @@ export function successPatchTouchesEnablementOrRouting(patch: Record<string, unk
 export function classifyConnectionTestFailure(input: {
   error: unknown;
   lastStatus: number | null;
+  providerErrorCode?: string | null;
+  providerErrorParam?: string | null;
 }): { category: StoredAiProviderFailureCategory; structuredOutputFailed: boolean } {
-  if (input.lastStatus === 401 || input.lastStatus === 403) {
+  const status = input.lastStatus;
+  const code = input.providerErrorCode ?? null;
+  const param = input.providerErrorParam ?? null;
+  if (status === 401 || status === 403 || isAuthProviderErrorCode(code)) {
     return { category: 'auth_rejected', structuredOutputFailed: false };
   }
-  if (input.lastStatus === 404) {
+  if (status === 429) {
+    return { category: 'rate_limited', structuredOutputFailed: false };
+  }
+  if (status === 404 || isModelProviderErrorCode(code, param)) {
+    return { category: 'model_unavailable', structuredOutputFailed: false };
+  }
+  if (status != null && status >= 500 && status <= 599) {
     return { category: 'provider_unavailable', structuredOutputFailed: false };
   }
   if (input.error instanceof AiGatewayError) {
@@ -156,6 +174,68 @@ export function classifyConnectionTestFailure(input: {
     return { category: 'endpoint_blocked', structuredOutputFailed: false };
   }
   return { category: 'provider_unavailable', structuredOutputFailed: false };
+}
+
+export type ConnectionTestObservation = {
+  correlation_id: string | null;
+  http_status: number | null;
+  provider_error_code: string | null;
+  failure_category: StoredAiProviderFailureCategory | null;
+  outcome: 'passed' | 'failed';
+  latency_ms: number;
+  provider: string | null;
+  model: string | null;
+  endpoint: 'POST /chat/completions';
+};
+
+export function buildConnectionTestObservation(input: ConnectionTestObservation): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    purpose: AI_PROVIDER_CONNECTION_TEST_PURPOSE,
+    correlation_id: input.correlation_id,
+    http_status: input.http_status,
+    provider_error_code: input.provider_error_code,
+    failure_category: input.failure_category,
+    outcome: input.outcome,
+    latency_ms: input.latency_ms,
+    provider: input.provider,
+    model: input.model,
+    endpoint: input.endpoint,
+  };
+  assertSafeTelemetryPayload(payload);
+  return payload;
+}
+
+export function logConnectionTestObservation(
+  input: ConnectionTestObservation,
+  write: (event: string, payload: Record<string, unknown>) => void = (event, payload) => {
+    console.info(event, payload);
+  },
+): Record<string, unknown> {
+  try {
+    const payload = buildConnectionTestObservation(input);
+    write('[ai-gateway]', payload);
+    return payload;
+  } catch {
+    const fallback = {
+      purpose: AI_PROVIDER_CONNECTION_TEST_PURPOSE,
+      correlation_id: input.correlation_id,
+      http_status: typeof input.http_status === 'number' ? input.http_status : null,
+      provider_error_code: null,
+      failure_category: input.failure_category,
+      outcome: input.outcome,
+      telemetry_omitted: true,
+    };
+    write('[ai-gateway]', fallback);
+    return fallback;
+  }
+}
+
+export function safeProviderHintFromBody(bodyText: string | null | undefined): {
+  code: string | null;
+  param: string | null;
+} {
+  if (!bodyText) return { code: null, param: null };
+  return extractSafeProviderErrorHint(bodyText);
 }
 
 export function isSuccessfulConnectionTestJson(json: Record<string, unknown>): boolean {

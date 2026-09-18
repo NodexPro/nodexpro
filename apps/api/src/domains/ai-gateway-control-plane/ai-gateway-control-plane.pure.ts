@@ -174,7 +174,11 @@ export function deriveAiProviderHealth(
     if (row.last_failure_category === 'timeout' || row.last_failure_category === 'rate_limited') {
       return { status: 'degraded', reason: humanFailure(row.last_failure_category) };
     }
-    if (row.last_failure_category === 'provider_unavailable' || row.last_failure_category === 'auth_rejected') {
+    if (
+      row.last_failure_category === 'provider_unavailable' ||
+      row.last_failure_category === 'auth_rejected' ||
+      row.last_failure_category === 'model_unavailable'
+    ) {
       return { status: 'unavailable', reason: humanFailure(row.last_failure_category) };
     }
   }
@@ -186,11 +190,13 @@ export function humanFailure(category: string | null): string {
     case 'timeout':
       return 'The last check timed out.';
     case 'rate_limited':
-      return 'The provider rate-limited the last check.';
+      return 'Rate limited.';
     case 'provider_unavailable':
-      return 'The provider was unavailable.';
+      return 'Provider unavailable.';
+    case 'model_unavailable':
+      return 'Model unavailable.';
     case 'auth_rejected':
-      return 'The API key was rejected.';
+      return 'Authentication failed.';
     case 'malformed_output':
       return 'The provider returned malformed output.';
     case 'structured_output_invalid':

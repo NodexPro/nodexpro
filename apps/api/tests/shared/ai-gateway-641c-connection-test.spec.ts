@@ -4,6 +4,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AI_ERROR_CODES, AiGatewayError } from '../../src/shared/ai-gateway/ai-gateway.errors.js';
+import { assertSafeTelemetryPayload } from '../../src/shared/ai-gateway/ai-gateway.redaction.js';
+import {
+  extractSafeProviderErrorHint,
+  isAuthProviderErrorCode,
+  isModelProviderErrorCode,
+} from '../../src/shared/ai-gateway/ai-gateway.provider-error.js';
 import { createAiGateway } from '../../src/shared/ai-gateway/ai-gateway.service.js';
 import {
   fetchAiProviderTransportHardened,
@@ -11,7 +17,7 @@ import {
   resolveSafeAiGatewayAddress,
 } from '../../src/shared/ai-gateway/ai-gateway.runtime-ssrf.js';
 import { inspectAiGatewayBaseUrl } from '../../src/shared/ai-gateway/ai-gateway.endpoint-policy.js';
-import { digestAiProviderTestConfiguration, connectionTestSummary } from '../../src/domains/ai-gateway-control-plane/ai-gateway-control-plane.pure.js';
+import { digestAiProviderTestConfiguration, connectionTestSummary, humanFailure } from '../../src/domains/ai-gateway-control-plane/ai-gateway-control-plane.pure.js';
 import {
   AI_PROVIDER_CONNECTION_TEST_PURPOSE,
   aiProviderConnectionTestThrottle,
@@ -20,6 +26,7 @@ import {
   buildConnectionTestSuccessPatch,
   classifyConnectionTestFailure,
   connectionTestContainsForbiddenData,
+  logConnectionTestObservation,
   noteAiProviderConnectionTestAttempt,
   resetAiProviderConnectionTestThrottleForTests,
   successPatchTouchesEnablementOrRouting,
@@ -126,6 +133,7 @@ test('TAX-641C mocked provider outcomes are sanitized and do not certify failure
   assert.equal(auth.ok, false);
   if (auth.ok) throw new Error('expected failure');
   assert.equal(auth.category, 'auth_rejected');
+  assert.equal(auth.http_status, 401);
 
   const timeout = await probeAiProviderConnection(testConfig, {
     transport: async () => {
@@ -143,6 +151,7 @@ test('TAX-641C mocked provider outcomes are sanitized and do not certify failure
   assert.equal(rate.ok, false);
   if (rate.ok) throw new Error('expected failure');
   assert.equal(rate.category, 'rate_limited');
+  assert.equal(rate.http_status, 429);
 
   const incompatible = await probeAiProviderConnection(testConfig, {
     transport: async () => ({
@@ -214,7 +223,7 @@ test('TAX-641C successful tiny structured response certifies the current digest 
       last_failure_at: '2026-09-17T12:02:00.000Z',
       last_failure_category: 'auth_rejected',
     }),
-    /Test failed: The API key was rejected/,
+    /Test failed: Authentication failed/,
   );
 });
 
@@ -269,4 +278,133 @@ test('TAX-641C instance probe does not use env bootstrap or fallback routing', a
   assert.equal(result.outcome, 'success');
   assert.equal(result.telemetry.routing_source, 'pinned');
   assert.equal(result.telemetry.failover_occurred, false);
+});
+
+test('connection-test observability classifies HTTP status without logging secrets or bodies', async () => {
+  const secret = 'sk-live-secret-observability-1234567890';
+  const authBody = JSON.stringify({
+    error: {
+      message: `Incorrect API key provided: ${secret}`,
+      type: 'invalid_request_error',
+      code: 'invalid_api_key',
+      param: null,
+    },
+  });
+  const auth = await probeAiProviderConnection(testConfig, {
+    transport: async () => ({ status: 401, bodyText: authBody, retryAfterMs: null }),
+  });
+  assert.equal(auth.ok, false);
+  if (auth.ok) throw new Error('expected failure');
+  assert.equal(auth.category, 'auth_rejected');
+  assert.equal(auth.http_status, 401);
+  assert.equal(auth.provider_error_code, 'invalid_api_key');
+
+  const modelBody = JSON.stringify({
+    error: {
+      message: 'The model `gpt-5.4-2026-03-05` does not exist or you do not have access to it.',
+      type: 'invalid_request_error',
+      param: 'model',
+      code: 'model_not_found',
+    },
+  });
+  const model = await probeAiProviderConnection(testConfig, {
+    transport: async () => ({ status: 400, bodyText: modelBody, retryAfterMs: null }),
+  });
+  assert.equal(model.ok, false);
+  if (model.ok) throw new Error('expected failure');
+  assert.equal(model.category, 'model_unavailable');
+  assert.equal(model.http_status, 400);
+  assert.equal(model.provider_error_code, 'model_not_found');
+
+  const missing = await probeAiProviderConnection(testConfig, {
+    transport: async () => ({ status: 404, bodyText: '{"error":{"code":"not_found"}}', retryAfterMs: null }),
+  });
+  assert.equal(missing.ok, false);
+  if (missing.ok) throw new Error('expected failure');
+  assert.equal(missing.category, 'model_unavailable');
+  assert.equal(missing.http_status, 404);
+
+  const unavailable = await probeAiProviderConnection(testConfig, {
+    transport: async () => ({ status: 503, bodyText: `provider down ${secret}`, retryAfterMs: null }),
+  });
+  assert.equal(unavailable.ok, false);
+  if (unavailable.ok) throw new Error('expected failure');
+  assert.equal(unavailable.category, 'provider_unavailable');
+  assert.equal(unavailable.http_status, 503);
+
+  const hint = extractSafeProviderErrorHint(authBody);
+  assert.equal(hint.code, 'invalid_api_key');
+  assert.equal(isAuthProviderErrorCode(hint.code), true);
+  assert.doesNotMatch(JSON.stringify(hint), new RegExp(secret));
+  assert.equal(isModelProviderErrorCode('model_not_found', null), true);
+  assert.equal(
+    extractSafeProviderErrorHint('{"error":{"message":"leak this legal_text ordinance","code":"sk-not-a-code"}}').code,
+    null,
+  );
+
+  const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
+  const logged = logConnectionTestObservation(
+    {
+      correlation_id: 'corr-test-641g',
+      http_status: 401,
+      provider_error_code: 'invalid_api_key',
+      failure_category: 'auth_rejected',
+      outcome: 'failed',
+      latency_ms: 12,
+      provider: 'openai',
+      model: 'gpt-4.1-mini',
+      endpoint: 'POST /chat/completions',
+    },
+    (event, payload) => events.push({ event, payload }),
+  );
+  assert.equal(events[0]?.event, '[ai-gateway]');
+  assert.equal(logged.purpose, AI_PROVIDER_CONNECTION_TEST_PURPOSE);
+  assert.equal(logged.correlation_id, 'corr-test-641g');
+  assert.equal(logged.http_status, 401);
+  assert.equal(logged.provider_error_code, 'invalid_api_key');
+  assert.equal(logged.failure_category, 'auth_rejected');
+  assert.equal(logged.endpoint, 'POST /chat/completions');
+  assertSafeTelemetryPayload(logged);
+  const encoded = JSON.stringify(events);
+  assert.doesNotMatch(encoded, new RegExp(secret));
+  assert.doesNotMatch(encoded, /Authorization|Bearer |legal_text|"choices"/i);
+  assert.equal(Object.prototype.hasOwnProperty.call(logged, 'body'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(logged, 'bodyText'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(logged, 'prompt'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(logged, 'completion'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(logged, 'headers'), false);
+  assert.throws(() => assertSafeTelemetryPayload({ body: authBody, prompt: 'nope' }));
+
+  assert.equal(humanFailure('auth_rejected'), 'Authentication failed.');
+  assert.equal(humanFailure('model_unavailable'), 'Model unavailable.');
+  assert.equal(humanFailure('rate_limited'), 'Rate limited.');
+  assert.equal(humanFailure('provider_unavailable'), 'Provider unavailable.');
+  assert.match(
+    connectionTestSummary({
+      last_test_at: '2026-09-18T12:00:00.000Z',
+      last_test_outcome: 'failed',
+      last_success_at: null,
+      last_failure_at: '2026-09-18T12:00:00.000Z',
+      last_failure_category: 'model_unavailable',
+    }),
+    /Test failed: Model unavailable/,
+  );
+
+  const classified400 = classifyConnectionTestFailure({
+    error: new AiGatewayError(AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE),
+    lastStatus: 400,
+    providerErrorCode: 'model_not_found',
+    providerErrorParam: 'model',
+  });
+  assert.equal(classified400.category, 'model_unavailable');
+
+  const probeSource = readRepo(
+    'apps/api/src/domains/ai-gateway-control-plane/ai-gateway-control-plane-connection-test.service.ts',
+  );
+  const hop = readRepo('apps/api/src/shared/ai-gateway/ai-gateway.service.ts');
+  assert.match(probeSource, /logConnectionTestObservation/);
+  assert.match(probeSource, /log:\s*\(\)\s*=>\s*undefined/);
+  assert.doesNotMatch(probeSource, /lastBodyText[,;].*console/);
+  assert.match(hop, /if \(response\.status === 401 \|\| response\.status === 403\)/);
+  assert.match(hop, /code: AI_ERROR_CODES\.AI_PROVIDER_UNAVAILABLE/);
 });

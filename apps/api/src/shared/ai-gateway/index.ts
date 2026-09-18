@@ -27,6 +27,13 @@ export {
 } from './ai-gateway.types.js';
 export { redactSecretsFromString, assertSafeTelemetryPayload } from './ai-gateway.redaction.js';
 export {
+  extractSafeProviderErrorCode,
+  extractSafeProviderErrorHint,
+  extractSafeProviderErrorParam,
+  isAuthProviderErrorCode,
+  isModelProviderErrorCode,
+} from './ai-gateway.provider-error.js';
+export {
   createAiGatewayCircuitBreaker,
   processAiGatewayCircuitBreaker,
   AI_GATEWAY_CIRCUIT_FAILURE_THRESHOLD,
