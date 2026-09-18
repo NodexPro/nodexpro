@@ -32,7 +32,12 @@ test('TAX-640C generate command is Owner-only, one-draft, and uses the shared ga
   assert.match(access, /generate_tax_knowledge_proposal/);
   assert.match(generate, /from '\.\.\/\.\.\/shared\/ai-gateway\/index\.js'/);
   assert.match(generate, /completeStructuredJson/);
+  assert.match(generate, /normalizeTaxKnowledgeProposalExtract/);
   assert.match(generate, /validateProposal/);
+  assert.ok(
+    generate.indexOf('normalizeTaxKnowledgeProposalExtract') < generate.indexOf('validateProposal(') ||
+      generate.indexOf('normalizeTaxKnowledgeProposalExtract') < generate.indexOf('await validateProposal'),
+  );
   assert.match(generate, /TAX_KNOWLEDGE_PROPOSAL_INVALID/);
   assert.match(generate, /creation_origin: 'ai_proposal'/);
   assert.match(generate, /generation_metadata_json/);
@@ -45,6 +50,9 @@ test('TAX-640C generate command is Owner-only, one-draft, and uses the shared ga
   assert.doesNotMatch(generate, /legal_ingestion_candidates/);
   assert.doesNotMatch(generate, /downloadOwnerLegalMaterial/);
   assert.doesNotMatch(generate, /runKnowledgeTrainerWorkerTick/);
+  assert.match(context, /legalNodeMatchQueriesForExtraction/);
+  assert.match(context, /buildCanonicalAllowlist/);
+  assert.match(context, /matched_from/);
   assert.doesNotMatch(context, /legal_ingestion_candidates/);
   assert.doesNotMatch(context, /value_payload_json/);
   assert.doesNotMatch(context, /statutory_rate/);

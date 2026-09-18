@@ -5,8 +5,11 @@ import {
   FACT_DEFINITION_LIMIT,
   LEGAL_VALUE_KEY_LIMIT,
   MATCHED_LEGAL_NODE_LIMIT,
+  buildCanonicalAllowlist,
+  legalNodeMatchQueriesForExtraction,
   type ControlledExtractionContext,
   type GenerateDraftRow,
+  type LegalNodeMatchQuery,
 } from './tax-knowledge-proposal-extract.pure.js';
 import {
   TAX_KNOWLEDGE_PROPOSAL_EXTRACT_PROMPT_VERSION,
@@ -46,14 +49,18 @@ async function loadAncestors(startParentId: string | null): Promise<ControlledEx
   return ancestors;
 }
 
-async function loadMatchingLegalNodes(draft: GenerateDraftRow): Promise<ControlledExtractionContext['existing_legal_nodes']> {
-  const normalized = draft.normalized_machine_identifier?.trim() || null;
-  const display = draft.source_display_identifier?.trim() || null;
-  if (!normalized && !display) return [];
-
+async function loadMatchingLegalNodes(
+  draft: GenerateDraftRow,
+  ancestors: ControlledExtractionContext['ancestors'],
+): Promise<ControlledExtractionContext['existing_legal_nodes']> {
+  const matchQueries = legalNodeMatchQueriesForExtraction(draft, ancestors);
   const byId = new Map<string, ControlledExtractionContext['existing_legal_nodes'][number]>();
-  const queries: Array<Promise<void>> = [];
-  const take = async (column: 'normalized_machine_identifier' | 'source_display_identifier', value: string) => {
+  const take = async (
+    column: 'normalized_machine_identifier' | 'source_display_identifier',
+    value: string,
+    matchedFrom: LegalNodeMatchQuery['matched_from'],
+  ) => {
+    if (byId.size >= MATCHED_LEGAL_NODE_LIMIT) return;
     const { data, error } = await supabaseAdmin
       .from('tax_legal_nodes')
       .select('id, title, source_display_identifier, normalized_machine_identifier, node_number, status')
@@ -72,12 +79,16 @@ async function loadMatchingLegalNodes(draft: GenerateDraftRow): Promise<Controll
         normalized_machine_identifier: asNullable(row.normalized_machine_identifier),
         node_number: asNullable(row.node_number),
         status: asNullable(row.status),
+        matched_from: matchedFrom,
       });
     }
   };
-  if (normalized) queries.push(take('normalized_machine_identifier', normalized));
-  if (display) queries.push(take('source_display_identifier', display));
-  await Promise.all(queries);
+  for (const query of matchQueries) {
+    const normalized = query.normalized_machine_identifier?.trim() || null;
+    const display = query.source_display_identifier?.trim() || null;
+    if (normalized) await take('normalized_machine_identifier', normalized, query.matched_from);
+    if (display && display !== normalized) await take('source_display_identifier', display, query.matched_from);
+  }
   return [...byId.values()];
 }
 
@@ -165,12 +176,16 @@ export async function loadControlledExtractionContext(
   draft: GenerateDraftRow,
 ): Promise<ControlledExtractionContext> {
   const vocab = taxKnowledgeProposalExtractStaticVocab();
-  const [ancestors, existingLegalNodes, facts, legalValueKeys] = await Promise.all([
-    loadAncestors(draft.parent_draft_id),
-    loadMatchingLegalNodes(draft),
+  const ancestors = await loadAncestors(draft.parent_draft_id);
+  const [existingLegalNodes, facts, legalValueKeys] = await Promise.all([
+    loadMatchingLegalNodes(draft, ancestors),
     loadFactDefinitions(draft.country_code),
     loadLegalValueKeys(draft.country_code),
   ]);
+  const canonicalAllowlist = buildCanonicalAllowlist({
+    existing_legal_nodes: existingLegalNodes,
+    tax_source_id: draft.tax_source_id,
+  });
   return {
     prompt_contract_version: TAX_KNOWLEDGE_PROPOSAL_EXTRACT_PROMPT_VERSION,
     purpose: TAX_KNOWLEDGE_PROPOSAL_EXTRACT_PURPOSE,
@@ -189,6 +204,7 @@ export async function loadControlledExtractionContext(
     },
     ancestors,
     existing_legal_nodes: existingLegalNodes,
+    canonical_allowlist: canonicalAllowlist,
     tax_fact_definitions: facts,
     country_legal_value_keys: legalValueKeys,
     relationship_vocabulary: vocab.relationship_vocabulary,

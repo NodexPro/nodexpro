@@ -111,7 +111,12 @@ export type ControlledExtractionContext = {
     normalized_machine_identifier: string | null;
     node_number: string | null;
     status: string | null;
+    matched_from: 'draft' | 'ancestor';
   }>;
+  canonical_allowlist: {
+    tax_legal_node_ids: string[];
+    tax_source_ids: string[];
+  };
   tax_fact_definitions: Array<{
     fact_key: string;
     country_code: string | null;
@@ -173,6 +178,44 @@ export function stableJson(value: unknown): string {
 
 export function sha256Hex(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+export type LegalNodeMatchQuery = {
+  matched_from: 'draft' | 'ancestor';
+  normalized_machine_identifier: string | null;
+  source_display_identifier: string | null;
+};
+
+export function legalNodeMatchQueriesForExtraction(
+  draft: Pick<GenerateDraftRow, 'normalized_machine_identifier' | 'source_display_identifier'>,
+  ancestors: Array<Pick<ControlledExtractionContext['ancestors'][number], 'normalized_machine_identifier' | 'source_display_identifier'>>,
+): LegalNodeMatchQuery[] {
+  return [
+    {
+      matched_from: 'draft',
+      normalized_machine_identifier: draft.normalized_machine_identifier,
+      source_display_identifier: draft.source_display_identifier,
+    },
+    ...ancestors.map((ancestor) => ({
+      matched_from: 'ancestor' as const,
+      normalized_machine_identifier: ancestor.normalized_machine_identifier,
+      source_display_identifier: ancestor.source_display_identifier,
+    })),
+  ];
+}
+
+export function buildCanonicalAllowlist(input: {
+  existing_legal_nodes: Array<{ id: string }>;
+  tax_source_id: string;
+}): ControlledExtractionContext['canonical_allowlist'] {
+  const tax_legal_node_ids: string[] = [];
+  for (const node of input.existing_legal_nodes) {
+    if (!tax_legal_node_ids.includes(node.id)) tax_legal_node_ids.push(node.id);
+  }
+  return {
+    tax_legal_node_ids,
+    tax_source_ids: input.tax_source_id ? [input.tax_source_id] : [],
+  };
 }
 
 export function digestControlledExtractionInput(context: ControlledExtractionContext): string {

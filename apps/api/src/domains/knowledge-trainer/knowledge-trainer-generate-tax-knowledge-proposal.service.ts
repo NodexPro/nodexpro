@@ -15,6 +15,7 @@ import {
 } from './tax-knowledge-proposal-extract-v1.js';
 import {
   assertDraftReadyForAiExtraction,
+  buildCanonicalAllowlist,
   buildExtractSystemMessage,
   buildExtractUserMessage,
   buildGenerationMetadataJson,
@@ -24,6 +25,10 @@ import {
   type ControlledExtractionContext,
   type GenerateDraftRow,
 } from './tax-knowledge-proposal-extract.pure.js';
+import {
+  normalizeTaxKnowledgeProposalExtract,
+  type TaxKnowledgeProposalCanonicalAllowlist,
+} from './tax-knowledge-proposal-extract-normalize.pure.js';
 import {
   insertProposedTaxKnowledgeProposalRow,
   type TaxKnowledgeProposalCommandResult,
@@ -72,6 +77,14 @@ async function defaultLoadDraft(draftId: string): Promise<GenerateDraftRow> {
     printed_marker: data.printed_marker == null ? null : String(data.printed_marker),
     draft_legal_text: data.draft_legal_text == null ? null : String(data.draft_legal_text),
   };
+}
+
+function allowlistFromContext(context: ControlledExtractionContext): TaxKnowledgeProposalCanonicalAllowlist {
+  if (context.canonical_allowlist) return context.canonical_allowlist;
+  return buildCanonicalAllowlist({
+    existing_legal_nodes: context.existing_legal_nodes,
+    tax_source_id: context.draft.tax_source_id,
+  });
 }
 
 function throwIfProposalInvalid(result: TaxKnowledgeProposalV1ValidationResult): void {
@@ -142,7 +155,11 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
       throw error;
     }
 
-    const validation = await validateProposal(result.json, {
+    const normalizedJson = normalizeTaxKnowledgeProposalExtract(result.json, {
+      draftLegalText: String(draft.draft_legal_text ?? ''),
+      allowlist: allowlistFromContext(context),
+    });
+    const validation = await validateProposal(normalizedJson as Record<string, unknown>, {
       id: draft.id,
       country_code: draft.country_code,
       tax_source_id: draft.tax_source_id,
@@ -177,7 +194,7 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
       creation_origin: 'ai_proposal',
       status: 'proposed',
       supersedes_proposal_id: null,
-      proposal_json: result.json,
+      proposal_json: normalizedJson,
       generation_metadata_json: buildGenerationMetadataJson({
         provider: result.provider,
         model: result.model,

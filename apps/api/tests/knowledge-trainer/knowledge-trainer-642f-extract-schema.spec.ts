@@ -14,6 +14,7 @@ import {
   TAX_KNOWLEDGE_PROPOSAL_EVIDENCE_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_FACT_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_LEGAL_VALUE_KEYS,
+  TAX_KNOWLEDGE_PROPOSAL_LOCAL_KEY_PATTERN,
   TAX_KNOWLEDGE_PROPOSAL_LOCATOR_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_NODE_KEYS,
   TAX_KNOWLEDGE_PROPOSAL_PARENT_KEYS,
@@ -39,6 +40,7 @@ type JsonSchemaNode = {
   $ref?: string;
   $defs?: Record<string, JsonSchemaNode>;
   enum?: unknown[];
+  pattern?: string;
 };
 
 function asSchema(value: unknown): JsonSchemaNode {
@@ -149,6 +151,17 @@ test('TAX-642F extract schema keeps the tax_knowledge_proposal_v1 top-level cont
   assert.deepEqual(Object.keys(properties), [...TAX_KNOWLEDGE_PROPOSAL_TOP_LEVEL_KEYS]);
   assert.deepEqual(properties.schema_version?.enum, [TAX_KNOWLEDGE_PROPOSAL_SCHEMA_VERSION]);
   assert.deepEqual(properties.contract?.enum, [TAX_KNOWLEDGE_PROPOSAL_CONTRACT]);
+});
+
+test('TAX-642I extract schema constrains local keys with TAX-639 grammar', () => {
+  const schema = asSchema(TAX_KNOWLEDGE_PROPOSAL_EXTRACT_JSON_SCHEMA.schema);
+  const properties = schema.properties ?? {};
+  const nodeItems = asSchema(asSchema(properties.legal_nodes).items);
+  const ruleItems = asSchema(asSchema(properties.rules).items);
+  const calcItems = asSchema(asSchema(properties.calculations).items);
+  assert.equal(nodeItems.properties?.proposal_node_key?.pattern, TAX_KNOWLEDGE_PROPOSAL_LOCAL_KEY_PATTERN);
+  assert.equal(ruleItems.properties?.proposal_rule_key?.pattern, TAX_KNOWLEDGE_PROPOSAL_LOCAL_KEY_PATTERN);
+  assert.equal(calcItems.properties?.proposal_calc_key?.pattern, TAX_KNOWLEDGE_PROPOSAL_LOCAL_KEY_PATTERN);
 });
 
 test('TAX-642F nested extract objects reuse TAX-639 field lists', () => {

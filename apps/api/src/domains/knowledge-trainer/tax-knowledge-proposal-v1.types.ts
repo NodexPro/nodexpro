@@ -3,6 +3,8 @@ import { TAX_CALCULATION_VALUE_TYPES } from '../tax-calculation-engine/tax-calcu
 
 export const TAX_KNOWLEDGE_PROPOSAL_CONTRACT = 'tax_knowledge_proposal_v1' as const;
 export const TAX_KNOWLEDGE_PROPOSAL_SCHEMA_VERSION = 1 as const;
+/** Matches TAX-639 `LOCAL_KEY_RE`. Provider schema and extract normalizer must use this grammar. */
+export const TAX_KNOWLEDGE_PROPOSAL_LOCAL_KEY_PATTERN = '^[A-Za-z][A-Za-z0-9_-]{0,63}$';
 
 export const TAX_KNOWLEDGE_PROPOSAL_TOP_LEVEL_KEYS = [
   'schema_version',
