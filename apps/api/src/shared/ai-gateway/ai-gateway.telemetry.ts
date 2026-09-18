@@ -8,6 +8,7 @@ import type {
 } from './ai-gateway.types.js';
 import { assertSafeTelemetryPayload } from './ai-gateway.redaction.js';
 import { AI_ERROR_CODES, type AiErrorCode } from './ai-gateway.errors.js';
+import { safeAiGatewayCorrelationId } from './ai-gateway.hop-observation.js';
 
 export function failureCategoryForAiErrorCode(code: AiErrorCode | null | undefined): AiGatewayFailureCategory | null {
   switch (code) {
@@ -47,6 +48,7 @@ export function buildAiGatewayTelemetry(input: {
 }): AiGatewayTelemetry {
   const telemetry: AiGatewayTelemetry = {
     purpose: input.request.purpose,
+    correlation_id: safeAiGatewayCorrelationId(input.request.correlationId),
     provider: input.provider,
     model: input.model,
     provider_id: input.providerId ?? null,

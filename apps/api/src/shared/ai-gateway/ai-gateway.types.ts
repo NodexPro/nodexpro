@@ -61,6 +61,8 @@ export type AiGatewayCompleteStructuredJsonInput = {
   outputSchemaVersion?: number;
   /** Telemetry flag only. Does not log or forward the source text. */
   includesUntrustedSourceText?: boolean;
+  /** Telemetry only. Never forwarded to the provider. */
+  correlationId?: string | null;
 };
 
 export type AiGatewayOutcome =
@@ -74,6 +76,7 @@ export type AiGatewayOutcome =
 
 export type AiGatewayTelemetry = {
   purpose: string;
+  correlation_id: string | null;
   provider: string | null;
   model: string | null;
   provider_id: string | null;

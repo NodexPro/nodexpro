@@ -8,7 +8,7 @@ import {
   type AiGatewayResolvedConfig,
   type AiGatewayRoutingSource,
 } from './ai-gateway.types.js';
-import { getAiAdapterRegistryEntry } from './ai-gateway.adapters.js';
+import { AI_ADAPTER_TYPE_OPENAI_COMPATIBLE, getAiAdapterRegistryEntry } from './ai-gateway.adapters.js';
 import { evaluateAiProviderEnablement } from '../../domains/ai-gateway-control-plane/ai-gateway-control-plane.pure.js';
 import type { AiGatewayControlPlaneProviderRow } from '../../domains/ai-gateway-control-plane/ai-gateway-control-plane.types.js';
 
@@ -16,6 +16,7 @@ export type AiGatewayRouteTarget = {
   id: string | null;
   position: number | null;
   routing_source: AiGatewayRoutingSource;
+  adapter_type?: string;
   config: AiGatewayResolvedConfig;
 };
 
@@ -69,6 +70,7 @@ export function envBootstrapRouteTarget(config: AiGatewayResolvedConfig): AiGate
     id: null,
     position: null,
     routing_source: 'env',
+    adapter_type: AI_ADAPTER_TYPE_OPENAI_COMPATIBLE,
     config,
   };
 }
@@ -78,6 +80,7 @@ export function pinnedInvocationRouteTarget(config: AiGatewayResolvedConfig): Ai
     id: null,
     position: null,
     routing_source: 'pinned',
+    adapter_type: AI_ADAPTER_TYPE_OPENAI_COMPATIBLE,
     config,
   };
 }
@@ -136,6 +139,7 @@ export async function loadEligibleOwnerRouteTargets(): Promise<AiGatewayRouteTar
       id: row.id,
       position: route.position,
       routing_source: 'owner',
+      adapter_type: adapter.adapter_type,
       config: {
         provider: AI_GATEWAY_PROVIDER_OPENAI,
         model: row.pinned_model,

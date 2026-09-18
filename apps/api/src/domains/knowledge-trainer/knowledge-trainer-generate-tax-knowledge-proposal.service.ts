@@ -121,6 +121,7 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
         outputContract: TAX_KNOWLEDGE_PROPOSAL_CONTRACT,
         outputSchemaVersion: TAX_KNOWLEDGE_PROPOSAL_SCHEMA_VERSION,
         includesUntrustedSourceText: true,
+        correlationId: ctx.correlationId ?? null,
       });
     } catch (error) {
       const outcome =

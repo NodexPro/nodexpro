@@ -21,6 +21,8 @@ import { resolveAiGatewayInvocationConfig, type AiGatewayEnv } from './ai-gatewa
 import { looksLikeSecret } from './ai-gateway.redaction.js';
 import { isValidStructuredOutputSchemaName, parseJsonObject, validateJsonAgainstSchema } from './ai-gateway.schema.js';
 import { buildAiGatewayTelemetry, failureCategoryForAiErrorCode, logAiGatewayTelemetry } from './ai-gateway.telemetry.js';
+import { logFailedProviderHopObservation } from './ai-gateway.hop-observation.js';
+import { AI_ADAPTER_TYPE_OPENAI_COMPATIBLE } from './ai-gateway.adapters.js';
 import {
   AI_RETRYABLE_STATUS_CODES,
   fetchAiProviderTransport,
@@ -109,6 +111,15 @@ type HopSuccess = {
   attemptCount: number;
 };
 
+type HopObserveCtx = {
+  purpose: string;
+  correlationId: string | null | undefined;
+  providerId: string | null;
+  adapterType: string;
+  provider: string;
+  model: string;
+};
+
 type HopFailure = {
   ok: false;
   code: AiErrorCode;
@@ -154,15 +165,47 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
     config: AiGatewayResolvedConfig,
     input: AiGatewayCompleteStructuredJsonInput,
     maxAttempts: number,
+    observe: HopObserveCtx,
   ): Promise<HopSuccess | HopFailure> {
     const timeoutMs = input.timeoutMs ?? config.timeoutMs;
     let attempt = 0;
     let lastRetryable: Extract<AiErrorCode, 'AI_RATE_LIMITED' | 'AI_PROVIDER_UNAVAILABLE'> | null = null;
 
+    const noteFailure = (inputNote: {
+      code: AiErrorCode;
+      attempt: number;
+      latencyMs: number;
+      endpointUrl: string | null;
+      httpStatus?: number | null;
+      providerBodyText?: string | null;
+      transportError?: unknown;
+    }) => {
+      logFailedProviderHopObservation(
+        {
+          purpose: observe.purpose,
+          correlationId: observe.correlationId,
+          providerId: observe.providerId,
+          adapterType: observe.adapterType,
+          provider: observe.provider,
+          model: observe.model,
+          endpointUrl: inputNote.endpointUrl,
+          attempt: inputNote.attempt,
+          latencyMs: inputNote.latencyMs,
+          httpStatus: inputNote.httpStatus ?? null,
+          providerBodyText: inputNote.providerBodyText ?? null,
+          transportError: inputNote.transportError,
+          failureCategory: failureCategoryForAiErrorCode(inputNote.code),
+        },
+        log,
+      );
+    };
+
     while (attempt < maxAttempts) {
       attempt += 1;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const attemptStarted = now();
+      let endpointUrl: string | null = null;
       try {
         const providerRequest = buildOpenAiCompatibleStructuredRequest({
           config,
@@ -170,9 +213,18 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
           timeoutMs,
           signal: controller.signal,
         });
+        endpointUrl = providerRequest.url;
         const response = await transport(providerRequest);
         if (response.status === 429 || AI_RETRYABLE_STATUS_CODES.has(response.status)) {
           lastRetryable = response.status === 429 ? AI_ERROR_CODES.AI_RATE_LIMITED : AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE;
+          noteFailure({
+            code: lastRetryable,
+            attempt,
+            latencyMs: now() - attemptStarted,
+            endpointUrl,
+            httpStatus: response.status,
+            providerBodyText: response.bodyText,
+          });
           if (attempt < maxAttempts) {
             const waitMs = Math.min(
               response.retryAfterMs ?? AI_GATEWAY_RETRY_BACKOFF_MS,
@@ -189,6 +241,14 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
           };
         }
         if (response.status === 401 || response.status === 403) {
+          noteFailure({
+            code: AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE,
+            attempt,
+            latencyMs: now() - attemptStarted,
+            endpointUrl,
+            httpStatus: response.status,
+            providerBodyText: response.bodyText,
+          });
           return {
             ok: false,
             code: AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE,
@@ -197,6 +257,14 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
           };
         }
         if (response.status < 200 || response.status >= 300) {
+          noteFailure({
+            code: AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE,
+            attempt,
+            latencyMs: now() - attemptStarted,
+            endpointUrl,
+            httpStatus: response.status,
+            providerBodyText: response.bodyText,
+          });
           return {
             ok: false,
             code: AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE,
@@ -207,6 +275,13 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
 
         const content = extractOpenAiCompatibleMessageContent(response.bodyText);
         if (content == null || looksLikeSecret(content)) {
+          noteFailure({
+            code: AI_ERROR_CODES.AI_MALFORMED_OUTPUT,
+            attempt,
+            latencyMs: now() - attemptStarted,
+            endpointUrl,
+            httpStatus: response.status,
+          });
           return {
             ok: false,
             code: AI_ERROR_CODES.AI_MALFORMED_OUTPUT,
@@ -216,6 +291,13 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
         }
         const parsed = parseJsonObject(content);
         if (!parsed.ok) {
+          noteFailure({
+            code: AI_ERROR_CODES.AI_MALFORMED_OUTPUT,
+            attempt,
+            latencyMs: now() - attemptStarted,
+            endpointUrl,
+            httpStatus: response.status,
+          });
           return {
             ok: false,
             code: AI_ERROR_CODES.AI_MALFORMED_OUTPUT,
@@ -225,6 +307,13 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
         }
         const schemaCheck = validateJsonAgainstSchema(parsed.value, input.outputSchema.schema);
         if (!schemaCheck.ok) {
+          noteFailure({
+            code: AI_ERROR_CODES.AI_STRUCTURED_OUTPUT_INVALID,
+            attempt,
+            latencyMs: now() - attemptStarted,
+            endpointUrl,
+            httpStatus: response.status,
+          });
           return {
             ok: false,
             code: AI_ERROR_CODES.AI_STRUCTURED_OUTPUT_INVALID,
@@ -235,6 +324,13 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
         return { ok: true, json: parsed.value, attemptCount: attempt };
       } catch (error) {
         if (error instanceof AiGatewayError) {
+          noteFailure({
+            code: error.code as AiErrorCode,
+            attempt,
+            latencyMs: now() - attemptStarted,
+            endpointUrl,
+            transportError: error,
+          });
           return {
             ok: false,
             code: error.code as AiErrorCode,
@@ -243,6 +339,13 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
           };
         }
         if (isAbortError(error)) {
+          noteFailure({
+            code: AI_ERROR_CODES.AI_TIMEOUT,
+            attempt,
+            latencyMs: now() - attemptStarted,
+            endpointUrl,
+            transportError: error,
+          });
           return {
             ok: false,
             code: AI_ERROR_CODES.AI_TIMEOUT,
@@ -250,6 +353,13 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
             attemptCount: attempt,
           };
         }
+        noteFailure({
+          code: AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE,
+          attempt,
+          latencyMs: now() - attemptStarted,
+          endpointUrl,
+          transportError: error,
+        });
         return {
           ok: false,
           code: AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE,
@@ -346,7 +456,14 @@ export function createAiGateway(deps: AiGatewayDeps = {}) {
 
       providersAttempted += 1;
       lastTarget = target;
-      const hop = await runAgainstConfig(target.config, input, maxAttempts);
+      const hop = await runAgainstConfig(target.config, input, maxAttempts, {
+        purpose: input.purpose,
+        correlationId: input.correlationId,
+        providerId: target.id,
+        adapterType: target.adapter_type ?? AI_ADAPTER_TYPE_OPENAI_COMPATIBLE,
+        provider: target.config.provider,
+        model: target.config.model,
+      });
       totalAttempts += hop.attemptCount;
 
       if (hop.ok) {

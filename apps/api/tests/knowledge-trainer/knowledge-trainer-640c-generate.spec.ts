@@ -131,6 +131,7 @@ function gatewayResult(
     outcome: 'success' as const,
     telemetry: {
       purpose: TAX_KNOWLEDGE_PROPOSAL_EXTRACT_PURPOSE,
+      correlation_id: null,
       provider,
       model,
       provider_id: null,

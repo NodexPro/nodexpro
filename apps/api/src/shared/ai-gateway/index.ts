@@ -27,6 +27,14 @@ export {
 } from './ai-gateway.types.js';
 export { redactSecretsFromString, assertSafeTelemetryPayload } from './ai-gateway.redaction.js';
 export {
+  AI_GATEWAY_HOP_FAILED_EVENT,
+  buildFailedProviderHopObservation,
+  classifyAiGatewayTransportError,
+  logFailedProviderHopObservation,
+  safeAiGatewayCorrelationId,
+  safeAiGatewayEndpoint,
+} from './ai-gateway.hop-observation.js';
+export {
   extractSafeProviderErrorCode,
   extractSafeProviderErrorHint,
   extractSafeProviderErrorParam,
