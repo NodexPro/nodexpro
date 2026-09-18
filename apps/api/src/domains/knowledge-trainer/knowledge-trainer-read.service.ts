@@ -17,6 +17,10 @@ import {
   taxKnowledgeProposalAllowedActions,
   taxKnowledgeProposalStatusLabel,
 } from './knowledge-trainer-tax-knowledge-proposal.pure.js';
+import {
+  buildTaxKnowledgeProposalOwnerView,
+  emptyTaxKnowledgeProposalOwnerView,
+} from './tax-knowledge-proposal-owner-view.pure.js';
 import { validateTaxKnowledgeProposalV1AgainstStore } from './tax-knowledge-proposal-v1-catalog.service.js';
 import {
   canOwnerApproveTaxKnowledgeProposal,
@@ -933,7 +937,7 @@ function pickSelectedDraftId(
 }
 
 function emptyTaxKnowledgeProposalSlice(): KnowledgeTrainerTaxKnowledgeProposalSliceDto {
-  return { latest: null, selected: null, history: [] };
+  return { latest: null, selected: null, history: [], owner_view: emptyTaxKnowledgeProposalOwnerView() };
 }
 
 const PROPOSAL_HISTORY_SELECT =
@@ -987,7 +991,7 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
   const latest = pickSelectedTaxKnowledgeProposal(history, null);
   const selectedMeta = pickSelectedTaxKnowledgeProposal(history, requestedProposalId);
   if (!selectedMeta) {
-    return { latest, selected: null, history };
+    return { latest, selected: null, history, owner_view: emptyTaxKnowledgeProposalOwnerView() };
   }
   const { data, error } = await supabaseAdmin
     .from('legal_ingestion_tax_knowledge_proposals')
@@ -1054,7 +1058,16 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
       },
     ],
   };
-  return { latest, selected, history };
+  return {
+    latest,
+    selected,
+    history,
+    owner_view: buildTaxKnowledgeProposalOwnerView({
+      selected,
+      proposal_json: json,
+      validation: validationSummary,
+    }),
+  };
 }
 
 function proposalJsonFromRow(row: Record<string, unknown>): Record<string, unknown> {

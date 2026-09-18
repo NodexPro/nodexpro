@@ -49,6 +49,7 @@ import {
 } from './owner-legal-control-types';
 
 import { emptyTaxKnowledgeAggregate } from './owner-legal-control-types';
+import { parseTaxKnowledgeProposalSlice } from './owner-tax-knowledge-proposal-view';
 import '../styles/nx-modal.css';
 import '../templates/template-1/tokens.css';
 
@@ -1045,6 +1046,7 @@ function parseKnowledgeTrainer(raw: UnknownRecord | null): OwnerKnowledgeTrainer
           selected_legal_text_review_node: parseLegalTextReviewTree([selected.selected_legal_text_review_node])[0] ?? null,
           legal_text_search_index: parseLegalTextSearchIndex(selected.legal_text_search_index),
           legal_text_completeness: parseLegalTextCompleteness(asRecord(selected.legal_text_completeness)),
+          tax_knowledge_proposals: parseTaxKnowledgeProposalSlice(selected.tax_knowledge_proposals),
         }
       : null,
     allowed_actions: parseAllowedActions(raw.allowed_actions),

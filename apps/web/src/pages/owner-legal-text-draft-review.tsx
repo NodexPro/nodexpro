@@ -16,8 +16,11 @@ import type {
   OwnerLegalTextReviewNode,
   OwnerLegalTextSearchIndexItem,
   OwnerSourceNote,
+  OwnerTaxKnowledgeProposalSlice,
   UnknownRecord,
 } from './owner-legal-control-types';
+import { emptyTaxKnowledgeProposalSlice } from './owner-legal-control-types';
+import { OwnerTaxKnowledgeProposalView } from './owner-tax-knowledge-proposal-view';
 
 export function OwnerLegalTextDraftReview({
   documentId,
@@ -27,6 +30,7 @@ export function OwnerLegalTextDraftReview({
   reviewTree,
   searchIndex,
   completeness,
+  proposals,
   frontier,
   summary,
   kindLabels,
@@ -46,6 +50,7 @@ export function OwnerLegalTextDraftReview({
   reviewTree: OwnerLegalTextReviewNode[];
   searchIndex: OwnerLegalTextSearchIndexItem[];
   completeness: OwnerLegalTextCompleteness | undefined;
+  proposals?: OwnerTaxKnowledgeProposalSlice;
   frontier: OwnerLegalTextDraftCreateFrontierItem[];
   summary: OwnerLegalTextDraftCounts;
   kindLabels: string[];
@@ -749,6 +754,8 @@ export function OwnerLegalTextDraftReview({
           )}
         </section>
       </div>
+
+      <OwnerTaxKnowledgeProposalView proposals={proposals ?? emptyTaxKnowledgeProposalSlice()} />
 
       <details
         className="nx-legal-draft-advanced"

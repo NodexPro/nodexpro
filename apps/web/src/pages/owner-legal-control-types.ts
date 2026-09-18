@@ -603,6 +603,63 @@ export type OwnerLegalTextCompleteness = {
   selected_branch_confirmed_at: string | null;
 };
 
+export type OwnerTaxKnowledgeProposalOwnerViewItem = {
+  label: string;
+  detail: string | null;
+};
+
+export type OwnerTaxKnowledgeProposalOwnerViewRule = {
+  title: string;
+  statement: string;
+  applicability_status_label: string;
+  applies_if: string | null;
+  does_not_apply_if: string | null;
+  notes: string | null;
+};
+
+export type OwnerTaxKnowledgeProposalOwnerView = {
+  available: boolean;
+  heading: string;
+  question: string;
+  empty_title: string;
+  empty_detail: string;
+  status_label: string;
+  revision_label: string;
+  understanding_summary: string;
+  publication_eligible_label: string;
+  owner_approval_allowed_label: string;
+  rules: OwnerTaxKnowledgeProposalOwnerViewRule[];
+  facts_title: string;
+  facts_empty_label: string;
+  facts: OwnerTaxKnowledgeProposalOwnerViewItem[];
+  legal_values_title: string;
+  legal_values_empty_label: string;
+  legal_values: OwnerTaxKnowledgeProposalOwnerViewItem[];
+  relationships_title: string;
+  relationships_empty_label: string;
+  relationships: OwnerTaxKnowledgeProposalOwnerViewItem[];
+  calculations_title: string;
+  calculations_empty_label: string;
+  calculations: OwnerTaxKnowledgeProposalOwnerViewItem[];
+  evidence_title: string;
+  evidence_empty_label: string;
+  evidence_locator: string | null;
+  evidence_quotes: OwnerTaxKnowledgeProposalOwnerViewItem[];
+  evidence_citations: OwnerTaxKnowledgeProposalOwnerViewItem[];
+  uncertainties_title: string;
+  uncertainties_empty_label: string;
+  uncertainties: OwnerTaxKnowledgeProposalOwnerViewItem[];
+  technical_title: string;
+  technical_rows: Array<{ label: string; value: string }>;
+};
+
+export type OwnerTaxKnowledgeProposalSlice = {
+  latest: { id: string; revision_no: number; status_label: string } | null;
+  selected: { id: string; revision_no: number; status_label: string } | null;
+  history: Array<{ id: string; revision_no: number; status_label: string }>;
+  owner_view: OwnerTaxKnowledgeProposalOwnerView;
+};
+
 export type OwnerKnowledgeTrainerSlice = {
   available: boolean;
   status_label: string;
@@ -652,6 +709,7 @@ export type OwnerKnowledgeTrainerSlice = {
     selected_legal_text_review_node: OwnerLegalTextReviewNode | null;
     legal_text_search_index: OwnerLegalTextSearchIndexItem[];
     legal_text_completeness: OwnerLegalTextCompleteness;
+    tax_knowledge_proposals: OwnerTaxKnowledgeProposalSlice;
   } | null;
   allowed_actions: TaxKnowledgeAllowedAction[];
 };
@@ -678,6 +736,49 @@ export function emptyLegalLibrarySlice(): OwnerLegalLibrarySlice {
     provenance_type_options: [],
     allowed_actions: [],
     trainer_upload: emptyKnowledgeTrainerSlice(),
+  };
+}
+
+export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice {
+  return {
+    latest: null,
+    selected: null,
+    history: [],
+    owner_view: {
+      available: false,
+      heading: 'AI Proposal / הצעת AI',
+      question: 'What did AI understand from this law?',
+      empty_title: 'No AI proposal yet / טרם נוצרה הצעת AI',
+      empty_detail: 'Selecting a Draft does not generate an AI proposal.',
+      status_label: '',
+      revision_label: '',
+      understanding_summary: '',
+      publication_eligible_label: '',
+      owner_approval_allowed_label: '',
+      rules: [],
+      facts_title: 'Required / referenced facts',
+      facts_empty_label: 'None recorded / לא נרשם',
+      facts: [],
+      legal_values_title: 'Legal values',
+      legal_values_empty_label: 'None recorded / לא נרשם',
+      legal_values: [],
+      relationships_title: 'Relationships',
+      relationships_empty_label: 'None recorded / לא נרשם',
+      relationships: [],
+      calculations_title: 'Calculations',
+      calculations_empty_label: 'None recorded / לא נרשם',
+      calculations: [],
+      evidence_title: 'Evidence / source citation',
+      evidence_empty_label: 'None recorded / לא נרשם',
+      evidence_locator: null,
+      evidence_quotes: [],
+      evidence_citations: [],
+      uncertainties_title: 'Uncertainties / missing information',
+      uncertainties_empty_label: 'None recorded / לא נרשם',
+      uncertainties: [],
+      technical_title: 'Technical details',
+      technical_rows: [],
+    },
   };
 }
 

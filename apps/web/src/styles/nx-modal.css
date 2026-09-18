@@ -2764,6 +2764,51 @@
   align-items: start;
 }
 
+.nx-legal-draft-ai-proposal {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nx-legal-draft-ai-proposal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.nx-legal-draft-ai-proposal-summary {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.nx-legal-draft-ai-proposal-block {
+  display: grid;
+  gap: 4px;
+}
+
+.nx-legal-draft-ai-proposal-block ul {
+  margin: 0;
+  padding-inline-start: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.nx-legal-draft-ai-proposal-empty {
+  color: #6b7280;
+  font-size: 13px;
+  display: grid;
+  gap: 4px;
+}
+
 .nx-legal-draft-tree,
 .nx-legal-draft-source,
 .nx-legal-draft-editor {

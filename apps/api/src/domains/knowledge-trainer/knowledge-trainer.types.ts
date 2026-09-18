@@ -1,4 +1,5 @@
 import { TAX_SOURCE_PROVENANCE_TYPES } from '../tax-knowledge/tax-knowledge.types.js';
+import type { TaxKnowledgeProposalOwnerViewDto } from './tax-knowledge-proposal-owner-view.pure.js';
 import type { TaxKnowledgeProposalV1ValidationSummary } from './tax-knowledge-proposal-v1.types.js';
 
 export const KNOWLEDGE_TRAINER_COMMANDS = [
@@ -572,6 +573,7 @@ export type KnowledgeTrainerTaxKnowledgeProposalSliceDto = {
   latest: KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto | null;
   selected: KnowledgeTrainerTaxKnowledgeProposalDetailDto | null;
   history: KnowledgeTrainerTaxKnowledgeProposalHistoryItemDto[];
+  owner_view: TaxKnowledgeProposalOwnerViewDto;
 };
 
 export type KnowledgeTrainerLegalTextDraftSummaryDto = {

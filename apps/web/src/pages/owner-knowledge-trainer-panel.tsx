@@ -451,6 +451,7 @@ function TrainerReview({
           reviewTree={document.legal_text_review_tree ?? []}
           searchIndex={document.legal_text_search_index ?? []}
           completeness={document.legal_text_completeness}
+          proposals={document.tax_knowledge_proposals}
           frontier={document.legal_text_draft_create_frontier ?? []}
           summary={document.legal_text_draft_summary}
           kindLabels={taxKnowledge.legal_library.node_kinds.map((kind) => kind.label)}
