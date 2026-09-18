@@ -24,6 +24,10 @@ import {
   getClientDataEncryptionEnvDiagnostic,
 } from './shared/field-encryption.js';
 import { logAiGatewayBootDiagnostic } from './shared/ai-gateway/index.js';
+import {
+  AI_GATEWAY_ENCRYPTION_NOT_CONFIGURED_CODE,
+  logAiGatewayEncryptionBootDiagnostic,
+} from './shared/ai-gateway/ai-gateway.encryption.js';
 import { writeAudit, AUDIT_ACTIONS } from './shared/audit-events.js';
 import { clientOperationsModuleRouter } from './domains/client-operations/client-operations.routes.js';
 import { ownerCountryPackRoutes } from './routes/owner-country-pack.routes.js';
@@ -197,6 +201,12 @@ app.use((err: unknown, req: express.Request, res: express.Response, _next: expre
         { correlation_id },
       );
     }
+    if (err.code === AI_GATEWAY_ENCRYPTION_NOT_CONFIGURED_CODE) {
+      console.error(
+        '[api] AI_GATEWAY_ENCRYPTION_KEY missing or invalid — set 32-byte key as base64 in API environment',
+        { correlation_id },
+      );
+    }
     return res.status(err.statusCode).json({
       code: err.code ?? 'ERROR',
       message: err.message,
@@ -221,6 +231,7 @@ app.listen(config.port, () => {
   console.log(
     `[api] CLIENT_DATA_ENCRYPTION_KEY: env_set=${enc.env_set ? 'yes' : 'no'}, decoded_bytes=${len}, aes256_ok=${enc.valid_for_aes256 ? 'yes' : 'no'}`
   );
+  logAiGatewayEncryptionBootDiagnostic();
   logAiGatewayBootDiagnostic();
   void logPdfEngineStartupProbe();
   logModuleLoaded();

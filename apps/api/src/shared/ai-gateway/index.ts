@@ -53,3 +53,13 @@ export {
   AI_GATEWAY_MAX_REDIRECTS,
 } from './ai-gateway.runtime-ssrf.js';
 export { fetchAiProviderTransport } from './providers/ai-provider.types.js';
+export {
+  encryptAiGatewayJson,
+  decryptAiGatewayJson,
+  assertAiGatewayEncryptionConfigured,
+  isAiGatewayEncryptionReady,
+  getAiGatewayEncryptionEnvDiagnostic,
+  logAiGatewayEncryptionBootDiagnostic,
+  isAiGatewayEncryptionNotConfiguredError,
+  AI_GATEWAY_ENCRYPTION_NOT_CONFIGURED_CODE,
+} from './ai-gateway.encryption.js';

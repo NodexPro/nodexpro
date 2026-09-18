@@ -1,4 +1,4 @@
-import { decryptJson } from '../../shared/field-encryption.js';
+import { decryptAiGatewayJson, isAiGatewayEncryptionNotConfiguredError } from '../../shared/ai-gateway/ai-gateway.encryption.js';
 import { AppError, badRequest, notFound } from '../../shared/errors.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS } from '../../shared/audit-events.js';
@@ -157,12 +157,13 @@ export async function testAiProviderConnection(
   }
   let apiKey: string;
   try {
-    const secret = decryptJson<{ value?: unknown }>(ciphertext);
+    const secret = decryptAiGatewayJson<{ value?: unknown }>(ciphertext);
     if (typeof secret.value !== 'string' || !secret.value.trim()) {
       throw new Error('empty');
     }
     apiKey = secret.value.trim();
-  } catch {
+  } catch (error) {
+    if (isAiGatewayEncryptionNotConfiguredError(error)) throw error;
     await persistTestSnapshot(id, buildConnectionTestFailurePatch({
       enabled: row.enabled,
       nowIso,

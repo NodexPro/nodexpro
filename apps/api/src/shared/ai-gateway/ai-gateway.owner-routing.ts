@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '../../db/client.js';
-import { decryptJson } from '../field-encryption.js';
+import { decryptAiGatewayJson, isAiGatewayEncryptionNotConfiguredError } from './ai-gateway.encryption.js';
 import { isSupabaseMissingTableError } from '../supabase-errors.js';
 import {
   AI_GATEWAY_DEFAULT_BASE_URL,
@@ -55,10 +55,11 @@ export function isOwnerRouteEligible(row: AiGatewayControlPlaneProviderRow): boo
 function decryptApiKey(ciphertext: string | null): string | null {
   if (!ciphertext || !ciphertext.trim()) return null;
   try {
-    const payload = decryptJson<{ value?: unknown }>(ciphertext);
+    const payload = decryptAiGatewayJson<{ value?: unknown }>(ciphertext);
     if (typeof payload.value !== 'string' || !payload.value.trim()) return null;
     return payload.value.trim();
-  } catch {
+  } catch (error) {
+    if (isAiGatewayEncryptionNotConfiguredError(error)) throw error;
     return null;
   }
 }

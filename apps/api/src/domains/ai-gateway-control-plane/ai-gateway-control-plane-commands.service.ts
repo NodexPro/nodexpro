@@ -3,7 +3,7 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import { AppError, badRequest, notFound } from '../../shared/errors.js';
-import { encryptJson } from '../../shared/field-encryption.js';
+import { encryptAiGatewayJson } from '../../shared/ai-gateway/ai-gateway.encryption.js';
 import { getAiAdapterRegistryEntry } from '../../shared/ai-gateway/ai-gateway.adapters.js';
 import { assertSafeAiGatewayBaseUrl } from '../../shared/ai-gateway/ai-gateway.endpoint-policy.js';
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
@@ -197,7 +197,7 @@ async function setAiProviderCredential(
 ): Promise<AiGatewayControlPlaneCommandResponse> {
   const parsed = parseCredentialPayload(payload);
   await requireProvider(parsed.ai_provider_id);
-  const ciphertext = encryptJson({ value: parsed.credential });
+  const ciphertext = encryptAiGatewayJson({ value: parsed.credential });
   const { error } = await supabaseAdmin
     .from(PROVIDER_TABLE)
     .update({

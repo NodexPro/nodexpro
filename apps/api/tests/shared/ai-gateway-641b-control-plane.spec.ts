@@ -6,7 +6,7 @@ import {
   isRegisteredAiAdapterType,
   listAiAdapterRegistry,
 } from '../../src/shared/ai-gateway/ai-gateway.adapters.js';
-import { encryptJson, decryptJson } from '../../src/shared/field-encryption.js';
+import { encryptAiGatewayJson, decryptAiGatewayJson } from '../../src/shared/ai-gateway/ai-gateway.encryption.js';
 import {
   asOptionalPinnedModel,
   credentialConfigured,
@@ -189,20 +189,24 @@ test('audit sanitizer drops credentials and secret-like values', () => {
   assert.doesNotMatch(JSON.stringify(cleaned), /sk-live/);
 });
 
-test('credentials encrypt with AES-256-GCM and are not treated as configured when missing', () => {
-  const previous = process.env.CLIENT_DATA_ENCRYPTION_KEY;
-  process.env.CLIENT_DATA_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
+test('credentials encrypt with dedicated AI Gateway AES-256-GCM and are not treated as configured when missing', () => {
+  const previousAi = process.env.AI_GATEWAY_ENCRYPTION_KEY;
+  const previousClient = process.env.CLIENT_DATA_ENCRYPTION_KEY;
+  process.env.AI_GATEWAY_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
+  delete process.env.CLIENT_DATA_ENCRYPTION_KEY;
   try {
-    const ciphertext = encryptJson({ value: 'sk-test-not-returned' });
+    const ciphertext = encryptAiGatewayJson({ value: 'sk-test-not-returned' });
     assert.notEqual(ciphertext, 'sk-test-not-returned');
     assert.doesNotMatch(ciphertext, /sk-test-not-returned/);
-    const roundTrip = decryptJson<{ value: string }>(ciphertext);
+    const roundTrip = decryptAiGatewayJson<{ value: string }>(ciphertext);
     assert.equal(roundTrip.value, 'sk-test-not-returned');
     assert.equal(credentialConfigured(row({ credential_configured: true })), true);
     assert.equal(credentialConfigured(row({ credential_configured: false })), false);
   } finally {
-    if (previous == null) delete process.env.CLIENT_DATA_ENCRYPTION_KEY;
-    else process.env.CLIENT_DATA_ENCRYPTION_KEY = previous;
+    if (previousAi == null) delete process.env.AI_GATEWAY_ENCRYPTION_KEY;
+    else process.env.AI_GATEWAY_ENCRYPTION_KEY = previousAi;
+    if (previousClient == null) delete process.env.CLIENT_DATA_ENCRYPTION_KEY;
+    else process.env.CLIENT_DATA_ENCRYPTION_KEY = previousClient;
   }
 });
 

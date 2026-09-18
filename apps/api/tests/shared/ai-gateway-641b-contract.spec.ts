@@ -35,7 +35,9 @@ test('TAX-641B Owner aggregate and commands are Platform Owner only and return r
   assert.match(commands, /set_ai_provider_routing/);
   assert.match(commands, /test_ai_provider_connection/);
   assert.match(commands, /assertPlatformOwner/);
-  assert.match(commands, /encryptJson/);
+  assert.match(commands, /encryptAiGatewayJson/);
+  assert.doesNotMatch(commands, /from '\.\.\/\.\.\/shared\/field-encryption/);
+  assert.doesNotMatch(commands, /encryptJson/);
   assert.match(commands, /removeProviderFromRouting/);
   assert.match(commands, /refreshed: await refreshed\(ctx\)/);
   const types = readRepo('apps/api/src/domains/ai-gateway-control-plane/ai-gateway-control-plane.types.ts');

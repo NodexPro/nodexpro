@@ -68,9 +68,14 @@ function getKey(): Buffer {
   return Buffer.from(process.env.CLIENT_DATA_ENCRYPTION_KEY!.trim(), 'base64');
 }
 
-/** Encrypt JSON to a single base64 blob (iv + tag + ciphertext). Never stores plaintext. */
-export function encryptJson(payload: Record<string, unknown>): string {
-  const key = getKey();
+/**
+ * AES-256-GCM JSON blob: iv (16) + tag (16) + ciphertext, base64.
+ * Key selection is the caller's domain. This primitive never reads env.
+ */
+export function aes256GcmEncryptJson(key: Buffer, payload: Record<string, unknown>): string {
+  if (!Buffer.isBuffer(key) || key.length !== 32) {
+    throw new Error('aes256_key_invalid');
+  }
   const iv = crypto.randomBytes(IV_LEN);
   const cipher = crypto.createCipheriv(ALGO, key, iv);
   const plaintext = JSON.stringify(payload);
@@ -79,20 +84,31 @@ export function encryptJson(payload: Record<string, unknown>): string {
   return Buffer.concat([iv, tag, enc]).toString('base64');
 }
 
+export function aes256GcmDecryptJson<T extends Record<string, unknown>>(key: Buffer, ciphertextB64: string): T {
+  if (!Buffer.isBuffer(key) || key.length !== 32) {
+    throw new Error('aes256_key_invalid');
+  }
+  const buf = Buffer.from(ciphertextB64, 'base64');
+  if (buf.length < IV_LEN + AUTH_TAG_LEN + 1) {
+    throw new Error('aes256_ciphertext_invalid');
+  }
+  const iv = buf.subarray(0, IV_LEN);
+  const tag = buf.subarray(IV_LEN, IV_LEN + AUTH_TAG_LEN);
+  const enc = buf.subarray(IV_LEN + AUTH_TAG_LEN);
+  const decipher = crypto.createDecipheriv(ALGO, key, iv);
+  decipher.setAuthTag(tag);
+  const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
+  return JSON.parse(dec.toString('utf8')) as T;
+}
+
+/** Encrypt JSON to a single base64 blob (iv + tag + ciphertext). Never stores plaintext. */
+export function encryptJson(payload: Record<string, unknown>): string {
+  return aes256GcmEncryptJson(getKey(), payload);
+}
+
 export function decryptJson<T extends Record<string, unknown>>(ciphertextB64: string): T {
   try {
-    const key = getKey();
-    const buf = Buffer.from(ciphertextB64, 'base64');
-    if (buf.length < IV_LEN + AUTH_TAG_LEN + 1) {
-      throw new AppError(400, PAYMENT_SECRET_DECODE_FAILED_MESSAGE_HE, PAYMENT_SECRET_DECODE_FAILED_CODE);
-    }
-    const iv = buf.subarray(0, IV_LEN);
-    const tag = buf.subarray(IV_LEN, IV_LEN + AUTH_TAG_LEN);
-    const enc = buf.subarray(IV_LEN + AUTH_TAG_LEN);
-    const decipher = crypto.createDecipheriv(ALGO, key, iv);
-    decipher.setAuthTag(tag);
-    const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
-    return JSON.parse(dec.toString('utf8')) as T;
+    return aes256GcmDecryptJson<T>(getKey(), ciphertextB64);
   } catch (e) {
     if (e instanceof AppError) throw e;
     throw new AppError(400, PAYMENT_SECRET_DECODE_FAILED_MESSAGE_HE, PAYMENT_SECRET_DECODE_FAILED_CODE);

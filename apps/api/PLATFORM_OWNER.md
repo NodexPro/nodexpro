@@ -21,6 +21,7 @@ There is **no** `platform_owner` row in app RBAC; do not add frontend email chec
 | `TWILIO_AUTH_TOKEN` | Yes* | |
 | `TWILIO_FROM_NUMBER` | Yes* | E.164 sender. |
 | `SENSITIVE_ACCESS_CODE_PEPPER` or `CLIENT_DATA_ENCRYPTION_KEY` | Recommended | Used to hash OTP at rest (never log OTP). |
+| `AI_GATEWAY_ENCRYPTION_KEY` | Yes for AI credential save | Dedicated AES-256-GCM key (32 raw bytes as standard base64) for Owner AI Gateway credentials. Do not reuse `CLIENT_DATA_ENCRYPTION_KEY`. DEV and PROD must use different values. |
 
 \*In `development`, if Twilio is missing, recovery SMS is skipped (warning only). In `production`, Twilio is required.
 

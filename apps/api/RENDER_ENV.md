@@ -29,6 +29,7 @@ Set these environment variables in Render for production deploy:
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `CLIENT_DATA_ENCRYPTION_KEY`
+- `AI_GATEWAY_ENCRYPTION_KEY` (AI Gateway provider credentials only; AES-256-GCM; 32 raw bytes as standard base64. Do not reuse `CLIENT_DATA_ENCRYPTION_KEY`. DEV and PROD must use different values. Leave unset until Owner sets it — credential save fails closed.)
 - `CORS_ALLOWED_ORIGINS=https://app.nodexpro.com,https://nodexpro.com,https://nodexpro.vercel.app`
 - `CORS_ALLOW_CREDENTIALS=false`
 - `PLATFORM_OWNER_EMAIL=marinator.321@gmail.com` (single platform owner; use a different email for org/tenant users)
