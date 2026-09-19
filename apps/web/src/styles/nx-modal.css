@@ -2759,7 +2759,7 @@
 
 .nx-legal-draft-review-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1.2fr) minmax(280px, 1.1fr);
+  grid-template-columns: minmax(240px, 0.96fr) minmax(320px, 1.48fr) minmax(200px, 0.66fr);
   gap: 12px;
   align-items: start;
 }
@@ -2783,14 +2783,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 4px;
 }
 
 .nx-legal-draft-ai-proposal-langs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  display: contents;
 }
 
 .nx-legal-draft-ai-proposal-create {

@@ -241,7 +241,7 @@ export function OwnerTaxKnowledgeProposalView({
             disabled={createDisabled}
             onClick={() => void createProposal()}
           >
-            {creating ? loc.analyzing_label : loc.create_label}
+            {creating ? loc.analyzing_label : '✨ Proposal'}
           </button>
         ) : null}
       </div>

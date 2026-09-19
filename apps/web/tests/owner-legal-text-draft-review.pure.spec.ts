@@ -79,6 +79,7 @@ test('TAX-633 Owner Draft UI is aggregate-only, command-only, and bidi-safe', ()
   assert.doesNotMatch(trainer, /legalTrainingDocumentFile/);
   assert.match(panel, /tax_knowledge_trainer_legal_text_draft_id/);
   assert.match(css, /nx-legal-draft-review-grid/);
+  assert.match(css, /minmax\(240px, 0\.96fr\) minmax\(320px, 1\.48fr\) minmax\(200px, 0\.66fr\)/);
   assert.match(css, /nx-btn-taxes-compact/);
 });
 

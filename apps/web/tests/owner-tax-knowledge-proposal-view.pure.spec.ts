@@ -33,8 +33,13 @@ test('TAX-644A/645 UI is compact, locale-local, and creates only via the named c
   assert.match(view, /inFlight\.current/);
   assert.match(view, /loc\.analyzing_label/);
   assert.match(view, /loc\.generation_failed/);
+  assert.match(view, /✨ Proposal/);
+  assert.doesNotMatch(view, /loc\.create_label/);
+  assert.doesNotMatch(view, /✨ צור Proposal/);
   assert.match(css, /nx-legal-draft-ai-proposal-langs/);
+  assert.match(css, /display: contents/);
   assert.match(css, /nx-legal-draft-ai-proposal-create/);
+  assert.match(css, /minmax\(240px, 0\.96fr\) minmax\(320px, 1\.48fr\) minmax\(200px, 0\.66fr\)/);
   assert.match(parser, /parseTaxKnowledgeProposalSlice/);
   assert.match(owner, /generate_tax_knowledge_proposal/);
   assert.match(owner, /setPanel\(out\.refreshed\.aggregate\)/);
