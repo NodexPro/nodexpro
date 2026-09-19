@@ -66,7 +66,6 @@ test('TAX-645 Owner UI calls the existing command from backend create action onl
   assert.doesNotMatch(view, /selectedDraftReviewStatus/);
   assert.doesNotMatch(view, /fetch\(/);
   assert.doesNotMatch(view, /apiJson/);
-  assert.doesNotMatch(view, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(view, /regenerate/);
   assert.doesNotMatch(trainer, /generate_tax_knowledge_proposal/);
   assert.match(owner, /LEGAL_TEXT_DRAFT_COMMANDS[\s\S]*generate_tax_knowledge_proposal/);

@@ -62,7 +62,6 @@ test('TAX-644A Owner UI renders by_locale locally and does not generate or publi
   assert.match(view, /view\.approve\.action_key/);
   assert.match(view, /view\.approve\.status/);
   assert.doesNotMatch(view, /selectedDraftReviewStatus/);
-  assert.doesNotMatch(view, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(view, /activate_tax_rule_version/);
   assert.doesNotMatch(view, />Approve</);
   assert.doesNotMatch(view, />אישור</);

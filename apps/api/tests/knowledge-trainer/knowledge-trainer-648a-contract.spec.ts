@@ -42,7 +42,6 @@ test('TAX-648A reuses review-status and corrected-proposal commands without cano
   assert.match(view, /rule_text_corrections/);
   assert.match(view, /view\.correct\.action_key/);
   assert.doesNotMatch(view, /proposal_json/);
-  assert.doesNotMatch(view, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(view, /activate_tax_rule_version/);
   assert.doesNotMatch(view, />Approve</);
   assert.doesNotMatch(view, />אישור</);

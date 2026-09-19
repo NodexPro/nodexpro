@@ -2822,6 +2822,34 @@
   color: #14532d;
 }
 
+.nx-legal-draft-ai-proposal-publish {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nx-legal-draft-ai-proposal-publish:disabled {
+  background: #99f6e4;
+  border-color: #99f6e4;
+  color: #115e59;
+}
+
+.nx-legal-draft-ai-proposal-published {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #0f766e;
+}
+
 .nx-legal-draft-ai-proposal-correct {
   display: grid;
   gap: 6px;

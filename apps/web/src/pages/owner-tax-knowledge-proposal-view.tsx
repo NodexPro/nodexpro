@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type {
+  OwnerTaxKnowledgeProposalAction,
   OwnerTaxKnowledgeProposalApproveAction,
   OwnerTaxKnowledgeProposalCorrectAction,
   OwnerTaxKnowledgeProposalCorrectRule,
   OwnerTaxKnowledgeProposalCreateAction,
   OwnerTaxKnowledgeProposalLocaleView,
+  OwnerTaxKnowledgeProposalMeta,
   OwnerTaxKnowledgeProposalOwnerLocale,
   OwnerTaxKnowledgeProposalOwnerView,
   OwnerTaxKnowledgeProposalOwnerViewItem,
@@ -13,6 +15,9 @@ import type {
   UnknownRecord,
 } from './owner-legal-control-types';
 import { emptyTaxKnowledgeProposalSlice } from './owner-legal-control-types';
+
+export const PUBLISH_TAX_KNOWLEDGE_PROPOSAL_TO_CANONICAL_DRAFT =
+  'publish_tax_knowledge_proposal_to_canonical_draft' as const;
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
@@ -61,6 +66,8 @@ function parseLocaleView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeP
     citation_label: asString(raw.citation_label) || fallback.citation_label,
     details_label: asString(raw.details_label) || fallback.details_label,
     approve_aria_label: asString(raw.approve_aria_label) || fallback.approve_aria_label,
+    publish_aria_label: asString(raw.publish_aria_label) || fallback.publish_aria_label,
+    published_to_draft_label: asString(raw.published_to_draft_label) || fallback.published_to_draft_label,
     correct_label: asString(raw.correct_label) || fallback.correct_label,
     correct_save_label: asString(raw.correct_save_label) || fallback.correct_save_label,
     correct_title_label: asString(raw.correct_title_label) || fallback.correct_title_label,
@@ -186,14 +193,47 @@ function parseOwnerView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgePr
   };
 }
 
-function parseProposalMeta(raw: unknown): { id: string; revision_no: number; status_label: string } | null {
+function parseProposalActions(raw: unknown): OwnerTaxKnowledgeProposalAction[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      action_key: asString(row.action_key),
+      enabled: row.enabled === true,
+    }))
+    .filter((row) => row.action_key);
+}
+
+function parseProposalMeta(raw: unknown): OwnerTaxKnowledgeProposalMeta | null {
   const row = asRecord(raw);
   if (!row?.id) return null;
   return {
     id: asString(row.id),
     revision_no: Number(row.revision_no) || 0,
+    status: asString(row.status),
     status_label: asString(row.status_label),
+    allowed_actions: parseProposalActions(row.allowed_actions),
   };
+}
+
+export function publishActionFromProposalSlice(slice: OwnerTaxKnowledgeProposalSlice): {
+  visible: boolean;
+  action_key: typeof PUBLISH_TAX_KNOWLEDGE_PROPOSAL_TO_CANONICAL_DRAFT;
+  tax_knowledge_proposal_id: string | null;
+} {
+  const action = (slice.selected?.allowed_actions ?? []).find(
+    (row) => row.action_key === PUBLISH_TAX_KNOWLEDGE_PROPOSAL_TO_CANONICAL_DRAFT,
+  );
+  return {
+    visible: action?.enabled === true,
+    action_key: PUBLISH_TAX_KNOWLEDGE_PROPOSAL_TO_CANONICAL_DRAFT,
+    tax_knowledge_proposal_id: slice.selected?.id ?? null,
+  };
+}
+
+export function isPublishedToCanonicalDraft(slice: OwnerTaxKnowledgeProposalSlice): boolean {
+  return slice.selected?.status === 'published_to_canonical_draft';
 }
 
 export function parseTaxKnowledgeProposalSlice(raw: unknown): OwnerTaxKnowledgeProposalSlice {
@@ -239,11 +279,14 @@ export function OwnerTaxKnowledgeProposalView({
   const [locale, setLocale] = useState<OwnerTaxKnowledgeProposalOwnerLocale>(view.default_locale || 'he');
   const [creating, setCreating] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [correctBusy, setCorrectBusy] = useState(false);
   const [ruleDrafts, setRuleDrafts] = useState(view.correct.rules);
   const [failed, setFailed] = useState(false);
   const inFlight = useRef(false);
+  const publish = publishActionFromProposalSlice(proposals);
+  const publishedToDraft = isPublishedToCanonicalDraft(proposals);
 
   useEffect(() => {
     setLocale(view.default_locale || 'he');
@@ -253,18 +296,20 @@ export function OwnerTaxKnowledgeProposalView({
     setFailed(false);
     setCreating(false);
     setApproving(false);
+    setPublishing(false);
     setCorrecting(false);
     setCorrectBusy(false);
     setRuleDrafts(view.correct.rules);
     inFlight.current = false;
-  }, [view.has_proposal, view.create.legal_text_draft_id, view.approve.tax_knowledge_proposal_id, view.correct.source_tax_knowledge_proposal_id]);
+  }, [view.has_proposal, view.create.legal_text_draft_id, view.approve.tax_knowledge_proposal_id, view.correct.source_tax_knowledge_proposal_id, proposals.selected?.id, proposals.selected?.status]);
 
   const selected = view.locale_options.some((row) => row.code === locale) ? locale : view.default_locale;
   const loc = view.by_locale[selected] ?? view.by_locale.he;
   const details = view.details;
   const createDisabled = !view.create.enabled || creating || inFlight.current || !onCommand;
-  const approveDisabled = !view.approve.enabled || approving || creating || correctBusy || inFlight.current || !onCommand;
-  const correctDisabled = !view.correct.enabled || correctBusy || approving || creating || inFlight.current || !onCommand;
+  const approveDisabled = !view.approve.enabled || approving || publishing || creating || correctBusy || inFlight.current || !onCommand;
+  const publishDisabled = !publish.visible || publishing || approving || creating || correctBusy || inFlight.current || !onCommand;
+  const correctDisabled = !view.correct.enabled || correctBusy || approving || publishing || creating || inFlight.current || !onCommand;
 
   async function createProposal(): Promise<void> {
     if (inFlight.current || !view.create.enabled || !view.create.legal_text_draft_id || !onCommand) return;
@@ -293,6 +338,20 @@ export function OwnerTaxKnowledgeProposalView({
     } finally {
       inFlight.current = false;
       setApproving(false);
+    }
+  }
+
+  async function publishProposal(): Promise<void> {
+    if (inFlight.current || !publish.visible || !publish.tax_knowledge_proposal_id || !onCommand) return;
+    inFlight.current = true;
+    setPublishing(true);
+    try {
+      await onCommand(publish.action_key, {
+        tax_knowledge_proposal_id: publish.tax_knowledge_proposal_id,
+      });
+    } finally {
+      inFlight.current = false;
+      setPublishing(false);
     }
   }
 
@@ -353,7 +412,27 @@ export function OwnerTaxKnowledgeProposalView({
         >
           ✓
         </button>
+        {publish.visible ? (
+          <button
+            type="button"
+            className="nx-btn nx-btn-taxes-compact nx-legal-draft-ai-proposal-publish"
+            disabled={publishDisabled}
+            aria-label={loc.publish_aria_label}
+            title={loc.publish_aria_label}
+            onClick={() => void publishProposal()}
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+              <path
+                fill="currentColor"
+                d="M8 1.6 4.8 4.8h2V9h2.4V4.8h2L8 1.6Zm-5 8.8v2.4h10V10.4H14v3.2H2V10.4h1Z"
+              />
+            </svg>
+          </button>
+        ) : null}
       </div>
+      {publishedToDraft ? (
+        <div className="nx-legal-draft-ai-proposal-published">{loc.published_to_draft_label}</div>
+      ) : null}
       {view.create.visible && !view.create.enabled && !creating ? (
         <div className="nx-legal-draft-ai-proposal-gate">{loc.create_disabled_reason}</div>
       ) : null}

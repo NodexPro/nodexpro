@@ -20,7 +20,6 @@ test('TAX-648C adds publication map + atomic draft RPC without Owner publish com
   const proposal = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-tax-knowledge-proposal.service.ts');
   const audit = readRepo('apps/api/src/shared/audit-events.ts');
   const ownerView = readRepo('apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-owner-view.pure.ts');
-  const view = readRepo('apps/web/src/pages/owner-tax-knowledge-proposal-view.tsx');
 
   assert.match(sql, /legal_ingestion_tax_knowledge_proposal_publications/);
   assert.match(sql, /local_kind in \('legal_node', 'rule', 'rule_version'\)/);
@@ -60,7 +59,6 @@ test('TAX-648C adds publication map + atomic draft RPC without Owner publish com
   assert.match(audit, /LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_PUBLISHED_TO_CANONICAL_DRAFT/);
   assert.match(audit, /legal_training_tax_knowledge_proposal_published_to_canonical_draft/);
   assert.doesNotMatch(ownerView, /publish_tax_knowledge_proposal/);
-  assert.doesNotMatch(view, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(sql, /publish_tax_knowledge_proposal_to_canonical_draft/);
   assert.doesNotMatch(commands, /legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication/);
   assert.doesNotMatch(proposal, /legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication/);

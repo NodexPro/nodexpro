@@ -51,7 +51,6 @@ test('TAX-644A/645 UI is compact, locale-local, and creates only via the named c
   assert.doesNotMatch(view, /apiJson/);
   assert.doesNotMatch(view, /JSON\.stringify/);
   assert.doesNotMatch(view, /proposal_json/);
-  assert.doesNotMatch(view, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(view, /activate_tax_rule_version/);
   assert.doesNotMatch(view, /regenerate/);
 });
@@ -345,7 +344,6 @@ test('TAX-648A UI keeps a locale-invariant ✓ and human correction without publ
   assert.doesNotMatch(view, />Подтвердить</);
   assert.doesNotMatch(view, /Reject/);
   assert.doesNotMatch(view, /proposal_json/);
-  assert.doesNotMatch(view, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(view, /activate_tax_rule_version/);
   assert.doesNotMatch(view, /owner_approval_allowed ===/);
 });

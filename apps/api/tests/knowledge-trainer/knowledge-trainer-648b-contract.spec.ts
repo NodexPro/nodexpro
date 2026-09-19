@@ -84,7 +84,6 @@ test('TAX-648B registers the named publish command with draft_create and a singl
   assert.match(read, /publish_tax_knowledge_proposal_to_canonical_draft/);
   assert.match(read, /publicationEligible: validationSummary\.publication_eligible/);
   assert.doesNotMatch(ownerView, /publish_tax_knowledge_proposal/);
-  assert.doesNotMatch(view, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(view, />Publish</);
   assert.doesNotMatch(validator, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(validator, /legal_ingestion_apply_tk_proposal_canonical_draft/);
@@ -98,6 +97,6 @@ test('TAX-648B keeps TAX-639, B2 immutability, and no WEB publish button', () =>
   assert.doesNotMatch(service, /\.update\([\s\S]{0,80}proposal_json/);
   assert.doesNotMatch(service, /from\('legal_ingestion_legal_text_drafts'\)[\s\S]{0,160}\.update\(/);
   assert.doesNotMatch(commands, /method:\s*['"]PATCH['"]/);
-  assert.doesNotMatch(owner, /publish_tax_knowledge_proposal_to_canonical_draft/);
+  assert.match(owner, /publish_tax_knowledge_proposal_to_canonical_draft/);
   assert.match(service, /TAX_KNOWLEDGE_PROPOSAL_CANONICAL_DRAFT_RPC/);
 });

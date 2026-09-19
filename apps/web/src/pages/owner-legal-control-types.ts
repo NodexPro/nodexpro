@@ -635,6 +635,8 @@ export type OwnerTaxKnowledgeProposalLocaleView = {
   citation_label: string;
   details_label: string;
   approve_aria_label: string;
+  publish_aria_label: string;
+  published_to_draft_label: string;
   correct_label: string;
   correct_save_label: string;
   correct_title_label: string;
@@ -697,10 +699,23 @@ export type OwnerTaxKnowledgeProposalOwnerView = {
   };
 };
 
+export type OwnerTaxKnowledgeProposalAction = {
+  action_key: string;
+  enabled: boolean;
+};
+
+export type OwnerTaxKnowledgeProposalMeta = {
+  id: string;
+  revision_no: number;
+  status: string;
+  status_label: string;
+  allowed_actions: OwnerTaxKnowledgeProposalAction[];
+};
+
 export type OwnerTaxKnowledgeProposalSlice = {
-  latest: { id: string; revision_no: number; status_label: string } | null;
-  selected: { id: string; revision_no: number; status_label: string } | null;
-  history: Array<{ id: string; revision_no: number; status_label: string }>;
+  latest: OwnerTaxKnowledgeProposalMeta | null;
+  selected: OwnerTaxKnowledgeProposalMeta | null;
+  history: OwnerTaxKnowledgeProposalMeta[];
   owner_view: OwnerTaxKnowledgeProposalOwnerView;
 };
 
@@ -795,6 +810,8 @@ function emptyLocaleView(
   citation: string,
   details: string,
   approveAria: string,
+  publishAria: string,
+  publishedLabel: string,
   correctLabel: string,
   correctSave: string,
   correctTitle: string,
@@ -817,6 +834,8 @@ function emptyLocaleView(
     citation_label: citation,
     details_label: details,
     approve_aria_label: approveAria,
+    publish_aria_label: publishAria,
+    published_to_draft_label: publishedLabel,
     correct_label: correctLabel,
     correct_save_label: correctSave,
     correct_title_label: correctTitle,
@@ -873,6 +892,8 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
           'ציטוט מקור',
           'פרטים נוספים',
           'אישור הצעת AI',
+          'פרסום לטיוטת מאגר הידע',
+          'פורסם לטיוטת מאגר הידע',
           'תיקון',
           'שמירת תיקון',
           'כותרת',
@@ -891,6 +912,8 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
           'Цитата источника',
           'Подробнее',
           'Подтвердить предложение AI',
+          'Опубликовать в базу знаний как черновик',
+          'Опубликовано в базу знаний как черновик',
           'Исправить',
           'Сохранить исправление',
           'Заголовок',
@@ -909,6 +932,8 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
           'Source citation',
           'Details',
           'Approve AI Proposal',
+          'Publish to canonical draft',
+          'Published to canonical draft',
           'Correct',
           'Save correction',
           'Title',
