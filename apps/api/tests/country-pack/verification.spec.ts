@@ -3,6 +3,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../src/shared/context.js';
+import {
+  VERIFICATION_RESERVED_COUNTRY_CODES,
+  assertCountryPackVerificationAllowed,
+  disposableVerificationCountryCodes,
+  formatCleanupError,
+  isPermanentDevSupabaseUrl,
+  nextVerificationCountryCode,
+  shouldRunInFilter,
+} from './verification-safety.pure.ts';
 
 type LoadedCountryPack = {
   executeCountryPackCommand: (ctx: RequestContext, command: { command: string; payload: Record<string, unknown> }) => Promise<unknown>;
@@ -75,6 +84,7 @@ type Env = {
 };
 
 async function setupEnv(prefix: string): Promise<Env> {
+  assertCountryPackVerificationAllowed(process.env.SUPABASE_URL);
   const supabaseAdmin = await getSupabaseAdmin();
   const marker = `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const ownerUserId = randomUUID();
@@ -114,17 +124,73 @@ async function setupEnv(prefix: string): Promise<Env> {
 
 async function cleanupEnv(env: Env): Promise<void> {
   const supabaseAdmin = await getSupabaseAdmin();
-  await supabaseAdmin.from('country_legal_value_versions').delete().in('legal_value_id', env.createdLegalValueIds);
-  await supabaseAdmin.from('country_legal_values').delete().in('id', env.createdLegalValueIds);
-  await supabaseAdmin.from('organization_country_settings').delete().in('organization_id', [env.orgIl, env.orgUs]);
-  await supabaseAdmin.from('country_pack_rulesets').delete().in('id', env.createdRulesetIds);
-  await supabaseAdmin.from('country_packs').delete().in('id', env.createdPackIds);
-  if (env.createdCountryCodes.length) {
-    await supabaseAdmin.from('countries').delete().in('code', env.createdCountryCodes);
+  const errors: Error[] = [];
+
+  async function step(
+    label: string,
+    run: () => Promise<{ error?: { message?: string } | null } | null | undefined>,
+  ): Promise<void> {
+    try {
+      const result = await run();
+      const formatted = formatCleanupError(label, result?.error);
+      if (formatted) errors.push(formatted);
+    } catch (error) {
+      errors.push(error instanceof Error ? error : new Error(`${label}: ${String(error)}`));
+    }
   }
-  await supabaseAdmin.from('audit_log').delete().in('actor_user_id', [env.ownerUserId, env.tenantUserId]);
-  await supabaseAdmin.from('organizations').delete().in('id', [env.orgIl, env.orgUs]);
-  await supabaseAdmin.from('users').delete().in('id', [env.ownerUserId, env.tenantUserId]);
+
+  if (shouldRunInFilter(env.createdLegalValueIds)) {
+    await step('country_legal_value_versions', () =>
+      supabaseAdmin.from('country_legal_value_versions').delete().in('legal_value_id', env.createdLegalValueIds),
+    );
+    await step('country_legal_values', () =>
+      supabaseAdmin.from('country_legal_values').delete().in('id', env.createdLegalValueIds),
+    );
+  }
+  if (shouldRunInFilter([env.orgIl, env.orgUs])) {
+    await step('organization_country_settings', () =>
+      supabaseAdmin.from('organization_country_settings').delete().in('organization_id', [env.orgIl, env.orgUs]),
+    );
+  }
+  if (shouldRunInFilter(env.createdRulesetIds)) {
+    await step('country_pack_rulesets', () =>
+      supabaseAdmin.from('country_pack_rulesets').delete().in('id', env.createdRulesetIds),
+    );
+  }
+  if (shouldRunInFilter(env.createdPackIds)) {
+    await step('country_packs', () => supabaseAdmin.from('country_packs').delete().in('id', env.createdPackIds));
+  }
+
+  const disposableCountries = disposableVerificationCountryCodes(env.createdCountryCodes);
+  if (shouldRunInFilter(disposableCountries)) {
+    await step('countries.delete', async () => {
+      const deleted = await supabaseAdmin.from('countries').delete().in('code', disposableCountries).select('code');
+      if (deleted.error) return deleted;
+      const remaining = await supabaseAdmin.from('countries').select('code').in('code', disposableCountries);
+      if (remaining.error) return remaining;
+      const leftover = (remaining.data ?? []).map((row: { code?: string }) => String(row.code ?? '')).filter(Boolean);
+      if (leftover.length) {
+        throw new Error(`countries still present after cleanup: ${leftover.join(',')}`);
+      }
+      return deleted;
+    });
+  }
+
+  if (shouldRunInFilter([env.ownerUserId, env.tenantUserId])) {
+    await step('audit_log', () =>
+      supabaseAdmin.from('audit_log').delete().in('actor_user_id', [env.ownerUserId, env.tenantUserId]),
+    );
+  }
+  if (shouldRunInFilter([env.orgIl, env.orgUs])) {
+    await step('organizations', () => supabaseAdmin.from('organizations').delete().in('id', [env.orgIl, env.orgUs]));
+  }
+  if (shouldRunInFilter([env.ownerUserId, env.tenantUserId])) {
+    await step('users', () => supabaseAdmin.from('users').delete().in('id', [env.ownerUserId, env.tenantUserId]));
+  }
+
+  if (errors.length) {
+    throw new AggregateError(errors, 'cleanupEnv failed');
+  }
 }
 
 function extractIdFromAdminAggregate(result: unknown, tableKey: 'country_packs' | 'rulesets'): string {
@@ -136,14 +202,27 @@ function extractIdFromAdminAggregate(result: unknown, tableKey: 'country_packs' 
   return rows[0].id;
 }
 
-function randomCountryCode(): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const a = alphabet[Math.floor(Math.random() * alphabet.length)];
-  const b = alphabet[Math.floor(Math.random() * alphabet.length)];
-  return `${a}${b}`;
+async function allocateVerificationCountryCode(unavailable: readonly string[]): Promise<string> {
+  assertCountryPackVerificationAllowed(process.env.SUPABASE_URL);
+  const supabaseAdmin = await getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from('countries')
+    .select('code')
+    .in('code', [...VERIFICATION_RESERVED_COUNTRY_CODES]);
+  if (error) throw error;
+  return nextVerificationCountryCode([
+    ...unavailable,
+    ...((data ?? []) as Array<{ code?: string }>).map((row) => String(row.code ?? '')),
+  ]);
 }
 
-test('country-pack verification suite: security, isolation, overlap, audit, resolution', async () => {
+test('country-pack verification suite: security, isolation, overlap, audit, resolution', async (t) => {
+  if (isPermanentDevSupabaseUrl(process.env.SUPABASE_URL)) {
+    t.skip('TAX-646A: refuse destructive country-pack verification against permanent DEV');
+    return;
+  }
+  assertCountryPackVerificationAllowed(process.env.SUPABASE_URL);
+
   const cp = await loadCountryPack();
   const supabaseAdmin = await getSupabaseAdmin();
   const env = await setupEnv('cp-verify');
@@ -188,7 +267,7 @@ test('country-pack verification suite: security, isolation, overlap, audit, reso
 
   try {
     // 1) Platform owner access + denied tenant roles
-    const ownerCreateCountryCode = randomCountryCode();
+    const ownerCreateCountryCode = await allocateVerificationCountryCode(env.createdCountryCodes);
     env.createdCountryCodes.push(ownerCreateCountryCode);
     await assert.doesNotReject(() =>
       cp.executeCountryPackCommand(ownerCtx, {

@@ -28,6 +28,13 @@ import { OwnerCountryContextPanel } from './owner-country-context-panel';
 import { OwnerFactDictionaryPanel, parseFactDictionaryAggregate } from './owner-fact-dictionary-panel';
 import { OwnerAddCountryControl } from './owner-add-country-control';
 import { activeOwnerCountrySelectorOptions, mergeOwnerCountrySelectorOptions } from './owner-iso-country-options';
+import {
+  normalizeOwnerCountryCode,
+  ownerCountryCodeFromSearch,
+  replaceOwnerLegalControlCountrySearch,
+  resolveOwnerSelectedCountryCode,
+  shouldApplyOwnerLegalControlPanelResponse,
+} from './owner-legal-control-country-selection';
 
 function isForbidden(e: unknown): boolean {
   return e instanceof ApiError && (e.status === 401 || e.status === 403);
@@ -96,10 +103,16 @@ export function PlatformOwnerLegalControl() {
   const [accessRequestSubmitted, setAccessRequestSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [panel, setPanel] = useState(null as UnknownRecord | null);
-  const [taxKnowledgeCountryQuery, setTaxKnowledgeCountryQuery] = useState('');
+  const [taxKnowledgeCountryQuery, setTaxKnowledgeCountryQuery] = useState(() =>
+    ownerCountryCodeFromSearch(location.search),
+  );
   const [trainerDocumentQuery, setTrainerDocumentQuery] = useState('');
   const [trainerDraftQuery, setTrainerDraftQuery] = useState('');
   const [pendingTaxKnowledgeCountry, setPendingTaxKnowledgeCountry] = useState(null as string | null);
+  const countryQueryRef = useRef(taxKnowledgeCountryQuery);
+  countryQueryRef.current = taxKnowledgeCountryQuery;
+  const loadSeqRef = useRef(0);
+  const loadAbortRef = useRef<AbortController | null>(null);
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandModal, setCommandModal] = useState(null as CommandModalState | null);
   const [warningsOpen, setWarningsOpen] = useState(false);
@@ -114,12 +127,30 @@ export function PlatformOwnerLegalControl() {
       const redirect =
         location.pathname === '/platform-owner/ai-gateway'
           ? '/platform-owner/ai-gateway'
-          : '/platform-owner/legal-control';
+          : `${location.pathname}${location.search}${location.hash}`;
       navigate(`/platform-owner/login?redirect=${encodeURIComponent(redirect)}`, { replace: true });
     }
-  }, [auth.status, location.pathname, navigate]);
+  }, [auth.status, location.hash, location.pathname, location.search, navigate]);
+
+  const persistOwnerCountrySelection = useCallback(
+    (countryCode: string) => {
+      const next = normalizeOwnerCountryCode(countryCode);
+      setPendingTaxKnowledgeCountry(next || null);
+      setTaxKnowledgeCountryQuery(next);
+      const nextSearch = replaceOwnerLegalControlCountrySearch(location.search, next);
+      if (nextSearch !== location.search) {
+        navigate({ pathname: location.pathname, search: nextSearch, hash: location.hash }, { replace: true });
+      }
+    },
+    [location.hash, location.pathname, location.search, navigate],
+  );
 
   const loadCore = useCallback(async (opts?: { silent?: boolean }): Promise<void> => {
+    loadAbortRef.current?.abort();
+    const ac = new AbortController();
+    loadAbortRef.current = ac;
+    const requestSeq = ++loadSeqRef.current;
+    const requestedCountry = taxKnowledgeCountryQuery;
     const silent = Boolean(opts?.silent);
     if (!silent) {
       setLoading(true);
@@ -140,10 +171,33 @@ export function PlatformOwnerLegalControl() {
       if (trainerDraftQuery) qs.set('tax_knowledge_trainer_legal_text_draft_id', trainerDraftQuery);
 
       const path = qs.toString() ? `${OWNER.legalControl}?${qs.toString()}` : OWNER.legalControl;
-      const p = (await apiJson(path)) as UnknownRecord;
+      const p = (await apiJson(path, { signal: ac.signal })) as UnknownRecord;
+      if (
+        !shouldApplyOwnerLegalControlPanelResponse({
+          requestSeq,
+          latestSeq: loadSeqRef.current,
+          aborted: ac.signal.aborted,
+          requestedCountryCode: requestedCountry,
+          explicitCountryCode: countryQueryRef.current,
+        })
+      ) {
+        return;
+      }
       setPanel(p);
       hasLoadedPanel.current = true;
     } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
+      if (
+        !shouldApplyOwnerLegalControlPanelResponse({
+          requestSeq,
+          latestSeq: loadSeqRef.current,
+          aborted: ac.signal.aborted,
+          requestedCountryCode: requestedCountry,
+          explicitCountryCode: countryQueryRef.current,
+        })
+      ) {
+        return;
+      }
       if (isForbidden(e)) {
         setAccessDenied(true);
         setAccessDeniedReason(ownerAccessReason(e));
@@ -151,8 +205,10 @@ export function PlatformOwnerLegalControl() {
         setError(userFacingApiMessage(e));
       }
     } finally {
-      setLoading(false);
-      setDetailLoading(false);
+      if (requestSeq === loadSeqRef.current) {
+        setLoading(false);
+        setDetailLoading(false);
+      }
     }
   }, [taxKnowledgeCountryQuery, trainerDocumentQuery, trainerDraftQuery]);
 
@@ -226,13 +282,27 @@ export function PlatformOwnerLegalControl() {
   const factDictionary = useMemo(() => parseFactDictionaryAggregate(panel?.fact_dictionary), [panel]);
 
   useEffect(() => {
+    const fromUrl = ownerCountryCodeFromSearch(location.search);
+    setTaxKnowledgeCountryQuery((current) => (current === fromUrl ? current : fromUrl));
+  }, [location.search]);
+
+  useEffect(() => {
     if (loading) return;
     setPendingTaxKnowledgeCountry(null);
-    const selected = taxKnowledge.selected_country_code ?? '';
-    if (selected && selected !== taxKnowledgeCountryQuery) {
-      setTaxKnowledgeCountryQuery(selected);
-    }
-  }, [loading, panel, taxKnowledge.selected_country_code, taxKnowledgeCountryQuery]);
+    const explicit = ownerCountryCodeFromSearch(location.search) || taxKnowledgeCountryQuery;
+    if (explicit) return;
+    const backendDefault =
+      taxKnowledge.selected_country_code ||
+      (typeof panel?.default_country_code === 'string' ? panel.default_country_code : '');
+    if (backendDefault) persistOwnerCountrySelection(backendDefault);
+  }, [
+    loading,
+    location.search,
+    panel,
+    persistOwnerCountrySelection,
+    taxKnowledge.selected_country_code,
+    taxKnowledgeCountryQuery,
+  ]);
 
   const countryPackTables = useMemo(() => {
     const tables = (countryPacksAdmin?.tables ?? {}) as UnknownRecord;
@@ -306,17 +376,17 @@ export function PlatformOwnerLegalControl() {
     }
   }, [location.hash, location.pathname]);
 
-  const selectedCountryCode = pendingTaxKnowledgeCountry ?? taxKnowledgeCountryQuery;
-
-  useEffect(() => {
-    if (!countryOptions.length) return;
-    const current = selectedCountryCode.trim().toUpperCase();
-    if (current && countryOptions.some((row) => row.code === current)) return;
-    const fallback = countryOptions[0]?.code ?? '';
-    if (!fallback || fallback === taxKnowledgeCountryQuery) return;
-    setPendingTaxKnowledgeCountry(null);
-    setTaxKnowledgeCountryQuery(fallback);
-  }, [countryOptions, selectedCountryCode, taxKnowledgeCountryQuery]);
+  const selectedCountryCode = resolveOwnerSelectedCountryCode({
+    pendingCountryCode: pendingTaxKnowledgeCountry,
+    explicitCountryCode: taxKnowledgeCountryQuery,
+    backendSelectedCountryCode: taxKnowledgeCountryQuery ? null : taxKnowledge.selected_country_code,
+    backendDefaultCountryCode:
+      taxKnowledgeCountryQuery || taxKnowledge.selected_country_code
+        ? null
+        : typeof panel?.default_country_code === 'string'
+          ? panel.default_country_code
+          : null,
+  });
 
   function normalizeCreateRulesetModal(
     command: string,
@@ -360,7 +430,7 @@ export function PlatformOwnerLegalControl() {
       navigate('/platform-owner/ai-gateway');
       return;
     }
-    navigate(`/platform-owner/legal-control#${id}`);
+    navigate({ pathname: '/platform-owner/legal-control', search: location.search, hash: `#${id}` });
   }
 
   if ((auth.status === 'loading' || loading) && !panel) {
@@ -428,10 +498,7 @@ export function PlatformOwnerLegalControl() {
         countryCode={selectedCountryCode}
         countries={countryOptions}
         countryBusy={commandBusy}
-        onSelectCountry={(countryCode) => {
-          setPendingTaxKnowledgeCountry(countryCode);
-          setTaxKnowledgeCountryQuery(countryCode);
-        }}
+        onSelectCountry={persistOwnerCountrySelection}
         navGroups={navGroups}
         addCountryControl={
           <OwnerAddCountryControl
@@ -481,10 +548,7 @@ export function PlatformOwnerLegalControl() {
             legalValues={panel?.legal_values}
             pendingCountryCode={pendingTaxKnowledgeCountry}
             busy={commandBusy}
-            onSelectCountry={(countryCode) => {
-              setPendingTaxKnowledgeCountry(countryCode);
-              setTaxKnowledgeCountryQuery(countryCode);
-            }}
+            onSelectCountry={persistOwnerCountrySelection}
             onCommand={async (command, payload) => {
               await sendOwnerCommand(command, payload);
             }}
@@ -527,10 +591,7 @@ export function PlatformOwnerLegalControl() {
             workspace={(legalValues?.workspace as UnknownRecord | undefined) ?? null}
             taxKnowledge={taxKnowledge}
             busy={commandBusy}
-            onSelectCountry={(countryCode) => {
-              setPendingTaxKnowledgeCountry(countryCode);
-              setTaxKnowledgeCountryQuery(countryCode);
-            }}
+            onSelectCountry={persistOwnerCountrySelection}
             onCommand={async (command, payload) => {
               await sendOwnerCommand(command, payload);
             }}

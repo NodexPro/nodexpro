@@ -43,6 +43,8 @@ test('normal Owner selector keeps only backend-active countries and never filter
   const selector = readRepo('apps/web/src/pages/PlatformOwnerLegalControl.tsx');
   const options = readRepo('apps/web/src/pages/owner-iso-country-options.ts');
   assert.match(selector, /activeOwnerCountrySelectorOptions/);
+  assert.match(selector, /resolveOwnerSelectedCountryCode/);
+  assert.doesNotMatch(selector, /countryOptions\[0\]/);
   assert.doesNotMatch(selector, /startsWith\(['"]cp-verify/);
   assert.doesNotMatch(options, /startsWith\(['"]cp-verify/);
 });
