@@ -55,6 +55,7 @@ test('TAX-637 allowed actions and labels are backend-owned', () => {
   assert.equal(none.create_tax_knowledge_proposal, false);
   assert.equal(none.generate_tax_knowledge_proposal, false);
   assert.equal(none.set_tax_knowledge_proposal_review_status, false);
+  assert.equal(none.publish_tax_knowledge_proposal_to_canonical_draft, false);
   const proposed = taxKnowledgeProposalAllowedActions({
     hasSelectedDraft: true,
     selectedDraftReviewStatus: 'draft',
@@ -83,6 +84,21 @@ test('TAX-637 allowed actions and labels are backend-owned', () => {
   });
   assert.equal(approved.set_tax_knowledge_proposal_review_status, false);
   assert.equal(approved.create_corrected_tax_knowledge_proposal, true);
+  assert.equal(approved.publish_tax_knowledge_proposal_to_canonical_draft, false);
+  const publishable = taxKnowledgeProposalAllowedActions({
+    hasSelectedDraft: true,
+    selectedProposalStatus: 'owner_approved',
+    publicationEligible: true,
+  });
+  assert.equal(publishable.publish_tax_knowledge_proposal_to_canonical_draft, true);
+  assert.equal(
+    taxKnowledgeProposalAllowedActions({
+      hasSelectedDraft: true,
+      selectedProposalStatus: 'proposed',
+      publicationEligible: true,
+    }).publish_tax_knowledge_proposal_to_canonical_draft,
+    false,
+  );
   assert.equal(isProposalRevisionConflictError({ code: '23505' }), true);
   assert.equal(
     isProposalRevisionConflictError({ message: 'revision_no must be monotonic per legal_text_draft_id' }),

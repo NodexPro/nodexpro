@@ -30,7 +30,6 @@ test('TAX-637 named proposal commands refresh the Owner aggregate and do not PAT
   assert.match(commands, /result\.proposal_id/);
   assert.match(commands, /refreshed: await refreshed\(/);
   assert.doesNotMatch(commands, /method:\s*['"]PATCH['"]/);
-  assert.doesNotMatch(types, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(types, /activate_tax_legal_node/);
 
   assert.equal(capabilityRequiredForOwnerCommand('create_tax_knowledge_proposal'), 'legal_knowledge.draft_create');
@@ -97,8 +96,7 @@ test('TAX-637 does not add publication, activation, worker, F2B/F2C, or a new mi
   const types = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer.types.ts');
   const worker = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-worker.runtime.ts');
   const persist = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-structure.service.ts');
-  assert.doesNotMatch(types, /publish_tax_knowledge_proposal/);
-  assert.doesNotMatch(commands, /publish_tax_knowledge_proposal/);
+  assert.match(service, /published_to_canonical_draft is not available/);
   assert.doesNotMatch(service, /activate_tax_legal_node/);
   assert.doesNotMatch(worker, /legal_ingestion_tax_knowledge_proposals/);
   assert.doesNotMatch(persist, /legal_ingestion_tax_knowledge_proposals/);

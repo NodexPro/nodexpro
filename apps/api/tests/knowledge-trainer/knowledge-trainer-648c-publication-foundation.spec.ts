@@ -22,7 +22,7 @@ function rpcMissing(error: { code?: string; message?: string; details?: string; 
   return (
     error?.code === '42883' ||
     error?.code === 'PGRST202' ||
-    /legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication/i.test(blob) ||
+    /legal_ingestion_apply_tk_proposal_canonical_draft/i.test(blob) ||
     /Could not find the function/i.test(blob)
   );
 }
@@ -60,7 +60,7 @@ test('TAX-648C live multi-object map, uniqueness, rollback, retry, draft-only, I
   }
 
   const rpcProbe = await supabaseAdmin.rpc(
-    'legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication',
+    'legal_ingestion_apply_tk_proposal_canonical_draft',
     {
       p_tax_knowledge_proposal_id: randomUUID(),
       p_actor_user_id: randomUUID(),
@@ -257,7 +257,7 @@ test('TAX-648C live multi-object map, uniqueness, rollback, retry, draft-only, I
         document_id: documentId,
         tax_source_id: sourceId,
         legal_text_draft_id: draftInsert.data.id,
-        creation_origin: 'ai_proposal',
+        creation_origin: 'owner_corrected',
         status: 'proposed',
         revision_no: 1,
         proposal_json: { contract: 'tax_knowledge_proposal_v1', marker, suffix },
@@ -340,7 +340,7 @@ test('TAX-648C live multi-object map, uniqueness, rollback, retry, draft-only, I
   const valuesBefore = await supabaseAdmin.from('country_legal_values').select('id', { count: 'exact', head: true });
 
   const first = await supabaseAdmin.rpc(
-    'legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication',
+    'legal_ingestion_apply_tk_proposal_canonical_draft',
     {
       p_tax_knowledge_proposal_id: ilProposalId,
       p_actor_user_id: actorUserId,
@@ -404,7 +404,7 @@ test('TAX-648C live multi-object map, uniqueness, rollback, retry, draft-only, I
   assert.ok((auditRows ?? []).length >= 1);
 
   const retry = await supabaseAdmin.rpc(
-    'legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication',
+    'legal_ingestion_apply_tk_proposal_canonical_draft',
     {
       p_tax_knowledge_proposal_id: ilProposalId,
       p_actor_user_id: actorUserId,
@@ -481,7 +481,7 @@ test('TAX-648C live multi-object map, uniqueness, rollback, retry, draft-only, I
     ],
   };
   const failed = await supabaseAdmin.rpc(
-    'legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication',
+    'legal_ingestion_apply_tk_proposal_canonical_draft',
     {
       p_tax_knowledge_proposal_id: failProposalId,
       p_actor_user_id: actorUserId,
@@ -522,7 +522,7 @@ test('TAX-648C live multi-object map, uniqueness, rollback, retry, draft-only, I
   assert.equal(failStatus.published_tax_rule_id, null);
 
   const iso = await supabaseAdmin.rpc(
-    'legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication',
+    'legal_ingestion_apply_tk_proposal_canonical_draft',
     {
       p_tax_knowledge_proposal_id: isoProposalId,
       p_actor_user_id: actorUserId,
@@ -555,7 +555,7 @@ test('TAX-648C live multi-object map, uniqueness, rollback, retry, draft-only, I
     rules: [rulePlan('us-rule', ['us-node'], 'us rule')],
   };
   const usPub = await supabaseAdmin.rpc(
-    'legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication',
+    'legal_ingestion_apply_tk_proposal_canonical_draft',
     {
       p_tax_knowledge_proposal_id: usProposalId,
       p_actor_user_id: actorUserId,

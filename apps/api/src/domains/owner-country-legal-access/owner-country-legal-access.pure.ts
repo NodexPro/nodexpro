@@ -149,7 +149,8 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'create_manual_legal_text_draft' ||
     command === 'create_tax_knowledge_proposal' ||
     command === 'generate_tax_knowledge_proposal' ||
-    command === 'ensure_tax_knowledge_proposal_owner_presentations'
+    command === 'ensure_tax_knowledge_proposal_owner_presentations' ||
+    command === 'publish_tax_knowledge_proposal_to_canonical_draft'
   ) {
     return 'legal_knowledge.draft_create';
   }

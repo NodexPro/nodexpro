@@ -32,6 +32,8 @@ export const TAX_KNOWLEDGE_PROPOSAL_TRUSTED_PROVENANCE_FIELDS = [
   'published_tax_rule_id',
   'published_tax_rule_version_id',
   'published_tax_legal_node_id',
+  'country_pack_id',
+  'country_pack_ruleset_id',
 ] as const;
 
 export function isTaxKnowledgeProposalStatus(value: unknown): value is TaxKnowledgeProposalStatus {
@@ -94,12 +96,14 @@ export function taxKnowledgeProposalAllowedActions(input: {
   hasSelectedDraft: boolean;
   selectedDraftReviewStatus?: string | null;
   selectedProposalStatus: string | null;
+  publicationEligible?: boolean;
 }): {
   create_tax_knowledge_proposal: boolean;
   generate_tax_knowledge_proposal: boolean;
   set_tax_knowledge_proposal_review_status: boolean;
   create_corrected_tax_knowledge_proposal: boolean;
   ensure_tax_knowledge_proposal_owner_presentations: boolean;
+  publish_tax_knowledge_proposal_to_canonical_draft: boolean;
 } {
   const next = input.selectedProposalStatus
     ? allowedTaxKnowledgeProposalReviewStatuses(input.selectedProposalStatus)
@@ -113,6 +117,8 @@ export function taxKnowledgeProposalAllowedActions(input: {
     set_tax_knowledge_proposal_review_status: next.length > 0,
     create_corrected_tax_knowledge_proposal: Boolean(input.selectedProposalStatus),
     ensure_tax_knowledge_proposal_owner_presentations: Boolean(input.selectedProposalStatus),
+    publish_tax_knowledge_proposal_to_canonical_draft:
+      input.selectedProposalStatus === 'owner_approved' && input.publicationEligible === true,
   };
 }
 

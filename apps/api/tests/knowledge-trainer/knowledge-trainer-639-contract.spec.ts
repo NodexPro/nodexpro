@@ -36,7 +36,8 @@ test('TAX-639 create/correct validate tax_knowledge_proposal_v1 before INSERT an
   assert.doesNotMatch(service, /from\('tax_rules'\)/);
   assert.doesNotMatch(service, /from\('tax_rule_versions'\)/);
   assert.doesNotMatch(service, /activate_tax_rule_version/);
-  assert.doesNotMatch(service, /publish_tax_knowledge_proposal/);
+  assert.doesNotMatch(catalog, /publish_tax_knowledge_proposal/);
+  assert.doesNotMatch(pure, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(service, /openai|anthropic|prompt_template/i);
   assert.doesNotMatch(pure, /openai|anthropic|prompt_template/i);
 });
@@ -61,11 +62,8 @@ test('TAX-639 owner_approved is gated on deterministic validation and aggregate 
 
 test('TAX-639 does not add a migration, publication command, activation, worker, UI, or F2B/F2C', () => {
   const service = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-tax-knowledge-proposal.service.ts');
-  const types = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer.types.ts');
-  const commands = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-commands.service.ts');
   const worker = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-worker.runtime.ts');
-  assert.doesNotMatch(types, /publish_tax_knowledge_proposal/);
-  assert.doesNotMatch(commands, /publish_tax_knowledge_proposal/);
+  assert.doesNotMatch(service.slice(0, service.indexOf('export async function publishTaxKnowledgeProposalToCanonicalDraft')), /legal_ingestion_apply_tk_proposal_canonical_draft/);
   assert.doesNotMatch(service, /activate_tax_legal_node/);
   assert.doesNotMatch(worker, /tax_knowledge_proposal_v1/);
   assert.doesNotMatch(service, /downloadOwnerLegalMaterial/);

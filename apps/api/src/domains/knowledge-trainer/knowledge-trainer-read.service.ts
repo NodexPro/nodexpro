@@ -484,6 +484,7 @@ export async function buildKnowledgeTrainerSlice(
     hasSelectedDraft: Boolean(selected?.selected_legal_text_draft),
     selectedDraftReviewStatus: selected?.selected_legal_text_draft?.review_status ?? null,
     selectedProposalStatus: selected?.tax_knowledge_proposals.selected?.status ?? null,
+    publicationEligible: selected?.tax_knowledge_proposals.selected?.validation?.publication_eligible === true,
   });
 
   return {
@@ -604,6 +605,9 @@ export async function buildKnowledgeTrainerSlice(
         proposal_json: 'object',
       }),
       action('ensure_tax_knowledge_proposal_owner_presentations', proposalActions.ensure_tax_knowledge_proposal_owner_presentations, {
+        tax_knowledge_proposal_id: 'uuid',
+      }),
+      action('publish_tax_knowledge_proposal_to_canonical_draft', proposalActions.publish_tax_knowledge_proposal_to_canonical_draft, {
         tax_knowledge_proposal_id: 'uuid',
       }),
     ],
@@ -1074,6 +1078,7 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
   const actions = taxKnowledgeProposalAllowedActions({
     hasSelectedDraft: true,
     selectedProposalStatus: selectedMeta.status,
+    publicationEligible: validationSummary.publication_eligible,
   });
   const selected: KnowledgeTrainerTaxKnowledgeProposalDetailDto = {
     ...selectedMeta,
@@ -1095,6 +1100,11 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
           proposal_json: 'object when replacing the full snapshot',
           rule_text_corrections: 'human-readable rule title, statement, notes',
         },
+      },
+      {
+        action_key: 'publish_tax_knowledge_proposal_to_canonical_draft',
+        enabled: actions.publish_tax_knowledge_proposal_to_canonical_draft,
+        required_fields: { tax_knowledge_proposal_id: 'uuid' },
       },
     ],
   };

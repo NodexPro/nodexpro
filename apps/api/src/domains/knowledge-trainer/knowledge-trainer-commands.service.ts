@@ -33,6 +33,7 @@ import {
 import {
   createCorrectedTaxKnowledgeProposal,
   createTaxKnowledgeProposal,
+  publishTaxKnowledgeProposalToCanonicalDraft,
   setTaxKnowledgeProposalReviewStatus,
 } from './knowledge-trainer-tax-knowledge-proposal.service.js';
 import { generateTaxKnowledgeProposal } from './knowledge-trainer-generate-tax-knowledge-proposal.service.js';
@@ -812,6 +813,13 @@ export async function executeKnowledgeTrainerCommand(
         'ensure_tax_knowledge_proposal_owner_presentations',
         payload,
         ensureTaxKnowledgeProposalOwnerPresentations,
+      );
+    case 'publish_tax_knowledge_proposal_to_canonical_draft':
+      return handleTaxKnowledgeProposalCommand(
+        ctx,
+        'publish_tax_knowledge_proposal_to_canonical_draft',
+        payload,
+        publishTaxKnowledgeProposalToCanonicalDraft,
       );
     default:
       throw badRequest(`Unsupported knowledge-trainer command: ${command}`);

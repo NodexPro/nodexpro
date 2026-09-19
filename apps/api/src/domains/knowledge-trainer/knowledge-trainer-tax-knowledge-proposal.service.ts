@@ -1,8 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { AppError, badRequest, conflict, notFound } from '../../shared/errors.js';
+import { AppError, badRequest, conflict, forbidden, notFound } from '../../shared/errors.js';
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import { resolveOwnerLegalValueRulesetContextForCountry } from '../country-pack/legal-value.service.js';
+import { generateLegalMachineCode } from '../tax-knowledge/tax-knowledge-library.pure.js';
 import {
   TAX_KNOWLEDGE_PROPOSAL_TRUSTED_PROVENANCE_FIELDS,
   applyTaxKnowledgeProposalRuleTextCorrections,
@@ -14,6 +17,13 @@ import {
   parseTaxKnowledgeProposalRuleTextCorrections,
   proposalJsonIsObject,
 } from './knowledge-trainer-tax-knowledge-proposal.pure.js';
+import {
+  TAX_KNOWLEDGE_PROPOSAL_CANONICAL_DRAFT_RPC,
+  TaxKnowledgeProposalPublishPlanError,
+  buildTaxKnowledgeProposalCanonicalDraftPlan,
+  earliestPublishableRuleEffectiveFrom,
+  proposalMachineCodeTargets,
+} from './tax-knowledge-proposal-canonical-draft-plan.pure.js';
 import { validateTaxKnowledgeProposalV1AgainstStore } from './tax-knowledge-proposal-v1-catalog.service.js';
 import { canOwnerApproveTaxKnowledgeProposal } from './tax-knowledge-proposal-v1.pure.js';
 import type { TaxKnowledgeProposalV1ValidationResult } from './tax-knowledge-proposal-v1.types.js';
@@ -389,5 +399,175 @@ export async function createCorrectedTaxKnowledgeProposal(
     document_id: String(draft.document_id),
     draft_id: sourceDraftId,
     proposal_id: created.id,
+  };
+}
+
+function assertPublishPayload(payload: Record<string, unknown>): void {
+  assertNoTrustedProvenance(payload);
+  const extra = Object.keys(payload).filter((key) => payload[key] !== undefined && key !== 'tax_knowledge_proposal_id');
+  if (extra.length) {
+    throw badRequest('publish_tax_knowledge_proposal_to_canonical_draft accepts tax_knowledge_proposal_id only');
+  }
+}
+
+function throwIfPublishPlanError(error: unknown): never | void {
+  if (error instanceof TaxKnowledgeProposalPublishPlanError) {
+    const status = error.code === 'TAX_KNOWLEDGE_PROPOSAL_COUNTRY_MISMATCH' ? 403 : 409;
+    throw new AppError(status, error.message, error.code);
+  }
+}
+
+function throwIfPublishRpcError(error: { message?: string; code?: string } | null): void {
+  if (!error) return;
+  const message = String(error.message ?? 'canonical draft publication failed');
+  if (/only from owner_approved/i.test(message)) {
+    throw conflict(message, 'TAX_KNOWLEDGE_PROPOSAL_NOT_APPROVED');
+  }
+  if (/Country Legal Values|legal_value_id/i.test(message)) {
+    throw new AppError(409, message, 'TAX_KNOWLEDGE_PROPOSAL_MISSING_LEGAL_VALUE');
+  }
+  if (/Fact Dictionary|tax_fact_definition/i.test(message)) {
+    throw new AppError(409, message, 'TAX_KNOWLEDGE_PROPOSAL_MISSING_FACT');
+  }
+  if (/country|tax_source/i.test(message)) {
+    throw forbidden(message, 'TAX_KNOWLEDGE_PROPOSAL_COUNTRY_MISMATCH');
+  }
+  throw conflict(message, 'TAX_KNOWLEDGE_PROPOSAL_PUBLISH_FAILED');
+}
+
+function generatedMachineCodes(targets: ReturnType<typeof proposalMachineCodeTargets>): {
+  node_codes: Record<string, string>;
+  rule_codes: Record<string, string>;
+} {
+  const node_codes: Record<string, string> = {};
+  const rule_codes: Record<string, string> = {};
+  for (const node of targets.nodes) {
+    if (!node.local_key) continue;
+    node_codes[node.local_key] = generateLegalMachineCode('node', node.title || node.local_key, randomBytes(6).toString('hex'));
+  }
+  for (const rule of targets.rules) {
+    if (!rule.local_key) continue;
+    rule_codes[rule.local_key] = generateLegalMachineCode('rule', rule.title || rule.local_key, randomBytes(6).toString('hex'));
+  }
+  return { node_codes, rule_codes };
+}
+
+export async function publishTaxKnowledgeProposalToCanonicalDraft(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeProposalCommandResult> {
+  assertPublishPayload(payload);
+  const proposalId = asUuid(payload.tax_knowledge_proposal_id, 'tax_knowledge_proposal_id');
+  const current = await loadProposal(proposalId);
+  const draft = await loadDraft(String(current.legal_text_draft_id));
+  if (String(draft.country_code) !== String(current.country_code) || String(draft.tax_source_id) !== String(current.tax_source_id)) {
+    throw forbidden('Tax knowledge proposal country and tax_source must match the Owner Draft', 'TAX_KNOWLEDGE_PROPOSAL_COUNTRY_MISMATCH');
+  }
+
+  const retryPlan = { country_code: String(current.country_code) };
+  if (String(current.status) === 'published_to_canonical_draft') {
+    const retry = await supabaseAdmin.rpc(TAX_KNOWLEDGE_PROPOSAL_CANONICAL_DRAFT_RPC, {
+      p_tax_knowledge_proposal_id: proposalId,
+      p_actor_user_id: ctx.user.id,
+      p_plan: retryPlan,
+    });
+    throwIfPublishRpcError(retry.error);
+    await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_PUBLISHED_TO_CANONICAL_DRAFT, proposalId, {
+      country_code: current.country_code,
+      document_id: current.document_id,
+      legal_text_draft_id: current.legal_text_draft_id,
+      already_published: true,
+    });
+    return {
+      country_code: String(current.country_code),
+      document_id: String(current.document_id),
+      draft_id: String(current.legal_text_draft_id),
+      proposal_id: proposalId,
+    };
+  }
+
+  if (String(current.status) !== 'owner_approved') {
+    throw conflict(
+      'proposal may be published_to_canonical_draft only from owner_approved',
+      'TAX_KNOWLEDGE_PROPOSAL_NOT_APPROVED',
+    );
+  }
+
+  const { data: proposalRow, error: proposalError } = await supabaseAdmin
+    .from(PROPOSAL_TABLE)
+    .select('proposal_json')
+    .eq('id', proposalId)
+    .maybeSingle();
+  throwIfProposalSchemaMissing(proposalError);
+  if (proposalError) throw proposalError;
+  const proposalJson = parseProposalJson(proposalRow?.proposal_json);
+  const validation = await validateProposalJsonForDraft(proposalJson, draft);
+  if (!validation.publication_eligible) {
+    throw new AppError(
+      409,
+      'canonical draft publication requires a TAX-639 publication_eligible proposal',
+      'TAX_KNOWLEDGE_PROPOSAL_NOT_PUBLISHABLE',
+      {
+        valid_schema: validation.valid_schema,
+        publication_eligible: validation.publication_eligible,
+        owner_approval_allowed: validation.owner_approval_allowed,
+        errors: validation.errors,
+        warnings: validation.warnings,
+        blocking_uncertainties: validation.blocking_uncertainties,
+      },
+    );
+  }
+
+  const ruleset = await resolveOwnerLegalValueRulesetContextForCountry({
+    countryCode: String(current.country_code),
+    effectiveDate: earliestPublishableRuleEffectiveFrom(proposalJson),
+  });
+  if (ruleset.country_code !== String(current.country_code)) {
+    throw forbidden('country pack/ruleset must belong to the proposal country', 'TAX_KNOWLEDGE_PROPOSAL_COUNTRY_MISMATCH');
+  }
+
+  const codes = generatedMachineCodes(proposalMachineCodeTargets(proposalJson));
+  let plan: Record<string, unknown>;
+  try {
+    plan = buildTaxKnowledgeProposalCanonicalDraftPlan({
+      country_code: String(current.country_code),
+      tax_source_id: String(current.tax_source_id),
+      country_pack_id: ruleset.country_pack_id,
+      country_pack_ruleset_id: ruleset.active_ruleset_id,
+      proposal_json: proposalJson,
+      validation,
+      node_codes: codes.node_codes,
+      rule_codes: codes.rule_codes,
+    });
+  } catch (error) {
+    throwIfPublishPlanError(error);
+    throw error;
+  }
+
+  const published = await supabaseAdmin.rpc(TAX_KNOWLEDGE_PROPOSAL_CANONICAL_DRAFT_RPC, {
+    p_tax_knowledge_proposal_id: proposalId,
+    p_actor_user_id: ctx.user.id,
+    p_plan: plan,
+  });
+  throwIfPublishRpcError(published.error);
+
+  const result = published.data && typeof published.data === 'object' && !Array.isArray(published.data)
+    ? (published.data as Record<string, unknown>)
+    : {};
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_PUBLISHED_TO_CANONICAL_DRAFT, proposalId, {
+    country_code: current.country_code,
+    document_id: current.document_id,
+    legal_text_draft_id: current.legal_text_draft_id,
+    already_published: result.already_published === true,
+    published_tax_rule_id: result.published_tax_rule_id ?? null,
+    published_tax_rule_version_id: result.published_tax_rule_version_id ?? null,
+    published_tax_legal_node_id: result.published_tax_legal_node_id ?? null,
+  });
+
+  return {
+    country_code: String(current.country_code),
+    document_id: String(current.document_id),
+    draft_id: String(current.legal_text_draft_id),
+    proposal_id: proposalId,
   };
 }

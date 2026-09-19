@@ -140,7 +140,8 @@ export async function resolveCountryForOwnerLegalCommand(
   if (
     command === 'set_tax_knowledge_proposal_review_status' ||
     command === 'create_corrected_tax_knowledge_proposal' ||
-    command === 'ensure_tax_knowledge_proposal_owner_presentations'
+    command === 'ensure_tax_knowledge_proposal_owner_presentations' ||
+    command === 'publish_tax_knowledge_proposal_to_canonical_draft'
   ) {
     const id =
       optionalUuid(payload.source_tax_knowledge_proposal_id) ??

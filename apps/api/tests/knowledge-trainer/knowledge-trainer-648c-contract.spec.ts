@@ -16,7 +16,6 @@ const MIGRATION = 'supabase/migrations/643_legal_ingestion_proposal_canonical_dr
 test('TAX-648C adds publication map + atomic draft RPC without Owner publish command or UI', () => {
   assert.equal(existsSync(join(repoRoot, MIGRATION)), true);
   const sql = readRepo(MIGRATION);
-  const types = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer.types.ts');
   const commands = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-commands.service.ts');
   const proposal = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-tax-knowledge-proposal.service.ts');
   const audit = readRepo('apps/api/src/shared/audit-events.ts');
@@ -60,16 +59,14 @@ test('TAX-648C adds publication map + atomic draft RPC without Owner publish com
 
   assert.match(audit, /LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_PUBLISHED_TO_CANONICAL_DRAFT/);
   assert.match(audit, /legal_training_tax_knowledge_proposal_published_to_canonical_draft/);
-  assert.doesNotMatch(types, /publish_tax_knowledge_proposal/);
-  assert.doesNotMatch(commands, /publish_tax_knowledge_proposal/);
-  assert.doesNotMatch(proposal, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(ownerView, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(view, /publish_tax_knowledge_proposal/);
+  assert.doesNotMatch(sql, /publish_tax_knowledge_proposal_to_canonical_draft/);
   assert.doesNotMatch(commands, /legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication/);
   assert.doesNotMatch(proposal, /legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication/);
 });
 
-test('TAX-648C keeps singular published_* pins and does not invent a weaker 6xx after 643', () => {
+test('TAX-648C keeps singular published_* pins; 644 is rename-only after NAMEDATALEN truncation', () => {
   const sql636 = readRepo('supabase/migrations/636_legal_ingestion_tax_knowledge_proposals.sql');
   const sql643 = readRepo(MIGRATION);
   assert.match(sql636, /published_tax_rule_id/);
@@ -86,9 +83,29 @@ test('TAX-648C keeps singular published_* pins and does not invent a weaker 6xx 
     .filter((name) => /^\d{3}_.+\.sql$/.test(name) && Number(name.slice(0, 3)) >= 600 && Number(name.slice(0, 3)) <= 699)
     .sort();
   assert.ok(taxBrain.includes('643_legal_ingestion_proposal_canonical_draft_publication.sql'));
+  assert.ok(taxBrain.includes('644_legal_ingestion_rename_proposal_canonical_draft_rpc.sql'));
   assert.equal(
-    taxBrain.filter((name) => Number(name.slice(0, 3)) > 643).length,
+    taxBrain.filter((name) => Number(name.slice(0, 3)) > 644).length,
     0,
-    'TAX-648C must use the next unused 6xx; later Tax Brain migrations must not exist yet',
+    'TAX-648C1 must use the next unused 6xx after 643; later Tax Brain migrations must not exist yet',
   );
+});
+
+test('TAX-648C1 renames the truncated 643 RPC without recreating its body', () => {
+  const sql644 = readRepo('supabase/migrations/644_legal_ingestion_rename_proposal_canonical_draft_rpc.sql');
+  const live = readRepo('apps/api/tests/knowledge-trainer/knowledge-trainer-648c-publication-foundation.spec.ts');
+  assert.match(sql644, /alter function public\.legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_pu\(uuid, uuid, jsonb\)/);
+  assert.match(sql644, /rename to legal_ingestion_apply_tk_proposal_canonical_draft/);
+  assert.ok('legal_ingestion_apply_tk_proposal_canonical_draft'.length <= 63);
+  assert.doesNotMatch(sql644, /create or replace function/i);
+  assert.doesNotMatch(sql644, /insert into public\.tax_legal_nodes/);
+  assert.doesNotMatch(sql644, /insert into public\.tax_rules/);
+  assert.doesNotMatch(sql644, /activate_tax_rule_version/);
+  assert.match(sql644, /revoke all on function public\.legal_ingestion_apply_tk_proposal_canonical_draft\(uuid, uuid, jsonb\) from public/);
+  assert.match(sql644, /revoke all on function public\.legal_ingestion_apply_tk_proposal_canonical_draft\(uuid, uuid, jsonb\) from anon, authenticated/);
+  assert.match(sql644, /grant execute on function public\.legal_ingestion_apply_tk_proposal_canonical_draft\(uuid, uuid, jsonb\) to service_role/);
+  assert.doesNotMatch(sql644, /grant execute[^\n]+to (anon|authenticated|public)/i);
+  assert.match(live, /legal_ingestion_apply_tk_proposal_canonical_draft/);
+  assert.doesNotMatch(live, /legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_publication/);
+  assert.doesNotMatch(live, /legal_ingestion_apply_tax_knowledge_proposal_canonical_draft_pu['"]/);
 });
