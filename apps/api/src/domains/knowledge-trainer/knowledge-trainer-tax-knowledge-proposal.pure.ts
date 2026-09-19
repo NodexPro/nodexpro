@@ -99,6 +99,7 @@ export function taxKnowledgeProposalAllowedActions(input: {
   generate_tax_knowledge_proposal: boolean;
   set_tax_knowledge_proposal_review_status: boolean;
   create_corrected_tax_knowledge_proposal: boolean;
+  ensure_tax_knowledge_proposal_owner_presentations: boolean;
 } {
   const next = input.selectedProposalStatus
     ? allowedTaxKnowledgeProposalReviewStatuses(input.selectedProposalStatus)
@@ -108,6 +109,7 @@ export function taxKnowledgeProposalAllowedActions(input: {
     generate_tax_knowledge_proposal: input.hasSelectedDraft && input.selectedDraftReviewStatus === 'ready',
     set_tax_knowledge_proposal_review_status: next.length > 0,
     create_corrected_tax_knowledge_proposal: Boolean(input.selectedProposalStatus),
+    ensure_tax_knowledge_proposal_owner_presentations: Boolean(input.selectedProposalStatus),
   };
 }
 

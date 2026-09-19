@@ -37,6 +37,7 @@ import {
 import { canOwnerApproveTaxKnowledgeProposal } from './tax-knowledge-proposal-v1.pure.js';
 import type { TaxKnowledgeProposalV1ValidationResult } from './tax-knowledge-proposal-v1.types.js';
 import { TAX_KNOWLEDGE_PROPOSAL_CONTRACT, TAX_KNOWLEDGE_PROPOSAL_SCHEMA_VERSION } from './tax-knowledge-proposal-v1.types.js';
+import { persistTaxKnowledgeProposalOwnerPresentations } from './tax-knowledge-proposal-owner-presentation.service.js';
 
 const PROPOSAL_TABLE = 'legal_ingestion_tax_knowledge_proposals';
 
@@ -46,6 +47,7 @@ export type GenerateTaxKnowledgeProposalDeps = {
   completeStructuredJson?: typeof completeStructuredJson;
   validateProposal?: typeof validateProposalJsonForDraft;
   insertProposal?: typeof insertProposedTaxKnowledgeProposalRow;
+  persistOwnerPresentations?: typeof persistTaxKnowledgeProposalOwnerPresentations;
   writeAudit?: typeof writeAudit;
   now?: () => Date;
 };
@@ -105,6 +107,7 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
   const complete = deps.completeStructuredJson ?? completeStructuredJson;
   const validateProposal = deps.validateProposal ?? validateProposalJsonForDraft;
   const insertProposal = deps.insertProposal ?? insertProposedTaxKnowledgeProposalRow;
+  const persistOwnerPresentations = deps.persistOwnerPresentations ?? persistTaxKnowledgeProposalOwnerPresentations;
   const auditWrite = deps.writeAudit ?? writeAudit;
   const now = deps.now ?? (() => new Date());
 
@@ -204,6 +207,17 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
       created_by: ctx.user.id,
       updated_by: ctx.user.id,
     });
+
+    try {
+      await persistOwnerPresentations({
+        proposalId: created.id,
+        proposalJson: normalizedJson as Record<string, unknown>,
+        actorUserId: ctx.user.id,
+        correlationId: ctx.correlationId ?? null,
+      });
+    } catch {
+      // Presentation is not legal truth. Keep the B2 proposal even if translations fail.
+    }
 
     await auditWrite({
       organizationId: null,

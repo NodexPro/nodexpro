@@ -1,4 +1,9 @@
 import type { TaxKnowledgeProposalV1ValidationSummary } from './tax-knowledge-proposal-v1.types.js';
+import {
+  extractOwnerPresentationStatements,
+  joinOwnerPresentationStatements,
+  parseOwnerPresentationJson,
+} from './tax-knowledge-proposal-owner-presentation.pure.js';
 
 export const TAX_KNOWLEDGE_PROPOSAL_OWNER_LOCALES = ['he', 'ru', 'en'] as const;
 export type TaxKnowledgeProposalOwnerLocale = (typeof TAX_KNOWLEDGE_PROPOSAL_OWNER_LOCALES)[number];
@@ -245,7 +250,11 @@ function explanationFor(
   catalog: Catalog,
   extractionOutcome: string,
   ruleCount: number,
+  presented: string | null,
+  sourceExplanation: string,
 ): string {
+  if (presented) return presented;
+  if (sourceExplanation) return sourceExplanation;
   if (extractionOutcome === 'no_rules') return catalog.extraction.no_rules;
   if (extractionOutcome === 'cannot_determine') return catalog.extraction.cannot_determine;
   if (extractionOutcome === 'rules' || ruleCount > 0) {
@@ -347,6 +356,7 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
   } | null;
   proposal_json: Record<string, unknown> | null;
   validation: TaxKnowledgeProposalV1ValidationSummary | null;
+  owner_presentation_json?: unknown;
 }): TaxKnowledgeProposalOwnerViewDto {
   const base = emptyView();
   if (!input.selected || !input.proposal_json) return base;
@@ -428,6 +438,8 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
 
   const extractionOutcome = asString(json.extraction_outcome) || null;
   const tone = warningTone(severities);
+  const sourceExplanation = joinOwnerPresentationStatements(extractOwnerPresentationStatements(json));
+  const presentations = parseOwnerPresentationJson(input.owner_presentation_json);
 
   const by_locale = Object.fromEntries(
     TAX_KNOWLEDGE_PROPOSAL_OWNER_LOCALES.map((locale) => {
@@ -439,7 +451,13 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
           question: catalog.question,
           empty_title: catalog.empty_title,
           empty_detail: catalog.empty_detail,
-          explanation: explanationFor(catalog, extractionOutcome ?? '', rules.length),
+          explanation: explanationFor(
+            catalog,
+            extractionOutcome ?? '',
+            rules.length,
+            presentations?.by_locale[locale]?.explanation ?? null,
+            sourceExplanation,
+          ),
           applicability: applicabilityFor(catalog, applicabilityStatuses),
           uncertainty: uncertaintyFor(catalog, codes, factsMissing),
           warning_tone: tone,

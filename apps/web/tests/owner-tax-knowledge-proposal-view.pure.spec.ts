@@ -21,7 +21,8 @@ test('TAX-644A UI is compact, locale-local, and does not generate or publish', (
   const css = readRepo('apps/web/src/styles/nx-modal.css');
 
   assert.match(trainer, /proposals=\{document\.tax_knowledge_proposals\}/);
-  assert.match(ui, /OwnerTaxKnowledgeProposalView/);
+  assert.match(ui, /nx-legal-draft-source[\s\S]*Full source region[\s\S]*OwnerTaxKnowledgeProposalView/);
+  assert.doesNotMatch(ui, /<\/div>\s*\r?\n\s*<OwnerTaxKnowledgeProposalView/);
   assert.match(view, /by_locale/);
   assert.match(view, /setLocale/);
   assert.match(view, /source\.quote/);
@@ -67,7 +68,7 @@ test('TAX-644A parser copies by_locale and original Hebrew quote', () => {
           question: 'מה ה-AI הבין מהחוק?',
           empty_title: 'טרם נוצרה הצעת AI',
           empty_detail: '',
-          explanation: 'ה-AI הבין כלל משפטי מהסעיף.',
+          explanation: 'הכנסה של אזרח ישראלי שהופקה או שנצמחה באזור נחשבת כהכנסה שהופקה או שנצמחה בישראל.',
           applicability: 'לא ניתן לקבוע תחולה.',
           uncertainty: 'חסרות הגדרות נדרשות ב-Fact Dictionary.',
           warning_tone: 'blocking',
@@ -79,7 +80,7 @@ test('TAX-644A parser copies by_locale and original Hebrew quote', () => {
           question: 'Что AI понял из закона?',
           empty_title: '',
           empty_detail: '',
-          explanation: 'AI понял правовую норму из этой статьи.',
+          explanation: 'Доход гражданина Израиля, произведённый или возникший в Районе, рассматривается как доход, произведённый или возникший в Израиле.',
           applicability: 'Применимость пока нельзя определить.',
           uncertainty: 'Отсутствуют нужные определения Fact Dictionary.',
           warning_tone: 'blocking',
@@ -91,7 +92,7 @@ test('TAX-644A parser copies by_locale and original Hebrew quote', () => {
           question: 'What did AI understand from this law?',
           empty_title: '',
           empty_detail: '',
-          explanation: 'AI understood a legal rule from this provision.',
+          explanation: 'The income of an Israeli citizen that was produced or accrued in the Area is treated as income produced or accrued in Israel.',
           applicability: 'Applicability cannot yet be determined.',
           uncertainty: 'Required Fact Dictionary definitions are missing.',
           warning_tone: 'blocking',
@@ -118,6 +119,8 @@ test('TAX-644A parser copies by_locale and original Hebrew quote', () => {
   assert.equal(parsed.owner_view.source.identifier, '3א(ב)');
   assert.equal(parsed.owner_view.source.quote, 'הכנסתו של אזרח ישראלי');
   assert.equal(parsed.owner_view.by_locale.he.warning_tone, 'blocking');
+  assert.match(parsed.owner_view.by_locale.he.explanation, /אזרח ישראלי/);
+  assert.match(parsed.owner_view.by_locale.en.explanation, /Israeli citizen/);
   assert.match(parsed.owner_view.by_locale.en.applicability, /cannot yet be determined/);
   assert.equal(parsed.owner_view.details.facts.length, 0);
 });

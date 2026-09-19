@@ -603,6 +603,9 @@ export async function buildKnowledgeTrainerSlice(
         source_tax_knowledge_proposal_id: 'uuid',
         proposal_json: 'object',
       }),
+      action('ensure_tax_knowledge_proposal_owner_presentations', proposalActions.ensure_tax_knowledge_proposal_owner_presentations, {
+        tax_knowledge_proposal_id: 'uuid',
+      }),
     ],
   };
 }
@@ -993,14 +996,30 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
   if (!selectedMeta) {
     return { latest, selected: null, history, owner_view: emptyTaxKnowledgeProposalOwnerView() };
   }
-  const { data, error } = await supabaseAdmin
-    .from('legal_ingestion_tax_knowledge_proposals')
-    .select(`${PROPOSAL_HISTORY_SELECT}, proposal_json`)
-    .eq('id', selectedMeta.id)
-    .eq('legal_text_draft_id', draftId)
-    .maybeSingle();
-  if (error) throw error;
-  const json = data ? proposalJsonFromRow(data as Record<string, unknown>) : {};
+  let data: Record<string, unknown> | null = null;
+  {
+    const first = await supabaseAdmin
+      .from('legal_ingestion_tax_knowledge_proposals')
+      .select(`${PROPOSAL_HISTORY_SELECT}, proposal_json, owner_presentation_json`)
+      .eq('id', selectedMeta.id)
+      .eq('legal_text_draft_id', draftId)
+      .maybeSingle();
+    if (first.error && isSupabaseMissingColumnError(first.error)) {
+      const fallback = await supabaseAdmin
+        .from('legal_ingestion_tax_knowledge_proposals')
+        .select(`${PROPOSAL_HISTORY_SELECT}, proposal_json`)
+        .eq('id', selectedMeta.id)
+        .eq('legal_text_draft_id', draftId)
+        .maybeSingle();
+      if (fallback.error) throw fallback.error;
+      data = (fallback.data as Record<string, unknown> | null) ?? null;
+    } else if (first.error) {
+      throw first.error;
+    } else {
+      data = (first.data as Record<string, unknown> | null) ?? null;
+    }
+  }
+  const json = data ? proposalJsonFromRow(data) : {};
   const { data: draftRow, error: draftError } = await supabaseAdmin
     .from('legal_ingestion_legal_text_drafts')
     .select('id, country_code, tax_source_id, draft_legal_text')
@@ -1066,6 +1085,7 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
       selected,
       proposal_json: json,
       validation: validationSummary,
+      owner_presentation_json: data?.owner_presentation_json,
     }),
   };
 }

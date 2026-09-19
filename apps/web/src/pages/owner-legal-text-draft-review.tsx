@@ -503,6 +503,7 @@ export function OwnerLegalTextDraftReview({
               ) : null}
             </>
           )}
+          <OwnerTaxKnowledgeProposalView proposals={proposals ?? emptyTaxKnowledgeProposalSlice()} />
         </section>
 
         <section className="nx-legal-draft-editor">
@@ -754,8 +755,6 @@ export function OwnerLegalTextDraftReview({
           )}
         </section>
       </div>
-
-      <OwnerTaxKnowledgeProposalView proposals={proposals ?? emptyTaxKnowledgeProposalSlice()} />
 
       <details
         className="nx-legal-draft-advanced"

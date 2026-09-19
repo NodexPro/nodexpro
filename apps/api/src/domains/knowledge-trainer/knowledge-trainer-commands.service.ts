@@ -36,6 +36,7 @@ import {
   setTaxKnowledgeProposalReviewStatus,
 } from './knowledge-trainer-tax-knowledge-proposal.service.js';
 import { generateTaxKnowledgeProposal } from './knowledge-trainer-generate-tax-knowledge-proposal.service.js';
+import { ensureTaxKnowledgeProposalOwnerPresentations } from './tax-knowledge-proposal-owner-presentation.service.js';
 import {
   createOwnerLegalMaterialSignedUrl,
   decodeLegalTrainingUpload,
@@ -805,6 +806,13 @@ export async function executeKnowledgeTrainerCommand(
       return handleTaxKnowledgeProposalCommand(ctx, 'set_tax_knowledge_proposal_review_status', payload, setTaxKnowledgeProposalReviewStatus);
     case 'create_corrected_tax_knowledge_proposal':
       return handleTaxKnowledgeProposalCommand(ctx, 'create_corrected_tax_knowledge_proposal', payload, createCorrectedTaxKnowledgeProposal);
+    case 'ensure_tax_knowledge_proposal_owner_presentations':
+      return handleTaxKnowledgeProposalCommand(
+        ctx,
+        'ensure_tax_knowledge_proposal_owner_presentations',
+        payload,
+        ensureTaxKnowledgeProposalOwnerPresentations,
+      );
     default:
       throw badRequest(`Unsupported knowledge-trainer command: ${command}`);
   }

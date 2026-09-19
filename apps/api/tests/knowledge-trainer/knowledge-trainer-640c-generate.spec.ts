@@ -203,6 +203,7 @@ async function runGenerate(options: {
   const audits: Record<string, unknown>[] = [];
   const gatewayCalls: unknown[] = [];
   const generate = createGenerateTaxKnowledgeProposal({
+    persistOwnerPresentations: async () => null,
     loadDraft: async () => options.draft ?? draftRow(),
     loadContext: async (draft) => sampleContext(draft),
     completeStructuredJson: async (input) => {

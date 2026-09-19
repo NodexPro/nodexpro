@@ -2764,6 +2764,10 @@
   align-items: start;
 }
 
+.nx-legal-draft-source .nx-legal-draft-ai-proposal {
+  margin-top: 4px;
+}
+
 .nx-legal-draft-ai-proposal {
   border: 1px solid #e5e7eb;
   border-radius: 8px;

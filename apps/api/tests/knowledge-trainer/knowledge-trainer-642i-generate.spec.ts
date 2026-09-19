@@ -135,6 +135,7 @@ function sampleContext(draft: GenerateDraftRow) {
 async function runGenerate(json: Record<string, unknown>) {
   const inserts: Record<string, unknown>[] = [];
   const generate = createGenerateTaxKnowledgeProposal({
+    persistOwnerPresentations: async () => null,
     loadDraft: async () => draftRow(),
     loadContext: async (draft) => sampleContext(draft),
     completeStructuredJson: async () => ({

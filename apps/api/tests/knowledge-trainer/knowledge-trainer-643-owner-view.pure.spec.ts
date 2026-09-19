@@ -118,11 +118,36 @@ test('TAX-644A empty owner view is he/ru/en and does not invent a proposal', () 
   assert.equal(buildTaxKnowledgeProposalOwnerView({ selected: null, proposal_json: null, validation: null }).available, false);
 });
 
-test('TAX-644A owner view uses typed outcomes, keeps Hebrew quote, and omits empty sections from compact meaning', () => {
+test('TAX-644B owner view shows the actual extracted meaning and stored he/ru/en presentation', () => {
+  const proposal = seif3AbProposal();
+  const sourceStatement =
+    'The income of an Israeli citizen that was produced or accrued in the Area is treated as income produced or accrued in Israel.';
+  const fallback = buildTaxKnowledgeProposalOwnerView({
+    selected: selectedMeta(),
+    proposal_json: proposal,
+    validation: validation(),
+  });
+  assert.equal(fallback.by_locale.en.explanation, sourceStatement);
+  assert.equal(fallback.by_locale.he.explanation, sourceStatement);
+  assert.doesNotMatch(fallback.by_locale.en.explanation, /legal rule from this provision/);
+
+  const heMeaning = 'הכנסה של אזרח ישראלי שהופקה או שנצמחה באזור נחשבת כהכנסה שהופקה או שנצמחה בישראל.';
+  const ruMeaning =
+    'Доход гражданина Израиля, произведённый или возникший в Районе, рассматривается как доход, произведённый или возникший в Израиле.';
   const view = buildTaxKnowledgeProposalOwnerView({
     selected: selectedMeta(),
-    proposal_json: seif3AbProposal(),
+    proposal_json: proposal,
     validation: validation(),
+    owner_presentation_json: {
+      schema_version: 1,
+      source_locale: 'en',
+      source_digest: 'test',
+      by_locale: {
+        he: { explanation: heMeaning },
+        ru: { explanation: ruMeaning },
+        en: { explanation: sourceStatement },
+      },
+    },
   });
 
   assert.equal(view.available, true);
@@ -132,12 +157,10 @@ test('TAX-644A owner view uses typed outcomes, keeps Hebrew quote, and omits emp
   assert.equal(view.by_locale.he.question, 'מה ה-AI הבין מהחוק?');
   assert.equal(view.by_locale.ru.question, 'Что AI понял из закона?');
   assert.equal(view.by_locale.en.question, 'What did AI understand from this law?');
-  assert.match(view.by_locale.he.explanation, /כלל משפטי/);
-  assert.match(view.by_locale.ru.explanation, /правовую норму/);
-  assert.match(view.by_locale.en.explanation, /legal rule/);
-  assert.doesNotMatch(view.by_locale.he.explanation, /Israeli citizen|3א\(ב\)|אזרח ישראלי/);
-  assert.doesNotMatch(view.by_locale.ru.explanation, /Israeli citizen|Area/);
-  assert.doesNotMatch(view.by_locale.en.explanation, /Israeli citizen|Area/);
+  assert.equal(view.by_locale.he.explanation, heMeaning);
+  assert.equal(view.by_locale.ru.explanation, ruMeaning);
+  assert.equal(view.by_locale.en.explanation, sourceStatement);
+  assert.equal(view.source.quote.includes('הכנסתו של אזרח ישראלי'), true);
   assert.equal(view.by_locale.he.applicability, 'לא ניתן לקבוע תחולה.');
   assert.equal(view.by_locale.en.applicability, 'Applicability cannot yet be determined.');
   assert.match(view.by_locale.he.uncertainty ?? '', /Fact Dictionary/);
@@ -147,5 +170,5 @@ test('TAX-644A owner view uses typed outcomes, keeps Hebrew quote, and omits emp
   assert.equal(view.details.relationships.length, 0);
   assert.equal(view.details.calculations.length, 0);
   assert.equal(view.details.technical_rows.some((row) => row.value === PROPOSAL_ID), true);
-  assert.equal(view.details.rules[0]?.statement.includes('Israeli citizen'), true);
+  assert.equal(view.details.rules[0]?.statement, sourceStatement);
 });

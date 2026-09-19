@@ -29,7 +29,8 @@ test('TAX-643/644A reuses selected-draft B2 aggregate owner_view without new rea
   assert.match(ownerView, /Что AI понял из закона\?/);
   assert.match(ownerView, /default_locale: 'he'/);
   assert.match(ownerView, /by_locale/);
-  assert.doesNotMatch(ownerView, /Israeli citizen produced or accrued/);
+  assert.doesNotMatch(ownerView, /הכנסה של אזרח ישראלי שהופקה או שנצמחה באזור נחשבת/);
+  assert.doesNotMatch(ownerView, /Доход гражданина Израиля, произведённый или возникший в Районе/);
   assert.doesNotMatch(ownerView, /validateTaxKnowledgeProposalV1\(/);
   assert.doesNotMatch(validator, /buildTaxKnowledgeProposalOwnerView/);
   assert.doesNotMatch(validator, /owner_view/);
@@ -47,7 +48,8 @@ test('TAX-644A Owner UI renders by_locale locally and does not generate or publi
   const parser = readRepo('apps/web/src/pages/owner-tax-knowledge-panel.tsx');
 
   assert.match(trainer, /tax_knowledge_proposals/);
-  assert.match(ui, /OwnerTaxKnowledgeProposalView/);
+  assert.match(ui, /nx-legal-draft-source[\s\S]*Full source region[\s\S]*OwnerTaxKnowledgeProposalView/);
+  assert.doesNotMatch(ui, /<\/div>\s*\r?\n\s*<OwnerTaxKnowledgeProposalView/);
   assert.match(view, /by_locale/);
   assert.match(view, /locale_options/);
   assert.match(view, /setLocale/);
@@ -63,4 +65,34 @@ test('TAX-644A Owner UI renders by_locale locally and does not generate or publi
   assert.doesNotMatch(view, /activate_tax_rule_version/);
   assert.doesNotMatch(view, /owner_approved/);
   assert.match(parser, /parseTaxKnowledgeProposalSlice/);
+});
+
+test('TAX-644B presentation is stored outside proposal_json and returned in the existing aggregate', () => {
+  const migration = readRepo(
+    'supabase/migrations/642_legal_ingestion_tax_knowledge_proposal_owner_presentation.sql',
+  );
+  const presentation = readRepo(
+    'apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-owner-presentation.pure.ts',
+  );
+  const service = readRepo(
+    'apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-owner-presentation.service.ts',
+  );
+  const read = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-read.service.ts');
+  const generate = readRepo(
+    'apps/api/src/domains/knowledge-trainer/knowledge-trainer-generate-tax-knowledge-proposal.service.ts',
+  );
+  const validator = readRepo('apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-v1.pure.ts');
+
+  assert.match(migration, /owner_presentation_json/);
+  assert.doesNotMatch(migration, /proposal_json is/);
+  assert.match(presentation, /tax_knowledge_proposal_owner_presentation_v1/);
+  assert.match(service, /persistTaxKnowledgeProposalOwnerPresentations/);
+  assert.match(service, /owner_presentation_json/);
+  assert.doesNotMatch(service, /proposal_json:/);
+  assert.match(read, /owner_presentation_json/);
+  assert.match(read, /buildTaxKnowledgeProposalOwnerView/);
+  assert.match(generate, /persistOwnerPresentations/);
+  assert.doesNotMatch(generate, /generate_tax_knowledge_proposal accepts/);
+  assert.doesNotMatch(validator, /owner_presentation_json/);
+  assert.doesNotMatch(validator, /owner_view/);
 });
