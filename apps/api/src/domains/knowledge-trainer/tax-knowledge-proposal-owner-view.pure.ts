@@ -1,17 +1,29 @@
 import type { TaxKnowledgeProposalV1ValidationSummary } from './tax-knowledge-proposal-v1.types.js';
 
+export const TAX_KNOWLEDGE_PROPOSAL_OWNER_LOCALES = ['he', 'ru', 'en'] as const;
+export type TaxKnowledgeProposalOwnerLocale = (typeof TAX_KNOWLEDGE_PROPOSAL_OWNER_LOCALES)[number];
+
+export type TaxKnowledgeProposalOwnerLocaleOption = {
+  code: TaxKnowledgeProposalOwnerLocale;
+  label: string;
+};
+
+export type TaxKnowledgeProposalOwnerLocaleView = {
+  dir: 'rtl' | 'ltr';
+  question: string;
+  empty_title: string;
+  empty_detail: string;
+  explanation: string;
+  applicability: string;
+  uncertainty: string | null;
+  warning_tone: 'blocking' | 'review' | null;
+  citation_label: string;
+  details_label: string;
+};
+
 export type TaxKnowledgeProposalOwnerViewRow = {
   label: string;
   value: string;
-};
-
-export type TaxKnowledgeProposalOwnerViewRule = {
-  title: string;
-  statement: string;
-  applicability_status_label: string;
-  applies_if: string | null;
-  does_not_apply_if: string | null;
-  notes: string | null;
 };
 
 export type TaxKnowledgeProposalOwnerViewItem = {
@@ -19,48 +31,158 @@ export type TaxKnowledgeProposalOwnerViewItem = {
   detail: string | null;
 };
 
-export type TaxKnowledgeProposalOwnerViewDto = {
-  available: boolean;
-  heading: string;
-  question: string;
-  empty_title: string;
-  empty_detail: string;
+export type TaxKnowledgeProposalOwnerViewRule = {
+  title: string;
+  statement: string;
+  applicability_status: string;
+  applies_if: string | null;
+  does_not_apply_if: string | null;
+  notes: string | null;
+};
+
+export type TaxKnowledgeProposalOwnerViewDetails = {
   status_label: string;
   revision_label: string;
-  understanding_summary: string;
-  publication_eligible_label: string;
-  owner_approval_allowed_label: string;
+  extraction_outcome: string | null;
   rules: TaxKnowledgeProposalOwnerViewRule[];
-  facts_title: string;
-  facts_empty_label: string;
   facts: TaxKnowledgeProposalOwnerViewItem[];
-  legal_values_title: string;
-  legal_values_empty_label: string;
   legal_values: TaxKnowledgeProposalOwnerViewItem[];
-  relationships_title: string;
-  relationships_empty_label: string;
   relationships: TaxKnowledgeProposalOwnerViewItem[];
-  calculations_title: string;
-  calculations_empty_label: string;
   calculations: TaxKnowledgeProposalOwnerViewItem[];
-  evidence_title: string;
-  evidence_empty_label: string;
-  evidence_locator: string | null;
-  evidence_quotes: TaxKnowledgeProposalOwnerViewItem[];
-  evidence_citations: TaxKnowledgeProposalOwnerViewItem[];
-  uncertainties_title: string;
-  uncertainties_empty_label: string;
-  uncertainties: TaxKnowledgeProposalOwnerViewItem[];
-  technical_title: string;
+  publication_eligible: string;
+  owner_approval_allowed: string;
   technical_rows: TaxKnowledgeProposalOwnerViewRow[];
 };
 
-const HEADING = 'AI Proposal / הצעת AI';
-const QUESTION = 'What did AI understand from this law?';
-const EMPTY_TITLE = 'No AI proposal yet / טרם נוצרה הצעת AI';
-const EMPTY_DETAIL = 'Selecting a Draft does not generate an AI proposal.';
-const NONE = 'None recorded / לא נרשם';
-const TECHNICAL_TITLE = 'Technical details';
+export type TaxKnowledgeProposalOwnerViewDto = {
+  available: boolean;
+  default_locale: 'he';
+  locale_options: TaxKnowledgeProposalOwnerLocaleOption[];
+  source: {
+    identifier: string | null;
+    quote: string | null;
+  };
+  by_locale: Record<TaxKnowledgeProposalOwnerLocale, TaxKnowledgeProposalOwnerLocaleView>;
+  details: TaxKnowledgeProposalOwnerViewDetails;
+};
+
+const LOCALE_OPTIONS: TaxKnowledgeProposalOwnerLocaleOption[] = [
+  { code: 'he', label: 'עברית' },
+  { code: 'ru', label: 'Русский' },
+  { code: 'en', label: 'English' },
+];
+
+type Catalog = {
+  dir: 'rtl' | 'ltr';
+  question: string;
+  empty_title: string;
+  empty_detail: string;
+  citation_label: string;
+  details_label: string;
+  extraction: {
+    rules_one: string;
+    rules_many: string;
+    no_rules: string;
+    cannot_determine: string;
+  };
+  applicability: {
+    determined: string;
+    unconstrained: string;
+    cannot_determine: string;
+  };
+  uncertainty: {
+    cannot_determine: string;
+    missing_fact_definition: string;
+    unresolved_reference: string;
+    ambiguous_interpretation: string;
+    professional_judgment_required: string;
+    insufficient_evidence: string;
+  };
+};
+
+const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
+  he: {
+    dir: 'rtl',
+    question: 'מה ה-AI הבין מהחוק?',
+    empty_title: 'טרם נוצרה הצעת AI',
+    empty_detail: 'בחירת טיוטה אינה יוצרת הצעת AI.',
+    citation_label: 'ציטוט מקור',
+    details_label: 'פרטים נוספים',
+    extraction: {
+      rules_one: 'ה-AI הבין כלל משפטי מהסעיף.',
+      rules_many: 'ה-AI הבין כמה כללים משפטיים מהסעיף.',
+      no_rules: 'ה-AI לא חילץ כלל משפטי מהטיוטה.',
+      cannot_determine: 'ה-AI לא הצליח לקבוע את המשמעות המשפטית של הטיוטה.',
+    },
+    applicability: {
+      determined: 'התחולה נקבעה.',
+      unconstrained: 'הכלל ללא תנאי תחולה.',
+      cannot_determine: 'לא ניתן לקבוע תחולה.',
+    },
+    uncertainty: {
+      cannot_determine: 'חסר מידע כדי לקבוע תחולה.',
+      missing_fact_definition: 'חסרות הגדרות נדרשות ב-Fact Dictionary.',
+      unresolved_reference: 'נותרה הפניה משפטית שלא יושבה.',
+      ambiguous_interpretation: 'הפרשנות אינה חד-משמעית.',
+      professional_judgment_required: 'נדרש שיקול דעת מקצועי.',
+      insufficient_evidence: 'הראיות אינן מספיקות.',
+    },
+  },
+  ru: {
+    dir: 'ltr',
+    question: 'Что AI понял из закона?',
+    empty_title: 'Предложение AI ещё не создано',
+    empty_detail: 'Выбор черновика не создаёт предложение AI.',
+    citation_label: 'Цитата источника',
+    details_label: 'Подробнее',
+    extraction: {
+      rules_one: 'AI понял правовую норму из этой статьи.',
+      rules_many: 'AI понял несколько правовых норм из этой статьи.',
+      no_rules: 'AI не извлёк правовую норму из этого черновика.',
+      cannot_determine: 'AI не смог определить правовой смысл этого черновика.',
+    },
+    applicability: {
+      determined: 'Применимость определена.',
+      unconstrained: 'Норма без условий применимости.',
+      cannot_determine: 'Применимость пока нельзя определить.',
+    },
+    uncertainty: {
+      cannot_determine: 'Недостаточно данных, чтобы определить применимость.',
+      missing_fact_definition: 'Отсутствуют нужные определения Fact Dictionary.',
+      unresolved_reference: 'Осталась неразрешённая правовая отсылка.',
+      ambiguous_interpretation: 'Толкование неоднозначно.',
+      professional_judgment_required: 'Требуется профессиональное суждение.',
+      insufficient_evidence: 'Доказательств недостаточно.',
+    },
+  },
+  en: {
+    dir: 'ltr',
+    question: 'What did AI understand from this law?',
+    empty_title: 'No AI proposal yet',
+    empty_detail: 'Selecting a Draft does not generate an AI proposal.',
+    citation_label: 'Source citation',
+    details_label: 'Details',
+    extraction: {
+      rules_one: 'AI understood a legal rule from this provision.',
+      rules_many: 'AI understood several legal rules from this provision.',
+      no_rules: 'AI did not extract a legal rule from this draft.',
+      cannot_determine: 'AI could not determine the legal meaning of this draft.',
+    },
+    applicability: {
+      determined: 'Applicability was determined.',
+      unconstrained: 'The rule has no applicability conditions.',
+      cannot_determine: 'Applicability cannot yet be determined.',
+    },
+    uncertainty: {
+      cannot_determine: 'Information is missing to determine applicability.',
+      missing_fact_definition: 'Required Fact Dictionary definitions are missing.',
+      unresolved_reference: 'An unresolved legal reference remains.',
+      ambiguous_interpretation: 'The interpretation is ambiguous.',
+      professional_judgment_required: 'Professional judgment is required.',
+      insufficient_evidence: 'Evidence is insufficient.',
+    },
+  },
+};
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -72,75 +194,6 @@ function asString(value: unknown): string {
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
-}
-
-function yesNoLabel(value: boolean, yes: string, no: string): string {
-  return value ? yes : no;
-}
-
-function applicabilityStatusLabel(status: string): string {
-  switch (status) {
-    case 'determined':
-      return 'Determined / נקבע';
-    case 'unconstrained':
-      return 'Unconstrained / ללא תנאי';
-    case 'cannot_determine':
-      return 'Cannot determine / לא ניתן לקבוע';
-    default:
-      return status || '—';
-  }
-}
-
-function factRoleLabel(role: string): string {
-  switch (role) {
-    case 'applicability_condition':
-      return 'Applicability condition';
-    case 'required_missing':
-      return 'Required / missing';
-    case 'informational':
-      return 'Informational';
-    case 'calculation_input':
-      return 'Calculation input';
-    default:
-      return role;
-  }
-}
-
-function dictionaryStatusLabel(status: string): string {
-  switch (status) {
-    case 'bound_existing':
-      return 'Bound to Fact Dictionary';
-    case 'missing_definition':
-      return 'Missing Fact Dictionary definition';
-    case 'reserved_forbidden':
-      return 'Reserved / forbidden';
-    default:
-      return status;
-  }
-}
-
-function quoteRoleLabel(role: string): string {
-  switch (role) {
-    case 'verbatim_from_draft':
-      return 'Verbatim from draft / ציטוט מדויק מהטיוטה';
-    case 'ai_paraphrase':
-      return 'AI paraphrase / ניסוח AI';
-    default:
-      return role || 'Quote';
-  }
-}
-
-function severityLabel(severity: string): string {
-  switch (severity) {
-    case 'blocks_rule_publication':
-      return 'Blocks publication';
-    case 'blocks_activation_only':
-      return 'Blocks activation only';
-    case 'review_only':
-      return 'Review only';
-    default:
-      return severity || 'Uncertainty';
-  }
 }
 
 function formatPredicate(value: unknown): string | null {
@@ -183,46 +236,99 @@ function endpointLabel(endpoint: unknown): string {
   if (!isPlainObject(endpoint)) return '—';
   if (asString(endpoint.kind) === 'unresolved') {
     const unresolved = isPlainObject(endpoint.unresolved) ? endpoint.unresolved : {};
-    return asString(unresolved.locator_text) || asString(unresolved.cited_title) || 'Unresolved reference';
+    return asString(unresolved.locator_text) || asString(unresolved.cited_title) || 'unresolved';
   }
   return asString(endpoint.key) || asString(endpoint.tax_rule_version_id) || asString(endpoint.kind) || '—';
+}
+
+function explanationFor(
+  catalog: Catalog,
+  extractionOutcome: string,
+  ruleCount: number,
+): string {
+  if (extractionOutcome === 'no_rules') return catalog.extraction.no_rules;
+  if (extractionOutcome === 'cannot_determine') return catalog.extraction.cannot_determine;
+  if (extractionOutcome === 'rules' || ruleCount > 0) {
+    return ruleCount > 1 ? catalog.extraction.rules_many : catalog.extraction.rules_one;
+  }
+  return catalog.extraction.cannot_determine;
+}
+
+function applicabilityFor(catalog: Catalog, statuses: string[]): string {
+  if (statuses.includes('cannot_determine')) return catalog.applicability.cannot_determine;
+  if (statuses.includes('unconstrained') && !statuses.includes('determined')) {
+    return catalog.applicability.unconstrained;
+  }
+  if (statuses.includes('determined')) return catalog.applicability.determined;
+  return catalog.applicability.cannot_determine;
+}
+
+function uncertaintyFor(
+  catalog: Catalog,
+  codes: string[],
+  factsMissing: boolean,
+): string | null {
+  if (!codes.length && !factsMissing) return null;
+  const set = new Set(codes);
+  if (set.has('missing_fact_definition') || (factsMissing && (set.has('cannot_determine') || !codes.length))) {
+    return catalog.uncertainty.missing_fact_definition;
+  }
+  const parts = [...set]
+    .map((code) => catalog.uncertainty[code as keyof Catalog['uncertainty']])
+    .filter((row): row is string => Boolean(row));
+  return parts.length ? [...new Set(parts)].join(' ') : catalog.uncertainty.cannot_determine;
+}
+
+function warningTone(severities: string[]): 'blocking' | 'review' | null {
+  if (severities.includes('blocks_rule_publication')) return 'blocking';
+  if (severities.includes('blocks_activation_only') || severities.includes('review_only')) return 'review';
+  return null;
+}
+
+function emptyLocaleView(locale: TaxKnowledgeProposalOwnerLocale): TaxKnowledgeProposalOwnerLocaleView {
+  const catalog = CATALOG[locale];
+  return {
+    dir: catalog.dir,
+    question: catalog.question,
+    empty_title: catalog.empty_title,
+    empty_detail: catalog.empty_detail,
+    explanation: '',
+    applicability: '',
+    uncertainty: null,
+    warning_tone: null,
+    citation_label: catalog.citation_label,
+    details_label: catalog.details_label,
+  };
+}
+
+function emptyDetails(): TaxKnowledgeProposalOwnerViewDetails {
+  return {
+    status_label: '',
+    revision_label: '',
+    extraction_outcome: null,
+    rules: [],
+    facts: [],
+    legal_values: [],
+    relationships: [],
+    calculations: [],
+    publication_eligible: '',
+    owner_approval_allowed: '',
+    technical_rows: [],
+  };
 }
 
 function emptyView(): TaxKnowledgeProposalOwnerViewDto {
   return {
     available: false,
-    heading: HEADING,
-    question: QUESTION,
-    empty_title: EMPTY_TITLE,
-    empty_detail: EMPTY_DETAIL,
-    status_label: '',
-    revision_label: '',
-    understanding_summary: '',
-    publication_eligible_label: '',
-    owner_approval_allowed_label: '',
-    rules: [],
-    facts_title: 'Required / referenced facts',
-    facts_empty_label: NONE,
-    facts: [],
-    legal_values_title: 'Legal values',
-    legal_values_empty_label: NONE,
-    legal_values: [],
-    relationships_title: 'Relationships',
-    relationships_empty_label: NONE,
-    relationships: [],
-    calculations_title: 'Calculations',
-    calculations_empty_label: NONE,
-    calculations: [],
-    evidence_title: 'Evidence / source citation',
-    evidence_empty_label: NONE,
-    evidence_locator: null,
-    evidence_quotes: [],
-    evidence_citations: [],
-    uncertainties_title: 'Uncertainties / missing information',
-    uncertainties_empty_label: NONE,
-    uncertainties: [],
-    technical_title: TECHNICAL_TITLE,
-    technical_rows: [],
+    default_locale: 'he',
+    locale_options: LOCALE_OPTIONS,
+    source: { identifier: null, quote: null },
+    by_locale: {
+      he: emptyLocaleView('he'),
+      ru: emptyLocaleView('ru'),
+      en: emptyLocaleView('en'),
+    },
+    details: emptyDetails(),
   };
 }
 
@@ -256,34 +362,46 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
   const evidence = isPlainObject(json.evidence) ? json.evidence : {};
   const locator = isPlainObject(evidence.legal_locator) ? evidence.legal_locator : {};
   const quotes = asArray(evidence.quotes).filter(isPlainObject);
-  const citations = asArray(evidence.citations).filter(isPlainObject);
+  const originalQuote = quotes
+    .map((row) => asString(row.text))
+    .find((text) => text) ?? null;
+  const identifier =
+    asString(locator.source_display_identifier) ||
+    asString(locator.normalized_machine_identifier) ||
+    asString(asArray(evidence.citations).filter(isPlainObject)[0]?.locator) ||
+    null;
 
-  const rules = rulesRaw.map((rule) => ({
-    title: asString(rule.title) || 'Untitled rule',
-    statement: asString(rule.statement),
-    applicability_status_label: applicabilityStatusLabel(asString(rule.applicability_status)),
-    applies_if: formatPredicate(rule.applies_if),
-    does_not_apply_if: formatPredicate(rule.does_not_apply_if),
-    notes: asString(rule.notes) || null,
-  }));
-
+  const applicabilityStatuses = rulesRaw.map((rule) => asString(rule.applicability_status)).filter(Boolean);
+  const blocking = validation?.blocking_uncertainties ?? [];
+  const uncertaintySource = blocking.length ? blocking : uncertaintiesRaw;
+  const codes = uncertaintySource
+    .map((row) => asString(isPlainObject(row) ? row.code : ''))
+    .filter(Boolean);
+  const severities = uncertaintySource
+    .map((row) => asString(isPlainObject(row) ? row.severity : ''))
+    .filter(Boolean);
   const factsFromProposal = factsRaw.map((fact) => {
-    const key = asString(fact.fact_key) || 'fact';
-    const role = asString(fact.role);
-    const status = asString(fact.dictionary_status);
-    const parts = [role ? factRoleLabel(role) : null, status ? dictionaryStatusLabel(status) : null].filter(Boolean);
-    return { label: key, detail: parts.length ? parts.join(' · ') : null };
-  });
+    const key = asString(fact.fact_key);
+    return key
+      ? {
+          label: key,
+          detail: [asString(fact.role), asString(fact.dictionary_status)].filter(Boolean).join(' · ') || null,
+        }
+      : null;
+  }).filter((row): row is TaxKnowledgeProposalOwnerViewItem => Boolean(row));
   const factsFromResolved = (validation?.resolved_fact_bindings ?? []).map((row) => ({
     label: row.fact_key,
-    detail: [factRoleLabel(row.role), dictionaryStatusLabel(row.dictionary_status)].filter(Boolean).join(' · '),
+    detail: [row.role, row.dictionary_status].filter(Boolean).join(' · ') || null,
   }));
   const facts = factsFromProposal.length ? factsFromProposal : factsFromResolved;
+  const factsMissing = facts.length === 0 && (codes.includes('cannot_determine') || codes.includes('missing_fact_definition') || applicabilityStatuses.includes('cannot_determine'));
 
-  const legalValuesFromProposal = legalValuesRaw.map((row) => ({
-    label: asString(row.value_key) || 'legal value',
-    detail: asString(row.existing_legal_value_id) || null,
-  }));
+  const legalValuesFromProposal = legalValuesRaw
+    .map((row) => {
+      const key = asString(row.value_key);
+      return key ? { label: key, detail: asString(row.existing_legal_value_id) || null } : null;
+    })
+    .filter((row): row is TaxKnowledgeProposalOwnerViewItem => Boolean(row));
   const legalValuesFromResolved = (validation?.resolved_legal_values ?? []).map((row) => ({
     label: row.value_key,
     detail: row.legal_value_id,
@@ -294,87 +412,70 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
     label: `${endpointLabel(row.from)} → ${endpointLabel(row.to)}`,
     detail: asString(row.relationship_type) || null,
   }));
-
   const calculations = calculationsRaw.map((row) => ({
-    label: asString(row.title) || asString(row.proposal_calc_key) || 'Calculation',
+    label: asString(row.title) || asString(row.proposal_calc_key) || 'calculation',
     detail: asString(row.expression) || null,
   }));
 
-  const evidence_quotes = quotes.map((row) => ({
-    label: quoteRoleLabel(asString(row.role)),
-    detail: asString(row.text) || null,
+  const rules = rulesRaw.map((rule) => ({
+    title: asString(rule.title),
+    statement: asString(rule.statement),
+    applicability_status: asString(rule.applicability_status),
+    applies_if: formatPredicate(rule.applies_if),
+    does_not_apply_if: formatPredicate(rule.does_not_apply_if),
+    notes: asString(rule.notes) || null,
   }));
-  const evidence_citations = citations.map((row) => ({
-    label: asString(row.locator) || 'Citation',
-    detail: asString(row.tax_source_id) || null,
-  }));
-  const evidence_locator =
-    asString(locator.source_display_identifier) || asString(locator.normalized_machine_identifier) || null;
 
-  const blocking = validation?.blocking_uncertainties ?? [];
-  const uncertaintySource = blocking.length ? blocking : uncertaintiesRaw;
-  const uncertainties = uncertaintySource.map((row) => {
-    const rec = isPlainObject(row) ? row : {};
-    const severity = asString(rec.severity);
-    const message = asString(rec.message);
-    const detail = asString(rec.detail) || null;
-    return {
-      label: severityLabel(severity),
-      detail: [message, detail].filter(Boolean).join(' ') || null,
-    };
-  });
+  const extractionOutcome = asString(json.extraction_outcome) || null;
+  const tone = warningTone(severities);
 
-  const extractionOutcome = asString(json.extraction_outcome);
-  const understanding: string[] = [];
-  if (extractionOutcome === 'rules' && rules.length) {
-    understanding.push(rules.length === 1 ? 'AI extracted a legal rule.' : `AI extracted ${rules.length} legal rules.`);
-    if (rules[0]?.statement) understanding.push(rules[0].statement);
-  } else if (extractionOutcome === 'no_rules') {
-    understanding.push('AI did not extract a legal rule from this draft.');
-  } else if (extractionOutcome === 'cannot_determine') {
-    understanding.push('AI could not determine the legal meaning of this draft.');
-  } else if (rules[0]?.statement) {
-    understanding.push(rules[0].statement);
-  }
-  if (rulesRaw.some((rule) => asString(rule.applicability_status) === 'cannot_determine')) {
-    understanding.push('Applicability cannot yet be determined.');
-  }
-  for (const row of uncertainties) {
-    if (row.detail) understanding.push(row.detail);
-  }
-
-  const technical_rows: TaxKnowledgeProposalOwnerViewRow[] = [
-    { label: 'Proposal ID', value: input.selected.id },
-    { label: 'Draft ID', value: input.selected.legal_text_draft_id },
-    { label: 'Origin', value: input.selected.creation_origin },
-    { label: 'Extraction outcome', value: extractionOutcome || '—' },
-  ];
+  const by_locale = Object.fromEntries(
+    TAX_KNOWLEDGE_PROPOSAL_OWNER_LOCALES.map((locale) => {
+      const catalog = CATALOG[locale];
+      return [
+        locale,
+        {
+          dir: catalog.dir,
+          question: catalog.question,
+          empty_title: catalog.empty_title,
+          empty_detail: catalog.empty_detail,
+          explanation: explanationFor(catalog, extractionOutcome ?? '', rules.length),
+          applicability: applicabilityFor(catalog, applicabilityStatuses),
+          uncertainty: uncertaintyFor(catalog, codes, factsMissing),
+          warning_tone: tone,
+          citation_label: catalog.citation_label,
+          details_label: catalog.details_label,
+        } satisfies TaxKnowledgeProposalOwnerLocaleView,
+      ];
+    }),
+  ) as Record<TaxKnowledgeProposalOwnerLocale, TaxKnowledgeProposalOwnerLocaleView>;
 
   return {
-    ...base,
     available: true,
-    status_label: input.selected.status_label,
-    revision_label: `Revision ${input.selected.revision_no}`,
-    understanding_summary: understanding.join(' '),
-    publication_eligible_label: yesNoLabel(
-      validation?.publication_eligible === true,
-      'Yes — currently eligible / כן — זכאי לפרסום כרגע',
-      'No — not currently eligible / לא — אינו זכאי לפרסום כרגע',
-    ),
-    owner_approval_allowed_label: yesNoLabel(
-      validation?.owner_approval_allowed === true,
-      'Yes — Owner approval is allowed / כן — אישור Owner מותר',
-      'No — Owner approval is not allowed / לא — אישור Owner אינו מותר',
-    ),
-    rules,
-    facts,
-    legal_values,
-    relationships,
-    calculations,
-    evidence_locator,
-    evidence_quotes,
-    evidence_citations,
-    uncertainties,
-    technical_rows,
+    default_locale: 'he',
+    locale_options: LOCALE_OPTIONS,
+    source: {
+      identifier,
+      quote: originalQuote,
+    },
+    by_locale,
+    details: {
+      status_label: input.selected.status_label,
+      revision_label: `Revision ${input.selected.revision_no}`,
+      extraction_outcome: extractionOutcome,
+      rules,
+      facts,
+      legal_values,
+      relationships,
+      calculations,
+      publication_eligible: validation?.publication_eligible === true ? 'yes' : 'no',
+      owner_approval_allowed: validation?.owner_approval_allowed === true ? 'yes' : 'no',
+      technical_rows: [
+        { label: 'proposal_id', value: input.selected.id },
+        { label: 'legal_text_draft_id', value: input.selected.legal_text_draft_id },
+        { label: 'creation_origin', value: input.selected.creation_origin },
+        { label: 'extraction_outcome', value: extractionOutcome || '—' },
+      ],
+    },
   };
 }

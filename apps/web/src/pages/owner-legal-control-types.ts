@@ -603,6 +603,8 @@ export type OwnerLegalTextCompleteness = {
   selected_branch_confirmed_at: string | null;
 };
 
+export type OwnerTaxKnowledgeProposalOwnerLocale = 'he' | 'ru' | 'en';
+
 export type OwnerTaxKnowledgeProposalOwnerViewItem = {
   label: string;
   detail: string | null;
@@ -611,46 +613,44 @@ export type OwnerTaxKnowledgeProposalOwnerViewItem = {
 export type OwnerTaxKnowledgeProposalOwnerViewRule = {
   title: string;
   statement: string;
-  applicability_status_label: string;
+  applicability_status: string;
   applies_if: string | null;
   does_not_apply_if: string | null;
   notes: string | null;
 };
 
-export type OwnerTaxKnowledgeProposalOwnerView = {
-  available: boolean;
-  heading: string;
+export type OwnerTaxKnowledgeProposalLocaleView = {
+  dir: 'rtl' | 'ltr';
   question: string;
   empty_title: string;
   empty_detail: string;
-  status_label: string;
-  revision_label: string;
-  understanding_summary: string;
-  publication_eligible_label: string;
-  owner_approval_allowed_label: string;
-  rules: OwnerTaxKnowledgeProposalOwnerViewRule[];
-  facts_title: string;
-  facts_empty_label: string;
-  facts: OwnerTaxKnowledgeProposalOwnerViewItem[];
-  legal_values_title: string;
-  legal_values_empty_label: string;
-  legal_values: OwnerTaxKnowledgeProposalOwnerViewItem[];
-  relationships_title: string;
-  relationships_empty_label: string;
-  relationships: OwnerTaxKnowledgeProposalOwnerViewItem[];
-  calculations_title: string;
-  calculations_empty_label: string;
-  calculations: OwnerTaxKnowledgeProposalOwnerViewItem[];
-  evidence_title: string;
-  evidence_empty_label: string;
-  evidence_locator: string | null;
-  evidence_quotes: OwnerTaxKnowledgeProposalOwnerViewItem[];
-  evidence_citations: OwnerTaxKnowledgeProposalOwnerViewItem[];
-  uncertainties_title: string;
-  uncertainties_empty_label: string;
-  uncertainties: OwnerTaxKnowledgeProposalOwnerViewItem[];
-  technical_title: string;
-  technical_rows: Array<{ label: string; value: string }>;
+  explanation: string;
+  applicability: string;
+  uncertainty: string | null;
+  warning_tone: 'blocking' | 'review' | null;
+  citation_label: string;
+  details_label: string;
+};
+
+export type OwnerTaxKnowledgeProposalOwnerView = {
+  available: boolean;
+  default_locale: OwnerTaxKnowledgeProposalOwnerLocale;
+  locale_options: Array<{ code: OwnerTaxKnowledgeProposalOwnerLocale; label: string }>;
+  source: { identifier: string | null; quote: string | null };
+  by_locale: Record<OwnerTaxKnowledgeProposalOwnerLocale, OwnerTaxKnowledgeProposalLocaleView>;
+  details: {
+    status_label: string;
+    revision_label: string;
+    extraction_outcome: string | null;
+    rules: OwnerTaxKnowledgeProposalOwnerViewRule[];
+    facts: OwnerTaxKnowledgeProposalOwnerViewItem[];
+    legal_values: OwnerTaxKnowledgeProposalOwnerViewItem[];
+    relationships: OwnerTaxKnowledgeProposalOwnerViewItem[];
+    calculations: OwnerTaxKnowledgeProposalOwnerViewItem[];
+    publication_eligible: string;
+    owner_approval_allowed: string;
+    technical_rows: Array<{ label: string; value: string }>;
+  };
 };
 
 export type OwnerTaxKnowledgeProposalSlice = {
@@ -739,6 +739,21 @@ export function emptyLegalLibrarySlice(): OwnerLegalLibrarySlice {
   };
 }
 
+function emptyLocaleView(dir: 'rtl' | 'ltr', question: string, emptyTitle: string, emptyDetail: string, citation: string, details: string): OwnerTaxKnowledgeProposalLocaleView {
+  return {
+    dir,
+    question,
+    empty_title: emptyTitle,
+    empty_detail: emptyDetail,
+    explanation: '',
+    applicability: '',
+    uncertainty: null,
+    warning_tone: null,
+    citation_label: citation,
+    details_label: details,
+  };
+}
+
 export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice {
   return {
     latest: null,
@@ -746,38 +761,31 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
     history: [],
     owner_view: {
       available: false,
-      heading: 'AI Proposal / הצעת AI',
-      question: 'What did AI understand from this law?',
-      empty_title: 'No AI proposal yet / טרם נוצרה הצעת AI',
-      empty_detail: 'Selecting a Draft does not generate an AI proposal.',
-      status_label: '',
-      revision_label: '',
-      understanding_summary: '',
-      publication_eligible_label: '',
-      owner_approval_allowed_label: '',
-      rules: [],
-      facts_title: 'Required / referenced facts',
-      facts_empty_label: 'None recorded / לא נרשם',
-      facts: [],
-      legal_values_title: 'Legal values',
-      legal_values_empty_label: 'None recorded / לא נרשם',
-      legal_values: [],
-      relationships_title: 'Relationships',
-      relationships_empty_label: 'None recorded / לא נרשם',
-      relationships: [],
-      calculations_title: 'Calculations',
-      calculations_empty_label: 'None recorded / לא נרשם',
-      calculations: [],
-      evidence_title: 'Evidence / source citation',
-      evidence_empty_label: 'None recorded / לא נרשם',
-      evidence_locator: null,
-      evidence_quotes: [],
-      evidence_citations: [],
-      uncertainties_title: 'Uncertainties / missing information',
-      uncertainties_empty_label: 'None recorded / לא נרשם',
-      uncertainties: [],
-      technical_title: 'Technical details',
-      technical_rows: [],
+      default_locale: 'he',
+      locale_options: [
+        { code: 'he', label: 'עברית' },
+        { code: 'ru', label: 'Русский' },
+        { code: 'en', label: 'English' },
+      ],
+      source: { identifier: null, quote: null },
+      by_locale: {
+        he: emptyLocaleView('rtl', 'מה ה-AI הבין מהחוק?', 'טרם נוצרה הצעת AI', 'בחירת טיוטה אינה יוצרת הצעת AI.', 'ציטוט מקור', 'פרטים נוספים'),
+        ru: emptyLocaleView('ltr', 'Что AI понял из закона?', 'Предложение AI ещё не создано', 'Выбор черновика не создаёт предложение AI.', 'Цитата источника', 'Подробнее'),
+        en: emptyLocaleView('ltr', 'What did AI understand from this law?', 'No AI proposal yet', 'Selecting a Draft does not generate an AI proposal.', 'Source citation', 'Details'),
+      },
+      details: {
+        status_label: '',
+        revision_label: '',
+        extraction_outcome: null,
+        rules: [],
+        facts: [],
+        legal_values: [],
+        relationships: [],
+        calculations: [],
+        publication_eligible: '',
+        owner_approval_allowed: '',
+        technical_rows: [],
+      },
     },
   };
 }

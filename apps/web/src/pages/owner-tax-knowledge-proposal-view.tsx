@@ -1,6 +1,10 @@
+import { useEffect, useState } from 'react';
 import type {
+  OwnerTaxKnowledgeProposalLocaleView,
+  OwnerTaxKnowledgeProposalOwnerLocale,
   OwnerTaxKnowledgeProposalOwnerView,
   OwnerTaxKnowledgeProposalOwnerViewItem,
+  OwnerTaxKnowledgeProposalOwnerViewRule,
   OwnerTaxKnowledgeProposalSlice,
   UnknownRecord,
 } from './owner-legal-control-types';
@@ -31,60 +35,84 @@ function parseItems(raw: unknown): OwnerTaxKnowledgeProposalOwnerViewItem[] {
     .filter((row) => row.label || row.detail);
 }
 
-function parseOwnerView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeProposalOwnerView): OwnerTaxKnowledgeProposalOwnerView {
+function parseLocaleCode(value: unknown): OwnerTaxKnowledgeProposalOwnerLocale {
+  return value === 'ru' || value === 'en' || value === 'he' ? value : 'he';
+}
+
+function parseLocaleView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeProposalLocaleView): OwnerTaxKnowledgeProposalLocaleView {
   if (!raw) return fallback;
   return {
-    available: raw.available === true,
-    heading: asString(raw.heading) || fallback.heading,
+    dir: raw.dir === 'ltr' || raw.dir === 'rtl' ? raw.dir : fallback.dir,
     question: asString(raw.question) || fallback.question,
     empty_title: asString(raw.empty_title) || fallback.empty_title,
     empty_detail: asString(raw.empty_detail) || fallback.empty_detail,
-    status_label: asString(raw.status_label),
-    revision_label: asString(raw.revision_label),
-    understanding_summary: asString(raw.understanding_summary),
-    publication_eligible_label: asString(raw.publication_eligible_label),
-    owner_approval_allowed_label: asString(raw.owner_approval_allowed_label),
-    rules: Array.isArray(raw.rules)
-      ? raw.rules
+    explanation: asString(raw.explanation),
+    applicability: asString(raw.applicability),
+    uncertainty: asNullableString(raw.uncertainty),
+    warning_tone: raw.warning_tone === 'blocking' || raw.warning_tone === 'review' ? raw.warning_tone : null,
+    citation_label: asString(raw.citation_label) || fallback.citation_label,
+    details_label: asString(raw.details_label) || fallback.details_label,
+  };
+}
+
+function parseRules(raw: unknown): OwnerTaxKnowledgeProposalOwnerViewRule[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      title: asString(row.title),
+      statement: asString(row.statement),
+      applicability_status: asString(row.applicability_status),
+      applies_if: asNullableString(row.applies_if),
+      does_not_apply_if: asNullableString(row.does_not_apply_if),
+      notes: asNullableString(row.notes),
+    }));
+}
+
+function parseOwnerView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeProposalOwnerView): OwnerTaxKnowledgeProposalOwnerView {
+  if (!raw) return fallback;
+  const byRaw = asRecord(raw.by_locale);
+  const detailsRaw = asRecord(raw.details);
+  const sourceRaw = asRecord(raw.source);
+  return {
+    available: raw.available === true,
+    default_locale: parseLocaleCode(raw.default_locale),
+    locale_options: Array.isArray(raw.locale_options)
+      ? raw.locale_options
           .map((row) => asRecord(row))
           .filter((row): row is UnknownRecord => row !== null)
-          .map((row) => ({
-            title: asString(row.title),
-            statement: asString(row.statement),
-            applicability_status_label: asString(row.applicability_status_label),
-            applies_if: asNullableString(row.applies_if),
-            does_not_apply_if: asNullableString(row.does_not_apply_if),
-            notes: asNullableString(row.notes),
-          }))
-      : [],
-    facts_title: asString(raw.facts_title) || fallback.facts_title,
-    facts_empty_label: asString(raw.facts_empty_label) || fallback.facts_empty_label,
-    facts: parseItems(raw.facts),
-    legal_values_title: asString(raw.legal_values_title) || fallback.legal_values_title,
-    legal_values_empty_label: asString(raw.legal_values_empty_label) || fallback.legal_values_empty_label,
-    legal_values: parseItems(raw.legal_values),
-    relationships_title: asString(raw.relationships_title) || fallback.relationships_title,
-    relationships_empty_label: asString(raw.relationships_empty_label) || fallback.relationships_empty_label,
-    relationships: parseItems(raw.relationships),
-    calculations_title: asString(raw.calculations_title) || fallback.calculations_title,
-    calculations_empty_label: asString(raw.calculations_empty_label) || fallback.calculations_empty_label,
-    calculations: parseItems(raw.calculations),
-    evidence_title: asString(raw.evidence_title) || fallback.evidence_title,
-    evidence_empty_label: asString(raw.evidence_empty_label) || fallback.evidence_empty_label,
-    evidence_locator: asNullableString(raw.evidence_locator),
-    evidence_quotes: parseItems(raw.evidence_quotes),
-    evidence_citations: parseItems(raw.evidence_citations),
-    uncertainties_title: asString(raw.uncertainties_title) || fallback.uncertainties_title,
-    uncertainties_empty_label: asString(raw.uncertainties_empty_label) || fallback.uncertainties_empty_label,
-    uncertainties: parseItems(raw.uncertainties),
-    technical_title: asString(raw.technical_title) || fallback.technical_title,
-    technical_rows: Array.isArray(raw.technical_rows)
-      ? raw.technical_rows
-          .map((row) => asRecord(row))
-          .filter((row): row is UnknownRecord => row !== null)
-          .map((row) => ({ label: asString(row.label), value: asString(row.value) }))
-          .filter((row) => row.label || row.value)
-      : [],
+          .map((row) => ({ code: parseLocaleCode(row.code), label: asString(row.label) }))
+          .filter((row) => row.label)
+      : fallback.locale_options,
+    source: {
+      identifier: asNullableString(sourceRaw?.identifier),
+      quote: asNullableString(sourceRaw?.quote),
+    },
+    by_locale: {
+      he: parseLocaleView(asRecord(byRaw?.he), fallback.by_locale.he),
+      ru: parseLocaleView(asRecord(byRaw?.ru), fallback.by_locale.ru),
+      en: parseLocaleView(asRecord(byRaw?.en), fallback.by_locale.en),
+    },
+    details: {
+      status_label: asString(detailsRaw?.status_label),
+      revision_label: asString(detailsRaw?.revision_label),
+      extraction_outcome: asNullableString(detailsRaw?.extraction_outcome),
+      rules: parseRules(detailsRaw?.rules),
+      facts: parseItems(detailsRaw?.facts),
+      legal_values: parseItems(detailsRaw?.legal_values),
+      relationships: parseItems(detailsRaw?.relationships),
+      calculations: parseItems(detailsRaw?.calculations),
+      publication_eligible: asString(detailsRaw?.publication_eligible),
+      owner_approval_allowed: asString(detailsRaw?.owner_approval_allowed),
+      technical_rows: Array.isArray(detailsRaw?.technical_rows)
+        ? detailsRaw.technical_rows
+            .map((row) => asRecord(row))
+            .filter((row): row is UnknownRecord => row !== null)
+            .map((row) => ({ label: asString(row.label), value: asString(row.value) }))
+            .filter((row) => row.label || row.value)
+        : [],
+    },
   };
 }
 
@@ -113,34 +141,19 @@ export function parseTaxKnowledgeProposalSlice(raw: unknown): OwnerTaxKnowledgeP
   };
 }
 
-function ItemList({
-  title,
-  emptyLabel,
-  items,
-}: {
-  title: string;
-  emptyLabel: string;
-  items: OwnerTaxKnowledgeProposalOwnerViewItem[];
-}) {
+function DetailList({ title, items }: { title: string; items: OwnerTaxKnowledgeProposalOwnerViewItem[] }) {
+  if (!items.length) return null;
   return (
     <div className="nx-legal-draft-ai-proposal-block">
-      <div style={{ fontWeight: 600 }}>{title}</div>
-      {items.length ? (
-        <ul>
-          {items.map((item, index) => (
-            <li key={`${item.label}-${index}`}>
-              <span>{item.label}</span>
-              {item.detail ? (
-                <div dir="auto" style={{ color: '#4b5563', fontSize: 13 }}>
-                  {item.detail}
-                </div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="nx-legal-draft-ai-proposal-empty">{emptyLabel}</div>
-      )}
+      <div className="nx-legal-draft-ai-proposal-k">{title}</div>
+      <ul>
+        {items.map((item, index) => (
+          <li key={`${item.label}-${index}`}>
+            <span>{item.label}</span>
+            {item.detail ? <div dir="auto">{item.detail}</div> : null}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -151,100 +164,96 @@ export function OwnerTaxKnowledgeProposalView({
   proposals: OwnerTaxKnowledgeProposalSlice;
 }) {
   const view = proposals.owner_view;
+  const [locale, setLocale] = useState<OwnerTaxKnowledgeProposalOwnerLocale>(view.default_locale || 'he');
+
+  useEffect(() => {
+    setLocale(view.default_locale || 'he');
+  }, [view.default_locale, view.available, view.source.identifier]);
+
+  const selected = view.locale_options.some((row) => row.code === locale) ? locale : view.default_locale;
+  const loc = view.by_locale[selected] ?? view.by_locale.he;
+  const details = view.details;
+
   return (
-    <section className="nx-legal-draft-ai-proposal">
-      <div style={{ fontWeight: 600 }}>{view.heading}</div>
-      <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{view.question}</p>
+    <section className="nx-legal-draft-ai-proposal" dir={loc.dir}>
+      <div className="nx-legal-draft-ai-proposal-langs" dir="ltr">
+        {view.locale_options.map((option) => (
+          <button
+            key={option.code}
+            type="button"
+            className="nx-btn nx-btn-taxes-compact"
+            aria-pressed={selected === option.code}
+            onClick={() => setLocale(option.code)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
       {!view.available ? (
         <div className="nx-legal-draft-ai-proposal-empty">
-          <div>{view.empty_title}</div>
-          {view.empty_detail ? <div>{view.empty_detail}</div> : null}
+          <div>{loc.empty_title}</div>
+          {loc.empty_detail ? <div>{loc.empty_detail}</div> : null}
         </div>
       ) : (
         <>
-          <div className="nx-legal-draft-ai-proposal-meta">
-            <span>{view.status_label}</span>
-            <span>{view.revision_label}</span>
-          </div>
-          {view.understanding_summary ? (
-            <div className="nx-legal-draft-ai-proposal-summary" dir="auto">
-              {view.understanding_summary}
+          {view.source.identifier ? (
+            <div className="nx-legal-draft-ai-proposal-id" dir="auto">
+              {view.source.identifier}
             </div>
           ) : null}
-          {view.rules.map((rule, index) => (
-            <div key={`${rule.title}-${index}`} className="nx-legal-draft-ai-proposal-block">
-              {rule.title ? <div style={{ fontWeight: 600 }} dir="auto">{rule.title}</div> : null}
-              {rule.statement ? (
-                <p style={{ margin: 0, fontSize: 14, lineHeight: 1.45 }} dir="auto">
-                  {rule.statement}
-                </p>
-              ) : null}
-              {rule.applicability_status_label ? (
-                <div style={{ fontSize: 13 }}>Applicability: {rule.applicability_status_label}</div>
-              ) : null}
-              {rule.applies_if ? (
-                <div style={{ fontSize: 13 }}>
-                  Conditions / applies if: <span dir="ltr">{rule.applies_if}</span>
-                </div>
-              ) : null}
-              {rule.does_not_apply_if ? (
-                <div style={{ fontSize: 13 }}>
-                  Exclusions / does not apply if: <span dir="ltr">{rule.does_not_apply_if}</span>
-                </div>
-              ) : null}
-              {rule.notes ? (
-                <p style={{ margin: 0, fontSize: 13, color: '#4b5563' }} dir="auto">
-                  {rule.notes}
-                </p>
+          <div className="nx-legal-draft-ai-proposal-q">{loc.question}</div>
+          {loc.explanation ? <div className="nx-legal-draft-ai-proposal-summary">{loc.explanation}</div> : null}
+          {loc.applicability ? <div className="nx-legal-draft-ai-proposal-line">{loc.applicability}</div> : null}
+          {loc.uncertainty ? (
+            <div
+              className={
+                loc.warning_tone === 'blocking'
+                  ? 'nx-legal-draft-ai-proposal-warn is-blocking'
+                  : loc.warning_tone === 'review'
+                    ? 'nx-legal-draft-ai-proposal-warn is-review'
+                    : 'nx-legal-draft-ai-proposal-warn'
+              }
+            >
+              {loc.uncertainty}
+            </div>
+          ) : null}
+          {view.source.quote || view.source.identifier ? (
+            <div className="nx-legal-draft-ai-proposal-cite">
+              <div className="nx-legal-draft-ai-proposal-k">{loc.citation_label}</div>
+              {view.source.quote ? (
+                <pre className="nx-legal-draft-ai-proposal-quote" dir="auto">
+                  {view.source.quote}
+                </pre>
               ) : null}
             </div>
-          ))}
-          <ItemList title={view.facts_title} emptyLabel={view.facts_empty_label} items={view.facts} />
-          <ItemList title={view.legal_values_title} emptyLabel={view.legal_values_empty_label} items={view.legal_values} />
-          <ItemList title={view.relationships_title} emptyLabel={view.relationships_empty_label} items={view.relationships} />
-          <ItemList title={view.calculations_title} emptyLabel={view.calculations_empty_label} items={view.calculations} />
-          <div className="nx-legal-draft-ai-proposal-block">
-            <div style={{ fontWeight: 600 }}>{view.evidence_title}</div>
-            {view.evidence_locator ? <div style={{ fontSize: 13 }}>Locator: {view.evidence_locator}</div> : null}
-            {view.evidence_quotes.length || view.evidence_citations.length ? (
-              <>
-                {view.evidence_quotes.map((quote, index) => (
-                  <div key={`${quote.label}-${index}`}>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{quote.label}</div>
-                    {quote.detail ? (
-                      <pre className="nx-legal-draft-readonly" dir="auto">
-                        {quote.detail}
-                      </pre>
-                    ) : null}
-                  </div>
-                ))}
-                {view.evidence_citations.map((citation, index) => (
-                  <div key={`${citation.label}-${index}`} style={{ fontSize: 13 }}>
-                    {citation.label}
-                  </div>
-                ))}
-              </>
-            ) : (
-              <div className="nx-legal-draft-ai-proposal-empty">{view.evidence_empty_label}</div>
-            )}
-          </div>
-          <ItemList
-            title={view.uncertainties_title}
-            emptyLabel={view.uncertainties_empty_label}
-            items={view.uncertainties}
-          />
-          <div style={{ fontSize: 13 }}>Publication eligible: {view.publication_eligible_label}</div>
-          <div style={{ fontSize: 13 }}>Owner approval allowed: {view.owner_approval_allowed_label}</div>
-          {view.technical_rows.length ? (
-            <details className="nx-legal-draft-advanced">
-              <summary>{view.technical_title}</summary>
-              {view.technical_rows.map((row) => (
-                <div key={row.label} style={{ fontSize: 12, color: '#4b5563' }}>
-                  {row.label}: {row.value}
-                </div>
-              ))}
-            </details>
           ) : null}
+          <details className="nx-legal-draft-ai-proposal-more">
+            <summary>{loc.details_label}</summary>
+            {details.status_label ? <div>{details.status_label}</div> : null}
+            {details.revision_label ? <div>{details.revision_label}</div> : null}
+            {details.extraction_outcome ? <div>extraction_outcome: {details.extraction_outcome}</div> : null}
+            {details.rules.map((rule, index) => (
+              <div key={`${rule.title}-${index}`} className="nx-legal-draft-ai-proposal-block">
+                {rule.title ? <div dir="auto">{rule.title}</div> : null}
+                {rule.statement ? <div dir="auto">{rule.statement}</div> : null}
+                {rule.applicability_status ? <div>{rule.applicability_status}</div> : null}
+                {rule.applies_if ? <div dir="ltr">applies_if: {rule.applies_if}</div> : null}
+                {rule.does_not_apply_if ? <div dir="ltr">does_not_apply_if: {rule.does_not_apply_if}</div> : null}
+                {rule.notes ? <div dir="auto">{rule.notes}</div> : null}
+              </div>
+            ))}
+            <DetailList title="facts" items={details.facts} />
+            <DetailList title="legal_values" items={details.legal_values} />
+            <DetailList title="relationships" items={details.relationships} />
+            <DetailList title="calculations" items={details.calculations} />
+            {details.publication_eligible ? <div>publication_eligible: {details.publication_eligible}</div> : null}
+            {details.owner_approval_allowed ? <div>owner_approval_allowed: {details.owner_approval_allowed}</div> : null}
+            {details.technical_rows.map((row) => (
+              <div key={row.label}>
+                {row.label}: {row.value}
+              </div>
+            ))}
+          </details>
         </>
       )}
     </section>

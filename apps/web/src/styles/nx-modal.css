@@ -2767,46 +2767,102 @@
 .nx-legal-draft-ai-proposal {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  padding: 12px;
+  padding: 8px 10px;
   display: grid;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
-.nx-legal-draft-ai-proposal-meta {
+.nx-legal-draft-ai-proposal-langs {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  font-size: 13px;
-  color: #374151;
+  gap: 4px;
+}
+
+.nx-legal-draft-ai-proposal-langs .nx-btn[aria-pressed='true'] {
+  background: #111827;
+  color: #fff;
+}
+
+.nx-legal-draft-ai-proposal-id {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.nx-legal-draft-ai-proposal-q {
+  color: #4b5563;
+  font-size: 12px;
 }
 
 .nx-legal-draft-ai-proposal-summary {
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 10px 12px;
   font-size: 14px;
-  line-height: 1.45;
+  font-weight: 600;
 }
 
+.nx-legal-draft-ai-proposal-line {
+  color: #111827;
+}
+
+.nx-legal-draft-ai-proposal-warn {
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.nx-legal-draft-ai-proposal-warn.is-blocking {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.nx-legal-draft-ai-proposal-warn.is-review {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.nx-legal-draft-ai-proposal-cite,
 .nx-legal-draft-ai-proposal-block {
   display: grid;
-  gap: 4px;
+  gap: 2px;
+}
+
+.nx-legal-draft-ai-proposal-k {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.nx-legal-draft-ai-proposal-quote {
+  margin: 0;
+  white-space: pre-wrap;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
 }
 
 .nx-legal-draft-ai-proposal-block ul {
   margin: 0;
-  padding-inline-start: 18px;
-  display: grid;
-  gap: 6px;
+  padding-inline-start: 16px;
+}
+
+.nx-legal-draft-ai-proposal-more {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.nx-legal-draft-ai-proposal-more summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #111827;
 }
 
 .nx-legal-draft-ai-proposal-empty {
   color: #6b7280;
   font-size: 13px;
-  display: grid;
-  gap: 4px;
 }
 
 .nx-legal-draft-tree,

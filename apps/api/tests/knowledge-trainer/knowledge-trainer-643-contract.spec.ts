@@ -11,7 +11,7 @@ function readRepo(rel: string): string {
   return readFileSync(join(repoRoot, rel), 'utf8');
 }
 
-test('TAX-643 reuses selected-draft B2 aggregate and adds owner_view without new reads or TAX-639 changes', () => {
+test('TAX-643/644A reuses selected-draft B2 aggregate owner_view without new reads or TAX-639 changes', () => {
   const read = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-read.service.ts');
   const types = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer.types.ts');
   const validator = readRepo('apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-v1.pure.ts');
@@ -25,7 +25,11 @@ test('TAX-643 reuses selected-draft B2 aggregate and adds owner_view without new
   assert.match(read, /owner_view:/);
   assert.match(types, /owner_view: TaxKnowledgeProposalOwnerViewDto/);
   assert.match(ownerView, /What did AI understand from this law\?/);
-  assert.match(ownerView, /No AI proposal yet \/ טרם נוצרה הצעת AI/);
+  assert.match(ownerView, /מה ה-AI הבין מהחוק\?/);
+  assert.match(ownerView, /Что AI понял из закона\?/);
+  assert.match(ownerView, /default_locale: 'he'/);
+  assert.match(ownerView, /by_locale/);
+  assert.doesNotMatch(ownerView, /Israeli citizen produced or accrued/);
   assert.doesNotMatch(ownerView, /validateTaxKnowledgeProposalV1\(/);
   assert.doesNotMatch(validator, /buildTaxKnowledgeProposalOwnerView/);
   assert.doesNotMatch(validator, /owner_view/);
@@ -36,7 +40,7 @@ test('TAX-643 reuses selected-draft B2 aggregate and adds owner_view without new
   assert.doesNotMatch(ownerView, /activate_tax_rule_version/);
 });
 
-test('TAX-643 Owner UI renders backend owner_view only and does not generate or publish', () => {
+test('TAX-644A Owner UI renders by_locale locally and does not generate or publish', () => {
   const ui = readRepo('apps/web/src/pages/owner-legal-text-draft-review.tsx');
   const view = readRepo('apps/web/src/pages/owner-tax-knowledge-proposal-view.tsx');
   const trainer = readRepo('apps/web/src/pages/owner-knowledge-trainer-panel.tsx');
@@ -44,11 +48,12 @@ test('TAX-643 Owner UI renders backend owner_view only and does not generate or 
 
   assert.match(trainer, /tax_knowledge_proposals/);
   assert.match(ui, /OwnerTaxKnowledgeProposalView/);
-  assert.match(view, /owner_view/);
-  assert.match(view, /view\.heading/);
-  assert.match(view, /empty_title/);
-  assert.match(view, /understanding_summary/);
-  assert.match(view, /technical_title/);
+  assert.match(view, /by_locale/);
+  assert.match(view, /locale_options/);
+  assert.match(view, /setLocale/);
+  assert.match(view, /details_label/);
+  assert.doesNotMatch(view, /fetch\(/);
+  assert.doesNotMatch(view, /onCommand/);
   assert.doesNotMatch(view, /JSON\.stringify\(.*proposal_json/);
   assert.doesNotMatch(view, /proposal_json\./);
   assert.doesNotMatch(ui, /generate_tax_knowledge_proposal/);

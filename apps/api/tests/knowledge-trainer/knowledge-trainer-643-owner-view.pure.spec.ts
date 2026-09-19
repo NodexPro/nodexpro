@@ -9,6 +9,7 @@ import type { TaxKnowledgeProposalV1ValidationResult } from '../../src/domains/k
 
 const DRAFT_ID = 'a50e79de-f5f4-44ae-ab32-149e2baae5dd';
 const PROPOSAL_ID = '4541cc2b-fef6-449c-ac25-477a5cd33dfc';
+const QUOTE = 'הכנסתו של אזרח ישראלי שהופקה או שנצמחה באזור, יראו אותה כהכנסה ( ב ) שהופקה או שנצמחה בישראל.';
 
 function seif3AbProposal() {
   return {
@@ -39,14 +40,7 @@ function seif3AbProposal() {
     ],
     contract: 'tax_knowledge_proposal_v1',
     evidence: {
-      quotes: [
-        {
-          end: 93,
-          role: 'verbatim_from_draft',
-          text: 'הכנסתו של אזרח ישראלי שהופקה או שנצמחה באזור, יראו אותה כהכנסה ( ב ) שהופקה או שנצמחה בישראל.',
-          start: 0,
-        },
-      ],
+      quotes: [{ end: 93, role: 'verbatim_from_draft', text: QUOTE, start: 0 }],
       citations: [{ locator: '3א(ב)', tax_source_id: 'afae0b6c-3a0d-444e-bd38-b44c25e23e52' }],
       source_role: 'reviewed_owner_draft',
       legal_locator: {
@@ -61,10 +55,8 @@ function seif3AbProposal() {
     uncertainties: [
       {
         code: 'cannot_determine',
-        detail:
-          'No tax fact definitions were provided, so the rule\'s conditions cannot be encoded without inventing missing fact keys.',
-        message:
-          'Applicability predicates cannot be determined from this draft within the available controlled context.',
+        detail: 'No tax fact definitions were provided, so the rule\'s conditions cannot be encoded without inventing missing fact keys.',
+        message: 'Applicability predicates cannot be determined from this draft within the available controlled context.',
         subject: { key: 'rule_1', kind: 'rule' },
         severity: 'blocks_rule_publication',
       },
@@ -85,18 +77,8 @@ function selectedMeta() {
   };
 }
 
-test('TAX-643 empty owner view is bilingual and does not invent a proposal', () => {
-  const view = emptyTaxKnowledgeProposalOwnerView();
-  assert.equal(view.available, false);
-  assert.equal(view.heading, 'AI Proposal / הצעת AI');
-  assert.equal(view.empty_title, 'No AI proposal yet / טרם נוצרה הצעת AI');
-  assert.match(view.empty_detail, /does not generate/i);
-  assert.equal(view.understanding_summary, '');
-  assert.equal(buildTaxKnowledgeProposalOwnerView({ selected: null, proposal_json: null, validation: null }).available, false);
-});
-
-test('TAX-643 owner view explains 3א(ב) deeming rule and missing Fact Dictionary without raw JSON', () => {
-  const validation = summarizeTaxKnowledgeProposalValidation({
+function validation() {
+  return summarizeTaxKnowledgeProposalValidation({
     valid_schema: true,
     publication_eligible: false,
     owner_approval_allowed: false,
@@ -107,10 +89,8 @@ test('TAX-643 owner view explains 3א(ב) deeming rule and missing Fact Dictiona
         code: 'cannot_determine',
         severity: 'blocks_rule_publication',
         subject: { kind: 'rule', key: 'rule_1' },
-        message:
-          'Applicability predicates cannot be determined from this draft within the available controlled context.',
-        detail:
-          'No tax fact definitions were provided, so the rule\'s conditions cannot be encoded without inventing missing fact keys.',
+        message: 'Applicability predicates cannot be determined from this draft within the available controlled context.',
+        detail: 'No tax fact definitions were provided, so the rule\'s conditions cannot be encoded without inventing missing fact keys.',
       },
     ],
     resolved_fact_bindings: [],
@@ -125,30 +105,47 @@ test('TAX-643 owner view explains 3א(ב) deeming rule and missing Fact Dictiona
       quotes: [{ index: 0, role: 'verbatim_from_draft', matched: true, message: null }],
     },
   } satisfies TaxKnowledgeProposalV1ValidationResult);
+}
 
+test('TAX-644A empty owner view is he/ru/en and does not invent a proposal', () => {
+  const view = emptyTaxKnowledgeProposalOwnerView();
+  assert.equal(view.available, false);
+  assert.equal(view.default_locale, 'he');
+  assert.deepEqual(view.locale_options.map((row) => row.code), ['he', 'ru', 'en']);
+  assert.equal(view.by_locale.he.empty_title, 'טרם נוצרה הצעת AI');
+  assert.equal(view.by_locale.ru.empty_title, 'Предложение AI ещё не создано');
+  assert.equal(view.by_locale.en.empty_title, 'No AI proposal yet');
+  assert.equal(buildTaxKnowledgeProposalOwnerView({ selected: null, proposal_json: null, validation: null }).available, false);
+});
+
+test('TAX-644A owner view uses typed outcomes, keeps Hebrew quote, and omits empty sections from compact meaning', () => {
   const view = buildTaxKnowledgeProposalOwnerView({
     selected: selectedMeta(),
     proposal_json: seif3AbProposal(),
-    validation,
+    validation: validation(),
   });
 
   assert.equal(view.available, true);
-  assert.equal(view.status_label, 'Proposed / מוצע');
-  assert.equal(view.revision_label, 'Revision 1');
-  assert.equal(view.rules[0]?.title.includes('Israeli citizen'), true);
-  assert.match(view.rules[0]?.statement ?? '', /treated as income produced or accrued in Israel/);
-  assert.equal(view.rules[0]?.applicability_status_label, 'Cannot determine / לא ניתן לקבוע');
-  assert.equal(view.rules[0]?.applies_if, null);
-  assert.equal(view.facts.length, 0);
-  assert.match(view.understanding_summary, /AI extracted a legal rule/);
-  assert.match(view.understanding_summary, /treated as income produced or accrued in Israel/);
-  assert.match(view.understanding_summary, /Applicability cannot yet be determined/);
-  assert.match(view.understanding_summary, /No tax fact definitions were provided/);
-  assert.match(view.publication_eligible_label, /^No /);
-  assert.match(view.owner_approval_allowed_label, /^No /);
-  assert.equal(view.evidence_locator, '3א(ב)');
-  assert.equal(view.evidence_quotes[0]?.detail?.includes('אזרח ישראלי'), true);
-  assert.equal(view.uncertainties.length, 1);
-  assert.match(view.uncertainties[0]?.detail ?? '', /Fact Dictionary|tax fact definitions/i);
-  assert.equal(view.technical_rows.some((row) => row.value === PROPOSAL_ID), true);
+  assert.equal(view.default_locale, 'he');
+  assert.equal(view.source.identifier, '3א(ב)');
+  assert.equal(view.source.quote, QUOTE);
+  assert.equal(view.by_locale.he.question, 'מה ה-AI הבין מהחוק?');
+  assert.equal(view.by_locale.ru.question, 'Что AI понял из закона?');
+  assert.equal(view.by_locale.en.question, 'What did AI understand from this law?');
+  assert.match(view.by_locale.he.explanation, /כלל משפטי/);
+  assert.match(view.by_locale.ru.explanation, /правовую норму/);
+  assert.match(view.by_locale.en.explanation, /legal rule/);
+  assert.doesNotMatch(view.by_locale.he.explanation, /Israeli citizen|3א\(ב\)|אזרח ישראלי/);
+  assert.doesNotMatch(view.by_locale.ru.explanation, /Israeli citizen|Area/);
+  assert.doesNotMatch(view.by_locale.en.explanation, /Israeli citizen|Area/);
+  assert.equal(view.by_locale.he.applicability, 'לא ניתן לקבוע תחולה.');
+  assert.equal(view.by_locale.en.applicability, 'Applicability cannot yet be determined.');
+  assert.match(view.by_locale.he.uncertainty ?? '', /Fact Dictionary/);
+  assert.equal(view.by_locale.he.warning_tone, 'blocking');
+  assert.equal(view.details.facts.length, 0);
+  assert.equal(view.details.legal_values.length, 0);
+  assert.equal(view.details.relationships.length, 0);
+  assert.equal(view.details.calculations.length, 0);
+  assert.equal(view.details.technical_rows.some((row) => row.value === PROPOSAL_ID), true);
+  assert.equal(view.details.rules[0]?.statement.includes('Israeli citizen'), true);
 });
