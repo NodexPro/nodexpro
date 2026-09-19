@@ -68,6 +68,7 @@ const LEGAL_TEXT_DRAFT_COMMANDS = new Set([
   'set_tax_knowledge_proposal_review_status',
   'create_corrected_tax_knowledge_proposal',
   'publish_tax_knowledge_proposal_to_canonical_draft',
+  'select_legal_training_document',
 ]);
 
 function trainerSelectionFromAggregate(aggregate: unknown): { documentId: string; draftId: string } {

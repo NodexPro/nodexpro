@@ -67,6 +67,7 @@ export function resolveOwnerLegalValueRulesetContextFromTables(params: {
     (pack) => String(pack.country_code ?? '').toUpperCase() === countryCode && String(pack.status ?? '') === 'enabled',
   );
 
+  const qualifying: OwnerLegalValueRulesetContext[] = [];
   for (const pack of enabledPacks) {
     const packId = String(pack.id ?? '');
     if (!packId) continue;
@@ -77,7 +78,7 @@ export function resolveOwnerLegalValueRulesetContextFromTables(params: {
     if (!ruleset?.id) continue;
     const rulesetCode = String(ruleset.ruleset_code ?? '');
     const rulesetVersion = String(ruleset.ruleset_version ?? '');
-    return {
+    qualifying.push({
       country_code: countryCode,
       country_name: countryName,
       country_pack_id: packId,
@@ -91,14 +92,45 @@ export function resolveOwnerLegalValueRulesetContextFromTables(params: {
         rulesetCode,
         rulesetVersion,
       }),
-    };
+    });
   }
 
-  return null;
+  return qualifying.length === 1 ? qualifying[0] ?? null : null;
 }
 
 export function ownerLegalValueRulesetMissingMessage(countryCode: string): string {
   return `No active Country Pack Ruleset exists for ${countryCode}.`;
+}
+
+export function ownerLegalValueRulesetAmbiguousMessage(countryCode: string): string {
+  return `Multiple enabled Country Packs have an active ruleset for ${countryCode}; Owner Legal Values cannot choose among them.`;
+}
+
+export function ownerLegalValueRulesetResolutionError(params: {
+  countryCode: string;
+  effectiveDate: string;
+  countries?: CountryRow[];
+  countryPacks?: PackRow[];
+  rulesets?: RulesetRow[];
+}): string | null {
+  const countryCode = params.countryCode.trim().toUpperCase();
+  const date = params.effectiveDate.trim() || new Date().toISOString().slice(0, 10);
+  if (!countryCode) return ownerLegalValueRulesetMissingMessage(params.countryCode);
+  const enabledPacks = (params.countryPacks ?? []).filter(
+    (pack) => String(pack.country_code ?? '').toUpperCase() === countryCode && String(pack.status ?? '') === 'enabled',
+  );
+  let qualifying = 0;
+  for (const pack of enabledPacks) {
+    const packId = String(pack.id ?? '');
+    if (!packId) continue;
+    const hasRuleset = (params.rulesets ?? []).some(
+      (ruleset) => String(ruleset.country_pack_id ?? '') === packId && isRulesetEffectiveOnDate(ruleset, date),
+    );
+    if (hasRuleset) qualifying += 1;
+  }
+  if (qualifying === 1) return null;
+  if (qualifying > 1) return ownerLegalValueRulesetAmbiguousMessage(countryCode);
+  return ownerLegalValueRulesetMissingMessage(countryCode);
 }
 
 export function buildOwnerLegalValueRulesetLabel(params: {

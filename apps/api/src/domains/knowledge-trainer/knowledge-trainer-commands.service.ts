@@ -37,6 +37,7 @@ import {
   setTaxKnowledgeProposalReviewStatus,
 } from './knowledge-trainer-tax-knowledge-proposal.service.js';
 import { generateTaxKnowledgeProposal } from './knowledge-trainer-generate-tax-knowledge-proposal.service.js';
+import { persistOwnerWorkspaceSelectedDocument } from './knowledge-trainer-workspace-selection.service.js';
 import { ensureTaxKnowledgeProposalOwnerPresentations } from './tax-knowledge-proposal-owner-presentation.service.js';
 import {
   createOwnerLegalMaterialSignedUrl,
@@ -237,6 +238,11 @@ async function handleUpload(
   throwIfTrainerSchemaMissing(existingError);
   if (existingError) throw existingError;
   if (existing) {
+    await persistOwnerWorkspaceSelectedDocument({
+      countryCode: source.country_code,
+      documentId: String(existing.id),
+      actorUserId: ctx.user.id,
+    });
     await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_DOCUMENT_UPLOADED, 'legal_ingestion_document', String(existing.id), {
       country_code: source.country_code,
       tax_source_id: source.id,
@@ -300,6 +306,11 @@ async function handleUpload(
     provenance_type: provenanceType,
     malware_scan_status: MALWARE_SCAN_STATUS_V1,
   });
+  await persistOwnerWorkspaceSelectedDocument({
+    countryCode: source.country_code,
+    documentId: String(document.id),
+    actorUserId: ctx.user.id,
+  });
   await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_EXTRACTION_STARTED, 'legal_ingestion_job', String(document.id), {
     country_code: source.country_code,
     document_id: document.id,
@@ -311,6 +322,27 @@ async function handleUpload(
     command: 'upload_legal_training_document',
     duplicate: false,
     refreshed: await refreshed(ctx, source.country_code, String(document.id)),
+  };
+}
+
+async function handleSelectLegalTrainingDocument(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<KnowledgeTrainerCommandResponse> {
+  const document = await loadDocument(asUuid(payload.legal_ingestion_document_id, 'legal_ingestion_document_id'));
+  await persistOwnerWorkspaceSelectedDocument({
+    countryCode: String(document.country_code),
+    documentId: String(document.id),
+    actorUserId: ctx.user.id,
+  });
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_DOCUMENT_SELECTED, 'legal_ingestion_document', String(document.id), {
+    country_code: document.country_code,
+    document_id: document.id,
+  });
+  return {
+    ok: true,
+    command: 'select_legal_training_document',
+    refreshed: await refreshed(ctx, String(document.country_code), String(document.id)),
   };
 }
 
@@ -821,6 +853,8 @@ export async function executeKnowledgeTrainerCommand(
         payload,
         publishTaxKnowledgeProposalToCanonicalDraft,
       );
+    case 'select_legal_training_document':
+      return handleSelectLegalTrainingDocument(ctx, payload);
     default:
       throw badRequest(`Unsupported knowledge-trainer command: ${command}`);
   }

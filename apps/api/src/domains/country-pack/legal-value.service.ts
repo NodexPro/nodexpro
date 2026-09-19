@@ -5,6 +5,7 @@ import { listCountryPacksByCountry } from './country-pack.service.js';
 import { resolveActiveRulesetByDate } from './ruleset.service.js';
 import {
   buildOwnerLegalValueRulesetLabel,
+  ownerLegalValueRulesetAmbiguousMessage,
   ownerLegalValueRulesetMissingMessage,
   type OwnerLegalValueRulesetContext,
 } from './owner-legal-value-ruleset.pure.js';
@@ -104,26 +105,32 @@ export async function resolveOwnerLegalValueRulesetContextForCountry(params: {
   ]);
 
   const enabledPacks = packs.filter((pack) => pack.status === 'enabled');
+  const matches: Array<{ pack: (typeof enabledPacks)[number]; ruleset: NonNullable<Awaited<ReturnType<typeof resolveActiveRulesetByDate>>> }> = [];
   for (const pack of enabledPacks) {
     const ruleset = await resolveActiveRulesetByDate(pack.id, date);
-    if (!ruleset) continue;
-    return {
-      country_code: countryCode,
-      country_name: String(countryRow?.name ?? countryCode),
-      country_pack_id: pack.id,
-      country_pack_name: pack.name,
-      active_ruleset_id: ruleset.id,
-      ruleset_code: ruleset.ruleset_code,
-      ruleset_version: ruleset.ruleset_version,
-      ruleset_label: buildOwnerLegalValueRulesetLabel({
-        countryName: String(countryRow?.name ?? countryCode),
-        packName: pack.name,
-        rulesetCode: ruleset.ruleset_code,
-        rulesetVersion: ruleset.ruleset_version,
-      }),
-    };
+    if (ruleset) matches.push({ pack, ruleset });
   }
-
-  throw badRequest(ownerLegalValueRulesetMissingMessage(countryCode));
+  if (matches.length > 1) {
+    throw badRequest(ownerLegalValueRulesetAmbiguousMessage(countryCode));
+  }
+  const match = matches[0];
+  if (!match) {
+    throw badRequest(ownerLegalValueRulesetMissingMessage(countryCode));
+  }
+  return {
+    country_code: countryCode,
+    country_name: String(countryRow?.name ?? countryCode),
+    country_pack_id: match.pack.id,
+    country_pack_name: match.pack.name,
+    active_ruleset_id: match.ruleset.id,
+    ruleset_code: match.ruleset.ruleset_code,
+    ruleset_version: match.ruleset.ruleset_version,
+    ruleset_label: buildOwnerLegalValueRulesetLabel({
+      countryName: String(countryRow?.name ?? countryCode),
+      packName: match.pack.name,
+      rulesetCode: match.ruleset.ruleset_code,
+      rulesetVersion: match.ruleset.ruleset_version,
+    }),
+  };
 }
 

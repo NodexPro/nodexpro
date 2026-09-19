@@ -225,6 +225,7 @@ export const AUDIT_ACTIONS = {
   TAX_RULE_LEGAL_NODE_LINKED: 'tax_rule_legal_node_linked',
   TAX_RULE_LEGAL_NODE_UNLINKED: 'tax_rule_legal_node_unlinked',
   LEGAL_TRAINING_DOCUMENT_UPLOADED: 'legal_training_document_uploaded',
+  LEGAL_TRAINING_DOCUMENT_SELECTED: 'legal_training_document_selected',
   LEGAL_TRAINING_EXTRACTION_STARTED: 'legal_training_extraction_started',
   LEGAL_TRAINING_PAGE_RETRIED: 'legal_training_page_retried',
   LEGAL_TRAINING_STRUCTURE_REBUILT: 'legal_training_structure_rebuilt',

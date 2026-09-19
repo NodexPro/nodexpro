@@ -90,6 +90,7 @@ export async function resolveCountryForOwnerLegalCommand(
     throw badRequest('tax_source_id is required');
   }
   if (
+    command === 'select_legal_training_document' ||
     command === 'start_legal_document_extraction' ||
     command === 'retry_legal_document_page' ||
     command === 'rebuild_legal_structure_candidates' ||

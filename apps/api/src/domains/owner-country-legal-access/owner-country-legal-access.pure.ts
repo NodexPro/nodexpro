@@ -122,6 +122,10 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     return 'legal_sources.manage';
   }
 
+  if (command === 'select_legal_training_document') {
+    return 'legal_knowledge.view';
+  }
+
   if (
     command.startsWith('create_legal_value') ||
     command.startsWith('update_legal_value') ||

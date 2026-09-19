@@ -2850,6 +2850,23 @@
   color: #0f766e;
 }
 
+.nx-legal-trainer-document-select {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 420px;
+}
+
+.nx-legal-trainer-document-select .nx-input {
+  height: auto;
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 6px;
+}
+
 .nx-legal-draft-ai-proposal-correct {
   display: grid;
   gap: 6px;

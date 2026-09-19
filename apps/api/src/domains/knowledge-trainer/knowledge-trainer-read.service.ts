@@ -31,6 +31,8 @@ import { attachStructureReviewModel, describeStoredLayoutEvidence } from './know
 import { emptySourceNoteSummary, parseSourceBBox, summarizeSourceNotes } from './knowledge-trainer-source-notes.pure.js';
 import { structureRunStatusLabel } from './knowledge-trainer-structure-run.pure.js';
 import { createOwnerLegalMaterialSignedUrl } from './knowledge-trainer-storage.service.js';
+import { resolveKnowledgeTrainerSelectedDocumentId } from './knowledge-trainer-workspace-selection.pure.js';
+import { loadOwnerWorkspaceSelectedDocumentId } from './knowledge-trainer-workspace-selection.service.js';
 import {
   buildOriginalFileAccess,
   decodeStructureAnalysis,
@@ -175,7 +177,65 @@ export async function buildKnowledgeTrainerSlice(
   const filtered = opts?.tax_source_id
     ? summaries.filter((row) => row.tax_source_id === opts.tax_source_id)
     : summaries;
-  const selectedId = opts?.document_id || filtered[0]?.id || null;
+  const persistedId = await loadOwnerWorkspaceSelectedDocumentId(countryCode);
+  const extraIds = [opts?.document_id, persistedId].filter((id): id is string => Boolean(id && !filtered.some((row) => row.id === id)));
+  if (extraIds.length) {
+    const extraDocs = await supabaseAdmin
+      .from('legal_ingestion_documents')
+      .select('id, tax_source_id, original_filename, input_type, provenance_type, created_at, storage_bucket, storage_key')
+      .eq('country_code', countryCode)
+      .in('id', extraIds);
+    if (extraDocs.error) throw extraDocs.error;
+    let extraJobs: { data: Array<Record<string, unknown>> | null; error: { message?: string; code?: string } | null } =
+      extraDocs.data?.length
+        ? await supabaseAdmin
+            .from('legal_ingestion_jobs')
+            .select(jobSelectWithRun)
+            .in('document_id', extraDocs.data.map((row) => String(row.id)))
+            .order('created_at', { ascending: false })
+        : { data: [], error: null };
+    if (extraJobs.error && isSupabaseMissingColumnError(extraJobs.error, 'active_structure_run_id')) {
+      extraJobs = extraDocs.data?.length
+        ? await supabaseAdmin
+            .from('legal_ingestion_jobs')
+            .select(jobSelectLegacy)
+            .in('document_id', extraDocs.data.map((row) => String(row.id)))
+            .order('created_at', { ascending: false })
+        : { data: [], error: null };
+    }
+    if (extraJobs.error) throw extraJobs.error;
+    for (const job of extraJobs.data ?? []) {
+      const documentId = String(job.document_id);
+      if (!latestJobByDocument.has(documentId)) latestJobByDocument.set(documentId, job);
+    }
+    for (const row of extraDocs.data ?? []) {
+      if (filtered.some((existing) => existing.id === String(row.id))) continue;
+      const job = latestJobByDocument.get(String(row.id));
+      const runSchema = Boolean(job && Object.prototype.hasOwnProperty.call(job, 'active_structure_run_id'));
+      const visibleCount =
+        runSchema && !job?.active_structure_run_id ? 0 : Number(job?.structure_candidate_count ?? 0);
+      filtered.push({
+        id: String(row.id),
+        tax_source_id: String(row.tax_source_id),
+        original_filename: String(row.original_filename),
+        input_type: row.input_type as KnowledgeTrainerDocumentSummaryDto['input_type'],
+        provenance_type: String(row.provenance_type),
+        page_count: Number(job?.page_count ?? 0),
+        extracted_page_count: Number(job?.extracted_page_count ?? 0),
+        needs_ocr_page_count: Number(job?.needs_ocr_page_count ?? 0),
+        failed_page_count: Number(job?.failed_page_count ?? 0),
+        structure_candidate_count: visibleCount,
+        job_status: String(job?.status ?? 'uploaded') as LegalIngestionJobStatus,
+        job_status_label: jobStatusLabel(String(job?.status ?? 'uploaded')),
+        duplicate_of_existing: false,
+      });
+    }
+  }
+  const selectedId = resolveKnowledgeTrainerSelectedDocumentId({
+    requestedDocumentId: opts?.document_id,
+    persistedDocumentId: persistedId,
+    inventoryIds: filtered.map((row) => row.id),
+  });
   const selectedSummary = filtered.find((row) => row.id === selectedId) ?? null;
   const selectedJob = selectedId ? latestJobByDocument.get(selectedId) : null;
 
@@ -503,6 +563,9 @@ export async function buildKnowledgeTrainerSlice(
         file_name: 'string',
         mime_type: 'application/pdf',
         provenance_type: 'existing provenance taxonomy',
+      }),
+      action('select_legal_training_document', filtered.length > 0, {
+        legal_ingestion_document_id: 'uuid',
       }),
       action('retry_legal_document_page', true, {
         legal_ingestion_document_id: 'uuid',

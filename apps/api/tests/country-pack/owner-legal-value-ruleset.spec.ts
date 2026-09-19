@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import {
+  ownerLegalValueRulesetAmbiguousMessage,
   ownerLegalValueRulesetMissingMessage,
+  ownerLegalValueRulesetResolutionError,
   resolveOwnerLegalValueRulesetContextFromTables,
 } from '../../src/domains/country-pack/owner-legal-value-ruleset.pure.js';
 import { buildOwnerLegalValueEditorDescriptor, IL_INCOME_ISSUE_MONTH_WINDOW_VALUE_KEY } from '../../src/domains/country-pack/owner-legal-value-editor.pure.js';
@@ -83,6 +85,55 @@ test('create version action disabled when no active ruleset exists', () => {
   const createAction = model.rows[0]?.actions.find((a) => a.action_key === 'create_legal_value_version');
   assert.equal(createAction?.enabled, false);
   assert.equal(createAction?.disabled_reason, ownerLegalValueRulesetMissingMessage('IL'));
+});
+
+test('TAX-649A does not pick a newer enabled test pack when more than one pack qualifies', () => {
+  const context = resolveOwnerLegalValueRulesetContextFromTables({
+    countryCode: 'IL',
+    effectiveDate: '2026-07-01',
+    countries: IL_CATALOG.countries,
+    countryPacks: [
+      { id: 'pack-test-newer', country_code: 'IL', name: 'tk648c newer pack', status: 'enabled' },
+      ...IL_CATALOG.countryPacks,
+    ],
+    rulesets: [
+      {
+        id: 'ruleset-test-newer',
+        country_pack_id: 'pack-test-newer',
+        ruleset_code: 'tk648c_rs',
+        ruleset_version: '1.0.0',
+        status: 'active',
+        effective_from: '2020-01-01',
+        effective_to: null,
+      },
+      ...IL_CATALOG.rulesets,
+    ],
+  });
+  assert.equal(context, null);
+  assert.equal(
+    ownerLegalValueRulesetResolutionError({
+      countryCode: 'IL',
+      effectiveDate: '2026-07-01',
+      countries: IL_CATALOG.countries,
+      countryPacks: [
+        { id: 'pack-test-newer', country_code: 'IL', name: 'tk648c newer pack', status: 'enabled' },
+        ...IL_CATALOG.countryPacks,
+      ],
+      rulesets: [
+        {
+          id: 'ruleset-test-newer',
+          country_pack_id: 'pack-test-newer',
+          ruleset_code: 'tk648c_rs',
+          ruleset_version: '1.0.0',
+          status: 'active',
+          effective_from: '2020-01-01',
+          effective_to: null,
+        },
+        ...IL_CATALOG.rulesets,
+      ],
+    }),
+    ownerLegalValueRulesetAmbiguousMessage('IL'),
+  );
 });
 
 test('command path auto-resolves ruleset when UUID omitted', () => {

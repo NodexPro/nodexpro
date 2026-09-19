@@ -78,6 +78,7 @@ export function OwnerKnowledgeTrainerPanel({
           onUpload={onUpload}
         />
       ) : null}
+      <TrainerDocumentSelector trainer={trainer} busy={busy} onCommand={onCommand} />
       {trainer.selected_document ? (
         <TrainerReview
           taxKnowledge={taxKnowledge}
@@ -207,6 +208,43 @@ function UploadMaterialModal({
         </form>
       </div>
     </div>
+  );
+}
+
+function TrainerDocumentSelector({
+  trainer,
+  busy,
+  onCommand,
+}: {
+  trainer: OwnerKnowledgeTrainerSlice;
+  busy: boolean;
+  onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
+}) {
+  const selectAction = trainer.allowed_actions.find((row) => row.action_key === 'select_legal_training_document');
+  if (!selectAction || trainer.documents.length === 0) return null;
+  const selectedId = trainer.selected_document?.id ?? '';
+  return (
+    <label className="nx-legal-trainer-document-select">
+      Document
+      <select
+        className="nx-input"
+        value={selectedId}
+        disabled={busy || selectAction.enabled !== true}
+        aria-label="Select Knowledge Trainer document"
+        onChange={(event) => {
+          const legal_ingestion_document_id = event.target.value;
+          if (!legal_ingestion_document_id || legal_ingestion_document_id === selectedId) return;
+          void onCommand('select_legal_training_document', { legal_ingestion_document_id });
+        }}
+      >
+        {selectedId ? null : <option value="">No document selected</option>}
+        {trainer.documents.map((row) => (
+          <option key={row.id} value={row.id} dir="auto">
+            {row.original_filename || row.id}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

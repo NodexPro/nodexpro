@@ -242,6 +242,7 @@ test('worker isolation forbids canonical legal tables and Owner drafts', () => {
 });
 
 test('upload/accept are not activate; reject is review; edit is draft_edit', () => {
+  assert.equal(capabilityRequiredForOwnerCommand('select_legal_training_document'), 'legal_knowledge.view');
   assert.equal(capabilityRequiredForOwnerCommand('upload_legal_training_document'), 'legal_sources.manage');
   assert.equal(capabilityRequiredForOwnerCommand('rebuild_legal_structure_candidates'), 'legal_sources.manage');
   assert.equal(capabilityRequiredForOwnerCommand('reextract_legal_document_layout'), 'legal_sources.manage');

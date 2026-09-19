@@ -4,7 +4,7 @@
  */
 
 import {
-  ownerLegalValueRulesetMissingMessage,
+  ownerLegalValueRulesetResolutionError,
   resolveOwnerLegalValueRulesetContextFromTables,
   type OwnerLegalValueRulesetContext,
 } from './owner-legal-value-ruleset.pure.js';
@@ -169,6 +169,19 @@ function buildIssueMonthWindowEditor(params: {
   versionContext?: Record<string, unknown>;
   countryCode: string;
   rulesetContext: OwnerLegalValueRulesetContext | null;
+  countryCatalog?: {
+    countries?: Array<{ code?: string; name?: string }>;
+    country_packs?: Array<{ id?: string; country_code?: string; name?: string; status?: string }>;
+    rulesets?: Array<{
+      id?: string;
+      country_pack_id?: string;
+      ruleset_code?: string;
+      ruleset_version?: string;
+      status?: string;
+      effective_from?: string;
+      effective_to?: string | null;
+    }>;
+  };
 }): OwnerLegalValueEditorDescriptor {
   const parsed =
     parseIssueMonthWindowFromLegalPayload(params.currentPayload) ?? IL_ISSUE_MONTH_WINDOW_FALLBACK;
@@ -220,7 +233,13 @@ function buildIssueMonthWindowEditor(params: {
     active_ruleset_id: rulesetContext?.active_ruleset_id ?? null,
     ruleset_resolution_error: rulesetContext
       ? null
-      : ownerLegalValueRulesetMissingMessage(params.countryCode),
+      : ownerLegalValueRulesetResolutionError({
+          countryCode: params.countryCode,
+          effectiveDate,
+          countries: params.countryCatalog?.countries,
+          countryPacks: params.countryCatalog?.country_packs,
+          rulesets: params.countryCatalog?.rulesets,
+        }),
   };
 }
 
@@ -267,6 +286,7 @@ export function buildOwnerLegalValueEditorDescriptor(params: {
       versionContext,
       countryCode,
       rulesetContext: resolvedRulesetContext,
+      countryCatalog: params.country_catalog,
     });
   }
   return null;
