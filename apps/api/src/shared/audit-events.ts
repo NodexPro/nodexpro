@@ -254,6 +254,8 @@ export const AUDIT_ACTIONS = {
   LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_CORRECTED: 'legal_training_tax_knowledge_proposal_corrected',
   LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_OWNER_PRESENTATION_ENSURED:
     'legal_training_tax_knowledge_proposal_owner_presentation_ensured',
+  LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_PUBLISHED_TO_CANONICAL_DRAFT:
+    'legal_training_tax_knowledge_proposal_published_to_canonical_draft',
   AI_PROVIDER_CREATED: 'ai_provider_created',
   AI_PROVIDER_CONFIGURATION_CHANGED: 'ai_provider_configuration_changed',
   AI_PROVIDER_CREDENTIAL_SET: 'ai_provider_credential_set',
