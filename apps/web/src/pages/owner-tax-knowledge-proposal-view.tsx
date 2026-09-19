@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
+  OwnerTaxKnowledgeProposalCreateAction,
   OwnerTaxKnowledgeProposalLocaleView,
   OwnerTaxKnowledgeProposalOwnerLocale,
   OwnerTaxKnowledgeProposalOwnerView,
@@ -46,6 +47,10 @@ function parseLocaleView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeP
     question: asString(raw.question) || fallback.question,
     empty_title: asString(raw.empty_title) || fallback.empty_title,
     empty_detail: asString(raw.empty_detail) || fallback.empty_detail,
+    create_label: asString(raw.create_label) || fallback.create_label,
+    create_disabled_reason: asString(raw.create_disabled_reason) || fallback.create_disabled_reason,
+    analyzing_label: asString(raw.analyzing_label) || fallback.analyzing_label,
+    generation_failed: asString(raw.generation_failed) || fallback.generation_failed,
     explanation: asString(raw.explanation),
     applicability: asString(raw.applicability),
     uncertainty: asNullableString(raw.uncertainty),
@@ -70,6 +75,16 @@ function parseRules(raw: unknown): OwnerTaxKnowledgeProposalOwnerViewRule[] {
     }));
 }
 
+function parseCreateAction(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeProposalCreateAction): OwnerTaxKnowledgeProposalCreateAction {
+  if (!raw) return fallback;
+  return {
+    action_key: 'generate_tax_knowledge_proposal',
+    visible: raw.visible === true,
+    enabled: raw.enabled === true,
+    legal_text_draft_id: asNullableString(raw.legal_text_draft_id),
+  };
+}
+
 function parseOwnerView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeProposalOwnerView): OwnerTaxKnowledgeProposalOwnerView {
   if (!raw) return fallback;
   const byRaw = asRecord(raw.by_locale);
@@ -77,6 +92,7 @@ function parseOwnerView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgePr
   const sourceRaw = asRecord(raw.source);
   return {
     available: raw.available === true,
+    has_proposal: raw.has_proposal === true,
     default_locale: parseLocaleCode(raw.default_locale),
     locale_options: Array.isArray(raw.locale_options)
       ? raw.locale_options
@@ -89,6 +105,7 @@ function parseOwnerView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgePr
       identifier: asNullableString(sourceRaw?.identifier),
       quote: asNullableString(sourceRaw?.quote),
     },
+    create: parseCreateAction(asRecord(raw.create), fallback.create),
     by_locale: {
       he: parseLocaleView(asRecord(byRaw?.he), fallback.by_locale.he),
       ru: parseLocaleView(asRecord(byRaw?.ru), fallback.by_locale.ru),
@@ -160,39 +177,85 @@ function DetailList({ title, items }: { title: string; items: OwnerTaxKnowledgeP
 
 export function OwnerTaxKnowledgeProposalView({
   proposals,
+  onCommand,
 }: {
   proposals: OwnerTaxKnowledgeProposalSlice;
+  onCommand?: (command: string, payload: UnknownRecord) => Promise<void>;
 }) {
   const view = proposals.owner_view;
   const [locale, setLocale] = useState<OwnerTaxKnowledgeProposalOwnerLocale>(view.default_locale || 'he');
+  const [creating, setCreating] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const inFlight = useRef(false);
 
   useEffect(() => {
     setLocale(view.default_locale || 'he');
-  }, [view.default_locale, view.available, view.source.identifier]);
+  }, [view.default_locale, view.available, view.source.identifier, view.create.legal_text_draft_id]);
+
+  useEffect(() => {
+    setFailed(false);
+    setCreating(false);
+    inFlight.current = false;
+  }, [view.has_proposal, view.create.legal_text_draft_id]);
 
   const selected = view.locale_options.some((row) => row.code === locale) ? locale : view.default_locale;
   const loc = view.by_locale[selected] ?? view.by_locale.he;
   const details = view.details;
+  const createDisabled = !view.create.enabled || creating || inFlight.current || !onCommand;
+
+  async function createProposal(): Promise<void> {
+    if (inFlight.current || !view.create.enabled || !view.create.legal_text_draft_id || !onCommand) return;
+    inFlight.current = true;
+    setCreating(true);
+    setFailed(false);
+    try {
+      await onCommand(view.create.action_key, { legal_text_draft_id: view.create.legal_text_draft_id });
+    } catch {
+      setFailed(true);
+    } finally {
+      inFlight.current = false;
+      setCreating(false);
+    }
+  }
 
   return (
     <section className="nx-legal-draft-ai-proposal" dir={loc.dir}>
-      <div className="nx-legal-draft-ai-proposal-langs" dir="ltr">
-        {view.locale_options.map((option) => (
+      <div className="nx-legal-draft-ai-proposal-toolbar">
+        <div className="nx-legal-draft-ai-proposal-langs" dir="ltr">
+          {view.locale_options.map((option) => (
+            <button
+              key={option.code}
+              type="button"
+              className="nx-btn nx-btn-taxes-compact"
+              aria-pressed={selected === option.code}
+              onClick={() => setLocale(option.code)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        {view.create.visible ? (
           <button
-            key={option.code}
             type="button"
-            className="nx-btn nx-btn-taxes-compact"
-            aria-pressed={selected === option.code}
-            onClick={() => setLocale(option.code)}
+            className="nx-btn nx-btn-taxes-compact nx-legal-draft-ai-proposal-create"
+            disabled={createDisabled}
+            onClick={() => void createProposal()}
           >
-            {option.label}
+            {creating ? loc.analyzing_label : loc.create_label}
           </button>
-        ))}
+        ) : null}
       </div>
+      {view.create.visible && !view.create.enabled && !creating ? (
+        <div className="nx-legal-draft-ai-proposal-gate">{loc.create_disabled_reason}</div>
+      ) : null}
+      {creating ? <div className="nx-legal-draft-ai-proposal-analyzing">{loc.analyzing_label}</div> : null}
+      {failed && !view.has_proposal ? (
+        <div className="nx-legal-draft-ai-proposal-error">{loc.generation_failed}</div>
+      ) : null}
       {!view.available ? (
         <div className="nx-legal-draft-ai-proposal-empty">
           <div>{loc.empty_title}</div>
-          {loc.empty_detail ? <div>{loc.empty_detail}</div> : null}
+          {loc.empty_detail && !creating ? <div>{loc.empty_detail}</div> : null}
         </div>
       ) : (
         <>

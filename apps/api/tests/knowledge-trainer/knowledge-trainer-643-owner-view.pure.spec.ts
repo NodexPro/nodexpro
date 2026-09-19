@@ -110,12 +110,62 @@ function validation() {
 test('TAX-644A empty owner view is he/ru/en and does not invent a proposal', () => {
   const view = emptyTaxKnowledgeProposalOwnerView();
   assert.equal(view.available, false);
+  assert.equal(view.has_proposal, false);
+  assert.equal(view.create.visible, false);
+  assert.equal(view.create.enabled, false);
   assert.equal(view.default_locale, 'he');
   assert.deepEqual(view.locale_options.map((row) => row.code), ['he', 'ru', 'en']);
   assert.equal(view.by_locale.he.empty_title, 'טרם נוצרה הצעת AI');
-  assert.equal(view.by_locale.ru.empty_title, 'Предложение AI ещё не создано');
-  assert.equal(view.by_locale.en.empty_title, 'No AI proposal yet');
+  assert.equal(view.by_locale.ru.empty_title, 'AI Proposal ещё не создан');
+  assert.equal(view.by_locale.en.empty_title, 'No AI Proposal yet');
   assert.equal(buildTaxKnowledgeProposalOwnerView({ selected: null, proposal_json: null, validation: null }).available, false);
+});
+
+test('TAX-645 Create action comes from backend eligibility, not frontend review_status', () => {
+  const notReviewed = buildTaxKnowledgeProposalOwnerView({
+    selected: null,
+    proposal_json: null,
+    validation: null,
+    draft: { id: DRAFT_ID, review_status: 'needs_review' },
+    generate_enabled: false,
+  });
+  assert.equal(notReviewed.available, false);
+  assert.equal(notReviewed.has_proposal, false);
+  assert.equal(notReviewed.create.action_key, 'generate_tax_knowledge_proposal');
+  assert.equal(notReviewed.create.visible, true);
+  assert.equal(notReviewed.create.enabled, false);
+  assert.equal(notReviewed.create.legal_text_draft_id, DRAFT_ID);
+  assert.equal(notReviewed.by_locale.he.create_disabled_reason, 'יש לבדוק ולאשר את טיוטת החוק לפני יצירת הצעת AI');
+  assert.equal(notReviewed.by_locale.ru.create_disabled_reason, 'Сначала проверьте и отметьте текст закона как Reviewed');
+  assert.equal(notReviewed.by_locale.en.create_disabled_reason, 'Review the legal draft before creating an AI Proposal');
+  assert.equal(notReviewed.by_locale.he.create_label, '✨ צור Proposal');
+  assert.equal(notReviewed.by_locale.ru.create_label, '✨ Создать Proposal');
+  assert.equal(notReviewed.by_locale.en.create_label, '✨ Create Proposal');
+
+  const ready = buildTaxKnowledgeProposalOwnerView({
+    selected: null,
+    proposal_json: null,
+    validation: null,
+    draft: { id: DRAFT_ID, review_status: 'ready' },
+    generate_enabled: true,
+  });
+  assert.equal(ready.has_proposal, false);
+  assert.equal(ready.create.visible, true);
+  assert.equal(ready.create.enabled, true);
+  assert.equal(ready.create.legal_text_draft_id, DRAFT_ID);
+
+  const existing = buildTaxKnowledgeProposalOwnerView({
+    selected: selectedMeta(),
+    proposal_json: seif3AbProposal(),
+    validation: validation(),
+    draft: { id: DRAFT_ID, review_status: 'ready' },
+    generate_enabled: false,
+  });
+  assert.equal(existing.available, true);
+  assert.equal(existing.has_proposal, true);
+  assert.equal(existing.create.visible, false);
+  assert.equal(existing.create.enabled, false);
+  assert.doesNotMatch(JSON.stringify(existing.create), /review_status/);
 });
 
 test('TAX-644B owner view shows the actual extracted meaning and stored he/ru/en presentation', () => {

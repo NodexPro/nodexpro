@@ -624,6 +624,10 @@ export type OwnerTaxKnowledgeProposalLocaleView = {
   question: string;
   empty_title: string;
   empty_detail: string;
+  create_label: string;
+  create_disabled_reason: string;
+  analyzing_label: string;
+  generation_failed: string;
   explanation: string;
   applicability: string;
   uncertainty: string | null;
@@ -632,11 +636,20 @@ export type OwnerTaxKnowledgeProposalLocaleView = {
   details_label: string;
 };
 
+export type OwnerTaxKnowledgeProposalCreateAction = {
+  action_key: 'generate_tax_knowledge_proposal';
+  visible: boolean;
+  enabled: boolean;
+  legal_text_draft_id: string | null;
+};
+
 export type OwnerTaxKnowledgeProposalOwnerView = {
   available: boolean;
+  has_proposal: boolean;
   default_locale: OwnerTaxKnowledgeProposalOwnerLocale;
   locale_options: Array<{ code: OwnerTaxKnowledgeProposalOwnerLocale; label: string }>;
   source: { identifier: string | null; quote: string | null };
+  create: OwnerTaxKnowledgeProposalCreateAction;
   by_locale: Record<OwnerTaxKnowledgeProposalOwnerLocale, OwnerTaxKnowledgeProposalLocaleView>;
   details: {
     status_label: string;
@@ -739,12 +752,27 @@ export function emptyLegalLibrarySlice(): OwnerLegalLibrarySlice {
   };
 }
 
-function emptyLocaleView(dir: 'rtl' | 'ltr', question: string, emptyTitle: string, emptyDetail: string, citation: string, details: string): OwnerTaxKnowledgeProposalLocaleView {
+function emptyLocaleView(
+  dir: 'rtl' | 'ltr',
+  question: string,
+  emptyTitle: string,
+  emptyDetail: string,
+  createLabel: string,
+  createDisabledReason: string,
+  analyzingLabel: string,
+  generationFailed: string,
+  citation: string,
+  details: string,
+): OwnerTaxKnowledgeProposalLocaleView {
   return {
     dir,
     question,
     empty_title: emptyTitle,
     empty_detail: emptyDetail,
+    create_label: createLabel,
+    create_disabled_reason: createDisabledReason,
+    analyzing_label: analyzingLabel,
+    generation_failed: generationFailed,
     explanation: '',
     applicability: '',
     uncertainty: null,
@@ -761,6 +789,7 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
     history: [],
     owner_view: {
       available: false,
+      has_proposal: false,
       default_locale: 'he',
       locale_options: [
         { code: 'he', label: 'עברית' },
@@ -768,10 +797,49 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
         { code: 'en', label: 'English' },
       ],
       source: { identifier: null, quote: null },
+      create: {
+        action_key: 'generate_tax_knowledge_proposal',
+        visible: false,
+        enabled: false,
+        legal_text_draft_id: null,
+      },
       by_locale: {
-        he: emptyLocaleView('rtl', 'מה ה-AI הבין מהחוק?', 'טרם נוצרה הצעת AI', 'בחירת טיוטה אינה יוצרת הצעת AI.', 'ציטוט מקור', 'פרטים נוספים'),
-        ru: emptyLocaleView('ltr', 'Что AI понял из закона?', 'Предложение AI ещё не создано', 'Выбор черновика не создаёт предложение AI.', 'Цитата источника', 'Подробнее'),
-        en: emptyLocaleView('ltr', 'What did AI understand from this law?', 'No AI proposal yet', 'Selecting a Draft does not generate an AI proposal.', 'Source citation', 'Details'),
+        he: emptyLocaleView(
+          'rtl',
+          'מה ה-AI הבין מהחוק?',
+          'טרם נוצרה הצעת AI',
+          'בחירת טיוטה אינה יוצרת הצעת AI.',
+          '✨ צור Proposal',
+          'יש לבדוק ולאשר את טיוטת החוק לפני יצירת הצעת AI',
+          'AI מנתח...',
+          'יצירת הצעת AI נכשלה. נסו שוב.',
+          'ציטוט מקור',
+          'פרטים נוספים',
+        ),
+        ru: emptyLocaleView(
+          'ltr',
+          'Что AI понял из закона?',
+          'AI Proposal ещё не создан',
+          'Выбор черновика не создаёт предложение AI.',
+          '✨ Создать Proposal',
+          'Сначала проверьте и отметьте текст закона как Reviewed',
+          'AI анализирует…',
+          'Не удалось создать предложение AI. Попробуйте снова.',
+          'Цитата источника',
+          'Подробнее',
+        ),
+        en: emptyLocaleView(
+          'ltr',
+          'What did AI understand from this law?',
+          'No AI Proposal yet',
+          'Selecting a Draft does not generate an AI proposal.',
+          '✨ Create Proposal',
+          'Review the legal draft before creating an AI Proposal',
+          'AI is analyzing…',
+          'AI Proposal could not be created. Try again.',
+          'Source citation',
+          'Details',
+        ),
       },
       details: {
         status_label: '',

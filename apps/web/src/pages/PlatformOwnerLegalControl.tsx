@@ -57,6 +57,7 @@ const LEGAL_TEXT_DRAFT_COMMANDS = new Set([
   'create_manual_legal_text_draft',
   'confirm_owner_structure_completeness',
   'retract_owner_structure_completeness',
+  'generate_tax_knowledge_proposal',
 ]);
 
 function trainerSelectionFromAggregate(aggregate: unknown): { documentId: string; draftId: string } {
@@ -187,7 +188,9 @@ export function PlatformOwnerLegalControl() {
       }
       return out;
     } catch (e) {
-      setError(userFacingApiMessage(e));
+      if (command !== 'generate_tax_knowledge_proposal') {
+        setError(userFacingApiMessage(e));
+      }
       throw e;
     } finally {
       setCommandBusy(false);

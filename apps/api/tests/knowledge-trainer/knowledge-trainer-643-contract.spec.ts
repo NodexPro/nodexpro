@@ -55,12 +55,11 @@ test('TAX-644A Owner UI renders by_locale locally and does not generate or publi
   assert.match(view, /setLocale/);
   assert.match(view, /details_label/);
   assert.doesNotMatch(view, /fetch\(/);
-  assert.doesNotMatch(view, /onCommand/);
   assert.doesNotMatch(view, /JSON\.stringify\(.*proposal_json/);
   assert.doesNotMatch(view, /proposal_json\./);
-  assert.doesNotMatch(ui, /generate_tax_knowledge_proposal/);
-  assert.doesNotMatch(view, /generate_tax_knowledge_proposal/);
-  assert.doesNotMatch(trainer, /generate_tax_knowledge_proposal/);
+  assert.match(view, /generate_tax_knowledge_proposal/);
+  assert.match(view, /onCommand/);
+  assert.doesNotMatch(view, /review_status/);
   assert.doesNotMatch(view, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(view, /activate_tax_rule_version/);
   assert.doesNotMatch(view, /owner_approved/);

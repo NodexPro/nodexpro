@@ -969,6 +969,7 @@ function mapProposalHistoryItem(row: Record<string, unknown>): KnowledgeTrainerT
 async function loadTaxKnowledgeProposalsForSelectedDraft(
   draftId: string | null,
   requestedProposalId?: string | null,
+  draftReviewStatus?: string | null,
 ): Promise<KnowledgeTrainerTaxKnowledgeProposalSliceDto> {
   if (!draftId) return emptyTaxKnowledgeProposalSlice();
   let rows: Record<string, unknown>[];
@@ -993,8 +994,24 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
   const history = rows.map(mapProposalHistoryItem);
   const latest = pickSelectedTaxKnowledgeProposal(history, null);
   const selectedMeta = pickSelectedTaxKnowledgeProposal(history, requestedProposalId);
+  const generateEnabled = taxKnowledgeProposalAllowedActions({
+    hasSelectedDraft: true,
+    selectedDraftReviewStatus: draftReviewStatus ?? null,
+    selectedProposalStatus: selectedMeta?.status ?? null,
+  }).generate_tax_knowledge_proposal;
   if (!selectedMeta) {
-    return { latest, selected: null, history, owner_view: emptyTaxKnowledgeProposalOwnerView() };
+    return {
+      latest,
+      selected: null,
+      history,
+      owner_view: buildTaxKnowledgeProposalOwnerView({
+        selected: null,
+        proposal_json: null,
+        validation: null,
+        draft: { id: draftId, review_status: draftReviewStatus ?? null },
+        generate_enabled: generateEnabled,
+      }),
+    };
   }
   let data: Record<string, unknown> | null = null;
   {
@@ -1086,6 +1103,8 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
       proposal_json: json,
       validation: validationSummary,
       owner_presentation_json: data?.owner_presentation_json,
+      draft: { id: draftId, review_status: draftReviewStatus ?? null },
+      generate_enabled: generateEnabled,
     }),
   };
 }
@@ -1262,6 +1281,7 @@ async function loadLegalTextDraftsForDocument(
   const tax_knowledge_proposals = await loadTaxKnowledgeProposalsForSelectedDraft(
     selected_review_node?.draft_id ?? selected?.id ?? null,
     opts?.selectedProposalId,
+    selected?.review_status ?? null,
   );
 
   return {

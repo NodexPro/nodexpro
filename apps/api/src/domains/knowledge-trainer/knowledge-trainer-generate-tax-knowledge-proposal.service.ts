@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { AppError, notFound } from '../../shared/errors.js';
+import { AppError, conflict, notFound } from '../../shared/errors.js';
 import {
   AiGatewayError,
   completeStructuredJson,
@@ -43,6 +43,7 @@ const PROPOSAL_TABLE = 'legal_ingestion_tax_knowledge_proposals';
 
 export type GenerateTaxKnowledgeProposalDeps = {
   loadDraft?: (draftId: string) => Promise<GenerateDraftRow>;
+  hasExistingProposal?: (draftId: string) => Promise<boolean>;
   loadContext?: (draft: GenerateDraftRow) => Promise<ControlledExtractionContext>;
   completeStructuredJson?: typeof completeStructuredJson;
   validateProposal?: typeof validateProposalJsonForDraft;
@@ -81,6 +82,17 @@ async function defaultLoadDraft(draftId: string): Promise<GenerateDraftRow> {
   };
 }
 
+async function defaultHasExistingProposal(draftId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from(PROPOSAL_TABLE)
+    .select('id')
+    .eq('legal_text_draft_id', draftId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data?.id);
+}
+
 function allowlistFromContext(context: ControlledExtractionContext): TaxKnowledgeProposalCanonicalAllowlist {
   if (context.canonical_allowlist) return context.canonical_allowlist;
   return buildCanonicalAllowlist({
@@ -103,6 +115,7 @@ function throwIfProposalInvalid(result: TaxKnowledgeProposalV1ValidationResult):
 
 export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgeProposalDeps = {}) {
   const loadDraft = deps.loadDraft ?? defaultLoadDraft;
+  const hasExistingProposal = deps.hasExistingProposal ?? defaultHasExistingProposal;
   const loadContext = deps.loadContext ?? loadControlledExtractionContext;
   const complete = deps.completeStructuredJson ?? completeStructuredJson;
   const validateProposal = deps.validateProposal ?? validateProposalJsonForDraft;
@@ -118,6 +131,9 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
     const draftId = parseGenerateTaxKnowledgeProposalDraftId(payload);
     const draft = await loadDraft(draftId);
     assertDraftReadyForAiExtraction(draft);
+    if (await hasExistingProposal(draftId)) {
+      throw conflict('An AI Proposal already exists for this draft', 'TAX_KNOWLEDGE_PROPOSAL_ALREADY_EXISTS');
+    }
     const context = await loadContext(draft);
     const inputContextDigest = digestControlledExtractionInput(context);
 

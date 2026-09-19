@@ -204,6 +204,7 @@ async function runGenerate(options: {
   const gatewayCalls: unknown[] = [];
   const generate = createGenerateTaxKnowledgeProposal({
     persistOwnerPresentations: async () => null,
+    hasExistingProposal: async () => false,
     loadDraft: async () => options.draft ?? draftRow(),
     loadContext: async (draft) => sampleContext(draft),
     completeStructuredJson: async (input) => {
@@ -361,6 +362,7 @@ test('one Draft only: extra caller fields never reach the gateway', async () => 
   const inserts: unknown[] = [];
   const gatewayCalls: unknown[] = [];
   const generate = createGenerateTaxKnowledgeProposal({
+    hasExistingProposal: async () => false,
     loadDraft: async () => draftRow(),
     loadContext: async (draft) => sampleContext(draft),
     completeStructuredJson: async (input) => {
@@ -395,6 +397,32 @@ test('context digest is stable across two mocked generations', async () => {
   const secondDigest = (second.inserts[0]?.generation_metadata_json as { input_context_digest: string }).input_context_digest;
   assert.equal(firstDigest, secondDigest);
   assert.match(firstDigest, /^[0-9a-f]{64}$/);
+});
+
+test('existing B2 Proposal is not overwritten and does not call AI', async () => {
+  const inserts: unknown[] = [];
+  const gatewayCalls: unknown[] = [];
+  const generate = createGenerateTaxKnowledgeProposal({
+    persistOwnerPresentations: async () => null,
+    hasExistingProposal: async () => true,
+    loadDraft: async () => draftRow(),
+    loadContext: async (draft) => sampleContext(draft),
+    completeStructuredJson: async (input) => {
+      gatewayCalls.push(input);
+      return gatewayResult(closed());
+    },
+    insertProposal: async (row) => {
+      inserts.push(row);
+      return { id: PROPOSAL_ID, revision_no: 1 };
+    },
+    writeAudit: async () => undefined,
+  });
+  await assert.rejects(
+    () => generate(ctx, { legal_text_draft_id: DRAFT_ID }),
+    (error: unknown) => error instanceof AppError && error.code === 'TAX_KNOWLEDGE_PROPOSAL_ALREADY_EXISTS',
+  );
+  assert.equal(gatewayCalls.length, 0);
+  assert.equal(inserts.length, 0);
 });
 
 test('generation metadata records the actual provider/model returned by the gateway', async () => {

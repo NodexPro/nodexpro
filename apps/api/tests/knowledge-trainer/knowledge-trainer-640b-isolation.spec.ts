@@ -28,7 +28,10 @@ test('TAX-640B provider HTTP stays inside the adapter; Trainer uses only the sha
     assert.doesNotMatch(text, /shared\/ai-gateway\/providers/);
     assert.doesNotMatch(text, /fetchAiProviderTransport/);
     assert.doesNotMatch(text, /from 'openai'|from '@anthropic-ai\/sdk'/);
-    if (!rel.endsWith('knowledge-trainer-generate-tax-knowledge-proposal.service.ts')) {
+    if (
+      !rel.endsWith('knowledge-trainer-generate-tax-knowledge-proposal.service.ts') &&
+      !rel.endsWith('tax-knowledge-proposal-owner-presentation.service.ts')
+    ) {
       assert.doesNotMatch(text, /completeStructuredJson/);
       assert.doesNotMatch(text, /shared\/ai-gateway/);
     }
