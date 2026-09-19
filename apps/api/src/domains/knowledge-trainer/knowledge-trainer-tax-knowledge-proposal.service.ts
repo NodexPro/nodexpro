@@ -5,11 +5,13 @@ import { AppError, badRequest, conflict, notFound } from '../../shared/errors.js
 import { isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
 import {
   TAX_KNOWLEDGE_PROPOSAL_TRUSTED_PROVENANCE_FIELDS,
+  applyTaxKnowledgeProposalRuleTextCorrections,
   canSetTaxKnowledgeProposalReviewStatus,
   isProposalRevisionConflictError,
   isTaxKnowledgeProposalCreationOrigin,
   isTaxKnowledgeProposalStatus,
   nextProposalRevisionNo,
+  parseTaxKnowledgeProposalRuleTextCorrections,
   proposalJsonIsObject,
 } from './knowledge-trainer-tax-knowledge-proposal.pure.js';
 import { validateTaxKnowledgeProposalV1AgainstStore } from './tax-knowledge-proposal-v1-catalog.service.js';
@@ -136,6 +138,26 @@ async function loadProposal(proposalId: string) {
   if (error) throw error;
   if (!data) throw notFound('Tax knowledge proposal not found');
   return data;
+}
+
+async function loadCorrectedProposalJsonFromRuleText(
+  sourceId: string,
+  rawCorrections: unknown,
+): Promise<Record<string, unknown>> {
+  const corrections = parseTaxKnowledgeProposalRuleTextCorrections(rawCorrections);
+  if (!corrections) {
+    throw badRequest('rule_text_corrections must be human-readable rule title, statement, and notes only');
+  }
+  const { data, error } = await supabaseAdmin
+    .from(PROPOSAL_TABLE)
+    .select('proposal_json')
+    .eq('id', sourceId)
+    .maybeSingle();
+  throwIfProposalSchemaMissing(error);
+  if (error) throw error;
+  const applied = applyTaxKnowledgeProposalRuleTextCorrections(parseProposalJson(data?.proposal_json), corrections);
+  if (!applied.ok) throw badRequest(applied.message);
+  return applied.proposal_json;
 }
 
 async function nextRevisionNo(draftId: string): Promise<number> {
@@ -317,8 +339,15 @@ export async function createCorrectedTaxKnowledgeProposal(
     payload.source_tax_knowledge_proposal_id ?? payload.tax_knowledge_proposal_id ?? payload.proposal_id,
     'source_tax_knowledge_proposal_id',
   );
-  const proposalJson = parseProposalJson(payload.proposal_json);
+  const hasProposalJson = payload.proposal_json !== undefined;
+  const hasRuleTextCorrections = payload.rule_text_corrections !== undefined;
+  if (hasProposalJson && hasRuleTextCorrections) {
+    throw badRequest('send either proposal_json or rule_text_corrections, not both');
+  }
   const source = await loadProposal(sourceId);
+  const proposalJson = hasRuleTextCorrections
+    ? await loadCorrectedProposalJsonFromRuleText(sourceId, payload.rule_text_corrections)
+    : parseProposalJson(payload.proposal_json);
   const sourceDraftId = String(source.legal_text_draft_id);
   const requestedDraftId = asOptionalUuid(payload.legal_text_draft_id, 'legal_text_draft_id');
   if (requestedDraftId && requestedDraftId !== sourceDraftId) {

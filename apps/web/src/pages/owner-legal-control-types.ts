@@ -634,6 +634,12 @@ export type OwnerTaxKnowledgeProposalLocaleView = {
   warning_tone: 'blocking' | 'review' | null;
   citation_label: string;
   details_label: string;
+  approve_aria_label: string;
+  correct_label: string;
+  correct_save_label: string;
+  correct_title_label: string;
+  correct_statement_label: string;
+  correct_notes_label: string;
 };
 
 export type OwnerTaxKnowledgeProposalCreateAction = {
@@ -643,6 +649,29 @@ export type OwnerTaxKnowledgeProposalCreateAction = {
   legal_text_draft_id: string | null;
 };
 
+export type OwnerTaxKnowledgeProposalApproveAction = {
+  action_key: 'set_tax_knowledge_proposal_review_status';
+  visible: boolean;
+  enabled: boolean;
+  tax_knowledge_proposal_id: string | null;
+  status: 'owner_approved';
+};
+
+export type OwnerTaxKnowledgeProposalCorrectRule = {
+  proposal_rule_key: string;
+  title: string;
+  statement: string;
+  notes: string;
+};
+
+export type OwnerTaxKnowledgeProposalCorrectAction = {
+  action_key: 'create_corrected_tax_knowledge_proposal';
+  visible: boolean;
+  enabled: boolean;
+  source_tax_knowledge_proposal_id: string | null;
+  rules: OwnerTaxKnowledgeProposalCorrectRule[];
+};
+
 export type OwnerTaxKnowledgeProposalOwnerView = {
   available: boolean;
   has_proposal: boolean;
@@ -650,6 +679,8 @@ export type OwnerTaxKnowledgeProposalOwnerView = {
   locale_options: Array<{ code: OwnerTaxKnowledgeProposalOwnerLocale; label: string }>;
   source: { identifier: string | null; quote: string | null };
   create: OwnerTaxKnowledgeProposalCreateAction;
+  approve: OwnerTaxKnowledgeProposalApproveAction;
+  correct: OwnerTaxKnowledgeProposalCorrectAction;
   by_locale: Record<OwnerTaxKnowledgeProposalOwnerLocale, OwnerTaxKnowledgeProposalLocaleView>;
   details: {
     status_label: string;
@@ -763,6 +794,12 @@ function emptyLocaleView(
   generationFailed: string,
   citation: string,
   details: string,
+  approveAria: string,
+  correctLabel: string,
+  correctSave: string,
+  correctTitle: string,
+  correctStatement: string,
+  correctNotes: string,
 ): OwnerTaxKnowledgeProposalLocaleView {
   return {
     dir,
@@ -779,6 +816,12 @@ function emptyLocaleView(
     warning_tone: null,
     citation_label: citation,
     details_label: details,
+    approve_aria_label: approveAria,
+    correct_label: correctLabel,
+    correct_save_label: correctSave,
+    correct_title_label: correctTitle,
+    correct_statement_label: correctStatement,
+    correct_notes_label: correctNotes,
   };
 }
 
@@ -803,6 +846,20 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
         enabled: false,
         legal_text_draft_id: null,
       },
+      approve: {
+        action_key: 'set_tax_knowledge_proposal_review_status',
+        visible: false,
+        enabled: false,
+        tax_knowledge_proposal_id: null,
+        status: 'owner_approved',
+      },
+      correct: {
+        action_key: 'create_corrected_tax_knowledge_proposal',
+        visible: false,
+        enabled: false,
+        source_tax_knowledge_proposal_id: null,
+        rules: [],
+      },
       by_locale: {
         he: emptyLocaleView(
           'rtl',
@@ -815,6 +872,12 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
           'יצירת הצעת AI נכשלה. נסו שוב.',
           'ציטוט מקור',
           'פרטים נוספים',
+          'אישור הצעת AI',
+          'תיקון',
+          'שמירת תיקון',
+          'כותרת',
+          'ניסוח',
+          'הערות',
         ),
         ru: emptyLocaleView(
           'ltr',
@@ -827,6 +890,12 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
           'Не удалось создать предложение AI. Попробуйте снова.',
           'Цитата источника',
           'Подробнее',
+          'Подтвердить предложение AI',
+          'Исправить',
+          'Сохранить исправление',
+          'Заголовок',
+          'Формулировка',
+          'Заметки',
         ),
         en: emptyLocaleView(
           'ltr',
@@ -839,6 +908,12 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
           'AI Proposal could not be created. Try again.',
           'Source citation',
           'Details',
+          'Approve AI Proposal',
+          'Correct',
+          'Save correction',
+          'Title',
+          'Statement',
+          'Notes',
         ),
       },
       details: {

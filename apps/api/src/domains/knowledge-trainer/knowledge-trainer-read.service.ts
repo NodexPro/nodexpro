@@ -1090,7 +1090,11 @@ async function loadTaxKnowledgeProposalsForSelectedDraft(
       {
         action_key: 'create_corrected_tax_knowledge_proposal',
         enabled: actions.create_corrected_tax_knowledge_proposal,
-        required_fields: { source_tax_knowledge_proposal_id: 'uuid', proposal_json: 'object' },
+        required_fields: {
+          source_tax_knowledge_proposal_id: 'uuid',
+          proposal_json: 'object when replacing the full snapshot',
+          rule_text_corrections: 'human-readable rule title, statement, notes',
+        },
       },
     ],
   };

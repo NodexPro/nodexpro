@@ -1,3 +1,4 @@
+import { allowedTaxKnowledgeProposalReviewStatuses } from './knowledge-trainer-tax-knowledge-proposal.pure.js';
 import type { TaxKnowledgeProposalV1ValidationSummary } from './tax-knowledge-proposal-v1.types.js';
 import {
   extractOwnerPresentationStatements,
@@ -28,6 +29,12 @@ export type TaxKnowledgeProposalOwnerLocaleView = {
   warning_tone: 'blocking' | 'review' | null;
   citation_label: string;
   details_label: string;
+  approve_aria_label: string;
+  correct_label: string;
+  correct_save_label: string;
+  correct_title_label: string;
+  correct_statement_label: string;
+  correct_notes_label: string;
 };
 
 export type TaxKnowledgeProposalOwnerCreateAction = {
@@ -35,6 +42,29 @@ export type TaxKnowledgeProposalOwnerCreateAction = {
   visible: boolean;
   enabled: boolean;
   legal_text_draft_id: string | null;
+};
+
+export type TaxKnowledgeProposalOwnerApproveAction = {
+  action_key: 'set_tax_knowledge_proposal_review_status';
+  visible: boolean;
+  enabled: boolean;
+  tax_knowledge_proposal_id: string | null;
+  status: 'owner_approved';
+};
+
+export type TaxKnowledgeProposalOwnerCorrectRule = {
+  proposal_rule_key: string;
+  title: string;
+  statement: string;
+  notes: string;
+};
+
+export type TaxKnowledgeProposalOwnerCorrectAction = {
+  action_key: 'create_corrected_tax_knowledge_proposal';
+  visible: boolean;
+  enabled: boolean;
+  source_tax_knowledge_proposal_id: string | null;
+  rules: TaxKnowledgeProposalOwnerCorrectRule[];
 };
 
 export type TaxKnowledgeProposalOwnerViewRow = {
@@ -80,6 +110,8 @@ export type TaxKnowledgeProposalOwnerViewDto = {
     quote: string | null;
   };
   create: TaxKnowledgeProposalOwnerCreateAction;
+  approve: TaxKnowledgeProposalOwnerApproveAction;
+  correct: TaxKnowledgeProposalOwnerCorrectAction;
   by_locale: Record<TaxKnowledgeProposalOwnerLocale, TaxKnowledgeProposalOwnerLocaleView>;
   details: TaxKnowledgeProposalOwnerViewDetails;
 };
@@ -101,6 +133,12 @@ type Catalog = {
   generation_failed: string;
   citation_label: string;
   details_label: string;
+  approve_aria_label: string;
+  correct_label: string;
+  correct_save_label: string;
+  correct_title_label: string;
+  correct_statement_label: string;
+  correct_notes_label: string;
   extraction: {
     rules_one: string;
     rules_many: string;
@@ -134,6 +172,12 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     generation_failed: 'יצירת הצעת AI נכשלה. נסו שוב.',
     citation_label: 'ציטוט מקור',
     details_label: 'פרטים נוספים',
+    approve_aria_label: 'אישור הצעת AI',
+    correct_label: 'תיקון',
+    correct_save_label: 'שמירת תיקון',
+    correct_title_label: 'כותרת',
+    correct_statement_label: 'ניסוח',
+    correct_notes_label: 'הערות',
     extraction: {
       rules_one: 'ה-AI הבין כלל משפטי מהסעיף.',
       rules_many: 'ה-AI הבין כמה כללים משפטיים מהסעיף.',
@@ -165,6 +209,12 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     generation_failed: 'Не удалось создать предложение AI. Попробуйте снова.',
     citation_label: 'Цитата источника',
     details_label: 'Подробнее',
+    approve_aria_label: 'Подтвердить предложение AI',
+    correct_label: 'Исправить',
+    correct_save_label: 'Сохранить исправление',
+    correct_title_label: 'Заголовок',
+    correct_statement_label: 'Формулировка',
+    correct_notes_label: 'Заметки',
     extraction: {
       rules_one: 'AI понял правовую норму из этой статьи.',
       rules_many: 'AI понял несколько правовых норм из этой статьи.',
@@ -196,6 +246,12 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     generation_failed: 'AI Proposal could not be created. Try again.',
     citation_label: 'Source citation',
     details_label: 'Details',
+    approve_aria_label: 'Approve AI Proposal',
+    correct_label: 'Correct',
+    correct_save_label: 'Save correction',
+    correct_title_label: 'Title',
+    correct_statement_label: 'Statement',
+    correct_notes_label: 'Notes',
     extraction: {
       rules_one: 'AI understood a legal rule from this provision.',
       rules_many: 'AI understood several legal rules from this provision.',
@@ -340,6 +396,12 @@ function emptyLocaleView(locale: TaxKnowledgeProposalOwnerLocale): TaxKnowledgeP
     warning_tone: null,
     citation_label: catalog.citation_label,
     details_label: catalog.details_label,
+    approve_aria_label: catalog.approve_aria_label,
+    correct_label: catalog.correct_label,
+    correct_save_label: catalog.correct_save_label,
+    correct_title_label: catalog.correct_title_label,
+    correct_statement_label: catalog.correct_statement_label,
+    correct_notes_label: catalog.correct_notes_label,
   };
 }
 
@@ -368,6 +430,72 @@ function emptyCreateAction(): TaxKnowledgeProposalOwnerCreateAction {
   };
 }
 
+function emptyApproveAction(): TaxKnowledgeProposalOwnerApproveAction {
+  return {
+    action_key: 'set_tax_knowledge_proposal_review_status',
+    visible: false,
+    enabled: false,
+    tax_knowledge_proposal_id: null,
+    status: 'owner_approved',
+  };
+}
+
+function emptyCorrectAction(): TaxKnowledgeProposalOwnerCorrectAction {
+  return {
+    action_key: 'create_corrected_tax_knowledge_proposal',
+    visible: false,
+    enabled: false,
+    source_tax_knowledge_proposal_id: null,
+    rules: [],
+  };
+}
+
+function correctionRulesFromProposal(rulesRaw: Record<string, unknown>[]): TaxKnowledgeProposalOwnerCorrectRule[] {
+  return rulesRaw
+    .map((rule) => {
+      const proposal_rule_key = asString(rule.proposal_rule_key);
+      return proposal_rule_key
+        ? {
+            proposal_rule_key,
+            title: asString(rule.title),
+            statement: asString(rule.statement),
+            notes: asString(rule.notes),
+          }
+        : null;
+    })
+    .filter((row): row is TaxKnowledgeProposalOwnerCorrectRule => Boolean(row));
+}
+
+function buildApproveAction(
+  selected: { id: string; status: string } | null,
+  validation: TaxKnowledgeProposalV1ValidationSummary | null,
+): TaxKnowledgeProposalOwnerApproveAction {
+  if (!selected) return emptyApproveAction();
+  return {
+    action_key: 'set_tax_knowledge_proposal_review_status',
+    visible: true,
+    enabled:
+      allowedTaxKnowledgeProposalReviewStatuses(selected.status).includes('owner_approved') &&
+      validation?.owner_approval_allowed === true,
+    tax_knowledge_proposal_id: selected.id,
+    status: 'owner_approved',
+  };
+}
+
+function buildCorrectAction(
+  selected: { id: string } | null,
+  rules: TaxKnowledgeProposalOwnerCorrectRule[],
+): TaxKnowledgeProposalOwnerCorrectAction {
+  if (!selected) return emptyCorrectAction();
+  return {
+    action_key: 'create_corrected_tax_knowledge_proposal',
+    visible: rules.length > 0,
+    enabled: rules.length > 0,
+    source_tax_knowledge_proposal_id: selected.id,
+    rules,
+  };
+}
+
 function withCreateAction(
   view: TaxKnowledgeProposalOwnerViewDto,
   input: { draftId: string | null; hasProposal: boolean; generateEnabled: boolean },
@@ -392,6 +520,8 @@ function emptyView(): TaxKnowledgeProposalOwnerViewDto {
     locale_options: LOCALE_OPTIONS,
     source: { identifier: null, quote: null },
     create: emptyCreateAction(),
+    approve: emptyApproveAction(),
+    correct: emptyCorrectAction(),
     by_locale: {
       he: emptyLocaleView('he'),
       ru: emptyLocaleView('ru'),
@@ -535,6 +665,12 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
           warning_tone: tone,
           citation_label: catalog.citation_label,
           details_label: catalog.details_label,
+          approve_aria_label: catalog.approve_aria_label,
+          correct_label: catalog.correct_label,
+          correct_save_label: catalog.correct_save_label,
+          correct_title_label: catalog.correct_title_label,
+          correct_statement_label: catalog.correct_statement_label,
+          correct_notes_label: catalog.correct_notes_label,
         } satisfies TaxKnowledgeProposalOwnerLocaleView,
       ];
     }),
@@ -550,6 +686,8 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
       quote: originalQuote,
     },
     create: emptyCreateAction(),
+    approve: buildApproveAction(input.selected, validation),
+    correct: buildCorrectAction(input.selected, correctionRulesFromProposal(rulesRaw)),
     by_locale,
     details: {
       status_label: input.selected.status_label,

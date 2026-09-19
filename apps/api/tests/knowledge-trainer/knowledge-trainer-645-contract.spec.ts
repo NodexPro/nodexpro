@@ -62,7 +62,8 @@ test('TAX-645 Owner UI calls the existing command from backend create action onl
   assert.match(view, /loc\.analyzing_label/);
   assert.match(view, /loc\.generation_failed/);
   assert.match(view, /loc\.create_disabled_reason/);
-  assert.doesNotMatch(view, /review_status/);
+  assert.match(view, /view\.approve\.action_key/);
+  assert.doesNotMatch(view, /selectedDraftReviewStatus/);
   assert.doesNotMatch(view, /fetch\(/);
   assert.doesNotMatch(view, /apiJson/);
   assert.doesNotMatch(view, /publish_tax_knowledge_proposal/);

@@ -2803,6 +2803,46 @@
   color: #14532d;
 }
 
+.nx-legal-draft-ai-proposal-approve {
+  background: #15803d;
+  border-color: #15803d;
+  color: #fff;
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.nx-legal-draft-ai-proposal-approve:disabled {
+  background: #86efac;
+  border-color: #86efac;
+  color: #14532d;
+}
+
+.nx-legal-draft-ai-proposal-correct {
+  display: grid;
+  gap: 6px;
+}
+
+.nx-legal-draft-ai-proposal-correct-form {
+  display: grid;
+  gap: 8px;
+}
+
+.nx-legal-draft-ai-proposal-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
 .nx-legal-draft-ai-proposal-gate,
 .nx-legal-draft-ai-proposal-analyzing,
 .nx-legal-draft-ai-proposal-error {

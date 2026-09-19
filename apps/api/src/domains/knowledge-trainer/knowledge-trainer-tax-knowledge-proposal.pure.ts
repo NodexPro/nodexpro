@@ -126,3 +126,81 @@ export function isProposalRevisionConflictError(error: { code?: string; message?
 export function proposalJsonIsObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
+
+export const TAX_KNOWLEDGE_PROPOSAL_RULE_TEXT_CORRECTION_KEYS = [
+  'proposal_rule_key',
+  'title',
+  'statement',
+  'notes',
+] as const;
+
+export type TaxKnowledgeProposalRuleTextCorrection = {
+  proposal_rule_key: string;
+  title?: string;
+  statement?: string;
+  notes?: string | null;
+};
+
+function asTrimmedString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function parseTaxKnowledgeProposalRuleTextCorrections(
+  value: unknown,
+): TaxKnowledgeProposalRuleTextCorrection[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const rows: TaxKnowledgeProposalRuleTextCorrection[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const rec = item as Record<string, unknown>;
+    if (Object.keys(rec).some((key) => !(TAX_KNOWLEDGE_PROPOSAL_RULE_TEXT_CORRECTION_KEYS as readonly string[]).includes(key))) {
+      return null;
+    }
+    const proposal_rule_key = asTrimmedString(rec.proposal_rule_key);
+    if (!proposal_rule_key) return null;
+    const row: TaxKnowledgeProposalRuleTextCorrection = { proposal_rule_key };
+    if ('title' in rec) {
+      if (typeof rec.title !== 'string') return null;
+      row.title = rec.title;
+    }
+    if ('statement' in rec) {
+      if (typeof rec.statement !== 'string') return null;
+      row.statement = rec.statement;
+    }
+    if ('notes' in rec) {
+      if (rec.notes !== null && typeof rec.notes !== 'string') return null;
+      row.notes = rec.notes;
+    }
+    if (!('title' in row) && !('statement' in row) && !('notes' in row)) return null;
+    rows.push(row);
+  }
+  return rows;
+}
+
+export function applyTaxKnowledgeProposalRuleTextCorrections(
+  proposalJson: Record<string, unknown>,
+  corrections: TaxKnowledgeProposalRuleTextCorrection[],
+): { ok: true; proposal_json: Record<string, unknown> } | { ok: false; message: string } {
+  if (!corrections.length) return { ok: false, message: 'rule_text_corrections is required' };
+  let cloned: Record<string, unknown>;
+  try {
+    cloned = JSON.parse(JSON.stringify(proposalJson)) as Record<string, unknown>;
+  } catch {
+    return { ok: false, message: 'proposal_json must be JSON-safe' };
+  }
+  const rules = Array.isArray(cloned.rules) ? cloned.rules : null;
+  if (!rules) return { ok: false, message: 'proposal_json.rules must be an array' };
+  for (const correction of corrections) {
+    const match = rules.find((row) => {
+      return Boolean(row && typeof row === 'object' && !Array.isArray(row) && asTrimmedString((row as Record<string, unknown>).proposal_rule_key) === correction.proposal_rule_key);
+    });
+    if (!match || typeof match !== 'object' || Array.isArray(match)) {
+      return { ok: false, message: `unknown proposal_rule_key: ${correction.proposal_rule_key}` };
+    }
+    const rule = match as Record<string, unknown>;
+    if (correction.title !== undefined) rule.title = correction.title;
+    if (correction.statement !== undefined) rule.statement = correction.statement;
+    if (correction.notes !== undefined) rule.notes = correction.notes;
+  }
+  return { ok: true, proposal_json: cloned };
+}

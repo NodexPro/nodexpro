@@ -113,6 +113,8 @@ test('TAX-644A empty owner view is he/ru/en and does not invent a proposal', () 
   assert.equal(view.has_proposal, false);
   assert.equal(view.create.visible, false);
   assert.equal(view.create.enabled, false);
+  assert.equal(view.approve.enabled, false);
+  assert.equal(view.correct.visible, false);
   assert.equal(view.default_locale, 'he');
   assert.deepEqual(view.locale_options.map((row) => row.code), ['he', 'ru', 'en']);
   assert.equal(view.by_locale.he.empty_title, 'טרם נוצרה הצעת AI');
@@ -165,7 +167,82 @@ test('TAX-645 Create action comes from backend eligibility, not frontend review_
   assert.equal(existing.has_proposal, true);
   assert.equal(existing.create.visible, false);
   assert.equal(existing.create.enabled, false);
+  assert.equal(existing.approve.visible, true);
+  assert.equal(existing.approve.enabled, false);
+  assert.equal(existing.approve.action_key, 'set_tax_knowledge_proposal_review_status');
+  assert.equal(existing.approve.status, 'owner_approved');
+  assert.equal(existing.correct.visible, true);
+  assert.equal(existing.correct.enabled, true);
+  assert.equal(existing.correct.action_key, 'create_corrected_tax_knowledge_proposal');
+  assert.equal(existing.correct.rules[0]?.proposal_rule_key, 'rule_1');
   assert.doesNotMatch(JSON.stringify(existing.create), /review_status/);
+});
+
+test('TAX-648A approve is enabled only from TAX-639 owner_approval_allowed and review transitions', () => {
+  const blocked = buildTaxKnowledgeProposalOwnerView({
+    selected: selectedMeta(),
+    proposal_json: seif3AbProposal(),
+    validation: validation(),
+  });
+  assert.equal(blocked.approve.enabled, false);
+  assert.equal(blocked.details.owner_approval_allowed, 'no');
+
+  const eligible = buildTaxKnowledgeProposalOwnerView({
+    selected: selectedMeta(),
+    proposal_json: seif3AbProposal(),
+    validation: summarizeTaxKnowledgeProposalValidation({
+      valid_schema: true,
+      publication_eligible: true,
+      owner_approval_allowed: true,
+      errors: [],
+      warnings: [],
+      blocking_uncertainties: [],
+      resolved_fact_bindings: [],
+      resolved_legal_values: [],
+      resolved_existing_rule_refs: [],
+      evidence_validation: {
+        draft_legal_text_length: 93,
+        verbatim_quote_count: 1,
+        paraphrase_quote_count: 0,
+        citation_count: 1,
+        authoritative_evidence: true,
+        quotes: [{ index: 0, role: 'verbatim_from_draft', matched: true, message: null }],
+      },
+    }),
+  });
+  assert.equal(eligible.approve.visible, true);
+  assert.equal(eligible.approve.enabled, true);
+  assert.equal(eligible.approve.tax_knowledge_proposal_id, PROPOSAL_ID);
+  assert.equal(eligible.approve.status, 'owner_approved');
+  assert.equal(eligible.by_locale.he.approve_aria_label, 'אישור הצעת AI');
+  assert.equal(eligible.by_locale.ru.approve_aria_label, 'Подтвердить предложение AI');
+  assert.equal(eligible.by_locale.en.approve_aria_label, 'Approve AI Proposal');
+
+  const alreadyApproved = buildTaxKnowledgeProposalOwnerView({
+    selected: { ...selectedMeta(), status: 'owner_approved', status_label: 'Owner approved / אושר על ידי Owner' },
+    proposal_json: seif3AbProposal(),
+    validation: summarizeTaxKnowledgeProposalValidation({
+      valid_schema: true,
+      publication_eligible: true,
+      owner_approval_allowed: true,
+      errors: [],
+      warnings: [],
+      blocking_uncertainties: [],
+      resolved_fact_bindings: [],
+      resolved_legal_values: [],
+      resolved_existing_rule_refs: [],
+      evidence_validation: {
+        draft_legal_text_length: 93,
+        verbatim_quote_count: 1,
+        paraphrase_quote_count: 0,
+        citation_count: 1,
+        authoritative_evidence: true,
+        quotes: [{ index: 0, role: 'verbatim_from_draft', matched: true, message: null }],
+      },
+    }),
+  });
+  assert.equal(alreadyApproved.approve.visible, true);
+  assert.equal(alreadyApproved.approve.enabled, false);
 });
 
 test('TAX-644B owner view shows the actual extracted meaning and stored he/ru/en presentation', () => {

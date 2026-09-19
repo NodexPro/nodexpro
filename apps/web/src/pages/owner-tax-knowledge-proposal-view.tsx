@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type {
+  OwnerTaxKnowledgeProposalApproveAction,
+  OwnerTaxKnowledgeProposalCorrectAction,
+  OwnerTaxKnowledgeProposalCorrectRule,
   OwnerTaxKnowledgeProposalCreateAction,
   OwnerTaxKnowledgeProposalLocaleView,
   OwnerTaxKnowledgeProposalOwnerLocale,
@@ -57,6 +60,12 @@ function parseLocaleView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeP
     warning_tone: raw.warning_tone === 'blocking' || raw.warning_tone === 'review' ? raw.warning_tone : null,
     citation_label: asString(raw.citation_label) || fallback.citation_label,
     details_label: asString(raw.details_label) || fallback.details_label,
+    approve_aria_label: asString(raw.approve_aria_label) || fallback.approve_aria_label,
+    correct_label: asString(raw.correct_label) || fallback.correct_label,
+    correct_save_label: asString(raw.correct_save_label) || fallback.correct_save_label,
+    correct_title_label: asString(raw.correct_title_label) || fallback.correct_title_label,
+    correct_statement_label: asString(raw.correct_statement_label) || fallback.correct_statement_label,
+    correct_notes_label: asString(raw.correct_notes_label) || fallback.correct_notes_label,
   };
 }
 
@@ -85,6 +94,48 @@ function parseCreateAction(raw: UnknownRecord | null, fallback: OwnerTaxKnowledg
   };
 }
 
+function parseApproveAction(
+  raw: UnknownRecord | null,
+  fallback: OwnerTaxKnowledgeProposalApproveAction,
+): OwnerTaxKnowledgeProposalApproveAction {
+  if (!raw) return fallback;
+  return {
+    action_key: 'set_tax_knowledge_proposal_review_status',
+    visible: raw.visible === true,
+    enabled: raw.enabled === true,
+    tax_knowledge_proposal_id: asNullableString(raw.tax_knowledge_proposal_id),
+    status: 'owner_approved',
+  };
+}
+
+function parseCorrectRules(raw: unknown): OwnerTaxKnowledgeProposalCorrectRule[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      proposal_rule_key: asString(row.proposal_rule_key),
+      title: asString(row.title),
+      statement: asString(row.statement),
+      notes: asString(row.notes),
+    }))
+    .filter((row) => row.proposal_rule_key);
+}
+
+function parseCorrectAction(
+  raw: UnknownRecord | null,
+  fallback: OwnerTaxKnowledgeProposalCorrectAction,
+): OwnerTaxKnowledgeProposalCorrectAction {
+  if (!raw) return fallback;
+  return {
+    action_key: 'create_corrected_tax_knowledge_proposal',
+    visible: raw.visible === true,
+    enabled: raw.enabled === true,
+    source_tax_knowledge_proposal_id: asNullableString(raw.source_tax_knowledge_proposal_id),
+    rules: parseCorrectRules(raw.rules),
+  };
+}
+
 function parseOwnerView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeProposalOwnerView): OwnerTaxKnowledgeProposalOwnerView {
   if (!raw) return fallback;
   const byRaw = asRecord(raw.by_locale);
@@ -106,6 +157,8 @@ function parseOwnerView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgePr
       quote: asNullableString(sourceRaw?.quote),
     },
     create: parseCreateAction(asRecord(raw.create), fallback.create),
+    approve: parseApproveAction(asRecord(raw.approve), fallback.approve),
+    correct: parseCorrectAction(asRecord(raw.correct), fallback.correct),
     by_locale: {
       he: parseLocaleView(asRecord(byRaw?.he), fallback.by_locale.he),
       ru: parseLocaleView(asRecord(byRaw?.ru), fallback.by_locale.ru),
@@ -185,6 +238,10 @@ export function OwnerTaxKnowledgeProposalView({
   const view = proposals.owner_view;
   const [locale, setLocale] = useState<OwnerTaxKnowledgeProposalOwnerLocale>(view.default_locale || 'he');
   const [creating, setCreating] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [correctBusy, setCorrectBusy] = useState(false);
+  const [ruleDrafts, setRuleDrafts] = useState(view.correct.rules);
   const [failed, setFailed] = useState(false);
   const inFlight = useRef(false);
 
@@ -195,13 +252,19 @@ export function OwnerTaxKnowledgeProposalView({
   useEffect(() => {
     setFailed(false);
     setCreating(false);
+    setApproving(false);
+    setCorrecting(false);
+    setCorrectBusy(false);
+    setRuleDrafts(view.correct.rules);
     inFlight.current = false;
-  }, [view.has_proposal, view.create.legal_text_draft_id]);
+  }, [view.has_proposal, view.create.legal_text_draft_id, view.approve.tax_knowledge_proposal_id, view.correct.source_tax_knowledge_proposal_id]);
 
   const selected = view.locale_options.some((row) => row.code === locale) ? locale : view.default_locale;
   const loc = view.by_locale[selected] ?? view.by_locale.he;
   const details = view.details;
   const createDisabled = !view.create.enabled || creating || inFlight.current || !onCommand;
+  const approveDisabled = !view.approve.enabled || approving || creating || correctBusy || inFlight.current || !onCommand;
+  const correctDisabled = !view.correct.enabled || correctBusy || approving || creating || inFlight.current || !onCommand;
 
   async function createProposal(): Promise<void> {
     if (inFlight.current || !view.create.enabled || !view.create.legal_text_draft_id || !onCommand) return;
@@ -215,6 +278,42 @@ export function OwnerTaxKnowledgeProposalView({
     } finally {
       inFlight.current = false;
       setCreating(false);
+    }
+  }
+
+  async function approveProposal(): Promise<void> {
+    if (inFlight.current || !view.approve.enabled || !view.approve.tax_knowledge_proposal_id || !onCommand) return;
+    inFlight.current = true;
+    setApproving(true);
+    try {
+      await onCommand(view.approve.action_key, {
+        tax_knowledge_proposal_id: view.approve.tax_knowledge_proposal_id,
+        status: view.approve.status,
+      });
+    } finally {
+      inFlight.current = false;
+      setApproving(false);
+    }
+  }
+
+  async function saveCorrection(): Promise<void> {
+    if (inFlight.current || !view.correct.enabled || !view.correct.source_tax_knowledge_proposal_id || !onCommand) return;
+    inFlight.current = true;
+    setCorrectBusy(true);
+    try {
+      await onCommand(view.correct.action_key, {
+        source_tax_knowledge_proposal_id: view.correct.source_tax_knowledge_proposal_id,
+        rule_text_corrections: ruleDrafts.map((row) => ({
+          proposal_rule_key: row.proposal_rule_key,
+          title: row.title,
+          statement: row.statement,
+          notes: row.notes,
+        })),
+      });
+      setCorrecting(false);
+    } finally {
+      inFlight.current = false;
+      setCorrectBusy(false);
     }
   }
 
@@ -244,6 +343,16 @@ export function OwnerTaxKnowledgeProposalView({
             {creating ? loc.analyzing_label : '✨ Proposal'}
           </button>
         ) : null}
+        <button
+          type="button"
+          className="nx-btn nx-btn-taxes-compact nx-legal-draft-ai-proposal-approve"
+          disabled={approveDisabled}
+          aria-label={loc.approve_aria_label}
+          title={loc.approve_aria_label}
+          onClick={() => void approveProposal()}
+        >
+          ✓
+        </button>
       </div>
       {view.create.visible && !view.create.enabled && !creating ? (
         <div className="nx-legal-draft-ai-proposal-gate">{loc.create_disabled_reason}</div>
@@ -267,6 +376,78 @@ export function OwnerTaxKnowledgeProposalView({
           <div className="nx-legal-draft-ai-proposal-q">{loc.question}</div>
           {loc.explanation ? <div className="nx-legal-draft-ai-proposal-summary">{loc.explanation}</div> : null}
           {loc.applicability ? <div className="nx-legal-draft-ai-proposal-line">{loc.applicability}</div> : null}
+          {view.correct.visible ? (
+            <div className="nx-legal-draft-ai-proposal-correct">
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                disabled={correctDisabled && !correcting}
+                onClick={() => {
+                  setRuleDrafts(view.correct.rules);
+                  setCorrecting((open) => !open);
+                }}
+              >
+                {loc.correct_label}
+              </button>
+              {correcting ? (
+                <div className="nx-legal-draft-ai-proposal-correct-form">
+                  {ruleDrafts.map((row, index) => (
+                    <div key={row.proposal_rule_key} className="nx-legal-draft-ai-proposal-block">
+                      <label className="nx-legal-draft-ai-proposal-k">
+                        {loc.correct_title_label}
+                        <input
+                          className="nx-legal-draft-ai-proposal-input"
+                          value={row.title}
+                          onChange={(event) => {
+                            const title = event.target.value;
+                            setRuleDrafts((current) =>
+                              current.map((item, itemIndex) => (itemIndex === index ? { ...item, title } : item)),
+                            );
+                          }}
+                        />
+                      </label>
+                      <label className="nx-legal-draft-ai-proposal-k">
+                        {loc.correct_statement_label}
+                        <textarea
+                          className="nx-legal-draft-ai-proposal-input"
+                          rows={3}
+                          value={row.statement}
+                          onChange={(event) => {
+                            const statement = event.target.value;
+                            setRuleDrafts((current) =>
+                              current.map((item, itemIndex) => (itemIndex === index ? { ...item, statement } : item)),
+                            );
+                          }}
+                        />
+                      </label>
+                      <label className="nx-legal-draft-ai-proposal-k">
+                        {loc.correct_notes_label}
+                        <textarea
+                          className="nx-legal-draft-ai-proposal-input"
+                          rows={2}
+                          value={row.notes}
+                          onChange={(event) => {
+                            const notes = event.target.value;
+                            setRuleDrafts((current) =>
+                              current.map((item, itemIndex) => (itemIndex === index ? { ...item, notes } : item)),
+                            );
+                          }}
+                        />
+                      </label>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="nx-btn nx-btn-taxes-compact"
+                    disabled={correctDisabled}
+                    onClick={() => void saveCorrection()}
+                  >
+                    {loc.correct_save_label}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {loc.uncertainty ? (
             <div
               className={

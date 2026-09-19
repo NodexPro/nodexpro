@@ -65,6 +65,8 @@ const LEGAL_TEXT_DRAFT_COMMANDS = new Set([
   'confirm_owner_structure_completeness',
   'retract_owner_structure_completeness',
   'generate_tax_knowledge_proposal',
+  'set_tax_knowledge_proposal_review_status',
+  'create_corrected_tax_knowledge_proposal',
 ]);
 
 function trainerSelectionFromAggregate(aggregate: unknown): { documentId: string; draftId: string } {
