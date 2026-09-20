@@ -2908,6 +2908,15 @@
   color: #991b1b;
 }
 
+.nx-legal-draft-ai-proposal-error-list {
+  margin: 6px 0 0;
+  padding: 0 0 0 16px;
+  font-size: 11px;
+  line-height: 1.35;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-word;
+}
+
 .nx-legal-draft-ai-proposal-langs .nx-btn[aria-pressed='true'] {
   background: #111827;
   color: #fff;

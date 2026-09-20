@@ -22,6 +22,7 @@ import {
   digestControlledExtractionInput,
   parseGenerateTaxKnowledgeProposalDraftId,
   sanitizeGenerateAuditPayload,
+  sanitizeTax639AuditErrors,
   type ControlledExtractionContext,
   type GenerateDraftRow,
 } from './tax-knowledge-proposal-extract.pure.js';
@@ -107,7 +108,7 @@ function throwIfProposalInvalid(result: TaxKnowledgeProposalV1ValidationResult):
     valid_schema: result.valid_schema,
     publication_eligible: result.publication_eligible,
     owner_approval_allowed: canOwnerApproveTaxKnowledgeProposal(result),
-    errors: result.errors,
+    errors: sanitizeTax639AuditErrors(result.errors),
     warnings: result.warnings,
     blocking_uncertainties: result.blocking_uncertainties,
   });
@@ -199,6 +200,7 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
           outcome: 'tax_639_invalid',
           input_context_digest: inputContextDigest,
           attempt_count: result.telemetry.attempt_count,
+          errors: validation.errors,
         }),
       });
       throwIfProposalInvalid(validation);

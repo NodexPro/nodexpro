@@ -21,6 +21,12 @@ import { emptyTaxKnowledgeProposalSlice } from './owner-legal-control-types';
 export const PUBLISH_TAX_KNOWLEDGE_PROPOSAL_TO_CANONICAL_DRAFT =
   'publish_tax_knowledge_proposal_to_canonical_draft' as const;
 
+export type OwnerTax639ValidationError = {
+  path: string;
+  code: string;
+  message: string;
+};
+
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
@@ -32,6 +38,34 @@ function asNullableString(value: unknown): string | null {
 
 function asRecord(value: unknown): UnknownRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as UnknownRecord) : null;
+}
+
+const OWNER_TAX_639_ERROR_MAX = 80;
+const OWNER_TAX_639_PATH_MAX = 240;
+const OWNER_TAX_639_CODE_MAX = 80;
+const OWNER_TAX_639_MESSAGE_MAX = 400;
+
+/** Compact Owner diagnostics from TAX_KNOWLEDGE_PROPOSAL_INVALID. Never copies proposal body, quotes, or completions. */
+export function sanitizeOwnerTax639ValidationErrors(error: unknown): OwnerTax639ValidationError[] {
+  const rec = asRecord(error);
+  if (!rec) return [];
+  const code = asString(rec.code);
+  if (code && code !== 'TAX_KNOWLEDGE_PROPOSAL_INVALID') return [];
+  const details = asRecord(rec.details) ?? rec;
+  const raw = details.errors;
+  if (!Array.isArray(raw)) return [];
+  const out: OwnerTax639ValidationError[] = [];
+  for (const row of raw) {
+    const item = asRecord(row);
+    if (!item) continue;
+    const path = asString(item.path).trim().slice(0, OWNER_TAX_639_PATH_MAX);
+    const errorCode = asString(item.code).trim().slice(0, OWNER_TAX_639_CODE_MAX);
+    const message = asString(item.message).trim().slice(0, OWNER_TAX_639_MESSAGE_MAX);
+    if (!path && !errorCode && !message) continue;
+    out.push({ path, code: errorCode, message });
+    if (out.length >= OWNER_TAX_639_ERROR_MAX) break;
+  }
+  return out;
 }
 
 function parseItems(raw: unknown): OwnerTaxKnowledgeProposalOwnerViewItem[] {
@@ -324,6 +358,7 @@ export function OwnerTaxKnowledgeProposalView({
   const [correctBusy, setCorrectBusy] = useState(false);
   const [ruleDrafts, setRuleDrafts] = useState(view.correct.rules);
   const [failed, setFailed] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<OwnerTax639ValidationError[]>([]);
   const [externalLawName, setExternalLawName] = useState('');
   const [externalLocator, setExternalLocator] = useState('');
   const [externalBusy, setExternalBusy] = useState(false);
@@ -338,6 +373,7 @@ export function OwnerTaxKnowledgeProposalView({
 
   useEffect(() => {
     setFailed(false);
+    setValidationErrors([]);
     setCreating(false);
     setApproving(false);
     setPublishing(false);
@@ -364,10 +400,12 @@ export function OwnerTaxKnowledgeProposalView({
     inFlight.current = true;
     setCreating(true);
     setFailed(false);
+    setValidationErrors([]);
     try {
       await onCommand(view.create.action_key, { legal_text_draft_id: view.create.legal_text_draft_id });
-    } catch {
+    } catch (error) {
       setFailed(true);
+      setValidationErrors(sanitizeOwnerTax639ValidationErrors(error));
     } finally {
       inFlight.current = false;
       setCreating(false);
@@ -535,7 +573,18 @@ export function OwnerTaxKnowledgeProposalView({
       ) : null}
       {creating ? <div className="nx-legal-draft-ai-proposal-analyzing">{loc.analyzing_label}</div> : null}
       {failed && !view.has_proposal ? (
-        <div className="nx-legal-draft-ai-proposal-error">{loc.generation_failed}</div>
+        <div className="nx-legal-draft-ai-proposal-error">
+          <div>{loc.generation_failed}</div>
+          {validationErrors.length ? (
+            <ul className="nx-legal-draft-ai-proposal-error-list" dir="ltr">
+              {validationErrors.map((row, index) => (
+                <li key={`${row.path}:${row.code}:${index}`}>
+                  {row.path} — {row.code}: {row.message}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
       {!view.available ? (
         <div className="nx-legal-draft-ai-proposal-empty">

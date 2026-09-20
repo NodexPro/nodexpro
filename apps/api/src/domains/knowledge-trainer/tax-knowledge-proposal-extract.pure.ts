@@ -269,6 +269,38 @@ export function buildGenerationMetadataJson(input: {
   };
 }
 
+const TAX_639_AUDIT_ERROR_MAX = 80;
+const TAX_639_AUDIT_PATH_MAX = 240;
+const TAX_639_AUDIT_CODE_MAX = 80;
+const TAX_639_AUDIT_MESSAGE_MAX = 400;
+
+export type SanitizedTax639AuditError = {
+  path: string;
+  code: string;
+  message: string;
+};
+
+/** TAX-639 audit/UI diagnostics: keep path/code/message only. Never store proposal JSON, quotes, or completions. */
+export function sanitizeTax639AuditErrors(errors: unknown): SanitizedTax639AuditError[] {
+  if (!Array.isArray(errors)) return [];
+  const out: SanitizedTax639AuditError[] = [];
+  for (const row of errors) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+    const rec = row as Record<string, unknown>;
+    const path = typeof rec.path === 'string' ? rec.path.trim() : '';
+    const code = typeof rec.code === 'string' ? rec.code.trim() : '';
+    const message = typeof rec.message === 'string' ? rec.message.trim() : '';
+    if (!path && !code && !message) continue;
+    out.push({
+      path: path.slice(0, TAX_639_AUDIT_PATH_MAX),
+      code: code.slice(0, TAX_639_AUDIT_CODE_MAX),
+      message: message.slice(0, TAX_639_AUDIT_MESSAGE_MAX),
+    });
+    if (out.length >= TAX_639_AUDIT_ERROR_MAX) break;
+  }
+  return out;
+}
+
 export function sanitizeGenerateAuditPayload(input: {
   legal_text_draft_id: string;
   proposal_id?: string | null;
@@ -281,8 +313,9 @@ export function sanitizeGenerateAuditPayload(input: {
   outcome: string;
   input_context_digest?: string | null;
   attempt_count?: number | null;
+  errors?: unknown;
 }): Record<string, unknown> {
-  return {
+  const payload: Record<string, unknown> = {
     legal_text_draft_id: input.legal_text_draft_id,
     proposal_id: input.proposal_id ?? null,
     provider: input.provider ?? null,
@@ -296,4 +329,8 @@ export function sanitizeGenerateAuditPayload(input: {
     attempt_count: input.attempt_count ?? null,
     purpose: TAX_KNOWLEDGE_PROPOSAL_EXTRACT_PURPOSE,
   };
+  if (input.outcome === 'tax_639_invalid') {
+    payload.errors = sanitizeTax639AuditErrors(input.errors);
+  }
+  return payload;
 }

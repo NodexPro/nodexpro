@@ -336,6 +336,22 @@ test('TAX-639 invalid output and provider failure store zero B2 rows', async () 
   assert.equal(invalid.error.code, 'TAX_KNOWLEDGE_PROPOSAL_INVALID');
   assert.equal(invalid.inserts.length, 0);
   assert.equal(invalid.gatewayCalls.length, 1);
+  assert.equal(invalid.audits.length, 1);
+  assert.equal(invalid.audits[0]?.outcome, 'tax_639_invalid');
+  const auditErrors = invalid.audits[0]?.errors as Array<Record<string, unknown>>;
+  assert.ok(Array.isArray(auditErrors) && auditErrors.length > 0);
+  for (const row of auditErrors) {
+    assert.deepEqual(Object.keys(row).sort(), ['code', 'message', 'path']);
+    assert.equal(typeof row.path, 'string');
+    assert.equal(typeof row.code, 'string');
+    assert.equal(typeof row.message, 'string');
+  }
+  assert.ok(auditErrors.some((row) => row.path === 'extra' && row.code === 'unknown_field'));
+  const detailsErrors = (invalid.error.details?.errors as Array<Record<string, unknown>>) ?? [];
+  assert.ok(detailsErrors.some((row) => row.path === 'extra' && row.code === 'unknown_field'));
+  const serializedAudit = JSON.stringify(invalid.audits);
+  assert.doesNotMatch(serializedAudit, /"prompt"|"completion"|"proposal_json"|"draft_legal_text"/);
+  assert.doesNotMatch(serializedAudit, /api_key|sk-/);
 
   const failed = await runGenerate({
     json: closed(),
@@ -346,6 +362,7 @@ test('TAX-639 invalid output and provider failure store zero B2 rows', async () 
   assert.ok(failed.error instanceof AiGatewayError);
   assert.equal(failed.error.code, AI_ERROR_CODES.AI_TIMEOUT);
   assert.equal(failed.inserts.length, 0);
+  assert.equal('errors' in (failed.audits[0] ?? {}), false);
 
   const unconfigured = await runGenerate({
     json: closed(),

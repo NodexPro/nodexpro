@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { emptyTaxKnowledgeProposalSlice } from '../src/pages/owner-legal-control-types.ts';
-import { parseTaxKnowledgeProposalSlice } from '../src/pages/owner-tax-knowledge-proposal-view.tsx';
+import { parseTaxKnowledgeProposalSlice, sanitizeOwnerTax639ValidationErrors } from '../src/pages/owner-tax-knowledge-proposal-view.tsx';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(dir, '../../..');
@@ -33,6 +33,8 @@ test('TAX-644A/645 UI is compact, locale-local, and creates only via the named c
   assert.match(view, /inFlight\.current/);
   assert.match(view, /loc\.analyzing_label/);
   assert.match(view, /loc\.generation_failed/);
+  assert.match(view, /sanitizeOwnerTax639ValidationErrors/);
+  assert.match(view, /nx-legal-draft-ai-proposal-error-list/);
   assert.match(view, /✨ Proposal/);
   assert.doesNotMatch(view, /loc\.create_label/);
   assert.doesNotMatch(view, /✨ צור Proposal/);
@@ -40,6 +42,7 @@ test('TAX-644A/645 UI is compact, locale-local, and creates only via the named c
   assert.match(css, /display: contents/);
   assert.match(css, /nx-legal-draft-ai-proposal-create/);
   assert.match(css, /nx-legal-draft-ai-proposal-approve/);
+  assert.match(css, /nx-legal-draft-ai-proposal-error-list/);
   assert.match(css, /minmax\(240px, 0\.96fr\) minmax\(320px, 1\.48fr\) minmax\(200px, 0\.66fr\)/);
   assert.match(parser, /parseTaxKnowledgeProposalSlice/);
   assert.match(owner, /generate_tax_knowledge_proposal/);
@@ -346,4 +349,44 @@ test('TAX-648A UI keeps a locale-invariant ✓ and human correction without publ
   assert.doesNotMatch(view, /proposal_json/);
   assert.doesNotMatch(view, /activate_tax_rule_version/);
   assert.doesNotMatch(view, /owner_approval_allowed ===/);
+});
+
+test('TAX-651 Owner UI keeps sanitized TAX-639 path/code/message and drops proposal content', () => {
+  const timeout = sanitizeOwnerTax639ValidationErrors({
+    code: 'AI_TIMEOUT',
+    details: { errors: [{ path: 'extra', code: 'unknown_field', message: 'should not show' }] },
+  });
+  assert.deepEqual(timeout, []);
+
+  const parsed = sanitizeOwnerTax639ValidationErrors({
+    code: 'TAX_KNOWLEDGE_PROPOSAL_INVALID',
+    message: 'proposal_json failed tax_knowledge_proposal_v1 validation',
+    details: {
+      valid_schema: false,
+      errors: [
+        {
+          path: 'evidence.quotes[0]',
+          code: 'fake_evidence_span',
+          message: 'verbatim span is outside the pinned Owner Draft',
+          text: 'סעיף 2(1) השתכרות',
+          proposal_json: { statement: 'secret' },
+          completion: 'MODEL COMPLETION',
+        },
+        { path: 'extra', code: 'unknown_field', message: 'Unknown top-level field extra is not part of tax_knowledge_proposal_v1' },
+      ],
+    },
+  });
+  assert.deepEqual(parsed, [
+    {
+      path: 'evidence.quotes[0]',
+      code: 'fake_evidence_span',
+      message: 'verbatim span is outside the pinned Owner Draft',
+    },
+    {
+      path: 'extra',
+      code: 'unknown_field',
+      message: 'Unknown top-level field extra is not part of tax_knowledge_proposal_v1',
+    },
+  ]);
+  assert.deepEqual(Object.keys(parsed[0] ?? {}).sort(), ['code', 'message', 'path']);
 });

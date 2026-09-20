@@ -158,5 +158,51 @@ test('generation metadata and audit omit prompt, completion, and secrets', () =>
   assert.equal('prompt' in audit, false);
   assert.equal('completion' in audit, false);
   assert.equal('draft_legal_text' in audit, false);
+  assert.equal('errors' in audit, false);
   assert.doesNotMatch(JSON.stringify(audit), /api_key|sk-/);
+});
+
+test('TAX-651 tax_639_invalid audit stores sanitized path/code/message only', () => {
+  const audit = sanitizeGenerateAuditPayload({
+    legal_text_draft_id: DRAFT_ID,
+    provider: 'openai',
+    model: 'gpt-5.4-2026-03-05',
+    outcome: 'tax_639_invalid',
+    input_context_digest: 'a'.repeat(64),
+    latency_ms: 8070,
+    attempt_count: 1,
+    errors: [
+      {
+        path: 'evidence.quotes[0]',
+        code: 'fake_evidence_span',
+        message: 'verbatim span is outside the pinned Owner Draft',
+        text: 'סעיף 2(1) השתכרות או ריווח מכל עסק',
+        proposal_json: { rules: [{ statement: 'secret rule text' }] },
+        completion: 'MODEL COMPLETION LEAK',
+        prompt: 'SYSTEM PROMPT LEAK',
+      },
+      {
+        path: 'extra',
+        code: 'unknown_field',
+        message: 'Unknown top-level field extra is not part of tax_knowledge_proposal_v1',
+      },
+    ],
+  });
+  assert.equal(audit.outcome, 'tax_639_invalid');
+  assert.deepEqual(audit.errors, [
+    {
+      path: 'evidence.quotes[0]',
+      code: 'fake_evidence_span',
+      message: 'verbatim span is outside the pinned Owner Draft',
+    },
+    {
+      path: 'extra',
+      code: 'unknown_field',
+      message: 'Unknown top-level field extra is not part of tax_knowledge_proposal_v1',
+    },
+  ]);
+  const serialized = JSON.stringify(audit);
+  assert.doesNotMatch(serialized, /proposal_json|draft_legal_text|"prompt"|"completion"|MODEL COMPLETION|SYSTEM PROMPT|השתכרות|secret rule text/);
+  assert.equal('prompt' in audit, false);
+  assert.equal('completion' in audit, false);
 });
