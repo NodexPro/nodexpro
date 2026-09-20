@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { isSupabaseMissingTableError } from '../../src/shared/supabase-errors.js';
 import { TAX_RULE_ENGINE_AGGREGATE_KEY } from '../../src/domains/tax-rule-engine/tax-rule-engine.types.js';
+import { skipCanonicalWritesOnPermanentDev } from '../_helpers/dev-live-fixture.ts';
 
 const AUTHORIZED_DEV_HOST = 'jgxezhjctrgfbmmkqqhn.supabase.co';
 const AS_OF = '2026-06-01';
@@ -63,6 +64,7 @@ function idsIn(aggregate: {
 }
 
 test('TAX-K3A live: loader/evaluate against DEV Tax Knowledge', async (t) => {
+  if (skipCanonicalWritesOnPermanentDev(t)) return;
   if (!supabaseConfigured()) {
     t.skip('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured');
     return;

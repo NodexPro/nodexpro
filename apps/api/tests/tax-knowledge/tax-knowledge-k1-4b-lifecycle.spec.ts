@@ -16,6 +16,7 @@ import {
 } from '../../src/domains/tax-knowledge/tax-knowledge-checksum.pure.js';
 import { AppError } from '../../src/shared/errors.js';
 import { isSupabaseMissingTableError } from '../../src/shared/supabase-errors.js';
+import { skipCanonicalWritesOnPermanentDev } from '../_helpers/dev-live-fixture.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(dir, '../../../..');
@@ -212,6 +213,7 @@ test('TAX-K1.4B commands require Platform Owner', async (t) => {
 });
 
 test('TAX-K1.4B live draft version + source/rule lifecycle', async (t) => {
+  if (skipCanonicalWritesOnPermanentDev(t)) return;
   if (!supabaseConfigured()) {
     t.skip('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured');
     return;

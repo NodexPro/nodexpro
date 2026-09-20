@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AppError } from '../../src/shared/errors.js';
 import { isSupabaseMissingTableError } from '../../src/shared/supabase-errors.js';
+import { skipCanonicalWritesOnPermanentDev } from '../_helpers/dev-live-fixture.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(dir, '../../../..');
@@ -69,6 +70,7 @@ test('TAX-K2C invariant: update_tax_source_metadata command matches sourceAllowe
 });
 
 test('TAX-K2C invariant: live draft/active metadata accepted, retired rejected', async (t) => {
+  if (skipCanonicalWritesOnPermanentDev(t)) return;
   if (!supabaseConfigured()) {
     t.skip('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured');
     return;

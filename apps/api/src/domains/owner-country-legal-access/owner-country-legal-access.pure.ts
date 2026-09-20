@@ -122,7 +122,7 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     return 'legal_sources.manage';
   }
 
-  if (command === 'select_legal_training_document') {
+  if (command === 'select_legal_training_document' || command === 'select_legal_text_draft') {
     return 'legal_knowledge.view';
   }
 
@@ -185,6 +185,7 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'set_legal_text_draft_boundary' ||
     command === 'reset_legal_text_draft_to_source' ||
     command === 'create_corrected_tax_knowledge_proposal' ||
+    command === 'record_tax_knowledge_proposal_external_reference' ||
     command === 'link_tax_rule_legal_node' ||
     command === 'unlink_tax_rule_legal_node' ||
     command.includes('tax_rule_relationship') ||

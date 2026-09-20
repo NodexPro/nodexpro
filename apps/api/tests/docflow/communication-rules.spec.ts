@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../../src/db/client.js';
 import { executeDocflowCommunicationOfficeCommand } from '../../src/domains/docflow/docflow-communication-rule.service.js';
 import { buildClientPortalInboxAggregate } from '../../src/domains/docflow/docflow-read-models.service.js';
 import type { RequestContext } from '../../src/shared/context.js';
+import { isPermanentDevSupabaseUrl } from '../country-pack/verification-safety.pure.ts';
 
 type CommEnv = {
   marker: string;
@@ -60,6 +61,11 @@ async function enableDocflowEntitlement(orgId: string): Promise<void> {
 }
 
 async function createCommEnv(templateText: string, opts?: CommRulePayloadOptions): Promise<CommEnv> {
+  if (isPermanentDevSupabaseUrl(process.env.SUPABASE_URL)) {
+    throw new Error(
+      'TAX-650: communication-rules refuses enabled Country Pack writes on permanent DEV jgxezhjctrgfbmmkqqhn',
+    );
+  }
   const marker = `docflow-comm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const userId = randomUUID();
   const orgId = randomUUID();
@@ -186,7 +192,13 @@ async function cleanupCommEnv(e: CommEnv): Promise<void> {
   await supabaseAdmin.from('country_legal_value_versions').delete().eq('country_pack_ruleset_id', e.rulesetId);
   await supabaseAdmin.from('country_legal_values').delete().eq('id', e.legalValueId);
   await supabaseAdmin.from('country_pack_rulesets').delete().eq('id', e.rulesetId);
-  await supabaseAdmin.from('country_packs').delete().eq('id', e.packId);
+  const packDel = await supabaseAdmin.from('country_packs').delete().eq('id', e.packId);
+  if (packDel.error) throw new Error(`TAX-650 docflow pack delete failed: ${packDel.error.message}`);
+  const leftoverPack = await supabaseAdmin.from('country_packs').select('id, pack_code').eq('id', e.packId).maybeSingle();
+  if (leftoverPack.error) throw new Error(`TAX-650 leftover pack probe failed: ${leftoverPack.error.message}`);
+  if (leftoverPack.data) {
+    throw new Error(`TAX-650 leftover enabled Country Pack ${leftoverPack.data.pack_code}`);
+  }
   await supabaseAdmin.from('organization_module_subscriptions').delete().eq('organization_id', e.orgId);
   await supabaseAdmin.from('organization_modules').delete().eq('organization_id', e.orgId);
   await supabaseAdmin.from('audit_log').delete().eq('organization_id', e.orgId);

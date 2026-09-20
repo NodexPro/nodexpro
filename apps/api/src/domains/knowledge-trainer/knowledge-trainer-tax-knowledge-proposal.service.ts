@@ -27,6 +27,10 @@ import {
 import { validateTaxKnowledgeProposalV1AgainstStore } from './tax-knowledge-proposal-v1-catalog.service.js';
 import { canOwnerApproveTaxKnowledgeProposal } from './tax-knowledge-proposal-v1.pure.js';
 import type { TaxKnowledgeProposalV1ValidationResult } from './tax-knowledge-proposal-v1.types.js';
+import {
+  appendOwnerExternalUnresolvedReference,
+  parseOwnerExternalReferencePayload,
+} from './tax-knowledge-proposal-external-reference.pure.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REVISION_INSERT_ATTEMPTS = 8;
@@ -400,6 +404,42 @@ export async function createCorrectedTaxKnowledgeProposal(
     draft_id: sourceDraftId,
     proposal_id: created.id,
   };
+}
+
+export async function recordTaxKnowledgeProposalExternalReference(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<TaxKnowledgeProposalCommandResult> {
+  assertNoTrustedProvenance(payload);
+  const parsed = parseOwnerExternalReferencePayload(payload);
+  const sourceId = asUuid(parsed.tax_knowledge_proposal_id, 'tax_knowledge_proposal_id');
+  await loadProposal(sourceId);
+  const { data, error } = await supabaseAdmin
+    .from(PROPOSAL_TABLE)
+    .select('proposal_json')
+    .eq('id', sourceId)
+    .maybeSingle();
+  throwIfProposalSchemaMissing(error);
+  if (error) throw error;
+  const nextJson = appendOwnerExternalUnresolvedReference(parseProposalJson(data?.proposal_json), parsed);
+  const created = await createCorrectedTaxKnowledgeProposal(ctx, {
+    source_tax_knowledge_proposal_id: sourceId,
+    proposal_json: nextJson,
+  });
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_EXTERNAL_REFERENCE_RECORDED, created.proposal_id, {
+    country_code: created.country_code,
+    document_id: created.document_id,
+    legal_text_draft_id: created.draft_id,
+    source_tax_knowledge_proposal_id: sourceId,
+    proposal_rule_key: parsed.proposal_rule_key,
+    relationship_type: parsed.relationship_type,
+    cited_instrument_kind: parsed.cited_instrument_kind,
+    locator_text: parsed.locator_text,
+    cited_law_name: parsed.cited_law_name,
+    owner_authored: true,
+    unresolved: true,
+  });
+  return created;
 }
 
 function assertPublishPayload(payload: Record<string, unknown>): void {

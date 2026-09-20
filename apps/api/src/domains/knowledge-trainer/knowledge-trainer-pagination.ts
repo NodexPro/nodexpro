@@ -1,4 +1,4 @@
-export const TRAINER_FETCH_PAGE_SIZE = 500;
+export const TRAINER_FETCH_PAGE_SIZE = 2000;
 
 export type PagedQueryError = { message?: string; code?: string } | null;
 

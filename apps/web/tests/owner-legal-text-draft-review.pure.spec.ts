@@ -43,10 +43,10 @@ test('TAX-633 Owner Draft UI is aggregate-only, command-only, and bidi-safe', ()
   const panel = readRepo('apps/web/src/pages/PlatformOwnerLegalControl.tsx');
   const css = readRepo('apps/web/src/styles/nx-modal.css');
 
-  assert.match(ui, /Original source — read only/);
+  assert.match(ui, /Original \/ Extracted source — immutable evidence/);
   assert.match(ui, /nx-legal-draft-readonly/);
   assert.match(ui, /Full source region/);
-  assert.match(ui, /Editable legal text/);
+  assert.match(ui, /Owner corrected legal text — current reviewed working legal text/);
   assert.match(ui, /nx-legal-draft-textarea/);
   assert.match(ui, /update_legal_text_draft_text/);
   assert.match(ui, /update_legal_text_draft_identity/);
@@ -77,7 +77,7 @@ test('TAX-633 Owner Draft UI is aggregate-only, command-only, and bidi-safe', ()
   assert.match(trainer, /workspace !== 'structure'/);
   assert.match(trainer, /create_legal_text_draft_from_candidate/);
   assert.doesNotMatch(trainer, /legalTrainingDocumentFile/);
-  assert.match(panel, /tax_knowledge_trainer_legal_text_draft_id/);
+  assert.match(panel, /select_legal_text_draft/);
   assert.match(css, /nx-legal-draft-review-grid/);
   assert.match(css, /minmax\(240px, 0\.96fr\) minmax\(320px, 1\.48fr\) minmax\(200px, 0\.66fr\)/);
   assert.match(css, /nx-btn-taxes-compact/);
@@ -100,13 +100,14 @@ test('TAX-634 Owner Draft workspace is a human legal-review screen', () => {
 
   assert.match(ui, /Law tree/);
   assert.match(ui, /Where am I in the law\?/);
-  assert.match(ui, /What did the original source say\?/);
-  assert.match(ui, /What text will I keep or correct\?/);
+  assert.match(ui, /OCR\/extracted source/);
+  assert.match(ui, /reviewed working legal text/);
   assert.match(ui, /Have I reviewed this node\?/);
-  assert.match(ui, /Owner version/);
-  assert.match(ui, /Editable legal text/);
+  assert.match(ui, /Owner corrected legal text — current working version/);
+  assert.match(ui, /Owner corrected legal text — current reviewed working legal text/);
   assert.match(ui, /Reset text from original/);
-  assert.match(ui, /Mark reviewed \/ נבדק/);
+  assert.match(ui, /textDirty/);
+  assert.match(ui, /disabled=\{busy \|\| textDirty\}/);
   assert.match(ui, /Needs review \/ דורש בדיקה/);
   assert.match(ui, /prepare_legal_text_drafts_for_structure/);
   assert.match(ui, /Technical details \/ Advanced source correction/);

@@ -121,6 +121,26 @@ export async function resolveCountryForOwnerLegalCommand(
       payload,
     );
   }
+  if (command === 'select_legal_text_draft') {
+    const id = optionalUuid(payload.legal_text_draft_id) ?? optionalUuid(payload.draft_id);
+    if (!id) throw badRequest('legal_text_draft_id is required');
+    const draft = await supabaseAdmin
+      .from('legal_ingestion_legal_text_drafts')
+      .select('id, country_code')
+      .eq('id', id)
+      .maybeSingle();
+    if (draft.error) throw draft.error;
+    if (draft.data) {
+      return assertPayloadCountryAgrees(
+        typeof draft.data.country_code === 'string' ? draft.data.country_code.trim().toUpperCase() : null,
+        payload,
+      );
+    }
+    return assertPayloadCountryAgrees(
+      await loadCountryFromRow('legal_ingestion_candidates', id, 'Legal text draft not found'),
+      payload,
+    );
+  }
   if (
     command === 'update_legal_text_draft_text' ||
     command === 'update_legal_text_draft_identity' ||
@@ -141,6 +161,7 @@ export async function resolveCountryForOwnerLegalCommand(
   if (
     command === 'set_tax_knowledge_proposal_review_status' ||
     command === 'create_corrected_tax_knowledge_proposal' ||
+    command === 'record_tax_knowledge_proposal_external_reference' ||
     command === 'ensure_tax_knowledge_proposal_owner_presentations' ||
     command === 'publish_tax_knowledge_proposal_to_canonical_draft'
   ) {

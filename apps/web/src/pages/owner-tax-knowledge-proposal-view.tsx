@@ -5,12 +5,14 @@ import type {
   OwnerTaxKnowledgeProposalCorrectAction,
   OwnerTaxKnowledgeProposalCorrectRule,
   OwnerTaxKnowledgeProposalCreateAction,
+  OwnerTaxKnowledgeProposalExternalReferenceAction,
   OwnerTaxKnowledgeProposalLocaleView,
   OwnerTaxKnowledgeProposalMeta,
   OwnerTaxKnowledgeProposalOwnerLocale,
   OwnerTaxKnowledgeProposalOwnerView,
   OwnerTaxKnowledgeProposalOwnerViewItem,
   OwnerTaxKnowledgeProposalOwnerViewRule,
+  OwnerTaxKnowledgeProposalPresentationsAction,
   OwnerTaxKnowledgeProposalSlice,
   UnknownRecord,
 } from './owner-legal-control-types';
@@ -73,6 +75,12 @@ function parseLocaleView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeP
     correct_title_label: asString(raw.correct_title_label) || fallback.correct_title_label,
     correct_statement_label: asString(raw.correct_statement_label) || fallback.correct_statement_label,
     correct_notes_label: asString(raw.correct_notes_label) || fallback.correct_notes_label,
+    record_external_label: asString(raw.record_external_label) || fallback.record_external_label,
+    record_external_law_name_label: asString(raw.record_external_law_name_label) || fallback.record_external_law_name_label,
+    record_external_locator_label: asString(raw.record_external_locator_label) || fallback.record_external_locator_label,
+    record_external_save_label: asString(raw.record_external_save_label) || fallback.record_external_save_label,
+    presentations_retry_label: asString(raw.presentations_retry_label) || fallback.presentations_retry_label,
+    presentations_missing: asString(raw.presentations_missing) || fallback.presentations_missing,
   };
 }
 
@@ -143,6 +151,36 @@ function parseCorrectAction(
   };
 }
 
+function parseExternalReferenceAction(
+  raw: UnknownRecord | null,
+  fallback: OwnerTaxKnowledgeProposalExternalReferenceAction,
+): OwnerTaxKnowledgeProposalExternalReferenceAction {
+  if (!raw) return fallback;
+  return {
+    action_key: 'record_tax_knowledge_proposal_external_reference',
+    visible: raw.visible === true,
+    enabled: raw.enabled === true,
+    tax_knowledge_proposal_id: asNullableString(raw.tax_knowledge_proposal_id),
+    proposal_rule_key: asNullableString(raw.proposal_rule_key),
+    relationship_type: 'depends_on',
+    cited_instrument_kind: 'regulation',
+    disabled_reason: asNullableString(raw.disabled_reason),
+  };
+}
+
+function parsePresentationsAction(
+  raw: UnknownRecord | null,
+  fallback: OwnerTaxKnowledgeProposalPresentationsAction,
+): OwnerTaxKnowledgeProposalPresentationsAction {
+  if (!raw) return fallback;
+  return {
+    action_key: 'ensure_tax_knowledge_proposal_owner_presentations',
+    visible: raw.visible === true,
+    enabled: raw.enabled === true,
+    tax_knowledge_proposal_id: asNullableString(raw.tax_knowledge_proposal_id),
+  };
+}
+
 function parseOwnerView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeProposalOwnerView): OwnerTaxKnowledgeProposalOwnerView {
   if (!raw) return fallback;
   const byRaw = asRecord(raw.by_locale);
@@ -166,6 +204,8 @@ function parseOwnerView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgePr
     create: parseCreateAction(asRecord(raw.create), fallback.create),
     approve: parseApproveAction(asRecord(raw.approve), fallback.approve),
     correct: parseCorrectAction(asRecord(raw.correct), fallback.correct),
+    external_reference: parseExternalReferenceAction(asRecord(raw.external_reference), fallback.external_reference),
+    presentations: parsePresentationsAction(asRecord(raw.presentations), fallback.presentations),
     by_locale: {
       he: parseLocaleView(asRecord(byRaw?.he), fallback.by_locale.he),
       ru: parseLocaleView(asRecord(byRaw?.ru), fallback.by_locale.ru),
@@ -284,6 +324,10 @@ export function OwnerTaxKnowledgeProposalView({
   const [correctBusy, setCorrectBusy] = useState(false);
   const [ruleDrafts, setRuleDrafts] = useState(view.correct.rules);
   const [failed, setFailed] = useState(false);
+  const [externalLawName, setExternalLawName] = useState('');
+  const [externalLocator, setExternalLocator] = useState('');
+  const [externalBusy, setExternalBusy] = useState(false);
+  const [presentationsBusy, setPresentationsBusy] = useState(false);
   const inFlight = useRef(false);
   const publish = publishActionFromProposalSlice(proposals);
   const publishedToDraft = isPublishedToCanonicalDraft(proposals);
@@ -300,8 +344,12 @@ export function OwnerTaxKnowledgeProposalView({
     setCorrecting(false);
     setCorrectBusy(false);
     setRuleDrafts(view.correct.rules);
+    setExternalLawName('');
+    setExternalLocator('');
+    setExternalBusy(false);
+    setPresentationsBusy(false);
     inFlight.current = false;
-  }, [view.has_proposal, view.create.legal_text_draft_id, view.approve.tax_knowledge_proposal_id, view.correct.source_tax_knowledge_proposal_id, proposals.selected?.id, proposals.selected?.status]);
+  }, [view.has_proposal, view.create.legal_text_draft_id, view.approve.tax_knowledge_proposal_id, view.correct.source_tax_knowledge_proposal_id, view.external_reference.tax_knowledge_proposal_id, proposals.selected?.id, proposals.selected?.status]);
 
   const selected = view.locale_options.some((row) => row.code === locale) ? locale : view.default_locale;
   const loc = view.by_locale[selected] ?? view.by_locale.he;
@@ -373,6 +421,55 @@ export function OwnerTaxKnowledgeProposalView({
     } finally {
       inFlight.current = false;
       setCorrectBusy(false);
+    }
+  }
+
+  async function saveExternalReference(): Promise<void> {
+    if (
+      inFlight.current ||
+      !view.external_reference.enabled ||
+      !view.external_reference.tax_knowledge_proposal_id ||
+      !onCommand
+    ) {
+      return;
+    }
+    inFlight.current = true;
+    setExternalBusy(true);
+    try {
+      await onCommand(view.external_reference.action_key, {
+        tax_knowledge_proposal_id: view.external_reference.tax_knowledge_proposal_id,
+        proposal_rule_key: view.external_reference.proposal_rule_key,
+        relationship_type: view.external_reference.relationship_type,
+        cited_instrument_kind: view.external_reference.cited_instrument_kind,
+        cited_law_name: externalLawName,
+        locator_text: externalLocator,
+      });
+      setExternalLawName('');
+      setExternalLocator('');
+    } finally {
+      inFlight.current = false;
+      setExternalBusy(false);
+    }
+  }
+
+  async function retryPresentations(): Promise<void> {
+    if (
+      inFlight.current ||
+      !view.presentations.enabled ||
+      !view.presentations.tax_knowledge_proposal_id ||
+      !onCommand
+    ) {
+      return;
+    }
+    inFlight.current = true;
+    setPresentationsBusy(true);
+    try {
+      await onCommand(view.presentations.action_key, {
+        tax_knowledge_proposal_id: view.presentations.tax_knowledge_proposal_id,
+      });
+    } finally {
+      inFlight.current = false;
+      setPresentationsBusy(false);
     }
   }
 
@@ -538,6 +635,56 @@ export function OwnerTaxKnowledgeProposalView({
               }
             >
               {loc.uncertainty}
+            </div>
+          ) : null}
+          {view.presentations.visible ? (
+            <div className="nx-legal-draft-ai-proposal-block">
+              <div className="nx-legal-draft-ai-proposal-warn is-review">{loc.presentations_missing}</div>
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                disabled={presentationsBusy || !view.presentations.enabled || !onCommand}
+                onClick={() => void retryPresentations()}
+              >
+                {loc.presentations_retry_label}
+              </button>
+            </div>
+          ) : null}
+          {view.external_reference.visible ? (
+            <div className="nx-legal-draft-ai-proposal-block">
+              <div className="nx-legal-draft-ai-proposal-k">{loc.record_external_label}</div>
+              {view.external_reference.enabled ? (
+                <>
+                  <label className="nx-legal-draft-ai-proposal-k">
+                    {loc.record_external_law_name_label}
+                    <input
+                      className="nx-legal-draft-ai-proposal-input"
+                      dir="auto"
+                      value={externalLawName}
+                      onChange={(event) => setExternalLawName(event.target.value)}
+                    />
+                  </label>
+                  <label className="nx-legal-draft-ai-proposal-k">
+                    {loc.record_external_locator_label}
+                    <input
+                      className="nx-legal-draft-ai-proposal-input"
+                      dir="auto"
+                      value={externalLocator}
+                      onChange={(event) => setExternalLocator(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="nx-btn nx-btn-taxes-compact"
+                    disabled={externalBusy || !onCommand || !externalLawName.trim() || !externalLocator.trim()}
+                    onClick={() => void saveExternalReference()}
+                  >
+                    {loc.record_external_save_label}
+                  </button>
+                </>
+              ) : view.external_reference.disabled_reason ? (
+                <div className="nx-legal-draft-ai-proposal-gate">{view.external_reference.disabled_reason}</div>
+              ) : null}
             </div>
           ) : null}
           {view.source.quote || view.source.identifier ? (

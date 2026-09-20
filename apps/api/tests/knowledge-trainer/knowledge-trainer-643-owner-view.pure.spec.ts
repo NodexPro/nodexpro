@@ -288,9 +288,10 @@ test('TAX-644B owner view shows the actual extracted meaning and stored he/ru/en
   assert.equal(view.by_locale.ru.explanation, ruMeaning);
   assert.equal(view.by_locale.en.explanation, sourceStatement);
   assert.equal(view.source.quote.includes('הכנסתו של אזרח ישראלי'), true);
-  assert.equal(view.by_locale.he.applicability, 'לא ניתן לקבוע תחולה.');
-  assert.equal(view.by_locale.en.applicability, 'Applicability cannot yet be determined.');
-  assert.match(view.by_locale.he.uncertainty ?? '', /Fact Dictionary/);
+  assert.equal(view.by_locale.he.applicability, 'לא ניתן לקבוע תחולה ללקוח בלי עובדות נוספות.');
+  assert.equal(view.by_locale.en.applicability, 'Client applicability cannot yet be determined without additional facts.');
+  assert.match(view.by_locale.he.uncertainty ?? '', /תחולה/);
+  assert.doesNotMatch(view.by_locale.en.explanation, /did not extract a legal rule/);
   assert.equal(view.by_locale.he.warning_tone, 'blocking');
   assert.equal(view.details.facts.length, 0);
   assert.equal(view.details.legal_values.length, 0);

@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isSupabaseMissingTableError } from '../../src/shared/supabase-errors.js';
+import { skipCanonicalWritesOnPermanentDev } from '../_helpers/dev-live-fixture.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(dir, '../../../..');
@@ -90,6 +91,7 @@ test('TAX-K1.2A contract: migrations 600/601 untouched and no unrelated files', 
 });
 
 test('TAX-K1.2A DB publication guard', async (t) => {
+  if (skipCanonicalWritesOnPermanentDev(t)) return;
   if (!supabaseConfigured()) {
     t.skip('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured');
     return;

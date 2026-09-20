@@ -29,7 +29,9 @@ export const KNOWLEDGE_TRAINER_COMMANDS = [
   'create_corrected_tax_knowledge_proposal',
   'ensure_tax_knowledge_proposal_owner_presentations',
   'publish_tax_knowledge_proposal_to_canonical_draft',
+  'record_tax_knowledge_proposal_external_reference',
   'select_legal_training_document',
+  'select_legal_text_draft',
 ] as const;
 
 export type KnowledgeTrainerCommandName = (typeof KNOWLEDGE_TRAINER_COMMANDS)[number];

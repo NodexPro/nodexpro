@@ -3,6 +3,16 @@ import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../..
 import { summarizeLayoutReadiness } from './knowledge-trainer-layout.pure.js';
 import { fetchAllPaged } from './knowledge-trainer-pagination.js';
 import {
+  readTrainerDocumentGraphCache,
+  readTrainerDraftListCache,
+  readTrainerReviewTreeCache,
+  trainerDocumentGraphCacheKey,
+  trainerReviewTreeCacheKey,
+  writeTrainerDocumentGraphCache,
+  writeTrainerDraftListCache,
+  writeTrainerReviewTreeCache,
+} from './knowledge-trainer-document-graph-cache.js';
+import {
   attachStructureCompleteness,
   buildLegalTextReviewNodes,
   buildLegalTextSearchIndex,
@@ -55,6 +65,7 @@ import type {
   KnowledgeTrainerLegalTextSearchIndexItemDto,
   KnowledgeTrainerLegalTextCompletenessDto,
   KnowledgeTrainerSliceDto,
+  OriginalFileAccessDto,
   KnowledgeTrainerSourceNoteAnchorDto,
   KnowledgeTrainerSourceNoteDto,
   KnowledgeTrainerTaxKnowledgeProposalDetailDto,
@@ -109,12 +120,17 @@ export async function buildKnowledgeTrainerSlice(
   countryCode: string,
   opts?: KnowledgeTrainerReadOpts,
 ): Promise<KnowledgeTrainerSliceDto> {
-  const { data: documents, error } = await supabaseAdmin
+  const documentsResult = supabaseAdmin
     .from('legal_ingestion_documents')
     .select('id, tax_source_id, original_filename, input_type, provenance_type, created_at, storage_bucket, storage_key')
     .eq('country_code', countryCode)
     .order('created_at', { ascending: false })
     .limit(40);
+  const [docResult, persistedId] = await Promise.all([
+    documentsResult,
+    loadOwnerWorkspaceSelectedDocumentId(countryCode),
+  ]);
+  const { data: documents, error } = docResult;
   if (error) {
     if (isSupabaseMissingTableError(error)) return emptyKnowledgeTrainerSlice(false);
     throw error;
@@ -177,7 +193,6 @@ export async function buildKnowledgeTrainerSlice(
   const filtered = opts?.tax_source_id
     ? summaries.filter((row) => row.tax_source_id === opts.tax_source_id)
     : summaries;
-  const persistedId = await loadOwnerWorkspaceSelectedDocumentId(countryCode);
   const extraIds = [opts?.document_id, persistedId].filter((id): id is string => Boolean(id && !filtered.some((row) => row.id === id)));
   if (extraIds.length) {
     const extraDocs = await supabaseAdmin
@@ -241,33 +256,14 @@ export async function buildKnowledgeTrainerSlice(
 
   let selected: KnowledgeTrainerSliceDto['selected_document'] = null;
   if (selectedSummary && selectedJob) {
-    let pages: Array<{
+    const job = selectedJob;
+    type TrainerPageRow = {
       page_no: number;
       status: string;
       page_text?: string | null;
       layout_status?: string | null;
       layout_item_count?: number | null;
-    }>;
-    try {
-      pages = await fetchAllPaged((from, to) =>
-        supabaseAdmin
-          .from('legal_ingestion_pages')
-          .select('page_no, status, layout_status, layout_item_count')
-          .eq('job_id', selectedJob.id)
-          .order('page_no', { ascending: true })
-          .range(from, to),
-      );
-    } catch (error) {
-      if (!isSupabaseMissingColumnError(error as { message?: string; code?: string })) throw error;
-      pages = await fetchAllPaged((from, to) =>
-        supabaseAdmin
-          .from('legal_ingestion_pages')
-          .select('page_no, status')
-          .eq('job_id', selectedJob.id)
-          .order('page_no', { ascending: true })
-          .range(from, to),
-      );
-    }
+    };
     const structureRunSchemaApplied = Object.prototype.hasOwnProperty.call(selectedJob, 'active_structure_run_id');
     const activeRunId =
       selectedJob.active_structure_run_id == null ? null : String(selectedJob.active_structure_run_id);
@@ -275,7 +271,32 @@ export async function buildKnowledgeTrainerSlice(
       'id, candidate_kind, candidate_status, kind_label, node_number, source_display_identifier, normalized_machine_identifier, identifier_base_number, identifier_letter_suffix, identifier_nested_components, printed_marker, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, source_page, source_item_start, source_item_end, source_line_index, source_bbox, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order, structure_run_id';
     const candidateSelectLegacy =
       'id, candidate_kind, candidate_status, kind_label, node_number, title, parent_candidate_id, parent_tax_legal_node_id, page_start, page_end, excerpt, confidence, validation_warnings, matched_tax_legal_node_id, accepted_tax_legal_node_id, sort_order';
-    const selectedJobId = String(selectedJob.id);
+    const selectedJobId = String(job.id);
+    const graphKey = trainerDocumentGraphCacheKey(selectedSummary.id, selectedJobId, activeRunId);
+    const cachedGraph = readTrainerDocumentGraphCache(graphKey);
+
+    async function loadPages(): Promise<TrainerPageRow[]> {
+      try {
+        return await fetchAllPaged((from, to) =>
+          supabaseAdmin
+            .from('legal_ingestion_pages')
+            .select('page_no, status, layout_status, layout_item_count')
+            .eq('job_id', job.id)
+            .order('page_no', { ascending: true })
+            .range(from, to),
+        );
+      } catch (error) {
+        if (!isSupabaseMissingColumnError(error as { message?: string; code?: string })) throw error;
+        return fetchAllPaged((from, to) =>
+          supabaseAdmin
+            .from('legal_ingestion_pages')
+            .select('page_no, status')
+            .eq('job_id', job.id)
+            .order('page_no', { ascending: true })
+            .range(from, to),
+        );
+      }
+    }
     async function loadCandidatesBy(columns: string): Promise<Array<Record<string, unknown>>> {
       return fetchAllPaged<Record<string, unknown>>((from, to) =>
         supabaseAdmin
@@ -286,16 +307,14 @@ export async function buildKnowledgeTrainerSlice(
           .range(from, to) as PromiseLike<{ data: Array<Record<string, unknown>> | null; error: { message?: string; code?: string } | null }>,
       );
     }
-    let candidates: Array<Record<string, unknown>> = [];
-    if (structureRunSchemaApplied && !activeRunId) {
-      candidates = [];
-    } else {
+    async function loadCandidates(): Promise<Array<Record<string, unknown>>> {
+      if (structureRunSchemaApplied && !activeRunId) return [];
       try {
-        candidates = await fetchAllPaged((from, to) => {
+        return await fetchAllPaged((from, to) => {
           let query = supabaseAdmin
             .from('legal_ingestion_candidates')
             .select(candidateSelect)
-            .eq('job_id', selectedJob.id)
+            .eq('job_id', job.id)
             .order('sort_order', { ascending: true })
             .range(from, to);
           if (activeRunId) query = query.eq('structure_run_id', activeRunId);
@@ -303,94 +322,116 @@ export async function buildKnowledgeTrainerSlice(
         });
       } catch (error) {
         if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'printed_marker')) {
-          candidates = await loadCandidatesBy(candidateSelect.replace(', printed_marker', ''));
-        } else if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'source_page')) {
-          candidates = await loadCandidatesBy(
+          return loadCandidatesBy(candidateSelect.replace(', printed_marker', ''));
+        }
+        if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'source_page')) {
+          return loadCandidatesBy(
             candidateSelect.replace(', source_page, source_item_start, source_item_end, source_line_index, source_bbox', ''),
           );
-        } else if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'source_display_identifier')) {
-          candidates = await loadCandidatesBy(candidateSelectLegacy);
-        } else if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'structure_run_id')) {
-          candidates = await loadCandidatesBy(candidateSelect.replace(', structure_run_id', ''));
-        } else {
-          throw error;
         }
+        if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'source_display_identifier')) {
+          return loadCandidatesBy(candidateSelectLegacy);
+        }
+        if (isSupabaseMissingColumnError(error as { message?: string; code?: string }, 'structure_run_id')) {
+          return loadCandidatesBy(candidateSelect.replace(', structure_run_id', ''));
+        }
+        throw error;
       }
+    }
+
+    let pages: TrainerPageRow[];
+    let candidates: Array<Record<string, unknown>>;
+    if (cachedGraph) {
+      pages = cachedGraph.pages as TrainerPageRow[];
+      candidates = cachedGraph.candidates;
+    } else {
+      [pages, candidates] = await Promise.all([loadPages(), loadCandidates()]);
     }
 
     const pageNo = opts?.page_no && opts.page_no > 0 ? opts.page_no : pages?.[0] ? Number(pages[0].page_no) : null;
     const selectedPageMeta = pages?.find((page) => Number(page.page_no) === pageNo) ?? null;
-    const selectedPageText = pageNo
-      ? await supabaseAdmin
+    const selectedPageTextPromise = pageNo
+      ? supabaseAdmin
           .from('legal_ingestion_pages')
           .select('page_no, page_text, status')
-          .eq('job_id', selectedJob.id)
+          .eq('job_id', job.id)
           .eq('page_no', pageNo)
           .maybeSingle()
-      : { data: null, error: null };
-    if (selectedPageText.error) throw selectedPageText.error;
-    const selectedPage = selectedPageText.data
-      ? {
-          page_no: Number(selectedPageText.data.page_no),
-          page_text: selectedPageText.data.page_text == null ? null : String(selectedPageText.data.page_text),
-          status: String(selectedPageText.data.status),
-        }
-      : selectedPageMeta;
+      : Promise.resolve({ data: null, error: null as { message?: string; code?: string } | null });
     const ocrPageNumbers = (pages ?? [])
       .filter((page) => String(page.status) === 'needs_ocr')
       .map((page) => Number(page.page_no))
       .filter((page) => page > 0);
-    const { data: kinds } = await supabaseAdmin
-      .from('tax_legal_node_kinds')
-      .select('id, label')
-      .eq('country_code', countryCode)
-      .order('sort_order', { ascending: true });
-    let buildingRun: { id: string } | null = null;
-    let lastFailed: { id: string; failure_reason: string | null } | null = null;
-    let activeRunMeta: { detector_version: string | null; status: string | null } | null = null;
-    if (structureRunSchemaApplied) {
-      const { data: runRows, error: runError } = await supabaseAdmin
-        .from('legal_ingestion_structure_runs')
-        .select('id, status, detector_version, failure_reason, started_at')
-        .eq('job_id', selectedJob.id)
-        .in('status', ['building', 'ready', 'failed'])
-        .order('started_at', { ascending: false });
-      if (runError && !isSupabaseMissingTableError(runError)) throw runError;
-      for (const row of runRows ?? []) {
-        if (String(row.status) === 'building' && !buildingRun) buildingRun = { id: String(row.id) };
-        if (String(row.status) === 'failed' && !lastFailed) {
-          lastFailed = {
-            id: String(row.id),
-            failure_reason: row.failure_reason == null ? null : String(row.failure_reason),
-          };
-        }
-        if (activeRunId && String(row.id) === activeRunId) {
-          activeRunMeta = {
-            detector_version: row.detector_version == null ? null : String(row.detector_version),
-            status: String(row.status),
-          };
+    const cachedReview =
+      cachedGraph?.reviewedCandidates?.length
+        ? {
+            candidates: cachedGraph.reviewedCandidates as KnowledgeTrainerCandidateDto[],
+            review_summary: cachedGraph.reviewSummary as ReturnType<typeof attachStructureReviewModel>['review_summary'],
+            review_filters: cachedGraph.reviewFilters as ReturnType<typeof attachStructureReviewModel>['review_filters'],
+            structure_tree: cachedGraph.structureTree as ReturnType<typeof attachStructureReviewModel>['structure_tree'],
+          }
+        : null;
+    let kinds: Array<{ id: unknown; label: unknown }> | null = null;
+    let structureRun: StructureRunReadDto;
+    if (cachedGraph?.structureRun && cachedReview) {
+      structureRun = cachedGraph.structureRun as StructureRunReadDto;
+    } else {
+      const kindsResult = await supabaseAdmin
+        .from('tax_legal_node_kinds')
+        .select('id, label')
+        .eq('country_code', countryCode)
+        .order('sort_order', { ascending: true });
+      kinds = kindsResult.data;
+      let buildingRun: { id: string } | null = null;
+      let lastFailed: { id: string; failure_reason: string | null } | null = null;
+      let activeRunMeta: { detector_version: string | null; status: string | null } | null = null;
+      if (structureRunSchemaApplied) {
+        const { data: runRows, error: runError } = await supabaseAdmin
+          .from('legal_ingestion_structure_runs')
+          .select('id, status, detector_version, failure_reason, started_at')
+          .eq('job_id', job.id)
+          .in('status', ['building', 'ready', 'failed'])
+          .order('started_at', { ascending: false });
+        if (runError && !isSupabaseMissingTableError(runError)) throw runError;
+        for (const row of runRows ?? []) {
+          if (String(row.status) === 'building' && !buildingRun) buildingRun = { id: String(row.id) };
+          if (String(row.status) === 'failed' && !lastFailed) {
+            lastFailed = {
+              id: String(row.id),
+              failure_reason: row.failure_reason == null ? null : String(row.failure_reason),
+            };
+          }
+          if (activeRunId && String(row.id) === activeRunId) {
+            activeRunMeta = {
+              detector_version: row.detector_version == null ? null : String(row.detector_version),
+              status: String(row.status),
+            };
+          }
         }
       }
-    }
-    const structureRun: StructureRunReadDto = {
-      schema_applied: structureRunSchemaApplied,
-      active_run_id: activeRunId,
-      active_status: activeRunMeta?.status ?? (activeRunId ? 'ready' : null),
-      detector_version: activeRunMeta?.detector_version ?? null,
-      visible_candidate_count: candidates?.length ?? 0,
-      building_run_id: buildingRun?.id ?? null,
-      building_status_label: buildingRun
-        ? 'Building. Not visible until atomic cutover.'
-        : null,
-      last_failed_run_id: lastFailed?.id ?? null,
-      last_failed_reason: lastFailed?.failure_reason ?? null,
-      status_label: structureRunStatusLabel({
+      structureRun = {
         schema_applied: structureRunSchemaApplied,
         active_run_id: activeRunId,
+        active_status: activeRunMeta?.status ?? (activeRunId ? 'ready' : null),
+        detector_version: activeRunMeta?.detector_version ?? null,
+        visible_candidate_count: candidates?.length ?? 0,
         building_run_id: buildingRun?.id ?? null,
-      }),
-    };
-    const baseCandidates = (candidates ?? []).map((row) => {
+        building_status_label: buildingRun
+          ? 'Building. Not visible until atomic cutover.'
+          : null,
+        last_failed_run_id: lastFailed?.id ?? null,
+        last_failed_reason: lastFailed?.failure_reason ?? null,
+        status_label: structureRunStatusLabel({
+          schema_applied: structureRunSchemaApplied,
+          active_run_id: activeRunId,
+          building_run_id: buildingRun?.id ?? null,
+        }),
+      };
+    }
+    const baseCandidates = (
+      cachedGraph?.mappedCandidates?.length
+        ? cachedGraph.mappedCandidates
+        : (candidates ?? []).map((row) => {
         const warnings = Array.isArray(row.validation_warnings)
           ? row.validation_warnings.map((item) => String(item))
           : [];
@@ -429,9 +470,10 @@ export async function buildKnowledgeTrainerSlice(
           sort_order: Number(row.sort_order ?? 0),
           possible_existing_match: Boolean(row.matched_tax_legal_node_id),
         };
-      });
+      })
+    ) as KnowledgeTrainerCandidateDto[];
     const structureAnalysis = decodeStructureAnalysis(
-      typeof selectedJob.last_error === 'string' ? selectedJob.last_error : null,
+      typeof job.last_error === 'string' ? job.last_error : null,
     ) ?? {
       ...emptyStructureAnalysis(),
       candidates_found: selectedSummary.structure_candidate_count,
@@ -451,11 +493,13 @@ export async function buildKnowledgeTrainerSlice(
         layout_item_count: Number(page.layout_item_count ?? 0),
       })),
     );
-    const reviewed = attachStructureReviewModel(baseCandidates, {
-      catalog: (kinds ?? []).map((row) => ({ id: String(row.id), label: String(row.label) })),
-      ocr_pages: ocrPageNumbers,
-      layout_used: structureAnalysis.layout_used === true,
-    });
+    const reviewed =
+      cachedReview ??
+      attachStructureReviewModel(baseCandidates, {
+        catalog: (kinds ?? []).map((row) => ({ id: String(row.id), label: String(row.label) })),
+        ocr_pages: ocrPageNumbers,
+        layout_used: structureAnalysis.layout_used === true,
+      });
     const canExtract =
       Boolean(selectedSummary) && !['uploaded', 'queued', 'extracting'].includes(selectedSummary.job_status);
     const selectedRow = (documents ?? []).find((row) => String(row.id) === selectedSummary.id);
@@ -463,8 +507,8 @@ export async function buildKnowledgeTrainerSlice(
     const storageBucket = String(
       (selectedRow as { storage_bucket?: string | null } | undefined)?.storage_bucket || OWNER_LEGAL_MATERIALS_BUCKET,
     );
-    let originalFileAccess = null;
-    if (storageKey) {
+    let originalFileAccess = cachedGraph ? cachedGraph.originalFileAccess : null;
+    if (!cachedGraph && storageKey) {
       try {
         const url = await createOwnerLegalMaterialSignedUrl(
           storageBucket,
@@ -480,7 +524,47 @@ export async function buildKnowledgeTrainerSlice(
         originalFileAccess = null;
       }
     }
-    const sourceEvidence = await loadSourceNotesForActiveRun(activeRunId);
+    const sourceEvidence = cachedGraph
+      ? {
+          notes: cachedGraph.sourceNotes as KnowledgeTrainerSourceNoteDto[],
+          unresolved_anchors: cachedGraph.unresolvedAnchors as KnowledgeTrainerSourceNoteAnchorDto[],
+          summary: cachedGraph.sourceNoteSummary as ReturnType<typeof summarizeSourceNotes>,
+        }
+      : await loadSourceNotesForActiveRun(activeRunId);
+    if (!cachedGraph) {
+      writeTrainerDocumentGraphCache(graphKey, {
+        pages,
+        candidates,
+        mappedCandidates: baseCandidates as Array<Record<string, unknown>>,
+        reviewedCandidates: reviewed.candidates as Array<Record<string, unknown>>,
+        reviewSummary: reviewed.review_summary,
+        reviewFilters: reviewed.review_filters,
+        structureTree: reviewed.structure_tree,
+        structureRun,
+        sourceNotes: sourceEvidence.notes,
+        unresolvedAnchors: sourceEvidence.unresolved_anchors,
+        sourceNoteSummary: sourceEvidence.summary,
+        originalFileAccess,
+      });
+    }
+    const [selectedPageText, draftSlice] = await Promise.all([
+      selectedPageTextPromise,
+      loadLegalTextDraftsForDocument(selectedSummary.id, sourceEvidence.notes, {
+        selectedDraftId: opts?.legal_text_draft_id,
+        selectedProposalId: opts?.tax_knowledge_proposal_id,
+        candidates: reviewed.candidates,
+        activeRunId,
+        graphKey,
+      }),
+    ]);
+    if (selectedPageText.error) throw selectedPageText.error;
+    const selectedPage = selectedPageText.data
+      ? {
+          page_no: Number(selectedPageText.data.page_no),
+          page_text: selectedPageText.data.page_text == null ? null : String(selectedPageText.data.page_text),
+          status: String(selectedPageText.data.status),
+        }
+      : selectedPageMeta;
     selected = {
       id: selectedSummary.id,
       original_filename: selectedSummary.original_filename,
@@ -508,7 +592,7 @@ export async function buildKnowledgeTrainerSlice(
       source_note_summary: sourceEvidence.summary,
       unresolved_source_note_anchors: sourceEvidence.unresolved_anchors,
       can_open_original: Boolean(storageKey),
-      original_file_access: originalFileAccess,
+      original_file_access: (originalFileAccess ?? null) as OriginalFileAccessDto | null,
       structure_analysis: structureAnalysis,
       can_rebuild_structure: canExtract,
       review_summary: reviewed.review_summary,
@@ -516,13 +600,7 @@ export async function buildKnowledgeTrainerSlice(
       structure_tree: reviewed.structure_tree,
       ocr_page_numbers: ocrPageNumbers,
       structure_run: structureRun,
-      ...mapLegalTextDraftSlice(
-        await loadLegalTextDraftsForDocument(selectedSummary.id, sourceEvidence.notes, {
-          selectedDraftId: opts?.legal_text_draft_id,
-          selectedProposalId: opts?.tax_knowledge_proposal_id,
-          candidates: reviewed.candidates,
-        }),
-      ),
+      ...mapLegalTextDraftSlice(draftSlice),
       layout_evidence: describeStoredLayoutEvidence(pages ?? []),
       layout_readiness: {
         ...layoutSummary,
@@ -566,6 +644,9 @@ export async function buildKnowledgeTrainerSlice(
       }),
       action('select_legal_training_document', filtered.length > 0, {
         legal_ingestion_document_id: 'uuid',
+      }),
+      action('select_legal_text_draft', Boolean(selected), {
+        legal_text_draft_id: 'uuid',
       }),
       action('retry_legal_document_page', true, {
         legal_ingestion_document_id: 'uuid',
@@ -666,6 +747,14 @@ export async function buildKnowledgeTrainerSlice(
       action('create_corrected_tax_knowledge_proposal', proposalActions.create_corrected_tax_knowledge_proposal, {
         source_tax_knowledge_proposal_id: 'uuid',
         proposal_json: 'object',
+      }),
+      action('record_tax_knowledge_proposal_external_reference', proposalActions.create_corrected_tax_knowledge_proposal, {
+        tax_knowledge_proposal_id: 'uuid',
+        cited_law_name: 'string',
+        locator_text: 'string',
+        cited_instrument_kind: 'optional; default regulation',
+        relationship_type: 'optional; default depends_on',
+        proposal_rule_key: 'optional proposal_rule_key',
       }),
       action('ensure_tax_knowledge_proposal_owner_presentations', proposalActions.ensure_tax_knowledge_proposal_owner_presentations, {
         tax_knowledge_proposal_id: 'uuid',
@@ -1198,6 +1287,8 @@ async function loadLegalTextDraftsForDocument(
     selectedDraftId?: string | null;
     selectedProposalId?: string | null;
     candidates?: KnowledgeTrainerCandidateDto[];
+    activeRunId?: string | null;
+    graphKey?: string;
   },
 ): Promise<{
   drafts: KnowledgeTrainerLegalTextDraftListItemDto[];
@@ -1229,15 +1320,42 @@ async function loadLegalTextDraftsForDocument(
     tax_knowledge_proposals: emptyProposals,
   };
   let rows: Record<string, unknown>[];
+  let completenessRows: Array<{ branch_draft_id: string | null; confirmed_at: string | null }> = [];
+  const cachedDraftList = readTrainerDraftListCache(documentId);
   try {
-    rows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
+    const completenessPromise = fetchAllPaged<Record<string, unknown>>((from, to) =>
       supabaseAdmin
-        .from('legal_ingestion_legal_text_drafts')
-        .select(LEGAL_TEXT_DRAFT_LIST_SELECT)
+        .from('legal_ingestion_owner_completeness')
+        .select('branch_draft_id, confirmed_at')
         .eq('document_id', documentId)
-        .order('created_at', { ascending: true })
+        .order('confirmed_at', { ascending: false })
         .range(from, to),
-    );
+    ).catch((error) => {
+      if (
+        isSupabaseMissingTableError(error as { message?: string; code?: string }) ||
+        isSupabaseMissingColumnError(error as { message?: string; code?: string })
+      ) {
+        return [] as Array<Record<string, unknown>>;
+      }
+      throw error;
+    });
+    const draftRowsPromise = cachedDraftList
+      ? Promise.resolve(cachedDraftList.rows)
+      : fetchAllPaged<Record<string, unknown>>((from, to) =>
+          supabaseAdmin
+            .from('legal_ingestion_legal_text_drafts')
+            .select(LEGAL_TEXT_DRAFT_LIST_SELECT)
+            .eq('document_id', documentId)
+            .order('created_at', { ascending: true })
+            .range(from, to),
+        );
+    const [draftRows, completenessLoaded] = await Promise.all([draftRowsPromise, completenessPromise]);
+    rows = draftRows;
+    completenessRows = completenessLoaded.map((row) => ({
+      branch_draft_id: row.branch_draft_id == null ? null : String(row.branch_draft_id),
+      confirmed_at: row.confirmed_at == null ? null : String(row.confirmed_at),
+    }));
+    if (!cachedDraftList) writeTrainerDraftListCache(documentId, { rows, completenessRows });
   } catch (error) {
     if (
       isSupabaseMissingTableError(error as { message?: string; code?: string }) ||
@@ -1248,10 +1366,23 @@ async function loadLegalTextDraftsForDocument(
     throw error;
   }
 
-  const notesByRun = await loadSourceNotesForDocument(documentId, fallbackNotes);
+  const notesByRun = fallbackNotes.map((note) => ({
+    ...note,
+    structure_run_id: opts?.activeRunId ?? null,
+  }));
   const byId = new Map(rows.map((row) => [String(row.id), row]));
   const drafts = rows.map((row) => mapDraftListItem(row, byId, notesByRun));
-  const review_tree = buildLegalTextReviewNodes(
+  const maxUpdated = rows.reduce((max, row) => {
+    const t = String(row.updated_at ?? '');
+    return t > max ? t : max;
+  }, '');
+  const treeKey = opts?.graphKey
+    ? trainerReviewTreeCacheKey(opts.graphKey, `${rows.length}:${maxUpdated}`)
+    : null;
+  const cachedTree = treeKey ? readTrainerReviewTreeCache(treeKey) : null;
+  const review_tree = cachedTree
+    ? (cachedTree.review_tree as ReturnType<typeof buildLegalTextReviewNodes>)
+    : buildLegalTextReviewNodes(
     (opts?.candidates ?? []).map((row, index) => ({
       id: row.id,
       parent_candidate_id: row.parent_candidate_id,
@@ -1279,6 +1410,9 @@ async function loadLegalTextDraftsForDocument(
           : String(rows[index]?.normalized_machine_identifier),
     })),
   );
+  if (treeKey && !cachedTree) {
+    writeTrainerReviewTreeCache(treeKey, { review_tree, search_index: [] });
+  }
   let selected_review_node = pickSelectedReviewNode(review_tree, opts?.selectedDraftId);
   const summary = emptyLegalTextDraftSummary();
   summary.all = drafts.length;
@@ -1318,28 +1452,6 @@ async function loadLegalTextDraftsForDocument(
     })),
   );
 
-  let completenessRows: Array<{ branch_draft_id: string | null; confirmed_at: string | null }> = [];
-  try {
-    const loaded = await fetchAllPaged<Record<string, unknown>>((from, to) =>
-      supabaseAdmin
-        .from('legal_ingestion_owner_completeness')
-        .select('branch_draft_id, confirmed_at')
-        .eq('document_id', documentId)
-        .order('confirmed_at', { ascending: false })
-        .range(from, to),
-    );
-    completenessRows = loaded.map((row) => ({
-      branch_draft_id: row.branch_draft_id == null ? null : String(row.branch_draft_id),
-      confirmed_at: row.confirmed_at == null ? null : String(row.confirmed_at),
-    }));
-  } catch (error) {
-    if (
-      !isSupabaseMissingTableError(error as { message?: string; code?: string }) &&
-      !isSupabaseMissingColumnError(error as { message?: string; code?: string })
-    ) {
-      throw error;
-    }
-  }
   const confirmedBranchIds = new Set(
     completenessRows.filter((row) => row.branch_draft_id).map((row) => String(row.branch_draft_id)),
   );
@@ -1372,68 +1484,4 @@ async function loadLegalTextDraftsForDocument(
     completeness,
     tax_knowledge_proposals,
   };
-}
-
-async function loadSourceNotesForDocument(
-  documentId: string,
-  fallbackNotes: KnowledgeTrainerSourceNoteDto[],
-): Promise<SourceNoteWithRun[]> {
-  try {
-    const noteRows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
-      supabaseAdmin
-        .from('legal_ingestion_source_notes')
-        .select(
-          'id, structure_run_id, source_page, source_item_start, source_item_end, source_line_index, source_bbox, printed_marker, note_text, classification, origin_zone, review_status, inline_link_status, confidence, validation_warnings, sort_order',
-        )
-        .eq('document_id', documentId)
-        .order('sort_order', { ascending: true })
-        .range(from, to),
-    );
-    const anchorRows = await fetchAllPaged<Record<string, unknown>>((from, to) =>
-      supabaseAdmin
-        .from('legal_ingestion_source_note_anchors')
-        .select(
-          'id, source_note_id, source_page, source_item_start, source_item_end, source_line_index, source_bbox, printed_marker, link_status, confidence',
-        )
-        .eq('document_id', documentId)
-        .order('source_page', { ascending: true })
-        .range(from, to),
-    );
-    const anchorsByNote = new Map<string, KnowledgeTrainerSourceNoteAnchorDto[]>();
-    for (const row of anchorRows) {
-      const noteId = row.source_note_id == null ? null : String(row.source_note_id);
-      if (!noteId) continue;
-      const list = anchorsByNote.get(noteId) ?? [];
-      list.push(mapSourceNoteAnchor(row));
-      anchorsByNote.set(noteId, list);
-    }
-    return noteRows.map((row) => ({
-      id: String(row.id),
-      structure_run_id: row.structure_run_id == null ? null : String(row.structure_run_id),
-      source_page: Number(row.source_page),
-      source_item_start: row.source_item_start == null ? null : Number(row.source_item_start),
-      source_item_end: row.source_item_end == null ? null : Number(row.source_item_end),
-      source_line_index: row.source_line_index == null ? null : Number(row.source_line_index),
-      source_bbox: parseSourceBBox(row.source_bbox),
-      printed_marker: row.printed_marker == null ? null : String(row.printed_marker),
-      note_text: String(row.note_text ?? ''),
-      classification: String(row.classification) as SourceNoteClassification,
-      origin_zone: String(row.origin_zone) as SourceNoteOriginZone,
-      review_status: String(row.review_status) as SourceNoteReviewStatus,
-      inline_link_status: String(row.inline_link_status) as SourceNoteInlineLinkStatus,
-      confidence: row.confidence == null ? null : Number(row.confidence),
-      validation_warnings: Array.isArray(row.validation_warnings)
-        ? row.validation_warnings.map((item) => String(item))
-        : [],
-      anchors: anchorsByNote.get(String(row.id)) ?? [],
-    }));
-  } catch (error) {
-    if (
-      isSupabaseMissingTableError(error as { message?: string; code?: string }) ||
-      isSupabaseMissingColumnError(error as { message?: string; code?: string })
-    ) {
-      return fallbackNotes.map((note) => ({ ...note, structure_run_id: null }));
-    }
-    throw error;
-  }
 }

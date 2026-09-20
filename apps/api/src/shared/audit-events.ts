@@ -238,6 +238,7 @@ export const AUDIT_ACTIONS = {
   LEGAL_TRAINING_CANDIDATE_REJECTED: 'legal_training_candidate_rejected',
   LEGAL_TRAINING_CANONICAL_DRAFT_CREATED: 'legal_training_canonical_draft_created',
   LEGAL_TRAINING_DOCUMENT_OPENED: 'legal_training_document_opened',
+  LEGAL_TRAINING_LEGAL_TEXT_DRAFT_SELECTED: 'legal_training_legal_text_draft_selected',
   LEGAL_TRAINING_LEGAL_TEXT_DRAFT_CREATED: 'legal_training_legal_text_draft_created',
   LEGAL_TRAINING_LEGAL_TEXT_DRAFT_TEXT_UPDATED: 'legal_training_legal_text_draft_text_updated',
   LEGAL_TRAINING_LEGAL_TEXT_DRAFT_IDENTITY_UPDATED: 'legal_training_legal_text_draft_identity_updated',
@@ -253,6 +254,8 @@ export const AUDIT_ACTIONS = {
   LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_GENERATED: 'legal_training_tax_knowledge_proposal_generated',
   LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_REVIEW_STATUS_SET: 'legal_training_tax_knowledge_proposal_review_status_set',
   LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_CORRECTED: 'legal_training_tax_knowledge_proposal_corrected',
+  LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_EXTERNAL_REFERENCE_RECORDED:
+    'legal_training_tax_knowledge_proposal_external_reference_recorded',
   LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_OWNER_PRESENTATION_ENSURED:
     'legal_training_tax_knowledge_proposal_owner_presentation_ensured',
   LEGAL_TRAINING_TAX_KNOWLEDGE_PROPOSAL_PUBLISHED_TO_CANONICAL_DRAFT:

@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { AppError } from '../../src/shared/errors.js';
 import type { RequestContext } from '../../src/shared/context.js';
 import { isSupabaseMissingTableError } from '../../src/shared/supabase-errors.js';
+import { skipCanonicalWritesOnPermanentDev } from '../_helpers/dev-live-fixture.ts';
 
 const COMMAND = 'publish_tax_knowledge_proposal_to_canonical_draft';
 const DRAFT = 'סעיף 1. תושב ישראל נשוי זכאי.';
@@ -117,6 +118,7 @@ function closedProposal(input: {
 }
 
 test('TAX-648B Owner command publishes approved B2 to canonical DRAFT via one RPC', async (t) => {
+  if (skipCanonicalWritesOnPermanentDev(t)) return;
   if (!supabaseConfigured()) {
     t.skip('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured');
     return;

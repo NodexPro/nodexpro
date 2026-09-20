@@ -69,6 +69,8 @@ const LEGAL_TEXT_DRAFT_COMMANDS = new Set([
   'create_corrected_tax_knowledge_proposal',
   'publish_tax_knowledge_proposal_to_canonical_draft',
   'select_legal_training_document',
+  'select_legal_text_draft',
+  'record_tax_knowledge_proposal_external_reference',
 ]);
 
 function trainerSelectionFromAggregate(aggregate: unknown): { documentId: string; draftId: string } {
@@ -172,7 +174,6 @@ export function PlatformOwnerLegalControl() {
         qs.set('strategy_engine_country_code', countryParams.strategy_engine_country_code);
       }
       if (trainerDocumentQuery) qs.set('tax_knowledge_trainer_document_id', trainerDocumentQuery);
-      if (trainerDraftQuery) qs.set('tax_knowledge_trainer_legal_text_draft_id', trainerDraftQuery);
 
       const path = qs.toString() ? `${OWNER.legalControl}?${qs.toString()}` : OWNER.legalControl;
       const p = (await apiJson(path, { signal: ac.signal })) as UnknownRecord;
@@ -214,7 +215,7 @@ export function PlatformOwnerLegalControl() {
         setDetailLoading(false);
       }
     }
-  }, [taxKnowledgeCountryQuery, trainerDocumentQuery, trainerDraftQuery]);
+  }, [taxKnowledgeCountryQuery, trainerDocumentQuery]);
 
   useEffect(() => {
     if (auth.status === 'authenticated') {
@@ -226,8 +227,13 @@ export function PlatformOwnerLegalControl() {
     void loadCore({ silent: true });
   }, [loadCore]);
 
-  const sendOwnerCommand = useCallback(async (command: string, payload: UnknownRecord): Promise<OwnerCommandResponse> => {
-    setCommandBusy(true);
+  const sendOwnerCommand = useCallback(async (
+    command: string,
+    payload: UnknownRecord,
+    opts?: { detail?: boolean },
+  ): Promise<OwnerCommandResponse> => {
+    if (opts?.detail) setDetailLoading(true);
+    else setCommandBusy(true);
     setError('');
     try {
       const out = (await apiJson(OWNER.command, {
@@ -254,6 +260,7 @@ export function PlatformOwnerLegalControl() {
       throw e;
     } finally {
       setCommandBusy(false);
+      setDetailLoading(false);
     }
   }, []);
 
@@ -585,7 +592,7 @@ export function PlatformOwnerLegalControl() {
             detailLoading={detailLoading}
             onSelectLegalTextDraft={(documentId, draftId) => {
               setTrainerDocumentQuery(documentId);
-              setTrainerDraftQuery(draftId);
+              void sendOwnerCommand('select_legal_text_draft', { legal_text_draft_id: draftId }, { detail: true });
             }}
           />
         ) : null}

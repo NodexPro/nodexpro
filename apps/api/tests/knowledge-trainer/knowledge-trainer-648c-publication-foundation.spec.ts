@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { taxRulePayloadChecksum } from '../../src/domains/tax-knowledge/tax-knowledge-checksum.pure.js';
 import { isSupabaseMissingTableError } from '../../src/shared/supabase-errors.js';
+import { skipCanonicalWritesOnPermanentDev } from '../_helpers/dev-live-fixture.ts';
 
 function supabaseConfigured(): boolean {
   return Boolean(process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
@@ -32,6 +33,7 @@ function sha256Hex(value: string): string {
 }
 
 test('TAX-648C live multi-object map, uniqueness, rollback, retry, draft-only, IL/US isolation', async (t) => {
+  if (skipCanonicalWritesOnPermanentDev(t)) return;
   if (!supabaseConfigured()) {
     t.skip('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured');
     return;

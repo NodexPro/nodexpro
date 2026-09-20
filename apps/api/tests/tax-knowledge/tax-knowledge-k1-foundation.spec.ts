@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { isSupabaseMissingTableError } from '../../src/shared/supabase-errors.js';
+import { skipCanonicalWritesOnPermanentDev } from '../_helpers/dev-live-fixture.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const migrationSql = readFileSync(
@@ -152,6 +153,7 @@ test('TAX-K1.1 migration contract: three tables, isolation, immutability, no ten
 });
 
 test('TAX-K1.1 DB foundation safety', async (t) => {
+  if (skipCanonicalWritesOnPermanentDev(t)) return;
   if (!supabaseConfigured()) {
     t.skip('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured');
     return;

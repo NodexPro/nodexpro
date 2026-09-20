@@ -86,6 +86,26 @@ test('ready-draft gate requires review_status ready and non-empty legal text', (
   );
 });
 
+test('TAX-651 extract user message is persisted Owner draft_legal_text, not original source', () => {
+  const ownerB = 'OWNER_CORRECTED_LEGAL_TEXT_B';
+  const context = sampleContext({
+    draft: {
+      ...sampleContext().draft,
+      draft_legal_text: ownerB,
+    },
+  });
+  const user = buildExtractUserMessage(context);
+  const system = buildExtractSystemMessage();
+  assert.match(user, /OWNER_CORRECTED_LEGAL_TEXT_B/);
+  assert.doesNotMatch(user, /original_source_text/);
+  assert.doesNotMatch(user, /EXTRACTED_SOURCE_A/);
+  assert.match(system, /draft\.draft_legal_text/);
+  assert.match(system, /delegated authority/);
+  assert.match(system, /Missing client facts/);
+  assert.match(system, /no_rules only when the draft is genuinely non-operative/);
+  assert.match(system, /Still set extraction_outcome=rules/);
+});
+
 test('prompt-injection text remains untrusted data inside the legal envelope', () => {
   const context = sampleContext();
   const system = buildExtractSystemMessage();

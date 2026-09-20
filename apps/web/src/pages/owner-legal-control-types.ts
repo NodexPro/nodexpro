@@ -642,6 +642,12 @@ export type OwnerTaxKnowledgeProposalLocaleView = {
   correct_title_label: string;
   correct_statement_label: string;
   correct_notes_label: string;
+  record_external_label: string;
+  record_external_law_name_label: string;
+  record_external_locator_label: string;
+  record_external_save_label: string;
+  presentations_retry_label: string;
+  presentations_missing: string;
 };
 
 export type OwnerTaxKnowledgeProposalCreateAction = {
@@ -674,6 +680,24 @@ export type OwnerTaxKnowledgeProposalCorrectAction = {
   rules: OwnerTaxKnowledgeProposalCorrectRule[];
 };
 
+export type OwnerTaxKnowledgeProposalExternalReferenceAction = {
+  action_key: 'record_tax_knowledge_proposal_external_reference';
+  visible: boolean;
+  enabled: boolean;
+  tax_knowledge_proposal_id: string | null;
+  proposal_rule_key: string | null;
+  relationship_type: 'depends_on';
+  cited_instrument_kind: 'regulation';
+  disabled_reason: string | null;
+};
+
+export type OwnerTaxKnowledgeProposalPresentationsAction = {
+  action_key: 'ensure_tax_knowledge_proposal_owner_presentations';
+  visible: boolean;
+  enabled: boolean;
+  tax_knowledge_proposal_id: string | null;
+};
+
 export type OwnerTaxKnowledgeProposalOwnerView = {
   available: boolean;
   has_proposal: boolean;
@@ -683,6 +707,8 @@ export type OwnerTaxKnowledgeProposalOwnerView = {
   create: OwnerTaxKnowledgeProposalCreateAction;
   approve: OwnerTaxKnowledgeProposalApproveAction;
   correct: OwnerTaxKnowledgeProposalCorrectAction;
+  external_reference: OwnerTaxKnowledgeProposalExternalReferenceAction;
+  presentations: OwnerTaxKnowledgeProposalPresentationsAction;
   by_locale: Record<OwnerTaxKnowledgeProposalOwnerLocale, OwnerTaxKnowledgeProposalLocaleView>;
   details: {
     status_label: string;
@@ -841,6 +867,12 @@ function emptyLocaleView(
     correct_title_label: correctTitle,
     correct_statement_label: correctStatement,
     correct_notes_label: correctNotes,
+    record_external_label: '',
+    record_external_law_name_label: '',
+    record_external_locator_label: '',
+    record_external_save_label: '',
+    presentations_retry_label: '',
+    presentations_missing: '',
   };
 }
 
@@ -878,6 +910,22 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
         enabled: false,
         source_tax_knowledge_proposal_id: null,
         rules: [],
+      },
+      external_reference: {
+        action_key: 'record_tax_knowledge_proposal_external_reference',
+        visible: false,
+        enabled: false,
+        tax_knowledge_proposal_id: null,
+        proposal_rule_key: null,
+        relationship_type: 'depends_on',
+        cited_instrument_kind: 'regulation',
+        disabled_reason: null,
+      },
+      presentations: {
+        action_key: 'ensure_tax_knowledge_proposal_owner_presentations',
+        visible: false,
+        enabled: false,
+        tax_knowledge_proposal_id: null,
       },
       by_locale: {
         he: emptyLocaleView(

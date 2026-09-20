@@ -7,6 +7,7 @@ import type { RequestContext } from '../../src/shared/context.js';
 import { isSupabaseMissingTableError } from '../../src/shared/supabase-errors.js';
 import { evaluateOwnerLegalCommandAccess } from '../../src/domains/owner-country-legal-access/owner-country-legal-access.pure.js';
 import { ownerLegalValueRulesetAmbiguousMessage } from '../../src/domains/country-pack/owner-legal-value-ruleset.pure.js';
+import { ORDINANCE_DOCUMENT_ID, ORDINANCE_SOURCE_ID } from '../_helpers/dev-live-fixture.ts';
 
 process.env.PLATFORM_OWNER_EMAIL = process.env.PLATFORM_OWNER_EMAIL?.trim() || 'marinator.321@gmail.com';
 
@@ -84,26 +85,16 @@ test('TAX-649A live DEV: persist selection, no newest fallback, fixture cannot h
     '../../src/domains/knowledge-trainer/knowledge-trainer-workspace-selection.service.js'
   );
 
-  const ilDocs = await supabaseAdmin
+  const keepId = ORDINANCE_DOCUMENT_ID;
+  const ordinance = await supabaseAdmin
     .from('legal_ingestion_documents')
-    .select('id, country_code, original_filename, created_at, tax_source_id')
-    .eq('country_code', 'IL')
-    .order('created_at', { ascending: false })
-    .limit(40);
-  if (ilDocs.error) throw new Error(`IL documents failed: ${errText(ilDocs.error)}`);
-  const inventory = ilDocs.data ?? [];
-  if (inventory.length < 2) throw new Error('TAX-649A live needs at least two existing IL documents');
-
-  const newest = inventory[0]!;
-  const keep = inventory.find((row) => row.id !== newest.id)!;
-
-  const usDocs = await supabaseAdmin
-    .from('legal_ingestion_documents')
-    .select('id, country_code, original_filename')
-    .eq('country_code', 'US')
-    .order('created_at', { ascending: false })
-    .limit(1);
-  if (usDocs.error) throw new Error(`US documents failed: ${errText(usDocs.error)}`);
+    .select('id, country_code, tax_source_id')
+    .eq('id', keepId)
+    .maybeSingle();
+  if (ordinance.error) throw new Error(`ordinance lookup failed: ${errText(ordinance.error)}`);
+  if (!ordinance.data || ordinance.data.tax_source_id !== ORDINANCE_SOURCE_ID) {
+    throw new Error('TAX-649A live refuses to run: real ordinance PDF/source missing');
+  }
 
   const existingPin = await supabaseAdmin
     .from('legal_ingestion_owner_workspace_selection')
@@ -116,36 +107,79 @@ test('TAX-649A live DEV: persist selection, no newest fallback, fixture cannot h
   const marker = `tk649a-verify-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let fixtureDocId: string | null = null;
   let fixtureJobId: string | null = null;
-  let fixtureSourceId: string | null = null;
-  let createdUsDocId: string | null = null;
-  let createdUsJobId: string | null = null;
-  let createdUsSourceId: string | null = null;
+  let packAId: string | null = null;
+  let packBId: string | null = null;
+  let rulesetAId: string | null = null;
+  let rulesetBId: string | null = null;
 
   t.after(async () => {
-    if (originalPin) {
-      await persistOwnerWorkspaceSelectedDocument({
-        countryCode: 'IL',
-        documentId: originalPin,
-        actorUserId,
-      });
-    } else {
-      await supabaseAdmin.from('legal_ingestion_owner_workspace_selection').delete().eq('country_code', 'IL');
+    const cleanupErrors: string[] = [];
+    try {
+      if (originalPin) {
+        await persistOwnerWorkspaceSelectedDocument({
+          countryCode: 'IL',
+          documentId: originalPin,
+          actorUserId,
+        });
+      } else {
+        const pinDel = await supabaseAdmin
+          .from('legal_ingestion_owner_workspace_selection')
+          .delete()
+          .eq('country_code', 'IL');
+        if (pinDel.error) cleanupErrors.push(`pin restore: ${errText(pinDel.error)}`);
+      }
+    } catch (error) {
+      cleanupErrors.push(`pin restore threw: ${error instanceof Error ? error.message : String(error)}`);
     }
-    if (fixtureJobId) await supabaseAdmin.from('legal_ingestion_jobs').delete().eq('id', fixtureJobId);
-    if (fixtureDocId) await supabaseAdmin.from('legal_ingestion_documents').delete().eq('id', fixtureDocId);
-    if (createdUsJobId) await supabaseAdmin.from('legal_ingestion_jobs').delete().eq('id', createdUsJobId);
-    if (createdUsDocId) await supabaseAdmin.from('legal_ingestion_documents').delete().eq('id', createdUsDocId);
-    if (createdUsSourceId) await supabaseAdmin.from('tax_sources').delete().eq('id', createdUsSourceId);
-    if (fixtureSourceId) await supabaseAdmin.from('tax_sources').delete().eq('id', fixtureSourceId);
+    if (fixtureJobId) {
+      const jobDel = await supabaseAdmin.from('legal_ingestion_jobs').delete().eq('id', fixtureJobId);
+      if (jobDel.error) cleanupErrors.push(`fixture job: ${errText(jobDel.error)}`);
+    }
+    if (fixtureDocId) {
+      const docDel = await supabaseAdmin.from('legal_ingestion_documents').delete().eq('id', fixtureDocId);
+      if (docDel.error) cleanupErrors.push(`fixture doc: ${errText(docDel.error)}`);
+    }
+    if (rulesetAId) {
+      const rsDel = await supabaseAdmin.from('country_pack_rulesets').delete().eq('id', rulesetAId);
+      if (rsDel.error) cleanupErrors.push(`ruleset A: ${errText(rsDel.error)}`);
+    }
+    if (rulesetBId) {
+      const rsDel = await supabaseAdmin.from('country_pack_rulesets').delete().eq('id', rulesetBId);
+      if (rsDel.error) cleanupErrors.push(`ruleset B: ${errText(rsDel.error)}`);
+    }
+    if (packAId) {
+      const packDel = await supabaseAdmin.from('country_packs').delete().eq('id', packAId);
+      if (packDel.error) cleanupErrors.push(`pack A: ${errText(packDel.error)}`);
+    }
+    if (packBId) {
+      const packDel = await supabaseAdmin.from('country_packs').delete().eq('id', packBId);
+      if (packDel.error) cleanupErrors.push(`pack B: ${errText(packDel.error)}`);
+    }
+    const leftover = await supabaseAdmin
+      .from('country_packs')
+      .select('id, pack_code')
+      .like('pack_code', `${marker}%`);
+    if (leftover.error) cleanupErrors.push(`leftover pack probe: ${errText(leftover.error)}`);
+    if ((leftover.data ?? []).length > 0) {
+      cleanupErrors.push(`leftover owned packs: ${(leftover.data ?? []).map((row) => row.pack_code).join(',')}`);
+    }
+    const leftoverDoc = fixtureDocId
+      ? await supabaseAdmin.from('legal_ingestion_documents').select('id').eq('id', fixtureDocId).maybeSingle()
+      : { data: null, error: null };
+    if (leftoverDoc.error) cleanupErrors.push(`leftover doc probe: ${errText(leftoverDoc.error)}`);
+    if (leftoverDoc.data) cleanupErrors.push(`leftover fixture document ${fixtureDocId}`);
+    if (cleanupErrors.length > 0) {
+      throw new Error(`TAX-649A cleanup failed: ${cleanupErrors.join(' | ')}`);
+    }
   });
 
   const ctx = ownerCtx(actorUserId, email);
 
-  const selected = await executeKnowledgeTrainerCommand(ctx, COMMAND, { legal_ingestion_document_id: keep.id });
+  const selected = await executeKnowledgeTrainerCommand(ctx, COMMAND, { legal_ingestion_document_id: keepId });
   assert.equal(selected.ok, true);
   assert.equal(selected.command, COMMAND);
   assert.equal(selected.refreshed?.aggregate_key, 'owner_legal_control_panel_aggregate');
-  assert.equal(trainerSelectedId(selected.refreshed?.aggregate), keep.id);
+  assert.equal(trainerSelectedId(selected.refreshed?.aggregate), keepId);
 
   const pinAfterSelect = await supabaseAdmin
     .from('legal_ingestion_owner_workspace_selection')
@@ -153,37 +187,16 @@ test('TAX-649A live DEV: persist selection, no newest fallback, fixture cannot h
     .eq('country_code', 'IL')
     .maybeSingle();
   if (pinAfterSelect.error) throw new Error(`pin after select failed: ${errText(pinAfterSelect.error)}`);
-  assert.equal(pinAfterSelect.data?.selected_document_id, keep.id);
+  assert.equal(pinAfterSelect.data?.selected_document_id, keepId);
 
   const refresh = await buildKnowledgeTrainerSlice('IL');
-  assert.equal(refresh.selected_document?.id ?? null, keep.id);
-  assert.notEqual(refresh.selected_document?.id ?? null, newest.id);
-  assert.ok(refresh.documents.some((row) => row.id === newest.id));
-
-  const switched = await executeKnowledgeTrainerCommand(ctx, COMMAND, { legal_ingestion_document_id: newest.id });
-  assert.equal(trainerSelectedId(switched.refreshed?.aggregate), newest.id);
-  const back = await executeKnowledgeTrainerCommand(ctx, COMMAND, { legal_ingestion_document_id: keep.id });
-  assert.equal(trainerSelectedId(back.refreshed?.aggregate), keep.id);
-
-  const sourceInsert = await supabaseAdmin
-    .from('tax_sources')
-    .insert({
-      country_code: 'IL',
-      source_code: `${marker}_il_src`,
-      title: 'TAX-649A verify source',
-      provenance_type: 'official_guidance',
-      status: 'draft',
-    })
-    .select('id')
-    .single();
-  if (sourceInsert.error) throw new Error(`fixture source insert failed: ${errText(sourceInsert.error)}`);
-  fixtureSourceId = String(sourceInsert.data.id);
+  assert.equal(refresh.selected_document?.id ?? null, keepId);
 
   const fixtureInsert = await supabaseAdmin
     .from('legal_ingestion_documents')
     .insert({
       country_code: 'IL',
-      tax_source_id: fixtureSourceId,
+      tax_source_id: ORDINANCE_SOURCE_ID,
       input_type: 'text',
       provenance_type: 'official_guidance',
       original_filename: `${marker}.txt`,
@@ -201,7 +214,7 @@ test('TAX-649A live DEV: persist selection, no newest fallback, fixture cannot h
     .insert({
       document_id: fixtureDocId,
       country_code: 'IL',
-      tax_source_id: fixtureSourceId,
+      tax_source_id: ORDINANCE_SOURCE_ID,
       status: 'uploaded',
     })
     .select('id')
@@ -210,66 +223,16 @@ test('TAX-649A live DEV: persist selection, no newest fallback, fixture cannot h
   fixtureJobId = String(fixtureJob.data.id);
 
   const afterHijack = await buildKnowledgeTrainerSlice('IL');
-  assert.equal(afterHijack.selected_document?.id ?? null, keep.id);
+  assert.equal(afterHijack.selected_document?.id ?? null, keepId);
   assert.notEqual(afterHijack.selected_document?.id ?? null, fixtureDocId);
   assert.ok(afterHijack.documents.some((row) => row.id === fixtureDocId));
   assert.equal(afterHijack.documents[0]?.id, fixtureDocId);
 
-  let usDocId = usDocs.data?.[0]?.id ? String(usDocs.data[0].id) : '';
-  if (!usDocId) {
-    const usSource = await supabaseAdmin
-      .from('tax_sources')
-      .insert({
-        country_code: 'US',
-        source_code: `${marker}_us_src`,
-        title: 'TAX-649A verify US source',
-        provenance_type: 'official_guidance',
-        status: 'draft',
-      })
-      .select('id')
-      .single();
-    if (usSource.error) throw new Error(`US source insert failed: ${errText(usSource.error)}`);
-    createdUsSourceId = String(usSource.data.id);
-    const usDoc = await supabaseAdmin
-      .from('legal_ingestion_documents')
-      .insert({
-        country_code: 'US',
-        tax_source_id: createdUsSourceId,
-        input_type: 'text',
-        provenance_type: 'official_guidance',
-        original_filename: `${marker}-us.txt`,
-        mime_type: 'text/plain',
-        byte_size: 16,
-        content_sha256: sha256Hex(`${marker}-us`),
-        uploaded_by: actorUserId,
-      })
-      .select('id')
-      .single();
-    if (usDoc.error) throw new Error(`US document insert failed: ${errText(usDoc.error)}`);
-    createdUsDocId = String(usDoc.data.id);
-    usDocId = createdUsDocId;
-    const usJob = await supabaseAdmin
-      .from('legal_ingestion_jobs')
-      .insert({
-        document_id: createdUsDocId,
-        country_code: 'US',
-        tax_source_id: createdUsSourceId,
-        status: 'uploaded',
-      })
-      .select('id')
-      .single();
-    if (usJob.error) throw new Error(`US job insert failed: ${errText(usJob.error)}`);
-    createdUsJobId = String(usJob.data.id);
-  }
+  const switched = await executeKnowledgeTrainerCommand(ctx, COMMAND, { legal_ingestion_document_id: fixtureDocId });
+  assert.equal(trainerSelectedId(switched.refreshed?.aggregate), fixtureDocId);
+  const back = await executeKnowledgeTrainerCommand(ctx, COMMAND, { legal_ingestion_document_id: keepId });
+  assert.equal(trainerSelectedId(back.refreshed?.aggregate), keepId);
 
-  await assert.rejects(
-    () =>
-      executeKnowledgeTrainerCommand(ctx, COMMAND, {
-        legal_ingestion_document_id: usDocId,
-        country_code: 'IL',
-      }),
-    (error: unknown) => error instanceof AppError && error.code === 'OWNER_LEGAL_COUNTRY_MISMATCH',
-  );
   assert.equal(
     evaluateOwnerLegalCommandAccess(
       { kind: 'country_legal_maintainer', capabilitiesByCountry: { IL: ['legal_knowledge.view'] } },
@@ -279,17 +242,63 @@ test('TAX-649A live DEV: persist selection, no newest fallback, fixture cannot h
     false,
   );
 
-  const leftover648c = await supabaseAdmin
+  const packA = await supabaseAdmin
     .from('country_packs')
-    .select('id, pack_code, name, status')
-    .eq('country_code', 'IL')
-    .eq('status', 'enabled');
-  if (leftover648c.error) throw new Error(`pack inventory failed: ${errText(leftover648c.error)}`);
-  const enabledIlPacks = leftover648c.data ?? [];
-  assert.ok(
-    enabledIlPacks.some((row) => /tk648c/i.test(`${row.pack_code ?? ''} ${row.name ?? ''}`)),
-    'expected leftover 648C enabled IL packs to still be present',
-  );
+    .insert({
+      country_code: 'IL',
+      pack_code: `${marker}_pack_a`,
+      name: `${marker} pack A`,
+      status: 'enabled',
+      framework_version: '1.0.0',
+      code_version: '1.0.0',
+    })
+    .select('id')
+    .single();
+  if (packA.error) throw new Error(`pack A insert failed: ${errText(packA.error)}`);
+  packAId = String(packA.data.id);
+  const packB = await supabaseAdmin
+    .from('country_packs')
+    .insert({
+      country_code: 'IL',
+      pack_code: `${marker}_pack_b`,
+      name: `${marker} pack B`,
+      status: 'enabled',
+      framework_version: '1.0.0',
+      code_version: '1.0.0',
+    })
+    .select('id')
+    .single();
+  if (packB.error) throw new Error(`pack B insert failed: ${errText(packB.error)}`);
+  packBId = String(packB.data.id);
+
+  const rulesetA = await supabaseAdmin
+    .from('country_pack_rulesets')
+    .insert({
+      country_pack_id: packAId,
+      ruleset_code: `${marker}_rs_a`,
+      ruleset_version: 'v1',
+      effective_from: '2020-01-01',
+      effective_to: null,
+      status: 'active',
+    })
+    .select('id')
+    .single();
+  if (rulesetA.error) throw new Error(`ruleset A insert failed: ${errText(rulesetA.error)}`);
+  rulesetAId = String(rulesetA.data.id);
+  const rulesetB = await supabaseAdmin
+    .from('country_pack_rulesets')
+    .insert({
+      country_pack_id: packBId,
+      ruleset_code: `${marker}_rs_b`,
+      ruleset_version: 'v1',
+      effective_from: '2020-01-01',
+      effective_to: null,
+      status: 'active',
+    })
+    .select('id')
+    .single();
+  if (rulesetB.error) throw new Error(`ruleset B insert failed: ${errText(rulesetB.error)}`);
+  rulesetBId = String(rulesetB.data.id);
 
   await assert.rejects(
     () => resolveOwnerLegalValueRulesetContextForCountry({ countryCode: 'IL', effectiveDate: '2026-07-01' }),

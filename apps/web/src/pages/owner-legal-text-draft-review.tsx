@@ -204,6 +204,8 @@ export function OwnerLegalTextDraftReview({
 
   const remaining = summary.not_prepared;
   const reviewLabel = selectedNode?.review_state_label || (selected ? 'Draft / טיוטה' : 'Not prepared / טרם הוכן');
+  const textDirty = Boolean(selected && draftText !== selected.draft_legal_text);
+  const ownerTextIsCurrentWorking = Boolean(selected && selected.draft_legal_text !== selected.original_source_text);
   const progress = selectedNode?.review_progress;
   const branchDraftId = selected?.id ?? selectedNode?.draft_id ?? '';
   const manuallyAdded =
@@ -462,8 +464,10 @@ export function OwnerLegalTextDraftReview({
         </aside>
 
         <section className="nx-legal-draft-source">
-          <div style={{ fontWeight: 600 }}>Original source — read only</div>
-          <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>What did the original source say?</p>
+          <div style={{ fontWeight: 600 }}>Original / Extracted source — immutable evidence</div>
+          <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+            OCR/extracted source. This is evidence only. It is not the current working legal text.
+          </p>
           {detailLoading ? <div className="nx-legal-draft-detail-loading">Loading section…</div> : null}
           {!selectedNode ? (
             <p style={{ fontSize: 13, color: '#6b7280' }}>Select a section in the law tree.</p>
@@ -510,8 +514,10 @@ export function OwnerLegalTextDraftReview({
         </section>
 
         <section className="nx-legal-draft-editor">
-          <div style={{ fontWeight: 600 }}>Owner version</div>
-          <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>What text will I keep or correct?</p>
+          <div style={{ fontWeight: 600 }}>Owner corrected legal text — current working version</div>
+          <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+            This is the reviewed working legal text. Save before Mark reviewed or Generate Proposal.
+          </p>
           {!selectedNode ? (
             <p style={{ fontSize: 13, color: '#6b7280' }}>Select a section in the law tree.</p>
           ) : !selected ? (
@@ -590,7 +596,17 @@ export function OwnerLegalTextDraftReview({
                 </select>
               </label>
               <label className="nx-field">
-                <span className="nx-field-label">Editable legal text</span>
+                <span className="nx-field-label">Owner corrected legal text — current reviewed working legal text</span>
+                {ownerTextIsCurrentWorking && !textDirty ? (
+                  <div style={{ fontSize: 12, color: '#047857', marginBottom: 4 }}>
+                    Current working legal text (Owner corrected). Original extracted source is unchanged.
+                  </div>
+                ) : null}
+                {textDirty ? (
+                  <div style={{ fontSize: 12, color: '#92400e', marginBottom: 4 }}>
+                    Unsaved correction. Save before Mark reviewed or Generate Proposal.
+                  </div>
+                ) : null}
                 <textarea
                   className="nx-input nx-legal-draft-textarea"
                   dir="auto"
@@ -662,7 +678,7 @@ export function OwnerLegalTextDraftReview({
                 <button
                   type="button"
                   className="nx-btn nx-btn-taxes-compact"
-                  disabled={busy}
+                  disabled={busy || textDirty}
                   onClick={() =>
                     void run('set_legal_text_draft_review_status', {
                       legal_text_draft_id: selected.id,

@@ -35,6 +35,12 @@ export type TaxKnowledgeProposalOwnerLocaleView = {
   correct_title_label: string;
   correct_statement_label: string;
   correct_notes_label: string;
+  record_external_label: string;
+  record_external_law_name_label: string;
+  record_external_locator_label: string;
+  record_external_save_label: string;
+  presentations_retry_label: string;
+  presentations_missing: string;
 };
 
 export type TaxKnowledgeProposalOwnerCreateAction = {
@@ -65,6 +71,24 @@ export type TaxKnowledgeProposalOwnerCorrectAction = {
   enabled: boolean;
   source_tax_knowledge_proposal_id: string | null;
   rules: TaxKnowledgeProposalOwnerCorrectRule[];
+};
+
+export type TaxKnowledgeProposalOwnerExternalReferenceAction = {
+  action_key: 'record_tax_knowledge_proposal_external_reference';
+  visible: boolean;
+  enabled: boolean;
+  tax_knowledge_proposal_id: string | null;
+  proposal_rule_key: string | null;
+  relationship_type: 'depends_on';
+  cited_instrument_kind: 'regulation';
+  disabled_reason: string | null;
+};
+
+export type TaxKnowledgeProposalOwnerPresentationsAction = {
+  action_key: 'ensure_tax_knowledge_proposal_owner_presentations';
+  visible: boolean;
+  enabled: boolean;
+  tax_knowledge_proposal_id: string | null;
 };
 
 export type TaxKnowledgeProposalOwnerViewRow = {
@@ -112,6 +136,8 @@ export type TaxKnowledgeProposalOwnerViewDto = {
   create: TaxKnowledgeProposalOwnerCreateAction;
   approve: TaxKnowledgeProposalOwnerApproveAction;
   correct: TaxKnowledgeProposalOwnerCorrectAction;
+  external_reference: TaxKnowledgeProposalOwnerExternalReferenceAction;
+  presentations: TaxKnowledgeProposalOwnerPresentationsAction;
   by_locale: Record<TaxKnowledgeProposalOwnerLocale, TaxKnowledgeProposalOwnerLocaleView>;
   details: TaxKnowledgeProposalOwnerViewDetails;
 };
@@ -139,6 +165,12 @@ type Catalog = {
   correct_title_label: string;
   correct_statement_label: string;
   correct_notes_label: string;
+  record_external_label: string;
+  record_external_law_name_label: string;
+  record_external_locator_label: string;
+  record_external_save_label: string;
+  presentations_retry_label: string;
+  presentations_missing: string;
   extraction: {
     rules_one: string;
     rules_many: string;
@@ -149,6 +181,7 @@ type Catalog = {
     determined: string;
     unconstrained: string;
     cannot_determine: string;
+    no_extracted_rule: string;
   };
   uncertainty: {
     cannot_determine: string;
@@ -178,6 +211,12 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     correct_title_label: 'כותרת',
     correct_statement_label: 'ניסוח',
     correct_notes_label: 'הערות',
+    record_external_label: 'תיעוד הפניה לתקנות',
+    record_external_law_name_label: 'שם המקור החיצוני',
+    record_external_locator_label: 'איתור / מזהה',
+    record_external_save_label: 'שמירת הפניה',
+    presentations_retry_label: 'נסה שוב תרגום להצגה',
+    presentations_missing: 'הכלל המשפטי נשמר. התרגום להצגה נכשל — ניתן לנסות שוב.',
     extraction: {
       rules_one: 'ה-AI הבין כלל משפטי מהסעיף.',
       rules_many: 'ה-AI הבין כמה כללים משפטיים מהסעיף.',
@@ -187,7 +226,8 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     applicability: {
       determined: 'התחולה נקבעה.',
       unconstrained: 'הכלל ללא תנאי תחולה.',
-      cannot_determine: 'לא ניתן לקבוע תחולה.',
+      cannot_determine: 'לא ניתן לקבוע תחולה ללקוח בלי עובדות נוספות.',
+      no_extracted_rule: 'אין כאן החלטת תחולה ללקוח — לא חולץ כלל משפטי.',
     },
     uncertainty: {
       cannot_determine: 'חסר מידע כדי לקבוע תחולה.',
@@ -215,6 +255,12 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     correct_title_label: 'Заголовок',
     correct_statement_label: 'Формулировка',
     correct_notes_label: 'Заметки',
+    record_external_label: 'Зафиксировать отсылку к תקנות',
+    record_external_law_name_label: 'Название внешнего источника',
+    record_external_locator_label: 'Локатор / идентификатор',
+    record_external_save_label: 'Сохранить отсылку',
+    presentations_retry_label: 'Повторить перевод для экрана',
+    presentations_missing: 'Правовая норма сохранена. Перевод для экрана не удался — можно повторить.',
     extraction: {
       rules_one: 'AI понял правовую норму из этой статьи.',
       rules_many: 'AI понял несколько правовых норм из этой статьи.',
@@ -224,7 +270,8 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     applicability: {
       determined: 'Применимость определена.',
       unconstrained: 'Норма без условий применимости.',
-      cannot_determine: 'Применимость пока нельзя определить.',
+      cannot_determine: 'Применимость к клиенту пока нельзя определить без дополнительных фактов.',
+      no_extracted_rule: 'Это не решение о применимости к клиенту: правовая норма не извлечена.',
     },
     uncertainty: {
       cannot_determine: 'Недостаточно данных, чтобы определить применимость.',
@@ -252,6 +299,12 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     correct_title_label: 'Title',
     correct_statement_label: 'Statement',
     correct_notes_label: 'Notes',
+    record_external_label: 'Record external תקנות reference',
+    record_external_law_name_label: 'External source name',
+    record_external_locator_label: 'Locator / identifier',
+    record_external_save_label: 'Save reference',
+    presentations_retry_label: 'Retry presentation translation',
+    presentations_missing: 'The legal Proposal is intact. Presentation translation failed — retry is available.',
     extraction: {
       rules_one: 'AI understood a legal rule from this provision.',
       rules_many: 'AI understood several legal rules from this provision.',
@@ -261,7 +314,8 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     applicability: {
       determined: 'Applicability was determined.',
       unconstrained: 'The rule has no applicability conditions.',
-      cannot_determine: 'Applicability cannot yet be determined.',
+      cannot_determine: 'Client applicability cannot yet be determined without additional facts.',
+      no_extracted_rule: 'This is not a client-applicability decision; no legal rule was extracted.',
     },
     uncertainty: {
       cannot_determine: 'Information is missing to determine applicability.',
@@ -326,7 +380,11 @@ function endpointLabel(endpoint: unknown): string {
   if (!isPlainObject(endpoint)) return '—';
   if (asString(endpoint.kind) === 'unresolved') {
     const unresolved = isPlainObject(endpoint.unresolved) ? endpoint.unresolved : {};
-    return asString(unresolved.locator_text) || asString(unresolved.cited_title) || 'unresolved';
+    return (
+      [asString(unresolved.cited_law_name), asString(unresolved.locator_text), asString(unresolved.cited_title)]
+        .filter(Boolean)
+        .join(' — ') || 'unresolved'
+    );
   }
   return asString(endpoint.key) || asString(endpoint.tax_rule_version_id) || asString(endpoint.kind) || '—';
 }
@@ -348,7 +406,16 @@ function explanationFor(
   return catalog.extraction.cannot_determine;
 }
 
-function applicabilityFor(catalog: Catalog, statuses: string[]): string {
+function applicabilityFor(
+  catalog: Catalog,
+  statuses: string[],
+  extractionOutcome: string,
+  ruleCount: number,
+): string {
+  if (ruleCount === 0) {
+    if (extractionOutcome === 'no_rules') return catalog.applicability.no_extracted_rule;
+    return catalog.applicability.cannot_determine;
+  }
   if (statuses.includes('cannot_determine')) return catalog.applicability.cannot_determine;
   if (statuses.includes('unconstrained') && !statuses.includes('determined')) {
     return catalog.applicability.unconstrained;
@@ -402,6 +469,12 @@ function emptyLocaleView(locale: TaxKnowledgeProposalOwnerLocale): TaxKnowledgeP
     correct_title_label: catalog.correct_title_label,
     correct_statement_label: catalog.correct_statement_label,
     correct_notes_label: catalog.correct_notes_label,
+    record_external_label: catalog.record_external_label,
+    record_external_law_name_label: catalog.record_external_law_name_label,
+    record_external_locator_label: catalog.record_external_locator_label,
+    record_external_save_label: catalog.record_external_save_label,
+    presentations_retry_label: catalog.presentations_retry_label,
+    presentations_missing: catalog.presentations_missing,
   };
 }
 
@@ -447,6 +520,28 @@ function emptyCorrectAction(): TaxKnowledgeProposalOwnerCorrectAction {
     enabled: false,
     source_tax_knowledge_proposal_id: null,
     rules: [],
+  };
+}
+
+function emptyExternalReferenceAction(): TaxKnowledgeProposalOwnerExternalReferenceAction {
+  return {
+    action_key: 'record_tax_knowledge_proposal_external_reference',
+    visible: false,
+    enabled: false,
+    tax_knowledge_proposal_id: null,
+    proposal_rule_key: null,
+    relationship_type: 'depends_on',
+    cited_instrument_kind: 'regulation',
+    disabled_reason: null,
+  };
+}
+
+function emptyPresentationsAction(): TaxKnowledgeProposalOwnerPresentationsAction {
+  return {
+    action_key: 'ensure_tax_knowledge_proposal_owner_presentations',
+    visible: false,
+    enabled: false,
+    tax_knowledge_proposal_id: null,
   };
 }
 
@@ -522,6 +617,8 @@ function emptyView(): TaxKnowledgeProposalOwnerViewDto {
     create: emptyCreateAction(),
     approve: emptyApproveAction(),
     correct: emptyCorrectAction(),
+    external_reference: emptyExternalReferenceAction(),
+    presentations: emptyPresentationsAction(),
     by_locale: {
       he: emptyLocaleView('he'),
       ru: emptyLocaleView('ru'),
@@ -602,7 +699,7 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
     detail: [row.role, row.dictionary_status].filter(Boolean).join(' · ') || null,
   }));
   const facts = factsFromProposal.length ? factsFromProposal : factsFromResolved;
-  const factsMissing = facts.length === 0 && (codes.includes('cannot_determine') || codes.includes('missing_fact_definition') || applicabilityStatuses.includes('cannot_determine'));
+  const factsMissing = facts.length === 0 && codes.includes('missing_fact_definition');
 
   const legalValuesFromProposal = legalValuesRaw
     .map((row) => {
@@ -660,7 +757,7 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
             presentations?.by_locale[locale]?.explanation ?? null,
             sourceExplanation,
           ),
-          applicability: applicabilityFor(catalog, applicabilityStatuses),
+          applicability: applicabilityFor(catalog, applicabilityStatuses, extractionOutcome ?? '', rules.length),
           uncertainty: uncertaintyFor(catalog, codes, factsMissing),
           warning_tone: tone,
           citation_label: catalog.citation_label,
@@ -671,6 +768,12 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
           correct_title_label: catalog.correct_title_label,
           correct_statement_label: catalog.correct_statement_label,
           correct_notes_label: catalog.correct_notes_label,
+          record_external_label: catalog.record_external_label,
+          record_external_law_name_label: catalog.record_external_law_name_label,
+          record_external_locator_label: catalog.record_external_locator_label,
+          record_external_save_label: catalog.record_external_save_label,
+          presentations_retry_label: catalog.presentations_retry_label,
+          presentations_missing: catalog.presentations_missing,
         } satisfies TaxKnowledgeProposalOwnerLocaleView,
       ];
     }),
@@ -688,6 +791,25 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
     create: emptyCreateAction(),
     approve: buildApproveAction(input.selected, validation),
     correct: buildCorrectAction(input.selected, correctionRulesFromProposal(rulesRaw)),
+    external_reference: {
+      action_key: 'record_tax_knowledge_proposal_external_reference',
+      visible: true,
+      enabled: rules.length > 0,
+      tax_knowledge_proposal_id: input.selected.id,
+      proposal_rule_key: rulesRaw.map((row) => asString(row.proposal_rule_key)).find(Boolean) || null,
+      relationship_type: 'depends_on',
+      cited_instrument_kind: 'regulation',
+      disabled_reason:
+        rules.length > 0
+          ? null
+          : 'A legal rule must exist on the Proposal before an external תקנות reference can be recorded',
+    },
+    presentations: {
+      action_key: 'ensure_tax_knowledge_proposal_owner_presentations',
+      visible: rules.length > 0 && !presentations,
+      enabled: rules.length > 0 && !presentations,
+      tax_knowledge_proposal_id: input.selected.id,
+    },
     by_locale,
     details: {
       status_label: input.selected.status_label,

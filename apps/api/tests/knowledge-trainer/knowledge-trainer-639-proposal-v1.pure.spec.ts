@@ -543,3 +543,34 @@ test('TAX-639 extraction_outcome=rules cannot keep leftover rules when switched 
   const result = run(closed({ extraction_outcome: 'no_rules' }));
   assert.equal(result.valid_schema, false);
 });
+
+test('TAX-651 delegated-authority valuation remains a valid rule when client applicability is unresolved', () => {
+  const statement =
+    'The Minister of Finance, with the approval of the Knesset Finance Committee, determines the value of the use of a vehicle or radio telephone made available to an employee.';
+  const result = run(
+    closed({
+      rules: [
+        determinedRule('r1', {
+          title: 'Valuation of employee vehicle or radio-telephone use',
+          statement,
+          applicability_status: 'cannot_determine',
+          applies_if: null,
+          does_not_apply_if: null,
+          legal_value_keys: [],
+        }),
+      ],
+      facts: [],
+      legal_values: [],
+      uncertainties: [
+        {
+          code: 'cannot_determine',
+          severity: 'blocks_rule_publication',
+          subject: { kind: 'rule', key: 'r1' },
+          message: 'Client applicability requires additional facts or subordinate legislation.',
+        },
+      ],
+    }),
+  );
+  assert.equal(result.valid_schema, true, JSON.stringify(result.errors));
+  assert.equal(result.publication_eligible, false);
+});
