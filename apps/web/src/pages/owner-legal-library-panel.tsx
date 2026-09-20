@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { userFacingApiMessage } from '../api/client';
 import { EmptyState } from '../templates/template-1/components/EmptyState';
 import { SectionCard } from '../templates/template-1/components/SectionCard';
@@ -263,12 +263,16 @@ export function OwnerLegalLibraryPanel({
   onReload,
   onSelectLegalTextDraft,
   detailLoading,
+  pendingUploadSourceId,
+  onConsumedPendingUpload,
 }: {
   taxKnowledge: TaxKnowledgeAggregate;
   countryPacks: unknown;
   rulesets: unknown;
   legalValues: unknown;
   pendingCountryCode: string | null;
+  pendingUploadSourceId?: string | null;
+  onConsumedPendingUpload?: () => void;
   busy: boolean;
   onSelectCountry: (countryCode: string) => void;
   onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
@@ -430,6 +434,12 @@ export function OwnerLegalLibraryPanel({
     ...library.domains.flatMap((domain) => domain.sources),
     ...library.unassigned_sources,
   ];
+  useEffect(() => {
+    if (!pendingUploadSourceId) return;
+    const source = findLegalLibrarySource(allSources, pendingUploadSourceId);
+    if (source) setUploadSource(source);
+    onConsumedPendingUpload?.();
+  }, [allSources, onConsumedPendingUpload, pendingUploadSourceId]);
   const structureParentSource = findLegalLibrarySource(allSources, nodeSourceId);
   const structureParentNodes = structureParentSource ? flattenLegalLibraryNodes(structureParentSource.nodes) : [];
   const structureParentSourceLabel = structureParentSource?.title

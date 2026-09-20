@@ -26,6 +26,7 @@ import { OwnerBusinessSetupAiWorkspace } from './owner-business-setup-ai-workspa
 import { OwnerLegalValuesPanel } from './owner-legal-values-panel';
 import { OwnerCountryContextPanel } from './owner-country-context-panel';
 import { OwnerFactDictionaryPanel, parseFactDictionaryAggregate } from './owner-fact-dictionary-panel';
+import { OwnerRegulationsRegistryPanel } from './owner-regulations-registry-panel';
 import { OwnerAddCountryControl } from './owner-add-country-control';
 import { activeOwnerCountrySelectorOptions, mergeOwnerCountrySelectorOptions } from './owner-iso-country-options';
 import {
@@ -72,6 +73,8 @@ const LEGAL_TEXT_DRAFT_COMMANDS = new Set([
   'select_legal_training_document',
   'select_legal_text_draft',
   'record_tax_knowledge_proposal_external_reference',
+  'record_legal_text_draft_regulation_reference',
+  'ensure_regulation_registry_entry',
 ]);
 
 function trainerSelectionFromAggregate(aggregate: unknown): { documentId: string; draftId: string } {
@@ -114,6 +117,7 @@ export function PlatformOwnerLegalControl() {
     ownerCountryCodeFromSearch(location.search),
   );
   const [trainerDocumentQuery, setTrainerDocumentQuery] = useState('');
+  const [pendingUploadSourceId, setPendingUploadSourceId] = useState('');
   const [pendingTaxKnowledgeCountry, setPendingTaxKnowledgeCountry] = useState(null as string | null);
   const countryQueryRef = useRef(taxKnowledgeCountryQuery);
   countryQueryRef.current = taxKnowledgeCountryQuery;
@@ -568,6 +572,20 @@ export function PlatformOwnerLegalControl() {
         warnings={panelWarningsCombined}
         error={error}
       >
+        {activeSection === 'regulations-orders' ? (
+          <OwnerRegulationsRegistryPanel
+            taxKnowledge={taxKnowledge}
+            busy={commandBusy}
+            onCommand={async (command, payload) => {
+              await sendOwnerCommand(command, payload);
+            }}
+            onOpenTrainer={(sourceId, upload) => {
+              selectSection('tax-knowledge');
+              if (upload) setPendingUploadSourceId(sourceId);
+            }}
+          />
+        ) : null}
+
         {activeSection === 'tax-knowledge' ? (
           <OwnerLegalLibraryPanel
             taxKnowledge={taxKnowledge}
@@ -575,6 +593,8 @@ export function PlatformOwnerLegalControl() {
             rulesets={panel?.rulesets}
             legalValues={panel?.legal_values}
             pendingCountryCode={pendingTaxKnowledgeCountry}
+            pendingUploadSourceId={pendingUploadSourceId || null}
+            onConsumedPendingUpload={() => setPendingUploadSourceId('')}
             busy={commandBusy}
             onSelectCountry={persistOwnerCountrySelection}
             onCommand={async (command, payload) => {

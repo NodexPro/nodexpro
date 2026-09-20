@@ -489,6 +489,7 @@ export type KnowledgeTrainerLegalTextDraftDto = {
   unresolved_source_note_count: number;
   subtree_source_notes: KnowledgeTrainerSourceNoteDto[];
   subtree_unresolved_source_note_count: number;
+  regulation_references?: Array<Record<string, unknown>>;
   created_at: string;
   updated_at: string;
 };

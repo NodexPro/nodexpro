@@ -24,6 +24,8 @@ export const TAX_KNOWLEDGE_COMMANDS = [
   'supersede_tax_rule_version',
   'create_tax_domain',
   'update_tax_domain_metadata',
+  'ensure_regulation_registry_entry',
+  'record_legal_text_draft_regulation_reference',
   'create_tax_legal_node_kind',
   'create_tax_legal_node',
   'update_tax_legal_node_metadata',
@@ -36,6 +38,7 @@ export type TaxKnowledgeCommandName = (typeof TAX_KNOWLEDGE_COMMANDS)[number];
 export const TAX_SOURCE_PROVENANCE_TYPES = [
   'official_law',
   'regulation',
+  'order',
   'circular',
   'official_guidance',
   'case_law_citation',
@@ -49,6 +52,7 @@ export type TaxSourceProvenanceType = (typeof TAX_SOURCE_PROVENANCE_TYPES)[numbe
 export const TAX_SOURCE_PROVENANCE_TYPE_LABELS: Record<TaxSourceProvenanceType, string> = {
   official_law: 'Law',
   regulation: 'Regulation',
+  order: 'Order',
   circular: 'Circular',
   official_guidance: 'Official Guidance',
   case_law_citation: 'Court Decision',

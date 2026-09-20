@@ -43,6 +43,8 @@ export type TaxKnowledgeCommandName =
   | 'supersede_tax_rule_version'
   | 'create_tax_domain'
   | 'update_tax_domain_metadata'
+  | 'ensure_regulation_registry_entry'
+  | 'record_legal_text_draft_regulation_reference'
   | 'create_tax_legal_node_kind'
   | 'create_tax_legal_node'
   | 'update_tax_legal_node_metadata'
@@ -521,6 +523,21 @@ export type OwnerLegalTextDraftListItem = {
   updated_at: string;
 };
 
+export type OwnerDraftLegalReference = {
+  id: string;
+  tax_source_id: string;
+  tax_domain_id: string | null;
+  category_title: string | null;
+  owner_catalog_number: string;
+  label: string;
+  locator_text: string;
+  confirmation_state: string;
+  creation_origin: string;
+  relationship_type: string;
+  cited_instrument_kind: string;
+  name: string | null;
+};
+
 export type OwnerLegalTextDraft = OwnerLegalTextDraftListItem & {
   original_source_text: string;
   original_subtree_text: string | null;
@@ -537,6 +554,59 @@ export type OwnerLegalTextDraft = OwnerLegalTextDraftListItem & {
   owner_source_item_end: number | null;
   source_notes: OwnerSourceNote[];
   subtree_source_notes: OwnerSourceNote[];
+  regulation_references: OwnerDraftLegalReference[];
+};
+
+export type OwnerRegulationRegistryCounts = {
+  all: number;
+  missing: number;
+  needs_review: number;
+  reviewed: number;
+  unresolved: number;
+};
+
+export type OwnerRegulationRegistryEntry = {
+  id: string;
+  tax_source_id: string;
+  owner_catalog_number: string;
+  name: string | null;
+  year: number | null;
+  source_status: string;
+  review_status: string;
+  resolution_status: string;
+  status_code: string;
+  status_label: string;
+  effective_from: string | null;
+  effective_to: string | null;
+  last_owner_review_at: string | null;
+  trainer_document_id: string | null;
+  open_command: TaxKnowledgeAllowedAction;
+};
+
+export type OwnerRegulationRegistryCategory = {
+  id: string;
+  title: string;
+  counts: OwnerRegulationRegistryCounts;
+  entries: OwnerRegulationRegistryEntry[];
+  allowed_actions: TaxKnowledgeAllowedAction[];
+};
+
+export type OwnerRegulationRegistrySlice = {
+  available: boolean;
+  selected_country_code: string | null;
+  schema_applied: boolean;
+  categories: OwnerRegulationRegistryCategory[];
+  selected_draft_references: OwnerDraftLegalReference[];
+  allowed_actions: TaxKnowledgeAllowedAction[];
+  labels: {
+    title: string;
+    missing: string;
+    source_added: string;
+    reviewed: string;
+    resolved: string;
+    last_owner_review: string;
+    effective: string;
+  };
 };
 
 export type OwnerLegalTextDraftCreateFrontierItem = {
@@ -817,10 +887,31 @@ export type TaxKnowledgeAggregate = {
   rules: TaxKnowledgeRule[];
   rule_versions: TaxKnowledgeVersion[];
   legal_library: OwnerLegalLibrarySlice;
+  regulations_orders_registry: OwnerRegulationRegistrySlice;
   allowed_actions: TaxKnowledgeAllowedAction[];
   implemented_commands: string[];
   warnings: string[];
 };
+
+export function emptyRegulationRegistrySlice(): OwnerRegulationRegistrySlice {
+  return {
+    available: false,
+    selected_country_code: null,
+    schema_applied: false,
+    categories: [],
+    selected_draft_references: [],
+    allowed_actions: [],
+    labels: {
+      title: 'תקנות וצווים',
+      missing: 'Missing',
+      source_added: 'Source added',
+      reviewed: 'Reviewed',
+      resolved: 'Resolved',
+      last_owner_review: 'Last Owner review',
+      effective: 'Effective',
+    },
+  };
+}
 
 export function emptyLegalLibrarySlice(): OwnerLegalLibrarySlice {
   return {
@@ -1048,6 +1139,7 @@ export function emptyTaxKnowledgeAggregate(): TaxKnowledgeAggregate {
     rules: [],
     rule_versions: [],
     legal_library: emptyLegalLibrarySlice(),
+    regulations_orders_registry: emptyRegulationRegistrySlice(),
     allowed_actions: [],
     implemented_commands: [],
     warnings: [],

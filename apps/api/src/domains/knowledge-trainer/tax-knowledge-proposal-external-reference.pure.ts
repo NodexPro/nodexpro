@@ -20,6 +20,8 @@ export function parseOwnerExternalReferencePayload(payload: Record<string, unkno
   cited_law_name: string;
   cited_title: string | null;
   cited_provision_number: string | null;
+  source_tax_source_id: string | null;
+  owner_catalog_number: string | null;
 } {
   const extra = Object.keys(payload).filter(
     (key) =>
@@ -34,6 +36,8 @@ export function parseOwnerExternalReferencePayload(payload: Record<string, unkno
         'cited_law_name',
         'cited_title',
         'cited_provision_number',
+        'source_tax_source_id',
+        'owner_catalog_number',
       ].includes(key) && payload[key] !== undefined,
   );
   if (extra.length) {
@@ -62,6 +66,8 @@ export function parseOwnerExternalReferencePayload(payload: Record<string, unkno
     cited_law_name,
     cited_title: asTrimmed(payload.cited_title) || null,
     cited_provision_number: asTrimmed(payload.cited_provision_number) || null,
+    source_tax_source_id: asTrimmed(payload.source_tax_source_id) || null,
+    owner_catalog_number: asTrimmed(payload.owner_catalog_number) || null,
   };
 }
 
@@ -75,6 +81,8 @@ export function appendOwnerExternalUnresolvedReference(
     cited_law_name: string;
     cited_title: string | null;
     cited_provision_number: string | null;
+    source_tax_source_id?: string | null;
+    owner_catalog_number?: string | null;
   },
 ): Record<string, unknown> {
   const rules = Array.isArray(proposalJson.rules) ? proposalJson.rules.map((row) => asPlainObject(row)).filter(Boolean) : [];
@@ -114,6 +122,8 @@ export function appendOwnerExternalUnresolvedReference(
   };
   if (input.cited_title) unresolved.cited_title = input.cited_title;
   if (input.cited_provision_number) unresolved.cited_provision_number = input.cited_provision_number;
+  if (input.source_tax_source_id) unresolved.source_tax_source_id = input.source_tax_source_id;
+  if (input.owner_catalog_number) unresolved.owner_catalog_number = input.owner_catalog_number;
 
   relationships.push({
     from: { kind: 'proposal_rule', key: proposal_rule_key },

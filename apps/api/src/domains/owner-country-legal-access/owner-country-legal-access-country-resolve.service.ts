@@ -61,7 +61,8 @@ export async function resolveCountryForOwnerLegalCommand(
     command === 'create_tax_source' ||
     command === 'create_tax_rule' ||
     command === 'create_tax_domain' ||
-    command === 'create_tax_legal_node_kind'
+    command === 'create_tax_legal_node_kind' ||
+    command === 'ensure_regulation_registry_entry'
   ) {
     return normalizeOwnerLegalCountryCode(payload.country_code);
   }
@@ -149,7 +150,8 @@ export async function resolveCountryForOwnerLegalCommand(
     command === 'reset_legal_text_draft_to_source' ||
     command === 'set_legal_text_draft_review_status' ||
     command === 'create_tax_knowledge_proposal' ||
-    command === 'generate_tax_knowledge_proposal'
+    command === 'generate_tax_knowledge_proposal' ||
+    command === 'record_legal_text_draft_regulation_reference'
   ) {
     const id = optionalUuid(payload.legal_text_draft_id) ?? optionalUuid(payload.draft_id);
     if (!id) throw badRequest('legal_text_draft_id is required');

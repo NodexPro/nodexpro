@@ -26,6 +26,7 @@ import {
   TAX_KNOWLEDGE_RELATIONSHIP_TYPES,
   emptyKnowledgeTrainerSlice,
   emptyLegalLibrarySlice,
+  emptyRegulationRegistrySlice,
   type OwnerKnowledgeTrainerCandidate,
   type OwnerStructureLayoutEvidence,
   type OwnerTrainerLayoutReadiness,
@@ -34,7 +35,9 @@ import {
   type OwnerStructureReviewTreeNode,
   type OwnerKnowledgeTrainerDocument,
   type OwnerKnowledgeTrainerSlice,
+  type OwnerDraftLegalReference,
   type OwnerLegalTextDraft,
+  type OwnerRegulationRegistrySlice,
   type OwnerLegalTextDraftCreateFrontierItem,
   type OwnerLegalTextDraftCounts,
   type OwnerLegalTextDraftListItem,
@@ -764,6 +767,100 @@ function parseLegalTextDraftDetail(raw: UnknownRecord | null): OwnerLegalTextDra
     owner_source_item_end: raw.owner_source_item_end == null ? null : Number(raw.owner_source_item_end),
     source_notes: parseSourceNotes(raw.source_notes),
     subtree_source_notes: parseSourceNotes(raw.subtree_source_notes),
+    regulation_references: parseDraftLegalReferences(raw.regulation_references),
+  };
+}
+
+function parseDraftLegalReferences(raw: unknown): OwnerDraftLegalReference[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => asRecord(row))
+    .filter((row): row is UnknownRecord => row !== null)
+    .map((row) => ({
+      id: asString(row.id),
+      tax_source_id: asString(row.tax_source_id),
+      tax_domain_id: asNullableString(row.tax_domain_id),
+      category_title: asNullableString(row.category_title),
+      owner_catalog_number: asString(row.owner_catalog_number),
+      label: asString(row.label),
+      locator_text: asString(row.locator_text),
+      confirmation_state: asString(row.confirmation_state),
+      creation_origin: asString(row.creation_origin),
+      relationship_type: asString(row.relationship_type),
+      cited_instrument_kind: asString(row.cited_instrument_kind),
+      name: asNullableString(row.name),
+    }));
+}
+
+function parseRegulationRegistry(raw: unknown): OwnerRegulationRegistrySlice {
+  const rec = asRecord(raw);
+  if (!rec) return emptyRegulationRegistrySlice();
+  const labels = asRecord(rec.labels);
+  return {
+    available: rec.available === true,
+    selected_country_code: asNullableString(rec.selected_country_code),
+    schema_applied: rec.schema_applied === true,
+    categories: Array.isArray(rec.categories)
+      ? rec.categories
+          .map((row) => asRecord(row))
+          .filter((row): row is UnknownRecord => row !== null)
+          .map((row) => {
+            const counts = asRecord(row.counts);
+            return {
+              id: asString(row.id),
+              title: asString(row.title),
+              counts: {
+                all: Number(counts?.all) || 0,
+                missing: Number(counts?.missing) || 0,
+                needs_review: Number(counts?.needs_review) || 0,
+                reviewed: Number(counts?.reviewed) || 0,
+                unresolved: Number(counts?.unresolved) || 0,
+              },
+              entries: Array.isArray(row.entries)
+                ? row.entries
+                    .map((entry) => asRecord(entry))
+                    .filter((entry): entry is UnknownRecord => entry !== null)
+                    .map((entry) => ({
+                      id: asString(entry.id),
+                      tax_source_id: asString(entry.tax_source_id || entry.id),
+                      owner_catalog_number: asString(entry.owner_catalog_number),
+                      name: asNullableString(entry.name),
+                      year: typeof entry.year === 'number' ? entry.year : null,
+                      source_status: asString(entry.source_status),
+                      review_status: asString(entry.review_status),
+                      resolution_status: asString(entry.resolution_status),
+                      status_code: asString(entry.status_code),
+                      status_label: asString(entry.status_label),
+                      effective_from: asNullableString(entry.effective_from),
+                      effective_to: asNullableString(entry.effective_to),
+                      last_owner_review_at: asNullableString(entry.last_owner_review_at),
+                      trainer_document_id: asNullableString(entry.trainer_document_id),
+                      open_command: {
+                        action_key: asString(asRecord(entry.open_command)?.action_key),
+                        enabled: asRecord(entry.open_command)?.enabled === true,
+                        payload: Object.fromEntries(
+                          Object.entries(asRecord(asRecord(entry.open_command)?.payload) ?? {}).filter(
+                            (pair): pair is [string, string] => typeof pair[1] === 'string',
+                          ),
+                        ),
+                      },
+                    }))
+                : [],
+              allowed_actions: parseAllowedActions(row.allowed_actions),
+            };
+          })
+      : [],
+    selected_draft_references: parseDraftLegalReferences(rec.selected_draft_references),
+    allowed_actions: parseAllowedActions(rec.allowed_actions),
+    labels: {
+      title: asString(labels?.title) || 'תקנות וצווים',
+      missing: asString(labels?.missing) || 'Missing',
+      source_added: asString(labels?.source_added) || 'Source added',
+      reviewed: asString(labels?.reviewed) || 'Reviewed',
+      resolved: asString(labels?.resolved) || 'Resolved',
+      last_owner_review: asString(labels?.last_owner_review) || 'Last Owner review',
+      effective: asString(labels?.effective) || 'Effective',
+    },
   };
 }
 
@@ -1070,6 +1167,7 @@ export function parseTaxKnowledgeAggregate(raw: unknown): TaxKnowledgeAggregate 
     rules: parseRules(rec.rules),
     rule_versions: parseVersions(rec.rule_versions),
     legal_library: parseLegalLibrary(rec.legal_library),
+    regulations_orders_registry: parseRegulationRegistry(rec.regulations_orders_registry),
     allowed_actions: parseAllowedActions(rec.allowed_actions),
     implemented_commands: Array.isArray(rec.implemented_commands)
       ? rec.implemented_commands.filter((item): item is string => typeof item === 'string')

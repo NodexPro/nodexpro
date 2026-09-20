@@ -507,6 +507,7 @@ function TrainerReview({
           detailLoading={Boolean(detailLoading)}
           onSelectNode={(nodeId) => onSelectLegalTextDraft(document.id, nodeId)}
           onCommand={onCommand}
+          regulationCategories={taxKnowledge.regulations_orders_registry.categories}
         />
       ) : null}
       {workspace === 'structure' ? (

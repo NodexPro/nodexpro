@@ -21,6 +21,10 @@ import {
   type LegalIdentifier,
 } from './legal-identifier.pure.js';
 import { generateLegalMachineCode } from './tax-knowledge-library.pure.js';
+import {
+  handleEnsureRegulationRegistryEntry,
+  handleRecordLegalTextDraftRegulationReference,
+} from './tax-regulation-registry-commands.service.js';
 import { validateTaxRulePayloadPredicates } from '../tax-rule-engine/tax-rule-engine-predicate.pure.js';
 import { randomBytes } from 'node:crypto';
 import {
@@ -871,6 +875,17 @@ async function handleUpdateTaxSourceMetadata(
     patch.published_on = asOptionalDate(payload.published_on, 'published_on');
   }
   if (payload.owner_note !== undefined) patch.owner_note = asOptionalString(payload.owner_note, 'owner_note');
+  if (payload.owner_catalog_year !== undefined) {
+    if (payload.owner_catalog_year === null || payload.owner_catalog_year === '') {
+      patch.owner_catalog_year = null;
+    } else {
+      const year = typeof payload.owner_catalog_year === 'number' ? payload.owner_catalog_year : Number(payload.owner_catalog_year);
+      if (!Number.isInteger(year) || year < 1800 || year > 2200) {
+        throw badRequest('owner_catalog_year is invalid');
+      }
+      patch.owner_catalog_year = year;
+    }
+  }
   if ('tax_domain_id' in payload) {
     patch.tax_domain_id = await resolveOptionalTaxDomainId(source.country_code, payload.tax_domain_id);
   }
@@ -2216,6 +2231,10 @@ export async function executeTaxKnowledgeCommand(
       return handleCreateTaxDomain(ctx, payload);
     case 'update_tax_domain_metadata':
       return handleUpdateTaxDomainMetadata(ctx, payload);
+    case 'ensure_regulation_registry_entry':
+      return handleEnsureRegulationRegistryEntry(ctx, payload);
+    case 'record_legal_text_draft_regulation_reference':
+      return handleRecordLegalTextDraftRegulationReference(ctx, payload);
     case 'create_tax_legal_node_kind':
       return handleCreateTaxLegalNodeKind(ctx, payload);
     case 'create_tax_legal_node':

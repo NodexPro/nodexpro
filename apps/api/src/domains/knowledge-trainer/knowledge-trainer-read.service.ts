@@ -38,6 +38,7 @@ import {
   summarizeTaxKnowledgeProposalValidation,
 } from './tax-knowledge-proposal-v1.pure.js';
 import { attachStructureReviewModel, describeStoredLayoutEvidence } from './knowledge-trainer-review.pure.js';
+import { loadDraftReferences } from '../tax-knowledge/tax-regulation-registry-read.service.js';
 import { emptySourceNoteSummary, parseSourceBBox, summarizeSourceNotes } from './knowledge-trainer-source-notes.pure.js';
 import { structureRunStatusLabel } from './knowledge-trainer-structure-run.pure.js';
 import { createOwnerLegalMaterialSignedUrl } from './knowledge-trainer-storage.service.js';
@@ -1454,7 +1455,10 @@ async function loadLegalTextDraftsForDocument(
       .eq('id', selectedId)
       .maybeSingle();
     if (error) throw error;
-    if (data) selected = mapDraftDetail(data as Record<string, unknown>, byId, notesByRun);
+    if (data) {
+      selected = mapDraftDetail(data as Record<string, unknown>, byId, notesByRun);
+      selected.regulation_references = await loadDraftReferences(selected.id);
+    }
   }
 
   const confirmedBranchIds = new Set(

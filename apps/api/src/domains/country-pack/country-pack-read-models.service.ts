@@ -39,6 +39,7 @@ import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
 import { buildOwnerLegalValuesTableModel } from './owner-legal-values-table.pure.js';
 import { buildOwnerTaxKnowledgeAggregate } from '../tax-knowledge/tax-knowledge-read-models.service.js';
+import { buildRegulationRegistrySlice } from '../tax-knowledge/tax-regulation-registry-read.service.js';
 import {
   buildKnowledgeTrainerSlice,
   emptyKnowledgeTrainerSlice,
@@ -1703,8 +1704,15 @@ export async function buildOwnerLegalControlPanelAggregate(
       })
     : emptyKnowledgeTrainerSlice(false);
   const legalLibrary = (taxKnowledge.legal_library ?? {}) as Record<string, unknown>;
+  const selectedTrainerDraft = (trainerSlice.selected_document as { selected_legal_text_draft?: { id?: string } } | null)
+    ?.selected_legal_text_draft;
+  const regulationsOrdersRegistry = await buildRegulationRegistrySlice({
+    countryCode: selectedCountryCode,
+    selectedDraftId: opts?.tax_knowledge_trainer_legal_text_draft_id ?? selectedTrainerDraft?.id ?? null,
+  });
   taxKnowledge = {
     ...taxKnowledge,
+    regulations_orders_registry: regulationsOrdersRegistry,
     legal_library: {
       ...legalLibrary,
       trainer_upload: {

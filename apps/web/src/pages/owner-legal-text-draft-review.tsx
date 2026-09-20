@@ -16,6 +16,7 @@ import type {
   OwnerLegalTextDraftListItem,
   OwnerLegalTextReviewNode,
   OwnerLegalTextSearchIndexItem,
+  OwnerRegulationRegistryCategory,
   OwnerSourceNote,
   OwnerTaxKnowledgeProposalSlice,
   UnknownRecord,
@@ -43,6 +44,7 @@ export function OwnerLegalTextDraftReview({
   detailLoading,
   onSelectNode,
   onCommand,
+  regulationCategories = [],
 }: {
   documentId: string;
   drafts: OwnerLegalTextDraftListItem[];
@@ -63,6 +65,7 @@ export function OwnerLegalTextDraftReview({
   detailLoading: boolean;
   onSelectNode: (nodeId: string) => void;
   onCommand: (command: string, payload: UnknownRecord) => Promise<void>;
+  regulationCategories?: OwnerRegulationRegistryCategory[];
 }) {
   const tree = useMemo(() => nestLegalTextReviewNodes(reviewTree), [reviewTree]);
   const [error, setError] = useState('');
@@ -101,6 +104,13 @@ export function OwnerLegalTextDraftReview({
   const [addTitle, setAddTitle] = useState('');
   const [addParentId, setAddParentId] = useState('');
   const [addDraftText, setAddDraftText] = useState('');
+  const draftTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkText, setLinkText] = useState('');
+  const [linkStart, setLinkStart] = useState<number | null>(null);
+  const [linkEnd, setLinkEnd] = useState<number | null>(null);
+  const [linkCategoryId, setLinkCategoryId] = useState('');
+  const [linkOwnerRef, setLinkOwnerRef] = useState('');
 
   useEffect(() => {
     if (!selected) {
@@ -619,12 +629,108 @@ export function OwnerLegalTextDraftReview({
                   </div>
                 ) : null}
                 <textarea
+                  ref={draftTextareaRef}
                   className="nx-input nx-legal-draft-textarea"
                   dir="auto"
                   value={draftText}
                   onChange={(event) => setDraftText(event.target.value)}
+                  onMouseUp={() => {
+                    const el = draftTextareaRef.current;
+                    if (!el || textDirty) {
+                      setLinkOpen(false);
+                      return;
+                    }
+                    const start = el.selectionStart;
+                    const end = el.selectionEnd;
+                    const selectedText = draftText.slice(start, end).trim();
+                    if (!selectedText || end <= start) {
+                      setLinkOpen(false);
+                      return;
+                    }
+                    setLinkText(selectedText);
+                    setLinkStart(start);
+                    setLinkEnd(end);
+                    setLinkCategoryId(regulationCategories[0]?.id ?? '');
+                    setLinkOwnerRef('');
+                    setLinkOpen(true);
+                  }}
                   disabled={busy}
                 />
+                {linkOpen && selected ? (
+                  <div className="nx-reg-popover">
+                    <label className="nx-field">
+                      <span className="nx-field-label">Category</span>
+                      <select
+                        className="nx-input"
+                        value={linkCategoryId}
+                        onChange={(event) => setLinkCategoryId(event.target.value)}
+                        disabled={busy}
+                      >
+                        {regulationCategories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="nx-field">
+                      <span className="nx-field-label">Owner reference number</span>
+                      <input
+                        className="nx-input"
+                        value={linkOwnerRef}
+                        onChange={(event) => setLinkOwnerRef(event.target.value)}
+                        disabled={busy}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn-taxes-compact"
+                      disabled={busy || !linkCategoryId || !linkOwnerRef.trim()}
+                      onClick={() =>
+                        void run('record_legal_text_draft_regulation_reference', {
+                          legal_text_draft_id: selected.id,
+                          tax_domain_id: linkCategoryId,
+                          owner_catalog_number: linkOwnerRef.trim(),
+                          locator_text: linkText,
+                          locator_start: linkStart,
+                          locator_end: linkEnd,
+                          creation_origin: 'owner_manual',
+                          owner_confirmed: true,
+                        }).then(() => setLinkOpen(false))
+                      }
+                    >
+                      ✓ Save reference
+                    </button>
+                  </div>
+                ) : null}
+                {(selected.regulation_references ?? []).length ? (
+                  <div className="nx-reg-chips">
+                    {(selected.regulation_references ?? []).map((ref) => (
+                      <span key={ref.id} className="nx-reg-chip">
+                        {ref.label}
+                        {ref.confirmation_state === 'ai_suggested' ? (
+                          <button
+                            type="button"
+                            className="nx-btn nx-btn-taxes-compact"
+                            disabled={busy}
+                            onClick={() =>
+                              void run('record_legal_text_draft_regulation_reference', {
+                                legal_text_draft_id: selected.id,
+                                tax_domain_id: ref.tax_domain_id,
+                                owner_catalog_number: ref.owner_catalog_number,
+                                locator_text: ref.locator_text,
+                                creation_origin: 'ai_suggestion',
+                                owner_confirmed: true,
+                              })
+                            }
+                          >
+                            Confirm
+                          </button>
+                        ) : null}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 <button

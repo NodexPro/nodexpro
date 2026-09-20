@@ -109,6 +109,7 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'create_tax_legal_node' ||
     command === 'update_tax_legal_node_metadata' ||
     command.startsWith('create_tax_source') ||
+    command === 'ensure_regulation_registry_entry' ||
     command.startsWith('update_tax_source') ||
     command === 'retire_tax_source' ||
     command === 'upload_legal_training_document' ||
@@ -186,6 +187,7 @@ export function capabilityRequiredForOwnerCommand(command: string): OwnerCountry
     command === 'reset_legal_text_draft_to_source' ||
     command === 'create_corrected_tax_knowledge_proposal' ||
     command === 'record_tax_knowledge_proposal_external_reference' ||
+    command === 'record_legal_text_draft_regulation_reference' ||
     command === 'link_tax_rule_legal_node' ||
     command === 'unlink_tax_rule_legal_node' ||
     command.includes('tax_rule_relationship') ||
@@ -233,6 +235,7 @@ export function buildOwnerWorkspaceNavigation(kind: 'platform_owner' | 'country_
     group: 'TAX & LAW',
     items: [
       { id: 'tax-knowledge', label: 'Legal Library' },
+      { id: 'regulations-orders', label: 'תקנות וצווים' },
       { id: 'legal-values', label: 'Legal Values' },
       { id: 'fact-dictionary', label: 'Fact Dictionary' },
     ],
