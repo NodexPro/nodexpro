@@ -198,6 +198,7 @@ async function runGenerate(json: Record<string, unknown>) {
       inserts.push(row);
       return { id: PROPOSAL_ID, revision_no: 1 };
     },
+    loadKindCatalog: async () => [],
     writeAudit: async () => undefined,
   });
   let error: unknown = null;

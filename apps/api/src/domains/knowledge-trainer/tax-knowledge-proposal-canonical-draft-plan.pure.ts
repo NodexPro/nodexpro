@@ -43,7 +43,13 @@ export function earliestPublishableRuleEffectiveFrom(proposalJson: Record<string
     .map((rule) => asTrimmed(rule.effective_from))
     .filter(Boolean)
     .sort();
-  return dates[0] || new Date().toISOString().slice(0, 10);
+  if (!dates[0]) {
+    throw new TaxKnowledgeProposalPublishPlanError(
+      'TAX_KNOWLEDGE_PROPOSAL_NOT_PUBLISHABLE',
+      'Canonical publish requires a sourced effective_from on a publication-eligible rule',
+    );
+  }
+  return dates[0];
 }
 
 export function proposalMachineCodeTargets(proposalJson: Record<string, unknown>): {
@@ -232,13 +238,20 @@ export function buildTaxKnowledgeProposalCanonicalDraftPlan(input: {
         predicates.message ?? 'rule payload predicates are invalid',
       );
     }
+    const effectiveFrom = asTrimmed(rule.effective_from);
+    if (!effectiveFrom) {
+      throw new TaxKnowledgeProposalPublishPlanError(
+        'TAX_KNOWLEDGE_PROPOSAL_NOT_PUBLISHABLE',
+        `rule ${localKey} requires a sourced effective_from`,
+      );
+    }
     const planRule: Record<string, unknown> = {
       local_key: localKey,
       legal_node_local_keys: asStringArray(rule.legal_node_keys),
       existing_tax_legal_node_ids: asStringArray(rule.existing_tax_legal_node_ids),
       legal_value_ids: valueKeys.map((key) => legalValueByKey.get(key)),
       version: {
-        effective_from: asTrimmed(rule.effective_from),
+        effective_from: effectiveFrom,
         effective_to: asTrimmed(rule.effective_to) || null,
         payload_json: payload,
         payload_checksum: taxRulePayloadChecksum(payload),

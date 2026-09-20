@@ -29,6 +29,7 @@ import {
 import {
   normalizeTaxKnowledgeProposalExtract,
   type TaxKnowledgeProposalCanonicalAllowlist,
+  type TaxKnowledgeProposalKindCatalogEntry,
 } from './tax-knowledge-proposal-extract-normalize.pure.js';
 import {
   insertProposedTaxKnowledgeProposalRow,
@@ -50,6 +51,7 @@ export type GenerateTaxKnowledgeProposalDeps = {
   validateProposal?: typeof validateProposalJsonForDraft;
   insertProposal?: typeof insertProposedTaxKnowledgeProposalRow;
   persistOwnerPresentations?: typeof persistTaxKnowledgeProposalOwnerPresentations;
+  loadKindCatalog?: (countryCode: string) => Promise<readonly TaxKnowledgeProposalKindCatalogEntry[]>;
   writeAudit?: typeof writeAudit;
   now?: () => Date;
 };
@@ -94,6 +96,18 @@ async function defaultHasExistingProposal(draftId: string): Promise<boolean> {
   return Boolean(data?.id);
 }
 
+async function defaultLoadKindCatalog(countryCode: string): Promise<TaxKnowledgeProposalKindCatalogEntry[]> {
+  const { data, error } = await supabaseAdmin
+    .from('tax_legal_node_kinds')
+    .select('id, label')
+    .eq('country_code', countryCode);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: String((row as { id: string }).id),
+    label: String((row as { label: string }).label),
+  }));
+}
+
 function allowlistFromContext(context: ControlledExtractionContext): TaxKnowledgeProposalCanonicalAllowlist {
   if (context.canonical_allowlist) return context.canonical_allowlist;
   return buildCanonicalAllowlist({
@@ -122,6 +136,7 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
   const validateProposal = deps.validateProposal ?? validateProposalJsonForDraft;
   const insertProposal = deps.insertProposal ?? insertProposedTaxKnowledgeProposalRow;
   const persistOwnerPresentations = deps.persistOwnerPresentations ?? persistTaxKnowledgeProposalOwnerPresentations;
+  const loadKindCatalog = deps.loadKindCatalog ?? defaultLoadKindCatalog;
   const auditWrite = deps.writeAudit ?? writeAudit;
   const now = deps.now ?? (() => new Date());
 
@@ -175,9 +190,18 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
       throw error;
     }
 
+    const kindCatalog = await loadKindCatalog(draft.country_code);
     const normalizedJson = normalizeTaxKnowledgeProposalExtract(result.json, {
       draftLegalText: String(draft.draft_legal_text ?? ''),
       allowlist: allowlistFromContext(context),
+      draftIdentity: {
+        title: draft.title,
+        source_display_identifier: draft.source_display_identifier,
+        normalized_machine_identifier: draft.normalized_machine_identifier,
+        printed_marker: draft.printed_marker,
+        kind_label: draft.kind_label,
+      },
+      kindCatalog,
     });
     const validation = await validateProposal(normalizedJson as Record<string, unknown>, {
       id: draft.id,

@@ -230,6 +230,7 @@ async function runGenerate(options: {
     writeAudit: async (input) => {
       audits.push(input.payload ?? {});
     },
+    loadKindCatalog: async () => [],
     now: () => new Date('2026-09-17T10:00:00.000Z'),
   });
   let error: unknown = null;

@@ -104,6 +104,10 @@ test('TAX-651 extract user message is persisted Owner draft_legal_text, not orig
   assert.match(system, /Missing client facts/);
   assert.match(system, /no_rules only when the draft is genuinely non-operative/);
   assert.match(system, /Still set extraction_outcome=rules/);
+  assert.match(system, /EFFECTIVE_FROM:/);
+  assert.match(system, /Set effective_from to null and add uncertainties\[] with code=insufficient_evidence/);
+  assert.match(system, /Do not invent a prose title for a headingless subsection/);
+  assert.match(system, /Do not invent tax_legal_node_kind_id/);
 });
 
 test('prompt-injection text remains untrusted data inside the legal envelope', () => {

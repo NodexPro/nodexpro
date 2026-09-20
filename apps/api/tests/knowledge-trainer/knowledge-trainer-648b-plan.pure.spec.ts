@@ -194,3 +194,30 @@ test('TAX-648B plan fails closed for missing Fact/Legal Value and country leaks'
     });
   assert.throws(leak, (error: unknown) => error instanceof TaxKnowledgeProposalPublishPlanError && error.code === 'TAX_KNOWLEDGE_PROPOSAL_COUNTRY_MISMATCH');
 });
+
+test('TAX-651 Canonical Publish refuses an unsourced effective_from and does not invent today', () => {
+  assert.throws(
+    () => earliestPublishableRuleEffectiveFrom(proposal({ rules: [rule('r1', { effective_from: null })] })),
+    (error: unknown) =>
+      error instanceof TaxKnowledgeProposalPublishPlanError &&
+      error.code === 'TAX_KNOWLEDGE_PROPOSAL_NOT_PUBLISHABLE' &&
+      /sourced effective_from/.test(error.message),
+  );
+  assert.throws(
+    () =>
+      buildTaxKnowledgeProposalCanonicalDraftPlan({
+        country_code: 'IL',
+        tax_source_id: SOURCE,
+        country_pack_id: PACK,
+        country_pack_ruleset_id: RULESET,
+        proposal_json: proposal({ rules: [rule('r1', { effective_from: null })] }),
+        validation: boundValidation(),
+        node_codes: { parent: 'node_parent', child: 'node_child' },
+        rule_codes: { r1: 'rule_r1' },
+      }),
+    (error: unknown) =>
+      error instanceof TaxKnowledgeProposalPublishPlanError &&
+      error.code === 'TAX_KNOWLEDGE_PROPOSAL_NOT_PUBLISHABLE' &&
+      /sourced effective_from/.test(error.message),
+  );
+});

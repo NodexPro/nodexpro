@@ -800,7 +800,19 @@ export function validateTaxKnowledgeProposalV1(input: {
       pushIssue(errors, `${at}.effective_to`, 'effective_date', 'effective_to must be on or after effective_from');
     }
     if (status && status !== 'cannot_determine' && !effectiveFrom) {
-      pushIssue(errors, `${at}.effective_from`, 'required', 'effective_from is required for publication-eligible rules');
+      const honestUnresolvedDate = Boolean(
+        key &&
+          parsedUncertainties.some(
+            (row) =>
+              row.code === 'insufficient_evidence' &&
+              row.severity === 'blocks_rule_publication' &&
+              row.subject?.kind === 'rule' &&
+              row.subject.key === key,
+          ),
+      );
+      if (!honestUnresolvedDate) {
+        pushIssue(errors, `${at}.effective_from`, 'required', 'effective_from is required for publication-eligible rules');
+      }
     }
 
     const nodeKeyRefs = asStringArray(rule.legal_node_keys, `${at}.legal_node_keys`, errors);

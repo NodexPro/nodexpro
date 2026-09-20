@@ -47,6 +47,31 @@ test('TAX-651 save updates only draft_legal_text, never original_source_text', (
   assert.doesNotMatch(fn, /original_source_text/);
 });
 
+test('TAX-651 generate stamps Layer B identity/kind and does not invent insufficient_evidence', () => {
+  const generate = readRepo(
+    'apps/api/src/domains/knowledge-trainer/knowledge-trainer-generate-tax-knowledge-proposal.service.ts',
+  );
+  const normalize = readRepo(
+    'apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-extract-normalize.pure.ts',
+  );
+  const prompt = readRepo('apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-extract-v1.ts');
+  const validator = readRepo('apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-v1.pure.ts');
+  const plan = readRepo(
+    'apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-canonical-draft-plan.pure.ts',
+  );
+  assert.match(generate, /draftIdentity:/);
+  assert.match(generate, /kind_label: draft\.kind_label/);
+  assert.match(generate, /loadKindCatalog/);
+  assert.match(generate, /from\('tax_legal_node_kinds'\)/);
+  assert.match(normalize, /stampDraftOwnedLegalNodeIdentity/);
+  assert.doesNotMatch(normalize, /code: 'insufficient_evidence'/);
+  assert.match(prompt, /Set effective_from to null and add uncertainties\[] with code=insufficient_evidence/);
+  assert.match(validator, /honestUnresolvedDate/);
+  assert.match(validator, /row\.code === 'insufficient_evidence'/);
+  assert.match(plan, /Canonical publish requires a sourced effective_from/);
+  assert.doesNotMatch(plan, /toISOString\(\)\.slice\(0, 10\)/);
+});
+
 test('TAX-651 document graph cache is keyed and TTL-bounded', () => {
   invalidateTrainerDocumentGraphCache();
   const key = trainerDocumentGraphCacheKey('doc', 'job', 'run');

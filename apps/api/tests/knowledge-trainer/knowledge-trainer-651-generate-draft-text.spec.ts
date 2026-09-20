@@ -122,6 +122,7 @@ test('TAX-651 generate_tax_knowledge_proposal sends persisted B and keeps Propos
       },
     }),
     insertProposal: async () => ({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', revision_no: 1 }),
+    loadKindCatalog: async () => [],
     persistOwnerPresentations: async () => {
       presentationsTried = true;
       throw new Error('translation failed independently');

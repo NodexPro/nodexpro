@@ -11,9 +11,24 @@ export type TaxKnowledgeProposalCanonicalAllowlist = {
   tax_source_ids: readonly string[];
 };
 
+export type TaxKnowledgeProposalDraftIdentity = {
+  title: string | null;
+  source_display_identifier: string | null;
+  normalized_machine_identifier: string | null;
+  printed_marker: string | null;
+  kind_label: string | null;
+};
+
+export type TaxKnowledgeProposalKindCatalogEntry = {
+  id: string;
+  label: string;
+};
+
 export type NormalizeTaxKnowledgeProposalExtractInput = {
   draftLegalText: string;
   allowlist: TaxKnowledgeProposalCanonicalAllowlist;
+  draftIdentity?: TaxKnowledgeProposalDraftIdentity | null;
+  kindCatalog?: readonly TaxKnowledgeProposalKindCatalogEntry[];
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -153,6 +168,74 @@ function remapUncertaintySubject(
     if (remapped) next.key = remapped;
   }
   return next;
+}
+
+function asTrimmed(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function identifiersEqual(left: unknown, right: unknown): boolean {
+  const a = asTrimmed(left);
+  const b = asTrimmed(right);
+  return Boolean(a && b && a === b);
+}
+
+function nodeMatchesDraftIdentity(
+  node: Record<string, unknown>,
+  draft: TaxKnowledgeProposalDraftIdentity,
+): boolean {
+  return (
+    identifiersEqual(node.source_display_identifier, draft.source_display_identifier) ||
+    identifiersEqual(node.source_display_identifier, draft.normalized_machine_identifier) ||
+    identifiersEqual(node.printed_marker, draft.printed_marker)
+  );
+}
+
+function selectDraftOwnedLegalNodes(
+  nodes: Array<Record<string, unknown> | unknown>,
+  draft: TaxKnowledgeProposalDraftIdentity,
+): Array<Record<string, unknown>> {
+  const objects = nodes.filter(isPlainObject);
+  const matched = objects.filter((node) => nodeMatchesDraftIdentity(node, draft));
+  if (matched.length) return matched;
+  return objects.length === 1 ? objects : [];
+}
+
+function resolveKindIdFromReviewedLabel(
+  kindLabel: string | null,
+  catalog: readonly TaxKnowledgeProposalKindCatalogEntry[],
+): string | null {
+  const label = asTrimmed(kindLabel);
+  if (!label) return null;
+  const found = catalog.find((row) => asTrimmed(row.label) === label);
+  return found && isUuid(found.id) ? found.id.trim() : null;
+}
+
+function stampDraftOwnedLegalNodeIdentity(
+  proposal: Record<string, unknown>,
+  input: NormalizeTaxKnowledgeProposalExtractInput,
+): void {
+  const draft = input.draftIdentity;
+  if (!draft) return;
+  const owned = selectDraftOwnedLegalNodes(asObjectItems(proposal.legal_nodes), draft);
+  if (!owned.length) return;
+  const title = asTrimmed(draft.title) || asTrimmed(draft.source_display_identifier);
+  const kindId = resolveKindIdFromReviewedLabel(draft.kind_label, input.kindCatalog ?? []);
+  for (const node of owned) {
+    if (asTrimmed(draft.source_display_identifier)) {
+      node.source_display_identifier = asTrimmed(draft.source_display_identifier);
+    }
+    if (asTrimmed(draft.printed_marker)) {
+      node.printed_marker = asTrimmed(draft.printed_marker);
+    }
+    if (asTrimmed(draft.kind_label)) {
+      node.kind_label = asTrimmed(draft.kind_label);
+    }
+    if (title) node.title = title;
+    node.tax_legal_node_kind_id = kindId;
+  }
 }
 
 function ensureCannotDetermineUncertainties(
@@ -304,5 +387,6 @@ export function normalizeTaxKnowledgeProposalExtract(
 
   bindEvidenceQuotes(proposal, input.draftLegalText);
   ensureCannotDetermineUncertainties(proposal, ruleKeyByIndex);
+  stampDraftOwnedLegalNodeIdentity(proposal, input);
   return proposal;
 }

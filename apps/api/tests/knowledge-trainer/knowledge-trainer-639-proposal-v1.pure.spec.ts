@@ -396,6 +396,61 @@ test('TAX-639 valid verbatim evidence span matches the Owner Draft; fake span an
   assert.ok(errorCodes(paraphrase).includes('authoritative_evidence_required'));
 });
 
+test('TAX-639 null effective_from is schema-valid only with blocking insufficient_evidence; Publish stays blocked', () => {
+  const missing = run(closed({ rules: [determinedRule('r1', { effective_from: null })] }));
+  assert.equal(missing.valid_schema, false);
+  assert.ok(missing.errors.some((row) => row.path === 'rules[0].effective_from' && row.code === 'required'));
+
+  const reviewOnly = run(
+    closed({
+      rules: [determinedRule('r1', { effective_from: null })],
+      uncertainties: [
+        {
+          code: 'insufficient_evidence',
+          severity: 'review_only',
+          subject: { kind: 'rule', key: 'r1' },
+          message: 'Draft does not prove commencement',
+        },
+      ],
+    }),
+  );
+  assert.equal(reviewOnly.valid_schema, false);
+  assert.ok(reviewOnly.errors.some((row) => row.path === 'rules[0].effective_from' && row.code === 'required'));
+
+  const wrongSubject = run(
+    closed({
+      rules: [determinedRule('r1', { effective_from: null })],
+      uncertainties: [
+        {
+          code: 'insufficient_evidence',
+          severity: 'blocks_rule_publication',
+          subject: { kind: 'legal_value', key: 'credit_point_value' },
+          message: 'Draft does not prove commencement',
+        },
+      ],
+    }),
+  );
+  assert.equal(wrongSubject.valid_schema, false);
+
+  const honest = run(
+    closed({
+      rules: [determinedRule('r1', { effective_from: null })],
+      uncertainties: [
+        {
+          code: 'insufficient_evidence',
+          severity: 'blocks_rule_publication',
+          subject: { kind: 'rule', key: 'r1' },
+          message: 'Pinned Owner evidence does not establish effective_from',
+        },
+      ],
+    }),
+  );
+  assert.equal(honest.valid_schema, true, JSON.stringify(honest.errors));
+  assert.equal(honest.publication_eligible, false);
+  assert.equal(honest.owner_approval_allowed, false);
+  assert.equal(canOwnerApproveTaxKnowledgeProposal(honest), false);
+});
+
 test('TAX-639 blocking uncertainty prevents owner approval even when schema is valid', () => {
   const result = run(
     closed({
