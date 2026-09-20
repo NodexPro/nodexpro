@@ -113,7 +113,6 @@ export function PlatformOwnerLegalControl() {
     ownerCountryCodeFromSearch(location.search),
   );
   const [trainerDocumentQuery, setTrainerDocumentQuery] = useState('');
-  const [trainerDraftQuery, setTrainerDraftQuery] = useState('');
   const [pendingTaxKnowledgeCountry, setPendingTaxKnowledgeCountry] = useState(null as string | null);
   const countryQueryRef = useRef(taxKnowledgeCountryQuery);
   countryQueryRef.current = taxKnowledgeCountryQuery;
@@ -246,7 +245,6 @@ export function PlatformOwnerLegalControl() {
           if (LEGAL_TEXT_DRAFT_COMMANDS.has(command)) {
             const selected = trainerSelectionFromAggregate(out.refreshed.aggregate);
             if (selected.documentId) setTrainerDocumentQuery(selected.documentId);
-            if (selected.draftId) setTrainerDraftQuery(selected.draftId);
           }
         }
       } catch (refreshError) {
