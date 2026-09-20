@@ -50,12 +50,23 @@ export type TaxKnowledgeProposalOwnerCreateAction = {
   legal_text_draft_id: string | null;
 };
 
+export const TAX_KNOWLEDGE_PROPOSAL_APPROVE_PRESENTATIONS = [
+  'hidden',
+  'available',
+  'approved',
+  'unavailable',
+] as const;
+
+export type TaxKnowledgeProposalApprovePresentation =
+  (typeof TAX_KNOWLEDGE_PROPOSAL_APPROVE_PRESENTATIONS)[number];
+
 export type TaxKnowledgeProposalOwnerApproveAction = {
   action_key: 'set_tax_knowledge_proposal_review_status';
   visible: boolean;
   enabled: boolean;
   tax_knowledge_proposal_id: string | null;
   status: 'owner_approved';
+  presentation: TaxKnowledgeProposalApprovePresentation;
 };
 
 export type TaxKnowledgeProposalOwnerCorrectRule = {
@@ -510,6 +521,7 @@ function emptyApproveAction(): TaxKnowledgeProposalOwnerApproveAction {
     enabled: false,
     tax_knowledge_proposal_id: null,
     status: 'owner_approved',
+    presentation: 'hidden',
   };
 }
 
@@ -566,14 +578,26 @@ function buildApproveAction(
   validation: TaxKnowledgeProposalV1ValidationSummary | null,
 ): TaxKnowledgeProposalOwnerApproveAction {
   if (!selected) return emptyApproveAction();
+  if (selected.status === 'owner_approved') {
+    return {
+      action_key: 'set_tax_knowledge_proposal_review_status',
+      visible: true,
+      enabled: false,
+      tax_knowledge_proposal_id: selected.id,
+      status: 'owner_approved',
+      presentation: 'approved',
+    };
+  }
+  const available =
+    allowedTaxKnowledgeProposalReviewStatuses(selected.status).includes('owner_approved') &&
+    validation?.owner_approval_allowed === true;
   return {
     action_key: 'set_tax_knowledge_proposal_review_status',
     visible: true,
-    enabled:
-      allowedTaxKnowledgeProposalReviewStatuses(selected.status).includes('owner_approved') &&
-      validation?.owner_approval_allowed === true,
+    enabled: available,
     tax_knowledge_proposal_id: selected.id,
     status: 'owner_approved',
+    presentation: available ? 'available' : 'unavailable',
   };
 }
 

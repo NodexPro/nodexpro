@@ -80,7 +80,7 @@ test('TAX-651 2(2)(ב)-pattern owner view shows the legal rule, not “no legal 
     validation: summarizeTaxKnowledgeProposalValidation({
       valid_schema: true,
       publication_eligible: false,
-      owner_approval_allowed: false,
+      owner_approval_allowed: true,
       errors: [],
       warnings: [],
       blocking_uncertainties: [

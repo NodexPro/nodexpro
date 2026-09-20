@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type {
   OwnerTaxKnowledgeProposalAction,
   OwnerTaxKnowledgeProposalApproveAction,
+  OwnerTaxKnowledgeProposalApprovePresentation,
   OwnerTaxKnowledgeProposalCorrectAction,
   OwnerTaxKnowledgeProposalCorrectRule,
   OwnerTaxKnowledgeProposalCreateAction,
@@ -143,6 +144,15 @@ function parseCreateAction(raw: UnknownRecord | null, fallback: OwnerTaxKnowledg
   };
 }
 
+function parseApprovePresentation(
+  value: unknown,
+  fallback: OwnerTaxKnowledgeProposalApprovePresentation,
+): OwnerTaxKnowledgeProposalApprovePresentation {
+  return value === 'hidden' || value === 'available' || value === 'approved' || value === 'unavailable'
+    ? value
+    : fallback;
+}
+
 function parseApproveAction(
   raw: UnknownRecord | null,
   fallback: OwnerTaxKnowledgeProposalApproveAction,
@@ -154,6 +164,7 @@ function parseApproveAction(
     enabled: raw.enabled === true,
     tax_knowledge_proposal_id: asNullableString(raw.tax_knowledge_proposal_id),
     status: 'owner_approved',
+    presentation: parseApprovePresentation(raw.presentation, fallback.presentation),
   };
 }
 
@@ -537,16 +548,19 @@ export function OwnerTaxKnowledgeProposalView({
             {creating ? loc.analyzing_label : '✨ Proposal'}
           </button>
         ) : null}
-        <button
-          type="button"
-          className="nx-btn nx-btn-taxes-compact nx-legal-draft-ai-proposal-approve"
-          disabled={approveDisabled}
-          aria-label={loc.approve_aria_label}
-          title={loc.approve_aria_label}
-          onClick={() => void approveProposal()}
-        >
-          ✓
-        </button>
+        {view.approve.visible && view.approve.presentation !== 'hidden' ? (
+          <button
+            type="button"
+            className={`nx-btn nx-btn-taxes-compact nx-legal-draft-ai-proposal-approve is-${view.approve.presentation}`}
+            disabled={approveDisabled}
+            aria-pressed={view.approve.presentation === 'approved'}
+            aria-label={loc.approve_aria_label}
+            title={loc.approve_aria_label}
+            onClick={() => void approveProposal()}
+          >
+            ✓
+          </button>
+        ) : null}
         {publish.visible ? (
           <button
             type="button"

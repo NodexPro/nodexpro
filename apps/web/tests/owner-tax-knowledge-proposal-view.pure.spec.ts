@@ -265,6 +265,7 @@ test('TAX-645 empty Reviewed Draft exposes Create action without inventing a pro
   assert.equal(parsed.owner_view.by_locale.he.empty_title, 'טרם נוצרה הצעת AI');
   assert.equal(parsed.selected, null);
   assert.equal(parsed.owner_view.approve.enabled, false);
+  assert.equal(parsed.owner_view.approve.presentation, 'hidden');
   assert.equal(parsed.owner_view.correct.visible, false);
 });
 
@@ -272,6 +273,7 @@ test('TAX-648A parser copies backend ✓ and correction actions without inventin
   const empty = parseTaxKnowledgeProposalSlice(null);
   assert.equal(empty.owner_view.approve.enabled, false);
   assert.equal(empty.owner_view.approve.status, 'owner_approved');
+  assert.equal(empty.owner_view.approve.presentation, 'hidden');
   assert.equal(empty.owner_view.correct.visible, false);
 
   const parsed = parseTaxKnowledgeProposalSlice({
@@ -300,6 +302,7 @@ test('TAX-648A parser copies backend ✓ and correction actions without inventin
         enabled: true,
         tax_knowledge_proposal_id: 'p1',
         status: 'owner_approved',
+        presentation: 'available',
       },
       correct: {
         action_key: 'create_corrected_tax_knowledge_proposal',
@@ -317,6 +320,7 @@ test('TAX-648A parser copies backend ✓ and correction actions without inventin
   assert.equal(parsed.owner_view.approve.action_key, 'set_tax_knowledge_proposal_review_status');
   assert.equal(parsed.owner_view.approve.status, 'owner_approved');
   assert.equal(parsed.owner_view.approve.tax_knowledge_proposal_id, 'p1');
+  assert.equal(parsed.owner_view.approve.presentation, 'available');
   assert.equal(parsed.owner_view.correct.visible, true);
   assert.equal(parsed.owner_view.correct.rules[0]?.proposal_rule_key, 'rule_1');
 
@@ -324,10 +328,21 @@ test('TAX-648A parser copies backend ✓ and correction actions without inventin
     ...parsed,
     owner_view: {
       ...parsed.owner_view,
-      approve: { ...parsed.owner_view.approve, enabled: false },
+      approve: { ...parsed.owner_view.approve, enabled: false, presentation: 'unavailable' },
     },
   });
   assert.equal(blocked.owner_view.approve.enabled, false);
+  assert.equal(blocked.owner_view.approve.presentation, 'unavailable');
+
+  const approved = parseTaxKnowledgeProposalSlice({
+    ...parsed,
+    owner_view: {
+      ...parsed.owner_view,
+      approve: { ...parsed.owner_view.approve, enabled: false, presentation: 'approved' },
+    },
+  });
+  assert.equal(approved.owner_view.approve.enabled, false);
+  assert.equal(approved.owner_view.approve.presentation, 'approved');
 });
 
 test('TAX-648A UI keeps a locale-invariant ✓ and human correction without publish or raw JSON', () => {
@@ -338,10 +353,20 @@ test('TAX-648A UI keeps a locale-invariant ✓ and human correction without publ
   assert.match(view, /view\.approve\.action_key/);
   assert.match(view, /status: view\.approve\.status/);
   assert.match(view, /!view\.approve\.enabled/);
+  assert.match(view, /presentation !== 'hidden'/);
+  assert.match(view, /is-\$\{view\.approve\.presentation\}/);
+  assert.match(view, /aria-pressed=\{view\.approve\.presentation === 'approved'\}/);
   assert.match(view, /rule_text_corrections/);
   assert.match(view, /view\.correct\.action_key/);
   assert.match(view, /loc\.approve_aria_label/);
   assert.match(css, /nx-legal-draft-ai-proposal-approve/);
+  assert.match(css, /is-available/);
+  assert.match(css, /is-approved/);
+  assert.match(css, /is-unavailable/);
+  assert.doesNotMatch(
+    css.slice(css.indexOf('.nx-legal-draft-ai-proposal-approve {'), css.indexOf('.nx-legal-draft-ai-proposal-publish')),
+    /#86efac/,
+  );
   assert.doesNotMatch(view, />Approve</);
   assert.doesNotMatch(view, />אישור</);
   assert.doesNotMatch(view, />Подтвердить</);

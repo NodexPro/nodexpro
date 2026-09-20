@@ -245,7 +245,7 @@ test('TAX-639 unconstrained requires null applies_if; cannot_determine requires 
   );
   assert.equal(cannotOk.valid_schema, true, JSON.stringify(cannotOk.errors));
   assert.equal(cannotOk.publication_eligible, false);
-  assert.equal(canOwnerApproveTaxKnowledgeProposal(cannotOk), false);
+  assert.equal(canOwnerApproveTaxKnowledgeProposal(cannotOk), true);
 });
 
 test('TAX-639 unknown fact key must not enter a predicate', () => {
@@ -277,7 +277,8 @@ test('TAX-639 missing fact definition may be declared with blocking uncertainty 
     }),
   );
   assert.equal(result.valid_schema, true, JSON.stringify(result.errors));
-  assert.equal(result.owner_approval_allowed, false);
+  assert.equal(result.owner_approval_allowed, true);
+  assert.equal(result.publication_eligible, false);
   assert.equal(result.resolved_fact_bindings.find((row) => row.fact_key === 'unknown_widget')?.dictionary_status, 'missing_definition');
 });
 
@@ -357,7 +358,8 @@ test('TAX-639 unknown legal value is blocking; forbidden statutory literal is an
     }),
   );
   assert.equal(honest.valid_schema, true, JSON.stringify(honest.errors));
-  assert.equal(honest.owner_approval_allowed, false);
+  assert.equal(honest.owner_approval_allowed, true);
+  assert.equal(honest.publication_eligible, false);
 
   const literal = run({
     ...closed(),
@@ -447,11 +449,11 @@ test('TAX-639 null effective_from is schema-valid only with blocking insufficien
   );
   assert.equal(honest.valid_schema, true, JSON.stringify(honest.errors));
   assert.equal(honest.publication_eligible, false);
-  assert.equal(honest.owner_approval_allowed, false);
-  assert.equal(canOwnerApproveTaxKnowledgeProposal(honest), false);
+  assert.equal(honest.owner_approval_allowed, true);
+  assert.equal(canOwnerApproveTaxKnowledgeProposal(honest), true);
 });
 
-test('TAX-639 blocking uncertainty prevents owner approval even when schema is valid', () => {
+test('TAX-639 blocking uncertainty prevents publication, not owner approval', () => {
   const result = run(
     closed({
       uncertainties: [
@@ -466,7 +468,8 @@ test('TAX-639 blocking uncertainty prevents owner approval even when schema is v
   );
   assert.equal(result.valid_schema, true, JSON.stringify(result.errors));
   assert.equal(result.publication_eligible, false);
-  assert.equal(result.owner_approval_allowed, false);
+  assert.equal(result.owner_approval_allowed, true);
+  assert.equal(canOwnerApproveTaxKnowledgeProposal(result), true);
   assert.equal(result.blocking_uncertainties.length, 1);
 });
 

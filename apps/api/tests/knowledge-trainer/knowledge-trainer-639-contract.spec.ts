@@ -31,7 +31,9 @@ test('TAX-639 create/correct validate tax_knowledge_proposal_v1 before INSERT an
   assert.match(service, /TAX_KNOWLEDGE_PROPOSAL_INVALID/);
   assert.match(service, /canOwnerApproveTaxKnowledgeProposal/);
   assert.match(service, /TAX_KNOWLEDGE_PROPOSAL_NOT_APPROVABLE/);
-  assert.match(service, /owner_approved requires a valid tax_knowledge_proposal_v1/);
+  assert.match(service, /owner_approved requires a valid tax_knowledge_proposal_v1 contract/);
+  assert.doesNotMatch(service, /with no blocks_rule_publication uncertainty/);
+  assert.match(pure, /return result\.valid_schema === true;/);
   assert.doesNotMatch(service, /from\('tax_legal_nodes'\)/);
   assert.doesNotMatch(service, /from\('tax_rules'\)/);
   assert.doesNotMatch(service, /from\('tax_rule_versions'\)/);

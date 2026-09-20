@@ -2804,9 +2804,6 @@
 }
 
 .nx-legal-draft-ai-proposal-approve {
-  background: #15803d;
-  border-color: #15803d;
-  color: #fff;
   min-width: 32px;
   width: 32px;
   height: 32px;
@@ -2816,10 +2813,23 @@
   line-height: 1;
 }
 
-.nx-legal-draft-ai-proposal-approve:disabled {
-  background: #86efac;
-  border-color: #86efac;
+.nx-legal-draft-ai-proposal-approve.is-available {
+  background: #15803d;
+  border-color: #15803d;
+  color: #fff;
+}
+
+.nx-legal-draft-ai-proposal-approve.is-approved {
+  background: #fff;
+  border-color: #14532d;
   color: #14532d;
+}
+
+.nx-legal-draft-ai-proposal-approve.is-unavailable,
+.nx-legal-draft-ai-proposal-approve:disabled:not(.is-approved):not(.is-available) {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #6b7280;
 }
 
 .nx-legal-draft-ai-proposal-publish {

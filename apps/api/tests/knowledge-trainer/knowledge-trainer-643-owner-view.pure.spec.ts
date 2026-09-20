@@ -81,7 +81,7 @@ function validation() {
   return summarizeTaxKnowledgeProposalValidation({
     valid_schema: true,
     publication_eligible: false,
-    owner_approval_allowed: false,
+    owner_approval_allowed: true,
     errors: [],
     warnings: [],
     blocking_uncertainties: [
@@ -114,6 +114,7 @@ test('TAX-644A empty owner view is he/ru/en and does not invent a proposal', () 
   assert.equal(view.create.visible, false);
   assert.equal(view.create.enabled, false);
   assert.equal(view.approve.enabled, false);
+  assert.equal(view.approve.presentation, 'hidden');
   assert.equal(view.correct.visible, false);
   assert.equal(view.default_locale, 'he');
   assert.deepEqual(view.locale_options.map((row) => row.code), ['he', 'ru', 'en']);
@@ -168,7 +169,8 @@ test('TAX-645 Create action comes from backend eligibility, not frontend review_
   assert.equal(existing.create.visible, false);
   assert.equal(existing.create.enabled, false);
   assert.equal(existing.approve.visible, true);
-  assert.equal(existing.approve.enabled, false);
+  assert.equal(existing.approve.enabled, true);
+  assert.equal(existing.approve.presentation, 'available');
   assert.equal(existing.approve.action_key, 'set_tax_knowledge_proposal_review_status');
   assert.equal(existing.approve.status, 'owner_approved');
   assert.equal(existing.correct.visible, true);
@@ -178,71 +180,59 @@ test('TAX-645 Create action comes from backend eligibility, not frontend review_
   assert.doesNotMatch(JSON.stringify(existing.create), /review_status/);
 });
 
-test('TAX-648A approve is enabled only from TAX-639 owner_approval_allowed and review transitions', () => {
-  const blocked = buildTaxKnowledgeProposalOwnerView({
+test('TAX-648A approve is available from valid_schema even when publication is blocked', () => {
+  const invalid = buildTaxKnowledgeProposalOwnerView({
+    selected: selectedMeta(),
+    proposal_json: seif3AbProposal(),
+    validation: summarizeTaxKnowledgeProposalValidation({
+      valid_schema: false,
+      publication_eligible: false,
+      owner_approval_allowed: false,
+      errors: [{ path: 'rules[0].title', code: 'required', message: 'title is required' }],
+      warnings: [],
+      blocking_uncertainties: [],
+      resolved_fact_bindings: [],
+      resolved_legal_values: [],
+      resolved_existing_rule_refs: [],
+      evidence_validation: {
+        draft_legal_text_length: 93,
+        verbatim_quote_count: 1,
+        paraphrase_quote_count: 0,
+        citation_count: 1,
+        authoritative_evidence: true,
+        quotes: [{ index: 0, role: 'verbatim_from_draft', matched: true, message: null }],
+      },
+    }),
+  });
+  assert.equal(invalid.approve.visible, true);
+  assert.equal(invalid.approve.enabled, false);
+  assert.equal(invalid.approve.presentation, 'unavailable');
+  assert.equal(invalid.details.owner_approval_allowed, 'no');
+
+  const blockedPublish = buildTaxKnowledgeProposalOwnerView({
     selected: selectedMeta(),
     proposal_json: seif3AbProposal(),
     validation: validation(),
   });
-  assert.equal(blocked.approve.enabled, false);
-  assert.equal(blocked.details.owner_approval_allowed, 'no');
-
-  const eligible = buildTaxKnowledgeProposalOwnerView({
-    selected: selectedMeta(),
-    proposal_json: seif3AbProposal(),
-    validation: summarizeTaxKnowledgeProposalValidation({
-      valid_schema: true,
-      publication_eligible: true,
-      owner_approval_allowed: true,
-      errors: [],
-      warnings: [],
-      blocking_uncertainties: [],
-      resolved_fact_bindings: [],
-      resolved_legal_values: [],
-      resolved_existing_rule_refs: [],
-      evidence_validation: {
-        draft_legal_text_length: 93,
-        verbatim_quote_count: 1,
-        paraphrase_quote_count: 0,
-        citation_count: 1,
-        authoritative_evidence: true,
-        quotes: [{ index: 0, role: 'verbatim_from_draft', matched: true, message: null }],
-      },
-    }),
-  });
-  assert.equal(eligible.approve.visible, true);
-  assert.equal(eligible.approve.enabled, true);
-  assert.equal(eligible.approve.tax_knowledge_proposal_id, PROPOSAL_ID);
-  assert.equal(eligible.approve.status, 'owner_approved');
-  assert.equal(eligible.by_locale.he.approve_aria_label, 'אישור הצעת AI');
-  assert.equal(eligible.by_locale.ru.approve_aria_label, 'Подтвердить предложение AI');
-  assert.equal(eligible.by_locale.en.approve_aria_label, 'Approve AI Proposal');
+  assert.equal(blockedPublish.approve.visible, true);
+  assert.equal(blockedPublish.approve.enabled, true);
+  assert.equal(blockedPublish.approve.presentation, 'available');
+  assert.equal(blockedPublish.approve.tax_knowledge_proposal_id, PROPOSAL_ID);
+  assert.equal(blockedPublish.approve.status, 'owner_approved');
+  assert.equal(blockedPublish.details.owner_approval_allowed, 'yes');
+  assert.equal(blockedPublish.details.publication_eligible, 'no');
+  assert.equal(blockedPublish.by_locale.he.approve_aria_label, 'אישור הצעת AI');
+  assert.equal(blockedPublish.by_locale.ru.approve_aria_label, 'Подтвердить предложение AI');
+  assert.equal(blockedPublish.by_locale.en.approve_aria_label, 'Approve AI Proposal');
 
   const alreadyApproved = buildTaxKnowledgeProposalOwnerView({
     selected: { ...selectedMeta(), status: 'owner_approved', status_label: 'Owner approved / אושר על ידי Owner' },
     proposal_json: seif3AbProposal(),
-    validation: summarizeTaxKnowledgeProposalValidation({
-      valid_schema: true,
-      publication_eligible: true,
-      owner_approval_allowed: true,
-      errors: [],
-      warnings: [],
-      blocking_uncertainties: [],
-      resolved_fact_bindings: [],
-      resolved_legal_values: [],
-      resolved_existing_rule_refs: [],
-      evidence_validation: {
-        draft_legal_text_length: 93,
-        verbatim_quote_count: 1,
-        paraphrase_quote_count: 0,
-        citation_count: 1,
-        authoritative_evidence: true,
-        quotes: [{ index: 0, role: 'verbatim_from_draft', matched: true, message: null }],
-      },
-    }),
+    validation: validation(),
   });
   assert.equal(alreadyApproved.approve.visible, true);
   assert.equal(alreadyApproved.approve.enabled, false);
+  assert.equal(alreadyApproved.approve.presentation, 'approved');
 });
 
 test('TAX-644B owner view shows the actual extracted meaning and stored he/ru/en presentation', () => {

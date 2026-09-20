@@ -68,6 +68,8 @@ test('TAX-651 generate stamps Layer B identity/kind and does not invent insuffic
   assert.match(prompt, /Set effective_from to null and add uncertainties\[] with code=insufficient_evidence/);
   assert.match(validator, /honestUnresolvedDate/);
   assert.match(validator, /row\.code === 'insufficient_evidence'/);
+  assert.match(validator, /export function canOwnerApproveTaxKnowledgeProposal/);
+  assert.match(validator, /return result\.valid_schema === true;/);
   assert.match(plan, /Canonical publish requires a sourced effective_from/);
   assert.doesNotMatch(plan, /toISOString\(\)\.slice\(0, 10\)/);
 });

@@ -22,6 +22,11 @@ test('TAX-648A reuses review-status and corrected-proposal commands without cano
   assert.match(ownerView, /action_key: 'set_tax_knowledge_proposal_review_status'/);
   assert.match(ownerView, /status: 'owner_approved'/);
   assert.match(ownerView, /owner_approval_allowed === true/);
+  assert.match(ownerView, /TAX_KNOWLEDGE_PROPOSAL_APPROVE_PRESENTATIONS/);
+  assert.match(ownerView, /presentation: available \? 'available' : 'unavailable'/);
+  assert.match(ownerView, /presentation: 'approved'/);
+  assert.match(service, /owner_approved requires a valid tax_knowledge_proposal_v1 contract/);
+  assert.doesNotMatch(service, /with no blocks_rule_publication uncertainty/);
   assert.match(ownerView, /action_key: 'create_corrected_tax_knowledge_proposal'/);
   assert.match(ownerView, /correctionRulesFromProposal/);
   assert.match(service, /rule_text_corrections/);
@@ -48,6 +53,15 @@ test('TAX-648A reuses review-status and corrected-proposal commands without cano
   assert.doesNotMatch(view, />Подтвердить</);
   assert.doesNotMatch(view, /Reject/);
   assert.match(css, /nx-legal-draft-ai-proposal-approve/);
+  assert.match(css, /is-available/);
+  assert.match(css, /is-approved/);
+  assert.match(css, /is-unavailable/);
+  assert.doesNotMatch(
+    css.slice(css.indexOf('.nx-legal-draft-ai-proposal-approve {'), css.indexOf('.nx-legal-draft-ai-proposal-publish')),
+    /#86efac/,
+  );
+  assert.match(view, /presentation !== 'hidden'/);
+  assert.match(view, /is-\$\{view\.approve\.presentation\}/);
   assert.match(owner, /set_tax_knowledge_proposal_review_status/);
   assert.match(owner, /create_corrected_tax_knowledge_proposal/);
 });

@@ -305,7 +305,7 @@ export async function setTaxKnowledgeProposalReviewStatus(
     if (!canOwnerApproveTaxKnowledgeProposal(validation)) {
       throw new AppError(
         409,
-        'owner_approved requires a valid tax_knowledge_proposal_v1 contract with no blocks_rule_publication uncertainty',
+        'owner_approved requires a valid tax_knowledge_proposal_v1 contract',
         'TAX_KNOWLEDGE_PROPOSAL_NOT_APPROVABLE',
         {
           valid_schema: validation.valid_schema,

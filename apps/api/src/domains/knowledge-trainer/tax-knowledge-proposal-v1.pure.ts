@@ -136,12 +136,9 @@ export function summarizeTaxKnowledgeProposalValidation(
 }
 
 export function canOwnerApproveTaxKnowledgeProposal(
-  result: Pick<TaxKnowledgeProposalV1ValidationResult, 'valid_schema' | 'blocking_uncertainties'>,
+  result: Pick<TaxKnowledgeProposalV1ValidationResult, 'valid_schema'>,
 ): boolean {
-  return (
-    result.valid_schema &&
-    !result.blocking_uncertainties.some((row) => row.severity === 'blocks_rule_publication')
-  );
+  return result.valid_schema === true;
 }
 
 function pushIssue(list: TaxKnowledgeProposalIssue[], path: string, code: string, message: string): void {

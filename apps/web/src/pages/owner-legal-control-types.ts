@@ -657,12 +657,19 @@ export type OwnerTaxKnowledgeProposalCreateAction = {
   legal_text_draft_id: string | null;
 };
 
+export type OwnerTaxKnowledgeProposalApprovePresentation =
+  | 'hidden'
+  | 'available'
+  | 'approved'
+  | 'unavailable';
+
 export type OwnerTaxKnowledgeProposalApproveAction = {
   action_key: 'set_tax_knowledge_proposal_review_status';
   visible: boolean;
   enabled: boolean;
   tax_knowledge_proposal_id: string | null;
   status: 'owner_approved';
+  presentation: OwnerTaxKnowledgeProposalApprovePresentation;
 };
 
 export type OwnerTaxKnowledgeProposalCorrectRule = {
@@ -903,6 +910,7 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
         enabled: false,
         tax_knowledge_proposal_id: null,
         status: 'owner_approved',
+        presentation: 'hidden',
       },
       correct: {
         action_key: 'create_corrected_tax_knowledge_proposal',

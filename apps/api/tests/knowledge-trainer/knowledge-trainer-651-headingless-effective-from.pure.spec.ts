@@ -179,7 +179,7 @@ test('TAX-651 real headingless rule with model-emitted blocking date uncertainty
   });
   assert.equal(result.valid_schema, true, JSON.stringify(result.errors));
   assert.equal(result.publication_eligible, false);
-  assert.equal(result.owner_approval_allowed, false);
+  assert.equal(result.owner_approval_allowed, true);
 });
 
 test('TAX-651 generate stamps headingless identity/kind and stores B2 when the model emitted blocking insufficient_evidence', async () => {
