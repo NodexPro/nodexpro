@@ -77,7 +77,7 @@ test('TAX-637 allowed actions and labels are backend-owned', () => {
     selectedDraftReviewStatus: 'ready',
     selectedProposalStatus: 'proposed',
   });
-  assert.equal(readyExisting.generate_tax_knowledge_proposal, false);
+  assert.equal(readyExisting.generate_tax_knowledge_proposal, true);
   const approved = taxKnowledgeProposalAllowedActions({
     hasSelectedDraft: true,
     selectedProposalStatus: 'owner_approved',

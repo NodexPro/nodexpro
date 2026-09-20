@@ -625,6 +625,7 @@ export type OwnerTaxKnowledgeProposalLocaleView = {
   empty_title: string;
   empty_detail: string;
   create_label: string;
+  reanalyze_label: string;
   create_disabled_reason: string;
   analyzing_label: string;
   generation_failed: string;
@@ -650,11 +651,14 @@ export type OwnerTaxKnowledgeProposalLocaleView = {
   presentations_missing: string;
 };
 
+export type OwnerTaxKnowledgeProposalCreatePresentation = 'generate' | 'reanalyze';
+
 export type OwnerTaxKnowledgeProposalCreateAction = {
   action_key: 'generate_tax_knowledge_proposal';
   visible: boolean;
   enabled: boolean;
   legal_text_draft_id: string | null;
+  presentation: OwnerTaxKnowledgeProposalCreatePresentation;
 };
 
 export type OwnerTaxKnowledgeProposalApprovePresentation =
@@ -837,6 +841,7 @@ function emptyLocaleView(
   emptyTitle: string,
   emptyDetail: string,
   createLabel: string,
+  reanalyzeLabel: string,
   createDisabledReason: string,
   analyzingLabel: string,
   generationFailed: string,
@@ -857,6 +862,7 @@ function emptyLocaleView(
     empty_title: emptyTitle,
     empty_detail: emptyDetail,
     create_label: createLabel,
+    reanalyze_label: reanalyzeLabel,
     create_disabled_reason: createDisabledReason,
     analyzing_label: analyzingLabel,
     generation_failed: generationFailed,
@@ -903,6 +909,7 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
         visible: false,
         enabled: false,
         legal_text_draft_id: null,
+        presentation: 'generate',
       },
       approve: {
         action_key: 'set_tax_knowledge_proposal_review_status',
@@ -942,6 +949,7 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
           'טרם נוצרה הצעת AI',
           'בחירת טיוטה אינה יוצרת הצעת AI.',
           '✨ צור Proposal',
+          '✨ נתח מחדש',
           'יש לבדוק ולאשר את טיוטת החוק לפני יצירת הצעת AI',
           'AI מנתח...',
           'יצירת הצעת AI נכשלה. נסו שוב.',
@@ -962,6 +970,7 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
           'AI Proposal ещё не создан',
           'Выбор черновика не создаёт предложение AI.',
           '✨ Создать Proposal',
+          '✨ Переанализировать',
           'Сначала проверьте и отметьте текст закона как Reviewed',
           'AI анализирует…',
           'Не удалось создать предложение AI. Попробуйте снова.',
@@ -982,6 +991,7 @@ export function emptyTaxKnowledgeProposalSlice(): OwnerTaxKnowledgeProposalSlice
           'No AI Proposal yet',
           'Selecting a Draft does not generate an AI proposal.',
           '✨ Create Proposal',
+          '✨ Re-analyze',
           'Review the legal draft before creating an AI Proposal',
           'AI is analyzing…',
           'AI Proposal could not be created. Try again.',

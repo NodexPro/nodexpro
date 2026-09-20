@@ -156,18 +156,22 @@ test('TAX-645 Create action comes from backend eligibility, not frontend review_
   assert.equal(ready.create.visible, true);
   assert.equal(ready.create.enabled, true);
   assert.equal(ready.create.legal_text_draft_id, DRAFT_ID);
+  assert.equal(ready.create.presentation, 'generate');
+  assert.equal(ready.by_locale.en.reanalyze_label, '✨ Re-analyze');
+  assert.equal(ready.by_locale.he.reanalyze_label, '✨ נתח מחדש');
 
   const existing = buildTaxKnowledgeProposalOwnerView({
     selected: selectedMeta(),
     proposal_json: seif3AbProposal(),
     validation: validation(),
     draft: { id: DRAFT_ID, review_status: 'ready' },
-    generate_enabled: false,
+    generate_enabled: true,
   });
   assert.equal(existing.available, true);
   assert.equal(existing.has_proposal, true);
-  assert.equal(existing.create.visible, false);
-  assert.equal(existing.create.enabled, false);
+  assert.equal(existing.create.visible, true);
+  assert.equal(existing.create.enabled, true);
+  assert.equal(existing.create.presentation, 'reanalyze');
   assert.equal(existing.approve.visible, true);
   assert.equal(existing.approve.enabled, true);
   assert.equal(existing.approve.presentation, 'available');

@@ -304,6 +304,8 @@ export function sanitizeTax639AuditErrors(errors: unknown): SanitizedTax639Audit
 export function sanitizeGenerateAuditPayload(input: {
   legal_text_draft_id: string;
   proposal_id?: string | null;
+  revision_no?: number | null;
+  supersedes_proposal_id?: string | null;
   provider?: string | null;
   model?: string | null;
   prompt_contract_version?: string | null;
@@ -329,6 +331,8 @@ export function sanitizeGenerateAuditPayload(input: {
     attempt_count: input.attempt_count ?? null,
     purpose: TAX_KNOWLEDGE_PROPOSAL_EXTRACT_PURPOSE,
   };
+  if (input.revision_no != null) payload.revision_no = input.revision_no;
+  if (input.supersedes_proposal_id != null) payload.supersedes_proposal_id = input.supersedes_proposal_id;
   if (input.outcome === 'tax_639_invalid') {
     payload.errors = sanitizeTax639AuditErrors(input.errors);
   }

@@ -35,6 +35,7 @@ import {
   resolveOwnerSelectedCountryCode,
   shouldApplyOwnerLegalControlPanelResponse,
 } from './owner-legal-control-country-selection';
+import { shouldApplyTrainerDraftSelectionResponse } from './owner-legal-text-draft-review.pure';
 
 function isForbidden(e: unknown): boolean {
   return e instanceof ApiError && (e.status === 401 || e.status === 403);
@@ -117,6 +118,7 @@ export function PlatformOwnerLegalControl() {
   const countryQueryRef = useRef(taxKnowledgeCountryQuery);
   countryQueryRef.current = taxKnowledgeCountryQuery;
   const loadSeqRef = useRef(0);
+  const draftSelectSeqRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandModal, setCommandModal] = useState(null as CommandModalState | null);
@@ -231,6 +233,12 @@ export function PlatformOwnerLegalControl() {
     payload: UnknownRecord,
     opts?: { detail?: boolean },
   ): Promise<OwnerCommandResponse> => {
+    const selectSeq =
+      command === 'select_legal_text_draft' ? ++draftSelectSeqRef.current : draftSelectSeqRef.current;
+    const requestedDraftId =
+      command === 'select_legal_text_draft' && typeof payload.legal_text_draft_id === 'string'
+        ? payload.legal_text_draft_id
+        : '';
     if (opts?.detail) setDetailLoading(true);
     else setCommandBusy(true);
     setError('');
@@ -241,9 +249,20 @@ export function PlatformOwnerLegalControl() {
       })) as OwnerCommandResponse;
       try {
         if (out.refreshed?.aggregate_key === 'owner_legal_control_panel_aggregate') {
+          const selected = trainerSelectionFromAggregate(out.refreshed.aggregate);
+          if (
+            command === 'select_legal_text_draft' &&
+            !shouldApplyTrainerDraftSelectionResponse({
+              requestSeq: selectSeq,
+              latestSeq: draftSelectSeqRef.current,
+              requestedDraftId,
+              appliedDraftId: selected.draftId,
+            })
+          ) {
+            return out;
+          }
           setPanel(out.refreshed.aggregate);
           if (LEGAL_TEXT_DRAFT_COMMANDS.has(command)) {
-            const selected = trainerSelectionFromAggregate(out.refreshed.aggregate);
             if (selected.documentId) setTrainerDocumentQuery(selected.documentId);
           }
         }

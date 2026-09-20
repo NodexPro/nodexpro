@@ -72,6 +72,37 @@ test('TAX-651 generate stamps Layer B identity/kind and does not invent insuffic
   assert.match(validator, /return result\.valid_schema === true;/);
   assert.match(plan, /Canonical publish requires a sourced effective_from/);
   assert.doesNotMatch(plan, /toISOString\(\)\.slice\(0, 10\)/);
+  assert.match(generate, /supersedes_proposal_id: latest\?\.id \?\? null/);
+  assert.doesNotMatch(generate, /TAX_KNOWLEDGE_PROPOSAL_ALREADY_EXISTS/);
+});
+
+test('TAX-651 re-analyze and section-switch reuse existing commands and caches', () => {
+  const generate = readRepo(
+    'apps/api/src/domains/knowledge-trainer/knowledge-trainer-generate-tax-knowledge-proposal.service.ts',
+  );
+  const ownerView = readRepo(
+    'apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-owner-view.pure.ts',
+  );
+  const read = readRepo('apps/api/src/domains/knowledge-trainer/knowledge-trainer-read.service.ts');
+  const plan = readRepo(
+    'apps/api/src/domains/knowledge-trainer/tax-knowledge-proposal-canonical-draft-plan.pure.ts',
+  );
+  const view = readRepo('apps/web/src/pages/owner-tax-knowledge-proposal-view.tsx');
+  const panel = readRepo('apps/web/src/pages/PlatformOwnerLegalControl.tsx');
+  assert.match(generate, /loadLatestProposal/);
+  assert.match(generate, /creation_origin: 'ai_proposal'/);
+  assert.match(generate, /draftLegalText: String\(draft\.draft_legal_text/);
+  assert.doesNotMatch(generate, /TAX_KNOWLEDGE_PROPOSAL_ALREADY_EXISTS/);
+  assert.doesNotMatch(generate, /from\('tax_rules'\)/);
+  assert.doesNotMatch(generate, /activate_tax_rule_version/);
+  assert.match(ownerView, /presentation: input.hasProposal \? 'reanalyze' : 'generate'/);
+  assert.match(read, /cachedTree && Array.isArray\(cachedTree.frontier\)/);
+  assert.match(read, /cachedTree && Array.isArray\(cachedTree.search_index\)/);
+  assert.match(plan, /row.cited_law_name = asTrimmed\(detail.cited_law_name\)/);
+  assert.match(view, /loc.reanalyze_label/);
+  assert.match(view, /sanitizeOwnerTax639ValidationErrors/);
+  assert.doesNotMatch(view, /fetch\(/);
+  assert.match(panel, /shouldApplyTrainerDraftSelectionResponse/);
 });
 
 test('TAX-651 document graph cache is keyed and TTL-bounded', () => {

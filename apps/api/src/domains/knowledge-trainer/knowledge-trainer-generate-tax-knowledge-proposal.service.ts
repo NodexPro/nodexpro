@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { AppError, conflict, notFound } from '../../shared/errors.js';
+import { AppError, notFound } from '../../shared/errors.js';
 import {
   AiGatewayError,
   completeStructuredJson,
@@ -43,8 +43,14 @@ import { persistTaxKnowledgeProposalOwnerPresentations } from './tax-knowledge-p
 
 const PROPOSAL_TABLE = 'legal_ingestion_tax_knowledge_proposals';
 
+export type GenerateTaxKnowledgeProposalLatest = {
+  id: string;
+  revision_no: number;
+};
+
 export type GenerateTaxKnowledgeProposalDeps = {
   loadDraft?: (draftId: string) => Promise<GenerateDraftRow>;
+  loadLatestProposal?: (draftId: string) => Promise<GenerateTaxKnowledgeProposalLatest | null>;
   hasExistingProposal?: (draftId: string) => Promise<boolean>;
   loadContext?: (draft: GenerateDraftRow) => Promise<ControlledExtractionContext>;
   completeStructuredJson?: typeof completeStructuredJson;
@@ -85,15 +91,17 @@ async function defaultLoadDraft(draftId: string): Promise<GenerateDraftRow> {
   };
 }
 
-async function defaultHasExistingProposal(draftId: string): Promise<boolean> {
+async function defaultLoadLatestProposal(draftId: string): Promise<GenerateTaxKnowledgeProposalLatest | null> {
   const { data, error } = await supabaseAdmin
     .from(PROPOSAL_TABLE)
-    .select('id')
+    .select('id, revision_no')
     .eq('legal_text_draft_id', draftId)
+    .order('revision_no', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return Boolean(data?.id);
+  if (!data?.id) return null;
+  return { id: String(data.id), revision_no: Number(data.revision_no) };
 }
 
 async function defaultLoadKindCatalog(countryCode: string): Promise<TaxKnowledgeProposalKindCatalogEntry[]> {
@@ -130,7 +138,11 @@ function throwIfProposalInvalid(result: TaxKnowledgeProposalV1ValidationResult):
 
 export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgeProposalDeps = {}) {
   const loadDraft = deps.loadDraft ?? defaultLoadDraft;
-  const hasExistingProposal = deps.hasExistingProposal ?? defaultHasExistingProposal;
+  const loadLatestProposal = async (draftId: string) => {
+    if (deps.loadLatestProposal) return deps.loadLatestProposal(draftId);
+    if (deps.hasExistingProposal && !(await deps.hasExistingProposal(draftId))) return null;
+    return defaultLoadLatestProposal(draftId);
+  };
   const loadContext = deps.loadContext ?? loadControlledExtractionContext;
   const complete = deps.completeStructuredJson ?? completeStructuredJson;
   const validateProposal = deps.validateProposal ?? validateProposalJsonForDraft;
@@ -147,9 +159,7 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
     const draftId = parseGenerateTaxKnowledgeProposalDraftId(payload);
     const draft = await loadDraft(draftId);
     assertDraftReadyForAiExtraction(draft);
-    if (await hasExistingProposal(draftId)) {
-      throw conflict('An AI Proposal already exists for this draft', 'TAX_KNOWLEDGE_PROPOSAL_ALREADY_EXISTS');
-    }
+    const latest = await loadLatestProposal(draftId);
     const context = await loadContext(draft);
     const inputContextDigest = digestControlledExtractionInput(context);
 
@@ -238,7 +248,7 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
       structure_run_id: draft.structure_run_id,
       creation_origin: 'ai_proposal',
       status: 'proposed',
-      supersedes_proposal_id: null,
+      supersedes_proposal_id: latest?.id ?? null,
       proposal_json: normalizedJson,
       generation_metadata_json: buildGenerationMetadataJson({
         provider: result.provider,
@@ -270,6 +280,8 @@ export function createGenerateTaxKnowledgeProposal(deps: GenerateTaxKnowledgePro
       payload: sanitizeGenerateAuditPayload({
         legal_text_draft_id: draftId,
         proposal_id: created.id,
+        revision_no: created.revision_no,
+        supersedes_proposal_id: latest?.id ?? null,
         provider: result.provider,
         model: result.model,
         latency_ms: result.latency_ms,

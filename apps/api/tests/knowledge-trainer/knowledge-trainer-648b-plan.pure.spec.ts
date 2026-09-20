@@ -221,3 +221,37 @@ test('TAX-651 Canonical Publish refuses an unsourced effective_from and does not
       /sourced effective_from/.test(error.message),
   );
 });
+
+test('TAX-651 publish plan keeps Owner תקנות pin on the existing unresolved path', () => {
+  const plan = buildTaxKnowledgeProposalCanonicalDraftPlan({
+    country_code: 'IL',
+    tax_source_id: SOURCE,
+    country_pack_id: PACK,
+    country_pack_ruleset_id: RULESET,
+    proposal_json: proposal({
+      relationships: [
+        {
+          from: { kind: 'proposal_rule', key: 'r1' },
+          to: { kind: 'unresolved' },
+          relationship_type: 'depends_on',
+          unresolved: {
+            cited_instrument_kind: 'regulation',
+            cited_law_name: 'תקנות מס הכנסה (שווי השימוש ברכב)',
+            locator_text: 'ראו תקנות מ"ה שווי השימוש ברכב',
+          },
+        },
+      ],
+    }),
+    validation: boundValidation(),
+    node_codes: { parent: 'node_parent', child: 'node_child' },
+    rule_codes: { r1: 'rule_r1', r2: 'rule_r2' },
+  });
+  const unresolved = plan.unresolved as Array<Record<string, unknown>>;
+  assert.equal(unresolved.length, 1);
+  assert.equal(unresolved[0]?.relationship_intent, 'depends_on');
+  assert.equal(unresolved[0]?.from_local_key, 'r1');
+  assert.equal(unresolved[0]?.cited_instrument_kind, 'regulation');
+  assert.equal(unresolved[0]?.cited_law_name, 'תקנות מס הכנסה (שווי השימוש ברכב)');
+  assert.equal(unresolved[0]?.cited_title, 'תקנות מס הכנסה (שווי השימוש ברכב)');
+  assert.equal(unresolved[0]?.locator_text, 'ראו תקנות מ"ה שווי השימוש ברכב');
+});

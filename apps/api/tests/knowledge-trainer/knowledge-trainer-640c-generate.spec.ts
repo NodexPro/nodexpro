@@ -198,13 +198,16 @@ async function runGenerate(options: {
   json: Record<string, unknown>;
   draft?: GenerateDraftRow;
   complete?: () => Promise<ReturnType<typeof gatewayResult>>;
+  latest?: { id: string; revision_no: number } | null;
+  created?: { id: string; revision_no: number };
 }) {
   const inserts: Record<string, unknown>[] = [];
   const audits: Record<string, unknown>[] = [];
   const gatewayCalls: unknown[] = [];
   const generate = createGenerateTaxKnowledgeProposal({
     persistOwnerPresentations: async () => null,
-    hasExistingProposal: async () => false,
+    hasExistingProposal: async () => Boolean(options.latest),
+    loadLatestProposal: options.latest === undefined ? undefined : async () => options.latest ?? null,
     loadDraft: async () => options.draft ?? draftRow(),
     loadContext: async (draft) => sampleContext(draft),
     completeStructuredJson: async (input) => {
@@ -225,7 +228,7 @@ async function runGenerate(options: {
       }),
     insertProposal: async (row) => {
       inserts.push(row);
-      return { id: PROPOSAL_ID, revision_no: 1 };
+      return options.created ?? { id: PROPOSAL_ID, revision_no: 1 };
     },
     writeAudit: async (input) => {
       audits.push(input.payload ?? {});
@@ -417,29 +420,52 @@ test('context digest is stable across two mocked generations', async () => {
   assert.match(firstDigest, /^[0-9a-f]{64}$/);
 });
 
-test('existing B2 Proposal is not overwritten and does not call AI', async () => {
+test('existing B2 Proposal is not overwritten; re-analyze inserts a new AI revision', async () => {
+  const createdId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const out = await runGenerate({
+    json: closed(),
+    latest: { id: PROPOSAL_ID, revision_no: 1 },
+    created: { id: createdId, revision_no: 2 },
+  });
+  assert.equal(out.error, null, JSON.stringify((out.error as AppError | null)?.details ?? out.error));
+  assert.equal(out.result?.proposal_id, createdId);
+  assert.equal(out.gatewayCalls.length, 1);
+  assert.equal(out.inserts.length, 1);
+  assert.equal(out.inserts[0]?.supersedes_proposal_id, PROPOSAL_ID);
+  assert.equal(out.inserts[0]?.creation_origin, 'ai_proposal');
+  assert.equal(out.inserts[0]?.legal_text_draft_id, DRAFT_ID);
+});
+
+test('failed re-analysis does not insert a revision or supersede the latest stored Proposal', async () => {
   const inserts: unknown[] = [];
-  const gatewayCalls: unknown[] = [];
   const generate = createGenerateTaxKnowledgeProposal({
     persistOwnerPresentations: async () => null,
-    hasExistingProposal: async () => true,
+    loadKindCatalog: async () => [],
+    loadLatestProposal: async () => ({ id: PROPOSAL_ID, revision_no: 1 }),
     loadDraft: async () => draftRow(),
     loadContext: async (draft) => sampleContext(draft),
-    completeStructuredJson: async (input) => {
-      gatewayCalls.push(input);
-      return gatewayResult(closed());
-    },
+    completeStructuredJson: async () => gatewayResult({ extra: true }),
+    validateProposal: async (json, draft) =>
+      validateTaxKnowledgeProposalV1({
+        proposal_json: json,
+        context: {
+          country_code: draft.country_code,
+          tax_source_id: draft.tax_source_id,
+          legal_text_draft_id: draft.id,
+          draft_legal_text: String(draft.draft_legal_text ?? ''),
+        },
+        catalog: catalog(),
+      }),
     insertProposal: async (row) => {
       inserts.push(row);
-      return { id: PROPOSAL_ID, revision_no: 1 };
+      return { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', revision_no: 2 };
     },
     writeAudit: async () => undefined,
   });
   await assert.rejects(
     () => generate(ctx, { legal_text_draft_id: DRAFT_ID }),
-    (error: unknown) => error instanceof AppError && error.code === 'TAX_KNOWLEDGE_PROPOSAL_ALREADY_EXISTS',
+    (error: unknown) => error instanceof AppError && error.code === 'TAX_KNOWLEDGE_PROPOSAL_INVALID',
   );
-  assert.equal(gatewayCalls.length, 0);
   assert.equal(inserts.length, 0);
 });
 

@@ -20,6 +20,7 @@ type CachedTrainerReviewTree = {
   expiresAt: number;
   review_tree: unknown[];
   search_index: unknown[];
+  frontier: unknown[];
 };
 
 type CachedTrainerDraftList = {
@@ -100,24 +101,27 @@ export function writeTrainerDocumentGraphCache(
   });
 }
 
-export function readTrainerReviewTreeCache(key: string): { review_tree: unknown[]; search_index: unknown[] } | null {
+export function readTrainerReviewTreeCache(
+  key: string,
+): { review_tree: unknown[]; search_index: unknown[]; frontier: unknown[] } | null {
   const hit = reviewTreeCache.get(key);
   if (!hit) return null;
   if (Date.now() > hit.expiresAt) {
     reviewTreeCache.delete(key);
     return null;
   }
-  return { review_tree: hit.review_tree, search_index: hit.search_index };
+  return { review_tree: hit.review_tree, search_index: hit.search_index, frontier: hit.frontier ?? [] };
 }
 
 export function writeTrainerReviewTreeCache(
   key: string,
-  value: { review_tree: unknown[]; search_index: unknown[] },
+  value: { review_tree: unknown[]; search_index: unknown[]; frontier?: unknown[] },
 ): void {
   reviewTreeCache.set(key, {
     expiresAt: Date.now() + GRAPH_TTL_MS,
     review_tree: value.review_tree,
     search_index: value.search_index,
+    frontier: value.frontier ?? [],
   });
 }
 

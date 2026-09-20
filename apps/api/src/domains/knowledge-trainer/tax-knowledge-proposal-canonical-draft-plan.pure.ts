@@ -300,6 +300,8 @@ export function buildTaxKnowledgeProposalCanonicalDraftPlan(input: {
       if (fromKind === 'proposal_rule') row.from_local_key = asTrimmed(from.key);
       else row.from_tax_rule_version_id = asTrimmed(from.tax_rule_version_id);
       if (asTrimmed(detail.cited_title)) row.cited_title = asTrimmed(detail.cited_title);
+      if (asTrimmed(detail.cited_law_name)) row.cited_law_name = asTrimmed(detail.cited_law_name);
+      if (!row.cited_title && asTrimmed(detail.cited_law_name)) row.cited_title = asTrimmed(detail.cited_law_name);
       if (asTrimmed(detail.source_tax_source_id)) row.source_tax_source_id = asTrimmed(detail.source_tax_source_id);
       if (rel.activation_critical !== undefined) row.activation_critical = rel.activation_critical;
       unresolved.push(row);

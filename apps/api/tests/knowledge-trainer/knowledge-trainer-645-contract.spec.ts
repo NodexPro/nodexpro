@@ -27,8 +27,8 @@ test('TAX-645 reuses generate_tax_knowledge_proposal and owner_view without a pa
   assert.equal((commands.match(/case 'generate_tax_knowledge_proposal':/g) ?? []).length, 1);
   assert.match(generate, /parseGenerateTaxKnowledgeProposalDraftId/);
   assert.match(generate, /assertDraftReadyForAiExtraction/);
-  assert.match(generate, /TAX_KNOWLEDGE_PROPOSAL_ALREADY_EXISTS/);
-  assert.match(generate, /hasExistingProposal/);
+  assert.match(generate, /loadLatestProposal/);
+  assert.match(generate, /supersedes_proposal_id: latest\?\.id \?\? null/);
   assert.match(generate, /completeStructuredJson/);
   assert.match(generate, /normalizeTaxKnowledgeProposalExtract/);
   assert.match(generate, /validateProposal/);
@@ -38,7 +38,7 @@ test('TAX-645 reuses generate_tax_knowledge_proposal and owner_view without a pa
   assert.match(read, /generate_enabled:/);
   assert.match(read, /taxKnowledgeProposalAllowedActions/);
   assert.match(allowed, /selectedDraftReviewStatus === 'ready'/);
-  assert.match(allowed, /!input.selectedProposalStatus/);
+  assert.match(ownerView, /presentation: input.hasProposal \? 'reanalyze' : 'generate'/);
   assert.doesNotMatch(generate, /publish_tax_knowledge_proposal/);
   assert.doesNotMatch(generate, /activate_tax_rule_version/);
   assert.doesNotMatch(ownerView, /app\.get\(/);

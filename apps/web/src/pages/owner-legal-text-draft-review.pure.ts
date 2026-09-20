@@ -49,6 +49,21 @@ export function matchLegalTextSearchIndex<T extends { search_label: string }>(
   return index.filter((row) => row.search_label.includes(q));
 }
 
+export function pendingOrSelectedDraftId(pendingId: string | null | undefined, selectedId: string): string {
+  return pendingId || selectedId;
+}
+
+export function shouldApplyTrainerDraftSelectionResponse(input: {
+  requestSeq: number;
+  latestSeq: number;
+  requestedDraftId: string;
+  appliedDraftId: string;
+}): boolean {
+  if (input.requestSeq !== input.latestSeq) return false;
+  if (!input.requestedDraftId) return true;
+  return !input.appliedDraftId || input.appliedDraftId === input.requestedDraftId;
+}
+
 export function mergeExpandedIds(
   current: ReadonlySet<string>,
   ancestorIds: readonly string[],

@@ -20,6 +20,7 @@ export type TaxKnowledgeProposalOwnerLocaleView = {
   empty_title: string;
   empty_detail: string;
   create_label: string;
+  reanalyze_label: string;
   create_disabled_reason: string;
   analyzing_label: string;
   generation_failed: string;
@@ -43,11 +44,14 @@ export type TaxKnowledgeProposalOwnerLocaleView = {
   presentations_missing: string;
 };
 
+export type TaxKnowledgeProposalOwnerCreatePresentation = 'generate' | 'reanalyze';
+
 export type TaxKnowledgeProposalOwnerCreateAction = {
   action_key: 'generate_tax_knowledge_proposal';
   visible: boolean;
   enabled: boolean;
   legal_text_draft_id: string | null;
+  presentation: TaxKnowledgeProposalOwnerCreatePresentation;
 };
 
 export const TAX_KNOWLEDGE_PROPOSAL_APPROVE_PRESENTATIONS = [
@@ -165,6 +169,7 @@ type Catalog = {
   empty_title: string;
   empty_detail: string;
   create_label: string;
+  reanalyze_label: string;
   create_disabled_reason: string;
   analyzing_label: string;
   generation_failed: string;
@@ -211,6 +216,7 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     empty_title: 'טרם נוצרה הצעת AI',
     empty_detail: 'בחירת טיוטה אינה יוצרת הצעת AI.',
     create_label: '✨ צור Proposal',
+    reanalyze_label: '✨ נתח מחדש',
     create_disabled_reason: 'יש לבדוק ולאשר את טיוטת החוק לפני יצירת הצעת AI',
     analyzing_label: 'AI מנתח...',
     generation_failed: 'יצירת הצעת AI נכשלה. נסו שוב.',
@@ -255,6 +261,7 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     empty_title: 'AI Proposal ещё не создан',
     empty_detail: 'Выбор черновика не создаёт предложение AI.',
     create_label: '✨ Создать Proposal',
+    reanalyze_label: '✨ Переанализировать',
     create_disabled_reason: 'Сначала проверьте и отметьте текст закона как Reviewed',
     analyzing_label: 'AI анализирует…',
     generation_failed: 'Не удалось создать предложение AI. Попробуйте снова.',
@@ -299,6 +306,7 @@ const CATALOG: Record<TaxKnowledgeProposalOwnerLocale, Catalog> = {
     empty_title: 'No AI Proposal yet',
     empty_detail: 'Selecting a Draft does not generate an AI proposal.',
     create_label: '✨ Create Proposal',
+    reanalyze_label: '✨ Re-analyze',
     create_disabled_reason: 'Review the legal draft before creating an AI Proposal',
     analyzing_label: 'AI is analyzing…',
     generation_failed: 'AI Proposal could not be created. Try again.',
@@ -465,6 +473,7 @@ function emptyLocaleView(locale: TaxKnowledgeProposalOwnerLocale): TaxKnowledgeP
     empty_title: catalog.empty_title,
     empty_detail: catalog.empty_detail,
     create_label: catalog.create_label,
+    reanalyze_label: catalog.reanalyze_label,
     create_disabled_reason: catalog.create_disabled_reason,
     analyzing_label: catalog.analyzing_label,
     generation_failed: catalog.generation_failed,
@@ -511,6 +520,7 @@ function emptyCreateAction(): TaxKnowledgeProposalOwnerCreateAction {
     visible: false,
     enabled: false,
     legal_text_draft_id: null,
+    presentation: 'generate',
   };
 }
 
@@ -624,9 +634,10 @@ function withCreateAction(
     has_proposal: input.hasProposal,
     create: {
       action_key: 'generate_tax_knowledge_proposal',
-      visible: Boolean(input.draftId) && !input.hasProposal,
-      enabled: Boolean(input.draftId) && !input.hasProposal && input.generateEnabled,
+      visible: Boolean(input.draftId),
+      enabled: Boolean(input.draftId) && input.generateEnabled,
       legal_text_draft_id: input.draftId,
+      presentation: input.hasProposal ? 'reanalyze' : 'generate',
     },
   };
 }
@@ -771,6 +782,7 @@ export function buildTaxKnowledgeProposalOwnerView(input: {
           empty_title: catalog.empty_title,
           empty_detail: catalog.empty_detail,
           create_label: catalog.create_label,
+          reanalyze_label: catalog.reanalyze_label,
           create_disabled_reason: catalog.create_disabled_reason,
           analyzing_label: catalog.analyzing_label,
           generation_failed: catalog.generation_failed,

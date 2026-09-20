@@ -36,6 +36,7 @@ test('TAX-644A/645 UI is compact, locale-local, and creates only via the named c
   assert.match(view, /sanitizeOwnerTax639ValidationErrors/);
   assert.match(view, /nx-legal-draft-ai-proposal-error-list/);
   assert.match(view, /✨ Proposal/);
+  assert.match(view, /loc\.reanalyze_label/);
   assert.doesNotMatch(view, /loc\.create_label/);
   assert.doesNotMatch(view, /✨ צור Proposal/);
   assert.match(css, /nx-legal-draft-ai-proposal-langs/);
@@ -414,4 +415,57 @@ test('TAX-651 Owner UI keeps sanitized TAX-639 path/code/message and drops propo
     },
   ]);
   assert.deepEqual(Object.keys(parsed[0] ?? {}).sort(), ['code', 'message', 'path']);
+});
+
+test('TAX-651 parser copies Re-analyze presentation and locale label', () => {
+  const parsed = parseTaxKnowledgeProposalSlice({
+    latest: { id: 'p1', revision_no: 1, status_label: 'Proposed / מוצע' },
+    selected: { id: 'p1', revision_no: 1, status_label: 'Proposed / מוצע' },
+    history: [{ id: 'p1', revision_no: 1, status_label: 'Proposed / מוצע' }],
+    owner_view: {
+      available: true,
+      has_proposal: true,
+      default_locale: 'en',
+      locale_options: [{ code: 'en', label: 'English' }],
+      source: { identifier: '2(2)(ב)', quote: null },
+      create: {
+        action_key: 'generate_tax_knowledge_proposal',
+        visible: true,
+        enabled: true,
+        legal_text_draft_id: 'draft-1',
+        presentation: 'reanalyze',
+      },
+      by_locale: {
+        en: {
+          dir: 'ltr',
+          question: 'What did AI understand from this law?',
+          empty_title: '',
+          empty_detail: '',
+          create_label: '✨ Create Proposal',
+          reanalyze_label: '✨ Re-analyze',
+          create_disabled_reason: '',
+          analyzing_label: 'AI is analyzing…',
+          generation_failed: 'AI Proposal could not be created. Try again.',
+        },
+      },
+      details: {
+        status_label: 'Proposed / מוצע',
+        revision_label: 'Revision 1',
+        extraction_outcome: 'no_rules',
+        rules: [],
+        facts: [],
+        legal_values: [],
+        relationships: [],
+        calculations: [],
+        publication_eligible: 'no',
+        owner_approval_allowed: 'yes',
+        technical_rows: [],
+      },
+    },
+  });
+  assert.equal(parsed.owner_view.create.visible, true);
+  assert.equal(parsed.owner_view.create.enabled, true);
+  assert.equal(parsed.owner_view.create.presentation, 'reanalyze');
+  assert.equal(parsed.owner_view.by_locale.en.reanalyze_label, '✨ Re-analyze');
+  assert.equal(parsed.owner_view.create.action_key, 'generate_tax_knowledge_proposal');
 });

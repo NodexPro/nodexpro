@@ -1410,8 +1410,28 @@ async function loadLegalTextDraftsForDocument(
           : String(rows[index]?.normalized_machine_identifier),
     })),
   );
+  const frontier = cachedTree && Array.isArray(cachedTree.frontier)
+    ? (cachedTree.frontier as ReturnType<typeof draftCreateFrontier>)
+    : draftCreateFrontier(
+        (opts?.candidates ?? []).map((row) => ({
+          id: row.id,
+          parent_candidate_id: row.parent_candidate_id,
+          candidate_kind: row.candidate_kind,
+          kind_label: row.kind_label,
+          source_display_identifier: row.source_display_identifier ?? row.display_identifier,
+          title: row.title,
+        })),
+        rows.map((row) => ({
+          id: String(row.id),
+          source_candidate_id: row.source_candidate_id == null ? null : String(row.source_candidate_id),
+        })),
+      );
   if (treeKey && !cachedTree) {
-    writeTrainerReviewTreeCache(treeKey, { review_tree, search_index: [] });
+    writeTrainerReviewTreeCache(treeKey, {
+      review_tree,
+      search_index: buildLegalTextSearchIndex(review_tree),
+      frontier,
+    });
   }
   let selected_review_node = pickSelectedReviewNode(review_tree, opts?.selectedDraftId);
   const summary = emptyLegalTextDraftSummary();
@@ -1436,21 +1456,6 @@ async function loadLegalTextDraftsForDocument(
     if (error) throw error;
     if (data) selected = mapDraftDetail(data as Record<string, unknown>, byId, notesByRun);
   }
-
-  const frontier = draftCreateFrontier(
-    (opts?.candidates ?? []).map((row) => ({
-      id: row.id,
-      parent_candidate_id: row.parent_candidate_id,
-      candidate_kind: row.candidate_kind,
-      kind_label: row.kind_label,
-      source_display_identifier: row.source_display_identifier ?? row.display_identifier,
-      title: row.title,
-    })),
-    rows.map((row) => ({
-      id: String(row.id),
-      source_candidate_id: row.source_candidate_id == null ? null : String(row.source_candidate_id),
-    })),
-  );
 
   const confirmedBranchIds = new Set(
     completenessRows.filter((row) => row.branch_draft_id).map((row) => String(row.branch_draft_id)),
@@ -1480,7 +1485,10 @@ async function loadLegalTextDraftsForDocument(
     summary,
     review_tree: review_tree_with_completeness,
     selected_review_node,
-    search_index: buildLegalTextSearchIndex(review_tree_with_completeness),
+    search_index:
+      cachedTree && Array.isArray(cachedTree.search_index)
+        ? (cachedTree.search_index as ReturnType<typeof buildLegalTextSearchIndex>)
+        : buildLegalTextSearchIndex(review_tree_with_completeness),
     completeness,
     tax_knowledge_proposals,
   };

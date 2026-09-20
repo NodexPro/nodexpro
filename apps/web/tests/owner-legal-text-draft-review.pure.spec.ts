@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { nestLegalTextDrafts, nestLegalTextReviewNodes, matchLegalTextSearchIndex, mergeExpandedIds } from '../src/pages/owner-legal-text-draft-review.pure.ts';
+import { nestLegalTextDrafts, nestLegalTextReviewNodes, matchLegalTextSearchIndex, mergeExpandedIds, pendingOrSelectedDraftId, shouldApplyTrainerDraftSelectionResponse } from '../src/pages/owner-legal-text-draft-review.pure.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(dir, '../../..');
@@ -180,5 +180,52 @@ test('TAX-635A identifier search uses backend search_label only', () => {
   assert.equal(expanded.has('unrelated'), true);
   assert.equal(expanded.has('perek'), true);
   assert.equal(expanded.has('seif'), true);
+});
+
+test('TAX-651 pending selection highlights immediately and stale older responses are ignored', () => {
+  assert.equal(pendingOrSelectedDraftId('pending-draft', 'old-draft'), 'pending-draft');
+  assert.equal(pendingOrSelectedDraftId(null, 'old-draft'), 'old-draft');
+  assert.equal(
+    shouldApplyTrainerDraftSelectionResponse({
+      requestSeq: 1,
+      latestSeq: 2,
+      requestedDraftId: 'older',
+      appliedDraftId: 'older',
+    }),
+    false,
+  );
+  assert.equal(
+    shouldApplyTrainerDraftSelectionResponse({
+      requestSeq: 2,
+      latestSeq: 2,
+      requestedDraftId: 'newest',
+      appliedDraftId: 'newest',
+    }),
+    true,
+  );
+  assert.equal(
+    shouldApplyTrainerDraftSelectionResponse({
+      requestSeq: 2,
+      latestSeq: 2,
+      requestedDraftId: 'newest',
+      appliedDraftId: 'older',
+    }),
+    false,
+  );
+});
+
+test('TAX-651 section switch stays on command + refreshed aggregate without hidden GET', () => {
+  const owner = readRepo('apps/web/src/pages/PlatformOwnerLegalControl.tsx');
+  const ui = readRepo('apps/web/src/pages/owner-legal-text-draft-review.tsx');
+  const trainer = readRepo('apps/web/src/pages/owner-knowledge-trainer-panel.tsx');
+  assert.match(owner, /shouldApplyTrainerDraftSelectionResponse/);
+  assert.match(owner, /draftSelectSeqRef/);
+  assert.match(owner, /command === 'select_legal_text_draft'/);
+  assert.match(owner, /setPanel\(out\.refreshed\.aggregate\)/);
+  assert.doesNotMatch(ui, /onSelectNode[\s\S]{0,200}apiJson/);
+  assert.doesNotMatch(ui, /onSelectNode[\s\S]{0,200}fetch\(/);
+  assert.doesNotMatch(trainer, /fetch\(/);
+  assert.match(ui, /pendingSelectedId/);
+  assert.match(ui, /pendingOrSelectedDraftId/);
 });
 

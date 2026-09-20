@@ -6,6 +6,7 @@ import {
   matchLegalTextSearchIndex,
   mergeExpandedIds,
   nestLegalTextReviewNodes,
+  pendingOrSelectedDraftId,
 } from './owner-legal-text-draft-review.pure';
 import type {
   OwnerLegalTextCompleteness,
@@ -71,6 +72,7 @@ export function OwnerLegalTextDraftReview({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingSelectedId, setPendingSelectedId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState(() =>
     mergeExpandedIds(
       new Set(),
@@ -141,6 +143,11 @@ export function OwnerLegalTextDraftReview({
   }, [selected, selectedNode]);
 
   useEffect(() => {
+    const appliedId = selectedNode?.id ?? selected?.id ?? '';
+    if (pendingSelectedId && appliedId === pendingSelectedId) setPendingSelectedId(null);
+  }, [pendingSelectedId, selectedNode?.id, selected?.id]);
+
+  useEffect(() => {
     setExpandedIds((prev) =>
       mergeExpandedIds(
         prev,
@@ -167,6 +174,7 @@ export function OwnerLegalTextDraftReview({
   const goToSearchHit = (hit: OwnerLegalTextSearchIndexItem) => {
     pendingScrollNodeId.current = hit.node_id;
     setExpandedIds((prev) => mergeExpandedIds(prev, hit.ancestor_ids));
+    setPendingSelectedId(hit.node_id);
     onSelectNode(hit.node_id);
   };
 
@@ -353,10 +361,13 @@ export function OwnerLegalTextDraftReview({
           {tree.length ? (
             <DraftTree
               nodes={tree}
-              selectedId={selectedNode?.id ?? selected?.id ?? ''}
+              selectedId={pendingOrSelectedDraftId(pendingSelectedId, selectedNode?.id ?? selected?.id ?? '')}
               expandedIds={expandedIds}
               onToggle={toggleExpanded}
-              onSelect={onSelectNode}
+              onSelect={(nodeId) => {
+                setPendingSelectedId(nodeId);
+                onSelectNode(nodeId);
+              }}
             />
           ) : (
             <div style={{ fontSize: 13, color: '#6b7280' }}>No structure for this document yet.</div>

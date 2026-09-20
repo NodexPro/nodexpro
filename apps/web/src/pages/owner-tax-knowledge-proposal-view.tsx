@@ -6,6 +6,7 @@ import type {
   OwnerTaxKnowledgeProposalCorrectAction,
   OwnerTaxKnowledgeProposalCorrectRule,
   OwnerTaxKnowledgeProposalCreateAction,
+  OwnerTaxKnowledgeProposalCreatePresentation,
   OwnerTaxKnowledgeProposalExternalReferenceAction,
   OwnerTaxKnowledgeProposalLocaleView,
   OwnerTaxKnowledgeProposalMeta,
@@ -93,6 +94,7 @@ function parseLocaleView(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeP
     empty_title: asString(raw.empty_title) || fallback.empty_title,
     empty_detail: asString(raw.empty_detail) || fallback.empty_detail,
     create_label: asString(raw.create_label) || fallback.create_label,
+    reanalyze_label: asString(raw.reanalyze_label) || fallback.reanalyze_label,
     create_disabled_reason: asString(raw.create_disabled_reason) || fallback.create_disabled_reason,
     analyzing_label: asString(raw.analyzing_label) || fallback.analyzing_label,
     generation_failed: asString(raw.generation_failed) || fallback.generation_failed,
@@ -134,6 +136,13 @@ function parseRules(raw: unknown): OwnerTaxKnowledgeProposalOwnerViewRule[] {
     }));
 }
 
+function parseCreatePresentation(
+  value: unknown,
+  fallback: OwnerTaxKnowledgeProposalCreatePresentation,
+): OwnerTaxKnowledgeProposalCreatePresentation {
+  return value === 'reanalyze' || value === 'generate' ? value : fallback;
+}
+
 function parseCreateAction(raw: UnknownRecord | null, fallback: OwnerTaxKnowledgeProposalCreateAction): OwnerTaxKnowledgeProposalCreateAction {
   if (!raw) return fallback;
   return {
@@ -141,6 +150,7 @@ function parseCreateAction(raw: UnknownRecord | null, fallback: OwnerTaxKnowledg
     visible: raw.visible === true,
     enabled: raw.enabled === true,
     legal_text_draft_id: asNullableString(raw.legal_text_draft_id),
+    presentation: parseCreatePresentation(raw.presentation, fallback.presentation),
   };
 }
 
@@ -545,7 +555,11 @@ export function OwnerTaxKnowledgeProposalView({
             disabled={createDisabled}
             onClick={() => void createProposal()}
           >
-            {creating ? loc.analyzing_label : '✨ Proposal'}
+            {creating
+              ? loc.analyzing_label
+              : view.create.presentation === 'reanalyze'
+                ? loc.reanalyze_label
+                : '✨ Proposal'}
           </button>
         ) : null}
         {view.approve.visible && view.approve.presentation !== 'hidden' ? (
@@ -586,7 +600,7 @@ export function OwnerTaxKnowledgeProposalView({
         <div className="nx-legal-draft-ai-proposal-gate">{loc.create_disabled_reason}</div>
       ) : null}
       {creating ? <div className="nx-legal-draft-ai-proposal-analyzing">{loc.analyzing_label}</div> : null}
-      {failed && !view.has_proposal ? (
+      {failed ? (
         <div className="nx-legal-draft-ai-proposal-error">
           <div>{loc.generation_failed}</div>
           {validationErrors.length ? (
