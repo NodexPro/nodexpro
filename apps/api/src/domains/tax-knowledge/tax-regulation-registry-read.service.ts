@@ -1,5 +1,9 @@
 import { supabaseAdmin } from '../../db/client.js';
-import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import {
+  isSupabaseMissingColumnError,
+  isSupabaseMissingTableError,
+  throwIfSupabaseError,
+} from '../../shared/supabase-errors.js';
 import {
   countRegistryEntries,
   deriveRegistryResolutionStatus,
@@ -309,7 +313,10 @@ export async function loadDraftReferences(draftId: string): Promise<Array<Record
     .order('created_at', { ascending: true });
   if (pins.error) {
     if (isSupabaseMissingTableError(pins.error)) return [];
-    throw pins.error;
+    throwIfSupabaseError(pins.error, 'regulationRegistry.draft_references', {
+      migrationHint:
+        'Apply supabase/migrations/653_tax_regulation_registry_service_role_grants.sql on DEV only.',
+    });
   }
   const sourceIds = (pins.data ?? []).map((row) => String(row.tax_source_id));
   const sources = sourceIds.length

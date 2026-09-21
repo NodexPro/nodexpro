@@ -3,7 +3,11 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, conflict, notFound } from '../../shared/errors.js';
-import { isSupabaseMissingColumnError, isSupabaseMissingTableError } from '../../shared/supabase-errors.js';
+import {
+  isSupabaseMissingColumnError,
+  isSupabaseMissingTableError,
+  throwIfSupabaseError,
+} from '../../shared/supabase-errors.js';
 import { buildOwnerLegalControlPanelAggregate } from '../country-pack/country-pack-read-models.service.js';
 import { recordTaxKnowledgeProposalExternalReference } from '../knowledge-trainer/knowledge-trainer-tax-knowledge-proposal.service.js';
 import { generateLegalMachineCode } from './tax-knowledge-library.pure.js';
@@ -202,7 +206,12 @@ export async function handleRecordLegalTextDraftRegulationReference(
     .eq('legal_text_draft_id', draftId)
     .eq('tax_source_id', entry.id)
     .eq('locator_text', locatorText);
-  if (existingPins.error && !isSupabaseMissingTableError(existingPins.error)) throw existingPins.error;
+  if (existingPins.error && !isSupabaseMissingTableError(existingPins.error)) {
+    throwIfSupabaseError(existingPins.error, 'regulationRegistry.record_pin', {
+      migrationHint:
+        'Apply supabase/migrations/653_tax_regulation_registry_service_role_grants.sql on DEV only.',
+    });
+  }
   const alreadyPinned = (existingPins.data ?? []).length > 0;
   if (!alreadyPinned) {
     const insert = await supabaseAdmin.from(PIN_TABLE).insert({
@@ -220,7 +229,12 @@ export async function handleRecordLegalTextDraftRegulationReference(
       creation_origin: creationOrigin,
       created_by: ctx.user.id,
     });
-    if (insert.error && insert.error.code !== '23505') throw insert.error;
+    if (insert.error && insert.error.code !== '23505') {
+      throwIfSupabaseError(insert.error, 'regulationRegistry.record_pin', {
+        migrationHint:
+          'Apply supabase/migrations/653_tax_regulation_registry_service_role_grants.sql on DEV only.',
+      });
+    }
   }
 
   const latestProposal = await supabaseAdmin
