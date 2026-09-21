@@ -9,6 +9,10 @@ import {
   getClientOperationsCase,
 } from './client-operations.service.js';
 import {
+  executeClientOperationsRegistryCommand,
+  type ClientOperationsRegistryCommandBody,
+} from './client-operations-registry-custom-columns.service.js';
+import {
   executeClientOperationsProfileCommand,
   executeClientOperationsTaxSettingsCommand,
 } from './client-operations-commands.service.js';
@@ -116,8 +120,27 @@ const withClientDocumentsEdit = [requirePermission('client_documents_tab.edit', 
 router.get('/registry', ...withView, async (req, res, next) => {
   try {
     const ctx = req.context as RequestContext;
-    const result = await listClientOperationsRegistry(ctx);
+    const qRaw = typeof req.query.q === 'string' ? req.query.q : null;
+    const sortByRaw = typeof req.query.sort_by === 'string' ? req.query.sort_by : null;
+    const sortDirRaw = typeof req.query.sort_dir === 'string' ? req.query.sort_dir : null;
+    const sort_dir =
+      sortDirRaw === 'asc' || sortDirRaw === 'desc' ? (sortDirRaw as 'asc' | 'desc') : null;
+    const result = await listClientOperationsRegistry(ctx, {
+      q: qRaw,
+      sort_by: sortByRaw,
+      sort_dir,
+    });
     return res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/registry/commands', ...withEdit, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const out = await executeClientOperationsRegistryCommand(ctx, (req.body ?? {}) as ClientOperationsRegistryCommandBody);
+    return res.json(out);
   } catch (e) {
     next(e);
   }

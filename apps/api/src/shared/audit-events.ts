@@ -110,6 +110,13 @@ export const AUDIT_ACTIONS = {
   CLIENT_DOCUMENTS_WORKSPACE_UPDATED: 'client_documents_workspace.updated',
   /** שמירת כרטיס "פרטי לקוח" במסך תפעול הלקוח (לא שינוי סכימת audit_log) */
   CLIENT_OPERATIONS_WORKSPACE_PROFILE_UPDATED: 'client_operations.workspace_profile.updated',
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_CREATED: 'client_operations.custom_column.created',
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_RENAMED: 'client_operations.custom_column.renamed',
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_HIDDEN: 'client_operations.custom_column.hidden',
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_SHOWN: 'client_operations.custom_column.shown',
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_REORDERED: 'client_operations.custom_column.reordered',
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_ARCHIVED: 'client_operations.custom_column.archived',
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_VALUE_SET: 'client_operations.custom_column.value_set',
   CLIENT_OBLIGATION_COMMAND_EXECUTED: 'client_obligation.command_executed',
   CLIENT_TASK_COMMAND_EXECUTED: 'client_task.command_executed',
   CLIENT_OPERATIONS_NIGHT_PASS_EXECUTED: 'client_operations.night_pass_executed',

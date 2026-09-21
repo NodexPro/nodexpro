@@ -100,7 +100,19 @@ export const orgDocumentActivity = (orgId: string, documentId: string) => `/orga
 export const MODULES = '/modules';
 
 // Module 1: client-operations
-export const moduleClientOperationsRegistry = () => '/m/client-operations/registry';
+export const moduleClientOperationsRegistry = (params?: {
+  q?: string | null;
+  sort_by?: string | null;
+  sort_dir?: 'asc' | 'desc' | null;
+}) => {
+  const sp = new URLSearchParams();
+  if (params?.q?.trim()) sp.set('q', params.q.trim());
+  if (params?.sort_by?.trim()) sp.set('sort_by', params.sort_by.trim());
+  if (params?.sort_dir === 'asc' || params?.sort_dir === 'desc') sp.set('sort_dir', params.sort_dir);
+  const qs = sp.toString();
+  return qs ? `/m/client-operations/registry?${qs}` : '/m/client-operations/registry';
+};
+export const moduleClientOperationsRegistryCommands = () => '/m/client-operations/registry/commands';
 /** GET אגרגט תיק; `fees_price_chart_view=all` — גרף מחירים מלא (ברירת מחדל בשרת: last_15) */
 export function moduleClientOperationsCase(
   clientId: string,

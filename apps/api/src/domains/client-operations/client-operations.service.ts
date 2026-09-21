@@ -2,7 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
-import { buildNotesCellDisplayHe, loadNotesAggregatesByClient } from './client-operations-notes.service.js';
+import { buildNotesCellDisplayHe, listOperationalNoteTypes, loadNotesAggregatesByClient } from './client-operations-notes.service.js';
 import {
   computeNationalInsuranceDeductionsRegistryDisplayHe,
   getClientTaxSettings,
@@ -35,6 +35,22 @@ import {
 } from './client-obligations-tasks-core.service.js';
 import { formatNationalInsuranceRegistryDisplayHe } from './national-insurance-registry.js';
 import { computeVatDueRegistryDisplayHe, computeVatRegistryColumnDisplayHe } from './vat-divuach.js';
+import {
+  applyRegistryQueryToRows,
+  buildCustomColumnsCapability,
+  buildClientOperationsToolbarCapabilities,
+  buildRegistryRowCells,
+  CLIENT_OPERATIONS_REGISTRY_COLUMNS,
+  mergeCustomCellsIntoRow,
+  type ClientOperationsRegistryColumn,
+  type ClientOperationsToolbarCapability,
+  type RegistryQueryInput,
+} from './client-operations-registry-presentation.pure.js';
+import {
+  loadActiveClientOperationsRegistryCustomColumns,
+  loadClientOperationsRegistryCustomColumnValues,
+  type RegistryCustomColumnDefinition,
+} from './client-operations-registry-custom-columns.service.js';
 
 export type ClientOperationsRegistryRow = {
   client_id: string;
@@ -53,11 +69,35 @@ export type ClientOperationsRegistryRow = {
   notes_cell_text_he: string | null;
   operational_notes_count: number;
   vat_due_registry_display_he: string | null;
+  /** Ready-to-render cell text by column key (excludes folder action). */
+  cells: Record<string, string>;
 };
 
 export type ClientOperationsRegistryResponse = {
+  title_he: string;
   rows: ClientOperationsRegistryRow[];
+  columns: ClientOperationsRegistryColumn[];
+  note_types: Array<{
+    code: string;
+    label_he: string;
+    sort_order: number;
+    allows_reminder: boolean;
+  }>;
+  toolbar_capabilities: ClientOperationsToolbarCapability[];
+  custom_columns_capability: {
+    max: number;
+    current: number;
+    can_create: boolean;
+  };
+  query: {
+    q: string | null;
+    sort_by: string | null;
+    sort_dir: 'asc' | 'desc' | null;
+  };
+  allowed_actions: string[];
 };
+
+export type { ClientOperationsRegistryColumn, ClientOperationsToolbarCapability, RegistryQueryInput };
 
 export type ClientOperationsCaseResponse = {
   client: {
@@ -148,8 +188,75 @@ function assertOrg(ctx: RequestContext): string {
   return orgId;
 }
 
-export async function listClientOperationsRegistry(ctx: RequestContext): Promise<ClientOperationsRegistryResponse> {
+function buildRegistryAllowedActions(ctx: RequestContext): string[] {
+  const permissions = ctx.membership?.permissions ?? [];
+  const actions: string[] = ['open_client_folder', 'open_notes'];
+  if (permissions.includes('client_operations.view')) {
+    actions.push('view_registry');
+  }
+  if (permissions.includes('client_operations.edit')) {
+    actions.push('client_operations.edit');
+  }
+  return actions;
+}
+
+function emptyRegistryResponse(
+  ctx: RequestContext,
+  query: RegistryQueryInput,
+  noteTypes: ClientOperationsRegistryResponse['note_types'],
+  customColumns: RegistryCustomColumnDefinition[],
+): ClientOperationsRegistryResponse {
+  const q = (query.q ?? '').trim() || null;
+  const sort_by = query.sort_by?.trim() || null;
+  const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
+  const customColumnsCapability = buildCustomColumnsCapability({
+    current: customColumns.length,
+    canEdit: ctx.membership?.permissions?.includes('client_operations.edit') === true,
+  });
+  const columns: ClientOperationsRegistryColumn[] = [
+    ...CLIENT_OPERATIONS_REGISTRY_COLUMNS,
+    ...customColumns
+      .filter((column) => column.visible)
+      .map((column) => ({
+        key: column.key,
+        label: column.label,
+        cell_kind: 'custom' as const,
+        value_field: null,
+        data_type: column.data_type,
+        custom_column_id: column.id,
+        default_width_px: 160,
+        visible: true,
+        system: false,
+        editable: true,
+        freeze_default: false,
+        align: 'right' as const,
+      })),
+  ];
+  return {
+    title_he: 'תפעול לקוחות',
+    rows: [],
+    columns,
+    note_types: noteTypes,
+    toolbar_capabilities: buildClientOperationsToolbarCapabilities({
+      can_create_custom_column: customColumnsCapability.can_create,
+      can_create_reason_he: customColumnsCapability.current >= customColumnsCapability.max ? 'הגעת למגבלת 10 עמודות מותאמות אישית' : null,
+    }),
+    custom_columns_capability: customColumnsCapability,
+    query: { q, sort_by, sort_dir },
+    allowed_actions: buildRegistryAllowedActions(ctx),
+  };
+}
+
+export async function listClientOperationsRegistry(
+  ctx: RequestContext,
+  query: RegistryQueryInput = {},
+): Promise<ClientOperationsRegistryResponse> {
   const orgId = assertOrg(ctx);
+  const [noteTypesResult, customColumns] = await Promise.all([
+    listOperationalNoteTypes(),
+    loadActiveClientOperationsRegistryCustomColumns(orgId),
+  ]);
+  const noteTypes = noteTypesResult.types;
 
   const { data: clients } = await supabaseAdmin
     .from('clients')
@@ -160,7 +267,7 @@ export async function listClientOperationsRegistry(ctx: RequestContext): Promise
 
   const safeClients = (clients ?? []) as Array<{ id: string; display_name: string | null; tax_id: string | null }>;
   if (safeClients.length === 0) {
-    return { rows: [] };
+    return emptyRegistryResponse(ctx, query, noteTypes, customColumns);
   }
 
   const clientIds = safeClients.map((c) => c.id);
@@ -176,6 +283,7 @@ export async function listClientOperationsRegistry(ctx: RequestContext): Promise
   }
 
   const notesByClient = await loadNotesAggregatesByClient(orgId, clientIds);
+  const customValuesByClientAndColumn = await loadClientOperationsRegistryCustomColumnValues(orgId, clientIds);
 
   const { data: taxSettingsRows } = await supabaseAdmin
     .from('client_tax_settings')
@@ -221,7 +329,7 @@ export async function listClientOperationsRegistry(ctx: RequestContext): Promise
     });
   }
 
-  const rows: ClientOperationsRegistryRow[] = safeClients.map((c) => {
+  const builtRows: ClientOperationsRegistryRow[] = safeClients.map((c) => {
     const p = profilesByClientId.get(c.id);
     const noteAgg = buildNotesCellDisplayHe(notesByClient.get(c.id) ?? []);
     const tax = taxByClient.get(c.id);
@@ -247,30 +355,82 @@ export async function listClientOperationsRegistry(ctx: RequestContext): Promise
             incomeDedProfile
           )
         : computeNationalInsuranceDeductionsRegistryDisplayHe(null, incomeDedProfile);
-    return {
+    const payroll_flag = (p?.payroll_flag as boolean | null) ?? null;
+    const material_brought_flag = (p?.material_brought_flag as boolean | null) ?? null;
+    const vat_status = vatFromTax ?? (p?.vat_status as string | null) ?? null;
+    const income_tax_advance_status = (p?.income_tax_advance_status as string | null) ?? null;
+    const national_insurance_status = niFromTax ?? (p?.national_insurance_status as string | null) ?? null;
+    const national_insurance_deductions_status =
+      niDedFromTax ?? (p?.national_insurance_deductions_status as string | null) ?? null;
+    const income_tax_deductions_status = (p?.income_tax_deductions_status as string | null) ?? null;
+    const assigned_handler_user_id = (p?.assigned_handler_user_id as string | null) ?? null;
+    const base = {
       client_id: c.id,
       client_name: c.display_name,
       tax_id: c.tax_id,
       business_type: bt,
-      payroll_flag: (p?.payroll_flag as boolean | null) ?? null,
-      material_brought_flag: (p?.material_brought_flag as boolean | null) ?? null,
+      payroll_flag,
+      material_brought_flag,
       /** מע״מ: תדירות מע״מ ממיסים; עוסק פטור — פטור */
-      vat_status: vatFromTax ?? (p?.vat_status as string | null) ?? null,
-      income_tax_advance_status: (p?.income_tax_advance_status as string | null) ?? null,
+      vat_status,
+      income_tax_advance_status,
       /** ביטוח לאומי: סכום חודשי ממיסים כשכן */
-      national_insurance_status: niFromTax ?? (p?.national_insurance_status as string | null) ?? null,
+      national_insurance_status,
       /** ביטוח לאומי ניכויים — מחושב ממיסים + סטטוס מס הכנסה ניכויים (לא → לא רלוונטי). */
-      national_insurance_deductions_status:
-        niDedFromTax ?? (p?.national_insurance_deductions_status as string | null) ?? null,
-      income_tax_deductions_status: (p?.income_tax_deductions_status as string | null) ?? null,
-      assigned_handler_user_id: (p?.assigned_handler_user_id as string | null) ?? null,
+      national_insurance_deductions_status,
+      income_tax_deductions_status,
+      assigned_handler_user_id,
       notes_cell_text_he: noteAgg.cell_text_he,
       operational_notes_count: noteAgg.count,
       vat_due_registry_display_he,
     };
+    return mergeCustomCellsIntoRow({
+      ...base,
+      cells: buildRegistryRowCells(base),
+    }, customColumns, customValuesByClientAndColumn);
   });
 
-  return { rows };
+  const q = (query.q ?? '').trim() || null;
+  const sort_by = query.sort_by?.trim() || null;
+  const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
+  const rows = applyRegistryQueryToRows(builtRows, { q, sort_by, sort_dir });
+
+  const customColumnsCapability = buildCustomColumnsCapability({
+    current: customColumns.length,
+    canEdit: ctx.membership?.permissions?.includes('client_operations.edit') === true,
+  });
+  const columns: ClientOperationsRegistryColumn[] = [
+    ...CLIENT_OPERATIONS_REGISTRY_COLUMNS,
+    ...customColumns
+      .filter((column) => column.visible)
+      .map((column) => ({
+        key: column.key,
+        label: column.label,
+        cell_kind: 'custom' as const,
+        value_field: null,
+        data_type: column.data_type,
+        custom_column_id: column.id,
+        default_width_px: 160,
+        visible: true,
+        system: false,
+        editable: true,
+        freeze_default: false,
+        align: 'right' as const,
+      })),
+  ];
+  return {
+    title_he: 'תפעול לקוחות',
+    rows,
+    columns,
+    note_types: noteTypes,
+    toolbar_capabilities: buildClientOperationsToolbarCapabilities({
+      can_create_custom_column: customColumnsCapability.can_create,
+      can_create_reason_he: customColumnsCapability.current >= customColumnsCapability.max ? 'הגעת למגבלת 10 עמודות מותאמות אישית' : null,
+    }),
+    custom_columns_capability: customColumnsCapability,
+    query: { q, sort_by, sort_dir },
+    allowed_actions: buildRegistryAllowedActions(ctx),
+  };
 }
 
 /** אופציות קריאה לאגרגט תיק — לא משנות נתונים ב-DB */

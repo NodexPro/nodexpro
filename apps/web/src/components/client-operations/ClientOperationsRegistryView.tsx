@@ -1,10 +1,14 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { apiFetch, apiJson } from '../../api/client';
 import {
   moduleClientOperationsCase,
   moduleClientOperationsOperationalNotes,
   moduleClientOperationsOperationalNote,
 } from '../../api/endpoints';
+import {
+  loadClientOperationsColumnWidths,
+  saveClientOperationsColumnWidths,
+} from '../../lib/client-operations-column-widths.pure';
 import { PageHeader } from '../../templates/template-1/components/PageHeader';
 import { SectionCard } from '../../templates/template-1/components/SectionCard';
 import { ClientNoteModal } from '../ClientNoteModal';
@@ -14,6 +18,7 @@ import {
   type ClientOperationsCaseResponse,
 } from '../ClientWorkspacePanel';
 import '../../styles/nx-modal.css';
+import '../../styles/nx-client-operations-spreadsheet.css';
 
 export type ClientOperationsRegistryRow = {
   client_id: string;
@@ -31,6 +36,8 @@ export type ClientOperationsRegistryRow = {
   notes_cell_text_he: string | null;
   operational_notes_count: number;
   vat_due_registry_display_he: string | null;
+  /** Ready-to-render display by column key (from aggregate). */
+  cells?: Record<string, string>;
 };
 
 export type ClientOperationsNoteTypeRow = {
@@ -38,6 +45,29 @@ export type ClientOperationsNoteTypeRow = {
   label_he: string;
   sort_order: number;
   allows_reminder: boolean;
+};
+
+export type ClientOperationsRegistryColumn = {
+  key: string;
+  label: string;
+  cell_kind: 'folder' | 'text' | 'notes' | 'custom';
+  value_field: string | null;
+  data_type?: 'text' | 'number' | 'date' | 'boolean';
+  custom_column_id?: string;
+  default_width_px?: number;
+  visible: boolean;
+  system: boolean;
+  editable: boolean;
+  freeze_default: boolean;
+  align: 'right' | 'center' | 'left';
+};
+
+export type ClientOperationsToolbarCapability = {
+  id: string;
+  label_he: string;
+  available: boolean;
+  reason_he: string | null;
+  group: 'history' | 'query' | 'format' | 'structure' | 'more';
 };
 
 type OperationalNoteRow = {
@@ -59,6 +89,21 @@ type ConflictPayload = {
     type_label_he: string;
     reminder_at: string;
   }>;
+};
+
+type CellPresentation = {
+  align?: 'right' | 'center' | 'left';
+  wrap?: boolean;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  color?: string;
+  fill?: string;
+  numberFormat?: 'general' | 'number' | 'currency' | 'percent' | 'date';
+};
+
+type PresentationHistory = {
+  presentation: Record<string, CellPresentation>;
 };
 
 function renderCell(v: unknown): string {
@@ -94,6 +139,40 @@ function datetimeLocalToIso(local: string): string | null {
   return d.toISOString();
 }
 
+function cellKey(clientId: string, colKey: string): string {
+  return `${clientId}::${colKey}`;
+}
+
+function displayForColumn(r: ClientOperationsRegistryRow, col: ClientOperationsRegistryColumn): string {
+  if (r.cells && col.key in r.cells) return r.cells[col.key] ?? '—';
+  if (col.key === 'national_insurance') return renderNationalInsuranceCell(r.national_insurance_status);
+  if (col.key === 'payroll') return renderCell(r.payroll_flag);
+  if (col.key === 'material_brought') return renderCell(r.material_brought_flag);
+  if (col.value_field) {
+    const rowRecord = r as unknown as Record<string, unknown>;
+    return renderCell(rowRecord[col.value_field]);
+  }
+  return '—';
+}
+
+/** Embedded (Work Engine) fallback columns — same labels as backend system columns. */
+const EMBEDDED_FALLBACK_COLUMNS: ClientOperationsRegistryColumn[] = [
+  { key: 'folder', label: '📁', cell_kind: 'folder', value_field: null, visible: true, system: true, editable: false, freeze_default: true, align: 'center' },
+  { key: 'client_name', label: 'שם לקוח', cell_kind: 'text', value_field: 'client_name', visible: true, system: true, editable: false, freeze_default: true, align: 'right' },
+  { key: 'tax_id', label: 'ח.פ', cell_kind: 'text', value_field: 'tax_id', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'business_type', label: 'סוג עסק', cell_kind: 'text', value_field: 'business_type', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'payroll', label: 'שכר', cell_kind: 'text', value_field: 'payroll_flag', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'material_brought', label: 'הביא חומר כן/לא', cell_kind: 'text', value_field: 'material_brought_flag', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'vat', label: 'מע״מ', cell_kind: 'text', value_field: 'vat_status', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'vat_due', label: 'יום יעד דיווח מע״מ', cell_kind: 'text', value_field: 'vat_due_registry_display_he', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'income_tax_advance', label: 'מקדמות מס הכנסה', cell_kind: 'text', value_field: 'income_tax_advance_status', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'national_insurance', label: 'ביטוח לאומי', cell_kind: 'text', value_field: 'national_insurance_status', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'national_insurance_deductions', label: 'ביטוח לאומי ניכויים', cell_kind: 'text', value_field: 'national_insurance_deductions_status', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'income_tax_deductions', label: 'מס הכנסה ניכויים', cell_kind: 'text', value_field: 'income_tax_deductions_status', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'handler', label: 'מטפל בתיק', cell_kind: 'text', value_field: 'assigned_handler_user_id', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+  { key: 'notes', label: 'הערות', cell_kind: 'notes', value_field: 'notes_cell_text_he', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
+];
+
 export type ClientOperationsRegistryViewProps = {
   rows: ClientOperationsRegistryRow[];
   onRowsChange: (rows: ClientOperationsRegistryRow[]) => void;
@@ -103,6 +182,17 @@ export type ClientOperationsRegistryViewProps = {
   canEdit: boolean;
   showPageHeader?: boolean;
   onReloadRegistry?: () => void;
+  /** Spreadsheet chrome only on /m/client-operations; embedded keeps prior Work Engine look. */
+  variant?: 'spreadsheet' | 'embedded';
+  titleHe?: string;
+  columns?: ClientOperationsRegistryColumn[];
+  toolbarCapabilities?: ClientOperationsToolbarCapability[];
+  customColumnsCapability?: { max: number; current: number; can_create: boolean };
+  query?: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null };
+  onQueryChange?: (next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null }) => void;
+  onRegistryCommand?: (body: Record<string, unknown>) => Promise<unknown>;
+  onApplyAggregate?: (aggregate: any) => void;
+  widthScope?: { userId: string; organizationId: string };
 };
 
 export function ClientOperationsRegistryView(props: ClientOperationsRegistryViewProps) {
@@ -115,9 +205,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     canEdit,
     showPageHeader = true,
     onReloadRegistry,
+    variant = 'embedded',
+    titleHe,
+    columns: columnsProp,
+    toolbarCapabilities = [],
+    customColumnsCapability,
+    query,
+    onQueryChange,
+    onRegistryCommand,
+    widthScope,
   } = props;
 
   const setRows = onRowsChange;
+  const isSpreadsheet = variant === 'spreadsheet';
+  const columns = columnsProp?.length ? columnsProp : EMBEDDED_FALLBACK_COLUMNS;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
@@ -135,6 +236,45 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [formReminderLocal, setFormReminderLocal] = useState('');
   const [, setFormSaving] = useState(false);
   const [conflict, setConflict] = useState<ConflictPayload | null>(null);
+
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [focusedCell, setFocusedCell] = useState<{ clientId: string; colKey: string } | null>(null);
+  const [searchDraft, setSearchDraft] = useState(query?.q ?? '');
+  const [freezeOn, setFreezeOn] = useState(true);
+  const [bordersOn, setBordersOn] = useState(true);
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set());
+  const [showColumnPanel, setShowColumnPanel] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [cellPresentation, setCellPresentation] = useState<Record<string, CellPresentation>>({});
+  const [undoStack, setUndoStack] = useState<PresentationHistory[]>([]);
+  const [redoStack, setRedoStack] = useState<PresentationHistory[]>([]);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [addColumnOpen, setAddColumnOpen] = useState(false);
+  const [addColumnLabel, setAddColumnLabel] = useState('');
+  const [addColumnDataType, setAddColumnDataType] = useState<'text' | 'number' | 'date' | 'boolean'>('text');
+  const [commandError, setCommandError] = useState('');
+
+  useEffect(() => {
+    setSearchDraft(query?.q ?? '');
+  }, [query?.q]);
+
+  useEffect(() => {
+    if (!widthScope?.userId || !widthScope.organizationId) {
+      setColumnWidths({});
+      return;
+    }
+    setColumnWidths(loadClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId));
+  }, [widthScope?.organizationId, widthScope?.userId]);
+
+  useEffect(() => {
+    if (!fullscreenOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreenOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [fullscreenOpen]);
 
   useEffect(() => {
     const first = noteTypes[0]?.code ?? '';
@@ -208,9 +348,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         ignore_reminder_conflict: ignoreConflict,
       };
       const url =
-        editingNoteId ?
-          moduleClientOperationsOperationalNote(notesModalClientId, editingNoteId)
-        : moduleClientOperationsOperationalNotes(notesModalClientId);
+        editingNoteId
+          ? moduleClientOperationsOperationalNote(notesModalClientId, editingNoteId)
+          : moduleClientOperationsOperationalNotes(notesModalClientId);
       const res = await apiFetch(url, {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -244,6 +384,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   ...row,
                   notes_cell_text_he: registryPreview.notes_cell_text_he,
                   operational_notes_count: registryPreview.operational_notes_count,
+                  cells: {
+                    ...(row.cells ?? {}),
+                    notes: registryPreview.notes_cell_text_he ?? '—',
+                  },
                 }
               : row,
           ),
@@ -280,200 +424,511 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     reloadRegistry();
   };
 
-  return (
-    <div>
-      {showPageHeader ? (
-        <PageHeader title="Nodex לקוחות" subtitle="Client registry (module v1 skeleton)" />
-      ) : null}
+  const capById = useMemo(() => {
+    const m = new Map<string, ClientOperationsToolbarCapability>();
+    for (const c of toolbarCapabilities) m.set(c.id, c);
+    return m;
+  }, [toolbarCapabilities]);
 
-      <SectionCard style={{ padding: 20 }}>
-        {error && <div style={{ color: '#b91c1c', marginBottom: 12 }}>{error}</div>}
-        {loading ? (
-          <p style={{ color: '#6b7280' }}>Loading…</p>
-        ) : (
-          <>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, direction: 'rtl' }}>
-                {(() => {
-                  const columns = [
-                    {
-                      id: 'folder',
-                      header: '📁',
-                      thStyle: { padding: '12px 8px', textAlign: 'center' },
-                      tdStyle: { width: 40, padding: '12px 8px', textAlign: 'center' },
-                      render: (r: ClientOperationsRegistryRow) => (
-                        <button
-                          type="button"
-                          onClick={() => openClientModal(r)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontSize: 18,
-                            lineHeight: 1,
-                          }}
-                          aria-label={`Open client case ${r.client_name ?? ''}`}
-                        >
-                          📁
-                        </button>
-                      ),
-                    },
-                    {
-                      id: 'client_name',
-                      header: 'שם לקוח',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', fontWeight: 600, textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) => renderCell(r.client_name),
-                    },
-                    {
-                      id: 'tax_id',
-                      header: 'ח.פ',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', fontFamily: 'monospace', textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) => renderCell(r.tax_id),
-                    },
-                    {
-                      id: 'business_type',
-                      header: 'סוג עסק',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) => renderCell(r.business_type),
-                    },
-                    {
-                      id: 'payroll',
-                      header: 'שכר',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) => renderCell(r.payroll_flag),
-                    },
-                    {
-                      id: 'material_brought',
-                      header: 'הביא חומר כן/לא',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) => renderCell(r.material_brought_flag),
-                    },
-                    {
-                      id: 'vat',
-                      header: 'מע״מ',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) => renderCell(r.vat_status),
-                    },
-                    {
-                      id: 'vat_due',
-                      header: 'יום יעד דיווח מע״מ',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', textAlign: 'right', fontWeight: 600 },
-                      render: (r: ClientOperationsRegistryRow) =>
-                        renderCell(r.vat_due_registry_display_he),
-                    },
-                    {
-                      id: 'income_tax_advance',
-                      header: 'מקדמות מס הכנסה',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) => renderCell(r.income_tax_advance_status),
-                    },
-                    {
-                      id: 'national_insurance',
-                      header: 'ביטוח לאומי',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) =>
-                        renderNationalInsuranceCell(r.national_insurance_status),
-                    },
-                    {
-                      id: 'national_insurance_deductions',
-                      header: 'ביטוח לאומי ניכויים',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) =>
-                        renderCell(r.national_insurance_deductions_status),
-                    },
-                    {
-                      id: 'income_tax_deductions',
-                      header: 'מס הכנסה ניכויים',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) => renderCell(r.income_tax_deductions_status),
-                    },
-                    {
-                      id: 'handler',
-                      header: 'מטפל בתיק',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: { padding: '12px 16px', fontFamily: 'monospace', textAlign: 'right' },
-                      render: (r: ClientOperationsRegistryRow) => renderCell(r.assigned_handler_user_id),
-                    },
-                    {
-                      id: 'notes',
-                      header: 'הערות',
-                      thStyle: { padding: '12px 16px', textAlign: 'right' },
-                      tdStyle: {
-                        padding: '12px 16px',
-                        color: '#374151',
-                        textAlign: 'right',
-                        maxWidth: 280,
-                        cursor: 'pointer',
-                        verticalAlign: 'top',
-                      },
-                      render: (r: ClientOperationsRegistryRow) => (
-                        <button
-                          type="button"
-                          onClick={() => openNotesModal(r)}
-                          style={{
-                            width: '100%',
-                            textAlign: 'right',
-                            background: 'rgba(59,130,246,0.06)',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: 8,
-                            padding: '8px 10px',
-                            cursor: 'pointer',
-                            fontSize: 13,
-                            lineHeight: 1.35,
-                          }}
-                        >
-                          {r.notes_cell_text_he ?? '—'}
-                        </button>
-                      ),
-                    },
-                  ];
+  const visibleColumns = useMemo(
+    () => columns.filter((c) => c.visible !== false && !hiddenColumns.has(c.key)),
+    [columns, hiddenColumns],
+  );
 
-                  return (
-                    <>
-                      <thead>
-                        <tr style={{ background: '#f3f4f6' }}>
-                          {columns.map((c) => (
-                            <th key={c.id} style={{ ...(c.thStyle as React.CSSProperties) }}>
-                              {c.header}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((r) => (
-                          <tr key={r.client_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                            {columns.map((c) => (
-                              <td key={c.id} style={{ ...(c.tdStyle as React.CSSProperties) }}>
-                                {c.render(r)}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </>
-                  );
-                })()}
-              </table>
+  const applyPresentation = (patch: Partial<CellPresentation>) => {
+    if (!focusedCell) return;
+    const k = cellKey(focusedCell.clientId, focusedCell.colKey);
+    setUndoStack((history) => [...history, { presentation: cellPresentation }]);
+    setRedoStack([]);
+    setCellPresentation((prev) => ({
+      ...prev,
+      [k]: { ...prev[k], ...patch },
+    }));
+  };
+
+  const isCap = (id: string) => capById.get(id)?.available === true;
+  const capTitle = (id: string) => {
+    const c = capById.get(id);
+    if (!c) return undefined;
+    return c.available ? c.label_he : `${c.label_he}: ${c.reason_he ?? 'לא זמין'}`;
+  };
+  const canCreateColumn = isCap('add_column') && customColumnsCapability?.can_create !== false;
+  const widthForColumn = (col: ClientOperationsRegistryColumn) =>
+    columnWidths[col.key] ?? col.default_width_px ?? (col.cell_kind === 'folder' ? 44 : col.cell_kind === 'custom' ? 140 : 110);
+  const saveColumnWidth = (key: string, width: number) => {
+    const next = { ...columnWidths, [key]: width };
+    setColumnWidths(next);
+    if (widthScope?.userId && widthScope.organizationId) {
+      saveClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId, next);
+    }
+  };
+  const beginResize = (event: ReactMouseEvent, column: ClientOperationsRegistryColumn) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = widthForColumn(column);
+    const onMove = (moveEvent: MouseEvent) => {
+      const nextWidth = startWidth + (document.dir === 'rtl' ? startX - moveEvent.clientX : moveEvent.clientX - startX);
+      setColumnWidths((previous) => ({ ...previous, [column.key]: Math.min(480, Math.max(48, Math.round(nextWidth))) }));
+    };
+    const onUp = (upEvent: MouseEvent) => {
+      const finalWidth = startWidth + (document.dir === 'rtl' ? startX - upEvent.clientX : upEvent.clientX - startX);
+      saveColumnWidth(column.key, Math.min(480, Math.max(48, Math.round(finalWidth))));
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+  const undoPresentation = () => {
+    const previous = undoStack.at(-1);
+    if (!previous) return;
+    setRedoStack((history) => [...history, { presentation: cellPresentation }]);
+    setCellPresentation(previous.presentation);
+    setUndoStack((history) => history.slice(0, -1));
+  };
+  const redoPresentation = () => {
+    const next = redoStack.at(-1);
+    if (!next) return;
+    setUndoStack((history) => [...history, { presentation: cellPresentation }]);
+    setCellPresentation(next.presentation);
+    setRedoStack((history) => history.slice(0, -1));
+  };
+  const formatPresentationValue = (value: string, column: ClientOperationsRegistryColumn, presentation?: CellPresentation) => {
+    if (column.cell_kind !== 'custom' || !presentation?.numberFormat || presentation.numberFormat === 'general') return value;
+    const number = Number(value.replace(/[^\d.-]/g, ''));
+    if (presentation.numberFormat === 'date') {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('he-IL').format(date);
+    }
+    if (!Number.isFinite(number)) return value;
+    if (presentation.numberFormat === 'currency') return new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(number);
+    if (presentation.numberFormat === 'percent') return new Intl.NumberFormat('he-IL', { style: 'percent' }).format(number);
+    return new Intl.NumberFormat('he-IL').format(number);
+  };
+  const editCustomCell = async (row: ClientOperationsRegistryRow, column: ClientOperationsRegistryColumn) => {
+    if (!canEdit || !column.editable || !column.custom_column_id || !onRegistryCommand) return;
+    const current = displayForColumn(row, column);
+    const value = window.prompt(column.label, current === '—' ? '' : current);
+    if (value === null) return;
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command: 'set_client_operations_custom_column_value',
+        client_id: row.client_id,
+        column_id: column.custom_column_id,
+        value,
+      });
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'שמירת הערך נכשלה');
+    }
+  };
+  const createColumn = async () => {
+    if (!addColumnLabel.trim() || !onRegistryCommand) return;
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command: 'create_client_operations_custom_column',
+        label: addColumnLabel.trim(),
+        data_type: addColumnDataType,
+      });
+      setAddColumnOpen(false);
+      setAddColumnLabel('');
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'יצירת העמודה נכשלה');
+    }
+  };
+
+  const primaryToolbarIds = [
+    'undo',
+    'redo',
+    'search',
+    'filter',
+    'sort_asc',
+    'sort_desc',
+    'align_right',
+    'align_center',
+    'align_left',
+    'wrap_text',
+    'bold',
+    'italic',
+    'underline',
+    'freeze_columns',
+    'add_column',
+  ];
+  const moreToolbarIds = ['text_color', 'fill_color', 'number_format', 'borders', 'toggle_columns'];
+
+  const renderSpreadsheetToolbar = () => (
+    <div className="nx-co-sheet__toolbar" role="toolbar" aria-label="כלי גיליון">
+      <div className="nx-co-sheet__toolbar-group">
+        <button type="button" className="nx-co-sheet__btn" disabled={!isCap('undo') || undoStack.length === 0} title={capTitle('undo')} onClick={undoPresentation}>
+          בטל
+        </button>
+        <button type="button" className="nx-co-sheet__btn" disabled={!isCap('redo') || redoStack.length === 0} title={capTitle('redo')} onClick={redoPresentation}>
+          בצע שוב
+        </button>
+      </div>
+
+      <div className="nx-co-sheet__toolbar-group">
+        <div className="nx-co-sheet__search">
+          <input
+            type="search"
+            value={searchDraft}
+            disabled={!isCap('search')}
+            title={capTitle('search')}
+            placeholder="חיפוש בטבלה…"
+            onChange={(e) => setSearchDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && isCap('search') && onQueryChange) {
+                onQueryChange({
+                  q: searchDraft.trim() || null,
+                  sort_by: query?.sort_by ?? null,
+                  sort_dir: query?.sort_dir ?? null,
+                });
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="nx-co-sheet__btn"
+            disabled={!isCap('search')}
+            title={capTitle('search')}
+            onClick={() =>
+              onQueryChange?.({
+                q: searchDraft.trim() || null,
+                sort_by: query?.sort_by ?? null,
+                sort_dir: query?.sort_dir ?? null,
+              })
+            }
+          >
+            חפש
+          </button>
+        </div>
+        <button type="button" className="nx-co-sheet__btn" disabled title={capTitle('filter')}>
+          סינון
+        </button>
+        <button
+          type="button"
+          className="nx-co-sheet__btn"
+          disabled={!isCap('sort_asc') || !focusedCell || focusedCell.colKey === 'folder'}
+          title={capTitle('sort_asc')}
+          onClick={() =>
+            onQueryChange?.({
+              q: query?.q ?? null,
+              sort_by: focusedCell?.colKey ?? null,
+              sort_dir: 'asc',
+            })
+          }
+        >
+          מיון ↑
+        </button>
+        <button
+          type="button"
+          className="nx-co-sheet__btn"
+          disabled={!isCap('sort_desc') || !focusedCell || focusedCell.colKey === 'folder'}
+          title={capTitle('sort_desc')}
+          onClick={() =>
+            onQueryChange?.({
+              q: query?.q ?? null,
+              sort_by: focusedCell?.colKey ?? null,
+              sort_dir: 'desc',
+            })
+          }
+        >
+          מיון ↓
+        </button>
+      </div>
+
+      <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--secondary">
+        <button
+          type="button"
+          className="nx-co-sheet__btn"
+          disabled={!isCap('align_right') || !focusedCell}
+          title={capTitle('align_right')}
+          onClick={() => applyPresentation({ align: 'right' })}
+        >
+          יישור ימין
+        </button>
+        <button
+          type="button"
+          className="nx-co-sheet__btn"
+          disabled={!isCap('align_center') || !focusedCell}
+          title={capTitle('align_center')}
+          onClick={() => applyPresentation({ align: 'center' })}
+        >
+          מרכז
+        </button>
+        <button
+          type="button"
+          className="nx-co-sheet__btn"
+          disabled={!isCap('align_left') || !focusedCell}
+          title={capTitle('align_left')}
+          onClick={() => applyPresentation({ align: 'left' })}
+        >
+          יישור שמאל
+        </button>
+        <button
+          type="button"
+          className={`nx-co-sheet__btn${focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap ? ' is-active' : ''}`}
+          disabled={!isCap('wrap_text') || !focusedCell}
+          title={capTitle('wrap_text')}
+          onClick={() => {
+            if (!focusedCell) return;
+            const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap;
+            applyPresentation({ wrap: !cur });
+          }}
+        >
+          גלישה
+        </button>
+        <button
+          type="button"
+          className="nx-co-sheet__btn"
+          disabled={!isCap('bold') || !focusedCell}
+          title={capTitle('bold')}
+          onClick={() => {
+            if (!focusedCell) return;
+            const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.bold;
+            applyPresentation({ bold: !cur });
+          }}
+        >
+          <strong>B</strong>
+        </button>
+        <button
+          type="button"
+          className="nx-co-sheet__btn"
+          disabled={!isCap('italic') || !focusedCell}
+          title={capTitle('italic')}
+          onClick={() => {
+            if (!focusedCell) return;
+            const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.italic;
+            applyPresentation({ italic: !cur });
+          }}
+        >
+          <em>I</em>
+        </button>
+        <button
+          type="button"
+          className="nx-co-sheet__btn"
+          disabled={!isCap('underline') || !focusedCell}
+          title={capTitle('underline')}
+          onClick={() => {
+            if (!focusedCell) return;
+            const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.underline;
+            applyPresentation({ underline: !cur });
+          }}
+        >
+          <span style={{ textDecoration: 'underline' }}>U</span>
+        </button>
+      </div>
+
+      <div className="nx-co-sheet__toolbar-group">
+        <button
+          type="button"
+          className={`nx-co-sheet__btn${freezeOn ? ' is-active' : ''}`}
+          disabled={!isCap('freeze_columns')}
+          title={capTitle('freeze_columns')}
+          onClick={() => setFreezeOn((v) => !v)}
+        >
+          הקפאה
+        </button>
+        <button type="button" className="nx-co-sheet__btn" disabled={!canCreateColumn} title={capTitle('add_column')} onClick={() => setAddColumnOpen(true)}>
+          + עמודה
+        </button>
+        <button
+          type="button"
+          className="nx-co-sheet__btn"
+          disabled={capById.has('fullscreen') && !isCap('fullscreen')}
+          title={capTitle('fullscreen') ?? 'מסך מלא'}
+          onClick={() => setFullscreenOpen(true)}
+        >
+          ⊞ מסך מלא
+        </button>
+        <div className="nx-co-sheet__more">
+          <button
+            type="button"
+            className="nx-co-sheet__btn"
+            title="עוד פעולות גיליון"
+            onClick={() => setMoreOpen((v) => !v)}
+          >
+            עוד…
+          </button>
+          {moreOpen ? (
+            <div className="nx-co-sheet__more-menu">
+              <label className="nx-co-sheet__btn" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                צבע טקסט
+                <input
+                  className="nx-co-sheet__color"
+                  type="color"
+                  disabled={!isCap('text_color') || !focusedCell}
+                  title={capTitle('text_color')}
+                  onChange={(e) => applyPresentation({ color: e.target.value })}
+                />
+              </label>
+              <label className="nx-co-sheet__btn" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                צבע רקע
+                <input
+                  className="nx-co-sheet__color"
+                  type="color"
+                  disabled={!isCap('fill_color') || !focusedCell}
+                  title={capTitle('fill_color')}
+                  onChange={(e) => applyPresentation({ fill: e.target.value })}
+                />
+              </label>
+              <label className="nx-co-sheet__btn nx-co-sheet__number-format">
+                פורמט מספר
+                <select
+                  value={focusedCell ? cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.numberFormat ?? 'general' : 'general'}
+                  disabled={!isCap('number_format') || !focusedCell}
+                  onChange={(e) => applyPresentation({ numberFormat: e.target.value as CellPresentation['numberFormat'] })}
+                >
+                  <option value="general">כללי</option><option value="number">מספר</option><option value="currency">מטבע</option><option value="percent">אחוז</option><option value="date">תאריך</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className={`nx-co-sheet__btn${bordersOn ? ' is-active' : ''}`}
+                disabled={!isCap('borders')}
+                title={capTitle('borders')}
+                onClick={() => setBordersOn((v) => !v)}
+              >
+                גבולות
+              </button>
+              <button
+                type="button"
+                className="nx-co-sheet__btn"
+                disabled={!isCap('toggle_columns')}
+                title={capTitle('toggle_columns')}
+                onClick={() => {
+                  setShowColumnPanel((v) => !v);
+                  setMoreOpen(false);
+                }}
+              >
+                הצג / הסתר עמודות
+              </button>
             </div>
+          ) : null}
+        </div>
+      </div>
+      {/* Keep capability ids referenced for tests / future collapse */}
+      <span hidden>{[...primaryToolbarIds, ...moreToolbarIds].join(',')}</span>
+    </div>
+  );
 
-            {rows.length === 0 && (
-              <p style={{ padding: 24, color: '#6b7280', textAlign: 'center' }}>No clients found.</p>
-            )}
-          </>
-        )}
-      </SectionCard>
+  const renderCellContent = (r: ClientOperationsRegistryRow, col: ClientOperationsRegistryColumn) => {
+    if (col.cell_kind === 'folder') {
+      return (
+        <button
+          type="button"
+          className={isSpreadsheet ? 'nx-co-sheet__folder-btn' : undefined}
+          onClick={() => openClientModal(r)}
+          style={
+            isSpreadsheet
+              ? undefined
+              : {
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 18,
+                  lineHeight: 1,
+                }
+          }
+          aria-label={`Open client case ${r.client_name ?? ''}`}
+        >
+          📁
+        </button>
+      );
+    }
+    if (col.cell_kind === 'notes') {
+      const text = displayForColumn(r, col);
+      return (
+        <button
+          type="button"
+          className={isSpreadsheet ? 'nx-co-sheet__notes-btn' : undefined}
+          onClick={() => openNotesModal(r)}
+          style={
+            isSpreadsheet
+              ? undefined
+              : {
+                  width: '100%',
+                  textAlign: 'right',
+                  background: 'rgba(59,130,246,0.06)',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  lineHeight: 1.35,
+                }
+          }
+        >
+          {text}
+        </button>
+      );
+    }
+    if (col.cell_kind === 'custom') {
+      const value = displayForColumn(r, col);
+      return canEdit && col.editable ? (
+        <button
+          type="button"
+          className="nx-co-sheet__custom-cell"
+          onDoubleClick={() => void editCustomCell(r, col)}
+          title="לחיצה כפולה לעריכה"
+        >
+          {value}
+        </button>
+      ) : (
+        value
+      );
+    }
+    return displayForColumn(r, col);
+  };
 
+  const renderSpreadsheetTable = () => (
+    <div className="nx-co-sheet__canvas">
+      <table className={`nx-co-sheet__table${freezeOn ? ' is-frozen' : ''}${bordersOn ? '' : ' is-borders-off'}`}>
+        <colgroup>
+          {visibleColumns.map((column) => <col key={column.key} style={{ width: widthForColumn(column) }} />)}
+        </colgroup>
+        <thead><tr>
+          {visibleColumns.map((column) => (
+            <th key={column.key} data-col={column.key} data-freeze={column.freeze_default ? 'true' : 'false'} style={{ textAlign: column.align }}>
+              {column.label}
+              <span className="nx-co-sheet__resize-handle" role="separator" aria-label={`שינוי רוחב ${column.label}`} onMouseDown={(event) => beginResize(event, column)} />
+            </th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.client_id} className={selectedRowId === row.client_id ? 'is-selected' : undefined} onClick={() => setSelectedRowId(row.client_id)}>
+              {visibleColumns.map((column) => {
+                const pk = cellKey(row.client_id, column.key);
+                const presentation = cellPresentation[pk];
+                const focused = focusedCell?.clientId === row.client_id && focusedCell.colKey === column.key;
+                return (
+                  <td
+                    key={column.key} data-col={column.key} data-freeze={column.freeze_default ? 'true' : 'false'}
+                    className={focused ? 'is-focused' : undefined}
+                    onClick={(event) => { event.stopPropagation(); setSelectedRowId(row.client_id); setFocusedCell({ clientId: row.client_id, colKey: column.key }); }}
+                    style={{ textAlign: presentation?.align ?? column.align, whiteSpace: presentation?.wrap ? 'pre-wrap' : undefined, fontWeight: presentation?.bold ? 700 : undefined, fontStyle: presentation?.italic ? 'italic' : undefined, textDecoration: presentation?.underline ? 'underline' : undefined, color: presentation?.color, background: presentation?.fill }}
+                  >
+                    {column.cell_kind === 'custom'
+                      ? canEdit && column.editable
+                        ? <button type="button" className="nx-co-sheet__custom-cell" onDoubleClick={() => void editCustomCell(row, column)} title="לחיצה כפולה לעריכה">{formatPresentationValue(displayForColumn(row, column), column, presentation)}</button>
+                        : formatPresentationValue(displayForColumn(row, column), column, presentation)
+                      : renderCellContent(row, column)}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length === 0 ? <p className="nx-co-sheet__empty">לא נמצאו לקוחות.</p> : null}
+    </div>
+  );
+
+  const modals = (
+    <>
       {modalOpen && (
         <ClientWorkspaceModal
           open={modalOpen}
@@ -580,6 +1035,132 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           )}
         </ClientNoteModal>
       )}
+    </>
+  );
+
+  if (isSpreadsheet) {
+    return (
+      <div className="nx-co-sheet" data-testid="client-operations-spreadsheet">
+        <h1 className="nx-co-sheet__title">{titleHe ?? 'תפעול לקוחות'}</h1>
+        {renderSpreadsheetToolbar()}
+        {showColumnPanel ? (
+          <div className="nx-co-sheet__columns-panel">
+            {columns
+              .filter((c) => c.cell_kind !== 'folder')
+              .map((c) => (
+                <label key={c.key}>
+                  <input
+                    type="checkbox"
+                    checked={!hiddenColumns.has(c.key)}
+                    onChange={() => {
+                      setHiddenColumns((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(c.key)) next.delete(c.key);
+                        else next.add(c.key);
+                        return next;
+                      });
+                    }}
+                  />
+                  {c.label}
+                </label>
+              ))}
+          </div>
+        ) : null}
+        {error ? <div className="nx-co-sheet__error">{error}</div> : null}
+        {loading ? (
+          <p className="nx-co-sheet__loading">טוען…</p>
+        ) : (
+          renderSpreadsheetTable()
+        )}
+        {commandError ? <div className="nx-co-sheet__error">{commandError}</div> : null}
+        {addColumnOpen ? (
+          <div className="nx-co-sheet__dialog-backdrop" role="presentation">
+            <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label="הוספת עמודה">
+              <button type="button" className="nx-co-sheet__close" onClick={() => setAddColumnOpen(false)} aria-label="סגירה">×</button>
+              <h2>הוספת עמודה</h2>
+              <label>שם עמודה<input value={addColumnLabel} onChange={(event) => setAddColumnLabel(event.target.value)} autoFocus /></label>
+              <label>סוג נתון<select value={addColumnDataType} onChange={(event) => setAddColumnDataType(event.target.value as typeof addColumnDataType)}><option value="text">טקסט</option><option value="number">מספר</option><option value="date">תאריך</option><option value="boolean">כן / לא</option></select></label>
+              <div className="nx-co-sheet__dialog-actions"><button type="button" className="nx-co-sheet__btn" onClick={() => setAddColumnOpen(false)}>ביטול</button><button type="button" className="nx-co-sheet__btn is-active" onClick={() => void createColumn()} disabled={!addColumnLabel.trim()}>שמירה</button></div>
+            </div>
+          </div>
+        ) : null}
+        {fullscreenOpen ? (
+          <div className="nx-co-sheet__fullscreen" role="dialog" aria-modal="true" aria-label="גיליון במסך מלא">
+            <button type="button" className="nx-co-sheet__close" onClick={() => setFullscreenOpen(false)} aria-label="סגירת מסך מלא">×</button>
+            <h1 className="nx-co-sheet__title">{titleHe ?? 'תפעול לקוחות'}</h1>
+            {renderSpreadsheetToolbar()}
+            {renderSpreadsheetTable()}
+          </div>
+        ) : null}
+        {modals}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {showPageHeader ? (
+        <PageHeader title="Nodex לקוחות" subtitle="Client registry (module v1 skeleton)" />
+      ) : null}
+
+      <SectionCard style={{ padding: 20 }}>
+        {error && <div style={{ color: '#b91c1c', marginBottom: 12 }}>{error}</div>}
+        {loading ? (
+          <p style={{ color: '#6b7280' }}>Loading…</p>
+        ) : (
+          <>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, direction: 'rtl' }}>
+                <thead>
+                  <tr style={{ background: '#f3f4f6' }}>
+                    {columns.map((c) => (
+                      <th
+                        key={c.key}
+                        style={{
+                          padding: c.cell_kind === 'folder' ? '12px 8px' : '12px 16px',
+                          textAlign: c.align,
+                        }}
+                      >
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.client_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      {columns.map((c) => (
+                        <td
+                          key={c.key}
+                          style={{
+                            padding: c.cell_kind === 'folder' ? '12px 8px' : '12px 16px',
+                            textAlign: c.align,
+                            fontWeight: c.key === 'client_name' || c.key === 'vat_due' ? 600 : undefined,
+                            fontFamily:
+                              c.key === 'tax_id' || c.key === 'handler' ? 'monospace' : undefined,
+                            maxWidth: c.cell_kind === 'notes' ? 280 : undefined,
+                            cursor: c.cell_kind === 'notes' ? 'pointer' : undefined,
+                            verticalAlign: c.cell_kind === 'notes' ? 'top' : undefined,
+                            color: c.cell_kind === 'notes' ? '#374151' : undefined,
+                            width: c.cell_kind === 'folder' ? 40 : undefined,
+                          }}
+                        >
+                          {renderCellContent(r, c)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {rows.length === 0 && (
+              <p style={{ padding: 24, color: '#6b7280', textAlign: 'center' }}>No clients found.</p>
+            )}
+          </>
+        )}
+      </SectionCard>
+      {modals}
     </div>
   );
 }
