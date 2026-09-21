@@ -319,6 +319,95 @@
   margin-top: 8px;
 }
 
+.nx-owner-calendar {
+  display: grid;
+  gap: 10px;
+}
+
+.nx-owner-calendar__toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.nx-owner-calendar__title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.nx-owner-calendar__meta,
+.nx-owner-calendar__note {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.nx-owner-calendar__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.nx-owner-calendar__year {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.nx-owner-calendar__year select {
+  height: 30px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0 8px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.nx-owner-calendar__table-wrap {
+  overflow-x: auto;
+}
+
+.nx-owner-calendar__table {
+  min-width: 920px;
+  direction: rtl;
+}
+
+.nx-owner-calendar__table th,
+.nx-owner-calendar__table td {
+  text-align: right;
+  padding: 6px 8px;
+}
+
+.nx-owner-calendar__period {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.nx-owner-calendar__period div,
+.nx-owner-calendar__display,
+.nx-owner-calendar__cell-status {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.nx-owner-calendar__date {
+  width: 132px;
+  height: 28px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 6px;
+  font-size: 12px;
+  direction: ltr;
+}
+
 @media (max-width: 900px) {
   .nx-owner-shell {
     grid-template-columns: 1fr;

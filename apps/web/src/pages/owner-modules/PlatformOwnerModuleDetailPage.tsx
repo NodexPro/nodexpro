@@ -58,6 +58,8 @@ export function PlatformOwnerModuleDetailPage() {
   const [extendUntilYmd, setExtendUntilYmd] = useState('');
   const [extendReason, setExtendReason] = useState('');
   const [extendError, setExtendError] = useState('');
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+  const [calendarEdits, setCalendarEdits] = useState<Record<string, Record<string, string>>>({});
 
   const tabs = asRows(aggregate?.available_detail_tabs);
   const requested = (searchParams.get('tab') as TabKey | null) ?? 'pricing';
@@ -78,6 +80,8 @@ export function PlatformOwnerModuleDetailPage() {
       if (search.trim()) qs.set('commercial_search', search.trim());
       if (entitlementStatus.trim()) qs.set('commercial_entitlement_status', entitlementStatus.trim());
       if (activationStatus.trim()) qs.set('commercial_activation_status', activationStatus.trim());
+      qs.set('calendar_country', 'IL');
+      qs.set('calendar_year', String(calendarYear));
       const agg = await apiJson<UnknownRecord>(`${OWNER.moduleDetail(moduleCode)}?${qs.toString()}`);
       setAggregate(agg);
     } catch (e) {
@@ -85,7 +89,7 @@ export function PlatformOwnerModuleDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [moduleCode, page, search, entitlementStatus, activationStatus]);
+  }, [moduleCode, page, search, entitlementStatus, activationStatus, calendarYear]);
 
   useEffect(() => {
     void load();
@@ -119,6 +123,37 @@ export function PlatformOwnerModuleDetailPage() {
       await load();
     } catch (e) {
       setError(userFacingApiMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendCalendarCommand(command: string, payload: UnknownRecord): Promise<UnknownRecord | null> {
+    setBusy(true);
+    setError('');
+    try {
+      const out = await apiJson<{
+        refreshed?: { aggregate_key?: string; aggregate?: UnknownRecord };
+      }>(OWNER.command, {
+        method: 'POST',
+        body: JSON.stringify({
+          command,
+          payload: {
+            ...payload,
+            owner_module_detail_code: moduleCode,
+            commercial_controls_context: commercialContext(),
+          },
+        }),
+      });
+      if (out?.refreshed?.aggregate_key === 'owner_module_detail_aggregate' && out.refreshed.aggregate) {
+        setAggregate(out.refreshed.aggregate);
+        return out.refreshed.aggregate;
+      }
+      setError('Command succeeded but refreshed module aggregate was not returned.');
+      return null;
+    } catch (e) {
+      setError(userFacingApiMessage(e));
+      return null;
     } finally {
       setBusy(false);
     }
@@ -198,6 +233,64 @@ export function PlatformOwnerModuleDetailPage() {
   const orgRows = asRows(commercial?.org_rows);
   const pagination = (commercial?.pagination as UnknownRecord | undefined) ?? null;
   const reportingCalendar = (aggregate?.reporting_calendar as UnknownRecord | undefined) ?? null;
+  const calendarColumns = asRows(reportingCalendar?.obligation_columns);
+  const calendarRows = asRows(reportingCalendar?.rows);
+  const availableCalendarYears = Array.isArray(reportingCalendar?.available_years)
+    ? (reportingCalendar.available_years as unknown[]).map((y) => Number(y)).filter((y) => Number.isInteger(y))
+    : [calendarYear];
+
+  function calendarCell(row: UnknownRecord, obligationKey: string): UnknownRecord {
+    const cells = row.cells as UnknownRecord | undefined;
+    const cell = cells?.[obligationKey];
+    return cell && typeof cell === 'object' && !Array.isArray(cell) ? (cell as UnknownRecord) : {};
+  }
+
+  function calendarInputValue(periodKey: string, obligationKey: string, cell: UnknownRecord): string {
+    return calendarEdits[periodKey]?.[obligationKey] ?? text(cell.filing_due_date);
+  }
+
+  function setCalendarInputValue(periodKey: string, obligationKey: string, value: string): void {
+    setCalendarEdits((prev) => ({
+      ...prev,
+      [periodKey]: {
+        ...(prev[periodKey] ?? {}),
+        [obligationKey]: value,
+      },
+    }));
+  }
+
+  async function saveCalendarPeriod(row: UnknownRecord): Promise<void> {
+    const periodKey = text(row.reporting_period_key);
+    if (!periodKey) return;
+    const dates: UnknownRecord = {};
+    for (const col of calendarColumns) {
+      const key = text(col.obligation_key);
+      if (!key) continue;
+      const cell = calendarCell(row, key);
+      const value = calendarInputValue(periodKey, key, cell).trim();
+      if (value) dates[key] = value;
+    }
+    const refreshed = await sendCalendarCommand('save_reporting_calendar_period_dates', {
+      country_code: text(reportingCalendar?.country_code) || 'IL',
+      year: Number(reportingCalendar?.year ?? calendarYear),
+      reporting_period_key: periodKey,
+      dates,
+    });
+    if (refreshed) {
+      setCalendarEdits((prev) => {
+        const next = { ...prev };
+        delete next[periodKey];
+        return next;
+      });
+    }
+  }
+
+  async function publishCalendarYear(): Promise<void> {
+    await sendCalendarCommand('publish_reporting_calendar_year', {
+      country_code: text(reportingCalendar?.country_code) || 'IL',
+      year: Number(reportingCalendar?.year ?? calendarYear),
+    });
+  }
 
   return (
     <div className="nx-owner-modules">
@@ -481,12 +574,111 @@ export function PlatformOwnerModuleDetailPage() {
       ) : null}
 
       {activeTab === 'reporting_calendar' ? (
-        <div className="nx-owner-empty">
-          <strong>{text(reportingCalendar?.message) || 'Reporting Calendar configuration is not available yet.'}</strong>
-          <p style={{ marginTop: 8 }}>
-            UI location: Modules → Client Operations → Reporting Calendar. Canonical legal owner remains Country Pack /
-            Owner Legal Control. No invented filing dates.
-          </p>
+        <div className="nx-owner-calendar" dir="rtl">
+          <div className="nx-owner-calendar__toolbar">
+            <div>
+              <div className="nx-owner-calendar__title">יומן דיווחים</div>
+              <div className="nx-owner-calendar__meta">
+                Country: {text(reportingCalendar?.country_code) || 'IL'} · Legal owner:{' '}
+                {text(reportingCalendar?.legal_owner) || 'country_pack_owner_legal_control'}
+              </div>
+            </div>
+            <div className="nx-owner-calendar__actions">
+              <label className="nx-owner-calendar__year">
+                שנה
+                <select
+                  value={String(reportingCalendar?.year ?? calendarYear)}
+                  onChange={(e) => setCalendarYear(Number(e.target.value))}
+                  disabled={busy}
+                >
+                  {availableCalendarYears.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className={`nx-owner-badge ${text(reportingCalendar?.status) === 'active' ? 'nx-owner-badge--on' : 'nx-owner-badge--off'}`}>
+                {text(reportingCalendar?.status_label) || 'Draft'}
+              </span>
+              <button
+                type="button"
+                className="nx-owner-btn nx-owner-btn--primary"
+                disabled={busy || !calendarRows.length}
+                onClick={() => void publishCalendarYear()}
+              >
+                פרסם שנה
+              </button>
+            </div>
+          </div>
+
+          <div className="nx-owner-calendar__note">
+            עריכת תאריך בתא שומרת טיוטה בלבד. פרסום שנתי הופך את התאריכים לאמת משפטית פעילה.
+          </div>
+
+          <div className="nx-owner-calendar__table-wrap">
+            <table className="nx-owner-sheet nx-owner-calendar__table">
+              <thead>
+                <tr>
+                  <th>תקופה</th>
+                  {calendarColumns.map((col) => (
+                    <th key={text(col.obligation_key)}>{text(col.label) || text(col.obligation_key)}</th>
+                  ))}
+                  <th>סטטוס</th>
+                  <th>פעולות</th>
+                </tr>
+              </thead>
+              <tbody>
+                {calendarRows.map((row) => {
+                  const periodKey = text(row.reporting_period_key);
+                  return (
+                    <tr key={periodKey}>
+                      <td className="nx-owner-calendar__period">
+                        {text(row.period_label) || periodKey}
+                        <div>{periodKey}</div>
+                      </td>
+                      {calendarColumns.map((col) => {
+                        const obligationKey = text(col.obligation_key);
+                        const cell = calendarCell(row, obligationKey);
+                        const display = text(cell.filing_due_date_display);
+                        return (
+                          <td key={`${periodKey}:${obligationKey}`}>
+                            <input
+                              className="nx-owner-calendar__date"
+                              type="date"
+                              value={calendarInputValue(periodKey, obligationKey, cell)}
+                              onChange={(e) => setCalendarInputValue(periodKey, obligationKey, e.target.value)}
+                              disabled={busy}
+                            />
+                            <div className="nx-owner-calendar__display">{display || '—'}</div>
+                            <div className="nx-owner-calendar__cell-status">{text(cell.status) || 'missing'}</div>
+                          </td>
+                        );
+                      })}
+                      <td>{text(row.row_status) || 'missing'}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="nx-owner-btn"
+                          disabled={busy}
+                          onClick={() => void saveCalendarPeriod(row)}
+                        >
+                          שמור
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!calendarRows.length ? (
+                  <tr>
+                    <td colSpan={calendarColumns.length + 3} style={{ color: '#6b7280' }}>
+                      No reporting calendar rows for this year.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
 

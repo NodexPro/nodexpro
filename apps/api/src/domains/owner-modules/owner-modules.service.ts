@@ -22,8 +22,13 @@ import {
   isOwnerModulesCatalogRow,
   summarizeCatalogPlans,
 } from './owner-modules.pure.js';
+import { buildCountryReportingCalendarAggregate } from '../country-pack/reporting-calendar.service.js';
 
 export type OwnerModulesCommercialQuery = Partial<CommercialControlsQuery>;
+export type OwnerModulesReportingCalendarQuery = {
+  country_code?: string | null;
+  year?: number | string | null;
+};
 
 type ModuleCatalogRow = {
   id: string;
@@ -166,7 +171,8 @@ export async function buildOwnerModulesListAggregate(ctx: RequestContext): Promi
 export async function buildOwnerModuleDetailAggregate(
   ctx: RequestContext,
   moduleCodeRaw: string,
-  commercialQuery?: OwnerModulesCommercialQuery
+  commercialQuery?: OwnerModulesCommercialQuery,
+  reportingCalendarQuery?: OwnerModulesReportingCalendarQuery
 ): Promise<Record<string, unknown>> {
   assertPlatformOwner(ctx);
   const moduleCode = moduleCodeRaw.trim();
@@ -189,6 +195,12 @@ export async function buildOwnerModuleDetailAggregate(
   const listRow = buildModuleListRow(mod, plansByModule.get(mod.id) ?? [], orgCounts.get(mod.id) ?? 0);
   const detailTabs = buildOwnerModuleDetailTabs(moduleCode);
   const reportingCalendarTab = detailTabs.find((t) => t.tab_key === 'reporting_calendar') ?? null;
+  const reportingCalendar = reportingCalendarTab
+    ? await buildCountryReportingCalendarAggregate({
+        country_code: reportingCalendarQuery?.country_code ?? 'IL',
+        year: reportingCalendarQuery?.year ?? new Date().getUTCFullYear(),
+      })
+    : null;
 
   return {
     aggregate_key: OWNER_MODULE_DETAIL_AGGREGATE_KEY,
@@ -196,15 +208,7 @@ export async function buildOwnerModuleDetailAggregate(
     available_detail_tabs: detailTabs,
     platform_pricing: filterPricingRowsForModule(platformPricing, moduleCode),
     commercial_controls: commercialControls,
-    reporting_calendar: reportingCalendarTab
-      ? {
-          tab_key: 'reporting_calendar',
-          configured: false,
-          legal_owner: 'country_pack_owner_legal_control',
-          message: 'Reporting Calendar configuration is not available yet.',
-          rows: [],
-        }
-      : null,
+    reporting_calendar: reportingCalendar,
     actions: [
       {
         action_key: 'set_module_global_activation',

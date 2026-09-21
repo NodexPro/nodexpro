@@ -35,7 +35,7 @@ test('Client Operations exposes Reporting Calendar tab without inventing legal d
   );
   const calendar = tabs.find((t) => t.tab_key === 'reporting_calendar');
   assert.ok(calendar);
-  assert.equal(calendar?.unavailable_reason != null, true);
+  assert.equal(calendar?.unavailable_reason, null);
 });
 
 test('Other modules do not expose Reporting Calendar tab', () => {

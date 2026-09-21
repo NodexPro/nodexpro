@@ -39,6 +39,10 @@ import {
   handleDisableOperationalReminderWorkflow,
   handleEnableOperationalReminderWorkflow,
 } from './operational-communication-owner-commands.service.js';
+import {
+  executeReportingCalendarCommand,
+  type ReportingCalendarCommandType,
+} from './reporting-calendar.service.js';
 
 type CountryPackCommandType =
   | 'create_country'
@@ -80,7 +84,8 @@ type CountryPackCommandType =
   | 'save_operational_reminder_policy'
   | 'save_operational_reminder_template'
   | 'save_operational_reminder_policy_version'
-  | 'save_operational_reminder_template_version';
+  | 'save_operational_reminder_template_version'
+  | ReportingCalendarCommandType;
 
 type CountryPackCommand = {
   command: CountryPackCommandType;
@@ -1801,6 +1806,13 @@ export async function executeCountryPackCommand(
       return handleSaveOperationalReminderPolicyVersion(ctx, command.payload);
     case 'save_operational_reminder_template_version':
       return handleSaveOperationalReminderTemplateVersion(ctx, command.payload);
+    case 'create_reporting_calendar_entry':
+    case 'correct_reporting_calendar_entry':
+    case 'activate_reporting_calendar_entry':
+    case 'deactivate_reporting_calendar_entry':
+    case 'save_reporting_calendar_period_dates':
+    case 'publish_reporting_calendar_year':
+      return executeReportingCalendarCommand(ctx, command.command, command.payload);
     default:
       throw badRequest(`Unsupported country-pack command: ${(command as { command?: string }).command ?? 'unknown'}`);
   }

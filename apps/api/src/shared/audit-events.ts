@@ -197,6 +197,13 @@ export const AUDIT_ACTIONS = {
   OWNER_PRICING_ADJUSTMENT_CREATED: 'owner_pricing_adjustment_created',
   OWNER_PRICING_ADJUSTMENT_CANCELLED: 'owner_pricing_adjustment_cancelled',
   OWNER_FREE_ACCESS_GRANTED: 'owner_free_access_granted',
+  REPORTING_CALENDAR_ENTRY_CREATED: 'reporting_calendar.entry_created',
+  REPORTING_CALENDAR_ENTRY_UPDATED: 'reporting_calendar.entry_updated',
+  REPORTING_CALENDAR_ENTRY_CORRECTED: 'reporting_calendar.entry_corrected',
+  REPORTING_CALENDAR_ENTRY_ACTIVATED: 'reporting_calendar.entry_activated',
+  REPORTING_CALENDAR_ENTRY_DEACTIVATED: 'reporting_calendar.entry_deactivated',
+  REPORTING_CALENDAR_PERIOD_DATES_UPDATED: 'reporting_calendar.period_dates_updated',
+  REPORTING_CALENDAR_YEAR_PUBLISHED: 'reporting_calendar.year_published',
   /** INV-13A — Owner Invoice Document Builder layout lifecycle. */
   OWNER_INVOICE_LAYOUT_DRAFT_CREATED: 'owner_invoice_layout.draft_created',
   OWNER_INVOICE_LAYOUT_SECTION_MOVED: 'owner_invoice_layout.section_moved',

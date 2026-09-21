@@ -149,6 +149,9 @@ router.get('/modules/:moduleCode', async (req: Request, res: Response, next: Nex
         typeof req.query.commercial_entitlement_status === 'string' ? req.query.commercial_entitlement_status : null,
       activation_status:
         typeof req.query.commercial_activation_status === 'string' ? req.query.commercial_activation_status : null,
+    }, {
+      country_code: typeof req.query.calendar_country === 'string' ? req.query.calendar_country : 'IL',
+      year: typeof req.query.calendar_year === 'string' ? req.query.calendar_year : undefined,
     });
     return res.json(aggregate);
   } catch (e) {

@@ -40,7 +40,7 @@ export function buildOwnerModuleDetailTabs(moduleCode: string): OwnerModuleDetai
       tab_key: 'reporting_calendar',
       label: 'Reporting Calendar',
       enabled: true,
-      unavailable_reason: 'Reporting Calendar configuration is not available yet.',
+      unavailable_reason: null,
     });
   }
   return tabs;
