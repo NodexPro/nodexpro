@@ -122,6 +122,9 @@ export function moduleClientOperationsCase(
   if (opts?.fees_price_chart_view === 'all') return `${base}?fees_price_chart_view=all`;
   return base;
 }
+/** GET compact client-name Quick Profile aggregate (not the full client case). */
+export const moduleClientOperationsClientQuickProfile = (clientId: string) =>
+  `/m/client-operations/clients/${clientId}/quick-profile`;
 export const moduleClientOperationsUpdateClientProfile = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/profile/commands/update_profile`;
 export const moduleClientOperationsFeesCommands = (clientId: string) =>

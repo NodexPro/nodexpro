@@ -8,6 +8,7 @@ import {
   listClientOperationsRegistry,
   getClientOperationsCase,
 } from './client-operations.service.js';
+import { getClientOperationsClientQuickProfile } from './client-operations-client-quick-profile.service.js';
 import {
   executeClientOperationsRegistryCommand,
   type ClientOperationsRegistryCommandBody,
@@ -177,6 +178,21 @@ router.get('/clients/:clientId', ...withView, async (req, res, next) => {
     next(e);
   }
 });
+
+
+/** Compact client-name Quick Profile — READ-ONLY aggregate (not the full client case). */
+router.get('/clients/:clientId/quick-profile', ...withView, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const clientId = String(req.params.clientId ?? '');
+    if (!clientId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId required' });
+    const result = await getClientOperationsClientQuickProfile(ctx, clientId);
+    return res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
 
 router.post('/clients/:clientId/history/commands', ...withView, async (req, res, next) => {
   try {

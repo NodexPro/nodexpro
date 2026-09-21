@@ -2,9 +2,14 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMous
 import { apiFetch, apiJson } from '../../api/client';
 import {
   moduleClientOperationsCase,
+  moduleClientOperationsClientQuickProfile,
   moduleClientOperationsOperationalNotes,
   moduleClientOperationsOperationalNote,
 } from '../../api/endpoints';
+import {
+  ClientOperationsClientQuickProfilePopover,
+  type ClientOperationsClientQuickProfileAggregate,
+} from './ClientOperationsClientQuickProfilePopover';
 import {
   loadClientOperationsColumnWidths,
   saveClientOperationsColumnWidths,
@@ -224,6 +229,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState('');
   const [modalData, setModalData] = useState<ClientOperationsCaseResponse | null>(null);
+  const [quickProfile, setQuickProfile] = useState<ClientOperationsClientQuickProfileAggregate | null>(
+    null
+  );
+  const [quickProfileAnchor, setQuickProfileAnchor] = useState<HTMLElement | null>(null);
 
   const [notesModalClientId, setNotesModalClientId] = useState<string | null>(null);
   const [notesModalClientName, setNotesModalClientName] = useState('');
@@ -295,7 +304,26 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     onReloadRegistry?.();
   }, [onReloadRegistry]);
 
+  const closeQuickProfile = useCallback(() => {
+    setQuickProfile(null);
+    setQuickProfileAnchor(null);
+  }, []);
+
+  const openQuickProfile = (r: ClientOperationsRegistryRow, anchorEl: HTMLElement) => {
+    setQuickProfileAnchor(anchorEl);
+    setQuickProfile(null);
+    apiJson<ClientOperationsClientQuickProfileAggregate>(
+      moduleClientOperationsClientQuickProfile(r.client_id)
+    )
+      .then((res) => setQuickProfile(res))
+      .catch(() => {
+        setQuickProfile(null);
+        setQuickProfileAnchor(null);
+      });
+  };
+
   const openClientModal = (r: ClientOperationsRegistryRow) => {
+    closeQuickProfile();
     setModalOpen(true);
     setModalLoading(true);
     setModalError('');
@@ -880,6 +908,22 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         value
       );
     }
+    if (col.key === 'client_name') {
+      const text = displayForColumn(r, col);
+      return (
+        <button
+          type="button"
+          className={isSpreadsheet ? 'nx-co-sheet__client-name-btn' : 'nx-co-sheet__client-name-btn'}
+          onClick={(e) => {
+            e.stopPropagation();
+            openQuickProfile(r, e.currentTarget);
+          }}
+          aria-label={`כרטיס מהיר ${r.client_name ?? ''}`}
+        >
+          {text}
+        </button>
+      );
+    }
     return displayForColumn(r, col);
   };
 
@@ -943,6 +987,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           onTaxSettingsSaved={reloadRegistry}
         />
       )}
+
+      {quickProfile && quickProfileAnchor ? (
+        <ClientOperationsClientQuickProfilePopover
+          profile={quickProfile}
+          anchorEl={quickProfileAnchor}
+          onClose={closeQuickProfile}
+        />
+      ) : null}
 
       {notesModalClientId && (
         <ClientNoteModal
