@@ -657,24 +657,25 @@ export function OwnerLegalTextDraftReview({
                   disabled={busy}
                 />
                 {linkOpen && selected ? (
-                  <div className="nx-reg-popover">
+                  <div className="nx-reg-popover" dir="ltr">
                     <label className="nx-field">
                       <span className="nx-field-label">Category</span>
                       <select
-                        className="nx-input"
+                        className="nx-input nx-reg-owner-text"
+                        dir="auto"
                         value={linkCategoryId}
                         onChange={(event) => setLinkCategoryId(event.target.value)}
                         disabled={busy}
                       >
                         {regulationCategories.map((category) => (
-                          <option key={category.id} value={category.id}>
+                          <option key={category.id} value={category.id} dir="auto">
                             {category.title}
                           </option>
                         ))}
                       </select>
                     </label>
                     <label className="nx-field">
-                      <span className="nx-field-label">Owner reference number</span>
+                      <span className="nx-field-label">Owner number</span>
                       <input
                         className="nx-input"
                         value={linkOwnerRef}
@@ -699,15 +700,17 @@ export function OwnerLegalTextDraftReview({
                         }).then(() => setLinkOpen(false))
                       }
                     >
-                      ✓ Save reference
+                      Save reference
                     </button>
                   </div>
                 ) : null}
                 {(selected.regulation_references ?? []).length ? (
-                  <div className="nx-reg-chips">
+                  <div className="nx-reg-chips" dir="ltr">
                     {(selected.regulation_references ?? []).map((ref) => (
                       <span key={ref.id} className="nx-reg-chip">
-                        {ref.label}
+                        <span dir="auto" className="nx-reg-owner-text">
+                          {ref.label}
+                        </span>
                         {ref.confirmation_state === 'ai_suggested' ? (
                           <button
                             type="button"

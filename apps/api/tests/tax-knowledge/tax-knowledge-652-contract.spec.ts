@@ -40,7 +40,8 @@ test('TAX-652 reuses tax_domains, tax_sources, unresolved refs, and existing tra
   assert.doesNotMatch(commands, /draft_legal_text:/);
   assert.doesNotMatch(commands, /original_source_text:/);
   assert.match(nav, /regulations-orders/);
-  assert.match(nav, /תקנות וצווים/);
+  assert.match(nav, /Regulations & Orders/);
+  assert.doesNotMatch(nav, /תקנות וצווים/);
   assert.match(resolve, /ensure_regulation_registry_entry/);
   assert.match(resolve, /record_legal_text_draft_regulation_reference/);
   assert.match(countryPack, /regulations_orders_registry/);
@@ -99,3 +100,20 @@ test('TAX-652 command returns the refreshed Owner Legal Control aggregate', () =
   assert.match(panel, /ensure_regulation_registry_entry/);
   assert.doesNotMatch(panel, /tax_knowledge_trainer_legal_text_draft_id',\s*trainerDraftQuery/);
 });
+
+test('TAX-652 system labels are English and Owner catalog language is stored as entered', () => {
+  const nav = readRepo('apps/api/src/domains/owner-country-legal-access/owner-country-legal-access.pure.ts');
+  const read = readRepo('apps/api/src/domains/tax-knowledge/tax-regulation-registry-read.service.ts');
+  const pure = readRepo('apps/api/src/domains/tax-knowledge/tax-regulation-registry.pure.ts');
+  const commands = readRepo('apps/api/src/domains/tax-knowledge/tax-regulation-registry-commands.service.ts');
+  assert.match(nav, /label: 'Regulations & Orders'/);
+  assert.match(read, /title: 'Regulations & Orders'/);
+  assert.match(read, /title: String\(domain.title\)/);
+  assert.match(read, /regulationReferenceLabel/);
+  assert.match(pure, /export function regulationReferenceLabel/);
+  assert.match(commands, /create_tax_domain|findOrCreateRegulationRegistryEntry/);
+  assert.doesNotMatch(read, /dir=|text_direction|rtl/);
+  assert.doesNotMatch(commands, /dir=|text_direction|translate/);
+  assert.doesNotMatch(pure, /toHebrew|toEnglish|i18n/);
+});
+

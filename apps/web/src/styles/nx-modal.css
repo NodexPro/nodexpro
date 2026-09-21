@@ -3251,15 +3251,37 @@
   }
 }
 
+.nx-reg-registry,
+.nx-reg-popover,
+.nx-reg-chips {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.nx-reg-registry *,
+.nx-reg-popover *,
+.nx-reg-chips * {
+  font-family: inherit;
+}
+
 .nx-reg-registry {
   display: grid;
   gap: 16px;
 }
 
-.nx-reg-registry__intro {
+.nx-reg-registry__intro,
+.nx-reg-registry__hint {
   margin: 0 0 12px;
   font-size: 13px;
   color: #4b5563;
+}
+
+.nx-reg-registry__hint {
+  margin-top: -4px;
+}
+
+.nx-reg-owner-text {
+  unicode-bidi: plaintext;
+  text-align: start;
 }
 
 .nx-reg-registry__toolbar,
@@ -3275,6 +3297,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  direction: ltr;
 }
 
 .nx-reg-registry-table th,
@@ -3326,4 +3349,5 @@
   background: #eef2ff;
   font-size: 12px;
   font-weight: 600;
+  unicode-bidi: isolate;
 }

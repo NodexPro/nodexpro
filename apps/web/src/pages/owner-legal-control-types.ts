@@ -902,7 +902,7 @@ export function emptyRegulationRegistrySlice(): OwnerRegulationRegistrySlice {
     selected_draft_references: [],
     allowed_actions: [],
     labels: {
-      title: 'תקנות וצווים',
+      title: 'Regulations & Orders',
       missing: 'Missing',
       source_added: 'Source added',
       reviewed: 'Reviewed',

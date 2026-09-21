@@ -21,7 +21,7 @@ export const BUSINESS_SETUP_AI_OWNER_NAV: readonly BusinessSetupAiOwnerNavGroup[
     group: 'TAX & LAW',
     items: [
       { id: 'tax-knowledge', label: 'Legal Library' },
-      { id: 'regulations-orders', label: 'תקנות וצווים' },
+      { id: 'regulations-orders', label: 'Regulations & Orders' },
       { id: 'legal-values', label: 'Legal Values' },
       { id: 'fact-dictionary', label: 'Fact Dictionary' },
     ],

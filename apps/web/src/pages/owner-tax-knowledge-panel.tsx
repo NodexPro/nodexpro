@@ -853,7 +853,7 @@ function parseRegulationRegistry(raw: unknown): OwnerRegulationRegistrySlice {
     selected_draft_references: parseDraftLegalReferences(rec.selected_draft_references),
     allowed_actions: parseAllowedActions(rec.allowed_actions),
     labels: {
-      title: asString(labels?.title) || 'תקנות וצווים',
+      title: asString(labels?.title) || 'Regulations & Orders',
       missing: asString(labels?.missing) || 'Missing',
       source_added: asString(labels?.source_added) || 'Source added',
       reviewed: asString(labels?.reviewed) || 'Reviewed',

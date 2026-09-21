@@ -14,6 +14,7 @@ import {
   lastOwnerReviewIsNotEffectiveDate,
   officialRegistryName,
   presentRegistryStatus,
+  regulationReferenceLabel,
   sourcedEffectiveFromOrNull,
   technicalTitleForPlaceholder,
 } from '../../src/domains/tax-knowledge/tax-regulation-registry.pure.js';
@@ -45,6 +46,15 @@ test('TAX-652 placeholder title stays unknown until Owner names it', () => {
   assert.equal(technicalTitleForPlaceholder('17'), '17');
   assert.equal(officialRegistryName('17', '17'), null);
   assert.equal(officialRegistryName('תקנות שווי שימוש', '17'), 'תקנות שווי שימוש');
+});
+
+test('TAX-652 Owner catalog names and reference labels keep the entered language', () => {
+  assert.equal(officialRegistryName('תקנות שווי שימוש ברכב', '17'), 'תקנות שווי שימוש ברכב');
+  assert.equal(officialRegistryName('Налоговые правила', '17'), 'Налоговые правила');
+  assert.equal(officialRegistryName('Income Tax Regulations', '17'), 'Income Tax Regulations');
+  assert.equal(regulationReferenceLabel('תקנות מס הכנסה', '17'), 'תקנות מס הכנסה · 17');
+  assert.equal(regulationReferenceLabel('Налоговые правила', '17'), 'Налоговые правила · 17');
+  assert.equal(regulationReferenceLabel('Income Tax Regulations', '17'), 'Income Tax Regulations · 17');
 });
 
 test('TAX-652 duplicate pin is detected without a second placeholder', () => {

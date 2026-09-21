@@ -47,6 +47,10 @@ export function officialRegistryName(title: string | null | undefined, ownerCata
   return trimmed;
 }
 
+export function regulationReferenceLabel(categoryTitle: string | null | undefined, ownerCatalogNumber: string): string {
+  return [typeof categoryTitle === 'string' ? categoryTitle.trim() : '', ownerCatalogNumber.trim()].filter(Boolean).join(' · ');
+}
+
 export function yearFromPublishedOn(publishedOn: string | null | undefined): number | null {
   if (typeof publishedOn !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(publishedOn)) return null;
   return Number(publishedOn.slice(0, 4));

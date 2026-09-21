@@ -235,7 +235,7 @@ export function buildOwnerWorkspaceNavigation(kind: 'platform_owner' | 'country_
     group: 'TAX & LAW',
     items: [
       { id: 'tax-knowledge', label: 'Legal Library' },
-      { id: 'regulations-orders', label: 'תקנות וצווים' },
+      { id: 'regulations-orders', label: 'Regulations & Orders' },
       { id: 'legal-values', label: 'Legal Values' },
       { id: 'fact-dictionary', label: 'Fact Dictionary' },
     ],

@@ -13,6 +13,7 @@ import {
   isRegulationRegistryProvenance,
   officialRegistryName,
   presentRegistryStatus,
+  regulationReferenceLabel,
   sourcedEffectiveFromOrNull,
   yearFromPublishedOn,
 } from './tax-regulation-registry.pure.js';
@@ -50,7 +51,7 @@ export function emptyRegulationRegistrySlice(countryCode: string | null = null):
     selected_draft_references: [],
     allowed_actions: [],
     labels: {
-      title: 'תקנות וצווים',
+      title: 'Regulations & Orders',
       missing: 'Missing',
       source_added: 'Source added',
       reviewed: 'Reviewed',
@@ -343,7 +344,7 @@ export async function loadDraftReferences(draftId: string): Promise<Array<Record
       tax_domain_id: source?.tax_domain_id == null ? null : String(source.tax_domain_id),
       category_title: domain ? String(domain.title) : null,
       owner_catalog_number: ownerRef,
-      label: [domain ? String(domain.title) : null, ownerRef].filter(Boolean).join(' · '),
+      label: regulationReferenceLabel(domain ? String(domain.title) : null, ownerRef),
       locator_text: String(pin.locator_text),
       confirmation_state: String(pin.confirmation_state),
       creation_origin: String(pin.creation_origin),

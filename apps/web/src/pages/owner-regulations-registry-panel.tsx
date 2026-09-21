@@ -79,31 +79,34 @@ export function OwnerRegulationsRegistryPanel({
 
   if (!countryCode) {
     return (
-      <SectionCard>
-        <h2>תקנות וצווים</h2>
-        <p>Select a country to manage Regulations and Orders.</p>
-      </SectionCard>
+      <div className="nx-reg-registry" dir="ltr">
+        <SectionCard>
+          <h2>{registry.labels.title || 'Regulations & Orders'}</h2>
+          <p>Select a country to manage Regulations and Orders.</p>
+        </SectionCard>
+      </div>
     );
   }
 
   return (
-    <div className="nx-reg-registry">
+    <div className="nx-reg-registry" dir="ltr">
       <SectionCard>
-        <h2>{registry.labels.title || 'תקנות וצווים'}</h2>
+        <h2>{registry.labels.title || 'Regulations & Orders'}</h2>
         <p className="nx-reg-registry__intro">
           Owner catalog of Regulations and Orders. The number is the Owner book number, not a database identity.
+          Groups reuse existing tax domains.
         </p>
         {error ? <p style={{ color: '#b91c1c', fontSize: 13 }}>{error}</p> : null}
         <div className="nx-reg-registry__toolbar">
           <label className="nx-field">
-            <span className="nx-field-label">New category</span>
+            <span className="nx-field-label">New tax domain</span>
             <input
-              className="nx-input"
+              className="nx-input nx-reg-owner-text"
               dir="auto"
               value={categoryTitle}
               onChange={(event) => setCategoryTitle(event.target.value)}
               disabled={busy}
-              placeholder="תקנות מס הכנסה"
+              placeholder="Name as entered by Owner"
             />
           </label>
           <button
@@ -118,9 +121,12 @@ export function OwnerRegulationsRegistryPanel({
               }).then(() => setCategoryTitle(''))
             }
           >
-            Add category
+            Add tax domain
           </button>
         </div>
+        <p className="nx-reg-registry__hint">
+          This creates a real tax domain. It is not a cosmetic regulation folder.
+        </p>
       </SectionCard>
 
       {categories.map((category) => (
@@ -197,7 +203,9 @@ function CategoryBlock({
 }) {
   return (
     <SectionCard>
-      <h3>{category.title}</h3>
+      <h3 dir="auto" className="nx-reg-owner-text">
+        {category.title}
+      </h3>
       <div className="nx-reg-counts" onClick={onSelect}>
         <button type="button" className={`nx-btn nx-btn-taxes-compact${filter === 'all' && active ? ' is-active' : ''}`} onClick={() => onFilter('all')}>
           All: {category.counts.all}
@@ -221,7 +229,7 @@ function CategoryBlock({
           Add placeholder
         </button>
       </div>
-      <table className="nx-reg-registry-table">
+      <table className="nx-reg-registry-table" dir="ltr">
         <thead>
           <tr>
             <th>No.</th>
@@ -247,11 +255,17 @@ function CategoryBlock({
                   </button>
                 </td>
                 <td>
-                  <button type="button" className="nx-reg-link" disabled={busy} onClick={() => onOpen(entry)}>
+                  <button
+                    type="button"
+                    className="nx-reg-link nx-reg-owner-text"
+                    dir="auto"
+                    disabled={busy}
+                    onClick={() => onOpen(entry)}
+                  >
                     {entry.name || '—'}
                   </button>
                   <input
-                    className="nx-input"
+                    className="nx-input nx-reg-owner-text"
                     dir="auto"
                     value={edit.name}
                     placeholder="Official name"

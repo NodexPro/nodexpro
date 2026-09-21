@@ -98,11 +98,12 @@ test('Business Setup AI nav lists only implemented Tax & Law and Strategy Engine
   const ids = BUSINESS_SETUP_AI_OWNER_NAV.flatMap((group) => group.items.map((item) => item.id));
   assert.deepEqual(labels, [
     'Legal Library',
+    'Regulations & Orders',
     'Legal Values',
     'Fact Dictionary',
     'Strategies',
   ]);
-  assert.deepEqual(ids, ['tax-knowledge', 'legal-values', 'fact-dictionary', 'strategy-engine']);
+  assert.deepEqual(ids, ['tax-knowledge', 'regulations-orders', 'legal-values', 'fact-dictionary', 'strategy-engine']);
   assert.equal(businessSetupAiOwnerSectionFromHash('#strategy-engine'), 'strategy-engine');
   assert.equal(businessSetupAiOwnerSectionFromHash('#fact-dictionary'), 'fact-dictionary');
   assert.equal(businessSetupAiOwnerSectionFromHash('#country-context'), 'tax-knowledge');
