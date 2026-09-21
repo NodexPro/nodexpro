@@ -413,3 +413,158 @@
     max-height: calc(100vh - 220px);
   }
 }
+
+
+/* --- Phase 2: Excel-style operational period sheet tabs --- */
+.nx-co-sheet__workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  position: relative;
+}
+
+.nx-co-sheet__workspace.is-loading .nx-co-sheet__canvas {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.nx-co-sheet__loading--inline {
+  position: absolute;
+  inset-inline-start: 12px;
+  top: 8px;
+  z-index: 5;
+  margin: 0;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--nx-co-grid);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.nx-co-sheet__period-tabs {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: -1px;
+  background: #eef2f6;
+  border: 1px solid var(--nx-co-grid);
+  border-top-color: var(--nx-co-grid);
+  border-radius: 0 0 6px 6px;
+}
+
+.nx-co-sheet__period-tabs-scroll {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 4px 6px 0;
+  overflow-x: auto;
+  min-height: 28px;
+}
+
+.nx-co-sheet__period-tab {
+  appearance: none;
+  border: 1px solid var(--nx-co-grid);
+  border-bottom: none;
+  background: #e4ebf2;
+  color: var(--nx-co-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 5px 12px;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  min-width: 52px;
+  height: 24px;
+  white-space: nowrap;
+}
+
+.nx-co-sheet__period-tab:hover:not(:disabled) {
+  background: #f3f6f9;
+  color: var(--nx-co-brand);
+}
+
+.nx-co-sheet__period-tab.is-active {
+  background: #fff;
+  color: var(--nx-co-brand);
+  border-color: var(--nx-co-grid);
+  box-shadow: inset 0 2px 0 var(--nx-co-accent);
+  cursor: default;
+}
+
+.nx-co-sheet__period-tab--plus {
+  min-width: 28px;
+  padding-inline: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--nx-co-brand);
+}
+
+.nx-co-sheet__period-opener {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--nx-co-grid);
+  background: #fff;
+}
+
+.nx-co-sheet__period-opener-field {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nx-co-brand);
+}
+
+.nx-co-sheet__period-opener-field select,
+.nx-co-sheet__period-opener-field input {
+  height: 30px;
+  min-width: 72px;
+  border: 1px solid var(--nx-co-grid);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.nx-co-sheet__period-opener-actions {
+  display: flex;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+
+.nx-co-sheet__period-opener-actions .nx-co-sheet__btn {
+  min-width: 96px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  height: auto;
+  border-radius: 6px;
+}
+
+.nx-co-sheet__na {
+  color: #9ca3af;
+  font-size: 13px;
+  user-select: none;
+}
+
+.nx-co-sheet__table td.is-not-applicable {
+  background: #f8fafc;
+  color: #9ca3af;
+}
+
+.nx-co-sheet__fullscreen .nx-co-sheet__workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.nx-co-sheet__fullscreen .nx-co-sheet__period-tabs {
+  flex: 0 0 auto;
+}

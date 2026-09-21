@@ -9,7 +9,7 @@
  * Country Pack bi-monthly identity remains odd-start and is not changed here.
  */
 
-import { businessMonthKey } from '../../shared/business-time.js';
+import { businessMonthKey, businessPreviousMonthKey } from '../../shared/business-time.js';
 
 export const OPERATIONAL_PERIOD_KEY_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
@@ -61,9 +61,15 @@ export function formatOperationalPeriodKey(parts: OperationalPeriodParts): strin
   return `${parts.year}-${String(parts.month).padStart(2, '0')}`;
 }
 
-/** Default / current operational period = Asia/Jerusalem calendar month. */
+/**
+ * Default Client Operations workspace period = previous completed Asia/Jerusalem month.
+ *
+ * Distinct from calendar "today" month. Example: on 2026-09-21 Jerusalem -> 2026-08.
+ * Explicit operational_period_key requests are unaffected (may still open 2026-09).
+ * Reuses shared businessPreviousMonthKey (payroll/NI alignment helper) -- no new calendar math.
+ */
 export function resolveDefaultOperationalPeriodKey(now: Date = new Date()): string {
-  return businessMonthKey(now);
+  return businessPreviousMonthKey(now);
 }
 
 function norm(value: string | null | undefined): string {
@@ -275,6 +281,30 @@ export function shouldIncludeArchivedClientInOperationalPeriodRegistry(input: {
 }
 
 /** Client created after period end must not appear in earlier periods. */
+
+/**
+ * Registry ROW membership for an already candidate client (passed created_at +
+ * active/archived historical gates).
+ *
+ * CLIENT MEMBERSHIP != WORK/CELL APPLICABILITY.
+ * snapshot.row_visible may be false when no stream is applicable — that must NOT
+ * remove an otherwise valid registry row. Cells still render N/A from applicability.
+ *
+ * - Active clients: always emit a row.
+ * - Archived clients: emit only with frozen snapshot and/or material fact evidence.
+ */
+export function shouldEmitOperationalPeriodRegistryRow(input: {
+  is_archived: boolean;
+  has_applicability_snapshot: boolean;
+  has_material_fact: boolean;
+  /** Retained for callers; intentionally ignored for membership. */
+  snapshot_row_visible?: boolean | null;
+}): boolean {
+  void input.snapshot_row_visible;
+  if (!input.is_archived) return true;
+  return input.has_applicability_snapshot || input.has_material_fact;
+}
+
 export function clientExistsInOperationalPeriod(input: {
   client_created_at: string | Date | null | undefined;
   operational_period_key: string;

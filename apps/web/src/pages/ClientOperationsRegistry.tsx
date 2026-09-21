@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
 import { moduleClientOperationsRegistry, moduleClientOperationsRegistryCommands } from '../api/endpoints';
@@ -52,6 +52,13 @@ export function ClientOperationsRegistry() {
     sort_dir: 'asc' | 'desc' | null;
     operational_period_key: string | null;
   }>({ q: null, sort_by: null, sort_dir: null, operational_period_key: null });
+  const [period, setPeriod] = useState<{
+    selected_period_key: string;
+    default_period_key: string;
+    available_periods: string[];
+  } | null>(null);
+  const loadSeqRef = useRef(0);
+  const loadAbortRef = useRef<AbortController | null>(null);
 
   const applyAggregate = useCallback((data: RegistryAggregate) => {
     setRows(Array.isArray(data?.rows) ? data.rows : []);
@@ -72,61 +79,81 @@ export function ClientOperationsRegistry() {
     } else if (data.period?.selected_period_key) {
       setQuery((current) => ({ ...current, operational_period_key: data.period!.selected_period_key }));
     }
+    if (data.period) {
+      setPeriod({
+        selected_period_key: data.period.selected_period_key,
+        default_period_key: data.period.default_period_key,
+        available_periods: Array.isArray(data.period.available_periods)
+          ? data.period.available_periods
+          : [],
+      });
+    }
   }, []);
 
-  const reloadRegistry = useCallback(
-    (nextQuery?: {
+  const loadRegistry = useCallback(
+    (nextQuery: {
       q: string | null;
       sort_by: string | null;
       sort_dir: 'asc' | 'desc' | null;
       operational_period_key?: string | null;
     }) => {
-      const q = nextQuery ?? query;
-      return apiJson<RegistryAggregate>(moduleClientOperationsRegistry(q))
-        .then((data) => applyAggregate(data))
-        .catch(() => {});
+      loadAbortRef.current?.abort();
+      const ac = new AbortController();
+      loadAbortRef.current = ac;
+      const seq = ++loadSeqRef.current;
+      setQuery({ ...nextQuery, operational_period_key: nextQuery.operational_period_key ?? null });
+      setLoading(true);
+      setError('');
+      return apiJson<RegistryAggregate>(moduleClientOperationsRegistry(nextQuery), {
+        signal: ac.signal,
+      })
+        .then((data) => {
+          if (seq !== loadSeqRef.current) return;
+          applyAggregate(data);
+        })
+        .catch((e) => {
+          if (e instanceof Error && e.name === 'AbortError') return;
+          if (seq !== loadSeqRef.current) return;
+          setError(e instanceof Error ? e.message : 'Failed to load');
+        })
+        .finally(() => {
+          if (seq === loadSeqRef.current) setLoading(false);
+        });
     },
-    [applyAggregate, query],
+    [applyAggregate],
   );
+
+  const reloadRegistry = useCallback(() => {
+    return loadRegistry(query);
+  }, [loadRegistry, query]);
 
   useEffect(() => {
     if (auth.status !== 'authenticated') return;
-    const ac = new AbortController();
-    let cancelled = false;
-    setLoading(true);
-    setError('');
-
-    apiJson<RegistryAggregate>(moduleClientOperationsRegistry(query), { signal: ac.signal })
-      .then((reg) => {
-        if (!cancelled) applyAggregate(reg);
-      })
-      .catch((e) => {
-        if (e instanceof Error && e.name === 'AbortError') return;
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
+    void loadRegistry(query);
     return () => {
-      cancelled = true;
-      ac.abort();
+      loadAbortRef.current?.abort();
     };
-    // Initial + query-driven reloads are handled via onQueryChange / reloadRegistry.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only; query changes use onQueryChange
+    // Mount-only initial load; subsequent loads use loadRegistry via handlers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
   }, [auth.status]);
 
   const onQueryChange = useCallback(
     (next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null }) => {
-      const nextQuery = { ...next, operational_period_key: query.operational_period_key };
-      setQuery(nextQuery);
-      setLoading(true);
-      apiJson<RegistryAggregate>(moduleClientOperationsRegistry(nextQuery))
-        .then((data) => applyAggregate(data))
-        .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
-        .finally(() => setLoading(false));
+      void loadRegistry({ ...next, operational_period_key: query.operational_period_key });
     },
-    [applyAggregate, query.operational_period_key],
+    [loadRegistry, query.operational_period_key],
+  );
+
+  const onPeriodChange = useCallback(
+    (operationalPeriodKey: string) => {
+      void loadRegistry({
+        q: query.q,
+        sort_by: query.sort_by,
+        sort_dir: query.sort_dir,
+        operational_period_key: operationalPeriodKey,
+      });
+    },
+    [loadRegistry, query.q, query.sort_by, query.sort_dir],
   );
 
   const onRegistryCommand = useCallback(
@@ -162,6 +189,8 @@ export function ClientOperationsRegistry() {
       onQueryChange={onQueryChange}
       onRegistryCommand={onRegistryCommand}
       onApplyAggregate={applyAggregate}
+      period={period}
+      onPeriodChange={onPeriodChange}
       widthScope={{
         userId: auth.me.user.id,
         organizationId: auth.me.activeOrganizationId ?? '',

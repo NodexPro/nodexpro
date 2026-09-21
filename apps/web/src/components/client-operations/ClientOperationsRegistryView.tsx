@@ -24,6 +24,7 @@ import {
 } from '../ClientWorkspacePanel';
 import '../../styles/nx-modal.css';
 import '../../styles/nx-client-operations-spreadsheet.css';
+import { ClientOperationsPeriodSheetTabs } from './ClientOperationsPeriodSheetTabs';
 
 export type ClientOperationsRegistryRow = {
   client_id: string;
@@ -32,6 +33,16 @@ export type ClientOperationsRegistryRow = {
   business_type: string | null;
   payroll_flag: boolean | null;
   material_brought_flag: boolean | null;
+  period_applicability?: {
+    vat_applicable: boolean;
+    payroll_applicable: boolean;
+    income_tax_advance_applicable: boolean;
+    income_tax_deductions_applicable: boolean;
+    national_insurance_applicable: boolean;
+    national_insurance_deductions_applicable: boolean;
+    row_visible: boolean;
+  };
+  material_brought_cell?: { applicable: boolean; completed: boolean | null; value: boolean | null };
   vat_status: string | null;
   income_tax_advance_status: string | null;
   national_insurance_status: string | null;
@@ -130,6 +141,33 @@ function cellKey(clientId: string, colKey: string): string {
   return `${clientId}::${colKey}`;
 }
 
+function obligationApplicable(
+  row: ClientOperationsRegistryRow,
+  columnKey: string,
+): boolean | null {
+  const a = row.period_applicability;
+  if (!a) return null;
+  switch (columnKey) {
+    case 'vat':
+    case 'vat_due':
+      return a.vat_applicable;
+    case 'payroll':
+      return a.payroll_applicable;
+    case 'income_tax_advance':
+      return a.income_tax_advance_applicable;
+    case 'income_tax_deductions':
+      return a.income_tax_deductions_applicable;
+    case 'national_insurance':
+      return a.national_insurance_applicable;
+    case 'national_insurance_deductions':
+      return a.national_insurance_deductions_applicable;
+    case 'material_brought':
+      return row.material_brought_cell?.applicable ?? row.material_brought_flag !== null;
+    default:
+      return null;
+  }
+}
+
 function displayForColumn(r: ClientOperationsRegistryRow, col: ClientOperationsRegistryColumn): string {
   const value = r.cells?.[col.key];
   if (value == null || value === '') return '—';
@@ -161,6 +199,12 @@ export type ClientOperationsRegistryViewProps = {
   onRegistryCommand?: (body: Record<string, unknown>) => Promise<unknown>;
   onApplyAggregate?: (aggregate: any) => void;
   widthScope?: { userId: string; organizationId: string };
+  period?: {
+    selected_period_key: string;
+    default_period_key: string;
+    available_periods: string[];
+  } | null;
+  onPeriodChange?: (operationalPeriodKey: string) => void;
 };
 
 export function ClientOperationsRegistryView(props: ClientOperationsRegistryViewProps) {
@@ -183,6 +227,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     onRegistryCommand,
     onApplyAggregate,
     widthScope,
+    period,
+    onPeriodChange,
   } = props;
 
   const setRows = onRowsChange;
@@ -901,15 +947,26 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       );
     }
     if (col.cell_kind === 'checkbox') {
-      const checked = Boolean(r.material_brought_flag);
+      const applicable =
+        r.material_brought_cell?.applicable ?? r.material_brought_flag !== null;
+      if (!applicable) {
+        return (
+          <span
+            className="nx-co-sheet__na"
+            title="לא רלוונטי לתקופה זו"
+            aria-label={`${col.label} לא רלוונטי`}
+          >
+            —
+          </span>
+        );
+      }
+      const checked = Boolean(r.material_brought_cell?.value ?? r.material_brought_flag);
       return (
         <input
           type="checkbox"
           className="nx-co-sheet__checkbox"
           checked={checked}
-          disabled={
-            r.material_brought_flag === null || !canEdit || !col.editable || !onRegistryCommand
-          }
+          disabled={!canEdit || !col.editable || !onRegistryCommand}
           aria-label={`${col.label} ${r.client_name ?? ''}`}
           onChange={() => void toggleMaterialBrought(r)}
           onClick={(event) => event.stopPropagation()}
@@ -930,6 +987,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         >
           {text}
         </button>
+      );
+    }
+    const applicable = obligationApplicable(r, col.key);
+    if (applicable === false) {
+      return (
+        <span className="nx-co-sheet__na" title="לא רלוונטי לתקופה זו" aria-label={`${col.label} לא רלוונטי`}>
+          —
+        </span>
       );
     }
     return displayForColumn(r, col);
@@ -959,7 +1024,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 return (
                   <td
                     key={column.key} data-col={column.key} data-freeze={column.freeze_default ? 'true' : 'false'}
-                    className={focused ? 'is-focused' : undefined}
+                    className={[focused ? 'is-focused' : '', obligationApplicable(row, column.key) === false ? 'is-not-applicable' : ''].filter(Boolean).join(' ') || undefined}
                     onClick={(event) => { event.stopPropagation(); setSelectedRowId(row.client_id); setFocusedCell({ clientId: row.client_id, colKey: column.key }); }}
                     style={{ textAlign: presentation?.align ?? column.align, whiteSpace: presentation?.wrap ? 'pre-wrap' : undefined, fontWeight: presentation?.bold ? 700 : undefined, fontStyle: presentation?.italic ? 'italic' : undefined, textDecoration: presentation?.underline ? 'underline' : undefined, color: presentation?.color, background: presentation?.fill }}
                   >
@@ -1128,11 +1193,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           </div>
         ) : null}
         {error ? <div className="nx-co-sheet__error">{error}</div> : null}
-        {loading ? (
-          <p className="nx-co-sheet__loading">טוען…</p>
-        ) : (
-          renderSpreadsheetTable()
-        )}
+        <div className={`nx-co-sheet__workspace${loading ? ' is-loading' : ''}`}>
+          {loading ? <p className="nx-co-sheet__loading nx-co-sheet__loading--inline">טוען תקופה…</p> : null}
+          {renderSpreadsheetTable()}
+        <ClientOperationsPeriodSheetTabs
+          availablePeriods={period?.available_periods ?? []}
+          selectedPeriodKey={period?.selected_period_key ?? query?.operational_period_key ?? null}
+          defaultPeriodKey={period?.default_period_key ?? null}
+          disabled={loading}
+          onSelectPeriod={(key) => onPeriodChange?.(key)}
+        />
+        </div>
         {commandError ? <div className="nx-co-sheet__error">{commandError}</div> : null}
         {addColumnOpen ? (
           <div className="nx-co-sheet__dialog-backdrop" role="presentation">
@@ -1150,7 +1221,16 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             <button type="button" className="nx-co-sheet__close" onClick={() => setFullscreenOpen(false)} aria-label="סגירת מסך מלא">×</button>
             <h1 className="nx-co-sheet__title">{titleHe ?? 'תפעול לקוחות'}</h1>
             {renderSpreadsheetToolbar()}
-            {renderSpreadsheetTable()}
+            <div className={`nx-co-sheet__workspace${loading ? ' is-loading' : ''}`}>
+              {renderSpreadsheetTable()}
+        <ClientOperationsPeriodSheetTabs
+          availablePeriods={period?.available_periods ?? []}
+          selectedPeriodKey={period?.selected_period_key ?? query?.operational_period_key ?? null}
+          defaultPeriodKey={period?.default_period_key ?? null}
+          disabled={loading}
+          onSelectPeriod={(key) => onPeriodChange?.(key)}
+        />
+            </div>
           </div>
         ) : null}
         {modals}

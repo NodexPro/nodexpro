@@ -68,6 +68,7 @@ import {
   resolveDefaultOperationalPeriodKey,
   resolveMaterialBroughtForPeriod,
   shouldIncludeArchivedClientInOperationalPeriodRegistry,
+  shouldEmitOperationalPeriodRegistryRow,
 } from './client-operations-operational-period.pure.js';
 
 export type ClientOperationsRegistryRow = {
@@ -515,12 +516,17 @@ export async function listClientOperationsRegistry(
   const builtRows: ClientOperationsRegistryRow[] = safeClients.flatMap((c) => {
     const snapshot = snapshots.get(c.id);
     const hasMaterialMembership = materialFacts.has(c.id);
-    // Active/historical rows require a visible frozen snapshot.
-    // Fact-only archived membership (no snapshot) still appears historically without
-    // inventing a new snapshot from today's settings.
-    if (snapshot) {
-      if (!snapshot.row_visible) return [];
-    } else if (!(c.is_archived && hasMaterialMembership)) {
+    // Registry membership != cell applicability.
+    // row_visible=false means no modeled work stream applies — cells are N/A —
+    // but the client row remains in the monthly registry when membership gates pass.
+    if (
+      !shouldEmitOperationalPeriodRegistryRow({
+        is_archived: Boolean(c.is_archived),
+        has_applicability_snapshot: Boolean(snapshot),
+        has_material_fact: hasMaterialMembership,
+        snapshot_row_visible: snapshot?.row_visible ?? null,
+      })
+    ) {
       return [];
     }
     const vatApplicable = snapshot?.vat_applicable ?? true;
