@@ -75,9 +75,15 @@ export async function buildDocflowFloatingWidgetAggregate(
   opts?: DocflowFloatingWidgetBuildOpts
 ): Promise<Record<string, unknown>> {
   const canUseCommunicationCommands = opts?.can_use_communication_commands !== false;
-  const { data: mod, error: modErr } = await supabaseAdmin.from('modules').select('id').eq('code', DOCFLOW_CODE).maybeSingle();
+  const { data: mod, error: modErr } = await supabaseAdmin
+    .from('modules')
+    .select('id, is_active')
+    .eq('code', DOCFLOW_CODE)
+    .maybeSingle();
   if (modErr) throw modErr;
-  if (!mod?.id) {
+  // Global kill-switch (modules.is_active): hide launcher entirely. Does not delete org rows / data.
+  // Intentionally distinct from entitlement-locked (visible but locked) when globally ON.
+  if (!mod?.id || !(mod as { is_active?: boolean }).is_active) {
     return {
       aggregate_key: 'docflow_floating_widget_aggregate',
       org_id: orgId,

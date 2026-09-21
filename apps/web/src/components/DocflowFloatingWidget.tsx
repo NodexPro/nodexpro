@@ -223,6 +223,9 @@ export function DocflowFloatingWidget() {
   const navigate = useNavigate();
   const auth = useAuth();
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
+  /** Session module list (backend already applied modules.is_active). Reload FAB when it changes. */
+  const enabledModulesKey =
+    auth.status === 'authenticated' ? [...(auth.me.enabledModules ?? [])].map((m) => m.toLowerCase()).sort().join('|') : '';
 
   const [aggregate, setAggregate] = useState<UnknownRecord | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -270,9 +273,11 @@ export function DocflowFloatingWidget() {
     }
   }, [orgId]);
 
+  // Re-fetch when session enabledModules change (e.g. Owner global OFF → refresh session).
+  // Aggregate remains source of visibility (incl. entitlement-locked FAB when globally ON).
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, enabledModulesKey]);
 
   const taskCenterCommandExtras = useCallback((): UnknownRecord => {
     return {

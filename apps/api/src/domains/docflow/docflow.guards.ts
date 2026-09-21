@@ -24,9 +24,21 @@ export function reqDateTimeIso(payload: Record<string, unknown>, key: string): s
 }
 
 export async function assertDocflowEntitled(organizationId: string): Promise<void> {
-  const { data: mod, error } = await supabaseAdmin.from('modules').select('id').eq('code', DOCFLOW_MODULE_CODE).maybeSingle();
+  const { data: mod, error } = await supabaseAdmin
+    .from('modules')
+    .select('id, is_active')
+    .eq('code', DOCFLOW_MODULE_CODE)
+    .maybeSingle();
   if (error) throw error;
   if (!mod) throw forbidden('DocFlow module not registered');
+  // Canonical global kill-switch — same gate as requireModuleActive / session enabledModules.
+  if (!(mod as { is_active?: boolean }).is_active) {
+    console.warn('[docflow][deny] assertDocflowEntitled: module globally inactive', {
+      org_id: organizationId,
+      module: DOCFLOW_MODULE_CODE,
+    });
+    throw forbidden('Module is globally disabled');
+  }
   const entitlement = await resolveEntitlement(organizationId, mod.id);
   if (entitlement.status !== 'entitled' && entitlement.status !== 'trial') {
     console.warn('[docflow][deny] assertDocflowEntitled', {
