@@ -103,3 +103,17 @@
 .nx-co-sheet__client-name-btn:hover {
   text-decoration: underline;
 }
+
+.nx-co-client-quick-profile__section + .nx-co-client-quick-profile__section {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.nx-co-client-quick-profile__section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  margin: 0 0 2px;
+  letter-spacing: 0.02em;
+}

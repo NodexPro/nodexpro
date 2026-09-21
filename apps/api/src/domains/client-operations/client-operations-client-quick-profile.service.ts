@@ -14,8 +14,8 @@ import {
   resolveNationalInsuranceDeductionsDueDate,
 } from '../country-pack/reporting-calendar-resolver.service.js';
 import { resolveOrganizationActiveRuleset } from '../country-pack/organization-country.service.js';
-import { getClientTaxSettings } from './client-tax-settings.service.js';
 import { loadVehicleFleet } from './client-vehicle-fleet.service.js';
+import { computeVatRegistryColumnDisplayHe } from './vat-divuach.js';
 import {
   CLIENT_OPERATIONS_CLIENT_QUICK_PROFILE_AGGREGATE_KEY,
   QUICK_PROFILE_EMPTY_DISPLAY,
@@ -23,6 +23,9 @@ import {
   buildQuickProfileInfoRow,
   buildQuickProfileRecurringExpenseRows,
   buildQuickProfileVehicleExpenseRows,
+  formatQuickProfileIncomeTaxAdvancesDisplayHe,
+  formatQuickProfileIncomeTaxDeductionsDisplayHe,
+  formatQuickProfilePayrollDisplayHe,
   resolveIncomeTaxDeductionsOperationalReportingPeriodKey,
   resolveOperationalReportingPeriodKey,
   resolveQuickProfilePhoneDisplay,
@@ -99,8 +102,33 @@ export async function getClientOperationsClientQuickProfile(
       .order('sort_order', { ascending: true }),
   ]);
 
-  const taxBundle = await getClientTaxSettings(ctx, id);
-  const settings = taxBundle.settings;
+  const { data: taxSettingsRow } = await supabaseAdmin
+    .from('client_tax_settings')
+    .select(
+      'vat_type, vat_frequency, vat_due_type, income_tax_advance_enabled, income_tax_advance_percent, income_tax_deductions_enabled, income_tax_deductions_frequency, national_insurance_deductions_file_number'
+    )
+    .eq('organization_id', orgId)
+    .eq('client_id', id)
+    .maybeSingle();
+  const settings = (taxSettingsRow ?? {
+    vat_type: null,
+    vat_frequency: null,
+    vat_due_type: null,
+    income_tax_advance_enabled: false,
+    income_tax_advance_percent: null,
+    income_tax_deductions_enabled: false,
+    income_tax_deductions_frequency: null,
+    national_insurance_deductions_file_number: null,
+  }) as {
+    vat_type: string | null;
+    vat_frequency: string | null;
+    vat_due_type: string | null;
+    income_tax_advance_enabled: boolean;
+    income_tax_advance_percent: number | null;
+    income_tax_deductions_enabled: boolean;
+    income_tax_deductions_frequency: string | null;
+    national_insurance_deductions_file_number: string | null;
+  };
 
   const hasVehicles = Boolean(
     (accountingSettings as { has_vehicles?: boolean | null } | null)?.has_vehicles
@@ -153,12 +181,47 @@ export async function getClientOperationsClientQuickProfile(
     }),
   ];
 
+  const vatFrequencyDisplay = computeVatRegistryColumnDisplayHe(
+    businessType,
+    settings.vat_type,
+    settings.vat_frequency
+  );
+
   const accounting_rows: ClientQuickProfileRow[] = [
     buildQuickProfileInfoRow({
       key: 'income_software',
       label_he: 'הכנסות',
       display_value: incomeSoftware,
       visible: true,
+    }),
+    buildQuickProfileInfoRow({
+      key: 'vat_frequency',
+      label_he: 'מע״מ',
+      display_value: vatFrequencyDisplay,
+      visible: true,
+    }),
+    buildQuickProfileInfoRow({
+      key: 'income_tax_advances',
+      label_he: 'מקדמות מס הכנסה',
+      display_value: formatQuickProfileIncomeTaxAdvancesDisplayHe({
+        enabled: settings.income_tax_advance_enabled,
+        percent: settings.income_tax_advance_percent,
+      }),
+      visible: true,
+    }),
+    buildQuickProfileInfoRow({
+      key: 'payroll',
+      label_he: 'שכר',
+      display_value: formatQuickProfilePayrollDisplayHe(payrollFlag),
+      visible: true,
+    }),
+    buildQuickProfileInfoRow({
+      key: 'income_tax_deductions',
+      label_he: 'מס הכנסה ניכויים',
+      display_value: formatQuickProfileIncomeTaxDeductionsDisplayHe(
+        settings.income_tax_deductions_enabled
+      ),
+      visible: settings.income_tax_deductions_enabled === true,
     }),
   ];
 
@@ -181,16 +244,53 @@ export async function getClientOperationsClientQuickProfile(
       .toUpperCase();
     const rulesetId = orgRuleset.ruleset_id;
 
-    if (vatReportingPeriodKey) {
-      const vatResolution = await resolveClientVatReportingDueDate({
-        country_code: countryCode,
-        reporting_period_key: vatReportingPeriodKey,
-        vat_type: settings.vat_type,
-        vat_due_type: settings.vat_due_type,
-        vat_frequency: settings.vat_frequency,
-        country_pack_ruleset_id: rulesetId,
-      });
+    const vatPromise = vatReportingPeriodKey
+      ? resolveClientVatReportingDueDate({
+          country_code: countryCode,
+          reporting_period_key: vatReportingPeriodKey,
+          vat_type: settings.vat_type,
+          vat_due_type: settings.vat_due_type,
+          vat_frequency: settings.vat_frequency,
+          country_pack_ruleset_id: rulesetId,
+        })
+      : Promise.resolve(null);
 
+    const advancesPromise =
+      settings.income_tax_advance_enabled && reportingPeriodKey
+        ? resolveClientIncomeTaxAdvancesDueDate({
+            country_code: countryCode,
+            reporting_period_key: reportingPeriodKey,
+            income_tax_advance_enabled: true,
+            country_pack_ruleset_id: rulesetId,
+          })
+        : Promise.resolve(null);
+
+    const deductionsPromise =
+      settings.income_tax_deductions_enabled &&
+      deductionsPeriod.applicable &&
+      deductionsPeriod.reporting_period_key
+        ? resolveClientIncomeTaxDeductionsDueDate({
+            country_code: countryCode,
+            reporting_period_key: deductionsPeriod.reporting_period_key,
+            country_pack_ruleset_id: rulesetId,
+          })
+        : Promise.resolve(null);
+
+    const niFile = String(settings.national_insurance_deductions_file_number ?? '').trim();
+    const niApplicable =
+      payrollFlag === true || Boolean(niFile) || settings.income_tax_deductions_enabled === true;
+    const niPromise =
+      niApplicable && reportingPeriodKey
+        ? resolveNationalInsuranceDeductionsDueDate({
+            country_code: countryCode,
+            reporting_period_key: reportingPeriodKey,
+          })
+        : Promise.resolve(null);
+
+    const [vatResolution, advancesResolution, deductionsResolution, ni] =
+      await Promise.all([vatPromise, advancesPromise, deductionsPromise, niPromise]);
+
+    if (vatResolution) {
       const vatReason = !vatResolution.resolved ? vatResolution.reason : null;
       const vatOmit =
         vatReason === 'vat_not_applicable' ||
@@ -207,63 +307,38 @@ export async function getClientOperationsClientQuickProfile(
       }
     }
 
-    // Advances: CO obligations use previous calendar month; frequency is not used for period pick.
-    if (settings.income_tax_advance_enabled && reportingPeriodKey) {
-      const advances = await resolveClientIncomeTaxAdvancesDueDate({
-        country_code: countryCode,
-        reporting_period_key: reportingPeriodKey,
-        income_tax_advance_enabled: true,
-        country_pack_ruleset_id: rulesetId,
-      });
+    if (advancesResolution) {
       reporting_rows.push(
         buildQuickProfileInfoRow({
           key: 'income_tax_advances_due_date',
           label_he: 'תאריך דיווח מקדמות מס הכנסה',
-          display_value: displayFromResolution(advances),
+          display_value: displayFromResolution(advancesResolution),
           visible: true,
         })
       );
     }
 
-    if (
-      settings.income_tax_deductions_enabled &&
-      deductionsPeriod.applicable &&
-      deductionsPeriod.reporting_period_key
-    ) {
-      const deductions = await resolveClientIncomeTaxDeductionsDueDate({
-        country_code: countryCode,
-        reporting_period_key: deductionsPeriod.reporting_period_key,
-        country_pack_ruleset_id: rulesetId,
-      });
+    if (deductionsResolution) {
       reporting_rows.push(
         buildQuickProfileInfoRow({
           key: 'income_tax_deductions_due_date',
           label_he: 'תאריך דיווח מס הכנסה ניכויים',
-          display_value: displayFromResolution(deductions),
+          display_value: displayFromResolution(deductionsResolution),
           visible: true,
         })
       );
     }
 
-    const niFile = String(settings.national_insurance_deductions_file_number ?? '').trim();
-    const niApplicable =
-      payrollFlag || Boolean(niFile) || settings.income_tax_deductions_enabled;
-    if (niApplicable && reportingPeriodKey) {
-      const ni = await resolveNationalInsuranceDeductionsDueDate({
-        country_code: countryCode,
-        reporting_period_key: reportingPeriodKey,
-      });
-      // Never invent / never alias Tax Authority dates. Show only if ACTIVE date exists.
-      if (ni.resolved) {
-        reporting_rows.push(
-          buildQuickProfileInfoRow({
-            key: 'national_insurance_deductions_due_date',
-            label_he: 'תאריך דיווח ביטוח לאומי ניכויים',
-            display_value: displayFromResolution(ni),
-            visible: true,
-          })
-        );
-      }
+    // Never invent / never alias Tax Authority dates. Show NI only if ACTIVE date exists.
+    if (ni && ni.resolved) {
+      reporting_rows.push(
+        buildQuickProfileInfoRow({
+          key: 'national_insurance_deductions_due_date',
+          label_he: 'תאריך דיווח ביטוח לאומי ניכויים',
+          display_value: displayFromResolution(ni),
+          visible: true,
+        })
+      );
     }
   }
 

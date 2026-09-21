@@ -17,6 +17,8 @@ import {
   isNationalInsuranceObligationKey,
   isReportingObligationKey,
   isReportingPeriodKey,
+  biMonthlyVatPairEndPeriodKey,
+  isFilingDueDateAfterReportingPeriodEnd,
   isVatReportingPeriodApplicable,
   resolveVatObligationKeyFromClientTaxSettings,
   unresolvedReportingDueDate,
@@ -197,18 +199,56 @@ export async function resolveClientVatReportingDueDate(input: {
       'vat_period_not_applicable_for_frequency'
     );
   }
-  return resolveReportingDueDate({
+
+  const frequency = String(input.vat_frequency ?? '')
+    .trim()
+    .toLowerCase();
+
+  /**
+   * Bi-monthly: period identity is the odd start key, but Country Pack monthly rows for
+   * that start key carry the *monthly* filing date (often mid-pair). Filing due date for
+   * the completed pair must come from the pair-end month row so it cannot precede pair end.
+   * Country Pack schema has no frequency dimension — this is the only ACTIVE legal mapping
+   * that satisfies the completion invariant without inventing dates.
+   */
+  let calendarLookupKey = input.reporting_period_key;
+  let periodEndKeyForInvariant = input.reporting_period_key;
+  if (frequency === 'bi_monthly') {
+    const endKey = biMonthlyVatPairEndPeriodKey(input.reporting_period_key);
+    if (!endKey) {
+      return unresolvedReportingDueDate(
+        input.country_code,
+        obligationKey,
+        input.reporting_period_key,
+        'invalid_reporting_period_key'
+      );
+    }
+    calendarLookupKey = endKey;
+    periodEndKeyForInvariant = endKey;
+  }
+
+  const resolved = await resolveReportingDueDate({
     country_code: input.country_code,
     obligation_key: obligationKey,
-    reporting_period_key: input.reporting_period_key,
+    reporting_period_key: calendarLookupKey,
     country_pack_ruleset_id: input.country_pack_ruleset_id,
   });
+
+  if (
+    resolved.resolved &&
+    !isFilingDueDateAfterReportingPeriodEnd(resolved.filing_due_date, periodEndKeyForInvariant)
+  ) {
+    return unresolvedReportingDueDate(
+      input.country_code,
+      obligationKey,
+      input.reporting_period_key,
+      'filing_due_before_reporting_period_end'
+    );
+  }
+
+  return resolved;
 }
 
-/**
- * Income-tax advances share the Tax Authority date column with regular VAT,
- * but applicability is independent: requires income_tax_advance_enabled.
- */
 export async function resolveClientIncomeTaxAdvancesDueDate(input: {
   country_code: string;
   reporting_period_key: string;

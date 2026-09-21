@@ -346,3 +346,55 @@ export function buildQuickProfileVehicleExpenseRows(input: {
     };
   });
 }
+
+/** Bi-monthly calendar lookup key (pair end) for a VAT period identity start key. */
+export function resolveVatOperationalCalendarLookupPeriodKey(input: {
+  vat_frequency: string | null | undefined;
+  period_identity_key: string;
+}): string | null {
+  const frequency = String(input.vat_frequency ?? '')
+    .trim()
+    .toLowerCase();
+  if (!frequency || frequency === 'not_relevant') return null;
+  if (frequency === 'monthly') return input.period_identity_key;
+  if (frequency === 'bi_monthly') {
+    const start = parseYearMonthKey(input.period_identity_key);
+    if (!start || start.month % 2 === 0) return null;
+    return formatYearMonth(shiftYearMonth(start, 1));
+  }
+  return null;
+}
+
+/** Payroll display — mirrors registry boolHe semantics. */
+export function formatQuickProfilePayrollDisplayHe(
+  payrollFlag: boolean | null | undefined
+): string {
+  if (payrollFlag === true) return 'כן';
+  if (payrollFlag === false) return 'לא';
+  return QUICK_PROFILE_EMPTY_DISPLAY;
+}
+
+/**
+ * Income-tax advances configuration display.
+ * Registry stores כן/לא only; compose enabled + percent when present.
+ */
+export function formatQuickProfileIncomeTaxAdvancesDisplayHe(input: {
+  enabled: boolean | null | undefined;
+  percent: number | null | undefined;
+}): string {
+  if (!input.enabled) return 'לא';
+  if (input.percent != null && Number.isFinite(Number(input.percent))) {
+    return `כן · ${Number(input.percent)}%`;
+  }
+  return 'כן';
+}
+
+/** Income-tax deductions applicability display. */
+export function formatQuickProfileIncomeTaxDeductionsDisplayHe(
+  enabled: boolean | null | undefined
+): string {
+  if (enabled === true) return 'כן';
+  if (enabled === false) return 'לא';
+  return QUICK_PROFILE_EMPTY_DISPLAY;
+}
+

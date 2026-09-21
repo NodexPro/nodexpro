@@ -10,7 +10,11 @@ import {
   resolveOperationalReportingPeriodKey,
   resolveVatOperationalReportingPeriodKey,
 } from '../../src/domains/client-operations/client-operations-client-quick-profile.pure.js';
-import { isVatReportingPeriodApplicable } from '../../src/domains/country-pack/reporting-calendar.pure.js';
+import {
+  biMonthlyVatPairEndPeriodKey,
+  isFilingDueDateAfterReportingPeriodEnd,
+  isVatReportingPeriodApplicable,
+} from '../../src/domains/country-pack/reporting-calendar.pure.js';
 
 /** Fixed Asia/Jerusalem wall times (UTC+2 winter / +3 summer — use noon UTC+3 safe midday). */
 function atJerusalem(isoLocal: string): Date {
@@ -189,3 +193,44 @@ test('service wires distinct VAT vs baseline periods (source contract)', async (
     /resolveClientIncomeTaxDeductionsDueDate\(\{[\s\S]*?reporting_period_key: deductionsPeriod\.reporting_period_key/
   );
 });
+
+test('2026-09-21 bi-monthly: identity 2026-07, calendar lookup 2026-08 (pair end)', () => {
+  const now = new Date('2026-09-21T12:00:00+03:00');
+  const identity = resolveVatOperationalReportingPeriodKey({
+    vat_frequency: 'bi_monthly',
+    now,
+  });
+  assert.equal(identity, '2026-07');
+  assert.equal(biMonthlyVatPairEndPeriodKey(identity!), '2026-08');
+  assert.equal(
+    isVatReportingPeriodApplicable({
+      vat_frequency: 'bi_monthly',
+      reporting_period_key: identity!,
+    }),
+    true
+  );
+});
+
+test('bi-monthly filing date mid-pair is rejected by completion invariant', () => {
+  // Official monthly July row due 2026-08-17 cannot represent Jul-Aug bi-monthly filing.
+  assert.equal(
+    isFilingDueDateAfterReportingPeriodEnd('2026-08-17', '2026-08'),
+    false
+  );
+  // Pair-end August row due 2026-09-24 is after Aug 31.
+  assert.equal(
+    isFilingDueDateAfterReportingPeriodEnd('2026-09-24', '2026-08'),
+    true
+  );
+});
+
+test('regular and PCN bi-monthly share pair identity; only obligation differs upstream', () => {
+  const now = new Date('2026-09-21T12:00:00+03:00');
+  const identity = resolveVatOperationalReportingPeriodKey({
+    vat_frequency: 'bi_monthly',
+    now,
+  });
+  assert.equal(identity, '2026-07');
+  assert.equal(biMonthlyVatPairEndPeriodKey(identity!), '2026-08');
+});
+

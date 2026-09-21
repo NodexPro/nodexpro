@@ -164,15 +164,30 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, o
           </button>
         </div>
         <dl className="nx-client-quick-card__rows">
-          {identity.map((row) => (
-            <ProfileRow key={row.key} row={row} />
-          ))}
-          {accounting.map((row) => (
-            <ProfileRow key={row.key} row={row} />
-          ))}
-          {reporting.map((row) => (
-            <ProfileRow key={row.key} row={row} />
-          ))}
+          {identity.length > 0 ? (
+            <div className="nx-co-client-quick-profile__section">
+              <div className="nx-co-client-quick-profile__section-title">פרטי לקוח</div>
+              {identity.map((row) => (
+                <ProfileRow key={row.key} row={row} />
+              ))}
+            </div>
+          ) : null}
+          {accounting.length > 0 ? (
+            <div className="nx-co-client-quick-profile__section">
+              <div className="nx-co-client-quick-profile__section-title">הנה״ח</div>
+              {accounting.map((row) => (
+                <ProfileRow key={row.key} row={row} />
+              ))}
+            </div>
+          ) : null}
+          {reporting.length > 0 ? (
+            <div className="nx-co-client-quick-profile__section">
+              <div className="nx-co-client-quick-profile__section-title">מועדי דיווח</div>
+              {reporting.map((row) => (
+                <ProfileRow key={row.key} row={row} />
+              ))}
+            </div>
+          ) : null}
         </dl>
         {showExpenses ? (
           <div className="nx-co-client-quick-profile__expenses">

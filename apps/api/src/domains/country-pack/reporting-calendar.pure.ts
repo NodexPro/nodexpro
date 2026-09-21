@@ -204,6 +204,7 @@ export type UnresolvedReportingDueDate = {
     | 'national_insurance_not_in_tax_authority_calendar'
     | 'vat_not_applicable'
     | 'vat_period_not_applicable_for_frequency'
+    | 'filing_due_before_reporting_period_end'
     | 'income_tax_advances_not_applicable'
     | 'invalid_obligation_key'
     | 'invalid_reporting_period_key'
@@ -211,9 +212,13 @@ export type UnresolvedReportingDueDate = {
 };
 
 /**
- * Backend-owned VAT reporting-period applicability.
- * Calendar stores monthly statutory rows; client frequency decides which periods apply.
- * IL bi-monthly: odd calendar months (Jan/Mar/May/Jul/Sep/Nov) — matches legacy vat-divuach.
+ * Backend-owned VAT reporting-period IDENTITY applicability.
+ * Calendar stores monthly statutory rows; client frequency decides which period identities apply.
+ *
+ * IL bi-monthly: odd calendar months (Jan/Mar/May/Jul/Sep/Nov) identify the START of a
+ * completed two-month pair (e.g. 2026-07 = July–August). This is period identity only —
+ * NOT the Country Pack row used for bi-monthly filing_due_date lookup.
+ * Bi-monthly filing dates resolve via {@link biMonthlyVatPairEndPeriodKey} (pair end month).
  */
 export function isVatReportingPeriodApplicable(input: {
   vat_frequency: ClientVatFrequency | string | null | undefined;
@@ -228,6 +233,46 @@ export function isVatReportingPeriodApplicable(input: {
   if (frequency === 'monthly') return true;
   if (frequency === 'bi_monthly') return parsed.month % 2 === 1;
   return false;
+}
+
+/**
+ * Bi-monthly pair end month (even) from an odd period-identity start key.
+ * Country Pack has no frequency dimension: filing_due_date for bi-monthly must come from
+ * the pair-end monthly statutory row so the due date cannot fall before the pair completes.
+ */
+export function biMonthlyVatPairEndPeriodKey(periodIdentityStartKey: string): string | null {
+  const parsed = parseReportingPeriodKey(periodIdentityStartKey);
+  if (!parsed) return null;
+  if (parsed.month % 2 === 0) return null;
+  return buildReportingPeriodKey(
+    parsed.month === 12 ? parsed.year + 1 : parsed.year,
+    parsed.month === 12 ? 1 : parsed.month + 1
+  );
+}
+
+/** Last calendar date (YYYY-MM-DD) of a reporting_period_key month. */
+export function lastDateOfReportingPeriodMonth(periodKey: string): string | null {
+  const parsed = parseReportingPeriodKey(periodKey);
+  if (!parsed) return null;
+  const lastDay = new Date(Date.UTC(parsed.year, parsed.month, 0)).getUTCDate();
+  return `${parsed.year}-${String(parsed.month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+}
+
+/**
+ * Invariant: a filing due date must not represent an impossible schedule for a period
+ * that has not yet completed. Requires filing_due_date strictly after period end date.
+ */
+export function isFilingDueDateAfterReportingPeriodEnd(
+  filingDueDate: string,
+  periodEndKey: string
+): boolean {
+  const end = lastDateOfReportingPeriodMonth(periodEndKey);
+  if (!end) return false;
+  const due = String(filingDueDate ?? '')
+    .trim()
+    .slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) return false;
+  return due > end;
 }
 
 export type YearPublicationCellSnapshot = {
