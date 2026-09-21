@@ -20,7 +20,11 @@ import {
   buildOrganizationCountrySettingsAggregate,
   buildOwnerLegalControlPanelAggregate,
 } from './country-pack-read-models.service.js';
-import { executeSetModuleGlobalActivation } from '../owner-modules/owner-modules.service.js';
+import {
+  buildOwnerModuleDetailAggregate,
+  executeSetModuleGlobalActivation,
+} from '../owner-modules/owner-modules.service.js';
+import { OWNER_MODULE_DETAIL_AGGREGATE_KEY } from '../owner-modules/owner-modules.pure.js';
 import { encryptOptionalSecret } from '../../shared/owner-email-provider-config.service.js';
 import { saveOwnerEmailProviderConfigGlobal } from '../../shared/owner-email-provider-config.service.js';
 import { saveOwnerEmailProviderConfigOrgOverride } from '../../shared/owner-email-provider-config.service.js';
@@ -90,7 +94,8 @@ type CountryPackCommandResponse = {
     aggregate_key:
       | 'owner_legal_control_panel_aggregate'
       | 'organization_country_settings_aggregate'
-      | 'owner_modules_list_aggregate';
+      | 'owner_modules_list_aggregate'
+      | 'owner_module_detail_aggregate';
     aggregate: Record<string, unknown>;
   };
 };
@@ -122,6 +127,23 @@ async function refreshedOwnerLegalControlPanel(ctx: RequestContext, payload?: Re
     aggregate_key: 'owner_legal_control_panel_aggregate',
     aggregate: await buildOwnerLegalControlPanelAggregate(ctx, commercial ? { commercial_controls: commercial } : undefined),
   };
+}
+
+/** Modules detail surface may request owner_module_detail_aggregate via owner_module_detail_code. */
+async function refreshedOwnerCommercialSurface(
+  ctx: RequestContext,
+  payload?: Record<string, unknown>
+): Promise<CountryPackCommandResponse['refreshed']> {
+  const detailCode =
+    payload && typeof payload.owner_module_detail_code === 'string' ? payload.owner_module_detail_code.trim() : '';
+  if (detailCode) {
+    const commercial = payload ? commercialControlsContextFromPayload(payload) : null;
+    return {
+      aggregate_key: OWNER_MODULE_DETAIL_AGGREGATE_KEY,
+      aggregate: await buildOwnerModuleDetailAggregate(ctx, detailCode, commercial ?? undefined),
+    };
+  }
+  return refreshedOwnerLegalControlPanel(ctx, payload);
 }
 
 function asString(value: unknown, field: string): string {
@@ -239,7 +261,7 @@ async function handleExtendOrgModuleTrial(ctx: RequestContext, payload: Record<s
       old_state: oldState,
       new_state: { status: 'trialing', trial_ends_at: expiresAtIso },
     });
-    return { ok: true, command: 'extend_org_module_trial', refreshed: await refreshedOwnerLegalControlPanel(ctx, payload) };
+    return { ok: true, command: 'extend_org_module_trial', refreshed: await refreshedOwnerCommercialSurface(ctx, payload) };
   }
 
   const planId = await resolveDefaultActivePlanId(mod.id);
@@ -262,7 +284,7 @@ async function handleExtendOrgModuleTrial(ctx: RequestContext, payload: Record<s
     old_state: null,
     new_state: { status: 'trialing', trial_ends_at: expiresAtIso },
   });
-  return { ok: true, command: 'extend_org_module_trial', refreshed: await refreshedOwnerLegalControlPanel(ctx, payload) };
+  return { ok: true, command: 'extend_org_module_trial', refreshed: await refreshedOwnerCommercialSurface(ctx, payload) };
 }
 
 async function handleActivateOrgModuleAccess(ctx: RequestContext, payload: Record<string, unknown>): Promise<CountryPackCommandResponse> {

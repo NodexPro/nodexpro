@@ -7,12 +7,36 @@ import './nx-owner-modules.css';
 type UnknownRecord = Record<string, unknown>;
 type TabKey = 'pricing' | 'users' | 'reporting_calendar';
 
+type ExtendTrialModal = {
+  org_id: string;
+  org_name: string;
+  module_key: string;
+  module_name: string;
+  trial_ends_at: string | null;
+};
+
 function asRows(v: unknown): UnknownRecord[] {
   return Array.isArray(v) ? (v as UnknownRecord[]) : [];
 }
 
 function text(v: unknown): string {
   return v == null ? '' : String(v);
+}
+
+/** Owner-facing date (presentation only). Matches Legal Control en-GB style as dd/mm/yyyy. */
+function formatOwnerDate(v: unknown): string {
+  const s = text(v).trim();
+  if (!s) return '—';
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+/** Transport formatting only — end-of-day UTC for existing expires_at contract. */
+function ymdToIsoEndOfDayZ(ymd: string): string {
+  const clean = ymd.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return new Date().toISOString();
+  return `${clean}T23:59:59.000Z`;
 }
 
 export function PlatformOwnerModuleDetailPage() {
@@ -29,6 +53,11 @@ export function PlatformOwnerModuleDetailPage() {
   const [search, setSearch] = useState('');
   const [entitlementStatus, setEntitlementStatus] = useState('');
   const [activationStatus, setActivationStatus] = useState('');
+
+  const [extendModal, setExtendModal] = useState<ExtendTrialModal | null>(null);
+  const [extendUntilYmd, setExtendUntilYmd] = useState('');
+  const [extendReason, setExtendReason] = useState('');
+  const [extendError, setExtendError] = useState('');
 
   const tabs = asRows(aggregate?.available_detail_tabs);
   const requested = (searchParams.get('tab') as TabKey | null) ?? 'pricing';
@@ -62,6 +91,17 @@ export function PlatformOwnerModuleDetailPage() {
     void load();
   }, [load]);
 
+  function commercialContext(): UnknownRecord {
+    return {
+      page,
+      page_size: 20,
+      search: search.trim() || null,
+      module_key: moduleCode,
+      entitlement_status: entitlementStatus.trim() || null,
+      activation_status: activationStatus.trim() || null,
+    };
+  }
+
   async function sendCommand(command: string, payload: UnknownRecord): Promise<void> {
     setBusy(true);
     setError('');
@@ -72,14 +112,7 @@ export function PlatformOwnerModuleDetailPage() {
           command,
           payload: {
             ...payload,
-            commercial_controls_context: {
-              page,
-              page_size: 20,
-              search: search.trim() || null,
-              module_key: moduleCode,
-              entitlement_status: entitlementStatus.trim() || null,
-              activation_status: activationStatus.trim() || null,
-            },
+            commercial_controls_context: commercialContext(),
           },
         }),
       });
@@ -90,6 +123,73 @@ export function PlatformOwnerModuleDetailPage() {
       setBusy(false);
     }
   }
+
+  function openExtendTrial(org: UnknownRecord, mod: UnknownRecord): void {
+    const moduleDisplay =
+      text(mod.module_name) ||
+      text((aggregate?.module as UnknownRecord | undefined)?.display_name) ||
+      moduleCode;
+    setExtendError('');
+    setExtendReason('');
+    setExtendUntilYmd('');
+    setExtendModal({
+      org_id: text(org.org_id),
+      org_name: text(org.org_name) || 'Organization',
+      module_key: moduleCode,
+      module_name: moduleDisplay,
+      trial_ends_at: text(mod.trial_ends_at) || null,
+    });
+  }
+
+  function closeExtendTrial(): void {
+    if (busy) return;
+    setExtendModal(null);
+    setExtendError('');
+    setExtendReason('');
+    setExtendUntilYmd('');
+  }
+
+  async function submitExtendTrial(): Promise<void> {
+    if (!extendModal) return;
+    const ymd = extendUntilYmd.trim();
+    const reason = extendReason.trim();
+    if (!ymd || !reason) return;
+    setExtendError('');
+    setBusy(true);
+    try {
+      const out = await apiJson<{
+        refreshed?: { aggregate_key?: string; aggregate?: UnknownRecord };
+      }>(OWNER.command, {
+        method: 'POST',
+        body: JSON.stringify({
+          command: 'extend_org_module_trial',
+          payload: {
+            org_id: extendModal.org_id,
+            module_key: extendModal.module_key,
+            expires_at: ymdToIsoEndOfDayZ(ymd),
+            reason,
+            owner_module_detail_code: moduleCode,
+            commercial_controls_context: commercialContext(),
+          },
+        }),
+      });
+      if (out?.refreshed?.aggregate_key === 'owner_module_detail_aggregate' && out.refreshed.aggregate) {
+        setAggregate(out.refreshed.aggregate);
+      } else {
+        setExtendError('Extend Trial succeeded but refreshed module aggregate was not returned.');
+        return;
+      }
+      setExtendModal(null);
+      setExtendReason('');
+      setExtendUntilYmd('');
+    } catch (e) {
+      setExtendError(userFacingApiMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canSubmitExtend = Boolean(extendUntilYmd.trim() && extendReason.trim()) && !busy;
 
   const module = (aggregate?.module as UnknownRecord | undefined) ?? null;
   const pricing = (aggregate?.platform_pricing as UnknownRecord | undefined) ?? null;
@@ -317,7 +417,7 @@ export function PlatformOwnerModuleDetailPage() {
                       <td>{text(org.clients_count)}</td>
                       <td>{text(mod.activation_status)}</td>
                       <td>{text(mod.entitlement_status)}</td>
-                      <td>{text(mod.trial_ends_at) || '—'}</td>
+                      <td>{mod.trial_ends_at ? formatOwnerDate(mod.trial_ends_at) : '—'}</td>
                       <td>
                         {text(mod.base_price_amount)} {text(mod.base_price_currency)}
                       </td>
@@ -329,17 +429,7 @@ export function PlatformOwnerModuleDetailPage() {
                           type="button"
                           className="nx-owner-btn"
                           disabled={busy}
-                          onClick={() => {
-                            const expires = window.prompt('Extend trial — expires_at (ISO)');
-                            const reason = window.prompt('Reason') || '';
-                            if (!expires) return;
-                            void sendCommand('extend_org_module_trial', {
-                              org_id: text(org.org_id),
-                              module_key: moduleCode,
-                              expires_at: expires,
-                              reason,
-                            });
-                          }}
+                          onClick={() => openExtendTrial(org, mod)}
                         >
                           Extend Trial
                         </button>{' '}
@@ -397,6 +487,76 @@ export function PlatformOwnerModuleDetailPage() {
             UI location: Modules → Client Operations → Reporting Calendar. Canonical legal owner remains Country Pack /
             Owner Legal Control. No invented filing dates.
           </p>
+        </div>
+      ) : null}
+
+      {extendModal ? (
+        <div className="nx-owner-modal-overlay" role="presentation" onClick={closeExtendTrial}>
+          <div
+            className="nx-owner-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="nx-owner-extend-trial-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="nx-owner-modal__header">
+              <h2 id="nx-owner-extend-trial-title" className="nx-owner-modal__title">
+                Extend Trial
+              </h2>
+              <button type="button" className="nx-owner-btn" disabled={busy} onClick={closeExtendTrial}>
+                Cancel
+              </button>
+            </div>
+
+            {extendError ? <div className="nx-owner-modal__error">{extendError}</div> : null}
+
+            <div className="nx-owner-modal__meta">
+              <div>
+                <div className="nx-owner-modal__label">Organization</div>
+                <div className="nx-owner-modal__value">{extendModal.org_name}</div>
+              </div>
+              <div>
+                <div className="nx-owner-modal__label">Module</div>
+                <div className="nx-owner-modal__value">{extendModal.module_name}</div>
+              </div>
+              <div>
+                <div className="nx-owner-modal__label">Current trial end</div>
+                <div className="nx-owner-modal__value">
+                  {extendModal.trial_ends_at ? formatOwnerDate(extendModal.trial_ends_at) : 'No active trial'}
+                </div>
+              </div>
+            </div>
+
+            <label className="nx-owner-modal__field">
+              New trial end date
+              <input type="date" value={extendUntilYmd} onChange={(e) => setExtendUntilYmd(e.target.value)} disabled={busy} />
+            </label>
+
+            <label className="nx-owner-modal__field">
+              Reason
+              <textarea
+                value={extendReason}
+                onChange={(e) => setExtendReason(e.target.value)}
+                disabled={busy}
+                rows={3}
+                placeholder="Reason for extending the trial"
+              />
+            </label>
+
+            <div className="nx-owner-modal__footer">
+              <button type="button" className="nx-owner-btn" disabled={busy} onClick={closeExtendTrial}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="nx-owner-btn nx-owner-btn--primary"
+                disabled={!canSubmitExtend}
+                onClick={() => void submitExtendTrial()}
+              >
+                Extend Trial
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
