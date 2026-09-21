@@ -3,7 +3,7 @@
  * System columns plus organization-owned custom column presentation helpers.
  */
 
-export type RegistryColumnCellKind = 'folder' | 'text' | 'notes' | 'custom' | 'checkbox';
+export type RegistryColumnCellKind = 'folder' | 'text' | 'notes' | 'custom' | 'checkbox' | 'operational_date';
 export type ClientOperationsCustomColumnDataType = 'text' | 'number' | 'date' | 'boolean';
 
 export type ClientOperationsRegistryColumn = {
@@ -98,6 +98,30 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     freeze_default: false,
     align: 'center',
     default_width_px: 120,
+  },
+  {
+    key: 'annual_report',
+    label: 'דוח שנתי',
+    cell_kind: 'operational_date',
+    value_field: null,
+    visible: true,
+    system: true,
+    editable: true,
+    freeze_default: false,
+    align: 'center',
+    default_width_px: 132,
+  },
+  {
+    key: 'capital_declaration',
+    label: 'הצהרת הון',
+    cell_kind: 'operational_date',
+    value_field: null,
+    visible: true,
+    system: true,
+    editable: true,
+    freeze_default: false,
+    align: 'center',
+    default_width_px: 132,
   },
   {
     key: 'vat',
@@ -298,6 +322,8 @@ export function buildRegistryRowCells(input: {
   income_tax_deductions_status: string | null;
   assigned_handler_display_he: string | null;
   notes_cell_text_he: string | null;
+  annual_report_display_he?: string | null;
+  capital_declaration_display_he?: string | null;
 }): Record<string, string> {
   return {
     client_name: textHe(input.client_name),
@@ -313,6 +339,8 @@ export function buildRegistryRowCells(input: {
     income_tax_deductions: textHe(input.income_tax_deductions_status),
     handler: textHe(input.assigned_handler_display_he),
     notes: textHe(input.notes_cell_text_he),
+    annual_report: textHe(input.annual_report_display_he),
+    capital_declaration: textHe(input.capital_declaration_display_he),
   };
 }
 

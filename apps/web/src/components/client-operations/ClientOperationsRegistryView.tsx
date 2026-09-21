@@ -38,6 +38,23 @@ export type ClientOperationsMaterialCells = {
   payroll: ClientOperationsMaterialCell;
 };
 
+export type ClientOperationsAnnualReportCell = {
+  applicable: boolean;
+  editable: boolean;
+  tax_year: number | null;
+  instance_id: string | null;
+  operational_target_date: string | null;
+};
+
+export type ClientOperationsCapitalDeclarationCell = {
+  applicable: boolean;
+  editable: boolean;
+  instance_id: string | null;
+  tax_year: number | null;
+  operational_target_date: string | null;
+  can_open: boolean;
+};
+
 export type ClientOperationsRegistryRow = {
   client_id: string;
   client_name: string | null;
@@ -56,6 +73,8 @@ export type ClientOperationsRegistryRow = {
   };
   material_brought_cell?: ClientOperationsMaterialCell;
   material_cells?: ClientOperationsMaterialCells;
+  annual_report_cell?: ClientOperationsAnnualReportCell;
+  capital_declaration_cell?: ClientOperationsCapitalDeclarationCell;
   vat_status: string | null;
   income_tax_advance_status: string | null;
   national_insurance_status: string | null;
@@ -79,7 +98,7 @@ export type ClientOperationsNoteTypeRow = {
 export type ClientOperationsRegistryColumn = {
   key: string;
   label: string;
-  cell_kind: 'folder' | 'text' | 'notes' | 'custom' | 'checkbox';
+  cell_kind: 'folder' | 'text' | 'notes' | 'custom' | 'checkbox' | 'operational_date';
   value_field: string | null;
   data_type?: 'text' | 'number' | 'date' | 'boolean';
   custom_column_id?: string;
@@ -623,6 +642,42 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       setCommandError(error instanceof Error ? error.message : 'שמירת חומר נכשלה');
     }
   };
+  const setOperationalTargetDate = async (
+    row: ClientOperationsRegistryRow,
+    columnKey: 'annual_report' | 'capital_declaration',
+    value: string | null,
+  ) => {
+    if (!canEdit || !onRegistryCommand) return;
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command:
+          columnKey === 'annual_report'
+            ? 'set_annual_report_operational_target_date'
+            : 'set_capital_declaration_operational_target_date',
+        client_id: row.client_id,
+        operational_period_key: query?.operational_period_key ?? null,
+        operational_target_date: value,
+        query,
+      });
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'שמירת תאריך יעד נכשלה');
+    }
+  };
+  const openCapitalDeclaration = async (row: ClientOperationsRegistryRow) => {
+    if (!canEdit || !onRegistryCommand || !row.capital_declaration_cell?.can_open) return;
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command: 'open_capital_declaration_instance',
+        client_id: row.client_id,
+        operational_period_key: query?.operational_period_key ?? null,
+        query,
+      });
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'פתיחת הצהרת הון נכשלה');
+    }
+  };
   const createColumn = async () => {
     if (!addColumnLabel.trim() || !onRegistryCommand) return;
     setCommandError('');
@@ -978,6 +1033,58 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         </button>
       ) : (
         value
+      );
+    }
+    if (col.cell_kind === 'operational_date') {
+      const operationalCell =
+        col.key === 'annual_report'
+          ? r.annual_report_cell
+          : col.key === 'capital_declaration'
+            ? r.capital_declaration_cell
+            : null;
+      if (!operationalCell?.applicable) {
+        return (
+          <span className="nx-co-sheet__operational-date is-na">
+            <span className="nx-co-sheet__na">—</span>
+            {col.key === 'capital_declaration' && r.capital_declaration_cell?.can_open ? (
+              <button
+                type="button"
+                className="nx-co-sheet__operational-open"
+                disabled={!canEdit || !onRegistryCommand}
+                title="פתיחת הצהרת הון"
+                aria-label={`פתיחת הצהרת הון — ${r.client_name ?? r.client_id}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void openCapitalDeclaration(r);
+                }}
+              >
+                +
+              </button>
+            ) : null}
+          </span>
+        );
+      }
+      const value = operationalCell.operational_target_date ?? '';
+      const displayValue = displayForColumn(r, col);
+      return (
+        <span className="nx-co-sheet__operational-date">
+          <span className="nx-co-sheet__operational-display">{displayValue}</span>
+          <input
+            type="date"
+            className="nx-co-sheet__operational-input"
+            value={value}
+            disabled={!canEdit || !col.editable || !operationalCell.editable || !onRegistryCommand}
+            aria-label={`${col.label} — ${r.client_name ?? r.client_id}`}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) =>
+              void setOperationalTargetDate(
+                r,
+                col.key === 'annual_report' ? 'annual_report' : 'capital_declaration',
+                event.currentTarget.value || null,
+              )
+            }
+          />
+        </span>
       );
     }
     if (col.cell_kind === 'checkbox' && col.key === 'material_brought') {

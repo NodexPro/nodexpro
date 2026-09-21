@@ -76,6 +76,18 @@ import {
   shouldEmitOperationalPeriodRegistryRow,
   type MaterialCells,
 } from './client-operations-operational-period.pure.js';
+import {
+  formatOperationalDateDisplayHe,
+  resolveAnnualReportTaxYearForOperationalPeriod,
+  type AnnualReportOperationalDateCell,
+  type CapitalDeclarationOperationalDateCell,
+} from './client-operations-annual-capital-operational.pure.js';
+import {
+  loadAnnualReportYearInstancesForClients,
+  loadOpenCapitalDeclarationInstancesForClients,
+  projectAnnualReportCells,
+  projectCapitalDeclarationCells,
+} from './client-operations-annual-capital-operational.service.js';
 
 export type ClientOperationsRegistryRow = {
   client_id: string;
@@ -95,6 +107,8 @@ export type ClientOperationsRegistryRow = {
   };
   material_brought_cell?: { applicable: boolean; completed: boolean | null; value: boolean | null };
   material_cells?: MaterialCells;
+  annual_report_cell?: AnnualReportOperationalDateCell;
+  capital_declaration_cell?: CapitalDeclarationOperationalDateCell;
   vat_status: string | null;
   income_tax_advance_status: string | null;
   national_insurance_status: string | null;
@@ -400,27 +414,65 @@ export async function listClientOperationsRegistry(
   }
 
   const clientIds = safeClients.map((c) => c.id);
-  const { data: profiles } = await supabaseAdmin
-    .from('client_operational_profiles')
-    .select(PROFILE_SELECT)
-    .eq('organization_id', orgId)
-    .in('client_id', clientIds);
+  const annualReportTaxYear = resolveAnnualReportTaxYearForOperationalPeriod(selectedPeriodKey);
+  const canEditRegistry = ctx.membership?.permissions?.includes('client_operations.edit') === true;
+  const payrollPeriodKey = mapOperationalPeriodKeyToPayrollPeriodKey(selectedPeriodKey);
+
+  const [
+    { data: profiles },
+    notesByClient,
+    customValuesByClientAndColumn,
+    { data: taxSettingsRows },
+    existingSnapshots,
+    materialFacts,
+    payrollSalaryByClient,
+    annualReportInstancesByClient,
+    openCapitalInstancesByClient,
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('client_operational_profiles')
+      .select(PROFILE_SELECT)
+      .eq('organization_id', orgId)
+      .in('client_id', clientIds),
+    loadNotesAggregatesByClient(orgId, clientIds),
+    loadClientOperationsRegistryCustomColumnValues(orgId, clientIds),
+    supabaseAdmin
+      .from('client_tax_settings')
+      .select(
+        'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
+      )
+      .eq('organization_id', orgId)
+      .in('client_id', clientIds),
+    loadPeriodApplicabilitySnapshots({
+      organizationId: orgId,
+      operationalPeriodKey: selectedPeriodKey,
+      clientIds,
+    }),
+    loadPeriodMaterialFacts({
+      organizationId: orgId,
+      operationalPeriodKey: selectedPeriodKey,
+      clientIds,
+    }),
+    loadPayrollPeriodSalaryDataReceived({
+      organizationId: orgId,
+      payrollPeriodKey,
+      clientIds,
+    }),
+    loadAnnualReportYearInstancesForClients({
+      organizationId: orgId,
+      clientIds,
+      taxYear: annualReportTaxYear,
+    }),
+    loadOpenCapitalDeclarationInstancesForClients({
+      organizationId: orgId,
+      clientIds,
+    }),
+  ]);
 
   const profilesByClientId = new Map<string, Record<string, unknown>>();
   for (const p of (profiles ?? []) as unknown as Array<{ client_id: string }>) {
     profilesByClientId.set(p.client_id, p as Record<string, unknown>);
   }
-
-  const notesByClient = await loadNotesAggregatesByClient(orgId, clientIds);
-  const customValuesByClientAndColumn = await loadClientOperationsRegistryCustomColumnValues(orgId, clientIds);
-
-  const { data: taxSettingsRows } = await supabaseAdmin
-    .from('client_tax_settings')
-    .select(
-      'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
-    )
-    .eq('organization_id', orgId)
-    .in('client_id', clientIds);
 
   const taxByClient = new Map<
     string,
@@ -467,24 +519,17 @@ export async function listClientOperationsRegistry(
     });
   }
 
-  const payrollPeriodKey = mapOperationalPeriodKeyToPayrollPeriodKey(selectedPeriodKey);
-  const [existingSnapshots, materialFacts, payrollSalaryByClient] = await Promise.all([
-    loadPeriodApplicabilitySnapshots({
-      organizationId: orgId,
-      operationalPeriodKey: selectedPeriodKey,
-      clientIds,
-    }),
-    loadPeriodMaterialFacts({
-      organizationId: orgId,
-      operationalPeriodKey: selectedPeriodKey,
-      clientIds,
-    }),
-    loadPayrollPeriodSalaryDataReceived({
-      organizationId: orgId,
-      payrollPeriodKey,
-      clientIds,
-    }),
-  ]);
+  const annualReportCells = projectAnnualReportCells({
+    clientIds,
+    taxYear: annualReportTaxYear,
+    instancesByClientId: annualReportInstancesByClient,
+    canEdit: canEditRegistry,
+  });
+  const capitalDeclarationCells = projectCapitalDeclarationCells({
+    clientIds,
+    openByClientId: openCapitalInstancesByClient,
+    canEdit: canEditRegistry,
+  });
   const periodSources: ClientPeriodSourceRow[] = safeClients
     // Never invent historical applicability for archived clients from today's settings.
     // Archived historical membership must already carry a frozen snapshot (and/or fact).
@@ -591,6 +636,21 @@ export async function listClientOperationsRegistry(
       salary_data_received: payrollSalaryByClient.get(c.id),
     });
     const material_brought_flag = materialBroughtCell.applicable ? materialBroughtCell.value : null;
+    const annual_report_cell = annualReportCells.get(c.id) ?? {
+      applicable: true,
+      editable: canEditRegistry,
+      tax_year: annualReportTaxYear,
+      instance_id: null,
+      operational_target_date: null,
+    };
+    const capital_declaration_cell = capitalDeclarationCells.get(c.id) ?? {
+      applicable: false,
+      editable: false,
+      instance_id: null,
+      tax_year: null,
+      operational_target_date: null,
+      can_open: canEditRegistry,
+    };
     const vat_status = vatFromTax ?? (p?.vat_status as string | null) ?? null;
     const income_tax_advance_status = (p?.income_tax_advance_status as string | null) ?? null;
     const national_insurance_status = niFromTax ?? (p?.national_insurance_status as string | null) ?? null;
@@ -620,6 +680,8 @@ export async function listClientOperationsRegistry(
         income_tax_advance: incomeTaxAdvanceCell,
         payroll: payrollCell,
       }),
+      annual_report_cell,
+      capital_declaration_cell,
       /** מע״מ: תדירות מע״מ ממיסים; עוסק פטור — פטור */
       vat_status,
       income_tax_advance_status,
@@ -637,6 +699,10 @@ export async function listClientOperationsRegistry(
       ...base,
       cells: buildRegistryRowCells({
         ...base,
+        annual_report_display_he: formatOperationalDateDisplayHe(annual_report_cell.operational_target_date),
+        capital_declaration_display_he: capital_declaration_cell.applicable
+          ? formatOperationalDateDisplayHe(capital_declaration_cell.operational_target_date)
+          : '—',
         assigned_handler_display_he: assigned_handler_user_id
           ? (handlerDisplayByUserId.get(assigned_handler_user_id) ?? null)
           : null,

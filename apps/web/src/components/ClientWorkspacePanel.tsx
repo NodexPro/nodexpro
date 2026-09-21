@@ -131,6 +131,15 @@ const TAB_ORDER: Array<{ key: WorkspaceTabKey; label: string }> = [
   { key: 'history', label: 'היסטוריה' },
 ];
 
+/** Hide from client-folder modal top nav only — obligations domain/tab content retained. */
+const HIDDEN_WORKSPACE_NAV_TAB_KEYS = new Set<WorkspaceTabKey>(['obligations']);
+
+function isWorkspaceNavTabVisible(key: WorkspaceTabKey, docflowVisible: boolean): boolean {
+  if (HIDDEN_WORKSPACE_NAV_TAB_KEYS.has(key)) return false;
+  if (key === 'docflow') return docflowVisible;
+  return true;
+}
+
 /** Registry row fields used to paint the workspace immediately while the case aggregate HTTP request is in flight. */
 export type RegistryRowForPlaceholderCase = {
   client_id: string;
@@ -422,12 +431,12 @@ export function ClientWorkspacePanel({
   }, []);
 
   const tabs = useMemo(
-    () => TAB_ORDER.filter((t) => (t.key === 'docflow' ? docflowTabVisible : true)),
+    () => TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, docflowTabVisible)),
     [docflowTabVisible]
   );
   const activeTabLabel = tabs.find((t) => t.key === activeTab)?.label ?? '';
   useEffect(() => {
-    if (activeTab === 'docflow' && !docflowTabVisible) setActiveTab('client');
+    if (!isWorkspaceNavTabVisible(activeTab, docflowTabVisible)) setActiveTab('client');
   }, [activeTab, docflowTabVisible]);
 
   const isClientTab = activeTab === 'client';
@@ -883,10 +892,6 @@ export function ClientWorkspacePanel({
             aria-selected={activeTab === t.key}
             className={`nx-workspace-tab-link ${activeTab === t.key ? 'nx-workspace-tab-link-active' : ''}`}
             onClick={() => setActiveTab(t.key)}
-            style={{
-              borderBottomColor: activeTab === t.key ? '#3b82f6' : 'transparent',
-              color: activeTab === t.key ? '#1d4ed8' : '#6b7280',
-            }}
           >
             {t.label}
           </button>
@@ -1073,7 +1078,7 @@ function WorkspaceModalShell({
       </div>
       <div className="nx-workspace-header-divider" />
       <div className="nx-workspace-tabs-bar" role="tablist" aria-label="Workspace tabs" aria-busy={busy}>
-        {TAB_ORDER.map((t) => (
+        {TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, false)).map((t) => (
           <button
             key={t.key}
             type="button"
@@ -1082,8 +1087,6 @@ function WorkspaceModalShell({
             aria-disabled="true"
             className="nx-workspace-tab-link"
             style={{
-              borderBottomColor: 'transparent',
-              color: '#9ca3af',
               cursor: tabCursor,
               opacity: 0.85,
             }}

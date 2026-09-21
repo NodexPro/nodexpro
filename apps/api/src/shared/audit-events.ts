@@ -121,6 +121,14 @@ export const AUDIT_ACTIONS = {
   CLIENT_OPERATIONS_INCOME_TAX_ADVANCE_MATERIAL_BROUGHT_SET:
     'client_operations.income_tax_advance_material_brought.set',
   CLIENT_OPERATIONS_PAYROLL_MATERIAL_BROUGHT_SET: 'client_operations.payroll_material_brought.set',
+  CLIENT_OPERATIONS_ANNUAL_REPORT_OPERATIONAL_TARGET_DATE_SET:
+    'client_operations.annual_report_operational_target_date.set',
+  CLIENT_OPERATIONS_CAPITAL_DECLARATION_INSTANCE_OPENED:
+    'client_operations.capital_declaration_instance.opened',
+  CLIENT_OPERATIONS_CAPITAL_DECLARATION_OPERATIONAL_TARGET_DATE_SET:
+    'client_operations.capital_declaration_operational_target_date.set',
+  CLIENT_OPERATIONS_CAPITAL_DECLARATION_INSTANCE_COMPLETED:
+    'client_operations.capital_declaration_instance.completed',
   CLIENT_OBLIGATION_COMMAND_EXECUTED: 'client_obligation.command_executed',
   CLIENT_TASK_COMMAND_EXECUTED: 'client_task.command_executed',
   CLIENT_OPERATIONS_NIGHT_PASS_EXECUTED: 'client_operations.night_pass_executed',

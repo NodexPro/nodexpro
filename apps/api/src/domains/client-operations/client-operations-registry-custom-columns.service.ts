@@ -26,6 +26,12 @@ import {
   mapOperationalPeriodKeyToPayrollPeriodKey,
   resolveDefaultOperationalPeriodKey,
 } from './client-operations-operational-period.pure.js';
+import {
+  completeCapitalDeclarationInstance,
+  openCapitalDeclarationInstance,
+  setAnnualReportOperationalTargetDate,
+  setCapitalDeclarationOperationalTargetDate,
+} from './client-operations-annual-capital-operational.service.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -56,6 +62,9 @@ export type ClientOperationsRegistryCommandBody = {
   position?: unknown;
   ordered_column_ids?: unknown;
   operational_period_key?: unknown;
+  operational_target_date?: unknown;
+  tax_year?: unknown;
+  label_he?: unknown;
   query?: RegistryQueryInput;
 };
 
@@ -252,6 +261,13 @@ const MATERIAL_REGISTRY_COMMANDS = new Set([
   'set_material_brought',
   'set_income_tax_advance_material_brought',
   'set_payroll_material_brought',
+]);
+
+const OPERATIONAL_DATE_REGISTRY_COMMANDS = new Set([
+  'set_annual_report_operational_target_date',
+  'open_capital_declaration_instance',
+  'set_capital_declaration_operational_target_date',
+  'complete_capital_declaration_instance',
 ]);
 
 async function ensurePeriodSnapshotForMaterialCommand(input: {
@@ -497,6 +513,32 @@ export async function executeClientOperationsRegistryCommand(
       payroll_period_key: payrollPeriodKey,
       salary_data_received: value,
     });
+  } else if (command === 'set_annual_report_operational_target_date') {
+    await setAnnualReportOperationalTargetDate({
+      ctx,
+      clientId: idFrom(body.client_id, 'client_id'),
+      operationalPeriodKey: operationalPeriodKeyFrom(body.operational_period_key),
+      operationalTargetDate: body.operational_target_date,
+    });
+  } else if (command === 'open_capital_declaration_instance') {
+    await openCapitalDeclarationInstance({
+      ctx,
+      clientId: idFrom(body.client_id, 'client_id'),
+      taxYear: body.tax_year,
+      labelHe: body.label_he,
+    });
+  } else if (command === 'set_capital_declaration_operational_target_date') {
+    await setCapitalDeclarationOperationalTargetDate({
+      ctx,
+      clientId: idFrom(body.client_id, 'client_id'),
+      operationalPeriodKey: operationalPeriodKeyFrom(body.operational_period_key),
+      operationalTargetDate: body.operational_target_date,
+    });
+  } else if (command === 'complete_capital_declaration_instance') {
+    await completeCapitalDeclarationInstance({
+      ctx,
+      clientId: idFrom(body.client_id, 'client_id'),
+    });
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin
@@ -512,8 +554,10 @@ export async function executeClientOperationsRegistryCommand(
 
   const { listClientOperationsRegistry } = await import('./client-operations.service.js');
   const responseQuery = queryFrom(body.query);
-  if (MATERIAL_REGISTRY_COMMANDS.has(command)) {
-    responseQuery.operational_period_key = operationalPeriodKeyFrom(body.operational_period_key);
+  if (MATERIAL_REGISTRY_COMMANDS.has(command) || OPERATIONAL_DATE_REGISTRY_COMMANDS.has(command)) {
+    responseQuery.operational_period_key = operationalPeriodKeyFrom(
+      body.operational_period_key ?? responseQuery.operational_period_key,
+    );
   }
   return listClientOperationsRegistry(ctx, responseQuery);
 }

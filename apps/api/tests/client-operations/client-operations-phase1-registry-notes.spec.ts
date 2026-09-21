@@ -127,23 +127,27 @@ test('14-15 custom columns + max 10 still backend-owned', () => {
 
 test('material VAT checkbox is a named command returning refreshed registry aggregate', () => {
   assert.match(presentation, /cell_kind: 'checkbox'/);
-  assert.match(view, /command: 'set_material_brought'/);
+  assert.match(view, /['"]set_material_brought['"]/);
   assert.match(view, /type="checkbox"/);
   assert.match(customColumns, /command === 'set_material_brought'/);
   assert.match(customColumns, /client_operational_profiles/);
   assert.match(customColumns, /material_brought_flag: value/);
-  assert.match(customColumns, /listClientOperationsRegistry\(ctx, queryFrom\(body\.query\)\)/);
+  assert.match(customColumns, /listClientOperationsRegistry\(ctx,\s*responseQuery\)/);
   assert.doesNotMatch(view, /setRows\(.*material_brought/i);
 });
 
-test('annual and capital STATUS columns are not in default registry presentation', () => {
-  assert.doesNotMatch(presentation, /key: 'annual_report'/);
-  assert.doesNotMatch(presentation, /key: 'capital_declaration'/);
-  assert.doesNotMatch(presentation, /דוח שנתי/);
-  assert.doesNotMatch(presentation, /הצהרת הון/);
+test('annual and capital operational DATE columns are in default registry presentation', () => {
+  assert.match(presentation, /key: 'annual_report'/);
+  assert.match(presentation, /key: 'capital_declaration'/);
+  assert.match(presentation, /דוח שנתי/);
+  assert.match(presentation, /הצהרת הון/);
+  assert.match(presentation, /cell_kind: 'operational_date'/);
   assert.doesNotMatch(service, /loadAnnualRegistryStatusProjection/);
   assert.doesNotMatch(service, /annual_report_status_he/);
   assert.doesNotMatch(service, /capital_declaration_status_he/);
+  assert.match(customColumns, /set_annual_report_operational_target_date/);
+  assert.match(customColumns, /open_capital_declaration_instance/);
+  assert.match(customColumns, /set_capital_declaration_operational_target_date/);
   assert.match(customColumns, /set_material_brought/);
   assert.doesNotMatch(view, /buildAnnualControlState|missing_documents|completion_percent/);
 });

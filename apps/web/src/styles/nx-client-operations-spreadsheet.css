@@ -382,6 +382,56 @@
   user-select: none;
 }
 
+.nx-co-sheet__operational-date {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 108px;
+}
+
+.nx-co-sheet__operational-date.is-na {
+  min-width: 56px;
+}
+
+.nx-co-sheet__operational-display {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.nx-co-sheet__operational-input {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  color: transparent;
+  background: #fff;
+  cursor: pointer;
+}
+
+.nx-co-sheet__operational-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.nx-co-sheet__operational-open {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: #fff;
+  color: #2563eb;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nx-co-sheet__operational-open:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .nx-co-sheet__number-format {
   display: flex;
   align-items: center;
