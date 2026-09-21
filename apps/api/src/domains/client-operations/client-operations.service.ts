@@ -21,7 +21,10 @@ import {
   type FeesTabResponse,
 } from './client-fees-tab.service.js';
 import { getPayrollTabReadModel, type PayrollTabResponse } from './client-payroll-tab.service.js';
-import { getAnnualTabReadModel, type AnnualTabResponse } from './client-annual-report-tab.service.js';
+import {
+  getAnnualTabReadModel,
+  type AnnualTabResponse,
+} from './client-annual-report-tab.service.js';
 import { getClientDocumentsTabReadModel, type ClientDocumentsTabResponse } from './client-documents-tab.service.js';
 import {
   getClientHistoryTabReadModel,
@@ -247,6 +250,35 @@ function emptyRegistryResponse(
   };
 }
 
+async function loadHandlerDisplayNamesByUserIds(
+  orgId: string,
+  userIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const unique = [...new Set(userIds.filter(Boolean))];
+  if (!unique.length) return map;
+  const { data, error } = await supabaseAdmin
+    .from('organization_users')
+    .select('user_id, users!organization_users_user_id_fkey(full_name, email)')
+    .eq('organization_id', orgId)
+    .in('user_id', unique)
+    .eq('membership_status', 'active')
+    .not('invited_by', 'is', null);
+  if (error) {
+    throw new AppError(500, error.message ?? 'organization_users (handlers) query failed', 'SUPABASE_ERROR');
+  }
+  type HandlerUser = { full_name: string | null; email: string | null };
+  type HandlerRow = { user_id: string; users: HandlerUser | HandlerUser[] | null };
+  for (const row of (data ?? []) as unknown as HandlerRow[]) {
+    const raw = row.users;
+    const u = Array.isArray(raw) ? raw[0] : raw;
+    if (!u || !row.user_id) continue;
+    const display = u.full_name?.trim() ? u.full_name.trim() : (u.email ?? '');
+    if (display) map.set(row.user_id, display);
+  }
+  return map;
+}
+
 export async function listClientOperationsRegistry(
   ctx: RequestContext,
   query: RegistryQueryInput = {},
@@ -329,6 +361,15 @@ export async function listClientOperationsRegistry(
     });
   }
 
+  const handlerIds = [
+    ...new Set(
+      [...profilesByClientId.values()]
+        .map((p) => (p?.assigned_handler_user_id as string | null) ?? null)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const handlerDisplayByUserId = await loadHandlerDisplayNamesByUserIds(orgId, handlerIds);
+
   const builtRows: ClientOperationsRegistryRow[] = safeClients.map((c) => {
     const p = profilesByClientId.get(c.id);
     const noteAgg = buildNotesCellDisplayHe(notesByClient.get(c.id) ?? []);
@@ -386,7 +427,12 @@ export async function listClientOperationsRegistry(
     };
     return mergeCustomCellsIntoRow({
       ...base,
-      cells: buildRegistryRowCells(base),
+      cells: buildRegistryRowCells({
+        ...base,
+        assigned_handler_display_he: assigned_handler_user_id
+          ? (handlerDisplayByUserId.get(assigned_handler_user_id) ?? null)
+          : null,
+      }),
     }, customColumns, customValuesByClientAndColumn);
   });
 

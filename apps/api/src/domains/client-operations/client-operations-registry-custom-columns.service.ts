@@ -11,6 +11,8 @@ import {
   type ClientOperationsCustomColumnDataType,
   type RegistryQueryInput,
 } from './client-operations-registry-presentation.pure.js';
+import { resolveVatOperationalReportingPeriodKey } from './client-operations-client-quick-profile.pure.js';
+import { syncVatMaterialWorkEvent } from './client-operations-work-engine-bridge.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -74,6 +76,11 @@ function idFrom(value: unknown, name: string): string {
   const id = typeof value === 'string' ? value.trim() : '';
   if (!id) throw badRequest(`${name} is required`);
   return id;
+}
+
+function booleanFrom(value: unknown, name: string): boolean {
+  if (typeof value !== 'boolean') throw badRequest(`${name} must be boolean`);
+  return value;
 }
 
 export async function loadActiveClientOperationsRegistryCustomColumns(orgId: string): Promise<RegistryCustomColumnDefinition[]> {
@@ -173,6 +180,37 @@ async function audit(ctx: RequestContext, action: string, entityId: string, payl
   });
 }
 
+async function ensureActiveClientInOrg(orgId: string, clientId: string): Promise<void> {
+  const { data: client, error: clientError } = await supabaseAdmin
+    .from('clients')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('id', clientId)
+    .eq('is_archived', false)
+    .maybeSingle();
+  assertQueryError(clientError, 'Failed to validate client');
+  if (!client) throw forbidden('Client not found');
+}
+
+async function syncVatMaterialForCurrentPeriod(
+  ctx: RequestContext,
+  orgId: string,
+  clientId: string,
+): Promise<void> {
+  const { data: taxSettings, error } = await supabaseAdmin
+    .from('client_tax_settings')
+    .select('vat_frequency')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId)
+    .maybeSingle();
+  assertQueryError(error, 'Failed to load VAT settings');
+  const periodKey = resolveVatOperationalReportingPeriodKey({
+    vat_frequency: (taxSettings as { vat_frequency?: string | null } | null)?.vat_frequency ?? null,
+  });
+  if (!periodKey) return;
+  await syncVatMaterialWorkEvent(ctx, orgId, clientId, periodKey);
+}
+
 function queryFrom(value: unknown): RegistryQueryInput {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const query = value as Record<string, unknown>;
@@ -262,15 +300,7 @@ export async function executeClientOperationsRegistryCommand(
   } else if (command === 'set_client_operations_custom_column_value') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const clientId = idFrom(body.client_id, 'client_id');
-    const { data: client, error: clientError } = await supabaseAdmin
-      .from('clients')
-      .select('id')
-      .eq('organization_id', orgId)
-      .eq('id', clientId)
-      .eq('is_archived', false)
-      .maybeSingle();
-    assertQueryError(clientError, 'Failed to validate client');
-    if (!client) throw forbidden('Client not found');
+    await ensureActiveClientInOrg(orgId, clientId);
     const values = valuePayload(column.data_type, body.value);
     const { error } = await supabaseAdmin.from('client_operations_registry_custom_column_values').upsert(
       { organization_id: orgId, client_id: clientId, column_id: column.id, ...values, updated_at: new Date().toISOString() },
@@ -278,6 +308,27 @@ export async function executeClientOperationsRegistryCommand(
     );
     assertQueryError(error, 'Failed to set custom registry column value');
     await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_CUSTOM_COLUMN_VALUE_SET, column.id, { client_id: clientId, key: column.key });
+  } else if (command === 'set_material_brought') {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const value = booleanFrom(body.value, 'value');
+    await ensureActiveClientInOrg(orgId, clientId);
+    const { error } = await supabaseAdmin
+      .from('client_operational_profiles')
+      .upsert(
+        {
+          organization_id: orgId,
+          client_id: clientId,
+          material_brought_flag: value,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'organization_id,client_id' }
+      );
+    assertQueryError(error, 'Failed to set material brought flag');
+    await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_MATERIAL_BROUGHT_SET, clientId, {
+      client_id: clientId,
+      material_brought_flag: value,
+    });
+    if (!value) await syncVatMaterialForCurrentPeriod(ctx, orgId, clientId);
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin

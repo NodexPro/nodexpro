@@ -117,3 +117,16 @@
   margin: 0 0 2px;
   letter-spacing: 0.02em;
 }
+
+.nx-co-client-quick-profile__skeleton {
+  display: grid;
+  gap: 8px;
+  padding: 6px 0 2px;
+}
+
+.nx-co-client-quick-profile__skeleton span {
+  display: block;
+  height: 16px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eef2f7, #f8fafc, #eef2f7);
+}

@@ -180,17 +180,20 @@ test('service wires distinct VAT vs baseline periods (source contract)', async (
   );
   assert.match(service, /resolveVatOperationalReportingPeriodKey/);
   assert.match(service, /resolveIncomeTaxDeductionsOperationalReportingPeriodKey/);
+  assert.match(service, /resolveReportingDueDatesBatch/);
+  assert.match(service, /resolveVatOperationalCalendarLookupPeriodKey/);
+  // Distinct period keys: VAT identity, advances baseline, deductions period — one batched Country Pack read.
   assert.match(
     service,
-    /resolveClientVatReportingDueDate\(\{[\s\S]*?reporting_period_key: vatReportingPeriodKey/
+    /vat_reporting_period_key:\s*vatReportingPeriodKey/
   );
   assert.match(
     service,
-    /resolveClientIncomeTaxAdvancesDueDate\(\{[\s\S]*?reporting_period_key: reportingPeriodKey/
+    /reporting_period_key:\s*reportingPeriodKey/
   );
   assert.match(
     service,
-    /resolveClientIncomeTaxDeductionsDueDate\(\{[\s\S]*?reporting_period_key: deductionsPeriod\.reporting_period_key/
+    /deductions_reporting_period_key:\s*deductionsPeriod\.reporting_period_key/
   );
 });
 

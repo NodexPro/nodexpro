@@ -101,3 +101,14 @@ test('bi-monthly VAT skips non-applicable months in backend resolver vocabulary'
   assert.equal(isVatReportingPeriodApplicable({ vat_frequency: 'monthly', reporting_period_key: '2026-02' }), true);
 });
 
+test('resolver exposes batched active lookup with single draft probe for misses', () => {
+  const resolverPath = fileURLToPath(new URL('../../src/domains/country-pack/reporting-calendar-resolver.service.ts', import.meta.url));
+  const source = readFileSync(resolverPath, 'utf8');
+  assert.match(source, /resolveReportingDueDatesBatch/);
+  assert.match(source, /\.in\('obligation_key', obligationKeys\)/);
+  assert.match(source, /\.in\('reporting_period_key', periodKeys\)/);
+  assert.match(source, /draftKeys/);
+  assert.match(source, /country_pack_ruleset_id === input\.country_pack_ruleset_id/);
+  assert.match(source, /biMonthlyVatPairEndPeriodKey/);
+});
+

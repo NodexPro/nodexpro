@@ -55,7 +55,7 @@ export type ClientOperationsNoteTypeRow = {
 export type ClientOperationsRegistryColumn = {
   key: string;
   label: string;
-  cell_kind: 'folder' | 'text' | 'notes' | 'custom';
+  cell_kind: 'folder' | 'text' | 'notes' | 'custom' | 'checkbox';
   value_field: string | null;
   data_type?: 'text' | 'number' | 'date' | 'boolean';
   custom_column_id?: string;
@@ -111,24 +111,6 @@ type PresentationHistory = {
   presentation: Record<string, CellPresentation>;
 };
 
-function renderCell(v: unknown): string {
-  if (v === true) return 'כן';
-  if (v === false) return 'לא';
-  if (v === null || v === undefined || v === '') return '—';
-  return String(v);
-}
-
-function renderNationalInsuranceCell(v: string | null | undefined): string {
-  if (v === null || v === undefined || v === '') return '—';
-  const s = String(v).trim();
-  if (s.includes('₪')) return s;
-  if (s === 'לא עונה להגדרות') return s;
-  if (/^[\d\u00A0\s,\u2009\u202F.]+$/.test(s)) {
-    return `${s}\u00A0₪`;
-  }
-  return s;
-}
-
 function isoToDatetimeLocal(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -149,34 +131,10 @@ function cellKey(clientId: string, colKey: string): string {
 }
 
 function displayForColumn(r: ClientOperationsRegistryRow, col: ClientOperationsRegistryColumn): string {
-  if (r.cells && col.key in r.cells) return r.cells[col.key] ?? '—';
-  if (col.key === 'national_insurance') return renderNationalInsuranceCell(r.national_insurance_status);
-  if (col.key === 'payroll') return renderCell(r.payroll_flag);
-  if (col.key === 'material_brought') return renderCell(r.material_brought_flag);
-  if (col.value_field) {
-    const rowRecord = r as unknown as Record<string, unknown>;
-    return renderCell(rowRecord[col.value_field]);
-  }
-  return '—';
+  const value = r.cells?.[col.key];
+  if (value == null || value === '') return '—';
+  return value;
 }
-
-/** Embedded (Work Engine) fallback columns — same labels as backend system columns. */
-const EMBEDDED_FALLBACK_COLUMNS: ClientOperationsRegistryColumn[] = [
-  { key: 'folder', label: '📁', cell_kind: 'folder', value_field: null, visible: true, system: true, editable: false, freeze_default: true, align: 'center' },
-  { key: 'client_name', label: 'שם לקוח', cell_kind: 'text', value_field: 'client_name', visible: true, system: true, editable: false, freeze_default: true, align: 'right' },
-  { key: 'tax_id', label: 'ח.פ', cell_kind: 'text', value_field: 'tax_id', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'business_type', label: 'סוג עסק', cell_kind: 'text', value_field: 'business_type', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'payroll', label: 'שכר', cell_kind: 'text', value_field: 'payroll_flag', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'material_brought', label: 'הביא חומר כן/לא', cell_kind: 'text', value_field: 'material_brought_flag', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'vat', label: 'מע״מ', cell_kind: 'text', value_field: 'vat_status', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'vat_due', label: 'יום יעד דיווח מע״מ', cell_kind: 'text', value_field: 'vat_due_registry_display_he', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'income_tax_advance', label: 'מקדמות מס הכנסה', cell_kind: 'text', value_field: 'income_tax_advance_status', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'national_insurance', label: 'ביטוח לאומי', cell_kind: 'text', value_field: 'national_insurance_status', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'national_insurance_deductions', label: 'ביטוח לאומי ניכויים', cell_kind: 'text', value_field: 'national_insurance_deductions_status', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'income_tax_deductions', label: 'מס הכנסה ניכויים', cell_kind: 'text', value_field: 'income_tax_deductions_status', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'handler', label: 'מטפל בתיק', cell_kind: 'text', value_field: 'assigned_handler_user_id', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-  { key: 'notes', label: 'הערות', cell_kind: 'notes', value_field: 'notes_cell_text_he', visible: true, system: true, editable: false, freeze_default: false, align: 'right' },
-];
 
 export type ClientOperationsRegistryViewProps = {
   rows: ClientOperationsRegistryRow[];
@@ -218,12 +176,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     query,
     onQueryChange,
     onRegistryCommand,
+    onApplyAggregate,
     widthScope,
   } = props;
 
   const setRows = onRowsChange;
   const isSpreadsheet = variant === 'spreadsheet';
-  const columns = columnsProp?.length ? columnsProp : EMBEDDED_FALLBACK_COLUMNS;
+  const columns = columnsProp ?? [];
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
@@ -233,6 +192,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     null
   );
   const [quickProfileAnchor, setQuickProfileAnchor] = useState<HTMLElement | null>(null);
+  const [quickProfileClientId, setQuickProfileClientId] = useState<string | null>(null);
+  const [quickProfileLoading, setQuickProfileLoading] = useState(false);
 
   const [notesModalClientId, setNotesModalClientId] = useState<string | null>(null);
   const [notesModalClientName, setNotesModalClientName] = useState('');
@@ -307,18 +268,33 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const closeQuickProfile = useCallback(() => {
     setQuickProfile(null);
     setQuickProfileAnchor(null);
+    setQuickProfileClientId(null);
+    setQuickProfileLoading(false);
   }, []);
 
   const openQuickProfile = (r: ClientOperationsRegistryRow, anchorEl: HTMLElement) => {
+    const requestedClientId = r.client_id;
     setQuickProfileAnchor(anchorEl);
+    setQuickProfileClientId(requestedClientId);
     setQuickProfile(null);
+    setQuickProfileLoading(true);
     apiJson<ClientOperationsClientQuickProfileAggregate>(
-      moduleClientOperationsClientQuickProfile(r.client_id)
+      moduleClientOperationsClientQuickProfile(requestedClientId)
     )
-      .then((res) => setQuickProfile(res))
+      .then((res) => {
+        setQuickProfileClientId((currentClientId) => {
+          if (currentClientId === requestedClientId && res.client_id === requestedClientId) {
+            setQuickProfile(res);
+            setQuickProfileLoading(false);
+          }
+          return currentClientId;
+        });
+      })
       .catch(() => {
         setQuickProfile(null);
         setQuickProfileAnchor(null);
+        setQuickProfileClientId(null);
+        setQuickProfileLoading(false);
       });
   };
 
@@ -399,28 +375,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       setFormBody('');
       setFormReminderLocal('');
       setFormTypeCode(noteTypes[0]?.code ?? formTypeCode);
-      closeNotesModal();
-
-      const registryPreview = (raw as {
-        registryPreview?: { notes_cell_text_he: string | null; operational_notes_count: number };
-      }).registryPreview;
-      if (registryPreview && notesModalClientId) {
-        setRows(
-          rows.map((row) =>
-            row.client_id === notesModalClientId
-              ? {
-                  ...row,
-                  notes_cell_text_he: registryPreview.notes_cell_text_he,
-                  operational_notes_count: registryPreview.operational_notes_count,
-                  cells: {
-                    ...(row.cells ?? {}),
-                    notes: registryPreview.notes_cell_text_he ?? '—',
-                  },
-                }
-              : row,
-          ),
-        );
+      const mutation = raw as {
+        notes?: OperationalNoteRow[];
+        registry?: Parameters<NonNullable<ClientOperationsRegistryViewProps['onApplyAggregate']>>[0];
+      };
+      if (Array.isArray(mutation.notes)) {
+        setOperationalNotes(mutation.notes);
       }
+      if (mutation.registry) {
+        if (onApplyAggregate) onApplyAggregate(mutation.registry);
+        else if (Array.isArray(mutation.registry.rows)) setRows(mutation.registry.rows);
+      }
+      closeNotesModal();
     } catch (e) {
       setNotesError(e instanceof Error ? e.message : 'Error');
     } finally {
@@ -445,11 +411,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       setFormBody('');
       setFormReminderLocal('');
     }
-    const list = await apiJson<{ notes: OperationalNoteRow[] }>(
-      moduleClientOperationsOperationalNotes(notesModalClientId),
-    );
-    setOperationalNotes(Array.isArray(list?.notes) ? list.notes : []);
-    reloadRegistry();
+    const mutation = (await res.json().catch(() => ({}))) as {
+      notes?: OperationalNoteRow[];
+      registry?: Parameters<NonNullable<ClientOperationsRegistryViewProps['onApplyAggregate']>>[0];
+    };
+    if (Array.isArray(mutation.notes)) {
+      setOperationalNotes(mutation.notes);
+    }
+    if (mutation.registry) {
+      if (onApplyAggregate) onApplyAggregate(mutation.registry);
+      else if (Array.isArray(mutation.registry.rows)) setRows(mutation.registry.rows);
+    }
   };
 
   const capById = useMemo(() => {
@@ -549,6 +521,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       });
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : 'שמירת הערך נכשלה');
+    }
+  };
+  const toggleMaterialBrought = async (row: ClientOperationsRegistryRow) => {
+    if (!canEdit || !onRegistryCommand) return;
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command: 'set_material_brought',
+        client_id: row.client_id,
+        value: !Boolean(row.material_brought_flag),
+        query,
+      });
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'שמירת חומר למע״מ נכשלה');
     }
   };
   const createColumn = async () => {
@@ -908,6 +894,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         value
       );
     }
+    if (col.cell_kind === 'checkbox') {
+      const checked = Boolean(r.material_brought_flag);
+      return (
+        <input
+          type="checkbox"
+          className="nx-co-sheet__checkbox"
+          checked={checked}
+          disabled={!canEdit || !col.editable || !onRegistryCommand}
+          aria-label={`${col.label} ${r.client_name ?? ''}`}
+          onChange={() => void toggleMaterialBrought(r)}
+          onClick={(event) => event.stopPropagation()}
+        />
+      );
+    }
     if (col.key === 'client_name') {
       const text = displayForColumn(r, col);
       return (
@@ -988,10 +988,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         />
       )}
 
-      {quickProfile && quickProfileAnchor ? (
+      {quickProfileAnchor ? (
         <ClientOperationsClientQuickProfilePopover
           profile={quickProfile}
           anchorEl={quickProfileAnchor}
+          loading={quickProfileLoading || quickProfile?.client_id !== quickProfileClientId}
           onClose={closeQuickProfile}
         />
       ) : null}
@@ -1165,7 +1166,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, direction: 'rtl' }}>
                 <thead>
                   <tr style={{ background: '#f3f4f6' }}>
-                    {columns.map((c) => (
+                    {visibleColumns.map((c) => (
                       <th
                         key={c.key}
                         style={{
@@ -1181,7 +1182,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.client_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      {columns.map((c) => (
+                      {visibleColumns.map((c) => (
                         <td
                           key={c.key}
                           style={{

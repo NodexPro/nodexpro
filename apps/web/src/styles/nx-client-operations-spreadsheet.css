@@ -289,6 +289,20 @@
   font: inherit;
 }
 
+.nx-co-sheet__checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  vertical-align: middle;
+  accent-color: var(--nx-co-brand);
+  cursor: pointer;
+}
+
+.nx-co-sheet__checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .nx-co-sheet__number-format {
   display: flex;
   align-items: center;

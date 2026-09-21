@@ -55,10 +55,10 @@ test('canonical identity + accounting sources', () => {
   assert.match(service, /has_vehicles/);
 });
 
-test('reporting dates from ACTIVE calendar resolvers; no invented NI date', () => {
-  assert.match(service, /resolveClientVatReportingDueDate/);
-  assert.match(service, /resolveClientIncomeTaxAdvancesDueDate/);
-  assert.match(service, /resolveClientIncomeTaxDeductionsDueDate/);
+test('reporting dates from ACTIVE calendar batch resolver; no invented NI date', () => {
+  assert.match(service, /resolveReportingDueDatesBatch/);
+  assert.match(service, /resolveQuickProfileReportingDueDates/);
+  assert.match(service, /resolveVatOperationalCalendarLookupPeriodKey/);
   assert.match(service, /resolveNationalInsuranceDeductionsDueDate/);
   assert.match(service, /ni\.resolved/);
   assert.doesNotMatch(service, /filing_due_date:\s*['"]15/);
@@ -76,6 +76,9 @@ test('VAT due-type resolution is backend-owned; frontend has no applicability br
 test('frontend: name opens quick profile; folder still opens full case; single GET', () => {
   assert.match(registryView, /openQuickProfile/);
   assert.match(registryView, /moduleClientOperationsClientQuickProfile/);
+  assert.match(registryView, /setQuickProfileAnchor\(anchorEl\)/);
+  assert.match(registryView, /setQuickProfileLoading\(true\)/);
+  assert.match(popover, /nx-co-client-quick-profile__skeleton/);
   assert.match(registryView, /col\.key === 'client_name'/);
   assert.match(registryView, /openClientModal/);
   assert.match(registryView, /📁/);

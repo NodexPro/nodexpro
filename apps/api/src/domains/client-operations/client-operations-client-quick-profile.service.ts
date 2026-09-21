@@ -6,15 +6,21 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { forbidden } from '../../shared/errors.js';
-import { formatFilingDueDateDisplay } from '../country-pack/reporting-calendar.pure.js';
 import {
-  resolveClientIncomeTaxAdvancesDueDate,
-  resolveClientIncomeTaxDeductionsDueDate,
-  resolveClientVatReportingDueDate,
+  formatFilingDueDateDisplay,
+  incomeTaxAdvancesObligationKey,
+  incomeTaxDeductionsObligationKey,
+  isFilingDueDateAfterReportingPeriodEnd,
+  isVatReportingPeriodApplicable,
+  resolveVatObligationKeyFromClientTaxSettings,
+  unresolvedReportingDueDate,
+  type ReportingDueDateResolution,
+} from '../country-pack/reporting-calendar.pure.js';
+import {
+  resolveReportingDueDatesBatch,
   resolveNationalInsuranceDeductionsDueDate,
 } from '../country-pack/reporting-calendar-resolver.service.js';
 import { resolveOrganizationActiveRuleset } from '../country-pack/organization-country.service.js';
-import { loadVehicleFleet } from './client-vehicle-fleet.service.js';
 import { computeVatRegistryColumnDisplayHe } from './vat-divuach.js';
 import {
   CLIENT_OPERATIONS_CLIENT_QUICK_PROFILE_AGGREGATE_KEY,
@@ -29,6 +35,7 @@ import {
   resolveIncomeTaxDeductionsOperationalReportingPeriodKey,
   resolveOperationalReportingPeriodKey,
   resolveQuickProfilePhoneDisplay,
+  resolveVatOperationalCalendarLookupPeriodKey,
   resolveVatOperationalReportingPeriodKey,
   type ClientOperationsClientQuickProfileAggregate,
   type ClientQuickProfileRow,
@@ -50,6 +57,125 @@ function displayFromResolution(resolution: {
   return formatFilingDueDateDisplay(resolution.filing_due_date) ?? QUICK_PROFILE_EMPTY_DISPLAY;
 }
 
+function calendarLookupMapKey(obligationKey: string, periodKey: string): string {
+  return `${obligationKey}::${periodKey}`;
+}
+
+async function resolveQuickProfileReportingDueDates(input: {
+  country_code: string;
+  country_pack_ruleset_id?: string | null;
+  reporting_period_key: string | null;
+  vat_reporting_period_key: string | null;
+  deductions_reporting_period_key: string | null;
+  vat_type: string | null;
+  vat_due_type: string | null;
+  vat_frequency: string | null;
+  income_tax_advance_enabled: boolean;
+  income_tax_deductions_enabled: boolean;
+}): Promise<{
+  vat: ReportingDueDateResolution | null;
+  advances: ReportingDueDateResolution | null;
+  deductions: ReportingDueDateResolution | null;
+}> {
+  const lookups: Array<{ obligation_key: string; reporting_period_key: string }> = [];
+  let vat: ReportingDueDateResolution | null = null;
+  let vatObligationKey: string | null = null;
+  let vatLookupPeriodKey: string | null = null;
+
+  if (input.vat_reporting_period_key) {
+    vatObligationKey = resolveVatObligationKeyFromClientTaxSettings({
+      vat_type: input.vat_type,
+      vat_due_type: input.vat_due_type,
+    });
+    if (!vatObligationKey) {
+      vat = unresolvedReportingDueDate(
+        input.country_code,
+        String(input.vat_due_type ?? 'vat'),
+        input.vat_reporting_period_key,
+        'vat_not_applicable'
+      );
+    } else if (
+      !isVatReportingPeriodApplicable({
+        vat_frequency: input.vat_frequency,
+        reporting_period_key: input.vat_reporting_period_key,
+      })
+    ) {
+      vat = unresolvedReportingDueDate(
+        input.country_code,
+        vatObligationKey,
+        input.vat_reporting_period_key,
+        'vat_period_not_applicable_for_frequency'
+      );
+    } else {
+      vatLookupPeriodKey = resolveVatOperationalCalendarLookupPeriodKey({
+        vat_frequency: input.vat_frequency,
+        period_identity_key: input.vat_reporting_period_key,
+      });
+      if (!vatLookupPeriodKey) {
+        vat = unresolvedReportingDueDate(
+          input.country_code,
+          vatObligationKey,
+          input.vat_reporting_period_key,
+          'invalid_reporting_period_key'
+        );
+      } else {
+        lookups.push({ obligation_key: vatObligationKey, reporting_period_key: vatLookupPeriodKey });
+      }
+    }
+  }
+
+  const advancesApplicable = input.income_tax_advance_enabled && Boolean(input.reporting_period_key);
+  if (advancesApplicable && input.reporting_period_key) {
+    lookups.push({
+      obligation_key: incomeTaxAdvancesObligationKey(),
+      reporting_period_key: input.reporting_period_key,
+    });
+  }
+
+  const deductionsApplicable =
+    input.income_tax_deductions_enabled && Boolean(input.deductions_reporting_period_key);
+  if (deductionsApplicable && input.deductions_reporting_period_key) {
+    lookups.push({
+      obligation_key: incomeTaxDeductionsObligationKey(),
+      reporting_period_key: input.deductions_reporting_period_key,
+    });
+  }
+
+  const resolved = await resolveReportingDueDatesBatch({
+    country_code: input.country_code,
+    country_pack_ruleset_id: input.country_pack_ruleset_id,
+    lookups,
+  });
+
+  if (vat == null && vatObligationKey && vatLookupPeriodKey && input.vat_reporting_period_key) {
+    const candidate = resolved.get(calendarLookupMapKey(vatObligationKey, vatLookupPeriodKey)) ?? null;
+    if (
+      candidate?.resolved &&
+      !isFilingDueDateAfterReportingPeriodEnd(candidate.filing_due_date, vatLookupPeriodKey)
+    ) {
+      vat = unresolvedReportingDueDate(
+        input.country_code,
+        vatObligationKey,
+        input.vat_reporting_period_key,
+        'filing_due_before_reporting_period_end'
+      );
+    } else {
+      vat = candidate;
+    }
+  }
+
+  const advances =
+    advancesApplicable && input.reporting_period_key
+      ? resolved.get(calendarLookupMapKey(incomeTaxAdvancesObligationKey(), input.reporting_period_key)) ?? null
+      : null;
+  const deductions =
+    deductionsApplicable && input.deductions_reporting_period_key
+      ? resolved.get(calendarLookupMapKey(incomeTaxDeductionsObligationKey(), input.deductions_reporting_period_key)) ?? null
+      : null;
+
+  return { vat, advances, deductions };
+}
+
 /**
  * GET quick profile for one client — one aggregate, org-scoped.
  */
@@ -61,7 +187,19 @@ export async function getClientOperationsClientQuickProfile(
   const id = String(clientId ?? '').trim();
   if (!id) throw forbidden('Client not found');
 
-  const [{ data: client, error: clientErr }, { data: primaryContact }, { data: profile }] =
+  const reportingPeriodKey = resolveOperationalReportingPeriodKey();
+  const asOf = new Date().toISOString().slice(0, 10);
+
+  const [
+    { data: client, error: clientErr },
+    { data: primaryContact },
+    { data: profile },
+    { data: accountingSettings },
+    { data: expenseItems },
+    { data: taxSettingsRow },
+    { data: fleetRows },
+    orgRuleset,
+  ] =
     await Promise.all([
       supabaseAdmin
         .from('clients')
@@ -82,34 +220,39 @@ export async function getClientOperationsClientQuickProfile(
         .eq('organization_id', orgId)
         .eq('client_id', id)
         .maybeSingle(),
+      supabaseAdmin
+        .from('client_accounting_settings')
+        .select('income_management_system, has_vehicles')
+        .eq('organization_id', orgId)
+        .eq('client_id', id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('client_accounting_expense_items')
+        .select('expense_type_code, business_percent, monthly_amount_ils, sort_order')
+        .eq('organization_id', orgId)
+        .eq('client_id', id)
+        .order('sort_order', { ascending: true }),
+      supabaseAdmin
+        .from('client_tax_settings')
+        .select(
+          'vat_type, vat_frequency, vat_due_type, income_tax_advance_enabled, income_tax_advance_percent, income_tax_deductions_enabled, income_tax_deductions_frequency, national_insurance_deductions_file_number'
+        )
+        .eq('organization_id', orgId)
+        .eq('client_id', id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('client_accounting_vehicle_fleet')
+        .select('vehicle_status, business_use_percent, license_plate')
+        .eq('organization_id', orgId)
+        .eq('client_id', id)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true }),
+      resolveOrganizationActiveRuleset(orgId, asOf),
     ]);
 
   if (clientErr) throw clientErr;
   if (!client) throw forbidden('Client not found');
 
-  const [{ data: accountingSettings }, { data: expenseItems }] = await Promise.all([
-    supabaseAdmin
-      .from('client_accounting_settings')
-      .select('income_management_system, has_vehicles')
-      .eq('organization_id', orgId)
-      .eq('client_id', id)
-      .maybeSingle(),
-    supabaseAdmin
-      .from('client_accounting_expense_items')
-      .select('expense_type_code, business_percent, monthly_amount_ils, sort_order')
-      .eq('organization_id', orgId)
-      .eq('client_id', id)
-      .order('sort_order', { ascending: true }),
-  ]);
-
-  const { data: taxSettingsRow } = await supabaseAdmin
-    .from('client_tax_settings')
-    .select(
-      'vat_type, vat_frequency, vat_due_type, income_tax_advance_enabled, income_tax_advance_percent, income_tax_deductions_enabled, income_tax_deductions_frequency, national_insurance_deductions_file_number'
-    )
-    .eq('organization_id', orgId)
-    .eq('client_id', id)
-    .maybeSingle();
   const settings = (taxSettingsRow ?? {
     vat_type: null,
     vat_frequency: null,
@@ -133,7 +276,11 @@ export async function getClientOperationsClientQuickProfile(
   const hasVehicles = Boolean(
     (accountingSettings as { has_vehicles?: boolean | null } | null)?.has_vehicles
   );
-  const fleet = hasVehicles ? await loadVehicleFleet(orgId, id) : [];
+  const fleet = (hasVehicles ? (fleetRows ?? []) : []) as Array<{
+    vehicle_status: string | null;
+    business_use_percent: number | null;
+    license_plate: string | null;
+  }>;
 
   const phone = resolveQuickProfilePhoneDisplay({
     client_phone: (client as { phone?: string | null }).phone,
@@ -227,7 +374,6 @@ export async function getClientOperationsClientQuickProfile(
 
   // Baseline = prior Jerusalem month (advances + aggregate metadata).
   // VAT / deductions select obligation-specific periods — see pure helpers.
-  const reportingPeriodKey = resolveOperationalReportingPeriodKey();
   const vatReportingPeriodKey = resolveVatOperationalReportingPeriodKey({
     vat_frequency: settings.vat_frequency,
   });
@@ -237,44 +383,10 @@ export async function getClientOperationsClientQuickProfile(
   const reporting_rows: ClientQuickProfileRow[] = [];
 
   if (reportingPeriodKey || vatReportingPeriodKey || deductionsPeriod.applicable) {
-    const asOf = new Date().toISOString().slice(0, 10);
-    const orgRuleset = await resolveOrganizationActiveRuleset(orgId, asOf);
     const countryCode = String(orgRuleset.country_code ?? '')
       .trim()
       .toUpperCase();
     const rulesetId = orgRuleset.ruleset_id;
-
-    const vatPromise = vatReportingPeriodKey
-      ? resolveClientVatReportingDueDate({
-          country_code: countryCode,
-          reporting_period_key: vatReportingPeriodKey,
-          vat_type: settings.vat_type,
-          vat_due_type: settings.vat_due_type,
-          vat_frequency: settings.vat_frequency,
-          country_pack_ruleset_id: rulesetId,
-        })
-      : Promise.resolve(null);
-
-    const advancesPromise =
-      settings.income_tax_advance_enabled && reportingPeriodKey
-        ? resolveClientIncomeTaxAdvancesDueDate({
-            country_code: countryCode,
-            reporting_period_key: reportingPeriodKey,
-            income_tax_advance_enabled: true,
-            country_pack_ruleset_id: rulesetId,
-          })
-        : Promise.resolve(null);
-
-    const deductionsPromise =
-      settings.income_tax_deductions_enabled &&
-      deductionsPeriod.applicable &&
-      deductionsPeriod.reporting_period_key
-        ? resolveClientIncomeTaxDeductionsDueDate({
-            country_code: countryCode,
-            reporting_period_key: deductionsPeriod.reporting_period_key,
-            country_pack_ruleset_id: rulesetId,
-          })
-        : Promise.resolve(null);
 
     const niFile = String(settings.national_insurance_deductions_file_number ?? '').trim();
     const niApplicable =
@@ -287,8 +399,27 @@ export async function getClientOperationsClientQuickProfile(
           })
         : Promise.resolve(null);
 
-    const [vatResolution, advancesResolution, deductionsResolution, ni] =
-      await Promise.all([vatPromise, advancesPromise, deductionsPromise, niPromise]);
+    const [calendarResolutions, ni] = await Promise.all([
+      resolveQuickProfileReportingDueDates({
+        country_code: countryCode,
+        country_pack_ruleset_id: rulesetId,
+        reporting_period_key: reportingPeriodKey,
+        vat_reporting_period_key: vatReportingPeriodKey,
+        deductions_reporting_period_key: deductionsPeriod.reporting_period_key,
+        vat_type: settings.vat_type,
+        vat_due_type: settings.vat_due_type,
+        vat_frequency: settings.vat_frequency,
+        income_tax_advance_enabled: settings.income_tax_advance_enabled,
+        income_tax_deductions_enabled:
+          settings.income_tax_deductions_enabled &&
+          deductionsPeriod.applicable &&
+          Boolean(deductionsPeriod.reporting_period_key),
+      }),
+      niPromise,
+    ]);
+    const vatResolution = calendarResolutions.vat;
+    const advancesResolution = calendarResolutions.advances;
+    const deductionsResolution = calendarResolutions.deductions;
 
     if (vatResolution) {
       const vatReason = !vatResolution.resolved ? vatResolution.reason : null;

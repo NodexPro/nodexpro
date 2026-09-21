@@ -18,14 +18,15 @@ type RegistryAggregate = {
   toolbar_capabilities?: ClientOperationsToolbarCapability[];
   custom_columns_capability?: { max: number; current: number; can_create: boolean };
   query?: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null };
+  allowed_actions?: string[];
 };
 
 export function ClientOperationsRegistry() {
   const auth = useAuth();
-  const canEdit =
-    auth.status === 'authenticated' && auth.me.permissions.includes('client_operations.edit');
 
   const [rows, setRows] = useState<ClientOperationsRegistryRow[]>([]);
+  const [allowedActions, setAllowedActions] = useState<string[]>([]);
+  const canEdit = allowedActions.includes('client_operations.edit');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [noteTypes, setNoteTypes] = useState<ClientOperationsNoteTypeRow[]>([]);
@@ -47,6 +48,7 @@ export function ClientOperationsRegistry() {
 
   const applyAggregate = useCallback((data: RegistryAggregate) => {
     setRows(Array.isArray(data?.rows) ? data.rows : []);
+    setAllowedActions(Array.isArray(data?.allowed_actions) ? data.allowed_actions : []);
     setNoteTypes(Array.isArray(data?.note_types) ? data.note_types : []);
     setColumns(Array.isArray(data?.columns) ? data.columns : []);
     setToolbarCapabilities(Array.isArray(data?.toolbar_capabilities) ? data.toolbar_capabilities : []);

@@ -37,6 +37,15 @@ type CalendarEntryRow = {
   country_pack_ruleset_id: string | null;
 };
 
+export type ReportingDueDateBatchLookup = {
+  obligation_key: string;
+  reporting_period_key: string;
+};
+
+function batchLookupKey(obligationKey: string, periodKey: string): string {
+  return `${obligationKey}::${periodKey}`;
+}
+
 function toIsoDate(value: string): string {
   return value.slice(0, 10);
 }
@@ -53,6 +62,129 @@ function asResolved(row: CalendarEntryRow): ResolvedReportingDueDate {
     explanation_code: row.explanation_code,
     legal_basis_reference: row.legal_basis_reference,
   };
+}
+
+/**
+ * Resolve ACTIVE calendar entries for many obligation/period pairs in one query.
+ * Returned map is keyed as `${obligation_key}::${reporting_period_key}`.
+ */
+export async function resolveReportingDueDatesBatch(input: {
+  country_code: string;
+  country_pack_ruleset_id?: string | null;
+  lookups: ReportingDueDateBatchLookup[];
+}): Promise<Map<string, ReportingDueDateResolution>> {
+  const countryCode = String(input.country_code ?? '')
+    .trim()
+    .toUpperCase();
+  const requested = new Map<string, ReportingDueDateBatchLookup>();
+  const out = new Map<string, ReportingDueDateResolution>();
+
+  for (const raw of input.lookups ?? []) {
+    const obligationKey = String(raw.obligation_key ?? '').trim();
+    const periodKey = String(raw.reporting_period_key ?? '').trim();
+    const key = batchLookupKey(obligationKey, periodKey);
+    if (requested.has(key)) continue;
+
+    if (!countryCode || countryCode.length !== 2) {
+      out.set(key, unresolvedReportingDueDate(countryCode || '??', obligationKey, periodKey, 'country_mismatch'));
+      continue;
+    }
+    if (isNationalInsuranceObligationKey(obligationKey)) {
+      out.set(
+        key,
+        unresolvedReportingDueDate(
+          countryCode,
+          obligationKey,
+          periodKey,
+          'national_insurance_not_in_tax_authority_calendar'
+        )
+      );
+      continue;
+    }
+    if (!isReportingObligationKey(obligationKey)) {
+      out.set(key, unresolvedReportingDueDate(countryCode, obligationKey, periodKey, 'invalid_obligation_key'));
+      continue;
+    }
+    if (!isReportingPeriodKey(periodKey)) {
+      out.set(key, unresolvedReportingDueDate(countryCode, obligationKey, periodKey, 'invalid_reporting_period_key'));
+      continue;
+    }
+    requested.set(key, { obligation_key: obligationKey, reporting_period_key: periodKey });
+  }
+
+  const validLookups = [...requested.values()];
+  if (!validLookups.length) return out;
+
+  const obligationKeys = [...new Set(validLookups.map((l) => l.obligation_key))];
+  const periodKeys = [...new Set(validLookups.map((l) => l.reporting_period_key))];
+  const requestedKeys = new Set(requested.keys());
+
+  let query = supabaseAdmin
+    .from('country_reporting_calendar_entries')
+    .select(
+      'id, country_code, obligation_key, reporting_period_key, filing_due_date, explanation_code, legal_basis_reference, status, replaces_entry_id, country_pack_ruleset_id'
+    )
+    .eq('country_code', countryCode)
+    .in('obligation_key', obligationKeys)
+    .in('reporting_period_key', periodKeys)
+    .eq('status', 'active');
+
+  if (input.country_pack_ruleset_id) {
+    query = query.or(
+      `country_pack_ruleset_id.eq.${input.country_pack_ruleset_id},country_pack_ruleset_id.is.null`
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const rowsByLookup = new Map<string, CalendarEntryRow[]>();
+  for (const row of (data ?? []) as CalendarEntryRow[]) {
+    const key = batchLookupKey(row.obligation_key, row.reporting_period_key);
+    if (!requestedKeys.has(key)) continue;
+    const rows = rowsByLookup.get(key) ?? [];
+    rows.push(row);
+    rowsByLookup.set(key, rows);
+  }
+
+  for (const [key, rows] of rowsByLookup.entries()) {
+    const preferred =
+      (input.country_pack_ruleset_id
+        ? rows.find((r) => r.country_pack_ruleset_id === input.country_pack_ruleset_id)
+        : null) ?? rows[0]!;
+    out.set(key, asResolved(preferred));
+  }
+
+  const missing = validLookups.filter((lookup) => !out.has(batchLookupKey(lookup.obligation_key, lookup.reporting_period_key)));
+  if (missing.length) {
+    const { data: draftRows, error: draftErr } = await supabaseAdmin
+      .from('country_reporting_calendar_entries')
+      .select('obligation_key, reporting_period_key')
+      .eq('country_code', countryCode)
+      .in('obligation_key', [...new Set(missing.map((l) => l.obligation_key))])
+      .in('reporting_period_key', [...new Set(missing.map((l) => l.reporting_period_key))])
+      .eq('status', 'draft');
+    if (draftErr) throw draftErr;
+    const draftKeys = new Set(
+      ((draftRows ?? []) as Array<{ obligation_key: string; reporting_period_key: string }>)
+        .map((row) => batchLookupKey(row.obligation_key, row.reporting_period_key))
+        .filter((key) => requestedKeys.has(key))
+    );
+    for (const lookup of missing) {
+      const key = batchLookupKey(lookup.obligation_key, lookup.reporting_period_key);
+      out.set(
+        key,
+        unresolvedReportingDueDate(
+          countryCode,
+          lookup.obligation_key,
+          lookup.reporting_period_key,
+          draftKeys.has(key) ? 'draft_not_runtime_truth' : 'missing_active_entry'
+        )
+      );
+    }
+  }
+
+  return out;
 }
 
 /**

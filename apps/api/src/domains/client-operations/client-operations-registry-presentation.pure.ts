@@ -3,7 +3,7 @@
  * System columns plus organization-owned custom column presentation helpers.
  */
 
-export type RegistryColumnCellKind = 'folder' | 'text' | 'notes' | 'custom';
+export type RegistryColumnCellKind = 'folder' | 'text' | 'notes' | 'custom' | 'checkbox';
 export type ClientOperationsCustomColumnDataType = 'text' | 'number' | 'date' | 'boolean';
 
 export type ClientOperationsRegistryColumn = {
@@ -59,7 +59,7 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     label: 'ח.פ',
     cell_kind: 'text',
     value_field: 'tax_id',
-    visible: true,
+    visible: false,
     system: true,
     editable: false,
     freeze_default: false,
@@ -70,7 +70,7 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     label: 'סוג עסק',
     cell_kind: 'text',
     value_field: 'business_type',
-    visible: true,
+    visible: false,
     system: true,
     editable: false,
     freeze_default: false,
@@ -89,14 +89,15 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
   },
   {
     key: 'material_brought',
-    label: 'הביא חומר כן/לא',
-    cell_kind: 'text',
+    label: 'חומר למע״מ',
+    cell_kind: 'checkbox',
     value_field: 'material_brought_flag',
     visible: true,
     system: true,
-    editable: false,
+    editable: true,
     freeze_default: false,
-    align: 'right',
+    align: 'center',
+    default_width_px: 84,
   },
   {
     key: 'vat',
@@ -114,7 +115,7 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     label: 'יום יעד דיווח מע״מ',
     cell_kind: 'text',
     value_field: 'vat_due_registry_display_he',
-    visible: true,
+    visible: false,
     system: true,
     editable: false,
     freeze_default: false,
@@ -168,7 +169,7 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     key: 'handler',
     label: 'מטפל בתיק',
     cell_kind: 'text',
-    value_field: 'assigned_handler_user_id',
+    value_field: null,
     visible: true,
     system: true,
     editable: false,
@@ -295,7 +296,7 @@ export function buildRegistryRowCells(input: {
   national_insurance_status: string | null;
   national_insurance_deductions_status: string | null;
   income_tax_deductions_status: string | null;
-  assigned_handler_user_id: string | null;
+  assigned_handler_display_he: string | null;
   notes_cell_text_he: string | null;
 }): Record<string, string> {
   return {
@@ -310,7 +311,7 @@ export function buildRegistryRowCells(input: {
     national_insurance: formatNationalInsuranceCellDisplayHe(input.national_insurance_status),
     national_insurance_deductions: textHe(input.national_insurance_deductions_status),
     income_tax_deductions: textHe(input.income_tax_deductions_status),
-    handler: textHe(input.assigned_handler_user_id),
+    handler: textHe(input.assigned_handler_display_he),
     notes: textHe(input.notes_cell_text_he),
   };
 }

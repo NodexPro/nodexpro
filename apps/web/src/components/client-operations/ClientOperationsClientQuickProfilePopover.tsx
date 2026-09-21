@@ -34,8 +34,9 @@ export type ClientOperationsClientQuickProfileAggregate = {
 };
 
 type Props = {
-  profile: ClientOperationsClientQuickProfileAggregate;
+  profile: ClientOperationsClientQuickProfileAggregate | null;
   anchorEl: HTMLElement;
+  loading?: boolean;
   onClose: () => void;
 };
 
@@ -84,7 +85,7 @@ function ProfileRow({ row }: { row: ClientOperationsQuickProfileRow }) {
  * Compact Client Operations Quick Profile popover.
  * Renders only backend-ready rows — no domain branching.
  */
-export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, onClose }: Props) {
+export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, loading = false, onClose }: Props) {
   const titleId = useId();
   const cardRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
@@ -114,7 +115,7 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, o
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };
-  }, [anchorEl, profile]);
+  }, [anchorEl, profile, loading]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -124,11 +125,11 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, o
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const identity = (profile.identity_rows ?? []).filter((r) => r.visible);
-  const accounting = (profile.accounting_rows ?? []).filter((r) => r.visible);
-  const reporting = (profile.reporting_rows ?? []).filter((r) => r.visible);
-  const expenses = (profile.recurring_expense_rows ?? []).filter((r) => r.visible);
-  const showExpenses = Boolean(profile.expense_section_visible) && expenses.length > 0;
+  const identity = (profile?.identity_rows ?? []).filter((r) => r.visible);
+  const accounting = (profile?.accounting_rows ?? []).filter((r) => r.visible);
+  const reporting = (profile?.reporting_rows ?? []).filter((r) => r.visible);
+  const expenses = (profile?.recurring_expense_rows ?? []).filter((r) => r.visible);
+  const showExpenses = Boolean(profile?.expense_section_visible) && expenses.length > 0;
 
   return createPortal(
     <>
@@ -152,7 +153,7 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, o
       >
         <div className="nx-co-client-quick-profile__header">
           <h2 id={titleId} className="nx-client-quick-card__title">
-            {profile.title}
+            {profile?.title ?? 'טוען כרטיס מהיר…'}
           </h2>
           <button
             type="button"
@@ -163,33 +164,42 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, o
             ×
           </button>
         </div>
-        <dl className="nx-client-quick-card__rows">
-          {identity.length > 0 ? (
+        {loading || !profile ? (
+          <div className="nx-co-client-quick-profile__skeleton" aria-live="polite" aria-busy="true">
+            <div className="nx-co-client-quick-profile__section-title">פרטי לקוח</div>
+            <span />
+            <span />
+            <span />
+          </div>
+        ) : (
+          <dl className="nx-client-quick-card__rows">
+            {identity.length > 0 ? (
             <div className="nx-co-client-quick-profile__section">
               <div className="nx-co-client-quick-profile__section-title">פרטי לקוח</div>
               {identity.map((row) => (
                 <ProfileRow key={row.key} row={row} />
               ))}
             </div>
-          ) : null}
-          {accounting.length > 0 ? (
+            ) : null}
+            {accounting.length > 0 ? (
             <div className="nx-co-client-quick-profile__section">
               <div className="nx-co-client-quick-profile__section-title">הנה״ח</div>
               {accounting.map((row) => (
                 <ProfileRow key={row.key} row={row} />
               ))}
             </div>
-          ) : null}
-          {reporting.length > 0 ? (
+            ) : null}
+            {reporting.length > 0 ? (
             <div className="nx-co-client-quick-profile__section">
               <div className="nx-co-client-quick-profile__section-title">מועדי דיווח</div>
               {reporting.map((row) => (
                 <ProfileRow key={row.key} row={row} />
               ))}
             </div>
-          ) : null}
-        </dl>
-        {showExpenses ? (
+            ) : null}
+          </dl>
+        )}
+        {!loading && profile && showExpenses ? (
           <div className="nx-co-client-quick-profile__expenses">
             <div className="nx-co-client-quick-profile__expenses-title">
               {profile.expense_section_title_he}

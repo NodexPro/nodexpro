@@ -179,7 +179,6 @@ router.get('/clients/:clientId', ...withView, async (req, res, next) => {
   }
 });
 
-
 /** Compact client-name Quick Profile — READ-ONLY aggregate (not the full client case). */
 router.get('/clients/:clientId/quick-profile', ...withView, async (req, res, next) => {
   try {
@@ -192,7 +191,6 @@ router.get('/clients/:clientId/quick-profile', ...withView, async (req, res, nex
     next(e);
   }
 });
-
 
 router.post('/clients/:clientId/history/commands', ...withView, async (req, res, next) => {
   try {
@@ -852,8 +850,8 @@ router.delete('/clients/:clientId/operational-notes/:noteId', ...withEdit, async
     const clientId = String(req.params.clientId ?? '');
     const noteId = String(req.params.noteId ?? '');
     if (!clientId || !noteId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId and noteId required' });
-    await deleteOperationalNote(ctx, clientId, noteId);
-    return res.status(204).send();
+    const out = await deleteOperationalNote(ctx, clientId, noteId);
+    return res.status(200).json(out);
   } catch (e) {
     next(e);
   }

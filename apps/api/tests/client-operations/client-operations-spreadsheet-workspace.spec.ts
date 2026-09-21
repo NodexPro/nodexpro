@@ -34,7 +34,7 @@ const REQUIRED_LABELS = [
   'ח.פ',
   'סוג עסק',
   'שכר',
-  'הביא חומר כן/לא',
+  'חומר למע״מ',
   'מע״מ',
   'יום יעד דיווח מע״מ',
   'מקדמות מס הכנסה',
@@ -53,6 +53,18 @@ test('1 — existing backend-defined system columns remain', () => {
   }
   assert.ok(CLIENT_OPERATIONS_REGISTRY_COLUMNS.some((c) => c.key === 'folder' && c.cell_kind === 'folder'));
   assert.ok(CLIENT_OPERATIONS_REGISTRY_COLUMNS.every((c) => c.system === true));
+});
+
+test('1b — default visible registry columns hide cleanup fields and expose material checkbox; annual STATUS cols absent', () => {
+  const byKey = new Map(CLIENT_OPERATIONS_REGISTRY_COLUMNS.map((c) => [c.key, c]));
+  assert.equal(byKey.get('tax_id')?.visible, false);
+  assert.equal(byKey.get('business_type')?.visible, false);
+  assert.equal(byKey.get('vat_due')?.visible, false);
+  assert.equal(byKey.get('material_brought')?.label, 'חומר למע״מ');
+  assert.equal(byKey.get('material_brought')?.cell_kind, 'checkbox');
+  assert.equal(byKey.get('material_brought')?.editable, true);
+  assert.equal(byKey.has('annual_report'), false);
+  assert.equal(byKey.has('capital_declaration'), false);
 });
 
 test('2 — folder action remains emoji button openClientModal', () => {
@@ -151,11 +163,13 @@ test('10 — folder behavior unchanged; spreadsheet title not skeleton', () => {
     national_insurance_status: '100',
     national_insurance_deductions_status: null,
     income_tax_deductions_status: null,
-    assigned_handler_user_id: null,
+    assigned_handler_display_he: null,
     notes_cell_text_he: null,
   });
   assert.equal(cells.payroll, 'כן');
   assert.equal(cells.material_brought, 'לא');
+  assert.equal(cells.annual_report, undefined);
+  assert.equal(cells.capital_declaration, undefined);
   assert.match(cells.national_insurance, /₪/);
 });
 

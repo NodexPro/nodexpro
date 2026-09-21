@@ -82,18 +82,23 @@ export function buildNotesCellDisplayHe(
   return { count: notes.length, cell_text_he: cell };
 }
 
-async function getClientNotesRegistryPreviewHe(
-  orgId: string,
+export type OperationalNoteMutationResult = {
+  note?: OperationalNoteDto;
+  notes: OperationalNoteDto[];
+  registry: import('./client-operations.service.js').ClientOperationsRegistryResponse;
+};
+
+async function buildOperationalNoteMutationResult(
+  ctx: RequestContext,
   clientId: string,
-): Promise<{ notes_cell_text_he: string | null; operational_notes_count: number }> {
-  const { data, error } = await supabaseAdmin
-    .from('client_operational_notes')
-    .select('body, reminder_at, updated_at')
-    .eq('organization_id', orgId)
-    .eq('client_id', clientId);
-  if (error) throw new AppError(500, error.message ?? 'Database error', 'SUPABASE_ERROR');
-  const agg = buildNotesCellDisplayHe((data ?? []) as Array<{ body: string; reminder_at: string | null; updated_at: string }>);
-  return { notes_cell_text_he: agg.cell_text_he, operational_notes_count: agg.count };
+  note?: OperationalNoteDto,
+): Promise<OperationalNoteMutationResult> {
+  const [{ notes }, { listClientOperationsRegistry }] = await Promise.all([
+    listOperationalNotes(ctx, clientId),
+    import('./client-operations.service.js'),
+  ]);
+  const registry = await listClientOperationsRegistry(ctx, {});
+  return note ? { note, notes, registry } : { notes, registry };
 }
 
 export async function loadNotesAggregatesByClient(
@@ -279,7 +284,7 @@ export async function createOperationalNote(
     ignore_reminder_conflict?: boolean;
   },
 ): Promise<
-  | { note: OperationalNoteDto; registryPreview: { notes_cell_text_he: string | null; operational_notes_count: number } }
+  | OperationalNoteMutationResult
   | { conflict: true; ui: typeof CONFLICT_UI; conflicts: ConflictRow[] }
 > {
   const orgId = assertOrg(ctx);
@@ -345,8 +350,7 @@ export async function createOperationalNote(
     updated_at: createdRow.updated_at as string,
   };
 
-  const registryPreview = await getClientNotesRegistryPreviewHe(orgId, clientId);
-  return { note, registryPreview };
+  return buildOperationalNoteMutationResult(ctx, clientId, note);
 }
 
 export async function updateOperationalNote(
@@ -360,7 +364,7 @@ export async function updateOperationalNote(
     ignore_reminder_conflict?: boolean;
   },
 ): Promise<
-  | { note: OperationalNoteDto; registryPreview: { notes_cell_text_he: string | null; operational_notes_count: number } }
+  | OperationalNoteMutationResult
   | { conflict: true; ui: typeof CONFLICT_UI; conflicts: ConflictRow[] }
 > {
   const orgId = assertOrg(ctx);
@@ -448,11 +452,14 @@ export async function updateOperationalNote(
     updated_at: noteRow.updated_at as string,
   };
 
-  const registryPreview = await getClientNotesRegistryPreviewHe(orgId, clientId);
-  return { note, registryPreview };
+  return buildOperationalNoteMutationResult(ctx, clientId, note);
 }
 
-export async function deleteOperationalNote(ctx: RequestContext, clientId: string, noteId: string): Promise<void> {
+export async function deleteOperationalNote(
+  ctx: RequestContext,
+  clientId: string,
+  noteId: string,
+): Promise<OperationalNoteMutationResult> {
   const orgId = assertOrg(ctx);
   await ensureClientInOrg(orgId, clientId);
   const { error } = await supabaseAdmin
@@ -462,4 +469,5 @@ export async function deleteOperationalNote(ctx: RequestContext, clientId: strin
     .eq('client_id', clientId)
     .eq('id', noteId);
   if (error) throw new AppError(500, error.message ?? 'Database error', 'SUPABASE_ERROR');
+  return buildOperationalNoteMutationResult(ctx, clientId);
 }
