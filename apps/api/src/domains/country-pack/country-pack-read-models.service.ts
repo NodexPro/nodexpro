@@ -24,7 +24,7 @@ import {
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
 import { buildOwnerLegalValuesTableModel } from './owner-legal-values-table.pure.js';
-type CommercialControlsQuery = {
+export type CommercialControlsQuery = {
   page: number;
   page_size: number;
   search: string | null;
@@ -61,7 +61,7 @@ function normalizeCommercialControlsQuery(input?: Partial<CommercialControlsQuer
   return { page, page_size: pageSize, search, module_key, entitlement_status, activation_status };
 }
 
-async function buildOwnerCommercialControlsAggregate(queryInput?: Partial<CommercialControlsQuery>): Promise<Record<string, unknown>> {
+export async function buildOwnerCommercialControlsAggregate(queryInput?: Partial<CommercialControlsQuery>): Promise<Record<string, unknown>> {
   const q0 = normalizeCommercialControlsQuery(queryInput);
   const excludedNamePrefix = /^(cc-sync-|cc-bad-|dbg-)/i;
 
