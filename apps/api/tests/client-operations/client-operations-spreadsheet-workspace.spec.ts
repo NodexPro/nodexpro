@@ -34,7 +34,7 @@ const REQUIRED_LABELS = [
   'ח.פ',
   'סוג עסק',
   'שכר',
-  'חומר למע״מ',
+  'חומר',
   'מע״מ',
   'יום יעד דיווח מע״מ',
   'מקדמות מס הכנסה',
@@ -60,7 +60,7 @@ test('1b — default visible registry columns hide cleanup fields and expose mat
   assert.equal(byKey.get('tax_id')?.visible, false);
   assert.equal(byKey.get('business_type')?.visible, false);
   assert.equal(byKey.get('vat_due')?.visible, false);
-  assert.equal(byKey.get('material_brought')?.label, 'חומר למע״מ');
+  assert.equal(byKey.get('material_brought')?.label, 'חומר');
   assert.equal(byKey.get('material_brought')?.cell_kind, 'checkbox');
   assert.equal(byKey.get('material_brought')?.editable, true);
   assert.equal(byKey.has('annual_report'), false);

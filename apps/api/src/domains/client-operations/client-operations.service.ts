@@ -60,15 +60,21 @@ import {
   loadPeriodApplicabilitySnapshots,
   loadPeriodMaterialFacts,
   loadPeriodMembershipClientIds,
+  loadPayrollPeriodSalaryDataReceived,
   resolveRegistryOperationalPeriodKey,
   type ClientPeriodSourceRow,
 } from './client-operations-operational-period.service.js';
 import {
+  buildMaterialCells,
   clientExistsInOperationalPeriod,
+  mapOperationalPeriodKeyToPayrollPeriodKey,
   resolveDefaultOperationalPeriodKey,
+  resolveIncomeTaxAdvanceMaterialForPeriod,
   resolveMaterialBroughtForPeriod,
+  resolvePayrollMaterialForPeriod,
   shouldIncludeArchivedClientInOperationalPeriodRegistry,
   shouldEmitOperationalPeriodRegistryRow,
+  type MaterialCells,
 } from './client-operations-operational-period.pure.js';
 
 export type ClientOperationsRegistryRow = {
@@ -88,6 +94,7 @@ export type ClientOperationsRegistryRow = {
     row_visible: boolean;
   };
   material_brought_cell?: { applicable: boolean; completed: boolean | null; value: boolean | null };
+  material_cells?: MaterialCells;
   vat_status: string | null;
   income_tax_advance_status: string | null;
   national_insurance_status: string | null;
@@ -460,7 +467,8 @@ export async function listClientOperationsRegistry(
     });
   }
 
-  const [existingSnapshots, materialFacts] = await Promise.all([
+  const payrollPeriodKey = mapOperationalPeriodKeyToPayrollPeriodKey(selectedPeriodKey);
+  const [existingSnapshots, materialFacts, payrollSalaryByClient] = await Promise.all([
     loadPeriodApplicabilitySnapshots({
       organizationId: orgId,
       operationalPeriodKey: selectedPeriodKey,
@@ -469,6 +477,11 @@ export async function listClientOperationsRegistry(
     loadPeriodMaterialFacts({
       organizationId: orgId,
       operationalPeriodKey: selectedPeriodKey,
+      clientIds,
+    }),
+    loadPayrollPeriodSalaryDataReceived({
+      organizationId: orgId,
+      payrollPeriodKey,
       clientIds,
     }),
   ]);
@@ -556,13 +569,26 @@ export async function listClientOperationsRegistry(
           )
         : computeNationalInsuranceDeductionsRegistryDisplayHe(null, incomeDedProfile);
     const payroll_flag = (p?.payroll_flag as boolean | null) ?? null;
+    const periodFact = materialFacts.get(c.id);
     const materialBroughtCell = resolveMaterialBroughtForPeriod({
-      period_fact: materialFacts.get(c.id),
+      period_fact: periodFact?.material_brought,
       has_period_fact: materialFacts.has(c.id),
       legacy_profile_flag: (p?.material_brought_flag as boolean | null) ?? null,
       operational_period_key: selectedPeriodKey,
       default_period_key: defaultPeriodKey,
       vat_applicable: vatApplicable,
+    });
+    const incomeTaxAdvanceCell = resolveIncomeTaxAdvanceMaterialForPeriod({
+      period_fact: periodFact?.income_tax_advance_material_brought,
+      has_period_fact: materialFacts.has(c.id),
+      legacy_profile_flag: (p?.income_data_received_flag as boolean | null) ?? null,
+      operational_period_key: selectedPeriodKey,
+      default_period_key: defaultPeriodKey,
+      income_tax_advance_applicable: snapshot?.income_tax_advance_applicable ?? false,
+    });
+    const payrollCell = resolvePayrollMaterialForPeriod({
+      payroll_applicable: snapshot?.payroll_applicable ?? false,
+      salary_data_received: payrollSalaryByClient.get(c.id),
     });
     const material_brought_flag = materialBroughtCell.applicable ? materialBroughtCell.value : null;
     const vat_status = vatFromTax ?? (p?.vat_status as string | null) ?? null;
@@ -589,6 +615,11 @@ export async function listClientOperationsRegistry(
         row_visible: snapshot?.row_visible ?? true,
       },
       material_brought_cell: materialBroughtCell,
+      material_cells: buildMaterialCells({
+        vat: materialBroughtCell,
+        income_tax_advance: incomeTaxAdvanceCell,
+        payroll: payrollCell,
+      }),
       /** מע״מ: תדירות מע״מ ממיסים; עוסק פטור — פטור */
       vat_status,
       income_tax_advance_status,

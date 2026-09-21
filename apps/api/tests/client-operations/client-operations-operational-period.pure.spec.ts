@@ -8,13 +8,17 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildAvailableOperationalPeriods,
+  buildMaterialCells,
   resolveDefaultOperationalPeriodKey,
   clientExistsInOperationalPeriod,
   computeOperationalPeriodApplicability,
   isVatBiMonthlyApplicableForOperationalPeriod,
   isVatMonthlyApplicableForOperationalPeriod,
   isVatPaturApplicableForOperationalPeriod,
+  mapOperationalPeriodKeyToPayrollPeriodKey,
+  resolveIncomeTaxAdvanceMaterialForPeriod,
   resolveMaterialBroughtForPeriod,
+  resolvePayrollMaterialForPeriod,
   resolveVatApplicabilityForOperationalPeriod,
   shouldIncludeArchivedClientInOperationalPeriodRegistry,
   shouldEmitOperationalPeriodRegistryRow,
@@ -557,5 +561,164 @@ test('M7 — default vs explicit same period: resolver does not branch membershi
     service,
     /isCurrentOrDefaultPeriod[\s\S]{0,200}row_visible/,
   );
+});
+
+const naCell = { applicable: false, completed: null, value: null };
+const trueCell = { applicable: true, completed: true, value: true };
+const falseCell = { applicable: true, completed: false, value: false };
+
+test('MC1 — income-tax-advance material: period fact wins; N/A not encoded as false', () => {
+  const factWins = resolveIncomeTaxAdvanceMaterialForPeriod({
+    period_fact: true,
+    has_period_fact: true,
+    legacy_profile_flag: false,
+    operational_period_key: '2026-08',
+    default_period_key: '2026-08',
+    income_tax_advance_applicable: true,
+  });
+  assert.deepEqual(factWins, trueCell);
+
+  const na = resolveIncomeTaxAdvanceMaterialForPeriod({
+    period_fact: true,
+    has_period_fact: true,
+    legacy_profile_flag: true,
+    operational_period_key: '2026-09',
+    default_period_key: '2026-08',
+    income_tax_advance_applicable: false,
+  });
+  assert.deepEqual(na, naCell);
+});
+
+test('MC2 — income-tax-advance legacy profile flag only on default period', () => {
+  const defaultPeriod = resolveIncomeTaxAdvanceMaterialForPeriod({
+    period_fact: undefined,
+    has_period_fact: false,
+    legacy_profile_flag: true,
+    operational_period_key: '2026-08',
+    default_period_key: '2026-08',
+    income_tax_advance_applicable: true,
+  });
+  assert.deepEqual(defaultPeriod, trueCell);
+
+  const historical = resolveIncomeTaxAdvanceMaterialForPeriod({
+    period_fact: undefined,
+    has_period_fact: false,
+    legacy_profile_flag: true,
+    operational_period_key: '2026-07',
+    default_period_key: '2026-08',
+    income_tax_advance_applicable: true,
+  });
+  assert.deepEqual(historical, falseCell);
+});
+
+test('MC3 — payroll material projects salary_data_received; N/A when not applicable', () => {
+  assert.deepEqual(
+    resolvePayrollMaterialForPeriod({ payroll_applicable: true, salary_data_received: true }),
+    trueCell,
+  );
+  assert.deepEqual(
+    resolvePayrollMaterialForPeriod({ payroll_applicable: true, salary_data_received: false }),
+    falseCell,
+  );
+  assert.deepEqual(
+    resolvePayrollMaterialForPeriod({ payroll_applicable: false, salary_data_received: true }),
+    naCell,
+  );
+});
+
+test('MC4 — payroll_period_key mapping is identity; material_cells shape is backend-owned', () => {
+  assert.equal(mapOperationalPeriodKeyToPayrollPeriodKey('2026-08'), '2026-08');
+  const cells = buildMaterialCells({
+    vat: trueCell,
+    income_tax_advance: naCell,
+    payroll: falseCell,
+  });
+  assert.deepEqual(cells, {
+    vat: trueCell,
+    income_tax_advance: naCell,
+    payroll: falseCell,
+  });
+  assert.equal(cells.vat.applicable, true);
+  assert.equal(cells.income_tax_advance.completed, null);
+  assert.equal(cells.payroll.value, false);
+});
+
+test('MC5 — registry aggregate builds material_cells; VAT period_fact is boolean not the fact row (source)', () => {
+  const service = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations.service.ts'),
+    'utf8',
+  );
+  assert.match(service, /loadPayrollPeriodSalaryDataReceived/);
+  assert.match(service, /mapOperationalPeriodKeyToPayrollPeriodKey\(selectedPeriodKey\)/);
+  assert.match(service, /periodFact\?\.material_brought/);
+  assert.match(service, /periodFact\?\.income_tax_advance_material_brought/);
+  assert.match(service, /income_data_received_flag/);
+  assert.match(service, /resolveIncomeTaxAdvanceMaterialForPeriod/);
+  assert.match(service, /resolvePayrollMaterialForPeriod/);
+  assert.match(service, /material_cells:\s*buildMaterialCells\(/);
+  assert.match(service, /material_brought_cell:\s*materialBroughtCell/);
+  assert.doesNotMatch(service, /period_fact:\s*materialFacts\.get\(c\.id\)[,\n]/);
+  // Membership remains independent of material cells / row_visible.
+  assert.match(service, /shouldEmitOperationalPeriodRegistryRow/);
+  assert.doesNotMatch(service, /if\s*\(\s*!.*material_cells/);
+  assert.doesNotMatch(service, /if\s*\(\s*!snapshot\.row_visible\)\s*return\s*\[\]/);
+});
+
+test('MC6 — no FE logic for material_cells / stream resolvers (source)', () => {
+  const view = readFileSync(
+    join(dir, '../../../web/src/components/client-operations/ClientOperationsRegistryView.tsx'),
+    'utf8',
+  );
+  const page = readFileSync(join(dir, '../../../web/src/pages/ClientOperationsRegistry.tsx'), 'utf8');
+  assert.doesNotMatch(view, /buildMaterialCells|resolveIncomeTaxAdvanceMaterialForPeriod|resolvePayrollMaterialForPeriod/);
+  assert.doesNotMatch(page, /buildMaterialCells|resolveIncomeTaxAdvanceMaterialForPeriod|resolvePayrollMaterialForPeriod/);
+  assert.doesNotMatch(view, /computeOperationalPeriodApplicability/);
+  assert.doesNotMatch(page, /income_tax_advance_applicable\s*\?/);
+});
+
+test('MC7 — material commands return same-period aggregate (source contract)', () => {
+  const custom = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations-registry-custom-columns.service.ts'),
+    'utf8',
+  );
+  const audit = readFileSync(join(dir, '../../src/shared/audit-events.ts'), 'utf8');
+  const core = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-obligations-tasks-core.service.ts'),
+    'utf8',
+  );
+  const presentation = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations-registry-presentation.pure.ts'),
+    'utf8',
+  );
+
+  assert.match(custom, /command === 'set_material_brought'/);
+  assert.match(custom, /command === 'set_income_tax_advance_material_brought'/);
+  assert.match(custom, /command === 'set_payroll_material_brought'/);
+  assert.match(custom, /upsertPeriodIncomeTaxAdvanceMaterialFact/);
+  assert.match(custom, /income_data_received_flag: value/);
+  assert.match(custom, /snapshot\?\.income_tax_advance_applicable/);
+  assert.match(custom, /snapshot\?\.payroll_applicable/);
+  assert.match(custom, /mapOperationalPeriodKeyToPayrollPeriodKey\(operationalPeriodKey\)/);
+  assert.match(custom, /setPayrollPeriodSalaryDataReceived/);
+  assert.match(custom, /MATERIAL_REGISTRY_COMMANDS/);
+  assert.match(custom, /responseQuery\.operational_period_key/);
+  assert.match(custom, /listClientOperationsRegistry\(ctx,\s*responseQuery\)/);
+
+  assert.match(audit, /CLIENT_OPERATIONS_INCOME_TAX_ADVANCE_MATERIAL_BROUGHT_SET/);
+  assert.match(audit, /client_operations\.income_tax_advance_material_brought\.set/);
+  assert.match(audit, /CLIENT_OPERATIONS_PAYROLL_MATERIAL_BROUGHT_SET/);
+  assert.match(audit, /client_operations\.payroll_material_brought\.set/);
+
+  assert.match(core, /export async function setPayrollPeriodSalaryDataReceived/);
+  assert.match(core, /from\('client_payroll_period_state'\)/);
+  assert.match(core, /salary_data_received/);
+  assert.match(core, /payroll_period_key/);
+  assert.match(core, /persistPayrollPeriodState/);
+  assert.match(core, /syncSalaryReceivedProfileFlagWithPayrollPeriodIfCurrent/);
+  assert.match(core, /await setPayrollPeriodSalaryDataReceived/);
+
+  assert.match(presentation, /key: 'material_brought'/);
+  assert.match(presentation, /label: 'חומר'/);
+  assert.doesNotMatch(presentation, /label: 'חומר למע״מ'/);
 });
 

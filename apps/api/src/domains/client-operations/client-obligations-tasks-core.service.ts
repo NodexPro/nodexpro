@@ -984,6 +984,50 @@ async function persistPayrollSalaryReceivedWhenProfileSaysSo(
   return next;
 }
 
+/**
+ * Canonical payroll write for salary_data_received (Client Operations חומר · שכר + obligations checkbox).
+ * Does not duplicate persist/sync: reuses persistPayrollPeriodState + profile flag alignment.
+ */
+export async function setPayrollPeriodSalaryDataReceived(input: {
+  organizationId: string;
+  clientId: string;
+  payrollPeriodKey: string;
+  enabled: boolean;
+  now?: Date;
+}): Promise<{ previous: PayrollPeriodStateRow; next: PayrollPeriodStateRow }> {
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const previous = await fetchPayrollPeriodState(
+    input.organizationId,
+    input.clientId,
+    input.payrollPeriodKey,
+  );
+  const next: PayrollPeriodStateRow = { ...previous };
+  if (input.enabled) {
+    next.not_relevant = false;
+    next.salary_data_received = true;
+  } else {
+    next.salary_data_received = false;
+    next.sent_to_employer = false;
+  }
+  await persistPayrollPeriodState(
+    input.organizationId,
+    input.clientId,
+    input.payrollPeriodKey,
+    next,
+    nowIso,
+  );
+  await syncSalaryReceivedProfileFlagWithPayrollPeriodIfCurrent(
+    input.organizationId,
+    input.clientId,
+    input.payrollPeriodKey,
+    next,
+    now,
+    nowIso,
+  );
+  return { previous, next };
+}
+
 function payrollStateSnapshot(row: PayrollPeriodStateRow): Record<string, unknown> {
   return {
     salary_data_received: row.salary_data_received,
@@ -3614,22 +3658,18 @@ export async function executeClientObligationsCommand(
     case 'set_payroll_period_salary_data_received': {
       const pk = readPayrollPeriodKey(payload);
       const enabled = payload.enabled !== false;
-      const prev = await fetchPayrollPeriodState(orgId, clientId, pk);
-      const next: PayrollPeriodStateRow = { ...prev };
-      if (enabled) {
-        next.not_relevant = false;
-        next.salary_data_received = true;
-      } else {
-        next.salary_data_received = false;
-        next.sent_to_employer = false;
-      }
+      const { previous: prev, next } = await setPayrollPeriodSalaryDataReceived({
+        organizationId: orgId,
+        clientId,
+        payrollPeriodKey: pk,
+        enabled,
+        now: commandNow,
+      });
       obligationAuditExtra = {
         payroll_period_key: pk,
         previous_payroll_state: payrollStateSnapshot(prev),
         next_payroll_state: payrollStateSnapshot(next),
       };
-      await persistPayrollPeriodState(orgId, clientId, pk, next, nowIso);
-      await syncSalaryReceivedProfileFlagWithPayrollPeriodIfCurrent(orgId, clientId, pk, next, commandNow, nowIso);
       break;
     }
     case 'set_payroll_period_sent_to_employer': {

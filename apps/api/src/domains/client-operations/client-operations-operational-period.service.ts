@@ -107,22 +107,55 @@ export async function loadPeriodApplicabilitySnapshots(input: {
   return out;
 }
 
+export type PeriodMaterialFactRow = {
+  material_brought: boolean;
+  income_tax_advance_material_brought: boolean;
+};
+
 export async function loadPeriodMaterialFacts(input: {
   organizationId: string;
   operationalPeriodKey: string;
+  clientIds: string[];
+}): Promise<Map<string, PeriodMaterialFactRow>> {
+  const out = new Map<string, PeriodMaterialFactRow>();
+  if (!input.clientIds.length) return out;
+  const { data, error } = await supabaseAdmin
+    .from('client_operations_period_material_facts')
+    .select('client_id, material_brought, income_tax_advance_material_brought')
+    .eq('organization_id', input.organizationId)
+    .eq('operational_period_key', input.operationalPeriodKey)
+    .in('client_id', input.clientIds);
+  assertQueryError(error, 'Failed to load period material facts');
+  for (const row of (data ?? []) as Array<{
+    client_id: string;
+    material_brought: boolean;
+    income_tax_advance_material_brought?: boolean;
+  }>) {
+    out.set(row.client_id, {
+      material_brought: Boolean(row.material_brought),
+      income_tax_advance_material_brought: Boolean(row.income_tax_advance_material_brought),
+    });
+  }
+  return out;
+}
+
+/** Batch-load payroll salary_data_received for payroll_period_key (= operational period K). */
+export async function loadPayrollPeriodSalaryDataReceived(input: {
+  organizationId: string;
+  payrollPeriodKey: string;
   clientIds: string[];
 }): Promise<Map<string, boolean>> {
   const out = new Map<string, boolean>();
   if (!input.clientIds.length) return out;
   const { data, error } = await supabaseAdmin
-    .from('client_operations_period_material_facts')
-    .select('client_id, material_brought')
+    .from('client_payroll_period_state')
+    .select('client_id, salary_data_received')
     .eq('organization_id', input.organizationId)
-    .eq('operational_period_key', input.operationalPeriodKey)
+    .eq('payroll_period_key', input.payrollPeriodKey)
     .in('client_id', input.clientIds);
-  assertQueryError(error, 'Failed to load period material facts');
-  for (const row of (data ?? []) as Array<{ client_id: string; material_brought: boolean }>) {
-    out.set(row.client_id, Boolean(row.material_brought));
+  assertQueryError(error, 'Failed to load payroll period salary_data_received');
+  for (const row of (data ?? []) as Array<{ client_id: string; salary_data_received: boolean }>) {
+    out.set(row.client_id, Boolean(row.salary_data_received));
   }
   return out;
 }
@@ -279,4 +312,25 @@ export async function upsertPeriodMaterialFact(input: {
     { onConflict: 'organization_id,client_id,operational_period_key' },
   );
   assertQueryError(error, 'Failed to upsert period material fact');
+}
+
+export async function upsertPeriodIncomeTaxAdvanceMaterialFact(input: {
+  ctx: RequestContext;
+  organizationId: string;
+  clientId: string;
+  operationalPeriodKey: string;
+  incomeTaxAdvanceMaterialBrought: boolean;
+}): Promise<void> {
+  const { error } = await supabaseAdmin.from('client_operations_period_material_facts').upsert(
+    {
+      organization_id: input.organizationId,
+      client_id: input.clientId,
+      operational_period_key: input.operationalPeriodKey,
+      income_tax_advance_material_brought: input.incomeTaxAdvanceMaterialBrought,
+      updated_by_user_id: input.ctx.user?.id ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'organization_id,client_id,operational_period_key' },
+  );
+  assertQueryError(error, 'Failed to upsert income-tax-advance period material fact');
 }

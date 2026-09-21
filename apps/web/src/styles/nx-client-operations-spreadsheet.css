@@ -158,9 +158,41 @@
 .nx-co-sheet__canvas {
   background: #fff;
   border: 1px solid var(--nx-co-grid);
-  border-radius: 6px;
-  overflow: auto;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  /* Explicit axes: keep required H/V scroll without fake arrow chrome. */
+  overflow-x: auto;
+  overflow-y: auto;
   max-height: calc(100vh - 180px);
+  min-height: 0;
+  flex: 1 1 auto;
+  scrollbar-width: thin;
+  scrollbar-color: #c5ced8 transparent;
+}
+
+/* Windows/Chromium classic scrollbars expose ▲▼ buttons; hide those only. */
+.nx-co-sheet__canvas::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.nx-co-sheet__canvas::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.nx-co-sheet__canvas::-webkit-scrollbar-thumb {
+  background: #c5ced8;
+  border-radius: 6px;
+}
+
+.nx-co-sheet__canvas::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nx-co-sheet__canvas::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .nx-co-sheet__table {
@@ -301,6 +333,53 @@
 .nx-co-sheet__checkbox:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.nx-co-sheet__material-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.1;
+}
+
+.nx-co-sheet__material-header-title {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.nx-co-sheet__material-header-subs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(28px, 1fr));
+  gap: 4px;
+  width: 100%;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--nx-co-muted);
+  text-align: center;
+}
+
+.nx-co-sheet__material {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(28px, 1fr));
+  gap: 4px;
+  align-items: center;
+  justify-items: center;
+  min-width: 96px;
+}
+
+.nx-co-sheet__material-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  margin: 0;
+}
+
+.nx-co-sheet__material-slot.is-na {
+  color: #9ca3af;
+  font-size: 13px;
+  user-select: none;
 }
 
 .nx-co-sheet__number-format {
@@ -448,12 +527,14 @@
   z-index: 6;
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
   gap: 0;
-  margin-top: -1px;
+  margin-top: 0;
   background: #eef2f6;
   border: 1px solid var(--nx-co-grid);
-  border-top-color: var(--nx-co-grid);
   border-radius: 0 0 6px 6px;
+  /* One thin Excel sheet-tab row — no tall gutter under the grid. */
+  min-height: 0;
 }
 
 .nx-co-sheet__period-tabs-scroll {
@@ -461,10 +542,34 @@
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: flex-end;
-  gap: 2px;
-  padding: 4px 6px 0;
+  gap: 1px;
+  padding: 0 4px;
+  /* Horizontal only: vertical auto here creates the bottom-left ▲▼ stub. */
   overflow-x: auto;
-  min-height: 28px;
+  overflow-y: hidden;
+  min-height: 22px;
+  max-height: 26px;
+  scrollbar-width: thin;
+  scrollbar-color: #c5ced8 transparent;
+}
+
+.nx-co-sheet__period-tabs-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.nx-co-sheet__period-tabs-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.nx-co-sheet__period-tabs-scroll::-webkit-scrollbar-thumb {
+  background: #c5ced8;
+  border-radius: 4px;
+}
+
+.nx-co-sheet__period-tabs-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .nx-co-sheet__period-tab {
@@ -475,13 +580,15 @@
   color: var(--nx-co-muted);
   font-size: 12px;
   font-weight: 600;
-  line-height: 1.2;
-  padding: 5px 12px;
-  border-radius: 4px 4px 0 0;
+  line-height: 1;
+  padding: 4px 10px;
+  border-radius: 3px 3px 0 0;
   cursor: pointer;
-  min-width: 52px;
-  height: 24px;
+  min-width: 48px;
+  height: 22px;
+  box-sizing: border-box;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .nx-co-sheet__period-tab:hover:not(:disabled) {
@@ -498,9 +605,9 @@
 }
 
 .nx-co-sheet__period-tab--plus {
-  min-width: 28px;
-  padding-inline: 8px;
-  font-size: 16px;
+  min-width: 24px;
+  padding-inline: 6px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--nx-co-brand);
 }
@@ -510,9 +617,11 @@
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px;
-  padding: 8px 10px 10px;
+  padding: 6px 8px 8px;
   border-top: 1px solid var(--nx-co-grid);
   background: #fff;
+  /* Opener expands only when + is open; tab strip itself stays one row. */
+  max-height: none;
 }
 
 .nx-co-sheet__period-opener-field {

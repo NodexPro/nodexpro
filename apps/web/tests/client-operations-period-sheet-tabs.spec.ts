@@ -153,3 +153,45 @@ test('FE does not filter registry rows by row_visible / applicability', () => {
   assert.doesNotMatch(view, /rows\.filter\(/);
 });
 
+test('sheet tab strip is compact; native scrollbar ▲▼ buttons are suppressed', () => {
+  const css = readFileSync(
+    join(dir, '../src/styles/nx-client-operations-spreadsheet.css'),
+    'utf8',
+  );
+  assert.match(css, /\.nx-co-sheet__period-tabs-scroll\s*\{[^}]*overflow-y:\s*hidden/s);
+  assert.match(css, /\.nx-co-sheet__period-tabs-scroll\s*\{[^}]*overflow-x:\s*auto/s);
+  assert.match(css, /\.nx-co-sheet__canvas\s*\{[^}]*overflow-x:\s*auto/s);
+  assert.match(css, /\.nx-co-sheet__canvas\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(css, /::-webkit-scrollbar-button\s*\{[^}]*display:\s*none/s);
+  assert.doesNotMatch(css, /fake-scroll|scroll-arrow|nx-co-sheet__scroll-btn/);
+});
+
+test('חומר column renders three backend-driven subcontrols מע״מ / מה״כ / שכר', () => {
+  const view = readFileSync(
+    join(dir, '../src/components/client-operations/ClientOperationsRegistryView.tsx'),
+    'utf8',
+  );
+  const css = readFileSync(
+    join(dir, '../src/styles/nx-client-operations-spreadsheet.css'),
+    'utf8',
+  );
+  assert.match(view, /material_cells/);
+  assert.match(view, /set_material_brought/);
+  assert.match(view, /set_income_tax_advance_material_brought/);
+  assert.match(view, /set_payroll_material_brought/);
+  assert.match(view, /nx-co-sheet__material-header-title/);
+  assert.match(view, />חומר</);
+  assert.match(view, /מע״מ/);
+  assert.match(view, /מה״כ/);
+  assert.match(view, /שכר/);
+  assert.match(view, /material_cells\?\.vat|cells\?\.vat/);
+  assert.match(view, /income_tax_advance/);
+  assert.match(view, /payroll/);
+  assert.match(view, /\.applicable/);
+  assert.match(css, /\.nx-co-sheet__material\s*\{/);
+  assert.match(css, /\.nx-co-sheet__material-slot\.is-na/);
+  assert.doesNotMatch(view, /vat_frequency|isVatBiMonthlyApplicable/);
+  assert.doesNotMatch(view, /income_tax_advance_frequency/);
+  assert.doesNotMatch(view, /mapOperationalPeriodKeyToPayrollPeriodKey|businessPreviousMonthKey/);
+});
+

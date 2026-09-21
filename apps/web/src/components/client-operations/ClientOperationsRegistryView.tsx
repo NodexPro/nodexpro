@@ -26,6 +26,18 @@ import '../../styles/nx-modal.css';
 import '../../styles/nx-client-operations-spreadsheet.css';
 import { ClientOperationsPeriodSheetTabs } from './ClientOperationsPeriodSheetTabs';
 
+export type ClientOperationsMaterialCell = {
+  applicable: boolean;
+  completed: boolean | null;
+  value: boolean | null;
+};
+
+export type ClientOperationsMaterialCells = {
+  vat: ClientOperationsMaterialCell;
+  income_tax_advance: ClientOperationsMaterialCell;
+  payroll: ClientOperationsMaterialCell;
+};
+
 export type ClientOperationsRegistryRow = {
   client_id: string;
   client_name: string | null;
@@ -42,7 +54,8 @@ export type ClientOperationsRegistryRow = {
     national_insurance_deductions_applicable: boolean;
     row_visible: boolean;
   };
-  material_brought_cell?: { applicable: boolean; completed: boolean | null; value: boolean | null };
+  material_brought_cell?: ClientOperationsMaterialCell;
+  material_cells?: ClientOperationsMaterialCells;
   vat_status: string | null;
   income_tax_advance_status: string | null;
   national_insurance_status: string | null;
@@ -574,19 +587,40 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       setCommandError(error instanceof Error ? error.message : 'שמירת הערך נכשלה');
     }
   };
-  const toggleMaterialBrought = async (row: ClientOperationsRegistryRow) => {
+  const toggleMaterialStream = async (
+    row: ClientOperationsRegistryRow,
+    stream: 'vat' | 'income_tax_advance' | 'payroll',
+  ) => {
     if (!canEdit || !onRegistryCommand) return;
+    const cells = row.material_cells;
+    const cell =
+      stream === 'vat'
+        ? cells?.vat ?? row.material_brought_cell
+        : stream === 'income_tax_advance'
+          ? cells?.income_tax_advance
+          : cells?.payroll;
+    if (!cell?.applicable) return;
+    const command =
+      stream === 'vat'
+        ? 'set_material_brought'
+        : stream === 'income_tax_advance'
+          ? 'set_income_tax_advance_material_brought'
+          : 'set_payroll_material_brought';
+    const current =
+      stream === 'vat'
+        ? Boolean(cell.value ?? row.material_brought_flag)
+        : Boolean(cell.value);
     setCommandError('');
     try {
       await onRegistryCommand({
-        command: 'set_material_brought',
+        command,
         client_id: row.client_id,
-        value: !Boolean(row.material_brought_flag),
+        value: !current,
         operational_period_key: query?.operational_period_key ?? null,
         query,
       });
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'שמירת חומר למע״מ נכשלה');
+      setCommandError(error instanceof Error ? error.message : 'שמירת חומר נכשלה');
     }
   };
   const createColumn = async () => {
@@ -946,32 +980,70 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         value
       );
     }
-    if (col.cell_kind === 'checkbox') {
-      const applicable =
-        r.material_brought_cell?.applicable ?? r.material_brought_flag !== null;
-      if (!applicable) {
-        return (
-          <span
-            className="nx-co-sheet__na"
-            title="לא רלוונטי לתקופה זו"
-            aria-label={`${col.label} לא רלוונטי`}
-          >
-            —
-          </span>
-        );
-      }
-      const checked = Boolean(r.material_brought_cell?.value ?? r.material_brought_flag);
+    if (col.cell_kind === 'checkbox' && col.key === 'material_brought') {
+      const periodLabel = query?.operational_period_key ?? '';
+      const clientLabel = r.client_name ?? r.client_id;
+      const streams: Array<{
+        key: 'vat' | 'income_tax_advance' | 'payroll';
+        labelHe: string;
+        cell: ClientOperationsMaterialCell | undefined;
+      }> = [
+        {
+          key: 'vat',
+          labelHe: 'מע״מ',
+          cell: r.material_cells?.vat ?? r.material_brought_cell,
+        },
+        {
+          key: 'income_tax_advance',
+          labelHe: 'מה״כ',
+          cell: r.material_cells?.income_tax_advance,
+        },
+        {
+          key: 'payroll',
+          labelHe: 'שכר',
+          cell: r.material_cells?.payroll,
+        },
+      ];
       return (
-        <input
-          type="checkbox"
-          className="nx-co-sheet__checkbox"
-          checked={checked}
-          disabled={!canEdit || !col.editable || !onRegistryCommand}
-          aria-label={`${col.label} ${r.client_name ?? ''}`}
-          onChange={() => void toggleMaterialBrought(r)}
-          onClick={(event) => event.stopPropagation()}
-        />
+        <div className="nx-co-sheet__material" role="group" aria-label={`חומר — ${clientLabel}`}>
+          {streams.map((stream) => {
+            const applicable = stream.cell?.applicable ?? false;
+            if (!applicable) {
+              return (
+                <span
+                  key={stream.key}
+                  className="nx-co-sheet__material-slot is-na"
+                  title={`${stream.labelHe} לא רלוונטי לתקופה זו`}
+                  aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel} — לא רלוונטי`}
+                >
+                  —
+                </span>
+              );
+            }
+            const checked = Boolean(
+              stream.key === 'vat'
+                ? stream.cell?.value ?? r.material_brought_flag
+                : stream.cell?.value,
+            );
+            return (
+              <label key={stream.key} className="nx-co-sheet__material-slot">
+                <input
+                  type="checkbox"
+                  className="nx-co-sheet__checkbox"
+                  checked={checked}
+                  disabled={!canEdit || !col.editable || !onRegistryCommand}
+                  aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel}`}
+                  onChange={() => void toggleMaterialStream(r, stream.key)}
+                  onClick={(event) => event.stopPropagation()}
+                />
+              </label>
+            );
+          })}
+        </div>
       );
+    }
+    if (col.cell_kind === 'checkbox') {
+      return displayForColumn(r, col);
     }
     if (col.key === 'client_name') {
       const text = displayForColumn(r, col);
@@ -1009,7 +1081,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         <thead><tr>
           {visibleColumns.map((column) => (
             <th key={column.key} data-col={column.key} data-freeze={column.freeze_default ? 'true' : 'false'} style={{ textAlign: column.align }}>
-              {column.label}
+              {column.key === 'material_brought' ? (
+                <div className="nx-co-sheet__material-header">
+                  <span className="nx-co-sheet__material-header-title">חומר</span>
+                  <div className="nx-co-sheet__material-header-subs" aria-hidden="true">
+                    <span>מע״מ</span>
+                    <span>מה״כ</span>
+                    <span>שכר</span>
+                  </div>
+                </div>
+              ) : (
+                column.label
+              )}
               <span className="nx-co-sheet__resize-handle" role="separator" aria-label={`שינוי רוחב ${column.label}`} onMouseDown={(event) => beginResize(event, column)} />
             </th>
           ))}

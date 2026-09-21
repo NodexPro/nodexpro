@@ -265,6 +265,67 @@ export function resolveMaterialBroughtForPeriod(input: {
 }
 
 /**
+ * מה״כ = מקדמות מס הכנסה material only (not ניכויים).
+ * Period fact wins; legacy income_data_received_flag only for default period.
+ */
+export function resolveIncomeTaxAdvanceMaterialForPeriod(input: {
+  period_fact: boolean | null | undefined;
+  has_period_fact: boolean;
+  legacy_profile_flag: boolean | null | undefined;
+  operational_period_key: string;
+  default_period_key: string;
+  income_tax_advance_applicable: boolean;
+}): OperationalCellState<boolean> {
+  if (!input.income_tax_advance_applicable) {
+    return { applicable: false, completed: null, value: null };
+  }
+  if (input.has_period_fact) {
+    return buildOperationalCheckboxCell(true, Boolean(input.period_fact));
+  }
+  if (input.operational_period_key === input.default_period_key) {
+    return buildOperationalCheckboxCell(true, Boolean(input.legacy_profile_flag));
+  }
+  return buildOperationalCheckboxCell(true, false);
+}
+
+/**
+ * שכר material projects canonical payroll salary_data_received for the mapped period.
+ * Mapping operational_period_key → payroll_period_key is identity (backend-owned).
+ */
+export function resolvePayrollMaterialForPeriod(input: {
+  payroll_applicable: boolean;
+  salary_data_received: boolean | null | undefined;
+}): OperationalCellState<boolean> {
+  if (!input.payroll_applicable) {
+    return { applicable: false, completed: null, value: null };
+  }
+  return buildOperationalCheckboxCell(true, Boolean(input.salary_data_received));
+}
+
+export type MaterialCells = {
+  vat: OperationalCellState<boolean>;
+  income_tax_advance: OperationalCellState<boolean>;
+  payroll: OperationalCellState<boolean>;
+};
+
+/** Backend-owned identity: payroll_period_key := operational_period_key. */
+export function mapOperationalPeriodKeyToPayrollPeriodKey(operationalPeriodKey: string): string {
+  return operationalPeriodKey;
+}
+
+export function buildMaterialCells(input: {
+  vat: OperationalCellState<boolean>;
+  income_tax_advance: OperationalCellState<boolean>;
+  payroll: OperationalCellState<boolean>;
+}): MaterialCells {
+  return {
+    vat: input.vat,
+    income_tax_advance: input.income_tax_advance,
+    payroll: input.payroll,
+  };
+}
+
+/**
  * Historical period registry membership for archived clients.
  * Live/current period: archived clients stay excluded.
  * Historical period: include only when a frozen snapshot/fact membership exists.

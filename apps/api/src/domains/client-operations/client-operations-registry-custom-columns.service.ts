@@ -13,13 +13,19 @@ import {
 } from './client-operations-registry-presentation.pure.js';
 import { resolveVatOperationalReportingPeriodKey } from './client-operations-client-quick-profile.pure.js';
 import { syncVatMaterialWorkEvent } from './client-operations-work-engine-bridge.js';
+import { setPayrollPeriodSalaryDataReceived } from './client-obligations-tasks-core.service.js';
 import {
   ensurePeriodApplicabilitySnapshots,
   loadPeriodApplicabilitySnapshots,
   resolveRegistryOperationalPeriodKey,
+  upsertPeriodIncomeTaxAdvanceMaterialFact,
   upsertPeriodMaterialFact,
+  type PeriodApplicabilitySnapshotRow,
 } from './client-operations-operational-period.service.js';
-import { resolveDefaultOperationalPeriodKey } from './client-operations-operational-period.pure.js';
+import {
+  mapOperationalPeriodKeyToPayrollPeriodKey,
+  resolveDefaultOperationalPeriodKey,
+} from './client-operations-operational-period.pure.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -242,6 +248,66 @@ function operationalPeriodKeyFrom(value: unknown): string {
   return resolveRegistryOperationalPeriodKey(value);
 }
 
+const MATERIAL_REGISTRY_COMMANDS = new Set([
+  'set_material_brought',
+  'set_income_tax_advance_material_brought',
+  'set_payroll_material_brought',
+]);
+
+async function ensurePeriodSnapshotForMaterialCommand(input: {
+  orgId: string;
+  clientId: string;
+  operationalPeriodKey: string;
+}): Promise<PeriodApplicabilitySnapshotRow | undefined> {
+  const client = await ensureActiveClientInOrg(input.orgId, input.clientId);
+  const [{ data: profile, error: profileError }, { data: tax, error: taxError }] = await Promise.all([
+    supabaseAdmin
+      .from('client_operational_profiles')
+      .select('payroll_flag')
+      .eq('organization_id', input.orgId)
+      .eq('client_id', input.clientId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('client_tax_settings')
+      .select(
+        'vat_type, vat_frequency, income_tax_advance_enabled, income_tax_advance_frequency, income_tax_deductions_enabled, income_tax_deductions_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number',
+      )
+      .eq('organization_id', input.orgId)
+      .eq('client_id', input.clientId)
+      .maybeSingle(),
+  ]);
+  assertQueryError(profileError, 'Failed to load operational profile');
+  assertQueryError(taxError, 'Failed to load tax settings');
+  const existing = await loadPeriodApplicabilitySnapshots({
+    organizationId: input.orgId,
+    operationalPeriodKey: input.operationalPeriodKey,
+    clientIds: [input.clientId],
+  });
+  const snapshots = await ensurePeriodApplicabilitySnapshots({
+    organizationId: input.orgId,
+    operationalPeriodKey: input.operationalPeriodKey,
+    existing,
+    sources: [{
+      client_id: input.clientId,
+      client_created_at: client.created_at,
+      inputs: {
+        vat_type: tax?.vat_type ?? null,
+        vat_frequency: tax?.vat_frequency ?? null,
+        payroll_flag: profile?.payroll_flag ?? null,
+        income_tax_advance_enabled: tax?.income_tax_advance_enabled ?? null,
+        income_tax_advance_frequency: tax?.income_tax_advance_frequency ?? null,
+        income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
+        income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
+        national_insurance_type: tax?.national_insurance_type ?? null,
+        national_insurance_monthly_amount: tax?.national_insurance_monthly_amount ?? null,
+        national_insurance_deductions_file_number:
+          tax?.national_insurance_deductions_file_number ?? null,
+      },
+    }],
+  });
+  return snapshots.get(input.clientId);
+}
+
 export async function executeClientOperationsRegistryCommand(
   ctx: RequestContext,
   body: ClientOperationsRegistryCommandBody
@@ -333,53 +399,11 @@ export async function executeClientOperationsRegistryCommand(
     const clientId = idFrom(body.client_id, 'client_id');
     const value = booleanFrom(body.value, 'value');
     const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
-    const client = await ensureActiveClientInOrg(orgId, clientId);
-    const [{ data: profile, error: profileError }, { data: tax, error: taxError }] = await Promise.all([
-      supabaseAdmin
-        .from('client_operational_profiles')
-        .select('payroll_flag')
-        .eq('organization_id', orgId)
-        .eq('client_id', clientId)
-        .maybeSingle(),
-      supabaseAdmin
-        .from('client_tax_settings')
-        .select(
-          'vat_type, vat_frequency, income_tax_advance_enabled, income_tax_advance_frequency, income_tax_deductions_enabled, income_tax_deductions_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number',
-        )
-        .eq('organization_id', orgId)
-        .eq('client_id', clientId)
-        .maybeSingle(),
-    ]);
-    assertQueryError(profileError, 'Failed to load operational profile');
-    assertQueryError(taxError, 'Failed to load tax settings');
-    const existing = await loadPeriodApplicabilitySnapshots({
-      organizationId: orgId,
+    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+      orgId,
+      clientId,
       operationalPeriodKey,
-      clientIds: [clientId],
     });
-    const snapshots = await ensurePeriodApplicabilitySnapshots({
-      organizationId: orgId,
-      operationalPeriodKey,
-      existing,
-      sources: [{
-        client_id: clientId,
-        client_created_at: client.created_at,
-        inputs: {
-          vat_type: tax?.vat_type ?? null,
-          vat_frequency: tax?.vat_frequency ?? null,
-          payroll_flag: profile?.payroll_flag ?? null,
-          income_tax_advance_enabled: tax?.income_tax_advance_enabled ?? null,
-          income_tax_advance_frequency: tax?.income_tax_advance_frequency ?? null,
-          income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
-          income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
-          national_insurance_type: tax?.national_insurance_type ?? null,
-          national_insurance_monthly_amount: tax?.national_insurance_monthly_amount ?? null,
-          national_insurance_deductions_file_number:
-            tax?.national_insurance_deductions_file_number ?? null,
-        },
-      }],
-    });
-    const snapshot = snapshots.get(clientId);
     if (!snapshot?.vat_applicable) throw badRequest('Material brought is not applicable for this period');
     await upsertPeriodMaterialFact({
       ctx,
@@ -410,6 +434,69 @@ export async function executeClientOperationsRegistryCommand(
     if (!value && operationalPeriodKey === resolveDefaultOperationalPeriodKey()) {
       await syncVatMaterialForCurrentPeriod(ctx, orgId, clientId);
     }
+  } else if (command === 'set_income_tax_advance_material_brought') {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const value = booleanFrom(body.value, 'value');
+    const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
+    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+      orgId,
+      clientId,
+      operationalPeriodKey,
+    });
+    if (!snapshot?.income_tax_advance_applicable) {
+      throw badRequest('Income tax advance material is not applicable for this period');
+    }
+    await upsertPeriodIncomeTaxAdvanceMaterialFact({
+      ctx,
+      organizationId: orgId,
+      clientId,
+      operationalPeriodKey,
+      incomeTaxAdvanceMaterialBrought: value,
+    });
+    if (operationalPeriodKey === resolveDefaultOperationalPeriodKey()) {
+      const { error } = await supabaseAdmin
+        .from('client_operational_profiles')
+        .upsert(
+          {
+            organization_id: orgId,
+            client_id: clientId,
+            income_data_received_flag: value,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'organization_id,client_id' },
+        );
+      assertQueryError(error, 'Failed to mirror income data received flag');
+    }
+    await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_INCOME_TAX_ADVANCE_MATERIAL_BROUGHT_SET, clientId, {
+      client_id: clientId,
+      operational_period_key: operationalPeriodKey,
+      income_tax_advance_material_brought: value,
+    });
+  } else if (command === 'set_payroll_material_brought') {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const value = booleanFrom(body.value, 'value');
+    const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
+    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+      orgId,
+      clientId,
+      operationalPeriodKey,
+    });
+    if (!snapshot?.payroll_applicable) {
+      throw badRequest('Payroll material is not applicable for this period');
+    }
+    const payrollPeriodKey = mapOperationalPeriodKeyToPayrollPeriodKey(operationalPeriodKey);
+    await setPayrollPeriodSalaryDataReceived({
+      organizationId: orgId,
+      clientId,
+      payrollPeriodKey,
+      enabled: value,
+    });
+    await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_PAYROLL_MATERIAL_BROUGHT_SET, clientId, {
+      client_id: clientId,
+      operational_period_key: operationalPeriodKey,
+      payroll_period_key: payrollPeriodKey,
+      salary_data_received: value,
+    });
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin
@@ -425,7 +512,7 @@ export async function executeClientOperationsRegistryCommand(
 
   const { listClientOperationsRegistry } = await import('./client-operations.service.js');
   const responseQuery = queryFrom(body.query);
-  if (command === 'set_material_brought') {
+  if (MATERIAL_REGISTRY_COMMANDS.has(command)) {
     responseQuery.operational_period_key = operationalPeriodKeyFrom(body.operational_period_key);
   }
   return listClientOperationsRegistry(ctx, responseQuery);

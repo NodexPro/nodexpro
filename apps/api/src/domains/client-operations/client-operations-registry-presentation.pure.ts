@@ -89,7 +89,7 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
   },
   {
     key: 'material_brought',
-    label: 'חומר למע״מ',
+    label: 'חומר',
     cell_kind: 'checkbox',
     value_field: 'material_brought_flag',
     visible: true,
@@ -97,7 +97,7 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     editable: true,
     freeze_default: false,
     align: 'center',
-    default_width_px: 84,
+    default_width_px: 120,
   },
   {
     key: 'vat',
