@@ -151,7 +151,12 @@ export type ClientOperationsRegistryViewProps = {
   columns?: ClientOperationsRegistryColumn[];
   toolbarCapabilities?: ClientOperationsToolbarCapability[];
   customColumnsCapability?: { max: number; current: number; can_create: boolean };
-  query?: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null };
+  query?: {
+    q: string | null;
+    sort_by: string | null;
+    sort_dir: 'asc' | 'desc' | null;
+    operational_period_key?: string | null;
+  };
   onQueryChange?: (next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null }) => void;
   onRegistryCommand?: (body: Record<string, unknown>) => Promise<unknown>;
   onApplyAggregate?: (aggregate: any) => void;
@@ -531,6 +536,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         command: 'set_material_brought',
         client_id: row.client_id,
         value: !Boolean(row.material_brought_flag),
+        operational_period_key: query?.operational_period_key ?? null,
         query,
       });
     } catch (error) {
@@ -901,7 +907,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           type="checkbox"
           className="nx-co-sheet__checkbox"
           checked={checked}
-          disabled={!canEdit || !col.editable || !onRegistryCommand}
+          disabled={
+            r.material_brought_flag === null || !canEdit || !col.editable || !onRegistryCommand
+          }
           aria-label={`${col.label} ${r.client_name ?? ''}`}
           onChange={() => void toggleMaterialBrought(r)}
           onClick={(event) => event.stopPropagation()}

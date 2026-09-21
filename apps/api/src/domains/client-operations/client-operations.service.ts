@@ -54,6 +54,21 @@ import {
   loadClientOperationsRegistryCustomColumnValues,
   type RegistryCustomColumnDefinition,
 } from './client-operations-registry-custom-columns.service.js';
+import {
+  ensurePeriodApplicabilitySnapshots,
+  listKnownOperationalPeriodKeys,
+  loadPeriodApplicabilitySnapshots,
+  loadPeriodMaterialFacts,
+  loadPeriodMembershipClientIds,
+  resolveRegistryOperationalPeriodKey,
+  type ClientPeriodSourceRow,
+} from './client-operations-operational-period.service.js';
+import {
+  clientExistsInOperationalPeriod,
+  resolveDefaultOperationalPeriodKey,
+  resolveMaterialBroughtForPeriod,
+  shouldIncludeArchivedClientInOperationalPeriodRegistry,
+} from './client-operations-operational-period.pure.js';
 
 export type ClientOperationsRegistryRow = {
   client_id: string;
@@ -62,6 +77,16 @@ export type ClientOperationsRegistryRow = {
   business_type: string | null;
   payroll_flag: boolean | null;
   material_brought_flag: boolean | null;
+  period_applicability?: {
+    vat_applicable: boolean;
+    payroll_applicable: boolean;
+    income_tax_advance_applicable: boolean;
+    income_tax_deductions_applicable: boolean;
+    national_insurance_applicable: boolean;
+    national_insurance_deductions_applicable: boolean;
+    row_visible: boolean;
+  };
+  material_brought_cell?: { applicable: boolean; completed: boolean | null; value: boolean | null };
   vat_status: string | null;
   income_tax_advance_status: string | null;
   national_insurance_status: string | null;
@@ -78,6 +103,11 @@ export type ClientOperationsRegistryRow = {
 
 export type ClientOperationsRegistryResponse = {
   title_he: string;
+  period: {
+    selected_period_key: string;
+    default_period_key: string;
+    available_periods: string[];
+  };
   rows: ClientOperationsRegistryRow[];
   columns: ClientOperationsRegistryColumn[];
   note_types: Array<{
@@ -96,6 +126,7 @@ export type ClientOperationsRegistryResponse = {
     q: string | null;
     sort_by: string | null;
     sort_dir: 'asc' | 'desc' | null;
+    operational_period_key: string;
   };
   allowed_actions: string[];
 };
@@ -208,6 +239,7 @@ function emptyRegistryResponse(
   query: RegistryQueryInput,
   noteTypes: ClientOperationsRegistryResponse['note_types'],
   customColumns: RegistryCustomColumnDefinition[],
+  period: ClientOperationsRegistryResponse['period'],
 ): ClientOperationsRegistryResponse {
   const q = (query.q ?? '').trim() || null;
   const sort_by = query.sort_by?.trim() || null;
@@ -237,6 +269,7 @@ function emptyRegistryResponse(
   ];
   return {
     title_he: 'תפעול לקוחות',
+    period,
     rows: [],
     columns,
     note_types: noteTypes,
@@ -245,7 +278,7 @@ function emptyRegistryResponse(
       can_create_reason_he: customColumnsCapability.current >= customColumnsCapability.max ? 'הגעת למגבלת 10 עמודות מותאמות אישית' : null,
     }),
     custom_columns_capability: customColumnsCapability,
-    query: { q, sort_by, sort_dir },
+    query: { q, sort_by, sort_dir, operational_period_key: period.selected_period_key },
     allowed_actions: buildRegistryAllowedActions(ctx),
   };
 }
@@ -284,22 +317,78 @@ export async function listClientOperationsRegistry(
   query: RegistryQueryInput = {},
 ): Promise<ClientOperationsRegistryResponse> {
   const orgId = assertOrg(ctx);
-  const [noteTypesResult, customColumns] = await Promise.all([
+  const selectedPeriodKey = resolveRegistryOperationalPeriodKey(query.operational_period_key);
+  const defaultPeriodKey = resolveDefaultOperationalPeriodKey();
+  const [noteTypesResult, customColumns, availablePeriods] = await Promise.all([
     listOperationalNoteTypes(),
     loadActiveClientOperationsRegistryCustomColumns(orgId),
+    listKnownOperationalPeriodKeys(orgId),
   ]);
   const noteTypes = noteTypesResult.types;
+  const period = {
+    selected_period_key: selectedPeriodKey,
+    default_period_key: defaultPeriodKey,
+    available_periods: availablePeriods,
+  };
 
-  const { data: clients } = await supabaseAdmin
+  const isCurrentOrDefaultPeriod = selectedPeriodKey === defaultPeriodKey;
+
+  type RegistryClientRow = {
+    id: string;
+    display_name: string | null;
+    tax_id: string | null;
+    created_at: string | null;
+    is_archived: boolean;
+  };
+
+  const { data: activeClients } = await supabaseAdmin
     .from('clients')
-    .select('id, display_name, tax_id')
+    .select('id, display_name, tax_id, created_at, is_archived')
     .eq('organization_id', orgId)
     .eq('is_archived', false)
     .order('display_name', { ascending: true });
 
-  const safeClients = (clients ?? []) as Array<{ id: string; display_name: string | null; tax_id: string | null }>;
+  const activeSafe = (activeClients ?? []) as RegistryClientRow[];
+  let safeClients: RegistryClientRow[] = activeSafe;
+
+  if (!isCurrentOrDefaultPeriod) {
+    // Historical period: keep live active clients, and re-include archived clients
+    // that already have frozen membership (snapshot and/or material fact) for this period.
+    const membershipIds = await loadPeriodMembershipClientIds({
+      organizationId: orgId,
+      operationalPeriodKey: selectedPeriodKey,
+    });
+    const activeIdSet = new Set(activeSafe.map((c) => c.id));
+    const archivedMembershipIds = membershipIds.filter((id) => !activeIdSet.has(id));
+    if (archivedMembershipIds.length) {
+      const { data: membershipClients } = await supabaseAdmin
+        .from('clients')
+        .select('id, display_name, tax_id, created_at, is_archived')
+        .eq('organization_id', orgId)
+        .in('id', archivedMembershipIds);
+      const historicalExtras = ((membershipClients ?? []) as RegistryClientRow[]).filter((c) =>
+        shouldIncludeArchivedClientInOperationalPeriodRegistry({
+          is_current_or_default_period: false,
+          is_archived: Boolean(c.is_archived),
+          has_frozen_period_membership: true,
+        }),
+      );
+      safeClients = [...activeSafe, ...historicalExtras].sort((a, b) =>
+        String(a.display_name ?? '').localeCompare(String(b.display_name ?? ''), 'he'),
+      );
+    }
+  }
+
+  // Created-after-period protection (active + historical membership alike).
+  safeClients = safeClients.filter((c) =>
+    clientExistsInOperationalPeriod({
+      client_created_at: c.created_at,
+      operational_period_key: selectedPeriodKey,
+    }),
+  );
+
   if (safeClients.length === 0) {
-    return emptyRegistryResponse(ctx, query, noteTypes, customColumns);
+    return emptyRegistryResponse(ctx, query, noteTypes, customColumns, period);
   }
 
   const clientIds = safeClients.map((c) => c.id);
@@ -320,7 +409,7 @@ export async function listClientOperationsRegistry(
   const { data: taxSettingsRows } = await supabaseAdmin
     .from('client_tax_settings')
     .select(
-      'client_id, vat_due_type, vat_frequency, vat_type, national_insurance_type, national_insurance_monthly_amount, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
+      'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
     )
     .eq('organization_id', orgId)
     .in('client_id', clientIds);
@@ -331,8 +420,11 @@ export async function listClientOperationsRegistry(
       vat_due_type: string | null;
       vat_frequency: string | null;
       vat_type: string | null;
+      income_tax_advance_enabled: boolean;
+      income_tax_advance_frequency: string | null;
       national_insurance_type: string | null;
       national_insurance_monthly_amount: number | null;
+      national_insurance_deductions_file_number: string | null;
       income_tax_deductions_enabled: boolean;
       income_tax_deductions_file_number: string | null;
       income_tax_deductions_frequency: string | null;
@@ -343,8 +435,11 @@ export async function listClientOperationsRegistry(
     vat_due_type: string | null;
     vat_frequency: string | null;
     vat_type: string | null;
+    income_tax_advance_enabled: boolean | null;
+    income_tax_advance_frequency: string | null;
     national_insurance_type: string | null;
     national_insurance_monthly_amount: number | null;
+    national_insurance_deductions_file_number: string | null;
     income_tax_deductions_enabled: boolean | null;
     income_tax_deductions_file_number: string | null;
     income_tax_deductions_frequency: string | null;
@@ -353,13 +448,60 @@ export async function listClientOperationsRegistry(
       vat_due_type: t.vat_due_type,
       vat_frequency: t.vat_frequency,
       vat_type: t.vat_type,
+      income_tax_advance_enabled: Boolean(t.income_tax_advance_enabled),
+      income_tax_advance_frequency: t.income_tax_advance_frequency,
       national_insurance_type: t.national_insurance_type,
       national_insurance_monthly_amount: t.national_insurance_monthly_amount,
+      national_insurance_deductions_file_number: t.national_insurance_deductions_file_number,
       income_tax_deductions_enabled: Boolean(t.income_tax_deductions_enabled),
       income_tax_deductions_file_number: t.income_tax_deductions_file_number,
       income_tax_deductions_frequency: t.income_tax_deductions_frequency,
     });
   }
+
+  const [existingSnapshots, materialFacts] = await Promise.all([
+    loadPeriodApplicabilitySnapshots({
+      organizationId: orgId,
+      operationalPeriodKey: selectedPeriodKey,
+      clientIds,
+    }),
+    loadPeriodMaterialFacts({
+      organizationId: orgId,
+      operationalPeriodKey: selectedPeriodKey,
+      clientIds,
+    }),
+  ]);
+  const periodSources: ClientPeriodSourceRow[] = safeClients
+    // Never invent historical applicability for archived clients from today's settings.
+    // Archived historical membership must already carry a frozen snapshot (and/or fact).
+    .filter((client) => !client.is_archived)
+    .map((client) => {
+    const profile = profilesByClientId.get(client.id);
+    const tax = taxByClient.get(client.id);
+    return {
+      client_id: client.id,
+      client_created_at: client.created_at,
+      inputs: {
+        vat_type: tax?.vat_type ?? null,
+        vat_frequency: tax?.vat_frequency ?? null,
+        payroll_flag: (profile?.payroll_flag as boolean | null) ?? null,
+        income_tax_advance_enabled: tax?.income_tax_advance_enabled ?? null,
+        income_tax_advance_frequency: tax?.income_tax_advance_frequency ?? null,
+        income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
+        income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
+        national_insurance_type: tax?.national_insurance_type ?? null,
+        national_insurance_monthly_amount: tax?.national_insurance_monthly_amount ?? null,
+        national_insurance_deductions_file_number:
+          tax?.national_insurance_deductions_file_number ?? null,
+      },
+    };
+  });
+  const snapshots = await ensurePeriodApplicabilitySnapshots({
+    organizationId: orgId,
+    operationalPeriodKey: selectedPeriodKey,
+    sources: periodSources,
+    existing: existingSnapshots,
+  });
 
   const handlerIds = [
     ...new Set(
@@ -370,7 +512,18 @@ export async function listClientOperationsRegistry(
   ];
   const handlerDisplayByUserId = await loadHandlerDisplayNamesByUserIds(orgId, handlerIds);
 
-  const builtRows: ClientOperationsRegistryRow[] = safeClients.map((c) => {
+  const builtRows: ClientOperationsRegistryRow[] = safeClients.flatMap((c) => {
+    const snapshot = snapshots.get(c.id);
+    const hasMaterialMembership = materialFacts.has(c.id);
+    // Active/historical rows require a visible frozen snapshot.
+    // Fact-only archived membership (no snapshot) still appears historically without
+    // inventing a new snapshot from today's settings.
+    if (snapshot) {
+      if (!snapshot.row_visible) return [];
+    } else if (!(c.is_archived && hasMaterialMembership)) {
+      return [];
+    }
+    const vatApplicable = snapshot?.vat_applicable ?? true;
     const p = profilesByClientId.get(c.id);
     const noteAgg = buildNotesCellDisplayHe(notesByClient.get(c.id) ?? []);
     const tax = taxByClient.get(c.id);
@@ -397,7 +550,15 @@ export async function listClientOperationsRegistry(
           )
         : computeNationalInsuranceDeductionsRegistryDisplayHe(null, incomeDedProfile);
     const payroll_flag = (p?.payroll_flag as boolean | null) ?? null;
-    const material_brought_flag = (p?.material_brought_flag as boolean | null) ?? null;
+    const materialBroughtCell = resolveMaterialBroughtForPeriod({
+      period_fact: materialFacts.get(c.id),
+      has_period_fact: materialFacts.has(c.id),
+      legacy_profile_flag: (p?.material_brought_flag as boolean | null) ?? null,
+      operational_period_key: selectedPeriodKey,
+      default_period_key: defaultPeriodKey,
+      vat_applicable: vatApplicable,
+    });
+    const material_brought_flag = materialBroughtCell.applicable ? materialBroughtCell.value : null;
     const vat_status = vatFromTax ?? (p?.vat_status as string | null) ?? null;
     const income_tax_advance_status = (p?.income_tax_advance_status as string | null) ?? null;
     const national_insurance_status = niFromTax ?? (p?.national_insurance_status as string | null) ?? null;
@@ -412,6 +573,16 @@ export async function listClientOperationsRegistry(
       business_type: bt,
       payroll_flag,
       material_brought_flag,
+      period_applicability: {
+        vat_applicable: vatApplicable,
+        payroll_applicable: snapshot?.payroll_applicable ?? false,
+        income_tax_advance_applicable: snapshot?.income_tax_advance_applicable ?? false,
+        income_tax_deductions_applicable: snapshot?.income_tax_deductions_applicable ?? false,
+        national_insurance_applicable: snapshot?.national_insurance_applicable ?? false,
+        national_insurance_deductions_applicable: snapshot?.national_insurance_deductions_applicable ?? false,
+        row_visible: snapshot?.row_visible ?? true,
+      },
+      material_brought_cell: materialBroughtCell,
       /** מע״מ: תדירות מע״מ ממיסים; עוסק פטור — פטור */
       vat_status,
       income_tax_advance_status,
@@ -425,7 +596,7 @@ export async function listClientOperationsRegistry(
       operational_notes_count: noteAgg.count,
       vat_due_registry_display_he,
     };
-    return mergeCustomCellsIntoRow({
+    return [mergeCustomCellsIntoRow({
       ...base,
       cells: buildRegistryRowCells({
         ...base,
@@ -433,7 +604,7 @@ export async function listClientOperationsRegistry(
           ? (handlerDisplayByUserId.get(assigned_handler_user_id) ?? null)
           : null,
       }),
-    }, customColumns, customValuesByClientAndColumn);
+    }, customColumns, customValuesByClientAndColumn)];
   });
 
   const q = (query.q ?? '').trim() || null;
@@ -466,6 +637,7 @@ export async function listClientOperationsRegistry(
   ];
   return {
     title_he: 'תפעול לקוחות',
+    period,
     rows,
     columns,
     note_types: noteTypes,
@@ -474,7 +646,7 @@ export async function listClientOperationsRegistry(
       can_create_reason_he: customColumnsCapability.current >= customColumnsCapability.max ? 'הגעת למגבלת 10 עמודות מותאמות אישית' : null,
     }),
     custom_columns_capability: customColumnsCapability,
-    query: { q, sort_by, sort_dir },
+    query: { q, sort_by, sort_dir, operational_period_key: selectedPeriodKey },
     allowed_actions: buildRegistryAllowedActions(ctx),
   };
 }

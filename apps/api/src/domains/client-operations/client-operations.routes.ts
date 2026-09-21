@@ -124,12 +124,15 @@ router.get('/registry', ...withView, async (req, res, next) => {
     const qRaw = typeof req.query.q === 'string' ? req.query.q : null;
     const sortByRaw = typeof req.query.sort_by === 'string' ? req.query.sort_by : null;
     const sortDirRaw = typeof req.query.sort_dir === 'string' ? req.query.sort_dir : null;
+    const operationalPeriodKeyRaw =
+      typeof req.query.operational_period_key === 'string' ? req.query.operational_period_key : null;
     const sort_dir =
       sortDirRaw === 'asc' || sortDirRaw === 'desc' ? (sortDirRaw as 'asc' | 'desc') : null;
     const result = await listClientOperationsRegistry(ctx, {
       q: qRaw,
       sort_by: sortByRaw,
       sort_dir,
+      operational_period_key: operationalPeriodKeyRaw,
     });
     return res.json(result);
   } catch (e) {

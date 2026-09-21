@@ -13,6 +13,13 @@ import {
 } from './client-operations-registry-presentation.pure.js';
 import { resolveVatOperationalReportingPeriodKey } from './client-operations-client-quick-profile.pure.js';
 import { syncVatMaterialWorkEvent } from './client-operations-work-engine-bridge.js';
+import {
+  ensurePeriodApplicabilitySnapshots,
+  loadPeriodApplicabilitySnapshots,
+  resolveRegistryOperationalPeriodKey,
+  upsertPeriodMaterialFact,
+} from './client-operations-operational-period.service.js';
+import { resolveDefaultOperationalPeriodKey } from './client-operations-operational-period.pure.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -42,6 +49,7 @@ export type ClientOperationsRegistryCommandBody = {
   value?: unknown;
   position?: unknown;
   ordered_column_ids?: unknown;
+  operational_period_key?: unknown;
   query?: RegistryQueryInput;
 };
 
@@ -180,16 +188,20 @@ async function audit(ctx: RequestContext, action: string, entityId: string, payl
   });
 }
 
-async function ensureActiveClientInOrg(orgId: string, clientId: string): Promise<void> {
+async function ensureActiveClientInOrg(
+  orgId: string,
+  clientId: string,
+): Promise<{ created_at: string | null }> {
   const { data: client, error: clientError } = await supabaseAdmin
     .from('clients')
-    .select('id')
+    .select('id, created_at')
     .eq('organization_id', orgId)
     .eq('id', clientId)
     .eq('is_archived', false)
     .maybeSingle();
   assertQueryError(clientError, 'Failed to validate client');
   if (!client) throw forbidden('Client not found');
+  return client as { created_at: string | null };
 }
 
 async function syncVatMaterialForCurrentPeriod(
@@ -218,7 +230,16 @@ function queryFrom(value: unknown): RegistryQueryInput {
     q: typeof query.q === 'string' ? query.q : null,
     sort_by: typeof query.sort_by === 'string' ? query.sort_by : null,
     sort_dir: query.sort_dir === 'asc' || query.sort_dir === 'desc' ? query.sort_dir : null,
+    operational_period_key:
+      typeof query.operational_period_key === 'string' ? query.operational_period_key : null,
   };
+}
+
+function operationalPeriodKeyFrom(value: unknown): string {
+  if (value !== undefined && value !== null && typeof value !== 'string') {
+    throw badRequest('operational_period_key must be YYYY-MM');
+  }
+  return resolveRegistryOperationalPeriodKey(value);
 }
 
 export async function executeClientOperationsRegistryCommand(
@@ -311,24 +332,84 @@ export async function executeClientOperationsRegistryCommand(
   } else if (command === 'set_material_brought') {
     const clientId = idFrom(body.client_id, 'client_id');
     const value = booleanFrom(body.value, 'value');
-    await ensureActiveClientInOrg(orgId, clientId);
-    const { error } = await supabaseAdmin
-      .from('client_operational_profiles')
-      .upsert(
-        {
-          organization_id: orgId,
-          client_id: clientId,
-          material_brought_flag: value,
-          updated_at: new Date().toISOString(),
+    const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
+    const client = await ensureActiveClientInOrg(orgId, clientId);
+    const [{ data: profile, error: profileError }, { data: tax, error: taxError }] = await Promise.all([
+      supabaseAdmin
+        .from('client_operational_profiles')
+        .select('payroll_flag')
+        .eq('organization_id', orgId)
+        .eq('client_id', clientId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('client_tax_settings')
+        .select(
+          'vat_type, vat_frequency, income_tax_advance_enabled, income_tax_advance_frequency, income_tax_deductions_enabled, income_tax_deductions_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number',
+        )
+        .eq('organization_id', orgId)
+        .eq('client_id', clientId)
+        .maybeSingle(),
+    ]);
+    assertQueryError(profileError, 'Failed to load operational profile');
+    assertQueryError(taxError, 'Failed to load tax settings');
+    const existing = await loadPeriodApplicabilitySnapshots({
+      organizationId: orgId,
+      operationalPeriodKey,
+      clientIds: [clientId],
+    });
+    const snapshots = await ensurePeriodApplicabilitySnapshots({
+      organizationId: orgId,
+      operationalPeriodKey,
+      existing,
+      sources: [{
+        client_id: clientId,
+        client_created_at: client.created_at,
+        inputs: {
+          vat_type: tax?.vat_type ?? null,
+          vat_frequency: tax?.vat_frequency ?? null,
+          payroll_flag: profile?.payroll_flag ?? null,
+          income_tax_advance_enabled: tax?.income_tax_advance_enabled ?? null,
+          income_tax_advance_frequency: tax?.income_tax_advance_frequency ?? null,
+          income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
+          income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
+          national_insurance_type: tax?.national_insurance_type ?? null,
+          national_insurance_monthly_amount: tax?.national_insurance_monthly_amount ?? null,
+          national_insurance_deductions_file_number:
+            tax?.national_insurance_deductions_file_number ?? null,
         },
-        { onConflict: 'organization_id,client_id' }
-      );
-    assertQueryError(error, 'Failed to set material brought flag');
+      }],
+    });
+    const snapshot = snapshots.get(clientId);
+    if (!snapshot?.vat_applicable) throw badRequest('Material brought is not applicable for this period');
+    await upsertPeriodMaterialFact({
+      ctx,
+      organizationId: orgId,
+      clientId,
+      operationalPeriodKey,
+      materialBrought: value,
+    });
+    if (operationalPeriodKey === resolveDefaultOperationalPeriodKey()) {
+      const { error } = await supabaseAdmin
+        .from('client_operational_profiles')
+        .upsert(
+          {
+            organization_id: orgId,
+            client_id: clientId,
+            material_brought_flag: value,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'organization_id,client_id' },
+        );
+      assertQueryError(error, 'Failed to mirror material brought flag');
+    }
     await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_MATERIAL_BROUGHT_SET, clientId, {
       client_id: clientId,
-      material_brought_flag: value,
+      operational_period_key: operationalPeriodKey,
+      material_brought: value,
     });
-    if (!value) await syncVatMaterialForCurrentPeriod(ctx, orgId, clientId);
+    if (!value && operationalPeriodKey === resolveDefaultOperationalPeriodKey()) {
+      await syncVatMaterialForCurrentPeriod(ctx, orgId, clientId);
+    }
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin
@@ -343,7 +424,11 @@ export async function executeClientOperationsRegistryCommand(
   }
 
   const { listClientOperationsRegistry } = await import('./client-operations.service.js');
-  return listClientOperationsRegistry(ctx, queryFrom(body.query));
+  const responseQuery = queryFrom(body.query);
+  if (command === 'set_material_brought') {
+    responseQuery.operational_period_key = operationalPeriodKeyFrom(body.operational_period_key);
+  }
+  return listClientOperationsRegistry(ctx, responseQuery);
 }
 
 export { buildCustomColumnsCapability };

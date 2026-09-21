@@ -104,11 +104,15 @@ export const moduleClientOperationsRegistry = (params?: {
   q?: string | null;
   sort_by?: string | null;
   sort_dir?: 'asc' | 'desc' | null;
+  operational_period_key?: string | null;
 }) => {
   const sp = new URLSearchParams();
   if (params?.q?.trim()) sp.set('q', params.q.trim());
   if (params?.sort_by?.trim()) sp.set('sort_by', params.sort_by.trim());
   if (params?.sort_dir === 'asc' || params?.sort_dir === 'desc') sp.set('sort_dir', params.sort_dir);
+  if (params?.operational_period_key?.trim()) {
+    sp.set('operational_period_key', params.operational_period_key.trim());
+  }
   const qs = sp.toString();
   return qs ? `/m/client-operations/registry?${qs}` : '/m/client-operations/registry';
 };

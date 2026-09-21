@@ -478,6 +478,7 @@ export type RegistryQueryInput = {
   q?: string | null;
   sort_by?: string | null;
   sort_dir?: 'asc' | 'desc' | null;
+  operational_period_key?: string | null;
 };
 
 export function applyRegistryQueryToRows<

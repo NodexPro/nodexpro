@@ -17,7 +17,13 @@ type RegistryAggregate = {
   note_types?: ClientOperationsNoteTypeRow[];
   toolbar_capabilities?: ClientOperationsToolbarCapability[];
   custom_columns_capability?: { max: number; current: number; can_create: boolean };
-  query?: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null };
+  query?: {
+    q: string | null;
+    sort_by: string | null;
+    sort_dir: 'asc' | 'desc' | null;
+    operational_period_key: string;
+  };
+  period?: { selected_period_key: string; default_period_key: string; available_periods: string[] };
   allowed_actions?: string[];
 };
 
@@ -44,7 +50,8 @@ export function ClientOperationsRegistry() {
     q: string | null;
     sort_by: string | null;
     sort_dir: 'asc' | 'desc' | null;
-  }>({ q: null, sort_by: null, sort_dir: null });
+    operational_period_key: string | null;
+  }>({ q: null, sort_by: null, sort_dir: null, operational_period_key: null });
 
   const applyAggregate = useCallback((data: RegistryAggregate) => {
     setRows(Array.isArray(data?.rows) ? data.rows : []);
@@ -59,12 +66,21 @@ export function ClientOperationsRegistry() {
         q: data.query.q ?? null,
         sort_by: data.query.sort_by ?? null,
         sort_dir: data.query.sort_dir ?? null,
+        operational_period_key:
+          data.period?.selected_period_key ?? data.query.operational_period_key ?? null,
       });
+    } else if (data.period?.selected_period_key) {
+      setQuery((current) => ({ ...current, operational_period_key: data.period!.selected_period_key }));
     }
   }, []);
 
   const reloadRegistry = useCallback(
-    (nextQuery?: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null }) => {
+    (nextQuery?: {
+      q: string | null;
+      sort_by: string | null;
+      sort_dir: 'asc' | 'desc' | null;
+      operational_period_key?: string | null;
+    }) => {
       const q = nextQuery ?? query;
       return apiJson<RegistryAggregate>(moduleClientOperationsRegistry(q))
         .then((data) => applyAggregate(data))
@@ -102,14 +118,15 @@ export function ClientOperationsRegistry() {
 
   const onQueryChange = useCallback(
     (next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null }) => {
-      setQuery(next);
+      const nextQuery = { ...next, operational_period_key: query.operational_period_key };
+      setQuery(nextQuery);
       setLoading(true);
-      apiJson<RegistryAggregate>(moduleClientOperationsRegistry(next))
+      apiJson<RegistryAggregate>(moduleClientOperationsRegistry(nextQuery))
         .then((data) => applyAggregate(data))
         .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
         .finally(() => setLoading(false));
     },
-    [applyAggregate],
+    [applyAggregate, query.operational_period_key],
   );
 
   const onRegistryCommand = useCallback(
