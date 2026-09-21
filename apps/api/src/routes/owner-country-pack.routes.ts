@@ -22,6 +22,10 @@ import {
   buildOwnerClientsListAggregate,
 } from '../domains/owner-clients/owner-clients.service.js';
 import {
+  buildOwnerModuleDetailAggregate,
+  buildOwnerModulesListAggregate,
+} from '../domains/owner-modules/owner-modules.service.js';
+import {
   buildOwnerInvoiceDocumentBuilderAggregate,
   executeOwnerInvoiceLayoutCommand,
   isOwnerInvoiceLayoutCommand,
@@ -113,6 +117,39 @@ router.get('/pricing', async (req: Request, res: Response, next: NextFunction) =
     const ctx = req.context as RequestContext;
     await assertOwnerOrAuditFailure(ctx, req);
     const aggregate = await buildOwnerPlatformPricingAggregate(ctx);
+    return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/modules', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const aggregate = await buildOwnerModulesListAggregate(ctx);
+    return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/modules/:moduleCode', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const moduleCode = String(req.params.moduleCode ?? '').trim();
+    if (!moduleCode) throw badRequest('moduleCode is required');
+    const aggregate = await buildOwnerModuleDetailAggregate(ctx, moduleCode, {
+      page: Number(req.query.commercial_page ?? 1) || 1,
+      page_size: Number(req.query.commercial_page_size ?? 20) || 20,
+      search: typeof req.query.commercial_search === 'string' ? req.query.commercial_search : null,
+      module_key: moduleCode,
+      entitlement_status:
+        typeof req.query.commercial_entitlement_status === 'string' ? req.query.commercial_entitlement_status : null,
+      activation_status:
+        typeof req.query.commercial_activation_status === 'string' ? req.query.commercial_activation_status : null,
+    });
     return res.json(aggregate);
   } catch (e) {
     next(e);

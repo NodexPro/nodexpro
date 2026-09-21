@@ -22,7 +22,7 @@ export function requireModuleActive(moduleCode: string) {
 
     const { data: mod } = await supabaseAdmin
       .from('modules')
-      .select('id, code')
+      .select('id, code, is_active')
       .eq('code', entitlementModuleCode)
       .single();
     if (!mod) {
@@ -33,6 +33,25 @@ export function requireModuleActive(moduleCode: string) {
         org_id: ctx.organizationId,
       });
       next(forbidden('Module not found'));
+      return;
+    }
+
+    if (!(mod as { is_active?: boolean }).is_active) {
+      console.warn('[docflow][deny] requireModuleActive: module globally inactive', {
+        module: moduleCode,
+        user_email: email || null,
+        user_id: ctx.user.id,
+        org_id: ctx.organizationId,
+      });
+      await writeAudit({
+        organizationId: ctx.organizationId,
+        actorUserId: ctx.user.id,
+        moduleCode: mod.code,
+        entityType: 'module',
+        action: AUDIT_ACTIONS.MODULE_ACCESS_DENIED,
+        payload: { reason: 'Module is globally disabled (modules.is_active=false)' },
+      });
+      next(forbidden('Module is globally disabled'));
       return;
     }
 

@@ -374,6 +374,8 @@ export const OWNER = {
   countryPacks: '/owner/country-packs',
   legalValues: '/owner/legal-values',
   pricing: '/owner/pricing',
+  modules: '/owner/modules',
+  moduleDetail: (moduleCode: string) => `/owner/modules/${encodeURIComponent(moduleCode)}`,
   emailProviderConfig: () => '/owner/email-provider-config',
   command: '/owner/command',
   countrySettings: (organizationId: string) => `/owner/country-settings/${organizationId}`,

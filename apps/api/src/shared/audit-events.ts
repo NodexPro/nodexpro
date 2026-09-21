@@ -190,6 +190,8 @@ export const AUDIT_ACTIONS = {
   MODULE_PRICE_UPDATED: 'module_price_updated',
   PACKAGE_PRICE_UPDATED: 'package_price_updated',
   MODULE_PLAN_CREATED: 'module_plan_created',
+  /** Platform Owner global kill-switch — modules.is_active only. */
+  MODULE_GLOBAL_ACTIVATION_SET: 'module_global_activation_set',
   OWNER_TRIAL_EXTENDED: 'owner_trial_extended',
   OWNER_MODULE_ACCESS_ACTIVATED: 'owner_module_access_activated',
   OWNER_PRICING_ADJUSTMENT_CREATED: 'owner_pricing_adjustment_created',

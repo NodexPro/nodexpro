@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiJson, ApiError, userFacingApiMessage } from '../api/client';
 import { OWNER } from '../api/endpoints';
 import { useAuth } from '../contexts/AuthContext';
@@ -163,6 +163,10 @@ function findDraftVersionIdForTemplate(
 export function PlatformOwnerLegalControl() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Owner shell deep-links may include ?section=system|clients|invoice_document_builder.
+  // Query reserved for nav parity; existing Legal Control content remains on this page.
+  void searchParams.get("section");
 
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);

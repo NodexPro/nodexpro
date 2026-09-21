@@ -27,6 +27,9 @@ import { ClientPortalInvite } from './pages/ClientPortalInvite';
 import { ClientPortalDocflow } from './pages/ClientPortalDocflow';
 import { PlatformOwnerLogin } from './pages/PlatformOwnerLogin';
 import { PlatformOwnerLegalControl } from './pages/PlatformOwnerLegalControl';
+import { PlatformOwnerShell } from './pages/PlatformOwnerShell';
+import { PlatformOwnerModulesPage } from './pages/owner-modules/PlatformOwnerModulesPage';
+import { PlatformOwnerModuleDetailPage } from './pages/owner-modules/PlatformOwnerModuleDetailPage';
 import { DocflowCommunicationReviewPage } from './pages/DocflowCommunicationReviewPage';
 import { DocflowInvitesManagementPage } from './pages/DocflowInvitesManagementPage';
 import { DocflowMessengerPage } from './pages/DocflowMessengerPage';
@@ -122,7 +125,12 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/platform-owner/login" element={<PlatformOwnerLogin />} />
-      <Route path="/platform-owner/legal-control" element={<PlatformOwnerLegalControl />} />
+      <Route path="/platform-owner" element={<PlatformOwnerShell />}>
+        <Route index element={<Navigate to="legal-control" replace />} />
+        <Route path="legal-control" element={<PlatformOwnerLegalControl />} />
+        <Route path="modules" element={<PlatformOwnerModulesPage />} />
+        <Route path="modules/:moduleCode" element={<PlatformOwnerModuleDetailPage />} />
+      </Route>
       <Route path="/register" element={<Register />} />
       <Route path="/invite/accept" element={<InviteAccept />} />
       <Route path="/invite/:token" element={<ClientPortalInvite />} />

@@ -20,6 +20,7 @@ import {
   buildOrganizationCountrySettingsAggregate,
   buildOwnerLegalControlPanelAggregate,
 } from './country-pack-read-models.service.js';
+import { executeSetModuleGlobalActivation } from '../owner-modules/owner-modules.service.js';
 import { encryptOptionalSecret } from '../../shared/owner-email-provider-config.service.js';
 import { saveOwnerEmailProviderConfigGlobal } from '../../shared/owner-email-provider-config.service.js';
 import { saveOwnerEmailProviderConfigOrgOverride } from '../../shared/owner-email-provider-config.service.js';
@@ -67,6 +68,7 @@ type CountryPackCommandType =
   | 'activate_org_module_access'
   | 'create_pricing_adjustment'
   | 'cancel_pricing_adjustment'
+  | 'set_module_global_activation'
   | 'save_operational_reminder_workflow'
   | 'edit_operational_reminder_workflow'
   | 'disable_operational_reminder_workflow'
@@ -87,7 +89,8 @@ type CountryPackCommandResponse = {
   refreshed: {
     aggregate_key:
       | 'owner_legal_control_panel_aggregate'
-      | 'organization_country_settings_aggregate';
+      | 'organization_country_settings_aggregate'
+      | 'owner_modules_list_aggregate';
     aggregate: Record<string, unknown>;
   };
 };
@@ -1749,6 +1752,17 @@ export async function executeCountryPackCommand(
       return handleCreatePricingAdjustment(ctx, command.payload);
     case 'cancel_pricing_adjustment':
       return handleCancelPricingAdjustment(ctx, command.payload);
+    case 'set_module_global_activation': {
+      const out = await executeSetModuleGlobalActivation(ctx, command.payload);
+      return {
+        ok: true,
+        command: 'set_module_global_activation',
+        refreshed: {
+          aggregate_key: out.refreshed.aggregate_key,
+          aggregate: out.refreshed.aggregate,
+        },
+      };
+    }
     case 'save_operational_reminder_workflow':
       return handleSaveOperationalReminderWorkflow(ctx, command.payload);
     case 'edit_operational_reminder_workflow':

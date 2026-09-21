@@ -17,15 +17,18 @@ export { computeSessionShellFromModules } from './session-shell.pure.js';
 async function loadActiveCommercialModuleCodes(orgId: string): Promise<string[]> {
   const { data } = await supabaseAdmin
     .from('organization_modules')
-    .select('modules(code, is_system)')
+    .select('modules(code, is_system, is_active)')
     .eq('organization_id', orgId)
     .eq('status', 'active');
 
   const codes: string[] = [];
   for (const row of data ?? []) {
     const raw = (row as { modules: unknown }).modules;
-    const mod = (Array.isArray(raw) ? raw[0] : raw) as { code?: string; is_system?: boolean } | undefined;
+    const mod = (Array.isArray(raw) ? raw[0] : raw) as
+      | { code?: string; is_system?: boolean; is_active?: boolean }
+      | undefined;
     if (!mod?.code || mod.is_system) continue;
+    if (mod.is_active === false) continue;
     codes.push(mod.code);
   }
   return [...new Set(codes)].sort();

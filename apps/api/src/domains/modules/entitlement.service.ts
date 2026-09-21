@@ -60,9 +60,22 @@ export async function filterSessionEnabledModuleCodes(params: {
 }): Promise<Set<string>> {
   const moduleIds = params.modules.map((m) => m.moduleId);
   if (!moduleIds.length) return new Set();
+
+  const { data: catalogRows, error: catalogErr } = await supabaseAdmin
+    .from('modules')
+    .select('id, is_active')
+    .in('id', moduleIds);
+  if (catalogErr) throw catalogErr;
+  const globallyActiveIds = new Set(
+    (catalogRows ?? [])
+      .filter((r) => Boolean((r as { is_active?: boolean }).is_active))
+      .map((r) => String((r as { id: string }).id))
+  );
+
   const entitlements = await resolveEntitlementsForOrganization(params.organizationId, moduleIds);
   const allowed = new Set<string>();
   for (const mod of params.modules) {
+    if (!globallyActiveIds.has(mod.moduleId)) continue;
     const entitlement = entitlements.get(mod.moduleId);
     if (entitlement && isSessionEnabledModuleEntitlementStatus(entitlement.status)) {
       allowed.add(mod.code);
