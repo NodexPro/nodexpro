@@ -8,6 +8,7 @@ import {
   buildClientOperationsToolbarCapabilities,
   buildRegistryRowCells,
   CLIENT_OPERATIONS_REGISTRY_COLUMNS,
+  formatIncomeTaxAdvanceRegistryFrequencyDisplayHe,
   isSystemRegistryColumnKey,
 } from '../../src/domains/client-operations/client-operations-registry-presentation.pure.js';
 
@@ -193,4 +194,61 @@ test('presentation-owned history and fullscreen are available in the aggregate',
   assert.equal(caps.find((c) => c.id === 'undo')?.available, true);
   assert.equal(caps.find((c) => c.id === 'redo')?.available, true);
   assert.equal(caps.find((c) => c.id === 'fullscreen')?.available, true);
+});
+
+test('מה״כ shows reporting frequency (not כן/לא); width matches מע״מ', () => {
+  assert.equal(formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({ enabled: true, frequency: 'monthly' }), 'חודשי');
+  assert.equal(formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({ enabled: true, frequency: 'bi_monthly' }), 'דו-חודשי');
+  assert.equal(formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({ enabled: false, frequency: 'monthly' }), null);
+  assert.equal(formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({ enabled: true, frequency: null }), null);
+  assert.equal(formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({ enabled: null, frequency: 'bi_monthly' }), null);
+
+  const monthlyCells = buildRegistryRowCells({
+    client_name: 'א',
+    tax_id: '1',
+    business_type: null,
+    payroll_flag: null,
+    material_brought_flag: null,
+    vat_status: 'חודשי',
+    vat_due_registry_display_he: null,
+    income_tax_advance_status: 'חודשי',
+    national_insurance_status: null,
+    national_insurance_deductions_status: null,
+    income_tax_deductions_status: null,
+    assigned_handler_display_he: null,
+    notes_cell_text_he: null,
+  });
+  assert.equal(monthlyCells.income_tax_advance, 'חודשי');
+  assert.equal(monthlyCells.vat, 'חודשי');
+
+  const naCells = buildRegistryRowCells({
+    client_name: 'ב',
+    tax_id: '2',
+    business_type: null,
+    payroll_flag: null,
+    material_brought_flag: null,
+    vat_status: null,
+    vat_due_registry_display_he: null,
+    income_tax_advance_status: null,
+    national_insurance_status: null,
+    national_insurance_deductions_status: null,
+    income_tax_deductions_status: null,
+    assigned_handler_display_he: null,
+    notes_cell_text_he: null,
+  });
+  assert.equal(naCells.income_tax_advance, '—');
+  assert.notEqual(naCells.income_tax_advance, 'כן');
+  assert.notEqual(naCells.income_tax_advance, 'לא');
+
+  const byKey = new Map(CLIENT_OPERATIONS_REGISTRY_COLUMNS.map((c) => [c.key, c]));
+  assert.equal(byKey.get('income_tax_advance')?.label, 'מה״כ');
+  assert.equal(byKey.get('income_tax_advance')?.default_width_px, byKey.get('vat')?.default_width_px);
+  assert.equal(byKey.get('vat')?.default_width_px, 72);
+
+  // Backend projects period-frozen frequency; React must not derive it.
+  assert.match(serviceSource, /formatIncomeTaxAdvanceRegistryFrequencyDisplayHe/);
+  assert.match(serviceSource, /snapshot\.income_tax_advance_frequency/);
+  assert.match(serviceSource, /snapshot\.income_tax_advance_enabled/);
+  assert.doesNotMatch(viewSource, /bi_monthly|income_tax_advance_frequency/);
+  assert.doesNotMatch(viewSource, /חודשי|דו-חודשי/);
 });

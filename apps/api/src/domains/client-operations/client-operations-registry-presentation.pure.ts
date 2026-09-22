@@ -263,6 +263,21 @@ function textHe(v: unknown): string {
   return String(v);
 }
 
+/**
+ * Registry column «מה״כ» — ready-to-render reporting frequency (same style as מע״מ).
+ * Backend owns the Hebrew label; React must not map monthly/bi_monthly.
+ * Returns null → presentation renders «—». Never returns כן/לא.
+ */
+export function formatIncomeTaxAdvanceRegistryFrequencyDisplayHe(input: {
+  enabled: boolean | null | undefined;
+  frequency: string | null | undefined;
+}): string | null {
+  if (input.enabled !== true) return null;
+  if (input.frequency === 'monthly') return 'חודשי';
+  if (input.frequency === 'bi_monthly') return 'דו-חודשי';
+  return null;
+}
+
 export function formatCustomCellDisplayHe(
   dataType: ClientOperationsCustomColumnDataType,
   values: {

@@ -90,6 +90,20 @@ test('capital N/A renders integrated dash plus open affordance', () => {
   assert.match(cssSource, /\.nx-co-sheet__date-field-plus/);
 });
 
+test('הצהרת הון open and no-open share the same outer date-field chrome', () => {
+  // One shared outer class for open instance and no-open (+ / —) states.
+  assert.match(viewSource, /nx-co-sheet__date-field is-na\$\{canOpenCapital \? ' is-openable' : ''\}/);
+  assert.match(viewSource, /className=\{`nx-co-sheet__date-field\$\{disabled/);
+  assert.match(cssSource, /\.nx-co-sheet__date-field\s*\{[\s\S]*?min-width:\s*104px/);
+  // No-open must not shrink / restyle into a different box (stay within the rule body).
+  assert.doesNotMatch(cssSource, /\.nx-co-sheet__date-field\.is-na\s*\{[^}]*min-width\s*:/);
+  assert.doesNotMatch(cssSource, /\.nx-co-sheet__date-field\.is-openable\s*\{[^}]*min-width\s*:/);
+  assert.doesNotMatch(cssSource, /\.nx-co-sheet__date-field\.is-na\s*\{[^}]*background\s*:/);
+  // Compact + still opens the canonical instance command.
+  assert.match(viewSource, /open_capital_declaration_instance/);
+  assert.match(viewSource, /nx-co-sheet__date-field-plus/);
+});
+
 test('operational date commands use existing registry command endpoint names', () => {
   assert.match(viewSource, /set_annual_report_operational_target_date/);
   assert.match(viewSource, /set_capital_declaration_operational_target_date/);

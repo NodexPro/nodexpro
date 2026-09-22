@@ -44,6 +44,7 @@ import {
   buildClientOperationsToolbarCapabilities,
   buildRegistryRowCells,
   CLIENT_OPERATIONS_REGISTRY_COLUMNS,
+  formatIncomeTaxAdvanceRegistryFrequencyDisplayHe,
   mergeCustomCellsIntoRow,
   type ClientOperationsRegistryColumn,
   type ClientOperationsToolbarCapability,
@@ -686,7 +687,17 @@ export async function listClientOperationsRegistry(
       earliestApplicablePeriodKey: earliestNiDeductionsApplicableByClient.get(c.id) ?? null,
     });
     const vat_status = vatFromTax ?? (p?.vat_status as string | null) ?? null;
-    const income_tax_advance_status = (p?.income_tax_advance_status as string | null) ?? null;
+    // מה״כ registry display = frozen period frequency (not profile כן/לא).
+    const income_tax_advance_status = formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({
+      enabled:
+        snapshot != null
+          ? snapshot.income_tax_advance_enabled
+          : (tax?.income_tax_advance_enabled ?? null),
+      frequency:
+        snapshot != null
+          ? snapshot.income_tax_advance_frequency
+          : (tax?.income_tax_advance_frequency ?? null),
+    });
     const national_insurance_status = niFromTax ?? (p?.national_insurance_status as string | null) ?? null;
     const national_insurance_deductions_status =
       niDedFromTax ?? (p?.national_insurance_deductions_status as string | null) ?? null;

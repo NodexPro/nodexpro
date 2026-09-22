@@ -401,18 +401,13 @@
   vertical-align: middle;
 }
 
+/* N/A + openable capital states keep the SAME outer date-field chrome as dated rows. */
 .nx-co-sheet__date-field.is-na {
-  min-width: 56px;
-  justify-content: center;
   color: #94a3b8;
-  background: #f8fafc;
 }
 
 .nx-co-sheet__date-field.is-openable {
-  min-width: 72px;
-  justify-content: space-between;
-  gap: 2px;
-  padding-inline-end: 2px;
+  color: #0f172a;
 }
 
 .nx-co-sheet__date-field.is-disabled {
