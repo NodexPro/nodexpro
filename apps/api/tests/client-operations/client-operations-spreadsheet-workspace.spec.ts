@@ -37,9 +37,10 @@ const REQUIRED_LABELS = [
   'חומר',
   'מע״מ',
   'יום יעד דיווח מע״מ',
-  'מקדמות מס הכנסה',
+  'מה״כ',
   'ביטוח לאומי',
-  'מס הכנסה ניכויים',
+  'ב״ל ניכויים',
+  'מ״ה ניכויים',
   'מטפל בתיק',
   'הערות',
 ];
@@ -55,7 +56,7 @@ test('1 — existing backend-defined system columns remain', () => {
   assert.ok(CLIENT_OPERATIONS_REGISTRY_COLUMNS.every((c) => c.system === true));
 });
 
-test('1b — default visible registry columns hide cleanup fields and expose material checkbox; annual STATUS cols absent', () => {
+test('1b — default visible registry columns hide cleanup fields; material + annual/capital operational date cols present', () => {
   const byKey = new Map(CLIENT_OPERATIONS_REGISTRY_COLUMNS.map((c) => [c.key, c]));
   assert.equal(byKey.get('tax_id')?.visible, false);
   assert.equal(byKey.get('business_type')?.visible, false);
@@ -63,8 +64,16 @@ test('1b — default visible registry columns hide cleanup fields and expose mat
   assert.equal(byKey.get('material_brought')?.label, 'חומר');
   assert.equal(byKey.get('material_brought')?.cell_kind, 'checkbox');
   assert.equal(byKey.get('material_brought')?.editable, true);
-  assert.equal(byKey.has('annual_report'), false);
-  assert.equal(byKey.has('capital_declaration'), false);
+  assert.equal(byKey.get('annual_report')?.cell_kind, 'operational_date');
+  assert.equal(byKey.get('capital_declaration')?.cell_kind, 'operational_date');
+  assert.equal(byKey.get('income_tax_advance')?.label, 'מה״כ');
+  assert.equal(byKey.get('national_insurance_deductions')?.label, 'ב״ל ניכויים');
+  assert.equal(byKey.get('income_tax_deductions')?.label, 'מ״ה ניכויים');
+  const keys = CLIENT_OPERATIONS_REGISTRY_COLUMNS.map((c) => c.key);
+  assert.ok(keys.indexOf('income_tax_deductions') < keys.indexOf('annual_report'));
+  assert.ok(keys.indexOf('annual_report') < keys.indexOf('capital_declaration'));
+  assert.ok(keys.indexOf('material_brought') < keys.indexOf('vat'));
+  assert.ok(keys.indexOf('vat') < keys.indexOf('annual_report'));
 });
 
 test('2 — folder action remains emoji button openClientModal', () => {
@@ -168,8 +177,8 @@ test('10 — folder behavior unchanged; spreadsheet title not skeleton', () => {
   });
   assert.equal(cells.payroll, 'כן');
   assert.equal(cells.material_brought, 'לא');
-  assert.equal(cells.annual_report, undefined);
-  assert.equal(cells.capital_declaration, undefined);
+  assert.equal(cells.annual_report, '—');
+  assert.equal(cells.capital_declaration, '—');
   assert.match(cells.national_insurance, /₪/);
 });
 

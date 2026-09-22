@@ -22,38 +22,90 @@ const tabsSource = readFileSync(
   join(dir, '../src/components/client-operations/ClientOperationsPeriodSheetTabs.tsx'),
   'utf8',
 );
+const cssSource = readFileSync(
+  join(dir, '../src/styles/nx-client-operations-spreadsheet.css'),
+  'utf8',
+);
 
-test('annual and capital columns are backend system columns after חומר and before מע״מ', () => {
-  assert.match(apiPresentationSource, /key:\s*'material_brought'[\s\S]*key:\s*'annual_report'[\s\S]*key:\s*'capital_declaration'[\s\S]*key:\s*'vat'/);
-  assert.match(apiPresentationSource, /key:\s*'annual_report'[\s\S]*label:\s*'דוח שנתי'[\s\S]*cell_kind:\s*'operational_date'[\s\S]*editable:\s*true/);
-  assert.match(apiPresentationSource, /key:\s*'capital_declaration'[\s\S]*label:\s*'הצהרת הון'[\s\S]*cell_kind:\s*'operational_date'[\s\S]*editable:\s*true/);
-  assert.match(apiPresentationSource, /annual_report:\s*textHe/);
-  assert.match(apiPresentationSource, /capital_declaration:\s*textHe/);
+test('compact tax labels are presentation-only (domain keys unchanged)', () => {
+  assert.match(apiPresentationSource, /key:\s*'income_tax_advance'[\s\S]*?label:\s*'מה״כ'/);
+  assert.match(apiPresentationSource, /key:\s*'national_insurance'[\s\S]*?label:\s*'ביטוח לאומי'/);
+  assert.match(apiPresentationSource, /key:\s*'national_insurance_deductions'[\s\S]*?label:\s*'ב״ל ניכויים'/);
+  assert.match(apiPresentationSource, /key:\s*'income_tax_deductions'[\s\S]*?label:\s*'מ״ה ניכויים'/);
+  assert.doesNotMatch(apiPresentationSource, /label:\s*'מקדמות מס הכנסה'/);
+  assert.doesNotMatch(apiPresentationSource, /label:\s*'ביטוח לאומי ניכויים'/);
+  assert.doesNotMatch(apiPresentationSource, /label:\s*'מס הכנסה ניכויים'/);
 });
 
-test('frontend renders operational date cells without tax year math', () => {
-  assert.match(viewSource, /cell_kind:\s*'folder' \| 'text' \| 'notes' \| 'custom' \| 'checkbox' \| 'operational_date'/);
+test('annual and capital columns sit after מ״ה ניכויים (not before מע״מ)', () => {
+  assert.match(
+    apiPresentationSource,
+    /key:\s*'income_tax_deductions'[\s\S]*key:\s*'annual_report'[\s\S]*key:\s*'capital_declaration'[\s\S]*key:\s*'handler'/,
+  );
+  assert.doesNotMatch(
+    apiPresentationSource,
+    /key:\s*'material_brought'[\s\S]*key:\s*'annual_report'[\s\S]*key:\s*'capital_declaration'[\s\S]*key:\s*'vat'/,
+  );
+  assert.match(apiPresentationSource, /key:\s*'material_brought'[\s\S]*key:\s*'vat'/);
+  assert.match(
+    apiPresentationSource,
+    /key:\s*'annual_report'[\s\S]*label:\s*'דוח שנתי'[\s\S]*cell_kind:\s*'operational_date'/,
+  );
+  assert.match(
+    apiPresentationSource,
+    /key:\s*'capital_declaration'[\s\S]*label:\s*'הצהרת הון'[\s\S]*cell_kind:\s*'operational_date'/,
+  );
+});
+
+test('default widths keep tax columns compact and date columns calendar-sized', () => {
+  assert.match(apiPresentationSource, /key:\s*'vat'[\s\S]*?default_width_px:\s*72/);
+  assert.match(apiPresentationSource, /key:\s*'income_tax_advance'[\s\S]*?default_width_px:\s*72/);
+  assert.match(apiPresentationSource, /key:\s*'national_insurance'[\s\S]*?default_width_px:\s*72/);
+  assert.match(apiPresentationSource, /key:\s*'national_insurance_deductions'[\s\S]*?default_width_px:\s*120/);
+  assert.match(apiPresentationSource, /key:\s*'income_tax_deductions'[\s\S]*?default_width_px:\s*72/);
+  assert.match(apiPresentationSource, /key:\s*'annual_report'[\s\S]*?default_width_px:\s*118/);
+  assert.match(apiPresentationSource, /key:\s*'capital_declaration'[\s\S]*?default_width_px:\s*118/);
+  assert.match(apiPresentationSource, /key:\s*'material_brought'[\s\S]*?default_width_px:\s*120/);
+});
+
+test('frontend renders integrated date/calendar control without tax year math', () => {
+  assert.match(viewSource, /nx-co-sheet__date-field/);
+  assert.match(viewSource, /nx-co-sheet__date-field-input/);
+  assert.match(viewSource, /nx-co-sheet__date-field-icon/);
+  assert.match(cssSource, /\.nx-co-sheet__date-field\s*\{/);
+  assert.match(cssSource, /\.nx-co-sheet__date-field-input\s*\{/);
   assert.match(viewSource, /annual_report_cell/);
   assert.match(viewSource, /capital_declaration_cell/);
   assert.match(viewSource, /type="date"/);
   assert.doesNotMatch(viewSource, /resolveAnnualReportTaxYearForOperationalPeriod/);
-  assert.doesNotMatch(viewSource, /operational_period_key[\s\S]{0,80}split\(/);
-  assert.match(apiRegistrySource, /resolveAnnualReportTaxYearForOperationalPeriod\(selectedPeriodKey\)/);
+  assert.match(apiRegistrySource, /resolveAnnualReportTaxYearForOperationalPeriod\(/);
 });
 
-test('capital N/A renders dash plus open command affordance', () => {
+test('capital N/A renders integrated dash plus open affordance', () => {
   assert.match(viewSource, /capital_declaration_cell\?\.can_open/);
   assert.match(viewSource, /open_capital_declaration_instance/);
   assert.match(viewSource, /פתיחת הצהרת הון/);
-  assert.match(viewSource, />\s*\+\s*<\/button>/);
-  assert.match(viewSource, /<span className="nx-co-sheet__na">—<\/span>/);
+  assert.match(viewSource, /nx-co-sheet__date-field-plus/);
+  assert.match(viewSource, /nx-co-sheet__date-field-value/);
+  assert.match(cssSource, /\.nx-co-sheet__date-field-plus/);
 });
 
 test('operational date commands use existing registry command endpoint names', () => {
   assert.match(viewSource, /set_annual_report_operational_target_date/);
   assert.match(viewSource, /set_capital_declaration_operational_target_date/);
   assert.match(viewSource, /open_capital_declaration_instance/);
-  assert.doesNotMatch(viewSource, /moduleClientOperationsAnnual|moduleClientOperationsCapital/);
+});
+
+test('ב״ל ניכויים renders backend 102/100/126 cell without inventing month/cycle logic', () => {
+  assert.match(viewSource, /national_insurance_deductions_cell/);
+  assert.match(viewSource, /set_ni_deductions_reported_102/);
+  assert.match(viewSource, /set_ni_deductions_reported_100/);
+  assert.match(viewSource, /complete_ni_deductions_126_cycle/);
+  // Frontend must not invent monthly 126 storage or cycle identity.
+  assert.doesNotMatch(viewSource, /\breported_126\b/);
+  assert.doesNotMatch(viewSource, /reporting_year\s*[:=]/);
+  assert.doesNotMatch(viewSource, /cycle_type\s*[:=]/);
+  assert.doesNotMatch(cssSource, /ni-deductions-102|ni-deductions-checkboxes/);
 });
 
 test('existing material, hidden obligations tab, and month tabs contracts remain intact', () => {
@@ -61,7 +113,10 @@ test('existing material, hidden obligations tab, and month tabs contracts remain
   assert.match(viewSource, /set_income_tax_advance_material_brought/);
   assert.match(viewSource, /set_payroll_material_brought/);
   assert.match(viewSource, />חומר</);
-  assert.match(panelSource, /HIDDEN_WORKSPACE_NAV_TAB_KEYS\s*=\s*new Set<WorkspaceTabKey>\(\['obligations'\]\)/);
+  assert.match(
+    panelSource,
+    /HIDDEN_WORKSPACE_NAV_TAB_KEYS\s*=\s*new Set<WorkspaceTabKey>\(\['obligations'\]\)/,
+  );
   assert.match(viewSource, /ClientOperationsPeriodSheetTabs/);
   assert.ok((viewSource.match(/ClientOperationsPeriodSheetTabs/g) || []).length >= 2);
   assert.match(tabsSource, /onSelectPeriod/);

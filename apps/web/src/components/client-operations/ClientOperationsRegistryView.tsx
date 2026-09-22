@@ -55,6 +55,24 @@ export type ClientOperationsCapitalDeclarationCell = {
   can_open: boolean;
 };
 
+export type ClientOperationsNiDeductionsFormItem = {
+  applicable: boolean;
+  completed: boolean | null;
+};
+
+export type ClientOperationsNiDeductions126Item = ClientOperationsNiDeductionsFormItem & {
+  outstanding_count: number;
+};
+
+export type ClientOperationsNiDeductionsCell = {
+  applicable: boolean;
+  items: {
+    '102': ClientOperationsNiDeductionsFormItem;
+    '100': ClientOperationsNiDeductionsFormItem;
+    '126': ClientOperationsNiDeductions126Item;
+  };
+};
+
 export type ClientOperationsRegistryRow = {
   client_id: string;
   client_name: string | null;
@@ -75,6 +93,7 @@ export type ClientOperationsRegistryRow = {
   material_cells?: ClientOperationsMaterialCells;
   annual_report_cell?: ClientOperationsAnnualReportCell;
   capital_declaration_cell?: ClientOperationsCapitalDeclarationCell;
+  national_insurance_deductions_cell?: ClientOperationsNiDeductionsCell;
   vat_status: string | null;
   income_tax_advance_status: string | null;
   national_insurance_status: string | null;
@@ -192,7 +211,10 @@ function obligationApplicable(
     case 'national_insurance':
       return a.national_insurance_applicable;
     case 'national_insurance_deductions':
-      return a.national_insurance_deductions_applicable;
+      return (
+        row.national_insurance_deductions_cell?.applicable ??
+        a.national_insurance_deductions_applicable
+      );
     case 'material_brought':
       return row.material_brought_cell?.applicable ?? row.material_brought_flag !== null;
     default:
@@ -642,6 +664,38 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       setCommandError(error instanceof Error ? error.message : 'שמירת חומר נכשלה');
     }
   };
+  const toggleNiDeductionsItem = async (
+    row: ClientOperationsRegistryRow,
+    formKey: '102' | '100' | '126',
+  ) => {
+    if (!canEdit || !onRegistryCommand) return;
+    const cell = row.national_insurance_deductions_cell;
+    if (!cell?.applicable) return;
+    const item = cell.items[formKey];
+    if (!item?.applicable) return;
+    setCommandError('');
+    try {
+      if (formKey === '126') {
+        if (item.completed) return;
+        await onRegistryCommand({
+          command: 'complete_ni_deductions_126_cycle',
+          client_id: row.client_id,
+          operational_period_key: query?.operational_period_key ?? null,
+          query,
+        });
+        return;
+      }
+      await onRegistryCommand({
+        command: formKey === '102' ? 'set_ni_deductions_reported_102' : 'set_ni_deductions_reported_100',
+        client_id: row.client_id,
+        value: !Boolean(item.completed),
+        operational_period_key: query?.operational_period_key ?? null,
+        query,
+      });
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'שמירת ב״ל ניכויים נכשלה');
+    }
+  };
   const setOperationalTargetDate = async (
     row: ClientOperationsRegistryRow,
     columnKey: 'annual_report' | 'capital_declaration',
@@ -1043,13 +1097,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             ? r.capital_declaration_cell
             : null;
       if (!operationalCell?.applicable) {
+        const canOpenCapital =
+          col.key === 'capital_declaration' && Boolean(r.capital_declaration_cell?.can_open);
         return (
-          <span className="nx-co-sheet__operational-date is-na">
-            <span className="nx-co-sheet__na">—</span>
-            {col.key === 'capital_declaration' && r.capital_declaration_cell?.can_open ? (
+          <span
+            className={`nx-co-sheet__date-field is-na${canOpenCapital ? ' is-openable' : ''}`}
+            title={canOpenCapital ? 'פתיחת הצהרת הון' : undefined}
+          >
+            <span className="nx-co-sheet__date-field-value">—</span>
+            {canOpenCapital ? (
               <button
                 type="button"
-                className="nx-co-sheet__operational-open"
+                className="nx-co-sheet__date-field-plus"
                 disabled={!canEdit || !onRegistryCommand}
                 title="פתיחת הצהרת הון"
                 aria-label={`פתיחת הצהרת הון — ${r.client_name ?? r.client_id}`}
@@ -1066,16 +1125,22 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       }
       const value = operationalCell.operational_target_date ?? '';
       const displayValue = displayForColumn(r, col);
+      const disabled = !canEdit || !col.editable || !operationalCell.editable || !onRegistryCommand;
       return (
-        <span className="nx-co-sheet__operational-date">
-          <span className="nx-co-sheet__operational-display">{displayValue}</span>
+        <label
+          className={`nx-co-sheet__date-field${disabled ? ' is-disabled' : ''}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span className="nx-co-sheet__date-field-value">{displayValue || '—'}</span>
+          <span className="nx-co-sheet__date-field-icon" aria-hidden="true">
+            📅
+          </span>
           <input
             type="date"
-            className="nx-co-sheet__operational-input"
+            className="nx-co-sheet__date-field-input"
             value={value}
-            disabled={!canEdit || !col.editable || !operationalCell.editable || !onRegistryCommand}
+            disabled={disabled}
             aria-label={`${col.label} — ${r.client_name ?? r.client_id}`}
-            onClick={(event) => event.stopPropagation()}
             onChange={(event) =>
               void setOperationalTargetDate(
                 r,
@@ -1084,7 +1149,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               )
             }
           />
-        </span>
+        </label>
       );
     }
     if (col.cell_kind === 'checkbox' && col.key === 'material_brought') {
@@ -1149,6 +1214,56 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         </div>
       );
     }
+    if (col.cell_kind === 'checkbox' && col.key === 'national_insurance_deductions') {
+      const periodLabel = query?.operational_period_key ?? '';
+      const clientLabel = r.client_name ?? r.client_id;
+      const niCell = r.national_insurance_deductions_cell;
+      if (!niCell?.applicable) {
+        return (
+          <span className="nx-co-sheet__na" title="לא רלוונטי לתקופה זו" aria-label={`${col.label} לא רלוונטי`}>
+            —
+          </span>
+        );
+      }
+      const forms: Array<{ key: '102' | '100' | '126'; labelHe: string }> = [
+        { key: '102', labelHe: '102' },
+        { key: '100', labelHe: '100' },
+        { key: '126', labelHe: '126' },
+      ];
+      return (
+        <div className="nx-co-sheet__material" role="group" aria-label={`ב״ל ניכויים — ${clientLabel}`}>
+          {forms.map((form) => {
+            const item = niCell.items[form.key];
+            if (!item?.applicable) {
+              return (
+                <span
+                  key={form.key}
+                  className="nx-co-sheet__material-slot is-na"
+                  title={`${form.labelHe} לא רלוונטי`}
+                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel} — לא רלוונטי`}
+                >
+                  —
+                </span>
+              );
+            }
+            const checked = Boolean(item.completed);
+            return (
+              <label key={form.key} className="nx-co-sheet__material-slot">
+                <input
+                  type="checkbox"
+                  className="nx-co-sheet__checkbox"
+                  checked={checked}
+                  disabled={!canEdit || !col.editable || !onRegistryCommand || (form.key === '126' && checked)}
+                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel}`}
+                  onChange={() => void toggleNiDeductionsItem(r, form.key)}
+                  onClick={(event) => event.stopPropagation()}
+                />
+              </label>
+            );
+          })}
+        </div>
+      );
+    }
     if (col.cell_kind === 'checkbox') {
       return displayForColumn(r, col);
     }
@@ -1195,6 +1310,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     <span>מע״מ</span>
                     <span>מה״כ</span>
                     <span>שכר</span>
+                  </div>
+                </div>
+              ) : column.key === 'national_insurance_deductions' ? (
+                <div className="nx-co-sheet__material-header">
+                  <span className="nx-co-sheet__material-header-title">ב״ל ניכויים</span>
+                  <div className="nx-co-sheet__material-header-subs" aria-hidden="true">
+                    <span>102</span>
+                    <span>100</span>
+                    <span>126</span>
                   </div>
                 </div>
               ) : (

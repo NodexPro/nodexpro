@@ -32,6 +32,10 @@ import {
   setAnnualReportOperationalTargetDate,
   setCapitalDeclarationOperationalTargetDate,
 } from './client-operations-annual-capital-operational.service.js';
+import {
+  completeNiDeductions126CycleForRegistry,
+  setNiDeductionsReportedStepForRegistry,
+} from './client-operations-ni-deductions-registry.service.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -268,6 +272,12 @@ const OPERATIONAL_DATE_REGISTRY_COMMANDS = new Set([
   'open_capital_declaration_instance',
   'set_capital_declaration_operational_target_date',
   'complete_capital_declaration_instance',
+]);
+
+const NI_DEDUCTIONS_REGISTRY_COMMANDS = new Set([
+  'set_ni_deductions_reported_102',
+  'set_ni_deductions_reported_100',
+  'complete_ni_deductions_126_cycle',
 ]);
 
 async function ensurePeriodSnapshotForMaterialCommand(input: {
@@ -539,6 +549,41 @@ export async function executeClientOperationsRegistryCommand(
       ctx,
       clientId: idFrom(body.client_id, 'client_id'),
     });
+  } else if (command === 'set_ni_deductions_reported_102' || command === 'set_ni_deductions_reported_100') {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
+    const enabled = booleanFrom(body.value, 'value');
+    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+      orgId,
+      clientId,
+      operationalPeriodKey,
+    });
+    if (!snapshot?.national_insurance_deductions_applicable) {
+      throw badRequest('NI deductions are not applicable for this period');
+    }
+    await setNiDeductionsReportedStepForRegistry({
+      ctx,
+      clientId,
+      operationalPeriodKey,
+      step: command === 'set_ni_deductions_reported_102' ? 'reported_102' : 'reported_100',
+      enabled,
+    });
+  } else if (command === 'complete_ni_deductions_126_cycle') {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
+    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+      orgId,
+      clientId,
+      operationalPeriodKey,
+    });
+    if (!snapshot?.national_insurance_deductions_applicable) {
+      throw badRequest('NI deductions are not applicable for this period');
+    }
+    await completeNiDeductions126CycleForRegistry({
+      ctx,
+      clientId,
+      operationalPeriodKey,
+    });
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin
@@ -554,7 +599,11 @@ export async function executeClientOperationsRegistryCommand(
 
   const { listClientOperationsRegistry } = await import('./client-operations.service.js');
   const responseQuery = queryFrom(body.query);
-  if (MATERIAL_REGISTRY_COMMANDS.has(command) || OPERATIONAL_DATE_REGISTRY_COMMANDS.has(command)) {
+  if (
+    MATERIAL_REGISTRY_COMMANDS.has(command) ||
+    OPERATIONAL_DATE_REGISTRY_COMMANDS.has(command) ||
+    NI_DEDUCTIONS_REGISTRY_COMMANDS.has(command)
+  ) {
     responseQuery.operational_period_key = operationalPeriodKeyFrom(
       body.operational_period_key ?? responseQuery.operational_period_key,
     );

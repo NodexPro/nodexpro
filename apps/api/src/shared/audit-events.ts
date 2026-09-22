@@ -129,6 +129,10 @@ export const AUDIT_ACTIONS = {
     'client_operations.capital_declaration_operational_target_date.set',
   CLIENT_OPERATIONS_CAPITAL_DECLARATION_INSTANCE_COMPLETED:
     'client_operations.capital_declaration_instance.completed',
+  CLIENT_OPERATIONS_NI_DEDUCTIONS_102_SET: 'client_operations.ni_deductions.102_set',
+  CLIENT_OPERATIONS_NI_DEDUCTIONS_100_SET: 'client_operations.ni_deductions.100_set',
+  CLIENT_OPERATIONS_NI_DEDUCTIONS_126_CYCLE_COMPLETED:
+    'client_operations.ni_deductions.126_cycle_completed',
   CLIENT_OBLIGATION_COMMAND_EXECUTED: 'client_obligation.command_executed',
   CLIENT_TASK_COMMAND_EXECUTED: 'client_task.command_executed',
   CLIENT_OPERATIONS_NIGHT_PASS_EXECUTED: 'client_operations.night_pass_executed',

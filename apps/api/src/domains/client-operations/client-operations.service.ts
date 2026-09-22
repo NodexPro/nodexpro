@@ -88,6 +88,13 @@ import {
   projectAnnualReportCells,
   projectCapitalDeclarationCells,
 } from './client-operations-annual-capital-operational.service.js';
+import {
+  buildNiDeductionsRegistryCellForClient,
+  loadEarliestNiDeductionsApplicablePeriodKeysForClients,
+  loadNiDeductions126CycleFactsForClients,
+  loadNiDeductionsPeriodFlagsForClients,
+  type NiDeductionsRegistryCell,
+} from './client-operations-ni-deductions-registry.service.js';
 
 export type ClientOperationsRegistryRow = {
   client_id: string;
@@ -109,6 +116,8 @@ export type ClientOperationsRegistryRow = {
   material_cells?: MaterialCells;
   annual_report_cell?: AnnualReportOperationalDateCell;
   capital_declaration_cell?: CapitalDeclarationOperationalDateCell;
+  /** Backend-ready ב״ל ניכויים cell (102/100 monthly + 126 cycle). */
+  national_insurance_deductions_cell?: NiDeductionsRegistryCell;
   vat_status: string | null;
   income_tax_advance_status: string | null;
   national_insurance_status: string | null;
@@ -428,6 +437,9 @@ export async function listClientOperationsRegistry(
     payrollSalaryByClient,
     annualReportInstancesByClient,
     openCapitalInstancesByClient,
+    niDeductionsPeriodFlagsByClient,
+    niDeductions126FactsByClient,
+    earliestNiDeductionsApplicableByClient,
   ] = await Promise.all([
     supabaseAdmin
       .from('client_operational_profiles')
@@ -464,6 +476,19 @@ export async function listClientOperationsRegistry(
       taxYear: annualReportTaxYear,
     }),
     loadOpenCapitalDeclarationInstancesForClients({
+      organizationId: orgId,
+      clientIds,
+    }),
+    loadNiDeductionsPeriodFlagsForClients({
+      organizationId: orgId,
+      clientIds,
+      operationalPeriodKey: selectedPeriodKey,
+    }),
+    loadNiDeductions126CycleFactsForClients({
+      organizationId: orgId,
+      clientIds,
+    }),
+    loadEarliestNiDeductionsApplicablePeriodKeysForClients({
       organizationId: orgId,
       clientIds,
     }),
@@ -651,6 +676,15 @@ export async function listClientOperationsRegistry(
       operational_target_date: null,
       can_open: canEditRegistry,
     };
+    const national_insurance_deductions_applicable =
+      snapshot?.national_insurance_deductions_applicable ?? false;
+    const national_insurance_deductions_cell = buildNiDeductionsRegistryCellForClient({
+      applicable: national_insurance_deductions_applicable,
+      periodFlags: niDeductionsPeriodFlagsByClient.get(c.id),
+      cycleFacts: niDeductions126FactsByClient.get(c.id),
+      operationalPeriodKey: selectedPeriodKey,
+      earliestApplicablePeriodKey: earliestNiDeductionsApplicableByClient.get(c.id) ?? null,
+    });
     const vat_status = vatFromTax ?? (p?.vat_status as string | null) ?? null;
     const income_tax_advance_status = (p?.income_tax_advance_status as string | null) ?? null;
     const national_insurance_status = niFromTax ?? (p?.national_insurance_status as string | null) ?? null;
@@ -671,7 +705,7 @@ export async function listClientOperationsRegistry(
         income_tax_advance_applicable: snapshot?.income_tax_advance_applicable ?? false,
         income_tax_deductions_applicable: snapshot?.income_tax_deductions_applicable ?? false,
         national_insurance_applicable: snapshot?.national_insurance_applicable ?? false,
-        national_insurance_deductions_applicable: snapshot?.national_insurance_deductions_applicable ?? false,
+        national_insurance_deductions_applicable,
         row_visible: snapshot?.row_visible ?? true,
       },
       material_brought_cell: materialBroughtCell,
@@ -682,6 +716,7 @@ export async function listClientOperationsRegistry(
       }),
       annual_report_cell,
       capital_declaration_cell,
+      national_insurance_deductions_cell,
       /** מע״מ: תדירות מע״מ ממיסים; עוסק פטור — פטור */
       vat_status,
       income_tax_advance_status,

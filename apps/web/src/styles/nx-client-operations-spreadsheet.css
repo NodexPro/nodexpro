@@ -382,6 +382,105 @@
   user-select: none;
 }
 
+/* Integrated spreadsheet date control (annual / capital operational targets). */
+.nx-co-sheet__date-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  box-sizing: border-box;
+  min-width: 104px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  vertical-align: middle;
+}
+
+.nx-co-sheet__date-field.is-na {
+  min-width: 56px;
+  justify-content: center;
+  color: #94a3b8;
+  background: #f8fafc;
+}
+
+.nx-co-sheet__date-field.is-openable {
+  min-width: 72px;
+  justify-content: space-between;
+  gap: 2px;
+  padding-inline-end: 2px;
+}
+
+.nx-co-sheet__date-field.is-disabled {
+  opacity: 0.55;
+}
+
+.nx-co-sheet__date-field-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.nx-co-sheet__date-field-icon {
+  flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.nx-co-sheet__date-field-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.nx-co-sheet__date-field-input:disabled {
+  cursor: not-allowed;
+}
+
+.nx-co-sheet__date-field-plus {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #2563eb;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nx-co-sheet__date-field-plus:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.nx-co-sheet__date-field-plus:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Legacy class names kept for any residual references. */
 .nx-co-sheet__operational-date {
   display: inline-flex;
   align-items: center;
