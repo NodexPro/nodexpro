@@ -199,6 +199,16 @@ function datetimeLocalToIso(local: string): string | null {
   return d.toISOString();
 }
 
+/** Progressive enhancement: open native date picker when the platform supports it. */
+function tryShowNativeDatePicker(input: HTMLInputElement): void {
+  if (typeof input.showPicker !== 'function') return;
+  try {
+    void input.showPicker();
+  } catch {
+    // NotAllowedError / unsupported — native click / indicator path remains.
+  }
+}
+
 function cellKey(clientId: string, colKey: string): string {
   return `${clientId}::${colKey}`;
 }
@@ -1160,21 +1170,43 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const value = operationalCell.operational_target_date ?? '';
       const displayValue = displayForColumn(r, col);
       const disabled = !canEdit || !col.editable || !operationalCell.editable || !onRegistryCommand;
+      const dateInputId = `co-date-${col.key}-${r.client_id}`;
+      const dateInputName = `co_${col.key}_operational_target_date`;
       return (
         <label
           className={`nx-co-sheet__date-field${disabled ? ' is-disabled' : ''}`}
-          onClick={(event) => event.stopPropagation()}
+          htmlFor={dateInputId}
+          onClick={(event) => {
+            // Prevent row/folder navigation; native input owns the hit target.
+            event.stopPropagation();
+          }}
+          onPointerDown={(event) => {
+            // Label chrome is pointer-events:none on children; still stop row selection.
+            event.stopPropagation();
+          }}
         >
           <span className="nx-co-sheet__date-field-value">{displayValue || '—'}</span>
           <span className="nx-co-sheet__date-field-icon" aria-hidden="true">
             📅
           </span>
           <input
+            id={dateInputId}
+            name={dateInputName}
             type="date"
             className="nx-co-sheet__date-field-input"
             value={value}
             disabled={disabled}
             aria-label={`${col.label} — ${r.client_name ?? r.client_id}`}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              if (disabled) return;
+              // Single user-gesture showPicker (progressive). Native indicator still works alone.
+              tryShowNativeDatePicker(event.currentTarget);
+            }}
+            onClick={(event) => {
+              // Native path + stop row selection. Do not call showPicker again (avoid double open).
+              event.stopPropagation();
+            }}
             onChange={(event) =>
               void setOperationalTargetDate(
                 r,
@@ -1186,6 +1218,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         </label>
       );
     }
+
     if (col.cell_kind === 'checkbox' && col.key === 'material_brought') {
       const periodLabel = query?.operational_period_key ?? '';
       const clientLabel = r.client_name ?? r.client_id;

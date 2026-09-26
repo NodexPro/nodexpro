@@ -227,6 +227,29 @@ export function resolveIncomeTaxDeductionsApplicability(input: {
 }
 
 /**
+ * CO-176 historical repair formula — frozen snapshot fields ONLY.
+ *
+ * Snapshot rows do not store `income_tax_deductions_file_number`. Capture-time
+ * configuration evidence is `income_tax_deductions_enabled` (+ frequency).
+ * Pre-9b1c4104 snapshots used `enabled && odd-month cadence` for bi_monthly;
+ * this helper mirrors migration 176's corrected even-month (VAT) cadence.
+ *
+ * NOT used by registry runtime. Historical reads remain
+ * `Boolean(snapshot.income_tax_deductions_applicable)` after the one-shot repair.
+ */
+export function resolveIncomeTaxDeductionsApplicableFromFrozenSnapshot(input: {
+  income_tax_deductions_enabled: boolean | null | undefined;
+  income_tax_deductions_frequency: string | null | undefined;
+  operational_period_key: string;
+}): boolean {
+  if (input.income_tax_deductions_enabled !== true) return false;
+  return isIncomeTaxDeductionsFrequencyApplicableForOperationalPeriod(
+    input.income_tax_deductions_frequency,
+    input.operational_period_key,
+  );
+}
+
+/**
  * @deprecated Prefer `resolvePayrollApplicabilityFromDeductionsFiles`.
  * Legacy profile payroll_flag is no longer the Client Operations registry source of truth.
  */
