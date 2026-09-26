@@ -112,13 +112,13 @@ test('4 — VAT bi-monthly + monthly advances: September visible; VAT N/A; advan
   assert.equal(r.row_visible, true);
 });
 
-test('5 — VAT patur + payroll: November visible via payroll; VAT N/A', () => {
+test('5 — VAT patur + payroll via deductions file: November visible via payroll; VAT N/A', () => {
   const r = computeOperationalPeriodApplicability(
     '2026-11',
     baseInputs({
       vat_type: 'patur',
       vat_frequency: 'not_relevant',
-      payroll_flag: true,
+      national_insurance_deductions_file_number: 'NI-1',
     }),
   );
   assert.equal(r.vat_applicable, false);

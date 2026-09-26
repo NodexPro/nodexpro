@@ -45,6 +45,7 @@ import {
   buildRegistryRowCells,
   CLIENT_OPERATIONS_REGISTRY_COLUMNS,
   formatIncomeTaxAdvanceRegistryFrequencyDisplayHe,
+  formatPcnRegistryDisplay,
   mergeCustomCellsIntoRow,
   type ClientOperationsRegistryColumn,
   type ClientOperationsToolbarCapability,
@@ -61,20 +62,26 @@ import {
   loadPeriodApplicabilitySnapshots,
   loadPeriodMaterialFacts,
   loadPeriodMembershipClientIds,
+  loadIncomeTaxDeductionsPeriodReported,
   loadPayrollPeriodSalaryDataReceived,
   resolveRegistryOperationalPeriodKey,
   type ClientPeriodSourceRow,
 } from './client-operations-operational-period.service.js';
 import {
+  buildIncomeTaxDeductionsRegistryCell,
   buildMaterialCells,
   clientExistsInOperationalPeriod,
   mapOperationalPeriodKeyToPayrollPeriodKey,
   resolveDefaultOperationalPeriodKey,
   resolveIncomeTaxAdvanceMaterialForPeriod,
+  resolveIncomeTaxDeductionsApplicability,
+  resolveIncomeTaxDeductionsConfigured,
   resolveMaterialBroughtForPeriod,
+  resolvePayrollApplicabilityFromDeductionsFiles,
   resolvePayrollMaterialForPeriod,
   shouldIncludeArchivedClientInOperationalPeriodRegistry,
   shouldEmitOperationalPeriodRegistryRow,
+  type IncomeTaxDeductionsRegistryCell,
   type MaterialCells,
 } from './client-operations-operational-period.pure.js';
 import {
@@ -119,6 +126,10 @@ export type ClientOperationsRegistryRow = {
   capital_declaration_cell?: CapitalDeclarationOperationalDateCell;
   /** Backend-ready ב״ל ניכויים cell (102/100 monthly + 126 cycle). */
   national_insurance_deductions_cell?: NiDeductionsRegistryCell;
+  /** Backend-ready מ״ה ניכויים cell (configured / due / disabled / completion). */
+  income_tax_deductions_cell?: IncomeTaxDeductionsRegistryCell;
+  /** Canonical vat_due_type === 'pcn' → "PCN"; otherwise empty string (not dash). */
+  pcn_display?: string;
   vat_status: string | null;
   income_tax_advance_status: string | null;
   national_insurance_status: string | null;
@@ -436,6 +447,7 @@ export async function listClientOperationsRegistry(
     existingSnapshots,
     materialFacts,
     payrollSalaryByClient,
+    incomeTaxDeductionsReportedByClient,
     annualReportInstancesByClient,
     openCapitalInstancesByClient,
     niDeductionsPeriodFlagsByClient,
@@ -471,6 +483,11 @@ export async function listClientOperationsRegistry(
       payrollPeriodKey,
       clientIds,
     }),
+    loadIncomeTaxDeductionsPeriodReported({
+      organizationId: orgId,
+      operationalPeriodKey: selectedPeriodKey,
+      clientIds,
+    }),
     loadAnnualReportYearInstancesForClients({
       organizationId: orgId,
       clientIds,
@@ -494,7 +511,6 @@ export async function listClientOperationsRegistry(
       clientIds,
     }),
   ]);
-
   const profilesByClientId = new Map<string, Record<string, unknown>>();
   for (const p of (profiles ?? []) as unknown as Array<{ client_id: string }>) {
     profilesByClientId.set(p.client_id, p as Record<string, unknown>);
@@ -640,7 +656,16 @@ export async function listClientOperationsRegistry(
             incomeDedProfile
           )
         : computeNationalInsuranceDeductionsRegistryDisplayHe(null, incomeDedProfile);
-    const payroll_flag = (p?.payroll_flag as boolean | null) ?? null;
+    // שכר presence = either deductions file. Current/open uses live files; historical uses frozen snapshot.
+    const isCurrentOpenPeriod = selectedPeriodKey === defaultPeriodKey;
+    const hasPayroll = isCurrentOpenPeriod
+      ? resolvePayrollApplicabilityFromDeductionsFiles({
+          income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
+          national_insurance_deductions_file_number:
+            tax?.national_insurance_deductions_file_number ?? null,
+        })
+      : Boolean(snapshot?.payroll_applicable);
+    const payroll_flag: boolean | null = hasPayroll ? true : null;
     const periodFact = materialFacts.get(c.id);
     const materialBroughtCell = resolveMaterialBroughtForPeriod({
       period_fact: periodFact?.material_brought,
@@ -659,7 +684,7 @@ export async function listClientOperationsRegistry(
       income_tax_advance_applicable: snapshot?.income_tax_advance_applicable ?? false,
     });
     const payrollCell = resolvePayrollMaterialForPeriod({
-      payroll_applicable: snapshot?.payroll_applicable ?? false,
+      payroll_applicable: hasPayroll,
       salary_data_received: payrollSalaryByClient.get(c.id),
     });
     const material_brought_flag = materialBroughtCell.applicable ? materialBroughtCell.value : null;
@@ -687,6 +712,33 @@ export async function listClientOperationsRegistry(
       operationalPeriodKey: selectedPeriodKey,
       earliestApplicablePeriodKey: earliestNiDeductionsApplicableByClient.get(c.id) ?? null,
     });
+    const incomeTaxDeductionsDue = isCurrentOpenPeriod
+      ? resolveIncomeTaxDeductionsApplicability({
+          file_number: tax?.income_tax_deductions_file_number ?? null,
+          frequency: tax?.income_tax_deductions_frequency ?? null,
+          operational_period_key: selectedPeriodKey,
+        })
+      : Boolean(snapshot?.income_tax_deductions_applicable);
+    // Historical: freeze from snapshot enabled/frequency. Live file only for current/open.
+    // due ⇒ configured (file was present at capture).
+    const incomeTaxDeductionsConfigured =
+      incomeTaxDeductionsDue ||
+      (isCurrentOpenPeriod
+        ? resolveIncomeTaxDeductionsConfigured({
+            file_number: tax?.income_tax_deductions_file_number ?? null,
+            income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
+            income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
+          })
+        : resolveIncomeTaxDeductionsConfigured({
+            income_tax_deductions_enabled: snapshot?.income_tax_deductions_enabled ?? null,
+            income_tax_deductions_frequency: snapshot?.income_tax_deductions_frequency ?? null,
+          }));
+    const income_tax_deductions_cell = buildIncomeTaxDeductionsRegistryCell({
+      configured: incomeTaxDeductionsConfigured,
+      due: incomeTaxDeductionsDue,
+      completed: incomeTaxDeductionsReportedByClient.get(c.id) ?? false,
+    });
+    const pcn_display = formatPcnRegistryDisplay(tax?.vat_due_type ?? null);
     const vat_status = vatFromTax ?? (p?.vat_status as string | null) ?? null;
     // מה״כ registry display = frozen period frequency (not profile כן/לא).
     const income_tax_advance_status = formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({
@@ -713,9 +765,9 @@ export async function listClientOperationsRegistry(
       material_brought_flag,
       period_applicability: {
         vat_applicable: vatApplicable,
-        payroll_applicable: snapshot?.payroll_applicable ?? false,
+        payroll_applicable: hasPayroll,
         income_tax_advance_applicable: snapshot?.income_tax_advance_applicable ?? false,
-        income_tax_deductions_applicable: snapshot?.income_tax_deductions_applicable ?? false,
+        income_tax_deductions_applicable: incomeTaxDeductionsDue,
         national_insurance_applicable: snapshot?.national_insurance_applicable ?? false,
         national_insurance_deductions_applicable,
         row_visible: snapshot?.row_visible ?? true,
@@ -729,6 +781,8 @@ export async function listClientOperationsRegistry(
       annual_report_cell,
       capital_declaration_cell,
       national_insurance_deductions_cell,
+      income_tax_deductions_cell,
+      pcn_display,
       /** מע״מ: תדירות מע״מ ממיסים; עוסק פטור — פטור */
       vat_status,
       income_tax_advance_status,

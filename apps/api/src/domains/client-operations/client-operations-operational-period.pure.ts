@@ -226,10 +226,94 @@ export function resolveIncomeTaxDeductionsApplicability(input: {
   );
 }
 
+/**
+ * @deprecated Prefer `resolvePayrollApplicabilityFromDeductionsFiles`.
+ * Legacy profile payroll_flag is no longer the Client Operations registry source of truth.
+ */
 export function resolvePayrollApplicabilityForOperationalPeriod(
   payrollFlag: boolean | null | undefined,
 ): boolean {
   return payrollFlag === true;
+}
+
+/**
+ * Canonical CO payroll / שכר presence:
+ * has_payroll = IT deductions file present OR NI deductions file present.
+ * When present, payroll is applicable every operational month.
+ */
+export function resolvePayrollApplicabilityFromDeductionsFiles(input: {
+  income_tax_deductions_file_number: string | null | undefined;
+  national_insurance_deductions_file_number: string | null | undefined;
+}): boolean {
+  return (
+    resolveIncomeTaxDeductionsFileNumberPresent(input.income_tax_deductions_file_number) ||
+    resolveNationalInsuranceDeductionsApplicability(input.national_insurance_deductions_file_number)
+  );
+}
+
+/**
+ * מ״ה ניכויים registry cell — three backend presentation states:
+ * - not_configured (no תיק) → dash
+ * - configured + due → active checkbox (editable)
+ * - configured + not due → disabled checkbox (not dash)
+ */
+export type IncomeTaxDeductionsRegistryCell = {
+  /** תיק ניכויים מס הכנסה present (canonical file number / frozen enabled). */
+  configured: boolean;
+  /** Report due in this operational period. */
+  due: boolean;
+  /** Interactive obligation this period (= configured && due). */
+  applicable: boolean;
+  editable: boolean;
+  completed: boolean | null;
+  value: boolean | null;
+};
+
+export function resolveIncomeTaxDeductionsConfigured(input: {
+  file_number?: string | null | undefined;
+  /** Frozen snapshot signal when live file number is not on the snapshot row. */
+  income_tax_deductions_enabled?: boolean | null | undefined;
+  income_tax_deductions_frequency?: string | null | undefined;
+}): boolean {
+  if (resolveIncomeTaxDeductionsFileNumberPresent(input.file_number)) return true;
+  if (input.income_tax_deductions_enabled === true) return true;
+  return Boolean(String(input.income_tax_deductions_frequency ?? '').trim());
+}
+
+export function buildIncomeTaxDeductionsRegistryCell(input: {
+  configured: boolean;
+  due: boolean;
+  completed: boolean | null | undefined;
+}): IncomeTaxDeductionsRegistryCell {
+  if (!input.configured) {
+    return {
+      configured: false,
+      due: false,
+      applicable: false,
+      editable: false,
+      completed: null,
+      value: null,
+    };
+  }
+  if (!input.due) {
+    return {
+      configured: true,
+      due: false,
+      applicable: false,
+      editable: false,
+      completed: null,
+      value: null,
+    };
+  }
+  const done = Boolean(input.completed);
+  return {
+    configured: true,
+    due: true,
+    applicable: true,
+    editable: true,
+    completed: done,
+    value: done,
+  };
 }
 
 /** NI self — fail-closed unless canonical type is explicitly yes. */
@@ -255,7 +339,10 @@ export function computeOperationalPeriodApplicability(
     vat_frequency: inputs.vat_frequency,
     operational_period_key: periodKey,
   });
-  const payroll_applicable = resolvePayrollApplicabilityForOperationalPeriod(inputs.payroll_flag);
+  const payroll_applicable = resolvePayrollApplicabilityFromDeductionsFiles({
+    income_tax_deductions_file_number: inputs.income_tax_deductions_file_number,
+    national_insurance_deductions_file_number: inputs.national_insurance_deductions_file_number,
+  });
   const income_tax_advance_applicable =
     inputs.income_tax_advance_enabled === true &&
     isIncomeTaxFrequencyApplicableForOperationalPeriod(

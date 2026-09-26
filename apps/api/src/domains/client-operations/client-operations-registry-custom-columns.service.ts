@@ -18,6 +18,7 @@ import {
   ensurePeriodApplicabilitySnapshots,
   loadPeriodApplicabilitySnapshots,
   resolveRegistryOperationalPeriodKey,
+  setIncomeTaxDeductionsReportedForRegistry,
   upsertPeriodIncomeTaxAdvanceMaterialFact,
   upsertPeriodMaterialFact,
   type PeriodApplicabilitySnapshotRow,
@@ -278,6 +279,10 @@ const NI_DEDUCTIONS_REGISTRY_COMMANDS = new Set([
   'set_ni_deductions_reported_102',
   'set_ni_deductions_reported_100',
   'complete_ni_deductions_126_cycle',
+]);
+
+const INCOME_TAX_DEDUCTIONS_REGISTRY_COMMANDS = new Set([
+  'set_income_tax_deductions_reported',
 ]);
 
 async function ensurePeriodSnapshotForMaterialCommand(input: {
@@ -585,6 +590,29 @@ export async function executeClientOperationsRegistryCommand(
       clientId,
       operationalPeriodKey,
     });
+  } else if (command === 'set_income_tax_deductions_reported') {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
+    const enabled = booleanFrom(body.value, 'value');
+    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+      orgId,
+      clientId,
+      operationalPeriodKey,
+    });
+    if (!snapshot?.income_tax_deductions_applicable) {
+      throw badRequest('Income-tax deductions are not due for this period');
+    }
+    await setIncomeTaxDeductionsReportedForRegistry({
+      organizationId: orgId,
+      clientId,
+      operationalPeriodKey,
+      enabled,
+    });
+    await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_INCOME_TAX_DEDUCTIONS_REPORTED_SET, clientId, {
+      client_id: clientId,
+      operational_period_key: operationalPeriodKey,
+      reported: enabled,
+    });
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin
@@ -603,7 +631,8 @@ export async function executeClientOperationsRegistryCommand(
   if (
     MATERIAL_REGISTRY_COMMANDS.has(command) ||
     OPERATIONAL_DATE_REGISTRY_COMMANDS.has(command) ||
-    NI_DEDUCTIONS_REGISTRY_COMMANDS.has(command)
+    NI_DEDUCTIONS_REGISTRY_COMMANDS.has(command) ||
+    INCOME_TAX_DEDUCTIONS_REGISTRY_COMMANDS.has(command)
   ) {
     responseQuery.operational_period_key = operationalPeriodKeyFrom(
       body.operational_period_key ?? responseQuery.operational_period_key,

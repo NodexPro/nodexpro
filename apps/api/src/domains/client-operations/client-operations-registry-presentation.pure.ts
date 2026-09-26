@@ -100,6 +100,18 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     default_width_px: 120,
   },
   {
+    key: 'pcn',
+    label: 'PCN',
+    cell_kind: 'text',
+    value_field: 'pcn_display',
+    visible: true,
+    system: true,
+    editable: false,
+    freeze_default: false,
+    align: 'center',
+    default_width_px: 52,
+  },
+  {
     key: 'vat',
     label: 'מע״מ',
     cell_kind: 'text',
@@ -162,13 +174,13 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
   {
     key: 'income_tax_deductions',
     label: 'מ״ה ניכויים',
-    cell_kind: 'text',
+    cell_kind: 'checkbox',
     value_field: 'income_tax_deductions_status',
     visible: true,
     system: true,
-    editable: false,
+    editable: true,
     freeze_default: false,
-    align: 'right',
+    align: 'center',
     default_width_px: 72,
   },
   {
@@ -329,12 +341,18 @@ export function formatNationalInsuranceCellDisplayHe(v: string | null | undefine
   return s;
 }
 
+/** Canonical מיסים vat_due_type → PCN column display (empty when not PCN). */
+export function formatPcnRegistryDisplay(vatDueType: string | null | undefined): string {
+  return String(vatDueType ?? '').trim().toLowerCase() === 'pcn' ? 'PCN' : '';
+}
+
 export function buildRegistryRowCells(input: {
   client_name: string | null;
   tax_id: string | null;
   business_type: string | null;
   payroll_flag: boolean | null;
   material_brought_flag: boolean | null;
+  pcn_display?: string | null;
   vat_status: string | null;
   vat_due_registry_display_he: string | null;
   income_tax_advance_status: string | null;
@@ -352,6 +370,7 @@ export function buildRegistryRowCells(input: {
     business_type: textHe(input.business_type),
     payroll: boolHe(input.payroll_flag),
     material_brought: boolHe(input.material_brought_flag),
+    pcn: String(input.pcn_display ?? ''),
     vat: textHe(input.vat_status),
     vat_due: textHe(input.vat_due_registry_display_he),
     income_tax_advance: textHe(input.income_tax_advance_status),

@@ -41,6 +41,7 @@ import {
   type ClientOperationsClientQuickProfileAggregate,
   type ClientQuickProfileRow,
 } from './client-operations-client-quick-profile.pure.js';
+import { resolvePayrollApplicabilityFromDeductionsFiles } from './client-operations-operational-period.pure.js';
 
 function assertOrg(ctx: RequestContext): string {
   const orgId = ctx.organizationId;
@@ -294,9 +295,11 @@ export async function getClientOperationsClientQuickProfile(
   const taxId = (client as { tax_id?: string | null }).tax_id ?? null;
   const businessType =
     (profile as { business_type?: string | null } | null)?.business_type ?? null;
-  const payrollFlag = Boolean(
-    (profile as { payroll_flag?: boolean | null } | null)?.payroll_flag
-  );
+  const payrollHas =
+    resolvePayrollApplicabilityFromDeductionsFiles({
+      income_tax_deductions_file_number: settings.income_tax_deductions_file_number,
+      national_insurance_deductions_file_number: settings.national_insurance_deductions_file_number,
+    });
 
   const incomeSoftware =
     String(
@@ -370,7 +373,7 @@ export async function getClientOperationsClientQuickProfile(
     buildQuickProfileInfoRow({
       key: 'payroll',
       label_he: 'שכר',
-      display_value: formatQuickProfilePayrollDisplayHe(payrollFlag),
+      display_value: formatQuickProfilePayrollDisplayHe(payrollHas),
       visible: true,
     }),
     buildQuickProfileInfoRow({
@@ -409,7 +412,7 @@ export async function getClientOperationsClientQuickProfile(
 
     const niFile = String(settings.national_insurance_deductions_file_number ?? '').trim();
     const niApplicable =
-      payrollFlag === true || Boolean(niFile) || settings.income_tax_deductions_enabled === true;
+      payrollHas === true || Boolean(niFile) || settings.income_tax_deductions_enabled === true;
     const niPromise =
       niApplicable && reportingPeriodKey
         ? resolveNationalInsuranceDeductionsDueDate({

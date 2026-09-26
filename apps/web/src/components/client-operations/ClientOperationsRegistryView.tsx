@@ -73,6 +73,15 @@ export type ClientOperationsNiDeductionsCell = {
   };
 };
 
+export type ClientOperationsIncomeTaxDeductionsCell = {
+  configured: boolean;
+  due: boolean;
+  applicable: boolean;
+  editable: boolean;
+  completed: boolean | null;
+  value: boolean | null;
+};
+
 export type ClientOperationsRegistryRow = {
   client_id: string;
   client_name: string | null;
@@ -94,6 +103,8 @@ export type ClientOperationsRegistryRow = {
   annual_report_cell?: ClientOperationsAnnualReportCell;
   capital_declaration_cell?: ClientOperationsCapitalDeclarationCell;
   national_insurance_deductions_cell?: ClientOperationsNiDeductionsCell;
+  income_tax_deductions_cell?: ClientOperationsIncomeTaxDeductionsCell;
+  pcn_display?: string;
   vat_status: string | null;
   income_tax_advance_status: string | null;
   national_insurance_status: string | null;
@@ -207,7 +218,8 @@ function obligationApplicable(
     case 'income_tax_advance':
       return a.income_tax_advance_applicable;
     case 'income_tax_deductions':
-      return a.income_tax_deductions_applicable;
+      // Presentation owned by income_tax_deductions_cell (configured/due/disabled).
+      return null;
     case 'national_insurance':
       return a.national_insurance_applicable;
     case 'national_insurance_deductions':
@@ -224,6 +236,11 @@ function obligationApplicable(
 
 function displayForColumn(r: ClientOperationsRegistryRow, col: ClientOperationsRegistryColumn): string {
   const value = r.cells?.[col.key];
+  // PCN: empty string means not PCN (must not coerce to em-dash).
+  if (col.key === 'pcn') {
+    if (value != null) return String(value);
+    return r.pcn_display ?? '';
+  }
   if (value == null || value === '') return '—';
   return value;
 }
@@ -694,6 +711,23 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       });
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : 'שמירת ב״ל ניכויים נכשלה');
+    }
+  };
+  const toggleIncomeTaxDeductions = async (row: ClientOperationsRegistryRow) => {
+    if (!canEdit || !onRegistryCommand) return;
+    const cell = row.income_tax_deductions_cell;
+    if (!cell?.configured || !cell.due || !cell.editable || !cell.applicable) return;
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command: 'set_income_tax_deductions_reported',
+        client_id: row.client_id,
+        value: !Boolean(cell.completed),
+        operational_period_key: query?.operational_period_key ?? null,
+        query,
+      });
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'שמירת מ״ה ניכויים נכשלה');
     }
   };
   const setOperationalTargetDate = async (
@@ -1262,6 +1296,36 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             );
           })}
         </div>
+      );
+    }
+    if (col.cell_kind === 'checkbox' && col.key === 'income_tax_deductions') {
+      const periodLabel = query?.operational_period_key ?? '';
+      const clientLabel = r.client_name ?? r.client_id;
+      const cell = r.income_tax_deductions_cell;
+      if (!cell?.configured) {
+        return (
+          <span className="nx-co-sheet__na" title="אין תיק ניכויים" aria-label={`${col.label} —`}>
+            —
+          </span>
+        );
+      }
+      const active = Boolean(cell.due && cell.editable && cell.applicable);
+      const checked = Boolean(cell.completed);
+      return (
+        <label
+          className={`nx-co-sheet__itd-slot${active ? '' : ' is-inactive'}`}
+          title={active ? undefined : 'יש תיק ניכויים — אין דיווח בחודש זה'}
+        >
+          <input
+            type="checkbox"
+            className="nx-co-sheet__checkbox"
+            checked={checked}
+            disabled={!active || !canEdit || !col.editable || !onRegistryCommand}
+            aria-label={`${col.label} — ${clientLabel} — ${periodLabel}${active ? '' : ' — לא נדרש החודש'}`}
+            onChange={() => void toggleIncomeTaxDeductions(r)}
+            onClick={(event) => event.stopPropagation()}
+          />
+        </label>
       );
     }
     if (col.cell_kind === 'checkbox') {

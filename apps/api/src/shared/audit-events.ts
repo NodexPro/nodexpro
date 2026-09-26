@@ -133,6 +133,8 @@ export const AUDIT_ACTIONS = {
   CLIENT_OPERATIONS_NI_DEDUCTIONS_100_SET: 'client_operations.ni_deductions.100_set',
   CLIENT_OPERATIONS_NI_DEDUCTIONS_126_CYCLE_COMPLETED:
     'client_operations.ni_deductions.126_cycle_completed',
+  CLIENT_OPERATIONS_INCOME_TAX_DEDUCTIONS_REPORTED_SET:
+    'client_operations.income_tax_deductions.reported_set',
   CLIENT_OBLIGATION_COMMAND_EXECUTED: 'client_obligation.command_executed',
   CLIENT_TASK_COMMAND_EXECUTED: 'client_task.command_executed',
   CLIENT_OPERATIONS_NIGHT_PASS_EXECUTED: 'client_operations.night_pass_executed',

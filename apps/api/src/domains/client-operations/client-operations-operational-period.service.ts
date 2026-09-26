@@ -162,6 +162,61 @@ export async function loadPayrollPeriodSalaryDataReceived(input: {
 }
 
 /**
+ * Batch-load מ״ה ניכויים registry completion (`reported`) for operational_period_key.
+ * Reuses canonical client_income_tax_deductions_period — period_key = operational YYYY-MM.
+ */
+export async function loadIncomeTaxDeductionsPeriodReported(input: {
+  organizationId: string;
+  operationalPeriodKey: string;
+  clientIds: string[];
+}): Promise<Map<string, boolean>> {
+  const out = new Map<string, boolean>();
+  if (!input.clientIds.length) return out;
+  const { data, error } = await supabaseAdmin
+    .from('client_income_tax_deductions_period')
+    .select('client_id, reported')
+    .eq('organization_id', input.organizationId)
+    .eq('period_key', input.operationalPeriodKey)
+    .in('client_id', input.clientIds);
+  assertQueryError(error, 'Failed to load income-tax deductions period reported');
+  for (const row of (data ?? []) as Array<{ client_id: string; reported: boolean }>) {
+    out.set(row.client_id, Boolean(row.reported));
+  }
+  return out;
+}
+
+/** Toggle מ״ה ניכויים registry completion for a due operational month. */
+export async function setIncomeTaxDeductionsReportedForRegistry(input: {
+  organizationId: string;
+  clientId: string;
+  operationalPeriodKey: string;
+  enabled: boolean;
+}): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const { data: existing, error: readError } = await supabaseAdmin
+    .from('client_income_tax_deductions_period')
+    .select('reported, paid, not_relevant')
+    .eq('organization_id', input.organizationId)
+    .eq('client_id', input.clientId)
+    .eq('period_key', input.operationalPeriodKey)
+    .maybeSingle();
+  assertQueryError(readError, 'Failed to read income-tax deductions period');
+  const { error } = await supabaseAdmin.from('client_income_tax_deductions_period').upsert(
+    {
+      organization_id: input.organizationId,
+      client_id: input.clientId,
+      period_key: input.operationalPeriodKey,
+      reported: input.enabled,
+      paid: Boolean((existing as { paid?: boolean } | null)?.paid),
+      not_relevant: Boolean((existing as { not_relevant?: boolean } | null)?.not_relevant),
+      updated_at: nowIso,
+    },
+    { onConflict: 'organization_id,client_id,period_key' },
+  );
+  assertQueryError(error, 'Failed to upsert income-tax deductions period reported');
+}
+
+/**
  * Frozen historical membership for a period = clients with an applicability
  * snapshot and/or a material fact row. Used so archived clients remain visible
  * in historical periods without inventing engagement history.
