@@ -44,8 +44,10 @@ test('1 — blank custom cell renders no dash', () => {
   assert.equal(formatUserCustomCellDisplayHe('text', null), '');
   assert.equal(formatUserCustomCellDisplayHe('text', { value_text: '  ', value_number: null, value_date: null, value_bool: null }), '');
   assert.equal(formatUserCustomCellDisplayHe('text', { value_text: 'הערה', value_number: null, value_date: null, value_bool: null }), 'הערה');
+  assert.match(viewSource, /formatCustomExcelCellDisplay|displayCustomColumnValue/);
   assert.match(viewSource, /is-blank/);
   assert.doesNotMatch(viewSource, /setCellDraft\(current === '—' \? '' : current\)/);
+  assert.doesNotMatch(viewSource, /formatPresentationValue\(displayForColumn\(row, column\), column, presentation\) \|\| '\\u00A0'/);
 });
 
 test('2/3/4/5 — autosave debounce + blur/Enter/period flush', () => {
@@ -66,6 +68,14 @@ test('6 — stale save response protection', () => {
   assert.match(viewSource, /preserveEditorDraftIfNeeded/);
   assert.match(pageSource, /options\?\.applyAggregate !== false/);
   assert.doesNotMatch(viewSource, /customCellSaveSeqRef/);
+});
+
+test('excel UX — whole-cell editor + gear isolation', () => {
+  assert.match(viewSource, /beginCustomCellEdit/);
+  assert.match(viewSource, /is-editing-custom/);
+  assert.match(viewSource, /nx-co-sheet__col-gear-icon/);
+  assert.match(viewSource, /openColumnSettings\(column\)/);
+  assert.match(viewSource, /beginCustomCellEdit\(row, column\)/);
 });
 
 test('7-12 — period values + carry-forward + non-destructive hide', () => {
