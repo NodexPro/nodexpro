@@ -82,7 +82,7 @@ test('19 — ensure slots is idempotent and create is race-hardened', () => {
 
 test('PURE READ — listClientOperationsRegistry does not ensure/write slots', () => {
   assert.doesNotMatch(registryService, /ensureClientOperationsUserColumnSlots/);
-  assert.match(registryService, /Pure read: user-slot initialization is ONLY via named command/);
+  assert.match(registryService, /Pure read: user-slot \/ period-setup initialization is ONLY via named commands/);
   assert.match(commandService, /ensure_client_operations_user_column_slots/);
   assert.match(commandService, /assertEdit\(ctx\)/);
 });
@@ -107,9 +107,10 @@ test('13/15/16 — rename + value commands remain the persistence path', () => {
   assert.match(viewSource, /set_client_operations_custom_column_value/);
 });
 
-test('18 — custom values have no operational_period_key', () => {
-  assert.doesNotMatch(commandService, /custom_column_values[\s\S]{0,200}operational_period_key/);
-  assert.match(commandService, /onConflict: 'organization_id,client_id,column_id'/);
+test('18 — period values are period-scoped; legacy table stays timeless', () => {
+  assert.match(commandService, /setPeriodCustomColumnValue/);
+  assert.match(commandService, /operationalPeriodKeyFrom\(body\.operational_period_key\)/);
+  assert.match(commandService, /set_client_operations_custom_column_value/);
 });
 
 test('SEARCH — live quiet path; X clears without dimming', () => {

@@ -26,7 +26,9 @@ test('business type display uses stored CO profile value', () => {
 });
 
 test('reads clients.address and city like client operations case', () => {
-  assert.match(coreSource, /select\('id, display_name, tax_id, email, phone, address, city'\)/);
+  // Canonical Core read includes website (production shape); WE must not query clients.address_json itself.
+  assert.match(coreSource, /select\('id, display_name, tax_id, email, phone, address, city, website'\)/);
   assert.match(coreSource, /buildClientOperationsAddressJson/);
-  assert.doesNotMatch(weWizardSource, /clients[\s\S]*address_json/);
+  assert.match(weWizardSource, /buildClientOperationsAddressJson\(c\.address, c\.city\)/);
+  assert.doesNotMatch(weWizardSource, /\.from\(\s*['"]clients['"]\s*\)/);
 });

@@ -15,6 +15,19 @@ import {
   loadClientOperationsColumnWidths,
   saveClientOperationsColumnWidths,
 } from '../../lib/client-operations-column-widths.pure';
+import {
+  completeCustomCellSaveFailure,
+  completeCustomCellSaveSuccess,
+  customCellSaveKey,
+  getCustomCellSlot,
+  isCustomCellInFlight,
+  rememberCustomCellDraft,
+  shouldApplyCellSaveAggregate,
+  tryStartCustomCellSave,
+  type CustomCellSaveIdentity,
+  type CustomCellSaveSlot,
+  type CustomCellSaveStart,
+} from '../../lib/client-operations-custom-cell-save.pure';
 import { PageHeader } from '../../templates/template-1/components/PageHeader';
 import { SectionCard } from '../../templates/template-1/components/SectionCard';
 import { ClientNoteModal } from '../ClientNoteModal';
@@ -139,6 +152,12 @@ export type ClientOperationsRegistryColumn = {
   editable: boolean;
   freeze_default: boolean;
   align: 'right' | 'center' | 'left';
+  settings_available?: boolean;
+  auto_extend_to_future?: boolean;
+  auto_extend_from_period_key?: string | null;
+  visible_period_keys?: string[];
+  legacy_baseline_required?: boolean;
+  legacy_baseline_period_key?: string | null;
 };
 
 export type ClientOperationsToolbarCapability = {
@@ -271,6 +290,17 @@ export type ClientOperationsRegistryViewProps = {
   columns?: ClientOperationsRegistryColumn[];
   toolbarCapabilities?: ClientOperationsToolbarCapability[];
   customColumnsCapability?: { max: number; current: number; can_create: boolean };
+  userColumnPeriodSetup?: {
+    needed: boolean;
+    operational_period_key: string;
+    eligible_columns: Array<{ column_id: string; label: string; key: string; preselected: boolean }>;
+  } | null;
+  columnsNeedingLegacyBaseline?: Array<{
+    column_id: string;
+    label: string;
+    key: string;
+    available_baseline_periods: string[];
+  }>;
   query?: {
     q: string | null;
     sort_by: string | null;
@@ -281,7 +311,10 @@ export type ClientOperationsRegistryViewProps = {
     next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null },
     options?: { quiet?: boolean },
   ) => void;
-  onRegistryCommand?: (body: Record<string, unknown>) => Promise<unknown>;
+  onRegistryCommand?: (
+    body: Record<string, unknown>,
+    options?: { applyAggregate?: boolean },
+  ) => Promise<unknown>;
   onApplyAggregate?: (aggregate: any) => void;
   widthScope?: { userId: string; organizationId: string };
   period?: {
@@ -307,6 +340,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     columns: columnsProp,
     toolbarCapabilities = [],
     customColumnsCapability: _customColumnsCapability,
+    userColumnPeriodSetup = null,
+    columnsNeedingLegacyBaseline: _columnsNeedingLegacyBaseline = [],
     query,
     onQueryChange,
     onRegistryCommand,
@@ -690,22 +725,199 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (presentation.numberFormat === 'percent') return new Intl.NumberFormat('he-IL', { style: 'percent' }).format(number);
     return new Intl.NumberFormat('he-IL').format(number);
   };
-  const editCustomCell = async (row: ClientOperationsRegistryRow, column: ClientOperationsRegistryColumn) => {
-    if (!canEdit || !column.editable || !column.custom_column_id || !onRegistryCommand) return;
-    const current = displayForColumn(row, column);
-    const value = window.prompt(column.label.trim() || 'ערך', current === '—' ? '' : current);
-    if (value === null) return;
+  const customCellSlotsRef = useRef<Map<string, CustomCellSaveSlot>>(new Map());
+  const customCellDebounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const customCellMetaRef = useRef<
+    Map<
+      string,
+      {
+        clientId: string;
+        column: ClientOperationsRegistryColumn;
+        identity: CustomCellSaveIdentity;
+      }
+    >
+  >(new Map());
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const viewedPeriodKeyRef = useRef<string | null>(null);
+  viewedPeriodKeyRef.current = query?.operational_period_key ?? period?.selected_period_key ?? null;
+  const editingCellKeyRef = useRef(editingCellKey);
+  editingCellKeyRef.current = editingCellKey;
+  const customCellFlightWaitersRef = useRef<Map<string, Array<() => void>>>(new Map());
+
+  const notifyCustomCellFlightSettled = (key: string) => {
+    if (isCustomCellInFlight(customCellSlotsRef.current, key)) return;
+    const waiters = customCellFlightWaitersRef.current.get(key);
+    if (!waiters?.length) return;
+    customCellFlightWaitersRef.current.delete(key);
+    for (const resolve of waiters) resolve();
+  };
+
+  const waitForCustomCellFlight = (key: string): Promise<void> => {
+    if (!isCustomCellInFlight(customCellSlotsRef.current, key)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const list = customCellFlightWaitersRef.current.get(key) ?? [];
+      list.push(resolve);
+      customCellFlightWaitersRef.current.set(key, list);
+    });
+  };
+
+  const makeCustomCellIdentity = (
+    clientId: string,
+    column: ClientOperationsRegistryColumn,
+    operationalPeriodKey: string,
+  ): CustomCellSaveIdentity | null => {
+    const organizationId = widthScope?.organizationId?.trim() ?? '';
+    const columnId = column.custom_column_id?.trim() ?? '';
+    if (!organizationId || !clientId || !columnId || !operationalPeriodKey) return null;
+    return { organizationId, clientId, columnId, operationalPeriodKey };
+  };
+
+  const serverValueForMeta = (meta: {
+    clientId: string;
+    column: ClientOperationsRegistryColumn;
+  }): string => {
+    const row = rowsRef.current.find((r) => r.client_id === meta.clientId);
+    if (!row) return '';
+    return displayForColumn(row, meta.column);
+  };
+
+  const clearCustomCellDebounce = (key: string) => {
+    const timer = customCellDebounceTimersRef.current.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      customCellDebounceTimersRef.current.delete(key);
+    }
+  };
+
+  const preserveEditorDraftIfNeeded = (key: string, meta: { clientId: string; column: ClientOperationsRegistryColumn }) => {
+    const pk = cellKey(meta.clientId, meta.column.key);
+    if (editingCellKeyRef.current !== pk) return;
+    const slot = getCustomCellSlot(customCellSlotsRef.current, key);
+    if (slot.latestDraft != null) setCellDraft(slot.latestDraft);
+  };
+
+  const executeCustomCellSave = async (start: CustomCellSaveStart): Promise<void> => {
+    if (!onRegistryCommand) return;
+    const meta = customCellMetaRef.current.get(start.key);
+    if (!meta) {
+      completeCustomCellSaveFailure(customCellSlotsRef.current, start.key);
+      return;
+    }
     setCommandError('');
     try {
-      await onRegistryCommand({
-        command: 'set_client_operations_custom_column_value',
-        client_id: row.client_id,
-        column_id: column.custom_column_id,
-        value,
-      });
+      const data = (await onRegistryCommand(
+        {
+          command: 'set_client_operations_custom_column_value',
+          client_id: start.identity.clientId,
+          column_id: start.identity.columnId,
+          value: start.value,
+          // Period is bound to the dirty cell identity — never the live navigator alone.
+          operational_period_key: start.identity.operationalPeriodKey,
+        },
+        { applyAggregate: false },
+      )) as {
+        rows?: ClientOperationsRegistryRow[];
+        period?: { selected_period_key?: string | null };
+        query?: { operational_period_key?: string | null };
+      };
+
+      const responsePeriodKey =
+        data?.period?.selected_period_key ?? data?.query?.operational_period_key ?? start.identity.operationalPeriodKey;
+      const viewedPeriodKey = viewedPeriodKeyRef.current;
+      const aggregateRow = Array.isArray(data?.rows)
+        ? data.rows.find((r) => r.client_id === start.identity.clientId)
+        : undefined;
+      const serverValueAfter = aggregateRow ? displayForColumn(aggregateRow, meta.column) : start.value;
+
+      const { startNext } = completeCustomCellSaveSuccess(
+        customCellSlotsRef.current,
+        start.key,
+        start.value,
+        serverValueAfter,
+      );
+
+      if (
+        shouldApplyCellSaveAggregate({
+          responsePeriodKey,
+          viewedPeriodKey,
+        })
+      ) {
+        onApplyAggregate?.(data);
+        preserveEditorDraftIfNeeded(start.key, meta);
+      }
+
+      if (startNext) {
+        await executeCustomCellSave(startNext);
+      } else {
+        notifyCustomCellFlightSettled(start.key);
+      }
     } catch (error) {
+      completeCustomCellSaveFailure(customCellSlotsRef.current, start.key);
+      preserveEditorDraftIfNeeded(start.key, meta);
+      notifyCustomCellFlightSettled(start.key);
       setCommandError(error instanceof Error ? error.message : 'שמירת הערך נכשלה');
     }
+  };
+
+  const kickCustomCellSave = async (key: string): Promise<void> => {
+    const meta = customCellMetaRef.current.get(key);
+    if (!meta) return;
+    const start = tryStartCustomCellSave(
+      customCellSlotsRef.current,
+      meta.identity,
+      serverValueForMeta(meta),
+    );
+    if (!start) return;
+    await executeCustomCellSave(start);
+  };
+
+  const flushCustomCellKey = async (key: string, options?: { clearEditing?: boolean }): Promise<void> => {
+    clearCustomCellDebounce(key);
+    const meta = customCellMetaRef.current.get(key);
+    if (!meta) return;
+
+    for (let guard = 0; guard < 20; guard += 1) {
+      if (isCustomCellInFlight(customCellSlotsRef.current, key)) {
+        await waitForCustomCellFlight(key);
+        continue;
+      }
+      const start = tryStartCustomCellSave(
+        customCellSlotsRef.current,
+        meta.identity,
+        serverValueForMeta(meta),
+      );
+      if (!start) break;
+      await executeCustomCellSave(start);
+    }
+
+    if (options?.clearEditing) {
+      const slot = getCustomCellSlot(customCellSlotsRef.current, key);
+      if (!slot.inFlight && (slot.latestDraft == null || slot.latestDraft === serverValueForMeta(meta))) {
+        setEditingCellKey(null);
+      }
+    }
+  };
+
+  const scheduleCustomCellAutosave = (
+    row: ClientOperationsRegistryRow,
+    column: ClientOperationsRegistryColumn,
+    value: string,
+  ) => {
+    if (!canEdit || !column.editable || !column.custom_column_id || !onRegistryCommand) return;
+    const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
+    const identity = makeCustomCellIdentity(row.client_id, column, periodKey);
+    if (!identity) return;
+    const key = rememberCustomCellDraft(customCellSlotsRef.current, identity, value);
+    customCellMetaRef.current.set(key, { clientId: row.client_id, column, identity });
+    clearCustomCellDebounce(key);
+    customCellDebounceTimersRef.current.set(
+      key,
+      setTimeout(() => {
+        customCellDebounceTimersRef.current.delete(key);
+        void kickCustomCellSave(key);
+      }, 500),
+    );
   };
 
   const commitCustomCellEdit = async (
@@ -714,12 +926,46 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     value: string,
   ) => {
     if (!canEdit || !column.editable || !column.custom_column_id || !onRegistryCommand) return;
-    const current = displayForColumn(row, column);
-    const normalizedCurrent = current === '—' ? '' : current;
-    if (value === normalizedCurrent) {
-      setEditingCellKey(null);
-      return;
+    const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
+    const identity = makeCustomCellIdentity(row.client_id, column, periodKey);
+    if (!identity) return;
+    const key = rememberCustomCellDraft(customCellSlotsRef.current, identity, value);
+    customCellMetaRef.current.set(key, { clientId: row.client_id, column, identity });
+    await flushCustomCellKey(key, { clearEditing: true });
+  };
+
+  const flushDirtyBeforePeriodChange = async (nextPeriodKey: string) => {
+    // Cancel debounces and flush every dirty/in-flight cell; period stays in each key.
+    const keys = new Set<string>([
+      ...customCellSlotsRef.current.keys(),
+      ...customCellDebounceTimersRef.current.keys(),
+      ...customCellMetaRef.current.keys(),
+    ]);
+    for (const key of keys) clearCustomCellDebounce(key);
+    await Promise.all([...keys].map((key) => flushCustomCellKey(key, { clearEditing: true })));
+    onPeriodChange?.(nextPeriodKey);
+  };
+
+  const cancelCustomCellEdit = (
+    row: ClientOperationsRegistryRow,
+    column: ClientOperationsRegistryColumn,
+  ) => {
+    const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
+    const identity = makeCustomCellIdentity(row.client_id, column, periodKey);
+    if (identity) {
+      const key = customCellSaveKey(identity);
+      clearCustomCellDebounce(key);
+      customCellSlotsRef.current.delete(key);
+      customCellMetaRef.current.delete(key);
     }
+    setEditingCellKey(null);
+  };
+
+  const editCustomCell = async (row: ClientOperationsRegistryRow, column: ClientOperationsRegistryColumn) => {
+    if (!canEdit || !column.editable || !column.custom_column_id || !onRegistryCommand) return;
+    const current = displayForColumn(row, column);
+    const value = window.prompt(column.label.trim() || 'ערך', current);
+    if (value === null) return;
     setCommandError('');
     try {
       await onRegistryCommand({
@@ -727,10 +973,65 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         client_id: row.client_id,
         column_id: column.custom_column_id,
         value,
+        operational_period_key: query?.operational_period_key ?? period?.selected_period_key ?? null,
       });
-      setEditingCellKey(null);
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : 'שמירת הערך נכשלה');
+    }
+  };
+
+  const [columnSettingsTarget, setColumnSettingsTarget] = useState<ClientOperationsRegistryColumn | null>(null);
+  const [settingsSelectedPeriods, setSettingsSelectedPeriods] = useState<string[]>([]);
+  const [settingsAutoFuture, setSettingsAutoFuture] = useState(false);
+  const [settingsLegacyBaseline, setSettingsLegacyBaseline] = useState<string>('');
+  const [periodSetupSelection, setPeriodSetupSelection] = useState<string[]>([]);
+  const [periodSetupSelectAll, setPeriodSetupSelectAll] = useState(false);
+
+  useEffect(() => {
+    if (!userColumnPeriodSetup?.needed || !userColumnPeriodSetup.eligible_columns.length) return;
+    const pre = userColumnPeriodSetup.eligible_columns.filter((c) => c.preselected).map((c) => c.column_id);
+    setPeriodSetupSelection(pre);
+    setPeriodSetupSelectAll(pre.length === userColumnPeriodSetup.eligible_columns.length && pre.length > 0);
+  }, [userColumnPeriodSetup]);
+
+  const openColumnSettings = (column: ClientOperationsRegistryColumn) => {
+    setColumnSettingsTarget(column);
+    setSettingsSelectedPeriods([...(column.visible_period_keys ?? [])]);
+    setSettingsAutoFuture(Boolean(column.auto_extend_to_future));
+    setSettingsLegacyBaseline(column.legacy_baseline_period_key ?? period?.selected_period_key ?? '');
+  };
+
+  const saveColumnSettings = async () => {
+    if (!columnSettingsTarget?.custom_column_id || !onRegistryCommand) return;
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command: 'set_client_operations_custom_column_period_settings',
+        column_id: columnSettingsTarget.custom_column_id,
+        operational_period_key: query?.operational_period_key ?? period?.selected_period_key ?? null,
+        selected_periods: settingsSelectedPeriods,
+        auto_extend_to_future: settingsAutoFuture,
+        legacy_baseline_period_key: columnSettingsTarget.legacy_baseline_required
+          ? settingsLegacyBaseline || null
+          : null,
+      });
+      setColumnSettingsTarget(null);
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'שמירת הגדרות עמודה נכשלה');
+    }
+  };
+
+  const confirmPeriodSetup = async () => {
+    if (!userColumnPeriodSetup?.needed || !onRegistryCommand) return;
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command: 'initialize_client_operations_user_columns_for_period',
+        operational_period_key: userColumnPeriodSetup.operational_period_key,
+        column_ids: periodSetupSelection,
+      });
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'אתחול עמודות לתקופה נכשל');
     }
   };
 
@@ -1467,41 +1768,57 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   </div>
                 </div>
               ) : column.cell_kind === 'custom' ? (
-                editingHeaderColumnId === column.custom_column_id ? (
-                  <input
-                    className="nx-co-sheet__header-edit"
-                    value={headerDraft}
-                    autoFocus
-                    aria-label="שם עמודה"
-                    onChange={(event) => setHeaderDraft(event.target.value)}
-                    onClick={(event) => event.stopPropagation()}
-                    onBlur={() => void commitCustomHeaderRename(column, headerDraft)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        void commitCustomHeaderRename(column, headerDraft);
-                      }
-                      if (event.key === 'Escape') {
-                        setEditingHeaderColumnId(null);
-                      }
-                    }}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className={`nx-co-sheet__header-label${column.label.trim() ? '' : ' is-blank'}`}
-                    disabled={!canEdit || !column.custom_column_id}
-                    title={canEdit ? 'לחיצה לשינוי שם העמודה' : undefined}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (!canEdit || !column.custom_column_id) return;
-                      setEditingHeaderColumnId(column.custom_column_id);
-                      setHeaderDraft(column.label.trim());
-                    }}
-                  >
-                    {column.label.trim() || '\u00A0'}
-                  </button>
-                )
+                <div className="nx-co-sheet__custom-header">
+                  {editingHeaderColumnId === column.custom_column_id ? (
+                    <input
+                      className="nx-co-sheet__header-edit"
+                      value={headerDraft}
+                      autoFocus
+                      aria-label="שם עמודה"
+                      onChange={(event) => setHeaderDraft(event.target.value)}
+                      onClick={(event) => event.stopPropagation()}
+                      onBlur={() => void commitCustomHeaderRename(column, headerDraft)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void commitCustomHeaderRename(column, headerDraft);
+                        }
+                        if (event.key === 'Escape') {
+                          setEditingHeaderColumnId(null);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className={`nx-co-sheet__header-label${column.label.trim() ? '' : ' is-blank'}`}
+                      disabled={!canEdit || !column.custom_column_id}
+                      title={canEdit ? 'לחיצה לשינוי שם העמודה' : undefined}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (!canEdit || !column.custom_column_id) return;
+                        setEditingHeaderColumnId(column.custom_column_id);
+                        setHeaderDraft(column.label.trim());
+                      }}
+                    >
+                      {column.label.trim() || '\u00A0'}
+                    </button>
+                  )}
+                  {canEdit && column.settings_available !== false ? (
+                    <button
+                      type="button"
+                      className="nx-co-sheet__col-gear"
+                      aria-label="הגדרות עמודה"
+                      title="הגדרות עמודה"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openColumnSettings(column);
+                      }}
+                    >
+                      ⚙
+                    </button>
+                  ) : null}
+                </div>
               ) : (
                 column.label
               )}
@@ -1532,7 +1849,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                               value={cellDraft}
                               autoFocus
                               aria-label={column.label.trim() || 'ערך עמודה'}
-                              onChange={(event) => setCellDraft(event.target.value)}
+                              onChange={(event) => {
+                                const next = event.target.value;
+                                setCellDraft(next);
+                                scheduleCustomCellAutosave(row, column, next);
+                              }}
                               onClick={(event) => event.stopPropagation()}
                               onBlur={() => void commitCustomCellEdit(row, column, cellDraft)}
                               onKeyDown={(event) => {
@@ -1540,28 +1861,31 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                                   event.preventDefault();
                                   void commitCustomCellEdit(row, column, cellDraft);
                                 }
-                                if (event.key === 'Escape') setEditingCellKey(null);
+                                if (event.key === 'Escape') {
+                                  event.preventDefault();
+                                  cancelCustomCellEdit(row, column);
+                                }
                               }}
                             />
                           )
                           : (
                             <button
                               type="button"
-                              className="nx-co-sheet__custom-cell"
+                              className={`nx-co-sheet__custom-cell${displayForColumn(row, column) ? '' : ' is-blank'}`}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 setSelectedRowId(row.client_id);
                                 setFocusedCell({ clientId: row.client_id, colKey: column.key });
                                 const current = displayForColumn(row, column);
                                 setEditingCellKey(pk);
-                                setCellDraft(current === '—' ? '' : current);
+                                setCellDraft(current);
                               }}
                               title="לחיצה לעריכה"
                             >
-                              {formatPresentationValue(displayForColumn(row, column), column, presentation)}
+                              {formatPresentationValue(displayForColumn(row, column), column, presentation) || '\u00A0'}
                             </button>
                           )
-                        : formatPresentationValue(displayForColumn(row, column), column, presentation)
+                        : (formatPresentationValue(displayForColumn(row, column), column, presentation) || '\u00A0')
                       : renderCellContent(row, column)}
                   </td>
                 );
@@ -1731,10 +2055,102 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           selectedPeriodKey={period?.selected_period_key ?? query?.operational_period_key ?? null}
           defaultPeriodKey={period?.default_period_key ?? null}
           disabled={loading}
-          onSelectPeriod={(key) => onPeriodChange?.(key)}
+          onSelectPeriod={(key) => void flushDirtyBeforePeriodChange(key)}
         />
         </div>
         {commandError ? <div className="nx-co-sheet__error">{commandError}</div> : null}
+        {userColumnPeriodSetup?.needed && (userColumnPeriodSetup.eligible_columns?.length ?? 0) > 0 && canEdit ? (
+          <div className="nx-co-sheet__dialog-backdrop" role="presentation">
+            <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label="עמודות לתקופה">
+              <h2>{`עמודות לתקופה ${userColumnPeriodSetup.operational_period_key.slice(5)}.${userColumnPeriodSetup.operational_period_key.slice(2, 4)}`}</h2>
+              <label className="nx-co-sheet__check">
+                <input
+                  type="checkbox"
+                  checked={periodSetupSelectAll}
+                  onChange={(event) => {
+                    const on = event.target.checked;
+                    setPeriodSetupSelectAll(on);
+                    setPeriodSetupSelection(
+                      on ? userColumnPeriodSetup.eligible_columns.map((c) => c.column_id) : [],
+                    );
+                  }}
+                />
+                הכל
+              </label>
+              {userColumnPeriodSetup.eligible_columns.map((col) => (
+                <label key={col.column_id} className="nx-co-sheet__check">
+                  <input
+                    type="checkbox"
+                    checked={periodSetupSelection.includes(col.column_id)}
+                    onChange={(event) => {
+                      setPeriodSetupSelection((prev) => {
+                        if (event.target.checked) return [...new Set([...prev, col.column_id])];
+                        return prev.filter((id) => id !== col.column_id);
+                      });
+                    }}
+                  />
+                  {col.label}
+                </label>
+              ))}
+              <div className="nx-co-sheet__dialog-actions">
+                <button type="button" className="nx-co-sheet__btn is-active" onClick={() => void confirmPeriodSetup()}>
+                  אישור
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {columnSettingsTarget ? (
+          <div className="nx-co-sheet__dialog-backdrop" role="presentation">
+            <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label="הגדרות עמודה">
+              <button type="button" className="nx-co-sheet__close" onClick={() => setColumnSettingsTarget(null)} aria-label="סגירה">×</button>
+              <h2>הגדרות עמודה</h2>
+              <p className="nx-co-sheet__dialog-subtitle">הצגה בתקופות</p>
+              {columnSettingsTarget.legacy_baseline_required ? (
+                <label>
+                  תקופת התחלה למידע הקיים
+                  <select
+                    value={settingsLegacyBaseline}
+                    onChange={(event) => setSettingsLegacyBaseline(event.target.value)}
+                  >
+                    {(period?.available_periods ?? []).map((key) => (
+                      <option key={key} value={key}>
+                        {`${key.slice(5)}.${key.slice(2, 4)}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <label className="nx-co-sheet__check">
+                <input
+                  type="checkbox"
+                  checked={settingsAutoFuture}
+                  onChange={(event) => setSettingsAutoFuture(event.target.checked)}
+                />
+                מהתקופה הנוכחית והלאה
+              </label>
+              {(period?.available_periods ?? []).map((key) => (
+                <label key={key} className="nx-co-sheet__check">
+                  <input
+                    type="checkbox"
+                    checked={settingsSelectedPeriods.includes(key)}
+                    onChange={(event) => {
+                      setSettingsSelectedPeriods((prev) => {
+                        if (event.target.checked) return [...new Set([...prev, key])].sort();
+                        return prev.filter((p) => p !== key);
+                      });
+                    }}
+                  />
+                  {`${key.slice(5)}.${key.slice(2, 4)}`}
+                </label>
+              ))}
+              <div className="nx-co-sheet__dialog-actions">
+                <button type="button" className="nx-co-sheet__btn" onClick={() => setColumnSettingsTarget(null)}>ביטול</button>
+                <button type="button" className="nx-co-sheet__btn is-active" onClick={() => void saveColumnSettings()}>שמירה</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {addColumnOpen ? (
           <div className="nx-co-sheet__dialog-backdrop" role="presentation">
             <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label="הוספת עמודה">
@@ -1758,7 +2174,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           selectedPeriodKey={period?.selected_period_key ?? query?.operational_period_key ?? null}
           defaultPeriodKey={period?.default_period_key ?? null}
           disabled={loading}
-          onSelectPeriod={(key) => onPeriodChange?.(key)}
+          onSelectPeriod={(key) => void flushDirtyBeforePeriodChange(key)}
         />
             </div>
           </div>

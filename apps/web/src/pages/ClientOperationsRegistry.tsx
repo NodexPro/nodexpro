@@ -17,6 +17,17 @@ type RegistryAggregate = {
   note_types?: ClientOperationsNoteTypeRow[];
   toolbar_capabilities?: ClientOperationsToolbarCapability[];
   custom_columns_capability?: { max: number; current: number; can_create: boolean };
+  user_column_period_setup?: {
+    needed: boolean;
+    operational_period_key: string;
+    eligible_columns: Array<{ column_id: string; label: string; key: string; preselected: boolean }>;
+  } | null;
+  columns_needing_legacy_baseline?: Array<{
+    column_id: string;
+    label: string;
+    key: string;
+    available_baseline_periods: string[];
+  }>;
   query?: {
     q: string | null;
     sort_by: string | null;
@@ -46,6 +57,10 @@ export function ClientOperationsRegistry() {
     current: 0,
     can_create: false,
   });
+  const [userColumnPeriodSetup, setUserColumnPeriodSetup] = useState<RegistryAggregate['user_column_period_setup']>(null);
+  const [columnsNeedingLegacyBaseline, setColumnsNeedingLegacyBaseline] = useState<
+    NonNullable<RegistryAggregate['columns_needing_legacy_baseline']>
+  >([]);
   const [query, setQuery] = useState<{
     q: string | null;
     sort_by: string | null;
@@ -61,6 +76,8 @@ export function ClientOperationsRegistry() {
   const loadAbortRef = useRef<AbortController | null>(null);
   /** Once-per-entry / in-flight guard — never loop ensure on aggregate refresh. */
   const userSlotsEnsureRef = useRef<'idle' | 'pending' | 'done'>('idle');
+  const periodSetupEmptyRef = useRef<'idle' | 'pending' | 'done'>('idle');
+  const periodSetupKeyRef = useRef<string | null>(null);
 
   const applyAggregate = useCallback((data: RegistryAggregate) => {
     setRows(Array.isArray(data?.rows) ? data.rows : []);
@@ -69,6 +86,10 @@ export function ClientOperationsRegistry() {
     setColumns(Array.isArray(data?.columns) ? data.columns : []);
     setToolbarCapabilities(Array.isArray(data?.toolbar_capabilities) ? data.toolbar_capabilities : []);
     if (data?.custom_columns_capability) setCustomColumnsCapability(data.custom_columns_capability);
+    setUserColumnPeriodSetup(data?.user_column_period_setup ?? null);
+    setColumnsNeedingLegacyBaseline(
+      Array.isArray(data?.columns_needing_legacy_baseline) ? data.columns_needing_legacy_baseline : [],
+    );
     if (typeof data?.title_he === 'string' && data.title_he.trim()) setTitleHe(data.title_he);
     if (data?.query) {
       setQuery({
@@ -169,12 +190,14 @@ export function ClientOperationsRegistry() {
   );
 
   const onRegistryCommand = useCallback(
-    (body: Record<string, unknown>) =>
+    (body: Record<string, unknown>, options?: { applyAggregate?: boolean }) =>
       apiJson<RegistryAggregate>(moduleClientOperationsRegistryCommands(), {
         method: 'POST',
         body: JSON.stringify({ ...body, query }),
       }).then((data) => {
-        applyAggregate(data);
+        // Cell autosave passes applyAggregate:false so View can reject wrong-period /
+        // stale in-flight paints before registry truth is replaced.
+        if (options?.applyAggregate !== false) applyAggregate(data);
         return data;
       }),
     [applyAggregate, query],
@@ -197,6 +220,31 @@ export function ClientOperationsRegistry() {
       });
   }, [loading, canEdit, customColumnsCapability.can_create, onRegistryCommand]);
 
+  // Zero-eligible period setup: named command only (GET never writes). One-shot per period key.
+  useEffect(() => {
+    if (loading) return;
+    if (!canEdit) return;
+    const setup = userColumnPeriodSetup;
+    if (!setup?.needed) return;
+    if ((setup.eligible_columns?.length ?? 0) > 0) return;
+    const key = setup.operational_period_key;
+    if (periodSetupKeyRef.current !== key) {
+      periodSetupKeyRef.current = key;
+      periodSetupEmptyRef.current = 'idle';
+    }
+    if (periodSetupEmptyRef.current !== 'idle') return;
+    periodSetupEmptyRef.current = 'pending';
+    void onRegistryCommand({
+      command: 'initialize_client_operations_user_columns_for_period',
+      operational_period_key: key,
+      column_ids: [],
+    })
+      .catch(() => {})
+      .finally(() => {
+        periodSetupEmptyRef.current = 'done';
+      });
+  }, [loading, canEdit, userColumnPeriodSetup, onRegistryCommand]);
+
   if (auth.status !== 'authenticated') return null;
 
   return (
@@ -214,6 +262,8 @@ export function ClientOperationsRegistry() {
       columns={columns}
       toolbarCapabilities={toolbarCapabilities}
       customColumnsCapability={customColumnsCapability}
+      userColumnPeriodSetup={userColumnPeriodSetup}
+      columnsNeedingLegacyBaseline={columnsNeedingLegacyBaseline}
       query={query}
       onQueryChange={onQueryChange}
       onRegistryCommand={onRegistryCommand}

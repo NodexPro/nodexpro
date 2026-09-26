@@ -38,6 +38,12 @@ import {
   completeNiDeductions126CycleForRegistry,
   setNiDeductionsReportedStepForRegistry,
 } from './client-operations-ni-deductions-registry.service.js';
+import {
+  initializeUserColumnsForPeriod,
+  loadActiveCustomColumnsExtended,
+  setCustomColumnPeriodSettings,
+  setPeriodCustomColumnValue,
+} from './client-operations-user-columns-periods.service.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -47,6 +53,10 @@ export type RegistryCustomColumnDefinition = {
   data_type: ClientOperationsCustomColumnDataType;
   position: number;
   visible: boolean;
+  auto_extend_to_future?: boolean;
+  auto_extend_from_period_key?: string | null;
+  legacy_baseline_period_key?: string | null;
+  legacy_baseline_completed_at?: string | null;
 };
 
 export type RegistryCustomColumnValue = {
@@ -72,6 +82,10 @@ export type ClientOperationsRegistryCommandBody = {
   tax_year?: unknown;
   label_he?: unknown;
   query?: RegistryQueryInput;
+  selected_periods?: unknown;
+  auto_extend_to_future?: unknown;
+  legacy_baseline_period_key?: unknown;
+  column_ids?: unknown;
 };
 
 function assertOrg(ctx: RequestContext): string {
@@ -498,13 +512,50 @@ export async function executeClientOperationsRegistryCommand(
     const column = await loadOwnedColumn(orgId, body.column_id);
     const clientId = idFrom(body.client_id, 'client_id');
     await ensureActiveClientInOrg(orgId, clientId);
+    const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
     const values = valuePayload(column.data_type, body.value);
-    const { error } = await supabaseAdmin.from('client_operations_registry_custom_column_values').upsert(
-      { organization_id: orgId, client_id: clientId, column_id: column.id, ...values, updated_at: new Date().toISOString() },
-      { onConflict: 'organization_id,client_id,column_id' }
-    );
-    assertQueryError(error, 'Failed to set custom registry column value');
-    await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_CUSTOM_COLUMN_VALUE_SET, column.id, { client_id: clientId, key: column.key });
+    await setPeriodCustomColumnValue({
+      organizationId: orgId,
+      clientId,
+      columnId: column.id,
+      operationalPeriodKey,
+      values,
+      actorUserId: ctx.user.id,
+      columnKey: column.key,
+    });
+  } else if (command === 'set_client_operations_custom_column_period_settings') {
+    const extended = await loadActiveCustomColumnsExtended(orgId);
+    const columnId = idFrom(body.column_id, 'column_id');
+    const column = extended.find((c) => c.id === columnId);
+    if (!column) throw forbidden('Custom registry column not found');
+    const selectedPeriods = Array.isArray(body.selected_periods)
+      ? body.selected_periods.map((p) => String(p ?? ''))
+      : [];
+    await setCustomColumnPeriodSettings({
+      ctx,
+      organizationId: orgId,
+      column,
+      selectedPeriodKey: operationalPeriodKeyFrom(
+        body.operational_period_key ?? (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+      ),
+      selectedPeriods,
+      autoExtendToFuture: booleanFrom(body.auto_extend_to_future ?? false, 'auto_extend_to_future'),
+      legacyBaselinePeriodKey:
+        body.legacy_baseline_period_key == null || body.legacy_baseline_period_key === ''
+          ? null
+          : String(body.legacy_baseline_period_key),
+    });
+  } else if (command === 'initialize_client_operations_user_columns_for_period') {
+    const extended = await loadActiveCustomColumnsExtended(orgId);
+    const periodKey = operationalPeriodKeyFrom(body.operational_period_key);
+    const columnIds = Array.isArray(body.column_ids) ? body.column_ids.map((id) => String(id ?? '')) : [];
+    await initializeUserColumnsForPeriod({
+      ctx,
+      organizationId: orgId,
+      operationalPeriodKey: periodKey,
+      columnIds,
+      allColumns: extended,
+    });
   } else if (command === 'set_material_brought') {
     const clientId = idFrom(body.client_id, 'client_id');
     const value = booleanFrom(body.value, 'value');

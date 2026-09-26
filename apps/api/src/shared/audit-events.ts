@@ -117,6 +117,9 @@ export const AUDIT_ACTIONS = {
   CLIENT_OPERATIONS_CUSTOM_COLUMN_REORDERED: 'client_operations.custom_column.reordered',
   CLIENT_OPERATIONS_CUSTOM_COLUMN_ARCHIVED: 'client_operations.custom_column.archived',
   CLIENT_OPERATIONS_CUSTOM_COLUMN_VALUE_SET: 'client_operations.custom_column.value_set',
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_PERIOD_SETTINGS: 'client_operations.custom_column.period_settings',
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_LEGACY_BASELINE: 'client_operations.custom_column.legacy_baseline',
+  CLIENT_OPERATIONS_USER_COLUMNS_PERIOD_INITIALIZED: 'client_operations.user_columns.period_initialized',
   CLIENT_OPERATIONS_MATERIAL_BROUGHT_SET: 'client_operations.material_brought.set',
   CLIENT_OPERATIONS_INCOME_TAX_ADVANCE_MATERIAL_BROUGHT_SET:
     'client_operations.income_tax_advance_material_brought.set',

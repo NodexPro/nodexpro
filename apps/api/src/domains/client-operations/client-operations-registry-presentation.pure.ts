@@ -20,6 +20,13 @@ export type ClientOperationsRegistryColumn = {
   editable: boolean;
   freeze_default: boolean;
   align: 'right' | 'center' | 'left';
+  /** User-column settings gear (backend-owned). */
+  settings_available?: boolean;
+  auto_extend_to_future?: boolean;
+  auto_extend_from_period_key?: string | null;
+  visible_period_keys?: string[];
+  legacy_baseline_required?: boolean;
+  legacy_baseline_period_key?: string | null;
 };
 
 export type ClientOperationsToolbarCapability = {

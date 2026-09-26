@@ -145,7 +145,7 @@ test('8 — add_column follows backend capability', () => {
   }).find((c) => c.id === 'add_column');
   assert.equal(add?.available, false);
   assert.equal(add?.reason_he, 'מגבלה');
-  assert.match(serviceSource, /loadActiveClientOperationsRegistryCustomColumns/);
+  assert.match(serviceSource, /loadActiveCustomColumnsExtended/);
   // Slots are NOT ensured on registry GET — named command only (pure read).
   assert.doesNotMatch(serviceSource, /ensureClientOperationsUserColumnSlots/);
   assert.doesNotMatch(viewSource, />\+ עמודה</);

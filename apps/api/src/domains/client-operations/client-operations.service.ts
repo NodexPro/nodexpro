@@ -46,16 +46,17 @@ import {
   CLIENT_OPERATIONS_REGISTRY_COLUMNS,
   formatIncomeTaxAdvanceRegistryFrequencyDisplayHe,
   formatPcnRegistryDisplay,
-  mergeCustomCellsIntoRow,
   type ClientOperationsRegistryColumn,
   type ClientOperationsToolbarCapability,
   type RegistryQueryInput,
 } from './client-operations-registry-presentation.pure.js';
+import type { RegistryCustomColumnDefinition } from './client-operations-registry-custom-columns.service.js';
 import {
-  loadActiveClientOperationsRegistryCustomColumns,
-  loadClientOperationsRegistryCustomColumnValues,
-  type RegistryCustomColumnDefinition,
-} from './client-operations-registry-custom-columns.service.js';
+  buildUserColumnsPeriodAggregateExtras,
+  loadActiveCustomColumnsExtended,
+  loadPeriodCustomColumnValues,
+} from './client-operations-user-columns-periods.service.js';
+import { mergeUserCustomCellsIntoRowPeriodAware } from './client-operations-user-columns-periods.pure.js';
 import {
   ensurePeriodApplicabilitySnapshots,
   listKnownOperationalPeriodKeys,
@@ -165,6 +166,19 @@ export type ClientOperationsRegistryResponse = {
     current: number;
     can_create: boolean;
   };
+  /** Period setup dialog truth — null when not needed or viewer. */
+  user_column_period_setup?: {
+    needed: boolean;
+    operational_period_key: string;
+    eligible_columns: Array<{ column_id: string; label: string; key: string; preselected: boolean }>;
+  } | null;
+  /** CASE B legacy baseline requirement (editors only). */
+  columns_needing_legacy_baseline?: Array<{
+    column_id: string;
+    label: string;
+    key: string;
+    available_baseline_periods: string[];
+  }>;
   query: {
     q: string | null;
     sort_by: string | null;
@@ -283,32 +297,53 @@ function emptyRegistryResponse(
   noteTypes: ClientOperationsRegistryResponse['note_types'],
   customColumns: RegistryCustomColumnDefinition[],
   period: ClientOperationsRegistryResponse['period'],
+  extras?: {
+    visibleCustomColumns: Array<{
+      id: string;
+      key: string;
+      label: string;
+      data_type: 'text' | 'number' | 'date' | 'boolean';
+      auto_extend_to_future: boolean;
+      auto_extend_from_period_key: string | null;
+      legacy_baseline_period_key: string | null;
+    }>;
+    user_column_period_setup: ClientOperationsRegistryResponse['user_column_period_setup'];
+    columns_needing_legacy_baseline: ClientOperationsRegistryResponse['columns_needing_legacy_baseline'];
+    visibilityByColumn: Map<string, string[]>;
+  },
 ): ClientOperationsRegistryResponse {
   const q = (query.q ?? '').trim() || null;
   const sort_by = query.sort_by?.trim() || null;
   const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
+  const canEdit = ctx.membership?.permissions?.includes('client_operations.edit') === true;
   const customColumnsCapability = buildCustomColumnsCapability({
     current: customColumns.length,
-    canEdit: ctx.membership?.permissions?.includes('client_operations.edit') === true,
+    canEdit,
   });
+  const visible = extras?.visibleCustomColumns ?? [];
+  const needingLegacy = new Set((extras?.columns_needing_legacy_baseline ?? []).map((c) => c.column_id));
   const columns: ClientOperationsRegistryColumn[] = [
     ...CLIENT_OPERATIONS_REGISTRY_COLUMNS,
-    ...customColumns
-      .filter((column) => column.visible)
-      .map((column) => ({
-        key: column.key,
-        label: column.label,
-        cell_kind: 'custom' as const,
-        value_field: null,
-        data_type: column.data_type,
-        custom_column_id: column.id,
-        default_width_px: 160,
-        visible: true,
-        system: false,
-        editable: true,
-        freeze_default: false,
-        align: 'right' as const,
-      })),
+    ...visible.map((column) => ({
+      key: column.key,
+      label: column.label,
+      cell_kind: 'custom' as const,
+      value_field: null,
+      data_type: column.data_type,
+      custom_column_id: column.id,
+      default_width_px: 160,
+      visible: true,
+      system: false,
+      editable: true,
+      freeze_default: false,
+      align: 'right' as const,
+      settings_available: canEdit,
+      auto_extend_to_future: column.auto_extend_to_future,
+      auto_extend_from_period_key: column.auto_extend_from_period_key,
+      visible_period_keys: extras?.visibilityByColumn.get(column.id) ?? [],
+      legacy_baseline_required: needingLegacy.has(column.id),
+      legacy_baseline_period_key: column.legacy_baseline_period_key,
+    })),
   ];
   return {
     title_he: 'תפעול לקוחות',
@@ -321,6 +356,8 @@ function emptyRegistryResponse(
       can_create_reason_he: customColumnsCapability.current >= customColumnsCapability.max ? 'הגעת למגבלת 10 עמודות מותאמות אישית' : null,
     }),
     custom_columns_capability: customColumnsCapability,
+    user_column_period_setup: extras?.user_column_period_setup ?? null,
+    columns_needing_legacy_baseline: extras?.columns_needing_legacy_baseline ?? [],
     query: { q, sort_by, sort_dir, operational_period_key: period.selected_period_key },
     allowed_actions: buildRegistryAllowedActions(ctx),
   };
@@ -364,19 +401,28 @@ export async function listClientOperationsRegistry(
   const defaultPeriodKey = resolveDefaultOperationalPeriodKey();
   const canEditRegistry =
     ctx.membership?.permissions?.includes('client_operations.edit') === true;
-  // Pure read: user-slot initialization is ONLY via named command
-  // ensure_client_operations_user_column_slots (never mutate DB on GET/list).
-  const [noteTypesResult, customColumns, availablePeriods] = await Promise.all([
+  // Pure read: user-slot / period-setup initialization is ONLY via named commands.
+  const [noteTypesResult, customColumnsExtended, availablePeriods] = await Promise.all([
     listOperationalNoteTypes(),
-    loadActiveClientOperationsRegistryCustomColumns(orgId),
+    loadActiveCustomColumnsExtended(orgId),
     listKnownOperationalPeriodKeys(orgId),
   ]);
+  const customColumns = customColumnsExtended;
   const noteTypes = noteTypesResult.types;
   const period = {
     selected_period_key: selectedPeriodKey,
     default_period_key: defaultPeriodKey,
     available_periods: availablePeriods,
   };
+
+  const userColumnsPeriodExtras = await buildUserColumnsPeriodAggregateExtras({
+    organizationId: orgId,
+    columns: customColumnsExtended,
+    selectedPeriodKey,
+    availablePeriods,
+    canEdit: canEditRegistry,
+  });
+  const visibleCustomColumns = userColumnsPeriodExtras.visibleColumns;
 
   const isCurrentOrDefaultPeriod = selectedPeriodKey === defaultPeriodKey;
 
@@ -435,7 +481,12 @@ export async function listClientOperationsRegistry(
   );
 
   if (safeClients.length === 0) {
-    return emptyRegistryResponse(ctx, query, noteTypes, customColumns, period);
+    return emptyRegistryResponse(ctx, query, noteTypes, customColumns, period, {
+      visibleCustomColumns,
+      user_column_period_setup: userColumnsPeriodExtras.user_column_period_setup,
+      columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
+      visibilityByColumn: userColumnsPeriodExtras.visibilityByColumn,
+    });
   }
 
   const clientIds = safeClients.map((c) => c.id);
@@ -463,7 +514,12 @@ export async function listClientOperationsRegistry(
       .eq('organization_id', orgId)
       .in('client_id', clientIds),
     loadNotesAggregatesByClient(orgId, clientIds),
-    loadClientOperationsRegistryCustomColumnValues(orgId, clientIds),
+    loadPeriodCustomColumnValues(
+      orgId,
+      selectedPeriodKey,
+      clientIds,
+      visibleCustomColumns.map((c) => c.id),
+    ),
     supabaseAdmin
       .from('client_tax_settings')
       .select(
@@ -799,7 +855,7 @@ export async function listClientOperationsRegistry(
       operational_notes_count: noteAgg.count,
       vat_due_registry_display_he,
     };
-    return [mergeCustomCellsIntoRow({
+    return [mergeUserCustomCellsIntoRowPeriodAware({
       ...base,
       cells: buildRegistryRowCells({
         ...base,
@@ -811,7 +867,7 @@ export async function listClientOperationsRegistry(
           ? (handlerDisplayByUserId.get(assigned_handler_user_id) ?? null)
           : null,
       }),
-    }, customColumns, customValuesByClientAndColumn)];
+    }, visibleCustomColumns, customValuesByClientAndColumn)];
   });
 
   const q = (query.q ?? '').trim() || null;
@@ -823,24 +879,31 @@ export async function listClientOperationsRegistry(
     current: customColumns.length,
     canEdit: ctx.membership?.permissions?.includes('client_operations.edit') === true,
   });
+  const needingLegacy = new Set(
+    (userColumnsPeriodExtras.columns_needing_legacy_baseline ?? []).map((c) => c.column_id),
+  );
   const columns: ClientOperationsRegistryColumn[] = [
     ...CLIENT_OPERATIONS_REGISTRY_COLUMNS,
-    ...customColumns
-      .filter((column) => column.visible)
-      .map((column) => ({
-        key: column.key,
-        label: column.label,
-        cell_kind: 'custom' as const,
-        value_field: null,
-        data_type: column.data_type,
-        custom_column_id: column.id,
-        default_width_px: 160,
-        visible: true,
-        system: false,
-        editable: true,
-        freeze_default: false,
-        align: 'right' as const,
-      })),
+    ...visibleCustomColumns.map((column) => ({
+      key: column.key,
+      label: column.label,
+      cell_kind: 'custom' as const,
+      value_field: null,
+      data_type: column.data_type,
+      custom_column_id: column.id,
+      default_width_px: 160,
+      visible: true,
+      system: false,
+      editable: true,
+      freeze_default: false,
+      align: 'right' as const,
+      settings_available: canEditRegistry,
+      auto_extend_to_future: column.auto_extend_to_future,
+      auto_extend_from_period_key: column.auto_extend_from_period_key,
+      visible_period_keys: userColumnsPeriodExtras.visibilityByColumn.get(column.id) ?? [],
+      legacy_baseline_required: needingLegacy.has(column.id),
+      legacy_baseline_period_key: column.legacy_baseline_period_key,
+    })),
   ];
   return {
     title_he: 'תפעול לקוחות',
@@ -853,6 +916,8 @@ export async function listClientOperationsRegistry(
       can_create_reason_he: customColumnsCapability.current >= customColumnsCapability.max ? 'הגעת למגבלת 10 עמודות מותאמות אישית' : null,
     }),
     custom_columns_capability: customColumnsCapability,
+    user_column_period_setup: userColumnsPeriodExtras.user_column_period_setup,
+    columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
     query: { q, sort_by, sort_dir, operational_period_key: selectedPeriodKey },
     allowed_actions: buildRegistryAllowedActions(ctx),
   };
