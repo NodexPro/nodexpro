@@ -362,6 +362,10 @@ export async function listClientOperationsRegistry(
   const orgId = assertOrg(ctx);
   const selectedPeriodKey = resolveRegistryOperationalPeriodKey(query.operational_period_key);
   const defaultPeriodKey = resolveDefaultOperationalPeriodKey();
+  const canEditRegistry =
+    ctx.membership?.permissions?.includes('client_operations.edit') === true;
+  // Pure read: user-slot initialization is ONLY via named command
+  // ensure_client_operations_user_column_slots (never mutate DB on GET/list).
   const [noteTypesResult, customColumns, availablePeriods] = await Promise.all([
     listOperationalNoteTypes(),
     loadActiveClientOperationsRegistryCustomColumns(orgId),
@@ -436,7 +440,6 @@ export async function listClientOperationsRegistry(
 
   const clientIds = safeClients.map((c) => c.id);
   const annualReportTaxYear = resolveAnnualReportTaxYearForOperationalPeriod(selectedPeriodKey);
-  const canEditRegistry = ctx.membership?.permissions?.includes('client_operations.edit') === true;
   const payrollPeriodKey = mapOperationalPeriodKeyToPayrollPeriodKey(selectedPeriodKey);
 
   const [

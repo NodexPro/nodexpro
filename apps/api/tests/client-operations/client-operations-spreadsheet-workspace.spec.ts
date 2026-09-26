@@ -146,7 +146,9 @@ test('8 — add_column follows backend capability', () => {
   assert.equal(add?.available, false);
   assert.equal(add?.reason_he, 'מגבלה');
   assert.match(serviceSource, /loadActiveClientOperationsRegistryCustomColumns/);
-  assert.match(viewSource, /canCreateColumn/);
+  // Slots are NOT ensured on registry GET — named command only (pure read).
+  assert.doesNotMatch(serviceSource, /ensureClientOperationsUserColumnSlots/);
+  assert.doesNotMatch(viewSource, />\+ עמודה</);
 });
 
 test('9 — canonical system keys cannot be treated as non-system', () => {
@@ -184,9 +186,10 @@ test('10 — folder behavior unchanged; spreadsheet title not skeleton', () => {
 });
 
 test('toolbar disabled controls expose backend reason (no fake enabled add_column)', () => {
-  assert.match(viewSource, /capTitle\('add_column'\)/);
-  assert.match(viewSource, /\+ עמודה/);
-  assert.match(viewSource, /disabled=\{!canCreateColumn\}/);
+  // + עמודה create UI is hidden; slots via named ensure command. Capability catalog retained.
+  assert.match(presentationSource, /id: 'add_column'/);
+  assert.match(pageSource, /ensure_client_operations_user_column_slots/);
+  assert.doesNotMatch(viewSource, />\+ עמודה</);
 });
 
 test('presentation-owned history and fullscreen are available in the aggregate', () => {

@@ -26,6 +26,13 @@ test('custom column capability enforces the max and edit permission', () => {
   assert.deepEqual(buildCustomColumnsCapability({ current: 0, canEdit: false }), { max: 10, current: 0, can_create: false });
 });
 
+test('ensure user slots plan fills only remaining capacity', async () => {
+  const { planClientOperationsUserSlotKeysToCreate } = await import(
+    '../../src/domains/client-operations/client-operations-registry-presentation.pure.js'
+  );
+  assert.equal(planClientOperationsUserSlotKeysToCreate(['x', 'y', 'z']).length, 7);
+});
+
 test('system keys cannot be allocated as custom keys', () => {
   assert.throws(() => assertNotSystemColumnKey('vat'), /collides with system column/);
   assert.throws(() => assertNotSystemColumnKey('folder'), /collides with system column/);

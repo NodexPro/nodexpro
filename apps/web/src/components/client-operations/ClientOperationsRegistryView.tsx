@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { apiFetch, apiJson } from '../../api/client';
 import {
   moduleClientOperationsCase,
@@ -11,6 +11,7 @@ import {
   type ClientOperationsClientQuickProfileAggregate,
 } from './ClientOperationsClientQuickProfilePopover';
 import {
+  clampClientOperationsColumnWidth,
   loadClientOperationsColumnWidths,
   saveClientOperationsColumnWidths,
 } from '../../lib/client-operations-column-widths.pure';
@@ -276,7 +277,10 @@ export type ClientOperationsRegistryViewProps = {
     sort_dir: 'asc' | 'desc' | null;
     operational_period_key?: string | null;
   };
-  onQueryChange?: (next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null }) => void;
+  onQueryChange?: (
+    next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null },
+    options?: { quiet?: boolean },
+  ) => void;
   onRegistryCommand?: (body: Record<string, unknown>) => Promise<unknown>;
   onApplyAggregate?: (aggregate: any) => void;
   widthScope?: { userId: string; organizationId: string };
@@ -302,7 +306,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     titleHe,
     columns: columnsProp,
     toolbarCapabilities = [],
-    customColumnsCapability,
+    customColumnsCapability: _customColumnsCapability,
     query,
     onQueryChange,
     onRegistryCommand,
@@ -342,7 +346,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [focusedCell, setFocusedCell] = useState<{ clientId: string; colKey: string } | null>(null);
   const [searchDraft, setSearchDraft] = useState(query?.q ?? '');
-  const [freezeOn, setFreezeOn] = useState(true);
+  // Freeze sticky CSS retained; toolbar toggle is hidden — keep pinned columns on by default.
+  const freezeOn = true;
   const [bordersOn, setBordersOn] = useState(true);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set());
   const [showColumnPanel, setShowColumnPanel] = useState(false);
@@ -352,14 +357,59 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [redoStack, setRedoStack] = useState<PresentationHistory[]>([]);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  // Legacy "+ עמודה" dialog kept in code but hidden — 10 user slots via ensure command.
   const [addColumnOpen, setAddColumnOpen] = useState(false);
   const [addColumnLabel, setAddColumnLabel] = useState('');
   const [addColumnDataType, setAddColumnDataType] = useState<'text' | 'number' | 'date' | 'boolean'>('text');
   const [commandError, setCommandError] = useState('');
+  const [editingHeaderColumnId, setEditingHeaderColumnId] = useState<string | null>(null);
+  const [headerDraft, setHeaderDraft] = useState('');
+  const [editingCellKey, setEditingCellKey] = useState<string | null>(null);
+  const [cellDraft, setCellDraft] = useState('');
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRequestSeqRef = useRef(0);
 
   useEffect(() => {
     setSearchDraft(query?.q ?? '');
   }, [query?.q]);
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
+
+  const applyLiveSearch = useCallback(
+    (raw: string) => {
+      if (!onQueryChange) return;
+      const q = raw.trim() || null;
+      if ((query?.q ?? null) === q) return;
+      const seq = ++searchRequestSeqRef.current;
+      onQueryChange(
+        {
+          q,
+          sort_by: query?.sort_by ?? null,
+          sort_dir: query?.sort_dir ?? null,
+        },
+        { quiet: true },
+      );
+      void seq;
+    },
+    [onQueryChange, query?.q, query?.sort_by, query?.sort_dir],
+  );
+
+  const onSearchDraftChange = (value: string) => {
+    setSearchDraft(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    // Native clear (X) and empty field restore immediately; typing uses a short debounce.
+    if (!value.trim()) {
+      applyLiveSearch('');
+      return;
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      applyLiveSearch(value);
+    }, 120);
+  };
 
   useEffect(() => {
     if (!widthScope?.userId || !widthScope.organizationId) {
@@ -584,7 +634,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (!c) return undefined;
     return c.available ? c.label_he : `${c.label_he}: ${c.reason_he ?? 'לא זמין'}`;
   };
-  const canCreateColumn = isCap('add_column') && customColumnsCapability?.can_create !== false;
   const widthForColumn = (col: ClientOperationsRegistryColumn) =>
     columnWidths[col.key] ?? col.default_width_px ?? (col.cell_kind === 'folder' ? 44 : col.cell_kind === 'custom' ? 140 : 110);
   const saveColumnWidth = (key: string, width: number) => {
@@ -601,11 +650,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const startWidth = widthForColumn(column);
     const onMove = (moveEvent: MouseEvent) => {
       const nextWidth = startWidth + (document.dir === 'rtl' ? startX - moveEvent.clientX : moveEvent.clientX - startX);
-      setColumnWidths((previous) => ({ ...previous, [column.key]: Math.min(480, Math.max(48, Math.round(nextWidth))) }));
+      setColumnWidths((previous) => ({
+        ...previous,
+        [column.key]: clampClientOperationsColumnWidth(nextWidth),
+      }));
     };
     const onUp = (upEvent: MouseEvent) => {
       const finalWidth = startWidth + (document.dir === 'rtl' ? startX - upEvent.clientX : upEvent.clientX - startX);
-      saveColumnWidth(column.key, Math.min(480, Math.max(48, Math.round(finalWidth))));
+      saveColumnWidth(column.key, clampClientOperationsColumnWidth(finalWidth));
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -641,7 +693,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const editCustomCell = async (row: ClientOperationsRegistryRow, column: ClientOperationsRegistryColumn) => {
     if (!canEdit || !column.editable || !column.custom_column_id || !onRegistryCommand) return;
     const current = displayForColumn(row, column);
-    const value = window.prompt(column.label, current === '—' ? '' : current);
+    const value = window.prompt(column.label.trim() || 'ערך', current === '—' ? '' : current);
     if (value === null) return;
     setCommandError('');
     try {
@@ -653,6 +705,47 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       });
     } catch (error) {
       setCommandError(error instanceof Error ? error.message : 'שמירת הערך נכשלה');
+    }
+  };
+
+  const commitCustomCellEdit = async (
+    row: ClientOperationsRegistryRow,
+    column: ClientOperationsRegistryColumn,
+    value: string,
+  ) => {
+    if (!canEdit || !column.editable || !column.custom_column_id || !onRegistryCommand) return;
+    const current = displayForColumn(row, column);
+    const normalizedCurrent = current === '—' ? '' : current;
+    if (value === normalizedCurrent) {
+      setEditingCellKey(null);
+      return;
+    }
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command: 'set_client_operations_custom_column_value',
+        client_id: row.client_id,
+        column_id: column.custom_column_id,
+        value,
+      });
+      setEditingCellKey(null);
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'שמירת הערך נכשלה');
+    }
+  };
+
+  const commitCustomHeaderRename = async (column: ClientOperationsRegistryColumn, label: string) => {
+    if (!canEdit || !column.custom_column_id || !onRegistryCommand) return;
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command: 'rename_client_operations_custom_column',
+        column_id: column.custom_column_id,
+        label,
+      });
+      setEditingHeaderColumnId(null);
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'שינוי שם העמודה נכשל');
     }
   };
   const toggleMaterialStream = async (
@@ -830,14 +923,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             disabled={!isCap('search')}
             title={capTitle('search')}
             placeholder="חיפוש בטבלה…"
-            onChange={(e) => setSearchDraft(e.target.value)}
+            aria-label="חיפוש לקוחות"
+            onChange={(e) => onSearchDraftChange(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && isCap('search') && onQueryChange) {
-                onQueryChange({
-                  q: searchDraft.trim() || null,
-                  sort_by: query?.sort_by ?? null,
-                  sort_dir: query?.sort_dir ?? null,
-                });
+              // Enter applies immediately (same quiet live path); no required submit.
+              if (e.key === 'Enter' && isCap('search')) {
+                if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                applyLiveSearch(searchDraft);
               }
             }}
           />
@@ -846,50 +938,16 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             className="nx-co-sheet__btn"
             disabled={!isCap('search')}
             title={capTitle('search')}
-            onClick={() =>
-              onQueryChange?.({
-                q: searchDraft.trim() || null,
-                sort_by: query?.sort_by ?? null,
-                sort_dir: query?.sort_dir ?? null,
-              })
-            }
+            onClick={() => {
+              if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+              applyLiveSearch(searchDraft);
+            }}
           >
             חפש
           </button>
         </div>
-        <button type="button" className="nx-co-sheet__btn" disabled title={capTitle('filter')}>
-          סינון
-        </button>
-        <button
-          type="button"
-          className="nx-co-sheet__btn"
-          disabled={!isCap('sort_asc') || !focusedCell || focusedCell.colKey === 'folder'}
-          title={capTitle('sort_asc')}
-          onClick={() =>
-            onQueryChange?.({
-              q: query?.q ?? null,
-              sort_by: focusedCell?.colKey ?? null,
-              sort_dir: 'asc',
-            })
-          }
-        >
-          מיון ↑
-        </button>
-        <button
-          type="button"
-          className="nx-co-sheet__btn"
-          disabled={!isCap('sort_desc') || !focusedCell || focusedCell.colKey === 'folder'}
-          title={capTitle('sort_desc')}
-          onClick={() =>
-            onQueryChange?.({
-              q: query?.q ?? null,
-              sort_by: focusedCell?.colKey ?? null,
-              sort_dir: 'desc',
-            })
-          }
-        >
-          מיון ↓
-        </button>
+        {/* HIDDEN for now — keep underlying capabilities/handlers for later restore:
+            סינון / מיון ↑ / מיון ↓ / הקפאה */}
       </div>
 
       <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--secondary">
@@ -975,18 +1033,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       </div>
 
       <div className="nx-co-sheet__toolbar-group">
-        <button
-          type="button"
-          className={`nx-co-sheet__btn${freezeOn ? ' is-active' : ''}`}
-          disabled={!isCap('freeze_columns')}
-          title={capTitle('freeze_columns')}
-          onClick={() => setFreezeOn((v) => !v)}
-        >
-          הקפאה
-        </button>
-        <button type="button" className="nx-co-sheet__btn" disabled={!canCreateColumn} title={capTitle('add_column')} onClick={() => setAddColumnOpen(true)}>
-          + עמודה
-        </button>
+        {/* הקפאה hidden from toolbar — freezeOn + sticky CSS implementation retained. */}
+        {/* + עמודה hidden — 10 user slots via ensure_client_operations_user_column_slots command. */}
         <button
           type="button"
           className="nx-co-sheet__btn"
@@ -1418,6 +1466,42 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     <span>126</span>
                   </div>
                 </div>
+              ) : column.cell_kind === 'custom' ? (
+                editingHeaderColumnId === column.custom_column_id ? (
+                  <input
+                    className="nx-co-sheet__header-edit"
+                    value={headerDraft}
+                    autoFocus
+                    aria-label="שם עמודה"
+                    onChange={(event) => setHeaderDraft(event.target.value)}
+                    onClick={(event) => event.stopPropagation()}
+                    onBlur={() => void commitCustomHeaderRename(column, headerDraft)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void commitCustomHeaderRename(column, headerDraft);
+                      }
+                      if (event.key === 'Escape') {
+                        setEditingHeaderColumnId(null);
+                      }
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className={`nx-co-sheet__header-label${column.label.trim() ? '' : ' is-blank'}`}
+                    disabled={!canEdit || !column.custom_column_id}
+                    title={canEdit ? 'לחיצה לשינוי שם העמודה' : undefined}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!canEdit || !column.custom_column_id) return;
+                      setEditingHeaderColumnId(column.custom_column_id);
+                      setHeaderDraft(column.label.trim());
+                    }}
+                  >
+                    {column.label.trim() || '\u00A0'}
+                  </button>
+                )
               ) : (
                 column.label
               )}
@@ -1441,7 +1525,42 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   >
                     {column.cell_kind === 'custom'
                       ? canEdit && column.editable
-                        ? <button type="button" className="nx-co-sheet__custom-cell" onDoubleClick={() => void editCustomCell(row, column)} title="לחיצה כפולה לעריכה">{formatPresentationValue(displayForColumn(row, column), column, presentation)}</button>
+                        ? editingCellKey === pk
+                          ? (
+                            <input
+                              className="nx-co-sheet__custom-cell-input"
+                              value={cellDraft}
+                              autoFocus
+                              aria-label={column.label.trim() || 'ערך עמודה'}
+                              onChange={(event) => setCellDraft(event.target.value)}
+                              onClick={(event) => event.stopPropagation()}
+                              onBlur={() => void commitCustomCellEdit(row, column, cellDraft)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault();
+                                  void commitCustomCellEdit(row, column, cellDraft);
+                                }
+                                if (event.key === 'Escape') setEditingCellKey(null);
+                              }}
+                            />
+                          )
+                          : (
+                            <button
+                              type="button"
+                              className="nx-co-sheet__custom-cell"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedRowId(row.client_id);
+                                setFocusedCell({ clientId: row.client_id, colKey: column.key });
+                                const current = displayForColumn(row, column);
+                                setEditingCellKey(pk);
+                                setCellDraft(current === '—' ? '' : current);
+                              }}
+                              title="לחיצה לעריכה"
+                            >
+                              {formatPresentationValue(displayForColumn(row, column), column, presentation)}
+                            </button>
+                          )
                         : formatPresentationValue(displayForColumn(row, column), column, presentation)
                       : renderCellContent(row, column)}
                   </td>

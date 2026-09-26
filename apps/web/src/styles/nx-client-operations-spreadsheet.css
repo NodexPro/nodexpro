@@ -319,6 +319,47 @@
   text-align: inherit;
   cursor: text;
   font: inherit;
+  min-height: 1.2em;
+}
+
+.nx-co-sheet__custom-cell-input,
+.nx-co-sheet__header-edit {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--nx-co-accent);
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+}
+
+.nx-co-sheet__header-label {
+  display: inline-block;
+  max-width: calc(100% - 10px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: inherit;
+  cursor: text;
+  min-width: 1.5em;
+  min-height: 1.1em;
+}
+
+.nx-co-sheet__header-label.is-blank {
+  opacity: 0.35;
+}
+
+.nx-co-sheet__header-label:disabled {
+  cursor: default;
+  opacity: 1;
 }
 
 .nx-co-sheet__checkbox {

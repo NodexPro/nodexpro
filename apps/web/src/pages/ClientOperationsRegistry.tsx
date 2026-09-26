@@ -59,6 +59,8 @@ export function ClientOperationsRegistry() {
   } | null>(null);
   const loadSeqRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
+  /** Once-per-entry / in-flight guard — never loop ensure on aggregate refresh. */
+  const userSlotsEnsureRef = useRef<'idle' | 'pending' | 'done'>('idle');
 
   const applyAggregate = useCallback((data: RegistryAggregate) => {
     setRows(Array.isArray(data?.rows) ? data.rows : []);
@@ -91,18 +93,22 @@ export function ClientOperationsRegistry() {
   }, []);
 
   const loadRegistry = useCallback(
-    (nextQuery: {
-      q: string | null;
-      sort_by: string | null;
-      sort_dir: 'asc' | 'desc' | null;
-      operational_period_key?: string | null;
-    }) => {
+    (
+      nextQuery: {
+        q: string | null;
+        sort_by: string | null;
+        sort_dir: 'asc' | 'desc' | null;
+        operational_period_key?: string | null;
+      },
+      options?: { quiet?: boolean },
+    ) => {
       loadAbortRef.current?.abort();
       const ac = new AbortController();
       loadAbortRef.current = ac;
       const seq = ++loadSeqRef.current;
       setQuery({ ...nextQuery, operational_period_key: nextQuery.operational_period_key ?? null });
-      setLoading(true);
+      // Query-only search must not dim/block the grid; period/initial loads still show loading.
+      if (!options?.quiet) setLoading(true);
       setError('');
       return apiJson<RegistryAggregate>(moduleClientOperationsRegistry(nextQuery), {
         signal: ac.signal,
@@ -117,7 +123,7 @@ export function ClientOperationsRegistry() {
           setError(e instanceof Error ? e.message : 'Failed to load');
         })
         .finally(() => {
-          if (seq === loadSeqRef.current) setLoading(false);
+          if (seq === loadSeqRef.current && !options?.quiet) setLoading(false);
         });
     },
     [applyAggregate],
@@ -138,8 +144,14 @@ export function ClientOperationsRegistry() {
   }, [auth.status]);
 
   const onQueryChange = useCallback(
-    (next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null }) => {
-      void loadRegistry({ ...next, operational_period_key: query.operational_period_key });
+    (
+      next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null },
+      options?: { quiet?: boolean },
+    ) => {
+      void loadRegistry(
+        { ...next, operational_period_key: query.operational_period_key },
+        { quiet: options?.quiet === true },
+      );
     },
     [loadRegistry, query.operational_period_key],
   );
@@ -167,6 +179,23 @@ export function ClientOperationsRegistry() {
       }),
     [applyAggregate, query],
   );
+
+  // Excel 10 user slots: init ONLY via named command when backend capability says so.
+  // React to custom_columns_capability.can_create — do not compute missing slots on FE.
+  useEffect(() => {
+    if (loading) return;
+    if (!canEdit) return;
+    if (!customColumnsCapability.can_create) return;
+    if (userSlotsEnsureRef.current !== 'idle') return;
+    userSlotsEnsureRef.current = 'pending';
+    void onRegistryCommand({ command: 'ensure_client_operations_user_column_slots' })
+      .catch(() => {
+        /* no local fabrication; mark done so we do not hammer on every refresh */
+      })
+      .finally(() => {
+        userSlotsEnsureRef.current = 'done';
+      });
+  }, [loading, canEdit, customColumnsCapability.can_create, onRegistryCommand]);
 
   if (auth.status !== 'authenticated') return null;
 

@@ -7,6 +7,7 @@ import {
   buildCustomColumnsCapability,
   CLIENT_OPERATIONS_CUSTOM_COLUMNS_MAX,
   isSystemRegistryColumnKey,
+  planClientOperationsUserSlotKeysToCreate,
   slugifyCustomColumnKey,
   type ClientOperationsCustomColumnDataType,
   type RegistryQueryInput,
@@ -93,6 +94,14 @@ function labelFrom(value: unknown): string {
   if (!label) throw badRequest('label is required');
   if (label.length > 80) throw badRequest('label must be 80 characters or less');
   return label;
+}
+
+/** Rename may clear a header back to an unused blank slot (stored as a single space). */
+function labelFromAllowBlank(value: unknown): string {
+  if (typeof value !== 'string') throw badRequest('label is required');
+  const trimmed = value.trim();
+  if (trimmed.length > 80) throw badRequest('label must be 80 characters or less');
+  return trimmed || ' ';
 }
 
 function dataTypeFrom(value: unknown): ClientOperationsCustomColumnDataType {
@@ -194,6 +203,46 @@ async function uniqueKeyForLabel(orgId: string, label: string): Promise<string> 
     if (!isSystemRegistryColumnKey(candidate) && !used.has(candidate)) return candidate;
   }
   throw badRequest('Could not allocate a custom column key');
+}
+
+/**
+ * Idempotent Excel-like user slots: fill remaining capacity up to 10 with blank-header
+ * `user_slot_XX` columns. Existing custom columns/labels/values are never overwritten.
+ * Safe under concurrent calls (unique key + max-10 trigger).
+ */
+export async function ensureClientOperationsUserColumnSlots(input: {
+  organizationId: string;
+  actorUserId: string | null;
+}): Promise<{ created_keys: string[]; active_count: number }> {
+  const columns = await loadActiveClientOperationsRegistryCustomColumns(input.organizationId);
+  const toCreate = planClientOperationsUserSlotKeysToCreate(columns.map((c) => c.key));
+  if (toCreate.length === 0) {
+    return { created_keys: [], active_count: columns.length };
+  }
+  const capturedAt = new Date().toISOString();
+  const rows = toCreate.map((key, index) => ({
+    organization_id: input.organizationId,
+    key,
+    // Whitespace satisfies DB CHECK(char_length >= 1); UI renders blank header.
+    label: ' ',
+    data_type: 'text' as const,
+    position: columns.length + index,
+    visible: true,
+    created_by: input.actorUserId,
+    created_at: capturedAt,
+    updated_at: capturedAt,
+  }));
+  const { error } = await supabaseAdmin
+    .from('client_operations_registry_custom_columns')
+    .upsert(rows, { onConflict: 'organization_id,key', ignoreDuplicates: true });
+  if (error?.message?.includes('CLIENT_OPERATIONS_CUSTOM_COLUMN_LIMIT')) {
+    const afterLimit = await loadActiveClientOperationsRegistryCustomColumns(input.organizationId);
+    return { created_keys: [], active_count: afterLimit.length };
+  }
+  assertQueryError(error, 'Failed to ensure user column slots');
+  const after = await loadActiveClientOperationsRegistryCustomColumns(input.organizationId);
+  const created = toCreate.filter((key) => after.some((c) => c.key === key));
+  return { created_keys: created, active_count: after.length };
 }
 
 async function audit(ctx: RequestContext, action: string, entityId: string, payload: Record<string, unknown>) {
@@ -349,6 +398,8 @@ export async function executeClientOperationsRegistryCommand(
   const command = typeof body.command === 'string' ? body.command : '';
 
   if (command === 'create_client_operations_custom_column') {
+    // Legacy create path: still max-10 + unique keys. Excel UX prefers ensure slots;
+    // re-check count immediately before insert to reduce double-submit duplicates.
     const columns = await loadActiveClientOperationsRegistryCustomColumns(orgId);
     if (columns.length >= CLIENT_OPERATIONS_CUSTOM_COLUMNS_MAX) {
       throw new AppError(409, 'Custom column limit reached', 'CLIENT_OPERATIONS_CUSTOM_COLUMN_LIMIT');
@@ -356,20 +407,47 @@ export async function executeClientOperationsRegistryCommand(
     const label = labelFrom(body.label);
     const data_type = dataTypeFrom(body.data_type);
     const key = await uniqueKeyForLabel(orgId, label);
+    const latest = await loadActiveClientOperationsRegistryCustomColumns(orgId);
+    if (latest.length >= CLIENT_OPERATIONS_CUSTOM_COLUMNS_MAX) {
+      throw new AppError(409, 'Custom column limit reached', 'CLIENT_OPERATIONS_CUSTOM_COLUMN_LIMIT');
+    }
     const { data, error } = await supabaseAdmin
       .from('client_operations_registry_custom_columns')
-      .insert({ organization_id: orgId, key, label, data_type, position: columns.length, visible: true, created_by: ctx.user.id })
+      .insert({
+        organization_id: orgId,
+        key,
+        label,
+        data_type,
+        position: latest.length,
+        visible: true,
+        created_by: ctx.user.id,
+      })
       .select('id')
       .single();
     if (error?.message.includes('CLIENT_OPERATIONS_CUSTOM_COLUMN_LIMIT')) {
       throw new AppError(409, 'Custom column limit reached', 'CLIENT_OPERATIONS_CUSTOM_COLUMN_LIMIT');
     }
-    assertQueryError(error, 'Failed to create custom registry column');
-    if (!data) throw new AppError(500, 'Custom registry column was not returned after create', 'SUPABASE_ERROR');
-    await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_CUSTOM_COLUMN_CREATED, data.id, { key, label, data_type });
+    if (error?.code === '23505') {
+      // Unique (organization_id, key) — concurrent duplicate create; return aggregate only.
+    } else {
+      assertQueryError(error, 'Failed to create custom registry column');
+      if (!data) throw new AppError(500, 'Custom registry column was not returned after create', 'SUPABASE_ERROR');
+      await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_CUSTOM_COLUMN_CREATED, data.id, { key, label, data_type });
+    }
+  } else if (command === 'ensure_client_operations_user_column_slots') {
+    const ensured = await ensureClientOperationsUserColumnSlots({
+      organizationId: orgId,
+      actorUserId: ctx.user.id,
+    });
+    if (ensured.created_keys.length) {
+      await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_CUSTOM_COLUMN_CREATED, 'user_slots', {
+        created_keys: ensured.created_keys,
+        active_count: ensured.active_count,
+      });
+    }
   } else if (command === 'rename_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
-    const label = labelFrom(body.label);
+    const label = labelFromAllowBlank(body.label);
     const { error } = await supabaseAdmin
       .from('client_operations_registry_custom_columns')
       .update({ label, updated_at: new Date().toISOString() })

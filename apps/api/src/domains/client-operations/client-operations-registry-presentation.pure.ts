@@ -234,6 +234,49 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
 const SYSTEM_COLUMN_KEYS = new Set(CLIENT_OPERATIONS_REGISTRY_COLUMNS.map((c) => c.key));
 export const CLIENT_OPERATIONS_CUSTOM_COLUMNS_MAX = 10;
 
+/** Stable keys for Excel-like unused user slots (never collide with system keys). */
+export const CLIENT_OPERATIONS_USER_SLOT_KEY_PREFIX = 'user_slot_';
+
+export function clientOperationsUserSlotKey(slotIndex1Based: number): string {
+  const n = Math.trunc(slotIndex1Based);
+  if (n < 1 || n > CLIENT_OPERATIONS_CUSTOM_COLUMNS_MAX) {
+    throw new Error(`user slot index out of range: ${slotIndex1Based}`);
+  }
+  return `${CLIENT_OPERATIONS_USER_SLOT_KEY_PREFIX}${String(n).padStart(2, '0')}`;
+}
+
+export function isClientOperationsUserSlotKey(key: string): boolean {
+  return /^user_slot_(0[1-9]|10)$/.test(String(key ?? ''));
+}
+
+/** Blank / unused slot header stored as whitespace (DB label CHECK requires length >= 1). */
+export function isBlankCustomColumnLabel(label: string | null | undefined): boolean {
+  return !String(label ?? '').trim();
+}
+
+export function displayCustomColumnHeaderLabel(label: string | null | undefined): string {
+  return isBlankCustomColumnLabel(label) ? '' : String(label).trim();
+}
+
+/**
+ * How many new `user_slot_XX` keys to insert to reach max 10, without touching existing keys.
+ * Existing custom columns (any key) occupy capacity; only missing capacity is filled.
+ */
+export function planClientOperationsUserSlotKeysToCreate(
+  existingKeys: readonly string[],
+  max: number = CLIENT_OPERATIONS_CUSTOM_COLUMNS_MAX,
+): string[] {
+  const used = new Set(existingKeys.map((k) => String(k ?? '').trim()).filter(Boolean));
+  const needed = Math.max(0, max - used.size);
+  if (needed === 0) return [];
+  const out: string[] = [];
+  for (let i = 1; i <= max && out.length < needed; i += 1) {
+    const key = clientOperationsUserSlotKey(i);
+    if (!used.has(key)) out.push(key);
+  }
+  return out;
+}
+
 export function isSystemRegistryColumnKey(key: string): boolean {
   return SYSTEM_COLUMN_KEYS.has(key);
 }
