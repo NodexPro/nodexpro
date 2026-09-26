@@ -53,6 +53,16 @@ export type ClientOperationsClientQuickProfileAggregate = {
   recurring_expense_rows: ClientQuickProfileExpenseRow[];
   expense_section_title_he: string;
   expense_section_visible: boolean;
+  /** Canonical מיסים — מס הכנסה ניכויים (file + frequency). */
+  income_tax_deductions: {
+    file_number: string | null;
+    frequency: string | null;
+    frequency_label_he: string | null;
+  };
+  /** Canonical מיסים — ביטוח לאומי ניכויים (file only). */
+  national_insurance_deductions: {
+    file_number: string | null;
+  };
   allowed_actions: string[];
 };
 
@@ -247,15 +257,19 @@ export function buildQuickProfileInfoRow(input: {
   label_he: string;
   display_value: string | null | undefined;
   visible: boolean;
+  copy_enabled?: boolean;
+  copy_value?: string | null;
 }): ClientQuickProfileRow {
   const display = trimOrNull(input.display_value) ?? QUICK_PROFILE_EMPTY_DISPLAY;
+  const copyValue = trimOrNull(input.copy_value);
+  const copyEnabled = Boolean(input.copy_enabled && copyValue);
   return {
     key: input.key,
     label_he: input.label_he,
     display_value: display,
     visible: input.visible,
-    copy_enabled: false,
-    copy_value: null,
+    copy_enabled: copyEnabled,
+    copy_value: copyEnabled ? copyValue : null,
   };
 }
 
@@ -389,12 +403,92 @@ export function formatQuickProfileIncomeTaxAdvancesDisplayHe(input: {
   return 'כן';
 }
 
-/** Income-tax deductions applicability display. */
+/** Income-tax deductions applicability display (legacy כן/לא). */
 export function formatQuickProfileIncomeTaxDeductionsDisplayHe(
   enabled: boolean | null | undefined
 ): string {
   if (enabled === true) return 'כן';
   if (enabled === false) return 'לא';
   return QUICK_PROFILE_EMPTY_DISPLAY;
+}
+
+/** Canonical מיסים income-tax deductions frequency → Hebrew label for Quick Profile. */
+export function formatIncomeTaxDeductionsFrequencyLabelHe(
+  frequency: string | null | undefined
+): string | null {
+  const freq = String(frequency ?? '')
+    .trim()
+    .toLowerCase();
+  if (freq === 'monthly') return 'חודשי';
+  if (freq === 'bi_monthly') return 'דו-חודשי';
+  if (freq === 'semi_annual') return 'חצי שנתי';
+  return null;
+}
+
+/**
+ * Ready-to-render מס הכנסה ניכויים Quick Profile projection.
+ * No file number → em-dash and no frequency (do not imply a deductions account).
+ */
+export function buildQuickProfileIncomeTaxDeductionsProjection(input: {
+  file_number: string | null | undefined;
+  frequency: string | null | undefined;
+}): {
+  file_number: string | null;
+  frequency: string | null;
+  frequency_label_he: string | null;
+  display_value: string;
+  copy_enabled: boolean;
+  copy_value: string | null;
+} {
+  const file = trimOrNull(input.file_number);
+  if (!file) {
+    return {
+      file_number: null,
+      frequency: null,
+      frequency_label_he: null,
+      display_value: QUICK_PROFILE_EMPTY_DISPLAY,
+      copy_enabled: false,
+      copy_value: null,
+    };
+  }
+  const freqRaw = trimOrNull(input.frequency);
+  const frequency_label_he = formatIncomeTaxDeductionsFrequencyLabelHe(freqRaw);
+  const display_value = frequency_label_he
+    ? `תיק: ${file} · דיווח: ${frequency_label_he}`
+    : `תיק: ${file}`;
+  return {
+    file_number: file,
+    frequency: freqRaw,
+    frequency_label_he,
+    display_value,
+    copy_enabled: true,
+    copy_value: file,
+  };
+}
+
+/** Ready-to-render ביטוח לאומי ניכויים Quick Profile projection (file only). */
+export function buildQuickProfileNationalInsuranceDeductionsProjection(input: {
+  file_number: string | null | undefined;
+}): {
+  file_number: string | null;
+  display_value: string;
+  copy_enabled: boolean;
+  copy_value: string | null;
+} {
+  const file = trimOrNull(input.file_number);
+  if (!file) {
+    return {
+      file_number: null,
+      display_value: QUICK_PROFILE_EMPTY_DISPLAY,
+      copy_enabled: false,
+      copy_value: null,
+    };
+  }
+  return {
+    file_number: file,
+    display_value: `תיק: ${file}`,
+    copy_enabled: true,
+    copy_value: file,
+  };
 }
 

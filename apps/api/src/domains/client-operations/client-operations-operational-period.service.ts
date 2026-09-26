@@ -10,6 +10,7 @@ import {
   buildAvailableOperationalPeriods,
   clientExistsInOperationalPeriod,
   computeOperationalPeriodApplicability,
+  isCurrentOpenOperationalPeriodKey,
   isOperationalPeriodKey,
   resolveDefaultOperationalPeriodKey,
   type OperationalPeriodSnapshotInputs,
@@ -291,6 +292,148 @@ export async function ensurePeriodApplicabilitySnapshots(input: {
   }
 
   return result;
+}
+
+/**
+ * After canonical מיסים tax-settings save: rebuild applicability for the
+ * CURRENT/OPEN operational period only (default_period_key).
+ *
+ * Persistence: ONE atomic RPC (DELETE + INSERT in a single plpgsql transaction).
+ * Applicability business logic stays in computeOperationalPeriodApplicability.
+ * Historical period rows are never touched.
+ *
+ * Stale-payload prevention: pass client_tax_settings.updated_at; RPC rejects
+ * if canonical settings changed under the lock → API reloads and retries.
+ */
+export async function reconcileCurrentOpenPeriodApplicabilitySnapshotForClient(input: {
+  organizationId: string;
+  clientId: string;
+  now?: Date;
+}): Promise<{
+  reconciled: boolean;
+  operational_period_key: string;
+}> {
+  const operationalPeriodKey = resolveDefaultOperationalPeriodKey(input.now);
+  const clientId = String(input.clientId ?? '').trim();
+  if (!clientId) {
+    return { reconciled: false, operational_period_key: operationalPeriodKey };
+  }
+  if (!isCurrentOpenOperationalPeriodKey(operationalPeriodKey, input.now)) {
+    // Defensive: resolveDefaultOperationalPeriodKey is the only open period.
+    return { reconciled: false, operational_period_key: operationalPeriodKey };
+  }
+
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const [{ data: client, error: clientError }, { data: profile, error: profileError }, { data: tax, error: taxError }] =
+      await Promise.all([
+        supabaseAdmin
+          .from('clients')
+          .select('id, created_at')
+          .eq('organization_id', input.organizationId)
+          .eq('id', clientId)
+          .maybeSingle(),
+        supabaseAdmin
+          .from('client_operational_profiles')
+          .select('payroll_flag')
+          .eq('organization_id', input.organizationId)
+          .eq('client_id', clientId)
+          .maybeSingle(),
+        supabaseAdmin
+          .from('client_tax_settings')
+          .select(
+            'vat_type, vat_frequency, income_tax_advance_enabled, income_tax_advance_frequency, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number, updated_at',
+          )
+          .eq('organization_id', input.organizationId)
+          .eq('client_id', clientId)
+          .maybeSingle(),
+      ]);
+    assertQueryError(clientError, 'Failed to load client for period snapshot reconcile');
+    assertQueryError(profileError, 'Failed to load operational profile for period snapshot reconcile');
+    assertQueryError(taxError, 'Failed to load tax settings for period snapshot reconcile');
+    if (!client) {
+      return { reconciled: false, operational_period_key: operationalPeriodKey };
+    }
+
+    if (
+      !clientExistsInOperationalPeriod({
+        client_created_at: (client as { created_at?: string | null }).created_at ?? null,
+        operational_period_key: operationalPeriodKey,
+      })
+    ) {
+      // Client not yet in this period — clear any accidental current snapshot via RPC with
+      // empty applicability? Prefer leave ensure-path alone: delete-only is not exposed.
+      // No snapshot row required when client does not exist in period.
+      return { reconciled: true, operational_period_key: operationalPeriodKey };
+    }
+
+    const inputs: OperationalPeriodSnapshotInputs = {
+      vat_type: tax?.vat_type ?? null,
+      vat_frequency: tax?.vat_frequency ?? null,
+      payroll_flag: profile?.payroll_flag ?? null,
+      income_tax_advance_enabled: tax?.income_tax_advance_enabled ?? null,
+      income_tax_advance_frequency: tax?.income_tax_advance_frequency ?? null,
+      income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
+      income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
+      income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
+      national_insurance_type: tax?.national_insurance_type ?? null,
+      national_insurance_monthly_amount: tax?.national_insurance_monthly_amount ?? null,
+      national_insurance_deductions_file_number:
+        tax?.national_insurance_deductions_file_number ?? null,
+    };
+    const appl = computeOperationalPeriodApplicability(operationalPeriodKey, inputs);
+    const expectedTaxUpdatedAt =
+      (tax as { updated_at?: string | null } | null)?.updated_at ?? null;
+
+    const { error: rpcError } = await supabaseAdmin.rpc(
+      'replace_client_operations_period_applicability_snapshot',
+      {
+        p_organization_id: input.organizationId,
+        p_client_id: clientId,
+        p_operational_period_key: operationalPeriodKey,
+        p_vat_type: inputs.vat_type,
+        p_vat_frequency: inputs.vat_frequency,
+        p_payroll_flag: inputs.payroll_flag,
+        p_income_tax_advance_enabled: inputs.income_tax_advance_enabled,
+        p_income_tax_advance_frequency: inputs.income_tax_advance_frequency,
+        p_income_tax_deductions_enabled: inputs.income_tax_deductions_enabled,
+        p_income_tax_deductions_frequency: inputs.income_tax_deductions_frequency,
+        p_national_insurance_type: inputs.national_insurance_type,
+        p_national_insurance_monthly_amount: inputs.national_insurance_monthly_amount,
+        p_national_insurance_deductions_file_number:
+          inputs.national_insurance_deductions_file_number,
+        p_vat_applicable: appl.vat_applicable,
+        p_payroll_applicable: appl.payroll_applicable,
+        p_income_tax_advance_applicable: appl.income_tax_advance_applicable,
+        p_income_tax_deductions_applicable: appl.income_tax_deductions_applicable,
+        p_national_insurance_applicable: appl.national_insurance_applicable,
+        p_national_insurance_deductions_applicable: appl.national_insurance_deductions_applicable,
+        p_row_visible: appl.row_visible,
+        p_client_created_at: (client as { created_at?: string | null }).created_at ?? null,
+        p_expected_tax_settings_updated_at: expectedTaxUpdatedAt,
+      },
+    );
+
+    if (!rpcError) {
+      return { reconciled: true, operational_period_key: operationalPeriodKey };
+    }
+
+    const msg = String(rpcError.message ?? '');
+    if (msg.includes('CLIENT_OPERATIONS_SNAPSHOT_REPLACE_STALE_TAX_SETTINGS') && attempt < maxAttempts) {
+      continue;
+    }
+    throw new AppError(
+      500,
+      msg || 'Failed to atomically replace current-open period applicability snapshot',
+      'SUPABASE_ERROR',
+    );
+  }
+
+  throw new AppError(
+    500,
+    'Failed to atomically replace current-open period applicability snapshot after retries',
+    'SUPABASE_ERROR',
+  );
 }
 
 export async function upsertPeriodMaterialFact(input: {

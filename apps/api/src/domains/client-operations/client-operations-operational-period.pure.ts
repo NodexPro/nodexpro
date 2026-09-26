@@ -39,6 +39,8 @@ export type OperationalPeriodSnapshotInputs = {
   income_tax_advance_enabled: boolean | null;
   income_tax_advance_frequency: string | null;
   income_tax_deductions_enabled: boolean | null;
+  /** Canonical מיסים file number — first gate for מ״ה ניכויים (not persisted on snapshot). */
+  income_tax_deductions_file_number: string | null;
   income_tax_deductions_frequency: string | null;
   national_insurance_type: string | null;
   national_insurance_monthly_amount: number | null;
@@ -70,6 +72,18 @@ export function formatOperationalPeriodKey(parts: OperationalPeriodParts): strin
  */
 export function resolveDefaultOperationalPeriodKey(now: Date = new Date()): string {
   return businessPreviousMonthKey(now);
+}
+
+/**
+ * Current/open Client Operations workspace period = backend default period only.
+ * Historical selected periods must not reconcile when current tax settings change.
+ */
+export function isCurrentOpenOperationalPeriodKey(
+  periodKey: string,
+  now: Date = new Date(),
+): boolean {
+  if (!isOperationalPeriodKey(periodKey)) return false;
+  return periodKey === resolveDefaultOperationalPeriodKey(now);
 }
 
 function norm(value: string | null | undefined): string {
@@ -160,6 +174,58 @@ export function isIncomeTaxFrequencyApplicableForOperationalPeriod(
   return false;
 }
 
+/**
+ * Income-tax DEDUCTIONS frequency for Client Operations registry/workspace months.
+ *
+ * Distinct from advances (`isIncomeTaxFrequencyApplicableForOperationalPeriod`):
+ * - monthly → every operational month
+ * - bi_monthly → SAME even-month cadence as דו-חודשי מע״מ (reuses VAT helper)
+ * - semi_annual → January + June only (YYYY-01 / YYYY-06) — CO workspace product rule
+ *
+ * Frequency alone never activates the cell: callers must also gate on canonical
+ * `income_tax_deductions_file_number` (see `resolveIncomeTaxDeductionsApplicability`).
+ */
+export function isIncomeTaxDeductionsFrequencyApplicableForOperationalPeriod(
+  frequency: string | null | undefined,
+  periodKey: string,
+): boolean {
+  const parts = parseOperationalPeriodKey(periodKey);
+  if (!parts) return false;
+  const freq = norm(frequency);
+  if (!freq) return false;
+  if (freq === 'monthly') return true;
+  if (freq === 'bi_monthly') {
+    return isVatBiMonthlyApplicableForOperationalPeriod(periodKey);
+  }
+  if (freq === 'semi_annual') {
+    return parts.month === 1 || parts.month === 6;
+  }
+  return false;
+}
+
+/** First gate: canonical מיסים תיק ניכויים must be present. */
+export function resolveIncomeTaxDeductionsFileNumberPresent(
+  fileNumber: string | null | undefined,
+): boolean {
+  return Boolean(String(fileNumber ?? '').trim());
+}
+
+/**
+ * מ״ה ניכויים applicability = file number present + frequency matches period.
+ * `enabled` alone is insufficient (no invented file / no orphan frequency).
+ */
+export function resolveIncomeTaxDeductionsApplicability(input: {
+  file_number: string | null | undefined;
+  frequency: string | null | undefined;
+  operational_period_key: string;
+}): boolean {
+  if (!resolveIncomeTaxDeductionsFileNumberPresent(input.file_number)) return false;
+  return isIncomeTaxDeductionsFrequencyApplicableForOperationalPeriod(
+    input.frequency,
+    input.operational_period_key,
+  );
+}
+
 export function resolvePayrollApplicabilityForOperationalPeriod(
   payrollFlag: boolean | null | undefined,
 ): boolean {
@@ -196,12 +262,11 @@ export function computeOperationalPeriodApplicability(
       inputs.income_tax_advance_frequency,
       periodKey,
     );
-  const income_tax_deductions_applicable =
-    inputs.income_tax_deductions_enabled === true &&
-    isIncomeTaxFrequencyApplicableForOperationalPeriod(
-      inputs.income_tax_deductions_frequency,
-      periodKey,
-    );
+  const income_tax_deductions_applicable = resolveIncomeTaxDeductionsApplicability({
+    file_number: inputs.income_tax_deductions_file_number,
+    frequency: inputs.income_tax_deductions_frequency,
+    operational_period_key: periodKey,
+  });
   const national_insurance_applicable = resolveNationalInsuranceApplicability(
     inputs.national_insurance_type,
   );

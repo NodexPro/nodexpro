@@ -296,7 +296,7 @@ async function ensurePeriodSnapshotForMaterialCommand(input: {
     supabaseAdmin
       .from('client_tax_settings')
       .select(
-        'vat_type, vat_frequency, income_tax_advance_enabled, income_tax_advance_frequency, income_tax_deductions_enabled, income_tax_deductions_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number',
+        'vat_type, vat_frequency, income_tax_advance_enabled, income_tax_advance_frequency, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number',
       )
       .eq('organization_id', input.orgId)
       .eq('client_id', input.clientId)
@@ -323,6 +323,7 @@ async function ensurePeriodSnapshotForMaterialCommand(input: {
         income_tax_advance_enabled: tax?.income_tax_advance_enabled ?? null,
         income_tax_advance_frequency: tax?.income_tax_advance_frequency ?? null,
         income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
+        income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
         income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
         national_insurance_type: tax?.national_insurance_type ?? null,
         national_insurance_monthly_amount: tax?.national_insurance_monthly_amount ?? null,

@@ -30,6 +30,14 @@ export type ClientOperationsClientQuickProfileAggregate = {
   recurring_expense_rows: ClientOperationsQuickProfileExpenseRow[];
   expense_section_title_he: string;
   expense_section_visible: boolean;
+  income_tax_deductions?: {
+    file_number: string | null;
+    frequency: string | null;
+    frequency_label_he: string | null;
+  };
+  national_insurance_deductions?: {
+    file_number: string | null;
+  };
   allowed_actions: string[];
 };
 

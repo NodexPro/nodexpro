@@ -28,6 +28,7 @@ import {
   formatVatDivuachDisplayHe,
   toIsoDateOnly,
 } from './vat-divuach.js';
+import { reconcileCurrentOpenPeriodApplicabilitySnapshotForClient } from './client-operations-operational-period.service.js';
 
 export type ClientTaxSettingsRow = {
   id: string;
@@ -1242,6 +1243,13 @@ export async function updateClientTaxSettings(
     entityId: clientId,
     action: AUDIT_ACTIONS.CLIENT_TAX_SETTINGS_UPDATED,
     payload: { client_id: clientId },
+  });
+
+  // Current/open CO period must immediately reflect new canonical tax settings.
+  // Historical period snapshots remain frozen (delete+reinsert only default_period_key).
+  await reconcileCurrentOpenPeriodApplicabilitySnapshotForClient({
+    organizationId: orgId,
+    clientId,
   });
 
   return getClientTaxSettings(ctx, clientId);

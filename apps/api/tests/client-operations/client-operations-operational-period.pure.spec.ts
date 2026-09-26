@@ -36,6 +36,7 @@ const baseInputs = (
   income_tax_advance_enabled: false,
   income_tax_advance_frequency: null,
   income_tax_deductions_enabled: false,
+  income_tax_deductions_file_number: null,
   income_tax_deductions_frequency: null,
   national_insurance_type: null,
   national_insurance_monthly_amount: null,
@@ -200,13 +201,14 @@ test('10 — client created after period excluded', () => {
   );
 });
 
-test('11 — deductions bi-monthly uses odd operational months', () => {
+test('11 — deductions bi-monthly aligns with VAT even months; file number required', () => {
   const biOdd = computeOperationalPeriodApplicability(
     '2026-09',
     baseInputs({
       vat_frequency: 'not_relevant',
       vat_type: 'no',
       income_tax_deductions_enabled: true,
+      income_tax_deductions_file_number: '935123456',
       income_tax_deductions_frequency: 'bi_monthly',
     }),
   );
@@ -216,11 +218,87 @@ test('11 — deductions bi-monthly uses odd operational months', () => {
       vat_frequency: 'not_relevant',
       vat_type: 'no',
       income_tax_deductions_enabled: true,
+      income_tax_deductions_file_number: '935123456',
       income_tax_deductions_frequency: 'bi_monthly',
     }),
   );
-  assert.equal(biOdd.income_tax_deductions_applicable, true);
-  assert.equal(biEven.income_tax_deductions_applicable, false);
+  assert.equal(biOdd.income_tax_deductions_applicable, false);
+  assert.equal(biEven.income_tax_deductions_applicable, true);
+
+  const noFileEven = computeOperationalPeriodApplicability(
+    '2026-10',
+    baseInputs({
+      vat_frequency: 'not_relevant',
+      vat_type: 'no',
+      income_tax_deductions_enabled: true,
+      income_tax_deductions_file_number: null,
+      income_tax_deductions_frequency: 'bi_monthly',
+    }),
+  );
+  assert.equal(noFileEven.income_tax_deductions_applicable, false);
+});
+
+test('11b — deductions monthly every month when file present; semi-annual Jan+Jun only', () => {
+  const monthlySep = computeOperationalPeriodApplicability(
+    '2026-09',
+    baseInputs({
+      vat_type: 'no',
+      vat_frequency: 'not_relevant',
+      income_tax_deductions_file_number: '111',
+      income_tax_deductions_frequency: 'monthly',
+    }),
+  );
+  assert.equal(monthlySep.income_tax_deductions_applicable, true);
+
+  const semiJan = computeOperationalPeriodApplicability(
+    '2026-01',
+    baseInputs({
+      vat_type: 'no',
+      vat_frequency: 'not_relevant',
+      income_tax_deductions_file_number: '111',
+      income_tax_deductions_frequency: 'semi_annual',
+    }),
+  );
+  const semiJun = computeOperationalPeriodApplicability(
+    '2026-06',
+    baseInputs({
+      vat_type: 'no',
+      vat_frequency: 'not_relevant',
+      income_tax_deductions_file_number: '111',
+      income_tax_deductions_frequency: 'semi_annual',
+    }),
+  );
+  const semiFeb = computeOperationalPeriodApplicability(
+    '2026-02',
+    baseInputs({
+      vat_type: 'no',
+      vat_frequency: 'not_relevant',
+      income_tax_deductions_file_number: '111',
+      income_tax_deductions_frequency: 'semi_annual',
+    }),
+  );
+  const semiJul = computeOperationalPeriodApplicability(
+    '2026-07',
+    baseInputs({
+      vat_type: 'no',
+      vat_frequency: 'not_relevant',
+      income_tax_deductions_file_number: '111',
+      income_tax_deductions_frequency: 'semi_annual',
+    }),
+  );
+  assert.equal(semiJan.income_tax_deductions_applicable, true);
+  assert.equal(semiJun.income_tax_deductions_applicable, true);
+  assert.equal(semiFeb.income_tax_deductions_applicable, false);
+  assert.equal(semiJul.income_tax_deductions_applicable, false);
+});
+
+test('11c — React registry has no deductions month/frequency business logic', () => {
+  const view = readFileSync(
+    join(dir, '../../../web/src/components/client-operations/ClientOperationsRegistryView.tsx'),
+    'utf8',
+  );
+  assert.doesNotMatch(view, /bi_monthly|semi_annual|income_tax_deductions_frequency/);
+  assert.doesNotMatch(view, /month\s*%\s*2|month\s*===\s*1|month\s*===\s*6/);
 });
 
 test('12 — NI fail-closed without canonical facts', () => {

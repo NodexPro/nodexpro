@@ -573,6 +573,7 @@ export async function listClientOperationsRegistry(
         income_tax_advance_enabled: tax?.income_tax_advance_enabled ?? null,
         income_tax_advance_frequency: tax?.income_tax_advance_frequency ?? null,
         income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
+        income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
         income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
         national_insurance_type: tax?.national_insurance_type ?? null,
         national_insurance_monthly_amount: tax?.national_insurance_monthly_amount ?? null,

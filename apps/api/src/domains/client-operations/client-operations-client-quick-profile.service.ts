@@ -29,8 +29,9 @@ import {
   buildQuickProfileInfoRow,
   buildQuickProfileRecurringExpenseRows,
   buildQuickProfileVehicleExpenseRows,
+  buildQuickProfileIncomeTaxDeductionsProjection,
+  buildQuickProfileNationalInsuranceDeductionsProjection,
   formatQuickProfileIncomeTaxAdvancesDisplayHe,
-  formatQuickProfileIncomeTaxDeductionsDisplayHe,
   formatQuickProfilePayrollDisplayHe,
   resolveIncomeTaxDeductionsOperationalReportingPeriodKey,
   resolveOperationalReportingPeriodKey,
@@ -235,7 +236,7 @@ export async function getClientOperationsClientQuickProfile(
       supabaseAdmin
         .from('client_tax_settings')
         .select(
-          'vat_type, vat_frequency, vat_due_type, income_tax_advance_enabled, income_tax_advance_percent, income_tax_deductions_enabled, income_tax_deductions_frequency, national_insurance_deductions_file_number'
+          'vat_type, vat_frequency, vat_due_type, income_tax_advance_enabled, income_tax_advance_percent, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency, national_insurance_deductions_file_number'
         )
         .eq('organization_id', orgId)
         .eq('client_id', id)
@@ -260,6 +261,7 @@ export async function getClientOperationsClientQuickProfile(
     income_tax_advance_enabled: false,
     income_tax_advance_percent: null,
     income_tax_deductions_enabled: false,
+    income_tax_deductions_file_number: null,
     income_tax_deductions_frequency: null,
     national_insurance_deductions_file_number: null,
   }) as {
@@ -269,6 +271,7 @@ export async function getClientOperationsClientQuickProfile(
     income_tax_advance_enabled: boolean;
     income_tax_advance_percent: number | null;
     income_tax_deductions_enabled: boolean;
+    income_tax_deductions_file_number: string | null;
     income_tax_deductions_frequency: string | null;
     national_insurance_deductions_file_number: string | null;
   };
@@ -334,6 +337,14 @@ export async function getClientOperationsClientQuickProfile(
     settings.vat_frequency
   );
 
+  const incomeTaxDeductionsQp = buildQuickProfileIncomeTaxDeductionsProjection({
+    file_number: settings.income_tax_deductions_file_number,
+    frequency: settings.income_tax_deductions_frequency,
+  });
+  const nationalInsuranceDeductionsQp = buildQuickProfileNationalInsuranceDeductionsProjection({
+    file_number: settings.national_insurance_deductions_file_number,
+  });
+
   const accounting_rows: ClientQuickProfileRow[] = [
     buildQuickProfileInfoRow({
       key: 'income_software',
@@ -365,10 +376,18 @@ export async function getClientOperationsClientQuickProfile(
     buildQuickProfileInfoRow({
       key: 'income_tax_deductions',
       label_he: 'מס הכנסה ניכויים',
-      display_value: formatQuickProfileIncomeTaxDeductionsDisplayHe(
-        settings.income_tax_deductions_enabled
-      ),
-      visible: settings.income_tax_deductions_enabled === true,
+      display_value: incomeTaxDeductionsQp.display_value,
+      visible: true,
+      copy_enabled: incomeTaxDeductionsQp.copy_enabled,
+      copy_value: incomeTaxDeductionsQp.copy_value,
+    }),
+    buildQuickProfileInfoRow({
+      key: 'national_insurance_deductions',
+      label_he: 'ביטוח לאומי ניכויים',
+      display_value: nationalInsuranceDeductionsQp.display_value,
+      visible: true,
+      copy_enabled: nationalInsuranceDeductionsQp.copy_enabled,
+      copy_value: nationalInsuranceDeductionsQp.copy_value,
     }),
   ];
 
@@ -509,6 +528,14 @@ export async function getClientOperationsClientQuickProfile(
     recurring_expense_rows,
     expense_section_title_he: 'הוצאות קבועות',
     expense_section_visible: recurring_expense_rows.length > 0,
+    income_tax_deductions: {
+      file_number: incomeTaxDeductionsQp.file_number,
+      frequency: incomeTaxDeductionsQp.frequency,
+      frequency_label_he: incomeTaxDeductionsQp.frequency_label_he,
+    },
+    national_insurance_deductions: {
+      file_number: nationalInsuranceDeductionsQp.file_number,
+    },
     allowed_actions: [],
   };
 }
