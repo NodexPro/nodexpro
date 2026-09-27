@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { apiFetch, apiJson } from '../../api/client';
 import {
   moduleClientOperationsCase,
@@ -37,6 +37,19 @@ import {
   type ManualStatusPaintSlot,
   type ManualStatusPaintStart,
 } from '../../lib/client-operations-manual-status-paint.pure';
+import {
+  clearManualStatusOverlays,
+  manualStatusPaintKey,
+  reconcileManualStatusRows,
+  setManualStatusOverlay,
+  type ManualStatusOverlay,
+} from '../../lib/client-operations-manual-status-reconcile.pure';
+import {
+  clearClientOperationsUndoStack,
+  popClientOperationsUndoEntry,
+  pushClientOperationsUndoEntry,
+  type CoUndoEntry,
+} from '../../lib/client-operations-undo-stack.pure';
 import { formatCustomExcelCellDisplay } from '../../lib/client-operations-custom-cell-display.pure';
 import { PageHeader } from '../../templates/template-1/components/PageHeader';
 import { SectionCard } from '../../templates/template-1/components/SectionCard';
@@ -348,6 +361,8 @@ export type ClientOperationsRegistryViewProps = {
     options?: { applyAggregate?: boolean },
   ) => Promise<unknown>;
   onApplyAggregate?: (aggregate: any) => void;
+  /** Bump parent load generation so in-flight quiet GETs cannot wipe newer writes. */
+  onInvalidateStaleLoads?: () => void;
   widthScope?: { userId: string; organizationId: string };
   period?: {
     selected_period_key: string;
@@ -379,6 +394,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     onQueryChange,
     onRegistryCommand,
     onApplyAggregate,
+    onInvalidateStaleLoads,
     widthScope,
     period,
     onPeriodChange,
@@ -421,7 +437,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [showColumnPanel, setShowColumnPanel] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [cellPresentation, setCellPresentation] = useState<Record<string, CellPresentation>>({});
-  const [undoStack, setUndoStack] = useState<PresentationHistory[]>([]);
+  const [coUndoStack, setCoUndoStack] = useState<CoUndoEntry[]>([]);
   const [redoStack, setRedoStack] = useState<PresentationHistory[]>([]);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
@@ -438,6 +454,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     'ready' | 'sent_for_approval' | 'completed' | 'clear' | null
   >(null);
   const statusPaintSlotsRef = useRef<Map<string, ManualStatusPaintSlot>>(new Map());
+  const statusOverlaysRef = useRef<Map<string, ManualStatusOverlay>>(new Map());
+  const statusOverlayGenRef = useRef(0);
+  const skipUndoPushRef = useRef(false);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRequestSeqRef = useRef(0);
 
@@ -492,12 +511,25 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   }, [widthScope?.organizationId, widthScope?.userId]);
 
   useEffect(() => {
+    clearManualStatusOverlays(statusOverlaysRef.current);
+    statusPaintSlotsRef.current.clear();
+    setCoUndoStack(clearClientOperationsUndoStack());
+    setRedoStack([]);
+    setCellPresentation({});
+  }, [widthScope?.organizationId]);
+
+  useEffect(() => {
     if (!fullscreenOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setFullscreenOpen(false);
     };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
   }, [fullscreenOpen]);
 
   useEffect(() => {
@@ -692,7 +724,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const applyPresentation = (patch: Partial<CellPresentation>) => {
     if (!focusedCell) return;
     const k = cellKey(focusedCell.clientId, focusedCell.colKey);
-    setUndoStack((history) => [...history, { presentation: cellPresentation }]);
+    if (!skipUndoPushRef.current) {
+      setCoUndoStack((history) =>
+        pushClientOperationsUndoEntry(history, { kind: 'presentation', previous: cellPresentation }),
+      );
+    }
     setRedoStack([]);
     setCellPresentation((prev) => ({
       ...prev,
@@ -736,17 +772,16 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
-  const undoPresentation = () => {
-    const previous = undoStack.at(-1);
-    if (!previous) return;
+  const undoPresentationOnly = (previous: Record<string, CellPresentation>) => {
     setRedoStack((history) => [...history, { presentation: cellPresentation }]);
-    setCellPresentation(previous.presentation);
-    setUndoStack((history) => history.slice(0, -1));
+    setCellPresentation(previous);
   };
   const redoPresentation = () => {
     const next = redoStack.at(-1);
     if (!next) return;
-    setUndoStack((history) => [...history, { presentation: cellPresentation }]);
+    setCoUndoStack((history) =>
+      pushClientOperationsUndoEntry(history, { kind: 'presentation', previous: cellPresentation }),
+    );
     setCellPresentation(next.presentation);
     setRedoStack((history) => history.slice(0, -1));
   };
@@ -778,6 +813,46 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   rowsRef.current = rows;
   const viewedPeriodKeyRef = useRef<string | null>(null);
   viewedPeriodKeyRef.current = query?.operational_period_key ?? period?.selected_period_key ?? null;
+
+  const applyAggregateReconciled = useCallback(
+    (data: unknown) => {
+      if (!onApplyAggregate) return;
+      const aggregate = data as {
+        rows?: ClientOperationsRegistryRow[];
+        period?: { selected_period_key?: string };
+        query?: { operational_period_key?: string };
+      };
+      const responsePeriod =
+        aggregate?.period?.selected_period_key ??
+        aggregate?.query?.operational_period_key ??
+        viewedPeriodKeyRef.current ??
+        '';
+      const incomingRows = Array.isArray(aggregate?.rows) ? aggregate.rows : [];
+      const reconciled = reconcileManualStatusRows({
+        rows: incomingRows,
+        overlays: statusOverlaysRef.current,
+        slots: statusPaintSlotsRef.current,
+        viewedPeriodKey: String(responsePeriod ?? ''),
+      });
+      if (reconciled === incomingRows) {
+        onApplyAggregate(data);
+        return;
+      }
+      onApplyAggregate({ ...(aggregate as object), rows: reconciled });
+    },
+    [onApplyAggregate],
+  );
+
+  useLayoutEffect(() => {
+    const periodKey = viewedPeriodKeyRef.current ?? '';
+    const reconciled = reconcileManualStatusRows({
+      rows,
+      overlays: statusOverlaysRef.current,
+      slots: statusPaintSlotsRef.current,
+      viewedPeriodKey: periodKey,
+    });
+    if (reconciled !== rows) onRowsChange(reconciled);
+  }, [rows, onRowsChange]);
   const editingCellKeyRef = useRef(editingCellKey);
   editingCellKeyRef.current = editingCellKey;
   const customCellFlightWaitersRef = useRef<Map<string, Array<() => void>>>(new Map());
@@ -843,6 +918,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     }
     setCommandError('');
     try {
+      const previousValue = serverValueForMeta(meta);
       const data = (await onRegistryCommand(
         {
           command: 'set_client_operations_custom_column_value',
@@ -858,6 +934,26 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         period?: { selected_period_key?: string | null };
         query?: { operational_period_key?: string | null };
       };
+
+      if (
+        !skipUndoPushRef.current &&
+        previousValue !== start.value &&
+        start.identity.organizationId &&
+        start.identity.operationalPeriodKey
+      ) {
+        setCoUndoStack((history) =>
+          pushClientOperationsUndoEntry(history, {
+            kind: 'custom_cell',
+            organizationId: start.identity.organizationId,
+            periodKey: start.identity.operationalPeriodKey,
+            clientId: start.identity.clientId,
+            columnId: start.identity.columnId,
+            columnKey: meta.column.key,
+            previousValue,
+            newValue: start.value,
+          }),
+        );
+      }
 
       const responsePeriodKey =
         data?.period?.selected_period_key ?? data?.query?.operational_period_key ?? start.identity.operationalPeriodKey;
@@ -880,7 +976,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           viewedPeriodKey,
         })
       ) {
-        onApplyAggregate?.(data);
+        applyAggregateReconciled(data);
         preserveEditorDraftIfNeeded(start.key, meta);
       }
 
@@ -1008,6 +1104,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const paintCellManualStatus = (
     row: ClientOperationsRegistryRow,
     columnKey: string,
+    options?: { skipUndoPush?: boolean },
   ): boolean => {
     if (!canEdit || !onRegistryCommand || !statusPaintMode) return false;
     if (columnKey === 'folder' || columnKey === 'client_name') return false;
@@ -1019,13 +1116,39 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (statusPaintMode !== 'clear' && !cap.allowed_statuses.includes(statusPaintMode)) return false;
 
     const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
-    const paintKey = `${row.client_id}:${columnKey}:${periodKey}`;
+    const paintKey = manualStatusPaintKey(row.client_id, columnKey, periodKey);
     const previousCap = { ...cap };
+    const previousStatus = (cap.status ?? null) as ManualStatusPaintIntent;
     rememberManualStatusPaintIntent(statusPaintSlotsRef.current, paintKey, nextStatus);
+    statusOverlayGenRef.current += 1;
+    setManualStatusOverlay(
+      statusOverlaysRef.current,
+      paintKey,
+      nextStatus,
+      statusOverlayGenRef.current,
+    );
+    onInvalidateStaleLoads?.();
 
-    // Optimistic local paint (presentation only) until aggregate returns.
+    if (!options?.skipUndoPush && !skipUndoPushRef.current && previousStatus !== nextStatus) {
+      const organizationId = widthScope?.organizationId?.trim() ?? '';
+      if (organizationId && periodKey) {
+        setCoUndoStack((history) =>
+          pushClientOperationsUndoEntry(history, {
+            kind: 'manual_status',
+            organizationId,
+            periodKey,
+            clientId: row.client_id,
+            columnKey,
+            previousStatus,
+            newStatus: nextStatus,
+          }),
+        );
+      }
+    }
+
+    // Optimistic local paint from latest rows (presentation only) until aggregate returns.
     onRowsChange(
-      rows.map((r) => {
+      rowsRef.current.map((r) => {
         if (r.client_id !== row.client_id) return r;
         const current = r.manual_cell_statuses ?? {};
         const existing = current[columnKey] ?? {
@@ -1077,13 +1200,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             (data as { query?: { operational_period_key?: string } })?.query?.operational_period_key ??
             periodKey;
           if (String(responsePeriod ?? '') === String(viewed ?? '')) {
-            onApplyAggregate?.(data);
+            onInvalidateStaleLoads?.();
+            applyAggregateReconciled(data);
           }
         }
         if (startNext) await executePaint(startNext);
       } catch (error) {
         completeManualStatusPaintFailure(statusPaintSlotsRef.current, start.key);
         // Rollback optimistic paint for this cell.
+        setManualStatusOverlay(
+          statusOverlaysRef.current,
+          paintKey,
+          previousStatus,
+          ++statusOverlayGenRef.current,
+        );
         onRowsChange(
           rowsRef.current.map((r) => {
             if (r.client_id !== row.client_id) return r;
@@ -1105,6 +1235,131 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const start = tryStartManualStatusPaint(statusPaintSlotsRef.current, paintKey);
     if (start) void executePaint(start);
     return true;
+  };
+
+  const restoreManualStatusFromUndo = async (entry: Extract<CoUndoEntry, { kind: 'manual_status' }>) => {
+    if (!onRegistryCommand) return;
+    const paintKey = manualStatusPaintKey(entry.clientId, entry.columnKey, entry.periodKey);
+    const restoreStatus = entry.previousStatus;
+    rememberManualStatusPaintIntent(statusPaintSlotsRef.current, paintKey, restoreStatus);
+    statusOverlayGenRef.current += 1;
+    setManualStatusOverlay(
+      statusOverlaysRef.current,
+      paintKey,
+      restoreStatus,
+      statusOverlayGenRef.current,
+    );
+    onInvalidateStaleLoads?.();
+    onRowsChange(
+      rowsRef.current.map((r) => {
+        if (r.client_id !== entry.clientId) return r;
+        const current = r.manual_cell_statuses ?? {};
+        const existing = current[entry.columnKey] ?? {
+          status: null,
+          presentation_token: null,
+          allowed_statuses: ['ready', 'sent_for_approval', 'completed', 'clear'] as Array<
+            'ready' | 'sent_for_approval' | 'completed' | 'clear'
+          >,
+          operational_square_count: 0,
+        };
+        return {
+          ...r,
+          manual_cell_statuses: {
+            ...current,
+            [entry.columnKey]: {
+              ...existing,
+              status: restoreStatus,
+              presentation_token: restoreStatus,
+              allowed_statuses:
+                restoreStatus == null
+                  ? existing.allowed_statuses.filter((s) => s !== 'clear')
+                  : Array.from(new Set([...existing.allowed_statuses, 'clear' as const])),
+            },
+          },
+        };
+      }),
+    );
+
+    const executePaint = async (start: ManualStatusPaintStart): Promise<void> => {
+      try {
+        const data = await onRegistryCommand(
+          {
+            command: 'set_client_operations_cell_manual_status',
+            client_id: entry.clientId,
+            column_key: entry.columnKey,
+            operational_period_key: entry.periodKey || null,
+            status: start.status,
+          },
+          { applyAggregate: false },
+        );
+        const { startNext, applyAggregateRecommended } = completeManualStatusPaintSuccess(
+          statusPaintSlotsRef.current,
+          start.key,
+          start.status,
+        );
+        if (applyAggregateRecommended) {
+          const viewed = viewedPeriodKeyRef.current;
+          const responsePeriod =
+            (data as { period?: { selected_period_key?: string }; query?: { operational_period_key?: string } })
+              ?.period?.selected_period_key ??
+            (data as { query?: { operational_period_key?: string } })?.query?.operational_period_key ??
+            entry.periodKey;
+          if (String(responsePeriod ?? '') === String(viewed ?? '')) {
+            onInvalidateStaleLoads?.();
+            applyAggregateReconciled(data);
+          }
+        }
+        if (startNext) await executePaint(startNext);
+      } catch (error) {
+        completeManualStatusPaintFailure(statusPaintSlotsRef.current, start.key);
+        setCommandError(error instanceof Error ? error.message : 'ביטול סטטוס נכשל');
+        onReloadRegistry?.();
+      }
+    };
+
+    const start = tryStartManualStatusPaint(statusPaintSlotsRef.current, paintKey);
+    if (start) await executePaint(start);
+  };
+
+  const restoreCustomCellFromUndo = async (entry: Extract<CoUndoEntry, { kind: 'custom_cell' }>) => {
+    if (!onRegistryCommand) return;
+    skipUndoPushRef.current = true;
+    try {
+      const data = await onRegistryCommand({
+        command: 'set_client_operations_custom_column_value',
+        client_id: entry.clientId,
+        column_id: entry.columnId,
+        value: entry.previousValue,
+        operational_period_key: entry.periodKey,
+      });
+      const viewed = viewedPeriodKeyRef.current;
+      if (String(entry.periodKey) === String(viewed ?? '')) {
+        onInvalidateStaleLoads?.();
+        applyAggregateReconciled(data);
+      }
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : 'ביטול ערך נכשל');
+      onReloadRegistry?.();
+    } finally {
+      skipUndoPushRef.current = false;
+    }
+  };
+
+  const undoLastAction = () => {
+    const { entry, stack } = popClientOperationsUndoEntry(coUndoStack);
+    if (!entry) return;
+    setCoUndoStack(stack);
+    if (entry.kind === 'presentation') {
+      undoPresentationOnly(entry.previous as Record<string, CellPresentation>);
+      return;
+    }
+    if (entry.kind === 'manual_status') {
+      void restoreManualStatusFromUndo(entry);
+      return;
+    }
+    if (entry.kind === 'custom_cell') {
+      void restoreCustomCellFromUndo(entry);
+    }
   };
 
   const cancelCustomCellEdit = (
@@ -1373,44 +1628,82 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const renderSpreadsheetToolbar = () => (
     <div className="nx-co-sheet__toolbar" role="toolbar" aria-label="כלי גיליון">
       <div className="nx-co-sheet__toolbar-group">
-        <button type="button" className="nx-co-sheet__btn" disabled={!isCap('undo') || undoStack.length === 0} title={capTitle('undo')} onClick={undoPresentation}>
-          בטל
+        <button
+          type="button"
+          className="nx-co-sheet__btn nx-co-sheet__btn--icon"
+          disabled={!isCap('undo') || coUndoStack.length === 0}
+          title={capTitle('undo') ?? 'בטל'}
+          aria-label="בטל"
+          onClick={undoLastAction}
+        >
+          <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M9.5 7.5H6.75A4.75 4.75 0 0 0 2 12.25v0A4.75 4.75 0 0 0 6.75 17H14a5 5 0 0 0 5-5"
+            />
+            <path
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M9.5 4.5 6.5 7.5l3 3"
+            />
+          </svg>
         </button>
-        <button type="button" className="nx-co-sheet__btn" disabled={!isCap('redo') || redoStack.length === 0} title={capTitle('redo')} onClick={redoPresentation}>
+        {/* HIDDEN — redo implementation retained for later restore */}
+        <button
+          type="button"
+          className="nx-co-sheet__btn"
+          hidden
+          disabled={!isCap('redo') || redoStack.length === 0}
+          title={capTitle('redo')}
+          onClick={redoPresentation}
+        >
           בצע שוב
         </button>
       </div>
 
       <div className="nx-co-sheet__toolbar-group">
         <div className="nx-co-sheet__search">
-          <input
-            type="search"
-            value={searchDraft}
-            disabled={!isCap('search')}
-            title={capTitle('search')}
-            placeholder="חיפוש בטבלה…"
-            aria-label="חיפוש לקוחות"
-            onChange={(e) => onSearchDraftChange(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter applies immediately (same quiet live path); no required submit.
-              if (e.key === 'Enter' && isCap('search')) {
+          <div className="nx-co-sheet__search-field">
+            <button
+              type="button"
+              className="nx-co-sheet__search-icon-btn"
+              disabled={!isCap('search')}
+              title={capTitle('search') ?? 'חיפוש'}
+              aria-label="חיפוש"
+              onClick={() => {
                 if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
                 applyLiveSearch(searchDraft);
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="nx-co-sheet__btn"
-            disabled={!isCap('search')}
-            title={capTitle('search')}
-            onClick={() => {
-              if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-              applyLiveSearch(searchDraft);
-            }}
-          >
-            חפש
-          </button>
+              }}
+            >
+              <svg className="nx-co-sheet__search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="11" cy="11" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.75" />
+                <path d="M16.2 16.2 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+              </svg>
+            </button>
+            <input
+              type="search"
+              value={searchDraft}
+              disabled={!isCap('search')}
+              title={capTitle('search')}
+              placeholder="חיפוש בטבלה…"
+              aria-label="חיפוש לקוחות"
+              onChange={(e) => onSearchDraftChange(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter applies immediately (same quiet live path); no required submit.
+                if (e.key === 'Enter' && isCap('search')) {
+                  if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                  applyLiveSearch(searchDraft);
+                }
+              }}
+            />
+          </div>
         </div>
         {/* HIDDEN for now — keep underlying capabilities/handlers for later restore:
             סינון / מיון ↑ / מיון ↓ / הקפאה */}
@@ -1440,34 +1733,57 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--secondary">
         <button
           type="button"
-          className="nx-co-sheet__btn"
+          className={`nx-co-sheet__btn nx-co-sheet__btn--icon${
+            focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.align === 'right'
+              ? ' is-active'
+              : ''
+          }`}
           disabled={!isCap('align_right') || !focusedCell}
-          title={capTitle('align_right')}
+          title={capTitle('align_right') ?? 'יישור ימין'}
+          aria-label="יישור ימין"
           onClick={() => applyPresentation({ align: 'right' })}
         >
-          יישור ימין
+          <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M20 7H8M20 12H4M20 17H10" />
+          </svg>
         </button>
         <button
           type="button"
-          className="nx-co-sheet__btn"
+          className={`nx-co-sheet__btn nx-co-sheet__btn--icon${
+            focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.align === 'center'
+              ? ' is-active'
+              : ''
+          }`}
           disabled={!isCap('align_center') || !focusedCell}
-          title={capTitle('align_center')}
+          title={capTitle('align_center') ?? 'מרכז'}
+          aria-label="מרכז"
           onClick={() => applyPresentation({ align: 'center' })}
         >
-          מרכז
+          <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M18 7H6M20 12H4M17 17H7" />
+          </svg>
         </button>
         <button
           type="button"
-          className="nx-co-sheet__btn"
+          className={`nx-co-sheet__btn nx-co-sheet__btn--icon${
+            focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.align === 'left'
+              ? ' is-active'
+              : ''
+          }`}
           disabled={!isCap('align_left') || !focusedCell}
-          title={capTitle('align_left')}
+          title={capTitle('align_left') ?? 'יישור שמאל'}
+          aria-label="יישור שמאל"
           onClick={() => applyPresentation({ align: 'left' })}
         >
-          יישור שמאל
+          <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M4 7h12M4 12h16M4 17h10" />
+          </svg>
         </button>
+        {/* HIDDEN — wrap implementation retained */}
         <button
           type="button"
           className={`nx-co-sheet__btn${focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap ? ' is-active' : ''}`}
+          hidden
           disabled={!isCap('wrap_text') || !focusedCell}
           title={capTitle('wrap_text')}
           onClick={() => {
@@ -1524,12 +1840,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         {/* + עמודה hidden — 10 user slots via ensure_client_operations_user_column_slots command. */}
         <button
           type="button"
-          className="nx-co-sheet__btn"
+          className={`nx-co-sheet__btn${fullscreenOpen ? ' is-active' : ''}`}
           disabled={capById.has('fullscreen') && !isCap('fullscreen')}
-          title={capTitle('fullscreen') ?? 'מסך מלא'}
-          onClick={() => setFullscreenOpen(true)}
+          title={fullscreenOpen ? 'יציאה ממסך מלא' : (capTitle('fullscreen') ?? 'מסך מלא')}
+          aria-label={fullscreenOpen ? 'יציאה ממסך מלא' : 'מסך מלא'}
+          aria-pressed={fullscreenOpen}
+          onClick={() => setFullscreenOpen((open) => !open)}
         >
-          ⊞ מסך מלא
+          {fullscreenOpen ? 'יציאה ממסך מלא' : '⊞ מסך מלא'}
         </button>
         <div className="nx-co-sheet__more">
           <button
@@ -2306,7 +2624,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   if (isSpreadsheet) {
     return (
-      <div className="nx-co-sheet" data-testid="client-operations-spreadsheet">
+      <div
+        className={`nx-co-sheet${fullscreenOpen ? ' nx-co-sheet--app-fullscreen' : ''}`}
+        data-testid="client-operations-spreadsheet"
+        data-fullscreen={fullscreenOpen ? 'true' : 'false'}
+      >
         <h1 className="nx-co-sheet__title">{titleHe ?? 'תפעול לקוחות'}</h1>
         {renderSpreadsheetToolbar()}
         {showColumnPanel ? (
@@ -2445,23 +2767,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               <label>שם עמודה<input value={addColumnLabel} onChange={(event) => setAddColumnLabel(event.target.value)} autoFocus /></label>
               <label>סוג נתון<select value={addColumnDataType} onChange={(event) => setAddColumnDataType(event.target.value as typeof addColumnDataType)}><option value="text">טקסט</option><option value="number">מספר</option><option value="date">תאריך</option><option value="boolean">כן / לא</option></select></label>
               <div className="nx-co-sheet__dialog-actions"><button type="button" className="nx-co-sheet__btn" onClick={() => setAddColumnOpen(false)}>ביטול</button><button type="button" className="nx-co-sheet__btn is-active" onClick={() => void createColumn()} disabled={!addColumnLabel.trim()}>שמירה</button></div>
-            </div>
-          </div>
-        ) : null}
-        {fullscreenOpen ? (
-          <div className="nx-co-sheet__fullscreen" role="dialog" aria-modal="true" aria-label="גיליון במסך מלא">
-            <button type="button" className="nx-co-sheet__close" onClick={() => setFullscreenOpen(false)} aria-label="סגירת מסך מלא">×</button>
-            <h1 className="nx-co-sheet__title">{titleHe ?? 'תפעול לקוחות'}</h1>
-            {renderSpreadsheetToolbar()}
-            <div className={`nx-co-sheet__workspace${loading ? ' is-loading' : ''}`}>
-              {renderSpreadsheetTable()}
-        <ClientOperationsPeriodSheetTabs
-          availablePeriods={period?.available_periods ?? []}
-          selectedPeriodKey={period?.selected_period_key ?? query?.operational_period_key ?? null}
-          defaultPeriodKey={period?.default_period_key ?? null}
-          disabled={loading}
-          onSelectPeriod={(key) => flushDirtyBeforePeriodChange(key)}
-        />
             </div>
           </div>
         ) : null}

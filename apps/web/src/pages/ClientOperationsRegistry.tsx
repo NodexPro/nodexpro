@@ -255,9 +255,8 @@ export function ClientOperationsRegistry() {
       })
         .then((data) => {
           if (seq !== loadSeqRef.current) {
-            const responsePeriod =
-              data.period?.selected_period_key ?? data.query?.operational_period_key ?? null;
-            if (responsePeriod) putPeriodAggregateCache(periodCacheRef.current, responsePeriod, data);
+            // Superseded by a newer load or authoritative mutation (e.g. status paint).
+            // Do NOT cache — stale quiet GETs must not poison period cache / wipe paints.
             return;
           }
           applyAggregate(data);
@@ -348,6 +347,11 @@ export function ClientOperationsRegistry() {
     [loadRegistry, query.q, query.sort_by, query.sort_dir],
   );
 
+  /** Invalidate in-flight quiet GETs so older aggregates cannot overwrite newer writes. */
+  const invalidateStaleLoads = useCallback(() => {
+    loadSeqRef.current += 1;
+  }, []);
+
   const onRegistryCommand = useCallback(
     (body: Record<string, unknown>, options?: { applyAggregate?: boolean }) =>
       apiJson<RegistryAggregate>(moduleClientOperationsRegistryCommands(), {
@@ -363,11 +367,7 @@ export function ClientOperationsRegistry() {
         }),
       }).then((data) => {
         if (options?.applyAggregate !== false) applyAggregate(data);
-        else {
-          const responsePeriod =
-            data.period?.selected_period_key ?? data.query?.operational_period_key ?? null;
-          if (responsePeriod) putPeriodAggregateCache(periodCacheRef.current, responsePeriod, data);
-        }
+        // Deferred paint/custom-cell responses: do not poison period cache with mid-flight siblings.
         return data;
       }),
     [applyAggregate, query],
@@ -434,6 +434,7 @@ export function ClientOperationsRegistry() {
       onQueryChange={onQueryChange}
       onRegistryCommand={onRegistryCommand}
       onApplyAggregate={applyAggregate}
+      onInvalidateStaleLoads={invalidateStaleLoads}
       period={period}
       onPeriodChange={onPeriodChange}
       widthScope={{

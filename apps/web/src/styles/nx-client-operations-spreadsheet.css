@@ -86,14 +86,73 @@
   gap: 6px;
 }
 
-.nx-co-sheet__search input {
+.nx-co-sheet__search-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.nx-co-sheet__search-field input {
   width: min(220px, 42vw);
   border: 1px solid #cfd8e3;
   border-radius: 6px;
   padding: 6px 10px;
+  padding-inline-start: 34px;
   font-size: 13px;
   background: #fff;
   color: var(--nx-co-text);
+}
+
+.nx-co-sheet__search-icon-btn {
+  appearance: none;
+  position: absolute;
+  inset-inline-start: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--nx-co-brand);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.nx-co-sheet__search-icon-btn:hover:not(:disabled) {
+  background: rgba(18, 55, 86, 0.08);
+}
+
+.nx-co-sheet__search-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-co-sheet__search-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.nx-co-sheet__btn--icon {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nx-co-brand);
+}
+
+.nx-co-sheet__toolbar-icon {
+  width: 17px;
+  height: 17px;
+  display: block;
 }
 
 .nx-co-sheet__color {
@@ -727,6 +786,46 @@
   flex-direction: column;
   gap: 10px;
   padding: 24px;
+}
+
+/* True application fullscreen — occupies full viewport (not inset modal). */
+.nx-co-sheet--app-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  gap: 8px;
+  background: #fff;
+  border-radius: 0;
+}
+
+.nx-co-sheet--app-fullscreen .nx-co-sheet__workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.nx-co-sheet--app-fullscreen .nx-co-sheet__canvas {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+}
+
+.nx-co-sheet--app-fullscreen .nx-co-sheet__period-tabs {
+  flex: 0 0 auto;
+}
+
+.nx-co-sheet--app-fullscreen .nx-co-sheet__toolbar {
+  flex: 0 0 auto;
+}
+
+.nx-co-sheet--app-fullscreen .nx-co-sheet__title {
+  flex: 0 0 auto;
 }
 
 .nx-co-sheet__fullscreen .nx-co-sheet__canvas {
