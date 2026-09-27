@@ -1071,6 +1071,24 @@
   background: #e5f4e5 !important;
 }
 
+/* Child chrome must not cover the status fill with opaque white. */
+.nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__custom-cell,
+.nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__na,
+.nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__material,
+.nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__date-field,
+.nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__notes-btn,
+.nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__itd-slot {
+  background: transparent;
+}
+
+.nx-co-sheet__table td.is-paint-mode {
+  cursor: cell;
+}
+
+.nx-co-sheet__table td.is-paint-blocked {
+  cursor: not-allowed;
+}
+
 .nx-co-sheet__check {
   display: flex;
   align-items: center;

@@ -64,7 +64,7 @@ import {
   loadManualCellStatusesForPeriod,
   manualStatusPaintModesForAggregate,
 } from './client-operations-cell-manual-status.service.js';
-import { mergeSelectedPeriodIntoAvailablePeriods } from './client-operations-cell-manual-status.pure.js';
+import { mergeSelectedPeriodIntoAvailablePeriods, isClientOperationsManualStatusPaintableColumnKey } from './client-operations-cell-manual-status.pure.js';
 import {
   ensurePeriodApplicabilitySnapshots,
   listKnownOperationalPeriodKeys,
@@ -602,11 +602,9 @@ export async function listClientOperationsRegistry(
   });
   const customColumnKeys = new Set(visibleCustomColumns.map((c) => c.key));
   const paintableColumnKeys = [
-    'material_brought',
-    'national_insurance_deductions',
-    'income_tax_deductions',
-    'annual_report',
-    'capital_declaration',
+    ...CLIENT_OPERATIONS_REGISTRY_COLUMNS.map((c) => c.key).filter((key) =>
+      isClientOperationsManualStatusPaintableColumnKey(key),
+    ),
     ...visibleCustomColumns.map((c) => c.key),
   ];
   const profilesByClientId = new Map<string, Record<string, unknown>>();
@@ -928,8 +926,6 @@ export async function listClientOperationsRegistry(
           form126Applicable: Boolean(national_insurance_deductions_cell.items?.['126']?.applicable),
         }),
         incomeTaxDeductionsSquareCount: income_tax_deductions_cell.configured ? 1 : 0,
-        annualApplicable: Boolean(annual_report_cell.applicable),
-        capitalApplicable: Boolean(capital_declaration_cell.applicable),
       }),
     }, visibleCustomColumns, customValuesByClientAndColumn)];
   });

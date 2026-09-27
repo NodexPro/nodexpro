@@ -155,7 +155,7 @@ test('annual and capital operational DATE columns are in default registry presen
 test('16 folder boundary unchanged', () => {
   assert.match(view, /openClientModal/);
   assert.match(weHost, /ClientOperationsRegistryView/);
-  assert.match(weHost, /columns=\{aggregate\.client_operations_aggregate\.columns/);
+  assert.match(weHost, /columns=\{\(aggregate\.client_operations_aggregate as any\)\.columns/);
 });
 
 test('17-18 tenant isolation + RBAC unchanged for notes', () => {

@@ -51,13 +51,23 @@ test('selected period merges into available tabs without reload', () => {
   assert.match(serviceSource, /mergeSelectedPeriodIntoAvailablePeriods/);
 });
 
-test('eligibility: ordinary/custom allow yellow blue green; multi-square yellow/blue rejected', () => {
+test('eligibility: ordinary client-row cells paint; multi-square yellow/blue rejected', () => {
+  for (const key of ['vat', 'pcn', 'payroll', 'income_tax_advance', 'national_insurance', 'handler', 'notes', 'annual_report']) {
+    assert.equal(isClientOperationsManualStatusPaintableColumnKey(key), true);
+    assert.deepEqual(
+      resolveAllowedManualStatuses({
+        columnKey: key,
+        operationalSquareCount: 0,
+        currentStatus: null,
+      }),
+      ['ready', 'sent_for_approval', 'completed'],
+    );
+  }
   assert.deepEqual(
     resolveAllowedManualStatuses({
       columnKey: 'user_slot_01',
       operationalSquareCount: 0,
       currentStatus: null,
-      isCustomColumn: true,
     }),
     ['ready', 'sent_for_approval', 'completed'],
   );
@@ -66,7 +76,6 @@ test('eligibility: ordinary/custom allow yellow blue green; multi-square yellow/
       columnKey: 'income_tax_deductions',
       operationalSquareCount: 1,
       currentStatus: null,
-      isCustomColumn: false,
     }),
     ['ready', 'sent_for_approval', 'completed'],
   );
@@ -75,7 +84,6 @@ test('eligibility: ordinary/custom allow yellow blue green; multi-square yellow/
       columnKey: 'national_insurance_deductions',
       operationalSquareCount: 3,
       currentStatus: null,
-      isCustomColumn: false,
     }),
     ['completed'],
   );
@@ -84,9 +92,24 @@ test('eligibility: ordinary/custom allow yellow blue green; multi-square yellow/
       columnKey: 'national_insurance_deductions',
       operationalSquareCount: 3,
       currentStatus: 'completed',
-      isCustomColumn: false,
     }),
     ['completed', 'clear'],
+  );
+  assert.deepEqual(
+    resolveAllowedManualStatuses({
+      columnKey: 'material_brought',
+      operationalSquareCount: 2,
+      currentStatus: null,
+    }),
+    ['completed'],
+  );
+  assert.deepEqual(
+    resolveAllowedManualStatuses({
+      columnKey: 'material_brought',
+      operationalSquareCount: 1,
+      currentStatus: null,
+    }),
+    ['ready', 'sent_for_approval', 'completed'],
   );
   assert.equal(isClientOperationsManualStatusPaintableColumnKey('folder'), false);
   assert.equal(isClientOperationsManualStatusPaintableColumnKey('client_name'), false);
@@ -103,6 +126,14 @@ test('eligibility: ordinary/custom allow yellow blue green; multi-square yellow/
   }), 3);
 });
 
+test('aggregate attaches capabilities for all paintable registry columns', () => {
+  assert.match(serviceSource, /isClientOperationsManualStatusPaintableColumnKey/);
+  assert.match(serviceSource, /CLIENT_OPERATIONS_REGISTRY_COLUMNS\.map/);
+  assert.doesNotMatch(
+    serviceSource,
+    /paintableColumnKeys = \[\s*'material_brought',\s*'national_insurance_deductions'/,
+  );
+});
 test('named command + audit for manual status', () => {
   assert.match(commandSource, /set_client_operations_cell_manual_status/);
   assert.match(commandSource, /setClientOperationsCellManualStatus/);
@@ -136,4 +167,14 @@ test('status paint modes and backend-owned capabilities', () => {
   assert.match(serviceSource, /manual_status_paint_modes/);
   assert.match(serviceSource, /manual_cell_statuses/);
   assert.doesNotMatch(viewSource, /querySelectorAll|getElementsByClassName/);
+});
+
+test('paint mode capture paints ordinary cells without child control actions', () => {
+  assert.match(viewSource, /onClickCapture/);
+  assert.match(viewSource, /statusPaintMode/);
+  assert.match(viewSource, /set_client_operations_cell_manual_status/);
+  assert.match(viewSource, /is-paint-blocked/);
+  assert.match(viewSource, /is-manual-status-\$\{statusToken\}/);
+  // Child toggles remain guarded when paint mode is active.
+  assert.match(viewSource, /if \(statusPaintMode\) return;/);
 });

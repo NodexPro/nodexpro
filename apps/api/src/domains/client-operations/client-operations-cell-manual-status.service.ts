@@ -64,39 +64,28 @@ export function buildManualStatusCapabilitiesForRow(input: {
   materialSquareCount: number;
   niDeductionsSquareCount: number;
   incomeTaxDeductionsSquareCount: number;
-  annualApplicable: boolean;
-  capitalApplicable: boolean;
 }): Record<string, ManualCellStatusCapability> {
   const result: Record<string, ManualCellStatusCapability> = {};
   for (const columnKey of input.columnKeys) {
-    const isCustom = input.customColumnKeys.has(columnKey);
-    if (!isCustom && !isClientOperationsManualStatusPaintableColumnKey(columnKey)) continue;
+    if (!isClientOperationsManualStatusPaintableColumnKey(columnKey)) continue;
 
     let squares = 0;
     if (columnKey === 'material_brought') {
-      if (!input.materialSquareCount) continue;
       squares = input.materialSquareCount;
-    }
-    else if (columnKey === 'national_insurance_deductions') {
-      if (!input.niDeductionsSquareCount) continue;
+    } else if (columnKey === 'national_insurance_deductions') {
       squares = input.niDeductionsSquareCount;
     } else if (columnKey === 'income_tax_deductions') {
-      if (input.incomeTaxDeductionsSquareCount < 1) continue;
-      squares = 1;
-    } else if (columnKey === 'annual_report') {
-      if (!input.annualApplicable) continue;
-      squares = 0;
-    } else if (columnKey === 'capital_declaration') {
-      if (!input.capitalApplicable) continue;
-      squares = 0;
-    } else squares = 0; // custom / ordinary
+      // One square when configured/present; otherwise ordinary (0).
+      squares = input.incomeTaxDeductionsSquareCount >= 1 ? 1 : 0;
+    } else {
+      squares = 0; // ordinary / date / text / notes / handler / custom
+    }
 
     const current = input.statuses.get(`${input.clientId}:${columnKey}`) ?? null;
     const allowed = resolveAllowedManualStatuses({
       columnKey,
       operationalSquareCount: squares,
       currentStatus: current,
-      isCustomColumn: isCustom,
     });
     if (!allowed.length && !current) continue;
     result[columnKey] = {
@@ -121,44 +110,25 @@ export async function resolveAllowedManualStatusesForWrite(input: {
   isCustomColumn: boolean;
 }): Promise<ClientOperationsManualStatusPaintMode[]> {
   const periodKey = periodKeyFrom(input.operationalPeriodKey);
+  const columnKey = String(input.columnKey ?? '').trim();
+  if (!isClientOperationsManualStatusPaintableColumnKey(columnKey)) return [];
+
   const statuses = await loadManualCellStatusesForPeriod({
     organizationId: input.organizationId,
     operationalPeriodKey: periodKey,
     clientIds: [input.clientId],
   });
-  const current = statuses.get(`${input.clientId}:${input.columnKey}`) ?? null;
+  const current = statuses.get(`${input.clientId}:${columnKey}`) ?? null;
 
-  if (input.isCustomColumn) {
+  if (input.isCustomColumn || columnKey.startsWith('user_slot_') || columnKey.startsWith('custom_')) {
     return resolveAllowedManualStatuses({
-      columnKey: input.columnKey,
+      columnKey,
       operationalSquareCount: 0,
       currentStatus: current,
-      isCustomColumn: true,
     });
   }
 
-  if (!isClientOperationsManualStatusPaintableColumnKey(input.columnKey)) return [];
-
-  if (input.columnKey === 'annual_report' || input.columnKey === 'capital_declaration') {
-    // Ordinary dates: always ≤1 square semantics when column is shown as applicable by FE/aggregate.
-    return resolveAllowedManualStatuses({
-      columnKey: input.columnKey,
-      operationalSquareCount: 0,
-      currentStatus: current,
-      isCustomColumn: false,
-    });
-  }
-
-  if (input.columnKey === 'income_tax_deductions') {
-    return resolveAllowedManualStatuses({
-      columnKey: input.columnKey,
-      operationalSquareCount: 1,
-      currentStatus: current,
-      isCustomColumn: false,
-    });
-  }
-
-  if (input.columnKey === 'material_brought') {
+  if (columnKey === 'material_brought') {
     const snaps = await loadPeriodApplicabilitySnapshots({
       organizationId: input.organizationId,
       operationalPeriodKey: periodKey,
@@ -171,14 +141,13 @@ export async function resolveAllowedManualStatusesForWrite(input: {
       payrollApplicable: Boolean(snap?.payroll_applicable),
     });
     return resolveAllowedManualStatuses({
-      columnKey: input.columnKey,
+      columnKey,
       operationalSquareCount: squares,
       currentStatus: current,
-      isCustomColumn: false,
     });
   }
 
-  if (input.columnKey === 'national_insurance_deductions') {
+  if (columnKey === 'national_insurance_deductions') {
     const snaps = await loadPeriodApplicabilitySnapshots({
       organizationId: input.organizationId,
       operationalPeriodKey: periodKey,
@@ -192,16 +161,34 @@ export async function resolveAllowedManualStatusesForWrite(input: {
       form100Applicable: applicable,
       form126Applicable: applicable,
     });
-    if (!squares) return current ? (['clear'] as ClientOperationsManualStatusPaintMode[]) : [];
     return resolveAllowedManualStatuses({
-      columnKey: input.columnKey,
+      columnKey,
       operationalSquareCount: squares,
       currentStatus: current,
-      isCustomColumn: false,
     });
   }
 
-  return [];
+  if (columnKey === 'income_tax_deductions') {
+    const snaps = await loadPeriodApplicabilitySnapshots({
+      organizationId: input.organizationId,
+      operationalPeriodKey: periodKey,
+      clientIds: [input.clientId],
+    });
+    const snap = snaps.get(input.clientId);
+    const squares = snap?.income_tax_deductions_applicable ? 1 : 0;
+    return resolveAllowedManualStatuses({
+      columnKey,
+      operationalSquareCount: squares,
+      currentStatus: current,
+    });
+  }
+
+  // Ordinary client-row cells (שכר / PCN / מע״מ / מה״כ / ביטוח לאומי / dates / handler / notes / …)
+  return resolveAllowedManualStatuses({
+    columnKey,
+    operationalSquareCount: 0,
+    currentStatus: current,
+  });
 }
 
 export async function setClientOperationsCellManualStatus(input: {

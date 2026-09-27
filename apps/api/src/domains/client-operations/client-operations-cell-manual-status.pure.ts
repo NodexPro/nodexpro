@@ -1,6 +1,9 @@
 /**
  * Client Operations — manual Excel cell status (pure eligibility / presentation tokens).
  * Not statutory / Accounting Base / Work Engine workflow truth.
+ *
+ * Paintability = visible client-row spreadsheet cells, excluding identity/chrome.
+ * Square count gates yellow/blue only; green is always allowed when paintable.
  */
 
 export type ClientOperationsManualCellStatus = 'ready' | 'sent_for_approval' | 'completed';
@@ -18,22 +21,26 @@ export const CLIENT_OPERATIONS_MANUAL_STATUS_PAINT_MODES: Array<{
   { id: 'clear', label_he: 'נקה', presentation_token: 'clear' },
 ];
 
-/** Columns that may carry a manual paint status (backend-owned set). */
-export const CLIENT_OPERATIONS_MANUAL_STATUS_PAINTABLE_COLUMN_KEYS = new Set<string>([
+/** Structural / identity columns — never receive manual paint markers. */
+export const CLIENT_OPERATIONS_MANUAL_STATUS_EXCLUDED_COLUMN_KEYS = new Set<string>([
+  'folder',
+  'client_name',
+]);
+
+/**
+ * Multi-square operational cells: yellow/blue only when square_count <= 1.
+ * All other paintable cells use square_count 0 (ordinary).
+ */
+export const CLIENT_OPERATIONS_MANUAL_STATUS_MULTI_SQUARE_COLUMN_KEYS = new Set<string>([
   'material_brought',
   'national_insurance_deductions',
-  'income_tax_deductions',
-  'annual_report',
-  'capital_declaration',
 ]);
 
 export function isClientOperationsManualStatusPaintableColumnKey(columnKey: string): boolean {
-  const key = String(columnKey ?? '');
-  if (CLIENT_OPERATIONS_MANUAL_STATUS_PAINTABLE_COLUMN_KEYS.has(key)) return true;
-  // User Excel custom columns (including blank slots).
-  if (key.startsWith('user_slot_')) return true;
-  if (key.startsWith('custom_')) return true;
-  return false;
+  const key = String(columnKey ?? '').trim();
+  if (!key) return false;
+  if (CLIENT_OPERATIONS_MANUAL_STATUS_EXCLUDED_COLUMN_KEYS.has(key)) return false;
+  return true;
 }
 
 export function parseClientOperationsManualCellStatus(
@@ -58,9 +65,9 @@ export function resolveAllowedManualStatuses(input: {
   columnKey: string;
   operationalSquareCount: number;
   currentStatus: ClientOperationsManualCellStatus | null;
-  isCustomColumn: boolean;
+  isCustomColumn?: boolean;
 }): ClientOperationsManualStatusPaintMode[] {
-  if (!input.isCustomColumn && !isClientOperationsManualStatusPaintableColumnKey(input.columnKey)) {
+  if (!isClientOperationsManualStatusPaintableColumnKey(input.columnKey)) {
     return [];
   }
   const squares = Math.max(0, Math.trunc(input.operationalSquareCount));

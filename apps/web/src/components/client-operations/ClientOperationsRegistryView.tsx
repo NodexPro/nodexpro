@@ -1008,17 +1008,19 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const paintCellManualStatus = (
     row: ClientOperationsRegistryRow,
     columnKey: string,
-  ) => {
-    if (!canEdit || !onRegistryCommand || !statusPaintMode) return;
+  ): boolean => {
+    if (!canEdit || !onRegistryCommand || !statusPaintMode) return false;
+    if (columnKey === 'folder' || columnKey === 'client_name') return false;
     const cap = row.manual_cell_statuses?.[columnKey];
-    if (!cap) return;
+    if (!cap) return false;
     const nextStatus: ManualStatusPaintIntent =
       statusPaintMode === 'clear' ? null : statusPaintMode;
-    if (statusPaintMode === 'clear' && !cap.allowed_statuses.includes('clear')) return;
-    if (statusPaintMode !== 'clear' && !cap.allowed_statuses.includes(statusPaintMode)) return;
+    if (statusPaintMode === 'clear' && !cap.allowed_statuses.includes('clear')) return false;
+    if (statusPaintMode !== 'clear' && !cap.allowed_statuses.includes(statusPaintMode)) return false;
 
     const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
     const paintKey = `${row.client_id}:${columnKey}:${periodKey}`;
+    const previousCap = { ...cap };
     rememberManualStatusPaintIntent(statusPaintSlotsRef.current, paintKey, nextStatus);
 
     // Optimistic local paint (presentation only) until aggregate returns.
@@ -1026,8 +1028,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       rows.map((r) => {
         if (r.client_id !== row.client_id) return r;
         const current = r.manual_cell_statuses ?? {};
-        const existing = current[columnKey];
-        if (!existing) return r;
+        const existing = current[columnKey] ?? {
+          status: null,
+          presentation_token: null,
+          allowed_statuses: cap.allowed_statuses,
+          operational_square_count: cap.operational_square_count,
+        };
         return {
           ...r,
           manual_cell_statuses: {
@@ -1077,12 +1083,28 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         if (startNext) await executePaint(startNext);
       } catch (error) {
         completeManualStatusPaintFailure(statusPaintSlotsRef.current, start.key);
+        // Rollback optimistic paint for this cell.
+        onRowsChange(
+          rowsRef.current.map((r) => {
+            if (r.client_id !== row.client_id) return r;
+            const current = r.manual_cell_statuses ?? {};
+            return {
+              ...r,
+              manual_cell_statuses: {
+                ...current,
+                [columnKey]: previousCap,
+              },
+            };
+          }),
+        );
         setCommandError(error instanceof Error ? error.message : 'עדכון סטטוס נכשל');
+        onReloadRegistry?.();
       }
     };
 
     const start = tryStartManualStatusPaint(statusPaintSlotsRef.current, paintKey);
     if (start) void executePaint(start);
+    return true;
   };
 
   const cancelCustomCellEdit = (
@@ -2048,6 +2070,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 const focused = focusedCell?.clientId === row.client_id && focusedCell.colKey === column.key;
                 const manualStatus = row.manual_cell_statuses?.[column.key];
                 const statusToken = manualStatus?.presentation_token ?? null;
+                const paintBlocked =
+                  Boolean(statusPaintMode) &&
+                  column.key !== 'folder' &&
+                  column.key !== 'client_name' &&
+                  Boolean(manualStatus) &&
+                  statusPaintMode !== null &&
+                  !(
+                    statusPaintMode === 'clear'
+                      ? manualStatus!.allowed_statuses.includes('clear')
+                      : manualStatus!.allowed_statuses.includes(statusPaintMode)
+                  );
                 return (
                   <td
                     key={column.key}
@@ -2057,18 +2090,27 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       focused ? 'is-focused' : '',
                       editingCellKey === pk && column.cell_kind === 'custom' ? 'is-editing-custom' : '',
                       statusToken ? `is-manual-status-${statusToken}` : '',
+                      statusPaintMode ? 'is-paint-mode' : '',
+                      paintBlocked ? 'is-paint-blocked' : '',
                       obligationApplicable(row, column.key) === false ? 'is-not-applicable' : '',
                     ]
                       .filter(Boolean)
                       .join(' ') || undefined}
+                    onClickCapture={(event) => {
+                      if (!statusPaintMode) return;
+                      if (column.key === 'folder' || column.key === 'client_name') return;
+                      // Paint mode owns the gesture — child controls must not toggle/edit.
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setSelectedRowId(row.client_id);
+                      setFocusedCell({ clientId: row.client_id, colKey: column.key });
+                      paintCellManualStatus(row, column.key);
+                    }}
                     onClick={(event) => {
                       event.stopPropagation();
                       setSelectedRowId(row.client_id);
                       setFocusedCell({ clientId: row.client_id, colKey: column.key });
-                      if (statusPaintMode) {
-                        paintCellManualStatus(row, column.key);
-                        return;
-                      }
+                      if (statusPaintMode) return;
                       if (column.cell_kind === 'custom' && canEdit && column.editable) {
                         beginCustomCellEdit(row, column);
                       }
@@ -2080,7 +2122,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       fontStyle: presentation?.italic ? 'italic' : undefined,
                       textDecoration: presentation?.underline ? 'underline' : undefined,
                       color: presentation?.color,
-                      background: presentation?.fill,
+                      // Manual status owns the cell fill while set.
+                      background: statusToken ? undefined : presentation?.fill,
                     }}
                   >
                     {column.cell_kind === 'custom'

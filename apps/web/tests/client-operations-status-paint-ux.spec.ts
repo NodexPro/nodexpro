@@ -73,7 +73,16 @@ test('paint mode does not invoke checkbox/date canonical commands', () => {
   assert.match(viewSource, /toggleNiDeductionsItem/);
   assert.match(viewSource, /toggleIncomeTaxDeductions/);
   assert.match(viewSource, /setOperationalTargetDate/);
-  assert.match(viewSource, /if \(statusPaintMode\) \{\s*event\.preventDefault\(\);\s*paintCellManualStatus/s);
+  assert.match(viewSource, /onClickCapture/);
+  assert.match(viewSource, /paintCellManualStatus\(row, column\.key\)/);
+});
+
+test('PROD regression: ordinary VAT/PCN/payroll cells are paint targets via capabilities', () => {
+  assert.match(viewSource, /manual_cell_statuses\?\.\[column\.key\]/);
+  assert.match(viewSource, /set_client_operations_cell_manual_status/);
+  assert.match(viewSource, /is-manual-status-\$\{statusToken\}/);
+  assert.match(cssSource, /is-manual-status-ready/);
+  assert.match(cssSource, /background:\s*transparent/);
 });
 
 test('org change clears period aggregate cache', () => {
