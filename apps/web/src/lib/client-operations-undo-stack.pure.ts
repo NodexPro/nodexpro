@@ -17,6 +17,7 @@ export type CoUndoPresentationSnapshot = Record<
     underline?: boolean;
     color?: string;
     fill?: string;
+    fontSize?: number;
     numberFormat?: 'general' | 'number' | 'currency' | 'percent' | 'date';
   }
 >;
@@ -44,6 +45,16 @@ export type CoUndoEntry =
       columnKey: string;
       previousValue: string;
       newValue: string;
+    }
+  | {
+      kind: 'column_visibility';
+      previousHiddenKeys: string[];
+    }
+  | {
+      kind: 'column_width';
+      columnKey: string;
+      previousWidth: number;
+      nextWidth: number;
     };
 
 /** Actions intentionally excluded from undo (no fabricated inverse). */
@@ -59,6 +70,9 @@ export const CO_UNDO_EXCLUDED_ACTIONS = [
   'search_query',
   'fullscreen_toggle',
   'status_paint_mode_select',
+  'print',
+  'palette_open',
+  'popover_open',
 ] as const;
 
 export function pushClientOperationsUndoEntry(

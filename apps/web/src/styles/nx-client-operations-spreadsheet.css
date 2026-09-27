@@ -1202,3 +1202,212 @@
   font-weight: 600;
   color: var(--nx-co-brand);
 }
+
+/* ── Font-size selector ── */
+.nx-co-sheet__font-size-select {
+  appearance: auto;
+  height: 30px;
+  min-width: 52px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #fff;
+  color: var(--nx-co-text);
+  cursor: pointer;
+}
+
+.nx-co-sheet__font-size-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Text-color A button + palette popover ── */
+.nx-co-sheet__color-picker-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.nx-co-sheet__color-a-btn {
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px !important;
+  min-width: 30px;
+}
+
+.nx-co-sheet__color-a-letter {
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  border-bottom: 3px solid currentColor;
+  padding-bottom: 1px;
+  display: block;
+  /* border-bottom-color is set via inline style to show current selection color */
+}
+
+.nx-co-sheet__color-palette {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  z-index: 30;
+  background: #fff;
+  border: 1px solid var(--nx-co-grid);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(18, 55, 86, 0.14);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 160px;
+}
+
+.nx-co-sheet__color-palette-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.nx-co-sheet__color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1.5px solid rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  flex: 0 0 auto;
+  padding: 0;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.nx-co-sheet__color-swatch:hover {
+  transform: scale(1.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  border-color: rgba(0, 0, 0, 0.28);
+}
+
+/* ── Column-visibility popover ── */
+.nx-co-sheet__col-visibility-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.nx-co-sheet__col-visibility-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  z-index: 30;
+  background: #fff;
+  border: 1px solid var(--nx-co-grid);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(18, 55, 86, 0.14);
+  padding: 8px 10px;
+  min-width: 190px;
+  max-height: 340px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nx-co-sheet__col-visibility-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--nx-co-text);
+  padding: 3px 2px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.nx-co-sheet__col-visibility-item:hover {
+  background: rgba(18, 55, 86, 0.06);
+}
+
+.nx-co-sheet__col-visibility-item input:disabled {
+  opacity: 0.6;
+}
+
+.nx-co-sheet__col-visibility-mandatory {
+  margin-inline-start: auto;
+  font-size: 10px;
+  color: var(--nx-co-muted);
+  user-select: none;
+}
+
+/* ── Resize handle — improved hover visibility ── */
+.nx-co-sheet__resize-handle {
+  background: transparent;
+  transition: background 0.12s;
+  opacity: 0;
+}
+
+.nx-co-sheet__table th:hover .nx-co-sheet__resize-handle,
+.nx-co-sheet__resize-handle:hover {
+  opacity: 1;
+  background: var(--nx-co-accent);
+}
+
+/* Resizing state on <table> — show active guide */
+.nx-co-sheet__table.is-resizing .nx-co-sheet__resize-handle {
+  opacity: 1;
+  background: var(--nx-co-brand);
+}
+
+/* ── Print ── */
+@media print {
+  .nx-co-sheet__toolbar,
+  .nx-co-sheet__period-tabs,
+  .nx-co-sheet__title,
+  .nx-co-sheet__more-menu,
+  .nx-co-sheet__col-visibility-popover,
+  .nx-co-sheet__color-palette {
+    display: none !important;
+  }
+
+  .nx-co-sheet__canvas {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  .nx-co-sheet__table {
+    width: 100% !important;
+    table-layout: auto !important;
+  }
+
+  .nx-co-sheet__table td.is-manual-status-ready {
+    background: #fbf4d4 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .nx-co-sheet__table td.is-manual-status-sent_for_approval {
+    background: #e8f1fa !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .nx-co-sheet__table td.is-manual-status-completed {
+    background: #e5f4e5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    size: landscape;
+    margin: 1cm;
+  }
+}
+
+/* ── Print root injected by handlePrint ── */
+.nx-co-sheet__print-root {
+  display: none;
+}
+
+@media print {
+  .nx-co-sheet__print-root {
+    display: block;
+  }
+}

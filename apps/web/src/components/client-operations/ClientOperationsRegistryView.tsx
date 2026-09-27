@@ -16,6 +16,36 @@ import {
   saveClientOperationsColumnWidths,
 } from '../../lib/client-operations-column-widths.pure';
 import {
+  loadClientOperationsCellPresentation,
+  saveClientOperationsCellPresentation,
+} from '../../lib/client-operations-cell-presentation.pure';
+import {
+  loadClientOperationsHiddenColumns,
+  saveClientOperationsHiddenColumns,
+} from '../../lib/client-operations-hidden-columns.pure';
+import {
+  CLIENT_OPERATIONS_DEFAULT_TEXT_COLOR,
+  clientOperationsTextColorPaletteRows,
+} from '../../lib/client-operations-text-color-palette.pure';
+import {
+  CLIENT_OPERATIONS_FONT_SIZES,
+  CLIENT_OPERATIONS_DEFAULT_FONT_SIZE,
+} from '../../lib/client-operations-font-size.pure';
+import {
+  computeClientOperationsColumnResizeDelta,
+  CLIENT_OPERATIONS_RESIZE_HANDLE_EDGE,
+} from '../../lib/client-operations-column-resize.pure';
+import {
+  toggleClientOperationsHiddenColumn,
+  isClientOperationsMandatoryVisibleColumn,
+} from '../../lib/client-operations-column-visibility.pure';
+import {
+  selectPrintableColumnKeys,
+  formatClientOperationsPeriodHeading,
+  type ClientOperationsPrintColumn,
+  type ClientOperationsPrintRow,
+} from '../../lib/client-operations-print.pure';
+import {
   completeCustomCellSaveFailure,
   completeCustomCellSaveSuccess,
   customCellSaveKey,
@@ -231,6 +261,8 @@ type CellPresentation = {
   color?: string;
   fill?: string;
   numberFormat?: 'general' | 'number' | 'currency' | 'percent' | 'date';
+  /** Explicit font size in px; when unset default rendering applies (no forced 12px). */
+  fontSize?: number;
 };
 
 type PresentationHistory = {
@@ -434,13 +466,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const freezeOn = true;
   const [bordersOn, setBordersOn] = useState(true);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set());
-  const [showColumnPanel, setShowColumnPanel] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [cellPresentation, setCellPresentation] = useState<Record<string, CellPresentation>>({});
   const [coUndoStack, setCoUndoStack] = useState<CoUndoEntry[]>([]);
   const [redoStack, setRedoStack] = useState<PresentationHistory[]>([]);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [colorPaletteOpen, setColorPaletteOpen] = useState(false);
+  const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
+  const [isResizingColumn, setIsResizingColumn] = useState(false);
   // Legacy "+ עמודה" dialog kept in code but hidden — 10 user slots via ensure command.
   const [addColumnOpen, setAddColumnOpen] = useState(false);
   const [addColumnLabel, setAddColumnLabel] = useState('');
@@ -505,9 +539,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   useEffect(() => {
     if (!widthScope?.userId || !widthScope.organizationId) {
       setColumnWidths({});
+      setCellPresentation({});
+      setHiddenColumns(new Set());
       return;
     }
     setColumnWidths(loadClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId));
+    setCellPresentation(loadClientOperationsCellPresentation(widthScope.userId, widthScope.organizationId));
+    setHiddenColumns(loadClientOperationsHiddenColumns(widthScope.userId, widthScope.organizationId));
   }, [widthScope?.organizationId, widthScope?.userId]);
 
   useEffect(() => {
@@ -515,7 +553,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     statusPaintSlotsRef.current.clear();
     setCoUndoStack(clearClientOperationsUndoStack());
     setRedoStack([]);
-    setCellPresentation({});
+    // cellPresentation / hiddenColumns hydrate from org-scoped storage above — do not wipe to empty.
   }, [widthScope?.organizationId]);
 
   useEffect(() => {
@@ -721,6 +759,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     [columns, hiddenColumns],
   );
 
+  const persistCellPresentation = (next: Record<string, CellPresentation>) => {
+    if (widthScope?.userId && widthScope.organizationId) {
+      saveClientOperationsCellPresentation(widthScope.userId, widthScope.organizationId, next);
+    }
+  };
+
+  const persistHiddenColumns = (next: Set<string>) => {
+    if (widthScope?.userId && widthScope.organizationId) {
+      saveClientOperationsHiddenColumns(widthScope.userId, widthScope.organizationId, next);
+    }
+  };
+
   const applyPresentation = (patch: Partial<CellPresentation>) => {
     if (!focusedCell) return;
     const k = cellKey(focusedCell.clientId, focusedCell.colKey);
@@ -730,10 +780,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       );
     }
     setRedoStack([]);
-    setCellPresentation((prev) => ({
-      ...prev,
-      [k]: { ...prev[k], ...patch },
-    }));
+    setCellPresentation((prev) => {
+      const next = {
+        ...prev,
+        [k]: { ...prev[k], ...patch },
+      };
+      persistCellPresentation(next);
+      return next;
+    });
   };
 
   const isCap = (id: string) => capById.get(id)?.available === true;
@@ -751,21 +805,60 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       saveClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId, next);
     }
   };
+  const toggleHiddenColumn = (columnKey: string) => {
+    const next = toggleClientOperationsHiddenColumn(hiddenColumns, columnKey);
+    setCoUndoStack((history) =>
+      pushClientOperationsUndoEntry(history, {
+        kind: 'column_visibility',
+        previousHiddenKeys: [...hiddenColumns],
+      }),
+    );
+    setHiddenColumns(next);
+    persistHiddenColumns(next);
+  };
+
   const beginResize = (event: ReactMouseEvent, column: ClientOperationsRegistryColumn) => {
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
     const startWidth = widthForColumn(column);
+    const direction = (document.dir as 'rtl' | 'ltr') === 'rtl' ? 'rtl' : 'ltr';
+    setIsResizingColumn(true);
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
     const onMove = (moveEvent: MouseEvent) => {
-      const nextWidth = startWidth + (document.dir === 'rtl' ? startX - moveEvent.clientX : moveEvent.clientX - startX);
+      const delta = computeClientOperationsColumnResizeDelta({
+        startClientX: startX,
+        currentClientX: moveEvent.clientX,
+        handleEdge: CLIENT_OPERATIONS_RESIZE_HANDLE_EDGE,
+        direction,
+      });
       setColumnWidths((previous) => ({
         ...previous,
-        [column.key]: clampClientOperationsColumnWidth(nextWidth),
+        [column.key]: clampClientOperationsColumnWidth(startWidth + delta),
       }));
     };
     const onUp = (upEvent: MouseEvent) => {
-      const finalWidth = startWidth + (document.dir === 'rtl' ? startX - upEvent.clientX : upEvent.clientX - startX);
-      saveColumnWidth(column.key, clampClientOperationsColumnWidth(finalWidth));
+      const delta = computeClientOperationsColumnResizeDelta({
+        startClientX: startX,
+        currentClientX: upEvent.clientX,
+        handleEdge: CLIENT_OPERATIONS_RESIZE_HANDLE_EDGE,
+        direction,
+      });
+      const finalWidth = clampClientOperationsColumnWidth(startWidth + delta);
+      saveColumnWidth(column.key, finalWidth);
+      if (finalWidth !== startWidth) {
+        setCoUndoStack((history) =>
+          pushClientOperationsUndoEntry(history, {
+            kind: 'column_width',
+            columnKey: column.key,
+            previousWidth: startWidth,
+            nextWidth: finalWidth,
+          }),
+        );
+      }
+      setIsResizingColumn(false);
+      document.body.style.userSelect = previousUserSelect;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -775,6 +868,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const undoPresentationOnly = (previous: Record<string, CellPresentation>) => {
     setRedoStack((history) => [...history, { presentation: cellPresentation }]);
     setCellPresentation(previous);
+    persistCellPresentation(previous);
   };
   const redoPresentation = () => {
     const next = redoStack.at(-1);
@@ -783,6 +877,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       pushClientOperationsUndoEntry(history, { kind: 'presentation', previous: cellPresentation }),
     );
     setCellPresentation(next.presentation);
+    persistCellPresentation(next.presentation);
     setRedoStack((history) => history.slice(0, -1));
   };
   const formatPresentationValue = (value: string, column: ClientOperationsRegistryColumn, presentation?: CellPresentation) => {
@@ -1359,7 +1454,109 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     }
     if (entry.kind === 'custom_cell') {
       void restoreCustomCellFromUndo(entry);
+      return;
     }
+    if (entry.kind === 'column_visibility') {
+      const restored = new Set(entry.previousHiddenKeys);
+      setHiddenColumns(restored);
+      persistHiddenColumns(restored);
+      return;
+    }
+    if (entry.kind === 'column_width') {
+      const restoredWidths = { ...columnWidths, [entry.columnKey]: entry.previousWidth };
+      setColumnWidths(restoredWidths);
+      if (widthScope?.userId && widthScope.organizationId) {
+        saveClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId, restoredWidths);
+      }
+    }
+  };
+
+  const handlePrint = () => {
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? null;
+    const printColumns: ClientOperationsPrintColumn[] = visibleColumns
+      .filter((c) => c.cell_kind !== 'folder' && c.key !== 'folder')
+      .map((c) => ({ key: c.key, label: c.label, cell_kind: c.cell_kind }));
+    const printRows: ClientOperationsPrintRow[] = rows.map((r) => ({
+      client_id: r.client_id,
+      client_name: r.client_name,
+      cells: r.cells as Record<string, string | null | undefined>,
+      pcn_display: r.pcn_display,
+      notes_cell_text_he: r.notes_cell_text_he,
+      operational_notes_count: r.operational_notes_count,
+      material_brought_flag: r.material_brought_flag,
+      material_brought_cell: r.material_brought_cell,
+      material_cells: r.material_cells
+        ? {
+            vat: r.material_cells.vat,
+            income_tax_advance: r.material_cells.income_tax_advance,
+            payroll: r.material_cells.payroll,
+          }
+        : undefined,
+      national_insurance_deductions_cell: r.national_insurance_deductions_cell,
+      income_tax_deductions_cell: r.income_tax_deductions_cell,
+      annual_report_cell: r.annual_report_cell,
+      capital_declaration_cell: r.capital_declaration_cell,
+      manual_cell_statuses: r.manual_cell_statuses,
+    }));
+    const printableKeys = selectPrintableColumnKeys({ columns: printColumns, rows: printRows });
+    const printableCols = visibleColumns.filter((c) => printableKeys.includes(c.key));
+    const periodHeading = formatClientOperationsPeriodHeading(periodKey);
+
+    const tableHeaders = printableCols.map((col) => `<th>${escapeHtml(col.label)}</th>`).join('');
+    const tableRows = rows
+      .map((r) => {
+        const cells = printableCols
+          .map((col) => {
+            const statusToken = r.manual_cell_statuses?.[col.key]?.presentation_token ?? null;
+            const statusClass = statusToken ? ` is-manual-status-${statusToken}` : '';
+            const value = escapeHtml(displayForColumn(r, col));
+            return `<td class="${statusClass}">${value}</td>`;
+          })
+          .join('');
+        return `<tr>${cells}</tr>`;
+      })
+      .join('');
+
+    const printWin = window.open('', '_blank', 'width=1200,height=850');
+    if (!printWin) return;
+    printWin.document.write(`<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<title>תפעול לקוחות — ${periodHeading}</title>
+<style>
+  @page { size: landscape; margin: 1cm; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; direction: rtl; margin: 0; }
+  h1 { font-size: 13px; font-weight: 700; margin: 0 0 6px; color: #123756; }
+  table { width: 100%; border-collapse: collapse; table-layout: auto; }
+  th, td { border: 1px solid #ccc; padding: 3px 6px; text-align: right; white-space: nowrap; font-size: 11px; vertical-align: middle; }
+  th { background: #f4f6f8; font-weight: 700; color: #123756; }
+  .is-manual-status-ready { background: #fbf4d4; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .is-manual-status-sent_for_approval { background: #e8f1fa; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .is-manual-status-completed { background: #e5f4e5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @media print { @page { size: landscape; } }
+</style>
+</head>
+<body>
+<h1>תפעול לקוחות — ${periodHeading}</h1>
+<table>
+<thead><tr>${tableHeaders}</tr></thead>
+<tbody>${tableRows}</tbody>
+</table>
+</body>
+</html>`);
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => {
+      printWin.print();
+      printWin.close();
+    }, 400);
   };
 
   const cancelCustomCellEdit = (
@@ -1625,303 +1822,341 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   ];
   const moreToolbarIds = ['text_color', 'fill_color', 'number_format', 'borders', 'toggle_columns'];
 
-  const renderSpreadsheetToolbar = () => (
-    <div className="nx-co-sheet__toolbar" role="toolbar" aria-label="כלי גיליון">
-      <div className="nx-co-sheet__toolbar-group">
-        <button
-          type="button"
-          className="nx-co-sheet__btn nx-co-sheet__btn--icon"
-          disabled={!isCap('undo') || coUndoStack.length === 0}
-          title={capTitle('undo') ?? 'בטל'}
-          aria-label="בטל"
-          onClick={undoLastAction}
-        >
-          <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9.5 7.5H6.75A4.75 4.75 0 0 0 2 12.25v0A4.75 4.75 0 0 0 6.75 17H14a5 5 0 0 0 5-5"
-            />
-            <path
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9.5 4.5 6.5 7.5l3 3"
-            />
-          </svg>
-        </button>
-        {/* HIDDEN — redo implementation retained for later restore */}
-        <button
-          type="button"
-          className="nx-co-sheet__btn"
-          hidden
-          disabled={!isCap('redo') || redoStack.length === 0}
-          title={capTitle('redo')}
-          onClick={redoPresentation}
-        >
-          בצע שוב
-        </button>
-      </div>
+  const renderSpreadsheetToolbar = () => {
+    const currentPk = focusedCell ? cellKey(focusedCell.clientId, focusedCell.colKey) : null;
+    const currentCellPres = currentPk ? cellPresentation[currentPk] : undefined;
+    const currentColor = currentCellPres?.color ?? CLIENT_OPERATIONS_DEFAULT_TEXT_COLOR;
+    const paletteRows = clientOperationsTextColorPaletteRows();
 
-      <div className="nx-co-sheet__toolbar-group">
-        <div className="nx-co-sheet__search">
-          <div className="nx-co-sheet__search-field">
-            <button
-              type="button"
-              className="nx-co-sheet__search-icon-btn"
-              disabled={!isCap('search')}
-              title={capTitle('search') ?? 'חיפוש'}
-              aria-label="חיפוש"
-              onClick={() => {
-                if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-                applyLiveSearch(searchDraft);
-              }}
-            >
-              <svg className="nx-co-sheet__search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <circle cx="11" cy="11" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                <path d="M16.2 16.2 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-              </svg>
-            </button>
-            <input
-              type="search"
-              value={searchDraft}
-              disabled={!isCap('search')}
-              title={capTitle('search')}
-              placeholder="חיפוש בטבלה…"
-              aria-label="חיפוש לקוחות"
-              onChange={(e) => onSearchDraftChange(e.target.value)}
-              onKeyDown={(e) => {
-                // Enter applies immediately (same quiet live path); no required submit.
-                if (e.key === 'Enter' && isCap('search')) {
-                  if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-                  applyLiveSearch(searchDraft);
-                }
-              }}
-            />
-          </div>
+    return (
+      <div className="nx-co-sheet__toolbar" role="toolbar" aria-label="כלי גיליון">
+        {/* ── Undo ── */}
+        <div className="nx-co-sheet__toolbar-group">
+          <button
+            type="button"
+            className="nx-co-sheet__btn nx-co-sheet__btn--icon"
+            disabled={!isCap('undo') || coUndoStack.length === 0}
+            title={capTitle('undo') ?? 'בטל'}
+            aria-label="בטל"
+            onClick={undoLastAction}
+          >
+            <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" d="M9.5 7.5H6.75A4.75 4.75 0 0 0 2 12.25v0A4.75 4.75 0 0 0 6.75 17H14a5 5 0 0 0 5-5" />
+              <path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" d="M9.5 4.5 6.5 7.5l3 3" />
+            </svg>
+          </button>
+          {/* HIDDEN — redo retained for later restore */}
+          <button type="button" className="nx-co-sheet__btn" hidden disabled={!isCap('redo') || redoStack.length === 0} title={capTitle('redo')} onClick={redoPresentation}>בצע שוב</button>
         </div>
-        {/* HIDDEN for now — keep underlying capabilities/handlers for later restore:
-            סינון / מיון ↑ / מיון ↓ / הקפאה */}
-      </div>
 
-      {manualStatusPaintModes.length ? (
-        <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--status-paint" role="toolbar" aria-label="מצב צביעת סטטוס">
-          {manualStatusPaintModes.map((mode) => (
-            <button
-              key={mode.id}
-              type="button"
-              className={`nx-co-sheet__status-mode nx-co-sheet__status-mode--${mode.presentation_token}${
-                statusPaintMode === mode.id ? ' is-active' : ''
-              }`}
-              disabled={!canEdit}
-              aria-pressed={statusPaintMode === mode.id}
-              title={mode.label_he}
-              onClick={() => setStatusPaintMode((current) => (current === mode.id ? null : mode.id))}
-            >
-              <span className="nx-co-sheet__status-mode-swatch" aria-hidden="true" />
-              <span>{mode.label_he}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--secondary">
-        <button
-          type="button"
-          className={`nx-co-sheet__btn nx-co-sheet__btn--icon${
-            focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.align === 'right'
-              ? ' is-active'
-              : ''
-          }`}
-          disabled={!isCap('align_right') || !focusedCell}
-          title={capTitle('align_right') ?? 'יישור ימין'}
-          aria-label="יישור ימין"
-          onClick={() => applyPresentation({ align: 'right' })}
-        >
-          <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M20 7H8M20 12H4M20 17H10" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className={`nx-co-sheet__btn nx-co-sheet__btn--icon${
-            focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.align === 'center'
-              ? ' is-active'
-              : ''
-          }`}
-          disabled={!isCap('align_center') || !focusedCell}
-          title={capTitle('align_center') ?? 'מרכז'}
-          aria-label="מרכז"
-          onClick={() => applyPresentation({ align: 'center' })}
-        >
-          <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M18 7H6M20 12H4M17 17H7" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className={`nx-co-sheet__btn nx-co-sheet__btn--icon${
-            focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.align === 'left'
-              ? ' is-active'
-              : ''
-          }`}
-          disabled={!isCap('align_left') || !focusedCell}
-          title={capTitle('align_left') ?? 'יישור שמאל'}
-          aria-label="יישור שמאל"
-          onClick={() => applyPresentation({ align: 'left' })}
-        >
-          <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M4 7h12M4 12h16M4 17h10" />
-          </svg>
-        </button>
-        {/* HIDDEN — wrap implementation retained */}
-        <button
-          type="button"
-          className={`nx-co-sheet__btn${focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap ? ' is-active' : ''}`}
-          hidden
-          disabled={!isCap('wrap_text') || !focusedCell}
-          title={capTitle('wrap_text')}
-          onClick={() => {
-            if (!focusedCell) return;
-            const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap;
-            applyPresentation({ wrap: !cur });
-          }}
-        >
-          גלישה
-        </button>
-        <button
-          type="button"
-          className="nx-co-sheet__btn"
-          disabled={!isCap('bold') || !focusedCell}
-          title={capTitle('bold')}
-          onClick={() => {
-            if (!focusedCell) return;
-            const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.bold;
-            applyPresentation({ bold: !cur });
-          }}
-        >
-          <strong>B</strong>
-        </button>
-        <button
-          type="button"
-          className="nx-co-sheet__btn"
-          disabled={!isCap('italic') || !focusedCell}
-          title={capTitle('italic')}
-          onClick={() => {
-            if (!focusedCell) return;
-            const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.italic;
-            applyPresentation({ italic: !cur });
-          }}
-        >
-          <em>I</em>
-        </button>
-        <button
-          type="button"
-          className="nx-co-sheet__btn"
-          disabled={!isCap('underline') || !focusedCell}
-          title={capTitle('underline')}
-          onClick={() => {
-            if (!focusedCell) return;
-            const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.underline;
-            applyPresentation({ underline: !cur });
-          }}
-        >
-          <span style={{ textDecoration: 'underline' }}>U</span>
-        </button>
-      </div>
-
-      <div className="nx-co-sheet__toolbar-group">
-        {/* הקפאה hidden from toolbar — freezeOn + sticky CSS implementation retained. */}
-        {/* + עמודה hidden — 10 user slots via ensure_client_operations_user_column_slots command. */}
-        <button
-          type="button"
-          className={`nx-co-sheet__btn${fullscreenOpen ? ' is-active' : ''}`}
-          disabled={capById.has('fullscreen') && !isCap('fullscreen')}
-          title={fullscreenOpen ? 'יציאה ממסך מלא' : (capTitle('fullscreen') ?? 'מסך מלא')}
-          aria-label={fullscreenOpen ? 'יציאה ממסך מלא' : 'מסך מלא'}
-          aria-pressed={fullscreenOpen}
-          onClick={() => setFullscreenOpen((open) => !open)}
-        >
-          {fullscreenOpen ? 'יציאה ממסך מלא' : '⊞ מסך מלא'}
-        </button>
-        <div className="nx-co-sheet__more">
+        {/* ── Format: B I U | align | font-size | A-color ── */}
+        <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--secondary">
           <button
             type="button"
             className="nx-co-sheet__btn"
-            title="עוד פעולות גיליון"
-            onClick={() => setMoreOpen((v) => !v)}
+            disabled={!isCap('bold') || !focusedCell}
+            title={capTitle('bold')}
+            onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.bold; applyPresentation({ bold: !cur }); }}
+          ><strong>B</strong></button>
+          <button
+            type="button"
+            className="nx-co-sheet__btn"
+            disabled={!isCap('italic') || !focusedCell}
+            title={capTitle('italic')}
+            onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.italic; applyPresentation({ italic: !cur }); }}
+          ><em>I</em></button>
+          <button
+            type="button"
+            className="nx-co-sheet__btn"
+            disabled={!isCap('underline') || !focusedCell}
+            title={capTitle('underline')}
+            onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.underline; applyPresentation({ underline: !cur }); }}
+          ><span style={{ textDecoration: 'underline' }}>U</span></button>
+
+          <button
+            type="button"
+            className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentCellPres?.align === 'right' ? ' is-active' : ''}`}
+            disabled={!isCap('align_right') || !focusedCell}
+            title={capTitle('align_right') ?? 'יישור ימין'}
+            aria-label="יישור ימין"
+            onClick={() => applyPresentation({ align: 'right' })}
           >
-            עוד…
+            <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M20 7H8M20 12H4M20 17H10" /></svg>
           </button>
-          {moreOpen ? (
-            <div className="nx-co-sheet__more-menu">
-              <label className="nx-co-sheet__btn" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                צבע טקסט
-                <input
-                  className="nx-co-sheet__color"
-                  type="color"
-                  disabled={!isCap('text_color') || !focusedCell}
-                  title={capTitle('text_color')}
-                  onChange={(e) => applyPresentation({ color: e.target.value })}
-                />
-              </label>
-              <label className="nx-co-sheet__btn" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                צבע רקע
-                <input
-                  className="nx-co-sheet__color"
-                  type="color"
-                  disabled={!isCap('fill_color') || !focusedCell}
-                  title={capTitle('fill_color')}
-                  onChange={(e) => applyPresentation({ fill: e.target.value })}
-                />
-              </label>
-              <label className="nx-co-sheet__btn nx-co-sheet__number-format">
-                פורמט מספר
-                <select
-                  value={focusedCell ? cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.numberFormat ?? 'general' : 'general'}
-                  disabled={!isCap('number_format') || !focusedCell}
-                  onChange={(e) => applyPresentation({ numberFormat: e.target.value as CellPresentation['numberFormat'] })}
-                >
-                  <option value="general">כללי</option><option value="number">מספר</option><option value="currency">מטבע</option><option value="percent">אחוז</option><option value="date">תאריך</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                className={`nx-co-sheet__btn${bordersOn ? ' is-active' : ''}`}
-                disabled={!isCap('borders')}
-                title={capTitle('borders')}
-                onClick={() => setBordersOn((v) => !v)}
-              >
-                גבולות
-              </button>
-              <button
-                type="button"
-                className="nx-co-sheet__btn"
-                disabled={!isCap('toggle_columns')}
-                title={capTitle('toggle_columns')}
-                onClick={() => {
-                  setShowColumnPanel((v) => !v);
-                  setMoreOpen(false);
-                }}
-              >
-                הצג / הסתר עמודות
-              </button>
-            </div>
-          ) : null}
+          <button
+            type="button"
+            className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentCellPres?.align === 'center' ? ' is-active' : ''}`}
+            disabled={!isCap('align_center') || !focusedCell}
+            title={capTitle('align_center') ?? 'מרכז'}
+            aria-label="מרכז"
+            onClick={() => applyPresentation({ align: 'center' })}
+          >
+            <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M18 7H6M20 12H4M17 17H7" /></svg>
+          </button>
+          <button
+            type="button"
+            className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentCellPres?.align === 'left' ? ' is-active' : ''}`}
+            disabled={!isCap('align_left') || !focusedCell}
+            title={capTitle('align_left') ?? 'יישור שמאל'}
+            aria-label="יישור שמאל"
+            onClick={() => applyPresentation({ align: 'left' })}
+          >
+            <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M4 7h12M4 12h16M4 17h10" /></svg>
+          </button>
+          {/* HIDDEN — wrap retained */}
+          <button type="button" className={`nx-co-sheet__btn${focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap ? ' is-active' : ''}`} hidden disabled={!isCap('wrap_text') || !focusedCell} title={capTitle('wrap_text')} onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap; applyPresentation({ wrap: !cur }); }}>גלישה</button>
+
+          {/* Font-size selector */}
+          <select
+            data-testid="font-size-control"
+            className="nx-co-sheet__font-size-select"
+            value={currentCellPres?.fontSize ?? CLIENT_OPERATIONS_DEFAULT_FONT_SIZE}
+            disabled={!focusedCell}
+            title="גודל גופן"
+            aria-label="גודל גופן"
+            onChange={(e) => applyPresentation({ fontSize: Number(e.target.value) })}
+          >
+            {CLIENT_OPERATIONS_FONT_SIZES.map((sz) => (
+              <option key={sz} value={sz}>{sz}</option>
+            ))}
+          </select>
+
+          {/* A text-color icon with current-color underline */}
+          <div className="nx-co-sheet__color-picker-wrap">
+            <button
+              type="button"
+              data-testid="text-color-control"
+              className={`nx-co-sheet__btn nx-co-sheet__btn--icon nx-co-sheet__color-a-btn${colorPaletteOpen ? ' is-active' : ''}`}
+              disabled={!isCap('text_color') || !focusedCell}
+              title="צבע טקסט"
+              aria-label="צבע טקסט"
+              aria-expanded={colorPaletteOpen}
+              onClick={() => setColorPaletteOpen((v) => !v)}
+            >
+              <span
+                className="nx-co-sheet__color-a-letter"
+                aria-hidden="true"
+                style={{ borderBottomColor: currentColor }}
+              >A</span>
+            </button>
+            {colorPaletteOpen && (
+              <div className="nx-co-sheet__color-palette" role="dialog" aria-label="בחירת צבע טקסט">
+                {([paletteRows.standard, paletteRows.beautiful] as const).map((row, ri) => (
+                  <div key={ri} className="nx-co-sheet__color-palette-row">
+                    {row.map((swatch) => (
+                      <button
+                        key={swatch.id}
+                        type="button"
+                        className="nx-co-sheet__color-swatch"
+                        style={{ background: swatch.hex }}
+                        title={swatch.label_he}
+                        aria-label={swatch.label_he}
+                        onClick={() => {
+                          applyPresentation({ color: swatch.hex });
+                          setColorPaletteOpen(false);
+                        }}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* ── Column visibility icon → popover ── */}
+        <div className="nx-co-sheet__toolbar-group">
+          <div className="nx-co-sheet__col-visibility-wrap">
+            <button
+              type="button"
+              data-testid="column-visibility-control"
+              className={`nx-co-sheet__btn nx-co-sheet__btn--icon${columnVisibilityOpen ? ' is-active' : ''}`}
+              title="הצג / הסתר עמודות"
+              aria-label="הצג / הסתר עמודות"
+              aria-expanded={columnVisibilityOpen}
+              onClick={() => setColumnVisibilityOpen((v) => !v)}
+            >
+              {/* Excel-like columns+eye SVG */}
+              <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="2" y="5" width="20" height="14" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                <line x1="8" y1="5" x2="8" y2="19" stroke="currentColor" strokeWidth="1.5" />
+                <line x1="16" y1="5" x2="16" y2="19" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M4 12c2-3 4-4 8-4s6 1 8 4c-2 3-4 4-8 4s-6-1-8-4Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                <circle cx="12" cy="12" r="2" fill="currentColor" />
+              </svg>
+            </button>
+            {columnVisibilityOpen && (
+              <div className="nx-co-sheet__col-visibility-popover" role="dialog" aria-label="הצג / הסתר עמודות">
+                {columns.filter((c) => c.cell_kind !== 'folder').map((c) => {
+                  const mandatory = isClientOperationsMandatoryVisibleColumn(c.key);
+                  return (
+                    <label key={c.key} className="nx-co-sheet__col-visibility-item">
+                      <input
+                        type="checkbox"
+                        className="nx-co-sheet__checkbox"
+                        checked={!hiddenColumns.has(c.key)}
+                        disabled={mandatory}
+                        onChange={() => { if (!mandatory) toggleHiddenColumn(c.key); }}
+                      />
+                      {c.label}
+                      {mandatory ? <span className="nx-co-sheet__col-visibility-mandatory">✦</span> : null}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Status paint modes ── */}
+        {manualStatusPaintModes.length ? (
+          <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--status-paint" role="toolbar" aria-label="מצב צביעת סטטוס">
+            {manualStatusPaintModes.map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                className={`nx-co-sheet__status-mode nx-co-sheet__status-mode--${mode.presentation_token}${statusPaintMode === mode.id ? ' is-active' : ''}`}
+                disabled={!canEdit}
+                aria-pressed={statusPaintMode === mode.id}
+                title={mode.label_he}
+                onClick={() => setStatusPaintMode((current) => (current === mode.id ? null : mode.id))}
+              >
+                <span className="nx-co-sheet__status-mode-swatch" aria-hidden="true" />
+                <span>{mode.label_he}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {/* ── Search ── */}
+        <div className="nx-co-sheet__toolbar-group">
+          <div className="nx-co-sheet__search">
+            <div className="nx-co-sheet__search-field">
+              <button
+                type="button"
+                className="nx-co-sheet__search-icon-btn"
+                disabled={!isCap('search')}
+                title={capTitle('search') ?? 'חיפוש'}
+                aria-label="חיפוש"
+                onClick={() => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); applyLiveSearch(searchDraft); }}
+              >
+                <svg className="nx-co-sheet__search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <circle cx="11" cy="11" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.75" />
+                  <path d="M16.2 16.2 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                </svg>
+              </button>
+              <input
+                type="search"
+                value={searchDraft}
+                disabled={!isCap('search')}
+                title={capTitle('search')}
+                placeholder="חיפוש בטבלה…"
+                aria-label="חיפוש לקוחות"
+                onChange={(e) => onSearchDraftChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && isCap('search')) {
+                    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                    applyLiveSearch(searchDraft);
+                  }
+                }}
+              />
+            </div>
+          </div>
+          {/* HIDDEN for now — keep underlying capabilities/handlers for later restore:
+              סינון / מיון ↑ / מיון ↓ / הקפאה */}
+        </div>
+
+        {/* ── Fullscreen ── */}
+        <div className="nx-co-sheet__toolbar-group">
+          {/* הקפאה hidden from toolbar — freezeOn + sticky CSS implementation retained. */}
+          {/* + עמודה hidden — 10 user slots via ensure_client_operations_user_column_slots command. */}
+          <button
+            type="button"
+            className={`nx-co-sheet__btn${fullscreenOpen ? ' is-active' : ''}`}
+            disabled={capById.has('fullscreen') && !isCap('fullscreen')}
+            title={fullscreenOpen ? 'יציאה ממסך מלא' : (capTitle('fullscreen') ?? 'מסך מלא')}
+            aria-label={fullscreenOpen ? 'יציאה ממסך מלא' : 'מסך מלא'}
+            aria-pressed={fullscreenOpen}
+            onClick={() => setFullscreenOpen((open) => !open)}
+          >
+            {fullscreenOpen ? 'יציאה ממסך מלא' : '⊞ מסך מלא'}
+          </button>
+
+          {/* ── Print ── */}
+          <button
+            type="button"
+            data-testid="print-control"
+            className="nx-co-sheet__btn nx-co-sheet__btn--icon"
+            title="הדפסה"
+            aria-label="הדפסה"
+            onClick={handlePrint}
+          >
+            <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="5" y="2" width="14" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M5 10H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2v-4h14v4h2a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="7" y="15" width="10" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="18" cy="13" r="1" fill="currentColor" />
+            </svg>
+          </button>
+
+          {/* ── עוד (fill/number/borders — text_color removed to toolbar A button) ── */}
+          <div className="nx-co-sheet__more">
+            <button
+              type="button"
+              className="nx-co-sheet__btn"
+              title="עוד פעולות גיליון"
+              onClick={() => setMoreOpen((v) => !v)}
+            >
+              עוד…
+            </button>
+            {moreOpen ? (
+              <div className="nx-co-sheet__more-menu">
+                <label className="nx-co-sheet__btn" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  צבע רקע
+                  <input
+                    className="nx-co-sheet__color"
+                    type="color"
+                    disabled={!isCap('fill_color') || !focusedCell}
+                    title={capTitle('fill_color')}
+                    onChange={(e) => applyPresentation({ fill: e.target.value })}
+                  />
+                </label>
+                <label className="nx-co-sheet__btn nx-co-sheet__number-format">
+                  פורמט מספר
+                  <select
+                    value={focusedCell ? (cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.numberFormat ?? 'general') : 'general'}
+                    disabled={!isCap('number_format') || !focusedCell}
+                    onChange={(e) => applyPresentation({ numberFormat: e.target.value as CellPresentation['numberFormat'] })}
+                  >
+                    <option value="general">כללי</option>
+                    <option value="number">מספר</option>
+                    <option value="currency">מטבע</option>
+                    <option value="percent">אחוז</option>
+                    <option value="date">תאריך</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className={`nx-co-sheet__btn${bordersOn ? ' is-active' : ''}`}
+                  disabled={!isCap('borders')}
+                  title={capTitle('borders')}
+                  onClick={() => setBordersOn((v) => !v)}
+                >
+                  גבולות
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Keep capability ids referenced for tests / future collapse */}
+        <span hidden>
+          {[...primaryToolbarIds, ...moreToolbarIds].join(',')}
+          {capTitle('add_column')}
+        </span>
       </div>
-      {/* Keep capability ids referenced for tests / future collapse */}
-      <span hidden>
-        {[...primaryToolbarIds, ...moreToolbarIds].join(',')}
-        {capTitle('add_column')}
-      </span>
-    </div>
-  );
+    );
+  };
 
   const renderCellContent = (r: ClientOperationsRegistryRow, col: ClientOperationsRegistryColumn) => {
     if (col.cell_kind === 'folder') {
@@ -2284,7 +2519,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const renderSpreadsheetTable = () => (
     <div className="nx-co-sheet__canvas">
-      <table className={`nx-co-sheet__table${freezeOn ? ' is-frozen' : ''}${bordersOn ? '' : ' is-borders-off'}`}>
+      <table className={`nx-co-sheet__table${freezeOn ? ' is-frozen' : ''}${bordersOn ? '' : ' is-borders-off'}${isResizingColumn ? ' is-resizing' : ''}`}>
         <colgroup>
           {visibleColumns.map((column) => <col key={column.key} style={{ width: widthForColumn(column) }} />)}
         </colgroup>
@@ -2440,6 +2675,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       fontStyle: presentation?.italic ? 'italic' : undefined,
                       textDecoration: presentation?.underline ? 'underline' : undefined,
                       color: presentation?.color,
+                      // Apply explicit font-size only when user has chosen one for this cell.
+                      fontSize: presentation?.fontSize != null ? `${presentation.fontSize}px` : undefined,
                       // Manual status owns the cell fill while set.
                       background: statusToken ? undefined : presentation?.fill,
                     }}
@@ -2631,29 +2868,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       >
         <h1 className="nx-co-sheet__title">{titleHe ?? 'תפעול לקוחות'}</h1>
         {renderSpreadsheetToolbar()}
-        {showColumnPanel ? (
-          <div className="nx-co-sheet__columns-panel">
-            {columns
-              .filter((c) => c.cell_kind !== 'folder')
-              .map((c) => (
-                <label key={c.key}>
-                  <input
-                    type="checkbox"
-                    checked={!hiddenColumns.has(c.key)}
-                    onChange={() => {
-                      setHiddenColumns((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(c.key)) next.delete(c.key);
-                        else next.add(c.key);
-                        return next;
-                      });
-                    }}
-                  />
-                  {c.label}
-                </label>
-              ))}
-          </div>
-        ) : null}
         {error ? <div className="nx-co-sheet__error">{error}</div> : null}
         <div className={`nx-co-sheet__workspace${loading ? ' is-loading' : ''}`}>
           {loading ? <p className="nx-co-sheet__loading nx-co-sheet__loading--inline">טוען תקופה…</p> : null}
