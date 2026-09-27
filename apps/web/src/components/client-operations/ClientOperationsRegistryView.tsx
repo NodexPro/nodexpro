@@ -24,6 +24,13 @@ import {
   saveClientOperationsHiddenColumns,
 } from '../../lib/client-operations-hidden-columns.pure';
 import {
+  isClientOperationsFormatEligibleColumn,
+  reconcileActiveCellAfterColumnVisibility,
+  reconcileActiveCellAfterRowsChange,
+  shouldClearActiveCellOnPeriodChange,
+  type ClientOperationsActiveCell,
+} from '../../lib/client-operations-active-cell.pure';
+import {
   CLIENT_OPERATIONS_DEFAULT_TEXT_COLOR,
   clientOperationsTextColorPaletteRows,
 } from '../../lib/client-operations-text-color-palette.pure';
@@ -460,7 +467,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [conflict, setConflict] = useState<ConflictPayload | null>(null);
 
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
-  const [focusedCell, setFocusedCell] = useState<{ clientId: string; colKey: string } | null>(null);
+  /** Presentation-only active cell for formatting toolbar (not persisted). */
+  const [focusedCell, setFocusedCell] = useState<ClientOperationsActiveCell | null>(null);
   const [searchDraft, setSearchDraft] = useState(query?.q ?? '');
   // Freeze sticky CSS retained; toolbar toggle is hidden — keep pinned columns on by default.
   const freezeOn = true;
@@ -541,11 +549,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       setColumnWidths({});
       setCellPresentation({});
       setHiddenColumns(new Set());
+      setFocusedCell(null);
       return;
     }
     setColumnWidths(loadClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId));
     setCellPresentation(loadClientOperationsCellPresentation(widthScope.userId, widthScope.organizationId));
     setHiddenColumns(loadClientOperationsHiddenColumns(widthScope.userId, widthScope.organizationId));
+    setFocusedCell(null);
   }, [widthScope?.organizationId, widthScope?.userId]);
 
   useEffect(() => {
@@ -557,16 +567,45 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   }, [widthScope?.organizationId]);
 
   useEffect(() => {
-    if (!fullscreenOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFullscreenOpen(false);
+    setFocusedCell((current) =>
+      reconcileActiveCellAfterColumnVisibility({
+        active: current,
+        hiddenColumnKeys: hiddenColumns,
+      }),
+    );
+  }, [hiddenColumns]);
+
+  useEffect(() => {
+    const clientIds = rows.map((r) => r.client_id);
+    setFocusedCell((current) =>
+      reconcileActiveCellAfterRowsChange({
+        active: current,
+        clientIds,
+      }),
+    );
+  }, [rows]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (focusedCell) {
+        setFocusedCell(null);
+        setEditingCellKey(null);
+        setColorPaletteOpen(false);
+        setColumnVisibilityOpen(false);
+      }
+      if (fullscreenOpen) setFullscreenOpen(false);
     };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [focusedCell, fullscreenOpen]);
+
+  useEffect(() => {
+    if (!fullscreenOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', closeOnEscape);
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', closeOnEscape);
     };
   }, [fullscreenOpen]);
 
@@ -769,6 +808,27 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (widthScope?.userId && widthScope.organizationId) {
       saveClientOperationsHiddenColumns(widthScope.userId, widthScope.organizationId, next);
     }
+  };
+
+  const selectActiveFormatCell = (
+    clientId: string,
+    column: Pick<ClientOperationsRegistryColumn, 'key' | 'cell_kind'>,
+  ) => {
+    if (
+      !isClientOperationsFormatEligibleColumn({
+        columnKey: column.key,
+        cellKind: column.cell_kind,
+      })
+    ) {
+      return;
+    }
+    setSelectedRowId(clientId);
+    setFocusedCell({ clientId, colKey: column.key });
+  };
+
+  /** Keep active cell while clicking formatting toolbar (avoid input blur races). */
+  const preserveActiveCellOnToolbarMouseDown = (event: ReactMouseEvent) => {
+    event.preventDefault();
   };
 
   const applyPresentation = (patch: Partial<CellPresentation>) => {
@@ -1176,8 +1236,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (!canEdit || !column.editable || !column.custom_column_id) return;
     if (statusPaintMode) return;
     const pk = cellKey(row.client_id, column.key);
-    setSelectedRowId(row.client_id);
-    setFocusedCell({ clientId: row.client_id, colKey: column.key });
+    selectActiveFormatCell(row.client_id, column);
     if (editingCellKeyRef.current === pk) return;
     setEditingCellKey(pk);
     setCellDraft(displayCustomColumnValue(row, column));
@@ -1193,6 +1252,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     for (const key of keys) clearCustomCellDebounce(key);
     for (const key of keys) void flushCustomCellKey(key);
     setEditingCellKey(null);
+    if (shouldClearActiveCellOnPeriodChange()) {
+      setFocusedCell(null);
+    }
     onPeriodChange?.(nextPeriodKey);
   };
 
@@ -1827,6 +1889,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const currentCellPres = currentPk ? cellPresentation[currentPk] : undefined;
     const currentColor = currentCellPres?.color ?? CLIENT_OPERATIONS_DEFAULT_TEXT_COLOR;
     const paletteRows = clientOperationsTextColorPaletteRows();
+    const formatTargetActive = Boolean(focusedCell);
+    const formatDisabled = !formatTargetActive;
 
     return (
       <div className="nx-co-sheet__toolbar" role="toolbar" aria-label="כלי גיליון">
@@ -1854,31 +1918,35 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           <button
             type="button"
             className="nx-co-sheet__btn"
-            disabled={!isCap('bold') || !focusedCell}
+            disabled={!isCap('bold') || formatDisabled}
             title={capTitle('bold')}
+            onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.bold; applyPresentation({ bold: !cur }); }}
           ><strong>B</strong></button>
           <button
             type="button"
             className="nx-co-sheet__btn"
-            disabled={!isCap('italic') || !focusedCell}
+            disabled={!isCap('italic') || formatDisabled}
             title={capTitle('italic')}
+            onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.italic; applyPresentation({ italic: !cur }); }}
           ><em>I</em></button>
           <button
             type="button"
             className="nx-co-sheet__btn"
-            disabled={!isCap('underline') || !focusedCell}
+            disabled={!isCap('underline') || formatDisabled}
             title={capTitle('underline')}
+            onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.underline; applyPresentation({ underline: !cur }); }}
           ><span style={{ textDecoration: 'underline' }}>U</span></button>
 
           <button
             type="button"
             className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentCellPres?.align === 'right' ? ' is-active' : ''}`}
-            disabled={!isCap('align_right') || !focusedCell}
+            disabled={!isCap('align_right') || formatDisabled}
             title={capTitle('align_right') ?? 'יישור ימין'}
             aria-label="יישור ימין"
+            onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onClick={() => applyPresentation({ align: 'right' })}
           >
             <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M20 7H8M20 12H4M20 17H10" /></svg>
@@ -1886,9 +1954,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           <button
             type="button"
             className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentCellPres?.align === 'center' ? ' is-active' : ''}`}
-            disabled={!isCap('align_center') || !focusedCell}
+            disabled={!isCap('align_center') || formatDisabled}
             title={capTitle('align_center') ?? 'מרכז'}
             aria-label="מרכז"
+            onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onClick={() => applyPresentation({ align: 'center' })}
           >
             <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M18 7H6M20 12H4M17 17H7" /></svg>
@@ -1896,24 +1965,26 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           <button
             type="button"
             className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentCellPres?.align === 'left' ? ' is-active' : ''}`}
-            disabled={!isCap('align_left') || !focusedCell}
+            disabled={!isCap('align_left') || formatDisabled}
             title={capTitle('align_left') ?? 'יישור שמאל'}
             aria-label="יישור שמאל"
+            onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onClick={() => applyPresentation({ align: 'left' })}
           >
             <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M4 7h12M4 12h16M4 17h10" /></svg>
           </button>
           {/* HIDDEN — wrap retained */}
-          <button type="button" className={`nx-co-sheet__btn${focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap ? ' is-active' : ''}`} hidden disabled={!isCap('wrap_text') || !focusedCell} title={capTitle('wrap_text')} onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap; applyPresentation({ wrap: !cur }); }}>גלישה</button>
+          <button type="button" className={`nx-co-sheet__btn${focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap ? ' is-active' : ''}`} hidden disabled={!isCap('wrap_text') || formatDisabled} title={capTitle('wrap_text')} onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap; applyPresentation({ wrap: !cur }); }}>גלישה</button>
 
           {/* Font-size selector */}
           <select
             data-testid="font-size-control"
             className="nx-co-sheet__font-size-select"
             value={currentCellPres?.fontSize ?? CLIENT_OPERATIONS_DEFAULT_FONT_SIZE}
-            disabled={!focusedCell}
+            disabled={formatDisabled}
             title="גודל גופן"
             aria-label="גודל גופן"
+            onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onChange={(e) => applyPresentation({ fontSize: Number(e.target.value) })}
           >
             {CLIENT_OPERATIONS_FONT_SIZES.map((sz) => (
@@ -1927,10 +1998,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               type="button"
               data-testid="text-color-control"
               className={`nx-co-sheet__btn nx-co-sheet__btn--icon nx-co-sheet__color-a-btn${colorPaletteOpen ? ' is-active' : ''}`}
-              disabled={!isCap('text_color') || !focusedCell}
+              disabled={!isCap('text_color') || formatDisabled}
               title="צבע טקסט"
               aria-label="צבע טקסט"
               aria-expanded={colorPaletteOpen}
+              onMouseDown={preserveActiveCellOnToolbarMouseDown}
               onClick={() => setColorPaletteOpen((v) => !v)}
             >
               <span
@@ -1951,6 +2023,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         style={{ background: swatch.hex }}
                         title={swatch.label_he}
                         aria-label={swatch.label_he}
+                        onMouseDown={preserveActiveCellOnToolbarMouseDown}
                         onClick={() => {
                           applyPresentation({ color: swatch.hex });
                           setColorPaletteOpen(false);
@@ -2273,7 +2346,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             if (statusPaintMode) {
               event.preventDefault();
               paintCellManualStatus(r, col.key);
+              return;
             }
+            // Presentation-only selection — does not change the date domain value.
+            selectActiveFormatCell(r.client_id, col);
           }}
           onPointerDown={(event) => {
             // Label chrome is pointer-events:none on children; still stop row selection.
@@ -2281,7 +2357,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             if (statusPaintMode) {
               event.preventDefault();
               paintCellManualStatus(r, col.key);
+              return;
             }
+            selectActiveFormatCell(r.client_id, col);
           }}
         >
           <span className="nx-co-sheet__date-field-value">{displayValue || '—'}</span>
@@ -2298,6 +2376,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             aria-label={`${col.label} — ${r.client_name ?? r.client_id}`}
             onPointerDown={(event) => {
               event.stopPropagation();
+              if (!statusPaintMode) {
+                selectActiveFormatCell(r.client_id, col);
+              }
               if (disabled) return;
               // Single user-gesture showPicker (progressive). Native indicator still works alone.
               tryShowNativeDatePicker(event.currentTarget);
@@ -2305,6 +2386,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             onClick={(event) => {
               // Native path + stop row selection. Do not call showPicker again (avoid double open).
               event.stopPropagation();
+              if (!statusPaintMode) {
+                selectActiveFormatCell(r.client_id, col);
+              }
             }}
             onChange={(event) =>
               void setOperationalTargetDate(
@@ -2380,7 +2464,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     if (statusPaintMode) {
                       event.preventDefault();
                       paintCellManualStatus(r, col.key);
+                      return;
                     }
+                    // Presentation-only selection — does not change checkbox domain value.
+                    selectActiveFormatCell(r.client_id, col);
                   }}
                 />
               </label>
@@ -2439,7 +2526,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     if (statusPaintMode) {
                       event.preventDefault();
                       paintCellManualStatus(r, col.key);
+                      return;
                     }
+                    // Presentation-only selection — does not change checkbox domain value.
+                    selectActiveFormatCell(r.client_id, col);
                   }}
                 />
               </label>
@@ -2481,7 +2571,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               if (statusPaintMode) {
                 event.preventDefault();
                 paintCellManualStatus(r, col.key);
+                return;
               }
+              // Presentation-only selection — does not change checkbox domain value.
+              selectActiveFormatCell(r.client_id, col);
             }}
           />
         </label>
@@ -2639,8 +2732,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     key={column.key}
                     data-col={column.key}
                     data-freeze={column.freeze_default ? 'true' : 'false'}
+                    data-format-selected={focused ? 'true' : 'false'}
+                    data-testid={focused ? 'co-active-format-cell' : undefined}
                     className={[
-                      focused ? 'is-focused' : '',
+                      focused ? 'is-focused is-format-selected' : '',
                       editingCellKey === pk && column.cell_kind === 'custom' ? 'is-editing-custom' : '',
                       statusToken ? `is-manual-status-${statusToken}` : '',
                       statusPaintMode ? 'is-paint-mode' : '',
@@ -2649,21 +2744,28 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     ]
                       .filter(Boolean)
                       .join(' ') || undefined}
+                    onMouseDown={(event) => {
+                      // Paint mode owns the gesture via capture click — do not turn into format selection.
+                      if (statusPaintMode) return;
+                      // Resize / gear / native interactive chrome handle their own events.
+                      const target = event.target as HTMLElement | null;
+                      if (target?.closest('.nx-co-sheet__resize-handle, .nx-co-sheet__col-gear')) return;
+                      selectActiveFormatCell(row.client_id, column);
+                    }}
                     onClickCapture={(event) => {
                       if (!statusPaintMode) return;
                       if (column.key === 'folder' || column.key === 'client_name') return;
                       // Paint mode owns the gesture — child controls must not toggle/edit.
+                      // Do NOT turn paint clicks into formatting selection (paint has priority).
                       event.preventDefault();
                       event.stopPropagation();
                       setSelectedRowId(row.client_id);
-                      setFocusedCell({ clientId: row.client_id, colKey: column.key });
                       paintCellManualStatus(row, column.key);
                     }}
                     onClick={(event) => {
                       event.stopPropagation();
-                      setSelectedRowId(row.client_id);
-                      setFocusedCell({ clientId: row.client_id, colKey: column.key });
                       if (statusPaintMode) return;
+                      selectActiveFormatCell(row.client_id, column);
                       if (column.cell_kind === 'custom' && canEdit && column.editable) {
                         beginCustomCellEdit(row, column);
                       }
