@@ -28,6 +28,15 @@ import {
   type CustomCellSaveSlot,
   type CustomCellSaveStart,
 } from '../../lib/client-operations-custom-cell-save.pure';
+import {
+  completeManualStatusPaintFailure,
+  completeManualStatusPaintSuccess,
+  rememberManualStatusPaintIntent,
+  tryStartManualStatusPaint,
+  type ManualStatusPaintIntent,
+  type ManualStatusPaintSlot,
+  type ManualStatusPaintStart,
+} from '../../lib/client-operations-manual-status-paint.pure';
 import { formatCustomExcelCellDisplay } from '../../lib/client-operations-custom-cell-display.pure';
 import { PageHeader } from '../../templates/template-1/components/PageHeader';
 import { SectionCard } from '../../templates/template-1/components/SectionCard';
@@ -131,6 +140,16 @@ export type ClientOperationsRegistryRow = {
   vat_due_registry_display_he: string | null;
   /** Ready-to-render display by column key (from aggregate). */
   cells?: Record<string, string>;
+  /** Backend-owned manual paint status capabilities per column key. */
+  manual_cell_statuses?: Record<
+    string,
+    {
+      status: 'ready' | 'sent_for_approval' | 'completed' | null;
+      presentation_token: 'ready' | 'sent_for_approval' | 'completed' | null;
+      allowed_statuses: Array<'ready' | 'sent_for_approval' | 'completed' | 'clear'>;
+      operational_square_count: number;
+    }
+  >;
 };
 
 export type ClientOperationsNoteTypeRow = {
@@ -309,6 +328,11 @@ export type ClientOperationsRegistryViewProps = {
     key: string;
     available_baseline_periods: string[];
   }>;
+  manualStatusPaintModes?: Array<{
+    id: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
+    label_he: string;
+    presentation_token: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
+  }>;
   query?: {
     q: string | null;
     sort_by: string | null;
@@ -350,6 +374,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     customColumnsCapability: _customColumnsCapability,
     userColumnPeriodSetup = null,
     columnsNeedingLegacyBaseline: _columnsNeedingLegacyBaseline = [],
+    manualStatusPaintModes = [],
     query,
     onQueryChange,
     onRegistryCommand,
@@ -409,6 +434,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [headerDraft, setHeaderDraft] = useState('');
   const [editingCellKey, setEditingCellKey] = useState<string | null>(null);
   const [cellDraft, setCellDraft] = useState('');
+  const [statusPaintMode, setStatusPaintMode] = useState<
+    'ready' | 'sent_for_approval' | 'completed' | 'clear' | null
+  >(null);
+  const statusPaintSlotsRef = useRef<Map<string, ManualStatusPaintSlot>>(new Map());
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRequestSeqRef = useRef(0);
 
@@ -932,7 +961,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     );
   };
 
-  const commitCustomCellEdit = async (
+  const commitCustomCellEdit = (
     row: ClientOperationsRegistryRow,
     column: ClientOperationsRegistryColumn,
     value: string,
@@ -944,7 +973,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const key = rememberCustomCellDraft(customCellSlotsRef.current, identity, value);
     customCellMetaRef.current.set(key, { clientId: row.client_id, column, identity });
     const pk = cellKey(row.client_id, column.key);
-    await flushCustomCellKey(key, { clearEditingKey: pk });
+    // Excel UX: leave the cell immediately; persistence continues via single-flight queue.
+    setEditingCellKey((current) => (current === pk ? null : current));
+    void flushCustomCellKey(key);
   };
 
   const beginCustomCellEdit = (
@@ -952,6 +983,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     column: ClientOperationsRegistryColumn,
   ) => {
     if (!canEdit || !column.editable || !column.custom_column_id) return;
+    if (statusPaintMode) return;
     const pk = cellKey(row.client_id, column.key);
     setSelectedRowId(row.client_id);
     setFocusedCell({ clientId: row.client_id, colKey: column.key });
@@ -960,17 +992,97 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     setCellDraft(displayCustomColumnValue(row, column));
   };
 
-  const flushDirtyBeforePeriodChange = async (nextPeriodKey: string) => {
-    // Cancel debounces and flush every dirty/in-flight cell; period stays in each key.
+  const flushDirtyBeforePeriodChange = (nextPeriodKey: string) => {
+    // Kick dirty/in-flight saves for their bound periods; do NOT block tab switch.
     const keys = new Set<string>([
       ...customCellSlotsRef.current.keys(),
       ...customCellDebounceTimersRef.current.keys(),
       ...customCellMetaRef.current.keys(),
     ]);
     for (const key of keys) clearCustomCellDebounce(key);
-    const editingPk = editingCellKeyRef.current;
-    await Promise.all([...keys].map((key) => flushCustomCellKey(key, { clearEditingKey: editingPk })));
+    for (const key of keys) void flushCustomCellKey(key);
+    setEditingCellKey(null);
     onPeriodChange?.(nextPeriodKey);
+  };
+
+  const paintCellManualStatus = (
+    row: ClientOperationsRegistryRow,
+    columnKey: string,
+  ) => {
+    if (!canEdit || !onRegistryCommand || !statusPaintMode) return;
+    const cap = row.manual_cell_statuses?.[columnKey];
+    if (!cap) return;
+    const nextStatus: ManualStatusPaintIntent =
+      statusPaintMode === 'clear' ? null : statusPaintMode;
+    if (statusPaintMode === 'clear' && !cap.allowed_statuses.includes('clear')) return;
+    if (statusPaintMode !== 'clear' && !cap.allowed_statuses.includes(statusPaintMode)) return;
+
+    const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
+    const paintKey = `${row.client_id}:${columnKey}:${periodKey}`;
+    rememberManualStatusPaintIntent(statusPaintSlotsRef.current, paintKey, nextStatus);
+
+    // Optimistic local paint (presentation only) until aggregate returns.
+    onRowsChange(
+      rows.map((r) => {
+        if (r.client_id !== row.client_id) return r;
+        const current = r.manual_cell_statuses ?? {};
+        const existing = current[columnKey];
+        if (!existing) return r;
+        return {
+          ...r,
+          manual_cell_statuses: {
+            ...current,
+            [columnKey]: {
+              ...existing,
+              status: nextStatus,
+              presentation_token: nextStatus,
+              allowed_statuses:
+                nextStatus == null
+                  ? existing.allowed_statuses.filter((s) => s !== 'clear')
+                  : Array.from(new Set([...existing.allowed_statuses, 'clear' as const])),
+            },
+          },
+        };
+      }),
+    );
+
+    const executePaint = async (start: ManualStatusPaintStart): Promise<void> => {
+      try {
+        const data = await onRegistryCommand(
+          {
+            command: 'set_client_operations_cell_manual_status',
+            client_id: row.client_id,
+            column_key: columnKey,
+            operational_period_key: periodKey || null,
+            status: start.status,
+          },
+          { applyAggregate: false },
+        );
+        const { startNext, applyAggregateRecommended } = completeManualStatusPaintSuccess(
+          statusPaintSlotsRef.current,
+          start.key,
+          start.status,
+        );
+        if (applyAggregateRecommended) {
+          const viewed = query?.operational_period_key ?? period?.selected_period_key ?? null;
+          const responsePeriod =
+            (data as { period?: { selected_period_key?: string }; query?: { operational_period_key?: string } })
+              ?.period?.selected_period_key ??
+            (data as { query?: { operational_period_key?: string } })?.query?.operational_period_key ??
+            periodKey;
+          if (String(responsePeriod ?? '') === String(viewed ?? '')) {
+            onApplyAggregate?.(data);
+          }
+        }
+        if (startNext) await executePaint(startNext);
+      } catch (error) {
+        completeManualStatusPaintFailure(statusPaintSlotsRef.current, start.key);
+        setCommandError(error instanceof Error ? error.message : 'עדכון סטטוס נכשל');
+      }
+    };
+
+    const start = tryStartManualStatusPaint(statusPaintSlotsRef.current, paintKey);
+    if (start) void executePaint(start);
   };
 
   const cancelCustomCellEdit = (
@@ -1080,6 +1192,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     row: ClientOperationsRegistryRow,
     stream: 'vat' | 'income_tax_advance' | 'payroll',
   ) => {
+    if (statusPaintMode) return;
     if (!canEdit || !onRegistryCommand) return;
     const cells = row.material_cells;
     const cell =
@@ -1116,6 +1229,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     row: ClientOperationsRegistryRow,
     formKey: '102' | '100' | '126',
   ) => {
+    if (statusPaintMode) return;
     if (!canEdit || !onRegistryCommand) return;
     const cell = row.national_insurance_deductions_cell;
     if (!cell?.applicable) return;
@@ -1145,6 +1259,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     }
   };
   const toggleIncomeTaxDeductions = async (row: ClientOperationsRegistryRow) => {
+    if (statusPaintMode) return;
     if (!canEdit || !onRegistryCommand) return;
     const cell = row.income_tax_deductions_cell;
     if (!cell?.configured || !cell.due || !cell.editable || !cell.applicable) return;
@@ -1166,6 +1281,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     columnKey: 'annual_report' | 'capital_declaration',
     value: string | null,
   ) => {
+    if (statusPaintMode) return;
     if (!canEdit || !onRegistryCommand) return;
     setCommandError('');
     try {
@@ -1277,6 +1393,27 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         {/* HIDDEN for now — keep underlying capabilities/handlers for later restore:
             סינון / מיון ↑ / מיון ↓ / הקפאה */}
       </div>
+
+      {manualStatusPaintModes.length ? (
+        <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--status-paint" role="toolbar" aria-label="מצב צביעת סטטוס">
+          {manualStatusPaintModes.map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              className={`nx-co-sheet__status-mode nx-co-sheet__status-mode--${mode.presentation_token}${
+                statusPaintMode === mode.id ? ' is-active' : ''
+              }`}
+              disabled={!canEdit}
+              aria-pressed={statusPaintMode === mode.id}
+              title={mode.label_he}
+              onClick={() => setStatusPaintMode((current) => (current === mode.id ? null : mode.id))}
+            >
+              <span className="nx-co-sheet__status-mode-swatch" aria-hidden="true" />
+              <span>{mode.label_he}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--secondary">
         <button
@@ -1439,7 +1576,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         </div>
       </div>
       {/* Keep capability ids referenced for tests / future collapse */}
-      <span hidden>{[...primaryToolbarIds, ...moreToolbarIds].join(',')}</span>
+      <span hidden>
+        {[...primaryToolbarIds, ...moreToolbarIds].join(',')}
+        {capTitle('add_column')}
+      </span>
     </div>
   );
 
@@ -1555,10 +1695,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           onClick={(event) => {
             // Prevent row/folder navigation; native input owns the hit target.
             event.stopPropagation();
+            if (statusPaintMode) {
+              event.preventDefault();
+              paintCellManualStatus(r, col.key);
+            }
           }}
           onPointerDown={(event) => {
             // Label chrome is pointer-events:none on children; still stop row selection.
             event.stopPropagation();
+            if (statusPaintMode) {
+              event.preventDefault();
+              paintCellManualStatus(r, col.key);
+            }
           }}
         >
           <span className="nx-co-sheet__date-field-value">{displayValue || '—'}</span>
@@ -1648,8 +1796,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   checked={checked}
                   disabled={!canEdit || !col.editable || !onRegistryCommand}
                   aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel}`}
-                  onChange={() => void toggleMaterialStream(r, stream.key)}
-                  onClick={(event) => event.stopPropagation()}
+                  onChange={() => {
+                    if (statusPaintMode) return;
+                    void toggleMaterialStream(r, stream.key);
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (statusPaintMode) {
+                      event.preventDefault();
+                      paintCellManualStatus(r, col.key);
+                    }
+                  }}
                 />
               </label>
             );
@@ -1698,8 +1855,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   checked={checked}
                   disabled={!canEdit || !col.editable || !onRegistryCommand || (form.key === '126' && checked)}
                   aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel}`}
-                  onChange={() => void toggleNiDeductionsItem(r, form.key)}
-                  onClick={(event) => event.stopPropagation()}
+                  onChange={() => {
+                    if (statusPaintMode) return;
+                    void toggleNiDeductionsItem(r, form.key);
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (statusPaintMode) {
+                      event.preventDefault();
+                      paintCellManualStatus(r, col.key);
+                    }
+                  }}
                 />
               </label>
             );
@@ -1731,8 +1897,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             checked={checked}
             disabled={!active || !canEdit || !col.editable || !onRegistryCommand}
             aria-label={`${col.label} — ${clientLabel} — ${periodLabel}${active ? '' : ' — לא נדרש החודש'}`}
-            onChange={() => void toggleIncomeTaxDeductions(r)}
-            onClick={(event) => event.stopPropagation()}
+            onChange={() => {
+              if (statusPaintMode) return;
+              void toggleIncomeTaxDeductions(r);
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (statusPaintMode) {
+                event.preventDefault();
+                paintCellManualStatus(r, col.key);
+              }
+            }}
           />
         </label>
       );
@@ -1871,6 +2046,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 const pk = cellKey(row.client_id, column.key);
                 const presentation = cellPresentation[pk];
                 const focused = focusedCell?.clientId === row.client_id && focusedCell.colKey === column.key;
+                const manualStatus = row.manual_cell_statuses?.[column.key];
+                const statusToken = manualStatus?.presentation_token ?? null;
                 return (
                   <td
                     key={column.key}
@@ -1879,6 +2056,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     className={[
                       focused ? 'is-focused' : '',
                       editingCellKey === pk && column.cell_kind === 'custom' ? 'is-editing-custom' : '',
+                      statusToken ? `is-manual-status-${statusToken}` : '',
                       obligationApplicable(row, column.key) === false ? 'is-not-applicable' : '',
                     ]
                       .filter(Boolean)
@@ -1887,6 +2065,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       event.stopPropagation();
                       setSelectedRowId(row.client_id);
                       setFocusedCell({ clientId: row.client_id, colKey: column.key });
+                      if (statusPaintMode) {
+                        paintCellManualStatus(row, column.key);
+                        return;
+                      }
                       if (column.cell_kind === 'custom' && canEdit && column.editable) {
                         beginCustomCellEdit(row, column);
                       }
@@ -2116,7 +2298,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           selectedPeriodKey={period?.selected_period_key ?? query?.operational_period_key ?? null}
           defaultPeriodKey={period?.default_period_key ?? null}
           disabled={loading}
-          onSelectPeriod={(key) => void flushDirtyBeforePeriodChange(key)}
+          onSelectPeriod={(key) => flushDirtyBeforePeriodChange(key)}
         />
         </div>
         {commandError ? <div className="nx-co-sheet__error">{commandError}</div> : null}
@@ -2235,7 +2417,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           selectedPeriodKey={period?.selected_period_key ?? query?.operational_period_key ?? null}
           defaultPeriodKey={period?.default_period_key ?? null}
           disabled={loading}
-          onSelectPeriod={(key) => void flushDirtyBeforePeriodChange(key)}
+          onSelectPeriod={(key) => flushDirtyBeforePeriodChange(key)}
         />
             </div>
           </div>

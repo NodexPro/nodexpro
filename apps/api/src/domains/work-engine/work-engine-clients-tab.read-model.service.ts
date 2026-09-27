@@ -10,7 +10,6 @@ import {
   listClientOperationsRegistry,
   type ClientOperationsRegistryRow,
 } from '../client-operations/client-operations.service.js';
-import { listOperationalNoteTypes } from '../client-operations/client-operations-notes.service.js';
 import { buildAccountantWorkspaceTabs } from './work-engine.read-models.service.js';
 
 export type WorkEngineClientsTabAggregate = {
@@ -23,12 +22,16 @@ export type WorkEngineClientsTabAggregate = {
   embedded_view: 'client_operations_first_screen';
   client_operations_aggregate: {
     rows: ClientOperationsRegistryRow[];
+    columns?: import('../client-operations/client-operations.service.js').ClientOperationsRegistryColumn[];
     note_types: Array<{
       code: string;
       label_he: string;
       sort_order: number;
       allows_reminder: boolean;
     }>;
+    toolbar_capabilities?: import('../client-operations/client-operations.service.js').ClientOperationsToolbarCapability[];
+    custom_columns_capability?: { max: number; current: number; can_create: boolean };
+    allowed_actions?: string[];
   };
   allowed_actions: string[];
 };
@@ -55,10 +58,7 @@ export async function buildWorkEngineClientsTabAggregate(params: {
     throw forbidden('client_operations.view permission required');
   }
 
-  const [registry, noteTypes] = await Promise.all([
-    listClientOperationsRegistry(params.ctx),
-    listOperationalNoteTypes(),
-  ]);
+  const registry = await listClientOperationsRegistry(params.ctx);
 
   return {
     aggregate_key: 'work_engine_clients_tab_aggregate',
@@ -70,7 +70,11 @@ export async function buildWorkEngineClientsTabAggregate(params: {
     embedded_view: 'client_operations_first_screen',
     client_operations_aggregate: {
       rows: registry.rows,
-      note_types: noteTypes.types,
+      columns: registry.columns,
+      note_types: registry.note_types,
+      toolbar_capabilities: registry.toolbar_capabilities,
+      custom_columns_capability: registry.custom_columns_capability,
+      allowed_actions: registry.allowed_actions,
     },
     allowed_actions: buildAllowedActions(permissions),
   };

@@ -295,6 +295,27 @@ function WorkEngineClientsTabPanel(props: {
         canEdit={canEdit}
         showPageHeader={false}
         onReloadRegistry={() => void loadAggregate({ silent: true })}
+        columns={aggregate.client_operations_aggregate.columns as any}
+        toolbarCapabilities={aggregate.client_operations_aggregate.toolbar_capabilities as any}
+        customColumnsCapability={aggregate.client_operations_aggregate.custom_columns_capability}
+        onApplyAggregate={(reg) => {
+          if (Array.isArray(reg?.rows)) setRows(reg.rows);
+          setAggregate((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  client_operations_aggregate: {
+                    ...prev.client_operations_aggregate,
+                    ...reg,
+                    note_types: reg.note_types ?? prev.client_operations_aggregate.note_types,
+                  },
+                  allowed_actions: Array.isArray(reg?.allowed_actions)
+                    ? reg.allowed_actions
+                    : prev.allowed_actions,
+                }
+              : prev,
+          );
+        }}
       />
     </>
   );

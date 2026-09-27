@@ -48,7 +48,8 @@ test('commands include selected period query; material command is period-scoped'
     join(dir, '../src/components/client-operations/ClientOperationsRegistryView.tsx'),
     'utf8',
   );
-  assert.match(page, /\{\s*\.\.\.body,\s*query\s*\}/);
+  assert.match(page, /\{\s*\.\.\.body,\s*query:\s*\{/);
+  assert.match(page, /operational_period_key:/);
   assert.match(view, /set_material_brought/);
   assert.match(view, /operational_period_key:\s*query\?\.operational_period_key/);
 });

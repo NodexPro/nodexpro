@@ -58,6 +58,14 @@ import {
 } from './client-operations-user-columns-periods.service.js';
 import { mergeUserCustomCellsIntoRowPeriodAware } from './client-operations-user-columns-periods.pure.js';
 import {
+  buildManualStatusCapabilitiesForRow,
+  countMaterialOperationalSquares,
+  countNiDeductionsOperationalSquares,
+  loadManualCellStatusesForPeriod,
+  manualStatusPaintModesForAggregate,
+} from './client-operations-cell-manual-status.service.js';
+import { mergeSelectedPeriodIntoAvailablePeriods } from './client-operations-cell-manual-status.pure.js';
+import {
   ensurePeriodApplicabilitySnapshots,
   listKnownOperationalPeriodKeys,
   loadPeriodApplicabilitySnapshots,
@@ -143,6 +151,16 @@ export type ClientOperationsRegistryRow = {
   vat_due_registry_display_he: string | null;
   /** Ready-to-render cell text by column key (excludes folder action). */
   cells: Record<string, string>;
+  /** Backend-owned manual paint status per paintable column key. */
+  manual_cell_statuses?: Record<
+    string,
+    {
+      status: 'ready' | 'sent_for_approval' | 'completed' | null;
+      presentation_token: 'ready' | 'sent_for_approval' | 'completed' | null;
+      allowed_statuses: Array<'ready' | 'sent_for_approval' | 'completed' | 'clear'>;
+      operational_square_count: number;
+    }
+  >;
 };
 
 export type ClientOperationsRegistryResponse = {
@@ -178,6 +196,12 @@ export type ClientOperationsRegistryResponse = {
     label: string;
     key: string;
     available_baseline_periods: string[];
+  }>;
+  /** Excel paint-mode tools (backend labels/tokens; FE is render-only). */
+  manual_status_paint_modes?: Array<{
+    id: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
+    label_he: string;
+    presentation_token: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
   }>;
   query: {
     q: string | null;
@@ -358,6 +382,7 @@ function emptyRegistryResponse(
     custom_columns_capability: customColumnsCapability,
     user_column_period_setup: extras?.user_column_period_setup ?? null,
     columns_needing_legacy_baseline: extras?.columns_needing_legacy_baseline ?? [],
+    manual_status_paint_modes: manualStatusPaintModesForAggregate(),
     query: { q, sort_by, sort_dir, operational_period_key: period.selected_period_key },
     allowed_actions: buildRegistryAllowedActions(ctx),
   };
@@ -570,6 +595,20 @@ export async function listClientOperationsRegistry(
       clientIds,
     }),
   ]);
+  const manualStatusesByClientColumn = await loadManualCellStatusesForPeriod({
+    organizationId: orgId,
+    operationalPeriodKey: selectedPeriodKey,
+    clientIds,
+  });
+  const customColumnKeys = new Set(visibleCustomColumns.map((c) => c.key));
+  const paintableColumnKeys = [
+    'material_brought',
+    'national_insurance_deductions',
+    'income_tax_deductions',
+    'annual_report',
+    'capital_declaration',
+    ...visibleCustomColumns.map((c) => c.key),
+  ];
   const profilesByClientId = new Map<string, Record<string, unknown>>();
   for (const p of (profiles ?? []) as unknown as Array<{ client_id: string }>) {
     profilesByClientId.set(p.client_id, p as Record<string, unknown>);
@@ -662,6 +701,11 @@ export async function listClientOperationsRegistry(
     operationalPeriodKey: selectedPeriodKey,
     sources: periodSources,
     existing: existingSnapshots,
+  });
+  // First-touch period: ensure creates snapshots after listKnown — always include selected tab.
+  period.available_periods = mergeSelectedPeriodIntoAvailablePeriods({
+    availablePeriods: period.available_periods,
+    selectedPeriodKey,
   });
 
   const handlerIds = [
@@ -867,6 +911,26 @@ export async function listClientOperationsRegistry(
           ? (handlerDisplayByUserId.get(assigned_handler_user_id) ?? null)
           : null,
       }),
+      manual_cell_statuses: buildManualStatusCapabilitiesForRow({
+        clientId: c.id,
+        columnKeys: paintableColumnKeys,
+        customColumnKeys,
+        statuses: manualStatusesByClientColumn,
+        materialSquareCount: countMaterialOperationalSquares({
+          vatApplicable: materialBroughtCell.applicable,
+          incomeTaxAdvanceApplicable: incomeTaxAdvanceCell.applicable,
+          payrollApplicable: payrollCell.applicable,
+        }),
+        niDeductionsSquareCount: countNiDeductionsOperationalSquares({
+          applicable: Boolean(national_insurance_deductions_cell.applicable),
+          form102Applicable: Boolean(national_insurance_deductions_cell.items?.['102']?.applicable),
+          form100Applicable: Boolean(national_insurance_deductions_cell.items?.['100']?.applicable),
+          form126Applicable: Boolean(national_insurance_deductions_cell.items?.['126']?.applicable),
+        }),
+        incomeTaxDeductionsSquareCount: income_tax_deductions_cell.configured ? 1 : 0,
+        annualApplicable: Boolean(annual_report_cell.applicable),
+        capitalApplicable: Boolean(capital_declaration_cell.applicable),
+      }),
     }, visibleCustomColumns, customValuesByClientAndColumn)];
   });
 
@@ -918,6 +982,7 @@ export async function listClientOperationsRegistry(
     custom_columns_capability: customColumnsCapability,
     user_column_period_setup: userColumnsPeriodExtras.user_column_period_setup,
     columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
+    manual_status_paint_modes: manualStatusPaintModesForAggregate(),
     query: { q, sort_by, sort_dir, operational_period_key: selectedPeriodKey },
     allowed_actions: buildRegistryAllowedActions(ctx),
   };

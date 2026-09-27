@@ -44,6 +44,11 @@ import {
   setCustomColumnPeriodSettings,
   setPeriodCustomColumnValue,
 } from './client-operations-user-columns-periods.service.js';
+import {
+  isValidClientOperationsManualCellStatus,
+  resolveAllowedManualStatusesForWrite,
+  setClientOperationsCellManualStatus,
+} from './client-operations-cell-manual-status.service.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -86,6 +91,8 @@ export type ClientOperationsRegistryCommandBody = {
   auto_extend_to_future?: unknown;
   legacy_baseline_period_key?: unknown;
   column_ids?: unknown;
+  column_key?: unknown;
+  status?: unknown;
 };
 
 function assertOrg(ctx: RequestContext): string {
@@ -522,6 +529,40 @@ export async function executeClientOperationsRegistryCommand(
       values,
       actorUserId: ctx.user.id,
       columnKey: column.key,
+    });
+  } else if (command === 'set_client_operations_cell_manual_status') {
+    const clientId = idFrom(body.client_id, 'client_id');
+    await ensureActiveClientInOrg(orgId, clientId);
+    const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
+    const columnKey = typeof body.column_key === 'string' ? body.column_key.trim() : '';
+    if (!columnKey) throw badRequest('column_key is required');
+    const statusRaw = body.status;
+    const status =
+      statusRaw === null || statusRaw === undefined || statusRaw === ''
+        ? null
+        : isValidClientOperationsManualCellStatus(statusRaw)
+          ? statusRaw
+          : (() => {
+              throw badRequest('status must be ready | sent_for_approval | completed | null');
+            })();
+    const extended = await loadActiveCustomColumnsExtended(orgId);
+    const isCustomColumn = extended.some((c) => c.key === columnKey && c.visible !== false);
+    const allowedStatuses = await resolveAllowedManualStatusesForWrite({
+      organizationId: orgId,
+      clientId,
+      operationalPeriodKey,
+      columnKey,
+      isCustomColumn,
+    });
+    if (!allowedStatuses.length) throw forbidden('Cell is not eligible for manual status');
+    await setClientOperationsCellManualStatus({
+      ctx,
+      organizationId: orgId,
+      clientId,
+      operationalPeriodKey,
+      columnKey,
+      status,
+      allowedStatuses,
     });
   } else if (command === 'set_client_operations_custom_column_period_settings') {
     const extended = await loadActiveCustomColumnsExtended(orgId);

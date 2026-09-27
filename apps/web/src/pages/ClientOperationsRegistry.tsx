@@ -9,6 +9,13 @@ import {
   type ClientOperationsRegistryRow,
   type ClientOperationsToolbarCapability,
 } from '../components/client-operations/ClientOperationsRegistryView';
+import {
+  getPeriodAggregateCache,
+  putPeriodAggregateCache,
+  selectPeriodPrefetchKeys,
+  shouldApplyPeriodAggregateResponse,
+  type PeriodAggregateCacheEntry,
+} from '../lib/client-operations-period-aggregate-cache.pure';
 
 type RegistryAggregate = {
   title_he?: string;
@@ -27,6 +34,11 @@ type RegistryAggregate = {
     label: string;
     key: string;
     available_baseline_periods: string[];
+  }>;
+  manual_status_paint_modes?: Array<{
+    id: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
+    label_he: string;
+    presentation_token: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
   }>;
   query?: {
     q: string | null;
@@ -61,6 +73,9 @@ export function ClientOperationsRegistry() {
   const [columnsNeedingLegacyBaseline, setColumnsNeedingLegacyBaseline] = useState<
     NonNullable<RegistryAggregate['columns_needing_legacy_baseline']>
   >([]);
+  const [manualStatusPaintModes, setManualStatusPaintModes] = useState<
+    NonNullable<RegistryAggregate['manual_status_paint_modes']>
+  >([]);
   const [query, setQuery] = useState<{
     q: string | null;
     sort_by: string | null;
@@ -74,12 +89,46 @@ export function ClientOperationsRegistry() {
   } | null>(null);
   const loadSeqRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
+  const viewedPeriodKeyRef = useRef<string | null>(null);
+  const periodCacheRef = useRef<Map<string, PeriodAggregateCacheEntry<RegistryAggregate>>>(new Map());
+  const prefetchInflightRef = useRef<Set<string>>(new Set());
+  /** Last backend-authoritative available_periods (not FE-optimistic). */
+  const backendAvailablePeriodsRef = useRef<string[]>([]);
+  const cacheOrganizationIdRef = useRef<string | null>(null);
   /** Once-per-entry / in-flight guard — never loop ensure on aggregate refresh. */
   const userSlotsEnsureRef = useRef<'idle' | 'pending' | 'done'>('idle');
   const periodSetupEmptyRef = useRef<'idle' | 'pending' | 'done'>('idle');
   const periodSetupKeyRef = useRef<string | null>(null);
 
-  const applyAggregate = useCallback((data: RegistryAggregate) => {
+  const activeOrganizationId =
+    auth.status === 'authenticated' ? (auth.me.activeOrganizationId ?? null) : null;
+
+  useEffect(() => {
+    if (cacheOrganizationIdRef.current === activeOrganizationId) return;
+    cacheOrganizationIdRef.current = activeOrganizationId;
+    periodCacheRef.current.clear();
+    prefetchInflightRef.current.clear();
+    backendAvailablePeriodsRef.current = [];
+    viewedPeriodKeyRef.current = null;
+  }, [activeOrganizationId]);
+
+  const applyAggregate = useCallback((data: RegistryAggregate, options?: { forcePeriodKey?: string }) => {
+    const responsePeriod =
+      data.period?.selected_period_key ?? data.query?.operational_period_key ?? null;
+    const viewed = options?.forcePeriodKey ?? viewedPeriodKeyRef.current;
+    if (
+      responsePeriod &&
+      viewed &&
+      !shouldApplyPeriodAggregateResponse({
+        responsePeriodKey: responsePeriod,
+        viewedPeriodKey: viewed,
+      })
+    ) {
+      // Cache late period truth without painting the active sheet.
+      putPeriodAggregateCache(periodCacheRef.current, responsePeriod, data);
+      return;
+    }
+
     setRows(Array.isArray(data?.rows) ? data.rows : []);
     setAllowedActions(Array.isArray(data?.allowed_actions) ? data.allowed_actions : []);
     setNoteTypes(Array.isArray(data?.note_types) ? data.note_types : []);
@@ -90,6 +139,9 @@ export function ClientOperationsRegistry() {
     setColumnsNeedingLegacyBaseline(
       Array.isArray(data?.columns_needing_legacy_baseline) ? data.columns_needing_legacy_baseline : [],
     );
+    if (Array.isArray(data?.manual_status_paint_modes)) {
+      setManualStatusPaintModes(data.manual_status_paint_modes);
+    }
     if (typeof data?.title_he === 'string' && data.title_he.trim()) setTitleHe(data.title_he);
     if (data?.query) {
       setQuery({
@@ -110,8 +162,43 @@ export function ClientOperationsRegistry() {
           ? data.period.available_periods
           : [],
       });
+      viewedPeriodKeyRef.current = data.period.selected_period_key;
+      putPeriodAggregateCache(periodCacheRef.current, data.period.selected_period_key, data);
+      if (Array.isArray(data.period.available_periods)) {
+        backendAvailablePeriodsRef.current = data.period.available_periods;
+      }
     }
   }, []);
+
+  const prefetchPeriods = useCallback(
+    (
+      baseQuery: {
+        q: string | null;
+        sort_by: string | null;
+        sort_dir: 'asc' | 'desc' | null;
+      },
+      selectedPeriodKey: string,
+      availablePeriods: string[],
+    ) => {
+      const keys = selectPeriodPrefetchKeys({ selectedPeriodKey, availablePeriods, max: 4 });
+      for (const key of keys) {
+        if (getPeriodAggregateCache(periodCacheRef.current, key)) continue;
+        if (prefetchInflightRef.current.has(key)) continue;
+        prefetchInflightRef.current.add(key);
+        void apiJson<RegistryAggregate>(
+          moduleClientOperationsRegistry({ ...baseQuery, operational_period_key: key }),
+        )
+          .then((data) => {
+            putPeriodAggregateCache(periodCacheRef.current, key, data);
+          })
+          .catch(() => {})
+          .finally(() => {
+            prefetchInflightRef.current.delete(key);
+          });
+      }
+    },
+    [],
+  );
 
   const loadRegistry = useCallback(
     (
@@ -121,37 +208,105 @@ export function ClientOperationsRegistry() {
         sort_dir: 'asc' | 'desc' | null;
         operational_period_key?: string | null;
       },
-      options?: { quiet?: boolean },
+      options?: { quiet?: boolean; preferCache?: boolean },
     ) => {
+      const periodKey = nextQuery.operational_period_key ?? null;
+      if (periodKey) {
+        viewedPeriodKeyRef.current = periodKey;
+        setQuery({ ...nextQuery, operational_period_key: periodKey });
+        setPeriod((current) => {
+          if (!current) {
+            return {
+              selected_period_key: periodKey,
+              default_period_key: periodKey,
+              available_periods: [periodKey],
+            };
+          }
+          const available = current.available_periods.includes(periodKey)
+            ? current.available_periods
+            : [...current.available_periods, periodKey].sort();
+          return {
+            ...current,
+            selected_period_key: periodKey,
+            available_periods: available,
+          };
+        });
+        if (options?.preferCache !== false) {
+          const cached = getPeriodAggregateCache(periodCacheRef.current, periodKey);
+          if (cached) {
+            applyAggregate(cached, { forcePeriodKey: periodKey });
+            // Quiet refresh after instant paint.
+            options = { ...options, quiet: true };
+          }
+        }
+      } else {
+        setQuery({ ...nextQuery, operational_period_key: null });
+      }
+
       loadAbortRef.current?.abort();
       const ac = new AbortController();
       loadAbortRef.current = ac;
       const seq = ++loadSeqRef.current;
-      setQuery({ ...nextQuery, operational_period_key: nextQuery.operational_period_key ?? null });
-      // Query-only search must not dim/block the grid; period/initial loads still show loading.
+      // Period switches / search must not dim; only true cold mount uses loading.
       if (!options?.quiet) setLoading(true);
       setError('');
       return apiJson<RegistryAggregate>(moduleClientOperationsRegistry(nextQuery), {
         signal: ac.signal,
       })
         .then((data) => {
-          if (seq !== loadSeqRef.current) return;
+          if (seq !== loadSeqRef.current) {
+            const responsePeriod =
+              data.period?.selected_period_key ?? data.query?.operational_period_key ?? null;
+            if (responsePeriod) putPeriodAggregateCache(periodCacheRef.current, responsePeriod, data);
+            return;
+          }
           applyAggregate(data);
+          const selected = data.period?.selected_period_key;
+          const available = data.period?.available_periods ?? [];
+          if (selected) {
+            prefetchPeriods(
+              { q: nextQuery.q, sort_by: nextQuery.sort_by, sort_dir: nextQuery.sort_dir },
+              selected,
+              available,
+            );
+          }
         })
         .catch((e) => {
           if (e instanceof Error && e.name === 'AbortError') return;
           if (seq !== loadSeqRef.current) return;
           setError(e instanceof Error ? e.message : 'Failed to load');
+          // Drop optimistic first-touch tab if backend never confirmed it.
+          if (periodKey && !getPeriodAggregateCache(periodCacheRef.current, periodKey)) {
+            const backendPeriods = backendAvailablePeriodsRef.current;
+            setPeriod((current) => {
+              if (!current) return current;
+              const fallback =
+                backendPeriods.find((p) => p !== periodKey) ??
+                current.available_periods.find((p) => p !== periodKey) ??
+                current.default_period_key;
+              return {
+                ...current,
+                selected_period_key: fallback,
+                available_periods: backendPeriods.length
+                  ? backendPeriods
+                  : current.available_periods.filter((p) => p !== periodKey),
+              };
+            });
+            viewedPeriodKeyRef.current =
+              backendPeriods.find((p) => p !== periodKey) ??
+              backendPeriods[0] ??
+              null;
+          }
         })
         .finally(() => {
           if (seq === loadSeqRef.current && !options?.quiet) setLoading(false);
         });
     },
-    [applyAggregate],
+    [applyAggregate, prefetchPeriods],
   );
 
   const reloadRegistry = useCallback(() => {
-    return loadRegistry(query);
+    return loadRegistry(query, { quiet: true });
   }, [loadRegistry, query]);
 
   useEffect(() => {
@@ -179,12 +334,16 @@ export function ClientOperationsRegistry() {
 
   const onPeriodChange = useCallback(
     (operationalPeriodKey: string) => {
-      void loadRegistry({
-        q: query.q,
-        sort_by: query.sort_by,
-        sort_dir: query.sort_dir,
-        operational_period_key: operationalPeriodKey,
-      });
+      // Instant tab + cache paint; quiet network refresh. Dirty cell saves continue in background.
+      void loadRegistry(
+        {
+          q: query.q,
+          sort_by: query.sort_by,
+          sort_dir: query.sort_dir,
+          operational_period_key: operationalPeriodKey,
+        },
+        { quiet: true, preferCache: true },
+      );
     },
     [loadRegistry, query.q, query.sort_by, query.sort_dir],
   );
@@ -193,18 +352,27 @@ export function ClientOperationsRegistry() {
     (body: Record<string, unknown>, options?: { applyAggregate?: boolean }) =>
       apiJson<RegistryAggregate>(moduleClientOperationsRegistryCommands(), {
         method: 'POST',
-        body: JSON.stringify({ ...body, query }),
+        body: JSON.stringify({
+          ...body,
+          query: {
+            ...query,
+            operational_period_key:
+              (typeof body.operational_period_key === 'string' && body.operational_period_key) ||
+              query.operational_period_key,
+          },
+        }),
       }).then((data) => {
-        // Cell autosave passes applyAggregate:false so View can reject wrong-period /
-        // stale in-flight paints before registry truth is replaced.
         if (options?.applyAggregate !== false) applyAggregate(data);
+        else {
+          const responsePeriod =
+            data.period?.selected_period_key ?? data.query?.operational_period_key ?? null;
+          if (responsePeriod) putPeriodAggregateCache(periodCacheRef.current, responsePeriod, data);
+        }
         return data;
       }),
     [applyAggregate, query],
   );
 
-  // Excel 10 user slots: init ONLY via named command when backend capability says so.
-  // React to custom_columns_capability.can_create — do not compute missing slots on FE.
   useEffect(() => {
     if (loading) return;
     if (!canEdit) return;
@@ -212,15 +380,12 @@ export function ClientOperationsRegistry() {
     if (userSlotsEnsureRef.current !== 'idle') return;
     userSlotsEnsureRef.current = 'pending';
     void onRegistryCommand({ command: 'ensure_client_operations_user_column_slots' })
-      .catch(() => {
-        /* no local fabrication; mark done so we do not hammer on every refresh */
-      })
+      .catch(() => {})
       .finally(() => {
         userSlotsEnsureRef.current = 'done';
       });
   }, [loading, canEdit, customColumnsCapability.can_create, onRegistryCommand]);
 
-  // Zero-eligible period setup: named command only (GET never writes). One-shot per period key.
   useEffect(() => {
     if (loading) return;
     if (!canEdit) return;
@@ -264,6 +429,7 @@ export function ClientOperationsRegistry() {
       customColumnsCapability={customColumnsCapability}
       userColumnPeriodSetup={userColumnPeriodSetup}
       columnsNeedingLegacyBaseline={columnsNeedingLegacyBaseline}
+      manualStatusPaintModes={manualStatusPaintModes}
       query={query}
       onQueryChange={onQueryChange}
       onRegistryCommand={onRegistryCommand}
