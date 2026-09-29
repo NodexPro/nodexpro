@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import type { Template1SidebarItem } from '../TemplateLayout';
 import type { SidebarAccountBlockModel } from '../../../types/session';
 import { SidebarAccountBlock } from './SidebarAccountBlock';
-import orbSrc from '../assets/nodexpro-orb.png';
+import logoSrc from '../assets/nodexpro-logo.png';
 import '../t1-sidebar-account.css';
 
 type SidebarMode = 'default' | 'collapsedHover';
@@ -80,14 +80,13 @@ export function AppSidebar({
         }}
       >
         <img
-          src={orbSrc}
-          alt=""
+          src={logoSrc}
+          alt="NodexPro"
           style={{
             width: 42,
             height: 42,
             display: 'block',
             objectFit: 'contain',
-            borderRadius: '50%',
             flexShrink: 0,
           }}
         />
