@@ -3098,14 +3098,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         </button>
       );
     }
-    const applicable = obligationApplicable(r, col.key);
-    if (applicable === false) {
-      return (
-        <span className="nx-co-sheet__na" title="לא רלוונטי לתקופה זו" aria-label={`${col.label} לא רלוונטי`}>
-          —
-        </span>
-      );
-    }
+    // Configuration / frequency text comes ready-made from the aggregate.
+    // Period "not due this month" must NOT overwrite configured labels with —.
+    // (CSS `is-not-applicable` may still dim filing-due semantics separately.)
     return displayForColumn(r, col);
   };
 

@@ -87,6 +87,7 @@ import {
   resolveIncomeTaxDeductionsConfigured,
   resolveMaterialBroughtForPeriod,
   resolvePayrollApplicabilityFromDeductionsFiles,
+  resolvePayrollApplicabilityFromFrozenSnapshot,
   resolvePayrollMaterialForPeriod,
   shouldIncludeArchivedClientInOperationalPeriodRegistry,
   shouldEmitOperationalPeriodRegistryRow,
@@ -857,7 +858,12 @@ export async function listClientOperationsRegistry(
           national_insurance_deductions_file_number:
             tax?.national_insurance_deductions_file_number ?? null,
         })
-      : Boolean(snapshot?.payroll_applicable);
+      : resolvePayrollApplicabilityFromFrozenSnapshot({
+          payroll_applicable: snapshot?.payroll_applicable,
+          income_tax_deductions_enabled: snapshot?.income_tax_deductions_enabled,
+          national_insurance_deductions_file_number:
+            snapshot?.national_insurance_deductions_file_number,
+        });
     const periodFact = materialFacts.get(c.id);
     const materialBroughtCell = resolveMaterialBroughtForPeriod({
       period_fact: periodFact?.material_brought,
@@ -1056,13 +1062,19 @@ export async function listClientOperationsRegistry(
     const p = profilesByClientId.get(c.id);
     const noteAgg = buildNotesCellDisplayHe(notesByClient.get(c.id) ?? []);
     const tax = taxByClient.get(c.id);
+    const bt = (p?.business_type as string | null) ?? null;
+    // מע״מ frequency: frozen snapshot when present; never erase by period non-due.
+    const vatTypeForDisplay = snapshot != null ? snapshot.vat_type : (tax?.vat_type ?? null);
+    const vatFrequencyForDisplay =
+      snapshot != null ? snapshot.vat_frequency : (tax?.vat_frequency ?? null);
     const vat_due_registry_display_he = tax
       ? computeVatDueRegistryDisplayHe(tax.vat_due_type, tax.vat_frequency)
       : null;
-    const bt = (p?.business_type as string | null) ?? null;
-    const vatFromTax = tax
-      ? computeVatRegistryColumnDisplayHe(bt, tax.vat_type, tax.vat_frequency)
-      : computeVatRegistryColumnDisplayHe(bt, null, null);
+    const vatFromTax = computeVatRegistryColumnDisplayHe(
+      bt,
+      vatTypeForDisplay,
+      vatFrequencyForDisplay,
+    );
     const niFromTax = tax
       ? formatNationalInsuranceRegistryDisplayHe(tax.national_insurance_type, tax.national_insurance_monthly_amount)
       : null;

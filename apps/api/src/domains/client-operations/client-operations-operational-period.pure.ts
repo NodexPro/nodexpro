@@ -275,6 +275,33 @@ export function resolvePayrollApplicabilityFromDeductionsFiles(input: {
 }
 
 /**
+ * Historical שכר from frozen snapshot evidence only — never today's live file numbers.
+ *
+ * Snapshot stores `payroll_applicable` plus capture-time evidence:
+ * - `national_insurance_deductions_file_number` (canonical NI file)
+ * - `income_tax_deductions_enabled` (IT file number is NOT persisted on snapshot;
+ *   enabled===true is the frozen proxy that IT deductions were configured at capture)
+ *
+ * If payroll_applicable was incorrectly frozen false while NI file / IT enabled
+ * evidence remains, restore true. If no frozen evidence of files, stay false
+ * (data-repair candidate — do not invent from live tax).
+ */
+export function resolvePayrollApplicabilityFromFrozenSnapshot(input: {
+  payroll_applicable: boolean | null | undefined;
+  income_tax_deductions_enabled: boolean | null | undefined;
+  national_insurance_deductions_file_number: string | null | undefined;
+}): boolean {
+  if (input.payroll_applicable === true) return true;
+  if (
+    resolveNationalInsuranceDeductionsApplicability(input.national_insurance_deductions_file_number)
+  ) {
+    return true;
+  }
+  if (input.income_tax_deductions_enabled === true) return true;
+  return false;
+}
+
+/**
  * מ״ה ניכויים registry cell — three backend presentation states:
  * - not_configured (no תיק) → dash
  * - configured + due → active checkbox (editable)
