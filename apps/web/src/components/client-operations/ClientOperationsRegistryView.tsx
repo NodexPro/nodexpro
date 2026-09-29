@@ -469,6 +469,25 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   /** Presentation-only active cell for formatting toolbar (not persisted). */
   const [focusedCell, setFocusedCell] = useState<ClientOperationsActiveCell | null>(null);
+  /** Toolbar presentation choices when no cell is selected (not persisted; not cell truth). */
+  const [presentationToolDefaults, setPresentationToolDefaults] = useState<{
+    color: string;
+    fontSize: number;
+    bold: boolean;
+    italic: boolean;
+    underline: boolean;
+    align?: 'right' | 'center' | 'left';
+    wrap: boolean;
+    fill?: string;
+    numberFormat?: CellPresentation['numberFormat'];
+  }>(() => ({
+    color: CLIENT_OPERATIONS_DEFAULT_TEXT_COLOR,
+    fontSize: CLIENT_OPERATIONS_DEFAULT_FONT_SIZE,
+    bold: false,
+    italic: false,
+    underline: false,
+    wrap: false,
+  }));
   const [searchDraft, setSearchDraft] = useState(query?.q ?? '');
   // Freeze sticky CSS retained; toolbar toggle is hidden — keep pinned columns on by default.
   const freezeOn = true;
@@ -848,6 +867,27 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       persistCellPresentation(next);
       return next;
     });
+  };
+
+  /**
+   * Cell-specific formatting: apply to active cell when present.
+   * With no active cell: update toolbar tool defaults only — no cell mutation, no domain mutation.
+   */
+  const commitPresentationOrToolDefault = (patch: Partial<CellPresentation>) => {
+    setPresentationToolDefaults((prev) => ({
+      ...prev,
+      ...(patch.color !== undefined ? { color: patch.color } : {}),
+      ...(patch.fontSize !== undefined ? { fontSize: patch.fontSize } : {}),
+      ...(patch.bold !== undefined ? { bold: patch.bold } : {}),
+      ...(patch.italic !== undefined ? { italic: patch.italic } : {}),
+      ...(patch.underline !== undefined ? { underline: patch.underline } : {}),
+      ...(patch.align !== undefined ? { align: patch.align } : {}),
+      ...(patch.wrap !== undefined ? { wrap: patch.wrap } : {}),
+      ...(patch.fill !== undefined ? { fill: patch.fill } : {}),
+      ...(patch.numberFormat !== undefined ? { numberFormat: patch.numberFormat } : {}),
+    }));
+    if (!focusedCell) return;
+    applyPresentation(patch);
   };
 
   const isCap = (id: string) => capById.get(id)?.available === true;
@@ -1887,10 +1927,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const renderSpreadsheetToolbar = () => {
     const currentPk = focusedCell ? cellKey(focusedCell.clientId, focusedCell.colKey) : null;
     const currentCellPres = currentPk ? cellPresentation[currentPk] : undefined;
-    const currentColor = currentCellPres?.color ?? CLIENT_OPERATIONS_DEFAULT_TEXT_COLOR;
+    // Toolbar always looks active: show cell values when selected, else current tool defaults.
+    const currentColor = currentCellPres?.color ?? presentationToolDefaults.color;
+    const currentFontSize = currentCellPres?.fontSize ?? presentationToolDefaults.fontSize;
+    const currentBold = currentCellPres?.bold ?? presentationToolDefaults.bold;
+    const currentItalic = currentCellPres?.italic ?? presentationToolDefaults.italic;
+    const currentUnderline = currentCellPres?.underline ?? presentationToolDefaults.underline;
+    const currentAlign = currentCellPres?.align ?? presentationToolDefaults.align;
+    const currentWrap = currentCellPres?.wrap ?? presentationToolDefaults.wrap;
     const paletteRows = clientOperationsTextColorPaletteRows();
-    const formatTargetActive = Boolean(focusedCell);
-    const formatDisabled = !formatTargetActive;
 
     return (
       <div className="nx-co-sheet__toolbar" role="toolbar" aria-label="כלי גיליון">
@@ -1913,92 +1958,94 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           <button type="button" className="nx-co-sheet__btn" hidden disabled={!isCap('redo') || redoStack.length === 0} title={capTitle('redo')} onClick={redoPresentation}>בצע שוב</button>
         </div>
 
-        {/* ── Format: B I U | align | font-size | A-color ── */}
+        {/* ── Format: B I U | align | font-size | A-color (always visually active) ── */}
         <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--secondary">
           <button
             type="button"
-            className="nx-co-sheet__btn"
-            disabled={!isCap('bold') || formatDisabled}
+            className={`nx-co-sheet__btn${currentBold ? ' is-active' : ''}`}
+            disabled={!isCap('bold')}
             title={capTitle('bold')}
+            aria-pressed={currentBold}
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
-            onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.bold; applyPresentation({ bold: !cur }); }}
+            onClick={() => commitPresentationOrToolDefault({ bold: !currentBold })}
           ><strong>B</strong></button>
           <button
             type="button"
-            className="nx-co-sheet__btn"
-            disabled={!isCap('italic') || formatDisabled}
+            className={`nx-co-sheet__btn${currentItalic ? ' is-active' : ''}`}
+            disabled={!isCap('italic')}
             title={capTitle('italic')}
+            aria-pressed={currentItalic}
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
-            onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.italic; applyPresentation({ italic: !cur }); }}
+            onClick={() => commitPresentationOrToolDefault({ italic: !currentItalic })}
           ><em>I</em></button>
           <button
             type="button"
-            className="nx-co-sheet__btn"
-            disabled={!isCap('underline') || formatDisabled}
+            className={`nx-co-sheet__btn${currentUnderline ? ' is-active' : ''}`}
+            disabled={!isCap('underline')}
             title={capTitle('underline')}
+            aria-pressed={currentUnderline}
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
-            onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.underline; applyPresentation({ underline: !cur }); }}
+            onClick={() => commitPresentationOrToolDefault({ underline: !currentUnderline })}
           ><span style={{ textDecoration: 'underline' }}>U</span></button>
 
           <button
             type="button"
-            className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentCellPres?.align === 'right' ? ' is-active' : ''}`}
-            disabled={!isCap('align_right') || formatDisabled}
+            className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentAlign === 'right' ? ' is-active' : ''}`}
+            disabled={!isCap('align_right')}
             title={capTitle('align_right') ?? 'יישור ימין'}
             aria-label="יישור ימין"
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
-            onClick={() => applyPresentation({ align: 'right' })}
+            onClick={() => commitPresentationOrToolDefault({ align: 'right' })}
           >
             <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M20 7H8M20 12H4M20 17H10" /></svg>
           </button>
           <button
             type="button"
-            className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentCellPres?.align === 'center' ? ' is-active' : ''}`}
-            disabled={!isCap('align_center') || formatDisabled}
+            className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentAlign === 'center' ? ' is-active' : ''}`}
+            disabled={!isCap('align_center')}
             title={capTitle('align_center') ?? 'מרכז'}
             aria-label="מרכז"
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
-            onClick={() => applyPresentation({ align: 'center' })}
+            onClick={() => commitPresentationOrToolDefault({ align: 'center' })}
           >
             <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M18 7H6M20 12H4M17 17H7" /></svg>
           </button>
           <button
             type="button"
-            className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentCellPres?.align === 'left' ? ' is-active' : ''}`}
-            disabled={!isCap('align_left') || formatDisabled}
+            className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentAlign === 'left' ? ' is-active' : ''}`}
+            disabled={!isCap('align_left')}
             title={capTitle('align_left') ?? 'יישור שמאל'}
             aria-label="יישור שמאל"
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
-            onClick={() => applyPresentation({ align: 'left' })}
+            onClick={() => commitPresentationOrToolDefault({ align: 'left' })}
           >
             <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M4 7h12M4 12h16M4 17h10" /></svg>
           </button>
           {/* HIDDEN — wrap retained */}
-          <button type="button" className={`nx-co-sheet__btn${focusedCell && cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap ? ' is-active' : ''}`} hidden disabled={!isCap('wrap_text') || formatDisabled} title={capTitle('wrap_text')} onClick={() => { if (!focusedCell) return; const cur = cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.wrap; applyPresentation({ wrap: !cur }); }}>גלישה</button>
+          <button type="button" className={`nx-co-sheet__btn${currentWrap ? ' is-active' : ''}`} hidden disabled={!isCap('wrap_text')} title={capTitle('wrap_text')} onClick={() => commitPresentationOrToolDefault({ wrap: !currentWrap })}>גלישה</button>
 
-          {/* Font-size selector */}
+          {/* Font-size selector — always visually active */}
           <select
             data-testid="font-size-control"
             className="nx-co-sheet__font-size-select"
-            value={currentCellPres?.fontSize ?? CLIENT_OPERATIONS_DEFAULT_FONT_SIZE}
-            disabled={formatDisabled}
+            value={currentFontSize}
             title="גודל גופן"
             aria-label="גודל גופן"
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
-            onChange={(e) => applyPresentation({ fontSize: Number(e.target.value) })}
+            onChange={(e) => commitPresentationOrToolDefault({ fontSize: Number(e.target.value) })}
           >
             {CLIENT_OPERATIONS_FONT_SIZES.map((sz) => (
               <option key={sz} value={sz}>{sz}</option>
             ))}
           </select>
 
-          {/* A text-color icon with current-color underline */}
+          {/* A text-color icon — always visually active */}
           <div className="nx-co-sheet__color-picker-wrap">
             <button
               type="button"
               data-testid="text-color-control"
               className={`nx-co-sheet__btn nx-co-sheet__btn--icon nx-co-sheet__color-a-btn${colorPaletteOpen ? ' is-active' : ''}`}
-              disabled={!isCap('text_color') || formatDisabled}
+              disabled={!isCap('text_color')}
               title="צבע טקסט"
               aria-label="צבע טקסט"
               aria-expanded={colorPaletteOpen}
@@ -2025,7 +2072,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         aria-label={swatch.label_he}
                         onMouseDown={preserveActiveCellOnToolbarMouseDown}
                         onClick={() => {
-                          applyPresentation({ color: swatch.hex });
+                          commitPresentationOrToolDefault({ color: swatch.hex });
                           setColorPaletteOpen(false);
                         }}
                       />
@@ -2189,17 +2236,22 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   <input
                     className="nx-co-sheet__color"
                     type="color"
-                    disabled={!isCap('fill_color') || !focusedCell}
+                    disabled={!isCap('fill_color')}
                     title={capTitle('fill_color')}
-                    onChange={(e) => applyPresentation({ fill: e.target.value })}
+                    onChange={(e) => commitPresentationOrToolDefault({ fill: e.target.value })}
                   />
                 </label>
                 <label className="nx-co-sheet__btn nx-co-sheet__number-format">
                   פורמט מספר
                   <select
-                    value={focusedCell ? (cellPresentation[cellKey(focusedCell.clientId, focusedCell.colKey)]?.numberFormat ?? 'general') : 'general'}
-                    disabled={!isCap('number_format') || !focusedCell}
-                    onChange={(e) => applyPresentation({ numberFormat: e.target.value as CellPresentation['numberFormat'] })}
+                    value={
+                      currentCellPres?.numberFormat
+                      ?? presentationToolDefaults.numberFormat
+                      ?? 'general'
+                    }
+                    disabled={!isCap('number_format')}
+                    title={capTitle('number_format')}
+                    onChange={(e) => commitPresentationOrToolDefault({ numberFormat: e.target.value as CellPresentation['numberFormat'] })}
                   >
                     <option value="general">כללי</option>
                     <option value="number">מספר</option>

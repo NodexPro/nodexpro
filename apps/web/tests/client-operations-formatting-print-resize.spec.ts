@@ -268,8 +268,8 @@ test('toolbar: text color moved out of עוד menu to A-color button in main too
   assert.match(viewSource, /צבע רקע/);
   assert.match(viewSource, /פורמט מספר/);
   assert.match(viewSource, /גבולות/);
-  // Text color is now via palette swatches (applyPresentation({ color: swatch.hex })) not a native color picker in more menu
-  assert.match(viewSource, /applyPresentation\(\{ color: swatch\.hex \}\)/);
+  // Text color is now via palette swatches (commitPresentationOrToolDefault) not a native color picker in more menu
+  assert.match(viewSource, /commitPresentationOrToolDefault\(\{ color: swatch\.hex \}\)/);
   // The A-color control carries the text-color capability testid
   assert.match(viewSource, /data-testid="text-color-control"/);
   // More menu does NOT check text_color capability for a native color input

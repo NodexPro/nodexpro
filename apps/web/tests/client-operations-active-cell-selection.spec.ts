@@ -78,27 +78,35 @@ test('selected cell gets visible Nova #123756 outline', () => {
   assert.match(viewSource, /data-testid=\{focused \? 'co-active-format-cell'/);
 });
 
-test('formatting toolbar enabled only when focusedCell is set', () => {
-  assert.match(viewSource, /const formatTargetActive = Boolean\(focusedCell\)/);
-  assert.match(viewSource, /const formatDisabled = !formatTargetActive/);
-  assert.match(viewSource, /disabled=\{!isCap\('bold'\) \|\| formatDisabled\}/);
-  assert.match(viewSource, /disabled=\{!isCap\('italic'\) \|\| formatDisabled\}/);
-  assert.match(viewSource, /disabled=\{!isCap\('underline'\) \|\| formatDisabled\}/);
-  assert.match(viewSource, /disabled=\{!isCap\('align_right'\) \|\| formatDisabled\}/);
-  assert.match(viewSource, /disabled=\{!isCap\('text_color'\) \|\| formatDisabled\}/);
-  assert.match(viewSource, /disabled=\{formatDisabled\}/); // font-size
+test('formatting toolbar is always visually active (not gated on focusedCell)', () => {
+  assert.doesNotMatch(viewSource, /const formatDisabled = !formatTargetActive/);
+  assert.doesNotMatch(viewSource, /disabled=\{!isCap\('bold'\) \|\| formatDisabled\}/);
+  assert.doesNotMatch(viewSource, /disabled=\{formatDisabled\}/);
+  assert.match(viewSource, /disabled=\{!isCap\('bold'\)\}/);
+  assert.match(viewSource, /disabled=\{!isCap\('italic'\)\}/);
+  assert.match(viewSource, /disabled=\{!isCap\('underline'\)\}/);
+  assert.match(viewSource, /disabled=\{!isCap\('align_right'\)\}/);
+  assert.match(viewSource, /disabled=\{!isCap\('text_color'\)\}/);
+  assert.match(viewSource, /data-testid="font-size-control"/);
+  assert.doesNotMatch(
+    viewSource.slice(
+      viewSource.indexOf('data-testid="font-size-control"'),
+      viewSource.indexOf('data-testid="font-size-control"') + 350,
+    ),
+    /disabled=/,
+  );
 });
 
-test('A / font size / B I U / alignment apply via applyPresentation on focusedCell', () => {
-  assert.match(viewSource, /applyPresentation\(\{ bold: !cur \}\)/);
-  assert.match(viewSource, /applyPresentation\(\{ italic: !cur \}\)/);
-  assert.match(viewSource, /applyPresentation\(\{ underline: !cur \}\)/);
-  assert.match(viewSource, /applyPresentation\(\{ align: 'right' \}\)/);
-  assert.match(viewSource, /applyPresentation\(\{ align: 'center' \}\)/);
-  assert.match(viewSource, /applyPresentation\(\{ align: 'left' \}\)/);
-  assert.match(viewSource, /applyPresentation\(\{ color: swatch\.hex \}\)/);
-  assert.match(viewSource, /applyPresentation\(\{\s*fontSize:/);
-  assert.match(viewSource, /if \(!focusedCell\) return;/);
+test('A / font size / B I U / alignment apply via commitPresentationOrToolDefault', () => {
+  assert.match(viewSource, /commitPresentationOrToolDefault\(\{ bold: !currentBold \}\)/);
+  assert.match(viewSource, /commitPresentationOrToolDefault\(\{ italic: !currentItalic \}\)/);
+  assert.match(viewSource, /commitPresentationOrToolDefault\(\{ underline: !currentUnderline \}\)/);
+  assert.match(viewSource, /commitPresentationOrToolDefault\(\{ align: 'right' \}\)/);
+  assert.match(viewSource, /commitPresentationOrToolDefault\(\{ align: 'center' \}\)/);
+  assert.match(viewSource, /commitPresentationOrToolDefault\(\{ align: 'left' \}\)/);
+  assert.match(viewSource, /commitPresentationOrToolDefault\(\{ color: swatch\.hex \}\)/);
+  assert.match(viewSource, /commitPresentationOrToolDefault\(\{\s*fontSize:/);
+  assert.match(viewSource, /if \(!focusedCell\) return;/); // applyPresentation still gates cell mutation
 });
 
 test('selection remains after toolbar action (mousedown preserve + no clear in applyPresentation)', () => {
