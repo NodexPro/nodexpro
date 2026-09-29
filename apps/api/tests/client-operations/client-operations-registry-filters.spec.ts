@@ -431,7 +431,7 @@ test('21 לא הוגדר business type works (null only; אחר is other)', () =
   );
 });
 
-test('22 search + filters combine — business filter applies after search rows', () => {
+test('22 search + filters combine — business filter early; search/sort after', () => {
   const rows = [
     { client_id: 'a', filter_facets: facets({ business_type: 'company' }) },
     { client_id: 'b', filter_facets: facets({ business_type: 'osek_murshe' }) },
@@ -444,7 +444,42 @@ test('22 search + filters combine — business filter applies after search rows'
     filtered.map((r) => r.client_id),
     ['a'],
   );
-  assert.match(serviceSource, /applyRegistryQueryToRows[\s\S]*applyClientOperationsRegistryBusinessFilters/);
+  // Early facet match before expensive presentation loads; search via applyRegistryQueryToRows.
+  assert.match(serviceSource, /rowMatchesClientOperationsBusinessFilters/);
+  assert.match(serviceSource, /matchingClientIds/);
+  assert.match(serviceSource, /phase2_presentation_loads|presentation-only set-based/);
+  assert.match(serviceSource, /applyRegistryQueryToRows/);
+  assert.doesNotMatch(
+    serviceSource,
+    /applyRegistryQueryToRows[\s\S]{0,200}applyClientOperationsRegistryBusinessFilters/,
+  );
+});
+
+test('28 early filter before presentation — no per-client N+1 in registry pipeline', () => {
+  assert.match(serviceSource, /rowMatchesClientOperationsBusinessFilters/);
+  assert.match(serviceSource, /matchingClientIds/);
+  assert.match(serviceSource, /loadNotesAggregatesByClient\(orgId, matchingClientIds\)/);
+  assert.match(serviceSource, /Promise\.all\(\[/);
+  // No per-client await inside the facet/presentation loops.
+  assert.doesNotMatch(serviceSource, /for \(const c of safeClients\)[\s\S]{0,400}await /);
+  assert.doesNotMatch(serviceSource, /facetSeeds\.flatMap[\s\S]{0,400}await /);
+});
+
+test('29 handler display reuses org handler options — no second org_users round-trip', () => {
+  assert.match(serviceSource, /handlerDisplayByUserId = new Map\(/);
+  assert.match(serviceSource, /handlerFilterOptions\.map/);
+  assert.doesNotMatch(
+    serviceSource,
+    /const handlerDisplayByUserId = await loadHandlerDisplayNamesByUserIds/,
+  );
+});
+
+test('30 stage timings recorded for registry aggregate', () => {
+  assert.match(serviceSource, /logAggregatePayloadBreakdown/);
+  assert.match(serviceSource, /client_operations_registry_aggregate/);
+  assert.match(serviceSource, /stage_timings/);
+  assert.match(serviceSource, /phase1_facet_inputs/);
+  assert.match(serviceSource, /facet_build_and_early_filter/);
 });
 
 test('23 filter + period — facets built from period snapshot fields', () => {

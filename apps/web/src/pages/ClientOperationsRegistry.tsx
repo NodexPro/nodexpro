@@ -12,9 +12,11 @@ import {
 } from '../components/client-operations/ClientOperationsRegistryView';
 import {
   getPeriodAggregateCache,
+  hasActiveClientOperationsBusinessFilters,
   putPeriodAggregateCache,
   selectPeriodPrefetchKeys,
   shouldApplyPeriodAggregateResponse,
+  type ClientOperationsRegistryCacheQuery,
   type PeriodAggregateCacheEntry,
 } from '../lib/client-operations-period-aggregate-cache.pure';
 
@@ -181,7 +183,16 @@ export function ClientOperationsRegistry() {
       })
     ) {
       // Cache late period truth without painting the active sheet.
-      putPeriodAggregateCache(periodCacheRef.current, responsePeriod, data);
+      const cacheQuery: ClientOperationsRegistryCacheQuery = {
+        q: data.query?.q ?? null,
+        filter_operational_reporting: data.query?.filter_operational_reporting ?? null,
+        filter_material: data.query?.filter_material ?? null,
+        filter_payroll: data.query?.filter_payroll ?? null,
+        filter_reporting_type: data.query?.filter_reporting_type ?? null,
+        filter_business_type: data.query?.filter_business_type ?? null,
+        filter_handler: data.query?.filter_handler ?? null,
+      };
+      putPeriodAggregateCache(periodCacheRef.current, responsePeriod, data, cacheQuery);
       return;
     }
 
@@ -228,7 +239,21 @@ export function ClientOperationsRegistry() {
           : [],
       });
       viewedPeriodKeyRef.current = data.period.selected_period_key;
-      putPeriodAggregateCache(periodCacheRef.current, data.period.selected_period_key, data);
+      const cacheQuery: ClientOperationsRegistryCacheQuery = {
+        q: data.query?.q ?? null,
+        filter_operational_reporting: data.query?.filter_operational_reporting ?? null,
+        filter_material: data.query?.filter_material ?? null,
+        filter_payroll: data.query?.filter_payroll ?? null,
+        filter_reporting_type: data.query?.filter_reporting_type ?? null,
+        filter_business_type: data.query?.filter_business_type ?? null,
+        filter_handler: data.query?.filter_handler ?? null,
+      };
+      putPeriodAggregateCache(
+        periodCacheRef.current,
+        data.period.selected_period_key,
+        data,
+        cacheQuery,
+      );
       if (Array.isArray(data.period.available_periods)) {
         backendAvailablePeriodsRef.current = data.period.available_periods;
       }
@@ -251,16 +276,27 @@ export function ClientOperationsRegistry() {
       selectedPeriodKey: string,
       availablePeriods: string[],
     ) => {
+      // Business filters: never fan-out adjacent-period prefetches (each is a full registry GET).
+      if (hasActiveClientOperationsBusinessFilters(baseQuery)) return;
+      const cacheQuery: ClientOperationsRegistryCacheQuery = {
+        q: baseQuery.q,
+        filter_operational_reporting: baseQuery.filter_operational_reporting ?? null,
+        filter_material: baseQuery.filter_material ?? null,
+        filter_payroll: baseQuery.filter_payroll ?? null,
+        filter_reporting_type: baseQuery.filter_reporting_type ?? null,
+        filter_business_type: baseQuery.filter_business_type ?? null,
+        filter_handler: baseQuery.filter_handler ?? null,
+      };
       const keys = selectPeriodPrefetchKeys({ selectedPeriodKey, availablePeriods, max: 4 });
       for (const key of keys) {
-        if (getPeriodAggregateCache(periodCacheRef.current, key)) continue;
+        if (getPeriodAggregateCache(periodCacheRef.current, key, cacheQuery)) continue;
         if (prefetchInflightRef.current.has(key)) continue;
         prefetchInflightRef.current.add(key);
         void apiJson<RegistryAggregate>(
           moduleClientOperationsRegistry({ ...baseQuery, operational_period_key: key }),
         )
           .then((data) => {
-            putPeriodAggregateCache(periodCacheRef.current, key, data);
+            putPeriodAggregateCache(periodCacheRef.current, key, data, cacheQuery);
           })
           .catch(() => {})
           .finally(() => {
@@ -288,6 +324,15 @@ export function ClientOperationsRegistry() {
       options?: { quiet?: boolean; preferCache?: boolean },
     ) => {
       const periodKey = nextQuery.operational_period_key ?? null;
+      const cacheQuery: ClientOperationsRegistryCacheQuery = {
+        q: nextQuery.q ?? null,
+        filter_operational_reporting: nextQuery.filter_operational_reporting ?? null,
+        filter_material: nextQuery.filter_material ?? null,
+        filter_payroll: nextQuery.filter_payroll ?? null,
+        filter_reporting_type: nextQuery.filter_reporting_type ?? null,
+        filter_business_type: nextQuery.filter_business_type ?? null,
+        filter_handler: nextQuery.filter_handler ?? null,
+      };
       if (periodKey) {
         viewedPeriodKeyRef.current = periodKey;
         setQuery({
@@ -320,7 +365,7 @@ export function ClientOperationsRegistry() {
           };
         });
         if (options?.preferCache !== false) {
-          const cached = getPeriodAggregateCache(periodCacheRef.current, periodKey);
+          const cached = getPeriodAggregateCache(periodCacheRef.current, periodKey, cacheQuery);
           if (cached) {
             applyAggregate(cached, { forcePeriodKey: periodKey });
             // Quiet refresh after instant paint.
@@ -384,7 +429,7 @@ export function ClientOperationsRegistry() {
           if (seq !== loadSeqRef.current) return;
           setError(e instanceof Error ? e.message : 'Failed to load');
           // Drop optimistic first-touch tab if backend never confirmed it.
-          if (periodKey && !getPeriodAggregateCache(periodCacheRef.current, periodKey)) {
+          if (periodKey && !getPeriodAggregateCache(periodCacheRef.current, periodKey, cacheQuery)) {
             const backendPeriods = backendAvailablePeriodsRef.current;
             setPeriod((current) => {
               if (!current) return current;
@@ -442,8 +487,8 @@ export function ClientOperationsRegistry() {
       },
       options?: { quiet?: boolean },
     ) => {
-      // Search/filter changes must not paint a period-cache entry built under different query params.
-      periodCacheRef.current.clear();
+      // Immediate quiet aggregate reload. Cache is keyed by period+search+filters —
+      // do NOT wipe the whole period cache on every dropdown change.
       void loadRegistry(
         {
           ...query,
@@ -458,20 +503,7 @@ export function ClientOperationsRegistry() {
 
   const onPeriodChange = useCallback(
     (operationalPeriodKey: string) => {
-      const hasBusinessFilter = Boolean(
-        query.filter_operational_reporting ||
-          query.filter_material ||
-          query.filter_payroll ||
-          query.filter_reporting_type ||
-          query.filter_business_type ||
-          query.filter_handler,
-      );
-      // Period cache is period-keyed only — drop it while business filters are active so
-      // preferCache cannot paint an aggregate from a different filter selection.
-      if (hasBusinessFilter) {
-        periodCacheRef.current.clear();
-      }
-      // Instant tab + cache paint; quiet network refresh. Dirty cell saves continue in background.
+      // Instant tab + cache paint (key includes active filters); quiet network refresh.
       void loadRegistry(
         {
           ...query,

@@ -15,6 +15,22 @@ test('period cache stores and returns full aggregates by key', () => {
   assert.equal(getPeriodAggregateCache(cache, '2026-10'), null);
 });
 
+test('period cache key separates filtered vs unfiltered aggregates', () => {
+  const cache = new Map<string, PeriodAggregateCacheEntry<{ tag: string }>>();
+  putPeriodAggregateCache(cache, '2026-09', { tag: 'all' }, { q: null });
+  putPeriodAggregateCache(
+    cache,
+    '2026-09',
+    { tag: 'filtered' },
+    { filter_business_type: 'company', q: null },
+  );
+  assert.equal(getPeriodAggregateCache(cache, '2026-09', { q: null })?.tag, 'all');
+  assert.equal(
+    getPeriodAggregateCache(cache, '2026-09', { filter_business_type: 'company' })?.tag,
+    'filtered',
+  );
+});
+
 test('prefetch selects adjacent available periods', () => {
   assert.deepEqual(
     selectPeriodPrefetchKeys({

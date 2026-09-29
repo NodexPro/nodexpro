@@ -2647,15 +2647,35 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const renderFilterBar = () => {
     if (!filters?.definitions?.length) return null;
-    const active = filters.active;
-    const activeById: Record<string, string> = {
-      operational_reporting: active.operational_reporting ?? 'all',
-      material: active.material ?? 'all',
-      payroll: active.payroll ?? 'all',
-      reporting_type: active.reporting_type ?? 'all',
-      business_type: active.business_type ?? 'all',
-      handler: active.handler ?? 'all',
-    };
+    // Optimistic selection from query (set immediately in parent onChange).
+    // Never wait for filters.active — that snaps the control back until the GET returns.
+    const fromQueryOrAll = (value: string | null | undefined) =>
+      value && value.trim() ? value.trim() : 'all';
+    const selectedById: Record<string, string> = query
+      ? {
+          operational_reporting: fromQueryOrAll(query.filter_operational_reporting),
+          material: fromQueryOrAll(query.filter_material),
+          payroll: fromQueryOrAll(query.filter_payroll),
+          reporting_type: fromQueryOrAll(query.filter_reporting_type),
+          business_type: fromQueryOrAll(query.filter_business_type),
+          handler: fromQueryOrAll(query.filter_handler),
+        }
+      : {
+          operational_reporting: filters.active?.operational_reporting ?? 'all',
+          material: filters.active?.material ?? 'all',
+          payroll: filters.active?.payroll ?? 'all',
+          reporting_type: filters.active?.reporting_type ?? 'all',
+          business_type: filters.active?.business_type ?? 'all',
+          handler: filters.active?.handler ?? 'all',
+        };
+    const clearAvailable =
+      selectedById.operational_reporting !== 'all' ||
+      selectedById.material !== 'all' ||
+      selectedById.payroll !== 'all' ||
+      selectedById.reporting_type !== 'all' ||
+      selectedById.business_type !== 'all' ||
+      selectedById.handler !== 'all' ||
+      filters.clear_action?.available === true;
     return (
       <div
         className="nx-co-sheet__filter-bar"
@@ -2671,7 +2691,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 : def.width_hint === 'handler'
                   ? ' nx-co-sheet__filter-control--handler'
                   : '';
-            const selected = activeById[def.id] ?? 'all';
+            const selected = selectedById[def.id] ?? 'all';
             return (
               <label
                 key={def.id}
@@ -2682,7 +2702,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 <select
                   className="nx-co-sheet__filter-select"
                   value={selected}
-                  disabled={loading || !onQueryChange}
+                  disabled={!onQueryChange}
                   title={def.label_he}
                   aria-label={def.label_he}
                   onChange={(e) => applyBusinessFilterChange(def.id, e.target.value)}
@@ -2699,7 +2719,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           <button
             type="button"
             className="nx-co-sheet__filter-clear"
-            disabled={loading || !filters.clear_action?.available || !onQueryChange}
+            disabled={!onQueryChange || !clearAvailable}
             title={filters.clear_action?.label_he ?? 'נקה סינון'}
             onClick={clearBusinessFilters}
           >

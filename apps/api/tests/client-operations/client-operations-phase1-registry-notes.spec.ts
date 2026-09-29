@@ -91,10 +91,11 @@ test('9 displayForColumn business fallback removed', () => {
 test('10-12 handler cell display-ready, batched, no N+1', () => {
   assert.match(presentation, /assigned_handler_display_he/);
   assert.match(presentation, /handler: textHe\(input\.assigned_handler_display_he\)/);
-  assert.match(service, /loadHandlerDisplayNamesByUserIds/);
-  assert.match(service, /\.in\('user_id', unique\)/);
+  // Org handler options loaded once; display map reused (no second organization_users round-trip).
+  assert.match(service, /loadOrgHandlerFilterOptions/);
+  assert.match(service, /handlerDisplayByUserId = new Map\(/);
   assert.match(service, /handlerDisplayByUserId\.get\(assigned_handler_user_id\)/);
-  assert.equal((service.match(/await loadHandlerDisplayNamesByUserIds/g) ?? []).length, 1);
+  assert.equal((service.match(/await loadHandlerDisplayNamesByUserIds/g) ?? []).length, 0);
   const cells = buildRegistryRowCells({
     client_name: 'א',
     tax_id: '1',
