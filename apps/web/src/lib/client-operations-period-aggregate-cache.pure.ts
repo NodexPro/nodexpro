@@ -118,17 +118,28 @@ export function resolveRegistryAggregatePeriodKey(
 }
 
 /**
- * Paint guard: response may become visible table truth only when it has an
- * explicit period that equals the currently selected/viewed period.
- * Missing period ⇒ never paint.
+ * Paint guard for registry aggregates.
+ *
+ * Default (explicit view): response paints only when it has an explicit period
+ * that equals the currently viewed/selected period. Missing either ⇒ reject.
+ *
+ * Initial unresolved bootstrap (`allowUnresolvedBootstrap: true`):
+ * when viewed is still null/empty (fresh entry with operational_period_key=null),
+ * a response with explicit selected period may establish that period as the view.
+ * Do NOT enable this for commands, prefetch, or quiet stale paths.
  */
 export function shouldApplyPeriodAggregateResponse(input: {
   responsePeriodKey: string | null | undefined;
   viewedPeriodKey: string | null | undefined;
+  /** Only the initial registry GET with unresolved viewed period may set this. */
+  allowUnresolvedBootstrap?: boolean;
 }): boolean {
   const response = String(input.responsePeriodKey ?? '').trim();
+  if (!response) return false;
   const viewed = String(input.viewedPeriodKey ?? '').trim();
-  if (!response || !viewed) return false;
+  if (!viewed) {
+    return input.allowUnresolvedBootstrap === true;
+  }
   return response === viewed;
 }
 

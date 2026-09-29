@@ -18,6 +18,45 @@ import {
 
 const dir = dirname(fileURLToPath(import.meta.url));
 
+test('0 — INITIAL BOOTSTRAP: null viewed accepts backend selected period', () => {
+  assert.equal(
+    shouldApplyPeriodAggregateResponse({
+      responsePeriodKey: '2026-08',
+      viewedPeriodKey: null,
+      allowUnresolvedBootstrap: true,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldApplyPeriodAggregateResponse({
+      responsePeriodKey: '2026-08',
+      viewedPeriodKey: null,
+      allowUnresolvedBootstrap: false,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldApplyPeriodAggregateResponse({
+      responsePeriodKey: null,
+      viewedPeriodKey: null,
+      allowUnresolvedBootstrap: true,
+    }),
+    false,
+  );
+  assert.equal(
+    canRenderPeriodBoundRows({
+      selectedPeriodKey: '2026-08',
+      renderedAggregatePeriodKey: '2026-08',
+    }),
+    true,
+  );
+  const page = readFileSync(join(dir, '../src/pages/ClientOperationsRegistry.tsx'), 'utf8');
+  assert.match(page, /allowUnresolvedBootstrap:\s*!periodKey/);
+  assert.match(page, /allowUnresolvedBootstrap/);
+  // Commands must not pass bootstrap by default.
+  assert.match(page, /applyAggregate\(data\)/);
+});
+
 test('1 — cache miss: selected B cannot keep A rows visible (contract)', () => {
   assert.equal(
     canRenderPeriodBoundRows({

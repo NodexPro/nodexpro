@@ -61,6 +61,50 @@ test('stale period aggregate cannot paint viewed period', () => {
   );
 });
 
+test('INITIAL BOOTSTRAP: null viewed + explicit response period may paint only with flag', () => {
+  assert.equal(
+    shouldApplyPeriodAggregateResponse({
+      responsePeriodKey: '2026-08',
+      viewedPeriodKey: null,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldApplyPeriodAggregateResponse({
+      responsePeriodKey: '2026-08',
+      viewedPeriodKey: null,
+      allowUnresolvedBootstrap: true,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldApplyPeriodAggregateResponse({
+      responsePeriodKey: null,
+      viewedPeriodKey: null,
+      allowUnresolvedBootstrap: true,
+    }),
+    false,
+  );
+  assert.equal(
+    canRenderPeriodBoundRows({
+      selectedPeriodKey: '2026-08',
+      renderedAggregatePeriodKey: '2026-08',
+    }),
+    true,
+  );
+});
+
+test('bootstrap flag does not weaken explicit mismatch', () => {
+  assert.equal(
+    shouldApplyPeriodAggregateResponse({
+      responsePeriodKey: '2026-08',
+      viewedPeriodKey: '2026-09',
+      allowUnresolvedBootstrap: true,
+    }),
+    false,
+  );
+});
+
 test('prefetch cache requires confirmed response period', () => {
   assert.equal(
     shouldCachePrefetchAggregate({

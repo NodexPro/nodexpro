@@ -184,13 +184,18 @@ export function ClientOperationsRegistry() {
     setManualRowsPeriodSetup(null);
   }, []);
 
-  const applyAggregate = useCallback((data: RegistryAggregate, options?: { forcePeriodKey?: string }) => {
+  const applyAggregate = useCallback(
+    (
+      data: RegistryAggregate,
+      options?: { forcePeriodKey?: string; allowUnresolvedBootstrap?: boolean },
+    ) => {
     const responsePeriod = resolveRegistryAggregatePeriodKey(data);
     const viewed = options?.forcePeriodKey ?? viewedPeriodKeyRef.current;
     if (
       !shouldApplyPeriodAggregateResponse({
         responsePeriodKey: responsePeriod,
         viewedPeriodKey: viewed,
+        allowUnresolvedBootstrap: options?.allowUnresolvedBootstrap === true,
       })
     ) {
       // Late / wrong / missing period never paints. Cache only when identity is explicit.
@@ -209,6 +214,8 @@ export function ClientOperationsRegistry() {
       return false;
     }
 
+    // Atomic: selected/viewed + rendered share the same explicit response period.
+    viewedPeriodKeyRef.current = responsePeriod;
     setRows(Array.isArray(data?.rows) ? data.rows : []);
     setManualRows(Array.isArray(data?.manual_rows) ? data.manual_rows : []);
     setRenderedAggregatePeriodKey(responsePeriod);
@@ -430,7 +437,11 @@ export function ClientOperationsRegistry() {
             // Do NOT cache — stale quiet GETs must not poison period cache / wipe paints.
             return;
           }
-          const painted = applyAggregate(data);
+          const painted = applyAggregate(data, {
+            // Fresh entry: operational_period_key was null → viewed unresolved.
+            // Backend-selected period is allowed to establish the initial view.
+            allowUnresolvedBootstrap: !periodKey,
+          });
           if (!painted) return;
           if (seq !== loadSeqRef.current) return;
           const selected = resolveRegistryAggregatePeriodKey(data);
