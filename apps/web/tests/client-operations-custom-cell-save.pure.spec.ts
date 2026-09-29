@@ -6,6 +6,9 @@ import {
   customCellSaveKey,
   getCustomCellSlot,
   isCustomCellInFlight,
+  listDirtyCustomCellKeys,
+  parseCustomCellSaveKey,
+  reconcileManualRowsWithDirtyDrafts,
   rememberCustomCellDraft,
   resolveCustomCellEditorDraft,
   shouldApplyCellSaveAggregate,
@@ -18,8 +21,8 @@ const ORG = 'org-1';
 const CLIENT_A = 'client-a';
 const CLIENT_B = 'client-b';
 const COL = 'col-1';
-const PERIOD_09 = '09.26';
-const PERIOD_10 = '10.26';
+const PERIOD_09 = '2026-09';
+const PERIOD_10 = '2026-10';
 
 function identity(
   overrides: Partial<CustomCellSaveIdentity> = {},
@@ -280,7 +283,7 @@ test('7-8: blur/Enter during in-flight queues latest, no parallel write', async 
   }
 });
 
-test('9-10: 09.26 dirty + navigate 10.26 — no wrong-period paint; write keeps 09.26', async () => {
+test('9-10: 2026-09 dirty + navigate 2026-10 — no wrong-period paint; write keeps 2026-09', async () => {
   const result = await runAutosaveScenario({
     steps: [
       { type: 'type', value: 'ab' },
@@ -289,8 +292,8 @@ test('9-10: 09.26 dirty + navigate 10.26 — no wrong-period paint; write keeps 
       { type: 'completeFlight', serverValue: 'ab' },
     ],
   });
-  assert.deepEqual(result.sentPeriods, ['09.26']);
-  assert.deepEqual(result.appliedPeriods, []); // must not paint 09.26 into 10.26 view
+  assert.deepEqual(result.sentPeriods, [PERIOD_09]);
+  assert.deepEqual(result.appliedPeriods, []); // must not paint 2026-09 into 2026-10 view
   assert.equal(shouldApplyCellSaveAggregate({
     responsePeriodKey: PERIOD_09,
     viewedPeriodKey: PERIOD_10,
@@ -339,4 +342,100 @@ test('cell identity includes org, client, column, period', () => {
   const k2 = customCellSaveKey(identity({ operationalPeriodKey: PERIOD_10 }));
   assert.notEqual(k1, k2);
   assert.match(k1, new RegExp(`^${ORG}:${CLIENT_A}:${COL}:${PERIOD_09}$`));
+});
+
+test('manual:01 row_key survives parseCustomCellSaveKey (colon in clientId)', () => {
+  const id = identity({ clientId: 'manual:01', columnId: 'client_name' });
+  const key = customCellSaveKey(id);
+  const parsed = parseCustomCellSaveKey(key);
+  assert.ok(parsed);
+  assert.equal(parsed!.clientId, 'manual:01');
+  assert.equal(parsed!.columnId, 'client_name');
+  assert.equal(parsed!.operationalPeriodKey, PERIOD_09);
+  assert.equal(parsed!.organizationId, ORG);
+});
+
+test('manual immediate: A in flight → type BC → next save ABC; no overlap; no debounce', () => {
+  const slots = new Map<string, CustomCellSaveSlot>();
+  const id = identity({ clientId: 'manual:03', columnId: 'notes' });
+  const sent: string[] = [];
+  let server = '';
+
+  rememberCustomCellDraft(slots, id, 'A');
+  const startA = tryStartCustomCellSave(slots, id, server);
+  assert.ok(startA);
+  sent.push(startA!.value);
+  assert.equal(startA!.value, 'A');
+
+  rememberCustomCellDraft(slots, id, 'AB');
+  rememberCustomCellDraft(slots, id, 'ABC');
+  assert.equal(tryStartCustomCellSave(slots, id, server), null); // single-flight
+
+  server = 'A';
+  const done = completeCustomCellSaveSuccess(slots, startA!.key, 'A', server);
+  assert.equal(done.applyAggregateRecommended, false);
+  assert.ok(done.startNext);
+  assert.equal(done.startNext!.value, 'ABC');
+  assert.equal(done.startNext!.identity.clientId, 'manual:03');
+  sent.push(done.startNext!.value);
+
+  server = 'ABC';
+  const done2 = completeCustomCellSaveSuccess(slots, done.startNext!.key, 'ABC', server);
+  assert.equal(done2.applyAggregateRecommended, true);
+  assert.equal(done2.startNext, null);
+  assert.deepEqual(sent, ['A', 'ABC']);
+  assert.equal(isCustomCellInFlight(slots, startA!.key), false);
+});
+
+test('empty draft is dirty (sparse delete) and listed for period flush', () => {
+  const slots = new Map<string, CustomCellSaveSlot>();
+  const id = identity({ clientId: 'manual:01' });
+  rememberCustomCellDraft(slots, id, '');
+  assert.deepEqual(listDirtyCustomCellKeys(slots), [customCellSaveKey(id)]);
+  const start = tryStartCustomCellSave(slots, id, 'old');
+  assert.ok(start);
+  assert.equal(start!.value, '');
+});
+
+test('reconcileManualRowsWithDirtyDrafts overlays latest draft; ignores other period', () => {
+  const slots = new Map<string, CustomCellSaveSlot>();
+  const id = identity({ clientId: 'manual:01', columnId: 'client_name' });
+  rememberCustomCellDraft(slots, id, 'ABC');
+  const rows = [
+    {
+      row_key: 'manual:01',
+      cells: { client_name: 'A', notes: '' },
+    },
+    {
+      row_key: 'manual:02',
+      cells: { client_name: '', notes: '' },
+    },
+  ];
+  const reconciled = reconcileManualRowsWithDirtyDrafts({
+    manualRows: rows,
+    slots,
+    organizationId: ORG,
+    viewedPeriodKey: PERIOD_09,
+  });
+  assert.equal(reconciled[0]!.cells.client_name, 'ABC');
+  assert.equal(reconciled[1]!.cells.client_name, '');
+  const otherPeriod = reconcileManualRowsWithDirtyDrafts({
+    manualRows: rows,
+    slots,
+    organizationId: ORG,
+    viewedPeriodKey: PERIOD_10,
+  });
+  assert.equal(otherPeriod[0]!.cells.client_name, 'A');
+});
+
+test('resolveCustomCellEditorDraft prefers newer local over stale server', () => {
+  assert.equal(
+    resolveCustomCellEditorDraft({
+      stillEditing: true,
+      localDraft: 'ABC',
+      latestDraft: 'ABC',
+      serverCellValue: 'A',
+    }),
+    'ABC',
+  );
 });

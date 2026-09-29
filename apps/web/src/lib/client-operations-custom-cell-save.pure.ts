@@ -150,24 +150,76 @@ export function shouldApplyCellSaveAggregate(input: {
   return response === viewed;
 }
 
-export function parseCustomCellSaveKey(key: string): CustomCellSaveIdentity | null {
-  const parts = key.split(':');
-  if (parts.length < 4) return null;
-  const operationalPeriodKey = parts[parts.length - 1]!;
-  const columnId = parts[parts.length - 2]!;
-  const clientId = parts[parts.length - 3]!;
-  const organizationId = parts.slice(0, parts.length - 3).join(':');
-  if (!organizationId || !clientId || !columnId || !operationalPeriodKey) return null;
-  return { organizationId, clientId, columnId, operationalPeriodKey };
-}
-
 /** Any dirty draft or in-flight save that must flush before period navigation. */
 export function listDirtyCustomCellKeys(slots: Map<string, CustomCellSaveSlot>): string[] {
   const out: string[] = [];
   for (const [key, slot] of slots) {
-    if (slot.inFlight || (slot.latestDraft != null && slot.latestDraft !== '')) {
+    // Empty-string draft is dirty (sparse DELETE) — must flush on period switch.
+    if (slot.inFlight || slot.latestDraft != null) {
       out.push(key);
     }
   }
   return out;
+}
+
+/**
+ * Parse save key. Period is always trailing YYYY-MM.
+ * clientId may contain colons (manual:01). organizationId is a UUID (no colons).
+ */
+export function parseCustomCellSaveKey(key: string): CustomCellSaveIdentity | null {
+  const periodMatch = /:(\d{4}-(?:0[1-9]|1[0-2]))$/.exec(key);
+  if (!periodMatch) return null;
+  const operationalPeriodKey = periodMatch[1]!;
+  const withoutPeriod = key.slice(0, -(operationalPeriodKey.length + 1));
+  const lastColon = withoutPeriod.lastIndexOf(':');
+  if (lastColon <= 0) return null;
+  const columnId = withoutPeriod.slice(lastColon + 1);
+  const orgAndClient = withoutPeriod.slice(0, lastColon);
+  const firstColon = orgAndClient.indexOf(':');
+  if (firstColon <= 0) return null;
+  const organizationId = orgAndClient.slice(0, firstColon);
+  const clientId = orgAndClient.slice(firstColon + 1);
+  if (!organizationId || !clientId || !columnId) return null;
+  return { organizationId, clientId, columnId, operationalPeriodKey };
+}
+
+/** Overlay dirty latestDraft onto manual_rows so stale aggregate cannot revert newer typing. */
+export function reconcileManualRowsWithDirtyDrafts<T extends {
+  row_key: string;
+  cells: Record<string, string>;
+}>(input: {
+  manualRows: T[];
+  slots: Map<string, CustomCellSaveSlot>;
+  organizationId: string;
+  viewedPeriodKey: string;
+}): T[] {
+  const org = String(input.organizationId ?? '').trim();
+  const period = String(input.viewedPeriodKey ?? '').trim();
+  if (!org || !period || !input.manualRows.length) return input.manualRows;
+
+  let changed = false;
+  const next = input.manualRows.map((row) => {
+    let cells = row.cells;
+    let rowChanged = false;
+    for (const [columnKey, serverValue] of Object.entries(row.cells ?? {})) {
+      const key = customCellSaveKey({
+        organizationId: org,
+        clientId: row.row_key,
+        columnId: columnKey,
+        operationalPeriodKey: period,
+      });
+      const slot = input.slots.get(key);
+      if (!slot || slot.latestDraft == null) continue;
+      if (slot.latestDraft === serverValue) continue;
+      if (!rowChanged) {
+        cells = { ...row.cells };
+        rowChanged = true;
+      }
+      cells[columnKey] = slot.latestDraft;
+    }
+    if (!rowChanged) return row;
+    changed = true;
+    return { ...row, cells };
+  });
+  return changed ? next : input.manualRows;
 }

@@ -60,6 +60,7 @@ import {
   customCellSaveKey,
   getCustomCellSlot,
   isCustomCellInFlight,
+  reconcileManualRowsWithDirtyDrafts,
   rememberCustomCellDraft,
   shouldApplyCellSaveAggregate,
   tryStartCustomCellSave,
@@ -527,6 +528,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [headerDraft, setHeaderDraft] = useState('');
   const [editingCellKey, setEditingCellKey] = useState<string | null>(null);
   const [cellDraft, setCellDraft] = useState('');
+  /** Optimistic manual drafts by cellKey — keeps visible text ahead of aggregate while single-flight saves. */
+  const [manualDraftOverlay, setManualDraftOverlay] = useState<Record<string, string>>({});
   const [statusPaintMode, setStatusPaintMode] = useState<
     'ready' | 'sent_for_approval' | 'completed' | 'clear' | null
   >(null);
@@ -1250,20 +1253,47 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               return aggregateRow ? displayForColumn(aggregateRow, meta.column) : start.value;
             })();
 
-      const { startNext } = completeCustomCellSaveSuccess(
+      const { startNext, applyAggregateRecommended } = completeCustomCellSaveSuccess(
         customCellSlotsRef.current,
         start.key,
         start.value,
         serverValueAfter,
       );
 
+      if (meta.kind === 'manual') {
+        const pk = cellKey(meta.rowKey, meta.column.key);
+        const slotAfter = getCustomCellSlot(customCellSlotsRef.current, start.key);
+        setManualDraftOverlay((prev) => {
+          if (slotAfter.latestDraft == null) {
+            if (!(pk in prev)) return prev;
+            const next = { ...prev };
+            delete next[pk];
+            return next;
+          }
+          if (prev[pk] === slotAfter.latestDraft) return prev;
+          return { ...prev, [pk]: slotAfter.latestDraft };
+        });
+      }
+
       if (
+        applyAggregateRecommended &&
         shouldApplyCellSaveAggregate({
           responsePeriodKey,
           viewedPeriodKey,
         })
       ) {
-        applyAggregateReconciled(data);
+        if (meta.kind === 'manual' && Array.isArray(data?.manual_rows)) {
+          const orgId = widthScope?.organizationId?.trim() ?? '';
+          const reconciledManual = reconcileManualRowsWithDirtyDrafts({
+            manualRows: data.manual_rows,
+            slots: customCellSlotsRef.current,
+            organizationId: orgId,
+            viewedPeriodKey: String(viewedPeriodKey ?? ''),
+          });
+          applyAggregateReconciled({ ...(data as object), manual_rows: reconciledManual });
+        } else {
+          applyAggregateReconciled(data);
+        }
         preserveEditorDraftIfNeeded(start.key, meta);
       }
 
@@ -1392,14 +1422,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       column,
       identity,
     });
+    const pk = cellKey(row.row_key, column.key);
+    setManualDraftOverlay((prev) => (prev[pk] === value ? prev : { ...prev, [pk]: value }));
+    // Manual rows: no debounce — first keystroke starts save immediately (single-flight + coalesce).
     clearCustomCellDebounce(key);
-    customCellDebounceTimersRef.current.set(
-      key,
-      setTimeout(() => {
-        customCellDebounceTimersRef.current.delete(key);
-        void kickCustomCellSave(key);
-      }, 500),
-    );
+    void kickCustomCellSave(key);
   };
 
   const commitManualRowCellEdit = (
@@ -1436,7 +1463,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     selectActiveFormatCell(row.row_key, column, { rowKey: row.row_key });
     if (editingCellKeyRef.current === pk) return;
     setEditingCellKey(pk);
-    setCellDraft(formatCustomExcelCellDisplay(row.cells?.[column.key]));
+    const overlay = manualDraftOverlay[pk];
+    setCellDraft(
+      overlay != null ? overlay : formatCustomExcelCellDisplay(row.cells?.[column.key]),
+    );
   };
 
   const cancelManualRowCellEdit = (
@@ -1445,12 +1475,19 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   ) => {
     const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
     const identity = makeManualRowCellIdentity(row.row_key, column.key, periodKey);
+    const pk = cellKey(row.row_key, column.key);
     if (identity) {
       const key = customCellSaveKey(identity);
       clearCustomCellDebounce(key);
       customCellSlotsRef.current.delete(key);
       customCellMetaRef.current.delete(key);
     }
+    setManualDraftOverlay((prev) => {
+      if (!(pk in prev)) return prev;
+      const next = { ...prev };
+      delete next[pk];
+      return next;
+    });
     setEditingCellKey(null);
   };
 
@@ -1464,6 +1501,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     for (const key of keys) clearCustomCellDebounce(key);
     for (const key of keys) void flushCustomCellKey(key);
     setEditingCellKey(null);
+    setManualDraftOverlay({});
     if (shouldClearActiveCellOnPeriodChange()) {
       setFocusedCell(null);
     }
@@ -3109,9 +3147,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 const isFolderCell = cellPres?.cell_kind === 'folder';
                 const isManualText = cellPres?.cell_kind === 'manual_text';
                 const canEditManual = Boolean(canEdit && isManualText && cellPres?.editable);
+                const overlayDraft = manualDraftOverlay[pk];
                 const displayValue = isFolderCell
                   ? ''
-                  : formatCustomExcelCellDisplay(row.cells?.[column.key]);
+                  : overlayDraft != null
+                    ? overlayDraft
+                    : formatCustomExcelCellDisplay(row.cells?.[column.key]);
                 return (
                   <td
                     key={column.key}
@@ -3123,7 +3164,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     data-testid={focused ? 'co-active-format-cell' : undefined}
                     className={[
                       focused ? 'is-focused is-format-selected' : '',
-                      editingCellKey === pk && isManualText ? 'is-editing-custom' : '',
+                      editingCellKey === pk && isManualText ? 'is-editing-custom is-editing-manual' : '',
                       statusPaintMode ? 'is-paint-mode' : '',
                     ]
                       .filter(Boolean)
@@ -3162,7 +3203,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     {isFolderCell ? null : canEditManual ? (
                       editingCellKey === pk ? (
                         <input
-                          className="nx-co-sheet__custom-cell-input"
+                          className="nx-co-sheet__custom-cell-input nx-co-sheet__manual-cell-input"
                           value={cellDraft}
                           autoFocus
                           aria-label={column.label.trim() || 'ערך ידני'}
@@ -3177,6 +3218,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                           onKeyDown={(event) => {
                             if (event.key === 'Enter') {
                               event.preventDefault();
+                              // Optional navigation finish — persistence already started on each keystroke.
                               void commitManualRowCellEdit(row, column, cellDraft);
                             }
                             if (event.key === 'Escape') {

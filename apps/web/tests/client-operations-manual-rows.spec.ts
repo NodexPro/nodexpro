@@ -69,15 +69,14 @@ test('manual typing uses set_client_operations_manual_row_cell_value — not VAT
   assert.match(viewSource, /scheduleManualRowCellAutosave/);
   assert.match(viewSource, /manual_row_slot:\s*meta\.manualRowSlot/);
   assert.match(viewSource, /column_key:\s*meta\.column\.key/);
-  // Autosave debounce parity with custom cells (~500ms).
-  assert.match(
-    viewSource,
-    /scheduleManualRowCellAutosave[\s\S]*?setTimeout\(\(\) => \{[\s\S]*?\}, 500\)/,
-  );
   const manualSchedule = viewSource.slice(
     viewSource.indexOf('const scheduleManualRowCellAutosave'),
     viewSource.indexOf('const commitManualRowCellEdit'),
   );
+  // Immediate first save — no 500ms debounce for manual rows.
+  assert.doesNotMatch(manualSchedule, /setTimeout/);
+  assert.doesNotMatch(manualSchedule, /,\s*500\)/);
+  assert.match(manualSchedule, /kickCustomCellSave/);
   assert.doesNotMatch(manualSchedule, /set_client_operations_cell_manual_status/);
   assert.doesNotMatch(manualSchedule, /set_client_operations_material/);
   assert.doesNotMatch(manualSchedule, /set_client_operations_custom_column_value/);
@@ -88,6 +87,28 @@ test('manual typing uses set_client_operations_manual_row_cell_value — not VAT
   assert.match(manualCmdSlice, /manual_row_slot/);
   assert.match(manualCmdSlice, /column_key/);
   assert.doesNotMatch(manualCmdSlice, /client_id:/);
+});
+
+test('manual cell editor has no nested form-control border; grid cell is boundary', () => {
+  assert.match(viewSource, /nx-co-sheet__manual-cell-input/);
+  assert.match(viewSource, /is-editing-manual/);
+  const css = readFileSync(
+    join(dir, '../src/styles/nx-client-operations-spreadsheet.css'),
+    'utf8',
+  );
+  assert.match(css, /\.nx-co-sheet__manual-cell-input/);
+  assert.match(css, /border:\s*0\s*!important/);
+  assert.match(css, /border-radius:\s*0\s*!important/);
+  assert.match(css, /box-shadow:\s*none\s*!important/);
+  assert.match(css, /td\.is-editing-manual/);
+});
+
+test('manual save path uses applyAggregateRecommended + dirty draft reconcile', () => {
+  assert.match(viewSource, /applyAggregateRecommended/);
+  assert.match(viewSource, /reconcileManualRowsWithDirtyDrafts/);
+  assert.match(viewSource, /manualDraftOverlay/);
+  // Persistence starts on change — Enter is optional navigation only.
+  assert.match(viewSource, /persistence already started on each keystroke/);
 });
 
 test('formatting / presentation key uses row_key for manual (no fabricated client_id)', () => {
