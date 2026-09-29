@@ -4,9 +4,25 @@
  */
 
 export type ClientOperationsActiveCell = {
-  clientId: string;
+  /**
+   * Client row identity. Set for real client rows only.
+   * Never a fabricated UUID for manual spreadsheet rows.
+   */
+  clientId?: string;
+  /** Manual row identity (`manual:01` …) — set for backend-owned manual rows only. */
+  rowKey?: string;
   colKey: string;
 };
+
+/** Presentation / formatting storage key: `clientId::col` or `row_key::col`. */
+export function clientOperationsPresentationCellKey(cell: {
+  clientId?: string | null;
+  rowKey?: string | null;
+  colKey: string;
+}): string {
+  const identity = cell.rowKey ?? cell.clientId ?? '';
+  return `${identity}::${cell.colKey}`;
+}
 
 export function isClientOperationsFormatEligibleColumn(input: {
   columnKey: string;
@@ -35,10 +51,19 @@ export function reconcileActiveCellAfterColumnVisibility(input: {
 export function reconcileActiveCellAfterRowsChange(input: {
   active: ClientOperationsActiveCell | null;
   clientIds: Iterable<string>;
+  manualRowKeys?: Iterable<string>;
 }): ClientOperationsActiveCell | null {
   if (!input.active) return null;
+  if (input.active.rowKey) {
+    for (const key of input.manualRowKeys ?? []) {
+      if (key === input.active.rowKey) return input.active;
+    }
+    return null;
+  }
+  const clientId = input.active.clientId;
+  if (!clientId) return null;
   for (const id of input.clientIds) {
-    if (id === input.active.clientId) return input.active;
+    if (id === clientId) return input.active;
   }
   return null;
 }

@@ -106,6 +106,14 @@ import {
   projectCapitalDeclarationCells,
 } from './client-operations-annual-capital-operational.service.js';
 import {
+  buildManualRowsForRegistryAggregate,
+  buildManualRowsPeriodSetupForAggregate,
+} from './client-operations-manual-rows.service.js';
+import {
+  materializeClientOperationsManualRows,
+  type ClientOperationsManualRegistryRow,
+} from './client-operations-manual-rows.pure.js';
+import {
   buildNiDeductionsRegistryCellForClient,
   loadEarliestNiDeductionsApplicablePeriodKeysForClients,
   loadNiDeductions126CycleFactsForClients,
@@ -171,6 +179,8 @@ export type ClientOperationsRegistryResponse = {
     available_periods: string[];
   };
   rows: ClientOperationsRegistryRow[];
+  /** Exactly five backend-owned manual spreadsheet slots (after real clients; no Core client_id). */
+  manual_rows: ClientOperationsManualRegistryRow[];
   columns: ClientOperationsRegistryColumn[];
   note_types: Array<{
     code: string;
@@ -189,6 +199,14 @@ export type ClientOperationsRegistryResponse = {
     needed: boolean;
     operational_period_key: string;
     eligible_columns: Array<{ column_id: string; label: string; key: string; preselected: boolean }>;
+  } | null;
+  /**
+   * Manual rows first-touch — null when viewer or already initialized.
+   * Init is a named command (never a hidden aggregate GET write).
+   */
+  manual_rows_period_setup?: {
+    needed: boolean;
+    operational_period_key: string;
   } | null;
   /** CASE B legacy baseline requirement (editors only). */
   columns_needing_legacy_baseline?: Array<{
@@ -332,6 +350,7 @@ function emptyRegistryResponse(
       legacy_baseline_period_key: string | null;
     }>;
     user_column_period_setup: ClientOperationsRegistryResponse['user_column_period_setup'];
+    manual_rows_period_setup: ClientOperationsRegistryResponse['manual_rows_period_setup'];
     columns_needing_legacy_baseline: ClientOperationsRegistryResponse['columns_needing_legacy_baseline'];
     visibilityByColumn: Map<string, string[]>;
   },
@@ -369,10 +388,17 @@ function emptyRegistryResponse(
       legacy_baseline_period_key: column.legacy_baseline_period_key,
     })),
   ];
+  // Empty-client org still exposes five backend-owned manual slots (values may be empty).
+  const manual_rows = materializeClientOperationsManualRows({
+    columnKeys: columns.map((c) => c.key),
+    valuesBySlotColumn: new Map(),
+    searchQ: q,
+  });
   return {
     title_he: 'תפעול לקוחות',
     period,
     rows: [],
+    manual_rows,
     columns,
     note_types: noteTypes,
     toolbar_capabilities: buildClientOperationsToolbarCapabilities({
@@ -381,6 +407,7 @@ function emptyRegistryResponse(
     }),
     custom_columns_capability: customColumnsCapability,
     user_column_period_setup: extras?.user_column_period_setup ?? null,
+    manual_rows_period_setup: extras?.manual_rows_period_setup ?? null,
     columns_needing_legacy_baseline: extras?.columns_needing_legacy_baseline ?? [],
     manual_status_paint_modes: manualStatusPaintModesForAggregate(),
     query: { q, sort_by, sort_dir, operational_period_key: period.selected_period_key },
@@ -448,6 +475,11 @@ export async function listClientOperationsRegistry(
     canEdit: canEditRegistry,
   });
   const visibleCustomColumns = userColumnsPeriodExtras.visibleColumns;
+  const manualRowsPeriodSetup = await buildManualRowsPeriodSetupForAggregate({
+    organizationId: orgId,
+    operationalPeriodKey: selectedPeriodKey,
+    canEdit: canEditRegistry,
+  });
 
   const isCurrentOrDefaultPeriod = selectedPeriodKey === defaultPeriodKey;
 
@@ -506,12 +538,20 @@ export async function listClientOperationsRegistry(
   );
 
   if (safeClients.length === 0) {
-    return emptyRegistryResponse(ctx, query, noteTypes, customColumns, period, {
+    const empty = emptyRegistryResponse(ctx, query, noteTypes, customColumns, period, {
       visibleCustomColumns,
       user_column_period_setup: userColumnsPeriodExtras.user_column_period_setup,
+      manual_rows_period_setup: manualRowsPeriodSetup,
       columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
       visibilityByColumn: userColumnsPeriodExtras.visibilityByColumn,
     });
+    empty.manual_rows = await buildManualRowsForRegistryAggregate({
+      organizationId: orgId,
+      operationalPeriodKey: selectedPeriodKey,
+      columnKeys: empty.columns.map((c) => c.key),
+      searchQ: empty.query.q,
+    });
+    return empty;
   }
 
   const clientIds = safeClients.map((c) => c.id);
@@ -965,10 +1005,17 @@ export async function listClientOperationsRegistry(
       legacy_baseline_period_key: column.legacy_baseline_period_key,
     })),
   ];
+  const manual_rows = await buildManualRowsForRegistryAggregate({
+    organizationId: orgId,
+    operationalPeriodKey: selectedPeriodKey,
+    columnKeys: columns.map((c) => c.key),
+    searchQ: q,
+  });
   return {
     title_he: 'תפעול לקוחות',
     period,
     rows,
+    manual_rows,
     columns,
     note_types: noteTypes,
     toolbar_capabilities: buildClientOperationsToolbarCapabilities({
@@ -977,6 +1024,7 @@ export async function listClientOperationsRegistry(
     }),
     custom_columns_capability: customColumnsCapability,
     user_column_period_setup: userColumnsPeriodExtras.user_column_period_setup,
+    manual_rows_period_setup: manualRowsPeriodSetup,
     columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
     manual_status_paint_modes: manualStatusPaintModesForAggregate(),
     query: { q, sort_by, sort_dir, operational_period_key: selectedPeriodKey },

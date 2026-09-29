@@ -3,7 +3,9 @@ import test from 'node:test';
 import {
   isMeaningfulPrintableCellValue,
   isMeaningfulPrintableRegistryCell,
+  isManualRowCompletelyEmptyForPrint,
   selectPrintableColumnKeys,
+  selectPrintableManualRows,
   formatClientOperationsPeriodHeading,
   type ClientOperationsPrintColumn,
   type ClientOperationsPrintRow,
@@ -160,4 +162,35 @@ test('null or empty falls back to default', () => {
 
 test('non-standard key passes through as-is', () => {
   assert.equal(formatClientOperationsPeriodHeading('annual'), 'annual');
+});
+
+// ── Manual rows print filter ───────────────────────────────────
+
+test('empty manual row is completely empty for print', () => {
+  assert.equal(
+    isManualRowCompletelyEmptyForPrint({
+      cells: { folder: '', client_name: '', vat: '', payroll: '—' },
+    }),
+    true,
+  );
+});
+
+test('filled manual row is not empty for print', () => {
+  assert.equal(
+    isManualRowCompletelyEmptyForPrint({
+      cells: { folder: '', client_name: '', vat: 'הערה', payroll: '' },
+    }),
+    false,
+  );
+});
+
+test('selectPrintableManualRows excludes empty slots', () => {
+  const rows = [
+    { row_key: 'manual:01', cells: { vat: '', payroll: '' } },
+    { row_key: 'manual:02', cells: { vat: 'x', payroll: '' } },
+    { row_key: 'manual:03', cells: { vat: '—', payroll: '–' } },
+  ];
+  const printable = selectPrintableManualRows(rows);
+  assert.equal(printable.length, 1);
+  assert.equal(printable[0]?.row_key, 'manual:02');
 });

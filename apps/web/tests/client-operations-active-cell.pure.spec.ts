@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  clientOperationsPresentationCellKey,
   isClientOperationsFormatEligibleColumn,
   reconcileActiveCellAfterColumnVisibility,
   reconcileActiveCellAfterRowsChange,
@@ -89,5 +90,39 @@ test('rows change keeps selection when client remains', () => {
       clientIds: ['c2', 'c1'],
     }),
     active,
+  );
+});
+
+test('manual rowKey selection kept when key remains', () => {
+  const active = { rowKey: 'manual:01', colKey: 'vat' };
+  assert.deepEqual(
+    reconcileActiveCellAfterRowsChange({
+      active,
+      clientIds: ['c1'],
+      manualRowKeys: ['manual:02', 'manual:01'],
+    }),
+    active,
+  );
+});
+
+test('manual rowKey selection cleared when key disappears', () => {
+  assert.equal(
+    reconcileActiveCellAfterRowsChange({
+      active: { rowKey: 'manual:01', colKey: 'vat' },
+      clientIds: ['c1'],
+      manualRowKeys: ['manual:02'],
+    }),
+    null,
+  );
+});
+
+test('presentation cell key uses row_key for manual without fabricating clientId', () => {
+  assert.equal(
+    clientOperationsPresentationCellKey({ rowKey: 'manual:01', colKey: 'vat' }),
+    'manual:01::vat',
+  );
+  assert.equal(
+    clientOperationsPresentationCellKey({ clientId: 'c1', colKey: 'vat' }),
+    'c1::vat',
   );
 });

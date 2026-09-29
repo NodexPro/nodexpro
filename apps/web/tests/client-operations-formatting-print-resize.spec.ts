@@ -327,7 +327,8 @@ test('view: handlePrint opens window with landscape and RTL table', () => {
 test('view: handlePrint uses selectPrintableColumnKeys from pure module', () => {
   assert.match(viewSource, /selectPrintableColumnKeys\(\{/);
   assert.match(viewSource, /columns: printColumns/);
-  assert.match(viewSource, /rows: printRows/);
+  // Client rows + filled manual rows (empty manual slots filtered by selectPrintableManualRows).
+  assert.match(viewSource, /rows: \[\.\.\.printRows, \.\.\.printManualRows\]/);
 });
 
 test('view: handlePrint includes print-safe status color classes', () => {

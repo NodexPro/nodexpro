@@ -24,6 +24,7 @@ import {
   saveClientOperationsHiddenColumns,
 } from '../../lib/client-operations-hidden-columns.pure';
 import {
+  clientOperationsPresentationCellKey,
   isClientOperationsFormatEligibleColumn,
   reconcileActiveCellAfterColumnVisibility,
   reconcileActiveCellAfterRowsChange,
@@ -48,6 +49,7 @@ import {
 } from '../../lib/client-operations-column-visibility.pure';
 import {
   selectPrintableColumnKeys,
+  selectPrintableManualRows,
   formatClientOperationsPeriodHeading,
   type ClientOperationsPrintColumn,
   type ClientOperationsPrintRow,
@@ -200,6 +202,17 @@ export type ClientOperationsRegistryRow = {
       operational_square_count: number;
     }
   >;
+};
+
+/** Backend-owned free-text manual spreadsheet rows (not Core clients). */
+export type ClientOperationsManualRegistryRow = {
+  row_kind: 'manual';
+  row_key: string;
+  manual_row_slot: 1 | 2 | 3 | 4 | 5;
+  client_id: null;
+  client_name: null;
+  cells: Record<string, string>;
+  cell_presentation: Record<string, { cell_kind: 'folder' | 'manual_text'; editable: boolean }>;
 };
 
 export type ClientOperationsNoteTypeRow = {
@@ -357,6 +370,8 @@ function displayForColumn(r: ClientOperationsRegistryRow, col: ClientOperationsR
 export type ClientOperationsRegistryViewProps = {
   rows: ClientOperationsRegistryRow[];
   onRowsChange: (rows: ClientOperationsRegistryRow[]) => void;
+  /** Backend-owned manual spreadsheet rows from aggregate (default []). */
+  manualRows?: ClientOperationsManualRegistryRow[];
   noteTypes: ClientOperationsNoteTypeRow[];
   loading: boolean;
   error: string;
@@ -415,6 +430,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const {
     rows,
     onRowsChange,
+    manualRows = [],
     noteTypes,
     loading,
     error,
@@ -596,13 +612,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   useEffect(() => {
     const clientIds = rows.map((r) => r.client_id);
+    const manualRowKeys = manualRows.map((r) => r.row_key);
     setFocusedCell((current) =>
       reconcileActiveCellAfterRowsChange({
         active: current,
         clientIds,
+        manualRowKeys,
       }),
     );
-  }, [rows]);
+  }, [rows, manualRows]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -832,6 +850,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const selectActiveFormatCell = (
     clientId: string,
     column: Pick<ClientOperationsRegistryColumn, 'key' | 'cell_kind'>,
+    options?: { rowKey?: string },
   ) => {
     if (
       !isClientOperationsFormatEligibleColumn({
@@ -841,7 +860,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     ) {
       return;
     }
-    setSelectedRowId(clientId);
+    setSelectedRowId(options?.rowKey ?? clientId);
+    if (options?.rowKey) {
+      setFocusedCell({ rowKey: options.rowKey, colKey: column.key });
+      return;
+    }
     setFocusedCell({ clientId, colKey: column.key });
   };
 
@@ -852,7 +875,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const applyPresentation = (patch: Partial<CellPresentation>) => {
     if (!focusedCell) return;
-    const k = cellKey(focusedCell.clientId, focusedCell.colKey);
+    const k = clientOperationsPresentationCellKey(focusedCell);
     if (!skipUndoPushRef.current) {
       setCoUndoStack((history) =>
         pushClientOperationsUndoEntry(history, { kind: 'presentation', previous: cellPresentation }),
@@ -997,15 +1020,25 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const customCellMetaRef = useRef<
     Map<
       string,
-      {
-        clientId: string;
-        column: ClientOperationsRegistryColumn;
-        identity: CustomCellSaveIdentity;
-      }
+      | {
+          kind: 'custom';
+          clientId: string;
+          column: ClientOperationsRegistryColumn;
+          identity: CustomCellSaveIdentity;
+        }
+      | {
+          kind: 'manual';
+          rowKey: string;
+          manualRowSlot: number;
+          column: ClientOperationsRegistryColumn;
+          identity: CustomCellSaveIdentity;
+        }
     >
   >(new Map());
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
+  const manualRowsRef = useRef(manualRows);
+  manualRowsRef.current = manualRows;
   const viewedPeriodKeyRef = useRef<string | null>(null);
   viewedPeriodKeyRef.current = query?.operational_period_key ?? period?.selected_period_key ?? null;
 
@@ -1080,11 +1113,30 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     return { organizationId, clientId, columnId, operationalPeriodKey };
   };
 
+  /** Slot identity for manual free-text cells — uses row_key (never a fabricated client UUID). */
+  const makeManualRowCellIdentity = (
+    rowKey: string,
+    columnKey: string,
+    operationalPeriodKey: string,
+  ): CustomCellSaveIdentity | null => {
+    const organizationId = widthScope?.organizationId?.trim() ?? '';
+    if (!organizationId || !rowKey || !columnKey || !operationalPeriodKey) return null;
+    return { organizationId, clientId: rowKey, columnId: columnKey, operationalPeriodKey };
+  };
+
   const serverValueForMeta = (meta: {
-    clientId: string;
+    kind?: 'custom' | 'manual';
+    clientId?: string;
+    rowKey?: string;
     column: ClientOperationsRegistryColumn;
   }): string => {
-    const row = rowsRef.current.find((r) => r.client_id === meta.clientId);
+    if (meta.kind === 'manual' && meta.rowKey) {
+      const row = manualRowsRef.current.find((r) => r.row_key === meta.rowKey);
+      return formatCustomExcelCellDisplay(row?.cells?.[meta.column.key]);
+    }
+    const clientId = meta.clientId;
+    if (!clientId) return '';
+    const row = rowsRef.current.find((r) => r.client_id === clientId);
     if (!row) return '';
     return displayForColumn(row, meta.column);
   };
@@ -1097,8 +1149,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     }
   };
 
-  const preserveEditorDraftIfNeeded = (key: string, meta: { clientId: string; column: ClientOperationsRegistryColumn }) => {
-    const pk = cellKey(meta.clientId, meta.column.key);
+  const preserveEditorDraftIfNeeded = (
+    key: string,
+    meta: {
+      kind?: 'custom' | 'manual';
+      clientId?: string;
+      rowKey?: string;
+      column: ClientOperationsRegistryColumn;
+    },
+  ) => {
+    const identity = meta.kind === 'manual' && meta.rowKey ? meta.rowKey : meta.clientId ?? '';
+    const pk = cellKey(identity, meta.column.key);
     if (editingCellKeyRef.current !== pk) return;
     const slot = getCustomCellSlot(customCellSlotsRef.current, key);
     if (slot.latestDraft != null) setCellDraft(slot.latestDraft);
@@ -1114,23 +1175,42 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     setCommandError('');
     try {
       const previousValue = serverValueForMeta(meta);
-      const data = (await onRegistryCommand(
-        {
-          command: 'set_client_operations_custom_column_value',
-          client_id: start.identity.clientId,
-          column_id: start.identity.columnId,
-          value: start.value,
-          // Period is bound to the dirty cell identity — never the live navigator alone.
-          operational_period_key: start.identity.operationalPeriodKey,
-        },
-        { applyAggregate: false },
-      )) as {
-        rows?: ClientOperationsRegistryRow[];
-        period?: { selected_period_key?: string | null };
-        query?: { operational_period_key?: string | null };
-      };
+      const data =
+        meta.kind === 'manual'
+          ? ((await onRegistryCommand(
+              {
+                command: 'set_client_operations_manual_row_cell_value',
+                manual_row_slot: meta.manualRowSlot,
+                column_key: meta.column.key,
+                value: start.value,
+                operational_period_key: start.identity.operationalPeriodKey,
+              },
+              { applyAggregate: false },
+            )) as {
+              rows?: ClientOperationsRegistryRow[];
+              manual_rows?: ClientOperationsManualRegistryRow[];
+              period?: { selected_period_key?: string | null };
+              query?: { operational_period_key?: string | null };
+            })
+          : ((await onRegistryCommand(
+              {
+                command: 'set_client_operations_custom_column_value',
+                client_id: start.identity.clientId,
+                column_id: start.identity.columnId,
+                value: start.value,
+                // Period is bound to the dirty cell identity — never the live navigator alone.
+                operational_period_key: start.identity.operationalPeriodKey,
+              },
+              { applyAggregate: false },
+            )) as {
+              rows?: ClientOperationsRegistryRow[];
+              manual_rows?: ClientOperationsManualRegistryRow[];
+              period?: { selected_period_key?: string | null };
+              query?: { operational_period_key?: string | null };
+            });
 
       if (
+        meta.kind !== 'manual' &&
         !skipUndoPushRef.current &&
         previousValue !== start.value &&
         start.identity.organizationId &&
@@ -1153,10 +1233,22 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const responsePeriodKey =
         data?.period?.selected_period_key ?? data?.query?.operational_period_key ?? start.identity.operationalPeriodKey;
       const viewedPeriodKey = viewedPeriodKeyRef.current;
-      const aggregateRow = Array.isArray(data?.rows)
-        ? data.rows.find((r) => r.client_id === start.identity.clientId)
-        : undefined;
-      const serverValueAfter = aggregateRow ? displayForColumn(aggregateRow, meta.column) : start.value;
+      const serverValueAfter =
+        meta.kind === 'manual'
+          ? (() => {
+              const aggregateManualRow = Array.isArray(data?.manual_rows)
+                ? data.manual_rows.find((r) => r.row_key === meta.rowKey)
+                : undefined;
+              return aggregateManualRow
+                ? formatCustomExcelCellDisplay(aggregateManualRow.cells?.[meta.column.key])
+                : start.value;
+            })()
+          : (() => {
+              const aggregateRow = Array.isArray(data?.rows)
+                ? data.rows.find((r) => r.client_id === start.identity.clientId)
+                : undefined;
+              return aggregateRow ? displayForColumn(aggregateRow, meta.column) : start.value;
+            })();
 
       const { startNext } = completeCustomCellSaveSuccess(
         customCellSlotsRef.current,
@@ -1241,7 +1333,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const identity = makeCustomCellIdentity(row.client_id, column, periodKey);
     if (!identity) return;
     const key = rememberCustomCellDraft(customCellSlotsRef.current, identity, value);
-    customCellMetaRef.current.set(key, { clientId: row.client_id, column, identity });
+    customCellMetaRef.current.set(key, { kind: 'custom', clientId: row.client_id, column, identity });
     clearCustomCellDebounce(key);
     customCellDebounceTimersRef.current.set(
       key,
@@ -1262,7 +1354,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const identity = makeCustomCellIdentity(row.client_id, column, periodKey);
     if (!identity) return;
     const key = rememberCustomCellDraft(customCellSlotsRef.current, identity, value);
-    customCellMetaRef.current.set(key, { clientId: row.client_id, column, identity });
+    customCellMetaRef.current.set(key, { kind: 'custom', clientId: row.client_id, column, identity });
     const pk = cellKey(row.client_id, column.key);
     // Excel UX: leave the cell immediately; persistence continues via single-flight queue.
     setEditingCellKey((current) => (current === pk ? null : current));
@@ -1280,6 +1372,86 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (editingCellKeyRef.current === pk) return;
     setEditingCellKey(pk);
     setCellDraft(displayCustomColumnValue(row, column));
+  };
+
+  const scheduleManualRowCellAutosave = (
+    row: ClientOperationsManualRegistryRow,
+    column: ClientOperationsRegistryColumn,
+    value: string,
+  ) => {
+    const cellPres = row.cell_presentation?.[column.key];
+    if (!canEdit || cellPres?.cell_kind !== 'manual_text' || !cellPres.editable || !onRegistryCommand) return;
+    const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
+    const identity = makeManualRowCellIdentity(row.row_key, column.key, periodKey);
+    if (!identity) return;
+    const key = rememberCustomCellDraft(customCellSlotsRef.current, identity, value);
+    customCellMetaRef.current.set(key, {
+      kind: 'manual',
+      rowKey: row.row_key,
+      manualRowSlot: row.manual_row_slot,
+      column,
+      identity,
+    });
+    clearCustomCellDebounce(key);
+    customCellDebounceTimersRef.current.set(
+      key,
+      setTimeout(() => {
+        customCellDebounceTimersRef.current.delete(key);
+        void kickCustomCellSave(key);
+      }, 500),
+    );
+  };
+
+  const commitManualRowCellEdit = (
+    row: ClientOperationsManualRegistryRow,
+    column: ClientOperationsRegistryColumn,
+    value: string,
+  ) => {
+    const cellPres = row.cell_presentation?.[column.key];
+    if (!canEdit || cellPres?.cell_kind !== 'manual_text' || !cellPres.editable || !onRegistryCommand) return;
+    const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
+    const identity = makeManualRowCellIdentity(row.row_key, column.key, periodKey);
+    if (!identity) return;
+    const key = rememberCustomCellDraft(customCellSlotsRef.current, identity, value);
+    customCellMetaRef.current.set(key, {
+      kind: 'manual',
+      rowKey: row.row_key,
+      manualRowSlot: row.manual_row_slot,
+      column,
+      identity,
+    });
+    const pk = cellKey(row.row_key, column.key);
+    setEditingCellKey((current) => (current === pk ? null : current));
+    void flushCustomCellKey(key);
+  };
+
+  const beginManualRowCellEdit = (
+    row: ClientOperationsManualRegistryRow,
+    column: ClientOperationsRegistryColumn,
+  ) => {
+    const cellPres = row.cell_presentation?.[column.key];
+    if (!canEdit || cellPres?.cell_kind !== 'manual_text' || !cellPres.editable) return;
+    if (statusPaintMode) return;
+    const pk = cellKey(row.row_key, column.key);
+    selectActiveFormatCell(row.row_key, column, { rowKey: row.row_key });
+    if (editingCellKeyRef.current === pk) return;
+    setEditingCellKey(pk);
+    setCellDraft(formatCustomExcelCellDisplay(row.cells?.[column.key]));
+  };
+
+  const cancelManualRowCellEdit = (
+    row: ClientOperationsManualRegistryRow,
+    column: ClientOperationsRegistryColumn,
+  ) => {
+    const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
+    const identity = makeManualRowCellIdentity(row.row_key, column.key, periodKey);
+    if (identity) {
+      const key = customCellSaveKey(identity);
+      clearCustomCellDebounce(key);
+      customCellSlotsRef.current.delete(key);
+      customCellMetaRef.current.delete(key);
+    }
+    setEditingCellKey(null);
   };
 
   const flushDirtyBeforePeriodChange = (nextPeriodKey: string) => {
@@ -1606,12 +1778,21 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       capital_declaration_cell: r.capital_declaration_cell,
       manual_cell_statuses: r.manual_cell_statuses,
     }));
-    const printableKeys = selectPrintableColumnKeys({ columns: printColumns, rows: printRows });
+    const printableManualRows = selectPrintableManualRows(manualRows);
+    const printManualRows: ClientOperationsPrintRow[] = printableManualRows.map((r) => ({
+      client_id: r.row_key,
+      client_name: r.cells?.client_name ?? null,
+      cells: r.cells as Record<string, string | null | undefined>,
+    }));
+    const printableKeys = selectPrintableColumnKeys({
+      columns: printColumns,
+      rows: [...printRows, ...printManualRows],
+    });
     const printableCols = visibleColumns.filter((c) => printableKeys.includes(c.key));
     const periodHeading = formatClientOperationsPeriodHeading(periodKey);
 
     const tableHeaders = printableCols.map((col) => `<th>${escapeHtml(col.label)}</th>`).join('');
-    const tableRows = rows
+    const clientTableRows = rows
       .map((r) => {
         const cells = printableCols
           .map((col) => {
@@ -1624,6 +1805,22 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         return `<tr>${cells}</tr>`;
       })
       .join('');
+    const manualTableRows = printableManualRows
+      .map((r) => {
+        const cells = printableCols
+          .map((col) => {
+            const cellPres = r.cell_presentation?.[col.key];
+            const raw =
+              cellPres?.cell_kind === 'folder'
+                ? ''
+                : formatCustomExcelCellDisplay(r.cells?.[col.key]);
+            return `<td>${escapeHtml(raw)}</td>`;
+          })
+          .join('');
+        return `<tr data-row-kind="manual">${cells}</tr>`;
+      })
+      .join('');
+    const tableRows = `${clientTableRows}${manualTableRows}`;
 
     const printWin = window.open('', '_blank', 'width=1200,height=850');
     if (!printWin) return;
@@ -1925,7 +2122,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const moreToolbarIds = ['text_color', 'fill_color', 'number_format', 'borders', 'toggle_columns'];
 
   const renderSpreadsheetToolbar = () => {
-    const currentPk = focusedCell ? cellKey(focusedCell.clientId, focusedCell.colKey) : null;
+    const currentPk = focusedCell ? clientOperationsPresentationCellKey(focusedCell) : null;
     const currentCellPres = currentPk ? cellPresentation[currentPk] : undefined;
     // Toolbar always looks active: show cell values when selected, else current tool defaults.
     const currentColor = currentCellPres?.color ?? presentationToolDefaults.color;
@@ -2225,6 +2422,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               type="button"
               className="nx-co-sheet__btn"
               title="עוד פעולות גיליון"
+              hidden
+              data-testid="co-toolbar-more"
+              aria-hidden="true"
               onClick={() => setMoreOpen((v) => !v)}
             >
               עוד…
@@ -2765,7 +2965,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               {visibleColumns.map((column) => {
                 const pk = cellKey(row.client_id, column.key);
                 const presentation = cellPresentation[pk];
-                const focused = focusedCell?.clientId === row.client_id && focusedCell.colKey === column.key;
+                const focused =
+                  Boolean(focusedCell?.clientId) &&
+                  focusedCell?.clientId === row.client_id &&
+                  focusedCell.colKey === column.key;
                 const manualStatus = row.manual_cell_statuses?.[column.key];
                 const statusToken = manualStatus?.presentation_token ?? null;
                 const paintBlocked =
@@ -2882,6 +3085,114 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                           )
                         )
                       : renderCellContent(row, column)}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+          {manualRows.map((row) => (
+            <tr
+              key={row.row_key}
+              data-row-kind="manual"
+              data-testid={`co-manual-row-${row.manual_row_slot}`}
+              className={selectedRowId === row.row_key ? 'is-selected' : undefined}
+              onClick={() => setSelectedRowId(row.row_key)}
+            >
+              {visibleColumns.map((column) => {
+                const pk = cellKey(row.row_key, column.key);
+                const presentation = cellPresentation[pk];
+                const focused =
+                  Boolean(focusedCell?.rowKey) &&
+                  focusedCell?.rowKey === row.row_key &&
+                  focusedCell.colKey === column.key;
+                const cellPres = row.cell_presentation?.[column.key];
+                const isFolderCell = cellPres?.cell_kind === 'folder';
+                const isManualText = cellPres?.cell_kind === 'manual_text';
+                const canEditManual = Boolean(canEdit && isManualText && cellPres?.editable);
+                const displayValue = isFolderCell
+                  ? ''
+                  : formatCustomExcelCellDisplay(row.cells?.[column.key]);
+                return (
+                  <td
+                    key={column.key}
+                    data-col={column.key}
+                    data-row-kind="manual"
+                    data-cell-kind={cellPres?.cell_kind ?? undefined}
+                    data-freeze={column.freeze_default ? 'true' : 'false'}
+                    data-format-selected={focused ? 'true' : 'false'}
+                    data-testid={focused ? 'co-active-format-cell' : undefined}
+                    className={[
+                      focused ? 'is-focused is-format-selected' : '',
+                      editingCellKey === pk && isManualText ? 'is-editing-custom' : '',
+                      statusPaintMode ? 'is-paint-mode' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ') || undefined}
+                    onMouseDown={(event) => {
+                      if (statusPaintMode) return;
+                      const target = event.target as HTMLElement | null;
+                      if (target?.closest('.nx-co-sheet__resize-handle, .nx-co-sheet__col-gear')) return;
+                      if (isFolderCell) return;
+                      selectActiveFormatCell(row.row_key, column, { rowKey: row.row_key });
+                    }}
+                    onClickCapture={(event) => {
+                      // Manual rows are NOT eligible for status paint (no fabricated client_id).
+                      if (!statusPaintMode) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (statusPaintMode) return;
+                      if (isFolderCell) return;
+                      selectActiveFormatCell(row.row_key, column, { rowKey: row.row_key });
+                      if (canEditManual) beginManualRowCellEdit(row, column);
+                    }}
+                    style={{
+                      textAlign: presentation?.align ?? column.align,
+                      whiteSpace: presentation?.wrap ? 'pre-wrap' : undefined,
+                      fontWeight: presentation?.bold ? 700 : undefined,
+                      fontStyle: presentation?.italic ? 'italic' : undefined,
+                      textDecoration: presentation?.underline ? 'underline' : undefined,
+                      color: presentation?.color,
+                      fontSize: presentation?.fontSize != null ? `${presentation.fontSize}px` : undefined,
+                      background: presentation?.fill,
+                    }}
+                  >
+                    {isFolderCell ? null : canEditManual ? (
+                      editingCellKey === pk ? (
+                        <input
+                          className="nx-co-sheet__custom-cell-input"
+                          value={cellDraft}
+                          autoFocus
+                          aria-label={column.label.trim() || 'ערך ידני'}
+                          data-testid={`co-manual-cell-input-${row.manual_row_slot}-${column.key}`}
+                          onChange={(event) => {
+                            const next = event.target.value;
+                            setCellDraft(next);
+                            scheduleManualRowCellAutosave(row, column, next);
+                          }}
+                          onClick={(event) => event.stopPropagation()}
+                          onBlur={() => void commitManualRowCellEdit(row, column, cellDraft)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              void commitManualRowCellEdit(row, column, cellDraft);
+                            }
+                            if (event.key === 'Escape') {
+                              event.preventDefault();
+                              cancelManualRowCellEdit(row, column);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className={`nx-co-sheet__custom-cell${displayValue ? '' : ' is-blank'}`}>
+                          {formatPresentationValue(displayValue, column, presentation)}
+                        </span>
+                      )
+                    ) : (
+                      formatPresentationValue(displayValue, column, presentation)
+                    )}
                   </td>
                 );
               })}

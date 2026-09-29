@@ -4,6 +4,7 @@ import { apiJson } from '../api/client';
 import { moduleClientOperationsRegistry, moduleClientOperationsRegistryCommands } from '../api/endpoints';
 import {
   ClientOperationsRegistryView,
+  type ClientOperationsManualRegistryRow,
   type ClientOperationsNoteTypeRow,
   type ClientOperationsRegistryColumn,
   type ClientOperationsRegistryRow,
@@ -20,6 +21,8 @@ import {
 type RegistryAggregate = {
   title_he?: string;
   rows: ClientOperationsRegistryRow[];
+  /** Backend-owned free-text manual spreadsheet rows (not Core clients). */
+  manual_rows?: ClientOperationsManualRegistryRow[];
   columns?: ClientOperationsRegistryColumn[];
   note_types?: ClientOperationsNoteTypeRow[];
   toolbar_capabilities?: ClientOperationsToolbarCapability[];
@@ -28,6 +31,11 @@ type RegistryAggregate = {
     needed: boolean;
     operational_period_key: string;
     eligible_columns: Array<{ column_id: string; label: string; key: string; preselected: boolean }>;
+  } | null;
+  /** Manual rows first-touch — null when viewer or already initialized. */
+  manual_rows_period_setup?: {
+    needed: boolean;
+    operational_period_key: string;
   } | null;
   columns_needing_legacy_baseline?: Array<{
     column_id: string;
@@ -54,6 +62,7 @@ export function ClientOperationsRegistry() {
   const auth = useAuth();
 
   const [rows, setRows] = useState<ClientOperationsRegistryRow[]>([]);
+  const [manualRows, setManualRows] = useState<ClientOperationsManualRegistryRow[]>([]);
   const [allowedActions, setAllowedActions] = useState<string[]>([]);
   const canEdit = allowedActions.includes('client_operations.edit');
   const [loading, setLoading] = useState(true);
@@ -70,6 +79,9 @@ export function ClientOperationsRegistry() {
     can_create: false,
   });
   const [userColumnPeriodSetup, setUserColumnPeriodSetup] = useState<RegistryAggregate['user_column_period_setup']>(null);
+  const [manualRowsPeriodSetup, setManualRowsPeriodSetup] = useState<
+    RegistryAggregate['manual_rows_period_setup']
+  >(null);
   const [columnsNeedingLegacyBaseline, setColumnsNeedingLegacyBaseline] = useState<
     NonNullable<RegistryAggregate['columns_needing_legacy_baseline']>
   >([]);
@@ -99,6 +111,8 @@ export function ClientOperationsRegistry() {
   const userSlotsEnsureRef = useRef<'idle' | 'pending' | 'done'>('idle');
   const periodSetupEmptyRef = useRef<'idle' | 'pending' | 'done'>('idle');
   const periodSetupKeyRef = useRef<string | null>(null);
+  const manualRowsSetupRef = useRef<'idle' | 'pending' | 'done'>('idle');
+  const manualRowsSetupKeyRef = useRef<string | null>(null);
 
   const activeOrganizationId =
     auth.status === 'authenticated' ? (auth.me.activeOrganizationId ?? null) : null;
@@ -130,12 +144,14 @@ export function ClientOperationsRegistry() {
     }
 
     setRows(Array.isArray(data?.rows) ? data.rows : []);
+    setManualRows(Array.isArray(data?.manual_rows) ? data.manual_rows : []);
     setAllowedActions(Array.isArray(data?.allowed_actions) ? data.allowed_actions : []);
     setNoteTypes(Array.isArray(data?.note_types) ? data.note_types : []);
     setColumns(Array.isArray(data?.columns) ? data.columns : []);
     setToolbarCapabilities(Array.isArray(data?.toolbar_capabilities) ? data.toolbar_capabilities : []);
     if (data?.custom_columns_capability) setCustomColumnsCapability(data.custom_columns_capability);
     setUserColumnPeriodSetup(data?.user_column_period_setup ?? null);
+    setManualRowsPeriodSetup(data?.manual_rows_period_setup ?? null);
     setColumnsNeedingLegacyBaseline(
       Array.isArray(data?.columns_needing_legacy_baseline) ? data.columns_needing_legacy_baseline : [],
     );
@@ -410,12 +426,35 @@ export function ClientOperationsRegistry() {
       });
   }, [loading, canEdit, userColumnPeriodSetup, onRegistryCommand]);
 
+  useEffect(() => {
+    if (loading) return;
+    if (!canEdit) return;
+    const setup = manualRowsPeriodSetup;
+    if (!setup?.needed) return;
+    const key = setup.operational_period_key;
+    if (manualRowsSetupKeyRef.current !== key) {
+      manualRowsSetupKeyRef.current = key;
+      manualRowsSetupRef.current = 'idle';
+    }
+    if (manualRowsSetupRef.current !== 'idle') return;
+    manualRowsSetupRef.current = 'pending';
+    void onRegistryCommand({
+      command: 'initialize_client_operations_manual_rows_for_period',
+      operational_period_key: key,
+    })
+      .catch(() => {})
+      .finally(() => {
+        manualRowsSetupRef.current = 'done';
+      });
+  }, [loading, canEdit, manualRowsPeriodSetup, onRegistryCommand]);
+
   if (auth.status !== 'authenticated') return null;
 
   return (
     <ClientOperationsRegistryView
       rows={rows}
       onRowsChange={setRows}
+      manualRows={manualRows}
       noteTypes={noteTypes}
       loading={loading}
       error={error}

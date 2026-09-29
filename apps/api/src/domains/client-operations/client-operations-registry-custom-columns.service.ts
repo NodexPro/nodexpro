@@ -6,6 +6,7 @@ import {
   assertNotSystemColumnKey,
   buildCustomColumnsCapability,
   CLIENT_OPERATIONS_CUSTOM_COLUMNS_MAX,
+  CLIENT_OPERATIONS_REGISTRY_COLUMNS,
   isSystemRegistryColumnKey,
   planClientOperationsUserSlotKeysToCreate,
   slugifyCustomColumnKey,
@@ -44,6 +45,7 @@ import {
   setCustomColumnPeriodSettings,
   setPeriodCustomColumnValue,
 } from './client-operations-user-columns-periods.service.js';
+import { setClientOperationsManualRowCellValue, initializeManualRowsForPeriod } from './client-operations-manual-rows.service.js';
 import {
   isValidClientOperationsManualCellStatus,
   resolveAllowedManualStatusesForWrite,
@@ -93,6 +95,7 @@ export type ClientOperationsRegistryCommandBody = {
   column_ids?: unknown;
   column_key?: unknown;
   status?: unknown;
+  manual_row_slot?: unknown;
 };
 
 function assertOrg(ctx: RequestContext): string {
@@ -782,6 +785,33 @@ export async function executeClientOperationsRegistryCommand(
       client_id: clientId,
       operational_period_key: operationalPeriodKey,
       reported: enabled,
+    });
+  } else if (command === 'initialize_client_operations_manual_rows_for_period') {
+    const periodKey = operationalPeriodKeyFrom(
+      body.operational_period_key ?? (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+    );
+    await initializeManualRowsForPeriod({
+      ctx,
+      organizationId: orgId,
+      operationalPeriodKey: periodKey,
+    });
+  } else if (command === 'set_client_operations_manual_row_cell_value') {
+    const operationalPeriodKey = operationalPeriodKeyFrom(
+      body.operational_period_key ?? (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+    );
+    const extended = await loadActiveCustomColumnsExtended(orgId);
+    const eligibleColumnKeys = new Set<string>([
+      ...CLIENT_OPERATIONS_REGISTRY_COLUMNS.map((c) => c.key).filter((key) => key !== 'folder'),
+      ...extended.filter((c) => c.visible !== false).map((c) => c.key),
+    ]);
+    await setClientOperationsManualRowCellValue({
+      ctx,
+      organizationId: orgId,
+      operationalPeriodKey,
+      manualRowSlot: body.manual_row_slot,
+      columnKey: String(body.column_key ?? ''),
+      value: body.value,
+      eligibleColumnKeys,
     });
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);

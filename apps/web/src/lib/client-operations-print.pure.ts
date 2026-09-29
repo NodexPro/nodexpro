@@ -146,3 +146,22 @@ export function formatClientOperationsPeriodHeading(periodKey: string | null | u
   const month = key.slice(5);
   return `${month}.${year}`;
 }
+
+/** Manual spreadsheet row with no meaningful free-text values — excluded from print. */
+export function isManualRowCompletelyEmptyForPrint(row: {
+  cells?: Record<string, string | null | undefined>;
+}): boolean {
+  const cells = row.cells ?? {};
+  for (const [key, value] of Object.entries(cells)) {
+    if (key === 'folder') continue;
+    if (isMeaningfulPrintableCellValue(value)) return false;
+  }
+  return true;
+}
+
+/** Print includes only manual rows that have at least one filled free-text cell. */
+export function selectPrintableManualRows<T extends { cells?: Record<string, string | null | undefined> }>(
+  manualRows: readonly T[],
+): T[] {
+  return manualRows.filter((row) => !isManualRowCompletelyEmptyForPrint(row));
+}
