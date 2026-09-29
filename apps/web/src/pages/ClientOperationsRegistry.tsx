@@ -53,9 +53,33 @@ type RegistryAggregate = {
     sort_by: string | null;
     sort_dir: 'asc' | 'desc' | null;
     operational_period_key: string;
+    filter_operational_reporting?: string | null;
+    filter_material?: string | null;
+    filter_payroll?: string | null;
+    filter_reporting_type?: string | null;
+    filter_business_type?: string | null;
+    filter_handler?: string | null;
   };
   period?: { selected_period_key: string; default_period_key: string; available_periods: string[] };
   allowed_actions?: string[];
+  filters?: {
+    definitions: Array<{
+      id: string;
+      label_he: string;
+      width_hint?: 'default' | 'wide' | 'handler';
+      options: Array<{ id: string; label_he: string; enabled: boolean }>;
+    }>;
+    active: {
+      operational_reporting: string;
+      material: string;
+      payroll: string;
+      reporting_type: string;
+      business_type: string;
+      handler: string;
+    };
+    any_business_filter_active: boolean;
+    clear_action: { id: string; label_he: string; available: boolean };
+  };
 };
 
 export function ClientOperationsRegistry() {
@@ -88,12 +112,30 @@ export function ClientOperationsRegistry() {
   const [manualStatusPaintModes, setManualStatusPaintModes] = useState<
     NonNullable<RegistryAggregate['manual_status_paint_modes']>
   >([]);
+  const [filters, setFilters] = useState<RegistryAggregate['filters']>(undefined);
   const [query, setQuery] = useState<{
     q: string | null;
     sort_by: string | null;
     sort_dir: 'asc' | 'desc' | null;
     operational_period_key: string | null;
-  }>({ q: null, sort_by: null, sort_dir: null, operational_period_key: null });
+    filter_operational_reporting: string | null;
+    filter_material: string | null;
+    filter_payroll: string | null;
+    filter_reporting_type: string | null;
+    filter_business_type: string | null;
+    filter_handler: string | null;
+  }>({
+    q: null,
+    sort_by: null,
+    sort_dir: null,
+    operational_period_key: null,
+    filter_operational_reporting: null,
+    filter_material: null,
+    filter_payroll: null,
+    filter_reporting_type: null,
+    filter_business_type: null,
+    filter_handler: null,
+  });
   const [period, setPeriod] = useState<{
     selected_period_key: string;
     default_period_key: string;
@@ -158,6 +200,7 @@ export function ClientOperationsRegistry() {
     if (Array.isArray(data?.manual_status_paint_modes)) {
       setManualStatusPaintModes(data.manual_status_paint_modes);
     }
+    if (data?.filters) setFilters(data.filters);
     if (typeof data?.title_he === 'string' && data.title_he.trim()) setTitleHe(data.title_he);
     if (data?.query) {
       setQuery({
@@ -166,6 +209,12 @@ export function ClientOperationsRegistry() {
         sort_dir: data.query.sort_dir ?? null,
         operational_period_key:
           data.period?.selected_period_key ?? data.query.operational_period_key ?? null,
+        filter_operational_reporting: data.query.filter_operational_reporting ?? null,
+        filter_material: data.query.filter_material ?? null,
+        filter_payroll: data.query.filter_payroll ?? null,
+        filter_reporting_type: data.query.filter_reporting_type ?? null,
+        filter_business_type: data.query.filter_business_type ?? null,
+        filter_handler: data.query.filter_handler ?? null,
       });
     } else if (data.period?.selected_period_key) {
       setQuery((current) => ({ ...current, operational_period_key: data.period!.selected_period_key }));
@@ -192,6 +241,12 @@ export function ClientOperationsRegistry() {
         q: string | null;
         sort_by: string | null;
         sort_dir: 'asc' | 'desc' | null;
+        filter_operational_reporting?: string | null;
+        filter_material?: string | null;
+        filter_payroll?: string | null;
+        filter_reporting_type?: string | null;
+        filter_business_type?: string | null;
+        filter_handler?: string | null;
       },
       selectedPeriodKey: string,
       availablePeriods: string[],
@@ -223,13 +278,30 @@ export function ClientOperationsRegistry() {
         sort_by: string | null;
         sort_dir: 'asc' | 'desc' | null;
         operational_period_key?: string | null;
+        filter_operational_reporting?: string | null;
+        filter_material?: string | null;
+        filter_payroll?: string | null;
+        filter_reporting_type?: string | null;
+        filter_business_type?: string | null;
+        filter_handler?: string | null;
       },
       options?: { quiet?: boolean; preferCache?: boolean },
     ) => {
       const periodKey = nextQuery.operational_period_key ?? null;
       if (periodKey) {
         viewedPeriodKeyRef.current = periodKey;
-        setQuery({ ...nextQuery, operational_period_key: periodKey });
+        setQuery({
+          q: nextQuery.q ?? null,
+          sort_by: nextQuery.sort_by ?? null,
+          sort_dir: nextQuery.sort_dir ?? null,
+          operational_period_key: periodKey,
+          filter_operational_reporting: nextQuery.filter_operational_reporting ?? null,
+          filter_material: nextQuery.filter_material ?? null,
+          filter_payroll: nextQuery.filter_payroll ?? null,
+          filter_reporting_type: nextQuery.filter_reporting_type ?? null,
+          filter_business_type: nextQuery.filter_business_type ?? null,
+          filter_handler: nextQuery.filter_handler ?? null,
+        });
         setPeriod((current) => {
           if (!current) {
             return {
@@ -256,7 +328,18 @@ export function ClientOperationsRegistry() {
           }
         }
       } else {
-        setQuery({ ...nextQuery, operational_period_key: null });
+        setQuery({
+          q: nextQuery.q ?? null,
+          sort_by: nextQuery.sort_by ?? null,
+          sort_dir: nextQuery.sort_dir ?? null,
+          operational_period_key: null,
+          filter_operational_reporting: nextQuery.filter_operational_reporting ?? null,
+          filter_material: nextQuery.filter_material ?? null,
+          filter_payroll: nextQuery.filter_payroll ?? null,
+          filter_reporting_type: nextQuery.filter_reporting_type ?? null,
+          filter_business_type: nextQuery.filter_business_type ?? null,
+          filter_handler: nextQuery.filter_handler ?? null,
+        });
       }
 
       loadAbortRef.current?.abort();
@@ -280,7 +363,17 @@ export function ClientOperationsRegistry() {
           const available = data.period?.available_periods ?? [];
           if (selected) {
             prefetchPeriods(
-              { q: nextQuery.q, sort_by: nextQuery.sort_by, sort_dir: nextQuery.sort_dir },
+              {
+                q: nextQuery.q,
+                sort_by: nextQuery.sort_by,
+                sort_dir: nextQuery.sort_dir,
+                filter_operational_reporting: nextQuery.filter_operational_reporting ?? null,
+                filter_material: nextQuery.filter_material ?? null,
+                filter_payroll: nextQuery.filter_payroll ?? null,
+                filter_reporting_type: nextQuery.filter_reporting_type ?? null,
+                filter_business_type: nextQuery.filter_business_type ?? null,
+                filter_handler: nextQuery.filter_handler ?? null,
+              },
               selected,
               available,
             );
@@ -336,31 +429,58 @@ export function ClientOperationsRegistry() {
 
   const onQueryChange = useCallback(
     (
-      next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null },
+      next: {
+        q: string | null;
+        sort_by: string | null;
+        sort_dir: 'asc' | 'desc' | null;
+        filter_operational_reporting?: string | null;
+        filter_material?: string | null;
+        filter_payroll?: string | null;
+        filter_reporting_type?: string | null;
+        filter_business_type?: string | null;
+        filter_handler?: string | null;
+      },
       options?: { quiet?: boolean },
     ) => {
+      // Search/filter changes must not paint a period-cache entry built under different query params.
+      periodCacheRef.current.clear();
       void loadRegistry(
-        { ...next, operational_period_key: query.operational_period_key },
-        { quiet: options?.quiet === true },
+        {
+          ...query,
+          ...next,
+          operational_period_key: query.operational_period_key,
+        },
+        { quiet: options?.quiet === true, preferCache: false },
       );
     },
-    [loadRegistry, query.operational_period_key],
+    [loadRegistry, query],
   );
 
   const onPeriodChange = useCallback(
     (operationalPeriodKey: string) => {
+      const hasBusinessFilter = Boolean(
+        query.filter_operational_reporting ||
+          query.filter_material ||
+          query.filter_payroll ||
+          query.filter_reporting_type ||
+          query.filter_business_type ||
+          query.filter_handler,
+      );
+      // Period cache is period-keyed only — drop it while business filters are active so
+      // preferCache cannot paint an aggregate from a different filter selection.
+      if (hasBusinessFilter) {
+        periodCacheRef.current.clear();
+      }
       // Instant tab + cache paint; quiet network refresh. Dirty cell saves continue in background.
       void loadRegistry(
         {
-          q: query.q,
-          sort_by: query.sort_by,
-          sort_dir: query.sort_dir,
+          ...query,
           operational_period_key: operationalPeriodKey,
         },
         { quiet: true, preferCache: true },
       );
     },
-    [loadRegistry, query.q, query.sort_by, query.sort_dir],
+    [loadRegistry, query],
   );
 
   /** Invalidate in-flight quiet GETs so older aggregates cannot overwrite newer writes. */
@@ -469,6 +589,7 @@ export function ClientOperationsRegistry() {
       userColumnPeriodSetup={userColumnPeriodSetup}
       columnsNeedingLegacyBaseline={columnsNeedingLegacyBaseline}
       manualStatusPaintModes={manualStatusPaintModes}
+      filters={filters}
       query={query}
       onQueryChange={onQueryChange}
       onRegistryCommand={onRegistryCommand}

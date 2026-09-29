@@ -126,6 +126,20 @@ router.get('/registry', ...withView, async (req, res, next) => {
     const sortDirRaw = typeof req.query.sort_dir === 'string' ? req.query.sort_dir : null;
     const operationalPeriodKeyRaw =
       typeof req.query.operational_period_key === 'string' ? req.query.operational_period_key : null;
+    const filterOperationalReportingRaw =
+      typeof req.query.filter_operational_reporting === 'string'
+        ? req.query.filter_operational_reporting
+        : null;
+    const filterMaterialRaw =
+      typeof req.query.filter_material === 'string' ? req.query.filter_material : null;
+    const filterPayrollRaw =
+      typeof req.query.filter_payroll === 'string' ? req.query.filter_payroll : null;
+    const filterReportingTypeRaw =
+      typeof req.query.filter_reporting_type === 'string' ? req.query.filter_reporting_type : null;
+    const filterBusinessTypeRaw =
+      typeof req.query.filter_business_type === 'string' ? req.query.filter_business_type : null;
+    const filterHandlerRaw =
+      typeof req.query.filter_handler === 'string' ? req.query.filter_handler : null;
     const sort_dir =
       sortDirRaw === 'asc' || sortDirRaw === 'desc' ? (sortDirRaw as 'asc' | 'desc') : null;
     const result = await listClientOperationsRegistry(ctx, {
@@ -133,6 +147,12 @@ router.get('/registry', ...withView, async (req, res, next) => {
       sort_by: sortByRaw,
       sort_dir,
       operational_period_key: operationalPeriodKeyRaw,
+      filter_operational_reporting: filterOperationalReportingRaw,
+      filter_material: filterMaterialRaw,
+      filter_payroll: filterPayrollRaw,
+      filter_reporting_type: filterReportingTypeRaw,
+      filter_business_type: filterBusinessTypeRaw,
+      filter_handler: filterHandlerRaw,
     });
     return res.json(result);
   } catch (e) {

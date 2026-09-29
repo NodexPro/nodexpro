@@ -34,6 +34,109 @@
   border-radius: 6px;
 }
 
+/* Separate horizontal filter strip — below formatting toolbar, above spreadsheet. */
+.nx-co-sheet__filter-bar {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border: 1px solid var(--nx-co-grid);
+  border-radius: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.nx-co-sheet__filter-bar-scroll {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: max-content;
+  width: 100%;
+}
+
+.nx-co-sheet__filter-control {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 112px;
+  flex: 0 0 auto;
+}
+
+.nx-co-sheet__filter-control--wide {
+  min-width: 168px;
+}
+
+.nx-co-sheet__filter-control--handler {
+  min-width: 148px;
+}
+
+.nx-co-sheet__filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--nx-co-muted);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.nx-co-sheet__filter-select {
+  appearance: none;
+  height: 30px;
+  min-height: 30px;
+  padding: 4px 28px 4px 8px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background-color: #fff;
+  background-image: linear-gradient(45deg, transparent 50%, #6b7280 50%),
+    linear-gradient(135deg, #6b7280 50%, transparent 50%);
+  background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--nx-co-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  width: 100%;
+}
+
+.nx-co-sheet__filter-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-co-sheet__filter-select:hover:not(:disabled) {
+  border-color: var(--nx-co-accent);
+}
+
+.nx-co-sheet__filter-clear {
+  appearance: none;
+  align-self: flex-end;
+  height: 30px;
+  min-height: 30px;
+  padding: 6px 12px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--nx-co-brand);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  margin-inline-start: 4px;
+}
+
+.nx-co-sheet__filter-clear:hover:not(:disabled) {
+  border-color: var(--nx-co-accent);
+}
+
+.nx-co-sheet__filter-clear:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .nx-co-sheet__toolbar-group {
   display: inline-flex;
   align-items: center;

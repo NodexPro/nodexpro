@@ -325,6 +325,17 @@ function queryFrom(value: unknown): RegistryQueryInput {
     sort_dir: query.sort_dir === 'asc' || query.sort_dir === 'desc' ? query.sort_dir : null,
     operational_period_key:
       typeof query.operational_period_key === 'string' ? query.operational_period_key : null,
+    filter_operational_reporting:
+      typeof query.filter_operational_reporting === 'string'
+        ? query.filter_operational_reporting
+        : null,
+    filter_material: typeof query.filter_material === 'string' ? query.filter_material : null,
+    filter_payroll: typeof query.filter_payroll === 'string' ? query.filter_payroll : null,
+    filter_reporting_type:
+      typeof query.filter_reporting_type === 'string' ? query.filter_reporting_type : null,
+    filter_business_type:
+      typeof query.filter_business_type === 'string' ? query.filter_business_type : null,
+    filter_handler: typeof query.filter_handler === 'string' ? query.filter_handler : null,
   };
 }
 

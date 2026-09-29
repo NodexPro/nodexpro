@@ -597,6 +597,13 @@ export type RegistryQueryInput = {
   sort_by?: string | null;
   sort_dir?: 'asc' | 'desc' | null;
   operational_period_key?: string | null;
+  /** Business filters — READ/query params only (not write commands). */
+  filter_operational_reporting?: string | null;
+  filter_material?: string | null;
+  filter_payroll?: string | null;
+  filter_reporting_type?: string | null;
+  filter_business_type?: string | null;
+  filter_handler?: string | null;
 };
 
 export function applyRegistryQueryToRows<

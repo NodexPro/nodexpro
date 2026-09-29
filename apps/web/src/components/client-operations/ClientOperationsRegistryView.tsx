@@ -401,14 +401,49 @@ export type ClientOperationsRegistryViewProps = {
     label_he: string;
     presentation_token: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
   }>;
+  /** Backend-owned filter bar contract — FE renders only. */
+  filters?: {
+    definitions: Array<{
+      id: string;
+      label_he: string;
+      width_hint?: 'default' | 'wide' | 'handler';
+      options: Array<{ id: string; label_he: string; enabled: boolean }>;
+    }>;
+    active: {
+      operational_reporting: string;
+      material: string;
+      payroll: string;
+      reporting_type: string;
+      business_type: string;
+      handler: string;
+    };
+    any_business_filter_active: boolean;
+    clear_action: { id: string; label_he: string; available: boolean };
+  };
   query?: {
     q: string | null;
     sort_by: string | null;
     sort_dir: 'asc' | 'desc' | null;
     operational_period_key?: string | null;
+    filter_operational_reporting?: string | null;
+    filter_material?: string | null;
+    filter_payroll?: string | null;
+    filter_reporting_type?: string | null;
+    filter_business_type?: string | null;
+    filter_handler?: string | null;
   };
   onQueryChange?: (
-    next: { q: string | null; sort_by: string | null; sort_dir: 'asc' | 'desc' | null },
+    next: {
+      q: string | null;
+      sort_by: string | null;
+      sort_dir: 'asc' | 'desc' | null;
+      filter_operational_reporting?: string | null;
+      filter_material?: string | null;
+      filter_payroll?: string | null;
+      filter_reporting_type?: string | null;
+      filter_business_type?: string | null;
+      filter_handler?: string | null;
+    },
     options?: { quiet?: boolean },
   ) => void;
   onRegistryCommand?: (
@@ -446,6 +481,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     userColumnPeriodSetup = null,
     columnsNeedingLegacyBaseline: _columnsNeedingLegacyBaseline = [],
     manualStatusPaintModes = [],
+    filters,
     query,
     onQueryChange,
     onRegistryCommand,
@@ -561,13 +597,101 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           q,
           sort_by: query?.sort_by ?? null,
           sort_dir: query?.sort_dir ?? null,
+          filter_operational_reporting: query?.filter_operational_reporting ?? null,
+          filter_material: query?.filter_material ?? null,
+          filter_payroll: query?.filter_payroll ?? null,
+          filter_reporting_type: query?.filter_reporting_type ?? null,
+          filter_business_type: query?.filter_business_type ?? null,
+          filter_handler: query?.filter_handler ?? null,
         },
         { quiet: true },
       );
       void seq;
     },
-    [onQueryChange, query?.q, query?.sort_by, query?.sort_dir],
+    [
+      onQueryChange,
+      query?.q,
+      query?.sort_by,
+      query?.sort_dir,
+      query?.filter_operational_reporting,
+      query?.filter_material,
+      query?.filter_payroll,
+      query?.filter_reporting_type,
+      query?.filter_business_type,
+      query?.filter_handler,
+    ],
   );
+
+  const FILTER_ID_TO_QUERY_KEY: Record<
+    string,
+    | 'filter_operational_reporting'
+    | 'filter_material'
+    | 'filter_payroll'
+    | 'filter_reporting_type'
+    | 'filter_business_type'
+    | 'filter_handler'
+  > = {
+    operational_reporting: 'filter_operational_reporting',
+    material: 'filter_material',
+    payroll: 'filter_payroll',
+    reporting_type: 'filter_reporting_type',
+    business_type: 'filter_business_type',
+    handler: 'filter_handler',
+  };
+
+  const applyBusinessFilterChange = useCallback(
+    (filterId: string, optionId: string) => {
+      if (!onQueryChange) return;
+      const key = FILTER_ID_TO_QUERY_KEY[filterId];
+      if (!key) return;
+      const value = optionId === 'all' ? null : optionId;
+      onQueryChange(
+        {
+          q: query?.q ?? null,
+          sort_by: query?.sort_by ?? null,
+          sort_dir: query?.sort_dir ?? null,
+          filter_operational_reporting: query?.filter_operational_reporting ?? null,
+          filter_material: query?.filter_material ?? null,
+          filter_payroll: query?.filter_payroll ?? null,
+          filter_reporting_type: query?.filter_reporting_type ?? null,
+          filter_business_type: query?.filter_business_type ?? null,
+          filter_handler: query?.filter_handler ?? null,
+          [key]: value,
+        },
+        { quiet: true },
+      );
+    },
+    [
+      onQueryChange,
+      query?.q,
+      query?.sort_by,
+      query?.sort_dir,
+      query?.filter_operational_reporting,
+      query?.filter_material,
+      query?.filter_payroll,
+      query?.filter_reporting_type,
+      query?.filter_business_type,
+      query?.filter_handler,
+    ],
+  );
+
+  const clearBusinessFilters = useCallback(() => {
+    if (!onQueryChange) return;
+    onQueryChange(
+      {
+        q: query?.q ?? null,
+        sort_by: query?.sort_by ?? null,
+        sort_dir: query?.sort_dir ?? null,
+        filter_operational_reporting: null,
+        filter_material: null,
+        filter_payroll: null,
+        filter_reporting_type: null,
+        filter_business_type: null,
+        filter_handler: null,
+      },
+      { quiet: true },
+    );
+  }, [onQueryChange, query?.q, query?.sort_by, query?.sort_dir]);
 
   const onSearchDraftChange = (value: string) => {
     setSearchDraft(value);
@@ -2521,6 +2645,71 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     );
   };
 
+  const renderFilterBar = () => {
+    if (!filters?.definitions?.length) return null;
+    const active = filters.active;
+    const activeById: Record<string, string> = {
+      operational_reporting: active.operational_reporting ?? 'all',
+      material: active.material ?? 'all',
+      payroll: active.payroll ?? 'all',
+      reporting_type: active.reporting_type ?? 'all',
+      business_type: active.business_type ?? 'all',
+      handler: active.handler ?? 'all',
+    };
+    return (
+      <div
+        className="nx-co-sheet__filter-bar"
+        role="toolbar"
+        aria-label="סינון תפעול לקוחות"
+        data-testid="client-operations-filter-bar"
+      >
+        <div className="nx-co-sheet__filter-bar-scroll">
+          {filters.definitions.map((def) => {
+            const widthClass =
+              def.width_hint === 'wide'
+                ? ' nx-co-sheet__filter-control--wide'
+                : def.width_hint === 'handler'
+                  ? ' nx-co-sheet__filter-control--handler'
+                  : '';
+            const selected = activeById[def.id] ?? 'all';
+            return (
+              <label
+                key={def.id}
+                className={`nx-co-sheet__filter-control${widthClass}`}
+                data-filter-id={def.id}
+              >
+                <span className="nx-co-sheet__filter-label">{def.label_he}</span>
+                <select
+                  className="nx-co-sheet__filter-select"
+                  value={selected}
+                  disabled={loading || !onQueryChange}
+                  title={def.label_he}
+                  aria-label={def.label_he}
+                  onChange={(e) => applyBusinessFilterChange(def.id, e.target.value)}
+                >
+                  {def.options.map((opt) => (
+                    <option key={opt.id} value={opt.id} disabled={opt.enabled === false}>
+                      {opt.label_he}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          })}
+          <button
+            type="button"
+            className="nx-co-sheet__filter-clear"
+            disabled={loading || !filters.clear_action?.available || !onQueryChange}
+            title={filters.clear_action?.label_he ?? 'נקה סינון'}
+            onClick={clearBusinessFilters}
+          >
+            {filters.clear_action?.label_he ?? 'נקה סינון'}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const renderCellContent = (r: ClientOperationsRegistryRow, col: ClientOperationsRegistryColumn) => {
     if (col.cell_kind === 'folder') {
       return (
@@ -3375,6 +3564,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       >
         <h1 className="nx-co-sheet__title">{titleHe ?? 'תפעול לקוחות'}</h1>
         {renderSpreadsheetToolbar()}
+        {renderFilterBar()}
         {error ? <div className="nx-co-sheet__error">{error}</div> : null}
         <div className={`nx-co-sheet__workspace${loading ? ' is-loading' : ''}`}>
           {loading ? <p className="nx-co-sheet__loading nx-co-sheet__loading--inline">טוען תקופה…</p> : null}

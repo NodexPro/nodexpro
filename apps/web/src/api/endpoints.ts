@@ -105,6 +105,12 @@ export const moduleClientOperationsRegistry = (params?: {
   sort_by?: string | null;
   sort_dir?: 'asc' | 'desc' | null;
   operational_period_key?: string | null;
+  filter_operational_reporting?: string | null;
+  filter_material?: string | null;
+  filter_payroll?: string | null;
+  filter_reporting_type?: string | null;
+  filter_business_type?: string | null;
+  filter_handler?: string | null;
 }) => {
   const sp = new URLSearchParams();
   if (params?.q?.trim()) sp.set('q', params.q.trim());
@@ -113,6 +119,18 @@ export const moduleClientOperationsRegistry = (params?: {
   if (params?.operational_period_key?.trim()) {
     sp.set('operational_period_key', params.operational_period_key.trim());
   }
+  if (params?.filter_operational_reporting?.trim()) {
+    sp.set('filter_operational_reporting', params.filter_operational_reporting.trim());
+  }
+  if (params?.filter_material?.trim()) sp.set('filter_material', params.filter_material.trim());
+  if (params?.filter_payroll?.trim()) sp.set('filter_payroll', params.filter_payroll.trim());
+  if (params?.filter_reporting_type?.trim()) {
+    sp.set('filter_reporting_type', params.filter_reporting_type.trim());
+  }
+  if (params?.filter_business_type?.trim()) {
+    sp.set('filter_business_type', params.filter_business_type.trim());
+  }
+  if (params?.filter_handler?.trim()) sp.set('filter_handler', params.filter_handler.trim());
   const qs = sp.toString();
   return qs ? `/m/client-operations/registry?${qs}` : '/m/client-operations/registry';
 };

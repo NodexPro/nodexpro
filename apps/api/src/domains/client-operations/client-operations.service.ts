@@ -114,6 +114,15 @@ import {
   type ClientOperationsManualRegistryRow,
 } from './client-operations-manual-rows.pure.js';
 import {
+  applyClientOperationsRegistryBusinessFilters,
+  buildClientOperationsRegistryFiltersContract,
+  buildClientOperationsRegistryRowFilterFacets,
+  isAnyClientOperationsBusinessFilterActive,
+  normalizeClientOperationsRegistryBusinessFilterQuery,
+  type ClientOperationsRegistryFiltersContract,
+  type ClientOperationsRegistryRowFilterFacets,
+} from './client-operations-registry-filters.pure.js';
+import {
   buildNiDeductionsRegistryCellForClient,
   loadEarliestNiDeductionsApplicablePeriodKeysForClients,
   loadNiDeductions126CycleFactsForClients,
@@ -169,6 +178,8 @@ export type ClientOperationsRegistryRow = {
       operational_square_count: number;
     }
   >;
+  /** Backend-owned row filter facets (business matching). */
+  filter_facets?: ClientOperationsRegistryRowFilterFacets;
 };
 
 export type ClientOperationsRegistryResponse = {
@@ -221,11 +232,19 @@ export type ClientOperationsRegistryResponse = {
     label_he: string;
     presentation_token: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
   }>;
+  /** Backend-owned filter bar contract (definitions + active + options). */
+  filters?: ClientOperationsRegistryFiltersContract;
   query: {
     q: string | null;
     sort_by: string | null;
     sort_dir: 'asc' | 'desc' | null;
     operational_period_key: string;
+    filter_operational_reporting: string | null;
+    filter_material: string | null;
+    filter_payroll: string | null;
+    filter_reporting_type: string | null;
+    filter_business_type: string | null;
+    filter_handler: string | null;
   };
   allowed_actions: string[];
 };
@@ -353,11 +372,16 @@ function emptyRegistryResponse(
     manual_rows_period_setup: ClientOperationsRegistryResponse['manual_rows_period_setup'];
     columns_needing_legacy_baseline: ClientOperationsRegistryResponse['columns_needing_legacy_baseline'];
     visibilityByColumn: Map<string, string[]>;
+    handlerFilterOptions?: Array<{ user_id: string; display_name: string }>;
   },
 ): ClientOperationsRegistryResponse {
   const q = (query.q ?? '').trim() || null;
-  const sort_by = query.sort_by?.trim() || null;
-  const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
+  const filterActive = normalizeClientOperationsRegistryBusinessFilterQuery(query);
+  const filters = buildClientOperationsRegistryFiltersContract({
+    active: filterActive,
+    handlerOptions: extras?.handlerFilterOptions ?? [],
+  });
+  const anyBusinessFilter = isAnyClientOperationsBusinessFilterActive(filterActive);
   const canEdit = ctx.membership?.permissions?.includes('client_operations.edit') === true;
   const customColumnsCapability = buildCustomColumnsCapability({
     current: customColumns.length,
@@ -388,12 +412,15 @@ function emptyRegistryResponse(
       legacy_baseline_period_key: column.legacy_baseline_period_key,
     })),
   ];
-  // Empty-client org still exposes five backend-owned manual slots (values may be empty).
-  const manual_rows = materializeClientOperationsManualRows({
-    columnKeys: columns.map((c) => c.key),
-    valuesBySlotColumn: new Map(),
-    searchQ: q,
-  });
+  // Empty-client org still exposes five backend-owned manual slots (values may be empty),
+  // unless a business filter is active (manual rows cannot match client business filters).
+  const manual_rows = anyBusinessFilter
+    ? []
+    : materializeClientOperationsManualRows({
+        columnKeys: columns.map((c) => c.key),
+        valuesBySlotColumn: new Map(),
+        searchQ: q,
+      });
   return {
     title_he: 'תפעול לקוחות',
     period,
@@ -410,7 +437,8 @@ function emptyRegistryResponse(
     manual_rows_period_setup: extras?.manual_rows_period_setup ?? null,
     columns_needing_legacy_baseline: extras?.columns_needing_legacy_baseline ?? [],
     manual_status_paint_modes: manualStatusPaintModesForAggregate(),
-    query: { q, sort_by, sort_dir, operational_period_key: period.selected_period_key },
+    filters,
+    query: registryQueryEcho(query, period.selected_period_key),
     allowed_actions: buildRegistryAllowedActions(ctx),
   };
 }
@@ -444,6 +472,62 @@ async function loadHandlerDisplayNamesByUserIds(
   return map;
 }
 
+/** Org handler options for the מטפל בתיק filter dropdown (stable user_id + display_name). */
+async function loadOrgHandlerFilterOptions(
+  orgId: string,
+): Promise<Array<{ user_id: string; display_name: string }>> {
+  const { data, error } = await supabaseAdmin
+    .from('organization_users')
+    .select('user_id, users!organization_users_user_id_fkey(id, email, full_name)')
+    .eq('organization_id', orgId)
+    .eq('membership_status', 'active')
+    .not('invited_by', 'is', null);
+  if (error) {
+    throw new AppError(
+      500,
+      error.message ?? 'organization_users (handler options) query failed',
+      'SUPABASE_ERROR',
+    );
+  }
+  type HandlerOptUser = { id: string; email: string | null; full_name: string | null };
+  type HandlerOptRow = { user_id: string; users: HandlerOptUser | HandlerOptUser[] | null };
+  return ((data ?? []) as unknown as HandlerOptRow[])
+    .map((r) => {
+      const uRaw = r.users;
+      const u = Array.isArray(uRaw) ? uRaw[0] : uRaw;
+      if (!u || !r.user_id) return null;
+      const email = u.email ?? '';
+      const display_name = u.full_name?.trim() ? u.full_name.trim() : email;
+      if (!r.user_id || !display_name) return null;
+      return { user_id: r.user_id, display_name };
+    })
+    .filter((x): x is { user_id: string; display_name: string } => x != null)
+    .sort((a, b) => a.display_name.localeCompare(b.display_name, 'he'));
+}
+
+function registryQueryEcho(
+  query: RegistryQueryInput,
+  selectedPeriodKey: string,
+): ClientOperationsRegistryResponse['query'] {
+  const q = (query.q ?? '').trim() || null;
+  const sort_by = query.sort_by?.trim() || null;
+  const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
+  const active = normalizeClientOperationsRegistryBusinessFilterQuery(query);
+  return {
+    q,
+    sort_by,
+    sort_dir,
+    operational_period_key: selectedPeriodKey,
+    filter_operational_reporting:
+      active.operational_reporting === 'all' ? null : active.operational_reporting,
+    filter_material: active.material === 'all' ? null : active.material,
+    filter_payroll: active.payroll === 'all' ? null : active.payroll,
+    filter_reporting_type: active.reporting_type === 'all' ? null : active.reporting_type,
+    filter_business_type: active.business_type === 'all' ? null : active.business_type,
+    filter_handler: active.handler === 'all' ? null : active.handler,
+  };
+}
+
 export async function listClientOperationsRegistry(
   ctx: RequestContext,
   query: RegistryQueryInput = {},
@@ -454,11 +538,13 @@ export async function listClientOperationsRegistry(
   const canEditRegistry =
     ctx.membership?.permissions?.includes('client_operations.edit') === true;
   // Pure read: user-slot / period-setup initialization is ONLY via named commands.
-  const [noteTypesResult, customColumnsExtended, availablePeriods] = await Promise.all([
-    listOperationalNoteTypes(),
-    loadActiveCustomColumnsExtended(orgId),
-    listKnownOperationalPeriodKeys(orgId),
-  ]);
+  const [noteTypesResult, customColumnsExtended, availablePeriods, handlerFilterOptions] =
+    await Promise.all([
+      listOperationalNoteTypes(),
+      loadActiveCustomColumnsExtended(orgId),
+      listKnownOperationalPeriodKeys(orgId),
+      loadOrgHandlerFilterOptions(orgId),
+    ]);
   const customColumns = customColumnsExtended;
   const noteTypes = noteTypesResult.types;
   const period = {
@@ -466,6 +552,12 @@ export async function listClientOperationsRegistry(
     default_period_key: defaultPeriodKey,
     available_periods: availablePeriods,
   };
+  const filterActive = normalizeClientOperationsRegistryBusinessFilterQuery(query);
+  const anyBusinessFilter = isAnyClientOperationsBusinessFilterActive(filterActive);
+  const filtersContract = buildClientOperationsRegistryFiltersContract({
+    active: filterActive,
+    handlerOptions: handlerFilterOptions,
+  });
 
   const userColumnsPeriodExtras = await buildUserColumnsPeriodAggregateExtras({
     organizationId: orgId,
@@ -544,13 +636,16 @@ export async function listClientOperationsRegistry(
       manual_rows_period_setup: manualRowsPeriodSetup,
       columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
       visibilityByColumn: userColumnsPeriodExtras.visibilityByColumn,
+      handlerFilterOptions,
     });
-    empty.manual_rows = await buildManualRowsForRegistryAggregate({
-      organizationId: orgId,
-      operationalPeriodKey: selectedPeriodKey,
-      columnKeys: empty.columns.map((c) => c.key),
-      searchQ: empty.query.q,
-    });
+    if (!anyBusinessFilter) {
+      empty.manual_rows = await buildManualRowsForRegistryAggregate({
+        organizationId: orgId,
+        operationalPeriodKey: selectedPeriodKey,
+        columnKeys: empty.columns.map((c) => c.key),
+        searchQ: empty.query.q,
+      });
+    }
     return empty;
   }
 
@@ -937,6 +1032,55 @@ export async function listClientOperationsRegistry(
       operational_notes_count: noteAgg.count,
       vat_due_registry_display_he,
     };
+    const material_cells = base.material_cells!;
+    const manual_cell_statuses = buildManualStatusCapabilitiesForRow({
+      clientId: c.id,
+      columnKeys: paintableColumnKeys,
+      customColumnKeys,
+      statuses: manualStatusesByClientColumn,
+      materialSquareCount: countMaterialOperationalSquares({
+        vatApplicable: materialBroughtCell.applicable,
+        incomeTaxAdvanceApplicable: incomeTaxAdvanceCell.applicable,
+        payrollApplicable: payrollCell.applicable,
+      }),
+      niDeductionsSquareCount: countNiDeductionsOperationalSquares({
+        applicable: Boolean(national_insurance_deductions_cell.applicable),
+        form102Applicable: Boolean(national_insurance_deductions_cell.items?.['102']?.applicable),
+        form100Applicable: Boolean(national_insurance_deductions_cell.items?.['100']?.applicable),
+        form126Applicable: Boolean(national_insurance_deductions_cell.items?.['126']?.applicable),
+      }),
+      incomeTaxDeductionsSquareCount: income_tax_deductions_cell.configured ? 1 : 0,
+    });
+    const advanceEnabledForFacet =
+      snapshot != null
+        ? snapshot.income_tax_advance_enabled
+        : (tax?.income_tax_advance_enabled ?? null);
+    const advanceFrequencyForFacet =
+      snapshot != null
+        ? snapshot.income_tax_advance_frequency
+        : (tax?.income_tax_advance_frequency ?? null);
+    const vatTypeForFacet = snapshot != null ? snapshot.vat_type : (tax?.vat_type ?? null);
+    const vatFrequencyForFacet =
+      snapshot != null ? snapshot.vat_frequency : (tax?.vat_frequency ?? null);
+    const itdFrequencyForFacet = isCurrentOpenPeriod
+      ? (tax?.income_tax_deductions_frequency ?? null)
+      : (snapshot?.income_tax_deductions_frequency ?? tax?.income_tax_deductions_frequency ?? null);
+    const filter_facets = buildClientOperationsRegistryRowFilterFacets({
+      period_applicability: base.period_applicability,
+      manual_cell_statuses,
+      material_cells,
+      payroll_applicable: hasPayroll,
+      business_type: bt,
+      assigned_handler_user_id,
+      // Explicit exemption truth — profile status 'לא', never display «—» / enabled!==true.
+      income_tax_advance_profile_status: (p?.income_tax_advance_status as string | null) ?? null,
+      income_tax_advance_enabled: advanceEnabledForFacet,
+      income_tax_advance_frequency: advanceFrequencyForFacet,
+      vat_type: vatTypeForFacet,
+      vat_frequency: vatFrequencyForFacet,
+      income_tax_deductions_configured: incomeTaxDeductionsConfigured,
+      income_tax_deductions_frequency: itdFrequencyForFacet,
+    });
     return [mergeUserCustomCellsIntoRowPeriodAware({
       ...base,
       cells: buildRegistryRowCells({
@@ -949,31 +1093,16 @@ export async function listClientOperationsRegistry(
           ? (handlerDisplayByUserId.get(assigned_handler_user_id) ?? null)
           : null,
       }),
-      manual_cell_statuses: buildManualStatusCapabilitiesForRow({
-        clientId: c.id,
-        columnKeys: paintableColumnKeys,
-        customColumnKeys,
-        statuses: manualStatusesByClientColumn,
-        materialSquareCount: countMaterialOperationalSquares({
-          vatApplicable: materialBroughtCell.applicable,
-          incomeTaxAdvanceApplicable: incomeTaxAdvanceCell.applicable,
-          payrollApplicable: payrollCell.applicable,
-        }),
-        niDeductionsSquareCount: countNiDeductionsOperationalSquares({
-          applicable: Boolean(national_insurance_deductions_cell.applicable),
-          form102Applicable: Boolean(national_insurance_deductions_cell.items?.['102']?.applicable),
-          form100Applicable: Boolean(national_insurance_deductions_cell.items?.['100']?.applicable),
-          form126Applicable: Boolean(national_insurance_deductions_cell.items?.['126']?.applicable),
-        }),
-        incomeTaxDeductionsSquareCount: income_tax_deductions_cell.configured ? 1 : 0,
-      }),
+      manual_cell_statuses,
+      filter_facets,
     }, visibleCustomColumns, customValuesByClientAndColumn)];
   });
 
   const q = (query.q ?? '').trim() || null;
   const sort_by = query.sort_by?.trim() || null;
   const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
-  const rows = applyRegistryQueryToRows(builtRows, { q, sort_by, sort_dir });
+  const searchedRows = applyRegistryQueryToRows(builtRows, { q, sort_by, sort_dir });
+  const rows = applyClientOperationsRegistryBusinessFilters(searchedRows, filterActive);
 
   const customColumnsCapability = buildCustomColumnsCapability({
     current: customColumns.length,
@@ -1005,12 +1134,14 @@ export async function listClientOperationsRegistry(
       legacy_baseline_period_key: column.legacy_baseline_period_key,
     })),
   ];
-  const manual_rows = await buildManualRowsForRegistryAggregate({
-    organizationId: orgId,
-    operationalPeriodKey: selectedPeriodKey,
-    columnKeys: columns.map((c) => c.key),
-    searchQ: q,
-  });
+  const manual_rows = anyBusinessFilter
+    ? []
+    : await buildManualRowsForRegistryAggregate({
+        organizationId: orgId,
+        operationalPeriodKey: selectedPeriodKey,
+        columnKeys: columns.map((c) => c.key),
+        searchQ: q,
+      });
   return {
     title_he: 'תפעול לקוחות',
     period,
@@ -1027,7 +1158,8 @@ export async function listClientOperationsRegistry(
     manual_rows_period_setup: manualRowsPeriodSetup,
     columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
     manual_status_paint_modes: manualStatusPaintModesForAggregate(),
-    query: { q, sort_by, sort_dir, operational_period_key: selectedPeriodKey },
+    filters: filtersContract,
+    query: registryQueryEcho(query, selectedPeriodKey),
     allowed_actions: buildRegistryAllowedActions(ctx),
   };
 }
