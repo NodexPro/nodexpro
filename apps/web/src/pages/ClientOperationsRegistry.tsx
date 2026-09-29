@@ -11,11 +11,14 @@ import {
   type ClientOperationsToolbarCapability,
 } from '../components/client-operations/ClientOperationsRegistryView';
 import {
+  canRenderPeriodBoundRows,
   getPeriodAggregateCache,
   hasActiveClientOperationsBusinessFilters,
   putPeriodAggregateCache,
+  resolveRegistryAggregatePeriodKey,
   selectPeriodPrefetchKeys,
   shouldApplyPeriodAggregateResponse,
+  shouldCachePrefetchAggregate,
   type ClientOperationsRegistryCacheQuery,
   type PeriodAggregateCacheEntry,
 } from '../lib/client-operations-period-aggregate-cache.pure';
@@ -146,6 +149,8 @@ export function ClientOperationsRegistry() {
   const loadSeqRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
   const viewedPeriodKeyRef = useRef<string | null>(null);
+  /** Aggregate period currently painted into rows/manualRows (null = transition). */
+  const [renderedAggregatePeriodKey, setRenderedAggregatePeriodKey] = useState<string | null>(null);
   const periodCacheRef = useRef<Map<string, PeriodAggregateCacheEntry<RegistryAggregate>>>(new Map());
   const prefetchInflightRef = useRef<Set<string>>(new Set());
   /** Last backend-authoritative available_periods (not FE-optimistic). */
@@ -168,36 +173,45 @@ export function ClientOperationsRegistry() {
     prefetchInflightRef.current.clear();
     backendAvailablePeriodsRef.current = [];
     viewedPeriodKeyRef.current = null;
+    setRenderedAggregatePeriodKey(null);
   }, [activeOrganizationId]);
 
+  const clearPeriodBoundPresentation = useCallback(() => {
+    setRows([]);
+    setManualRows([]);
+    setRenderedAggregatePeriodKey(null);
+    setUserColumnPeriodSetup(null);
+    setManualRowsPeriodSetup(null);
+  }, []);
+
   const applyAggregate = useCallback((data: RegistryAggregate, options?: { forcePeriodKey?: string }) => {
-    const responsePeriod =
-      data.period?.selected_period_key ?? data.query?.operational_period_key ?? null;
+    const responsePeriod = resolveRegistryAggregatePeriodKey(data);
     const viewed = options?.forcePeriodKey ?? viewedPeriodKeyRef.current;
     if (
-      responsePeriod &&
-      viewed &&
       !shouldApplyPeriodAggregateResponse({
         responsePeriodKey: responsePeriod,
         viewedPeriodKey: viewed,
       })
     ) {
-      // Cache late period truth without painting the active sheet.
-      const cacheQuery: ClientOperationsRegistryCacheQuery = {
-        q: data.query?.q ?? null,
-        filter_operational_reporting: data.query?.filter_operational_reporting ?? null,
-        filter_material: data.query?.filter_material ?? null,
-        filter_payroll: data.query?.filter_payroll ?? null,
-        filter_reporting_type: data.query?.filter_reporting_type ?? null,
-        filter_business_type: data.query?.filter_business_type ?? null,
-        filter_handler: data.query?.filter_handler ?? null,
-      };
-      putPeriodAggregateCache(periodCacheRef.current, responsePeriod, data, cacheQuery);
-      return;
+      // Late / wrong / missing period never paints. Cache only when identity is explicit.
+      if (responsePeriod) {
+        const cacheQuery: ClientOperationsRegistryCacheQuery = {
+          q: data.query?.q ?? null,
+          filter_operational_reporting: data.query?.filter_operational_reporting ?? null,
+          filter_material: data.query?.filter_material ?? null,
+          filter_payroll: data.query?.filter_payroll ?? null,
+          filter_reporting_type: data.query?.filter_reporting_type ?? null,
+          filter_business_type: data.query?.filter_business_type ?? null,
+          filter_handler: data.query?.filter_handler ?? null,
+        };
+        putPeriodAggregateCache(periodCacheRef.current, responsePeriod, data, cacheQuery);
+      }
+      return false;
     }
 
     setRows(Array.isArray(data?.rows) ? data.rows : []);
     setManualRows(Array.isArray(data?.manual_rows) ? data.manual_rows : []);
+    setRenderedAggregatePeriodKey(responsePeriod);
     setAllowedActions(Array.isArray(data?.allowed_actions) ? data.allowed_actions : []);
     setNoteTypes(Array.isArray(data?.note_types) ? data.note_types : []);
     setColumns(Array.isArray(data?.columns) ? data.columns : []);
@@ -258,6 +272,7 @@ export function ClientOperationsRegistry() {
         backendAvailablePeriodsRef.current = data.period.available_periods;
       }
     }
+    return true;
   }, []);
 
   const prefetchPeriods = useCallback(
@@ -296,6 +311,15 @@ export function ClientOperationsRegistry() {
           moduleClientOperationsRegistry({ ...baseQuery, operational_period_key: key }),
         )
           .then((data) => {
+            const responsePeriod = resolveRegistryAggregatePeriodKey(data);
+            if (
+              !shouldCachePrefetchAggregate({
+                requestedPeriodKey: key,
+                responsePeriodKey: responsePeriod,
+              })
+            ) {
+              return;
+            }
             putPeriodAggregateCache(periodCacheRef.current, key, data, cacheQuery);
           })
           .catch(() => {})
@@ -370,6 +394,9 @@ export function ClientOperationsRegistry() {
             applyAggregate(cached, { forcePeriodKey: periodKey });
             // Quiet refresh after instant paint.
             options = { ...options, quiet: true };
+          } else {
+            // Cache miss: never leave previous-period rows under the new tab.
+            clearPeriodBoundPresentation();
           }
         }
       } else {
@@ -403,26 +430,27 @@ export function ClientOperationsRegistry() {
             // Do NOT cache — stale quiet GETs must not poison period cache / wipe paints.
             return;
           }
-          applyAggregate(data);
-          const selected = data.period?.selected_period_key;
+          const painted = applyAggregate(data);
+          if (!painted) return;
+          if (seq !== loadSeqRef.current) return;
+          const selected = resolveRegistryAggregatePeriodKey(data);
+          if (!selected || viewedPeriodKeyRef.current !== selected) return;
           const available = data.period?.available_periods ?? [];
-          if (selected) {
-            prefetchPeriods(
-              {
-                q: nextQuery.q,
-                sort_by: nextQuery.sort_by,
-                sort_dir: nextQuery.sort_dir,
-                filter_operational_reporting: nextQuery.filter_operational_reporting ?? null,
-                filter_material: nextQuery.filter_material ?? null,
-                filter_payroll: nextQuery.filter_payroll ?? null,
-                filter_reporting_type: nextQuery.filter_reporting_type ?? null,
-                filter_business_type: nextQuery.filter_business_type ?? null,
-                filter_handler: nextQuery.filter_handler ?? null,
-              },
-              selected,
-              available,
-            );
-          }
+          prefetchPeriods(
+            {
+              q: nextQuery.q,
+              sort_by: nextQuery.sort_by,
+              sort_dir: nextQuery.sort_dir,
+              filter_operational_reporting: nextQuery.filter_operational_reporting ?? null,
+              filter_material: nextQuery.filter_material ?? null,
+              filter_payroll: nextQuery.filter_payroll ?? null,
+              filter_reporting_type: nextQuery.filter_reporting_type ?? null,
+              filter_business_type: nextQuery.filter_business_type ?? null,
+              filter_handler: nextQuery.filter_handler ?? null,
+            },
+            selected,
+            available,
+          );
         })
         .catch((e) => {
           if (e instanceof Error && e.name === 'AbortError') return;
@@ -455,7 +483,7 @@ export function ClientOperationsRegistry() {
           if (seq === loadSeqRef.current && !options?.quiet) setLoading(false);
         });
     },
-    [applyAggregate, prefetchPeriods],
+    [applyAggregate, clearPeriodBoundPresentation, prefetchPeriods],
   );
 
   const reloadRegistry = useCallback(() => {
@@ -561,6 +589,7 @@ export function ClientOperationsRegistry() {
     if (!setup?.needed) return;
     if ((setup.eligible_columns?.length ?? 0) > 0) return;
     const key = setup.operational_period_key;
+    if (viewedPeriodKeyRef.current && key !== viewedPeriodKeyRef.current) return;
     if (periodSetupKeyRef.current !== key) {
       periodSetupKeyRef.current = key;
       periodSetupEmptyRef.current = 'idle';
@@ -584,6 +613,7 @@ export function ClientOperationsRegistry() {
     const setup = manualRowsPeriodSetup;
     if (!setup?.needed) return;
     const key = setup.operational_period_key;
+    if (viewedPeriodKeyRef.current && key !== viewedPeriodKeyRef.current) return;
     if (manualRowsSetupKeyRef.current !== key) {
       manualRowsSetupKeyRef.current = key;
       manualRowsSetupRef.current = 'idle';
@@ -602,6 +632,13 @@ export function ClientOperationsRegistry() {
 
   if (auth.status !== 'authenticated') return null;
 
+  const selectedPeriodKey =
+    period?.selected_period_key ?? query.operational_period_key ?? null;
+  const periodContentPending = !canRenderPeriodBoundRows({
+    selectedPeriodKey,
+    renderedAggregatePeriodKey,
+  });
+
   return (
     <ClientOperationsRegistryView
       rows={rows}
@@ -609,6 +646,8 @@ export function ClientOperationsRegistry() {
       manualRows={manualRows}
       noteTypes={noteTypes}
       loading={loading}
+      periodContentPending={periodContentPending}
+      renderedAggregatePeriodKey={renderedAggregatePeriodKey}
       error={error}
       canEdit={canEdit}
       showPageHeader={false}

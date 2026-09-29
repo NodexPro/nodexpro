@@ -58,13 +58,24 @@ export function ClientOperationsPeriodSheetTabs(props: ClientOperationsPeriodShe
       <div className="nx-co-sheet__period-tabs-scroll" role="tablist" aria-label="חודשי תפעול">
         {tabs.map((key) => {
           const active = key === selectedPeriodKey;
+          // Backend default_period_key = current working period (no FE calendar math).
+          const isCurrentWorkingPeriod = Boolean(defaultPeriodKey) && key === defaultPeriodKey;
+          const tabClass = [
+            'nx-co-sheet__period-tab',
+            active ? 'is-active' : '',
+            isCurrentWorkingPeriod ? 'is-current-working-period' : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
           return (
             <button
               key={key}
               type="button"
               role="tab"
               aria-selected={active}
-              className={`nx-co-sheet__period-tab${active ? ' is-active' : ''}`}
+              data-selected={active ? 'true' : 'false'}
+              data-current-working-period={isCurrentWorkingPeriod ? 'true' : 'false'}
+              className={tabClass}
               disabled={disabled || active}
               onClick={() => onSelectPeriod(key)}
               title={key}

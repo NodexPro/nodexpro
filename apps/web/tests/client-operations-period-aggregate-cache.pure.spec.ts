@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  canRenderPeriodBoundRows,
   getPeriodAggregateCache,
   putPeriodAggregateCache,
   selectPeriodPrefetchKeys,
   shouldApplyPeriodAggregateResponse,
+  shouldCachePrefetchAggregate,
   type PeriodAggregateCacheEntry,
 } from '../src/lib/client-operations-period-aggregate-cache.pure.js';
 
@@ -56,5 +58,39 @@ test('stale period aggregate cannot paint viewed period', () => {
       viewedPeriodKey: '2026-10',
     }),
     true,
+  );
+});
+
+test('prefetch cache requires confirmed response period', () => {
+  assert.equal(
+    shouldCachePrefetchAggregate({
+      requestedPeriodKey: '2026-08',
+      responsePeriodKey: '2026-08',
+    }),
+    true,
+  );
+  assert.equal(
+    shouldCachePrefetchAggregate({
+      requestedPeriodKey: '2026-08',
+      responsePeriodKey: '2026-09',
+    }),
+    false,
+  );
+});
+
+test('period-bound rows require selected === rendered aggregate period', () => {
+  assert.equal(
+    canRenderPeriodBoundRows({
+      selectedPeriodKey: '2026-11',
+      renderedAggregatePeriodKey: '2026-11',
+    }),
+    true,
+  );
+  assert.equal(
+    canRenderPeriodBoundRows({
+      selectedPeriodKey: '2026-11',
+      renderedAggregatePeriodKey: '2026-08',
+    }),
+    false,
   );
 });

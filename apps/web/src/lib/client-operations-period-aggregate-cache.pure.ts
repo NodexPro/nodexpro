@@ -101,6 +101,27 @@ export function selectPeriodPrefetchKeys(input: {
   return out;
 }
 
+/** Explicit period identity from a registry/command aggregate (no row inference). */
+export function resolveRegistryAggregatePeriodKey(
+  data:
+    | {
+        period?: { selected_period_key?: string | null } | null;
+        query?: { operational_period_key?: string | null } | null;
+      }
+    | null
+    | undefined,
+): string | null {
+  const fromPeriod = String(data?.period?.selected_period_key ?? '').trim();
+  if (fromPeriod) return fromPeriod;
+  const fromQuery = String(data?.query?.operational_period_key ?? '').trim();
+  return fromQuery || null;
+}
+
+/**
+ * Paint guard: response may become visible table truth only when it has an
+ * explicit period that equals the currently selected/viewed period.
+ * Missing period ⇒ never paint.
+ */
 export function shouldApplyPeriodAggregateResponse(input: {
   responsePeriodKey: string | null | undefined;
   viewedPeriodKey: string | null | undefined;
@@ -109,4 +130,29 @@ export function shouldApplyPeriodAggregateResponse(input: {
   const viewed = String(input.viewedPeriodKey ?? '').trim();
   if (!response || !viewed) return false;
   return response === viewed;
+}
+
+/** Prefetch may cache under requested key only when response confirms that period. */
+export function shouldCachePrefetchAggregate(input: {
+  requestedPeriodKey: string;
+  responsePeriodKey: string | null | undefined;
+}): boolean {
+  const requested = String(input.requestedPeriodKey ?? '').trim();
+  const response = String(input.responsePeriodKey ?? '').trim();
+  if (!requested || !response) return false;
+  return requested === response;
+}
+
+/**
+ * Period-bound rows render only when the aggregate currently painted matches
+ * the selected tab. Otherwise show a period-safe transition state.
+ */
+export function canRenderPeriodBoundRows(input: {
+  selectedPeriodKey: string | null | undefined;
+  renderedAggregatePeriodKey: string | null | undefined;
+}): boolean {
+  const selected = String(input.selectedPeriodKey ?? '').trim();
+  const rendered = String(input.renderedAggregatePeriodKey ?? '').trim();
+  if (!selected || !rendered) return false;
+  return selected === rendered;
 }

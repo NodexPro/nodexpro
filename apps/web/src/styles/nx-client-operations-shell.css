@@ -1,0 +1,115 @@
+/**
+ * Client Operations — page shell / sidebar navy glass (scoped).
+ * Only applies under .t1-appShell--client-operations — does not restyle other modules.
+ */
+
+.t1-appShell--client-operations {
+  --nx-nova: #123756;
+  --nx-navy-950: #061a33;
+  --nx-navy-900: #082447;
+  --nx-navy-850: #0a2d55;
+  --nx-navy-800: #0d3764;
+  --nx-blue-500: #268cff;
+  --nx-blue-400: #42a5ff;
+  --nx-cyan-500: #00cfef;
+  --nx-cyan-400: #39e6f4;
+  --nx-cyan-300: #7decf7;
+  --nx-violet-500: #6657e8;
+  --nx-text-on-navy: #c8d9ed;
+  --nx-text-on-navy-muted: rgba(200, 217, 237, 0.72);
+
+  background-color: var(--nx-navy-950);
+  background-image:
+    radial-gradient(ellipse 80% 55% at 12% -10%, rgba(102, 87, 232, 0.14), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 88% 0%, rgba(0, 207, 239, 0.08), transparent 50%),
+    linear-gradient(165deg, var(--nx-navy-900) 0%, var(--nx-navy-950) 42%, var(--nx-navy-800) 100%);
+  color: var(--nx-text-on-navy);
+}
+
+.t1-appShell--client-operations .t1-pageMain {
+  background: transparent;
+}
+
+/* Header: calm glass over navy (inline styles overridden only in this module). */
+.t1-appShell--client-operations > div > header {
+  background: rgba(8, 36, 71, 0.82) !important;
+  border-bottom: 1px solid rgba(125, 236, 247, 0.12) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--nx-text-on-navy);
+}
+
+.t1-appShell--client-operations > div > header button,
+.t1-appShell--client-operations > div > header span,
+.t1-appShell--client-operations > div > header div {
+  color: inherit;
+}
+
+/* Sidebar navy glass */
+.t1-appShell--client-operations .t1-sidebar {
+  background: rgba(6, 26, 51, 0.88);
+  border-right: 1px solid rgba(125, 236, 247, 0.12);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  color: var(--nx-text-on-navy);
+}
+
+.t1-appShell--client-operations .t1-sidebar__brand-name {
+  color: #e8f2ff !important;
+}
+
+.t1-appShell--client-operations .t1-sidebar__link {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--nx-text-on-navy-muted);
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.t1-appShell--client-operations .t1-sidebar__link:hover {
+  color: #e8f2ff;
+  background: rgba(38, 140, 255, 0.1);
+  border-color: rgba(66, 165, 255, 0.22);
+}
+
+.t1-appShell--client-operations .t1-sidebar__link.is-active {
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, rgba(38, 140, 255, 0.3), rgba(0, 207, 239, 0.2));
+  border: 1px solid rgba(57, 230, 244, 0.48);
+  box-shadow: 0 0 18px rgba(0, 207, 239, 0.16);
+}
+
+.t1-appShell--client-operations .t1-sidebar__link-child {
+  height: 36px;
+  font-size: 14px;
+  color: var(--nx-text-on-navy-muted);
+}
+
+.t1-appShell--client-operations .t1-sidebar__link-child.is-active {
+  background: linear-gradient(135deg, rgba(38, 140, 255, 0.22), rgba(0, 207, 239, 0.14));
+  border: 1px solid rgba(57, 230, 244, 0.36);
+  box-shadow: 0 0 12px rgba(0, 207, 239, 0.12);
+  color: #ffffff;
+}
+
+.t1-appShell--client-operations .t1-sidebar-account__org-name,
+.t1-appShell--client-operations .t1-sidebar-account__user,
+.t1-appShell--client-operations .t1-sidebar-account__label {
+  color: var(--nx-text-on-navy);
+}
+
+.t1-appShell--client-operations .t1-sidebar-account__divider {
+  background: rgba(125, 236, 247, 0.14);
+}
+
+.t1-appShell--client-operations .t1-sidebar-account__select {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(66, 165, 255, 0.28);
+  color: #e8f2ff;
+}

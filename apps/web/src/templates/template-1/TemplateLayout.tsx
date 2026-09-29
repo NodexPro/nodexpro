@@ -6,6 +6,7 @@ import type { SidebarAccountBlockModel } from '../../types/session';
 import type { UiLanguageCode } from '../../types/session';
 
 import './tokens.css';
+import '../../styles/nx-client-operations-shell.css';
 
 export type Template1SidebarItem = { to: string; label: string; children?: { to: string; label: string }[] };
 
@@ -40,10 +41,14 @@ export function TemplateLayout({
   const pageMaxWidth = isClientOperationsModule || isIncomeModule || isWorkEngineSection ? 1600 : 1100;
 
   return (
-    <div className="t1-appShell" style={{ display: 'flex', minHeight: '100vh' }}>
+    <div
+      className={`t1-appShell${isClientOperationsModule ? ' t1-appShell--client-operations' : ''}`}
+      style={{ display: 'flex', minHeight: '100vh' }}
+    >
       <AppSidebar
         items={sidebarItems}
         mode={isClientOperationsModule || isIncomeModule || isWorkEngineSection ? 'collapsedHover' : 'default'}
+        appearance={isClientOperationsModule ? 'co-navy-glass' : 'default'}
         accountBlock={sidebarAccountBlock}
         accountBusy={accountBusy}
         onSelectOrganization={onSelectOrg}

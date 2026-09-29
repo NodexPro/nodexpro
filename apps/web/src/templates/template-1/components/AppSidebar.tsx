@@ -3,10 +3,11 @@ import { NavLink } from 'react-router-dom';
 import type { Template1SidebarItem } from '../TemplateLayout';
 import type { SidebarAccountBlockModel } from '../../../types/session';
 import { SidebarAccountBlock } from './SidebarAccountBlock';
-import logoSrc from '../assets/nodexpro-logo.png';
+import orbSrc from '../assets/nodexpro-orb.png';
 import '../t1-sidebar-account.css';
 
 type SidebarMode = 'default' | 'collapsedHover';
+type SidebarAppearance = 'default' | 'co-navy-glass';
 
 function iconForNavItem(to: string, label: string): string {
   if (to.includes('/work-engine')) return '📋';
@@ -30,6 +31,7 @@ function iconForLabel(label: string): string {
 export function AppSidebar({
   items,
   mode = 'default',
+  appearance = 'default',
   accountBlock,
   accountBusy = false,
   onSelectOrganization,
@@ -38,6 +40,8 @@ export function AppSidebar({
 }: {
   items: Template1SidebarItem[];
   mode?: SidebarMode;
+  /** Presentation-only: navy glass when Client Operations module is active. */
+  appearance?: SidebarAppearance;
   accountBlock: SidebarAccountBlockModel;
   accountBusy?: boolean;
   onSelectOrganization: (organizationId: string) => void | Promise<void>;
@@ -45,6 +49,7 @@ export function AppSidebar({
   onLogout: () => void | Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const coGlass = appearance === 'co-navy-glass';
 
   const showExpanded = mode !== 'collapsedHover' ? true : expanded;
   const width = mode === 'collapsedHover' ? (showExpanded ? 240 : 64) : 240;
@@ -74,12 +79,26 @@ export function AppSidebar({
           flexShrink: 0,
         }}
       >
-        <img src={logoSrc} alt="NodexPro" style={{ width: 42, height: 42, display: 'block' }} />
-        {showExpanded && (
-          <div style={{ fontSize: 18, fontWeight: 600, color: '#111827', lineHeight: 1 }}>
+        <img
+          src={orbSrc}
+          alt=""
+          style={{
+            width: 42,
+            height: 42,
+            display: 'block',
+            objectFit: 'contain',
+            borderRadius: '50%',
+            flexShrink: 0,
+          }}
+        />
+        {showExpanded ? (
+          <div
+            className={coGlass ? 't1-sidebar__brand-name' : undefined}
+            style={{ fontSize: 18, fontWeight: 600, color: coGlass ? undefined : '#111827', lineHeight: 1 }}
+          >
             NodexPro
           </div>
-        )}
+        ) : null}
       </div>
 
       <nav className="t1-sidebar__nav" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -88,20 +107,30 @@ export function AppSidebar({
             <NavLink
               to={item.to}
               end={item.to === '/modules'}
-              style={({ isActive }) => ({
-                height: 40,
-                display: 'flex',
-                alignItems: 'center',
-                padding: showExpanded ? '0 12px' : '0 0',
-                borderRadius: 10,
-                textDecoration: 'none',
-                color: '#111827',
-                fontWeight: isActive ? 600 : 500,
-                background: isActive ? 'rgba(59,130,246,0.10)' : 'transparent',
-                border: '1px solid ' + (isActive ? 'rgba(59,130,246,0.20)' : 'transparent'),
-                transition: 'background 120ms ease',
-                justifyContent: showExpanded ? 'flex-start' : 'center',
-              })}
+              className={({ isActive }) =>
+                coGlass ? `t1-sidebar__link${isActive ? ' is-active' : ''}` : undefined
+              }
+              style={({ isActive }) =>
+                coGlass
+                  ? {
+                      padding: showExpanded ? '0 12px' : '0 0',
+                      justifyContent: showExpanded ? 'flex-start' : 'center',
+                    }
+                  : {
+                      height: 40,
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: showExpanded ? '0 12px' : '0 0',
+                      borderRadius: 10,
+                      textDecoration: 'none',
+                      color: '#111827',
+                      fontWeight: isActive ? 600 : 500,
+                      background: isActive ? 'rgba(59,130,246,0.10)' : 'transparent',
+                      border: '1px solid ' + (isActive ? 'rgba(59,130,246,0.20)' : 'transparent'),
+                      transition: 'background 120ms ease',
+                      justifyContent: showExpanded ? 'flex-start' : 'center',
+                    }
+              }
             >
               <span aria-hidden="true" style={{ width: 22, display: 'inline-flex', justifyContent: 'center' }}>
                 {item.icon}
@@ -113,19 +142,28 @@ export function AppSidebar({
                 <NavLink
                   key={child.to}
                   to={child.to}
-                  style={({ isActive }) => ({
-                    height: 36,
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '0 12px 0 36px',
-                    borderRadius: 10,
-                    textDecoration: 'none',
-                    color: '#374151',
-                    fontSize: 14,
-                    fontWeight: isActive ? 600 : 500,
-                    background: isActive ? 'rgba(59,130,246,0.08)' : 'transparent',
-                    border: '1px solid ' + (isActive ? 'rgba(59,130,246,0.15)' : 'transparent'),
-                  })}
+                  className={({ isActive }) =>
+                    coGlass
+                      ? `t1-sidebar__link t1-sidebar__link-child${isActive ? ' is-active' : ''}`
+                      : undefined
+                  }
+                  style={({ isActive }) =>
+                    coGlass
+                      ? { padding: '0 12px 0 36px' }
+                      : {
+                          height: 36,
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '0 12px 0 36px',
+                          borderRadius: 10,
+                          textDecoration: 'none',
+                          color: '#374151',
+                          fontSize: 14,
+                          fontWeight: isActive ? 600 : 500,
+                          background: isActive ? 'rgba(59,130,246,0.08)' : 'transparent',
+                          border: '1px solid ' + (isActive ? 'rgba(59,130,246,0.15)' : 'transparent'),
+                        }
+                  }
                 >
                   <span aria-hidden="true" style={{ width: 22, display: 'inline-flex', justifyContent: 'center' }}>
                     {iconForLabel(child.label)}

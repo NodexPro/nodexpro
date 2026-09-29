@@ -375,6 +375,13 @@ export type ClientOperationsRegistryViewProps = {
   manualRows?: ClientOperationsManualRegistryRow[];
   noteTypes: ClientOperationsNoteTypeRow[];
   loading: boolean;
+  /**
+   * Period-safe transition: selected tab does not yet match painted aggregate.
+   * Toolbar/filters/tabs stay; period-bound rows must not show prior-period content.
+   */
+  periodContentPending?: boolean;
+  /** Aggregate period currently painted (null during transition). */
+  renderedAggregatePeriodKey?: string | null;
   error: string;
   canEdit: boolean;
   showPageHeader?: boolean;
@@ -469,6 +476,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     manualRows = [],
     noteTypes,
     loading,
+    periodContentPending = false,
     error,
     canEdit,
     showPageHeader = true,
@@ -3202,7 +3210,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           ))}
         </tr></thead>
         <tbody>
-          {rows.map((row) => (
+          {!periodContentPending
+            ? rows.map((row) => (
             <tr key={row.client_id} className={selectedRowId === row.client_id ? 'is-selected' : undefined} onClick={() => setSelectedRowId(row.client_id)}>
               {visibleColumns.map((column) => {
                 const pk = cellKey(row.client_id, column.key);
@@ -3331,8 +3340,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 );
               })}
             </tr>
-          ))}
-          {manualRows.map((row) => (
+          ))
+            : null}
+          {!periodContentPending
+            ? manualRows.map((row) => (
             <tr
               key={row.row_key}
               data-row-kind="manual"
@@ -3443,10 +3454,25 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 );
               })}
             </tr>
-          ))}
+          ))
+            : null}
         </tbody>
       </table>
-      {rows.length === 0 ? <p className="nx-co-sheet__empty">לא נמצאו לקוחות.</p> : null}
+      {periodContentPending ? (
+        <div
+          className="nx-co-sheet__period-pending"
+          data-testid="client-operations-period-pending"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <div className="nx-co-sheet__period-pending-line" />
+          <div className="nx-co-sheet__period-pending-line" />
+          <div className="nx-co-sheet__period-pending-line" />
+          <p className="nx-co-sheet__period-pending-label">טוען תקופה…</p>
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="nx-co-sheet__empty">לא נמצאו לקוחות.</p>
+      ) : null}
     </div>
   );
 
@@ -3581,7 +3607,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         {renderSpreadsheetToolbar()}
         {renderFilterBar()}
         {error ? <div className="nx-co-sheet__error">{error}</div> : null}
-        <div className={`nx-co-sheet__workspace${loading ? ' is-loading' : ''}`}>
+        <div
+          className={`nx-co-sheet__workspace${loading || periodContentPending ? ' is-loading' : ''}${
+            periodContentPending ? ' is-period-pending' : ''
+          }`}
+        >
           {loading ? <p className="nx-co-sheet__loading nx-co-sheet__loading--inline">טוען תקופה…</p> : null}
           {renderSpreadsheetTable()}
         <ClientOperationsPeriodSheetTabs

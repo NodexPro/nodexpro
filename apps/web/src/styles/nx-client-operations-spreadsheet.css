@@ -1,18 +1,52 @@
-/* Client Operations spreadsheet workspace — NodexPro identity, RTL-first */
+/* Client Operations spreadsheet workspace — premium navy / cyan glass presentation */
 
 .nx-co-sheet {
+  --nx-nova: #123756;
+  --nx-navy-950: #061a33;
+  --nx-navy-900: #082447;
+  --nx-navy-850: #0a2d55;
+  --nx-navy-800: #0d3764;
+  --nx-blue-500: #268cff;
+  --nx-blue-400: #42a5ff;
+  --nx-cyan-500: #00cfef;
+  --nx-cyan-400: #39e6f4;
+  --nx-cyan-300: #7decf7;
+  --nx-violet-500: #6657e8;
+  --nx-violet-400: #8074f2;
+  --nx-workspace: #edf5ff;
+  --nx-surface: #f7faff;
+  --nx-surface-strong: #ffffff;
+  --nx-surface-blue: #e8f2ff;
+  --nx-table-bg: #ffffff;
+  --nx-table-alt: #f8fbff;
+  --nx-table-header: #e8f2fc;
+  --nx-grid: #d5e2f0;
+  --nx-text-primary: #102a4c;
+  --nx-text-secondary: #58708e;
+  --nx-text-muted: #879ab0;
+  /* Legacy aliases used across this stylesheet */
   --nx-co-brand: #123756;
-  --nx-co-accent: #2a7a9b;
-  --nx-co-select: rgba(18, 55, 86, 0.12);
-  --nx-co-grid: #d8dee6;
-  --nx-co-header-bg: #f4f6f8;
-  --nx-co-text: #111827;
-  --nx-co-muted: #6b7280;
+  --nx-co-accent: var(--nx-blue-500);
+  --nx-co-select: rgba(38, 140, 255, 0.12);
+  --nx-co-grid: var(--nx-grid);
+  --nx-co-header-bg: var(--nx-table-header);
+  --nx-co-text: var(--nx-text-primary);
+  --nx-co-muted: var(--nx-text-secondary);
   direction: rtl;
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-height: 0;
+  padding: 14px 16px 12px;
+  box-sizing: border-box;
+  background: rgba(241, 247, 255, 0.94);
+  border: 1px solid rgba(125, 236, 247, 0.24);
+  border-radius: 18px;
+  box-shadow:
+    0 20px 55px rgba(2, 20, 45, 0.24),
+    0 0 28px rgba(38, 140, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .nx-co-sheet__title {
@@ -29,9 +63,12 @@
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  background: #f8fafc;
-  border: 1px solid var(--nx-co-grid);
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(90, 135, 185, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(18, 55, 86, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 /* Separate horizontal filter strip — below formatting toolbar, above spreadsheet. */
@@ -39,11 +76,14 @@
   display: flex;
   align-items: center;
   padding: 6px 10px;
-  background: #f8fafc;
-  border: 1px solid var(--nx-co-grid);
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(90, 135, 185, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(18, 55, 86, 0.05);
   overflow-x: auto;
   overflow-y: hidden;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .nx-co-sheet__filter-bar-scroll {
@@ -84,15 +124,15 @@
   height: 30px;
   min-height: 30px;
   padding: 4px 28px 4px 8px;
-  border: 1px solid #cfd8e3;
+  border: 1px solid var(--nx-grid);
   border-radius: 6px;
-  background-color: #fff;
-  background-image: linear-gradient(45deg, transparent 50%, #6b7280 50%),
-    linear-gradient(135deg, #6b7280 50%, transparent 50%);
+  background-color: var(--nx-surface-strong);
+  background-image: linear-gradient(45deg, transparent 50%, var(--nx-text-secondary) 50%),
+    linear-gradient(135deg, var(--nx-text-secondary) 50%, transparent 50%);
   background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
-  color: var(--nx-co-text);
+  color: var(--nx-text-primary);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
@@ -106,7 +146,13 @@
 }
 
 .nx-co-sheet__filter-select:hover:not(:disabled) {
-  border-color: var(--nx-co-accent);
+  border-color: var(--nx-blue-500);
+}
+
+.nx-co-sheet__filter-select:focus-visible {
+  outline: none;
+  border-color: var(--nx-cyan-500);
+  box-shadow: 0 0 0 3px rgba(0, 207, 239, 0.18);
 }
 
 .nx-co-sheet__filter-clear {
@@ -115,10 +161,10 @@
   height: 30px;
   min-height: 30px;
   padding: 6px 12px;
-  border: 1px solid #cfd8e3;
+  border: 1px solid var(--nx-grid);
   border-radius: 6px;
-  background: #fff;
-  color: var(--nx-co-brand);
+  background: var(--nx-surface-strong);
+  color: var(--nx-nova);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
@@ -129,7 +175,7 @@
 }
 
 .nx-co-sheet__filter-clear:hover:not(:disabled) {
-  border-color: var(--nx-co-accent);
+  border-color: var(--nx-blue-500);
 }
 
 .nx-co-sheet__filter-clear:disabled {
@@ -154,10 +200,10 @@
 
 .nx-co-sheet__btn {
   appearance: none;
-  border: 1px solid #cfd8e3;
-  background: #fff;
+  border: 1px solid rgba(90, 135, 185, 0.2);
+  background: rgba(255, 255, 255, 0.72);
   color: var(--nx-co-text);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 6px 10px;
   font-size: 13px;
   font-weight: 600;
@@ -165,11 +211,18 @@
   min-height: 30px;
   cursor: pointer;
   white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(18, 55, 86, 0.05);
 }
 
 .nx-co-sheet__btn:hover:not(:disabled) {
-  border-color: var(--nx-co-accent);
+  border-color: var(--nx-blue-500);
   color: var(--nx-co-brand);
+}
+
+.nx-co-sheet__btn:focus-visible {
+  outline: none;
+  border-color: var(--nx-cyan-500);
+  box-shadow: 0 0 0 3px rgba(0, 207, 239, 0.18);
 }
 
 .nx-co-sheet__btn:disabled {
@@ -179,7 +232,7 @@
 
 .nx-co-sheet__btn.is-active {
   background: var(--nx-co-select);
-  border-color: var(--nx-co-brand);
+  border-color: var(--nx-blue-500);
   color: var(--nx-co-brand);
 }
 
@@ -197,13 +250,20 @@
 
 .nx-co-sheet__search-field input {
   width: min(220px, 42vw);
-  border: 1px solid #cfd8e3;
-  border-radius: 6px;
+  border: 1px solid rgba(90, 135, 185, 0.2);
+  border-radius: 8px;
   padding: 6px 10px;
   padding-inline-start: 34px;
   font-size: 13px;
-  background: #fff;
-  color: var(--nx-co-text);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--nx-text-primary);
+  box-shadow: 0 2px 8px rgba(18, 55, 86, 0.05);
+}
+
+.nx-co-sheet__search-field input:focus-visible {
+  outline: none;
+  border-color: var(--nx-cyan-500);
+  box-shadow: 0 0 0 3px rgba(0, 207, 239, 0.18);
 }
 
 .nx-co-sheet__search-icon-btn {
@@ -318,10 +378,11 @@
 }
 
 .nx-co-sheet__canvas {
-  background: #fff;
-  border: 1px solid var(--nx-co-grid);
+  background: var(--nx-table-bg);
+  border: 1px solid rgba(72, 124, 178, 0.2);
   border-bottom: none;
-  border-radius: 6px 6px 0 0;
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 8px 22px rgba(18, 55, 86, 0.07);
   /* Explicit axes: keep required H/V scroll without fake arrow chrome. */
   overflow-x: auto;
   overflow-y: auto;
@@ -329,7 +390,7 @@
   min-height: 0;
   flex: 1 1 auto;
   scrollbar-width: thin;
-  scrollbar-color: #c5ced8 transparent;
+  scrollbar-color: #a8bdd4 transparent;
 }
 
 /* Windows/Chromium classic scrollbars expose ▲▼ buttons; hide those only. */
@@ -363,29 +424,33 @@
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 13px;
-  color: var(--nx-co-text);
-  background: #fff;
+  color: var(--nx-text-primary);
+  background: var(--nx-table-bg);
   direction: rtl;
 }
 
 .nx-co-sheet__table th,
 .nx-co-sheet__table td {
-  border: 1px solid var(--nx-co-grid);
+  border: 1px solid var(--nx-grid);
   padding: 6px 10px;
   vertical-align: middle;
   white-space: nowrap;
-  background: #fff;
+  background: var(--nx-table-bg);
 }
 
 .nx-co-sheet__table thead th {
   position: sticky;
   top: 0;
   z-index: 3;
-  background: var(--nx-co-header-bg);
+  background: var(--nx-table-header);
   font-weight: 700;
-  color: var(--nx-co-brand);
-  box-shadow: inset 0 -1px 0 var(--nx-co-grid);
+  color: var(--nx-nova);
+  box-shadow: inset 0 -1px 0 var(--nx-grid);
   position: sticky;
+}
+
+.nx-co-sheet__table tbody tr:nth-child(even) td {
+  background: var(--nx-table-alt);
 }
 
 .nx-co-sheet__table th {
@@ -419,7 +484,8 @@
   box-shadow: inset 0 -1px 0 #eef2f6;
 }
 
-.nx-co-sheet__table tbody tr.is-selected td {
+.nx-co-sheet__table tbody tr.is-selected td,
+.nx-co-sheet__table tbody tr:nth-child(even).is-selected td {
   background: var(--nx-co-select);
 }
 
@@ -941,8 +1007,12 @@
   box-sizing: border-box;
   padding: 12px 14px;
   gap: 8px;
-  background: #fff;
+  background: rgba(241, 247, 255, 0.97);
   border-radius: 0;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .nx-co-sheet--app-fullscreen .nx-co-sheet__workspace {
@@ -1016,6 +1086,47 @@
   pointer-events: none;
 }
 
+.nx-co-sheet__workspace.is-period-pending .nx-co-sheet__canvas {
+  opacity: 1;
+  pointer-events: none;
+}
+
+.nx-co-sheet__period-pending {
+  display: grid;
+  gap: 8px;
+  padding: 16px 12px 20px;
+  pointer-events: none;
+}
+
+.nx-co-sheet__period-pending-line {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(213, 226, 240, 0.55) 0%,
+    rgba(232, 242, 255, 0.95) 50%,
+    rgba(213, 226, 240, 0.55) 100%
+  );
+  background-size: 200% 100%;
+}
+
+.nx-co-sheet__period-pending-line:nth-child(1) {
+  width: 92%;
+}
+.nx-co-sheet__period-pending-line:nth-child(2) {
+  width: 78%;
+}
+.nx-co-sheet__period-pending-line:nth-child(3) {
+  width: 86%;
+}
+
+.nx-co-sheet__period-pending-label {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nx-co-muted);
+}
+
 .nx-co-sheet__loading--inline {
   position: absolute;
   inset-inline-start: 12px;
@@ -1038,11 +1149,14 @@
   flex: 0 0 auto;
   gap: 0;
   margin-top: 0;
-  background: #eef2f6;
-  border: 1px solid var(--nx-co-grid);
-  border-radius: 0 0 6px 6px;
+  background: linear-gradient(180deg, rgba(8, 36, 71, 0.92), rgba(6, 26, 51, 0.97));
+  border: 1px solid rgba(72, 124, 178, 0.2);
+  border-top: 1px solid rgba(57, 230, 244, 0.14);
+  border-radius: 0 0 12px 12px;
   /* One thin Excel sheet-tab row — no tall gutter under the grid. */
   min-height: 0;
+  padding: 6px 4px 6px;
+  box-shadow: 0 -4px 16px rgba(2, 20, 45, 0.12);
 }
 
 .nx-co-sheet__period-tabs-scroll {
@@ -1050,15 +1164,15 @@
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: flex-end;
-  gap: 1px;
+  gap: 6px;
   padding: 0 4px;
   /* Horizontal only: vertical auto here creates the bottom-left ▲▼ stub. */
   overflow-x: auto;
   overflow-y: hidden;
-  min-height: 22px;
-  max-height: 26px;
+  min-height: 32px;
+  max-height: 36px;
   scrollbar-width: thin;
-  scrollbar-color: #c5ced8 transparent;
+  scrollbar-color: rgba(125, 236, 247, 0.35) transparent;
 }
 
 .nx-co-sheet__period-tabs-scroll::-webkit-scrollbar {
@@ -1072,7 +1186,7 @@
 }
 
 .nx-co-sheet__period-tabs-scroll::-webkit-scrollbar-thumb {
-  background: #c5ced8;
+  background: rgba(125, 236, 247, 0.35);
   border-radius: 4px;
 }
 
@@ -1082,42 +1196,69 @@
 
 .nx-co-sheet__period-tab {
   appearance: none;
-  border: 1px solid var(--nx-co-grid);
-  border-bottom: none;
-  background: #e4ebf2;
-  color: var(--nx-co-muted);
+  border: 1px solid rgba(66, 165, 255, 0.2);
+  background: rgba(8, 36, 71, 0.92);
+  color: #c8d9ed;
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
-  padding: 4px 10px;
-  border-radius: 3px 3px 0 0;
+  padding: 6px 12px;
+  border-radius: 9px;
   cursor: pointer;
-  min-width: 48px;
-  height: 22px;
+  min-width: 52px;
+  height: 28px;
   box-sizing: border-box;
   white-space: nowrap;
   flex: 0 0 auto;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, color 120ms ease;
 }
 
 .nx-co-sheet__period-tab:hover:not(:disabled) {
-  background: #f3f6f9;
-  color: var(--nx-co-brand);
+  border-color: rgba(66, 165, 255, 0.48);
+  background: rgba(10, 45, 85, 0.96);
+  color: #e8f2ff;
 }
 
-.nx-co-sheet__period-tab.is-active {
-  background: #fff;
-  color: var(--nx-co-brand);
-  border-color: var(--nx-co-grid);
-  box-shadow: inset 0 2px 0 var(--nx-co-accent);
+/* Selected period that is NOT the current working period — quieter blue. */
+.nx-co-sheet__period-tab.is-active:not(.is-current-working-period) {
+  background: rgba(38, 140, 255, 0.18);
+  border: 1px solid rgba(66, 165, 255, 0.55);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(38, 140, 255, 0.16);
+  cursor: default;
+}
+
+/* Current working period — strongest accent (backend default_period_key). */
+.nx-co-sheet__period-tab.is-current-working-period {
+  background: linear-gradient(135deg, #1477e8 0%, #00cfef 100%);
+  color: #ffffff;
+  border: 1px solid rgba(125, 236, 247, 0.9);
+  box-shadow:
+    0 0 0 1px rgba(57, 230, 244, 0.2),
+    0 0 14px rgba(0, 207, 239, 0.55),
+    0 0 28px rgba(38, 140, 255, 0.28);
+  font-weight: 700;
+}
+
+.nx-co-sheet__period-tab.is-current-working-period.is-active {
   cursor: default;
 }
 
 .nx-co-sheet__period-tab--plus {
-  min-width: 24px;
-  padding-inline: 6px;
+  min-width: 28px;
+  padding-inline: 8px;
   font-size: 14px;
   font-weight: 700;
-  color: var(--nx-co-brand);
+  color: #c8d9ed;
+  background: rgba(8, 36, 71, 0.92);
+  border: 1px solid rgba(66, 165, 255, 0.2);
+}
+
+.nx-co-sheet__period-tab--plus:hover:not(:disabled) {
+  color: #ffffff;
+  border-color: rgba(66, 165, 255, 0.48);
+  background: rgba(10, 45, 85, 0.96);
 }
 
 .nx-co-sheet__period-opener {
@@ -1125,9 +1266,9 @@
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px;
-  padding: 6px 8px 8px;
-  border-top: 1px solid var(--nx-co-grid);
-  background: #fff;
+  padding: 8px 8px 10px;
+  border-top: 1px solid rgba(57, 230, 244, 0.14);
+  background: rgba(8, 36, 71, 0.96);
   /* Opener expands only when + is open; tab strip itself stays one row. */
   max-height: none;
 }
@@ -1137,17 +1278,19 @@
   gap: 4px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--nx-co-brand);
+  color: #c8d9ed;
 }
 
 .nx-co-sheet__period-opener-field select,
 .nx-co-sheet__period-opener-field input {
   height: 30px;
   min-width: 72px;
-  border: 1px solid var(--nx-co-grid);
+  border: 1px solid rgba(66, 165, 255, 0.28);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 13px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--nx-text-primary);
 }
 
 .nx-co-sheet__period-opener-actions {
