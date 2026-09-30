@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { AppHeader } from './components/AppHeader';
 import { AppSidebar } from './components/AppSidebar';
+import { ClientOperationsAppHeader } from './components/ClientOperationsAppHeader';
+import { ClientOperationsHeaderSearchSlotContext } from '../../components/client-operations/ClientOperationsHeaderSearchSlot';
 import type { SidebarAccountBlockModel } from '../../types/session';
 import type { UiLanguageCode } from '../../types/session';
 
@@ -40,6 +42,25 @@ export function TemplateLayout({
   const isWorkEngineQueuePage = location.pathname === '/work-engine/queue';
   const pageMaxWidth = isClientOperationsModule || isIncomeModule || isWorkEngineSection ? 1600 : 1100;
 
+  // CO route only: header centre slot that receives the registry's existing search field (portal).
+  const [coHeaderSearchSlot, setCoHeaderSearchSlot] = useState<HTMLElement | null>(null);
+  const coHeaderSearchSlotRef = useCallback((el: HTMLDivElement | null) => setCoHeaderSearchSlot(el), []);
+
+  let header: React.ReactNode = null;
+  if (!isWorkEngineQueuePage) {
+    header = isClientOperationsModule ? (
+      <ClientOperationsAppHeader searchSlotRef={coHeaderSearchSlotRef} />
+    ) : (
+      <AppHeader
+        organizations={organizations}
+        activeOrganizationId={activeOrganizationId}
+        onSelectOrg={onSelectOrg}
+        user={user}
+        onSignOut={onSignOut}
+      />
+    );
+  }
+
   return (
     <div
       className={`t1-appShell${isClientOperationsModule ? ' t1-appShell--client-operations' : ''}`}
@@ -56,15 +77,7 @@ export function TemplateLayout({
         onLogout={onSignOut}
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {!isWorkEngineQueuePage ? (
-          <AppHeader
-            organizations={organizations}
-            activeOrganizationId={activeOrganizationId}
-            onSelectOrg={onSelectOrg}
-            user={user}
-            onSignOut={onSignOut}
-          />
-        ) : null}
+        {header}
         <main
           className={
             isWorkEngineQueuePage ? 't1-pageMain t1-pageMain--work-engine-queue' : 't1-pageMain'
@@ -79,7 +92,11 @@ export function TemplateLayout({
               boxSizing: 'border-box',
             }}
           >
-            {children}
+            <ClientOperationsHeaderSearchSlotContext.Provider
+              value={isClientOperationsModule ? coHeaderSearchSlot : null}
+            >
+              {children}
+            </ClientOperationsHeaderSearchSlotContext.Provider>
           </div>
         </main>
       </div>

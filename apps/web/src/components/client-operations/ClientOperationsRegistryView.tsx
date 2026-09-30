@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { apiFetch, apiJson } from '../../api/client';
+import { useClientOperationsHeaderSearchSlot } from './ClientOperationsHeaderSearchSlot';
 import {
   moduleClientOperationsCase,
   moduleClientOperationsClientQuickProfile,
@@ -388,6 +390,10 @@ export type ClientOperationsRegistryViewProps = {
   onReloadRegistry?: () => void;
   /** Spreadsheet chrome only on /m/client-operations; embedded keeps prior Work Engine look. */
   variant?: 'spreadsheet' | 'embedded';
+  /**
+   * Aggregate title (contract kept). The inner sheet title is no longer rendered —
+   * the module title lives in the route header (ClientOperationsAppHeader).
+   */
   titleHe?: string;
   columns?: ClientOperationsRegistryColumn[];
   toolbarCapabilities?: ClientOperationsToolbarCapability[];
@@ -482,7 +488,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     showPageHeader = true,
     onReloadRegistry,
     variant = 'embedded',
-    titleHe,
     columns: columnsProp,
     toolbarCapabilities = [],
     customColumnsCapability: _customColumnsCapability,
@@ -503,6 +508,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const setRows = onRowsChange;
   const isSpreadsheet = variant === 'spreadsheet';
   const columns = columnsProp ?? [];
+  /** Route header centre slot (CO route). null → search renders inline in the toolbar. */
+  const headerSearchSlot = useClientOperationsHeaderSearchSlot();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
@@ -2291,6 +2298,47 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   ];
   const moreToolbarIds = ['text_color', 'fill_color', 'number_format', 'borders', 'toggle_columns'];
 
+  /**
+   * ONE search renderer / ONE search truth (searchDraft + debounce + applyLiveSearch → onQueryChange).
+   * Placement is presentation only: portaled into the route header slot when available,
+   * otherwise (no CO header / fullscreen sheet covering the header) inline in the toolbar.
+   */
+  const renderSearchField = (placement: 'header' | 'toolbar') => (
+    <div className={`nx-co-sheet__search nx-co-sheet__search--${placement}`} data-testid="client-operations-search">
+      <div className="nx-co-sheet__search-field">
+        <button
+          type="button"
+          className="nx-co-sheet__search-icon-btn"
+          disabled={!isCap('search')}
+          title={capTitle('search') ?? 'חיפוש'}
+          aria-label="חיפוש"
+          onClick={() => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); applyLiveSearch(searchDraft); }}
+        >
+          <svg className="nx-co-sheet__search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="11" cy="11" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.75" />
+            <path d="M16.2 16.2 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+          </svg>
+        </button>
+        <input
+          type="search"
+          value={searchDraft}
+          disabled={!isCap('search')}
+          title={capTitle('search')}
+          placeholder="חיפוש בטבלה…"
+          aria-label="חיפוש לקוחות"
+          onChange={(e) => onSearchDraftChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && isCap('search')) {
+              if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+              applyLiveSearch(searchDraft);
+            }
+          }}
+        />
+      </div>
+    </div>
+  );
+  const searchInHeader = Boolean(headerSearchSlot) && !fullscreenOpen;
+
   const renderSpreadsheetToolbar = () => {
     const currentPk = focusedCell ? clientOperationsPresentationCellKey(focusedCell) : null;
     const currentCellPres = currentPk ? cellPresentation[currentPk] : undefined;
@@ -2515,43 +2563,16 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           </div>
         ) : null}
 
-        {/* ── Search ── */}
-        <div className="nx-co-sheet__toolbar-group">
-          <div className="nx-co-sheet__search">
-            <div className="nx-co-sheet__search-field">
-              <button
-                type="button"
-                className="nx-co-sheet__search-icon-btn"
-                disabled={!isCap('search')}
-                title={capTitle('search') ?? 'חיפוש'}
-                aria-label="חיפוש"
-                onClick={() => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); applyLiveSearch(searchDraft); }}
-              >
-                <svg className="nx-co-sheet__search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <circle cx="11" cy="11" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                  <path d="M16.2 16.2 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-                </svg>
-              </button>
-              <input
-                type="search"
-                value={searchDraft}
-                disabled={!isCap('search')}
-                title={capTitle('search')}
-                placeholder="חיפוש בטבלה…"
-                aria-label="חיפוש לקוחות"
-                onChange={(e) => onSearchDraftChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && isCap('search')) {
-                    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-                    applyLiveSearch(searchDraft);
-                  }
-                }}
-              />
+        {/* ── Search ── lives in the route header (portal); toolbar fallback only when no header slot. */}
+        {searchInHeader && headerSearchSlot
+          ? createPortal(renderSearchField('header'), headerSearchSlot)
+          : (
+            <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--search-fallback">
+              {renderSearchField('toolbar')}
             </div>
-          </div>
-          {/* HIDDEN for now — keep underlying capabilities/handlers for later restore:
-              סינון / מיון ↑ / מיון ↓ / הקפאה */}
-        </div>
+          )}
+        {/* HIDDEN for now — keep underlying capabilities/handlers for later restore:
+            סינון / מיון ↑ / מיון ↓ / הקפאה */}
 
         {/* ── Fullscreen ── */}
         <div className="nx-co-sheet__toolbar-group">
@@ -3603,7 +3624,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         data-testid="client-operations-spreadsheet"
         data-fullscreen={fullscreenOpen ? 'true' : 'false'}
       >
-        <h1 className="nx-co-sheet__title">{titleHe ?? 'תפעול לקוחות'}</h1>
+        {/* Inner sheet title removed — module title renders once in the route header. */}
         {renderSpreadsheetToolbar()}
         {renderFilterBar()}
         {error ? <div className="nx-co-sheet__error">{error}</div> : null}

@@ -1,6 +1,15 @@
 /**
- * Client Operations — page shell / sidebar navy glass (scoped).
+ * Client Operations — page shell / route header / sidebar navy glass (scoped).
  * Only applies under .t1-appShell--client-operations — does not restyle other modules.
+ *
+ * Approved palette (exact):
+ *   shell navy        #061A33 / #082447 / #0A2D55 / #0D3764
+ *   electric blue     #268CFF
+ *   cyan              #00CFEF
+ *   light cyan        #39E6F4
+ *   bright cyan       #7DECF7
+ *   violet            #6657E8 / #8074F2
+ *   nova              #123756
  */
 
 .t1-appShell--client-operations {
@@ -15,6 +24,7 @@
   --nx-cyan-400: #39e6f4;
   --nx-cyan-300: #7decf7;
   --nx-violet-500: #6657e8;
+  --nx-violet-400: #8074f2;
   --nx-text-on-navy: #c8d9ed;
   --nx-text-on-navy-muted: rgba(200, 217, 237, 0.72);
 
@@ -26,8 +36,8 @@
 
 /*
  * Atmospheric navy backdrop (fixed, behind sidebar/header/workspace):
- * deep navy base + large soft blue/cyan waves rising from the lower-left,
- * subtle violet bloom top-right. Pure CSS gradients — no raster.
+ * deep navy base + large luminous blue/cyan waves from left/lower-left,
+ * violet depth. Pure CSS gradients — no raster.
  */
 .t1-appShell--client-operations::before {
   content: '';
@@ -37,13 +47,13 @@
   pointer-events: none;
   background-color: var(--nx-navy-950);
   background-image:
-    radial-gradient(ellipse 54% 38% at 3% 97%, rgba(57, 230, 244, 0.88), rgba(0, 207, 239, 0.46) 34%, transparent 70%),
-    radial-gradient(ellipse 84% 48% at 26% 108%, rgba(38, 140, 255, 0.72), rgba(38, 140, 255, 0.24) 46%, transparent 74%),
-    radial-gradient(ellipse 60% 32% at 94% 86%, rgba(38, 140, 255, 0.38), transparent 66%),
-    radial-gradient(ellipse 38% 40% at 100% 44%, rgba(0, 207, 239, 0.18), transparent 62%),
-    radial-gradient(ellipse 46% 36% at 84% 4%, rgba(102, 87, 232, 0.34), rgba(128, 116, 242, 0.12) 46%, transparent 64%),
-    radial-gradient(ellipse 40% 30% at 10% 6%, rgba(128, 116, 242, 0.18), transparent 60%),
-    linear-gradient(160deg, var(--nx-navy-900) 0%, var(--nx-navy-950) 38%, var(--nx-navy-850) 74%, var(--nx-navy-800) 100%);
+    radial-gradient(ellipse 58% 42% at 4% 96%, rgba(57, 230, 244, 0.28), rgba(0, 207, 239, 0.4) 36%, transparent 72%),
+    radial-gradient(ellipse 88% 52% at 22% 108%, rgba(38, 140, 255, 0.55), rgba(38, 140, 255, 0.28) 48%, transparent 76%),
+    radial-gradient(ellipse 64% 36% at 92% 88%, rgba(38, 140, 255, 0.32), transparent 66%),
+    radial-gradient(ellipse 42% 40% at 100% 42%, rgba(0, 207, 239, 0.18), transparent 62%),
+    radial-gradient(ellipse 48% 38% at 78% 88%, rgba(102, 87, 232, 0.32), rgba(128, 116, 242, 0.2) 48%, transparent 68%),
+    radial-gradient(ellipse 40% 30% at 8% 8%, rgba(128, 116, 242, 0.18), transparent 60%),
+    linear-gradient(135deg, #061a33 0%, #082447 38%, #0a2d55 72%, #0d3764 100%);
 }
 
 /* Luminous cyan wave crest — rotated elliptical ring sweeping from lower-left. */
@@ -59,11 +69,11 @@
   border-radius: 50%;
   border: 4px solid rgba(57, 230, 244, 0.78);
   box-shadow:
-    0 0 22px 6px rgba(0, 207, 239, 0.55),
-    0 0 70px 26px rgba(38, 140, 255, 0.36),
-    0 0 140px 60px rgba(38, 140, 255, 0.18),
-    inset 0 0 40px 10px rgba(57, 230, 244, 0.28),
-    inset 0 0 120px 40px rgba(38, 140, 255, 0.26);
+    0 0 26px 8px rgba(0, 207, 239, 0.55),
+    0 0 80px 30px rgba(38, 140, 255, 0.42),
+    0 0 160px 70px rgba(38, 140, 255, 0.22),
+    inset 0 0 46px 12px rgba(57, 230, 244, 0.28),
+    inset 0 0 130px 44px rgba(38, 140, 255, 0.26);
   transform: rotate(-7deg);
   filter: blur(1.5px);
 }
@@ -107,51 +117,158 @@
   min-height: 0;
 }
 
-/* Header: transparent glass that dissolves into the atmosphere. */
-.t1-appShell--client-operations > div > header {
-  background: rgba(6, 26, 51, 0.52) !important;
-  border-bottom: 1px solid rgba(125, 236, 247, 0.1) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Route header (CO only): title on the right (RTL), search in the centre.
+ * No duplicated account / language chrome — owned by the sidebar account block.
+ * ─────────────────────────────────────────────────────────────────────────── */
+.nx-co-app-header {
+  flex: 0 0 auto;
+  height: 64px;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(280px, 520px) minmax(200px, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 0 28px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(ellipse at 55% 0%, rgba(38, 140, 255, 0.25), transparent 55%),
+    radial-gradient(ellipse at 30% 100%, rgba(0, 207, 239, 0.1), transparent 50%),
+    linear-gradient(90deg, #082447 0%, #0a2d55 48%, #082447 100%);
+  border-bottom: 1px solid rgba(0, 207, 239, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 28px rgba(2, 20, 45, 0.28);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   color: var(--nx-text-on-navy);
 }
 
-.t1-appShell--client-operations > div > header button,
-.t1-appShell--client-operations > div > header span,
-.t1-appShell--client-operations > div > header div {
-  color: inherit;
+.nx-co-app-header__title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  justify-self: start;
 }
 
-/* Top-level header controls only (org / user / language) — dropdown menus stay white. */
-.t1-appShell--client-operations > div > header > div > button,
-.t1-appShell--client-operations > div > header > div > div > button,
-.t1-appShell--client-operations > div > header > div > label > select {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border-color: rgba(125, 236, 247, 0.28) !important;
-  color: #e8f2ff !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+.nx-co-app-header__title-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: linear-gradient(135deg, #268cff 0%, #00cfef 100%);
+  box-shadow:
+    0 0 0 1px rgba(125, 236, 247, 0.35),
+    0 0 18px rgba(0, 207, 239, 0.42);
+  flex: 0 0 auto;
 }
 
-.t1-appShell--client-operations > div > header > div > button:hover,
-.t1-appShell--client-operations > div > header > div > div > button:hover {
-  background: rgba(38, 140, 255, 0.16) !important;
-  border-color: rgba(66, 165, 255, 0.45) !important;
+.nx-co-app-header__title-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 
-.t1-appShell--client-operations > div > header > div > label {
-  color: var(--nx-text-on-navy-muted) !important;
+.nx-co-app-header__title {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+  color: #ffffff;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(2, 20, 45, 0.35);
 }
 
-.t1-appShell--client-operations > div > header > div > label > select option {
-  color: #111827;
-  background: #ffffff;
+.nx-co-app-header__search-slot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
 }
 
-/* Sidebar navy glass — blends into the atmosphere, no hard seam. */
+.nx-co-app-header__end {
+  min-width: 0;
+}
+
+/* Header search — dark blue glass pill (same field renderer as the toolbar, header placement). */
+.nx-co-app-header .nx-co-sheet__search--header {
+  width: min(100%, 440px);
+  min-width: min(100%, 360px);
+  max-width: 520px;
+  direction: rtl;
+}
+
+.nx-co-app-header .nx-co-sheet__search--header .nx-co-sheet__search-field {
+  width: 100%;
+}
+
+.nx-co-app-header .nx-co-sheet__search--header input {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  padding-inline-start: 40px;
+  border-radius: 20px;
+  border: 1px solid rgba(38, 140, 255, 0.6);
+  background: linear-gradient(180deg, rgba(13, 55, 100, 0.78), rgba(8, 36, 71, 0.88));
+  color: #ffffff;
+  font-size: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 12px rgba(38, 140, 255, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.nx-co-app-header .nx-co-sheet__search--header input::placeholder {
+  color: rgba(200, 217, 237, 0.72);
+}
+
+.nx-co-app-header .nx-co-sheet__search--header input:focus-visible {
+  outline: none;
+  border-color: #00cfef;
+  box-shadow:
+    0 0 0 1px rgba(0, 207, 239, 0.2),
+    0 0 16px rgba(0, 207, 239, 0.22);
+}
+
+.nx-co-app-header .nx-co-sheet__search--header input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Native clear (X) on dark glass — keep it visible. */
+.nx-co-app-header .nx-co-sheet__search--header input::-webkit-search-cancel-button {
+  filter: invert(1) brightness(1.4);
+  cursor: pointer;
+}
+
+.nx-co-app-header .nx-co-sheet__search--header .nx-co-sheet__search-icon-btn {
+  inset-inline-start: 10px;
+  width: 24px;
+  height: 24px;
+  color: #7decf7;
+}
+
+.nx-co-app-header .nx-co-sheet__search--header .nx-co-sheet__search-icon-btn:hover:not(:disabled) {
+  background: rgba(0, 207, 239, 0.16);
+}
+
+.nx-co-app-header .nx-co-sheet__search--header .nx-co-sheet__search-icon {
+  width: 17px;
+  height: 17px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Sidebar navy glass — brighter, blends into the atmosphere, no hard seam.
+ * ─────────────────────────────────────────────────────────────────────────── */
 .t1-appShell--client-operations .t1-sidebar {
-  background: linear-gradient(180deg, rgba(6, 26, 51, 0.88) 0%, rgba(6, 26, 51, 0.8) 62%, rgba(8, 36, 71, 0.62) 100%);
-  border-right: 1px solid rgba(125, 236, 247, 0.1);
-  box-shadow: 1px 0 24px rgba(2, 20, 45, 0.35);
+  background: rgba(6, 26, 51, 0.9);
+  border-right: 1px solid rgba(0, 207, 239, 0.22);
+  box-shadow: 1px 0 28px rgba(2, 20, 45, 0.32);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   color: var(--nx-text-on-navy);
@@ -159,8 +276,9 @@
 
 /* Cool-blue nav glyphs (emoji → monochrome blue tint, presentation only). */
 .t1-appShell--client-operations .t1-sidebar__link > span[aria-hidden='true'] {
-  filter: grayscale(1) brightness(1.55) sepia(1) hue-rotate(172deg) saturate(3.4);
+  filter: grayscale(1) brightness(1.55) sepia(1) hue-rotate(172deg) saturate(2.8);
   opacity: 0.9;
+  color: #7fa9d6;
 }
 
 .t1-appShell--client-operations .t1-sidebar__link.is-active > span[aria-hidden='true'] {
@@ -178,7 +296,7 @@
   align-items: center;
   border-radius: 8px;
   text-decoration: none;
-  color: var(--nx-text-on-navy-muted);
+  color: #7fa9d6;
   font-weight: 500;
   background: transparent;
   border: 1px solid transparent;
@@ -186,8 +304,8 @@
 }
 
 .t1-appShell--client-operations .t1-sidebar__link:hover {
-  color: #e8f2ff;
-  background: rgba(38, 140, 255, 0.1);
+  color: #39e6f4;
+  background: rgba(38, 140, 255, 0.12);
   border-color: rgba(66, 165, 255, 0.22);
 }
 
@@ -195,12 +313,9 @@
 .t1-appShell--client-operations .t1-sidebar__link.is-active {
   font-weight: 600;
   color: #ffffff;
-  background: linear-gradient(135deg, rgba(38, 140, 255, 0.34), rgba(0, 207, 239, 0.22));
+  background: linear-gradient(135deg, rgba(38, 140, 255, 0.42), rgba(0, 207, 239, 0.3));
   border: 1px solid rgba(57, 230, 244, 0.7);
-  box-shadow:
-    0 0 0 1px rgba(0, 207, 239, 0.18),
-    0 0 18px rgba(0, 207, 239, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 16px rgba(0, 207, 239, 0.32);
 }
 
 .t1-appShell--client-operations .t1-sidebar__link-child {
@@ -210,9 +325,9 @@
 }
 
 .t1-appShell--client-operations .t1-sidebar__link-child.is-active {
-  background: linear-gradient(135deg, rgba(38, 140, 255, 0.22), rgba(0, 207, 239, 0.14));
-  border: 1px solid rgba(57, 230, 244, 0.36);
-  box-shadow: 0 0 12px rgba(0, 207, 239, 0.12);
+  background: linear-gradient(135deg, rgba(38, 140, 255, 0.28), rgba(0, 207, 239, 0.18));
+  border: 1px solid rgba(57, 230, 244, 0.42);
+  box-shadow: 0 0 12px rgba(0, 207, 239, 0.16);
   color: #ffffff;
 }
 
@@ -223,11 +338,11 @@
 }
 
 .t1-appShell--client-operations .t1-sidebar-account__divider {
-  background: rgba(125, 236, 247, 0.14);
+  background: rgba(0, 207, 239, 0.18);
 }
 
 .t1-appShell--client-operations .t1-sidebar-account__select {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(66, 165, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(66, 165, 255, 0.32);
   color: #e8f2ff;
 }

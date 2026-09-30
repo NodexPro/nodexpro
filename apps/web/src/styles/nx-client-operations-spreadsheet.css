@@ -39,29 +39,18 @@
   min-height: 0;
   padding: 14px 18px 14px;
   box-sizing: border-box;
-  /* Icy luminous glass workspace over the navy atmosphere. */
+  /* Icy luminous glass workspace — brighter cyan edge per approved reference. */
   background:
     linear-gradient(180deg, rgba(247, 250, 255, 0.97) 0%, rgba(237, 245, 255, 0.95) 100%);
-  border: 1px solid rgba(125, 236, 247, 0.35);
+  border: 1px solid rgba(125, 236, 247, 0.55);
   border-radius: 20px;
   box-shadow:
-    0 0 0 1px rgba(38, 140, 255, 0.18),
-    0 0 34px rgba(0, 207, 239, 0.26),
-    0 0 90px rgba(38, 140, 255, 0.2),
-    0 18px 60px rgba(0, 207, 239, 0.16),
-    0 28px 70px rgba(2, 20, 45, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    0 20px 55px rgba(2, 20, 45, 0.28),
+    0 0 18px rgba(0, 207, 239, 0.28),
+    0 0 34px rgba(38, 140, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-}
-
-.nx-co-sheet__title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--nx-text-primary);
-  letter-spacing: 0;
-  line-height: 1.2;
 }
 
 .nx-co-sheet__toolbar {
@@ -1040,11 +1029,11 @@
   /* Same navy atmosphere as the shell; the icy glass panel is drawn by ::before. */
   background-color: #061a33;
   background-image:
-    radial-gradient(ellipse 48% 34% at 6% 98%, rgba(57, 230, 244, 0.6), rgba(0, 207, 239, 0.28) 38%, transparent 72%),
-    radial-gradient(ellipse 72% 42% at 28% 104%, rgba(38, 140, 255, 0.48), rgba(38, 140, 255, 0.16) 48%, transparent 74%),
+    radial-gradient(ellipse 48% 34% at 6% 98%, rgba(57, 230, 244, 0.28), rgba(0, 207, 239, 0.4) 38%, transparent 72%),
+    radial-gradient(ellipse 72% 42% at 28% 104%, rgba(38, 140, 255, 0.55), rgba(38, 140, 255, 0.22) 48%, transparent 74%),
     radial-gradient(ellipse 60% 30% at 92% 84%, rgba(38, 140, 255, 0.3), transparent 66%),
-    radial-gradient(ellipse 46% 36% at 84% 6%, rgba(102, 87, 232, 0.3), rgba(128, 116, 242, 0.1) 46%, transparent 64%),
-    linear-gradient(160deg, #082447 0%, #061a33 38%, #0a2d55 74%, #0d3764 100%);
+    radial-gradient(ellipse 46% 36% at 84% 6%, rgba(102, 87, 232, 0.32), rgba(128, 116, 242, 0.2) 46%, transparent 64%),
+    linear-gradient(135deg, #061a33 0%, #082447 38%, #0a2d55 72%, #0d3764 100%);
   border-radius: 0;
   border: none;
   box-shadow: none;
@@ -1060,13 +1049,12 @@
   pointer-events: none;
   border-radius: 20px;
   background: linear-gradient(180deg, rgba(247, 250, 255, 0.97) 0%, rgba(237, 245, 255, 0.95) 100%);
-  border: 1px solid rgba(125, 236, 247, 0.35);
+  border: 1px solid rgba(125, 236, 247, 0.55);
   box-shadow:
-    0 0 0 1px rgba(38, 140, 255, 0.16),
-    0 0 34px rgba(0, 207, 239, 0.22),
-    0 0 90px rgba(38, 140, 255, 0.18),
-    0 28px 70px rgba(2, 20, 45, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    0 20px 55px rgba(2, 20, 45, 0.28),
+    0 0 18px rgba(0, 207, 239, 0.28),
+    0 0 34px rgba(38, 140, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .nx-co-sheet--app-fullscreen .nx-co-sheet__workspace {
@@ -1087,10 +1075,6 @@
 }
 
 .nx-co-sheet--app-fullscreen .nx-co-sheet__toolbar {
-  flex: 0 0 auto;
-}
-
-.nx-co-sheet--app-fullscreen .nx-co-sheet__title {
   flex: 0 0 auto;
 }
 
@@ -1204,9 +1188,9 @@
   flex: 0 0 auto;
   gap: 0;
   margin-top: 10px;
-  background: linear-gradient(180deg, rgba(8, 36, 71, 0.96), rgba(6, 26, 51, 0.98));
+  background: linear-gradient(180deg, #082447 0%, #061a33 100%);
   border: 1px solid rgba(66, 165, 255, 0.22);
-  border-top: 1px solid rgba(57, 230, 244, 0.2);
+  border-top: 1px solid rgba(0, 207, 239, 0.24);
   border-radius: 14px;
   /* One thin Excel sheet-tab row — no tall gutter under the grid. */
   min-height: 0;
@@ -1214,7 +1198,7 @@
   box-shadow:
     0 10px 28px rgba(2, 20, 45, 0.32),
     0 0 0 1px rgba(2, 20, 45, 0.18),
-    inset 0 1px 0 rgba(125, 236, 247, 0.08);
+    inset 0 1px 0 rgba(66, 165, 255, 0.12);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -1256,7 +1240,7 @@
 
 .nx-co-sheet__period-tab {
   appearance: none;
-  border: 1px solid rgba(66, 165, 255, 0.22);
+  border: 1px solid rgba(66, 165, 255, 0.25);
   background: rgba(8, 36, 71, 0.94);
   color: #c8d9ed;
   font-size: 14px;
@@ -1278,7 +1262,7 @@
 }
 
 .nx-co-sheet__period-tab:hover:not(:disabled) {
-  border-color: rgba(66, 165, 255, 0.5);
+  border-color: rgba(66, 165, 255, 0.55);
   background: rgba(10, 45, 85, 0.98);
   color: #e8f2ff;
 }
@@ -1298,12 +1282,11 @@
 .nx-co-sheet__period-tab.is-current-working-period {
   background: linear-gradient(135deg, #1477e8 0%, #00cfef 100%);
   color: #ffffff;
-  border: 1px solid rgba(125, 236, 247, 0.95);
+  border: 1px solid #7decf7;
   box-shadow:
-    0 0 0 1px rgba(57, 230, 244, 0.28),
-    0 0 16px rgba(0, 207, 239, 0.65),
-    0 0 34px rgba(38, 140, 255, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    0 0 0 1px rgba(57, 230, 244, 0.3),
+    0 0 12px rgba(0, 207, 239, 0.8),
+    0 0 24px rgba(38, 140, 255, 0.52);
   font-weight: 700;
   text-shadow: 0 1px 2px rgba(2, 20, 45, 0.25);
 }
@@ -1320,13 +1303,13 @@
   font-weight: 700;
   color: #c8d9ed;
   background: rgba(8, 36, 71, 0.94);
-  border: 1px solid rgba(66, 165, 255, 0.22);
+  border: 1px solid rgba(66, 165, 255, 0.25);
   margin-inline-start: auto;
 }
 
 .nx-co-sheet__period-tab--plus:hover:not(:disabled) {
   color: #ffffff;
-  border-color: rgba(66, 165, 255, 0.5);
+  border-color: rgba(66, 165, 255, 0.55);
   background: rgba(10, 45, 85, 0.98);
 }
 
@@ -1715,7 +1698,7 @@
 @media print {
   .nx-co-sheet__toolbar,
   .nx-co-sheet__period-tabs,
-  .nx-co-sheet__title,
+  .nx-co-app-header,
   .nx-co-sheet__more-menu,
   .nx-co-sheet__col-visibility-popover,
   .nx-co-sheet__color-palette {
