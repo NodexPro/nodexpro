@@ -50,7 +50,6 @@ import {
   type ClientOperationsToolbarCapability,
   type RegistryQueryInput,
 } from './client-operations-registry-presentation.pure.js';
-import type { RegistryCustomColumnDefinition } from './client-operations-registry-custom-columns.service.js';
 import {
   buildUserColumnsPeriodAggregateExtras,
   loadActiveCustomColumnsExtended,
@@ -107,9 +106,14 @@ import {
   projectCapitalDeclarationCells,
 } from './client-operations-annual-capital-operational.service.js';
 import {
-  buildManualRowsForRegistryAggregate,
   buildManualRowsPeriodSetupForAggregate,
+  loadManualRowValuesBySlotColumnForRegistryAggregate,
 } from './client-operations-manual-rows.service.js';
+import {
+  buildClientOperationsRegistryMaterializationCacheKey,
+  clientOperationsRegistryMaterializationCache,
+} from './client-operations-registry-materialization-cache.js';
+import type { BoundedTtlCacheSource } from '../../shared/bounded-ttl-cache.js';
 import {
   materializeClientOperationsManualRows,
   type ClientOperationsManualRegistryRow,
@@ -354,46 +358,25 @@ function buildRegistryAllowedActions(ctx: RequestContext): string[] {
   return actions;
 }
 
-function emptyRegistryResponse(
-  ctx: RequestContext,
-  query: RegistryQueryInput,
-  noteTypes: ClientOperationsRegistryResponse['note_types'],
-  customColumns: RegistryCustomColumnDefinition[],
-  period: ClientOperationsRegistryResponse['period'],
-  extras?: {
-    visibleCustomColumns: Array<{
-      id: string;
-      key: string;
-      label: string;
-      data_type: 'text' | 'number' | 'date' | 'boolean';
-      auto_extend_to_future: boolean;
-      auto_extend_from_period_key: string | null;
-      legacy_baseline_period_key: string | null;
-    }>;
-    user_column_period_setup: ClientOperationsRegistryResponse['user_column_period_setup'];
-    manual_rows_period_setup: ClientOperationsRegistryResponse['manual_rows_period_setup'];
-    columns_needing_legacy_baseline: ClientOperationsRegistryResponse['columns_needing_legacy_baseline'];
-    visibilityByColumn: Map<string, string[]>;
-    handlerFilterOptions?: Array<{ user_id: string; display_name: string }>;
-  },
-): ClientOperationsRegistryResponse {
-  const q = (query.q ?? '').trim() || null;
-  const filterActive = normalizeClientOperationsRegistryBusinessFilterQuery(query);
-  const filters = buildClientOperationsRegistryFiltersContract({
-    active: filterActive,
-    handlerOptions: extras?.handlerFilterOptions ?? [],
-  });
-  const anyBusinessFilter = isAnyClientOperationsBusinessFilterActive(filterActive);
-  const canEdit = ctx.membership?.permissions?.includes('client_operations.edit') === true;
-  const customColumnsCapability = buildCustomColumnsCapability({
-    current: customColumns.length,
-    canEdit,
-  });
-  const visible = extras?.visibleCustomColumns ?? [];
-  const needingLegacy = new Set((extras?.columns_needing_legacy_baseline ?? []).map((c) => c.column_id));
-  const columns: ClientOperationsRegistryColumn[] = [
+/** Registry columns = system columns + period-visible custom columns (same shape for empty and populated orgs). */
+function buildRegistryColumnsForAggregate(input: {
+  visibleCustomColumns: Array<{
+    id: string;
+    key: string;
+    label: string;
+    data_type: 'text' | 'number' | 'date' | 'boolean';
+    auto_extend_to_future: boolean;
+    auto_extend_from_period_key: string | null;
+    legacy_baseline_period_key: string | null;
+  }>;
+  canEdit: boolean;
+  visibilityByColumn: Map<string, string[]>;
+  columnsNeedingLegacyBaseline: ClientOperationsRegistryResponse['columns_needing_legacy_baseline'];
+}): ClientOperationsRegistryColumn[] {
+  const needingLegacy = new Set((input.columnsNeedingLegacyBaseline ?? []).map((c) => c.column_id));
+  return [
     ...CLIENT_OPERATIONS_REGISTRY_COLUMNS,
-    ...visible.map((column) => ({
+    ...input.visibleCustomColumns.map((column) => ({
       key: column.key,
       label: column.label,
       cell_kind: 'custom' as const,
@@ -406,44 +389,50 @@ function emptyRegistryResponse(
       editable: true,
       freeze_default: false,
       align: 'right' as const,
-      settings_available: canEdit,
+      settings_available: input.canEdit,
       auto_extend_to_future: column.auto_extend_to_future,
       auto_extend_from_period_key: column.auto_extend_from_period_key,
-      visible_period_keys: extras?.visibilityByColumn.get(column.id) ?? [],
+      visible_period_keys: input.visibilityByColumn.get(column.id) ?? [],
       legacy_baseline_required: needingLegacy.has(column.id),
       legacy_baseline_period_key: column.legacy_baseline_period_key,
     })),
   ];
-  // Empty-client org still exposes five backend-owned manual slots (values may be empty),
-  // unless a business filter is active (manual rows cannot match client business filters).
-  const manual_rows = anyBusinessFilter
-    ? []
-    : materializeClientOperationsManualRows({
-        columnKeys: columns.map((c) => c.key),
-        valuesBySlotColumn: new Map(),
-        searchQ: q,
-      });
-  return {
-    title_he: 'תפעול לקוחות',
-    period,
-    rows: [],
-    manual_rows,
-    columns,
-    note_types: noteTypes,
-    toolbar_capabilities: buildClientOperationsToolbarCapabilities({
-      can_create_custom_column: customColumnsCapability.can_create,
-      can_create_reason_he: customColumnsCapability.current >= customColumnsCapability.max ? 'הגעת למגבלת 10 עמודות מותאמות אישית' : null,
-    }),
-    custom_columns_capability: customColumnsCapability,
-    user_column_period_setup: extras?.user_column_period_setup ?? null,
-    manual_rows_period_setup: extras?.manual_rows_period_setup ?? null,
-    columns_needing_legacy_baseline: extras?.columns_needing_legacy_baseline ?? [],
-    manual_status_paint_modes: manualStatusPaintModesForAggregate(),
-    filters,
-    query: registryQueryEcho(query, period.selected_period_key),
-    allowed_actions: buildRegistryAllowedActions(ctx),
-  };
 }
+
+/**
+ * Canonical PRE-SEARCH state of the registry aggregate for one
+ * (org, period, default period, editor capability, business filters) tuple.
+ *
+ * No `q` / sort applied here — `listClientOperationsRegistry` runs the EXISTING
+ * `applyRegistryQueryToRows` + `materializeClientOperationsManualRows(searchQ)` on top of it
+ * per request. This is what the short-TTL materialization cache stores (never a source of truth).
+ */
+export type ClientOperationsRegistryPreSearchMaterialization = {
+  period: ClientOperationsRegistryResponse['period'];
+  /** Rows after tenant scoping, period membership and business-filter facets; before search/sort. */
+  built_rows: ClientOperationsRegistryRow[];
+  columns: ClientOperationsRegistryColumn[];
+  note_types: ClientOperationsRegistryResponse['note_types'];
+  filters: ClientOperationsRegistryFiltersContract;
+  toolbar_capabilities: ClientOperationsRegistryResponse['toolbar_capabilities'];
+  custom_columns_capability: ClientOperationsRegistryResponse['custom_columns_capability'];
+  user_column_period_setup: ClientOperationsRegistryResponse['user_column_period_setup'];
+  manual_rows_period_setup: ClientOperationsRegistryResponse['manual_rows_period_setup'];
+  columns_needing_legacy_baseline: ClientOperationsRegistryResponse['columns_needing_legacy_baseline'];
+  /** Pre-search manual-row values (`slot:columnKey` → text); null when a business filter hides manual rows. */
+  manual_row_values_by_slot_column: Map<string, string> | null;
+  stage_timings: Record<string, number>;
+  materialized_at_ms: number;
+};
+
+export type ClientOperationsRegistryReadOptions = {
+  /**
+   * GET /registry only: reuse the pre-search materialization within its short TTL
+   * (same org + period + filters + capability; `q` / sort are applied per request).
+   * Commands / other read models never set this — they always rebuild fresh truth.
+   */
+  materializationCache?: boolean;
+};
 
 async function loadHandlerDisplayNamesByUserIds(
   orgId: string,
@@ -533,18 +522,123 @@ function registryQueryEcho(
 export async function listClientOperationsRegistry(
   ctx: RequestContext,
   query: RegistryQueryInput = {},
+  options?: ClientOperationsRegistryReadOptions,
 ): Promise<ClientOperationsRegistryResponse> {
   const aggregateStartMs = Date.now();
-  const stageTimings: Record<string, number> = {};
-  const markStage = (name: string, startedMs: number) => {
-    stageTimings[name] = Date.now() - startedMs;
-  };
 
+  // Tenant + RBAC are resolved on EVERY request before any cache lookup (auth is never cached).
   const orgId = assertOrg(ctx);
   const selectedPeriodKey = resolveRegistryOperationalPeriodKey(query.operational_period_key);
   const defaultPeriodKey = resolveDefaultOperationalPeriodKey();
   const canEditRegistry =
     ctx.membership?.permissions?.includes('client_operations.edit') === true;
+  const filterActive = normalizeClientOperationsRegistryBusinessFilterQuery(query);
+  const anyBusinessFilter = isAnyClientOperationsBusinessFilterActive(filterActive);
+
+  // PRE-SEARCH materialization: expensive; keyed by every dimension that changes base rows (never q/sort).
+  const buildMaterialization = () =>
+    buildClientOperationsRegistryPreSearchMaterialization({
+      orgId,
+      selectedPeriodKey,
+      defaultPeriodKey,
+      canEditRegistry,
+      filterActive,
+      anyBusinessFilter,
+    });
+  let materialization: ClientOperationsRegistryPreSearchMaterialization;
+  let materializationSource: 'bypass' | BoundedTtlCacheSource;
+  if (options?.materializationCache === true) {
+    const cacheKey = buildClientOperationsRegistryMaterializationCacheKey({
+      organizationId: orgId,
+      selectedPeriodKey,
+      defaultPeriodKey,
+      canEditRegistry,
+      filters: filterActive,
+    });
+    const resolved = await clientOperationsRegistryMaterializationCache.getOrBuild(
+      cacheKey,
+      buildMaterialization,
+    );
+    materialization = resolved.value;
+    materializationSource = resolved.source;
+  } else {
+    materialization = await buildMaterialization();
+    materializationSource = 'bypass';
+  }
+
+  // Request-scoped search / sort on canonical pre-search rows — the EXISTING matching function.
+  const searchMs = Date.now();
+  const q = (query.q ?? '').trim() || null;
+  const sort_by = query.sort_by?.trim() || null;
+  const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
+  // Business filters already applied via early facet matching; search/sort still apply.
+  const rows = applyRegistryQueryToRows(materialization.built_rows, { q, sort_by, sort_dir });
+  // Manual rows: same pipeline as buildManualRowsForRegistryAggregate — values loaded pre-search,
+  // `materializeClientOperationsManualRows` applies searchQ per request.
+  const manual_rows = anyBusinessFilter
+    ? []
+    : materializeClientOperationsManualRows({
+        columnKeys: materialization.columns.map((c) => c.key),
+        valuesBySlotColumn: materialization.manual_row_values_by_slot_column ?? new Map(),
+        searchQ: q,
+      });
+  const searchAndSortMs = Date.now() - searchMs;
+
+  const response: ClientOperationsRegistryResponse = {
+    title_he: 'תפעול לקוחות',
+    period: materialization.period,
+    rows,
+    manual_rows,
+    columns: materialization.columns,
+    note_types: materialization.note_types,
+    toolbar_capabilities: materialization.toolbar_capabilities,
+    custom_columns_capability: materialization.custom_columns_capability,
+    user_column_period_setup: materialization.user_column_period_setup,
+    manual_rows_period_setup: materialization.manual_rows_period_setup,
+    columns_needing_legacy_baseline: materialization.columns_needing_legacy_baseline,
+    manual_status_paint_modes: manualStatusPaintModesForAggregate(),
+    filters: materialization.filters,
+    query: registryQueryEcho(query, selectedPeriodKey),
+    allowed_actions: buildRegistryAllowedActions(ctx),
+  };
+  const reusedMaterialization =
+    materializationSource === 'hit' || materializationSource === 'coalesced';
+  logAggregatePayloadBreakdown(
+    'client_operations_registry_aggregate',
+    response as unknown as Record<string, unknown>,
+    {
+      organization_id: orgId,
+      duration_ms: Date.now() - aggregateStartMs,
+      stage_timings: {
+        ...(reusedMaterialization ? {} : materialization.stage_timings),
+        materialization_cache_hit: reusedMaterialization ? 1 : 0,
+        search_sort_manual_rows: searchAndSortMs,
+      },
+    },
+  );
+  return response;
+}
+
+/**
+ * Expensive PRE-SEARCH aggregate build (tenant-scoped, period-resolved, business-filtered rows).
+ * Pure read of business truth; never applies `q` / sort. Called directly by commands / other read
+ * models, and through the short-TTL materialization cache by GET /registry.
+ */
+async function buildClientOperationsRegistryPreSearchMaterialization(input: {
+  orgId: string;
+  selectedPeriodKey: string;
+  defaultPeriodKey: string;
+  canEditRegistry: boolean;
+  filterActive: ReturnType<typeof normalizeClientOperationsRegistryBusinessFilterQuery>;
+  anyBusinessFilter: boolean;
+}): Promise<ClientOperationsRegistryPreSearchMaterialization> {
+  const { orgId, selectedPeriodKey, defaultPeriodKey, canEditRegistry, filterActive, anyBusinessFilter } =
+    input;
+  const stageTimings: Record<string, number> = {};
+  const markStage = (name: string, startedMs: number) => {
+    stageTimings[name] = Date.now() - startedMs;
+  };
+
   // Pure read: user-slot / period-setup initialization is ONLY via named commands.
   const bootMs = Date.now();
   const [noteTypesResult, customColumnsExtended, availablePeriods, handlerFilterOptions] =
@@ -562,8 +656,6 @@ export async function listClientOperationsRegistry(
     default_period_key: defaultPeriodKey,
     available_periods: availablePeriods,
   };
-  const filterActive = normalizeClientOperationsRegistryBusinessFilterQuery(query);
-  const anyBusinessFilter = isAnyClientOperationsBusinessFilterActive(filterActive);
   // Static definitions are cheap; handler options already loaded once for this request.
   const filtersContract = buildClientOperationsRegistryFiltersContract({
     active: filterActive,
@@ -583,7 +675,12 @@ export async function listClientOperationsRegistry(
   };
 
   const setupMs = Date.now();
-  const [userColumnsPeriodExtras, manualRowsPeriodSetup, activeClientsResult] = await Promise.all([
+  const [
+    userColumnsPeriodExtras,
+    manualRowsPeriodSetup,
+    activeClientsResult,
+    manualRowValuesBySlotColumn,
+  ] = await Promise.all([
     buildUserColumnsPeriodAggregateExtras({
       organizationId: orgId,
       columns: customColumnsExtended,
@@ -602,10 +699,51 @@ export async function listClientOperationsRegistry(
       .eq('organization_id', orgId)
       .eq('is_archived', false)
       .order('display_name', { ascending: true }),
+    // Manual rows are hidden under any business filter (they cannot match client facets).
+    anyBusinessFilter
+      ? Promise.resolve(null)
+      : loadManualRowValuesBySlotColumnForRegistryAggregate({
+          organizationId: orgId,
+          operationalPeriodKey: selectedPeriodKey,
+        }),
   ]);
   markStage('user_columns_manual_setup_clients', setupMs);
   const visibleCustomColumns = userColumnsPeriodExtras.visibleColumns;
   const { data: activeClients } = activeClientsResult;
+  const customColumnsCapability = buildCustomColumnsCapability({
+    current: customColumns.length,
+    canEdit: canEditRegistry,
+  });
+  const toolbarCapabilities = buildClientOperationsToolbarCapabilities({
+    can_create_custom_column: customColumnsCapability.can_create,
+    can_create_reason_he:
+      customColumnsCapability.current >= customColumnsCapability.max
+        ? 'הגעת למגבלת 10 עמודות מותאמות אישית'
+        : null,
+  });
+  const columns = buildRegistryColumnsForAggregate({
+    visibleCustomColumns,
+    canEdit: canEditRegistry,
+    visibilityByColumn: userColumnsPeriodExtras.visibilityByColumn,
+    columnsNeedingLegacyBaseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
+  });
+  const finishMaterialization = (
+    builtRows: ClientOperationsRegistryRow[],
+  ): ClientOperationsRegistryPreSearchMaterialization => ({
+    period,
+    built_rows: builtRows,
+    columns,
+    note_types: noteTypes,
+    filters: filtersContract,
+    toolbar_capabilities: toolbarCapabilities,
+    custom_columns_capability: customColumnsCapability,
+    user_column_period_setup: userColumnsPeriodExtras.user_column_period_setup,
+    manual_rows_period_setup: manualRowsPeriodSetup,
+    columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
+    manual_row_values_by_slot_column: manualRowValuesBySlotColumn,
+    stage_timings: stageTimings,
+    materialized_at_ms: Date.now(),
+  });
 
   const isCurrentOrDefaultPeriod = selectedPeriodKey === defaultPeriodKey;
   const activeSafe = (activeClients ?? []) as RegistryClientRow[];
@@ -648,32 +786,9 @@ export async function listClientOperationsRegistry(
   );
 
   if (safeClients.length === 0) {
-    const empty = emptyRegistryResponse(ctx, query, noteTypes, customColumns, period, {
-      visibleCustomColumns,
-      user_column_period_setup: userColumnsPeriodExtras.user_column_period_setup,
-      manual_rows_period_setup: manualRowsPeriodSetup,
-      columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
-      visibilityByColumn: userColumnsPeriodExtras.visibilityByColumn,
-      handlerFilterOptions,
-    });
-    if (!anyBusinessFilter) {
-      empty.manual_rows = await buildManualRowsForRegistryAggregate({
-        organizationId: orgId,
-        operationalPeriodKey: selectedPeriodKey,
-        columnKeys: empty.columns.map((c) => c.key),
-        searchQ: empty.query.q,
-      });
-    }
-    logAggregatePayloadBreakdown(
-      'client_operations_registry_aggregate',
-      empty as unknown as Record<string, unknown>,
-      {
-        organization_id: orgId,
-        duration_ms: Date.now() - aggregateStartMs,
-        stage_timings: stageTimings,
-      },
-    );
-    return empty;
+    // Empty-client org still exposes five backend-owned manual slots (values may be empty),
+    // unless a business filter is active (manual rows cannot match client business filters).
+    return finishMaterialization([]);
   }
 
   const clientIds = safeClients.map((c) => c.id);
@@ -1214,82 +1329,7 @@ export async function listClientOperationsRegistry(
   });
   markStage('presentation_row_build', presentationMs);
 
-  const q = (query.q ?? '').trim() || null;
-  const sort_by = query.sort_by?.trim() || null;
-  const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
-  // Business filters already applied via early facet matching; search/sort still apply.
-  const rows = applyRegistryQueryToRows(builtRows, { q, sort_by, sort_dir });
-
-  const customColumnsCapability = buildCustomColumnsCapability({
-    current: customColumns.length,
-    canEdit: ctx.membership?.permissions?.includes('client_operations.edit') === true,
-  });
-  const needingLegacy = new Set(
-    (userColumnsPeriodExtras.columns_needing_legacy_baseline ?? []).map((c) => c.column_id),
-  );
-  const columns: ClientOperationsRegistryColumn[] = [
-    ...CLIENT_OPERATIONS_REGISTRY_COLUMNS,
-    ...visibleCustomColumns.map((column) => ({
-      key: column.key,
-      label: column.label,
-      cell_kind: 'custom' as const,
-      value_field: null,
-      data_type: column.data_type,
-      custom_column_id: column.id,
-      default_width_px: 160,
-      visible: true,
-      system: false,
-      editable: true,
-      freeze_default: false,
-      align: 'right' as const,
-      settings_available: canEditRegistry,
-      auto_extend_to_future: column.auto_extend_to_future,
-      auto_extend_from_period_key: column.auto_extend_from_period_key,
-      visible_period_keys: userColumnsPeriodExtras.visibilityByColumn.get(column.id) ?? [],
-      legacy_baseline_required: needingLegacy.has(column.id),
-      legacy_baseline_period_key: column.legacy_baseline_period_key,
-    })),
-  ];
-  const manualRowsMs = Date.now();
-  const manual_rows = anyBusinessFilter
-    ? []
-    : await buildManualRowsForRegistryAggregate({
-        organizationId: orgId,
-        operationalPeriodKey: selectedPeriodKey,
-        columnKeys: columns.map((c) => c.key),
-        searchQ: q,
-      });
-  markStage('manual_rows', manualRowsMs);
-  const response: ClientOperationsRegistryResponse = {
-    title_he: 'תפעול לקוחות',
-    period,
-    rows,
-    manual_rows,
-    columns,
-    note_types: noteTypes,
-    toolbar_capabilities: buildClientOperationsToolbarCapabilities({
-      can_create_custom_column: customColumnsCapability.can_create,
-      can_create_reason_he: customColumnsCapability.current >= customColumnsCapability.max ? 'הגעת למגבלת 10 עמודות מותאמות אישית' : null,
-    }),
-    custom_columns_capability: customColumnsCapability,
-    user_column_period_setup: userColumnsPeriodExtras.user_column_period_setup,
-    manual_rows_period_setup: manualRowsPeriodSetup,
-    columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
-    manual_status_paint_modes: manualStatusPaintModesForAggregate(),
-    filters: filtersContract,
-    query: registryQueryEcho(query, selectedPeriodKey),
-    allowed_actions: buildRegistryAllowedActions(ctx),
-  };
-  logAggregatePayloadBreakdown(
-    'client_operations_registry_aggregate',
-    response as unknown as Record<string, unknown>,
-    {
-      organization_id: orgId,
-      duration_ms: Date.now() - aggregateStartMs,
-      stage_timings: stageTimings,
-    },
-  );
-  return response;
+  return finishMaterialization(builtRows);
 }
 
 /** אופציות קריאה לאגרגט תיק — לא משנות נתונים ב-DB */

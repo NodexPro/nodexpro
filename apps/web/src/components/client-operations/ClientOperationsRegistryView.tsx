@@ -317,6 +317,22 @@ function tryShowNativeDatePicker(input: HTMLInputElement): void {
   }
 }
 
+/** Unified amber client-folder glyph (spreadsheet chrome) — folder shape preserved, colors via CSS. */
+function ClientOperationsFolderIcon() {
+  return (
+    <svg className="nx-co-sheet__folder-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        className="nx-co-sheet__folder-back"
+        d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6c.4 0 .8.16 1.06.44L11.6 6.9H19.5A1.5 1.5 0 0 1 21 8.4v9.1a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"
+      />
+      <path
+        className="nx-co-sheet__folder-front"
+        d="M3.4 10.2h17.2c.9 0 1.5.8 1.3 1.7l-1.2 6a1.5 1.5 0 0 1-1.47 1.2H4.77a1.5 1.5 0 0 1-1.47-1.2l-1.2-6c-.2-.9.4-1.7 1.3-1.7z"
+      />
+    </svg>
+  );
+}
+
 function cellKey(clientId: string, colKey: string): string {
   return `${clientId}::${colKey}`;
 }
@@ -382,6 +398,8 @@ export type ClientOperationsRegistryViewProps = {
    * Toolbar/filters/tabs stay; period-bound rows must not show prior-period content.
    */
   periodContentPending?: boolean;
+  /** Quiet search/filter aggregate refresh in flight (page-owned) → compact pending state in the search field. */
+  searchPending?: boolean;
   /** Aggregate period currently painted (null during transition). */
   renderedAggregatePeriodKey?: string | null;
   error: string;
@@ -483,6 +501,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     noteTypes,
     loading,
     periodContentPending = false,
+    searchPending = false,
     error,
     canEdit,
     showPageHeader = true,
@@ -557,6 +576,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     wrap: false,
   }));
   const [searchDraft, setSearchDraft] = useState(query?.q ?? '');
+  /** Typing debounce window (before the aggregate request starts) — presentation only. */
+  const [searchDebouncePending, setSearchDebouncePending] = useState(false);
   // Freeze sticky CSS retained; toolbar toggle is hidden — keep pinned columns on by default.
   const freezeOn = true;
   const [bordersOn, setBordersOn] = useState(true);
@@ -603,6 +624,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const applyLiveSearch = useCallback(
     (raw: string) => {
+      // Debounce window is over; from here the page-owned `searchPending` reflects the request.
+      setSearchDebouncePending(false);
       if (!onQueryChange) return;
       const q = raw.trim() || null;
       if ((query?.q ?? null) === q) return;
@@ -716,6 +739,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       applyLiveSearch('');
       return;
     }
+    setSearchDebouncePending(true);
     searchDebounceRef.current = setTimeout(() => {
       applyLiveSearch(value);
     }, 120);
@@ -2303,9 +2327,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
    * Placement is presentation only: portaled into the route header slot when available,
    * otherwise (no CO header / fullscreen sheet covering the header) inline in the toolbar.
    */
+  const searchBusy = searchDebouncePending || searchPending;
   const renderSearchField = (placement: 'header' | 'toolbar') => (
     <div className={`nx-co-sheet__search nx-co-sheet__search--${placement}`} data-testid="client-operations-search">
-      <div className="nx-co-sheet__search-field">
+      <div className="nx-co-sheet__search-field" aria-busy={searchBusy ? 'true' : undefined}>
         <button
           type="button"
           className="nx-co-sheet__search-icon-btn"
@@ -2334,6 +2359,23 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             }
           }}
         />
+        {/* Compact pending state INSIDE the field: fixed slot (no layout shift), typed text untouched. */}
+        <span
+          className="nx-co-sheet__search-pending"
+          role="status"
+          aria-live="polite"
+          data-testid="client-operations-search-pending"
+          data-pending={searchBusy ? 'true' : 'false'}
+        >
+          {searchBusy ? (
+            <>
+              <svg className="nx-co-sheet__search-spinner" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+              <span className="nx-co-sheet__sr-only">מחפש...</span>
+            </>
+          ) : null}
+        </span>
       </div>
     </div>
   );
@@ -2779,7 +2821,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           }
           aria-label={`Open client case ${r.client_name ?? ''}`}
         >
-          📁
+          {/* Unified amber folder (shape preserved) — presentation only, same openClientModal path. */}
+          {isSpreadsheet ? <ClientOperationsFolderIcon /> : '📁'}
         </button>
       );
     }
@@ -3223,6 +3266,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     </button>
                   ) : null}
                 </div>
+              ) : column.cell_kind === 'folder' ? (
+                <span className="nx-co-sheet__folder-header" title={column.label}>
+                  <ClientOperationsFolderIcon />
+                  <span className="nx-co-sheet__sr-only">{column.label}</span>
+                </span>
               ) : (
                 column.label
               )}

@@ -13,12 +13,12 @@ import {
 import {
   canRenderPeriodBoundRows,
   getPeriodAggregateCache,
-  hasActiveClientOperationsBusinessFilters,
   putPeriodAggregateCache,
   resolveRegistryAggregatePeriodKey,
   selectPeriodPrefetchKeys,
   shouldApplyPeriodAggregateResponse,
   shouldCachePrefetchAggregate,
+  shouldPrefetchAdjacentPeriods,
   type ClientOperationsRegistryCacheQuery,
   type PeriodAggregateCacheEntry,
 } from '../lib/client-operations-period-aggregate-cache.pure';
@@ -95,6 +95,11 @@ export function ClientOperationsRegistry() {
   const [allowedActions, setAllowedActions] = useState<string[]>([]);
   const canEdit = allowedActions.includes('client_operations.edit');
   const [loading, setLoading] = useState(true);
+  /**
+   * Quiet search/filter aggregate refresh in flight (header search pending indicator).
+   * Cleared only by the load generation that is still current — superseded loads never clear it.
+   */
+  const [queryRefreshPending, setQueryRefreshPending] = useState(false);
   const [error, setError] = useState('');
   const [noteTypes, setNoteTypes] = useState<ClientOperationsNoteTypeRow[]>([]);
   const [columns, setColumns] = useState<ClientOperationsRegistryColumn[]>([]);
@@ -298,8 +303,9 @@ export function ClientOperationsRegistry() {
       selectedPeriodKey: string,
       availablePeriods: string[],
     ) => {
-      // Business filters: never fan-out adjacent-period prefetches (each is a full registry GET).
-      if (hasActiveClientOperationsBusinessFilters(baseQuery)) return;
+      // Active search (`q`) or business filters: never fan-out adjacent-period prefetches
+      // (each is a full registry GET). Resumes when q is empty and no filter is active.
+      if (!shouldPrefetchAdjacentPeriods(baseQuery)) return;
       const cacheQuery: ClientOperationsRegistryCacheQuery = {
         q: baseQuery.q,
         filter_operational_reporting: baseQuery.filter_operational_reporting ?? null,
@@ -491,7 +497,10 @@ export function ClientOperationsRegistry() {
           }
         })
         .finally(() => {
-          if (seq === loadSeqRef.current && !options?.quiet) setLoading(false);
+          if (seq !== loadSeqRef.current) return;
+          if (!options?.quiet) setLoading(false);
+          // Current generation settled (painted, rejected by period guard, or failed) → search no longer pending.
+          setQueryRefreshPending(false);
         });
     },
     [applyAggregate, clearPeriodBoundPresentation, prefetchPeriods],
@@ -528,6 +537,8 @@ export function ClientOperationsRegistry() {
     ) => {
       // Immediate quiet aggregate reload. Cache is keyed by period+search+filters —
       // do NOT wipe the whole period cache on every dropdown change.
+      // Search-term change → pending indicator inside the search field (filter-only changes do not flag it).
+      if ((next.q ?? null) !== (query.q ?? null)) setQueryRefreshPending(true);
       void loadRegistry(
         {
           ...query,
@@ -557,6 +568,8 @@ export function ClientOperationsRegistry() {
   /** Invalidate in-flight quiet GETs so older aggregates cannot overwrite newer writes. */
   const invalidateStaleLoads = useCallback(() => {
     loadSeqRef.current += 1;
+    // The in-flight quiet GET can no longer paint; the authoritative command aggregate is the truth.
+    setQueryRefreshPending(false);
   }, []);
 
   const onRegistryCommand = useCallback(
@@ -657,6 +670,7 @@ export function ClientOperationsRegistry() {
       manualRows={manualRows}
       noteTypes={noteTypes}
       loading={loading}
+      searchPending={queryRefreshPending}
       periodContentPending={periodContentPending}
       renderedAggregatePeriodKey={renderedAggregatePeriodKey}
       error={error}

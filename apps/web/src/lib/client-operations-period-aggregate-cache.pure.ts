@@ -52,6 +52,20 @@ export function hasActiveClientOperationsBusinessFilters(
   );
 }
 
+/**
+ * Adjacent-period prefetch policy (presentation only — no business meaning).
+ * Skipped while a free-text search is active (normalized `q` non-empty): each prefetch is a full
+ * registry GET and would fan out per keystroke. Also skipped under any business filter.
+ * Resumes automatically once `q` is empty again.
+ */
+export function shouldPrefetchAdjacentPeriods(
+  query?: ClientOperationsRegistryCacheQuery | null,
+): boolean {
+  if (String(query?.q ?? '').trim()) return false;
+  if (hasActiveClientOperationsBusinessFilters(query)) return false;
+  return true;
+}
+
 export function putPeriodAggregateCache<T>(
   cache: Map<string, PeriodAggregateCacheEntry<T>>,
   periodKey: string,

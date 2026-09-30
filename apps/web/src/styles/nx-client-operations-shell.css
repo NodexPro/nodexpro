@@ -27,6 +27,11 @@
   --nx-violet-400: #8074f2;
   --nx-text-on-navy: #c8d9ed;
   --nx-text-on-navy-muted: rgba(200, 217, 237, 0.72);
+  /* Unified amber accent (search clear X / client folders / yellow paint-mode indicator). */
+  --nx-amber-500: #ffbf47;
+  --nx-amber-300: #ffd67a;
+  --nx-amber-200: #ffe29a;
+  --nx-amber-700: #c98216;
 
   position: relative;
   isolation: isolate;
@@ -211,6 +216,8 @@
   height: 40px;
   padding: 0 14px;
   padding-inline-start: 40px;
+  /* Reserved end slot for the pending spinner (constant → no layout shift while searching). */
+  padding-inline-end: 30px;
   border-radius: 20px;
   border: 1px solid rgba(38, 140, 255, 0.6);
   background: linear-gradient(180deg, rgba(13, 55, 100, 0.78), rgba(8, 36, 71, 0.88));
@@ -240,10 +247,29 @@
   cursor: not-allowed;
 }
 
-/* Native clear (X) on dark glass — keep it visible. */
+/* Native clear (X) on dark glass — unified amber accent, same hit target / same clear path. */
 .nx-co-app-header .nx-co-sheet__search--header input::-webkit-search-cancel-button {
-  filter: invert(1) brightness(1.4);
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
   cursor: pointer;
+  background-color: var(--nx-amber-500, #ffbf47);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-linecap='round'><circle cx='8' cy='8' r='6.9' stroke-width='1.5'/><path d='M5.4 5.4l5.2 5.2M10.6 5.4l-5.2 5.2' stroke-width='1.7'/></svg>") center / 16px 16px no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-linecap='round'><circle cx='8' cy='8' r='6.9' stroke-width='1.5'/><path d='M5.4 5.4l5.2 5.2M10.6 5.4l-5.2 5.2' stroke-width='1.7'/></svg>") center / 16px 16px no-repeat;
+  opacity: 0.96;
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+
+.nx-co-app-header .nx-co-sheet__search--header input::-webkit-search-cancel-button:hover {
+  background-color: var(--nx-amber-200, #ffe29a);
+  opacity: 1;
+}
+
+.nx-co-app-header .nx-co-sheet__search--header input::-webkit-search-cancel-button:active {
+  background-color: var(--nx-amber-700, #c98216);
 }
 
 .nx-co-app-header .nx-co-sheet__search--header .nx-co-sheet__search-icon-btn {
@@ -262,72 +288,116 @@
   height: 17px;
 }
 
+/* Header placement: cyan spinner inside the dark glass pill. */
+.nx-co-app-header .nx-co-sheet__search--header .nx-co-sheet__search-pending {
+  inset-inline-end: 10px;
+  color: #7decf7;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
- * Sidebar navy glass — brighter, blends into the atmosphere, no hard seam.
+ * Sidebar — deep navy gradient + glass nav tiles (CO scoped, compact icon rail).
+ * Same width / nav / order / behavior as the shared sidebar; presentation only.
+ *
+ *   rail        linear 180deg #082447 → #0A2D55 (55%) → #061A33
+ *               + radial glow at 0% 65% rgba(38,140,255,0.24)
+ *   icon        #A9C9EE   hover #7DECF7   active #FFFFFF
+ *   hover tile  glass  rgba(38,140,255,.25) → rgba(0,207,239,.13), edge rgba(125,236,247,.38)
+ *   active tile #1477E8 → #00CFEF, edge #7DECF7
  * ─────────────────────────────────────────────────────────────────────────── */
 .t1-appShell--client-operations .t1-sidebar {
-  background: rgba(6, 26, 51, 0.9);
+  background:
+    radial-gradient(ellipse at 0% 65%, rgba(38, 140, 255, 0.24), transparent 65%),
+    linear-gradient(180deg, #082447 0%, #0a2d55 55%, #061a33 100%);
   border-right: 1px solid rgba(0, 207, 239, 0.22);
   box-shadow: 1px 0 28px rgba(2, 20, 45, 0.32);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
   color: var(--nx-text-on-navy);
-}
-
-/* Cool-blue nav glyphs (emoji → monochrome blue tint, presentation only). */
-.t1-appShell--client-operations .t1-sidebar__link > span[aria-hidden='true'] {
-  filter: grayscale(1) brightness(1.55) sepia(1) hue-rotate(172deg) saturate(2.8);
-  opacity: 0.9;
-  color: #7fa9d6;
-}
-
-.t1-appShell--client-operations .t1-sidebar__link.is-active > span[aria-hidden='true'] {
-  filter: grayscale(1) brightness(1.9) sepia(1) hue-rotate(160deg) saturate(4);
-  opacity: 1;
 }
 
 .t1-appShell--client-operations .t1-sidebar__brand-name {
   color: #e8f2ff !important;
 }
 
+/* Nav tile: equal box for every item (icon-only rail), no width change. */
 .t1-appShell--client-operations .t1-sidebar__link {
+  position: relative;
   height: 40px;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  border-radius: 8px;
+  box-sizing: border-box;
+  border-radius: 10px;
   text-decoration: none;
-  color: #7fa9d6;
+  color: #a9c9ee;
   font-weight: 500;
   background: transparent;
   border: 1px solid transparent;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
 }
 
+/* Equal icon dimensions: fixed 22px slot, 20px glyph, centred. */
+.t1-appShell--client-operations .t1-sidebar__icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.t1-appShell--client-operations .t1-sidebar__glyph {
+  width: 20px;
+  height: 20px;
+  display: block;
+  color: inherit;
+}
+
+/* Hover — glass tile. */
 .t1-appShell--client-operations .t1-sidebar__link:hover {
-  color: #39e6f4;
-  background: rgba(38, 140, 255, 0.12);
-  border-color: rgba(66, 165, 255, 0.22);
+  color: #7decf7;
+  background: linear-gradient(135deg, rgba(38, 140, 255, 0.25), rgba(0, 207, 239, 0.13));
+  border: 1px solid rgba(125, 236, 247, 0.38);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    0 0 14px rgba(0, 207, 239, 0.16);
 }
 
-/* Active: cyan-edged rectangle with a soft inner blue fill and outer halo. */
-.t1-appShell--client-operations .t1-sidebar__link.is-active {
+.t1-appShell--client-operations .t1-sidebar__link:focus-visible {
+  outline: none;
+  border-color: rgba(125, 236, 247, 0.6);
+  box-shadow: 0 0 0 2px rgba(0, 207, 239, 0.28);
+}
+
+/* Active — brighter solid blue→cyan tile, white glyph. */
+.t1-appShell--client-operations .t1-sidebar__link.is-active,
+.t1-appShell--client-operations .t1-sidebar__link.is-active:hover {
   font-weight: 600;
   color: #ffffff;
-  background: linear-gradient(135deg, rgba(38, 140, 255, 0.42), rgba(0, 207, 239, 0.3));
-  border: 1px solid rgba(57, 230, 244, 0.7);
-  box-shadow: 0 0 16px rgba(0, 207, 239, 0.32);
+  background: linear-gradient(135deg, #1477e8, #00cfef);
+  border: 1px solid #7decf7;
+  box-shadow:
+    0 0 12px rgba(0, 207, 239, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .t1-appShell--client-operations .t1-sidebar__link-child {
   height: 36px;
+  min-height: 36px;
   font-size: 14px;
   color: var(--nx-text-on-navy-muted);
 }
 
-.t1-appShell--client-operations .t1-sidebar__link-child.is-active {
-  background: linear-gradient(135deg, rgba(38, 140, 255, 0.28), rgba(0, 207, 239, 0.18));
-  border: 1px solid rgba(57, 230, 244, 0.42);
-  box-shadow: 0 0 12px rgba(0, 207, 239, 0.16);
+.t1-appShell--client-operations .t1-sidebar__link-child.is-active,
+.t1-appShell--client-operations .t1-sidebar__link-child.is-active:hover {
+  background: linear-gradient(135deg, rgba(20, 119, 232, 0.72), rgba(0, 207, 239, 0.6));
+  border: 1px solid rgba(125, 236, 247, 0.7);
+  box-shadow: 0 0 12px rgba(0, 207, 239, 0.28);
   color: #ffffff;
 }
 

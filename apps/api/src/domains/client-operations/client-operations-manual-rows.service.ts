@@ -135,13 +135,16 @@ export async function initializeManualRowsForPeriod(input: {
   return { initialized };
 }
 
-/** Aggregate READ only — never writes setup markers or carry-forward copies. */
-export async function buildManualRowsForRegistryAggregate(input: {
+/**
+ * Aggregate READ only — pre-search manual-row values for a period
+ * (`` `${slot}:${columnKey}` `` → value_text). Search (`searchQ`) is applied afterwards by
+ * `materializeClientOperationsManualRows`, so this map can be materialized once per period and reused
+ * across different `q` values.
+ */
+export async function loadManualRowValuesBySlotColumnForRegistryAggregate(input: {
   organizationId: string;
   operationalPeriodKey: string;
-  columnKeys: readonly string[];
-  searchQ?: string | null;
-}): Promise<ClientOperationsManualRegistryRow[]> {
+}): Promise<Map<string, string>> {
   const periodKey = periodKeyFrom(input.operationalPeriodKey);
   const values = await loadManualRowValuesForPeriod({
     organizationId: input.organizationId,
@@ -158,6 +161,20 @@ export async function buildManualRowsForRegistryAggregate(input: {
     if (!isClientOperationsManualFreeTextColumnKey(row.column_key)) continue;
     valuesBySlotColumn.set(`${slot}:${row.column_key}`, row.value_text);
   }
+  return valuesBySlotColumn;
+}
+
+/** Aggregate READ only — never writes setup markers or carry-forward copies. */
+export async function buildManualRowsForRegistryAggregate(input: {
+  organizationId: string;
+  operationalPeriodKey: string;
+  columnKeys: readonly string[];
+  searchQ?: string | null;
+}): Promise<ClientOperationsManualRegistryRow[]> {
+  const valuesBySlotColumn = await loadManualRowValuesBySlotColumnForRegistryAggregate({
+    organizationId: input.organizationId,
+    operationalPeriodKey: input.operationalPeriodKey,
+  });
   return materializeClientOperationsManualRows({
     columnKeys: input.columnKeys,
     valuesBySlotColumn,

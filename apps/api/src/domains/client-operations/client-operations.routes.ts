@@ -9,6 +9,7 @@ import {
   getClientOperationsCase,
 } from './client-operations.service.js';
 import { getClientOperationsClientQuickProfile } from './client-operations-client-quick-profile.service.js';
+import { invalidateClientOperationsRegistryMaterializationCache } from './client-operations-registry-materialization-cache.js';
 import {
   executeClientOperationsRegistryCommand,
   type ClientOperationsRegistryCommandBody,
@@ -118,6 +119,24 @@ function parseAnnualTabScope(v: unknown): AnnualTabScope {
 const withClientDocumentsView = [requirePermission('client_documents_tab.view', 'client_operations.view')];
 const withClientDocumentsEdit = [requirePermission('client_documents_tab.edit', 'client_operations.edit')];
 
+/**
+ * Registry pre-search materialization cache — write safety net.
+ * Any non-GET request in this module may change registry rows (notes, profile, tax settings,
+ * material facts, manual rows, custom columns, …). Drop the org scope BEFORE the handler runs
+ * (so a concurrent GET cannot pin pre-mutation rows for the whole TTL) and again when the
+ * response finishes (covers builds that started mid-command). Commands themselves never read
+ * the cache — they always return a freshly built aggregate.
+ */
+router.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  const orgId = (req.context as RequestContext | undefined)?.organizationId ?? null;
+  invalidateClientOperationsRegistryMaterializationCache(orgId);
+  res.on('finish', () => {
+    invalidateClientOperationsRegistryMaterializationCache(orgId);
+  });
+  return next();
+});
+
 router.get('/registry', ...withView, async (req, res, next) => {
   try {
     const ctx = req.context as RequestContext;
@@ -142,18 +161,24 @@ router.get('/registry', ...withView, async (req, res, next) => {
       typeof req.query.filter_handler === 'string' ? req.query.filter_handler : null;
     const sort_dir =
       sortDirRaw === 'asc' || sortDirRaw === 'desc' ? (sortDirRaw as 'asc' | 'desc') : null;
-    const result = await listClientOperationsRegistry(ctx, {
-      q: qRaw,
-      sort_by: sortByRaw,
-      sort_dir,
-      operational_period_key: operationalPeriodKeyRaw,
-      filter_operational_reporting: filterOperationalReportingRaw,
-      filter_material: filterMaterialRaw,
-      filter_payroll: filterPayrollRaw,
-      filter_reporting_type: filterReportingTypeRaw,
-      filter_business_type: filterBusinessTypeRaw,
-      filter_handler: filterHandlerRaw,
-    });
+    const result = await listClientOperationsRegistry(
+      ctx,
+      {
+        q: qRaw,
+        sort_by: sortByRaw,
+        sort_dir,
+        operational_period_key: operationalPeriodKeyRaw,
+        filter_operational_reporting: filterOperationalReportingRaw,
+        filter_material: filterMaterialRaw,
+        filter_payroll: filterPayrollRaw,
+        filter_reporting_type: filterReportingTypeRaw,
+        filter_business_type: filterBusinessTypeRaw,
+        filter_handler: filterHandlerRaw,
+      },
+      // READ path only: repeated search (`q`) over the same org/period/filters reuses the
+      // short-TTL pre-search materialization. Auth/org/RBAC middleware already ran above.
+      { materializationCache: true },
+    );
     return res.json(result);
   } catch (e) {
     next(e);

@@ -93,10 +93,14 @@ async function buildOperationalNoteMutationResult(
   clientId: string,
   note?: OperationalNoteDto,
 ): Promise<OperationalNoteMutationResult> {
-  const [{ notes }, { listClientOperationsRegistry }] = await Promise.all([
-    listOperationalNotes(ctx, clientId),
-    import('./client-operations.service.js'),
-  ]);
+  const [{ notes }, { listClientOperationsRegistry }, { invalidateClientOperationsRegistryMaterializationCache }] =
+    await Promise.all([
+      listOperationalNotes(ctx, clientId),
+      import('./client-operations.service.js'),
+      import('./client-operations-registry-materialization-cache.js'),
+    ]);
+  // Notes change registry cells (notes column) — fresh aggregate + drop cached pre-search rows.
+  invalidateClientOperationsRegistryMaterializationCache(ctx.organizationId);
   const registry = await listClientOperationsRegistry(ctx, {});
   return note ? { note, notes, registry } : { notes, registry };
 }

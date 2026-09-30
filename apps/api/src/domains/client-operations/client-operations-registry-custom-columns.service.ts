@@ -837,7 +837,14 @@ export async function executeClientOperationsRegistryCommand(
     throw badRequest('Unknown registry command');
   }
 
-  const { listClientOperationsRegistry } = await import('./client-operations.service.js');
+  const [{ listClientOperationsRegistry }, { invalidateClientOperationsRegistryMaterializationCache }] =
+    await Promise.all([
+      import('./client-operations.service.js'),
+      import('./client-operations-registry-materialization-cache.js'),
+    ]);
+  // Mutation result is always a fresh full aggregate (no cache read); drop cached pre-search
+  // materializations for this org so a later GET cannot serve pre-mutation rows.
+  invalidateClientOperationsRegistryMaterializationCache(orgId);
   const responseQuery = queryFrom(body.query);
   if (
     MATERIAL_REGISTRY_COMMANDS.has(command) ||

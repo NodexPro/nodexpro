@@ -11,6 +11,7 @@ import {
   getPeriodAggregateCache,
   hasActiveClientOperationsBusinessFilters,
   putPeriodAggregateCache,
+  shouldPrefetchAdjacentPeriods,
   type PeriodAggregateCacheEntry,
 } from '../src/lib/client-operations-period-aggregate-cache.pure.js';
 
@@ -72,8 +73,11 @@ test('5 second filter change aborts/supersedes; loadSeq guard; stale cannot pain
 });
 
 test('6 one selection = one aggregate request; no adjacent prefetch while filters active', () => {
-  assert.match(pageSource, /hasActiveClientOperationsBusinessFilters\(baseQuery\)\) return/);
+  // Guard is the pure policy (filters OR active search) — see shouldPrefetchAdjacentPeriods.
+  assert.match(pageSource, /if \(!shouldPrefetchAdjacentPeriods\(baseQuery\)\) return/);
   assert.match(pageSource, /never fan-out adjacent-period prefetches/);
+  assert.equal(shouldPrefetchAdjacentPeriods({ filter_material: 'not_received' }), false);
+  assert.equal(shouldPrefetchAdjacentPeriods({}), true);
 });
 
 test('7 no frontend business rows.filter matching', () => {
