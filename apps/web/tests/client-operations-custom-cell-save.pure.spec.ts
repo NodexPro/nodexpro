@@ -7,15 +7,22 @@ import {
   getCustomCellSlot,
   isCustomCellInFlight,
   listDirtyCustomCellKeys,
+  manualDraftOverlayKey,
   parseCustomCellSaveKey,
   reconcileManualRowsWithDirtyDrafts,
   rememberCustomCellDraft,
   resolveCustomCellEditorDraft,
   shouldApplyCellSaveAggregate,
+  shouldCacheCellSaveAggregate,
+  shouldWriteManualDraftOverlay,
   tryStartCustomCellSave,
   type CustomCellSaveIdentity,
   type CustomCellSaveSlot,
 } from '../src/lib/client-operations-custom-cell-save.pure.js';
+import {
+  getPeriodAggregateCache,
+  putPeriodAggregateCache,
+} from '../src/lib/client-operations-period-aggregate-cache.pure.js';
 
 const ORG = 'org-1';
 const CLIENT_A = 'client-a';
@@ -426,6 +433,99 @@ test('reconcileManualRowsWithDirtyDrafts overlays latest draft; ignores other pe
     viewedPeriodKey: PERIOD_10,
   });
   assert.equal(otherPeriod[0]!.cells.client_name, 'A');
+});
+
+test('P0: manual overlay keys are period-scoped; off-period writes blocked', () => {
+  assert.equal(
+    manualDraftOverlayKey(PERIOD_09, 'manual:01', 'client_name'),
+    `${PERIOD_09}::manual:01::client_name`,
+  );
+  assert.notEqual(
+    manualDraftOverlayKey(PERIOD_09, 'manual:01', 'client_name'),
+    manualDraftOverlayKey(PERIOD_10, 'manual:01', 'client_name'),
+  );
+  assert.equal(
+    shouldWriteManualDraftOverlay({ writePeriodKey: PERIOD_09, viewedPeriodKey: PERIOD_09 }),
+    true,
+  );
+  assert.equal(
+    shouldWriteManualDraftOverlay({ writePeriodKey: PERIOD_09, viewedPeriodKey: PERIOD_10 }),
+    false,
+  );
+  assert.equal(
+    shouldWriteManualDraftOverlay({ writePeriodKey: PERIOD_09, viewedPeriodKey: null }),
+    false,
+  );
+});
+
+test('P0: off-period cell-save still caches under response period; never paints', () => {
+  assert.equal(
+    shouldCacheCellSaveAggregate({
+      applyAggregateRecommended: true,
+      responsePeriodKey: PERIOD_09,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldApplyCellSaveAggregate({
+      responsePeriodKey: PERIOD_09,
+      viewedPeriodKey: PERIOD_10,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldCacheCellSaveAggregate({
+      applyAggregateRecommended: false,
+      responsePeriodKey: PERIOD_09,
+    }),
+    false,
+    'mid-flight sibling must not poison period cache',
+  );
+
+  const cache = new Map();
+  const aggregate09 = {
+    period: { selected_period_key: PERIOD_09 },
+    query: { operational_period_key: PERIOD_09, q: null },
+    rows: [{ client_id: CLIENT_A, cells: { [COL]: 'saved-09' } }],
+    manual_rows: [{ row_key: 'manual:01', cells: { client_name: 'manual-09' } }],
+  };
+  // Simulate: recommend cache, do not paint into 10, put under response period.
+  if (
+    shouldCacheCellSaveAggregate({
+      applyAggregateRecommended: true,
+      responsePeriodKey: PERIOD_09,
+    }) &&
+    !shouldApplyCellSaveAggregate({
+      responsePeriodKey: PERIOD_09,
+      viewedPeriodKey: PERIOD_10,
+    })
+  ) {
+    putPeriodAggregateCache(cache, PERIOD_09, aggregate09, { q: null });
+  }
+  assert.deepEqual(getPeriodAggregateCache(cache, PERIOD_09, { q: null }), aggregate09);
+  assert.equal(getPeriodAggregateCache(cache, PERIOD_10, { q: null }), null);
+
+  // Return to 09 → preferCache paints saved value immediately (no click required).
+  const cached = getPeriodAggregateCache(cache, PERIOD_09, { q: null }) as typeof aggregate09;
+  assert.equal(cached.rows[0]!.cells[COL], 'saved-09');
+  assert.equal(cached.manual_rows[0]!.cells.client_name, 'manual-09');
+});
+
+test('P0 reverse race: 10.26 response never paints while viewing 09', () => {
+  assert.equal(
+    shouldApplyCellSaveAggregate({
+      responsePeriodKey: PERIOD_10,
+      viewedPeriodKey: PERIOD_09,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldCacheCellSaveAggregate({
+      applyAggregateRecommended: true,
+      responsePeriodKey: PERIOD_10,
+    }),
+    true,
+  );
 });
 
 test('resolveCustomCellEditorDraft prefers newer local over stale server', () => {

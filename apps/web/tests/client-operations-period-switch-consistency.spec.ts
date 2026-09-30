@@ -220,3 +220,24 @@ test('12 — prefetch fan-out only after still-current applied load', () => {
   // Prefetch after apply must re-check loadSeq / viewed period.
   assert.match(page, /viewedPeriodKeyRef\.current/);
 });
+
+test('P0 — off-period cell save caches under response period; preferCache return shows value', () => {
+  const view = readFileSync(
+    join(dir, '../src/components/client-operations/ClientOperationsRegistryView.tsx'),
+    'utf8',
+  );
+  assert.match(view, /shouldCacheCellSaveAggregate/);
+  assert.match(view, /onApplyAggregate\(data\)/);
+  assert.match(view, /Off-period completion: cache under response period only/);
+
+  const cache = new Map<string, PeriodAggregateCacheEntry<{ value: string }>>();
+  // Period A save completes while viewing B → reject paint path still caches A.
+  putPeriodAggregateCache(cache, '2026-10', { value: 'from-10' }, { q: null });
+  assert.equal(getPeriodAggregateCache(cache, '2026-11', { q: null }), null);
+  assert.equal(getPeriodAggregateCache(cache, '2026-10', { q: null })?.value, 'from-10');
+  // Period B cannot be populated by A.
+  assert.notEqual(
+    getPeriodAggregateCache(cache, '2026-10', { q: null })?.value,
+    getPeriodAggregateCache(cache, '2026-11', { q: null })?.value,
+  );
+});

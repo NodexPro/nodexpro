@@ -150,6 +150,42 @@ export function shouldApplyCellSaveAggregate(input: {
   return response === viewed;
 }
 
+/**
+ * Manual draft overlay is presentation-only and MUST be period-scoped.
+ * Same row_key/col across months must never share an overlay entry.
+ */
+export function manualDraftOverlayKey(
+  periodKey: string,
+  rowKey: string,
+  colKey: string,
+): string {
+  return `${String(periodKey ?? '').trim()}::${String(rowKey ?? '').trim()}::${String(colKey ?? '').trim()}`;
+}
+
+/** Overlay writes only while viewing the draft's own period (blocks cross-month bleed). */
+export function shouldWriteManualDraftOverlay(input: {
+  writePeriodKey: string | null | undefined;
+  viewedPeriodKey: string | null | undefined;
+}): boolean {
+  const write = String(input.writePeriodKey ?? '').trim();
+  const viewed = String(input.viewedPeriodKey ?? '').trim();
+  if (!write || !viewed) return false;
+  return write === viewed;
+}
+
+/**
+ * Successful cell-save with no newer pending draft:
+ * - paint only when response period === viewed period
+ * - always cache under the response period identity when applyAggregateRecommended
+ */
+export function shouldCacheCellSaveAggregate(input: {
+  applyAggregateRecommended: boolean;
+  responsePeriodKey: string | null | undefined;
+}): boolean {
+  if (!input.applyAggregateRecommended) return false;
+  return Boolean(String(input.responsePeriodKey ?? '').trim());
+}
+
 /** Any dirty draft or in-flight save that must flush before period navigation. */
 export function listDirtyCustomCellKeys(slots: Map<string, CustomCellSaveSlot>): string[] {
   const out: string[] = [];

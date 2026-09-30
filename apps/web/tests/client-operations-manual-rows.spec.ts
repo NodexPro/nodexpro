@@ -107,8 +107,21 @@ test('manual save path uses applyAggregateRecommended + dirty draft reconcile', 
   assert.match(viewSource, /applyAggregateRecommended/);
   assert.match(viewSource, /reconcileManualRowsWithDirtyDrafts/);
   assert.match(viewSource, /manualDraftOverlay/);
+  assert.match(viewSource, /manualDraftOverlayKey/);
+  assert.match(viewSource, /shouldWriteManualDraftOverlay/);
+  assert.match(viewSource, /shouldCacheCellSaveAggregate/);
+  // Off-period completion caches via onApplyAggregate without painting.
+  assert.match(viewSource, /Off-period completion: cache under response period only/);
   // Persistence starts on change — Enter is optional navigation only.
   assert.match(viewSource, /persistence already started on each keystroke/);
+});
+
+test('P0: period switch clears overlay + cellDraft; overlay keys include period', () => {
+  assert.match(viewSource, /setManualDraftOverlay\(\{\}\)/);
+  assert.match(viewSource, /setCellDraft\(''\)/);
+  assert.match(viewSource, /manualDraftOverlayKey\(/);
+  assert.match(viewSource, /viewedPeriodForOverlay/);
+  assert.match(viewSource, /manualDraftOverlay\[overlayPk\]/);
 });
 
 test('formatting / presentation key uses row_key for manual (no fabricated client_id)', () => {

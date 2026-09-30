@@ -62,9 +62,12 @@ import {
   customCellSaveKey,
   getCustomCellSlot,
   isCustomCellInFlight,
+  manualDraftOverlayKey,
   reconcileManualRowsWithDirtyDrafts,
   rememberCustomCellDraft,
   shouldApplyCellSaveAggregate,
+  shouldCacheCellSaveAggregate,
+  shouldWriteManualDraftOverlay,
   tryStartCustomCellSave,
   type CustomCellSaveIdentity,
   type CustomCellSaveSlot,
@@ -95,6 +98,7 @@ import {
 import { formatCustomExcelCellDisplay } from '../../lib/client-operations-custom-cell-display.pure';
 import {
   buildCopyUserPeriodDataCommandBody,
+  clampClientOperationsContextMenuPosition,
   sourcePeriodsForUserPeriodDataCopy,
   targetPeriodHasConflictingUserEnteredData,
   type UserPeriodDataCopyMode,
@@ -610,7 +614,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [headerDraft, setHeaderDraft] = useState('');
   const [editingCellKey, setEditingCellKey] = useState<string | null>(null);
   const [cellDraft, setCellDraft] = useState('');
-  /** Optimistic manual drafts by cellKey — keeps visible text ahead of aggregate while single-flight saves. */
+  /**
+   * Optimistic manual drafts keyed by period::row::col — period-scoped so month A
+   * never paints into month B while a late save resolves.
+   */
   const [manualDraftOverlay, setManualDraftOverlay] = useState<Record<string, string>>({});
   const [statusPaintMode, setStatusPaintMode] = useState<
     'ready' | 'sent_for_approval' | 'completed' | 'clear' | null
@@ -620,6 +627,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     y: number;
     submenuOpen: boolean;
   }>(null);
+  const [gridContextMenuPos, setGridContextMenuPos] = useState<{ left: number; top: number } | null>(
+    null,
+  );
+  const gridContextMenuRef = useRef<HTMLDivElement | null>(null);
   const [periodCopyDialog, setPeriodCopyDialog] = useState<null | {
     sourcePeriodKey: string;
     mode: UserPeriodDataCopyMode;
@@ -1445,40 +1456,52 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       );
 
       if (meta.kind === 'manual') {
-        const pk = cellKey(meta.rowKey, meta.column.key);
-        const slotAfter = getCustomCellSlot(customCellSlotsRef.current, start.key);
-        setManualDraftOverlay((prev) => {
-          if (slotAfter.latestDraft == null) {
-            if (!(pk in prev)) return prev;
-            const next = { ...prev };
-            delete next[pk];
-            return next;
-          }
-          if (prev[pk] === slotAfter.latestDraft) return prev;
-          return { ...prev, [pk]: slotAfter.latestDraft };
-        });
+        const writePeriod = start.identity.operationalPeriodKey;
+        if (
+          shouldWriteManualDraftOverlay({
+            writePeriodKey: writePeriod,
+            viewedPeriodKey,
+          })
+        ) {
+          const pk = manualDraftOverlayKey(writePeriod, meta.rowKey, meta.column.key);
+          const slotAfter = getCustomCellSlot(customCellSlotsRef.current, start.key);
+          setManualDraftOverlay((prev) => {
+            if (slotAfter.latestDraft == null) {
+              if (!(pk in prev)) return prev;
+              const next = { ...prev };
+              delete next[pk];
+              return next;
+            }
+            if (prev[pk] === slotAfter.latestDraft) return prev;
+            return { ...prev, [pk]: slotAfter.latestDraft };
+          });
+        }
       }
 
-      if (
-        applyAggregateRecommended &&
-        shouldApplyCellSaveAggregate({
-          responsePeriodKey,
-          viewedPeriodKey,
-        })
-      ) {
-        if (meta.kind === 'manual' && Array.isArray(data?.manual_rows)) {
-          const orgId = widthScope?.organizationId?.trim() ?? '';
-          const reconciledManual = reconcileManualRowsWithDirtyDrafts({
-            manualRows: data.manual_rows,
-            slots: customCellSlotsRef.current,
-            organizationId: orgId,
-            viewedPeriodKey: String(viewedPeriodKey ?? ''),
-          });
-          applyAggregateReconciled({ ...(data as object), manual_rows: reconciledManual });
-        } else {
-          applyAggregateReconciled(data);
+      if (shouldCacheCellSaveAggregate({ applyAggregateRecommended, responsePeriodKey })) {
+        if (
+          shouldApplyCellSaveAggregate({
+            responsePeriodKey,
+            viewedPeriodKey,
+          })
+        ) {
+          if (meta.kind === 'manual' && Array.isArray(data?.manual_rows)) {
+            const orgId = widthScope?.organizationId?.trim() ?? '';
+            const reconciledManual = reconcileManualRowsWithDirtyDrafts({
+              manualRows: data.manual_rows,
+              slots: customCellSlotsRef.current,
+              organizationId: orgId,
+              viewedPeriodKey: String(viewedPeriodKey ?? ''),
+            });
+            applyAggregateReconciled({ ...(data as object), manual_rows: reconciledManual });
+          } else {
+            applyAggregateReconciled(data);
+          }
+          preserveEditorDraftIfNeeded(start.key, meta);
+        } else if (onApplyAggregate) {
+          // Off-period completion: cache under response period only — never paint into viewed month.
+          onApplyAggregate(data);
         }
-        preserveEditorDraftIfNeeded(start.key, meta);
       }
 
       if (startNext) {
@@ -1606,8 +1629,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       column,
       identity,
     });
-    const pk = cellKey(row.row_key, column.key);
-    setManualDraftOverlay((prev) => (prev[pk] === value ? prev : { ...prev, [pk]: value }));
+    const pk = manualDraftOverlayKey(periodKey, row.row_key, column.key);
+    if (
+      shouldWriteManualDraftOverlay({
+        writePeriodKey: periodKey,
+        viewedPeriodKey: periodKey,
+      })
+    ) {
+      setManualDraftOverlay((prev) => (prev[pk] === value ? prev : { ...prev, [pk]: value }));
+    }
     // Manual rows: no debounce — first keystroke starts save immediately (single-flight + coalesce).
     clearCustomCellDebounce(key);
     void kickCustomCellSave(key);
@@ -1643,11 +1673,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const cellPres = row.cell_presentation?.[column.key];
     if (!canEdit || cellPres?.cell_kind !== 'manual_text' || !cellPres.editable) return;
     if (statusPaintMode) return;
+    const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
     const pk = cellKey(row.row_key, column.key);
+    const overlayPk = manualDraftOverlayKey(periodKey, row.row_key, column.key);
     selectActiveFormatCell(row.row_key, column, { rowKey: row.row_key });
     if (editingCellKeyRef.current === pk) return;
     setEditingCellKey(pk);
-    const overlay = manualDraftOverlay[pk];
+    const overlay = manualDraftOverlay[overlayPk];
     setCellDraft(
       overlay != null ? overlay : formatCustomExcelCellDisplay(row.cells?.[column.key]),
     );
@@ -1659,7 +1691,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   ) => {
     const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
     const identity = makeManualRowCellIdentity(row.row_key, column.key, periodKey);
-    const pk = cellKey(row.row_key, column.key);
+    const overlayPk = manualDraftOverlayKey(periodKey, row.row_key, column.key);
     if (identity) {
       const key = customCellSaveKey(identity);
       clearCustomCellDebounce(key);
@@ -1667,9 +1699,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       customCellMetaRef.current.delete(key);
     }
     setManualDraftOverlay((prev) => {
-      if (!(pk in prev)) return prev;
+      if (!(overlayPk in prev)) return prev;
       const next = { ...prev };
-      delete next[pk];
+      delete next[overlayPk];
       return next;
     });
     setEditingCellKey(null);
@@ -1685,6 +1717,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     for (const key of keys) clearCustomCellDebounce(key);
     for (const key of keys) void flushCustomCellKey(key);
     setEditingCellKey(null);
+    setCellDraft('');
     setManualDraftOverlay({});
     if (shouldClearActiveCellOnPeriodChange()) {
       setFocusedCell(null);
@@ -2249,6 +2282,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       event.preventDefault();
       event.stopPropagation();
       setPeriodCopyFeedback(null);
+      setGridContextMenuPos(null);
       setGridContextMenu({
         x: event.clientX,
         y: event.clientY,
@@ -2257,6 +2291,36 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     },
     [canEdit, onRegistryCommand],
   );
+
+  useLayoutEffect(() => {
+    if (!gridContextMenu) {
+      setGridContextMenuPos(null);
+      return;
+    }
+    const place = () => {
+      const el = gridContextMenuRef.current;
+      const menuWidth = el?.offsetWidth ?? 200;
+      const menuHeight = el?.offsetHeight ?? 48;
+      const rtl =
+        typeof document !== 'undefined' &&
+        (document.documentElement.dir === 'rtl' || document.body.dir === 'rtl');
+      setGridContextMenuPos(
+        clampClientOperationsContextMenuPosition({
+          x: gridContextMenu.x,
+          y: gridContextMenu.y,
+          menuWidth,
+          menuHeight,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          margin: 8,
+          rtl,
+        }),
+      );
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [gridContextMenu]);
 
   useEffect(() => {
     if (!gridContextMenu) return;
@@ -3552,6 +3616,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             >
               {visibleColumns.map((column) => {
                 const pk = cellKey(row.row_key, column.key);
+                const viewedPeriodForOverlay =
+                  query?.operational_period_key ?? period?.selected_period_key ?? '';
+                const overlayPk = manualDraftOverlayKey(
+                  viewedPeriodForOverlay,
+                  row.row_key,
+                  column.key,
+                );
                 const presentation = cellPresentation[pk];
                 const focused =
                   Boolean(focusedCell?.rowKey) &&
@@ -3561,7 +3632,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 const isFolderCell = cellPres?.cell_kind === 'folder';
                 const isManualText = cellPres?.cell_kind === 'manual_text';
                 const canEditManual = Boolean(canEdit && isManualText && cellPres?.editable);
-                const overlayDraft = manualDraftOverlay[pk];
+                const overlayDraft = manualDraftOverlay[overlayPk];
                 const displayValue = isFolderCell
                   ? ''
                   : overlayDraft != null
@@ -3827,52 +3898,63 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             {periodCopyFeedback}
           </div>
         ) : null}
-        {gridContextMenu && canEdit ? (
-          <div
-            className="nx-co-sheet__context-menu"
-            role="menu"
-            aria-label="תפריט גיליון"
-            data-testid="client-operations-period-copy-menu"
-            style={{ left: gridContextMenu.x, top: gridContextMenu.y }}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="nx-co-sheet__context-menu-item"
-              role="menuitem"
-              aria-haspopup="true"
-              aria-expanded={gridContextMenu.submenuOpen}
-              disabled={sourcePeriodsForCopy.length === 0 || periodCopyBusy}
-              onClick={() =>
-                setGridContextMenu((current) =>
-                  current ? { ...current, submenuOpen: !current.submenuOpen } : current,
-                )
-              }
-            >
-              העתק מידע מחודש
-            </button>
-            {gridContextMenu.submenuOpen ? (
-              <div className="nx-co-sheet__context-submenu" role="menu" aria-label="בחירת חודש מקור">
-                {sourcePeriodsForCopy.length === 0 ? (
-                  <div className="nx-co-sheet__context-menu-empty">אין חודשים זמינים</div>
-                ) : (
-                  sourcePeriodsForCopy.map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className="nx-co-sheet__context-menu-item"
-                      role="menuitem"
-                      disabled={periodCopyBusy}
-                      onClick={() => onSelectCopySourcePeriod(key)}
-                    >
-                      {formatClientOperationsOperationalPeriodTabLabel(key)}
-                    </button>
-                  ))
-                )}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {gridContextMenu && canEdit
+          ? createPortal(
+              <div
+                ref={gridContextMenuRef}
+                className="nx-co-sheet__context-menu"
+                role="menu"
+                aria-label="תפריט גיליון"
+                data-testid="client-operations-period-copy-menu"
+                style={{
+                  left: gridContextMenuPos?.left ?? gridContextMenu.x,
+                  top: gridContextMenuPos?.top ?? gridContextMenu.y,
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="nx-co-sheet__context-menu-item"
+                  role="menuitem"
+                  aria-haspopup="true"
+                  aria-expanded={gridContextMenu.submenuOpen}
+                  disabled={sourcePeriodsForCopy.length === 0 || periodCopyBusy}
+                  onClick={() =>
+                    setGridContextMenu((current) =>
+                      current ? { ...current, submenuOpen: !current.submenuOpen } : current,
+                    )
+                  }
+                >
+                  העתק מידע מחודש
+                </button>
+                {gridContextMenu.submenuOpen ? (
+                  <div
+                    className="nx-co-sheet__context-submenu"
+                    role="menu"
+                    aria-label="בחירת חודש מקור"
+                  >
+                    {sourcePeriodsForCopy.length === 0 ? (
+                      <div className="nx-co-sheet__context-menu-empty">אין חודשים זמינים</div>
+                    ) : (
+                      sourcePeriodsForCopy.map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className="nx-co-sheet__context-menu-item"
+                          role="menuitem"
+                          disabled={periodCopyBusy}
+                          onClick={() => onSelectCopySourcePeriod(key)}
+                        >
+                          {formatClientOperationsOperationalPeriodTabLabel(key)}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>,
+              document.body,
+            )
+          : null}
         {periodCopyDialog ? (
           <div className="nx-co-sheet__dialog-backdrop" role="presentation">
             <div
