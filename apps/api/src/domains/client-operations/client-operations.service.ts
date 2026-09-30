@@ -109,6 +109,7 @@ import {
   buildManualRowsPeriodSetupForAggregate,
   loadManualRowValuesBySlotColumnForRegistryAggregate,
 } from './client-operations-manual-rows.service.js';
+import { loadUserPeriodDataCopySourcePeriods } from './client-operations-user-period-data-copy.service.js';
 import {
   buildClientOperationsRegistryMaterializationCacheKey,
   clientOperationsRegistryMaterializationCache,
@@ -195,6 +196,11 @@ export type ClientOperationsRegistryResponse = {
     default_period_key: string;
     available_periods: string[];
   };
+  /**
+   * Periods with meaningful user-entered custom-column / manual-row values.
+   * Dedicated to `העתק מידע מחודש` — independent of sheet-tab `available_periods`.
+   */
+  user_period_data_copy_source_periods: string[];
   rows: ClientOperationsRegistryRow[];
   /** Exactly five backend-owned manual spreadsheet slots (after real clients; no Core client_id). */
   manual_rows: ClientOperationsManualRegistryRow[];
@@ -409,6 +415,8 @@ function buildRegistryColumnsForAggregate(input: {
  */
 export type ClientOperationsRegistryPreSearchMaterialization = {
   period: ClientOperationsRegistryResponse['period'];
+  /** Org-scoped periods with meaningful user-entered custom/manual values (copy menu). */
+  user_period_data_copy_source_periods: string[];
   /** Rows after tenant scoping, period membership and business-filter facets; before search/sort. */
   built_rows: ClientOperationsRegistryRow[];
   columns: ClientOperationsRegistryColumn[];
@@ -587,6 +595,7 @@ export async function listClientOperationsRegistry(
   const response: ClientOperationsRegistryResponse = {
     title_he: 'תפעול לקוחות',
     period: materialization.period,
+    user_period_data_copy_source_periods: materialization.user_period_data_copy_source_periods,
     rows,
     manual_rows,
     columns: materialization.columns,
@@ -641,11 +650,12 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
 
   // Pure read: user-slot / period-setup initialization is ONLY via named commands.
   const bootMs = Date.now();
-  const [noteTypesResult, customColumnsExtended, availablePeriods, handlerFilterOptions] =
+  const [noteTypesResult, customColumnsExtended, availablePeriods, userPeriodDataCopySourcePeriods, handlerFilterOptions] =
     await Promise.all([
       listOperationalNoteTypes(),
       loadActiveCustomColumnsExtended(orgId),
       listKnownOperationalPeriodKeys(orgId),
+      loadUserPeriodDataCopySourcePeriods(orgId),
       loadOrgHandlerFilterOptions(orgId),
     ]);
   markStage('boot_note_types_columns_periods_handlers', bootMs);
@@ -731,6 +741,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     builtRows: ClientOperationsRegistryRow[],
   ): ClientOperationsRegistryPreSearchMaterialization => ({
     period,
+    user_period_data_copy_source_periods: userPeriodDataCopySourcePeriods,
     built_rows: builtRows,
     columns,
     note_types: noteTypes,

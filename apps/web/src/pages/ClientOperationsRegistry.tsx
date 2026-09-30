@@ -66,6 +66,8 @@ type RegistryAggregate = {
     filter_handler?: string | null;
   };
   period?: { selected_period_key: string; default_period_key: string; available_periods: string[] };
+  /** Backend-owned periods with meaningful user-entered custom/manual values (copy menu). */
+  user_period_data_copy_source_periods?: string[];
   allowed_actions?: string[];
   filters?: {
     definitions: Array<{
@@ -151,6 +153,7 @@ export function ClientOperationsRegistry() {
     default_period_key: string;
     available_periods: string[];
   } | null>(null);
+  const [userPeriodDataCopySourcePeriods, setUserPeriodDataCopySourcePeriods] = useState<string[]>([]);
   const loadSeqRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
   const viewedPeriodKeyRef = useRef<string | null>(null);
@@ -265,6 +268,13 @@ export function ClientOperationsRegistry() {
           : [],
       });
       viewedPeriodKeyRef.current = data.period.selected_period_key;
+    }
+    setUserPeriodDataCopySourcePeriods(
+      Array.isArray(data?.user_period_data_copy_source_periods)
+        ? data.user_period_data_copy_source_periods
+        : [],
+    );
+    if (data.period) {
       const cacheQuery: ClientOperationsRegistryCacheQuery = {
         q: data.query?.q ?? null,
         filter_operational_reporting: data.query?.filter_operational_reporting ?? null,
@@ -692,6 +702,7 @@ export function ClientOperationsRegistry() {
       onApplyAggregate={applyAggregate}
       onInvalidateStaleLoads={invalidateStaleLoads}
       period={period}
+      userPeriodDataCopySourcePeriods={userPeriodDataCopySourcePeriods}
       onPeriodChange={onPeriodChange}
       widthScope={{
         userId: auth.me.user.id,

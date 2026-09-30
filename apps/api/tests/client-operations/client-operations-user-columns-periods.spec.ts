@@ -78,9 +78,10 @@ test('excel UX — whole-cell editor + gear isolation', () => {
   assert.match(viewSource, /beginCustomCellEdit\(row, column\)/);
 });
 
-test('7-12 — period values + carry-forward + non-destructive hide', () => {
-  assert.match(periodsService, /carryForwardColumnIntoPeriod/);
+test('7-12 — period values + visibility without silent value carry-forward', () => {
+  assert.doesNotMatch(periodsService, /carryForwardColumnIntoPeriod/);
   assert.match(periodsService, /client_operations_registry_custom_column_period_values/);
+  assert.match(periodsService, /ensureVisibilityRowForPeriod/);
   assert.match(periodsService, /toRemove/);
   assert.match(periodsService, /\.delete\(/);
   assert.doesNotMatch(periodsService, /period_values[\s\S]{0,80}\.delete\(/);

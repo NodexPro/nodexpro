@@ -172,13 +172,14 @@ test('18-20 clearing stops carry — empty previous slot not copied', () => {
   assert.equal(plan.length, 0);
 });
 
-test('21 carry-forward uses immediate previous calendar period only (atomic RPC)', () => {
+test('21 carry-forward RPC retained in migrations but TS init no longer copies values', () => {
   assert.match(mig179, /initialize_client_operations_manual_rows_for_period/);
   assert.match(mig179, /on conflict \(organization_id, operational_period_key\) do nothing/);
-  assert.match(serviceSource, /initialize_client_operations_manual_rows_for_period/);
+  assert.doesNotMatch(serviceSource, /initialize_client_operations_manual_rows_for_period/);
+  assert.match(serviceSource, /WITHOUT copying prior-period cell VALUES/);
   assert.doesNotMatch(serviceSource, /latestEarlierPeriodKey/);
   assert.doesNotMatch(mig179, /latestEarlierPeriodKey/);
-  // RPC computes previous month in SQL (no older-month scan).
+  // Legacy RPC still computes previous month in SQL (historical artifact; unused by TS write path).
   assert.match(mig179, /v_prev/);
   assert.match(mig179, /v_month := v_month - 1/);
 });
@@ -236,11 +237,12 @@ test('READ path never initializes — no hidden GET write', () => {
   assert.match(aggregateSource, /buildManualRowsPeriodSetupForAggregate/);
 });
 
-test('first-touch setup marker via named command + atomic RPC', () => {
+test('first-touch setup marker via named command (no silent value copy)', () => {
   assert.match(serviceSource, /client_operations_manual_rows_period_setup/);
   assert.match(serviceSource, /initializeManualRowsForPeriod/);
   assert.match(serviceSource, /isManualRowsPeriodSetupComplete/);
   assert.match(commandSource, /initialize_client_operations_manual_rows_for_period/);
+  assert.doesNotMatch(serviceSource, /\.rpc\(/);
   assert.match(mig179, /security definer/);
 });
 

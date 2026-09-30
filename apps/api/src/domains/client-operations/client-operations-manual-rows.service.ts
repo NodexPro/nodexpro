@@ -102,8 +102,9 @@ async function upsertManualRowCellValue(input: {
 }
 
 /**
- * Named-command first-touch only. Uses atomic RPC (claim marker + previous-period copy).
- * Returns true when this call performed initialization.
+ * Named-command first-touch only.
+ * Marks the period as initialized WITHOUT copying prior-period cell VALUES.
+ * User-entered values move across months only via copy_client_operations_user_period_data.
  */
 export async function initializeManualRowsForPeriod(input: {
   ctx: RequestContext;
@@ -111,28 +112,33 @@ export async function initializeManualRowsForPeriod(input: {
   operationalPeriodKey: string;
 }): Promise<{ initialized: boolean }> {
   const periodKey = periodKeyFrom(input.operationalPeriodKey);
-  const { data, error } = await supabaseAdmin.rpc(
-    'initialize_client_operations_manual_rows_for_period',
-    {
-      p_organization_id: input.organizationId,
-      p_operational_period_key: periodKey,
-      p_actor_user_id: input.ctx.user.id,
-    },
-  );
-  assertQueryError(error, 'Failed to initialize manual rows for period');
-  const initialized = data === true;
-  if (initialized) {
-    await writeAudit({
-      organizationId: input.organizationId,
-      actorUserId: input.ctx.user.id,
-      moduleCode: 'client-operations',
-      entityType: 'client_operations_manual_rows_period_setup',
-      entityId: `${input.organizationId}:${periodKey}`,
-      action: AUDIT_ACTIONS.CLIENT_OPERATIONS_MANUAL_ROWS_PERIOD_INITIALIZED,
-      payload: { operational_period_key: periodKey },
-    });
+  if (await isManualRowsPeriodSetupComplete(input.organizationId, periodKey)) {
+    return { initialized: false };
   }
-  return { initialized };
+  const { error } = await supabaseAdmin.from('client_operations_manual_rows_period_setup').insert({
+    organization_id: input.organizationId,
+    operational_period_key: periodKey,
+    initialized_at: new Date().toISOString(),
+    initialized_by: input.ctx.user.id,
+  });
+  if (error) {
+    // Concurrent first-touch: unique violation means another writer claimed the marker.
+    const code = String((error as { code?: string }).code ?? '');
+    if (code === '23505' || /duplicate|unique/i.test(String(error.message ?? ''))) {
+      return { initialized: false };
+    }
+    assertQueryError(error, 'Failed to initialize manual rows for period');
+  }
+  await writeAudit({
+    organizationId: input.organizationId,
+    actorUserId: input.ctx.user.id,
+    moduleCode: 'client-operations',
+    entityType: 'client_operations_manual_rows_period_setup',
+    entityId: `${input.organizationId}:${periodKey}`,
+    action: AUDIT_ACTIONS.CLIENT_OPERATIONS_MANUAL_ROWS_PERIOD_INITIALIZED,
+    payload: { operational_period_key: periodKey },
+  });
+  return { initialized: true };
 }
 
 /**

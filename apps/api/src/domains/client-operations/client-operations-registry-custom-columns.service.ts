@@ -46,6 +46,7 @@ import {
   setPeriodCustomColumnValue,
 } from './client-operations-user-columns-periods.service.js';
 import { setClientOperationsManualRowCellValue, initializeManualRowsForPeriod } from './client-operations-manual-rows.service.js';
+import { copyClientOperationsUserPeriodData } from './client-operations-user-period-data-copy.service.js';
 import {
   isValidClientOperationsManualCellStatus,
   resolveAllowedManualStatusesForWrite,
@@ -96,6 +97,9 @@ export type ClientOperationsRegistryCommandBody = {
   column_key?: unknown;
   status?: unknown;
   manual_row_slot?: unknown;
+  source_operational_period_key?: unknown;
+  target_operational_period_key?: unknown;
+  mode?: unknown;
 };
 
 function assertOrg(ctx: RequestContext): string {
@@ -824,6 +828,19 @@ export async function executeClientOperationsRegistryCommand(
       value: body.value,
       eligibleColumnKeys,
     });
+  } else if (command === 'copy_client_operations_user_period_data') {
+    const targetPeriodKey = operationalPeriodKeyFrom(
+      body.target_operational_period_key ??
+        body.operational_period_key ??
+        (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+    );
+    await copyClientOperationsUserPeriodData({
+      ctx,
+      organizationId: orgId,
+      sourceOperationalPeriodKey: body.source_operational_period_key,
+      targetOperationalPeriodKey: targetPeriodKey,
+      mode: body.mode ?? 'empty_only',
+    });
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin
@@ -854,6 +871,13 @@ export async function executeClientOperationsRegistryCommand(
   ) {
     responseQuery.operational_period_key = operationalPeriodKeyFrom(
       body.operational_period_key ?? responseQuery.operational_period_key,
+    );
+  }
+  if (command === 'copy_client_operations_user_period_data') {
+    responseQuery.operational_period_key = operationalPeriodKeyFrom(
+      body.target_operational_period_key ??
+        body.operational_period_key ??
+        responseQuery.operational_period_key,
     );
   }
   return listClientOperationsRegistry(ctx, responseQuery);

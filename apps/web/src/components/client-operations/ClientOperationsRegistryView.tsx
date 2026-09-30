@@ -93,6 +93,13 @@ import {
   type CoUndoEntry,
 } from '../../lib/client-operations-undo-stack.pure';
 import { formatCustomExcelCellDisplay } from '../../lib/client-operations-custom-cell-display.pure';
+import {
+  buildCopyUserPeriodDataCommandBody,
+  sourcePeriodsForUserPeriodDataCopy,
+  targetPeriodHasConflictingUserEnteredData,
+  type UserPeriodDataCopyMode,
+} from '../../lib/client-operations-user-period-data-copy.pure';
+import { formatClientOperationsOperationalPeriodTabLabel } from '../../lib/client-operations-operational-period-label.pure';
 import { PageHeader } from '../../templates/template-1/components/PageHeader';
 import { SectionCard } from '../../templates/template-1/components/SectionCard';
 import { ClientNoteModal } from '../ClientNoteModal';
@@ -490,6 +497,8 @@ export type ClientOperationsRegistryViewProps = {
     default_period_key: string;
     available_periods: string[];
   } | null;
+  /** Backend-owned periods with meaningful user-entered custom/manual values (copy menu). */
+  userPeriodDataCopySourcePeriods?: string[];
   onPeriodChange?: (operationalPeriodKey: string) => void;
 };
 
@@ -521,6 +530,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     onInvalidateStaleLoads,
     widthScope,
     period,
+    userPeriodDataCopySourcePeriods = [],
     onPeriodChange,
   } = props;
 
@@ -605,6 +615,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [statusPaintMode, setStatusPaintMode] = useState<
     'ready' | 'sent_for_approval' | 'completed' | 'clear' | null
   >(null);
+  const [gridContextMenu, setGridContextMenu] = useState<null | {
+    x: number;
+    y: number;
+    submenuOpen: boolean;
+  }>(null);
+  const [periodCopyDialog, setPeriodCopyDialog] = useState<null | {
+    sourcePeriodKey: string;
+    mode: UserPeriodDataCopyMode;
+  }>(null);
+  const [periodCopyBusy, setPeriodCopyBusy] = useState(false);
+  const [periodCopyFeedback, setPeriodCopyFeedback] = useState<string | null>(null);
   const statusPaintSlotsRef = useRef<Map<string, ManualStatusPaintSlot>>(new Map());
   const statusOverlaysRef = useRef<Map<string, ManualStatusOverlay>>(new Map());
   const statusOverlayGenRef = useRef(0);
@@ -2148,6 +2169,115 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     }
   };
 
+  const targetPeriodKeyForCopy =
+    period?.selected_period_key ?? query?.operational_period_key ?? '';
+  const sourcePeriodsForCopy = useMemo(
+    () =>
+      sourcePeriodsForUserPeriodDataCopy(userPeriodDataCopySourcePeriods, targetPeriodKeyForCopy),
+    [userPeriodDataCopySourcePeriods, targetPeriodKeyForCopy],
+  );
+
+  const collectTargetConflictSignals = useCallback(() => {
+    const customKeys = columns.filter((c) => c.cell_kind === 'custom').map((c) => c.key);
+    const customCellTexts = rows.flatMap((row) =>
+      customKeys.map((key) => String(row.cells?.[key] ?? '')),
+    );
+    const manualCellTexts = manualRows.flatMap((row) =>
+      Object.entries(row.cells ?? {})
+        .filter(([key]) => key !== 'folder')
+        .map(([, value]) => String(value ?? '')),
+    );
+    return { customCellTexts, manualCellTexts };
+  }, [columns, rows, manualRows]);
+
+  const executePeriodDataCopy = useCallback(
+    async (sourcePeriodKey: string, mode: UserPeriodDataCopyMode) => {
+      if (!canEdit || !onRegistryCommand || !targetPeriodKeyForCopy) return;
+      setPeriodCopyBusy(true);
+      setCommandError('');
+      setGridContextMenu(null);
+      try {
+        await onRegistryCommand(
+          buildCopyUserPeriodDataCommandBody({
+            sourcePeriodKey,
+            targetPeriodKey: targetPeriodKeyForCopy,
+            mode,
+            query: {
+              q: query?.q ?? null,
+              sort_by: query?.sort_by ?? null,
+              sort_dir: query?.sort_dir ?? null,
+              filter_operational_reporting: query?.filter_operational_reporting ?? null,
+              filter_material: query?.filter_material ?? null,
+              filter_payroll: query?.filter_payroll ?? null,
+              filter_reporting_type: query?.filter_reporting_type ?? null,
+              filter_business_type: query?.filter_business_type ?? null,
+              filter_handler: query?.filter_handler ?? null,
+              operational_period_key: targetPeriodKeyForCopy,
+            },
+          }),
+        );
+        setPeriodCopyDialog(null);
+        setPeriodCopyFeedback(
+          `המידע הועתק מ־${formatClientOperationsOperationalPeriodTabLabel(sourcePeriodKey)} ל־${formatClientOperationsOperationalPeriodTabLabel(targetPeriodKeyForCopy)}`,
+        );
+      } catch (error) {
+        setCommandError(error instanceof Error ? error.message : 'העתקת מידע מחודש נכשלה');
+      } finally {
+        setPeriodCopyBusy(false);
+      }
+    },
+    [canEdit, onRegistryCommand, query, targetPeriodKeyForCopy],
+  );
+
+  const onSelectCopySourcePeriod = useCallback(
+    (sourcePeriodKey: string) => {
+      if (!canEdit || !targetPeriodKeyForCopy || sourcePeriodKey === targetPeriodKeyForCopy) return;
+      const hasConflict = targetPeriodHasConflictingUserEnteredData(collectTargetConflictSignals());
+      setGridContextMenu(null);
+      if (hasConflict) {
+        setPeriodCopyDialog({ sourcePeriodKey, mode: 'empty_only' });
+        return;
+      }
+      void executePeriodDataCopy(sourcePeriodKey, 'empty_only');
+    },
+    [canEdit, collectTargetConflictSignals, executePeriodDataCopy, targetPeriodKeyForCopy],
+  );
+
+  const onGridContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (!canEdit || !onRegistryCommand) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPeriodCopyFeedback(null);
+      setGridContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        submenuOpen: false,
+      });
+    },
+    [canEdit, onRegistryCommand],
+  );
+
+  useEffect(() => {
+    if (!gridContextMenu) return;
+    const close = () => setGridContextMenu(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [gridContextMenu]);
+
+  useEffect(() => {
+    if (!periodCopyFeedback) return;
+    const timer = window.setTimeout(() => setPeriodCopyFeedback(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [periodCopyFeedback]);
+
   const commitCustomHeaderRename = async (column: ClientOperationsRegistryColumn, label: string) => {
     if (!canEdit || !column.custom_column_id || !onRegistryCommand) return;
     setCommandError('');
@@ -3177,7 +3307,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   };
 
   const renderSpreadsheetTable = () => (
-    <div className="nx-co-sheet__canvas">
+    <div className="nx-co-sheet__canvas" onContextMenu={onGridContextMenu} data-testid="client-operations-grid-surface">
       <table className={`nx-co-sheet__table${freezeOn ? ' is-frozen' : ''}${bordersOn ? '' : ' is-borders-off'}${isResizingColumn ? ' is-resizing' : ''}`}>
         <colgroup>
           {visibleColumns.map((column) => <col key={column.key} style={{ width: widthForColumn(column) }} />)}
@@ -3692,6 +3822,122 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         />
         </div>
         {commandError ? <div className="nx-co-sheet__error">{commandError}</div> : null}
+        {periodCopyFeedback ? (
+          <div className="nx-co-sheet__copy-feedback" role="status" aria-live="polite">
+            {periodCopyFeedback}
+          </div>
+        ) : null}
+        {gridContextMenu && canEdit ? (
+          <div
+            className="nx-co-sheet__context-menu"
+            role="menu"
+            aria-label="תפריט גיליון"
+            data-testid="client-operations-period-copy-menu"
+            style={{ left: gridContextMenu.x, top: gridContextMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="nx-co-sheet__context-menu-item"
+              role="menuitem"
+              aria-haspopup="true"
+              aria-expanded={gridContextMenu.submenuOpen}
+              disabled={sourcePeriodsForCopy.length === 0 || periodCopyBusy}
+              onClick={() =>
+                setGridContextMenu((current) =>
+                  current ? { ...current, submenuOpen: !current.submenuOpen } : current,
+                )
+              }
+            >
+              העתק מידע מחודש
+            </button>
+            {gridContextMenu.submenuOpen ? (
+              <div className="nx-co-sheet__context-submenu" role="menu" aria-label="בחירת חודש מקור">
+                {sourcePeriodsForCopy.length === 0 ? (
+                  <div className="nx-co-sheet__context-menu-empty">אין חודשים זמינים</div>
+                ) : (
+                  sourcePeriodsForCopy.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className="nx-co-sheet__context-menu-item"
+                      role="menuitem"
+                      disabled={periodCopyBusy}
+                      onClick={() => onSelectCopySourcePeriod(key)}
+                    >
+                      {formatClientOperationsOperationalPeriodTabLabel(key)}
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {periodCopyDialog ? (
+          <div className="nx-co-sheet__dialog-backdrop" role="presentation">
+            <div
+              className="nx-co-sheet__dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label="העתקת מידע מחודש"
+              data-testid="client-operations-period-copy-dialog"
+            >
+              <h2>העתקת מידע מחודש</h2>
+              <p className="nx-co-sheet__dialog-subtitle">
+                {`כבר קיים מידע שהוזן ידנית בחודש ${formatClientOperationsOperationalPeriodTabLabel(targetPeriodKeyForCopy)}.`}
+              </p>
+              <p className="nx-co-sheet__dialog-subtitle">
+                {`בחר כיצד להעתיק את המידע מ־${formatClientOperationsOperationalPeriodTabLabel(periodCopyDialog.sourcePeriodKey)}:`}
+              </p>
+              <label className="nx-co-sheet__check">
+                <input
+                  type="radio"
+                  name="nx-co-period-copy-mode"
+                  checked={periodCopyDialog.mode === 'empty_only'}
+                  onChange={() =>
+                    setPeriodCopyDialog((current) =>
+                      current ? { ...current, mode: 'empty_only' } : current,
+                    )
+                  }
+                />
+                העתק רק לתאים ריקים
+              </label>
+              <label className="nx-co-sheet__check">
+                <input
+                  type="radio"
+                  name="nx-co-period-copy-mode"
+                  checked={periodCopyDialog.mode === 'replace_existing'}
+                  onChange={() =>
+                    setPeriodCopyDialog((current) =>
+                      current ? { ...current, mode: 'replace_existing' } : current,
+                    )
+                  }
+                />
+                החלף את הנתונים הקיימים
+              </label>
+              <div className="nx-co-sheet__dialog-actions">
+                <button
+                  type="button"
+                  className="nx-co-sheet__btn"
+                  disabled={periodCopyBusy}
+                  onClick={() => setPeriodCopyDialog(null)}
+                >
+                  ביטול
+                </button>
+                <button
+                  type="button"
+                  className="nx-co-sheet__btn is-active"
+                  disabled={periodCopyBusy}
+                  onClick={() =>
+                    void executePeriodDataCopy(periodCopyDialog.sourcePeriodKey, periodCopyDialog.mode)
+                  }
+                >
+                  העתק
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {userColumnPeriodSetup?.needed && (userColumnPeriodSetup.eligible_columns?.length ?? 0) > 0 && canEdit ? (
           <div className="nx-co-sheet__dialog-backdrop" role="presentation">
             <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label="עמודות לתקופה">

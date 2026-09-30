@@ -121,6 +121,7 @@ export const AUDIT_ACTIONS = {
   CLIENT_OPERATIONS_CUSTOM_COLUMN_PERIOD_SETTINGS: 'client_operations.custom_column.period_settings',
   CLIENT_OPERATIONS_CUSTOM_COLUMN_LEGACY_BASELINE: 'client_operations.custom_column.legacy_baseline',
   CLIENT_OPERATIONS_USER_COLUMNS_PERIOD_INITIALIZED: 'client_operations.user_columns.period_initialized',
+  CLIENT_OPERATIONS_USER_PERIOD_DATA_COPIED: 'client_operations.user_period_data.copied',
   CLIENT_OPERATIONS_MANUAL_ROW_CELL_VALUE_SET: 'client_operations.manual_row.cell_value_set',
   CLIENT_OPERATIONS_MANUAL_ROWS_PERIOD_INITIALIZED:
     'client_operations.manual_rows.period_initialized',

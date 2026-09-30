@@ -312,7 +312,7 @@ export async function buildUserColumnsPeriodAggregateExtras(input: {
   };
 }
 
-async function upsertPeriodValueRow(input: {
+export async function upsertPeriodCustomColumnValueRow(input: {
   organizationId: string;
   clientId: string;
   columnId: string;
@@ -333,7 +333,8 @@ async function upsertPeriodValueRow(input: {
   assertQueryError(error, 'Failed to upsert period custom column value');
 }
 
-async function ensureVisibilityRow(input: {
+/** Visibility only — never copies cell VALUES into the period. */
+export async function ensureVisibilityRowForPeriod(input: {
   organizationId: string;
   columnId: string;
   operationalPeriodKey: string;
@@ -351,62 +352,6 @@ async function ensureVisibilityRow(input: {
   assertQueryError(error, 'Failed to ensure period visibility');
 }
 
-async function carryForwardColumnIntoPeriod(input: {
-  organizationId: string;
-  columnId: string;
-  operationalPeriodKey: string;
-}): Promise<void> {
-  const { data: existing, error: existingError } = await supabaseAdmin
-    .from('client_operations_registry_custom_column_period_values')
-    .select('client_id')
-    .eq('organization_id', input.organizationId)
-    .eq('column_id', input.columnId)
-    .eq('operational_period_key', input.operationalPeriodKey);
-  assertQueryError(existingError, 'Failed to load existing period values');
-  const already = new Set(((existing ?? []) as Array<{ client_id: string }>).map((r) => r.client_id));
-
-  const { data: priors, error: priorError } = await supabaseAdmin
-    .from('client_operations_registry_custom_column_period_values')
-    .select('client_id, operational_period_key, value_text, value_number, value_date, value_bool')
-    .eq('organization_id', input.organizationId)
-    .eq('column_id', input.columnId)
-    .lt('operational_period_key', input.operationalPeriodKey);
-  assertQueryError(priorError, 'Failed to load prior period values for carry-forward');
-
-  const latestByClient = new Map<string, { period: string; value: PeriodTypedValue }>();
-  for (const row of (priors ?? []) as Array<
-    { client_id: string; operational_period_key: string } & PeriodTypedValue
-  >) {
-    const prev = latestByClient.get(row.client_id);
-    if (!prev || row.operational_period_key > prev.period) {
-      latestByClient.set(row.client_id, {
-        period: row.operational_period_key,
-        value: {
-          value_text: row.value_text,
-          value_number: row.value_number,
-          value_date: row.value_date,
-          value_bool: row.value_bool,
-        },
-      });
-    }
-  }
-
-  for (const [clientId, pack] of latestByClient) {
-    if (already.has(clientId)) continue;
-    if (!isMeaningfulTypedValue(pack.value) && pack.value.value_bool == null) {
-      // still copy blanks? only meaningful — skip empty
-      if (!isMeaningfulTypedValue(pack.value)) continue;
-    }
-    await upsertPeriodValueRow({
-      organizationId: input.organizationId,
-      clientId,
-      columnId: input.columnId,
-      operationalPeriodKey: input.operationalPeriodKey,
-      values: pack.value,
-    });
-  }
-}
-
 export async function applyLegacyBaselineTransition(input: {
   ctx: RequestContext;
   organizationId: string;
@@ -418,7 +363,7 @@ export async function applyLegacyBaselineTransition(input: {
   const legacyRows = await loadLegacyValuesForColumn(input.organizationId, input.column.id);
   for (const row of legacyRows) {
     if (!isMeaningfulTypedValue(row)) continue;
-    await upsertPeriodValueRow({
+    await upsertPeriodCustomColumnValueRow({
       organizationId: input.organizationId,
       clientId: row.client_id,
       columnId: input.column.id,
@@ -431,7 +376,7 @@ export async function applyLegacyBaselineTransition(input: {
       },
     });
   }
-  await ensureVisibilityRow({
+  await ensureVisibilityRowForPeriod({
     organizationId: input.organizationId,
     columnId: input.column.id,
     operationalPeriodKey: baseline,
@@ -507,17 +452,13 @@ export async function setCustomColumnPeriodSettings(input: {
   const toAdd = selected.filter((p) => !existing.has(p));
   const toRemove = [...existing].filter((p) => !selected.includes(p));
 
+  // Visibility/config only — cell VALUES never silently propagate across periods.
   for (const period of toAdd) {
-    await ensureVisibilityRow({
+    await ensureVisibilityRowForPeriod({
       organizationId: input.organizationId,
       columnId: input.column.id,
       operationalPeriodKey: period,
       actorUserId: input.ctx.user.id,
-    });
-    await carryForwardColumnIntoPeriod({
-      organizationId: input.organizationId,
-      columnId: input.column.id,
-      operationalPeriodKey: period,
     });
   }
 
@@ -576,17 +517,13 @@ export async function initializeUserColumnsForPeriod(input: {
     if (isBlankCustomColumnLabel(column.label)) selectedIds.add(column.id);
   }
 
+  // Visibility/config only — cell VALUES never silently propagate on period init.
   for (const columnId of selectedIds) {
-    await ensureVisibilityRow({
+    await ensureVisibilityRowForPeriod({
       organizationId: input.organizationId,
       columnId,
       operationalPeriodKey: periodKey,
       actorUserId: input.ctx.user.id,
-    });
-    await carryForwardColumnIntoPeriod({
-      organizationId: input.organizationId,
-      columnId,
-      operationalPeriodKey: periodKey,
     });
   }
 
@@ -622,7 +559,7 @@ export async function setPeriodCustomColumnValue(input: {
   columnKey: string;
 }): Promise<void> {
   const periodKey = periodKeyFrom(input.operationalPeriodKey);
-  await upsertPeriodValueRow({
+  await upsertPeriodCustomColumnValueRow({
     organizationId: input.organizationId,
     clientId: input.clientId,
     columnId: input.columnId,
