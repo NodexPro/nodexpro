@@ -138,3 +138,14 @@ test('UX: readable dark text + primary/secondary period-copy buttons', () => {
   assert.match(cssSource, /border-radius:\s*10px/);
   assert.match(cssSource, /linear-gradient\(135deg,\s*rgba\(38,\s*140,\s*255/);
 });
+
+test('UX: period-copy modal typography is scoped Arial/sans-serif', () => {
+  const modalBlock = cssSource.slice(cssSource.indexOf('.nx-co-period-copy-modal {'));
+  assert.match(modalBlock, /\.nx-co-period-copy-modal\s*\{[\s\S]*?font-family:\s*Arial,\s*sans-serif/);
+  assert.match(cssSource, /\.nx-co-period-copy-modal__title\s*\{[\s\S]*?font-family:\s*Arial,\s*sans-serif/);
+  assert.match(cssSource, /\.nx-co-period-copy-modal__body\s*\{[\s\S]*?font-family:\s*Arial,\s*sans-serif/);
+  assert.match(cssSource, /\.nx-co-period-copy-modal__period-option\s*\{[\s\S]*?font-family:\s*Arial,\s*sans-serif/);
+  assert.match(cssSource, /\.nx-co-period-copy-modal__radio\s*\{[\s\S]*?font-family:\s*Arial,\s*sans-serif/);
+  assert.match(cssSource, /\.nx-co-period-copy-btn\s*\{[\s\S]*?font-family:\s*Arial,\s*sans-serif/);
+  assert.doesNotMatch(modalBlock.slice(0, 3500), /Georgia|Times New Roman|Playfair|Merriweather|font-family:\s*serif\b/);
+});
